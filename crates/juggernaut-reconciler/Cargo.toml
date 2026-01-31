@@ -1,0 +1,25 @@
+[package]
+name = "juggernaut-reconciler"
+description = "K8s-style reconciliation loop for bead management"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+juggernaut-core = { workspace = true }
+juggernaut-events = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+chrono = { workspace = true }
+im = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+
+[lints]
+workspace = true

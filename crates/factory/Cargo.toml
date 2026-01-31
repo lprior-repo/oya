@@ -1,0 +1,22 @@
+[package]
+name = "factory"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Factory CLI - Contract-driven CI/CD pipeline"
+
+[[bin]]
+name = "factory"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+factory-core = { path = "../factory-core" }
+clap = { version = "4.5", features = ["derive"] }
+
+[dev-dependencies]
+tempfile = "3.10"

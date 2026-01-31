@@ -1,0 +1,22 @@
+[package]
+name = "juggernaut-core"
+description = "Core types, errors, and Railway-Oriented primitives for Juggernaut SDLC Factory"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+ulid = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+futures = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros"] }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,9 @@
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: rust
+
+fileGroups:
+  sources:
+    - 'src/**/*.rs'
+  configs:
+    - 'Cargo.toml'

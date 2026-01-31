@@ -1,0 +1,111 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/juggernaut-core",
+    "crates/juggernaut-workflow",
+    "crates/juggernaut-events",
+    "crates/juggernaut-reconciler",
+    "crates/juggernaut-intent",
+    "crates/juggernaut-tdd15",
+    "crates/juggernaut-zjj",
+    "crates/juggernaut-docs",
+    "crates/juggernaut-opencode",
+    "crates/juggernaut-cli",
+    "crates/factory",
+    "crates/factory-core",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+authors = ["Lewis Prior <lewis@lewisandquark.com>"]
+license = "MIT"
+repository = "https://github.com/lprior-repo/oya"
+
+[workspace.dependencies]
+# Async runtime (battle-tested)
+tokio = { version = "1", features = ["full"] }
+futures = "0.3"
+
+# Storage (battle-tested)
+rusqlite = { version = "0.32", features = ["bundled"] }
+redis = "0.27"
+
+# Caching (battle-tested)
+moka = { version = "0.12", features = ["sync"] }
+papaya = "0.1"
+
+# Serialization (battle-tested)
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rkyv = "0.8"
+
+# FP primitives (battle-tested)
+im = "15.1"
+itertools = "0.13"
+either = "1.13"
+frunk = "0.4"
+tap = "1.0"
+
+# Allocation optimization (battle-tested)
+bumpalo = "3"
+smallvec = "1"
+arrayvec = "0.7"
+
+# CLI (battle-tested)
+clap = { version = "4", features = ["derive"] }
+
+# IDs
+ulid = { version = "1", features = ["serde"] }
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Async traits
+async-trait = "0.1"
+
+# Concurrent collections
+dashmap = "6"
+
+# Tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Error handling
+thiserror = "2"
+
+# Internal crates
+juggernaut-core = { path = "crates/juggernaut-core" }
+juggernaut-workflow = { path = "crates/juggernaut-workflow" }
+juggernaut-events = { path = "crates/juggernaut-events" }
+juggernaut-reconciler = { path = "crates/juggernaut-reconciler" }
+juggernaut-intent = { path = "crates/juggernaut-intent" }
+juggernaut-tdd15 = { path = "crates/juggernaut-tdd15" }
+juggernaut-zjj = { path = "crates/juggernaut-zjj" }
+juggernaut-docs = { path = "crates/juggernaut-docs" }
+juggernaut-opencode = { path = "crates/juggernaut-opencode" }
+juggernaut-cli = { path = "crates/juggernaut-cli" }
+factory = { path = "crates/factory" }
+factory-core = { path = "crates/factory-core" }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+unwrap_used = "forbid"
+expect_used = "deny"
+panic = "forbid"
+todo = "warn"
+unimplemented = "forbid"
+unreachable = "forbid"
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
