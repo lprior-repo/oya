@@ -7,6 +7,7 @@ members = [
     "crates/centralized-docs",
     "crates/orchestrator",
     "crates/merge-queue",
+    "crates/opencode",
 ]
 resolver = "2"
 
@@ -35,6 +36,7 @@ oya-core = { path = "crates/core" }
 oya-zjj = { path = "crates/zjj" }
 oya-factory = { path = "crates/factory" }
 oya-intent = { path = "crates/intent" }
+oya-opencode = { path = "crates/opencode" }
 centralized-docs = { path = "crates/centralized-docs" }
 orchestrator = { path = "crates/orchestrator" }
 merge-queue = { path = "crates/merge-queue" }
@@ -85,7 +87,7 @@ notify = "7"
 # HTTP and web scraping
 reqwest = { version = "0.12", features = ["blocking", "json"] }
 scraper = "0.20"
-url = "2"
+url = { version = "2", features = ["serde"] }
 
 # Functional utilities
 tap = "1"
