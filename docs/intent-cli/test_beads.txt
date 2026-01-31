@@ -1,0 +1,20 @@
+Beads to Add Testing Instructions To:
+========================================
+
+These beads exist but need testing instructions:
+
+intent-cli-m4c - parse command
+intent-cli-bzz - lint command
+intent-cli-dxi - bead-status
+intent-cli-8i5 - beads-regenerate
+intent-cli-4ai - history
+intent-cli-8mh - ai aggregate
+intent-cli-5ns - plan
+intent-cli-766 - ready start
+
+Each needs:
+1. EARS Format Testing (for parse/lint)
+2. Edge Cases Testing
+3. Integration Testing
+4. End-to-End Testing
+5. Test Commands with expected outputs

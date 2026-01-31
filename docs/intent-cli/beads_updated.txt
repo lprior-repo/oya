@@ -1,0 +1,30 @@
+BEADS WITH TESTING INSTRUCTIONS ADDED
+========================================
+
+Updated with comprehensive testing (EARS, edge cases, integration, E2E):
+
+PRIORITY 0:
+✓ intent-cli-wb2 - Test suite
+✓ intent-cli-7ch - Vision command testing
+
+PRIORITY 1 (Features):
+✓ intent-cli-n6c - Global --json flag
+✓ intent-cli-34a - Standardize error codes
+✓ intent-cli-2i5 - Fix export command
+✓ intent-cli-6ur - JSON mode for utility commands
+✓ intent-cli-hb5 - Shorten field names
+
+PRIORITY 1 (Phases):
+✓ intent-cli-6oy.1 - Interview system testing
+✓ intent-cli-6oy.2 - Beads system testing
+✓ intent-cli-6oy.3 - KIRK quality testing
+✓ intent-cli-6oy.4 - History & sessions testing
+✓ intent-cli-6oy.5 - Core spec testing
+
+PRIORITY 1 (E2E):
+✓ intent-cli-ibp - E2E test suite implementation
+
+TOTAL: 13 beads updated with testing instructions
+
+COMMAND TO CLAIM ONE:
+bd update intent-cli-wb2 --status in_progress
