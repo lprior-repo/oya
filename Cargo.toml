@@ -13,6 +13,8 @@ members = [
     "crates/juggernaut-cli",
     "crates/factory",
     "crates/factory-core",
+    "crates/zjj",
+    "crates/zjj-core",
 ]
 
 [workspace.package]
@@ -88,6 +90,8 @@ juggernaut-opencode = { path = "crates/juggernaut-opencode" }
 juggernaut-cli = { path = "crates/juggernaut-cli" }
 factory = { path = "crates/factory" }
 factory-core = { path = "crates/factory-core" }
+zjj = { path = "crates/zjj" }
+zjj-core = { path = "crates/zjj-core" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
