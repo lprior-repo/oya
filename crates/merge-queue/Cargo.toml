@@ -11,7 +11,7 @@ description = "OYA Merge Queue - Parallel task merging and conflict resolution"
 workspace = true
 
 [dependencies]
-core = { path = "../core" }
+oya-core = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

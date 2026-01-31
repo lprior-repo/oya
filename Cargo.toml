@@ -30,11 +30,11 @@ unimplemented = "forbid"
 unreachable = "forbid"
 
 [workspace.dependencies]
-# Internal crates
-core = { path = "crates/core" }
-zjj = { path = "crates/zjj" }
-factory = { path = "crates/factory" }
-intent = { path = "crates/intent" }
+# Internal crates (must match actual package names in Cargo.toml)
+oya-core = { path = "crates/core" }
+oya-zjj = { path = "crates/zjj" }
+oya-factory = { path = "crates/factory" }
+oya-intent = { path = "crates/intent" }
 centralized-docs = { path = "crates/centralized-docs" }
 orchestrator = { path = "crates/orchestrator" }
 merge-queue = { path = "crates/merge-queue" }
@@ -107,10 +107,10 @@ name = "oya"
 path = "src/main.rs"
 
 [dependencies]
-core = { workspace = true }
-zjj = { workspace = true }
-factory = { workspace = true }
-intent = { workspace = true }
+oya-core = { workspace = true }
+oya-zjj = { workspace = true }
+oya-factory = { workspace = true }
+oya-intent = { workspace = true }
 centralized-docs = { workspace = true }
 orchestrator = { workspace = true }
 merge-queue = { workspace = true }

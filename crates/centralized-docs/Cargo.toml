@@ -11,7 +11,7 @@ description = "OYA Centralized Documentation - Document transformation, chunking
 workspace = true
 
 [dependencies]
-core = { path = "../core" }
+oya-core = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

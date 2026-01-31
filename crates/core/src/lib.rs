@@ -15,4 +15,4 @@ pub mod result;
 
 // Re-export commonly used items
 pub use error::Error;
-pub use result::{Result, ResultExt};
+pub use result::{GenericResultExt, OptionExt, Result, ResultExt};
