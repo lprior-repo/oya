@@ -1,0 +1,695 @@
+{
+  "session_id": "simple-api-example",
+  "generated_at": "2026-01-25T16:30:00Z",
+  "health": {
+    "overall_score": 85,
+    "coverage_score": 90,
+    "clarity_score": 88,
+    "testability_score": 82,
+    "ai_readiness_score": 80,
+    "gaps": [
+      "Missing edge case for empty request body",
+      "No validation for maximum page size"
+    ],
+    "inversion_gaps": [
+      "Concurrent request handling not specified"
+    ]
+  },
+  "waves": [
+    {
+      "number": 1,
+      "beads": [
+        "USER-001",
+        "USER-002"
+      ],
+      "parallelizable": true,
+      "risk_level": "low",
+      "estimated_minutes": 20
+    },
+    {
+      "number": 2,
+      "beads": [
+        "USER-003"
+      ],
+      "parallelizable": false,
+      "risk_level": "low",
+      "estimated_minutes": 15
+    },
+    {
+      "number": 3,
+      "beads": [
+        "USER-004",
+        "USER-005"
+      ],
+      "parallelizable": true,
+      "risk_level": "medium",
+      "estimated_minutes": 45
+    }
+  ],
+  "beads": [
+    {
+      "id": "USER-001",
+      "title": "Implement GET /users endpoint",
+      "description": "Return paginated list of users with filtering",
+      "profile_type": "api",
+      "issue_type": "feature",
+      "labels": ["crud", "pagination"],
+      "priority": 1,
+      "effort": "10min",
+      "ears_requirements": [
+        {
+          "pattern": "ubiquitous",
+          "requirement": "WHEN the client requests /users, the system SHALL return a paginated JSON array of user objects"
+        },
+        {
+          "pattern": "optional",
+          "requirement": "WHERE the client provides query parameter 'page', the system SHALL return the specified page"
+        }
+      ],
+      "contracts": {
+        "preconditions": [
+          "Request must include valid authentication token",
+          "Page number must be >= 1 if provided"
+        ],
+        "postconditions": [
+          "Response status is 200 OK",
+          "Response body contains 'users' array",
+          "Response includes pagination metadata"
+        ],
+        "invariants": [
+          "Total count never decreases during pagination",
+          "Page size remains constant unless explicitly changed"
+        ]
+      },
+      "type_definitions": [
+        {
+          "name": "User",
+          "fields": [
+            {"name": "id", "type": "string", "required": true},
+            {"name": "email", "type": "string", "required": true},
+            {"name": "name", "type": "string", "required": true},
+            {"name": "created_at", "type": "ISO8601", "required": true}
+          ]
+        },
+        {
+          "name": "PaginatedUsers",
+          "fields": [
+            {"name": "users", "type": "List<User>", "required": true},
+            {"name": "page", "type": "int", "required": true},
+            {"name": "per_page", "type": "int", "required": true},
+            {"name": "total", "type": "int", "required": true}
+          ]
+        }
+      ],
+      "test_cases": {
+        "happy_path": [
+          {
+            "name": "Returns first page of users",
+            "request": {"method": "GET", "path": "/users"},
+            "expected": {"status": 200, "body_contains": ["users", "page"]}
+          },
+          {
+            "name": "Returns specific page",
+            "request": {"method": "GET", "path": "/users?page=2"},
+            "expected": {"status": 200, "body_field": {"page": 2}}
+          }
+        ],
+        "edge_cases": [
+          {
+            "name": "Page beyond available data returns empty array",
+            "request": {"method": "GET", "path": "/users?page=9999"},
+            "expected": {"status": 200, "body_field": {"users": []}}
+          },
+          {
+            "name": "Page 0 returns validation error",
+            "request": {"method": "GET", "path": "/users?page=0"},
+            "expected": {"status": 400}
+          }
+        ],
+        "error_cases": [
+          {
+            "name": "Missing auth token returns 401",
+            "request": {"method": "GET", "path": "/users", "headers": {}},
+            "expected": {"status": 401}
+          }
+        ]
+      },
+      "input_schema": {
+        "query_params": {
+          "page": {"type": "int", "min": 1, "default": 1},
+          "per_page": {"type": "int", "min": 1, "max": 100, "default": 20}
+        },
+        "headers": {
+          "Authorization": {"required": true, "pattern": "^Bearer .+"}
+        }
+      },
+      "output_schema": {
+        "status_codes": [200, 400, 401, 500],
+        "body_schema": {
+          "users": {"type": "array", "items": "User"},
+          "page": {"type": "int", "min": 1},
+          "per_page": {"type": "int", "min": 1},
+          "total": {"type": "int", "min": 0}
+        }
+      },
+      "edge_cases": [
+        "Empty database returns empty array with total=0",
+        "Invalid page number returns 400 with error message",
+        "Page size exceeds maximum returns 400"
+      ],
+      "boundaries": {
+        "will_do": [
+          "Validate pagination parameters",
+          "Return consistent structure",
+          "Handle authentication"
+        ],
+        "will_not_do": [
+          "Cache results (caching is separate concern)",
+          "Transform user data (return raw)",
+          "Support complex filtering (use separate search endpoint)"
+        ]
+      },
+      "dependencies": [],
+      "blocks": [],
+      "ai_context": {
+        "implementation_hints": [
+          "Use ORM pagination helpers",
+          "Extract pagination logic to reusable middleware"
+        ],
+        "pitfalls": [
+          "Don't calculate total on every request (cache it)",
+          "Validate page bounds before DB query"
+        ]
+      },
+      "spec_source": {
+        "session_id": "simple-api-example",
+        "feature_name": "User Management",
+        "behavior_name": "List Users"
+      }
+    },
+    {
+      "id": "USER-002",
+      "title": "Implement POST /users endpoint",
+      "description": "Create new user with validation",
+      "profile_type": "api",
+      "issue_type": "feature",
+      "labels": ["crud", "validation"],
+      "priority": 1,
+      "effort": "15min",
+      "ears_requirements": [
+        {
+          "pattern": "ubiquitous",
+          "requirement": "WHEN the client POSTs to /users with valid user data, the system SHALL create a new user and return 201 Created"
+        },
+        {
+          "pattern": "unwanted",
+          "requirement": "IF the email is already registered, the system SHALL NOT create a duplicate user"
+        }
+      ],
+      "contracts": {
+        "preconditions": [
+          "Request body must be valid JSON",
+          "Email must be unique",
+          "Password must meet complexity requirements"
+        ],
+        "postconditions": [
+          "User exists in database",
+          "Response includes user ID",
+          "Password is hashed (never stored plain)"
+        ],
+        "invariants": [
+          "Email addresses remain unique across all users",
+          "User IDs are immutable once assigned"
+        ]
+      },
+      "type_definitions": [
+        {
+          "name": "CreateUserRequest",
+          "fields": [
+            {"name": "email", "type": "string", "required": true, "format": "email"},
+            {"name": "name", "type": "string", "required": true, "min_length": 1},
+            {"name": "password", "type": "string", "required": true, "min_length": 8}
+          ]
+        }
+      ],
+      "test_cases": {
+        "happy_path": [
+          {
+            "name": "Creates user with valid data",
+            "request": {
+              "method": "POST",
+              "path": "/users",
+              "body": {"email": "new@example.com", "name": "New User", "password": "SecurePass123"}
+            },
+            "expected": {"status": 201, "body_contains": ["id", "email"]}
+          }
+        ],
+        "edge_cases": [
+          {
+            "name": "Duplicate email returns 409 Conflict",
+            "request": {
+              "method": "POST",
+              "path": "/users",
+              "body": {"email": "existing@example.com", "name": "Duplicate", "password": "Pass1234"}
+            },
+            "expected": {"status": 409}
+          }
+        ],
+        "error_cases": [
+          {
+            "name": "Invalid email format returns 400",
+            "request": {
+              "method": "POST",
+              "path": "/users",
+              "body": {"email": "not-an-email", "name": "User", "password": "Pass1234"}
+            },
+            "expected": {"status": 400}
+          },
+          {
+            "name": "Short password returns 400",
+            "request": {
+              "method": "POST",
+              "path": "/users",
+              "body": {"email": "user@example.com", "name": "User", "password": "short"}
+            },
+            "expected": {"status": 400}
+          }
+        ]
+      },
+      "input_schema": {
+        "body": {
+          "email": {"type": "string", "format": "email"},
+          "name": {"type": "string", "min_length": 1, "max_length": 255},
+          "password": {"type": "string", "min_length": 8, "max_length": 128}
+        }
+      },
+      "output_schema": {
+        "status_codes": [201, 400, 409, 500],
+        "body_schema": {
+          "id": {"type": "string", "format": "uuid"},
+          "email": {"type": "string"},
+          "name": {"type": "string"},
+          "created_at": {"type": "string", "format": "ISO8601"}
+        }
+      },
+      "edge_cases": [
+        "Concurrent creation with same email (use DB unique constraint)",
+        "Email with Unicode characters",
+        "Very long names (enforce max length)"
+      ],
+      "boundaries": {
+        "will_do": [
+          "Validate email format",
+          "Hash password before storage",
+          "Check email uniqueness"
+        ],
+        "will_not_do": [
+          "Send welcome email (separate service)",
+          "Validate password strength beyond length (use external service)",
+          "Auto-generate username from email"
+        ]
+      },
+      "dependencies": [],
+      "blocks": [],
+      "ai_context": {
+        "implementation_hints": [
+          "Use bcrypt for password hashing",
+          "Transaction for uniqueness check + insert"
+        ],
+        "pitfalls": [
+          "Race condition on email uniqueness (use DB constraint)",
+          "Don't return password in response (even hashed)"
+        ]
+      },
+      "spec_source": {
+        "session_id": "simple-api-example",
+        "feature_name": "User Management",
+        "behavior_name": "Create User"
+      }
+    },
+    {
+      "id": "USER-003",
+      "title": "Implement GET /users/:id endpoint",
+      "description": "Retrieve single user by ID",
+      "profile_type": "api",
+      "issue_type": "feature",
+      "labels": ["crud"],
+      "priority": 2,
+      "effort": "10min",
+      "ears_requirements": [
+        {
+          "pattern": "ubiquitous",
+          "requirement": "WHEN the client requests /users/:id with a valid user ID, the system SHALL return the user object"
+        },
+        {
+          "pattern": "unwanted",
+          "requirement": "IF the user ID does not exist, the system SHALL NOT return fake data"
+        }
+      ],
+      "contracts": {
+        "preconditions": [
+          "ID must be valid UUID format",
+          "User must exist in database"
+        ],
+        "postconditions": [
+          "Response contains complete user object",
+          "Password field is never included"
+        ],
+        "invariants": [
+          "Same ID always returns same user (unless updated)"
+        ]
+      },
+      "type_definitions": [],
+      "test_cases": {
+        "happy_path": [
+          {
+            "name": "Returns user for valid ID",
+            "request": {"method": "GET", "path": "/users/123e4567-e89b-12d3-a456-426614174000"},
+            "expected": {"status": 200, "body_contains": ["id", "email", "name"]}
+          }
+        ],
+        "edge_cases": [
+          {
+            "name": "Non-existent ID returns 404",
+            "request": {"method": "GET", "path": "/users/00000000-0000-0000-0000-000000000000"},
+            "expected": {"status": 404}
+          }
+        ],
+        "error_cases": [
+          {
+            "name": "Invalid UUID format returns 400",
+            "request": {"method": "GET", "path": "/users/not-a-uuid"},
+            "expected": {"status": 400}
+          }
+        ]
+      },
+      "input_schema": {
+        "path_params": {
+          "id": {"type": "string", "format": "uuid"}
+        }
+      },
+      "output_schema": {
+        "status_codes": [200, 400, 404, 500],
+        "body_schema": {
+          "id": {"type": "string"},
+          "email": {"type": "string"},
+          "name": {"type": "string"},
+          "created_at": {"type": "string"}
+        }
+      },
+      "edge_cases": [
+        "Deleted user returns 404",
+        "Soft-deleted user handling (business decision)"
+      ],
+      "boundaries": {
+        "will_do": [
+          "Validate UUID format",
+          "Return 404 for missing users"
+        ],
+        "will_not_do": [
+          "Return related data (use separate endpoints)",
+          "Log access for audit (separate concern)"
+        ]
+      },
+      "dependencies": [
+        "USER-001",
+        "USER-002"
+      ],
+      "blocks": [],
+      "ai_context": {
+        "implementation_hints": [
+          "Use framework's UUID validation",
+          "Single DB query with SELECT by ID"
+        ],
+        "pitfalls": [
+          "Don't expose internal error details in 500 responses"
+        ]
+      },
+      "spec_source": {
+        "session_id": "simple-api-example",
+        "feature_name": "User Management",
+        "behavior_name": "Get User"
+      }
+    },
+    {
+      "id": "USER-004",
+      "title": "Implement PATCH /users/:id endpoint",
+      "description": "Update user fields",
+      "profile_type": "api",
+      "issue_type": "feature",
+      "labels": ["crud", "validation"],
+      "priority": 3,
+      "effort": "20min",
+      "ears_requirements": [
+        {
+          "pattern": "ubiquitous",
+          "requirement": "WHEN the client PATCHes /users/:id with valid fields, the system SHALL update only the provided fields"
+        },
+        {
+          "pattern": "state",
+          "requirement": "WHILE the user exists, the system SHALL allow updates to name and email"
+        }
+      ],
+      "contracts": {
+        "preconditions": [
+          "User must exist",
+          "At least one field must be provided",
+          "Email must be unique if changed"
+        ],
+        "postconditions": [
+          "Only specified fields are updated",
+          "Updated timestamp is refreshed",
+          "Response reflects new state"
+        ],
+        "invariants": [
+          "User ID never changes",
+          "Email uniqueness maintained"
+        ]
+      },
+      "type_definitions": [
+        {
+          "name": "UpdateUserRequest",
+          "fields": [
+            {"name": "name", "type": "string", "required": false},
+            {"name": "email", "type": "string", "required": false, "format": "email"}
+          ]
+        }
+      ],
+      "test_cases": {
+        "happy_path": [
+          {
+            "name": "Updates single field",
+            "request": {
+              "method": "PATCH",
+              "path": "/users/123e4567-e89b-12d3-a456-426614174000",
+              "body": {"name": "Updated Name"}
+            },
+            "expected": {"status": 200, "body_field": {"name": "Updated Name"}}
+          },
+          {
+            "name": "Updates multiple fields",
+            "request": {
+              "method": "PATCH",
+              "path": "/users/123e4567-e89b-12d3-a456-426614174000",
+              "body": {"name": "New Name", "email": "new@example.com"}
+            },
+            "expected": {"status": 200}
+          }
+        ],
+        "edge_cases": [
+          {
+            "name": "Empty body returns 400",
+            "request": {
+              "method": "PATCH",
+              "path": "/users/123e4567-e89b-12d3-a456-426614174000",
+              "body": {}
+            },
+            "expected": {"status": 400}
+          },
+          {
+            "name": "Changing email to existing one returns 409",
+            "request": {
+              "method": "PATCH",
+              "path": "/users/123e4567-e89b-12d3-a456-426614174000",
+              "body": {"email": "existing@example.com"}
+            },
+            "expected": {"status": 409}
+          }
+        ],
+        "error_cases": [
+          {
+            "name": "Non-existent user returns 404",
+            "request": {
+              "method": "PATCH",
+              "path": "/users/00000000-0000-0000-0000-000000000000",
+              "body": {"name": "Test"}
+            },
+            "expected": {"status": 404}
+          }
+        ]
+      },
+      "input_schema": {
+        "path_params": {
+          "id": {"type": "string", "format": "uuid"}
+        },
+        "body": {
+          "name": {"type": "string", "min_length": 1, "max_length": 255},
+          "email": {"type": "string", "format": "email"}
+        }
+      },
+      "output_schema": {
+        "status_codes": [200, 400, 404, 409, 500],
+        "body_schema": {
+          "id": {"type": "string"},
+          "email": {"type": "string"},
+          "name": {"type": "string"},
+          "updated_at": {"type": "string"}
+        }
+      },
+      "edge_cases": [
+        "Concurrent updates to same user (use optimistic locking)",
+        "Partial validation failure (which fields are invalid)"
+      ],
+      "boundaries": {
+        "will_do": [
+          "Validate each field independently",
+          "Return updated object",
+          "Check email uniqueness on change"
+        ],
+        "will_not_do": [
+          "Update password (use separate endpoint)",
+          "Update created_at (immutable)",
+          "Cascade updates to related entities"
+        ]
+      },
+      "dependencies": [
+        "USER-003"
+      ],
+      "blocks": [],
+      "ai_context": {
+        "implementation_hints": [
+          "Use PATCH semantics (partial update)",
+          "Validate only provided fields"
+        ],
+        "pitfalls": [
+          "Don't allow updating restricted fields (id, created_at)",
+          "Handle concurrent updates with version or timestamp"
+        ]
+      },
+      "spec_source": {
+        "session_id": "simple-api-example",
+        "feature_name": "User Management",
+        "behavior_name": "Update User"
+      }
+    },
+    {
+      "id": "USER-005",
+      "title": "Implement DELETE /users/:id endpoint",
+      "description": "Delete user by ID",
+      "profile_type": "api",
+      "issue_type": "feature",
+      "labels": ["crud"],
+      "priority": 3,
+      "effort": "15min",
+      "ears_requirements": [
+        {
+          "pattern": "ubiquitous",
+          "requirement": "WHEN the client DELETEs /users/:id, the system SHALL remove the user and return 204 No Content"
+        },
+        {
+          "pattern": "unwanted",
+          "requirement": "IF the user has dependent data, the system SHALL NOT silently cascade delete"
+        }
+      ],
+      "contracts": {
+        "preconditions": [
+          "User must exist",
+          "No dependent records (or handle cascade)"
+        ],
+        "postconditions": [
+          "User no longer exists",
+          "Subsequent GET returns 404",
+          "Response is 204 No Content"
+        ],
+        "invariants": [
+          "Deleted users cannot be retrieved",
+          "Delete is idempotent (second delete returns 404)"
+        ]
+      },
+      "type_definitions": [],
+      "test_cases": {
+        "happy_path": [
+          {
+            "name": "Deletes existing user",
+            "request": {"method": "DELETE", "path": "/users/123e4567-e89b-12d3-a456-426614174000"},
+            "expected": {"status": 204}
+          }
+        ],
+        "edge_cases": [
+          {
+            "name": "Deleting non-existent user returns 404",
+            "request": {"method": "DELETE", "path": "/users/00000000-0000-0000-0000-000000000000"},
+            "expected": {"status": 404}
+          },
+          {
+            "name": "Second delete returns 404 (idempotency)",
+            "request": {"method": "DELETE", "path": "/users/123e4567-e89b-12d3-a456-426614174000"},
+            "expected": {"status": 404}
+          }
+        ],
+        "error_cases": [
+          {
+            "name": "Invalid UUID returns 400",
+            "request": {"method": "DELETE", "path": "/users/invalid"},
+            "expected": {"status": 400}
+          }
+        ]
+      },
+      "input_schema": {
+        "path_params": {
+          "id": {"type": "string", "format": "uuid"}
+        }
+      },
+      "output_schema": {
+        "status_codes": [204, 400, 404, 409, 500],
+        "body_schema": null
+      },
+      "edge_cases": [
+        "User with related records (return 409 or cascade)",
+        "Soft delete vs hard delete (business decision)"
+      ],
+      "boundaries": {
+        "will_do": [
+          "Remove user from database",
+          "Return 204 on success"
+        ],
+        "will_not_do": [
+          "Archive user data (use soft delete pattern)",
+          "Send deletion notification (separate service)",
+          "Delete related data (explicit cascade or return 409)"
+        ]
+      },
+      "dependencies": [
+        "USER-003"
+      ],
+      "blocks": [],
+      "ai_context": {
+        "implementation_hints": [
+          "Use database transaction",
+          "Consider soft delete with deleted_at timestamp"
+        ],
+        "pitfalls": [
+          "Don't expose why delete failed in production",
+          "Handle foreign key constraints gracefully"
+        ]
+      },
+      "spec_source": {
+        "session_id": "simple-api-example",
+        "feature_name": "User Management",
+        "behavior_name": "Delete User"
+      }
+    }
+  ],
+  "total_beads": 5,
+  "estimated_time_minutes": 80
+}
