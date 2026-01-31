@@ -1,23 +1,27 @@
-[package]
-name = "oya"
+[workspace]
+members = [
+    "crates/core",
+    "crates/zjj",
+    "crates/factory",
+    "crates/intent",
+    "crates/centralized-docs",
+    "crates/orchestrator",
+    "crates/merge-queue",
+]
+resolver = "2"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
 authors = ["Lewis Prior <lewis@lewisandquark.com>"]
 license = "MIT"
 repository = "https://github.com/lprior-repo/oya"
-description = "OYA SDLC Factory - Storm goddess of transformation. 100x developer throughput with AI agent swarms."
-keywords = ["sdlc", "tdd", "ai", "agents", "automation"]
-categories = ["development-tools", "command-line-utilities"]
 
-[[bin]]
-name = "oya"
-path = "src/main.rs"
-
-[lints.rust]
+[workspace.lints.rust]
 unsafe_code = "forbid"
 
-[lints.clippy]
+[workspace.lints.clippy]
 unwrap_used = "forbid"
 expect_used = "deny"
 panic = "forbid"
@@ -25,7 +29,16 @@ todo = "warn"
 unimplemented = "forbid"
 unreachable = "forbid"
 
-[dependencies]
+[workspace.dependencies]
+# Internal crates
+core = { path = "crates/core" }
+zjj = { path = "crates/zjj" }
+factory = { path = "crates/factory" }
+intent = { path = "crates/intent" }
+centralized-docs = { path = "crates/centralized-docs" }
+orchestrator = { path = "crates/orchestrator" }
+merge-queue = { path = "crates/merge-queue" }
+
 # Async runtime (battle-tested)
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
@@ -39,6 +52,7 @@ moka = { version = "0.12", features = ["sync"] }
 # Serialization (battle-tested)
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+serde_yaml = "0.9"
 toml = "0.8"
 
 # FP primitives (battle-tested)
@@ -60,12 +74,51 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Error handling
 thiserror = "2"
+anyhow = "1"
 
 # Regex
 regex = "1"
 
 # Notify for file watching
 notify = "7"
+
+# HTTP and web scraping
+reqwest = { version = "0.12", features = ["blocking", "json"] }
+scraper = "0.20"
+url = "2"
+
+# Functional utilities
+tap = "1"
+
+[package]
+name = "oya"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "OYA SDLC Factory - Storm goddess of transformation. 100x developer throughput with AI agent swarms."
+keywords = ["sdlc", "tdd", "ai", "agents", "automation"]
+categories = ["development-tools", "command-line-utilities"]
+
+[[bin]]
+name = "oya"
+path = "src/main.rs"
+
+[dependencies]
+core = { workspace = true }
+zjj = { workspace = true }
+factory = { workspace = true }
+intent = { workspace = true }
+centralized-docs = { workspace = true }
+orchestrator = { workspace = true }
+merge-queue = { workspace = true }
+
+tokio = { workspace = true }
+clap = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

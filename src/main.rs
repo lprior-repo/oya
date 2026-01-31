@@ -1,13 +1,13 @@
-//! Factory CLI - Contract-driven CI/CD Pipeline
+//! OYA CLI - Main entry point
 //!
-//! Main entry point for the factory command line tool.
+//! Storm goddess of transformation. 100x developer throughput with AI agent swarms.
 
 mod cli;
 
 use std::time::Instant;
 
 use clap::Parser;
-use factory_core::{
+use oya_factory::{
     audit,
     domain::{filter_stages, get_stage, Slug, Task, TaskStatus},
     persistence::{list_all_tasks, load_task_record, save_task_record},
@@ -187,7 +187,7 @@ fn check_at_least_one_stage_passed(repo_root: &std::path::Path, slug: &str) -> R
     if has_passed_stage {
         Ok(())
     } else {
-        Err(factory_core::Error::InvalidRecord {
+        Err(oya_factory::Error::InvalidRecord {
             reason: "Cannot approve task: no stages have been passed. Run at least one stage before approving.".to_string(),
         })
     }

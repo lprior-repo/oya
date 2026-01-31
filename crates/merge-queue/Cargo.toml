@@ -1,0 +1,19 @@
+[package]
+name = "merge-queue"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "OYA Merge Queue - Parallel task merging and conflict resolution"
+
+[lints]
+workspace = true
+
+[dependencies]
+core = { path = "../core" }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
