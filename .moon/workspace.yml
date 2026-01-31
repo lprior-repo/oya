@@ -1,0 +1,25 @@
+$schema: "https://moonrepo.dev/schemas/workspace.json"
+
+# Project locations
+projects:
+  globs:
+    - "crates/*"
+
+# VCS configuration
+vcs:
+  manager: "git"
+  defaultBranch: "main"
+
+# Version constraint
+versionConstraint: ">=1.20.0"
+
+# HYPER-FAST LOCAL CACHE CONFIGURATION
+# Remote cache runs locally on this machine for zero network latency
+unstable_remote:
+  host: 'grpc://localhost:9092'
+  cache:
+    compression: 'zstd'
+
+# Hasher performance optimization
+hasher:
+  optimization: 'performance'

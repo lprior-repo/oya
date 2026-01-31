@@ -1,0 +1,14 @@
+$schema: "https://moonrepo.dev/schemas/workspace.json"
+
+# Project locations
+projects:
+  globs:
+    - "crates/*"
+
+# VCS configuration
+vcs:
+  manager: "git"
+  defaultBranch: "main"
+
+# Version constraint
+versionConstraint: ">=1.20.0"

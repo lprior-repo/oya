@@ -1,0 +1,104 @@
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 77 tests
+test error::tests::test_exit_codes ... ok
+test error::tests::test_from_io_error ... ok
+test error::tests::test_is_recoverable ... ok
+test error::tests::test_http_error_display ... ok
+test error::tests::test_not_found_error_display ... ok
+test error::tests::test_parse_error_display ... ok
+test error::tests::test_validation_batch ... ok
+test error::tests::test_validation_error_display ... ok
+test types::tests::header_name_as_ref ... ok
+test types::tests::header_name_clone ... ok
+test types::tests::header_name_case_insensitive_equality ... ok
+test types::tests::header_name_common_headers ... ok
+test types::tests::header_name_empty_fails ... ok
+test types::tests::header_name_valid_alphanumeric ... ok
+test types::tests::header_name_display ... ok
+test types::tests::header_name_valid_lowercase ... ok
+test types::tests::header_name_valid_simple ... ok
+test types::tests::header_name_valid_uppercase ... ok
+test types::tests::header_name_valid_with_hyphens ... ok
+test types::tests::header_name_with_colon_fails ... ok
+test types::tests::header_name_with_slash_fails ... ok
+test types::tests::header_name_with_spaces_fails ... ok
+test types::tests::header_name_with_special_chars_fails ... ok
+test types::tests::header_value_as_ref ... ok
+test types::tests::header_name_with_underscore_fails ... ok
+test types::tests::header_value_case_sensitive ... ok
+test types::tests::header_value_clone ... ok
+test types::tests::header_value_display ... ok
+test types::tests::header_value_common_values ... ok
+test types::tests::header_value_empty_fails ... ok
+test types::tests::header_value_equality ... ok
+test types::tests::header_value_valid_simple ... ok
+test types::tests::header_value_valid_with_crlf ... ok
+test types::tests::header_value_valid_with_numbers ... ok
+test types::tests::header_value_valid_with_spaces ... ok
+test types::tests::header_value_valid_with_special_chars ... ok
+test types::tests::header_value_valid_with_tabs ... ok
+test types::tests::header_value_with_control_chars_fails ... ok
+test types::tests::header_value_with_non_ascii_fails ... ok
+test types::tests::header_value_with_null_fails ... ok
+test types::tests::http_method_all_variants_display ... ok
+test types::tests::http_method_equality ... ok
+test types::tests::http_method_from_str_case_insensitive ... ok
+test types::tests::http_method_from_str_invalid ... ok
+test types::tests::http_method_from_str_valid ... ok
+test types::tests::http_method_get_display ... ok
+test types::tests::http_method_post_display ... ok
+test types::tests::spec_name_as_path ... ok
+test types::tests::spec_name_base_name ... ok
+test types::tests::spec_name_display ... ok
+test types::tests::spec_name_empty_fails ... ok
+test types::tests::spec_name_invalid_chars_fails ... ok
+test types::tests::spec_name_missing_extension_fails ... ok
+test types::tests::spec_name_valid ... ok
+test types::tests::spec_name_with_hyphens_underscores ... ok
+test types::tests::spec_name_with_path ... ok
+test types::tests::types_module_compiles ... ok
+test types::tests::url_as_str ... ok
+test types::tests::url_clone ... ok
+test types::tests::url_invalid_empty ... ok
+test types::tests::url_display ... ok
+test types::tests::url_equality ... ok
+test types::tests::url_host_none_for_file ... ok
+test types::tests::url_invalid_malformed ... ok
+test types::tests::url_invalid_no_scheme ... ok
+test types::tests::url_invalid_scheme ... ok
+test types::tests::url_path_nested ... ok
+test types::tests::url_localhost ... ok
+test types::tests::url_path_root ... ok
+test types::tests::url_ip_address ... ok
+test types::tests::url_scheme_various ... ok
+test types::tests::url_valid_http ... ok
+test types::tests::url_valid_https ... ok
+test types::tests::url_with_query ... ok
+test types::tests::url_with_path ... ok
+test types::tests::url_with_fragment ... ok
+test types::tests::url_with_port ... ok
+
+test result: ok. 77 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 13 tests
+test crates/intent-core/src/prelude.rs - prelude (line 4) ... ok
+test crates/intent-core/src/error.rs - error (line 16) ... ok
+test crates/intent-core/src/types.rs - types::HeaderValue (line 389) ... ok
+test crates/intent-core/src/types.rs - types::HeaderValue::try_new (line 415) ... ok
+test crates/intent-core/src/types.rs - types::HttpMethod (line 237) ... ok
+test crates/intent-core/src/types.rs - types::HeaderName::try_new (line 327) ... ok
+test crates/intent-core/src/types.rs - types::Url::host (line 187) ... ok
+test crates/intent-core/src/types.rs - types::SpecName (line 27) ... ok
+test crates/intent-core/src/types.rs - types::Url::scheme (line 170) ... ok
+test crates/intent-core/src/types.rs - types::HeaderName (line 299) ... ok
+test crates/intent-core/src/types.rs - types::Url::try_new (line 147) ... ok
+test crates/intent-core/src/types.rs - types::Url::path (line 202) ... ok
+test crates/intent-core/src/types.rs - types::Url (line 127) ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s

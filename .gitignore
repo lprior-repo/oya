@@ -2,6 +2,9 @@
 target/
 Cargo.lock
 
+# Moon cache (can be large)
+.moon/cache/
+
 # IDE
 .idea/
 .vscode/

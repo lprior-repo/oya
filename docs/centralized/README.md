@@ -1,351 +1,201 @@
-# contextual-chunker
+# centralized-docs
 
-[![Crates.io](https://img.shields.io/crates/v/contextual-chunker.svg)](https://crates.io/crates/contextual-chunker)
-[![Docs.rs](https://docs.rs/contextual-chunker/badge.svg)](https://docs.rs/contextual-chunker)
-[![License](https://img.shields.io/crates/l/contextual-chunker.svg)](https://github.com/anthropics/centralized-docs/blob/main/contextual-chunker/LICENSE)
+A pure Rust CLI tool for transforming raw documentation into AI-optimized, searchable knowledge structures.
 
-Semantic chunking with hierarchical levels for documentation and knowledge bases.
+## Overview
 
-Split markdown documents into semantically meaningful chunks at multiple levels (Summary, Standard, Detailed) with automatic relationship tracking, making it ideal for RAG systems and retrieval-augmented generation.
+**centralized-docs** (v5.0) is the **best documentation indexer for AI agents**, transforming any documentation into a semantic knowledge graph with:
 
-## Features
-
-- **Semantic Boundaries**: Chunks respect H2 headings (##) in markdown
-- **Hierarchical Levels**: 3-level hierarchy (128, 512, 1024 tokens)
-- **Automatic Relationships**: Parent-child links for progressive disclosure
-- **Navigation Links**: Sequential prev/next pointers at same level
-- **Content Analysis**: Automatic type detection (code/table/prose)
-- **Summary Extraction**: Extractive summaries for quick overview
-- **Unicode Safe**: No panics on emoji, CJK, or special characters
-- **Deterministic**: Same input always produces identical chunks
-- **Minimal Dependencies**: Only regex, serde, anyhow
-
-## Installation
-
-Add to your `Cargo.toml`:
-
-```toml
-[dependencies]
-contextual-chunker = "0.1"
-```
+- 🕷️ **Web scraping** via spider-rs with sitemap.xml support
+- 🎯 **Content filtering** using BM25 relevance and text density pruning
+- 🤖 **llms.txt generation** - AI-first entry point files
+- 📑 **Automatic metadata extraction** (titles, headings, categories, tags)
+- 🔗 **Knowledge Graph DAG** with Jaccard similarity relationships
+- 📝 **Semantic chunking** with 50-100 token context prefixes
+- 🔍 **Full-text search** using Tantivy with BM25 scoring
+- 🧠 **Semantic similarity** via HNSW approximate nearest neighbor
+- 🧭 **Navigation guides** (COMPASS.md and AGENTS.md)
+- ✅ **Automated validation** and quality checking
 
 ## Quick Start
 
-```rust
-use contextual_chunker::{Document, chunk_all};
-
-let documents = vec![
-    Document::new(
-        "getting-started".to_string(),
-        "Getting Started Guide".to_string(),
-        "## Installation\nSteps to install...\n## Configuration\nHow to configure...".to_string(),
-    ),
-];
-
-let result = chunk_all(&documents)?;
-println!("Created {} chunks across {} levels",
-    result.chunks.len(),
-    3 // Summary, Standard, Detailed
-);
+### Build
+```bash
+moon run :build      # Build release binaries (cached)
+moon run :install    # Install to ~/.local/bin
 ```
 
-## Using the Chunker Trait
+### Usage
 
-The crate provides a `Chunker` trait for flexible, extensible chunking strategies:
-
-```rust
-use contextual_chunker::{Chunker, ContextualChunker, Document};
-
-// Use factory methods for common configurations
-let summary_chunker = ContextualChunker::summary();   // ~128 tokens
-let standard_chunker = ContextualChunker::standard(); // ~512 tokens
-let detailed_chunker = ContextualChunker::detailed(); // ~1024 tokens
-
-let doc = Document::new(
-    "guide".to_string(),
-    "Guide".to_string(),
-    "## Intro\nContent".to_string(),
-);
-
-let chunks = standard_chunker.chunk(&doc)?;
+**Scrape a documentation website:**
+```bash
+./target/release/doc_transformer scrape https://docs.example.com \
+  --output ./scraped \
+  --delay 250
 ```
 
-### Custom Configuration
-
-Create custom chunkers with specific parameters:
-
-```rust
-use contextual_chunker::{Chunker, ContextualChunker, Document, ChunkLevel};
-
-// Custom level with 800 tokens and 150 context tokens
-let custom_chunker = ContextualChunker::new(ChunkLevel::Standard, 150);
-
-let doc = Document::new(
-    "custom".to_string(),
-    "Custom Doc".to_string(),
-    "Content here...".to_string(),
-);
-
-let chunks = custom_chunker.chunk(&doc)?;
+**Index local markdown files:**
+```bash
+./target/release/doc_transformer index ./source_docs \
+  --output ./indexed \
+  --llms-txt
 ```
 
-### Implementing Custom Chunkers
-
-Define your own chunking strategies by implementing the `Chunker` trait:
-
-```rust
-use contextual_chunker::{Chunker, Document, Chunk};
-
-struct SimpleChunker;
-
-impl Chunker for SimpleChunker {
-    fn chunk(&self, doc: &Document) -> anyhow::Result<Vec<Chunk>> {
-        // Your custom chunking logic
-        Ok(vec![])
-    }
-}
+**One-shot scrape + index:**
+```bash
+./target/release/doc_transformer ingest https://docs.example.com \
+  --output ./indexed
 ```
 
-## How It Works
-
-### 3-Level Hierarchy
-
-Documents are chunked at three levels simultaneously for multi-granularity retrieval:
-
-| Level | Tokens | Use Case |
-|-------|--------|----------|
-| **Summary** | ~128 | Quick lookups, table of contents |
-| **Standard** | ~512 | Default search results, RAG context |
-| **Detailed** | ~1024 | Deep reading, comprehensive context |
-
-### Chunk Boundaries
-
-Chunks respect markdown structure:
-1. H2 headings (##) are primary boundaries
-2. If section exceeds token limit, split further
-3. Previous section's tail included as context (30-200 tokens)
-
-### Relationships
-
-```
-Summary Chunk 1 (128 tokens)
-├── Standard Chunk 1 (512 tokens)
-│   ├── Detailed Chunk 1 (1024 tokens)
-│   ├── Detailed Chunk 2 (1024 tokens)
-│   └── Detailed Chunk 3 (1024 tokens)
-├── Standard Chunk 2 (512 tokens)
-│   └── Detailed Chunk 4 (1024 tokens)
+**Search indexed documentation:**
+```bash
+./target/release/doc_transformer search "query terms" \
+  --index-dir ./indexed \
+  --limit 10
 ```
 
-Each chunk knows:
-- **parent_chunk_id**: Chunk at next higher level
-- **child_chunk_ids**: Chunks at next lower level
-- **previous_chunk_id**: Previous chunk at same level
-- **next_chunk_id**: Next chunk at same level
-
-## Examples
-
-### Single Document Chunking
-
-```rust
-use contextual_chunker::{Document, ChunkLevel, chunk};
-
-let doc = Document::new(
-    "api-reference".to_string(),
-    "API Reference".to_string(),
-    "## Authentication\nAPI keys...\n## Endpoints\n### GET /users".to_string(),
-);
-
-// Chunk at one level
-let standard_chunks = chunk(&doc, ChunkLevel::Standard)?;
-println!("Created {} standard chunks", standard_chunks.len());
+**Legacy mode (backward compatible):**
+```bash
+./target/release/doc_transformer ./source_docs ./output_index
 ```
 
-### Multiple Documents
-
-```rust
-use contextual_chunker::{Document, chunk_all};
-
-let docs = vec![
-    Document::new("intro".to_string(), "Intro".to_string(), content1),
-    Document::new("guide".to_string(), "Guide".to_string(), content2),
-    Document::new("api".to_string(), "API".to_string(), content3),
-];
-
-let result = chunk_all(&docs)?;
-println!("Summary: {}", result.summary_count);
-println!("Standard: {}", result.standard_count);
-println!("Detailed: {}", result.detailed_count);
+### Output Structure
+```
+output_index/
+├── llms.txt                 # AI entry point (read this first!)
+├── llms-full.txt            # Full content for large context models
+├── AGENTS.md                # Instructions for AI coding agents
+├── INDEX.json               # Complete searchable index + knowledge graph
+├── COMPASS.md               # Human-readable navigation guide
+├── docs/                    # Transformed documents with YAML frontmatter
+├── chunks/                  # Semantic chunks with context prefixes
+└── .tantivy_index/          # Full-text search index
 ```
 
-### Navigation & Relationships
+## Architecture
 
-```rust
-use contextual_chunker::{Document, ChunkLevel, chunk_all};
+### 7-Step Pipeline
 
-let result = chunk_all(&[doc])?;
+1. **DISCOVER** - Scan directories for markdown files
+2. **ANALYZE** - Extract metadata (titles, headings, categories)
+3. **ASSIGN IDs** - Generate hierarchical document IDs
+4. **TRANSFORM** - Apply standard formatting and frontmatter
+5. **CHUNK** - Semantic splitting with context prefixes (~512 tokens/chunk)
+6. **INDEX** - Build searchable index (INDEX.json)
+7. **VALIDATE** - Quality checks and validation
 
-// Find Summary chunk
-let summary = result.chunks.iter()
-    .find(|c| c.chunk_level == ChunkLevel::Summary)
-    .unwrap();
+### Key Features
 
-// Navigate to Standard children
-for child_id in &summary.child_chunk_ids {
-    let child = result.chunks.iter()
-        .find(|c| c.chunk_id == child_id)
-        .unwrap();
-    println!("Standard: {}", child.heading.as_deref().unwrap_or("Intro"));
+**Knowledge Graph (DAG)**
+- Automatic relationship detection
+- Jaccard similarity scoring
+- Topological ordering
+- Semantic navigation
 
-    // Navigate to Detailed grandchildren
-    for grandchild_id in &child.child_chunk_ids {
-        let grandchild = result.chunks.iter()
-            .find(|c| c.chunk_id == grandchild_id)
-            .unwrap();
-        println!("  → Detailed: {}", grandchild.chunk_id);
-    }
-}
+**Contextual Retrieval**
+- Each chunk includes 50-100 token context prefix
+- Natural multi-turn AI conversations
+- 35% fewer retrieval failures (Anthropic research)
+
+**Full-Text Search**
+- Keyword indexing
+- Category and tag filtering
+- Complete chunk navigation
+
+## Example
+
+```bash
+# Transform CUE documentation (36 files)
+./target/release/doc_transformer ./cue_docs ./indexed_output
+
+# Output
+# ======================================================================
+# DOC_TRANSFORMER v4.3 (Knowledge DAG)
+# ======================================================================
+# [STEP 1] DISCOVER: Found 36 files
+# [STEP 2] ANALYZE: Processed 36 files
+# [STEP 3] ASSIGN IDs: Generated 36 IDs
+# [STEP 4] TRANSFORM: 36/36 files (0 errors)
+# [STEP 5] CHUNK: Generated 156 chunks
+# [STEP 6] INDEX: Created COMPASS.md and INDEX.json
+# [STEP 7] VALIDATE: 36/36 files passed
+# ======================================================================
+# COMPLETE
 ```
 
-### Serialization
+## For AI Agents
 
-```rust
-use contextual_chunker::{Document, chunk_all};
+Load the generated INDEX.json to:
+1. Search by keyword
+2. Get document metadata and chunk list
+3. Retrieve individual chunks with context
+4. Navigate related documents via Knowledge Graph
 
-let result = chunk_all(&[doc])?;
+See `docs/INDEXER.md` for complete integration guide.
 
-// Serialize to JSON
-let json = serde_json::to_string(&result.chunks)?;
+## Testing
 
-// Deserialize
-let chunks: Vec<Chunk> = serde_json::from_str(&json)?;
+```bash
+moon run :test       # Run all tests
+moon run :ci         # Full CI pipeline
+moon run :quick      # Quick format + lint check
 ```
 
-## Design Principles
+## Project Structure
 
-**Deterministic**: Same input → same chunks (no randomness)
-- Enables caching, reproducibility, version control
-
-**Type-Safe**: Invalid documents rejected at validation, not runtime panics
-
-**Immutable**: Chunks are frozen after creation
-- No hidden mutations, easier to reason about
-
-**Zero-Panic**: All Unicode handled safely; regex patterns compile-time verified
-- Safe on emoji 🎉, CJK 中文, combining marks, etc.
-
-**Minimal Dependencies**: Only standard Rust ecosystem
-- regex, serde, anyhow (no ML libraries or heavy dependencies)
-
-## Token Estimation
-
-Token counts are estimated as: **content_length / 4 ≈ tokens**
-
-This is the OpenAI standard approximation. For exact counts, use a tokenizer:
-
-```rust
-// This crate estimates
-let chunk = chunks[0];
-assert!(chunk.token_count >= 100); // Approximate
-
-// For production: use tiktoken or similar
-// let exact = tiktoken::count_tokens(&chunk.content, "cl100k_base")?;
+```
+centralized-docs/
+├── doc_transformer/              # Rust transformer binary
+│   ├── src/
+│   │   ├── main.rs              # Entry point
+│   │   ├── discover.rs          # File discovery
+│   │   ├── analyze.rs           # Metadata extraction
+│   │   ├── assign.rs            # ID generation
+│   │   ├── transform.rs         # Document transformation
+│   │   ├── chunk.rs             # Semantic chunking
+│   │   ├── graph.rs             # Knowledge DAG
+│   │   ├── index.rs             # Indexing
+│   │   └── validate.rs          # Validation
+│   └── Cargo.toml
+├── cue_docs/                     # Example: CUE documentation (36 files)
+├── docs/
+│   └── INDEXER.md               # Complete documentation
+├── CLAUDE.md                     # AI development rules
+└── README.md                     # This file
 ```
 
-## Safety & Guarantees
+## Dependencies
 
-### Panic Safety
-- ❌ No panics on invalid UTF-8 (input is already String)
-- ❌ No panics on Unicode (emoji, CJK, combining marks all safe)
-- ❌ No panics on regex (hardcoded patterns verified at compile-time)
-- ❌ No unwrap() or expect() except hardcoded regex (tested)
+**Core:**
+- **petgraph** - Graph data structures (Knowledge DAG)
+- **serde** / **serde_json** - Serialization
+- **regex** - Pattern matching
+- **walkdir** - Directory traversal
+- **chrono** - Timestamps
+- **clap** - CLI parsing
+- **tokio** - Async runtime
+- **anyhow** - Error handling
 
-### Stability Guarantees
-- Chunk IDs are deterministic based on content
-- Token counts consistent within ±10%
-- Parent-child relationships form valid DAG (no cycles)
-- Navigation pointers (prev/next) are bidirectional
+**v5.0 Web Scraping & Search:**
+- **spider** - Web scraping with sitemap support
+- **spider_transformations** - HTML to markdown conversion
+- **url** - URL parsing and manipulation
+- **scraper** - HTML parsing for content filtering
+- **tantivy** - Full-text search engine with BM25
+- **hnsw_rs** - Approximate nearest neighbor search
+- **readability** - Content extraction (Mozilla algorithm)
+- **pulldown-cmark** - Markdown parsing
 
-### API Stability (0.x)
-- `Chunk` struct fields are fixed (no removals/reorders)
-- `ChunkLevel` enum variants are fixed
-- New features added with new methods, not breaking changes
+## Version
 
-## Performance
-
-| Metric | Time | Space |
-|--------|------|-------|
-| **Small doc** (1MB) | ~1ms | ~2MB |
-| **Medium doc** (10MB) | ~10ms | ~20MB |
-| **Large doc** (100MB) | ~100ms | ~200MB |
-
-All measurements on modern hardware; scales linearly with content size.
-
-## Use Cases
-
-### RAG (Retrieval-Augmented Generation)
-- Chunk with Summary level for quick filtering
-- Retrieve at Standard level for context window
-- Use Detailed chunks for verification/followup
-
-### Knowledge Base
-- Summary level for table of contents
-- Standard level for search results
-- Detailed level for full article view
-
-### Documentation
-- Multi-level navigation (collapsed/expanded)
-- Link chunks to source code (via doc_id)
-- Version-aware chunking (separate docs per version)
-
-### LLM Fine-tuning
-- Use Summary/Standard chunks for training
-- Preserve hierarchical structure in training data
-
-## Contributing
-
-Contributions welcome! Please:
-1. Add tests for new features
-2. Maintain documentation
-3. Keep dependencies minimal
-4. Ensure zero unsafe code
+**v5.0** - AI-Optimized Documentation Indexer with Web Scraping
+- Web scraping via spider-rs with sitemap support
+- Content filtering (BM25 + pruning algorithms)
+- llms.txt generation for AI entry points
+- Full-text search with Tantivy
+- HNSW semantic similarity search
+- CLI subcommands: scrape, index, ingest, search
 
 ## License
 
-MIT - See LICENSE file
-
-## Changelog
-
-### 0.1.0 (Initial Release)
-- Core chunking algorithm
-- 3-level hierarchy
-- Parent-child relationships
-- Sequential navigation links
-- Content type detection
-- Summary extraction
-
-## Related Projects
-
-- [tantivy](https://github.com/quickwit-oss/tantivy) - Full-text search
-- [pgvector](https://github.com/pgvector/pgvector) - Semantic search in PostgreSQL
-- [ragas](https://github.com/explodinggradients/ragas) - RAG evaluation
-- [llms.txt](https://github.com/llmsorg/llms-txt) - AI documentation standard
-
-## Citation
-
-If you use contextual-chunker in research, please cite:
-
-```bibtex
-@software{contextual_chunker,
-  author = {Anthropic},
-  title = {contextual-chunker: Semantic Chunking for Documentation},
-  year = {2026},
-  url = {https://github.com/anthropics/centralized-docs}
-}
-```
-
-## Questions?
-
-- Issues: https://github.com/anthropics/centralized-docs/issues
-- Discussions: https://github.com/anthropics/centralized-docs/discussions
-- Email: opensource@anthropic.com
+MIT

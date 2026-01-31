@@ -1,0 +1,1 @@
+[{"projects":{"intent-cli":{"source":"."}},"configs":{".moon/workspace.yml":"15a94590b7ce7a928af0cd7ca3f2a3a449ea34f2","moon.yml":"73a487c0b503d1b3e858fd152cf716a74e71066f"},"env":{"MOON_OUTPUT_STYLE":"","MOON_RETRY_COUNT":""},"inDocker":false,"version":"1.41.7"}]
