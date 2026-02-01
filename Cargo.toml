@@ -7,6 +7,10 @@ members = [
     "crates/centralized-docs",
     "crates/orchestrator",
     "crates/merge-queue",
+    "crates/opencode",
+    "crates/workflow",
+    "crates/events",
+    "crates/reconciler",
 ]
 resolver = "2"
 
@@ -30,11 +34,15 @@ unimplemented = "forbid"
 unreachable = "forbid"
 
 [workspace.dependencies]
-# Internal crates
-core = { path = "crates/core" }
-zjj = { path = "crates/zjj" }
-factory = { path = "crates/factory" }
-intent = { path = "crates/intent" }
+# Internal crates (must match actual package names in Cargo.toml)
+oya-core = { path = "crates/core" }
+oya-zjj = { path = "crates/zjj" }
+oya-factory = { path = "crates/factory" }
+oya-intent = { path = "crates/intent" }
+oya-opencode = { path = "crates/opencode" }
+oya-workflow = { path = "crates/workflow" }
+oya-events = { path = "crates/events" }
+oya-reconciler = { path = "crates/reconciler" }
 centralized-docs = { path = "crates/centralized-docs" }
 orchestrator = { path = "crates/orchestrator" }
 merge-queue = { path = "crates/merge-queue" }
@@ -42,6 +50,7 @@ merge-queue = { path = "crates/merge-queue" }
 # Async runtime (battle-tested)
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
+async-trait = "0.1"
 
 # Storage (battle-tested)
 rusqlite = { version = "0.32", features = ["bundled"] }
@@ -85,7 +94,7 @@ notify = "7"
 # HTTP and web scraping
 reqwest = { version = "0.12", features = ["blocking", "json"] }
 scraper = "0.20"
-url = "2"
+url = { version = "2", features = ["serde"] }
 
 # Functional utilities
 tap = "1"
@@ -107,10 +116,10 @@ name = "oya"
 path = "src/main.rs"
 
 [dependencies]
-core = { workspace = true }
-zjj = { workspace = true }
-factory = { workspace = true }
-intent = { workspace = true }
+oya-core = { workspace = true }
+oya-zjj = { workspace = true }
+oya-factory = { workspace = true }
+oya-intent = { workspace = true }
 centralized-docs = { workspace = true }
 orchestrator = { workspace = true }
 merge-queue = { workspace = true }

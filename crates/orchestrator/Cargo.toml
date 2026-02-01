@@ -11,7 +11,7 @@ description = "OYA Orchestrator - Agent swarm coordination and task distribution
 workspace = true
 
 [dependencies]
-core = { path = "../core" }
+oya-core = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
