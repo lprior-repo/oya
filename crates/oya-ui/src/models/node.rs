@@ -159,40 +159,40 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_valid_node_creation() {
-        let result = Node::new("node1", "Test Node");
-        assert!(result.is_ok());
-
-        let node = result.unwrap();
+    fn test_valid_node_creation() -> Result<(), String> {
+        let node = Node::new("node1", "Test Node")?;
         assert_eq!(node.id().as_str(), "node1");
         assert_eq!(node.label(), "Test Node");
         assert_eq!(node.position(), Position::origin());
         assert_eq!(node.state(), NodeState::Idle);
         assert_eq!(node.shape(), NodeShape::Circle);
+        Ok(())
     }
 
     #[test]
     fn test_invalid_node_id_empty() {
         let result = Node::new("", "Test Node");
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Node ID cannot be empty");
+        if let Err(msg) = result {
+            assert_eq!(msg, "Node ID cannot be empty");
+        }
     }
 
     #[test]
-    fn test_node_with_position() {
-        let result = Node::with_position("node2", "Node 2", 10.5, 20.5);
-        assert!(result.is_ok());
-
-        let node = result.unwrap();
+    fn test_node_with_position() -> Result<(), String> {
+        let node = Node::with_position("node2", "Node 2", 10.5, 20.5)?;
         assert_eq!(node.position().x, 10.5);
         assert_eq!(node.position().y, 20.5);
+        Ok(())
     }
 
     #[test]
     fn test_position_validation_nan() {
         let result = Position::new(f32::NAN, 0.0);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("must be finite"));
+        if let Err(msg) = result {
+            assert!(msg.contains("must be finite"));
+        }
     }
 
     #[test]
@@ -212,8 +212,8 @@ mod tests {
     }
 
     #[test]
-    fn test_node_state_transitions() {
-        let mut node = Node::new("node3", "Node 3").unwrap();
+    fn test_node_state_transitions() -> Result<(), String> {
+        let mut node = Node::new("node3", "Node 3")?;
 
         assert_eq!(node.state(), NodeState::Idle);
 
@@ -228,11 +228,12 @@ mod tests {
 
         node.set_state(NodeState::Blocked);
         assert_eq!(node.state(), NodeState::Blocked);
+        Ok(())
     }
 
     #[test]
-    fn test_node_shape_variants() {
-        let mut node = Node::new("node4", "Node 4").unwrap();
+    fn test_node_shape_variants() -> Result<(), String> {
+        let mut node = Node::new("node4", "Node 4")?;
 
         assert_eq!(node.shape(), NodeShape::Circle);
 
@@ -241,38 +242,35 @@ mod tests {
 
         node.set_shape(NodeShape::Diamond);
         assert_eq!(node.shape(), NodeShape::Diamond);
+        Ok(())
     }
 
     #[test]
-    fn test_node_serialization() {
-        let node = Node::new("node5", "Node 5").unwrap();
+    fn test_node_serialization() -> Result<(), String> {
+        let node = Node::new("node5", "Node 5")?;
 
-        let json = serde_json::to_string(&node);
-        assert!(json.is_ok());
-
-        let deserialized: Result<Node, _> = serde_json::from_str(&json.unwrap());
-        assert!(deserialized.is_ok());
-
-        let deserialized_node = deserialized.unwrap();
-        assert_eq!(deserialized_node.id().as_str(), "node5");
-        assert_eq!(deserialized_node.label(), "Node 5");
+        let json = serde_json::to_string(&node).map_err(|e| e.to_string())?;
+        let deserialized: Node = serde_json::from_str(&json).map_err(|e| e.to_string())?;
+        assert_eq!(deserialized.id().as_str(), "node5");
+        assert_eq!(deserialized.label(), "Node 5");
+        Ok(())
     }
 
     #[test]
-    fn test_nodeid_unicode() {
+    fn test_nodeid_unicode() -> Result<(), String> {
         // Test Unicode support
-        let result = NodeId::new("节点-1");
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().as_str(), "节点-1");
+        let node_id = NodeId::new("节点-1")?;
+        assert_eq!(node_id.as_str(), "节点-1");
+        Ok(())
     }
 
     #[test]
-    fn test_nodeid_very_long() {
+    fn test_nodeid_very_long() -> Result<(), String> {
         // Test very long IDs
         let long_id = "a".repeat(10000);
-        let result = NodeId::new(long_id.clone());
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().as_str(), &long_id);
+        let node_id = NodeId::new(long_id.clone())?;
+        assert_eq!(node_id.as_str(), &long_id);
+        Ok(())
     }
 
     #[test]
@@ -283,13 +281,14 @@ mod tests {
     }
 
     #[test]
-    fn test_node_position_update() {
-        let mut node = Node::new("node6", "Node 6").unwrap();
+    fn test_node_position_update() -> Result<(), String> {
+        let mut node = Node::new("node6", "Node 6")?;
 
-        let new_pos = Position::new(42.0, 43.0).unwrap();
+        let new_pos = Position::new(42.0, 43.0)?;
         node.set_position(new_pos);
 
         assert_eq!(node.position().x, 42.0);
         assert_eq!(node.position().y, 43.0);
+        Ok(())
     }
 }

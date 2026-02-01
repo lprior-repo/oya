@@ -3,6 +3,7 @@
 //! Provides cancel, retry, and view logs buttons for workflow timeline.
 
 use leptos::prelude::*;
+use leptos::task::spawn_local;
 use serde::{Deserialize, Serialize};
 
 /// Status of a workflow/bead
@@ -23,13 +24,6 @@ pub struct ControlsState {
     pub status: BeadStatus,
     pub is_loading: bool,
     pub error_message: Option<String>,
-}
-
-/// Props for WorkflowControls component
-#[derive(Clone)]
-pub struct WorkflowControlsProps {
-    pub bead_id: Signal<String>,
-    pub status: Signal<BeadStatus>,
 }
 
 /// Result type for API operations
@@ -75,7 +69,7 @@ pub fn WorkflowControls(
             let bead_id_value = bead_id.get();
 
             // Spawn async task for API call
-            leptos::spawn_local(async move {
+            spawn_local(async move {
                 match send_cancel_request(&bead_id_value).await {
                     Ok(_) => {
                         is_loading.set(false);
@@ -96,7 +90,7 @@ pub fn WorkflowControls(
 
         let bead_id_value = bead_id.get();
 
-        leptos::spawn_local(async move {
+        spawn_local(async move {
             match send_retry_request(&bead_id_value).await {
                 Ok(_) => {
                     is_loading.set(false);
@@ -137,16 +131,22 @@ pub fn WorkflowControls(
             </button>
 
             // Retry button (yellow) - only for failed beads
-            <Show when=show_retry>
-                <button
-                    class="btn btn-retry"
-                    style="background-color: #eab308; color: white; padding: 8px 16px; margin: 4px; border: none; border-radius: 4px; cursor: pointer;"
-                    on:click=on_retry_click
-                    disabled=loading
-                >
-                    {move || if loading() { "Loading..." } else { "Retry" }}
-                </button>
-            </Show>
+            {move || {
+                if show_retry() {
+                    Some(view! {
+                        <button
+                            class="btn btn-retry"
+                            style="background-color: #eab308; color: white; padding: 8px 16px; margin: 4px; border: none; border-radius: 4px; cursor: pointer;"
+                            on:click=on_retry_click
+                            disabled=loading
+                        >
+                            {move || if loading() { "Loading..." } else { "Retry" }}
+                        </button>
+                    })
+                } else {
+                    None
+                }
+            }}
 
             // View logs button (blue)
             <button
@@ -159,29 +159,37 @@ pub fn WorkflowControls(
             </button>
 
             // Error message display
-            <Show when=move || error().is_some()>
-                <div class="error-message" style="color: #dc2626; margin-top: 8px;">
-                    {move || error().unwrap_or_default()}
-                </div>
-            </Show>
+            {move || {
+                error().map(|err| view! {
+                    <div class="error-message" style="color: #dc2626; margin-top: 8px;">
+                        {err}
+                    </div>
+                })
+            }}
 
             // Logs modal
-            <Show when=show_modal>
-                <div class="logs-modal" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border: 1px solid #ccc; border-radius: 8px; z-index: 1000; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-                    <h3>"Workflow Logs"</h3>
-                    <div class="logs-content" style="max-height: 400px; overflow-y: auto; margin: 16px 0;">
-                        <p>"Logs for bead: " {move || bead_id.get()}</p>
-                        <p>"Status: " {move || format!("{:?}", status.get())}</p>
-                    </div>
-                    <button
-                        class="btn btn-close"
-                        style="background-color: #6b7280; color: white; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer;"
-                        on:click=on_close_modal
-                    >
-                        "Close"
-                    </button>
-                </div>
-            </Show>
+            {move || {
+                if show_modal() {
+                    Some(view! {
+                        <div class="logs-modal" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border: 1px solid #ccc; border-radius: 8px; z-index: 1000; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                            <h3>"Workflow Logs"</h3>
+                            <div class="logs-content" style="max-height: 400px; overflow-y: auto; margin: 16px 0;">
+                                <p>"Logs for bead: " {move || bead_id.get()}</p>
+                                <p>"Status: " {move || format!("{:?}", status.get())}</p>
+                            </div>
+                            <button
+                                class="btn btn-close"
+                                style="background-color: #6b7280; color: white; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer;"
+                                on:click=on_close_modal
+                            >
+                                "Close"
+                            </button>
+                        </div>
+                    })
+                } else {
+                    None
+                }
+            }}
         </div>
     }
 }

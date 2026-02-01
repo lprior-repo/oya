@@ -137,14 +137,11 @@ pub fn TaskCard(task: Task) -> impl IntoView {
 
 /// StatusWidget component for rendering status count widgets
 #[component]
-pub fn StatusWidget<F>(label: &'static str, #[prop(into)] count: F, color: &'static str) -> impl IntoView
-where
-    F: Fn() -> usize + 'static,
-{
+pub fn StatusWidget(label: &'static str, count: usize, color: &'static str) -> impl IntoView {
     view! {
         <div class="status-widget" style=format!("border-top: 3px solid {}", color)>
             <div class="status-label">{label}</div>
-            <div class="status-count">{move || count()}</div>
+            <div class="status-count">{count}</div>
         </div>
     }
 }
@@ -196,6 +193,8 @@ pub fn Dashboard() -> impl IntoView {
 
     set_tasks.set(sample_tasks);
 
+    let counts = move || status_counts.get();
+
     view! {
         <div class="dashboard">
             <h1 class="dashboard-title">"OYA Task Dashboard"</h1>
@@ -203,22 +202,22 @@ pub fn Dashboard() -> impl IntoView {
             <div class="status-widgets">
                 <StatusWidget
                     label="Open"
-                    count=move || status_counts.get().open
+                    count=counts().open
                     color="#6b7280"
                 />
                 <StatusWidget
                     label="In Progress"
-                    count=move || status_counts.get().in_progress
+                    count=counts().in_progress
                     color="#3b82f6"
                 />
                 <StatusWidget
                     label="Closed"
-                    count=move || status_counts.get().closed
+                    count=counts().closed
                     color="#10b981"
                 />
                 <StatusWidget
                     label="Blocked"
-                    count=move || status_counts.get().blocked
+                    count=counts().blocked
                     color="#ef4444"
                 />
             </div>

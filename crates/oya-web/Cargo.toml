@@ -30,3 +30,4 @@ thiserror = { workspace = true }
 [dev-dependencies]
 tokio = { workspace = true }
 axum-test = "18"
+proptest = "1"
