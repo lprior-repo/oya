@@ -37,6 +37,7 @@ impl ReplayProgress {
     }
 
     /// Calculate percentage complete.
+    #[allow(dead_code)]
     fn calculate_percent(&self) -> f64 {
         if self.events_total == 0 {
             100.0
@@ -46,6 +47,7 @@ impl ReplayProgress {
     }
 
     /// Update progress with new event count.
+    #[allow(dead_code)]
     fn update(&mut self, events_processed: u64, eta: Option<Duration>) {
         self.events_processed = events_processed;
         self.percent_complete = self.calculate_percent();
