@@ -41,19 +41,23 @@
 #![forbid(clippy::panic)]
 
 pub mod bus;
+pub mod durable_store;
 pub mod error;
 pub mod event;
 pub mod projection;
+pub mod replay;
 pub mod store;
 pub mod types;
 
 // Re-export main types
 pub use bus::{EventBus, EventBusBuilder, EventPattern, EventSubscription};
+pub use durable_store::{DurableEventStore, EventQuery};
 pub use error::{Error, Result};
 pub use event::BeadEvent;
 pub use projection::{
     AllBeadsProjection, AllBeadsState, BeadProjection, ManagedProjection, Projection,
 };
+pub use replay::{create_tracker, ReplayProgress, ReplayTracker};
 pub use store::{EventStore, InMemoryEventStore, TracingEventStore};
 pub use types::{
     BeadId, BeadResult, BeadSpec, BeadState, Complexity, EventId, PhaseId, PhaseOutput,

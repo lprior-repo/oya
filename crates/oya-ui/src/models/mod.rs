@@ -3,6 +3,7 @@
 pub mod colors;
 pub mod edge;
 pub mod node;
+pub mod task;
 
 use serde::{Deserialize, Serialize};
 

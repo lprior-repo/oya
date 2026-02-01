@@ -93,7 +93,10 @@ fn test_resize_canvas_preserves_aspect_ratio() {
     // Verify dimensions
     let ratio = canvas.width() as f32 / canvas.height() as f32;
     let expected_ratio = 16.0 / 9.0;
-    assert!((ratio - expected_ratio).abs() < 0.01, "Should maintain 16:9 aspect ratio");
+    assert!(
+        (ratio - expected_ratio).abs() < 0.01,
+        "Should maintain 16:9 aspect ratio"
+    );
 }
 
 #[wasm_bindgen_test]
@@ -107,16 +110,21 @@ fn test_calculate_and_resize_workflow() {
     };
 
     // Simulate window size
-    let (new_width, new_height) = calculate_canvas_size(1920.0, 1080.0, &config)
-        .expect("Calculate should succeed");
+    let (new_width, new_height) =
+        calculate_canvas_size(1920.0, 1080.0, &config).expect("Calculate should succeed");
 
     // Apply calculated dimensions
-    resize_canvas(&canvas, new_width, new_height)
-        .expect("Resize should succeed");
+    resize_canvas(&canvas, new_width, new_height).expect("Resize should succeed");
 
     // Verify constraints applied
-    assert!(canvas.width() <= 1600, "Width should respect max constraint");
-    assert!(canvas.height() <= 900, "Height should respect max constraint");
+    assert!(
+        canvas.width() <= 1600,
+        "Width should respect max constraint"
+    );
+    assert!(
+        canvas.height() <= 900,
+        "Height should respect max constraint"
+    );
 }
 
 #[wasm_bindgen_test]
@@ -136,7 +144,12 @@ fn test_rapid_resize_sequence() {
 
     for (w, h) in &sizes {
         let result = resize_canvas(&canvas, *w, *h);
-        assert!(result.is_ok(), "Rapid resize should not fail at {}x{}", w, h);
+        assert!(
+            result.is_ok(),
+            "Rapid resize should not fail at {}x{}",
+            w,
+            h
+        );
         assert_eq!(canvas.width(), *w);
         assert_eq!(canvas.height(), *h);
     }

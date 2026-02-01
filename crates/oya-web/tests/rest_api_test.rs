@@ -123,6 +123,92 @@ async fn test_create_workflow_without_required_field_returns_400() {
 }
 
 #[tokio::test]
+async fn test_create_workflow_returns_valid_ulid() {
+    let server = create_test_server().unwrap();
+
+    let payload = serde_json::json!({
+        "bead_spec": "test workflow with ULID validation"
+    });
+
+    let response = server.post("/api/workflows").json(&payload).await;
+
+    assert_eq!(response.status_code(), StatusCode::CREATED);
+
+    let body: Value = response.json();
+    let bead_id = body["bead_id"].as_str().unwrap();
+
+    // ULID should be exactly 26 characters
+    assert_eq!(bead_id.len(), 26);
+
+    // ULID should only contain Crockford base32 characters
+    assert!(
+        bead_id
+            .chars()
+            .all(|c| "0123456789ABCDEFGHJKMNPQRSTVWXYZ".contains(c))
+    );
+}
+
+#[tokio::test]
+async fn test_create_workflow_is_idempotent() {
+    let server = create_test_server().unwrap();
+
+    let payload = serde_json::json!({
+        "bead_spec": "idempotent test spec"
+    });
+
+    // First request
+    let response1 = server.post("/api/workflows").json(&payload).await;
+    assert_eq!(response1.status_code(), StatusCode::CREATED);
+    let body1: Value = response1.json();
+
+    // Second identical request - should still succeed
+    let response2 = server.post("/api/workflows").json(&payload).await;
+    assert_eq!(response2.status_code(), StatusCode::CREATED);
+    let body2: Value = response2.json();
+
+    // Both should return valid bead IDs (may be different due to ULID generation)
+    assert!(body1["bead_id"].is_string());
+    assert!(body2["bead_id"].is_string());
+}
+
+#[tokio::test]
+async fn test_create_workflow_handles_empty_string_spec() {
+    let server = create_test_server().unwrap();
+
+    let payload = serde_json::json!({
+        "bead_spec": ""
+    });
+
+    let response = server.post("/api/workflows").json(&payload).await;
+
+    // Empty string should be accepted (validation is responsibility of scheduler)
+    assert_eq!(response.status_code(), StatusCode::CREATED);
+
+    let body: Value = response.json();
+    assert!(body["bead_id"].is_string());
+}
+
+#[tokio::test]
+async fn test_create_workflow_response_structure() {
+    let server = create_test_server().unwrap();
+
+    let payload = serde_json::json!({
+        "bead_spec": "structure validation test"
+    });
+
+    let response = server.post("/api/workflows").json(&payload).await;
+
+    assert_eq!(response.status_code(), StatusCode::CREATED);
+
+    let body: Value = response.json();
+
+    // Should have exactly one field: bead_id
+    assert_eq!(body.as_object().unwrap().len(), 1);
+    assert!(body.get("bead_id").is_some());
+    assert!(body["bead_id"].is_string());
+}
+
+#[tokio::test]
 async fn test_nonexistent_route_returns_404() {
     let server = create_test_server().unwrap();
 

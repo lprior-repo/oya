@@ -3,7 +3,7 @@
 //! Provides functional, panic-free canvas resizing with aspect ratio maintenance,
 //! dimension constraints, and DPI scaling preservation.
 
-use web_sys::{window, HtmlCanvasElement};
+use web_sys::{HtmlCanvasElement, window};
 
 /// Configuration for canvas resize behavior
 #[derive(Debug, Clone, Copy)]
@@ -110,11 +110,7 @@ pub fn calculate_canvas_size(
 /// # Ok(())
 /// # }
 /// ```
-pub fn resize_canvas(
-    canvas: &HtmlCanvasElement,
-    width: u32,
-    height: u32,
-) -> Result<(), String> {
+pub fn resize_canvas(canvas: &HtmlCanvasElement, width: u32, height: u32) -> Result<(), String> {
     // Set canvas dimensions
     canvas.set_width(width);
     canvas.set_height(height);
@@ -160,15 +156,13 @@ pub fn get_window_size() -> Result<(f32, f32), String> {
         .inner_width()
         .map_err(|e| format!("Failed to get window width: {:?}", e))?
         .as_f64()
-        .ok_or("Window width is not a number")?
-        as f32;
+        .ok_or("Window width is not a number")? as f32;
 
     let height = window
         .inner_height()
         .map_err(|e| format!("Failed to get window height: {:?}", e))?
         .as_f64()
-        .ok_or("Window height is not a number")?
-        as f32;
+        .ok_or("Window height is not a number")? as f32;
 
     Ok((width, height))
 }
@@ -234,7 +228,12 @@ mod tests {
         // Should maintain 3:2 aspect ratio (1200:800)
         let ratio = w as f32 / h as f32;
         let expected_ratio = 1200.0 / 800.0;
-        assert!((ratio - expected_ratio).abs() < 0.01, "ratio={}, expected={}", ratio, expected_ratio);
+        assert!(
+            (ratio - expected_ratio).abs() < 0.01,
+            "ratio={}, expected={}",
+            ratio,
+            expected_ratio
+        );
         Ok(())
     }
 
@@ -249,7 +248,12 @@ mod tests {
         // Should maintain 3:2 aspect ratio
         let ratio = w as f32 / h as f32;
         let expected_ratio = 1200.0 / 800.0;
-        assert!((ratio - expected_ratio).abs() < 0.01, "ratio={}, expected={}", ratio, expected_ratio);
+        assert!(
+            (ratio - expected_ratio).abs() < 0.01,
+            "ratio={}, expected={}",
+            ratio,
+            expected_ratio
+        );
         Ok(())
     }
 
@@ -258,7 +262,9 @@ mod tests {
         let config = ResizeConfig::default();
         let result = calculate_canvas_size(0.0, 1080.0, &config);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Invalid window width"));
+        if let Err(msg) = result {
+            assert!(msg.contains("Invalid window width"));
+        }
     }
 
     #[test]
@@ -266,7 +272,9 @@ mod tests {
         let config = ResizeConfig::default();
         let result = calculate_canvas_size(-100.0, 1080.0, &config);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Invalid window width"));
+        if let Err(msg) = result {
+            assert!(msg.contains("Invalid window width"));
+        }
     }
 
     #[test]
@@ -274,7 +282,9 @@ mod tests {
         let config = ResizeConfig::default();
         let result = calculate_canvas_size(f32::NAN, 1080.0, &config);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Invalid window width"));
+        if let Err(msg) = result {
+            assert!(msg.contains("Invalid window width"));
+        }
     }
 
     #[test]
@@ -282,7 +292,9 @@ mod tests {
         let config = ResizeConfig::default();
         let result = calculate_canvas_size(f32::INFINITY, 1080.0, &config);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Invalid window width"));
+        if let Err(msg) = result {
+            assert!(msg.contains("Invalid window width"));
+        }
     }
 
     #[test]
@@ -290,7 +302,9 @@ mod tests {
         let config = ResizeConfig::default();
         let result = calculate_canvas_size(1920.0, 0.0, &config);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Invalid window height"));
+        if let Err(msg) = result {
+            assert!(msg.contains("Invalid window height"));
+        }
     }
 
     #[test]
@@ -298,7 +312,9 @@ mod tests {
         let config = ResizeConfig::default();
         let result = calculate_canvas_size(1920.0, -100.0, &config);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Invalid window height"));
+        if let Err(msg) = result {
+            assert!(msg.contains("Invalid window height"));
+        }
     }
 
     #[test]
@@ -306,7 +322,9 @@ mod tests {
         let config = ResizeConfig::default();
         let result = calculate_canvas_size(1920.0, f32::NAN, &config);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Invalid window height"));
+        if let Err(msg) = result {
+            assert!(msg.contains("Invalid window height"));
+        }
     }
 
     #[test]
@@ -314,7 +332,9 @@ mod tests {
         let config = ResizeConfig::default();
         let result = calculate_canvas_size(1920.0, f32::INFINITY, &config);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Invalid window height"));
+        if let Err(msg) = result {
+            assert!(msg.contains("Invalid window height"));
+        }
     }
 
     #[test]
@@ -359,7 +379,12 @@ mod tests {
 
         let ratio = w as f32 / h as f32;
         let expected_ratio = 1200.0 / 800.0;
-        assert!((ratio - expected_ratio).abs() < 0.01, "ratio={}, expected={}", ratio, expected_ratio);
+        assert!(
+            (ratio - expected_ratio).abs() < 0.01,
+            "ratio={}, expected={}",
+            ratio,
+            expected_ratio
+        );
         Ok(())
     }
 }

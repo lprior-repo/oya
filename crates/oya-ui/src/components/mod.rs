@@ -4,6 +4,9 @@ use leptos::prelude::*;
 
 pub mod canvas;
 pub mod controls;
+pub mod dashboard;
+pub mod task_list;
+pub mod timeline;
 
 /// Canvas component for rendering the graph
 #[component]

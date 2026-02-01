@@ -26,6 +26,12 @@ pub struct CancelBeadResponse {
     message: String,
 }
 
+/// Response for bead retry
+#[derive(Debug, Serialize)]
+pub struct RetryBeadResponse {
+    message: String,
+}
+
 /// GET /api/beads/:id - Query bead status
 pub async fn get_bead_status(
     Path(id): Path<String>,
@@ -66,5 +72,24 @@ pub async fn cancel_bead(
 
     Ok(Json(CancelBeadResponse {
         message: format!("Bead {} cancellation requested", bead_id),
+    }))
+}
+
+/// POST /api/beads/:id/retry - Retry a failed bead
+pub async fn retry_bead(
+    Path(id): Path<String>,
+    State(state): State<AppState>,
+) -> Result<Json<RetryBeadResponse>> {
+    let bead_id = id
+        .parse::<Ulid>()
+        .map_err(|_| AppError::BadRequest("Invalid bead ID".to_string()))?;
+
+    state
+        .scheduler
+        .send(SchedulerMessage::RetryBead { id: bead_id })
+        .map_err(|_| AppError::ServiceUnavailable("Scheduler unavailable".to_string()))?;
+
+    Ok(Json(RetryBeadResponse {
+        message: format!("Bead {} retry requested", bead_id),
     }))
 }

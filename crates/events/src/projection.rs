@@ -7,6 +7,7 @@ use tokio::sync::RwLock;
 
 use crate::error::Result;
 use crate::event::BeadEvent;
+use crate::replay::ReplayTracker;
 use crate::store::EventStore;
 use crate::types::{BeadId, BeadSpec, BeadState, PhaseId, StateTransition};
 
@@ -24,10 +25,22 @@ pub trait Projection: Send + Sync {
 
     /// Rebuild the state from a store.
     async fn rebuild(&self, store: &dyn EventStore) -> Result<Self::State> {
+        self.rebuild_with_progress(store, None).await
+    }
+
+    /// Rebuild the state from a store with optional progress tracking.
+    async fn rebuild_with_progress(
+        &self,
+        store: &dyn EventStore,
+        tracker: Option<&ReplayTracker>,
+    ) -> Result<Self::State> {
         let events = store.read(None).await?;
         let mut state = self.initial_state();
         for event in events {
             self.apply(&mut state, &event);
+            if let Some(t) = tracker {
+                t.increment()?;
+            }
         }
         Ok(state)
     }
@@ -234,7 +247,19 @@ impl<P: Projection> ManagedProjection<P> {
 
     /// Rebuild from a store.
     pub async fn rebuild(&self, store: &dyn EventStore) -> Result<()> {
-        let new_state = self.projection.rebuild(store).await?;
+        self.rebuild_with_progress(store, None).await
+    }
+
+    /// Rebuild from a store with optional progress tracking.
+    pub async fn rebuild_with_progress(
+        &self,
+        store: &dyn EventStore,
+        tracker: Option<&ReplayTracker>,
+    ) -> Result<()> {
+        let new_state = self
+            .projection
+            .rebuild_with_progress(store, tracker)
+            .await?;
         let mut state = self.state.write().await;
         *state = new_state;
         Ok(())
@@ -343,5 +368,71 @@ mod tests {
             state.and_then(|s| s.beads.get(&bead_id).map(|b| b.current_state)),
             Some(BeadState::Scheduled)
         );
+    }
+
+    #[tokio::test]
+    async fn test_projection_rebuild_with_progress() {
+        use crate::replay::ReplayTracker;
+
+        let store = Arc::new(InMemoryEventStore::new());
+
+        // Add multiple events to test progress tracking
+        for _ in 0..5 {
+            let bead_id = BeadId::new();
+            store
+                .append(BeadEvent::created(
+                    bead_id,
+                    BeadSpec::new("Test").with_complexity(Complexity::Simple),
+                ))
+                .await
+                .ok();
+        }
+
+        let (tracker, mut rx) = ReplayTracker::new(5, 1);
+        let proj = AllBeadsProjection::new();
+        let result = proj
+            .rebuild_with_progress(store.as_ref(), Some(&tracker))
+            .await;
+
+        assert!(result.is_ok());
+
+        // Verify progress was tracked
+        rx.changed().await.ok();
+        let progress = rx.borrow().clone();
+        assert_eq!(progress.events_processed, 5);
+        assert_eq!(progress.percent_complete, 100.0);
+    }
+
+    #[tokio::test]
+    async fn test_managed_projection_rebuild_with_progress() {
+        use crate::replay::ReplayTracker;
+
+        let store = Arc::new(InMemoryEventStore::new());
+
+        // Add events
+        for _ in 0..10 {
+            let bead_id = BeadId::new();
+            store
+                .append(BeadEvent::created(
+                    bead_id,
+                    BeadSpec::new("Test").with_complexity(Complexity::Simple),
+                ))
+                .await
+                .ok();
+        }
+
+        let managed = ManagedProjection::new(AllBeadsProjection::new());
+        let (tracker, mut rx) = ReplayTracker::new(10, 5);
+
+        let result = managed
+            .rebuild_with_progress(store.as_ref(), Some(&tracker))
+            .await;
+        assert!(result.is_ok());
+
+        // Verify progress updates were emitted
+        rx.changed().await.ok();
+        let progress = rx.borrow().clone();
+        assert!(progress.events_processed > 0);
+        assert!(progress.percent_complete > 0.0);
     }
 }

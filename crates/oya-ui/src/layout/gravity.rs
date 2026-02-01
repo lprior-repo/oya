@@ -68,10 +68,7 @@ impl Default for GravityConfig {
 ///
 /// # Returns
 /// New position after applying gravity force
-pub fn apply_center_gravity(
-    node: &Node,
-    config: &GravityConfig,
-) -> Result<Position, String> {
+pub fn apply_center_gravity(node: &Node, config: &GravityConfig) -> Result<Position, String> {
     let pos = node.position();
 
     // Calculate distance vector from node to center
@@ -97,10 +94,7 @@ pub fn apply_center_gravity(
 ///
 /// # Returns
 /// New vector of nodes with updated positions
-pub fn apply_gravity_to_all(
-    nodes: &[Node],
-    config: &GravityConfig,
-) -> Result<Vec<Node>, String> {
+pub fn apply_gravity_to_all(nodes: &[Node], config: &GravityConfig) -> Result<Vec<Node>, String> {
     nodes
         .iter()
         .map(|node| {
@@ -119,7 +113,9 @@ mod tests {
     #[test]
     fn test_gravity_pulls_toward_center() {
         // Node far from center should move closer
-        let node = Node::with_position("n1", "Node 1", 800.0, 600.0).ok().unwrap();
+        let node = Node::with_position("n1", "Node 1", 800.0, 600.0)
+            .ok()
+            .unwrap();
 
         let config = GravityConfig::default(); // center at (600, 400)
         let new_pos = apply_center_gravity(&node, &config).ok().unwrap();
@@ -134,7 +130,9 @@ mod tests {
     #[test]
     fn test_gravity_is_deterministic() {
         // Same input should produce same output
-        let node = Node::with_position("n1", "Node 1", 100.0, 100.0).ok().unwrap();
+        let node = Node::with_position("n1", "Node 1", 100.0, 100.0)
+            .ok()
+            .unwrap();
 
         let config = GravityConfig::default();
         let pos1 = apply_center_gravity(&node, &config).ok().unwrap();
@@ -147,7 +145,9 @@ mod tests {
     #[test]
     fn test_gravity_at_center_no_movement() {
         // Node at center should not move
-        let node = Node::with_position("n1", "Node 1", 600.0, 400.0).ok().unwrap();
+        let node = Node::with_position("n1", "Node 1", 600.0, 400.0)
+            .ok()
+            .unwrap();
 
         let config = GravityConfig::default();
         let new_pos = apply_center_gravity(&node, &config).ok().unwrap();
@@ -212,7 +212,9 @@ mod tests {
     #[test]
     fn test_gravity_extreme_position() {
         // Node very far from center
-        let node = Node::with_position("n1", "Node 1", 10000.0, 10000.0).ok().unwrap();
+        let node = Node::with_position("n1", "Node 1", 10000.0, 10000.0)
+            .ok()
+            .unwrap();
 
         let config = GravityConfig::default();
         let new_pos = apply_center_gravity(&node, &config).ok().unwrap();
@@ -231,8 +233,12 @@ mod tests {
     #[test]
     fn test_apply_gravity_to_all_immutability() {
         // Original nodes should be unchanged
-        let node1 = Node::with_position("n1", "Node 1", 100.0, 100.0).ok().unwrap();
-        let node2 = Node::with_position("n2", "Node 2", 800.0, 600.0).ok().unwrap();
+        let node1 = Node::with_position("n1", "Node 1", 100.0, 100.0)
+            .ok()
+            .unwrap();
+        let node2 = Node::with_position("n2", "Node 2", 800.0, 600.0)
+            .ok()
+            .unwrap();
 
         let original_nodes = vec![node1.clone(), node2.clone()];
         let config = GravityConfig::default();
@@ -285,7 +291,9 @@ mod tests {
     #[test]
     fn test_gravity_convergence() {
         // Multiple applications should converge toward center
-        let node = Node::with_position("n1", "Node 1", 1000.0, 1000.0).ok().unwrap();
+        let node = Node::with_position("n1", "Node 1", 1000.0, 1000.0)
+            .ok()
+            .unwrap();
 
         let config = GravityConfig::default();
 
@@ -321,7 +329,9 @@ mod tests {
     #[test]
     fn test_gravity_negative_coordinates() {
         // Negative coordinates should work fine
-        let node = Node::with_position("n1", "Node 1", -100.0, -200.0).ok().unwrap();
+        let node = Node::with_position("n1", "Node 1", -100.0, -200.0)
+            .ok()
+            .unwrap();
 
         let config = GravityConfig::new(0.0, 0.0, 0.05).ok().unwrap();
         let new_pos = apply_center_gravity(&node, &config).ok().unwrap();
@@ -336,7 +346,9 @@ mod tests {
     #[test]
     fn test_gravity_max_strength_single_step() {
         // Strength of 1.0 should move node directly to center in one step
-        let node = Node::with_position("n1", "Node 1", 800.0, 600.0).ok().unwrap();
+        let node = Node::with_position("n1", "Node 1", 800.0, 600.0)
+            .ok()
+            .unwrap();
 
         let config = GravityConfig::new(600.0, 400.0, 1.0).ok().unwrap();
         let new_pos = apply_center_gravity(&node, &config).ok().unwrap();
@@ -349,7 +361,9 @@ mod tests {
     #[test]
     fn test_gravity_weak_strength_slow_convergence() {
         // Very weak strength should converge slowly
-        let node = Node::with_position("n1", "Node 1", 1000.0, 1000.0).ok().unwrap();
+        let node = Node::with_position("n1", "Node 1", 1000.0, 1000.0)
+            .ok()
+            .unwrap();
 
         let config = GravityConfig::new(600.0, 400.0, 0.001).ok().unwrap();
 
@@ -361,9 +375,8 @@ mod tests {
         current.set_position(new_pos);
 
         // Should move only slightly
-        let distance_moved = ((new_pos.x - initial_pos.x).powi(2)
-            + (new_pos.y - initial_pos.y).powi(2))
-        .sqrt();
+        let distance_moved =
+            ((new_pos.x - initial_pos.x).powi(2) + (new_pos.y - initial_pos.y).powi(2)).sqrt();
 
         // With 0.001 strength and distance ~700, movement should be small
         assert!(distance_moved < 10.0);
@@ -373,8 +386,12 @@ mod tests {
     #[test]
     fn test_apply_gravity_preserves_node_identity() {
         // Node IDs and labels should be preserved
-        let node1 = Node::with_position("n1", "Node One", 100.0, 100.0).ok().unwrap();
-        let node2 = Node::with_position("n2", "Node Two", 800.0, 600.0).ok().unwrap();
+        let node1 = Node::with_position("n1", "Node One", 100.0, 100.0)
+            .ok()
+            .unwrap();
+        let node2 = Node::with_position("n2", "Node Two", 800.0, 600.0)
+            .ok()
+            .unwrap();
 
         let nodes = vec![node1, node2];
         let config = GravityConfig::default();

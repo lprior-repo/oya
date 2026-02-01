@@ -16,5 +16,6 @@ pub fn create_router() -> Router<AppState> {
         .route("/api/workflows", post(workflows::create_workflow))
         .route("/api/beads/{id}", get(beads::get_bead_status))
         .route("/api/beads/{id}/cancel", post(beads::cancel_bead))
+        .route("/api/beads/{id}/retry", post(beads::retry_bead))
         .route("/api/health", get(health::health_check))
 }

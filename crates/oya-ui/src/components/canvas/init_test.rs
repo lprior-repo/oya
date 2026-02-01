@@ -57,7 +57,10 @@ fn test_canvas_zero_dimensions() {
     };
 
     let result = create_canvas(&config);
-    assert!(result.is_ok(), "Canvas with zero dimensions should still create");
+    assert!(
+        result.is_ok(),
+        "Canvas with zero dimensions should still create"
+    );
 
     let canvas = result.unwrap();
     assert_eq!(canvas.width(), 0);
@@ -98,7 +101,10 @@ fn test_canvas_duplicate_id() {
     assert!(result1.is_ok(), "First canvas should create");
 
     let result2 = create_canvas(&config2);
-    assert!(result2.is_ok(), "Second canvas with duplicate ID should still create");
+    assert!(
+        result2.is_ok(),
+        "Second canvas with duplicate ID should still create"
+    );
 
     // Both should exist, though DOM will have ID collision
     let canvas2 = result2.unwrap();
@@ -120,7 +126,11 @@ fn test_canvas_accessibility_attributes() {
 
     // Verify accessibility attributes
     let role = canvas.get_attribute("role");
-    assert_eq!(role, Some("img".to_string()), "Canvas should have role='img'");
+    assert_eq!(
+        role,
+        Some("img".to_string()),
+        "Canvas should have role='img'"
+    );
 
     let aria_label = canvas.get_attribute("aria-label");
     assert!(

@@ -84,7 +84,7 @@ pub fn get_or_create_context(
 #[cfg(target_arch = "wasm32")]
 mod tests {
     use super::*;
-    use crate::components::canvas::init::{create_canvas, CanvasConfig};
+    use crate::components::canvas::init::{CanvasConfig, create_canvas};
     use wasm_bindgen_test::*;
 
     wasm_bindgen_test_configure!(run_in_browser);

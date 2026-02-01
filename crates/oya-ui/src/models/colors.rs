@@ -37,11 +37,11 @@ impl RgbColor {
 /// - Failed: Red (error)
 pub fn get_node_color(state: &NodeState) -> RgbColor {
     match state {
-        NodeState::Idle => RgbColor::new(200, 200, 200),      // Light gray
-        NodeState::Running => RgbColor::new(52, 152, 219),    // Blue
-        NodeState::Blocked => RgbColor::new(230, 126, 34),    // Orange
-        NodeState::Completed => RgbColor::new(46, 204, 113),  // Green
-        NodeState::Failed => RgbColor::new(231, 76, 60),      // Red
+        NodeState::Idle => RgbColor::new(200, 200, 200), // Light gray
+        NodeState::Running => RgbColor::new(52, 152, 219), // Blue
+        NodeState::Blocked => RgbColor::new(230, 126, 34), // Orange
+        NodeState::Completed => RgbColor::new(46, 204, 113), // Green
+        NodeState::Failed => RgbColor::new(231, 76, 60), // Red
     }
 }
 

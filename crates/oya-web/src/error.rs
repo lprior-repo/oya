@@ -60,11 +60,13 @@ impl ErrorResponse {
     }
 
     pub fn from_error(err: &AppError) -> Self {
-        Self::new(
-            err.status_code(),
-            err.status_code().canonical_reason().unwrap_or("Error"),
-            err.to_string(),
-        )
+        let status = err.status_code();
+        let title = status
+            .canonical_reason()
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "Error".to_string());
+
+        Self::new(status, title, err.to_string())
     }
 }
 

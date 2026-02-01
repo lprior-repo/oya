@@ -75,10 +75,7 @@ pub fn clear_canvas(
 /// # Errors
 ///
 /// Returns an error if canvas operations fail (rare in practice)
-fn render_grid(
-    context: &CanvasRenderingContext2d,
-    config: &ClearConfig,
-) -> Result<(), String> {
+fn render_grid(context: &CanvasRenderingContext2d, config: &ClearConfig) -> Result<(), String> {
     const GRID_SIZE: f32 = 50.0;
     const GRID_COLOR: &str = "#E0E0E0";
 
@@ -114,7 +111,7 @@ mod tests {
     use super::*;
     use crate::components::canvas::{
         context::get_2d_context,
-        init::{create_canvas, CanvasConfig},
+        init::{CanvasConfig, create_canvas},
     };
     use wasm_bindgen_test::*;
 
@@ -214,7 +211,10 @@ mod tests {
         };
 
         let result = clear_canvas(&context, &clear_config);
-        assert!(result.is_ok(), "Clear with custom background should succeed");
+        assert!(
+            result.is_ok(),
+            "Clear with custom background should succeed"
+        );
     }
 
     #[wasm_bindgen_test]

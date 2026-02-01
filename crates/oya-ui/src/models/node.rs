@@ -101,12 +101,7 @@ impl Node {
     }
 
     /// Creates a Node with all fields
-    pub fn with_position(
-        id: &str,
-        label: &str,
-        x: f32,
-        y: f32,
-    ) -> Result<Self, String> {
+    pub fn with_position(id: &str, label: &str, x: f32, y: f32) -> Result<Self, String> {
         let node_id = NodeId::new(id)?;
         let position = Position::new(x, y)?;
         Ok(Self {

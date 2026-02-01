@@ -57,9 +57,7 @@ pub fn create_canvas(config: &CanvasConfig) -> Result<HtmlCanvasElement, String>
     // Get window and document with error handling
     let window = web_sys::window().ok_or("No window object available")?;
 
-    let document = window
-        .document()
-        .ok_or("No document object available")?;
+    let document = window.document().ok_or("No document object available")?;
 
     // Create canvas element
     let canvas = document
