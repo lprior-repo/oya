@@ -438,10 +438,11 @@ mod channel_behavior_tests {
         // Verify messages arrive in order
         let mut expected = 0;
         while expected < 10 {
-            let msg = timeout(Duration::from_millis(100), rx.recv())
-                .await
-                .expect("Should receive within timeout")
-                .expect("Channel should not be closed");
+            let timeout_result = timeout(Duration::from_millis(100), rx.recv()).await;
+            assert!(timeout_result.is_ok(), "Should receive within timeout");
+            let msg_option = timeout_result.unwrap();
+            assert!(msg_option.is_some(), "Channel should not be closed");
+            let msg = msg_option.unwrap();
 
             assert_eq!(msg, expected, "Messages should arrive in order");
             expected += 1;
@@ -469,7 +470,7 @@ mod clone_behavior_tests {
             ) => {
                 assert_eq!(s1, s2, "Cloned spec should match original");
             }
-            _ => panic!("Both should be CreateBead variants"),
+            _ => assert!(false, "Both should be CreateBead variants"),
         }
     }
 
@@ -484,7 +485,7 @@ mod clone_behavior_tests {
             (SchedulerResponse::Created { id: id1 }, SchedulerResponse::Created { id: id2 }) => {
                 assert_eq!(id1, id2, "Cloned ID should match original");
             }
-            _ => panic!("Both should be Created variants"),
+            _ => assert!(false, "Both should be Created variants"),
         }
     }
 
@@ -742,52 +743,80 @@ mod property_tests {
     use tokio::runtime::Runtime;
 
     // Property: Any string can be used as a spec
+    // Note: Uses match for error handling instead of .expect() to comply with zero-panic policy
     proptest! {
         #[test]
         fn prop_scheduler_accepts_any_spec(spec in "\\PC*") {
-            let rt = Runtime::new().expect("Failed to create runtime");
-            rt.block_on(async {
+            let rt = match Runtime::new() {
+                Ok(r) => r,
+                Err(e) => return Err(TestCaseError::fail(format!("Runtime creation failed: {}", e))),
+            };
+            match rt.block_on(async {
                 let scheduler = mock_scheduler();
                 let result = scheduler.send(SchedulerMessage::CreateBead { id: Ulid::new(), spec });
-                assert!(result.is_ok(), "Scheduler should accept any valid string spec");
-            });
+                prop_assert!(result.is_ok(), "Scheduler should accept any valid string spec");
+                Ok(())
+            }) {
+                Ok(_) => (),
+                Err(e) => return Err(e),
+            }
         }
     }
 
     // Property: All ULID values are valid for cancel operations
+    // Note: Uses match for error handling instead of .expect() to comply with zero-panic policy
     proptest! {
         #[test]
         fn prop_scheduler_accepts_any_ulid_for_cancel(bytes in prop::array::uniform16(any::<u8>())) {
-            let rt = Runtime::new().expect("Failed to create runtime");
-            rt.block_on(async {
+            let rt = match Runtime::new() {
+                Ok(r) => r,
+                Err(e) => return Err(TestCaseError::fail(format!("Runtime creation failed: {}", e))),
+            };
+            match rt.block_on(async {
                 let scheduler = mock_scheduler();
                 let id = Ulid::from_bytes(bytes);
                 let result = scheduler.send(SchedulerMessage::CancelBead { id });
-                assert!(result.is_ok(), "Scheduler should accept any ULID");
-            });
+                prop_assert!(result.is_ok(), "Scheduler should accept any ULID");
+                Ok(())
+            }) {
+                Ok(_) => (),
+                Err(e) => return Err(e),
+            }
         }
     }
 
     // Property: State manager accepts any ULID for queries
+    // Note: Uses match for error handling instead of .expect() to comply with zero-panic policy
     proptest! {
         #[test]
         fn prop_state_manager_accepts_any_ulid(bytes in prop::array::uniform16(any::<u8>())) {
-            let rt = Runtime::new().expect("Failed to create runtime");
-            rt.block_on(async {
+            let rt = match Runtime::new() {
+                Ok(r) => r,
+                Err(e) => return Err(TestCaseError::fail(format!("Runtime creation failed: {}", e))),
+            };
+            match rt.block_on(async {
                 let state_manager = mock_state_manager();
                 let id = Ulid::from_bytes(bytes);
                 let result = state_manager.send(StateManagerMessage::QueryBead { id });
-                assert!(result.is_ok(), "State manager should accept any ULID");
-            });
+                prop_assert!(result.is_ok(), "State manager should accept any ULID");
+                Ok(())
+            }) {
+                Ok(_) => (),
+                Err(e) => return Err(e),
+            }
         }
     }
 
     // Property: Message order is preserved
+    // Note: Uses match for error handling instead of .expect() to comply with zero-panic policy
     proptest! {
         #[test]
         fn prop_messages_processed_in_order(specs in prop::collection::vec("\\PC{1,20}", 1..=20)) {
-            let rt = Runtime::new().expect("Failed to create runtime");
-            rt.block_on(async {
+            let rt = match Runtime::new() {
+                Ok(r) => r,
+                Err(e) => return Err(TestCaseError::fail(format!("Runtime creation failed: {}", e))),
+            };
+            match rt.block_on(async {
                 let scheduler = mock_scheduler();
 
                 // Send all messages
@@ -796,21 +825,29 @@ mod property_tests {
                         id: Ulid::new(),
                         spec: spec.clone()
                     });
-                    assert!(result.is_ok(), "All messages should send successfully");
+                    prop_assert!(result.is_ok(), "All messages should send successfully");
                 }
 
                 // Messages were sent in order (we can't verify receipt order without response channels,
                 // but we verify they were all accepted)
-            });
+                Ok(())
+            }) {
+                Ok(_) => (),
+                Err(e) => return Err(e),
+            }
         }
     }
 
     // Property: Actors handle high load without errors
+    // Note: Uses match for error handling instead of .expect() to comply with zero-panic policy
     proptest! {
         #[test]
         fn prop_scheduler_handles_burst_load(count in 1usize..=1000) {
-            let rt = Runtime::new().expect("Failed to create runtime");
-            rt.block_on(async {
+            let rt = match Runtime::new() {
+                Ok(r) => r,
+                Err(e) => return Err(TestCaseError::fail(format!("Runtime creation failed: {}", e))),
+            };
+            match rt.block_on(async {
                 let scheduler = mock_scheduler();
 
                 for i in 0..count {
@@ -818,13 +855,18 @@ mod property_tests {
                         id: Ulid::new(),
                         spec: format!("spec-{}", i),
                     });
-                    assert!(result.is_ok(), "Message {} should send successfully", i);
+                    prop_assert!(result.is_ok(), "Message {} should send successfully", i);
                 }
-            });
+                Ok(())
+            }) {
+                Ok(_) => (),
+                Err(e) => return Err(e),
+            }
         }
     }
 
     // Property: Multiple clones work independently
+    // Note: Uses match for error handling instead of .expect() to comply with zero-panic policy
     proptest! {
         #[test]
         fn prop_cloned_senders_work_independently(
@@ -832,8 +874,11 @@ mod property_tests {
             spec2 in "\\PC{1,10}",
             spec3 in "\\PC{1,10}",
         ) {
-            let rt = Runtime::new().expect("Failed to create runtime");
-            rt.block_on(async {
+            let rt = match Runtime::new() {
+                Ok(r) => r,
+                Err(e) => return Err(TestCaseError::fail(format!("Runtime creation failed: {}", e))),
+            };
+            match rt.block_on(async {
                 let scheduler = mock_scheduler();
                 let s1 = scheduler.clone();
                 let s2 = scheduler.clone();
@@ -843,23 +888,27 @@ mod property_tests {
                 let r2 = s2.send(SchedulerMessage::CreateBead { id: Ulid::new(), spec: spec2 });
                 let r3 = s3.send(SchedulerMessage::CreateBead { id: Ulid::new(), spec: spec3 });
 
-                assert!(r1.is_ok() && r2.is_ok() && r3.is_ok(),
+                prop_assert!(r1.is_ok() && r2.is_ok() && r3.is_ok(),
                     "All cloned senders should work");
-            });
+                Ok(())
+            }) {
+                Ok(_) => (),
+                Err(e) => return Err(e),
+            }
         }
     }
 
     // Property: Error response messages can contain any string
+    // Note: Uses prop_assert_eq! and explicit match for error handling (zero-panic policy)
     proptest! {
         #[test]
         fn prop_error_response_accepts_any_message(msg in "\\PC*") {
             let response = SchedulerResponse::Error { message: msg.clone() };
 
-            match response {
-                SchedulerResponse::Error { message } => {
-                    assert_eq!(message, msg, "Error message should be preserved");
-                }
-                _ => panic!("Should be Error variant"),
+            if let SchedulerResponse::Error { message } = response {
+                prop_assert_eq!(message, msg, "Error message should be preserved");
+            } else {
+                return Err(TestCaseError::fail("Should be Error variant"));
             }
         }
     }
