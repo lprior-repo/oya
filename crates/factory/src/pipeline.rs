@@ -104,7 +104,13 @@ impl PipelineResult {
                 .stages
                 .iter()
                 .find(|s| !s.passed)
-                .map(|s| format!("{}: {}", s.stage_name, s.error.as_deref().unwrap_or("unknown")))
+                .map(|s| {
+                    format!(
+                        "{}: {}",
+                        s.stage_name,
+                        s.error.as_deref().unwrap_or("unknown")
+                    )
+                })
                 .unwrap_or_else(|| "unknown failure".to_string());
             Err(Error::InvalidRecord { reason: failed })
         }
@@ -402,7 +408,8 @@ mod tests {
 
     #[test]
     fn test_stage_execution_failure() {
-        let exec = StageExecution::failure("lint", Duration::from_millis(50), 2, "formatting error");
+        let exec =
+            StageExecution::failure("lint", Duration::from_millis(50), 2, "formatting error");
         assert!(!exec.passed);
         assert_eq!(exec.error.as_deref(), Some("formatting error"));
     }

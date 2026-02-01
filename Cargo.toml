@@ -1,10 +1,8 @@
 [workspace]
 members = [
     "crates/core",
-    "crates/zjj",
     "crates/factory",
     "crates/intent",
-    "crates/centralized-docs",
     "crates/orchestrator",
     "crates/merge-queue",
     "crates/opencode",
@@ -36,14 +34,12 @@ unreachable = "forbid"
 [workspace.dependencies]
 # Internal crates (must match actual package names in Cargo.toml)
 oya-core = { path = "crates/core" }
-oya-zjj = { path = "crates/zjj" }
 oya-factory = { path = "crates/factory" }
 oya-intent = { path = "crates/intent" }
 oya-opencode = { path = "crates/opencode" }
 oya-workflow = { path = "crates/workflow" }
 oya-events = { path = "crates/events" }
 oya-reconciler = { path = "crates/reconciler" }
-centralized-docs = { path = "crates/centralized-docs" }
 orchestrator = { path = "crates/orchestrator" }
 merge-queue = { path = "crates/merge-queue" }
 
@@ -117,10 +113,8 @@ path = "src/main.rs"
 
 [dependencies]
 oya-core = { workspace = true }
-oya-zjj = { workspace = true }
 oya-factory = { workspace = true }
 oya-intent = { workspace = true }
-centralized-docs = { workspace = true }
 orchestrator = { workspace = true }
 merge-queue = { workspace = true }
 

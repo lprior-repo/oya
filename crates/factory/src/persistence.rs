@@ -245,6 +245,87 @@ pub fn list_all_tasks(repo_root: &Path) -> Result<Vec<Task>> {
         .collect::<Result<Vec<_>>>()
 }
 
+/// Filter tasks by status.
+#[must_use]
+pub fn filter_tasks_by_status(tasks: &[Task], status_filter: TaskStatus) -> Vec<&Task> {
+    tasks
+        .iter()
+        .filter(|task| match (&task.status, &status_filter) {
+            (TaskStatus::Created, TaskStatus::Created) => true,
+            (TaskStatus::InProgress { .. }, TaskStatus::InProgress { .. }) => true,
+            (TaskStatus::PassedPipeline, TaskStatus::PassedPipeline) => true,
+            (TaskStatus::FailedPipeline { .. }, TaskStatus::FailedPipeline { .. }) => true,
+            (TaskStatus::Integrated, TaskStatus::Integrated) => true,
+            _ => false,
+        })
+        .collect()
+}
+
+/// Filter tasks by language.
+#[must_use]
+pub fn filter_tasks_by_language(tasks: &[Task], language: Language) -> Vec<&Task> {
+    tasks
+        .iter()
+        .filter(|task| task.language == language)
+        .collect()
+}
+
+/// Filter tasks by priority.
+#[must_use]
+pub fn filter_tasks_by_priority(tasks: &[Task], priority: Priority) -> Vec<&Task> {
+    tasks
+        .iter()
+        .filter(|task| task.priority == priority)
+        .collect()
+}
+
+/// Get tasks ready for integration (PassedPipeline).
+#[must_use]
+pub fn get_ready_tasks(tasks: &[Task]) -> Vec<&Task> {
+    tasks
+        .iter()
+        .filter(|task| task.status.is_ready_for_integration())
+        .collect()
+}
+
+/// Get failed tasks.
+#[must_use]
+pub fn get_failed_tasks(tasks: &[Task]) -> Vec<&Task> {
+    tasks
+        .iter()
+        .filter(|task| task.status.is_failed())
+        .collect()
+}
+
+/// Get in-progress tasks.
+#[must_use]
+pub fn get_in_progress_tasks(tasks: &[Task]) -> Vec<&Task> {
+    tasks
+        .iter()
+        .filter(|task| task.status.is_transient())
+        .collect()
+}
+
+/// Count tasks by status.
+#[must_use]
+pub fn count_tasks_by_status(tasks: &[Task]) -> std::collections::HashMap<String, usize> {
+    let mut counts = std::collections::HashMap::new();
+
+    for task in tasks {
+        let status_key = match &task.status {
+            TaskStatus::Created => "created".to_string(),
+            TaskStatus::InProgress { .. } => "in_progress".to_string(),
+            TaskStatus::PassedPipeline => "passed".to_string(),
+            TaskStatus::FailedPipeline { .. } => "failed".to_string(),
+            TaskStatus::Integrated => "integrated".to_string(),
+        };
+
+        *counts.entry(status_key).or_insert(0) += 1;
+    }
+
+    counts
+}
+
 /// Update stage status in task record.
 #[allow(clippy::too_many_arguments)]
 pub fn update_stage_status(

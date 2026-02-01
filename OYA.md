@@ -55,9 +55,9 @@ In the SDLC Factory:
 
 ---
 
-## OYA ↔ Brutalist SDLC Mapping
+## OYA ↔ oya SDLC Mapping
 
-| Brutalist Principle | OYA Manifestation |
+| oya Principle | OYA Manifestation |
 |---------------------|-------------------|
 | **Brutal Speed** | Storm - overwhelming force, 100 concurrent beads |
 | **No Unnecessary Abstraction** | Lightning - direct strike, no ceremony |
@@ -203,7 +203,7 @@ oya build
 - **Panics**: Zero (forbidden at compile time)
 - **Concurrency**: 100+ parallel beads
 - **Throughput**: ~100k LOC/hour
-- **Philosophy**: Brutalist - no unnecessary abstraction
+- **Philosophy**: oya - no unnecessary abstraction
 - **Testing**: TDD15 - 15-phase discipline
 - **Quality**: Railway-oriented programming, Result<T,E> everywhere
 

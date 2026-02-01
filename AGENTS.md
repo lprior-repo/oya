@@ -1,24 +1,25 @@
 # Agent Instructions
 
-This project uses **bd** (beads) for issue tracking, **Moon** for hyper-fast builds, and **jj** (Jujutsu) for version control.
+This project uses **bd** (beads) for issue tracking, **Moon** for hyper-fast builds, and **zjj** for workspace isolation.
 
-## Critical: Version Control is Jujutsu (jj), NOT git
+## Critical: Use zjj CLI for Workspace Management
 
-**NEVER use git commands directly.** This project uses Jujutsu (jj):
+**zjj wraps Jujutsu + Zellij for isolated development:**
 
 ```bash
-# Correct - Use jj
-jj status              # Show working copy status
-jj commit -m "msg"     # Create commit (auto-tracks changes)
-jj git fetch           # Fetch from remote (auto-rebases)
-jj git push            # Push to remote
-jj log                 # View commit history
+# Create isolated workspace
+zjj add <session-name>     # Manual work
+zjj spawn <bead-id>        # Agent work
 
-# WRONG - Never use git
-git status             # NO
-git commit             # NO
-git pull               # NO
-git push               # NO
+# Workflow
+zjj status                 # Check session state
+zjj sync                   # Sync with main
+zjj done                   # Merge and cleanup
+
+# For raw jj when needed
+jj commit -m "msg"         # Create commit
+jj git fetch               # Fetch from remote
+jj git push                # Push to remote
 ```
 
 ## Quick Reference

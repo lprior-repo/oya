@@ -7,7 +7,7 @@
 #![forbid(clippy::panic)]
 #![deny(clippy::expect_used)]
 
-pub use core::error::{Error, Result};
+pub use oya_core::{Error, Result};
 
 /// Queue management module
 pub mod queue {

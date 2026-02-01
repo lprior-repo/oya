@@ -118,7 +118,9 @@ impl RetryConfig {
         }
 
         let base_delay_ms = self.initial_delay.as_millis() as f64
-            * self.backoff_multiplier.powi(i32::try_from(attempt - 1).unwrap_or(i32::MAX));
+            * self
+                .backoff_multiplier
+                .powi(i32::try_from(attempt - 1).unwrap_or(i32::MAX));
 
         let capped_delay_ms = base_delay_ms.min(self.max_delay.as_millis() as f64);
 

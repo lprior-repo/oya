@@ -171,15 +171,21 @@ impl TaskBuilder<Present, Present, Present> {
     /// Only available when slug, language, and worktree_path have been set.
     /// Type-state guarantees these fields are present, so this always succeeds.
     pub fn build(self) -> Result<Task> {
-        let slug = self.slug.ok_or_else(|| crate::error::Error::InvalidRecord {
-            reason: "slug not set (type-state violation)".into(),
-        })?;
-        let language = self.language.ok_or_else(|| crate::error::Error::InvalidRecord {
-            reason: "language not set (type-state violation)".into(),
-        })?;
-        let worktree_path = self.worktree_path.ok_or_else(|| crate::error::Error::InvalidRecord {
-            reason: "worktree_path not set (type-state violation)".into(),
-        })?;
+        let slug = self
+            .slug
+            .ok_or_else(|| crate::error::Error::InvalidRecord {
+                reason: "slug not set (type-state violation)".into(),
+            })?;
+        let language = self
+            .language
+            .ok_or_else(|| crate::error::Error::InvalidRecord {
+                reason: "language not set (type-state violation)".into(),
+            })?;
+        let worktree_path =
+            self.worktree_path
+                .ok_or_else(|| crate::error::Error::InvalidRecord {
+                    reason: "worktree_path not set (type-state violation)".into(),
+                })?;
 
         let branch = self
             .branch
@@ -210,9 +216,12 @@ impl Task {
     /// Start a stage (functional status transition).
     #[must_use]
     pub fn start_stage(self, stage_name: impl Into<String>) -> Self {
-        Task::with_status(self, TaskStatus::InProgress {
-            stage: stage_name.into(),
-        })
+        Task::with_status(
+            self,
+            TaskStatus::InProgress {
+                stage: stage_name.into(),
+            },
+        )
     }
 
     /// Mark task as passed.
@@ -224,10 +233,13 @@ impl Task {
     /// Mark task as failed.
     #[must_use]
     pub fn mark_failed(self, stage: impl Into<String>, reason: impl Into<String>) -> Self {
-        Task::with_status(self, TaskStatus::FailedPipeline {
-            stage: stage.into(),
-            reason: reason.into(),
-        })
+        Task::with_status(
+            self,
+            TaskStatus::FailedPipeline {
+                stage: stage.into(),
+                reason: reason.into(),
+            },
+        )
     }
 
     /// Mark task as integrated.
@@ -291,12 +303,12 @@ impl StageBuilder {
     ///
     /// Returns Err if required fields are missing.
     pub fn try_build(self) -> Result<Stage> {
-        let name = self.name.ok_or_else(|| crate::error::Error::InvalidRecord {
-            reason: "stage name is required".into(),
-        })?;
-        let gate = self
-            .gate
-            .unwrap_or_else(|| format!("{name} passes"));
+        let name = self
+            .name
+            .ok_or_else(|| crate::error::Error::InvalidRecord {
+                reason: "stage name is required".into(),
+            })?;
+        let gate = self.gate.unwrap_or_else(|| format!("{name} passes"));
 
         Ok(Stage::new(name, gate, self.retries))
     }

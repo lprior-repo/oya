@@ -26,7 +26,10 @@ use crate::error::{Error, Result};
 /// let first = items.first(); // Always safe, no Option needed
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(bound(serialize = "T: Serialize + Clone", deserialize = "T: Deserialize<'de> + Clone"))]
+#[serde(bound(
+    serialize = "T: Serialize + Clone",
+    deserialize = "T: Deserialize<'de> + Clone"
+))]
 #[serde(try_from = "Vec<T>", into = "Vec<T>")]
 pub struct NonEmpty<T: Clone>(Vec<T>);
 

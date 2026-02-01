@@ -1,4 +1,4 @@
-# BRUTALIST - Full-Stack Rust SDLC Factory
+# oya - Full-Stack Rust SDLC Factory
 
 > 100x developer throughput - rough idea to production-quality software in hours.
 
@@ -12,41 +12,41 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                           BRUTALIST MONOREPO                                │
+│                           oya MONOREPO                                │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐                   │
-│  │ brutalist-  │     │ brutalist-  │     │ brutalist-  │                   │
+│  │ oya-  │     │ oya-  │     │ oya-  │                   │
 │  │    cli      │────▶│   intent    │────▶│   tdd15     │                   │
 │  └─────────────┘     └─────────────┘     └─────────────┘                   │
 │         │                   │                   │                           │
 │         ▼                   ▼                   ▼                           │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                      brutalist-workflow                              │   │
+│  │                      oya-workflow                              │   │
 │  │  (Intra-bead: TDD15 phases, checkpoints, rewind, journal replay)    │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │         │                                                                   │
 │         ▼                                                                   │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                      brutalist-events                                │   │
+│  │                      oya-events                                │   │
 │  │  (Inter-bead: Event sourcing, pub/sub, coordination)                │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │         │                                                                   │
 │         ▼                                                                   │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                     brutalist-reconciler                             │   │
+│  │                     oya-reconciler                             │   │
 │  │  (K8s pattern: desired state → reconcile → actual state)            │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │         │                                                                   │
 │         ├───────────────┬───────────────┬───────────────┐                  │
 │         ▼               ▼               ▼               ▼                  │
 │  ┌───────────┐   ┌───────────┐   ┌───────────┐   ┌───────────┐            │
-│  │brutalist- │   │brutalist- │   │brutalist- │   │brutalist- │            │
+│  │oya- │   │oya- │   │oya- │   │oya- │            │
 │  │   zjj     │   │   docs    │   │  opencode │   │    ui     │            │
 │  └───────────┘   └───────────┘   └───────────┘   └───────────┘            │
 │                                                                             │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                       brutalist-core                                 │   │
+│  │                       oya-core                                 │   │
 │  │  (Types, errors, Result extensions, Railway-Oriented primitives)    │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                                                             │
@@ -69,25 +69,25 @@
 ## Crate Structure
 
 ```
-brutalist/
+oya/
 ├── Cargo.toml                    # Workspace root
 ├── rust-toolchain.toml           # Pin Rust version
 ├── .cargo/config.toml            # Build optimizations
 │
 ├── crates/
-│   ├── brutalist-core/           # Foundation types (~500 LOC)
-│   ├── brutalist-workflow/       # Intra-bead engine (~2.5k LOC)
-│   ├── brutalist-events/         # Inter-bead coordination (~2k LOC)
-│   ├── brutalist-reconciler/     # K8s-style reconciliation (~1.5k LOC)
-│   ├── brutalist-intent/         # Requirement decomposition (~8k LOC)
-│   ├── brutalist-tdd15/          # TDD15 phase machine (~1k LOC)
-│   ├── brutalist-zjj/            # Workspace isolation (~2k LOC)
-│   ├── brutalist-docs/           # Documentation indexing (~15k LOC)
-│   ├── brutalist-opencode/       # AI execution bridge (~1k LOC)
-│   └── brutalist-cli/            # Unified CLI (~1k LOC)
+│   ├── oya-core/           # Foundation types (~500 LOC)
+│   ├── oya-workflow/       # Intra-bead engine (~2.5k LOC)
+│   ├── oya-events/         # Inter-bead coordination (~2k LOC)
+│   ├── oya-reconciler/     # K8s-style reconciliation (~1.5k LOC)
+│   ├── oya-intent/         # Requirement decomposition (~8k LOC)
+│   ├── oya-tdd15/          # TDD15 phase machine (~1k LOC)
+│   ├── oya-zjj/            # Workspace isolation (~2k LOC)
+│   ├── oya-docs/           # Documentation indexing (~15k LOC)
+│   ├── oya-opencode/       # AI execution bridge (~1k LOC)
+│   └── oya-cli/            # Unified CLI (~1k LOC)
 │
 ├── app/
-│   └── brutalist-ui/             # Tauri frontend (~5k LOC)
+│   └── oya-ui/             # Tauri frontend (~5k LOC)
 │
 └── tests/
     └── integration/              # Cross-crate integration tests
@@ -99,13 +99,13 @@ brutalist/
 
 ## Crate Specifications
 
-### brutalist-core (~500 LOC)
+### oya-core (~500 LOC)
 
 Foundation types used across all crates. Zero external deps beyond std.
 
 ```rust
 // Core error type with Railway-Oriented extensions
-pub enum BrutalistError {
+pub enum oyaError {
     Workflow(WorkflowError),
     Event(EventError),
     Storage(StorageError),
@@ -115,7 +115,7 @@ pub enum BrutalistError {
 }
 
 // Result alias
-pub type Result<T> = std::result::Result<T, BrutalistError>;
+pub type Result<T> = std::result::Result<T, oyaError>;
 
 // Railway extensions
 pub trait ResultExt<T, E> {
@@ -161,7 +161,7 @@ impl BeadState {
 
 ---
 
-### brutalist-workflow (~2.5k LOC)
+### oya-workflow (~2.5k LOC)
 
 Intra-bead workflow engine. Manages TDD15 phases within a single bead.
 
@@ -237,7 +237,7 @@ impl WorkflowEngine {
 
 ---
 
-### brutalist-events (~2k LOC)
+### oya-events (~2k LOC)
 
 Inter-bead coordination via event sourcing.
 
@@ -248,7 +248,7 @@ pub enum BeadEvent {
     StateChanged { bead_id: BeadId, from: BeadState, to: BeadState },
     PhaseCompleted { bead_id: BeadId, phase_id: PhaseId, output: PhaseOutput },
     DependencyResolved { bead_id: BeadId, dependency_id: BeadId },
-    Failed { bead_id: BeadId, error: BrutalistError },
+    Failed { bead_id: BeadId, error: oyaError },
     Completed { bead_id: BeadId, result: BeadResult },
 }
 
@@ -304,7 +304,7 @@ pub trait Projection: Send + Sync {
 
 ---
 
-### brutalist-reconciler (~1.5k LOC)
+### oya-reconciler (~1.5k LOC)
 
 K8s-style reconciliation loop for bead management.
 
@@ -385,7 +385,7 @@ impl ReconciliationLoop {
 
 ---
 
-### brutalist-tdd15 (~1k LOC)
+### oya-tdd15 (~1k LOC)
 
 TDD15 phase definitions and routing logic.
 
@@ -444,7 +444,7 @@ impl TDD15WorkflowBuilder {
 
 ---
 
-### brutalist-intent (~8k LOC)
+### oya-intent (~8k LOC)
 
 Port of intent-cli. Requirement decomposition with EARS and KIRK.
 
@@ -495,7 +495,7 @@ impl IntentDecomposer {
 
 ---
 
-### brutalist-zjj (~2k LOC)
+### oya-zjj (~2k LOC)
 
 Move existing zjj. Workspace isolation: 1 bead = 1 jj worktree + Zellij session.
 
@@ -524,7 +524,7 @@ impl WorkspaceManager {
 
 ---
 
-### brutalist-docs (~15k LOC)
+### oya-docs (~15k LOC)
 
 Move centralized-docs. Documentation indexing v5.0.
 
@@ -546,7 +546,7 @@ impl DocIndex {
 
 ---
 
-### brutalist-opencode (~1k LOC)
+### oya-opencode (~1k LOC)
 
 Bridge to opencode for AI execution.
 
@@ -579,7 +579,7 @@ impl PhaseHandler for AIExecutor {
 
 ---
 
-### brutalist-cli (~1k LOC)
+### oya-cli (~1k LOC)
 
 Unified CLI with JSON-native output.
 
@@ -633,12 +633,12 @@ pub struct CliOutput<T> {
 
 ---
 
-### brutalist-ui (~5k LOC)
+### oya-ui (~5k LOC)
 
 Tauri frontend with "video game UX".
 
 ```
-app/brutalist-ui/
+app/oya-ui/
 ├── src-tauri/           # Rust backend
 │   ├── src/
 │   │   ├── main.rs
@@ -791,21 +791,21 @@ ulid = "1"
 
 ### Phase 1: Foundation (Week 1-2)
 - [ ] Create monorepo structure
-- [ ] Implement brutalist-core
-- [ ] Move zjj to brutalist-zjj
-- [ ] Move centralized-docs to brutalist-docs
+- [ ] Implement oya-core
+- [ ] Move zjj to oya-zjj
+- [ ] Move centralized-docs to oya-docs
 - [ ] Basic CLI scaffold
 
 ### Phase 2: Orchestration (Week 3-4)
-- [ ] Implement brutalist-workflow
-- [ ] Implement brutalist-events
-- [ ] Implement brutalist-reconciler
-- [ ] Implement brutalist-tdd15
+- [ ] Implement oya-workflow
+- [ ] Implement oya-events
+- [ ] Implement oya-reconciler
+- [ ] Implement oya-tdd15
 - [ ] Integration tests
 
 ### Phase 3: Intelligence (Week 5-6)
-- [ ] Port intent-cli to brutalist-intent
-- [ ] Implement brutalist-opencode bridge
+- [ ] Port intent-cli to oya-intent
+- [ ] Implement oya-opencode bridge
 - [ ] Basic Tauri UI
 - [ ] End-to-end workflow
 
@@ -813,9 +813,9 @@ ulid = "1"
 
 ## Next Actions
 
-1. **Create workspace** - `cargo new brutalist --lib` with workspace config
+1. **Create workspace** - `cargo new oya --lib` with workspace config
 2. **Move zjj** - Copy and adapt existing battle-tested code
-3. **Write brutalist-core tests** - Farley Discipline: tests first
+3. **Write oya-core tests** - Farley Discipline: tests first
 4. **Implement BeadState** - Core type with transition validation
 
 Ready to execute.

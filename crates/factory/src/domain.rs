@@ -362,6 +362,8 @@ pub struct Stage {
     pub name: String,
     pub gate: String,
     pub retries: u32,
+    /// Stages that must complete before this stage can run.
+    pub depends_on: Vec<String>,
 }
 
 impl Stage {
@@ -372,23 +374,97 @@ impl Stage {
             name: name.into(),
             gate: gate.into(),
             retries,
+            depends_on: Vec::new(),
         }
+    }
+
+    /// Create a new stage with dependencies.
+    #[must_use]
+    pub fn with_dependencies(
+        name: impl Into<String>,
+        gate: impl Into<String>,
+        retries: u32,
+        depends_on: Vec<String>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            gate: gate.into(),
+            retries,
+            depends_on,
+        }
+    }
+
+    /// Add a dependency to this stage.
+    #[must_use]
+    pub fn depends_on(mut self, stage: impl Into<String>) -> Self {
+        self.depends_on.push(stage.into());
+        self
+    }
+
+    /// Check if this stage depends on another stage.
+    #[must_use]
+    pub fn has_dependency(&self, stage_name: &str) -> bool {
+        self.depends_on.iter().any(|dep| dep == stage_name)
+    }
+
+    /// Get all dependencies.
+    #[must_use]
+    pub fn dependencies(&self) -> &[String] {
+        &self.depends_on
     }
 }
 
-/// Standard 9-stage pipeline.
+/// Standard 9-stage pipeline with dependencies.
 #[must_use]
 pub fn standard_pipeline() -> Vec<Stage> {
     vec![
         Stage::new("implement", "Code compiles", 5),
-        Stage::new("unit-test", "All tests pass", 3),
-        Stage::new("coverage", "80% coverage", 5),
-        Stage::new("lint", "Code formatted", 3),
-        Stage::new("static", "Static analysis passes", 3),
-        Stage::new("integration", "Integration tests pass", 3),
-        Stage::new("security", "No vulnerabilities", 2),
-        Stage::new("review", "Code review passes", 3),
-        Stage::new("accept", "Ready for merge", 1),
+        Stage::with_dependencies(
+            "unit-test",
+            "All tests pass",
+            3,
+            vec!["implement".to_string()],
+        ),
+        Stage::with_dependencies("coverage", "80% coverage", 5, vec!["unit-test".to_string()]),
+        Stage::with_dependencies("lint", "Code formatted", 3, vec!["implement".to_string()]),
+        Stage::with_dependencies(
+            "static",
+            "Static analysis passes",
+            3,
+            vec!["lint".to_string()],
+        ),
+        Stage::with_dependencies(
+            "integration",
+            "Integration tests pass",
+            3,
+            vec!["unit-test".to_string(), "static".to_string()],
+        ),
+        Stage::with_dependencies(
+            "security",
+            "No vulnerabilities",
+            2,
+            vec!["coverage".to_string(), "static".to_string()],
+        ),
+        Stage::with_dependencies(
+            "review",
+            "Code review passes",
+            3,
+            vec![
+                "lint".to_string(),
+                "static".to_string(),
+                "unit-test".to_string(),
+            ],
+        ),
+        Stage::with_dependencies(
+            "accept",
+            "Ready for merge",
+            1,
+            vec![
+                "integration".to_string(),
+                "security".to_string(),
+                "review".to_string(),
+            ],
+        ),
     ]
 }
 

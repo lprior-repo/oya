@@ -42,3 +42,7 @@ time=2026-01-31T20:53:26.377-06:00 level=INFO msg="Git ref change detected: %s" 
 time=2026-01-31T20:53:27.383-06:00 level=INFO msg="Import triggered by file change"
 time=2026-01-31T20:53:27.383-06:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
 time=2026-01-31T20:53:27.383-06:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-31T20:53:29.396-06:00 level=INFO msg="Git ref change detected: %s" !BADKEY=/home/lewis/src/oya/.git/refs/heads/main.lock
+time=2026-01-31T20:53:30.397-06:00 level=INFO msg="Import triggered by file change"
+time=2026-01-31T20:53:30.397-06:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-31T20:53:30.397-06:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import

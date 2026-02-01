@@ -18,6 +18,7 @@ use std::{fmt, path::PathBuf, str::FromStr};
 
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::error::{IntentError, IntentResult};
 

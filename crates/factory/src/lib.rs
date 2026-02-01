@@ -27,6 +27,8 @@ pub mod audit;
 pub mod builder;
 pub mod domain;
 pub mod error;
+pub mod execution;
+pub mod functional;
 pub mod persistence;
 pub mod pipeline;
 pub mod process;
@@ -38,3 +40,7 @@ pub mod worktree;
 
 // Re-export commonly used items
 pub use error::{Error, Result};
+pub use functional::{
+    audit_functional_style, format_violations_report, generate_functional_module,
+    has_critical_violations, ForbiddenPattern, FunctionalAudit,
+};

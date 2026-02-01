@@ -55,36 +55,36 @@ crates/
 5. `factory list` - List all tasks
 
 ### Key Decisions
-- **Workspace isolation**: JJ workspaces (`jj workspace add`)
+- **Workspace isolation**: zjj CLI for workspace + session management
 - **Task storage**: `.factory/tasks.json`
 - **Beads**: Hard requirement, always integrate with `.beads/`
 - **Stages**: implement, unit-test, coverage, lint, static, integration, security, review, accept
 
 ### Dependencies
-- JJ (Jujutsu) for workspace management and version control
+- zjj CLI for workspace isolation with Zellij integration
 - Beads for issue tracking integration
 - Language-specific tooling per stage
 
-### Version Control: Jujutsu (jj) Only
-**NEVER use git commands directly.** This project uses Jujutsu (jj) for all version control:
+### Version Control & Workspace Isolation: zjj CLI
+
+**Use zjj CLI for all workspace operations.** zjj wraps Jujutsu with Zellij integration:
 
 ```bash
-# Correct - Use jj
-jj status              # Show working copy status
-jj commit -m "msg"     # Create commit
-jj git fetch           # Fetch from remote (auto-rebases)
-jj git push            # Push to remote
-jj log                 # View commit history
-jj diff                # Show changes
+# Correct - Use zjj
+zjj add <session-name>     # Create isolated workspace + Zellij tab
+zjj spawn <bead-id>        # Create workspace for agent work
+zjj status                 # Show session status
+zjj done                   # Merge to main and cleanup
+zjj sync                   # Sync workspace with main
+zjj diff                   # Show differences
 
-# WRONG - Never use git directly
-git status             # NO
-git commit             # NO
-git pull               # NO
-git push               # NO
+# For raw jj when needed
+jj commit -m "msg"         # Create commit
+jj git fetch               # Fetch from remote
+jj git push                # Push to remote
 ```
 
-**Why jj**: Automatic conflict resolution, first-class workspace isolation, better UX.
+**Why zjj**: Workspace isolation + Zellij session management in one tool.
 
 ---
 
