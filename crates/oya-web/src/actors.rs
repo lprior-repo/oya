@@ -50,15 +50,40 @@ pub struct AppState {
     pub state_manager: Arc<StateManagerSender>,
 }
 
-/// Mock scheduler (will be replaced with actual actor)
+/// Mock scheduler with working receiver (will be replaced with actual actor)
 pub fn mock_scheduler() -> SchedulerSender {
-    let (tx, _rx) = mpsc::unbounded_channel();
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    
+    tokio::spawn(async move {
+        while let Some(msg) = rx.recv().await {
+            match msg {
+                SchedulerMessage::CreateBead { spec } => {
+                    tracing::debug!("Scheduler: Creating bead with spec: {}", spec);
+                }
+                SchedulerMessage::CancelBead { id } => {
+                    tracing::debug!("Scheduler: Cancelling bead {}", id);
+                }
+            }
+        }
+    });
+    
     tx
 }
 
-/// Mock state manager (will be replaced with actual actor)
+/// Mock state manager with working receiver (will be replaced with actual actor)
 pub fn mock_state_manager() -> StateManagerSender {
-    let (tx, _rx) = mpsc::unbounded_channel();
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    
+    tokio::spawn(async move {
+        while let Some(msg) = rx.recv().await {
+            match msg {
+                StateManagerMessage::QueryBead { id } => {
+                    tracing::debug!("State manager: Querying bead {}", id);
+                }
+            }
+        }
+    });
+    
     tx
 }
 

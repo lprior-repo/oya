@@ -2,14 +2,19 @@
 
 use super::super::actors::{AppState, SchedulerMessage};
 use super::super::error::{AppError, Result};
-use axum::{extract::State, response::Json};
+use axum::{
+    extract::State,
+    http::StatusCode,
+    response::{IntoResponse, Json},
+};
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
 /// Request payload for creating a workflow
 #[derive(Debug, Deserialize)]
 pub struct CreateWorkflowRequest {
-    bead_spec: String,
+    #[serde(default)]
+    bead_spec: Option<String>,
 }
 
 /// Response for creating a workflow
@@ -22,17 +27,18 @@ pub struct CreateWorkflowResponse {
 pub async fn create_workflow(
     State(state): State<AppState>,
     Json(req): Json<CreateWorkflowRequest>,
-) -> Result<Json<CreateWorkflowResponse>> {
-    let bead_id = Ulid::new();
+) -> impl IntoResponse {
+    match req.bead_spec {
+        Some(spec) => {
+            let bead_id = Ulid::new();
 
-    state
-        .scheduler
-        .send(SchedulerMessage::CreateBead {
-            spec: req.bead_spec,
-        })
-        .map_err(|_| AppError::ServiceUnavailable("Scheduler actor unavailable".to_string()))?;
-
-    Ok(Json(CreateWorkflowResponse {
-        bead_id: bead_id.to_string(),
-    }))
+            match state.scheduler.send(SchedulerMessage::CreateBead { spec }) {
+                Ok(_) => (StatusCode::CREATED, Json(CreateWorkflowResponse {
+                    bead_id: bead_id.to_string(),
+                })).into_response(),
+                Err(_) => AppError::ServiceUnavailable("Scheduler actor unavailable".to_string()).into_response(),
+            }
+        }
+        None => AppError::BadRequest("Missing required field: bead_spec".to_string()).into_response(),
+    }
 }

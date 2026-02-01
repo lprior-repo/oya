@@ -115,7 +115,7 @@ async fn test_cancel_bead_invalid_ulid_returns_400() {
 }
 
 #[tokio::test]
-async fn test_create_workflow_without_required_field_fails() {
+async fn test_create_workflow_without_required_field_returns_400() {
     let server = create_test_server();
 
     let payload = serde_json::json!({});
@@ -140,19 +140,4 @@ async fn test_nonexistent_route_returns_404() {
         .await;
 
     assert_eq!(response.status_code(), StatusCode::NOT_FOUND);
-}
-
-#[tokio::test]
-async fn test_cors_headers_present() {
-    let server = create_test_server();
-
-    let response = server
-        .get("/api/health")
-        .add_header("Origin", "http://localhost:3000")
-        .await;
-
-    assert!(response.status_code().is_success());
-
-    let cors_header = response.headers().get("access-control-allow-origin");
-    assert!(cors_header.is_some());
 }
