@@ -463,14 +463,14 @@ mod clone_behavior_tests {
 
         let cloned = original.clone();
 
-        match (&original, &cloned) {
-            (
-                SchedulerMessage::CreateBead { id: _, spec: s1 },
-                SchedulerMessage::CreateBead { id: _, spec: s2 },
-            ) => {
-                assert_eq!(s1, s2, "Cloned spec should match original");
-            }
-            _ => assert!(false, "Both should be CreateBead variants"),
+        if let (
+            SchedulerMessage::CreateBead { id: _, spec: s1 },
+            SchedulerMessage::CreateBead { id: _, spec: s2 },
+        ) = (&original, &cloned)
+        {
+            assert_eq!(s1, s2, "Cloned spec should match original");
+        } else {
+            unreachable!("Both should be CreateBead variants");
         }
     }
 
@@ -481,11 +481,12 @@ mod clone_behavior_tests {
 
         let cloned = original.clone();
 
-        match (&original, &cloned) {
-            (SchedulerResponse::Created { id: id1 }, SchedulerResponse::Created { id: id2 }) => {
-                assert_eq!(id1, id2, "Cloned ID should match original");
-            }
-            _ => assert!(false, "Both should be Created variants"),
+        if let (SchedulerResponse::Created { id: id1 }, SchedulerResponse::Created { id: id2 }) =
+            (&original, &cloned)
+        {
+            assert_eq!(id1, id2, "Cloned ID should match original");
+        } else {
+            unreachable!("Both should be Created variants");
         }
     }
 

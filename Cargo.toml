@@ -9,7 +9,9 @@
     "crates/events",
     "crates/reconciler",
     "crates/oya-web",
-    "crates/oya-ui",
+    # Temporarily excluded: oya-ui has Leptos/clippy forbid conflict
+    # See bead src-35ya for resolution
+    # "crates/oya-ui",
 ]
 resolver = "2"
 
