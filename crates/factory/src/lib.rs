@@ -25,6 +25,7 @@
 
 pub mod audit;
 pub mod builder;
+pub mod codegen;
 pub mod domain;
 pub mod error;
 pub mod execution;
@@ -32,6 +33,7 @@ pub mod functional;
 pub mod persistence;
 pub mod pipeline;
 pub mod process;
+pub mod quality_gates;
 pub mod repo;
 pub mod retry;
 pub mod stages;
@@ -39,8 +41,13 @@ pub mod types;
 pub mod worktree;
 
 // Re-export commonly used items
+pub use codegen::{
+    generate_from_bead, parse_bead_spec, simple_function_spec, spec_to_prompt,
+    validate_functional_code, BeadSpec, FunctionRequirement,
+};
 pub use error::{Error, Result};
 pub use functional::{
     audit_functional_style, format_violations_report, generate_functional_module,
     has_critical_violations, ForbiddenPattern, FunctionalAudit,
 };
+pub use quality_gates::{enforce_functional_quality, FunctionalGate, QualityGateResult};

@@ -9,10 +9,6 @@
 //! - No unwrap(), expect(), or panic!()
 
 use regex::Regex;
-use std::collections::HashSet;
-use tracing::{debug, warn};
-
-use crate::error::{Error, Result};
 
 /// Forbidden patterns in functional Rust code.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -75,7 +71,7 @@ impl ForbiddenPattern {
 }
 
 /// Severity level for violations.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ViolationSeverity {
     Low,
     Medium,
@@ -233,7 +229,7 @@ pub fn audit_functional_style(code: &str) -> FunctionalAudit {
 }
 
 /// Find matches of a pattern in a line.
-fn find_matches(line: &str, pattern: &ForbiddenPattern) -> Option<Vec<(usize, &str)>> {
+fn find_matches<'a>(line: &'a str, pattern: &ForbiddenPattern) -> Option<Vec<(usize, &'a str)>> {
     let regex = Regex::new(pattern.regex()).ok()?;
     let matches: Vec<_> = regex
         .find_iter(line)

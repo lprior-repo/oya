@@ -4,7 +4,7 @@
 //! and captures artifacts (coverage reports, test results, etc.).
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use tracing::{debug, info, warn};

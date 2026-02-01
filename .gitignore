@@ -32,3 +32,4 @@ Thumbs.db
 # Testing
 *.profraw
 *.profdata
+vendor/opencode-sme/

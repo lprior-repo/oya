@@ -84,6 +84,9 @@ anyhow = "1"
 # Regex
 regex = "1"
 
+# Glob pattern matching
+glob = "0.3"
+
 # Notify for file watching
 notify = "7"
 

@@ -8,6 +8,7 @@ use crate::{
     domain::Language,
     error::{Error, Result},
     process::{dir_exists, run_command},
+    quality_gates::enforce_functional_quality,
     repo::detect_language,
 };
 
@@ -253,6 +254,82 @@ fn generate_unique_id() -> String {
 
     let nanos = duration.as_nanos();
     format!("{}", nanos % 100_000_000)
+}
+
+/// Create a worktree from a bead specification with functional quality enforcement.
+///
+/// This function is the main entry point for pulling down bead tasks.
+/// It ensures all generated/modified code follows strict functional Rust patterns.
+pub fn create_worktree_from_bead(
+    bead_id: &str,
+    bead_spec_json: &str,
+    language: Language,
+    repo_root: &Path,
+) -> Result<Worktree> {
+    tracing::info!(
+        bead_id,
+        ?language,
+        "Creating worktree from bead specification"
+    );
+
+    // Parse bead spec
+    let spec = crate::codegen::parse_bead_spec(bead_spec_json)
+        .map_err(|e| Error::invalid_record(format!("Invalid bead spec: {e}")))?;
+
+    // Create worktree
+    let worktree = create_worktree(bead_id, language, repo_root)?;
+
+    // Generate functional code from bead spec
+    let generated_code = crate::codegen::generate_from_bead(&spec);
+
+    // Write generated code to src/lib.rs
+    let lib_path = worktree.path.join("src/lib.rs");
+    std::fs::create_dir_all(
+        lib_path
+            .parent()
+            .ok_or_else(|| Error::invalid_record("Cannot create src directory"))?,
+    )
+    .map_err(|e| Error::directory_creation_failed(lib_path.parent().unwrap(), e.to_string()))?;
+
+    std::fs::write(&lib_path, generated_code)
+        .map_err(|e| Error::file_write_failed(&lib_path, e.to_string()))?;
+
+    tracing::info!(?lib_path, "Generated functional code from bead spec");
+
+    // Enforce functional quality gate
+    tracing::info!(bead_id, "Running functional quality gate");
+    enforce_functional_quality(&worktree.path).map_err(|e| {
+        tracing::error!(error = %e, "Functional quality gate failed");
+        Error::invalid_record(format!(
+            "Code from bead '{}' does not meet functional requirements: {}",
+            bead_id, e
+        ))
+    })?;
+
+    tracing::info!(
+        bead_id,
+        ?worktree.path,
+        "Worktree created and functional quality enforced"
+    );
+
+    Ok(worktree)
+}
+
+/// Validate that an existing worktree meets functional requirements.
+pub fn validate_worktree_functional(slug: &str, repo_root: &Path) -> Result<()> {
+    tracing::info!(slug, "Validating worktree functional compliance");
+
+    let worktree = get_worktree(slug, repo_root)?;
+
+    enforce_functional_quality(&worktree.path).map_err(|e| {
+        Error::invalid_record(format!(
+            "Worktree '{}' does not meet functional requirements: {}",
+            slug, e
+        ))
+    })?;
+
+    tracing::info!(slug, "Worktree functional validation passed");
+    Ok(())
 }
 
 #[cfg(test)]
