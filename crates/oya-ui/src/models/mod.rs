@@ -1,5 +1,7 @@
 //! Data models for graph visualization
 
+pub mod node;
+
 use serde::{Deserialize, Serialize};
 
 /// Represents a node in the dependency graph

@@ -2,6 +2,9 @@
 
 use leptos::prelude::*;
 
+pub mod canvas;
+pub mod controls;
+
 /// Canvas component for rendering the graph
 #[component]
 pub fn GraphCanvas() -> impl IntoView {
