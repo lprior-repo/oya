@@ -4,21 +4,11 @@ use crate::models::task::{Task, TaskPriority, TaskStatus, TaskType};
 use leptos::prelude::*;
 
 /// Filter options for the task list
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub struct TaskFilters {
     pub status: Option<TaskStatus>,
     pub priority: Option<TaskPriority>,
     pub task_type: Option<TaskType>,
-}
-
-impl Default for TaskFilters {
-    fn default() -> Self {
-        Self {
-            status: None,
-            priority: None,
-            task_type: None,
-        }
-    }
 }
 
 impl TaskFilters {

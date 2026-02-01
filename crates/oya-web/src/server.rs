@@ -2,13 +2,14 @@
 
 use super::actors::{AppState, mock_scheduler, mock_state_manager};
 use super::routes;
-use axum::Router;
+use axum::{Router, routing::get_service};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower_http::{
     compression::CompressionLayer,
     cors::{Any, CorsLayer},
+    services::ServeDir,
     trace::TraceLayer,
 };
 use tracing::info;
@@ -26,14 +27,27 @@ pub async fn run_server(addr: SocketAddr) -> Result<(), Box<dyn std::error::Erro
 }
 
 /// Create the axum application with middleware
+/// Serves both the Leptos WASM frontend AND the API
 fn create_app() -> Router {
     let state = AppState {
         scheduler: Arc::new(mock_scheduler()),
         state_manager: Arc::new(mock_state_manager()),
     };
 
-    routes::create_router()
-        .with_state(state)
+    // Serve static files from the compiled Leptos UI
+    // These will be built by trunk into crates/oya-ui/dist
+    let static_files = get_service(
+        ServeDir::new("crates/oya-ui/dist")
+            .append_index_html_on_directories(true)
+    );
+
+    // Combine API routes and static file serving
+    Router::new()
+        // API routes under /api prefix
+        .nest("/api", routes::create_router().with_state(state))
+        // Serve static frontend files for all other routes
+        .fallback_service(static_files)
+        // Middleware
         .layer(
             CorsLayer::new()
                 .allow_origin(Any)
