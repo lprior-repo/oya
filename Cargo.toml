@@ -8,6 +8,7 @@ members = [
     "crates/orchestrator",
     "crates/merge-queue",
     "crates/opencode",
+    "crates/workflow",
 ]
 resolver = "2"
 
@@ -37,6 +38,7 @@ oya-zjj = { path = "crates/zjj" }
 oya-factory = { path = "crates/factory" }
 oya-intent = { path = "crates/intent" }
 oya-opencode = { path = "crates/opencode" }
+oya-workflow = { path = "crates/workflow" }
 centralized-docs = { path = "crates/centralized-docs" }
 orchestrator = { path = "crates/orchestrator" }
 merge-queue = { path = "crates/merge-queue" }
@@ -44,6 +46,7 @@ merge-queue = { path = "crates/merge-queue" }
 # Async runtime (battle-tested)
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
+async-trait = "0.1"
 
 # Storage (battle-tested)
 rusqlite = { version = "0.32", features = ["bundled"] }
