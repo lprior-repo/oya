@@ -61,9 +61,30 @@ crates/
 - **Stages**: implement, unit-test, coverage, lint, static, integration, security, review, accept
 
 ### Dependencies
-- JJ (Jujutsu) for workspace management
+- JJ (Jujutsu) for workspace management and version control
 - Beads for issue tracking integration
 - Language-specific tooling per stage
+
+### Version Control: Jujutsu (jj) Only
+**NEVER use git commands directly.** This project uses Jujutsu (jj) for all version control:
+
+```bash
+# Correct - Use jj
+jj status              # Show working copy status
+jj commit -m "msg"     # Create commit
+jj git fetch           # Fetch from remote (auto-rebases)
+jj git push            # Push to remote
+jj log                 # View commit history
+jj diff                # Show changes
+
+# WRONG - Never use git directly
+git status             # NO
+git commit             # NO
+git pull               # NO
+git push               # NO
+```
+
+**Why jj**: Automatic conflict resolution, first-class workspace isolation, better UX.
 
 ---
 
@@ -75,7 +96,7 @@ bd ready              # Find available work
 bd show <id>          # View issue details
 bd update <id> --status in_progress  # Claim work
 bd close <id>         # Complete work
-bd sync               # Sync with git
+bd sync               # Sync with jj (Jujutsu)
 ```
 
 ### Development (Moon CI/CD)
@@ -190,9 +211,9 @@ zjj add <session-name>
 # Step 6: LAND - Finalize and push
 # Use land skill for mandatory quality gates:
 # - Moon quick check (6-7ms cached)
-# - git commit with proper message
+# - jj commit with proper message
 # - bd sync
-# - git push (MANDATORY - work not done until pushed)
+# - jj git push (MANDATORY - work not done until pushed)
 
 # Step 7: MERGE - Reintegrate to main
 # Use zjj skill to merge workspace back to main
@@ -203,7 +224,7 @@ zjj add <session-name>
 
 ## Landing the Plane (Session Completion)
 
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
+**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `jj git push` succeeds.
 
 **MANDATORY WORKFLOW:**
 
@@ -217,24 +238,24 @@ zjj add <session-name>
 3. **Update issue status** - Close finished work, update in-progress items
 4. **COMMIT AND PUSH** - This is MANDATORY:
    ```bash
-   git add <files>
-   git commit -m "description"
-   bd sync  # Sync beads
-   git pull --rebase
-   git push
-   git status  # MUST show "up to date with origin"
+   jj commit -m "description"  # jj auto-tracks changes, no 'add' needed
+   bd sync                     # Sync beads with jj
+   jj git fetch                # Fetch from remote (auto-rebases)
+   jj git push                 # Push to remote
+   jj status                   # MUST show clean working copy
    ```
 5. **Verify cache health**:
    ```bash
    systemctl --user is-active bazel-remote  # Should be "active"
    ```
-6. **Clean up** - Clear stashes, prune remote branches
+6. **Clean up** - Clear abandoned workspaces
 7. **Hand off** - Provide context for next session
 
 **CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
+- Work is NOT complete until `jj git push` succeeds
 - NEVER stop before pushing - that leaves work stranded locally
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
-- Always use Moon for builds (never raw cargo)
+- Always use jj for version control (NEVER raw git commands)
+- Always use Moon for builds (NEVER raw cargo commands)
 - YOU ARE TO NEVER TOUCH CLIPPY SETTINGS EVER
