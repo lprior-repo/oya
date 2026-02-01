@@ -19,7 +19,7 @@ mod scheduler_actor_tests {
         let scheduler = mock_scheduler();
         let spec = "test-spec".to_string();
 
-        let result = scheduler.send(SchedulerMessage::CreateBead { id: Ulid::new(), 
+        let result = scheduler.send(SchedulerMessage::CreateBead {
             id: Ulid::new(),
             spec: spec.clone(),
         });
@@ -34,7 +34,8 @@ mod scheduler_actor_tests {
     async fn test_scheduler_handles_create_bead_message() {
         let scheduler = mock_scheduler();
 
-        let result = scheduler.send(SchedulerMessage::CreateBead { id: Ulid::new(), 
+        let result = scheduler.send(SchedulerMessage::CreateBead {
+            id: Ulid::new(),
             spec: "test-bead-spec".to_string(),
         });
 
@@ -65,11 +66,11 @@ mod scheduler_actor_tests {
         let spec2 = "spec-2".to_string();
         let id1 = Ulid::new();
 
-        let r1 = scheduler.send(SchedulerMessage::CreateBead { id: Ulid::new(), 
+        let r1 = scheduler.send(SchedulerMessage::CreateBead {
             id: Ulid::new(),
             spec: spec1,
         });
-        let r2 = scheduler.send(SchedulerMessage::CreateBead { id: Ulid::new(), 
+        let r2 = scheduler.send(SchedulerMessage::CreateBead {
             id: Ulid::new(),
             spec: spec2,
         });
@@ -88,7 +89,8 @@ mod scheduler_actor_tests {
         let scheduler = mock_scheduler();
 
         // Send before potential actor startup
-        let r1 = scheduler.send(SchedulerMessage::CreateBead { id: Ulid::new(), 
+        let r1 = scheduler.send(SchedulerMessage::CreateBead {
+            id: Ulid::new(),
             spec: "early".to_string(),
         });
         assert!(r1.is_ok(), "Should send before actor fully initialized");
@@ -97,7 +99,8 @@ mod scheduler_actor_tests {
         tokio::time::sleep(Duration::from_millis(5)).await;
 
         // Send after actor is running
-        let r2 = scheduler.send(SchedulerMessage::CreateBead { id: Ulid::new(), 
+        let r2 = scheduler.send(SchedulerMessage::CreateBead {
+            id: Ulid::new(),
             spec: "late".to_string(),
         });
         assert!(r2.is_ok(), "Should send after actor is running");
@@ -109,7 +112,8 @@ mod scheduler_actor_tests {
         let test_id = Ulid::new();
 
         // Verify we can send different message types
-        let create_result = scheduler.send(SchedulerMessage::CreateBead { id: Ulid::new(), 
+        let create_result = scheduler.send(SchedulerMessage::CreateBead {
+            id: Ulid::new(),
             spec: "test".to_string(),
         });
 
@@ -191,16 +195,13 @@ mod message_type_tests {
     #[test]
     fn test_scheduler_message_create_bead_construction() {
         let spec = "test-spec".to_string();
-        let msg = SchedulerMessage::CreateBead { id: Ulid::new(), 
+        let msg = SchedulerMessage::CreateBead {
             id: Ulid::new(),
             spec: spec.clone(),
         };
 
         match msg {
-            SchedulerMessage::CreateBead { id: Ulid::new(), 
-                id: Ulid::new(),
-                spec: s,
-            } => {
+            SchedulerMessage::CreateBead { id: _, spec: s } => {
                 assert_eq!(s, spec, "Spec should match");
             }
             _ => panic!("Expected CreateBead variant"),
@@ -297,8 +298,9 @@ mod app_state_tests {
     use super::*;
     use std::sync::Arc;
 
-    #[test]
-    fn test_app_state_construction() {
+    #[tokio::test]
+
+    async fn test_app_state_construction() {
         let scheduler = mock_scheduler();
         let state_manager = mock_state_manager();
 
@@ -326,7 +328,8 @@ mod app_state_tests {
         };
 
         // Send via app state
-        let r1 = app_state.scheduler.send(SchedulerMessage::CreateBead { id: Ulid::new(), 
+        let r1 = app_state.scheduler.send(SchedulerMessage::CreateBead {
+            id: Ulid::new(),
             spec: "test".to_string(),
         });
 
@@ -351,12 +354,14 @@ mod app_state_tests {
         let cloned = app_state.clone();
 
         // Send via original
-        let r1 = app_state.scheduler.send(SchedulerMessage::CreateBead { id: Ulid::new(), 
+        let r1 = app_state.scheduler.send(SchedulerMessage::CreateBead {
+            id: Ulid::new(),
             spec: "original".to_string(),
         });
 
         // Send via clone
-        let r2 = cloned.scheduler.send(SchedulerMessage::CreateBead { id: Ulid::new(), 
+        let r2 = cloned.scheduler.send(SchedulerMessage::CreateBead {
+            id: Ulid::new(),
             spec: "cloned".to_string(),
         });
 
@@ -375,7 +380,8 @@ mod channel_behavior_tests {
 
         // Send 1000 messages rapidly
         for i in 0..1000 {
-            let result = scheduler.send(SchedulerMessage::CreateBead { id: Ulid::new(), 
+            let result = scheduler.send(SchedulerMessage::CreateBead {
+                id: Ulid::new(),
                 spec: format!("spec-{}", i),
             });
             assert!(result.is_ok(), "Message {} should send successfully", i);
@@ -395,13 +401,16 @@ mod channel_behavior_tests {
         let s3 = scheduler.clone();
 
         // Send from each clone
-        let r1 = s1.send(SchedulerMessage::CreateBead { id: Ulid::new(), 
+        let r1 = s1.send(SchedulerMessage::CreateBead {
+            id: Ulid::new(),
             spec: "s1".to_string(),
         });
-        let r2 = s2.send(SchedulerMessage::CreateBead { id: Ulid::new(), 
+        let r2 = s2.send(SchedulerMessage::CreateBead {
+            id: Ulid::new(),
             spec: "s2".to_string(),
         });
-        let r3 = s3.send(SchedulerMessage::CreateBead { id: Ulid::new(), 
+        let r3 = s3.send(SchedulerMessage::CreateBead {
+            id: Ulid::new(),
             spec: "s3".to_string(),
         });
 
@@ -446,7 +455,8 @@ mod clone_behavior_tests {
 
     #[test]
     fn test_scheduler_message_clone() {
-        let original = SchedulerMessage::CreateBead { id: Ulid::new(), 
+        let original = SchedulerMessage::CreateBead {
+            id: Ulid::new(),
             spec: "test".to_string(),
         };
 
@@ -454,14 +464,8 @@ mod clone_behavior_tests {
 
         match (&original, &cloned) {
             (
-                SchedulerMessage::CreateBead { id: Ulid::new(), 
-                    id: Ulid::new(),
-                    spec: s1,
-                },
-                SchedulerMessage::CreateBead { id: Ulid::new(), 
-                    id: Ulid::new(),
-                    spec: s2,
-                },
+                SchedulerMessage::CreateBead { id: _, spec: s1 },
+                SchedulerMessage::CreateBead { id: _, spec: s2 },
             ) => {
                 assert_eq!(s1, s2, "Cloned spec should match original");
             }
@@ -508,7 +512,8 @@ mod debug_trait_tests {
 
     #[test]
     fn test_scheduler_message_debug() {
-        let msg = SchedulerMessage::CreateBead { id: Ulid::new(), 
+        let msg = SchedulerMessage::CreateBead {
+            id: Ulid::new(),
             spec: "test".to_string(),
         };
 
@@ -558,7 +563,8 @@ mod lifecycle_tests {
         let scheduler = mock_scheduler();
 
         // Should be able to send immediately
-        let result = scheduler.send(SchedulerMessage::CreateBead { id: Ulid::new(), 
+        let result = scheduler.send(SchedulerMessage::CreateBead {
+            id: Ulid::new(),
             spec: "immediate".to_string(),
         });
 
@@ -587,10 +593,12 @@ mod lifecycle_tests {
         let state_manager = mock_state_manager();
 
         // All three actors should work independently
-        let r1 = scheduler1.send(SchedulerMessage::CreateBead { id: Ulid::new(), 
+        let r1 = scheduler1.send(SchedulerMessage::CreateBead {
+            id: Ulid::new(),
             spec: "s1".to_string(),
         });
-        let r2 = scheduler2.send(SchedulerMessage::CreateBead { id: Ulid::new(), 
+        let r2 = scheduler2.send(SchedulerMessage::CreateBead {
+            id: Ulid::new(),
             spec: "s2".to_string(),
         });
         let r3 = state_manager.send(StateManagerMessage::QueryBead { id: Ulid::new() });
@@ -606,7 +614,8 @@ mod lifecycle_tests {
 
         // Send 100 messages as fast as possible
         for i in 0..100 {
-            let result = scheduler.send(SchedulerMessage::CreateBead { id: Ulid::new(), 
+            let result = scheduler.send(SchedulerMessage::CreateBead {
+                id: Ulid::new(),
                 spec: format!("burst-{}", i),
             });
             assert!(result.is_ok(), "Message {} should succeed", i);
@@ -615,7 +624,8 @@ mod lifecycle_tests {
         // Verify actor still works after burst
         tokio::time::sleep(Duration::from_millis(50)).await;
 
-        let result = scheduler.send(SchedulerMessage::CreateBead { id: Ulid::new(), 
+        let result = scheduler.send(SchedulerMessage::CreateBead {
+            id: Ulid::new(),
             spec: "after-burst".to_string(),
         });
 
@@ -632,7 +642,8 @@ mod lifecycle_tests {
         // Unbounded channels never fail to send (unless dropped)
         // Send many messages without waiting
         for i in 0..10000 {
-            let result = scheduler.send(SchedulerMessage::CreateBead { id: Ulid::new(), 
+            let result = scheduler.send(SchedulerMessage::CreateBead {
+                id: Ulid::new(),
                 spec: format!("msg-{}", i),
             });
             assert!(result.is_ok(), "Unbounded channel should never block");
@@ -652,7 +663,7 @@ mod supervision_tests {
         drop(rx);
 
         // Next send should fail
-        let result = tx.send(SchedulerMessage::CreateBead { id: Ulid::new(), 
+        let result = tx.send(SchedulerMessage::CreateBead {
             id: Ulid::new(),
             spec: "test".to_string(),
         });
@@ -673,19 +684,22 @@ mod supervision_tests {
 
         // All senders should fail
         assert!(
-            s1.send(SchedulerMessage::CreateBead { id: Ulid::new(), 
+            s1.send(SchedulerMessage::CreateBead {
+                id: Ulid::new(),
                 spec: "1".to_string()
             })
             .is_err()
         );
         assert!(
-            s2.send(SchedulerMessage::CreateBead { id: Ulid::new(), 
+            s2.send(SchedulerMessage::CreateBead {
+                id: Ulid::new(),
                 spec: "2".to_string()
             })
             .is_err()
         );
         assert!(
-            s3.send(SchedulerMessage::CreateBead { id: Ulid::new(), 
+            s3.send(SchedulerMessage::CreateBead {
+                id: Ulid::new(),
                 spec: "3".to_string()
             })
             .is_err()
@@ -698,7 +712,8 @@ mod supervision_tests {
 
         // Send 1000 messages
         for i in 0..1000 {
-            let result = scheduler.send(SchedulerMessage::CreateBead { id: Ulid::new(), 
+            let result = scheduler.send(SchedulerMessage::CreateBead {
+                id: Ulid::new(),
                 spec: format!("msg-{}", i),
             });
             assert!(result.is_ok(), "Message {} should send", i);
@@ -708,7 +723,8 @@ mod supervision_tests {
         tokio::time::sleep(Duration::from_millis(100)).await;
 
         // Verify actor still alive
-        let result = scheduler.send(SchedulerMessage::CreateBead { id: Ulid::new(), 
+        let result = scheduler.send(SchedulerMessage::CreateBead {
+            id: Ulid::new(),
             spec: "final".to_string(),
         });
 
@@ -723,14 +739,18 @@ mod supervision_tests {
 mod property_tests {
     use super::*;
     use proptest::prelude::*;
+    use tokio::runtime::Runtime;
 
     // Property: Any string can be used as a spec
     proptest! {
         #[test]
         fn prop_scheduler_accepts_any_spec(spec in "\\PC*") {
-            let scheduler = mock_scheduler();
-            let result = scheduler.send(SchedulerMessage::CreateBead { id: Ulid::new(), spec });
-            assert!(result.is_ok(), "Scheduler should accept any valid string spec");
+            let rt = Runtime::new().expect("Failed to create runtime");
+            rt.block_on(async {
+                let scheduler = mock_scheduler();
+                let result = scheduler.send(SchedulerMessage::CreateBead { id: Ulid::new(), spec });
+                assert!(result.is_ok(), "Scheduler should accept any valid string spec");
+            });
         }
     }
 
@@ -738,10 +758,13 @@ mod property_tests {
     proptest! {
         #[test]
         fn prop_scheduler_accepts_any_ulid_for_cancel(bytes in prop::array::uniform16(any::<u8>())) {
-            let scheduler = mock_scheduler();
-            let id = Ulid::from_bytes(bytes);
-            let result = scheduler.send(SchedulerMessage::CancelBead { id });
-            assert!(result.is_ok(), "Scheduler should accept any ULID");
+            let rt = Runtime::new().expect("Failed to create runtime");
+            rt.block_on(async {
+                let scheduler = mock_scheduler();
+                let id = Ulid::from_bytes(bytes);
+                let result = scheduler.send(SchedulerMessage::CancelBead { id });
+                assert!(result.is_ok(), "Scheduler should accept any ULID");
+            });
         }
     }
 
@@ -749,10 +772,13 @@ mod property_tests {
     proptest! {
         #[test]
         fn prop_state_manager_accepts_any_ulid(bytes in prop::array::uniform16(any::<u8>())) {
-            let state_manager = mock_state_manager();
-            let id = Ulid::from_bytes(bytes);
-            let result = state_manager.send(StateManagerMessage::QueryBead { id });
-            assert!(result.is_ok(), "State manager should accept any ULID");
+            let rt = Runtime::new().expect("Failed to create runtime");
+            rt.block_on(async {
+                let state_manager = mock_state_manager();
+                let id = Ulid::from_bytes(bytes);
+                let result = state_manager.send(StateManagerMessage::QueryBead { id });
+                assert!(result.is_ok(), "State manager should accept any ULID");
+            });
         }
     }
 
@@ -760,18 +786,22 @@ mod property_tests {
     proptest! {
         #[test]
         fn prop_messages_processed_in_order(specs in prop::collection::vec("\\PC{1,20}", 1..=20)) {
-            let scheduler = mock_scheduler();
+            let rt = Runtime::new().expect("Failed to create runtime");
+            rt.block_on(async {
+                let scheduler = mock_scheduler();
 
-            // Send all messages
-            for spec in &specs {
-                let result = scheduler.send(SchedulerMessage::CreateBead { id: Ulid::new(), 
-                    spec: spec.clone()
-                });
-                assert!(result.is_ok(), "All messages should send successfully");
-            }
+                // Send all messages
+                for spec in &specs {
+                    let result = scheduler.send(SchedulerMessage::CreateBead {
+                        id: Ulid::new(),
+                        spec: spec.clone()
+                    });
+                    assert!(result.is_ok(), "All messages should send successfully");
+                }
 
-            // Messages were sent in order (we can't verify receipt order without response channels,
-            // but we verify they were all accepted)
+                // Messages were sent in order (we can't verify receipt order without response channels,
+                // but we verify they were all accepted)
+            });
         }
     }
 
@@ -779,14 +809,18 @@ mod property_tests {
     proptest! {
         #[test]
         fn prop_scheduler_handles_burst_load(count in 1usize..=1000) {
-            let scheduler = mock_scheduler();
+            let rt = Runtime::new().expect("Failed to create runtime");
+            rt.block_on(async {
+                let scheduler = mock_scheduler();
 
-            for i in 0..count {
-                let result = scheduler.send(SchedulerMessage::CreateBead { id: Ulid::new(), 
-                    spec: format!("spec-{}", i),
-                });
-                assert!(result.is_ok(), "Message {} should send successfully", i);
-            }
+                for i in 0..count {
+                    let result = scheduler.send(SchedulerMessage::CreateBead {
+                        id: Ulid::new(),
+                        spec: format!("spec-{}", i),
+                    });
+                    assert!(result.is_ok(), "Message {} should send successfully", i);
+                }
+            });
         }
     }
 
@@ -798,17 +832,20 @@ mod property_tests {
             spec2 in "\\PC{1,10}",
             spec3 in "\\PC{1,10}",
         ) {
-            let scheduler = mock_scheduler();
-            let s1 = scheduler.clone();
-            let s2 = scheduler.clone();
-            let s3 = scheduler.clone();
+            let rt = Runtime::new().expect("Failed to create runtime");
+            rt.block_on(async {
+                let scheduler = mock_scheduler();
+                let s1 = scheduler.clone();
+                let s2 = scheduler.clone();
+                let s3 = scheduler.clone();
 
-            let r1 = s1.send(SchedulerMessage::CreateBead { id: Ulid::new(), spec: spec1 });
-            let r2 = s2.send(SchedulerMessage::CreateBead { id: Ulid::new(), spec: spec2 });
-            let r3 = s3.send(SchedulerMessage::CreateBead { id: Ulid::new(), spec: spec3 });
+                let r1 = s1.send(SchedulerMessage::CreateBead { id: Ulid::new(), spec: spec1 });
+                let r2 = s2.send(SchedulerMessage::CreateBead { id: Ulid::new(), spec: spec2 });
+                let r3 = s3.send(SchedulerMessage::CreateBead { id: Ulid::new(), spec: spec3 });
 
-            assert!(r1.is_ok() && r2.is_ok() && r3.is_ok(),
-                "All cloned senders should work");
+                assert!(r1.is_ok() && r2.is_ok() && r3.is_ok(),
+                    "All cloned senders should work");
+            });
         }
     }
 
