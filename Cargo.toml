@@ -9,6 +9,7 @@
     "crates/events",
     "crates/reconciler",
     "crates/oya-web",
+    "crates/oya-ui",
 ]
 resolver = "2"
 
@@ -40,6 +41,7 @@ oya-workflow = { path = "crates/workflow" }
 oya-events = { path = "crates/events" }
 oya-reconciler = { path = "crates/reconciler" }
 oya-web = { path = "crates/oya-web" }
+oya-ui = { path = "crates/oya-ui" }
 orchestrator = { path = "crates/orchestrator" }
 merge-queue = { path = "crates/merge-queue" }
 

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OYA Graph Visualization</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+        }
+        .app-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-top: 0;
+        }
+        #graph-canvas {
+            display: block;
+            margin: 20px auto;
+        }
+        .control-panel, .info-panel {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 4px;
+        }
+        button {
+            padding: 8px 16px;
+            margin-right: 10px;
+            background: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #0052a3;
+        }
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+    <script type="module">
+        // WASM initialization
+        import init, { hydrate } from './pkg/oya_ui.js';
+
+        async function run() {
+            try {
+                await init();
+                hydrate();
+            } catch (error) {
+                console.error('Failed to initialize WASM:', error);
+                document.getElementById('app').innerHTML =
+                    '<div class="error">Failed to load application. Please check the console for details.</div>';
+            }
+        }
+
+        run();
+    </script>
+</body>
+</html>
