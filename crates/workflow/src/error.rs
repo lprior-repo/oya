@@ -9,67 +9,36 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug, Clone)]
 pub enum Error {
     /// Phase execution failed.
-    PhaseFailed {
-        phase_name: String,
-        reason: String,
-    },
+    PhaseFailed { phase_name: String, reason: String },
     /// Phase timeout exceeded.
     PhaseTimeout {
         phase_name: String,
         timeout_secs: u64,
     },
     /// Rollback failed.
-    RollbackFailed {
-        phase_name: String,
-        reason: String,
-    },
+    RollbackFailed { phase_name: String, reason: String },
     /// Checkpoint creation failed.
-    CheckpointFailed {
-        reason: String,
-    },
+    CheckpointFailed { reason: String },
     /// Checkpoint not found.
-    CheckpointNotFound {
-        phase_id: String,
-    },
+    CheckpointNotFound { phase_id: String },
     /// Rewind failed.
-    RewindFailed {
-        reason: String,
-    },
+    RewindFailed { reason: String },
     /// Journal replay failed.
-    ReplayFailed {
-        reason: String,
-    },
+    ReplayFailed { reason: String },
     /// Invalid state transition.
-    InvalidTransition {
-        from: String,
-        to: String,
-    },
+    InvalidTransition { from: String, to: String },
     /// Storage operation failed.
-    StorageFailed {
-        operation: String,
-        reason: String,
-    },
+    StorageFailed { operation: String, reason: String },
     /// Workflow not found.
-    WorkflowNotFound {
-        workflow_id: String,
-    },
+    WorkflowNotFound { workflow_id: String },
     /// Phase not found.
-    PhaseNotFound {
-        phase_name: String,
-    },
+    PhaseNotFound { phase_name: String },
     /// Serialization error.
-    Serialization {
-        reason: String,
-    },
+    Serialization { reason: String },
     /// Handler not registered.
-    HandlerNotFound {
-        phase_name: String,
-    },
+    HandlerNotFound { phase_name: String },
     /// Maximum retries exceeded.
-    MaxRetriesExceeded {
-        phase_name: String,
-        attempts: u32,
-    },
+    MaxRetriesExceeded { phase_name: String, attempts: u32 },
 }
 
 impl fmt::Display for Error {
@@ -241,9 +210,7 @@ impl Error {
     pub fn is_retryable(&self) -> bool {
         matches!(
             self,
-            Self::PhaseFailed { .. }
-                | Self::PhaseTimeout { .. }
-                | Self::StorageFailed { .. }
+            Self::PhaseFailed { .. } | Self::PhaseTimeout { .. } | Self::StorageFailed { .. }
         )
     }
 }

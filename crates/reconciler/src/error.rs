@@ -9,37 +9,21 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug, Clone)]
 pub enum Error {
     /// Reconciliation failed.
-    ReconcileFailed {
-        reason: String,
-    },
+    ReconcileFailed { reason: String },
     /// Action execution failed.
-    ActionFailed {
-        action: String,
-        reason: String,
-    },
+    ActionFailed { action: String, reason: String },
     /// State computation failed.
-    StateFailed {
-        reason: String,
-    },
+    StateFailed { reason: String },
     /// Bead not found.
-    BeadNotFound {
-        bead_id: String,
-    },
+    BeadNotFound { bead_id: String },
     /// Concurrency limit reached.
-    ConcurrencyLimit {
-        current: usize,
-        max: usize,
-    },
+    ConcurrencyLimit { current: usize, max: usize },
     /// Event bus error.
-    EventError {
-        reason: String,
-    },
+    EventError { reason: String },
     /// Loop was stopped.
     LoopStopped,
     /// Invalid configuration.
-    InvalidConfig {
-        reason: String,
-    },
+    InvalidConfig { reason: String },
 }
 
 impl fmt::Display for Error {

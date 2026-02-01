@@ -35,7 +35,9 @@ pub enum Error {
     #[error("not in a git repository")]
     NotInRepo,
 
-    #[error("could not detect language from repository files (looked for gleam.toml, go.mod, Cargo.toml, pyproject.toml, package.json)")]
+    #[error(
+        "could not detect language from repository files (looked for gleam.toml, go.mod, Cargo.toml, pyproject.toml, package.json)"
+    )]
     LanguageDetectionFailed,
 
     #[error("could not determine base branch")]
@@ -100,6 +102,10 @@ pub enum Error {
     // Audit errors
     #[error("failed to write audit entry: {reason}")]
     AuditWriteFailed { reason: String },
+
+    // Database errors
+    #[error("database error: {reason}")]
+    DatabaseError { reason: String },
 
     // Core error wrapper
     #[error(transparent)]

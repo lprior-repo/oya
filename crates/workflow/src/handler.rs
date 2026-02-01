@@ -310,9 +310,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_fn_handler() {
-        let handler = FnHandler::new("double", |_ctx| {
-            Ok(PhaseOutput::success(vec![2, 4, 6]))
-        });
+        let handler = FnHandler::new("double", |_ctx| Ok(PhaseOutput::success(vec![2, 4, 6])));
         let ctx = make_context();
         let result = handler.execute(&ctx).await;
         assert!(result.is_ok());

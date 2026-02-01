@@ -683,7 +683,11 @@ mod tests {
         let phase_id = PhaseId::new();
 
         journal.append(JournalEntry::phase_started(phase_id, "build"));
-        journal.append(JournalEntry::phase_completed(phase_id, "build", vec![1, 2, 3]));
+        journal.append(JournalEntry::phase_completed(
+            phase_id,
+            "build",
+            vec![1, 2, 3],
+        ));
 
         assert_eq!(journal.len(), 2);
         assert_eq!(journal.entries_for_phase(phase_id).len(), 2);

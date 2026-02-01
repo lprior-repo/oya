@@ -7,7 +7,7 @@ use std::path::Path;
 use tracing::{debug, warn};
 
 use crate::error::{Error, Result};
-use crate::functional::{audit_functional_style, FunctionalAudit, ViolationSeverity};
+use crate::functional::{FunctionalAudit, ViolationSeverity, audit_functional_style};
 
 /// Minimum functional code compliance percentage required (95%).
 const MIN_FUNCTIONAL_COMPLIANCE: f64 = 95.0;

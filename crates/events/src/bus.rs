@@ -19,17 +19,12 @@ pub struct EventSubscription {
 impl EventSubscription {
     /// Receive the next event.
     pub async fn recv(&mut self) -> Result<BeadEvent> {
-        self.receiver
-            .recv()
-            .await
-            .map_err(|_| Error::ChannelClosed)
+        self.receiver.recv().await.map_err(|_| Error::ChannelClosed)
     }
 
     /// Try to receive an event without waiting.
     pub fn try_recv(&mut self) -> Result<BeadEvent> {
-        self.receiver
-            .try_recv()
-            .map_err(|_| Error::ChannelClosed)
+        self.receiver.try_recv().map_err(|_| Error::ChannelClosed)
     }
 }
 
@@ -107,11 +102,12 @@ impl EventBus {
 
         // Send to pattern-based subscribers
         let subscribers = self.subscribers.read().await;
-        for (_, sub) in subscribers.iter() {
-            if sub.pattern.matches(&event) {
+        subscribers
+            .iter()
+            .filter(|(_, sub)| sub.pattern.matches(&event))
+            .for_each(|(_, sub)| {
                 let _ = sub.sender.send(event.clone());
-            }
-        }
+            });
 
         Ok(event_id)
     }
@@ -124,7 +120,10 @@ impl EventBus {
     }
 
     /// Subscribe to events matching a pattern.
-    pub async fn subscribe_with_pattern(&self, pattern: EventPattern) -> (String, EventSubscription) {
+    pub async fn subscribe_with_pattern(
+        &self,
+        pattern: EventPattern,
+    ) -> (String, EventSubscription) {
         let (sender, receiver) = broadcast::channel(100);
 
         let mut next_id = self.next_id.write().await;
@@ -132,13 +131,7 @@ impl EventBus {
         *next_id += 1;
 
         let mut subscribers = self.subscribers.write().await;
-        subscribers.insert(
-            id.clone(),
-            Subscriber {
-                sender,
-                pattern,
-            },
-        );
+        subscribers.insert(id.clone(), Subscriber { sender, pattern });
 
         (id, EventSubscription { receiver })
     }

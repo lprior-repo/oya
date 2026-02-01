@@ -289,7 +289,7 @@ pub fn create_worktree_from_bead(
             .parent()
             .ok_or_else(|| Error::invalid_record("Cannot create src directory"))?,
     )
-    .map_err(|e| Error::directory_creation_failed(lib_path.parent().unwrap(), e.to_string()))?;
+    .map_err(|e| Error::directory_creation_failed(lib_path.parent().as_ref(), e.to_string()))?;
 
     std::fs::write(&lib_path, generated_code)
         .map_err(|e| Error::file_write_failed(&lib_path, e.to_string()))?;

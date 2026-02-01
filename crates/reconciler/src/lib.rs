@@ -71,8 +71,9 @@ pub mod types;
 // Re-export main types
 pub use error::{Error, Result};
 pub use r#loop::{
-    DesiredStateProvider, InMemoryDesiredStateProvider, LoopConfig, LoopStopper,
-    ReconciliationLoop,
+    DesiredStateProvider, InMemoryDesiredStateProvider, LoopConfig, LoopStopper, ReconciliationLoop,
 };
-pub use reconciler::{ActionExecutor, EventActionExecutor, Reconciler, ReconcilerBuilder, ReconcilerConfig};
+pub use reconciler::{
+    ActionExecutor, EventActionExecutor, Reconciler, ReconcilerBuilder, ReconcilerConfig,
+};
 pub use types::{ActualState, DesiredState, ReconcileAction, ReconcileResult};

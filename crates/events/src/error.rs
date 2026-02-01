@@ -9,42 +9,23 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug, Clone)]
 pub enum Error {
     /// Event store operation failed.
-    StoreFailed {
-        operation: String,
-        reason: String,
-    },
+    StoreFailed { operation: String, reason: String },
     /// Event not found.
-    EventNotFound {
-        event_id: String,
-    },
+    EventNotFound { event_id: String },
     /// Invalid event data.
-    InvalidEvent {
-        reason: String,
-    },
+    InvalidEvent { reason: String },
     /// Subscription failed.
-    SubscriptionFailed {
-        reason: String,
-    },
+    SubscriptionFailed { reason: String },
     /// Channel closed.
     ChannelClosed,
     /// Serialization error.
-    Serialization {
-        reason: String,
-    },
+    Serialization { reason: String },
     /// Projection failed.
-    ProjectionFailed {
-        projection: String,
-        reason: String,
-    },
+    ProjectionFailed { projection: String, reason: String },
     /// Bead not found.
-    BeadNotFound {
-        bead_id: String,
-    },
+    BeadNotFound { bead_id: String },
     /// Invalid state transition.
-    InvalidTransition {
-        from: String,
-        to: String,
-    },
+    InvalidTransition { from: String, to: String },
 }
 
 impl fmt::Display for Error {

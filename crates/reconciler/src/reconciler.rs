@@ -130,7 +130,11 @@ pub struct Reconciler {
 
 impl Reconciler {
     /// Create a new reconciler.
-    pub fn new(bus: Arc<EventBus>, executor: Arc<dyn ActionExecutor>, config: ReconcilerConfig) -> Self {
+    pub fn new(
+        bus: Arc<EventBus>,
+        executor: Arc<dyn ActionExecutor>,
+        config: ReconcilerConfig,
+    ) -> Self {
         Self {
             bus,
             executor,
@@ -165,12 +169,7 @@ impl Reconciler {
         // Apply actions
         let (taken, failed) = self.apply_actions(actions).await;
 
-        let result = ReconcileResult::new(
-            taken,
-            failed,
-            desired.len(),
-            actual.beads.len(),
-        );
+        let result = ReconcileResult::new(taken, failed, desired.len(), actual.beads.len());
 
         if result.converged {
             info!("System converged");
@@ -369,7 +368,10 @@ mod tests {
         let (reconciler, _) = setup_reconciler();
         let mut desired = DesiredState::new();
         let bead_id = BeadId::new();
-        desired.add_bead(bead_id, BeadSpec::new("Test").with_complexity(Complexity::Simple));
+        desired.add_bead(
+            bead_id,
+            BeadSpec::new("Test").with_complexity(Complexity::Simple),
+        );
 
         let actual = ActualState::new();
 
@@ -378,8 +380,13 @@ mod tests {
         let result = result.ok();
 
         // Should have a CreateBead action
-        let has_create = result.as_ref()
-            .map(|r| r.actions_taken.iter().any(|a| matches!(a, ReconcileAction::CreateBead { .. })))
+        let has_create = result
+            .as_ref()
+            .map(|r| {
+                r.actions_taken
+                    .iter()
+                    .any(|a| matches!(a, ReconcileAction::CreateBead { .. }))
+            })
             .unwrap_or(false);
         assert!(has_create);
     }
@@ -389,13 +396,18 @@ mod tests {
         let (reconciler, _) = setup_reconciler();
         let mut desired = DesiredState::new();
         let bead_id = BeadId::new();
-        desired.add_bead(bead_id, BeadSpec::new("Test").with_complexity(Complexity::Simple));
+        desired.add_bead(
+            bead_id,
+            BeadSpec::new("Test").with_complexity(Complexity::Simple),
+        );
 
         let actual = ActualState::new();
         let actions = reconciler.diff(&desired, &actual);
 
         assert!(!actions.is_empty());
-        assert!(actions.iter().any(|a| matches!(a, ReconcileAction::CreateBead { .. })));
+        assert!(actions
+            .iter()
+            .any(|a| matches!(a, ReconcileAction::CreateBead { .. })));
     }
 
     #[tokio::test]
@@ -425,7 +437,9 @@ mod tests {
         let actions = reconciler.diff(&desired, &actual);
 
         // Should not have any StartBead actions
-        let has_start = actions.iter().any(|a| matches!(a, ReconcileAction::StartBead { .. }));
+        let has_start = actions
+            .iter()
+            .any(|a| matches!(a, ReconcileAction::StartBead { .. }));
         assert!(!has_start);
     }
 
@@ -442,7 +456,10 @@ mod tests {
 
         assert!(result.is_ok());
         let reconciler = result.ok();
-        assert_eq!(reconciler.as_ref().map(|r| r.config.max_concurrent), Some(5));
+        assert_eq!(
+            reconciler.as_ref().map(|r| r.config.max_concurrent),
+            Some(5)
+        );
         assert_eq!(reconciler.map(|r| r.config.auto_start), Some(false));
     }
 }

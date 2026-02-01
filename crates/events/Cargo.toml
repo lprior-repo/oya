@@ -30,6 +30,10 @@ thiserror = { workspace = true }
 # Tracing
 tracing = { workspace = true }
 
+# Database
+surrealdb = { workspace = true }
+surrealdb-core = { workspace = true }
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 

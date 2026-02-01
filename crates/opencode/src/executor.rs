@@ -408,8 +408,18 @@ mod tests {
         let prompt = ctx.generate_prompt();
         assert!(prompt.is_ok());
         let prompt = prompt.ok();
-        assert!(prompt.as_ref().map(|p| p.contains("implement")).unwrap_or(false));
-        assert!(prompt.as_ref().map(|p| p.contains("No unsafe code")).unwrap_or(false));
+        assert!(
+            prompt
+                .as_ref()
+                .map(|p| p.contains("implement"))
+                .unwrap_or(false)
+        );
+        assert!(
+            prompt
+                .as_ref()
+                .map(|p| p.contains("No unsafe code"))
+                .unwrap_or(false)
+        );
     }
 
     #[test]

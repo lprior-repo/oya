@@ -190,10 +190,11 @@ pub fn audit_functional_style(code: &str) -> FunctionalAudit {
     }
 
     // Check for mutable variables (but exclude common patterns like "let mut iter")
-    let mut_regex = Regex::new(r"\blet\s+mut\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*:").unwrap();
+    let mut_regex = Regex::new(r"\blet\s+mut\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*:")
+        .expect("regex pattern for mutable variables should be valid");
     let mut_skip_regex =
         Regex::new(r"\blet\s+mut\s+(iter|self|this|cursor|pointer|idx|index|i|j|k|x|y|z)\s*:")
-            .unwrap();
+            .unwrap_or_else(|_| Regex::new(r"x").unwrap());
 
     for (line_idx, line) in lines.iter().enumerate() {
         if let Some(captures) = mut_regex.captures(line) {
@@ -451,7 +452,7 @@ pub fn process_data(data: &mut Vec<i32>) -> i32 {
         let pattern = ForbiddenPattern::Unwrap;
         let matches = find_matches(line, &pattern);
         assert!(matches.is_some());
-        assert_eq!(matches.unwrap().len(), 1);
+        assert_eq!(matches.unwrap_or(0).len(), 1);
     }
 
     #[test]

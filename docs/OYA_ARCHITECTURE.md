@@ -58,9 +58,9 @@
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  L1 Hot:    papaya (lock-free HashMap)           ~10-50ns                  │
 │  L2 Cache:  moka (TinyLFU)                       ~100ns                    │
-│  L3 State:  SQLite via rusqlite                  ~10-100µs                 │
-│  L4 Graph:  FalkorDB (Redis-based)               <10ms p50                 │
-│  L5 Vector: QdrantDB                             ~1-10ms                   │
+│  L3 State:  SurrealDB (embedded/remote)          ~100µs-1ms                │
+│  L4 Graph:  SurrealDB graph relations            ~1-5ms                    │
+│  L5 Vector: SurrealDB vector search              ~5-20ms                   │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -659,72 +659,88 @@ app/oya-ui/
 
 ## Storage Configuration
 
-### SQLite (L3 State)
+### SurrealDB (L3 State)
 
-```sql
+```surreal
 -- Beads table
-CREATE TABLE beads (
-    id TEXT PRIMARY KEY,
-    spec BLOB NOT NULL,           -- rkyv serialized BeadSpec
-    state TEXT NOT NULL,
-    current_phase TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
+DEFINE TABLE beads SCHEMAFULL;
+DEFINE FIELD id ON beads TYPE record<beads>;
+DEFINE FIELD spec ON beads TYPE object;
+DEFINE FIELD state ON beads TYPE string;
+DEFINE FIELD current_phase ON beads TYPE option<string>;
+DEFINE FIELD created_at ON beads TYPE datetime;
+DEFINE FIELD updated_at ON beads TYPE datetime;
+DEFINE INDEX beads_state ON beads FIELDS state;
 
 -- Events table (append-only)
-CREATE TABLE events (
-    id TEXT PRIMARY KEY,
-    bead_id TEXT NOT NULL,
-    event_type TEXT NOT NULL,
-    payload BLOB NOT NULL,        -- rkyv serialized
-    timestamp TEXT NOT NULL
-);
-CREATE INDEX idx_events_bead ON events(bead_id);
-CREATE INDEX idx_events_time ON events(timestamp);
+DEFINE TABLE events SCHEMAFULL;
+DEFINE FIELD id ON events TYPE record<events>;
+DEFINE FIELD bead_id ON events TYPE record<beads>;
+DEFINE FIELD event_type ON events TYPE string;
+DEFINE FIELD payload ON events TYPE object;
+DEFINE FIELD timestamp ON events TYPE datetime;
+DEFINE INDEX events_bead ON events FIELDS bead_id;
+DEFINE INDEX events_time ON events FIELDS timestamp;
+DEFINE INDEX events_type ON events FIELDS event_type;
 
 -- Checkpoints table
-CREATE TABLE checkpoints (
-    id TEXT PRIMARY KEY,
-    workflow_id TEXT NOT NULL,
-    phase_id TEXT NOT NULL,
-    state BLOB NOT NULL,          -- rkyv serialized
-    timestamp TEXT NOT NULL
-);
-CREATE INDEX idx_checkpoints_workflow ON checkpoints(workflow_id);
+DEFINE TABLE checkpoints SCHEMAFULL;
+DEFINE FIELD id ON checkpoints TYPE record<checkpoints>;
+DEFINE FIELD workflow_id ON checkpoints TYPE record<workflows>;
+DEFINE FIELD phase_id ON checkpoints TYPE string;
+DEFINE FIELD state ON checkpoints TYPE object;
+DEFINE FIELD timestamp ON checkpoints TYPE datetime;
+DEFINE INDEX checkpoints_workflow ON checkpoints FIELDS workflow_id;
 
 -- Journal table
-CREATE TABLE journal (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    workflow_id TEXT NOT NULL,
-    entry_type TEXT NOT NULL,
-    payload BLOB NOT NULL,
-    timestamp TEXT NOT NULL
-);
-CREATE INDEX idx_journal_workflow ON journal(workflow_id);
+DEFINE TABLE journal SCHEMAFULL;
+DEFINE FIELD id ON journal TYPE record<journal>;
+DEFINE FIELD workflow_id ON journal TYPE record<workflows>;
+DEFINE FIELD entry_type ON journal TYPE string;
+DEFINE FIELD payload ON journal TYPE object;
+DEFINE FIELD timestamp ON journal TYPE datetime;
+DEFINE INDEX journal_workflow ON journal FIELDS workflow_id;
+
+-- Tasks table (factory)
+DEFINE TABLE tasks SCHEMAFULL;
+DEFINE FIELD id ON tasks TYPE record<tasks>;
+DEFINE FIELD slug ON tasks TYPE string;
+DEFINE FIELD language ON tasks TYPE string;
+DEFINE FIELD status ON tasks TYPE string;
+DEFINE FIELD priority ON tasks TYPE string;
+DEFINE FIELD worktree_path ON tasks TYPE string;
+DEFINE FIELD branch ON tasks TYPE string;
+DEFINE FIELD created_at ON tasks TYPE datetime;
+DEFINE FIELD updated_at ON tasks TYPE datetime;
+DEFINE FIELD stages ON tasks TYPE array<object>;
+DEFINE INDEX tasks_slug ON tasks FIELDS slug UNIQUE;
+DEFINE INDEX tasks_status ON tasks FIELDS status;
+DEFINE INDEX tasks_priority ON tasks FIELDS priority;
 ```
 
-### FalkorDB (L4 Graph)
+### SurrealDB Graph Relations (L4 Graph)
 
-```cypher
-// Bead dependency graph
-CREATE (b:Bead {id: $id, state: $state})
+```surreal
+-- Bead dependency graph using relations
+DEFINE TABLE depends_on SCHEMAFULL TYPE RELATION IN beads OUT beads;
+DEFINE FIELD blocked_count ON depends_on TYPE int DEFAULT 0;
 
-// Dependencies
-MATCH (a:Bead {id: $from}), (b:Bead {id: $to})
-CREATE (a)-[:DEPENDS_ON]->(b)
+-- Create dependency relationship
+RELATE beads:from->depends_on->beads:to;
 
-// Query blocked beads
-MATCH (b:Bead {state: 'pending'})-[:DEPENDS_ON]->(dep:Bead)
-WHERE dep.state <> 'completed'
-RETURN b.id, collect(dep.id) as blockers
+-- Query blocked beads
+SELECT id, ->depends_on->beads AS dependencies
+FROM beads
+WHERE state = 'pending'
+AND ->depends_on->beads[WHERE state != 'completed'] != NONE;
 
-// Critical path analysis
-MATCH path = (start:Bead)-[:DEPENDS_ON*]->(end:Bead)
-WHERE NOT EXISTS((end)-[:DEPENDS_ON]->())
-RETURN path, length(path) as depth
-ORDER BY depth DESC
-LIMIT 1
+-- Critical path analysis (recursive graph traversal)
+SELECT *,
+    <-depends_on<-beads AS blockers,
+    ->depends_on->beads AS dependencies,
+    count(->depends_on->beads) AS dep_count
+FROM beads
+ORDER BY dep_count DESC;
 ```
 
 ---
@@ -735,9 +751,9 @@ LIMIT 1
 |-----------|--------|----------------|
 | Hot cache read | <50ns | papaya |
 | Warm cache read | <100ns | moka |
-| State read | <100µs | SQLite |
-| State write | <1ms | SQLite WAL batched |
-| Graph query | <10ms p50 | FalkorDB |
+| State read | <1ms | SurrealDB |
+| State write | <2ms | SurrealDB async persist |
+| Graph query | <5ms p50 | SurrealDB graph relations |
 | Bead startup | <100ms | Pre-warmed pools |
 | Phase transition | <10ms | In-memory + async persist |
 | Event publish | <1ms | Broadcast + async store |
@@ -754,8 +770,8 @@ tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 
 # Storage
-rusqlite = { version = "0.32", features = ["bundled"] }
-redis = "0.27"  # For FalkorDB
+surrealdb = { version = "2", features = ["protocol-ws"] }
+surrealdb-core = "2"
 
 # Caching
 moka = "0.12"

@@ -113,7 +113,9 @@ impl WorkflowEngine {
                 .await?;
 
             // Execute with retries
-            let result = self.execute_phase_with_retries(&workflow, &phase, last_output.clone()).await;
+            let result = self
+                .execute_phase_with_retries(&workflow, &phase, last_output.clone())
+                .await;
 
             match result {
                 Ok(output) => {
@@ -128,7 +130,11 @@ impl WorkflowEngine {
                     self.storage
                         .append_journal(
                             workflow.id,
-                            JournalEntry::phase_completed(phase.id, &phase.name, output.data.clone()),
+                            JournalEntry::phase_completed(
+                                phase.id,
+                                &phase.name,
+                                output.data.clone(),
+                            ),
                         )
                         .await?;
 
@@ -170,7 +176,11 @@ impl WorkflowEngine {
                     self.transition_state(&mut workflow, WorkflowState::Failed)
                         .await?;
 
-                    return Ok(WorkflowResult::failure(workflow.id, phase_outputs, e.to_string()));
+                    return Ok(WorkflowResult::failure(
+                        workflow.id,
+                        phase_outputs,
+                        e.to_string(),
+                    ));
                 }
             }
         }
@@ -248,9 +258,8 @@ impl WorkflowEngine {
                     }
 
                     // Exponential backoff
-                    let backoff = std::time::Duration::from_millis(
-                        100 * 2u64.saturating_pow(attempt - 1),
-                    );
+                    let backoff =
+                        std::time::Duration::from_millis(100 * 2u64.saturating_pow(attempt - 1));
                     tokio::time::sleep(backoff).await;
 
                     attempt += 1;
@@ -279,8 +288,8 @@ impl WorkflowEngine {
         phase: &crate::types::Phase,
         output: &PhaseOutput,
     ) -> Result<()> {
-        let checkpoint = Checkpoint::new(phase.id, Vec::new(), Vec::new())
-            .with_outputs(output.data.clone());
+        let checkpoint =
+            Checkpoint::new(phase.id, Vec::new(), Vec::new()).with_outputs(output.data.clone());
 
         self.storage
             .save_checkpoint(workflow.id, &checkpoint)
@@ -401,10 +410,7 @@ impl WorkflowEngine {
                 phase_id, output, ..
             } = entry
             {
-                phase_outputs.push((
-                    *phase_id,
-                    PhaseOutput::success(output.clone()),
-                ));
+                phase_outputs.push((*phase_id, PhaseOutput::success(output.clone())));
             }
         }
 
@@ -451,11 +457,7 @@ impl WorkflowEngine {
     }
 
     /// Transition workflow state.
-    async fn transition_state(
-        &self,
-        workflow: &mut Workflow,
-        to: WorkflowState,
-    ) -> Result<()> {
+    async fn transition_state(&self, workflow: &mut Workflow, to: WorkflowState) -> Result<()> {
         let from = workflow.state;
 
         if !from.can_transition_to(to) {
@@ -500,11 +502,8 @@ mod tests {
         registry.register("test", Arc::new(NoOpHandler::new("test")));
         registry.register("deploy", Arc::new(NoOpHandler::new("deploy")));
 
-        let engine = WorkflowEngine::new(
-            storage.clone(),
-            Arc::new(registry),
-            EngineConfig::default(),
-        );
+        let engine =
+            WorkflowEngine::new(storage.clone(), Arc::new(registry), EngineConfig::default());
 
         (engine, storage)
     }
@@ -517,7 +516,10 @@ mod tests {
         let result = engine.run(workflow).await;
         assert!(result.is_ok());
         let result = result.ok();
-        assert!(result.as_ref().map(|r| r.state == WorkflowState::Completed).unwrap_or(false));
+        assert!(result
+            .as_ref()
+            .map(|r| r.state == WorkflowState::Completed)
+            .unwrap_or(false));
     }
 
     #[tokio::test]
@@ -529,7 +531,10 @@ mod tests {
         let result = engine.run(workflow).await;
         assert!(result.is_ok());
         let result = result.ok();
-        assert!(result.as_ref().map(|r| r.state == WorkflowState::Completed).unwrap_or(false));
+        assert!(result
+            .as_ref()
+            .map(|r| r.state == WorkflowState::Completed)
+            .unwrap_or(false));
         assert_eq!(result.map(|r| r.phase_outputs.len()).unwrap_or(0), 1);
     }
 
@@ -544,15 +549,17 @@ mod tests {
         let result = engine.run(workflow).await;
         assert!(result.is_ok());
         let result = result.ok();
-        assert!(result.as_ref().map(|r| r.state == WorkflowState::Completed).unwrap_or(false));
+        assert!(result
+            .as_ref()
+            .map(|r| r.state == WorkflowState::Completed)
+            .unwrap_or(false));
         assert_eq!(result.map(|r| r.phase_outputs.len()).unwrap_or(0), 3);
     }
 
     #[tokio::test]
     async fn test_missing_handler() {
         let (engine, _) = setup_engine();
-        let workflow = Workflow::new("unknown")
-            .add_phase(Phase::new("unknown_phase"));
+        let workflow = Workflow::new("unknown").add_phase(Phase::new("unknown_phase"));
 
         let result = engine.run(workflow).await;
         assert!(result.is_err());
@@ -561,8 +568,7 @@ mod tests {
     #[tokio::test]
     async fn test_workflow_persisted() {
         let (engine, storage) = setup_engine();
-        let workflow = Workflow::new("persist")
-            .add_phase(Phase::new("build"));
+        let workflow = Workflow::new("persist").add_phase(Phase::new("build"));
 
         let workflow_id = workflow.id;
         let _ = engine.run(workflow).await;
@@ -590,8 +596,7 @@ mod tests {
     #[tokio::test]
     async fn test_journal_recorded() {
         let (engine, storage) = setup_engine();
-        let workflow = Workflow::new("journal")
-            .add_phase(Phase::new("build"));
+        let workflow = Workflow::new("journal").add_phase(Phase::new("build"));
 
         let workflow_id = workflow.id;
         let _ = engine.run(workflow).await;

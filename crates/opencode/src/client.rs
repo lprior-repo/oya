@@ -89,9 +89,7 @@ impl OpencodeClient {
         // Spawn a task to run the CLI and send chunks
         tokio::spawn(async move {
             if let Err(e) = stream_cli_output(&config, &prompt, tx.clone()).await {
-                let _ = tx
-                    .send(Err(Error::stream_error(e.to_string())))
-                    .await;
+                let _ = tx.send(Err(Error::stream_error(e.to_string()))).await;
             }
         });
 
@@ -216,11 +214,7 @@ async fn stream_cli_output(
     prompt: &str,
     tx: mpsc::Sender<Result<StreamChunk>>,
 ) -> Result<()> {
-    let mut args = vec![
-        "-p".to_string(),
-        prompt.to_string(),
-        "-q".to_string(),
-    ];
+    let mut args = vec!["-p".to_string(), prompt.to_string(), "-q".to_string()];
 
     if let Some(ref cwd) = config.working_directory {
         args.push("-c".to_string());
@@ -261,7 +255,10 @@ async fn stream_cli_output(
     let final_chunk = if status.success() {
         StreamChunk::final_chunk("", sequence + 1)
     } else {
-        StreamChunk::error(format!("Process exited with status: {status}"), sequence + 1)
+        StreamChunk::error(
+            format!("Process exited with status: {status}"),
+            sequence + 1,
+        )
     };
 
     let _ = tx.send(Ok(final_chunk)).await;
@@ -316,7 +313,10 @@ mod tests {
         assert!(result.is_ok());
         let result = result.ok();
         assert!(result.as_ref().map(|r| r.success).unwrap_or(false));
-        assert_eq!(result.map(|r| r.output), Some("This is plain text output".to_string()));
+        assert_eq!(
+            result.map(|r| r.output),
+            Some("This is plain text output".to_string())
+        );
     }
 
     #[test]

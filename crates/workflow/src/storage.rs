@@ -21,7 +21,8 @@ pub trait WorkflowStorage: Send + Sync {
     async fn list_workflows(&self) -> Result<Vec<Workflow>>;
 
     /// Save a checkpoint.
-    async fn save_checkpoint(&self, workflow_id: WorkflowId, checkpoint: &Checkpoint) -> Result<()>;
+    async fn save_checkpoint(&self, workflow_id: WorkflowId, checkpoint: &Checkpoint)
+        -> Result<()>;
 
     /// Load checkpoints for a workflow.
     async fn load_checkpoints(&self, workflow_id: WorkflowId) -> Result<Vec<Checkpoint>>;
@@ -51,8 +52,7 @@ pub trait WorkflowStorage: Send + Sync {
 #[derive(Default)]
 pub struct InMemoryStorage {
     workflows: tokio::sync::RwLock<std::collections::HashMap<WorkflowId, Workflow>>,
-    checkpoints:
-        tokio::sync::RwLock<std::collections::HashMap<WorkflowId, Vec<Checkpoint>>>,
+    checkpoints: tokio::sync::RwLock<std::collections::HashMap<WorkflowId, Vec<Checkpoint>>>,
     journals: tokio::sync::RwLock<std::collections::HashMap<WorkflowId, Journal>>,
 }
 
@@ -88,7 +88,11 @@ impl WorkflowStorage for InMemoryStorage {
         Ok(self.workflows.read().await.values().cloned().collect())
     }
 
-    async fn save_checkpoint(&self, workflow_id: WorkflowId, checkpoint: &Checkpoint) -> Result<()> {
+    async fn save_checkpoint(
+        &self,
+        workflow_id: WorkflowId,
+        checkpoint: &Checkpoint,
+    ) -> Result<()> {
         self.checkpoints
             .write()
             .await

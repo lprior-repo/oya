@@ -51,7 +51,9 @@ pub mod types;
 pub use bus::{EventBus, EventBusBuilder, EventPattern, EventSubscription};
 pub use error::{Error, Result};
 pub use event::BeadEvent;
-pub use projection::{AllBeadsProjection, AllBeadsState, BeadProjection, ManagedProjection, Projection};
+pub use projection::{
+    AllBeadsProjection, AllBeadsState, BeadProjection, ManagedProjection, Projection,
+};
 pub use store::{EventStore, InMemoryEventStore, TracingEventStore};
 pub use types::{
     BeadId, BeadResult, BeadSpec, BeadState, Complexity, EventId, PhaseId, PhaseOutput,

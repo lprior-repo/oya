@@ -42,12 +42,12 @@ pub mod worktree;
 
 // Re-export commonly used items
 pub use codegen::{
-    generate_from_bead, parse_bead_spec, simple_function_spec, spec_to_prompt,
-    validate_functional_code, BeadSpec, FunctionRequirement,
+    BeadSpec, FunctionRequirement, generate_from_bead, parse_bead_spec, simple_function_spec,
+    spec_to_prompt, validate_functional_code,
 };
 pub use error::{Error, Result};
 pub use functional::{
-    audit_functional_style, format_violations_report, generate_functional_module,
-    has_critical_violations, ForbiddenPattern, FunctionalAudit,
+    ForbiddenPattern, FunctionalAudit, audit_functional_style, format_violations_report,
+    generate_functional_module, has_critical_violations,
 };
-pub use quality_gates::{enforce_functional_quality, FunctionalGate, QualityGateResult};
+pub use quality_gates::{FunctionalGate, QualityGateResult, enforce_functional_quality};

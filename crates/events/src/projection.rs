@@ -160,7 +160,9 @@ impl Projection for AllBeadsProjection {
                     *state.state_counts.entry(*to).or_insert(0) += 1;
                 }
             }
-            BeadEvent::PhaseCompleted { bead_id, phase_id, .. } => {
+            BeadEvent::PhaseCompleted {
+                bead_id, phase_id, ..
+            } => {
                 if let Some(bead) = state.beads.get_mut(bead_id) {
                     bead.current_phase = Some(*phase_id);
                 }
@@ -292,10 +294,7 @@ mod tests {
             state.beads.get(&bead_id).map(|b| b.current_state),
             Some(BeadState::Scheduled)
         );
-        assert_eq!(
-            state.beads.get(&bead_id).map(|b| b.history.len()),
-            Some(1)
-        );
+        assert_eq!(state.beads.get(&bead_id).map(|b| b.history.len()), Some(1));
     }
 
     #[tokio::test]

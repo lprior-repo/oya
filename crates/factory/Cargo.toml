@@ -20,6 +20,8 @@ chrono = { workspace = true }
 ulid = { workspace = true }
 regex = { workspace = true }
 glob = { workspace = true }
+surrealdb = { workspace = true }
+surrealdb-core = { workspace = true }
 
 [lints]
 workspace = true

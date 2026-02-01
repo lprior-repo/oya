@@ -136,41 +136,24 @@ impl ActualState {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ReconcileAction {
     /// Create a new bead.
-    CreateBead {
-        bead_id: BeadId,
-        spec: BeadSpec,
-    },
+    CreateBead { bead_id: BeadId, spec: BeadSpec },
     /// Start a bead (transition to Running).
-    StartBead {
-        bead_id: BeadId,
-    },
+    StartBead { bead_id: BeadId },
     /// Stop a bead.
-    StopBead {
-        bead_id: BeadId,
-        reason: String,
-    },
+    StopBead { bead_id: BeadId, reason: String },
     /// Retry a failed bead.
-    RetryBead {
-        bead_id: BeadId,
-    },
+    RetryBead { bead_id: BeadId },
     /// Mark a bead as complete.
-    MarkComplete {
-        bead_id: BeadId,
-        result: BeadResult,
-    },
+    MarkComplete { bead_id: BeadId, result: BeadResult },
     /// Update bead dependencies.
     UpdateDependencies {
         bead_id: BeadId,
         dependencies: Vec<BeadId>,
     },
     /// Schedule a bead (transition to Scheduled).
-    ScheduleBead {
-        bead_id: BeadId,
-    },
+    ScheduleBead { bead_id: BeadId },
     /// Delete a bead.
-    DeleteBead {
-        bead_id: BeadId,
-    },
+    DeleteBead { bead_id: BeadId },
 }
 
 impl ReconcileAction {

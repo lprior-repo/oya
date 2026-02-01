@@ -2,6 +2,10 @@
 //!
 //! Executes external commands with timeout support and captures output.
 
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+#![deny(clippy::panic)]
+
 use std::{
     path::Path,
     process::{Command, Output, Stdio},

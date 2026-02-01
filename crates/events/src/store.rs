@@ -86,7 +86,10 @@ impl EventStore for InMemoryEventStore {
         let bead_index = self.bead_index.read().await;
 
         if let Some(indices) = bead_index.get(&bead_id) {
-            Ok(indices.iter().filter_map(|&i| events.get(i).cloned()).collect())
+            Ok(indices
+                .iter()
+                .filter_map(|&i| events.get(i).cloned())
+                .collect())
         } else {
             Ok(Vec::new())
         }

@@ -396,9 +396,10 @@ impl Stage {
 
     /// Add a dependency to this stage.
     #[must_use]
-    pub fn depends_on(mut self, stage: impl Into<String>) -> Self {
-        self.depends_on.push(stage.into());
-        self
+    pub fn depends_on(self, stage: impl Into<String>) -> Self {
+        let mut deps = self.depends_on;
+        deps.push(stage.into());
+        Self::with_dependencies(self.name, self.gate, self.retries, deps)
     }
 
     /// Check if this stage depends on another stage.

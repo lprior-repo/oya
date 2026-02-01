@@ -4,13 +4,15 @@
 //! Uses the builder pattern with method chaining for ergonomic API.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 
 use tracing::{debug, info, warn};
 
 use crate::domain::{Language, Stage, Task};
 use crate::error::{Error, Result};
-use crate::retry::{retry_on_retryable, RetryConfig};
+use crate::retry::{RetryConfig, retry_on_retryable};
 use crate::stages::execute_stage;
 
 /// Result of executing a single stage.
@@ -315,9 +317,9 @@ impl Pipeline {
         let worktree_path = self.worktree_path.clone();
         let stage_name = stage.name.clone();
 
-        let mut attempts = 0u32;
+        let attempts = Arc::new(AtomicU32::new(0u32));
         let result = retry_on_retryable(&retry_config, || {
-            attempts += 1;
+            let _current_attempt = attempts.fetch_add(1, Ordering::SeqCst) + 1;
             execute_stage(&stage_name, language, &worktree_path)
         });
 
@@ -333,20 +335,25 @@ impl Pipeline {
                 info!(
                     stage = %stage.name,
                     duration_ms = duration.as_millis(),
-                    attempts,
+                    attempts = attempts.load(Ordering::SeqCst),
                     "Stage passed"
                 );
-                StageExecution::success(&stage.name, duration, attempts)
+                StageExecution::success(&stage.name, duration, attempts.load(Ordering::SeqCst))
             }
             Err(e) => {
                 warn!(
                     stage = %stage.name,
                     duration_ms = duration.as_millis(),
-                    attempts,
+                    attempts = attempts.load(Ordering::SeqCst),
                     error = %e,
                     "Stage failed"
                 );
-                StageExecution::failure(&stage.name, duration, attempts, e.to_string())
+                StageExecution::failure(
+                    &stage.name,
+                    duration,
+                    attempts.load(Ordering::SeqCst),
+                    e.to_string(),
+                )
             }
         }
     }

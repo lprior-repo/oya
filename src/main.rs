@@ -2,31 +2,35 @@
 //!
 //! Storm goddess of transformation. 100x developer throughput with AI agent swarms.
 
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+#![deny(clippy::panic)]
+
 mod cli;
 
 use std::time::Instant;
 
 use clap::Parser;
 use oya_factory::{
-    audit,
-    domain::{filter_stages, get_stage, Slug, Task, TaskStatus},
+    Result, audit,
+    domain::{Slug, Task, TaskStatus, filter_stages, get_stage},
     persistence::{list_all_tasks, load_task_record, save_task_record},
     repo::{detect_language, detect_repo_root},
     stages::{execute_stage, execute_stages_dry_run},
     worktree::create_worktree,
-    Result,
 };
 
 use crate::cli::{Cli, Commands, HELP_TEXT};
 
-fn main() {
-    if let Err(e) = run() {
+#[tokio::main]
+async fn main() {
+    if let Err(e) = run().await {
         eprintln!("Error: {e}");
         std::process::exit(1);
     }
 }
 
-fn run() -> Result<()> {
+async fn run() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
@@ -34,7 +38,7 @@ fn run() -> Result<()> {
             slug,
             contract,
             interactive,
-        } => execute_new(&slug, contract.as_deref(), interactive),
+        } => execute_new(&slug, contract.as_deref(), interactive).await,
 
         Commands::Stage {
             slug,
@@ -42,17 +46,19 @@ fn run() -> Result<()> {
             dry_run,
             from,
             to,
-        } => execute_stage_command(&slug, &stage, dry_run, from.as_deref(), to.as_deref()),
+        } => execute_stage_command(&slug, &stage, dry_run, from.as_deref(), to.as_deref()).await,
 
         Commands::Approve {
             slug,
             strategy,
             force,
-        } => execute_approve(&slug, strategy.as_deref(), force),
+        } => execute_approve(&slug, strategy.as_deref(), force).await,
 
-        Commands::Show { slug, detailed } => execute_show(&slug, detailed),
+        Commands::Show { slug, detailed } => execute_show(&slug, detailed).await,
 
-        Commands::List { priority, status } => execute_list(priority.as_deref(), status.as_deref()),
+        Commands::List { priority, status } => {
+            execute_list(priority.as_deref(), status.as_deref()).await
+        }
 
         Commands::Help { topic } => {
             show_help(topic.as_deref());
@@ -61,7 +67,7 @@ fn run() -> Result<()> {
     }
 }
 
-fn execute_new(slug: &str, contract: Option<&str>, interactive: bool) -> Result<()> {
+async fn execute_new(slug: &str, contract: Option<&str>, interactive: bool) -> Result<()> {
     let validated_slug = Slug::new(slug)?;
     let repo_root = detect_repo_root()?;
     let lang = detect_language(&repo_root)?;
@@ -69,7 +75,7 @@ fn execute_new(slug: &str, contract: Option<&str>, interactive: bool) -> Result<
     let wt = create_worktree(slug, lang, &repo_root)?;
 
     let task = Task::new(validated_slug, lang, wt.path.clone());
-    save_task_record(&task, &repo_root)?;
+    save_task_record(&task, &repo_root).await?;
 
     // Log task creation to audit trail
     let _ = audit::log_task_created(&repo_root, slug, lang.as_str(), &wt.branch);
@@ -93,7 +99,7 @@ fn execute_new(slug: &str, contract: Option<&str>, interactive: bool) -> Result<
     Ok(())
 }
 
-fn execute_stage_command(
+async fn execute_stage_command(
     slug: &str,
     stage_name: &str,
     dry_run: bool,
@@ -102,7 +108,7 @@ fn execute_stage_command(
 ) -> Result<()> {
     let _ = Slug::new(slug)?;
     let repo_root = detect_repo_root()?;
-    let task = load_task_record(slug, &repo_root)?;
+    let task = load_task_record(slug, &repo_root).await?;
 
     // Get stages to run based on from/to range
     let stages_to_run = match (from, to) {
@@ -123,13 +129,13 @@ fn execute_stage_command(
     }
 
     for stage in stages_to_run {
-        execute_single_stage(slug, &stage.name, &task, &repo_root)?;
+        execute_single_stage(slug, &stage.name, &task, &repo_root).await?;
     }
 
     Ok(())
 }
 
-fn execute_single_stage(
+async fn execute_single_stage(
     slug: &str,
     stage_name: &str,
     task: &Task,
@@ -155,19 +161,22 @@ fn execute_single_stage(
     }
 }
 
-fn execute_approve(slug: &str, strategy: Option<&str>, force: bool) -> Result<()> {
+async fn execute_approve(slug: &str, strategy: Option<&str>, force: bool) -> Result<()> {
     let _ = Slug::new(slug)?;
     let repo_root = detect_repo_root()?;
-    let task = load_task_record(slug, &repo_root)?;
+    let task = load_task_record(slug, &repo_root).await?;
 
     if !force {
         check_at_least_one_stage_passed(&repo_root, slug)?;
     }
 
-    let strategy_str = strategy.unwrap_or("immediate");
+    let strategy_str = strategy
+        .as_deref()
+        .map(|s| s.as_str())
+        .unwrap_or("immediate");
 
     let approved_task = task.with_status(TaskStatus::Integrated);
-    save_task_record(&approved_task, &repo_root)?;
+    save_task_record(&approved_task, &repo_root).await?;
 
     // Log task approval to audit trail
     let _ = audit::log_task_approved(&repo_root, slug, strategy_str);
@@ -193,10 +202,10 @@ fn check_at_least_one_stage_passed(repo_root: &std::path::Path, slug: &str) -> R
     }
 }
 
-fn execute_show(slug: &str, detailed: bool) -> Result<()> {
+async fn execute_show(slug: &str, detailed: bool) -> Result<()> {
     let _ = Slug::new(slug)?;
     let repo_root = detect_repo_root()?;
-    let task = load_task_record(slug, &repo_root)?;
+    let task = load_task_record(slug, &repo_root).await?;
 
     if detailed {
         println!("Task: {slug}");
@@ -211,9 +220,9 @@ fn execute_show(slug: &str, detailed: bool) -> Result<()> {
     Ok(())
 }
 
-fn execute_list(priority: Option<&str>, status: Option<&str>) -> Result<()> {
+async fn execute_list(priority: Option<&str>, status: Option<&str>) -> Result<()> {
     let repo_root = detect_repo_root()?;
-    let tasks = list_all_tasks(&repo_root)?;
+    let tasks = list_all_tasks(&repo_root).await?;
 
     let filtered: Vec<_> = tasks
         .into_iter()

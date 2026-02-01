@@ -260,16 +260,14 @@ mod tests {
             interval: Duration::from_millis(10),
             ..Default::default()
         };
-        let loop_runner = ReconciliationLoop::new(
-            reconciler,
-            desired_provider,
-            projection,
-            config,
-        );
+        let loop_runner = ReconciliationLoop::new(reconciler, desired_provider, projection, config);
 
         let result = loop_runner.reconcile_once().await;
         assert!(result.is_ok());
-        assert!(result.ok().unwrap_or(false), "Empty system should be converged");
+        assert!(
+            result.ok().unwrap_or(false),
+            "Empty system should be converged"
+        );
     }
 
     /// Given a desired state with one bead
@@ -292,17 +290,15 @@ mod tests {
             .await;
 
         let config = LoopConfig::default();
-        let loop_runner = ReconciliationLoop::new(
-            reconciler,
-            desired_provider,
-            projection,
-            config,
-        );
+        let loop_runner = ReconciliationLoop::new(reconciler, desired_provider, projection, config);
 
         let result = loop_runner.reconcile_once().await;
         assert!(result.is_ok());
         // Should NOT be converged because a bead needs to be created
-        assert!(!result.ok().unwrap_or(true), "System with missing bead should not be converged");
+        assert!(
+            !result.ok().unwrap_or(true),
+            "System with missing bead should not be converged"
+        );
     }
 
     /// Given a loop that is running
@@ -315,19 +311,13 @@ mod tests {
             interval: Duration::from_millis(100),
             ..Default::default()
         };
-        let mut loop_runner = ReconciliationLoop::new(
-            reconciler,
-            desired_provider,
-            projection,
-            config,
-        );
+        let mut loop_runner =
+            ReconciliationLoop::new(reconciler, desired_provider, projection, config);
 
         let stopper = loop_runner.stopper();
 
         // Start the loop in a task
-        let handle = tokio::spawn(async move {
-            loop_runner.run().await
-        });
+        let handle = tokio::spawn(async move { loop_runner.run().await });
 
         // Give it a moment to start
         tokio::time::sleep(Duration::from_millis(50)).await;
@@ -374,7 +364,10 @@ mod tests {
         let bead_id = BeadId::new();
         provider
             .modify(|state| {
-                state.add_bead(bead_id, BeadSpec::new("Test").with_complexity(Complexity::Simple));
+                state.add_bead(
+                    bead_id,
+                    BeadSpec::new("Test").with_complexity(Complexity::Simple),
+                );
             })
             .await;
 
@@ -391,32 +384,34 @@ mod tests {
     async fn actual_state_computes_counts_correctly() {
         let (reconciler, desired_provider, projection, _) = setup();
         let config = LoopConfig::default();
-        let loop_runner = ReconciliationLoop::new(
-            reconciler,
-            desired_provider,
-            projection.clone(),
-            config,
-        );
+        let loop_runner =
+            ReconciliationLoop::new(reconciler, desired_provider, projection.clone(), config);
 
         // Manually update the projection with some beads
         use oya_events::{BeadEvent, BeadState};
         let bead1 = BeadId::new();
         let bead2 = BeadId::new();
 
-        projection.apply(&BeadEvent::created(
-            bead1,
-            BeadSpec::new("Bead 1").with_complexity(Complexity::Simple),
-        )).await;
-        projection.apply(&BeadEvent::state_changed(
-            bead1,
-            BeadState::Pending,
-            BeadState::Running,
-        )).await;
+        projection
+            .apply(&BeadEvent::created(
+                bead1,
+                BeadSpec::new("Bead 1").with_complexity(Complexity::Simple),
+            ))
+            .await;
+        projection
+            .apply(&BeadEvent::state_changed(
+                bead1,
+                BeadState::Pending,
+                BeadState::Running,
+            ))
+            .await;
 
-        projection.apply(&BeadEvent::created(
-            bead2,
-            BeadSpec::new("Bead 2").with_complexity(Complexity::Simple),
-        )).await;
+        projection
+            .apply(&BeadEvent::created(
+                bead2,
+                BeadSpec::new("Bead 2").with_complexity(Complexity::Simple),
+            ))
+            .await;
 
         let proj_state = projection.state().await;
         let actual = loop_runner.build_actual_state(&proj_state);

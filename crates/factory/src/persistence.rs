@@ -1,24 +1,27 @@
-//! Persistence module - Save/load task status as JSON.
+//! Persistence module - Save/load task status using SurrealDB.
 //!
-//! Tracks which stages passed/failed for each task.
-//! Uses `.factory/tasks.json` for storage.
+//! Tracks which stages passed/failed for each task using embedded SurrealDB.
+
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+#![deny(clippy::panic)]
 
 use std::path::{Path, PathBuf};
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use surrealdb::{
+    Surreal,
+    engine::local::{Db, RocksDb},
+};
 
 use crate::{
     domain::{Language, Priority, Slug, Task, TaskStatus},
     error::{Error, Result},
-    process::{create_dir_all, read_text_file, write_text_file},
 };
 
 /// Branch prefix for feature branches.
 const BRANCH_PREFIX: &str = "feat/";
-
-/// Colon escape sequence for encoded strings.
-const COLON_ESCAPE: &str = "\\c";
 
 /// Stage result type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -61,43 +64,56 @@ impl StageRecord {
     }
 }
 
-/// Complete task record for persistence.
+/// Complete task record for persistence in SurrealDB.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskRecord {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
     pub slug: String,
     pub language: String,
     pub status: String,
-    #[serde(default = "default_priority")]
     pub priority: String,
-    pub created_at: String,
-    pub updated_at: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
     pub stages: Vec<StageRecord>,
-    #[serde(default)]
     pub worktree_path: String,
+    pub branch: String,
     #[serde(default)]
     pub current_stage: String,
     #[serde(default)]
     pub current_error: String,
 }
 
-fn default_priority() -> String {
-    "P2".to_string()
+/// SurrealDB connection wrapper.
+pub struct DbConnection {
+    db: Surreal<Db>,
 }
 
-/// Get the status file path.
-#[must_use]
-pub fn status_file_path(repo_root: &Path) -> PathBuf {
-    repo_root.join(".factory").join("tasks.json")
-}
+impl DbConnection {
+    /// Create new database connection at repo root.
+    pub async fn new(repo_root: &Path) -> Result<Self> {
+        let db_path = repo_root.join(".factory").join("db");
 
-/// Get current timestamp in ISO format.
-fn current_timestamp() -> String {
-    Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()
-}
+        let db = Surreal::new::<RocksDb>(db_path)
+            .await
+            .map_err(|e| Error::DatabaseError {
+                reason: format!("Failed to open SurrealDB: {e}"),
+            })?;
 
-/// Decode reason string (unescape colons).
-fn decode_reason(encoded: &str) -> String {
-    encoded.replace(COLON_ESCAPE, ":")
+        db.use_ns("oya")
+            .use_db("factory")
+            .await
+            .map_err(|e| Error::DatabaseError {
+                reason: format!("Failed to select namespace/database: {e}"),
+            })?;
+
+        Ok(Self { db })
+    }
+
+    /// Get the underlying Surreal instance.
+    pub fn inner(&self) -> &Surreal<Db> {
+        &self.db
+    }
 }
 
 /// Convert domain task to record for persistence.
@@ -118,17 +134,19 @@ pub fn task_to_record(task: &Task) -> TaskRecord {
     };
 
     let priority_str = task.priority.as_str().to_string();
-    let timestamp = current_timestamp();
+    let timestamp = Utc::now();
 
     TaskRecord {
+        id: None,
         slug: task.slug.to_string(),
         language: language_str,
         status: status_str,
         priority: priority_str,
-        created_at: timestamp.clone(),
+        created_at: timestamp,
         updated_at: timestamp,
         stages: Vec::new(),
         worktree_path: task.worktree_path.to_string_lossy().to_string(),
+        branch: task.branch.clone(),
         current_stage,
         current_error,
     }
@@ -145,14 +163,13 @@ pub fn record_to_task(record: &TaskRecord) -> Result<Task> {
         "passed" => TaskStatus::PassedPipeline,
         "failed" => TaskStatus::FailedPipeline {
             stage: record.current_stage.clone(),
-            reason: decode_reason(&record.current_error),
+            reason: record.current_error.clone(),
         },
         "integrated" => TaskStatus::Integrated,
-        // "created" and any unknown status default to Created
         _ => TaskStatus::Created,
     };
 
-    let priority = Priority::parse(&record.priority).unwrap_or_default();
+    let priority = Priority::parse(&record.priority).unwrap_or_else(|_| Priority::default());
     let slug = Slug::new(&record.slug)?;
 
     Ok(Task {
@@ -161,88 +178,163 @@ pub fn record_to_task(record: &TaskRecord) -> Result<Task> {
         status,
         priority,
         worktree_path: PathBuf::from(&record.worktree_path),
-        branch: format!("{BRANCH_PREFIX}{}", record.slug),
+        branch: record.branch.clone(),
     })
 }
 
-/// Load all task records from JSON file.
-fn load_all_records(repo_root: &Path) -> Result<Vec<TaskRecord>> {
-    let file_path = status_file_path(repo_root);
-
-    if !file_path.exists() {
-        return Ok(Vec::new());
-    }
-
-    let content = read_text_file(&file_path)?;
-
-    if content.trim().is_empty() {
-        return Ok(Vec::new());
-    }
-
-    // Try parsing as array first
-    serde_json::from_str(&content).or_else(|_| {
-        // Try parsing as single object
-        serde_json::from_str::<TaskRecord>(&content)
-            .map(|r| vec![r])
-            .map_err(|e| Error::json_parse_failed(e.to_string()))
-    })
-}
-
-/// Save all records to JSON file.
-fn save_all_records(repo_root: &Path, records: &[TaskRecord]) -> Result<()> {
-    let file_path = status_file_path(repo_root);
-    let factory_dir = repo_root.join(".factory");
-
-    create_dir_all(&factory_dir)?;
-
-    let json = serde_json::to_string_pretty(records)
-        .map_err(|e| Error::json_parse_failed(e.to_string()))?;
-
-    write_text_file(&file_path, &json)
-}
-
-/// Save a task record to `.factory/tasks.json`.
-pub fn save_task_record(task: &Task, repo_root: &Path) -> Result<()> {
+/// Save a task record to SurrealDB.
+pub async fn save_task_record(task: &Task, repo_root: &Path) -> Result<()> {
+    let conn = DbConnection::new(repo_root).await?;
     let record = task_to_record(task);
-    let mut records = load_all_records(repo_root)?;
+    let slug = record.slug.clone();
 
-    // Update existing or append new
-    let existing_idx = records.iter().position(|r| r.slug == record.slug);
+    // Use UPSERT to insert or update based on slug
+    let _: Vec<TaskRecord> = conn
+        .inner()
+        .query(
+            "UPDATE tasks SET
+            language = $language,
+            status = $status,
+            priority = $priority,
+            updated_at = $updated_at,
+            worktree_path = $worktree_path,
+            branch = $branch,
+            current_stage = $current_stage,
+            current_error = $current_error
+            WHERE slug = $slug",
+        )
+        .bind(("slug", &slug))
+        .bind(("language", &record.language))
+        .bind(("status", &record.status))
+        .bind(("priority", &record.priority))
+        .bind(("updated_at", &record.updated_at))
+        .bind(("worktree_path", &record.worktree_path))
+        .bind(("branch", &record.branch))
+        .bind(("current_stage", &record.current_stage))
+        .bind(("current_error", &record.current_error))
+        .await
+        .map_err(|e| Error::DatabaseError {
+            reason: format!("Failed to update task: {e}"),
+        })?
+        .take(0)
+        .map_err(|e| Error::DatabaseError {
+            reason: format!("Failed to parse update result: {e}"),
+        })?;
 
-    match existing_idx {
-        Some(idx) => {
-            records[idx] = record;
-        }
-        None => {
-            records.push(record);
-        }
+    // If no rows were updated, insert new record
+    let check: Option<TaskRecord> =
+        conn.inner()
+            .select(("tasks", &slug))
+            .await
+            .map_err(|e| Error::DatabaseError {
+                reason: format!("Failed to check task existence: {e}"),
+            })?;
+
+    if check.is_none() {
+        let _: Option<TaskRecord> = conn
+            .inner()
+            .create(("tasks", &slug))
+            .content(record)
+            .await
+            .map_err(|e| Error::DatabaseError {
+                reason: format!("Failed to create task: {e}"),
+            })?;
     }
 
-    save_all_records(repo_root, &records)
+    Ok(())
 }
 
 /// Load a task record by slug.
-pub fn load_task_record(slug: &str, repo_root: &Path) -> Result<Task> {
-    let records = load_all_records(repo_root)?;
+pub async fn load_task_record(slug: &str, repo_root: &Path) -> Result<Task> {
+    let conn = DbConnection::new(repo_root).await?;
 
-    let record = records
-        .iter()
-        .find(|r| r.slug == slug)
-        .ok_or_else(|| Error::TaskNotFound {
-            slug: slug.to_string(),
-        })?;
+    let record: Option<TaskRecord> =
+        conn.inner()
+            .select(("tasks", slug))
+            .await
+            .map_err(|e| Error::DatabaseError {
+                reason: format!("Failed to load task: {e}"),
+            })?;
 
-    record_to_task(record)
+    let record = record.ok_or_else(|| Error::TaskNotFound {
+        slug: slug.to_string(),
+    })?;
+
+    record_to_task(&record)
 }
 
-/// List all tasks from `.factory/tasks.json`.
-pub fn list_all_tasks(repo_root: &Path) -> Result<Vec<Task>> {
-    let records = load_all_records(repo_root)?;
+/// List all tasks from SurrealDB.
+pub async fn list_all_tasks(repo_root: &Path) -> Result<Vec<Task>> {
+    let conn = DbConnection::new(repo_root).await?;
+
+    let records: Vec<TaskRecord> =
+        conn.inner()
+            .select("tasks")
+            .await
+            .map_err(|e| Error::DatabaseError {
+                reason: format!("Failed to list tasks: {e}"),
+            })?;
 
     records
         .iter()
         .map(record_to_task)
         .collect::<Result<Vec<_>>>()
+}
+
+/// Update stage status in task record.
+#[allow(clippy::too_many_arguments)]
+pub async fn update_stage_status(
+    task: &Task,
+    stage_name: &str,
+    result: StageResult,
+    attempts: i32,
+    error: &str,
+    repo_root: &Path,
+) -> Result<()> {
+    let conn = DbConnection::new(repo_root).await?;
+    let slug = task.slug.to_string();
+
+    // Load existing task to get current stages
+    let mut record: Option<TaskRecord> =
+        conn.inner()
+            .select(("tasks", &slug))
+            .await
+            .map_err(|e| Error::DatabaseError {
+                reason: format!("Failed to load task for stage update: {e}"),
+            })?;
+
+    let mut task_record = record.take().unwrap_or_else(|| task_to_record(task));
+
+    // Update or append stage
+    let new_stage = StageRecord::new(stage_name.to_string(), result, attempts, error.to_string());
+
+    let existing_stage_idx = task_record
+        .stages
+        .iter()
+        .position(|s| s.stage_name == stage_name);
+
+    match existing_stage_idx {
+        Some(idx) => {
+            task_record.stages[idx] = new_stage;
+        }
+        None => {
+            task_record.stages.push(new_stage);
+        }
+    }
+
+    task_record.updated_at = Utc::now();
+
+    // Update the task with new stages
+    let _: Option<TaskRecord> = conn
+        .inner()
+        .update(("tasks", &slug))
+        .content(task_record)
+        .await
+        .map_err(|e| Error::DatabaseError {
+            reason: format!("Failed to update stage status: {e}"),
+        })?;
+
+    Ok(())
 }
 
 /// Filter tasks by status.
@@ -309,77 +401,22 @@ pub fn get_in_progress_tasks(tasks: &[Task]) -> Vec<&Task> {
 /// Count tasks by status.
 #[must_use]
 pub fn count_tasks_by_status(tasks: &[Task]) -> std::collections::HashMap<String, usize> {
-    let mut counts = std::collections::HashMap::new();
+    let counts = tasks
+        .iter()
+        .fold(std::collections::HashMap::new(), |mut counts, task| {
+            let status_key = match &task.status {
+                TaskStatus::Created => "created".to_string(),
+                TaskStatus::InProgress { .. } => "in_progress".to_string(),
+                TaskStatus::PassedPipeline => "passed".to_string(),
+                TaskStatus::FailedPipeline { .. } => "failed".to_string(),
+                TaskStatus::Integrated => "integrated".to_string(),
+            };
 
-    for task in tasks {
-        let status_key = match &task.status {
-            TaskStatus::Created => "created".to_string(),
-            TaskStatus::InProgress { .. } => "in_progress".to_string(),
-            TaskStatus::PassedPipeline => "passed".to_string(),
-            TaskStatus::FailedPipeline { .. } => "failed".to_string(),
-            TaskStatus::Integrated => "integrated".to_string(),
-        };
-
-        *counts.entry(status_key).or_insert(0) += 1;
-    }
+            *counts.entry(status_key).or_insert(0) += 1;
+            counts
+        });
 
     counts
-}
-
-/// Update stage status in task record.
-#[allow(clippy::too_many_arguments)]
-pub fn update_stage_status(
-    task: &Task,
-    stage_name: &str,
-    result: StageResult,
-    attempts: i32,
-    error: &str,
-    repo_root: &Path,
-) -> Result<()> {
-    let factory_dir = repo_root.join(".factory");
-    create_dir_all(&factory_dir)?;
-
-    let slug_str = task.slug.to_string();
-    let mut task_record = task_to_record(task);
-
-    // Load existing stages if task exists
-    if let Ok(existing_records) = load_all_records(repo_root) {
-        if let Some(existing) = existing_records.iter().find(|r| r.slug == slug_str) {
-            task_record.stages.clone_from(&existing.stages);
-        }
-    }
-
-    // Update or append stage
-    let new_stage = StageRecord::new(stage_name.to_string(), result, attempts, error.to_string());
-
-    let existing_stage_idx = task_record
-        .stages
-        .iter()
-        .position(|s| s.stage_name == stage_name);
-
-    match existing_stage_idx {
-        Some(idx) => {
-            task_record.stages[idx] = new_stage;
-        }
-        None => {
-            task_record.stages.push(new_stage);
-        }
-    }
-
-    // Save updated record
-    let mut records = load_all_records(repo_root)?;
-    let existing_idx = records.iter().position(|r| r.slug == slug_str);
-
-    match existing_idx {
-        Some(idx) => {
-            records[idx] = task_record;
-        }
-        None => {
-            records.push(task_record);
-        }
-    }
-
-    save_all_records(repo_root, &records)
 }
 
 #[cfg(test)]
@@ -387,7 +424,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_task_record_roundtrip() {
+    fn test_task_record_conversion() {
         let slug = Slug::new("test-task");
         assert!(slug.is_ok());
 
@@ -402,12 +439,5 @@ mod tests {
             let restored = record_to_task(&record);
             assert!(restored.is_ok());
         }
-    }
-
-    #[test]
-    fn test_current_timestamp() {
-        let ts = current_timestamp();
-        assert!(ts.contains('T'));
-        assert!(ts.ends_with('Z'));
     }
 }

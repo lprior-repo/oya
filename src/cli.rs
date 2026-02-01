@@ -1,5 +1,9 @@
 //! CLI command definitions using clap.
 
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+#![deny(clippy::panic)]
+
 use clap::{Parser, Subcommand};
 
 /// Factory - Contract-driven CI/CD Pipeline

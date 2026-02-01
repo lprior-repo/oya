@@ -46,7 +46,9 @@ pub mod types;
 pub use client::OpencodeClient;
 pub use config::{AgentMode, OpencodeConfig};
 pub use error::{Error, Result};
-pub use executor::{AIExecutor, PhaseContext, PhaseHandler, PhaseInput, PhaseOutput, PhaseRegistry};
+pub use executor::{
+    AIExecutor, PhaseContext, PhaseHandler, PhaseInput, PhaseOutput, PhaseRegistry,
+};
 pub use types::{
     ChunkType, CommandExecution, ExecutionResult, ModificationType, ModifiedFile, StreamChunk,
     TokenUsage,
