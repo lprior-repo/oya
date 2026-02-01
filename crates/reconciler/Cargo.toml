@@ -1,0 +1,40 @@
+[package]
+name = "oya-reconciler"
+version = "0.1.0"
+edition = "2021"
+description = "K8s-style reconciliation loop for bead management"
+license = "MIT"
+
+[dependencies]
+# Workspace dependencies
+oya-core = { workspace = true }
+oya-events = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true, features = ["sync", "time"] }
+async-trait = { workspace = true }
+futures = { workspace = true }
+
+# Serialization
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+# Time
+chrono = { workspace = true, features = ["serde"] }
+
+# IDs
+ulid = { workspace = true, features = ["serde"] }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Tracing
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+
+[lints.clippy]
+unwrap_used = "forbid"
+expect_used = "deny"
+panic = "forbid"

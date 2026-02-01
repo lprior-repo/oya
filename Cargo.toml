@@ -10,6 +10,7 @@ members = [
     "crates/opencode",
     "crates/workflow",
     "crates/events",
+    "crates/reconciler",
 ]
 resolver = "2"
 
@@ -41,6 +42,7 @@ oya-intent = { path = "crates/intent" }
 oya-opencode = { path = "crates/opencode" }
 oya-workflow = { path = "crates/workflow" }
 oya-events = { path = "crates/events" }
+oya-reconciler = { path = "crates/reconciler" }
 centralized-docs = { path = "crates/centralized-docs" }
 orchestrator = { path = "crates/orchestrator" }
 merge-queue = { path = "crates/merge-queue" }
