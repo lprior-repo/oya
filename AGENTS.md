@@ -26,17 +26,7 @@ jj git push                # Push to remote
 
 ### Issue Tracking (Beads)
 
-**Note:** `br` is non-invasive and never executes git commands. After `br sync --flush-only`, you must manually run `git add .beads/ && git commit`.
-
-```bash
-br ready              # Find available work
-br show <id>          # View issue details
-br update <id> --status in_progress  # Claim work
-br close <id>         # Complete work
-br sync --flush-only  # Export to JSONL (no git)
-git add .beads/
-git commit -m "sync beads"
-```
+**See [docs/BEADS.md](docs/BEADS.md) for complete br reference.**
 
 ### Development (Moon CI/CD)
 ```bash
@@ -268,3 +258,5 @@ bv --robot-triage --robot-triage-by-track
 - Always use jj for version control (NEVER raw git commands)
 - Always use Moon for builds (NEVER raw cargo commands)
 - YOU ARE TO NEVER TOUCH CLIPPY SETTINGS EVER
+
+

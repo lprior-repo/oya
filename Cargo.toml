@@ -1,5 +1,5 @@
 [workspace]
-members = [
+ members = [
     "crates/core",
     "crates/pipeline",
     "crates/orchestrator",
@@ -8,6 +8,7 @@ members = [
     "crates/workflow",
     "crates/events",
     "crates/reconciler",
+    "crates/oya-web",
 ]
 resolver = "2"
 
@@ -38,6 +39,7 @@ oya-opencode = { path = "crates/opencode" }
 oya-workflow = { path = "crates/workflow" }
 oya-events = { path = "crates/events" }
 oya-reconciler = { path = "crates/reconciler" }
+oya-web = { path = "crates/oya-web" }
 orchestrator = { path = "crates/orchestrator" }
 merge-queue = { path = "crates/merge-queue" }
 
@@ -93,6 +95,15 @@ notify = "7"
 reqwest = { version = "0.12", features = ["blocking", "json"] }
 scraper = "0.20"
 url = { version = "2", features = ["serde"] }
+
+# Web framework (latest)
+axum = { version = "0.8", features = ["macros", "tokio"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip"] }
+hyper = "1.8"
+hyper-util = { version = "0.1", features = ["full"] }
+http = "1.2"
+http-body-util = "0.1"
 
 # Functional utilities
 tap = "1"
