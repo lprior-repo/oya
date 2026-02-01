@@ -1,151 +1,206 @@
 # Stream E: Tauri Desktop UI + axum Backend
 
-**Timeline**: Weeks 3-6
-**Goal**: Step Functions-like DAG visualization with real-time WebSocket updates in native desktop app
-**LOC Target**: ~3.5k LOC
-**Status**: Session initialized, beads NOT YET CREATED
+**Duration**: Weeks 3-6 (4 weeks)
+**LOC**: ~3.5k
+**Priority**: High (user-facing MVP component)
 
 ## Overview
 
-Stream E implements the user interface for Oya:
-- Native desktop app using Tauri 2.0
-- Rust WASM frontend using Leptos (type-safe reactive UI)
-- axum backend (REST API + WebSocket server)
-- Real-time bead status updates via WebSocket
-- Step Functions-like DAG visualization and execution history
+Step Functions-like DAG visualization with real-time WebSocket updates in a native desktop app using Tauri + Leptos + axum.
 
-## Planning Session
+---
 
-**Session ID**: `stream-e-tauri-ui`
-**Session File**: `~/.local/share/planner/sessions/stream-e-tauri-ui.yml`
-**Status**: INITIALIZED - Beads NOT yet generated
+## Bead Breakdown
+
+**Total Beads**: 6
+**Planning Session**: stream-e-tauri-ui (COMPLETE)
+
+| # | Bead ID | Title | Type | Priority | Effort | Description |
+|---|---------|-------|------|----------|--------|-------------|
+| 1 | intent-cli-20260201020059-ttfabixq | backend: Implement axum REST API with tower middleware | feature | 1 | 4hr | Implement axum HTTP server with 4 REST endpoints (create workflow, query status, cancel, health check) and tower middleware (CORS, tracing, compression). Provides backend API for Tauri frontend. |
+| 2 | intent-cli-20260201020059-hwlgqn0s | backend: Implement WebSocket server with bincode binary streaming | feature | 1 | 4hr | Implement WebSocket server for real-time bead event streaming using bincode binary protocol. Broadcasts BeadEvent updates to all connected clients with <50ms latency. |
+| 3 | intent-cli-20260201020059-o7uvwmxl | ui: Implement Tauri 2.0 scaffold with Leptos CSR frontend | feature | 1 | 4hr | Create Tauri 2.0 desktop app with Leptos client-side rendering (CSR) frontend. Sets up project structure, build pipeline, HTTP client, and WebSocket connection to axum backend. |
+| 4 | intent-cli-20260201020059-xrlsf0mp | ui: Implement DAG visualization with Leptos components | feature | 2 | 4hr | Build interactive DAG visualization using Leptos components and Canvas API. Renders bead nodes with state colors, dependency edges, pan/zoom controls. Force-directed layout for 50+ node graphs. |
+| 5 | intent-cli-20260201020059-4eih0cdy | ui: Integrate WebSocket for real-time bead status updates | feature | 1 | 2hr | Connect Leptos frontend to WebSocket server. Subscribe to bincode event stream, deserialize BeadEvent updates, reactively update DAG visualization with <50ms latency using Leptos signals. |
+| 6 | intent-cli-20260201020059-n6vt99rk | ui: Implement execution timeline and manual bead controls | feature | 2 | 4hr | Build Step Functions-like execution timeline component with Leptos. Shows phase progress, event history, manual actions (cancel/retry buttons), error visualization, responsive layout. |
+
+---
 
 ## Architecture
 
-### Tech Stack
-- **Frontend**: Tauri (native window) + Leptos (Rust WASM)
-- **Backend**: axum (REST + WebSocket) running in orchestrator process
-- **Communication**: HTTP/WebSocket from Tauri frontend to axum backend
-- **Serialization**: bincode for WebSocket binary frames
-- **Real-time**: WebSocket subscriptions to bead events
+### Frontend: Tauri + Leptos
+- **Tauri 2.0**: Native desktop window (cross-platform: Linux, macOS, Windows)
+- **Leptos 0.7 CSR**: Type-safe reactive UI in Rust WASM
+- **Communication**: HTTP/REST + WebSocket to axum backend
 
-### Component Structure
+### Backend: axum + tower
+- **axum 0.7**: Web framework for REST API + WebSocket server
+- **tower**: Middleware (CORS, tracing, compression)
+- **bincode**: Binary serialization for WebSocket frames
+
+### Data Flow
 ```
-crates/oya-ui/              # Tauri + Leptos frontend
-├── src-tauri/              # Tauri wrapper (Rust)
-│   └── main.rs
-└── src/                    # Leptos app (WASM)
-    ├── app.rs              # Main app component
-    ├── components/
-    │   ├── dag_viz.rs      # DAG visualization
-    │   ├── timeline.rs     # Execution history
-    │   └── controls.rs     # Manual actions
-    └── websocket.rs        # WebSocket client
-
-crates/oya-web/             # axum backend
-├── src/
-│   ├── lib.rs              # Server setup
-│   ├── routes.rs           # REST API routes
-│   └── websocket.rs        # WebSocket server
+Leptos Frontend (WASM)
+  ↓ HTTP POST
+axum Backend (REST API) → Orchestrator (create bead)
+  ↓ WebSocket (bincode)
+Leptos Frontend (WASM) → Reactive UI update (<50ms)
 ```
 
-## Planned Features (Week-by-Week)
+---
 
-### Week 3: axum Backend + Tauri Scaffold
-**Beads to create**:
-1. axum REST API (5 endpoints: create/query/cancel/health/list)
-2. WebSocket server (bincode binary frames, event streaming)
-3. Tauri 2.0 scaffold (window setup, frontend build)
-4. Leptos CSR setup (client-side rendering, routing)
+## Technical Details
 
-### Week 4: DAG Visualization
-**Beads to create**:
-1. Leptos DAG component (force-directed graph rendering)
-2. Canvas/SVG rendering (nodes as circles, edges as arrows)
-3. Interactive controls (pan, zoom, node selection)
-4. State coloring (Pending=gray, Running=blue, Completed=green, Failed=red)
-
-### Week 5: Real-Time Status Updates
-**Beads to create**:
-1. WebSocket client in Leptos (connect to axum)
-2. Event subscription and deserialization (bincode)
-3. Reactive UI updates (Leptos signals for state changes)
-4. Phase progress display (current phase out of 15 TDD15 phases)
-
-### Week 6: Step Functions-Like Features
-**Beads to create**:
-1. Execution history timeline (vertical list with Leptos `For`)
-2. Bead detail panel (status, logs, checkpoints, events)
-3. Manual actions (cancel button, retry button, view logs)
-4. Error visualization (conditional rendering with Leptos `Show`)
-
-## REST API Specification
-
-### Endpoints
-```
-POST /api/workflows         - Create new workflow/bead
-GET  /api/beads/:id         - Query bead status
-POST /api/beads/:id/cancel  - Cancel bead execution
-POST /api/beads/:id/retry   - Retry failed bead
-GET  /api/beads/:id/events  - Get event log for bead
-GET  /api/health            - System health check
-GET  /api/workflows         - List all workflows
-WS   /api/ws                - WebSocket for real-time updates
-```
+### REST API Endpoints
+1. `POST /api/workflows` - Create new bead
+2. `GET /api/beads/:id` - Query bead status
+3. `POST /api/beads/:id/cancel` - Cancel execution
+4. `GET /api/health` - System health check
 
 ### WebSocket Protocol
-- **Message Format**: bincode binary frames
-- **Event Types**: BeadStateChanged, PhaseCompleted, BeadFailed, WorkflowCompleted
-- **Subscription**: Client subscribes to specific workflow or all events
-- **Heartbeat**: Ping/pong every 30s to detect disconnection
+- **URL**: `ws://localhost:8080/api/ws`
+- **Format**: bincode binary frames
+- **Messages**: Streamed `BeadEvent` updates
+- **Latency**: <50ms from event to UI update
+
+### DAG Visualization Features
+- Force-directed graph layout (Canvas API)
+- State-based node colors:
+  - Pending: gray
+  - Scheduled: yellow
+  - Running: blue
+  - Completed: green
+  - Failed: red
+- Dependency edges with arrows
+- Pan/zoom controls (mouse events)
+- Interactive node selection
+
+### Execution Timeline Features
+- Phase progress indicator (15 phases for TDD15)
+- Event history (chronological list)
+- Manual controls:
+  - Cancel running bead
+  - Retry failed bead
+  - View event log
+- Error visualization (conditional rendering)
+- Responsive layout (Tailwind or Leptos styling)
+
+---
+
+## Quality Gates
+
+### Per-Bead Gates
+- All tests pass (happy path + error path)
+- CUE schema validation passes
+- No unwraps, no panics (clippy forbid)
+- Railway-Oriented Programming (Result<T, Error>)
+- Moon quick check passes (6-7ms with cache)
+
+### Integration Gates
+- Tauri app launches and connects to axum
+- WebSocket establishes connection
+- REST API responds to all 4 endpoints
+- DAG renders 50-node graph correctly
+- Real-time updates <50ms latency
+- Manual controls work (cancel, retry)
+- Full user workflow complete (create → visualize → watch → view results)
+
+---
 
 ## Success Criteria
 
-- ✅ crates/oya-web/ with axum + tower backend
-- ✅ crates/oya-ui/ with Tauri + Leptos frontend
-- ✅ REST API (5+ endpoints)
-- ✅ WebSocket server with bincode binary frames
-- ✅ DAG visualization (force-directed graph in Leptos)
-- ✅ Real-time status updates (<50ms latency)
-- ✅ Step Functions-like execution history
-- ✅ Manual bead control (cancel, retry)
-- ✅ Type-safe frontend (Leptos + Rust WASM)
-- ✅ Native desktop app (Tauri)
+### MVP Complete When:
+- ✅ Tauri desktop app launches
+- ✅ axum backend serves REST API + WebSocket
+- ✅ Leptos frontend renders DAG visualization
+- ✅ Real-time WebSocket updates working
+- ✅ Manual bead controls functional (cancel, retry)
+- ✅ Execution timeline displays phase progress
+- ✅ <50ms UI update latency
+- ✅ All 6 beads implemented and tested
+- ✅ User acceptance test passes (full workflow)
+
+---
 
 ## Dependencies
 
-**Rust Crates**:
-- `tauri = "2.0"` - Desktop app framework
-- `leptos = { version = "0.7", features = ["csr"] }` - Reactive UI
-- `axum = "0.7"` - Web framework
-- `tower = "0.5"` - Middleware
-- `tower-http = "0.6"` - HTTP middleware (CORS, compression)
-- `tokio-tungstenite = "0.24"` - WebSocket for axum
-- `gloo-net = "0.6"` - WebSocket client for Leptos/WASM
+### Rust Crates
+```toml
+# Backend
+axum = "0.7"
+tower = "0.5"
+tower-http = "0.6"
+bincode = "1.3"
 
-## Critical Files (To Be Created)
-
-```
-crates/oya-web/src/lib.rs                   - axum server
-crates/oya-web/src/routes.rs                - REST API
-crates/oya-web/src/websocket.rs             - WebSocket server
-crates/oya-ui/src-tauri/main.rs             - Tauri wrapper
-crates/oya-ui/src/app.rs                    - Leptos app
-crates/oya-ui/src/components/dag_viz.rs     - DAG visualization
-crates/oya-ui/src/websocket.rs              - WebSocket client
+# Frontend (Tauri app)
+tauri = "2.0"
+leptos = { version = "0.7", features = ["csr"] }
+gloo-net = "0.6"  # WebSocket client
+web-sys = "0.3"   # Canvas API
 ```
 
-## Next Steps
+### External Tools
+- Node.js (for Tauri build)
+- Rust nightly (for Leptos WASM)
 
-1. **Continue planning**: Create 8-10 atomic beads for Stream E
-2. **Task breakdown**: REST API, WebSocket, Tauri setup, Leptos components, DAG viz
-3. **CUE schemas**: Generate validation schemas for each bead
-4. **Implementation order**: Backend first (axum), then frontend (Tauri + Leptos)
+---
 
-## Notes
+## Critical Files
 
-- **Defer complexity**: Start with simple list view before complex DAG visualization
-- **Tauri is mandatory**: Desktop app is part of MVP (not optional)
-- **Type safety**: Leptos provides compile-time guarantees for UI
-- **Performance**: Target <50ms latency for WebSocket updates
-- **Integration**: UI is last stream to implement (depends on A, B, C, D)
+### Backend (axum)
+- `crates/oya-web/src/lib.rs` - axum server setup
+- `crates/oya-web/src/routes.rs` - REST API routes
+- `crates/oya-web/src/websocket.rs` - WebSocket server
+- `crates/oya-web/Cargo.toml` - Backend dependencies
+
+### Frontend (Tauri + Leptos)
+- `crates/oya-ui/src-tauri/main.rs` - Tauri wrapper
+- `crates/oya-ui/src/app.rs` - Leptos frontend app
+- `crates/oya-ui/src/components/dag_viz.rs` - DAG visualization component
+- `crates/oya-ui/src/components/timeline.rs` - Execution timeline component
+- `crates/oya-ui/src/websocket.rs` - WebSocket client
+- `crates/oya-ui/Cargo.toml` - Frontend dependencies
+- `crates/oya-ui/tauri.conf.json` - Tauri configuration
+
+### Tests
+- `crates/oya-web/tests/rest_api_test.rs` - REST API integration tests
+- `crates/oya-web/tests/websocket_test.rs` - WebSocket integration tests
+- `crates/oya-ui/tests/ui_test.rs` - Frontend component tests
+
+---
+
+## Risk Mitigation
+
+### Risk 1: Tauri + Leptos Integration
+**Mitigation**:
+- Follow official Tauri + Leptos template
+- Use WebSocket for loose coupling (Tauri backend doesn't know about Leptos)
+- If WebSocket issues, fallback to Tauri IPC commands
+- If Leptos issues, fallback to vanilla JS + Vite
+
+### Risk 2: Canvas Performance (50+ nodes)
+**Mitigation**:
+- Use force-directed layout with caching
+- Render on RequestAnimationFrame
+- Implement viewport culling (only render visible nodes)
+- If too slow, fallback to SVG with d3.js
+
+### Risk 3: WebSocket Latency
+**Mitigation**:
+- Use bincode binary protocol (faster than JSON)
+- Batch events if >100/sec
+- Debounce UI updates (max 60 FPS)
+- Monitor latency in production
+
+---
+
+## Planning Session Details
+
+**Session ID**: stream-e-tauri-ui
+**Status**: COMPLETE
+**Created**: 2026-02-01T01:38:29
+**Tasks Generated**: 6
+**Beads Created**: 6
+**CUE Schemas**: 6 (all in `.beads/schemas/`)
+
+**State File**: `~/.local/share/planner/sessions/stream-e-tauri-ui.yml`

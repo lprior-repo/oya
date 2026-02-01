@@ -1,13 +1,13 @@
 # Oya Rock-Solid Orchestrator - Master Planning Summary
 
 **Date**: 2026-02-01
-**Status**: Planning Complete for Streams A-D, Streams E-F initialized
-**Total Beads Created**: 30 beads across 4 streams
+**Status**: Planning Complete for ALL 6 Streams (A-F)
+**Total Beads Created**: 42 beads across 6 streams
 **Total LOC Target**: ~32k LOC (14k existing → 32k final)
 
 ## Executive Summary
 
-This document summarizes the complete planning for the Oya rock-solid orchestrator implementation. We've decomposed the 7-week, 6-stream parallel implementation into 30 atomic beads (with more to come for Streams E-F) using the planner skill with full CUE validation.
+This document summarizes the complete planning for the Oya rock-solid orchestrator implementation. We've decomposed the 7-week, 6-stream parallel implementation into 42 atomic beads using the planner skill with full CUE validation and two-stage validation.
 
 ## Planning Approach
 
@@ -31,10 +31,10 @@ This document summarizes the complete planning for the Oya rock-solid orchestrat
 | B | Actor System + Supervision | 1-4 | 8 | ✅ Complete | `stream-b-actor-system.yml` |
 | C | DAG Engine + Scheduling + Merge Queue | 3-5 | 8 | ✅ Complete | `stream-c-dag-scheduling.yml` |
 | D | Process Pool + Workspace Isolation | 2-4 | 6 | ✅ Complete | `stream-d-process-pool.yml` |
-| E | Tauri Desktop UI + axum Backend | 3-6 | TBD | 🟡 Initialized | `stream-e-tauri-ui.yml` |
-| F | Integration + Chaos Testing | 5-7 | TBD | 🟡 Initialized | `stream-f-integration.yml` |
+| E | Tauri Desktop UI + axum Backend | 3-6 | 6 | ✅ Complete | `stream-e-tauri-ui.yml` |
+| F | Integration + Chaos Testing | 5-7 | 6 | ✅ Complete | `stream-f-integration.yml` |
 
-**Total**: 30 beads planned, ~10-12 more needed for Streams E-F
+**Total**: 42 beads planned (ALL streams complete)
 
 ## All Created Beads (30 total)
 
@@ -88,10 +88,32 @@ This document summarizes the complete planning for the Oya rock-solid orchestrat
 | `intent-cli-20260201014713-mgcop1nx` | worker: Integrate WorkspaceManager with BeadWorkerActor | 2hr |
 | `intent-cli-20260201014713-j3tktekl` | sticky: Implement sticky worker assignment with soft/hard modes | 4hr |
 
+### Stream E: Tauri Desktop UI + axum Backend (6 beads)
+
+| Bead ID | Title | Effort |
+|---------|-------|--------|
+| `intent-cli-20260201020059-ttfabixq` | backend: Implement axum REST API with tower middleware | 4hr |
+| `intent-cli-20260201020059-hwlgqn0s` | backend: Implement WebSocket server with bincode binary streaming | 4hr |
+| `intent-cli-20260201020059-o7uvwmxl` | ui: Implement Tauri 2.0 scaffold with Leptos CSR frontend | 4hr |
+| `intent-cli-20260201020059-xrlsf0mp` | ui: Implement DAG visualization with Leptos components | 4hr |
+| `intent-cli-20260201020059-4eih0cdy` | ui: Integrate WebSocket for real-time bead status updates | 2hr |
+| `intent-cli-20260201020059-n6vt99rk` | ui: Implement execution timeline and manual bead controls | 4hr |
+
+### Stream F: Integration + Chaos Testing (6 beads)
+
+| Bead ID | Title | Effort |
+|---------|-------|--------|
+| `intent-cli-20260201020059-jjbgksde` | integration: Implement orchestrator initialization and graceful shutdown | 4hr |
+| `intent-cli-20260201020059-mahvrqrz` | integration: End-to-end bead execution integration tests | 4hr |
+| `intent-cli-20260201020339-ykctqedr` | chaos: Implement chaos testing framework with 6 test scenarios | 4hr |
+| `intent-cli-20260201020339-tou8kwbh` | perf: Implement performance benchmarks with criterion | 2hr |
+| `intent-cli-20260201020059-jonmp2v0` | perf: Implement load testing with 100 concurrent beads | 4hr |
+| `intent-cli-20260201020339-fauedab9` | perf: Memory profiling and leak detection | 2hr |
+
 ## CUE Schema Storage
 
 **Location**: `/home/lewis/src/oya/.beads/schemas/`
-**Total Schemas**: 30 bead-specific CUE files
+**Total Schemas**: 42 bead-specific CUE files
 **Purpose**: Post-implementation validation (Stage 2)
 
 Each CUE schema enforces:
