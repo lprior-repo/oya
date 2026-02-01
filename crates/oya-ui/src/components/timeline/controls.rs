@@ -251,10 +251,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_bead_status_serialization() {
+    fn test_bead_status_serialization() -> Result<(), String> {
         let status = BeadStatus::Failed;
-        let json = serde_json::to_string(&status).expect("Failed to serialize");
+        let json =
+            serde_json::to_string(&status).map_err(|e| format!("Failed to serialize: {}", e))?;
         assert_eq!(json, r#""failed""#);
+        Ok(())
     }
 
     #[test]
@@ -272,18 +274,20 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_send_cancel_request() {
+    async fn test_send_cancel_request() -> Result<(), String> {
         let result = send_cancel_request("test-123").await;
         assert!(result.is_ok());
-        let response = result.expect("Expected Ok result");
+        let response = result?;
         assert!(response.message.contains("test-123"));
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_send_retry_request() {
+    async fn test_send_retry_request() -> Result<(), String> {
         let result = send_retry_request("test-456").await;
         assert!(result.is_ok());
-        let response = result.expect("Expected Ok result");
+        let response = result?;
         assert!(response.message.contains("test-456"));
+        Ok(())
     }
 }

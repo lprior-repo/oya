@@ -6,7 +6,7 @@
 use web_sys::{HtmlCanvasElement, window};
 
 /// Configuration for canvas resize behavior
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct ResizeConfig {
     /// Whether to maintain aspect ratio during resize
     pub maintain_aspect_ratio: bool,
@@ -14,16 +14,6 @@ pub struct ResizeConfig {
     pub max_width: Option<f32>,
     /// Maximum height constraint in logical pixels
     pub max_height: Option<f32>,
-}
-
-impl Default for ResizeConfig {
-    fn default() -> Self {
-        Self {
-            maintain_aspect_ratio: false,
-            max_width: None,
-            max_height: None,
-        }
-    }
 }
 
 /// Calculate new canvas dimensions based on window size and configuration

@@ -2,8 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use super::super::controls::{BeadStatus, WorkflowControls, WorkflowControlsProps};
-    use leptos::prelude::*;
+    use super::super::controls::WorkflowControls;
 
     #[test]
     fn test_workflow_controls_component_exists() {

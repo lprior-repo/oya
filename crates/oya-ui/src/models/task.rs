@@ -5,46 +5,34 @@ use serde::{Deserialize, Serialize};
 /// Task status enumeration
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum TaskStatus {
+    #[default]
     Open,
     InProgress,
     Done,
 }
 
-impl Default for TaskStatus {
-    fn default() -> Self {
-        Self::Open
-    }
-}
-
 /// Task priority enumeration
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum TaskPriority {
     Low,
+    #[default]
     Medium,
     High,
-}
-
-impl Default for TaskPriority {
-    fn default() -> Self {
-        Self::Medium
-    }
 }
 
 /// Task type enumeration
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum TaskType {
+    #[default]
     Feature,
     Bug,
     Chore,
-}
-
-impl Default for TaskType {
-    fn default() -> Self {
-        Self::Feature
-    }
 }
 
 /// Task data structure
@@ -136,20 +124,21 @@ mod tests {
     }
 
     #[test]
-    fn test_task_serialization() {
+    fn test_task_serialization() -> Result<(), Box<dyn std::error::Error>> {
         let task = Task::new("task-3", "Serialize Test")
             .with_status(TaskStatus::Done)
             .with_priority(TaskPriority::Low);
 
-        let json = serde_json::to_string(&task).expect("Task serialization should succeed");
+        let json = serde_json::to_string(&task)?;
         assert!(json.contains("task-3"));
         assert!(json.contains("Serialize Test"));
         assert!(json.contains("done"));
         assert!(json.contains("low"));
+        Ok(())
     }
 
     #[test]
-    fn test_task_deserialization() {
+    fn test_task_deserialization() -> Result<(), Box<dyn std::error::Error>> {
         let json = r#"{
             "id": "task-4",
             "title": "Deserialize Test",
@@ -159,13 +148,14 @@ mod tests {
             "task_type": "chore"
         }"#;
 
-        let task: Task = serde_json::from_str(json).expect("Task deserialization should succeed");
+        let task: Task = serde_json::from_str(json)?;
         assert_eq!(task.id, "task-4");
         assert_eq!(task.title, "Deserialize Test");
         assert_eq!(task.description, "Test desc");
         assert_eq!(task.status, TaskStatus::InProgress);
         assert_eq!(task.priority, TaskPriority::High);
         assert_eq!(task.task_type, TaskType::Chore);
+        Ok(())
     }
 
     #[test]

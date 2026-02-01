@@ -200,11 +200,13 @@ mod message_type_tests {
             spec: spec.clone(),
         };
 
-        match msg {
-            SchedulerMessage::CreateBead { id: _, spec: s } => {
-                assert_eq!(s, spec, "Spec should match");
-            }
-            _ => panic!("Expected CreateBead variant"),
+        if let SchedulerMessage::CreateBead { id: _, spec: s } = msg {
+            assert_eq!(s, spec, "Spec should match");
+        } else {
+            assert!(
+                matches!(msg, SchedulerMessage::CreateBead { .. }),
+                "Expected CreateBead variant"
+            );
         }
     }
 
@@ -213,11 +215,13 @@ mod message_type_tests {
         let test_id = Ulid::new();
         let msg = SchedulerMessage::CancelBead { id: test_id };
 
-        match msg {
-            SchedulerMessage::CancelBead { id } => {
-                assert_eq!(id, test_id, "ID should match");
-            }
-            _ => panic!("Expected CancelBead variant"),
+        if let SchedulerMessage::CancelBead { id } = msg {
+            assert_eq!(id, test_id, "ID should match");
+        } else {
+            assert!(
+                matches!(msg, SchedulerMessage::CancelBead { .. }),
+                "Expected CancelBead variant"
+            );
         }
     }
 
@@ -226,11 +230,13 @@ mod message_type_tests {
         let test_id = Ulid::new();
         let response = SchedulerResponse::Created { id: test_id };
 
-        match response {
-            SchedulerResponse::Created { id } => {
-                assert_eq!(id, test_id, "ID should match");
-            }
-            _ => panic!("Expected Created variant"),
+        if let SchedulerResponse::Created { id } = response {
+            assert_eq!(id, test_id, "ID should match");
+        } else {
+            assert!(
+                matches!(response, SchedulerResponse::Created { .. }),
+                "Expected Created variant"
+            );
         }
     }
 
@@ -239,11 +245,13 @@ mod message_type_tests {
         let test_id = Ulid::new();
         let response = SchedulerResponse::Cancelled { id: test_id };
 
-        match response {
-            SchedulerResponse::Cancelled { id } => {
-                assert_eq!(id, test_id, "ID should match");
-            }
-            _ => panic!("Expected Cancelled variant"),
+        if let SchedulerResponse::Cancelled { id } = response {
+            assert_eq!(id, test_id, "ID should match");
+        } else {
+            assert!(
+                matches!(response, SchedulerResponse::Cancelled { .. }),
+                "Expected Cancelled variant"
+            );
         }
     }
 
@@ -254,11 +262,13 @@ mod message_type_tests {
             message: error_msg.clone(),
         };
 
-        match response {
-            SchedulerResponse::Error { message } => {
-                assert_eq!(message, error_msg, "Error message should match");
-            }
-            _ => panic!("Expected Error variant"),
+        if let SchedulerResponse::Error { message } = response {
+            assert_eq!(message, error_msg, "Error message should match");
+        } else {
+            assert!(
+                matches!(response, SchedulerResponse::Error { .. }),
+                "Expected Error variant"
+            );
         }
     }
 
@@ -436,16 +446,17 @@ mod channel_behavior_tests {
         });
 
         // Verify messages arrive in order
-        let mut expected = 0;
-        while expected < 10 {
+        for expected in 0..10 {
             let timeout_result = timeout(Duration::from_millis(100), rx.recv()).await;
             assert!(timeout_result.is_ok(), "Should receive within timeout");
-            let msg_option = timeout_result.unwrap();
-            assert!(msg_option.is_some(), "Channel should not be closed");
-            let msg = msg_option.unwrap();
-
-            assert_eq!(msg, expected, "Messages should arrive in order");
-            expected += 1;
+            if let Ok(Some(msg)) = timeout_result {
+                assert_eq!(msg, expected, "Messages should arrive in order");
+            } else {
+                assert!(
+                    timeout_result.is_ok() && timeout_result.as_ref().ok().is_some(),
+                    "Should receive message"
+                );
+            }
         }
     }
 }

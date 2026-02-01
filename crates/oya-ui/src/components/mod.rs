@@ -8,9 +8,8 @@
 
 pub mod canvas;
 pub mod controls;
-// TODO: Fix Leptos component panic conflicts - see bead src-XXXXX
-// pub mod dashboard;
-// pub mod task_list;
+pub mod dashboard;
+pub mod task_list;
 pub mod timeline;
 
 // Temporarily commented out due to clippy::panic forbid conflict with Leptos macro

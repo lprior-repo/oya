@@ -15,31 +15,21 @@ pub enum EdgeType {
 }
 
 /// Visual style for edge rendering
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum EdgeStyle {
+    #[default]
     Solid,
     Dashed,
     Dotted,
 }
 
-impl Default for EdgeStyle {
-    fn default() -> Self {
-        Self::Solid
-    }
-}
-
 /// Visual state of the edge
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum EdgeState {
+    #[default]
     Normal,
     Highlighted,
     Dimmed,
-}
-
-impl Default for EdgeState {
-    fn default() -> Self {
-        Self::Normal
-    }
 }
 
 /// An edge in the dependency graph with type-safe node references
@@ -113,49 +103,51 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_valid_edge_creation() {
-        let source = NodeId::new("node1").unwrap();
-        let target = NodeId::new("node2").unwrap();
-        let result = Edge::new(source, target, EdgeType::Dependency);
+    fn test_valid_edge_creation() -> Result<(), String> {
+        let source = NodeId::new("node1")?;
+        let target = NodeId::new("node2")?;
+        let edge = Edge::new(source, target, EdgeType::Dependency)?;
 
-        assert!(result.is_ok());
-        let edge = result.unwrap();
         assert_eq!(edge.source().as_str(), "node1");
         assert_eq!(edge.target().as_str(), "node2");
         assert_eq!(edge.edge_type(), EdgeType::Dependency);
         assert_eq!(edge.style(), EdgeStyle::Solid);
         assert_eq!(edge.state(), EdgeState::Normal);
+        Ok(())
     }
 
     #[test]
-    fn test_self_referencing_edge_rejected() {
-        let node = NodeId::new("node1").unwrap();
+    fn test_self_referencing_edge_rejected() -> Result<(), String> {
+        let node = NodeId::new("node1")?;
         let result = Edge::new(node.clone(), node, EdgeType::Dependency);
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Edge cannot reference itself");
+        let err = result.err().ok_or("Expected error but got Ok")?;
+        assert_eq!(err, "Edge cannot reference itself");
+        Ok(())
     }
 
     #[test]
-    fn test_edge_type_variants() {
-        let source = NodeId::new("n1").unwrap();
-        let target = NodeId::new("n2").unwrap();
+    fn test_edge_type_variants() -> Result<(), String> {
+        let source = NodeId::new("n1")?;
+        let target = NodeId::new("n2")?;
 
-        let dep_edge = Edge::new(source.clone(), target.clone(), EdgeType::Dependency).unwrap();
+        let dep_edge = Edge::new(source.clone(), target.clone(), EdgeType::Dependency)?;
         assert_eq!(dep_edge.edge_type(), EdgeType::Dependency);
 
-        let flow_edge = Edge::new(source.clone(), target.clone(), EdgeType::DataFlow).unwrap();
+        let flow_edge = Edge::new(source.clone(), target.clone(), EdgeType::DataFlow)?;
         assert_eq!(flow_edge.edge_type(), EdgeType::DataFlow);
 
-        let trigger_edge = Edge::new(source, target, EdgeType::Trigger).unwrap();
+        let trigger_edge = Edge::new(source, target, EdgeType::Trigger)?;
         assert_eq!(trigger_edge.edge_type(), EdgeType::Trigger);
+        Ok(())
     }
 
     #[test]
-    fn test_edge_style_variants() {
-        let source = NodeId::new("n1").unwrap();
-        let target = NodeId::new("n2").unwrap();
-        let mut edge = Edge::new(source, target, EdgeType::Dependency).unwrap();
+    fn test_edge_style_variants() -> Result<(), String> {
+        let source = NodeId::new("n1")?;
+        let target = NodeId::new("n2")?;
+        let mut edge = Edge::new(source, target, EdgeType::Dependency)?;
 
         // Default style
         assert_eq!(edge.style(), EdgeStyle::Solid);
@@ -169,13 +161,14 @@ mod tests {
 
         edge.set_style(EdgeStyle::Solid);
         assert_eq!(edge.style(), EdgeStyle::Solid);
+        Ok(())
     }
 
     #[test]
-    fn test_edge_state_variants() {
-        let source = NodeId::new("n1").unwrap();
-        let target = NodeId::new("n2").unwrap();
-        let mut edge = Edge::new(source, target, EdgeType::Dependency).unwrap();
+    fn test_edge_state_variants() -> Result<(), String> {
+        let source = NodeId::new("n1")?;
+        let target = NodeId::new("n2")?;
+        let mut edge = Edge::new(source, target, EdgeType::Dependency)?;
 
         // Default state
         assert_eq!(edge.state(), EdgeState::Normal);
@@ -189,101 +182,102 @@ mod tests {
 
         edge.set_state(EdgeState::Normal);
         assert_eq!(edge.state(), EdgeState::Normal);
+        Ok(())
     }
 
     #[test]
-    fn test_edge_serialization() {
-        let source = NodeId::new("source").unwrap();
-        let target = NodeId::new("target").unwrap();
-        let edge = Edge::new(source, target, EdgeType::DataFlow).unwrap();
+    fn test_edge_serialization() -> Result<(), String> {
+        let source = NodeId::new("source")?;
+        let target = NodeId::new("target")?;
+        let edge = Edge::new(source, target, EdgeType::DataFlow)?;
 
-        let json = serde_json::to_string(&edge);
-        assert!(json.is_ok());
+        let json = serde_json::to_string(&edge).map_err(|e| e.to_string())?;
+        let deserialized: Edge = serde_json::from_str(&json).map_err(|e| e.to_string())?;
 
-        let deserialized: Result<Edge, _> = serde_json::from_str(&json.unwrap());
-        assert!(deserialized.is_ok());
-
-        let deserialized_edge = deserialized.unwrap();
-        assert_eq!(deserialized_edge.source().as_str(), "source");
-        assert_eq!(deserialized_edge.target().as_str(), "target");
-        assert_eq!(deserialized_edge.edge_type(), EdgeType::DataFlow);
+        assert_eq!(deserialized.source().as_str(), "source");
+        assert_eq!(deserialized.target().as_str(), "target");
+        assert_eq!(deserialized.edge_type(), EdgeType::DataFlow);
+        Ok(())
     }
 
     #[test]
-    fn test_edge_with_unicode_node_ids() {
-        let source = NodeId::new("节点-1").unwrap();
-        let target = NodeId::new("節點-2").unwrap();
-        let result = Edge::new(source, target, EdgeType::Dependency);
+    fn test_edge_with_unicode_node_ids() -> Result<(), String> {
+        let source = NodeId::new("节点-1")?;
+        let target = NodeId::new("節點-2")?;
+        let edge = Edge::new(source, target, EdgeType::Dependency)?;
 
-        assert!(result.is_ok());
-        let edge = result.unwrap();
         assert_eq!(edge.source().as_str(), "节点-1");
         assert_eq!(edge.target().as_str(), "節點-2");
+        Ok(())
     }
 
     #[test]
-    fn test_edge_type_serialization() {
+    fn test_edge_type_serialization() -> Result<(), String> {
         let dep = EdgeType::Dependency;
-        let json = serde_json::to_string(&dep).unwrap();
-        let deserialized: EdgeType = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&dep).map_err(|e| e.to_string())?;
+        let deserialized: EdgeType = serde_json::from_str(&json).map_err(|e| e.to_string())?;
         assert_eq!(deserialized, EdgeType::Dependency);
 
         let flow = EdgeType::DataFlow;
-        let json = serde_json::to_string(&flow).unwrap();
-        let deserialized: EdgeType = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&flow).map_err(|e| e.to_string())?;
+        let deserialized: EdgeType = serde_json::from_str(&json).map_err(|e| e.to_string())?;
         assert_eq!(deserialized, EdgeType::DataFlow);
 
         let trigger = EdgeType::Trigger;
-        let json = serde_json::to_string(&trigger).unwrap();
-        let deserialized: EdgeType = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&trigger).map_err(|e| e.to_string())?;
+        let deserialized: EdgeType = serde_json::from_str(&json).map_err(|e| e.to_string())?;
         assert_eq!(deserialized, EdgeType::Trigger);
+        Ok(())
     }
 
     #[test]
-    fn test_edge_style_serialization() {
+    fn test_edge_style_serialization() -> Result<(), String> {
         let solid = EdgeStyle::Solid;
-        let json = serde_json::to_string(&solid).unwrap();
-        let deserialized: EdgeStyle = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&solid).map_err(|e| e.to_string())?;
+        let deserialized: EdgeStyle = serde_json::from_str(&json).map_err(|e| e.to_string())?;
         assert_eq!(deserialized, EdgeStyle::Solid);
 
         let dashed = EdgeStyle::Dashed;
-        let json = serde_json::to_string(&dashed).unwrap();
-        let deserialized: EdgeStyle = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&dashed).map_err(|e| e.to_string())?;
+        let deserialized: EdgeStyle = serde_json::from_str(&json).map_err(|e| e.to_string())?;
         assert_eq!(deserialized, EdgeStyle::Dashed);
 
         let dotted = EdgeStyle::Dotted;
-        let json = serde_json::to_string(&dotted).unwrap();
-        let deserialized: EdgeStyle = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&dotted).map_err(|e| e.to_string())?;
+        let deserialized: EdgeStyle = serde_json::from_str(&json).map_err(|e| e.to_string())?;
         assert_eq!(deserialized, EdgeStyle::Dotted);
+        Ok(())
     }
 
     #[test]
-    fn test_edge_state_serialization() {
+    fn test_edge_state_serialization() -> Result<(), String> {
         let normal = EdgeState::Normal;
-        let json = serde_json::to_string(&normal).unwrap();
-        let deserialized: EdgeState = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&normal).map_err(|e| e.to_string())?;
+        let deserialized: EdgeState = serde_json::from_str(&json).map_err(|e| e.to_string())?;
         assert_eq!(deserialized, EdgeState::Normal);
 
         let highlighted = EdgeState::Highlighted;
-        let json = serde_json::to_string(&highlighted).unwrap();
-        let deserialized: EdgeState = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&highlighted).map_err(|e| e.to_string())?;
+        let deserialized: EdgeState = serde_json::from_str(&json).map_err(|e| e.to_string())?;
         assert_eq!(deserialized, EdgeState::Highlighted);
 
         let dimmed = EdgeState::Dimmed;
-        let json = serde_json::to_string(&dimmed).unwrap();
-        let deserialized: EdgeState = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&dimmed).map_err(|e| e.to_string())?;
+        let deserialized: EdgeState = serde_json::from_str(&json).map_err(|e| e.to_string())?;
         assert_eq!(deserialized, EdgeState::Dimmed);
+        Ok(())
     }
 
     #[test]
-    fn test_edge_clone() {
-        let source = NodeId::new("n1").unwrap();
-        let target = NodeId::new("n2").unwrap();
-        let edge1 = Edge::new(source, target, EdgeType::Dependency).unwrap();
+    fn test_edge_clone() -> Result<(), String> {
+        let source = NodeId::new("n1")?;
+        let target = NodeId::new("n2")?;
+        let edge1 = Edge::new(source, target, EdgeType::Dependency)?;
         let edge2 = edge1.clone();
 
         assert_eq!(edge1, edge2);
         assert_eq!(edge1.source().as_str(), edge2.source().as_str());
         assert_eq!(edge1.target().as_str(), edge2.target().as_str());
+        Ok(())
     }
 }

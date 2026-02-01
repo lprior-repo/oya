@@ -90,99 +90,93 @@ mod tests {
     wasm_bindgen_test_configure!(run_in_browser);
 
     #[wasm_bindgen_test]
-    fn test_get_2d_context_succeeds() {
+    fn test_get_2d_context_succeeds() -> Result<(), Box<dyn std::error::Error>> {
         let config = CanvasConfig {
             width: 800,
             height: 600,
             id: "test-ctx-1".to_string(),
         };
 
-        let canvas = create_canvas(&config).expect("Canvas creation should work");
-        let context = get_2d_context(&canvas);
-
-        assert!(context.is_ok(), "Context creation should succeed");
+        let canvas = create_canvas(&config)?;
+        let _context = get_2d_context(&canvas)?;
+        Ok(())
     }
 
     #[wasm_bindgen_test]
-    fn test_context_is_correct_type() {
+    fn test_context_is_correct_type() -> Result<(), Box<dyn std::error::Error>> {
         let config = CanvasConfig {
             width: 800,
             height: 600,
             id: "test-ctx-2".to_string(),
         };
 
-        let canvas = create_canvas(&config).expect("Canvas creation");
-        let context = get_2d_context(&canvas).expect("Context creation");
+        let canvas = create_canvas(&config)?;
+        let context = get_2d_context(&canvas)?;
 
         // Verify we can use 2D context methods
-        context.set_fill_style(&"#000000".into());
-        // If this compiles, we have the right type
+        context.set_fill_style_str("#000000");
+        Ok(())
     }
 
     #[wasm_bindgen_test]
-    fn test_multiple_retrievals() {
+    fn test_multiple_retrievals() -> Result<(), Box<dyn std::error::Error>> {
         let config = CanvasConfig {
             width: 800,
             height: 600,
             id: "test-ctx-3".to_string(),
         };
 
-        let canvas = create_canvas(&config).expect("Canvas creation");
-        let ctx1 = get_2d_context(&canvas).expect("First context");
-        let ctx2 = get_2d_context(&canvas).expect("Second context");
+        let canvas = create_canvas(&config)?;
+        let ctx1 = get_2d_context(&canvas)?;
+        let ctx2 = get_2d_context(&canvas)?;
 
         // Both should succeed (same underlying context)
         assert!(ctx1.canvas().is_some());
         assert!(ctx2.canvas().is_some());
+        Ok(())
     }
 
     #[wasm_bindgen_test]
-    fn test_get_or_create_with_none() {
+    fn test_get_or_create_with_none() -> Result<(), Box<dyn std::error::Error>> {
         let config = CanvasConfig {
             width: 800,
             height: 600,
             id: "test-ctx-4".to_string(),
         };
 
-        let canvas = create_canvas(&config).expect("Canvas creation");
+        let canvas = create_canvas(&config)?;
         let cached = None;
 
-        let context = get_or_create_context(&canvas, &cached);
-        assert!(context.is_ok(), "Should create new context when None");
+        let _context = get_or_create_context(&canvas, &cached)?;
+        Ok(())
     }
 
     #[wasm_bindgen_test]
-    fn test_get_or_create_with_cached() {
+    fn test_get_or_create_with_cached() -> Result<(), Box<dyn std::error::Error>> {
         let config = CanvasConfig {
             width: 800,
             height: 600,
             id: "test-ctx-5".to_string(),
         };
 
-        let canvas = create_canvas(&config).expect("Canvas creation");
-        let first_context = get_2d_context(&canvas).expect("First context");
+        let canvas = create_canvas(&config)?;
+        let first_context = get_2d_context(&canvas)?;
         let cached = Some(first_context);
 
-        let context = get_or_create_context(&canvas, &cached);
-        assert!(context.is_ok(), "Should return cached context");
+        let _context = get_or_create_context(&canvas, &cached)?;
+        Ok(())
     }
 
     #[wasm_bindgen_test]
-    fn test_error_messages_descriptive() {
+    fn test_error_messages_descriptive() -> Result<(), Box<dyn std::error::Error>> {
         let config = CanvasConfig {
             width: 800,
             height: 600,
             id: "test-ctx-6".to_string(),
         };
 
-        let canvas = create_canvas(&config).expect("Canvas creation");
-        let context = get_2d_context(&canvas);
-
-        // On success, verify we got a context
-        // (We can't easily test error paths in WASM without mocking)
-        assert!(
-            context.is_ok(),
-            "Context creation should succeed in browser"
-        );
+        let canvas = create_canvas(&config)?;
+        let _context = get_2d_context(&canvas)?;
+        Ok(())
     }
 }

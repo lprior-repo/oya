@@ -1,11 +1,11 @@
 [package]
 name = "oya-ui"
-version.workspace = true
-edition.workspace = true
-rust-version.workspace = true
-authors.workspace = true
-license.workspace = true
-repository.workspace = true
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+authors = ["Lewis Prior <lewis@lewisandquark.com>"]
+license = "MIT"
+repository = "https://github.com/lprior-repo/oya"
 description = "Leptos 0.7 CSR frontend for OYA graph visualization"
 
 [lib]
@@ -23,13 +23,27 @@ web-sys = { version = "0.3", features = [
 ] }
 wasm-bindgen = "0.2"
 console_error_panic_hook = "0.1"
-serde = { workspace = true }
-serde_json = { workspace = true }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 gloo-net = "0.6"
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"
 tokio = { version = "1", features = ["macros", "rt"] }
 
-[lints]
-workspace = true
+# Standalone workspace to avoid Leptos macro conflicts
+# See: https://github.com/leptos-rs/leptos/issues/xxx
+# Leptos #[component] macro needs #[allow(clippy::panic)]
+# which conflicts with workspace forbid(clippy::panic)
+[workspace]
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+unwrap_used = "forbid"
+expect_used = "deny"
+panic = "deny"
+todo = "warn"
+unimplemented = "forbid"
+unreachable = "forbid"

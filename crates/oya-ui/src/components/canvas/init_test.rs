@@ -11,45 +11,41 @@ use wasm_bindgen_test::*;
 wasm_bindgen_test_configure!(run_in_browser);
 
 #[wasm_bindgen_test]
-fn test_canvas_creation_succeeds() {
+fn test_canvas_creation_succeeds() -> Result<(), Box<dyn std::error::Error>> {
     let config = CanvasConfig {
         width: 1200,
         height: 800,
         id: "test-canvas-1".to_string(),
     };
 
-    let result = create_canvas(&config);
-    assert!(result.is_ok(), "Canvas creation should succeed");
-
-    let canvas = result.unwrap();
+    let canvas = create_canvas(&config)?;
     assert_eq!(canvas.width(), 1200);
     assert_eq!(canvas.height(), 800);
     assert_eq!(canvas.id(), "test-canvas-1");
+    Ok(())
 }
 
 #[wasm_bindgen_test]
-fn test_canvas_appends_to_body() {
+fn test_canvas_appends_to_body() -> Result<(), Box<dyn std::error::Error>> {
     let config = CanvasConfig {
         width: 800,
         height: 600,
         id: "test-canvas-2".to_string(),
     };
 
-    let result = create_canvas(&config);
-    assert!(result.is_ok(), "Canvas should append to body");
-
-    let canvas = result.unwrap();
+    let _canvas = create_canvas(&config)?;
 
     // Verify canvas is in the document
-    let window = web_sys::window().expect("should have window");
-    let document = window.document().expect("should have document");
+    let window = web_sys::window()?;
+    let document = window.document()?;
     let found = document.get_element_by_id("test-canvas-2");
 
     assert!(found.is_some(), "Canvas should be in document");
+    Ok(())
 }
 
 #[wasm_bindgen_test]
-fn test_canvas_zero_dimensions() {
+fn test_canvas_zero_dimensions() -> Result<(), Box<dyn std::error::Error>> {
     let config = CanvasConfig {
         width: 0,
         height: 0,
@@ -62,13 +58,14 @@ fn test_canvas_zero_dimensions() {
         "Canvas with zero dimensions should still create"
     );
 
-    let canvas = result.unwrap();
+    let canvas = result?;
     assert_eq!(canvas.width(), 0);
     assert_eq!(canvas.height(), 0);
+    Ok(())
 }
 
 #[wasm_bindgen_test]
-fn test_canvas_large_dimensions() {
+fn test_canvas_large_dimensions() -> Result<(), Box<dyn std::error::Error>> {
     let config = CanvasConfig {
         width: 4096,
         height: 4096,
@@ -78,13 +75,14 @@ fn test_canvas_large_dimensions() {
     let result = create_canvas(&config);
     assert!(result.is_ok(), "Canvas with large dimensions should create");
 
-    let canvas = result.unwrap();
+    let canvas = result?;
     assert_eq!(canvas.width(), 4096);
     assert_eq!(canvas.height(), 4096);
+    Ok(())
 }
 
 #[wasm_bindgen_test]
-fn test_canvas_duplicate_id() {
+fn test_canvas_duplicate_id() -> Result<(), Box<dyn std::error::Error>> {
     let config1 = CanvasConfig {
         width: 100,
         height: 100,
@@ -109,10 +107,11 @@ fn test_canvas_duplicate_id() {
     // Both should exist, though DOM will have ID collision
     let canvas2 = result2.unwrap();
     assert_eq!(canvas2.id(), "duplicate-id");
+    Ok(())
 }
 
 #[wasm_bindgen_test]
-fn test_canvas_accessibility_attributes() {
+fn test_canvas_accessibility_attributes() -> Result<(), Box<dyn std::error::Error>> {
     let config = CanvasConfig {
         width: 800,
         height: 600,
@@ -122,7 +121,7 @@ fn test_canvas_accessibility_attributes() {
     let result = create_canvas(&config);
     assert!(result.is_ok(), "Canvas creation should succeed");
 
-    let canvas = result.unwrap();
+    let canvas = result?;
 
     // Verify accessibility attributes
     let role = canvas.get_attribute("role");
@@ -137,10 +136,11 @@ fn test_canvas_accessibility_attributes() {
         aria_label.is_some(),
         "Canvas should have aria-label attribute"
     );
+    Ok(())
 }
 
 #[wasm_bindgen_test]
-fn test_canvas_css_class() {
+fn test_canvas_css_class() -> Result<(), Box<dyn std::error::Error>> {
     let config = CanvasConfig {
         width: 800,
         height: 600,
@@ -150,12 +150,13 @@ fn test_canvas_css_class() {
     let result = create_canvas(&config);
     assert!(result.is_ok(), "Canvas creation should succeed");
 
-    let canvas = result.unwrap();
+    let canvas = result?;
     assert_eq!(
         canvas.class_name(),
         "dag-canvas",
         "Canvas should have 'dag-canvas' class"
     );
+    Ok(())
 }
 
 #[wasm_bindgen_test]

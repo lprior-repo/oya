@@ -387,7 +387,7 @@ mod tests {
     #[test]
     fn test_event_query_filter_events() {
         let bead_id = BeadId::new();
-        let events = vec![
+        let events = [
             BeadEvent::created(
                 bead_id,
                 BeadSpec::new("Test").with_complexity(Complexity::Simple),

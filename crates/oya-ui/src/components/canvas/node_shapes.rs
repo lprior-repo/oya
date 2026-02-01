@@ -19,7 +19,6 @@
 use crate::components::canvas::coords::{Viewport, world_to_screen};
 use crate::models::colors::{RgbColor, get_node_color};
 use crate::models::node::{Node, NodeShape};
-use wasm_bindgen::JsValue;
 use web_sys::CanvasRenderingContext2d;
 
 /// Default node radius in world coordinates
@@ -84,9 +83,8 @@ fn render_circle(
     // Transform world coordinates to screen coordinates
     let (screen_x, screen_y) = world_to_screen(&node.position(), viewport)?;
 
-    // Get the state color
+    // Get state color
     let color = get_node_color(&node.state());
-    let fill_style = JsValue::from_str(&color.to_css());
 
     // Begin path
     ctx.begin_path();
@@ -103,11 +101,11 @@ fn render_circle(
     .map_err(|e| format!("Failed to draw arc: {:?}", e))?;
 
     // Fill with state color
-    ctx.set_fill_style(&fill_style);
+    ctx.set_fill_style_str(&color.to_css());
     ctx.fill();
 
     // Stroke border
-    ctx.set_stroke_style(&JsValue::from_str(BORDER_COLOR));
+    ctx.set_stroke_style_str(BORDER_COLOR);
     ctx.set_line_width(BORDER_WIDTH as f64);
     ctx.stroke();
 
@@ -130,16 +128,15 @@ fn render_rectangle(
     // Transform world coordinates to screen coordinates
     let (screen_x, screen_y) = world_to_screen(&node.position(), viewport)?;
 
-    // Get the state color
+    // Get state color
     let color = get_node_color(&node.state());
-    let fill_style = JsValue::from_str(&color.to_css());
 
     // Rectangle dimensions (2x radius for square)
     let size = DEFAULT_NODE_RADIUS * 2.0 * viewport.zoom.value();
     let half_size = size / 2.0;
 
     // Fill rectangle centered on position
-    ctx.set_fill_style(&fill_style);
+    ctx.set_fill_style_str(&color.to_css());
     ctx.fill_rect(
         (screen_x - half_size) as f64,
         (screen_y - half_size) as f64,
@@ -148,7 +145,7 @@ fn render_rectangle(
     );
 
     // Stroke border
-    ctx.set_stroke_style(&JsValue::from_str(BORDER_COLOR));
+    ctx.set_stroke_style_str(BORDER_COLOR);
     ctx.set_line_width(BORDER_WIDTH as f64);
     ctx.stroke_rect(
         (screen_x - half_size) as f64,

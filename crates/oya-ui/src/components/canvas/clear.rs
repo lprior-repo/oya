@@ -57,7 +57,7 @@ pub fn clear_canvas(
     context.clear_rect(0.0, 0.0, config.width.into(), config.height.into());
 
     // Apply background color
-    context.set_fill_style(&config.background_color.into());
+    context.set_fill_style_str(config.background_color);
     context.fill_rect(0.0, 0.0, config.width.into(), config.height.into());
 
     // Optionally render grid
@@ -79,7 +79,7 @@ fn render_grid(context: &CanvasRenderingContext2d, config: &ClearConfig) -> Resu
     const GRID_SIZE: f32 = 50.0;
     const GRID_COLOR: &str = "#E0E0E0";
 
-    context.set_stroke_style(&GRID_COLOR.into());
+    context.set_stroke_style_str(GRID_COLOR);
     context.set_line_width(1.0);
 
     context.begin_path();
@@ -118,32 +118,31 @@ mod tests {
     wasm_bindgen_test_configure!(run_in_browser);
 
     #[wasm_bindgen_test]
-    fn test_clear_canvas_succeeds() {
+    fn test_clear_canvas_succeeds() -> Result<(), Box<dyn std::error::Error>> {
         let canvas_config = CanvasConfig {
             width: 800,
             height: 600,
             id: "test-clear-1".to_string(),
         };
 
-        let canvas = create_canvas(&canvas_config).expect("Canvas creation");
-        let context = get_2d_context(&canvas).expect("Context creation");
+        let canvas = create_canvas(&canvas_config)?;
+        let context = get_2d_context(&canvas)?;
 
         let clear_config = ClearConfig::default();
-        let result = clear_canvas(&context, &clear_config);
-
-        assert!(result.is_ok(), "Clear should succeed");
+        clear_canvas(&context, &clear_config)?;
+        Ok(())
     }
 
     #[wasm_bindgen_test]
-    fn test_clear_with_custom_dimensions() {
+    fn test_clear_with_custom_dimensions() -> Result<(), Box<dyn std::error::Error>> {
         let canvas_config = CanvasConfig {
             width: 1920,
             height: 1080,
             id: "test-clear-2".to_string(),
         };
 
-        let canvas = create_canvas(&canvas_config).expect("Canvas creation");
-        let context = get_2d_context(&canvas).expect("Context creation");
+        let canvas = create_canvas(&canvas_config)?;
+        let context = get_2d_context(&canvas)?;
 
         let clear_config = ClearConfig {
             width: 1920.0,
@@ -151,82 +150,81 @@ mod tests {
             ..Default::default()
         };
 
-        let result = clear_canvas(&context, &clear_config);
-        assert!(result.is_ok());
+        clear_canvas(&context, &clear_config)?;
+        Ok(())
     }
 
     #[wasm_bindgen_test]
-    fn test_clear_with_grid() {
+    fn test_clear_with_grid() -> Result<(), Box<dyn std::error::Error>> {
         let canvas_config = CanvasConfig {
             width: 800,
             height: 600,
             id: "test-clear-3".to_string(),
         };
 
-        let canvas = create_canvas(&canvas_config).expect("Canvas creation");
-        let context = get_2d_context(&canvas).expect("Context creation");
+        let canvas = create_canvas(&canvas_config)?;
+        let context = get_2d_context(&canvas)?;
 
         let clear_config = ClearConfig {
             render_grid: true,
             ..Default::default()
         };
 
-        let result = clear_canvas(&context, &clear_config);
-        assert!(result.is_ok(), "Clear with grid should succeed");
+        clear_canvas(&context, &clear_config)?;
+        Ok(())
     }
 
     #[wasm_bindgen_test]
-    fn test_multiple_clears() {
+    fn test_multiple_clears() -> Result<(), Box<dyn std::error::Error>> {
         let canvas_config = CanvasConfig {
             width: 800,
             height: 600,
             id: "test-clear-4".to_string(),
         };
 
-        let canvas = create_canvas(&canvas_config).expect("Canvas creation");
-        let context = get_2d_context(&canvas).expect("Context creation");
+        let canvas = create_canvas(&canvas_config)?;
+        let context = get_2d_context(&canvas)?;
 
         let clear_config = ClearConfig::default();
 
         // Multiple clears should all succeed
-        assert!(clear_canvas(&context, &clear_config).is_ok());
-        assert!(clear_canvas(&context, &clear_config).is_ok());
-        assert!(clear_canvas(&context, &clear_config).is_ok());
+        clear_canvas(&context, &clear_config)?;
+        clear_canvas(&context, &clear_config)?;
+        clear_canvas(&context, &clear_config)?;
+        Ok(())
     }
 
     #[wasm_bindgen_test]
-    fn test_clear_with_different_background() {
+    fn test_clear_with_different_background() -> Result<(), Box<dyn std::error::Error>> {
         let canvas_config = CanvasConfig {
             width: 800,
             height: 600,
             id: "test-clear-5".to_string(),
         };
 
-        let canvas = create_canvas(&canvas_config).expect("Canvas creation");
-        let context = get_2d_context(&canvas).expect("Context creation");
+        let canvas = create_canvas(&canvas_config)?;
+        let context = get_2d_context(&canvas)?;
 
         let clear_config = ClearConfig {
             background_color: "#1F2937",
             ..Default::default()
         };
 
-        let result = clear_canvas(&context, &clear_config);
-        assert!(
-            result.is_ok(),
-            "Clear with custom background should succeed"
-        );
+        clear_canvas(&context, &clear_config)?;
+        assert!(true, "Clear with custom background should succeed");
+        Ok(())
     }
 
     #[wasm_bindgen_test]
-    fn test_extreme_dimensions() {
+    fn test_extreme_dimensions() -> Result<(), Box<dyn std::error::Error>> {
         let canvas_config = CanvasConfig {
             width: 4096,
             height: 4096,
             id: "test-clear-6".to_string(),
         };
 
-        let canvas = create_canvas(&canvas_config).expect("Canvas creation");
-        let context = get_2d_context(&canvas).expect("Context creation");
+        let canvas = create_canvas(&canvas_config)?;
+        let context = get_2d_context(&canvas)?;
 
         let clear_config = ClearConfig {
             width: 4096.0,
@@ -234,20 +232,20 @@ mod tests {
             ..Default::default()
         };
 
-        let result = clear_canvas(&context, &clear_config);
-        assert!(result.is_ok(), "Clear with large dimensions should succeed");
+        clear_canvas(&context, &clear_config)?;
+        assert!(true, "Clear with large dimensions should succeed");
     }
 
     #[wasm_bindgen_test]
-    fn test_small_dimensions() {
+    fn test_small_dimensions() -> Result<(), Box<dyn std::error::Error>> {
         let canvas_config = CanvasConfig {
             width: 10,
             height: 10,
             id: "test-clear-7".to_string(),
         };
 
-        let canvas = create_canvas(&canvas_config).expect("Canvas creation");
-        let context = get_2d_context(&canvas).expect("Context creation");
+        let canvas = create_canvas(&canvas_config)?;
+        let context = get_2d_context(&canvas)?;
 
         let clear_config = ClearConfig {
             width: 10.0,
@@ -255,20 +253,20 @@ mod tests {
             ..Default::default()
         };
 
-        let result = clear_canvas(&context, &clear_config);
-        assert!(result.is_ok(), "Clear with tiny dimensions should succeed");
+        clear_canvas(&context, &clear_config)?;
+        assert!(true, "Clear with tiny dimensions should succeed");
     }
 
     #[wasm_bindgen_test]
-    fn test_grid_with_various_dimensions() {
+    fn test_grid_with_various_dimensions() -> Result<(), Box<dyn std::error::Error>> {
         let canvas_config = CanvasConfig {
             width: 333,
             height: 777,
             id: "test-clear-8".to_string(),
         };
 
-        let canvas = create_canvas(&canvas_config).expect("Canvas creation");
-        let context = get_2d_context(&canvas).expect("Context creation");
+        let canvas = create_canvas(&canvas_config)?;
+        let context = get_2d_context(&canvas)?;
 
         let clear_config = ClearConfig {
             width: 333.0,
@@ -277,23 +275,21 @@ mod tests {
             ..Default::default()
         };
 
-        let result = clear_canvas(&context, &clear_config);
-        assert!(
-            result.is_ok(),
-            "Grid rendering should work with odd dimensions"
-        );
+        clear_canvas(&context, &clear_config)?;
+        assert!(true, "Grid rendering should work with odd dimensions");
+        Ok(())
     }
 
     #[wasm_bindgen_test]
-    fn test_rapid_repeated_clears() {
+    fn test_rapid_repeated_clears() -> Result<(), Box<dyn std::error::Error>> {
         let canvas_config = CanvasConfig {
             width: 800,
             height: 600,
             id: "test-clear-9".to_string(),
         };
 
-        let canvas = create_canvas(&canvas_config).expect("Canvas creation");
-        let context = get_2d_context(&canvas).expect("Context creation");
+        let canvas = create_canvas(&canvas_config)?;
+        let context = get_2d_context(&canvas)?;
 
         let clear_config = ClearConfig::default();
 
@@ -305,15 +301,15 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
-    fn test_alternating_grid_renders() {
+    fn test_alternating_grid_renders() -> Result<(), Box<dyn std::error::Error>> {
         let canvas_config = CanvasConfig {
             width: 800,
             height: 600,
             id: "test-clear-10".to_string(),
         };
 
-        let canvas = create_canvas(&canvas_config).expect("Canvas creation");
-        let context = get_2d_context(&canvas).expect("Context creation");
+        let canvas = create_canvas(&canvas_config)?;
+        let context = get_2d_context(&canvas)?;
 
         // Alternate between grid and no grid
         for i in 0..10 {
@@ -322,8 +318,8 @@ mod tests {
                 ..Default::default()
             };
 
-            let result = clear_canvas(&context, &clear_config);
-            assert!(result.is_ok(), "Alternating grid renders should succeed");
+            clear_canvas(&context, &clear_config)?;
         }
+        Ok(())
     }
 }

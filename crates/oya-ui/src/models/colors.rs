@@ -103,10 +103,8 @@ mod tests {
 
         for state in &states {
             let color = get_node_color(state);
-            // All u8 values are valid (0-255), so just verify they exist
-            assert!(color.r <= 255);
-            assert!(color.g <= 255);
-            assert!(color.b <= 255);
+            // All u8 values are valid (0-255), color exists if this compiles
+            let _ = (color.r, color.g, color.b);
         }
     }
 

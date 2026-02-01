@@ -246,17 +246,21 @@ mod tests {
     }
 
     #[test]
-    fn test_viewport_new_invalid_width() {
+    fn test_viewport_new_invalid_width() -> Result<(), String> {
         let result = Viewport::new(-100.0, 800.0);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("width"));
+        let err = result.err().ok_or("Expected error but got Ok")?;
+        assert!(err.contains("width"));
+        Ok(())
     }
 
     #[test]
-    fn test_viewport_new_invalid_height() {
+    fn test_viewport_new_invalid_height() -> Result<(), String> {
         let result = Viewport::new(1200.0, 0.0);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("height"));
+        let err = result.err().ok_or("Expected error but got Ok")?;
+        assert!(err.contains("height"));
+        Ok(())
     }
 
     #[test]
@@ -282,11 +286,13 @@ mod tests {
     }
 
     #[test]
-    fn test_viewport_with_transform_invalid_pan() {
+    fn test_viewport_with_transform_invalid_pan() -> Result<(), String> {
         let zoom = ZoomLevel::default();
         let result = Viewport::with_transform(1200.0, 800.0, f32::NAN, 50.0, zoom);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Pan X"));
+        let err = result.err().ok_or("Expected error but got Ok")?;
+        assert!(err.contains("Pan X"));
+        Ok(())
     }
 
     // ========================================================================

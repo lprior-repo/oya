@@ -62,7 +62,7 @@ impl ZoomLevel {
             return Err("Zoom level must be a finite number".to_string());
         }
 
-        let clamped = value.max(MIN_ZOOM).min(MAX_ZOOM);
+        let clamped = value.clamp(MIN_ZOOM, MAX_ZOOM);
         Ok(Self { value: clamped })
     }
 

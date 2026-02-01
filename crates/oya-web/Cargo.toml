@@ -25,7 +25,12 @@ hyper = { workspace = true }
 http = { workspace = true }
 
 tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 thiserror = { workspace = true }
+
+[[bin]]
+name = "oya-server"
+path = "src/bin/server.rs"
 
 [dev-dependencies]
 tokio = { workspace = true }

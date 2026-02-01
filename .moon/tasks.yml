@@ -162,3 +162,21 @@ tasks:
       - "/Cargo.lock"
     options:
       cache: true
+
+  # ============================================================================
+  # DEVELOPMENT SERVERS
+  # ============================================================================
+
+  serve-ui:
+    command: "cd crates/oya-ui && trunk serve --open"
+    description: "Serve Leptos UI with hot reload (http://localhost:8080)"
+    options:
+      cache: false
+      runInCI: false
+
+  serve-api:
+    command: "cargo run --bin oya-server"
+    description: "Run API server (http://localhost:3000)"
+    options:
+      cache: false
+      runInCI: false

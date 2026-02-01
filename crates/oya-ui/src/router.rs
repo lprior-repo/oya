@@ -47,7 +47,7 @@ mod tests {
 
     #[test]
     fn test_route_constants_are_unique() {
-        let routes_list = vec![
+        let routes_list = [
             routes::HOME,
             routes::DASHBOARD,
             routes::TASKS,

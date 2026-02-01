@@ -9,8 +9,7 @@
     "crates/events",
     "crates/reconciler",
     "crates/oya-web",
-    # Temporarily excluded: oya-ui has Leptos/clippy forbid conflict
-    # See bead src-35ya for resolution
+    # Excluded: oya-ui is standalone workspace (Leptos macro needs panic = deny)
     # "crates/oya-ui",
 ]
 resolver = "2"

@@ -247,15 +247,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_task_creation_valid() {
-        let task = Task::new("task-1", "Test Task", TaskStatus::Open, 1);
-        assert!(task.is_ok());
-
-        let task = task.expect("Task creation failed");
+    fn test_task_creation_valid() -> Result<(), Box<dyn std::error::Error>> {
+        let task = Task::new("task-1", "Test Task", TaskStatus::Open, 1)?;
         assert_eq!(task.id, "task-1");
         assert_eq!(task.title, "Test Task");
         assert_eq!(task.status, TaskStatus::Open);
         assert_eq!(task.priority, 1);
+        Ok(())
     }
 
     #[test]
@@ -298,13 +296,13 @@ mod tests {
     }
 
     #[test]
-    fn test_status_counts_mixed() {
+    fn test_status_counts_mixed() -> Result<(), Box<dyn std::error::Error>> {
         let tasks = vec![
-            Task::new("t1", "Task 1", TaskStatus::Open, 1).expect("Task creation failed"),
-            Task::new("t2", "Task 2", TaskStatus::InProgress, 1).expect("Task creation failed"),
-            Task::new("t3", "Task 3", TaskStatus::Closed, 1).expect("Task creation failed"),
-            Task::new("t4", "Task 4", TaskStatus::Blocked, 2).expect("Task creation failed"),
-            Task::new("t5", "Task 5", TaskStatus::Open, 1).expect("Task creation failed"),
+            Task::new("t1", "Task 1", TaskStatus::Open, 1)?,
+            Task::new("t2", "Task 2", TaskStatus::InProgress, 1)?,
+            Task::new("t3", "Task 3", TaskStatus::Closed, 1)?,
+            Task::new("t4", "Task 4", TaskStatus::Blocked, 2)?,
+            Task::new("t5", "Task 5", TaskStatus::Open, 1)?,
         ];
 
         let counts = StatusCounts::from_tasks(&tasks);
@@ -314,6 +312,7 @@ mod tests {
         assert_eq!(counts.closed, 1);
         assert_eq!(counts.blocked, 1);
         assert_eq!(counts.total(), 5);
+        Ok(())
     }
 
     #[test]
@@ -333,26 +332,20 @@ mod tests {
     }
 
     #[test]
-    fn test_task_serialization() {
-        let task =
-            Task::new("task-1", "Test Task", TaskStatus::Open, 1).expect("Task creation failed");
+    fn test_task_serialization() -> Result<(), Box<dyn std::error::Error>> {
+        let task = Task::new("task-1", "Test Task", TaskStatus::Open, 1)?;
+        let json_str = serde_json::to_string(&task)?;
+        let deserialized_task: Task = serde_json::from_str(&json_str)?;
 
-        let json = serde_json::to_string(&task);
-        assert!(json.is_ok());
-
-        let json_str = json.expect("Serialization failed");
-        let deserialized: Result<Task, _> = serde_json::from_str(&json_str);
-        assert!(deserialized.is_ok());
-
-        let deserialized_task = deserialized.expect("Deserialization failed");
         assert_eq!(deserialized_task.id, "task-1");
         assert_eq!(deserialized_task.title, "Test Task");
         assert_eq!(deserialized_task.status, TaskStatus::Open);
         assert_eq!(deserialized_task.priority, 1);
+        Ok(())
     }
 
     #[test]
-    fn test_status_counts_serialization() {
+    fn test_status_counts_serialization() -> Result<(), Box<dyn std::error::Error>> {
         let counts = StatusCounts {
             open: 1,
             in_progress: 2,
@@ -360,18 +353,14 @@ mod tests {
             blocked: 4,
         };
 
-        let json = serde_json::to_string(&counts);
-        assert!(json.is_ok());
+        let json_str = serde_json::to_string(&counts)?;
+        let deserialized_counts: StatusCounts = serde_json::from_str(&json_str)?;
 
-        let json_str = json.expect("Serialization failed");
-        let deserialized: Result<StatusCounts, _> = serde_json::from_str(&json_str);
-        assert!(deserialized.is_ok());
-
-        let deserialized_counts = deserialized.expect("Deserialization failed");
         assert_eq!(deserialized_counts.open, 1);
         assert_eq!(deserialized_counts.in_progress, 2);
         assert_eq!(deserialized_counts.closed, 3);
         assert_eq!(deserialized_counts.blocked, 4);
+        Ok(())
     }
 
     #[test]

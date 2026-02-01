@@ -194,7 +194,7 @@ pub fn render_node_label(
 ) -> Result<(), String> {
     // Set font style
     ctx.set_font(LABEL_FONT_FAMILY);
-    ctx.set_fill_style(&LABEL_COLOR.into());
+    ctx.set_fill_style_str(LABEL_COLOR);
 
     // Get label text
     let label = node.label();
@@ -268,63 +268,62 @@ mod wasm_tests {
     wasm_bindgen_test_configure!(run_in_browser);
 
     #[wasm_bindgen_test]
-    fn test_truncate_text_empty() {
+    fn test_truncate_text_empty() -> Result<(), Box<dyn std::error::Error>> {
         let config = CanvasConfig {
             width: 800,
             height: 600,
             id: "test-label-1".to_string(),
         };
 
-        let canvas = create_canvas(&config).expect("Canvas creation");
-        let ctx = get_2d_context(&canvas).expect("Context creation");
+        let canvas = create_canvas(&config)?;
+        let ctx = get_2d_context(&canvas)?;
         ctx.set_font(LABEL_FONT_FAMILY);
 
-        let result = truncate_text(&ctx, "", 120.0);
-        assert!(result.is_ok());
-        assert_eq!(result.expect("Empty string"), "");
+        let result = truncate_text(&ctx, "", 120.0)?;
+        assert_eq!(result, "");
+        Ok(())
     }
 
     #[wasm_bindgen_test]
-    fn test_truncate_text_short() {
+    fn test_truncate_text_short() -> Result<(), Box<dyn std::error::Error>> {
         let config = CanvasConfig {
             width: 800,
             height: 600,
             id: "test-label-2".to_string(),
         };
 
-        let canvas = create_canvas(&config).expect("Canvas creation");
-        let ctx = get_2d_context(&canvas).expect("Context creation");
+        let canvas = create_canvas(&config)?;
+        let ctx = get_2d_context(&canvas)?;
         ctx.set_font(LABEL_FONT_FAMILY);
 
         let short_text = "Short";
-        let result = truncate_text(&ctx, short_text, 120.0);
-        assert!(result.is_ok());
-        assert_eq!(result.expect("Short text unchanged"), short_text);
+        let result = truncate_text(&ctx, short_text, 120.0)?;
+        assert_eq!(result, short_text);
+        Ok(())
     }
 
     #[wasm_bindgen_test]
-    fn test_truncate_text_long() {
+    fn test_truncate_text_long() -> Result<(), Box<dyn std::error::Error>> {
         let config = CanvasConfig {
             width: 800,
             height: 600,
             id: "test-label-3".to_string(),
         };
 
-        let canvas = create_canvas(&config).expect("Canvas creation");
-        let ctx = get_2d_context(&canvas).expect("Context creation");
+        let canvas = create_canvas(&config)?;
+        let ctx = get_2d_context(&canvas)?;
         ctx.set_font(LABEL_FONT_FAMILY);
 
         let long_text = "This is a very long node label that definitely needs truncation";
-        let result = truncate_text(&ctx, long_text, 120.0);
-        assert!(result.is_ok());
+        let truncated = truncate_text(&ctx, long_text, 120.0)?;
 
-        let truncated = result.expect("Truncated text");
         assert!(truncated.ends_with(ELLIPSIS));
         assert!(truncated.len() < long_text.len());
 
         // Verify truncated text fits
-        let metrics = ctx.measure_text(&truncated).expect("Measure truncated");
+        let metrics = ctx.measure_text(&truncated)?;
         assert!(metrics.width() <= 120.0);
+        Ok(())
     }
 
     #[wasm_bindgen_test]

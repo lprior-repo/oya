@@ -48,8 +48,9 @@ impl Position {
 }
 
 /// State of a node in the graph
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum NodeState {
+    #[default]
     Idle,
     Running,
     Blocked,
@@ -57,24 +58,13 @@ pub enum NodeState {
     Failed,
 }
 
-impl Default for NodeState {
-    fn default() -> Self {
-        Self::Idle
-    }
-}
-
 /// Shape for rendering the node
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum NodeShape {
+    #[default]
     Circle,
     Square,
     Diamond,
-}
-
-impl Default for NodeShape {
-    fn default() -> Self {
-        Self::Circle
-    }
 }
 
 /// A node in the dependency graph with type-safe validation
