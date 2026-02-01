@@ -10,11 +10,7 @@
 pub use oya_core::{Error, Result};
 
 /// Queue management module
-pub mod queue {
-    //! Merge queue implementation
-}
+pub mod queue {}
 
 /// Conflict resolution module
-pub mod conflict {
-    //! Conflict detection and resolution
-}
+pub mod conflict {}

@@ -2,12 +2,12 @@
 
 ## Problem Summary
 
-3 test failures in factory_supervisor_test.gleam caused by global state mutation in signal handling. Every test manipulates the VM's global `erl_signal_server`, creating race conditions that crash the test runner.
+3 test failures in oya_supervisor_test.gleam caused by global state mutation in signal handling. Every test manipulates the VM's global `erl_signal_server`, creating race conditions that crash the test runner.
 
 ## Failing Tests
 
 1. `supervisor_starts_test` - Test crashes during signal handler setup/teardown
-2. Module-level crash - factory_supervisor_test module fails to complete
+2. Module-level crash - oya_supervisor_test module fails to complete
 3. Test runner crash - Exit(Killed) from signal handler interference
 
 ## Root Cause Analysis
@@ -16,8 +16,8 @@
 
 Every test that starts a supervisor manipulates the VM's global `erl_signal_server`:
 
-- `factory_supervisor.gleam:164` - `signal_handler.setup()` installs custom handler
-- `factory_supervisor.gleam:353` - `signal_handler.teardown()` removes handler
+- `oya_supervisor.gleam:164` - `signal_handler.setup()` installs custom handler
+- `oya_supervisor.gleam:353` - `signal_handler.teardown()` removes handler
 
 With 496 passing tests, hundreds of install/remove cycles race for the same global resource, corrupting the test runner's own signal handling and causing crashes.
 
@@ -66,7 +66,7 @@ From [Graceful Shutdown Best Practices](https://ellispritchard.medium.com/gracef
 
 ## Architectural Violation
 
-`factory_supervisor` violates single responsibility principle by being both:
+`oya_supervisor` violates single responsibility principle by being both:
 
 1. **Reusable OTP supervisor** - should be testable, instantiable multiple times
 2. **Application entry point** - manages global signals
@@ -80,12 +80,12 @@ This conflation breaks:
 
 ### Architecture Layers
 
-**Layer 1: Pure Supervisor (factory_supervisor.gleam)**
+**Layer 1: Pure Supervisor (oya_supervisor.gleam)**
 - Pure OTP supervisor - no signal handling
 - Testable, instantiable multiple times
 - Manages process tree only
 
-**Layer 2: Application Controller (factory_application.gleam)**
+**Layer 2: Application Controller (oya_application.gleam)**
 - Installs signal handlers ONCE at application boot
 - Starts root supervisor
 - Waits for shutdown signals
@@ -93,7 +93,7 @@ This conflation breaks:
 
 ### Implementation Changes
 
-#### 1. factory_supervisor.gleam
+#### 1. oya_supervisor.gleam
 
 **Remove from Started record:**
 ```gleam
@@ -131,7 +131,7 @@ pub fn start_and_wait(config: SupervisorConfig) -> Result(Nil, InitFailed) {
 - `shutdown()` / `graceful_shutdown()` - synchronous cleanup
 - All accessor functions
 
-#### 2. Create factory_application.gleam
+#### 2. Create oya_application.gleam
 
 ```gleam
 //// Application controller - manages signal handling and supervisor lifecycle
@@ -139,7 +139,7 @@ pub fn start_and_wait(config: SupervisorConfig) -> Result(Nil, InitFailed) {
 //// Follows OTP application behavior pattern: install signals once,
 //// start supervisor tree, wait for shutdown signal, cleanup gracefully.
 
-import factory_supervisor
+import oya_supervisor
 import gleam/dict
 import gleam/erlang/process.{type Subject}
 import logging
@@ -149,8 +149,8 @@ const shutdown_timeout_ms = 1000
 
 /// Start application: install signal handlers, start supervisor, wait for shutdown
 pub fn start_and_wait(
-  config: factory_supervisor.SupervisorConfig,
-) -> Result(Nil, factory_supervisor.InitFailed) {
+  config: oya_supervisor.SupervisorConfig,
+) -> Result(Nil, oya_supervisor.InitFailed) {
   // Install signal handlers ONCE at application level
   let signal_handler_subject = process.new_subject()
   case signal_handler.setup(signal_handler_subject) {
@@ -166,7 +166,7 @@ pub fn start_and_wait(
   }
 
   // Start supervisor tree
-  use started <- result.try(factory_supervisor.start_link(config))
+  use started <- result.try(oya_supervisor.start_link(config))
 
   // Wait for shutdown signal
   wait_for_shutdown(started, signal_handler_subject)
@@ -178,7 +178,7 @@ pub fn start_and_wait(
 }
 
 fn wait_for_shutdown(
-  started: factory_supervisor.Started,
+  started: oya_supervisor.Started,
   signal_subject: Subject(signal_handler.SignalHandlerMessage),
 ) -> Nil {
   logging.log(logging.Info, "Waiting for shutdown signal", dict.new())
@@ -186,7 +186,7 @@ fn wait_for_shutdown(
 }
 
 fn wait_for_shutdown_loop(
-  started: factory_supervisor.Started,
+  started: oya_supervisor.Started,
   signal_subject: Subject(signal_handler.SignalHandlerMessage),
   iteration: Int,
 ) -> Nil {
@@ -202,10 +202,10 @@ fn wait_for_shutdown_loop(
         dict.new(),
       )
       signal_bus.broadcast(
-        factory_supervisor.get_signal_bus(started),
+        oya_supervisor.get_signal_bus(started),
         signal_bus.ShutdownRequested,
       )
-      factory_supervisor.shutdown(started)
+      oya_supervisor.shutdown(started)
     }
     Error(Nil) -> {
       case iteration % 10 {
@@ -223,9 +223,9 @@ fn wait_for_shutdown_loop(
 }
 ```
 
-#### 3. Update factory.gleam (if needed)
+#### 3. Update oya.gleam (if needed)
 
-If there's a daemon/server mode that uses `start_and_wait`, update it to use `factory_application.start_and_wait()` instead of `factory_supervisor.start_and_wait()`.
+If there's a daemon/server mode that uses `start_and_wait`, update it to use `oya_application.start_and_wait()` instead of `oya_supervisor.start_and_wait()`.
 
 ### Benefits
 
@@ -251,9 +251,9 @@ If there's a daemon/server mode that uses `start_and_wait`, update it to use `fa
 
 ## Migration Path
 
-1. Create `factory_application.gleam` with signal handling logic
-2. Update `factory_supervisor.gleam` to remove signal handling
-3. Update any callers of `factory_supervisor.start_and_wait()` to use `factory_application.start_and_wait()`
+1. Create `oya_application.gleam` with signal handling logic
+2. Update `oya_supervisor.gleam` to remove signal handling
+3. Update any callers of `oya_supervisor.start_and_wait()` to use `oya_application.start_and_wait()`
 4. Run tests - all 3 failures should be fixed
 5. Verify no regressions in production daemon mode
 

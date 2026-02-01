@@ -6,7 +6,7 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -19,9 +19,6 @@ use crate::{
     domain::{Language, Priority, Slug, Task, TaskStatus},
     error::{Error, Result},
 };
-
-/// Branch prefix for feature branches.
-const BRANCH_PREFIX: &str = "feat/";
 
 /// Stage result type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -67,8 +64,6 @@ impl StageRecord {
 /// Complete task record for persistence in SurrealDB.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskRecord {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub id: Option<String>,
     pub slug: String,
     pub language: String,
     pub status: String,
@@ -92,7 +87,7 @@ pub struct DbConnection {
 impl DbConnection {
     /// Create new database connection at repo root.
     pub async fn new(repo_root: &Path) -> Result<Self> {
-        let db_path = repo_root.join(".factory").join("db");
+        let db_path = repo_root.join(".OYA").join("db");
 
         let db = Surreal::new::<RocksDb>(db_path)
             .await
@@ -101,7 +96,7 @@ impl DbConnection {
             })?;
 
         db.use_ns("oya")
-            .use_db("factory")
+            .use_db("OYA")
             .await
             .map_err(|e| Error::DatabaseError {
                 reason: format!("Failed to select namespace/database: {e}"),
@@ -137,7 +132,6 @@ pub fn task_to_record(task: &Task) -> TaskRecord {
     let timestamp = Utc::now();
 
     TaskRecord {
-        id: None,
         slug: task.slug.to_string(),
         language: language_str,
         status: status_str,
@@ -145,7 +139,7 @@ pub fn task_to_record(task: &Task) -> TaskRecord {
         created_at: timestamp,
         updated_at: timestamp,
         stages: Vec::new(),
-        worktree_path: task.worktree_path.to_string_lossy().to_string(),
+        worktree_path: String::new(),
         branch: task.branch.clone(),
         current_stage,
         current_error,
@@ -177,7 +171,6 @@ pub fn record_to_task(record: &TaskRecord) -> Result<Task> {
         language: lang,
         status,
         priority,
-        worktree_path: PathBuf::from(&record.worktree_path),
         branch: record.branch.clone(),
     })
 }
@@ -188,41 +181,8 @@ pub async fn save_task_record(task: &Task, repo_root: &Path) -> Result<()> {
     let record = task_to_record(task);
     let slug = record.slug.clone();
 
-    // Use UPSERT to insert or update based on slug
-    let _: Vec<TaskRecord> = conn
-        .inner()
-        .query(
-            "UPDATE tasks SET
-            language = $language,
-            status = $status,
-            priority = $priority,
-            updated_at = $updated_at,
-            worktree_path = $worktree_path,
-            branch = $branch,
-            current_stage = $current_stage,
-            current_error = $current_error
-            WHERE slug = $slug",
-        )
-        .bind(("slug", &slug))
-        .bind(("language", &record.language))
-        .bind(("status", &record.status))
-        .bind(("priority", &record.priority))
-        .bind(("updated_at", &record.updated_at))
-        .bind(("worktree_path", &record.worktree_path))
-        .bind(("branch", &record.branch))
-        .bind(("current_stage", &record.current_stage))
-        .bind(("current_error", &record.current_error))
-        .await
-        .map_err(|e| Error::DatabaseError {
-            reason: format!("Failed to update task: {e}"),
-        })?
-        .take(0)
-        .map_err(|e| Error::DatabaseError {
-            reason: format!("Failed to parse update result: {e}"),
-        })?;
-
-    // If no rows were updated, insert new record
-    let check: Option<TaskRecord> =
+    // Check if task exists
+    let existing: Option<TaskRecord> =
         conn.inner()
             .select(("tasks", &slug))
             .await
@@ -230,10 +190,19 @@ pub async fn save_task_record(task: &Task, repo_root: &Path) -> Result<()> {
                 reason: format!("Failed to check task existence: {e}"),
             })?;
 
-    if check.is_none() {
-        let _: Option<TaskRecord> = conn
-            .inner()
-            .create(("tasks", &slug))
+    if existing.is_some() {
+        // Update existing task
+        conn.inner()
+            .update::<Option<TaskRecord>>(("tasks", &slug))
+            .content(record.clone())
+            .await
+            .map_err(|e| Error::DatabaseError {
+                reason: format!("Failed to update task: {e}"),
+            })?;
+    } else {
+        // Create new task
+        conn.inner()
+            .create::<Option<TaskRecord>>(("tasks", &slug))
             .content(record)
             .await
             .map_err(|e| Error::DatabaseError {
@@ -295,7 +264,7 @@ pub async fn update_stage_status(
     let slug = task.slug.to_string();
 
     // Load existing task to get current stages
-    let mut record: Option<TaskRecord> =
+    let record: Option<TaskRecord> =
         conn.inner()
             .select(("tasks", &slug))
             .await
@@ -303,7 +272,7 @@ pub async fn update_stage_status(
                 reason: format!("Failed to load task for stage update: {e}"),
             })?;
 
-    let mut task_record = record.take().unwrap_or_else(|| task_to_record(task));
+    let mut task_record = record.unwrap_or_else(|| task_to_record(task));
 
     // Update or append stage
     let new_stage = StageRecord::new(stage_name.to_string(), result, attempts, error.to_string());
@@ -325,9 +294,8 @@ pub async fn update_stage_status(
     task_record.updated_at = Utc::now();
 
     // Update the task with new stages
-    let _: Option<TaskRecord> = conn
-        .inner()
-        .update(("tasks", &slug))
+    conn.inner()
+        .update::<Option<TaskRecord>>(("tasks", &slug))
         .content(task_record)
         .await
         .map_err(|e| Error::DatabaseError {
@@ -342,13 +310,18 @@ pub async fn update_stage_status(
 pub fn filter_tasks_by_status(tasks: &[Task], status_filter: TaskStatus) -> Vec<&Task> {
     tasks
         .iter()
-        .filter(|task| match (&task.status, &status_filter) {
-            (TaskStatus::Created, TaskStatus::Created) => true,
-            (TaskStatus::InProgress { .. }, TaskStatus::InProgress { .. }) => true,
-            (TaskStatus::PassedPipeline, TaskStatus::PassedPipeline) => true,
-            (TaskStatus::FailedPipeline { .. }, TaskStatus::FailedPipeline { .. }) => true,
-            (TaskStatus::Integrated, TaskStatus::Integrated) => true,
-            _ => false,
+        .filter(|task| {
+            matches!(
+                (&task.status, &status_filter),
+                (TaskStatus::Created, TaskStatus::Created)
+                    | (TaskStatus::InProgress { .. }, TaskStatus::InProgress { .. })
+                    | (TaskStatus::PassedPipeline, TaskStatus::PassedPipeline)
+                    | (
+                        TaskStatus::FailedPipeline { .. },
+                        TaskStatus::FailedPipeline { .. }
+                    )
+                    | (TaskStatus::Integrated, TaskStatus::Integrated)
+            )
         })
         .collect()
 }
@@ -401,7 +374,7 @@ pub fn get_in_progress_tasks(tasks: &[Task]) -> Vec<&Task> {
 /// Count tasks by status.
 #[must_use]
 pub fn count_tasks_by_status(tasks: &[Task]) -> std::collections::HashMap<String, usize> {
-    let counts = tasks
+    tasks
         .iter()
         .fold(std::collections::HashMap::new(), |mut counts, task| {
             let status_key = match &task.status {
@@ -414,9 +387,7 @@ pub fn count_tasks_by_status(tasks: &[Task]) -> std::collections::HashMap<String
 
             *counts.entry(status_key).or_insert(0) += 1;
             counts
-        });
-
-    counts
+        })
 }
 
 #[cfg(test)]
@@ -429,7 +400,7 @@ mod tests {
         assert!(slug.is_ok());
 
         if let Ok(s) = slug {
-            let task = Task::new(s, Language::Rust, PathBuf::from("/tmp/test"));
+            let task = Task::new(s, Language::Rust);
 
             let record = task_to_record(&task);
             assert_eq!(record.slug, "test-task");

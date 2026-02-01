@@ -15,7 +15,6 @@
 //! ```
 
 use std::marker::PhantomData;
-use std::path::PathBuf;
 
 use crate::domain::{Language, Priority, Slug, Task, TaskStatus};
 use crate::error::Result;
@@ -42,43 +41,40 @@ pub struct Optional;
 /// Required fields must be set before `build()` can be called.
 /// The type system enforces this at compile time.
 #[derive(Debug)]
-pub struct TaskBuilder<SlugState, LangState, PathState> {
+pub struct TaskBuilder<SlugState, LangState> {
     slug: Option<Slug>,
     language: Option<Language>,
-    worktree_path: Option<PathBuf>,
     priority: Priority,
     status: TaskStatus,
     branch: Option<String>,
     _slug_state: PhantomData<SlugState>,
     _lang_state: PhantomData<LangState>,
-    _path_state: PhantomData<PathState>,
 }
 
-impl TaskBuilder<Missing, Missing, Missing> {
+impl TaskBuilder<Missing, Missing> {
     /// Create a new TaskBuilder with no fields set.
     #[must_use]
     pub fn new() -> Self {
         Self {
             slug: None,
             language: None,
-            worktree_path: None,
+
             priority: Priority::default(),
             status: TaskStatus::default(),
             branch: None,
             _slug_state: PhantomData,
             _lang_state: PhantomData,
-            _path_state: PhantomData,
         }
     }
 }
 
-impl Default for TaskBuilder<Missing, Missing, Missing> {
+impl Default for TaskBuilder<Missing, Missing> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<SlugState, LangState, PathState> TaskBuilder<SlugState, LangState, PathState> {
+impl<SlugState, LangState> TaskBuilder<SlugState, LangState> {
     /// Set the priority (optional, defaults to P2).
     #[must_use]
     pub fn priority(mut self, priority: Priority) -> Self {
@@ -102,73 +98,46 @@ impl<SlugState, LangState, PathState> TaskBuilder<SlugState, LangState, PathStat
 }
 
 // Slug setter - transitions Missing -> Present
-impl<LangState, PathState> TaskBuilder<Missing, LangState, PathState> {
+impl<LangState> TaskBuilder<Missing, LangState> {
     /// Set the task slug (required).
-    pub fn slug(
-        self,
-        slug: impl Into<String>,
-    ) -> Result<TaskBuilder<Present, LangState, PathState>> {
+    pub fn slug(self, slug: impl Into<String>) -> Result<TaskBuilder<Present, LangState>> {
         let validated_slug = Slug::new(slug)?;
         Ok(TaskBuilder {
             slug: Some(validated_slug),
             language: self.language,
-            worktree_path: self.worktree_path,
+
             priority: self.priority,
             status: self.status,
             branch: self.branch,
             _slug_state: PhantomData,
             _lang_state: PhantomData,
-            _path_state: PhantomData,
         })
     }
 }
 
 // Language setter - transitions Missing -> Present
-impl<SlugState, PathState> TaskBuilder<SlugState, Missing, PathState> {
+impl<SlugState> TaskBuilder<SlugState, Missing> {
     /// Set the language (required).
     #[must_use]
-    pub fn language(self, language: Language) -> TaskBuilder<SlugState, Present, PathState> {
+    pub fn language(self, language: Language) -> TaskBuilder<SlugState, Present> {
         TaskBuilder {
             slug: self.slug,
             language: Some(language),
-            worktree_path: self.worktree_path,
+
             priority: self.priority,
             status: self.status,
             branch: self.branch,
             _slug_state: PhantomData,
             _lang_state: PhantomData,
-            _path_state: PhantomData,
         }
     }
 }
 
-// Worktree path setter - transitions Missing -> Present
-impl<SlugState, LangState> TaskBuilder<SlugState, LangState, Missing> {
-    /// Set the worktree path (required).
-    pub fn worktree(
-        self,
-        path: impl Into<PathBuf>,
-    ) -> Result<TaskBuilder<SlugState, LangState, Present>> {
-        let path = path.into();
-        Ok(TaskBuilder {
-            slug: self.slug,
-            language: self.language,
-            worktree_path: Some(path),
-            priority: self.priority,
-            status: self.status,
-            branch: self.branch,
-            _slug_state: PhantomData,
-            _lang_state: PhantomData,
-            _path_state: PhantomData,
-        })
-    }
-}
-
 // Build is only available when all required fields are Present
-impl TaskBuilder<Present, Present, Present> {
+impl TaskBuilder<Present, Present> {
     /// Build the Task.
     ///
-    /// Only available when slug, language, and worktree_path have been set.
+    /// Only available when slug and language have been set.
     /// Type-state guarantees these fields are present, so this always succeeds.
     pub fn build(self) -> Result<Task> {
         let slug = self
@@ -181,11 +150,6 @@ impl TaskBuilder<Present, Present, Present> {
             .ok_or_else(|| crate::error::Error::InvalidRecord {
                 reason: "language not set (type-state violation)".into(),
             })?;
-        let worktree_path =
-            self.worktree_path
-                .ok_or_else(|| crate::error::Error::InvalidRecord {
-                    reason: "worktree_path not set (type-state violation)".into(),
-                })?;
 
         let branch = self
             .branch
@@ -196,7 +160,6 @@ impl TaskBuilder<Present, Present, Present> {
             language,
             status: self.status,
             priority: self.priority,
-            worktree_path,
             branch,
         })
     }
@@ -209,7 +172,7 @@ impl TaskBuilder<Present, Present, Present> {
 impl Task {
     /// Start building a new Task.
     #[must_use]
-    pub fn builder() -> TaskBuilder<Missing, Missing, Missing> {
+    pub fn builder() -> TaskBuilder<Missing, Missing> {
         TaskBuilder::new()
     }
 
@@ -330,8 +293,7 @@ mod tests {
     fn test_task_builder_all_required() {
         let task = TaskBuilder::new()
             .slug("my-task")
-            .and_then(|b| Ok(b.language(Language::Rust)))
-            .and_then(|b| b.worktree("/tmp/worktree"))
+            .map(|b| b.language(Language::Rust))
             .and_then(|b| b.build());
 
         assert!(task.is_ok());
@@ -346,8 +308,7 @@ mod tests {
     fn test_task_builder_with_optional() {
         let result = TaskBuilder::new()
             .slug("high-priority")
-            .and_then(|b| Ok(b.language(Language::Go).priority(Priority::P1)))
-            .and_then(|b| b.worktree("/tmp"))
+            .map(|b| b.language(Language::Go).priority(Priority::P1))
             .and_then(|b| b.build());
 
         assert!(result.is_ok());
@@ -367,7 +328,7 @@ mod tests {
         let slug = Slug::new("test");
         assert!(slug.is_ok());
         if let Ok(s) = slug {
-            let task = Task::new(s, Language::Rust, PathBuf::from("/tmp"))
+            let task = Task::new(s, Language::Rust)
                 .start_stage("implement")
                 .mark_passed()
                 .mark_integrated();

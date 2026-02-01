@@ -9,7 +9,7 @@
 # No waves, no dependencies, no sequencing—pure throughput.
 #
 # This script:
-#   1. Loads ALL beads from bd daemon
+#   1. Loads ALL beads from br CLI
 #   2. Launches each bead into isolated zjj workspace (async)
 #   3. Invokes tdd15 skill per bead (via Claude Code AI)
 #   4. Collects results as they complete
@@ -303,7 +303,7 @@ def record_bead_executed [bead_id: string] {
 def load_all_beads [] {
     let ready = (
         do {
-            let result = (^bd ready --json | complete)
+            let result = (^br ready --json | complete)
             if $result.exit_code == 0 {
                 $result.stdout | from json
             } else {
@@ -314,7 +314,7 @@ def load_all_beads [] {
 
     let in_progress = (
         do {
-            let result = (^bd list --status=in_progress --json | complete)
+            let result = (^br list --status=in_progress --json | complete)
             if $result.exit_code == 0 {
                 $result.stdout | from json
             } else {
@@ -360,9 +360,9 @@ def execute_bead_in_swarm [bead: record, dry_run: bool, log_file: string] {
             null
         }
 
-        # Step 2: Mark bead as in_progress in bd
+        # Step 2: Mark bead as in_progress in br
         print $"      └─ Marking in_progress..."
-        ^bd update $bead_id --status in_progress --json | ignore
+        ^br update $bead_id --status in_progress --json | ignore
 
         # Step 3: Signal for tdd15 skill invocation
         # NOTE: This is where Claude Code (me) will invoke /tdd15 skill
@@ -374,7 +374,7 @@ def execute_bead_in_swarm [bead: record, dry_run: bool, log_file: string] {
 
         if $tdd_success {
             # Step 4: Close bead on success
-            ^bd close $bead_id --reason "tdd15-orchestrator" | ignore
+            ^br close $bead_id --reason "tdd15-orchestrator" | ignore
             print $"      └─ ✅ COMPLETE"
 
             # Record bead as executed (for idempotency)

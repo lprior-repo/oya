@@ -3,7 +3,7 @@
 //! Provides a functional, composable way to build and execute CI/CD pipelines.
 //! Uses the builder pattern with method chaining for ergonomic API.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, Instant};
@@ -140,8 +140,6 @@ pub struct Pipeline {
     stages: Vec<Stage>,
     /// Language for the pipeline.
     language: Language,
-    /// Working directory.
-    worktree_path: PathBuf,
     /// Retry configuration.
     retry_config: RetryConfig,
     /// Failure handling strategy.
@@ -157,11 +155,10 @@ pub struct Pipeline {
 impl Pipeline {
     /// Create a new pipeline builder.
     #[must_use]
-    pub fn new(language: Language, worktree_path: PathBuf) -> Self {
+    pub fn new(language: Language) -> Self {
         Self {
             stages: Vec::new(),
             language,
-            worktree_path,
             retry_config: RetryConfig::default(),
             failure_strategy: FailureStrategy::default(),
             before_stage: None,
@@ -173,7 +170,7 @@ impl Pipeline {
     /// Create a pipeline from a task.
     #[must_use]
     pub fn from_task(task: &Task) -> Self {
-        Self::new(task.language, task.worktree_path.clone())
+        Self::new(task.language)
     }
 
     /// Add a single stage to the pipeline.
@@ -303,7 +300,7 @@ impl Pipeline {
 
         // Call before hook
         if let Some(ref hook) = self.before_stage {
-            hook(&stage.name, &self.language, &self.worktree_path);
+            hook(&stage.name, &self.language, Path::new("."));
         }
 
         if self.dry_run {
@@ -314,18 +311,17 @@ impl Pipeline {
         // Execute with retry
         let retry_config = RetryConfig::default().with_max_attempts(stage.retries);
         let language = self.language;
-        let worktree_path = self.worktree_path.clone();
         let stage_name = stage.name.clone();
 
         let attempts = Arc::new(AtomicU32::new(0u32));
         let result = retry_on_retryable(&retry_config, || {
             let _current_attempt = attempts.fetch_add(1, Ordering::SeqCst) + 1;
-            execute_stage(&stage_name, language, &worktree_path)
+            execute_stage(&stage_name, language, Path::new("."))
         });
 
         // Call after hook
         if let Some(ref hook) = self.after_stage {
-            hook(&stage.name, &self.language, &self.worktree_path);
+            hook(&stage.name, &self.language, Path::new("."));
         }
 
         let duration = stage_start.elapsed();
@@ -363,9 +359,9 @@ impl Pipeline {
 pub fn execute_stages_sequentially(
     stages: &[Stage],
     language: Language,
-    worktree_path: &Path,
+    _worktree_path: &Path,
 ) -> PipelineResult {
-    Pipeline::new(language, worktree_path.to_path_buf())
+    Pipeline::new(language)
         .with_stages(stages.iter().cloned())
         .execute()
 }
@@ -398,7 +394,7 @@ mod tests {
 
     #[test]
     fn test_pipeline_builder() {
-        let pipeline = Pipeline::new(Language::Rust, PathBuf::from("/tmp"))
+        let pipeline = Pipeline::new(Language::Rust)
             .with_retry(RetryConfig::quick())
             .with_failure_strategy(FailureStrategy::StopOnFirst)
             .dry_run();
@@ -443,7 +439,7 @@ mod tests {
     #[test]
     fn test_dry_run_pipeline() {
         let stages = standard_pipeline();
-        let result = Pipeline::new(Language::Rust, PathBuf::from("/tmp"))
+        let result = Pipeline::new(Language::Rust)
             .with_stages(stages)
             .dry_run()
             .execute();

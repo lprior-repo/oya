@@ -10,5 +10,4 @@
 
 // Re-export all crates
 pub use oya_core;
-pub use oya_factory;
-pub use oya_intent;
+pub use oya_pipeline;

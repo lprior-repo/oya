@@ -33,7 +33,7 @@ tasks:
     command: 'gleam run'
     args:
       - '--module'
-      - factory
+      - oya
 
   clean:
     command: 'gleam clean'

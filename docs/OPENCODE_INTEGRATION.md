@@ -2,7 +2,7 @@
 
 ## Overview
 
-The factory system integrates with OpenCode AI for AI-powered stage execution. This allows you to delegate implementation, testing, refactoring, and other coding tasks to AI while maintaining full pipeline control.
+The oya system integrates with OpenCode AI for AI-powered stage execution. This allows you to delegate implementation, testing, refactoring, and other coding tasks to AI while maintaining full pipeline control.
 
 ## Supported Stages
 
@@ -36,7 +36,7 @@ oya ai-stage -s my-feature --stage test -f src/lib.rs -f src/main.rs
 ### Programmatic Usage
 
 ```rust
-use oya_factory::{AIStageExecutor, Task, Stage};
+use oya_oya::{AIStageExecutor, Task, Stage};
 use oya_opencode::PhaseInput;
 
 // Create the AI executor
@@ -66,9 +66,9 @@ if result.passed {
 
 ### Stage-to-Phase Mapping
 
-Factory stages are mapped to OpenCode phases via `StagePhaseMapping`:
+OYA stages are mapped to OpenCode phases via `StagePhaseMapping`:
 
-| Factory Stage | OpenCode Phase |
+| OYA Stage | OpenCode Phase |
 |--------------|----------------|
 | implement    | implement      |
 | unit-test    | test           |
@@ -79,7 +79,7 @@ Factory stages are mapped to OpenCode phases via `StagePhaseMapping`:
 
 ### Context Building
 
-The `FactoryPhaseContextBuilder` converts factory tasks into OpenCode `PhaseContext`:
+The `OYAPhaseContextBuilder` converts oya tasks into OpenCode `PhaseContext`:
 
 1. Maps stage name to phase name
 2. Generates phase description based on task and language
@@ -95,7 +95,7 @@ The `FactoryPhaseContextBuilder` converts factory tasks into OpenCode `PhaseCont
 ```
 Task + Stage
     ↓
-FactoryPhaseContextBuilder
+OYAPhaseContextBuilder
     ↓
 PhaseContext (constraints, description, input)
     ↓
@@ -137,7 +137,7 @@ match executor.execute_stage(&task, &stage, None).await {
 Run the integration test suite:
 
 ```bash
-moon run factory:test
+moon run oya:test
 ```
 
 Unit tests verify:

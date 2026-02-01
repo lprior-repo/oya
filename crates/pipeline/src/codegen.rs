@@ -73,15 +73,15 @@ pub fn generate_from_bead(spec: &BeadSpec) -> String {
         "//! Module generated from bead {}\n",
         spec.bead_id
     ));
-    output.push_str(&format!("//!\n"));
+    output.push_str("//!\n");
     output.push_str(&format!("//! {}\n", spec.description));
-    output.push_str(&format!("//!\n"));
-    output.push_str(&format!("//! Generated with functional Rust guarantees:\n"));
-    output.push_str(&format!("//! - Immutable by default\n"));
-    output.push_str(&format!("//! - Pure functions (no side effects)\n"));
-    output.push_str(&format!("//! - Railway-Oriented Programming (Result)\n"));
-    output.push_str(&format!("//! - Zero panics\n"));
-    output.push_str(&format!("//! - Explicit error handling\n\n"));
+    output.push_str("//!\n");
+    output.push_str("//! Generated with functional Rust guarantees:\n");
+    output.push_str("//! - Immutable by default\n");
+    output.push_str("//! - Pure functions (no side effects)\n");
+    output.push_str("//! - Railway-Oriented Programming (Result)\n");
+    output.push_str("//! - Zero panics\n");
+    output.push_str("//! - Explicit error handling\n\n");
 
     // Types
     output.push_str(
@@ -139,7 +139,7 @@ pub fn generate_from_bead(spec: &BeadSpec) -> String {
 
     output.push_str("#[cfg(test)]\n");
     output.push_str("mod tests {\n");
-    output.push_str(&format!("    use super::*;\n\n"));
+    output.push_str("    use super::*;\n\n");
 
     for test_req in &spec.tests {
         output.push_str(&generate_test(test_req));
@@ -158,9 +158,7 @@ fn generate_type(type_req: &TypeRequirement) -> String {
     if type_req.is_opaque {
         // Opaque validated type
         output.push_str(&format!("/// Validated {} type.\n", type_req.name));
-        output.push_str(&format!(
-            "/// Guarantees invariants are enforced at construction.\n"
-        ));
+        output.push_str("/// Guarantees invariants are enforced at construction.\n");
         output.push_str("#[derive(Debug, Clone)]\n");
         output.push_str(&format!("pub struct {}(String);\n", type_req.name));
 
@@ -169,20 +167,18 @@ fn generate_type(type_req: &TypeRequirement) -> String {
             "    /// Create new {} with validation.\n",
             type_req.name
         ));
-        output.push_str(&format!(
-            "    pub fn new(value: impl Into<String>) -> Result<Self> {{\n"
-        ));
-        output.push_str(&format!("        let s = value.into();\n"));
-        output.push_str(&format!("        // TODO: Add validation logic\n"));
-        output.push_str(&format!("        Ok(Self(s))\n"));
-        output.push_str(&format!("    }}\n\n"));
+        output.push_str("    pub fn new(value: impl Into<String>) -> Result<Self> {\n");
+        output.push_str("        let s = value.into();\n");
+        output.push_str("        // TODO: Add validation logic\n");
+        output.push_str("        Ok(Self(s))\n");
+        output.push_str("    }\n\n");
 
-        output.push_str(&format!("    /// Get inner value.\n"));
+        output.push_str("    /// Get inner value.\n");
         output.push_str("#[must_use]\n");
-        output.push_str(&format!("    pub fn as_str(&self) -> &str {{\n"));
-        output.push_str(&format!("        &self.0\n"));
-        output.push_str(&format!("    }}\n"));
-        output.push_str(&format!("}}\n"));
+        output.push_str("    pub fn as_str(&self) -> &str {\n");
+        output.push_str("        &self.0\n");
+        output.push_str("    }\n");
+        output.push_str("}\n");
     } else {
         // Plain struct
         output.push_str(&format!("/// {}\n", type_req.name));
@@ -205,7 +201,7 @@ fn generate_type(type_req: &TypeRequirement) -> String {
 fn generate_test(test_req: &TestRequirement) -> String {
     let mut output = String::new();
 
-    output.push_str(&format!("    #[test]\n"));
+    output.push_str("    #[test]\n");
     output.push_str(&format!("    fn test_{}() {{\n", test_req.function_name));
 
     output.push_str(&format!("        // {}\n", test_req.description));
@@ -226,8 +222,8 @@ fn generate_test(test_req: &TestRequirement) -> String {
         test_req.input.join(", ")
     ));
 
-    output.push_str(&format!("        // assert!(result.is_ok());\n"));
-    output.push_str(&format!("    }}\n\n"));
+    output.push_str("        // assert!(result.is_ok());\n");
+    output.push_str("    }\n\n");
 
     output
 }

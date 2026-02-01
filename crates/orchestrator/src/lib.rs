@@ -10,11 +10,7 @@
 pub use oya_core::{Error, Result};
 
 /// Orchestrator module for managing agent swarms
-pub mod agent_swarm {
-    //! Agent swarm coordination
-}
+pub mod agent_swarm {}
 
 /// Task distribution module
-pub mod distribution {
-    //! Task distribution across agents
-}
+pub mod distribution {}

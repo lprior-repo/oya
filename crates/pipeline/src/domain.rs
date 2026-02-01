@@ -1,9 +1,7 @@
-//! Domain types for Factory pipeline.
+//! Domain types for OYA pipeline.
 //!
 //! Pure data types that make illegal states unrepresentable.
 //! Uses opaque validated types for `Slug` and `GitHash`.
-
-use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
@@ -529,7 +527,6 @@ pub struct Task {
     pub language: Language,
     pub status: TaskStatus,
     pub priority: Priority,
-    pub worktree_path: PathBuf,
     pub branch: String,
 }
 
@@ -539,14 +536,13 @@ impl Task {
 
     /// Create a new task with default status.
     #[must_use]
-    pub fn new(slug: Slug, language: Language, worktree_path: PathBuf) -> Self {
+    pub fn new(slug: Slug, language: Language) -> Self {
         let branch = format!("{}{}", Self::BRANCH_PREFIX, slug);
         Self {
             slug,
             language,
             status: TaskStatus::Created,
             priority: Priority::default(),
-            worktree_path,
             branch,
         }
     }

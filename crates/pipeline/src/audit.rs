@@ -103,8 +103,8 @@ fn get_timestamp() -> String {
 /// Get current actor from environment or default.
 fn get_actor() -> String {
     std::env::var("USER")
-        .or_else(|_| std::env::var("FACTORY_ACTOR"))
-        .unwrap_or_else(|_| "factory".to_string())
+        .or_else(|_| std::env::var("OYA_ACTOR"))
+        .unwrap_or_else(|_| "oya".to_string())
 }
 
 /// Create a new audit entry.
@@ -134,7 +134,7 @@ pub fn create_entry(
 #[must_use]
 pub fn audit_file_path(repo_root: &Path, task_slug: &str) -> PathBuf {
     repo_root
-        .join(".factory")
+        .join(".oya")
         .join("audit")
         .join(format!("{task_slug}.jsonl"))
 }
@@ -149,7 +149,7 @@ pub fn log_event(
 ) -> Result<()> {
     let entry = create_entry(event_type, task_slug, details, metadata);
     let file_path = audit_file_path(repo_root, task_slug);
-    let audit_dir = repo_root.join(".factory").join("audit");
+    let audit_dir = repo_root.join(".oya").join("audit");
 
     create_dir_all(&audit_dir)?;
 

@@ -234,7 +234,7 @@ def cmd-task-add [
 
 # IMPORTANT: When a survivor is found (bug proven by exit code), the caller MUST:
 #   1. Call task-add-check to lock the regression (this function)
-#   2. Call `bd create --title "[Red Queen] <SEVERITY>: <finding>" --type=bug` IMMEDIATELY
+#   2. Call `br create --title "[Red Queen] <SEVERITY>: <finding>" --type=bug` IMMEDIATELY
 #   Beads are filed at the moment of selection, NEVER deferred to session end.
 def cmd-task-add-check [
   task_id: string,
@@ -526,7 +526,7 @@ def cmd-supervisor-merge [
 # This enforces that the test bank only grows with real regressions, not false positives.
 #
 # IMPORTANT: After calling regress, the caller MUST also run:
-#   bd create --title "[Red Queen] <SEVERITY>: <finding>" --type=bug
+#   br create --title "[Red Queen] <SEVERITY>: <finding>" --type=bug
 # Beads are filed at the moment of selection, NEVER deferred to session end.
 
 def cmd-regress [
@@ -585,7 +585,7 @@ def cmd-gen-start [task_id: string] {
 }
 
 # Record a survivor — locks regression + updates landscape atomically
-# The caller MUST also run: bd create --title "[Red Queen] ..." --type=bug
+# The caller MUST also run: br create --title "[Red Queen] ..." --type=bug
 def cmd-gen-survivor [
   task_id: string,
   dimension: string,
@@ -718,7 +718,7 @@ def main [] {
     "",
     "DRQ Evolution:",
     "  gen-start             Start a new generation (increments counter)",
-    "  gen-survivor          Lock a survivor: regression + landscape update + bd create reminder",
+    "  gen-survivor          Lock a survivor: regression + landscape update + br create reminder",
     "  gen-discard           Record a test that found nothing (landscape only)",
     "  landscape             Show fitness scores, crown status (all computed)",
     "  regress               Add a regression test to the permanent bank",

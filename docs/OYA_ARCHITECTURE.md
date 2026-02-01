@@ -1,4 +1,4 @@
-# oya - Full-Stack Rust SDLC Factory
+# oya - Full-Stack Rust SDLC System
 
 > 100x developer throughput - rough idea to production-quality software in hours.
 
@@ -701,7 +701,7 @@ DEFINE FIELD payload ON journal TYPE object;
 DEFINE FIELD timestamp ON journal TYPE datetime;
 DEFINE INDEX journal_workflow ON journal FIELDS workflow_id;
 
--- Tasks table (factory)
+-- Tasks table (system)
 DEFINE TABLE tasks SCHEMAFULL;
 DEFINE FIELD id ON tasks TYPE record<tasks>;
 DEFINE FIELD slug ON tasks TYPE string;

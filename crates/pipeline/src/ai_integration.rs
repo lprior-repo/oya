@@ -1,6 +1,6 @@
-//! AI Integration layer between factory stages and OpenCode execution.
+//! AI Integration layer between OYA stages and OpenCode execution.
 //!
-//! This module provides the bridge between factory pipeline stages and
+//! This module provides the bridge between OYA pipeline stages and
 //! OpenCode's AI-powered phase execution.
 
 use std::collections::HashMap;
@@ -17,10 +17,10 @@ use crate::domain::{Language, Stage, Task};
 use crate::error::{Error, Result};
 use crate::pipeline::StageExecution;
 
-/// Maps factory stage names to OpenCode phase names.
+/// Maps OYA stage names to OpenCode phase names.
 #[derive(Debug, Clone)]
 pub struct StagePhaseMapping {
-    /// Direct mappings: factory stage name -> opencode phase name
+    /// Direct mappings: OYA stage name -> opencode phase name
     mappings: HashMap<String, String>,
 }
 
@@ -64,14 +64,14 @@ impl Default for StagePhaseMapping {
     }
 }
 
-/// Context builder for converting factory tasks to OpenCode phase contexts.
-pub struct FactoryPhaseContextBuilder {
+/// Context builder for converting OYA tasks to OpenCode phase contexts.
+pub struct OYAPhaseContextBuilder {
     task: Task,
     stage: Stage,
     mapping: Arc<StagePhaseMapping>,
 }
 
-impl FactoryPhaseContextBuilder {
+impl OYAPhaseContextBuilder {
     /// Create a new context builder.
     #[must_use]
     pub fn new(task: Task, stage: Stage, mapping: Arc<StagePhaseMapping>) -> Self {
@@ -82,7 +82,7 @@ impl FactoryPhaseContextBuilder {
         }
     }
 
-    /// Build a PhaseContext from the factory task and stage.
+    /// Build a PhaseContext from the OYA task and stage.
     pub fn build(&self) -> Result<PhaseContext> {
         // Get phase name from mapping
         let phase_name = self
@@ -244,7 +244,7 @@ impl AIStageExecutor {
 
         // Build phase context
         let builder =
-            FactoryPhaseContextBuilder::new(task.clone(), stage.clone(), self.mapping.clone());
+            OYAPhaseContextBuilder::new(task.clone(), stage.clone(), self.mapping.clone());
 
         let ctx = if let Some(inp) = input {
             builder.with_input(inp)?
@@ -289,7 +289,7 @@ impl AIStageExecutor {
     }
 }
 
-/// Convert OpenCode PhaseOutput to factory StageExecution.
+/// Convert OpenCode PhaseOutput to OYA StageExecution.
 fn convert_phase_output_to_stage_execution(
     output: &PhaseOutput,
     stage_name: &str,
@@ -337,7 +337,7 @@ mod tests {
         let stage = Stage::new("implement".to_string(), "none".to_string(), 1);
         let mapping = Arc::new(StagePhaseMapping::new());
 
-        let builder = FactoryPhaseContextBuilder::new(task, stage, mapping);
+        let builder = OYAPhaseContextBuilder::new(task, stage, mapping);
         let ctx = builder.build();
 
         assert!(ctx.is_ok());

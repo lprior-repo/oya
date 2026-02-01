@@ -43,20 +43,20 @@ cargo build          # NO
 ### Project Structure
 ```
 crates/
-  factory-core/   # Core library (error handling, types, functional utils)
-  factory/        # CLI binary (new, stage, approve, show, list)
+  oya-pipeline/   # Core library (error handling, types, functional utils)
+  oya/        # CLI binary (new, stage, approve, show, list)
 ```
 
 ### MVP Commands
-1. `factory new -s <slug>` - Create task with JJ workspace
-2. `factory stage -s <slug> --stage <name>` - Run pipeline stage
-3. `factory approve -s <slug>` - Mark task for integration
-4. `factory show -s <slug>` - Show task details
-5. `factory list` - List all tasks
+1. `oya new -s <slug>` - Create task with JJ workspace
+2. `oya stage -s <slug> --stage <name>` - Run pipeline stage
+3. `oya approve -s <slug>` - Mark task for integration
+4. `oya show -s <slug>` - Show task details
+5. `oya list` - List all tasks
 
 ### Key Decisions
 - **Workspace isolation**: zjj CLI for workspace + session management
-- **Task storage**: `.factory/tasks.json`
+- **Task storage**: `.oya/tasks.json`
 - **Beads**: Hard requirement, always integrate with `.beads/`
 - **Stages**: implement, unit-test, coverage, lint, static, integration, security, review, accept
 
@@ -91,12 +91,17 @@ jj git push                # Push to remote
 ## Quick Reference
 
 ### Issue Tracking (Beads)
+
+**Note:** `br` is non-invasive and never executes git commands. After `br sync --flush-only`, you must manually run `git add .beads/ && git commit`.
+
 ```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --status in_progress  # Claim work
-bd close <id>         # Complete work
-bd sync               # Sync with jj (Jujutsu)
+br ready              # Find available work
+br show <id>          # View issue details
+br update <id> --status in_progress  # Claim work
+br close <id>         # Complete work
+br sync --flush-only  # Export to JSONL (no git)
+git add .beads/
+git commit -m "sync beads"
 ```
 
 ### Development (Moon CI/CD)
@@ -194,7 +199,7 @@ bv --robot-triage --robot-triage-by-track  # Get parallel execution tracks
 bv --robot-next  # Get top recommendation + claim command
 
 # Step 2: CLAIM - Reserve the bead
-bd update <bead-id> --status in_progress
+br update <bead-id> --status in_progress
 
 # Step 3: ISOLATE - Create isolated workspace
 # Use zjj skill to spawn isolated JJ workspace + Zellij tab
@@ -212,7 +217,8 @@ zjj add <session-name>
 # Use land skill for mandatory quality gates:
 # - Moon quick check (6-7ms cached)
 # - jj commit with proper message
-# - bd sync
+# - br sync --flush-only
+# - git add .beads/ && git commit -m "sync beads"
 # - jj git push (MANDATORY - work not done until pushed)
 
 # Step 7: MERGE - Reintegrate to main
@@ -239,7 +245,9 @@ zjj add <session-name>
 4. **COMMIT AND PUSH** - This is MANDATORY:
    ```bash
    jj commit -m "description"  # jj auto-tracks changes, no 'add' needed
-   bd sync                     # Sync beads with jj
+   br sync --flush-only        # Export beads to JSONL
+   git add .beads/
+   git commit -m "sync beads"
    jj git fetch                # Fetch from remote (auto-rebases)
    jj git push                 # Push to remote
    jj status                   # MUST show clean working copy

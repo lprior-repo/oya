@@ -1,6 +1,6 @@
 # Agent Instructions
 
-This project uses **bd** (beads) for issue tracking, **Moon** for hyper-fast builds, and **zjj** for workspace isolation.
+This project uses **br** (beads_rust) for issue tracking, **Moon** for hyper-fast builds, and **zjj** for workspace isolation.
 
 ## Critical: Use zjj CLI for Workspace Management
 
@@ -25,12 +25,17 @@ jj git push                # Push to remote
 ## Quick Reference
 
 ### Issue Tracking (Beads)
+
+**Note:** `br` is non-invasive and never executes git commands. After `br sync --flush-only`, you must manually run `git add .beads/ && git commit`.
+
 ```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --status in_progress  # Claim work
-bd close <id>         # Complete work
-bd sync               # Sync with jj (Jujutsu)
+br ready              # Find available work
+br show <id>          # View issue details
+br update <id> --status in_progress  # Claim work
+br close <id>         # Complete work
+br sync --flush-only  # Export to JSONL (no git)
+git add .beads/
+git commit -m "sync beads"
 ```
 
 ### Development (Moon CI/CD)
@@ -141,7 +146,7 @@ bv --robot-triage --robot-triage-by-track  # Get parallel execution tracks
 bv --robot-next  # Get top recommendation + claim command
 
 # Step 2: CLAIM - Reserve the bead
-bd update <bead-id> --status in_progress
+br update <bead-id> --status in_progress
 
 # Step 3: ISOLATE - Create isolated workspace
 # Use zjj skill to spawn isolated JJ workspace + Zellij tab
@@ -159,7 +164,8 @@ zjj add <session-name>
 # Use land skill for mandatory quality gates:
 # - Moon quick check (6-7ms cached)
 # - jj commit with proper message
-# - bd sync
+# - br sync --flush-only
+# - git add .beads/ && git commit -m "sync beads"
 # - jj git push (MANDATORY - work not done until pushed)
 
 # Step 7: MERGE - Reintegrate to main
@@ -184,7 +190,7 @@ You are a parallel autonomous agent. Complete this workflow:
 **BEAD TO WORK ON**: <bead-id> - "<title>"
 
 **WORKFLOW**:
-1. CLAIM: `bd update <bead-id> --status in_progress`
+1. CLAIM: `br update <bead-id> --status in_progress`
 2. ISOLATE: Use the zjj skill to spawn an isolated workspace named "<session-name>"
 3. IMPLEMENT: Use functional-rust-generator skill
    - Zero unwraps, zero panics
@@ -240,7 +246,9 @@ bv --robot-triage --robot-triage-by-track
 4. **COMMIT AND PUSH** - This is MANDATORY:
    ```bash
    jj commit -m "description"  # jj auto-tracks changes, no 'add' needed
-   bd sync                     # Sync beads with jj
+   br sync --flush-only        # Export beads to JSONL
+   git add .beads/
+   git commit -m "sync beads"
    jj git fetch                # Fetch from remote (auto-rebases)
    jj git push                 # Push to remote
    jj status                   # MUST show clean working copy

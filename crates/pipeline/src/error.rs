@@ -1,4 +1,4 @@
-//! Error types for Factory operations using Railway-Oriented Programming.
+//! Error types for OYA operations using Railway-Oriented Programming.
 //!
 //! All errors are explicit, typed, and recoverable - no panics allowed.
 
@@ -6,10 +6,10 @@ use std::path::PathBuf;
 
 use thiserror::Error;
 
-/// Result type alias for Factory operations.
+/// Result type alias for OYA operations.
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Unified error type for all Factory operations.
+/// Unified error type for all OYA operations.
 #[derive(Debug, Error)]
 pub enum Error {
     // Domain validation errors

@@ -88,7 +88,7 @@ tasks:
       - "Cargo.toml"
       - "/Cargo.lock"
     outputs:
-      - "/target/release/intent"
+      - "/target/release/oya"
     options:
       cache: true
 
@@ -133,8 +133,8 @@ tasks:
   # ============================================================================
 
   install:
-    command: "mkdir -p ~/.local/bin && cargo build --release && cp target/release/intent ~/.local/bin/intent && chmod +x ~/.local/bin/intent && echo '✅ Installed intent to ~/.local/bin/intent'"
-    description: "Install intent binary to ~/.local/bin (system-wide)"
+    command: "mkdir -p ~/.local/bin && cargo build --release && cp target/release/oya ~/.local/bin/oya && chmod +x ~/.local/bin/oya && echo '✅ Installed oya to ~/.local/bin/oya'"
+    description: "Install oya binary to ~/.local/bin (system-wide)"
     options:
       cache: false
 

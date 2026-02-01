@@ -12,7 +12,7 @@ use std::path::Path;
 use std::time::Instant;
 
 use clap::Parser;
-use oya_factory::{
+use oya_pipeline::{
     AIStageExecutor, Result, audit,
     domain::{Slug, Task, TaskStatus, filter_stages, get_stage},
     persistence::{list_all_tasks, load_task_record, save_task_record},
@@ -21,7 +21,7 @@ use oya_factory::{
 };
 use oya_opencode::PhaseInput;
 
-use crate::cli::{Cli, Commands, HELP_TEXT};
+use crate::cli::{Cli, Commands};
 
 #[tokio::main]
 async fn main() {
@@ -66,11 +66,6 @@ async fn run() -> Result<()> {
 
         Commands::List { priority, status } => {
             execute_list(priority.as_deref(), status.as_deref()).await
-        }
-
-        Commands::Help { topic } => {
-            show_help(topic.as_deref());
-            Ok(())
         }
     }
 }
@@ -186,14 +181,14 @@ async fn execute_ai_stage(
 
     // Check if OpenCode is available
     if !ai_executor.is_available().await {
-        return Err(oya_factory::Error::InvalidRecord {
+        return Err(oya_pipeline::Error::InvalidRecord {
             reason: "OpenCode CLI is not available. Please install opencode.".to_string(),
         });
     }
 
     // Check if this stage can be executed by AI
     if !ai_executor.can_execute(&stage) {
-        return Err(oya_factory::Error::InvalidRecord {
+        return Err(oya_pipeline::Error::InvalidRecord {
             reason: format!(
                 "Stage '{}' cannot be executed by AI. Supported stages: implement, test, review, refactor, document",
                 stage_name
@@ -236,7 +231,7 @@ async fn execute_ai_stage(
     } else {
         let error_msg = result.error.as_deref().unwrap_or("unknown error");
         println!("\u{2717} {} failed: {}", stage_name, error_msg);
-        return Err(oya_factory::Error::InvalidRecord {
+        return Err(oya_pipeline::Error::InvalidRecord {
             reason: format!("AI stage execution failed: {}", error_msg),
         });
     }
@@ -276,7 +271,7 @@ fn check_at_least_one_stage_passed(repo_root: &std::path::Path, slug: &str) -> R
     if has_passed_stage {
         Ok(())
     } else {
-        Err(oya_factory::Error::InvalidRecord {
+        Err(oya_pipeline::Error::InvalidRecord {
             reason: "Cannot approve task: no stages have been passed. Run at least one stage before approving.".to_string(),
         })
     }
@@ -339,9 +334,3 @@ async fn execute_list(priority: Option<&str>, status: Option<&str>) -> Result<()
     Ok(())
 }
 
-fn show_help(topic: Option<&str>) {
-    match topic {
-        None => println!("{HELP_TEXT}"),
-        Some(t) => println!("Help for: {t}"),
-    }
-}

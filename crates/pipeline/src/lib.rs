@@ -2,7 +2,7 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
-//! # oya-factory
+//! # oya-OYA
 //!
 //! CI/CD pipeline and task management for OYA.
 //!
@@ -40,7 +40,7 @@ pub mod stages;
 pub mod types;
 
 // Re-export commonly used items
-pub use ai_integration::{AIStageExecutor, FactoryPhaseContextBuilder, StagePhaseMapping};
+pub use ai_integration::{AIStageExecutor, OYAPhaseContextBuilder, StagePhaseMapping};
 pub use codegen::{
     BeadSpec, FunctionRequirement, generate_from_bead, parse_bead_spec, simple_function_spec,
     spec_to_prompt, validate_functional_code,

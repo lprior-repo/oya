@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "crates/core",
-    "crates/factory",
+    "crates/pipeline",
     "crates/orchestrator",
     "crates/merge-queue",
     "crates/opencode",
@@ -33,7 +33,7 @@ unreachable = "forbid"
 [workspace.dependencies]
 # Internal crates (must match actual package names in Cargo.toml)
 oya-core = { path = "crates/core" }
-oya-factory = { path = "crates/factory" }
+oya-pipeline = { path = "crates/pipeline" }
 oya-opencode = { path = "crates/opencode" }
 oya-workflow = { path = "crates/workflow" }
 oya-events = { path = "crates/events" }
@@ -47,7 +47,7 @@ futures = "0.3"
 async-trait = "0.1"
 
 # Storage (battle-tested)
-surrealdb = { version = "2", features = ["protocol-ws"] }
+surrealdb = { version = "2", features = ["kv-rocksdb"] }
 surrealdb-core = "2"
 
 # Caching (battle-tested)
@@ -105,7 +105,7 @@ rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "OYA SDLC Factory - Storm goddess of transformation. 100x developer throughput with AI agent swarms."
+description = "OYA SDLC System - Storm goddess of transformation. 100x developer throughput with AI agent swarms."
 keywords = ["sdlc", "tdd", "ai", "agents", "automation"]
 categories = ["development-tools", "command-line-utilities"]
 
@@ -115,7 +115,7 @@ path = "src/main.rs"
 
 [dependencies]
 oya-core = { workspace = true }
-oya-factory = { workspace = true }
+oya-pipeline = { workspace = true }
 oya-opencode = { workspace = true }
 oya-workflow = { workspace = true }
 oya-events = { workspace = true }

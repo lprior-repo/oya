@@ -1,4 +1,4 @@
-//! Quality gates for factory pipeline stages.
+//! Quality gates for OYA pipeline stages.
 //!
 //! Enforces strict functional Rust requirements before allowing
 //! code to proceed through the pipeline.
@@ -206,10 +206,10 @@ impl FunctionalGate {
         if let QualityGateResult::Passed = gate_result {
             report.push_str("\n✓ Quality gate PASSED\n");
         } else if let QualityGateResult::Failed { reason, .. } = gate_result {
-            report.push_str(&format!("\n✗ Quality gate FAILED\n"));
+            report.push_str("\n✗ Quality gate FAILED\n");
             report.push_str(&format!("Reason: {}\n", reason));
         } else if let QualityGateResult::Warning { reason, .. } = gate_result {
-            report.push_str(&format!("\n⚠ Quality gate PASSED with warnings\n"));
+            report.push_str("\n⚠ Quality gate PASSED with warnings\n");
             report.push_str(&format!("Warning: {}\n", reason));
         }
 
@@ -268,7 +268,7 @@ fn find_rust_files(worktree_path: &Path) -> Result<Vec<String>> {
             if !is_hidden_dir(&path) {
                 rust_files.extend(find_rust_files(&path)?);
             }
-        } else if path.extension().map_or(false, |ext| ext == "rs") {
+        } else if path.extension().is_some_and(|ext| ext == "rs") {
             rust_files.push(path.to_string_lossy().to_string());
         }
     }
@@ -315,6 +315,7 @@ pub fn enforce_functional_quality(worktree_path: &Path) -> Result<()> {
 mod tests {
     use super::*;
     use std::fs;
+    use std::path::PathBuf;
 
     #[test]
     fn test_find_rust_files() {
@@ -329,11 +330,12 @@ mod tests {
 
         let files = find_rust_files(&test_dir);
         assert!(files.is_ok());
-        let rust_files = files.unwrap();
-        assert_eq!(rust_files.len(), 2);
-        assert!(rust_files.iter().any(|f| f.contains("main.rs")));
-        assert!(rust_files.iter().any(|f| f.contains("lib.rs")));
-        assert!(!rust_files.iter().any(|f| f.contains("README.md")));
+        if let Ok(rust_files) = files {
+            assert_eq!(rust_files.len(), 2);
+            assert!(rust_files.iter().any(|f| f.contains("main.rs")));
+            assert!(rust_files.iter().any(|f| f.contains("lib.rs")));
+            assert!(!rust_files.iter().any(|f| f.contains("README.md")));
+        }
 
         // Cleanup
         let _ = fs::remove_dir_all(&test_dir);

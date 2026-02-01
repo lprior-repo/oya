@@ -190,23 +190,22 @@ pub fn audit_functional_style(code: &str) -> FunctionalAudit {
     }
 
     // Check for mutable variables (but exclude common patterns like "let mut iter")
-    let mut_regex = Regex::new(r"\blet\s+mut\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*:")
-        .expect("regex pattern for mutable variables should be valid");
-    let mut_skip_regex =
-        Regex::new(r"\blet\s+mut\s+(iter|self|this|cursor|pointer|idx|index|i|j|k|x|y|z)\s*:")
-            .unwrap_or_else(|_| Regex::new(r"x").unwrap());
-
-    for (line_idx, line) in lines.iter().enumerate() {
-        if let Some(captures) = mut_regex.captures(line) {
-            if let Some(var_name) = captures.get(1) {
-                let _var = var_name.as_str();
-                if !mut_skip_regex.is_match(line) {
-                    violations.push(Violation::new(
-                        ForbiddenPattern::MutLocalVar,
-                        line_idx + 1,
-                        var_name.start(),
-                        line.to_string(),
-                    ));
+    if let (Ok(mut_regex), Ok(mut_skip_regex)) = (
+        Regex::new(r"\blet\s+mut\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*:"),
+        Regex::new(r"\blet\s+mut\s+(iter|self|this|cursor|pointer|idx|index|i|j|k|x|y|z)\s*:"),
+    ) {
+        for (line_idx, line) in lines.iter().enumerate() {
+            if let Some(captures) = mut_regex.captures(line) {
+                if let Some(var_name) = captures.get(1) {
+                    let _var = var_name.as_str();
+                    if !mut_skip_regex.is_match(line) {
+                        violations.push(Violation::new(
+                            ForbiddenPattern::MutLocalVar,
+                            line_idx + 1,
+                            var_name.start(),
+                            line.to_string(),
+                        ));
+                    }
                 }
             }
         }
@@ -250,23 +249,19 @@ pub fn generate_functional_module(module_name: &str, functions: &[FunctionStub])
 
     // Module header
     output.push_str(&format!("//! {module_name}\n"));
-    output.push_str(&format!("//!\n"));
-    output.push_str(&format!(
-        "//! Functional Rust module - all functions are pure and return Result.\n"
-    ));
-    output.push_str(&format!("//!\n"));
-    output.push_str(&format!("//! # Design Principles\n"));
-    output.push_str(&format!("//!\n"));
-    output.push_str(&format!("//! - Immutable by default\n"));
-    output.push_str(&format!("//! - Pure functions (no side effects)\n"));
-    output.push_str(&format!(
-        "//! - Railway-Oriented Programming (Result types)\n"
-    ));
-    output.push_str(&format!("//! - Zero panics\n"));
-    output.push_str(&format!("//! - Explicit error handling\n"));
-    output.push_str(&format!("//!\n"));
-    output.push_str(&format!("//! ## Functions\n"));
-    output.push_str(&format!("//!\n"));
+    output.push_str("//!\n");
+    output.push_str("//! Functional Rust module - all functions are pure and return Result.\n");
+    output.push_str("//!\n");
+    output.push_str("//! # Design Principles\n");
+    output.push_str("//!\n");
+    output.push_str("//! - Immutable by default\n");
+    output.push_str("//! - Pure functions (no side effects)\n");
+    output.push_str("//! - Railway-Oriented Programming (Result types)\n");
+    output.push_str("//! - Zero panics\n");
+    output.push_str("//! - Explicit error handling\n");
+    output.push_str("//!\n");
+    output.push_str("//! ## Functions\n");
+    output.push_str("//!\n");
 
     for func in functions {
         output.push_str(&format_function_stub(func));
@@ -312,9 +307,7 @@ pub fn format_function_stub(func: &FunctionStub) -> String {
 
     // Implementation note
     output.push_str(&format!("    // TODO: Implement {}\n", func.name));
-    output.push_str(&format!(
-        "    // Ensure: immutability, purity, explicit error handling\n"
-    ));
+    output.push_str("    // Ensure: immutability, purity, explicit error handling\n");
 
     if func.returns_result {
         output.push_str(&format!(
@@ -372,11 +365,7 @@ pub fn format_violations_report(audit: &FunctionalAudit) -> Vec<String> {
     ] {
         let violations = audit.violations_by_severity(severity);
         if !violations.is_empty() {
-            report.push(format!(
-                "\n{} violations ({}):",
-                format!("{:?}", severity),
-                violations.len()
-            ));
+            report.push(format!("\n{severity:?} violations ({}):", violations.len()));
 
             for v in violations {
                 report.push(format!(
@@ -452,7 +441,9 @@ pub fn process_data(data: &mut Vec<i32>) -> i32 {
         let pattern = ForbiddenPattern::Unwrap;
         let matches = find_matches(line, &pattern);
         assert!(matches.is_some());
-        assert_eq!(matches.unwrap_or(0).len(), 1);
+        if let Some(m) = matches {
+            assert_eq!(m.len(), 1);
+        }
     }
 
     #[test]

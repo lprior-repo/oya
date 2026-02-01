@@ -6,13 +6,15 @@
 
 use clap::{Parser, Subcommand};
 
-/// Factory - Contract-driven CI/CD Pipeline
+/// OYA - SDLC System
 #[derive(Parser, Debug)]
-#[command(name = "factory")]
+#[command(name = "oya")]
 #[command(version)]
-#[command(about = "Contract-driven CI/CD pipeline for software projects")]
 #[command(
-    long_about = "Factory manages isolated workspaces, runs pipeline stages, and tracks task progress across multiple programming languages."
+    about = "Storm goddess of transformation - 100x developer throughput with AI agent swarms"
+)]
+#[command(
+    long_about = "OYA manages isolated workspaces, runs pipeline stages, and tracks task progress across multiple programming languages."
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -114,51 +116,4 @@ pub enum Commands {
         #[arg(long)]
         status: Option<String>,
     },
-
-    /// Show help information
-    Help {
-        /// Topic to get help on
-        topic: Option<String>,
-    },
 }
-
-/// Help text for the CLI.
-pub const HELP_TEXT: &str = r"Factory - Contract-driven CI/CD Pipeline
-
-USAGE:
-  factory <COMMAND> [FLAGS]
-
-COMMANDS:
-  new       Create new task
-            factory new -s bd-52.1
-
-  stage     Run pipeline stage
-            factory stage -s bd-52.1 --stage implement [-d] [--from X] [--to Y]
-
-  ai-stage  Run stage with AI assistance
-            factory ai-stage -s bd-52.1 --stage implement
-
-  approve   Approve for deployment
-            factory approve -s bd-52.1 [--strategy immediate|gradual|canary] [-f]
-
-  show      Show task details
-            factory show -s bd-52.1 [--detailed]
-
-  list      List all tasks
-            factory list [--priority P1|P2|P3] [--status open|in_progress|done]
-
-  help      Show this help [--topic COMMAND]
-
-SHORT FLAGS:
-  -s       --slug
-  -d       --dry-run
-  -f       --force
-
-EXAMPLES:
-  factory new -s bd-52.1
-  factory stage -s bd-52.1 --stage implement -d
-  factory ai-stage -s bd-52.1 --stage implement
-  factory approve -s bd-52.1 --strategy gradual
-  factory list --priority P1
-
-Documentation: ./ARCHITECTURE.md";

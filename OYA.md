@@ -1,4 +1,4 @@
-# OYA - SDLC Factory
+# OYA - SDLC System
 
 > **"I don't ask for power. I take it. I am the storm that tears down what was so something new can stand."**
 
@@ -30,7 +30,7 @@ OYA doesn't preserve. She clears the path. When the storm arrives:
 - The new is **forced** to exist
 - There is no negotiation
 
-This is the SDLC Factory philosophy:
+This is the SDLC System philosophy:
 - **No preservation of bad code** - it dies in the storm
 - **Transformation is violent** - TDD kills before it creates
 - **What survives is worthy** - only tested code ships
@@ -48,7 +48,7 @@ In software:
 
 OYA guards the boundary between the living and the dead. Nothing passes without meeting her standard.
 
-In the SDLC Factory:
+In the SDLC System:
 - **Quality gates are absolute** - pass or don't exist
 - **No exceptions** - the storm doesn't negotiate
 - **Zero unwrap, zero panic** - code that can die, will die (at compile time)

@@ -1,13 +1,13 @@
-# Factory - System Architecture
+# OYA - System Architecture
 
-Contract-driven CI/CD pipeline for multi-language projects built in Gleam.
+Contract-driven CI/CD pipeline for multi-language projects built in Rust.
 
 Status: Active development
-Last Updated: January 29, 2026
+Last Updated: January 31, 2026
 
 ## Core System
 
-Factory creates isolated jj worktrees per task, runs language-specific validation stages, tracks progress via .factory/tasks.json.
+OYA creates isolated jj worktrees per task, runs language-specific validation stages, tracks progress via .oya/tasks.json.
 
 ## Key Components
 
@@ -36,9 +36,9 @@ Domain Model (domain.gleam)
   TaskStatus(Created|InProgress|PassedPipeline|FailedPipeline|Integrated)
   Priority(P1|P2|P3)
 
-Persistence (persistence.gleam)
-  .factory/tasks.json - Task records
-  .factory/audit.log - Event log
+Persistence (persistence.rs)
+  .oya/tasks.json - Task records
+  .oya/audit.log - Event log
   JSON serialization with atomic updates
 
 Integrations
@@ -63,5 +63,5 @@ build/         - Gleam build packages
 .codanna/       - Code analysis and indexing
 .planning/      - Planning and test analysis
 .moon/          - Moon build tool
-.factory/       - Factory task state
+.oya/           - OYA task state
 .tdd15-cache/  - TDD15 workflow cache
