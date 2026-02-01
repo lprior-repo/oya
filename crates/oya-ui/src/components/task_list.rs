@@ -24,18 +24,9 @@ impl Default for TaskFilters {
 impl TaskFilters {
     /// Check if a task matches all active filters
     pub fn matches(&self, task: &Task) -> bool {
-        let status_match = self
-            .status
-            .map(|s| s == task.status)
-            .unwrap_or(true);
-        let priority_match = self
-            .priority
-            .map(|p| p == task.priority)
-            .unwrap_or(true);
-        let type_match = self
-            .task_type
-            .map(|t| t == task.task_type)
-            .unwrap_or(true);
+        let status_match = self.status.map(|s| s == task.status).unwrap_or(true);
+        let priority_match = self.priority.map(|p| p == task.priority).unwrap_or(true);
+        let type_match = self.task_type.map(|t| t == task.task_type).unwrap_or(true);
 
         status_match && priority_match && type_match
     }
@@ -292,10 +283,8 @@ mod tests {
             task_type: None,
         };
 
-        let matching_task = Task::new("task-1", "Test")
-            .with_status(TaskStatus::InProgress);
-        let non_matching_task = Task::new("task-2", "Test")
-            .with_status(TaskStatus::Open);
+        let matching_task = Task::new("task-1", "Test").with_status(TaskStatus::InProgress);
+        let non_matching_task = Task::new("task-2", "Test").with_status(TaskStatus::Open);
 
         assert!(filters.matches(&matching_task));
         assert!(!filters.matches(&non_matching_task));
@@ -309,10 +298,8 @@ mod tests {
             task_type: None,
         };
 
-        let matching_task = Task::new("task-1", "Test")
-            .with_priority(TaskPriority::High);
-        let non_matching_task = Task::new("task-2", "Test")
-            .with_priority(TaskPriority::Low);
+        let matching_task = Task::new("task-1", "Test").with_priority(TaskPriority::High);
+        let non_matching_task = Task::new("task-2", "Test").with_priority(TaskPriority::Low);
 
         assert!(filters.matches(&matching_task));
         assert!(!filters.matches(&non_matching_task));
@@ -326,10 +313,8 @@ mod tests {
             task_type: Some(TaskType::Bug),
         };
 
-        let matching_task = Task::new("task-1", "Test")
-            .with_type(TaskType::Bug);
-        let non_matching_task = Task::new("task-2", "Test")
-            .with_type(TaskType::Feature);
+        let matching_task = Task::new("task-1", "Test").with_type(TaskType::Bug);
+        let non_matching_task = Task::new("task-2", "Test").with_type(TaskType::Feature);
 
         assert!(filters.matches(&matching_task));
         assert!(!filters.matches(&non_matching_task));

@@ -27,10 +27,11 @@ pub struct ReplayProgress {
 impl ReplayProgress {
     /// Create a new progress with zero events processed.
     pub fn new(events_total: u64) -> Self {
+        let percent_complete = if events_total == 0 { 100.0 } else { 0.0 };
         Self {
             events_total,
             events_processed: 0,
-            percent_complete: 0.0,
+            percent_complete,
             eta: None,
         }
     }
@@ -87,7 +88,7 @@ impl ReplayTracker {
         let processed = self.events_processed.fetch_add(1, Ordering::Relaxed) + 1;
 
         // Emit update every N events or on completion
-        if processed % self.update_interval == 0 || processed == self.events_total {
+        if processed.is_multiple_of(self.update_interval) || processed == self.events_total {
             let eta = self.calculate_eta(processed);
             let progress = ReplayProgress {
                 events_total: self.events_total,

@@ -57,10 +57,7 @@ mod tests {
         // Check for duplicates
         for i in 0..routes_list.len() {
             for j in (i + 1)..routes_list.len() {
-                assert_ne!(
-                    routes_list[i], routes_list[j],
-                    "Routes should be unique"
-                );
+                assert_ne!(routes_list[i], routes_list[j], "Routes should be unique");
             }
         }
     }
