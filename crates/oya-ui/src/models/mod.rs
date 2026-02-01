@@ -1,5 +1,6 @@
 //! Data models for graph visualization
 
+pub mod colors;
 pub mod edge;
 pub mod node;
 
