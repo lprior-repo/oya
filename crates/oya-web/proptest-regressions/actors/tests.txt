@@ -1,0 +1,12 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 0c12d889bbc6397acc48546c769a182add17daa6478a6410b8b67037cdde255b # shrinks to count = 1
+cc 01b2745c56e9321bf095498836f0cf284bea5852431d369c656c3529ac926b1a # shrinks to spec = ""
+cc 208c89e92a3c10d0827ac85ecaa404052901e0590f428a5af2ab11117ee5ceb2 # shrinks to bytes = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+cc 9267894d9b380ce5b3c4db10addcca549dec6daadb91ef4ca772212592ac4162 # shrinks to bytes = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+cc 99f7cfad5c771d38360f7085c5114b6605cf832d15d5fb7a01673dd0229bfa54 # shrinks to spec1 = "a", spec2 = "0", spec3 = "\u{a980}"
+cc 1af5cedbd9d87b0cf7772af58291317ef7c84a596b1ae0299570facfa9fd5e22 # shrinks to specs = ["\u{cbc}"]

@@ -21,7 +21,6 @@ mod scheduler_actor_tests {
 
         let result = scheduler.send(SchedulerMessage::CreateBead {
             id: Ulid::new(),
-            id: Ulid::new(),
             spec: spec.clone(),
         });
 
@@ -69,11 +68,9 @@ mod scheduler_actor_tests {
 
         let r1 = scheduler.send(SchedulerMessage::CreateBead {
             id: Ulid::new(),
-            id: Ulid::new(),
             spec: spec1,
         });
         let r2 = scheduler.send(SchedulerMessage::CreateBead {
-            id: Ulid::new(),
             id: Ulid::new(),
             spec: spec2,
         });
@@ -199,7 +196,6 @@ mod message_type_tests {
     fn test_scheduler_message_create_bead_construction() {
         let spec = "test-spec".to_string();
         let msg = SchedulerMessage::CreateBead {
-            id: Ulid::new(),
             id: Ulid::new(),
             spec: spec.clone(),
         };
@@ -667,7 +663,6 @@ mod supervision_tests {
 
         // Next send should fail
         let result = tx.send(SchedulerMessage::CreateBead {
-            id: Ulid::new(),
             id: Ulid::new(),
             spec: "test".to_string(),
         });
