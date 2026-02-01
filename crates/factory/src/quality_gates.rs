@@ -269,13 +269,7 @@ fn find_rust_files(worktree_path: &Path) -> Result<Vec<String>> {
                 rust_files.extend(find_rust_files(&path)?);
             }
         } else if path.extension().map_or(false, |ext| ext == "rs") {
-            rust_files.push(
-                path.to_str()
-                    .ok_or_else(|| Error::InvalidRecord {
-                        reason: "path not valid UTF-8".into(),
-                    })?
-                    .to_string(),
-            );
+            rust_files.push(path.to_string_lossy().to_string());
         }
     }
 
@@ -287,9 +281,10 @@ fn find_rust_files(worktree_path: &Path) -> Result<Vec<String>> {
 fn is_hidden_dir(path: &Path) -> bool {
     if let Some(name) = path.file_name() {
         let name_str = name.to_string_lossy();
-        return name_str.starts_with('.')
+        let name = name_str.as_ref();
+        return name.starts_with('.')
             || matches!(
-                name_str.as_str(),
+                name,
                 "target" | "node_modules" | "build" | "dist" | ".git" | "vendor"
             );
     }

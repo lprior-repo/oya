@@ -32,7 +32,7 @@ pub struct ProgressUpdate {
 }
 
 /// Artifact type produced by a stage.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ArtifactType {
     TestResults,
     CoverageReport,
@@ -40,7 +40,7 @@ pub enum ArtifactType {
     SecurityReport,
     BuildArtifacts,
     Logs,
-    Other(String),
+    Other(&'static str),
 }
 
 /// Artifact captured during stage execution.
@@ -50,6 +50,21 @@ pub struct Artifact {
     pub path: PathBuf,
     pub size_bytes: u64,
     pub content: Option<String>,
+}
+
+impl ArtifactType {
+    #[must_use]
+    pub fn name(&self) -> &str {
+        match self {
+            Self::TestResults => "test_results",
+            Self::CoverageReport => "coverage_report",
+            Self::LintReport => "lint_report",
+            Self::SecurityReport => "security_report",
+            Self::BuildArtifacts => "build_artifacts",
+            Self::Logs => "logs",
+            Self::Other(name) => name,
+        }
+    }
 }
 
 /// Stage execution context with progress tracking.
@@ -161,7 +176,7 @@ impl ExecutionContext {
 
         info!(
             stage = %self.stage_name,
-            artifact_type = ?artifact_type,
+            artifact_type = artifact_type.name(),
             path = ?path,
             size_bytes,
             "Artifact captured"
@@ -201,8 +216,6 @@ pub fn collect_artifacts(
     stage_name: &str,
     language: &str,
 ) -> Result<()> {
-    let cwd = &ctx.worktree_path;
-
     // Collect coverage reports
     if stage_name == "coverage" {
         for pattern in coverage_patterns(language) {

@@ -33,3 +33,6 @@ Thumbs.db
 *.profraw
 *.profdata
 vendor/opencode-sme/
+
+# bv (beads viewer) local config and caches
+.bv/

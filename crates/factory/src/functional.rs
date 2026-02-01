@@ -198,7 +198,7 @@ pub fn audit_functional_style(code: &str) -> FunctionalAudit {
     for (line_idx, line) in lines.iter().enumerate() {
         if let Some(captures) = mut_regex.captures(line) {
             if let Some(var_name) = captures.get(1) {
-                let var = var_name.as_str();
+                let _var = var_name.as_str();
                 if !mut_skip_regex.is_match(line) {
                     violations.push(Violation::new(
                         ForbiddenPattern::MutLocalVar,
@@ -212,7 +212,6 @@ pub fn audit_functional_style(code: &str) -> FunctionalAudit {
     }
 
     // Calculate functional score
-    let max_allowed_violations = (total_lines as f64 * 0.01).ceil() as usize; // 1% tolerance
     let violation_count = violations.len();
     let functional_percentage = if total_lines > 0 {
         let clean_lines = total_lines.saturating_sub(violation_count);
