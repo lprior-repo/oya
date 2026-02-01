@@ -100,12 +100,10 @@ impl OpencodeClient {
     async fn execute_via_cli(&self, prompt: &str) -> Result<ExecutionResult> {
         let opencode_path = &self.config.cli_path;
 
-        // Build command arguments
+        // Build command arguments - opencode run subcommand
         let mut args = vec![
-            "-p".to_string(),
+            "run".to_string(),
             prompt.to_string(),
-            "-f".to_string(),
-            "json".to_string(),
             "-q".to_string(), // Quiet mode (no spinner)
         ];
 
