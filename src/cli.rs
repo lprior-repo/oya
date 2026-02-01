@@ -117,10 +117,10 @@ pub enum Commands {
         status: Option<String>,
     },
 
-    /// Say hello from the storm goddess
+    /// Say hello to the world
     Hello {
-        /// Name to greet
-        #[arg(short, long, default_value = "World")]
-        name: String,
+        /// Custom greeting message
+        #[arg(short, long, default_value = "Hello, World!")]
+        message: String,
     },
 }

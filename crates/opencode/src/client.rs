@@ -100,11 +100,12 @@ impl OpencodeClient {
     async fn execute_via_cli(&self, prompt: &str) -> Result<ExecutionResult> {
         let opencode_path = &self.config.cli_path;
 
-        // Build command arguments - opencode run subcommand
+        // Build command arguments - opencode run subcommand with JSON output
         let mut args = vec![
             "run".to_string(),
             prompt.to_string(),
-            "-q".to_string(), // Quiet mode (no spinner)
+            "--format".to_string(),
+            "json".to_string(),
         ];
 
         // Add working directory if specified
@@ -212,7 +213,12 @@ async fn stream_cli_output(
     prompt: &str,
     tx: mpsc::Sender<Result<StreamChunk>>,
 ) -> Result<()> {
-    let mut args = vec!["-p".to_string(), prompt.to_string(), "-q".to_string()];
+    let mut args = vec![
+        "run".to_string(),
+        prompt.to_string(),
+        "--format".to_string(),
+        "json".to_string(),
+    ];
 
     if let Some(ref cwd) = config.working_directory {
         args.push("-c".to_string());

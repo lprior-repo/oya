@@ -12,6 +12,7 @@ use std::path::Path;
 use std::time::Instant;
 
 use clap::Parser;
+use oya_opencode::PhaseInput;
 use oya_pipeline::{
     AIStageExecutor, Result, audit,
     domain::{Slug, Task, TaskStatus, filter_stages, get_stage},
@@ -19,7 +20,6 @@ use oya_pipeline::{
     repo::{detect_language, detect_repo_root},
     stages::{execute_stage, execute_stages_dry_run},
 };
-use oya_opencode::PhaseInput;
 
 use crate::cli::{Cli, Commands};
 
@@ -67,6 +67,8 @@ async fn run() -> Result<()> {
         Commands::List { priority, status } => {
             execute_list(priority.as_deref(), status.as_deref()).await
         }
+
+        Commands::Hello { message } => execute_hello(&message),
     }
 }
 
@@ -334,3 +336,7 @@ async fn execute_list(priority: Option<&str>, status: Option<&str>) -> Result<()
     Ok(())
 }
 
+fn execute_hello(message: &str) -> Result<()> {
+    println!("{}", message);
+    Ok(())
+}
