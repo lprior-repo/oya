@@ -36,6 +36,7 @@
 //! let output = executor.execute(&ctx).await?;
 //! ```
 
+pub mod acp_schemas;
 pub mod client;
 pub mod config;
 pub mod error;
@@ -43,6 +44,11 @@ pub mod executor;
 pub mod types;
 
 // Re-export commonly used items
+pub use acp_schemas::{
+    AcpError, AcpMessage, AgentPart, CacheStats, FilePart, FilePartSource, LspPosition, LspRange,
+    MessagePart, PartBase, PatchPart, ReasoningPart, SnapshotPart, StepFinishPart, StepStartPart,
+    TextPart, TimeRange, ToolPart, ToolState, ToolTimeRange,
+};
 pub use client::OpencodeClient;
 pub use config::{AgentMode, OpencodeConfig};
 pub use error::{Error, Result};

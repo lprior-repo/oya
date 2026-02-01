@@ -11,6 +11,9 @@ description = "OpenCode AI bridge for OYA - Execute AI coding tasks via opencode
 [dependencies]
 oya-core = { workspace = true }
 
+# ID generation
+ulid = "1"
+
 # Async runtime
 tokio = { workspace = true }
 futures = { workspace = true }
