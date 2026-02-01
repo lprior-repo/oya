@@ -3,10 +3,8 @@
 use axum::Router;
 use axum::routing::get;
 use axum_test::TestServer;
-use http::StatusCode;
-use oya_web::{routes, actors::{mock_scheduler, mock_state_manager, AppState}};
+use oya_web::actors::{AppState, mock_scheduler, mock_state_manager};
 use std::sync::Arc;
-use tower_http::cors;
 
 #[tokio::test]
 async fn test_cors_headers_added() {

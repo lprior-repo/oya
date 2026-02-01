@@ -53,7 +53,7 @@ pub struct AppState {
 /// Mock scheduler with working receiver (will be replaced with actual actor)
 pub fn mock_scheduler() -> SchedulerSender {
     let (tx, mut rx) = mpsc::unbounded_channel();
-    
+
     tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
             match msg {
@@ -66,14 +66,14 @@ pub fn mock_scheduler() -> SchedulerSender {
             }
         }
     });
-    
+
     tx
 }
 
 /// Mock state manager with working receiver (will be replaced with actual actor)
 pub fn mock_state_manager() -> StateManagerSender {
     let (tx, mut rx) = mpsc::unbounded_channel();
-    
+
     tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
             match msg {
@@ -83,7 +83,7 @@ pub fn mock_state_manager() -> StateManagerSender {
             }
         }
     });
-    
+
     tx
 }
 

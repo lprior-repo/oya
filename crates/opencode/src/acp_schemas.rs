@@ -382,7 +382,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_text_part_serialization() {
+    fn test_text_part_serialization() -> Result<(), Box<dyn std::error::Error>> {
         let part = TextPart {
             base: PartBase {
                 id: "test-id".to_string(),
@@ -399,15 +399,16 @@ mod tests {
             metadata: None,
         };
 
-        let json = serde_json::to_string(&part).unwrap();
-        let parsed: TextPart = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&part)?;
+        let parsed: TextPart = serde_json::from_str(&json)?;
 
         assert_eq!(parsed.text, part.text);
         assert_eq!(parsed.base.id, part.base.id);
+        Ok(())
     }
 
     #[test]
-    fn test_tool_state_completed() {
+    fn test_tool_state_completed() -> Result<(), Box<dyn std::error::Error>> {
         let state = ToolState::Completed {
             input: HashMap::new(),
             output: "Success!".to_string(),
@@ -421,14 +422,15 @@ mod tests {
             attachments: None,
         };
 
-        let json = serde_json::to_string(&state).unwrap();
-        let parsed: ToolState = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&state)?;
+        let parsed: ToolState = serde_json::from_str(&json)?;
 
         assert!(matches!(parsed, ToolState::Completed { .. }));
+        Ok(())
     }
 
     #[test]
-    fn test_token_usage() {
+    fn test_token_usage() -> Result<(), Box<dyn std::error::Error>> {
         let tokens = TokenUsage {
             input: 1000,
             output: 500,
@@ -439,10 +441,11 @@ mod tests {
             },
         };
 
-        let json = serde_json::to_string(&tokens).unwrap();
-        let parsed: TokenUsage = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&tokens)?;
+        let parsed: TokenUsage = serde_json::from_str(&json)?;
 
         assert_eq!(parsed.input, 1000);
         assert_eq!(parsed.cache.read, 8000);
+        Ok(())
     }
 }

@@ -2,9 +2,12 @@
 
 use axum_test::TestServer;
 use http::StatusCode;
-use oya_web::{routes, actors::{mock_scheduler, mock_state_manager, AppState}};
-use std::sync::Arc;
+use oya_web::{
+    actors::{AppState, mock_scheduler, mock_state_manager},
+    routes,
+};
 use serde_json::Value;
+use std::sync::Arc;
 
 fn create_test_server() -> Result<TestServer, String> {
     let state = AppState {
@@ -12,20 +15,16 @@ fn create_test_server() -> Result<TestServer, String> {
         state_manager: Arc::new(mock_state_manager()),
     };
 
-    let app = routes::create_router()
-        .with_state(state);
+    let app = routes::create_router().with_state(state);
 
-    TestServer::new(app)
-        .map_err(|e| format!("Failed to create test server: {e}"))
+    TestServer::new(app).map_err(|e| format!("Failed to create test server: {e}"))
 }
 
 #[tokio::test]
 async fn test_health_check_returns_ok() {
     let server = create_test_server().unwrap();
 
-    let response = server
-        .get("/api/health")
-        .await;
+    let response = server.get("/api/health").await;
 
     assert_eq!(response.status_code(), StatusCode::OK);
 
@@ -42,10 +41,7 @@ async fn test_create_workflow_returns_201() {
         "bead_spec": "test workflow spec"
     });
 
-    let response = server
-        .post("/api/workflows")
-        .json(&payload)
-        .await;
+    let response = server.post("/api/workflows").json(&payload).await;
 
     assert_eq!(response.status_code(), StatusCode::CREATED);
 
@@ -61,9 +57,7 @@ async fn test_create_workflow_returns_201() {
 async fn test_get_bead_status_returns_200() {
     let server = create_test_server().unwrap();
 
-    let response = server
-        .get("/api/beads/01ARZ3NDEKTSV4RRFFQ69G5FAV")
-        .await;
+    let response = server.get("/api/beads/01ARZ3NDEKTSV4RRFFQ69G5FAV").await;
 
     assert_eq!(response.status_code(), StatusCode::OK);
 
@@ -80,9 +74,7 @@ async fn test_get_bead_status_returns_200() {
 async fn test_get_bead_status_invalid_ulid_returns_400() {
     let server = create_test_server().unwrap();
 
-    let response = server
-        .get("/api/beads/invalid-ulid")
-        .await;
+    let response = server.get("/api/beads/invalid-ulid").await;
 
     assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
 
@@ -108,9 +100,7 @@ async fn test_cancel_bead_returns_200() {
 async fn test_cancel_bead_invalid_ulid_returns_400() {
     let server = create_test_server().unwrap();
 
-    let response = server
-        .post("/api/beads/invalid/cancel")
-        .await;
+    let response = server.post("/api/beads/invalid/cancel").await;
 
     assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
 
@@ -124,10 +114,7 @@ async fn test_create_workflow_without_required_field_returns_400() {
 
     let payload = serde_json::json!({});
 
-    let response = server
-        .post("/api/workflows")
-        .json(&payload)
-        .await;
+    let response = server.post("/api/workflows").json(&payload).await;
 
     assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
 
@@ -139,9 +126,7 @@ async fn test_create_workflow_without_required_field_returns_400() {
 async fn test_nonexistent_route_returns_404() {
     let server = create_test_server().unwrap();
 
-    let response = server
-        .get("/api/nonexistent")
-        .await;
+    let response = server.get("/api/nonexistent").await;
 
     assert_eq!(response.status_code(), StatusCode::NOT_FOUND);
 }

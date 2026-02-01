@@ -1,7 +1,7 @@
 //! Workflow endpoints: POST /api/workflows
 
 use super::super::actors::{AppState, SchedulerMessage};
-use super::super::error::{AppError, Result};
+use super::super::error::AppError;
 use axum::{
     extract::State,
     http::StatusCode,
@@ -33,12 +33,19 @@ pub async fn create_workflow(
             let bead_id = Ulid::new();
 
             match state.scheduler.send(SchedulerMessage::CreateBead { spec }) {
-                Ok(_) => (StatusCode::CREATED, Json(CreateWorkflowResponse {
-                    bead_id: bead_id.to_string(),
-                })).into_response(),
-                Err(_) => AppError::ServiceUnavailable("Scheduler actor unavailable".to_string()).into_response(),
+                Ok(_) => (
+                    StatusCode::CREATED,
+                    Json(CreateWorkflowResponse {
+                        bead_id: bead_id.to_string(),
+                    }),
+                )
+                    .into_response(),
+                Err(_) => AppError::ServiceUnavailable("Scheduler actor unavailable".to_string())
+                    .into_response(),
             }
         }
-        None => AppError::BadRequest("Missing required field: bead_spec".to_string()).into_response(),
+        None => {
+            AppError::BadRequest("Missing required field: bead_spec".to_string()).into_response()
+        }
     }
 }

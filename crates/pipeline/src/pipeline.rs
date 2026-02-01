@@ -231,6 +231,19 @@ impl Pipeline {
     /// Execute the pipeline.
     pub fn execute(self) -> PipelineResult {
         let start = Instant::now();
+        let executions = self.execute_stages();
+        let first_failure = Self::find_first_failure(&executions);
+        let all_passed = first_failure.is_none();
+
+        PipelineResult {
+            stages: executions,
+            total_duration: start.elapsed(),
+            all_passed,
+            first_failure,
+        }
+    }
+
+    fn execute_stages(self) -> Vec<StageExecution> {
         let mut executions = Vec::new();
         let mut should_stop = false;
 
@@ -241,34 +254,26 @@ impl Pipeline {
             }
 
             let execution = self.execute_single_stage(stage);
-            let passed = execution.passed;
+            should_stop = self.should_stop_on_failure(execution.passed);
             executions.push(execution);
-
-            if !passed {
-                match self.failure_strategy {
-                    FailureStrategy::StopOnFirst => {
-                        should_stop = true;
-                    }
-                    FailureStrategy::ContinueOnFailure => {
-                        // Continue with next stage
-                    }
-                    FailureStrategy::SkipDependents => {
-                        // For now, treat as stop (dependency tracking not implemented)
-                        should_stop = true;
-                    }
-                }
-            }
         }
 
-        let first_failure = executions.iter().position(|e| !e.passed);
-        let all_passed = first_failure.is_none();
+        executions
+    }
 
-        PipelineResult {
-            stages: executions,
-            total_duration: start.elapsed(),
-            all_passed,
-            first_failure,
+    fn should_stop_on_failure(&self, passed: bool) -> bool {
+        if passed {
+            return false;
         }
+
+        matches!(
+            self.failure_strategy,
+            FailureStrategy::StopOnFirst | FailureStrategy::SkipDependents
+        )
+    }
+
+    fn find_first_failure(executions: &[StageExecution]) -> Option<usize> {
+        executions.iter().position(|e| !e.passed)
     }
 
     /// Execute and return Result directly.

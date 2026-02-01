@@ -154,23 +154,28 @@ impl Reconciler {
         desired: &DesiredState,
         actual: &ActualState,
     ) -> Result<ReconcileResult> {
+        self.log_reconciliation_start(desired, actual);
+
+        let actions = self.diff(desired, actual);
+        debug!(actions = actions.len(), "Generated actions");
+
+        let (taken, failed) = self.apply_actions(actions).await;
+        let result = ReconcileResult::new(taken, failed, desired.len(), actual.beads.len());
+
+        self.log_reconciliation_complete(&result);
+        Ok(result)
+    }
+
+    fn log_reconciliation_start(&self, desired: &DesiredState, actual: &ActualState) {
         info!(
             desired = desired.len(),
             actual = actual.beads.len(),
             running = actual.running_count,
             "Starting reconciliation"
         );
+    }
 
-        // Generate actions from diff
-        let actions = self.diff(desired, actual);
-
-        debug!(actions = actions.len(), "Generated actions");
-
-        // Apply actions
-        let (taken, failed) = self.apply_actions(actions).await;
-
-        let result = ReconcileResult::new(taken, failed, desired.len(), actual.beads.len());
-
+    fn log_reconciliation_complete(&self, result: &ReconcileResult) {
         if result.converged {
             info!("System converged");
         } else {
@@ -180,8 +185,6 @@ impl Reconciler {
                 "Reconciliation complete"
             );
         }
-
-        Ok(result)
     }
 
     /// Compute diff between desired and actual state.
