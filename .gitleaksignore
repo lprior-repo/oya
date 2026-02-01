@@ -1,0 +1,13 @@
+# Moon build cache - contains file content hashes, not secrets
+.moon/cache/**
+
+# Documentation examples - contains example API keys for documentation purposes
+docs/**/schema-*.md
+docs/**/schema-antipattern-*.md
+docs/**/schema-config-*.md
+docs/**/schema-feature-*.md
+
+# Example code with mock API keys
+examples/**/*.md
+examples/**/*.json
+examples/**/*.cue

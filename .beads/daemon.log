@@ -4,3 +4,41 @@ time=2026-01-31T20:43:16.815-06:00 level=INFO msg="database opened" path=/home/l
 time=2026-01-31T20:43:16.815-06:00 level=INFO msg="upgrading .beads/.gitignore"
 time=2026-01-31T20:43:16.815-06:00 level=WARN msg="failed to upgrade .gitignore" error="open .beads/.gitignore: no such file or directory"
 time=2026-01-31T20:43:16.815-06:00 level=ERROR msg="repository fingerprint validation failed" error="\nLEGACY DATABASE DETECTED!\n\nThis database was created before version 0.17.5 and lacks a repository fingerprint.\nTo continue using this database, you must explicitly set its repository ID:\n\n  bd migrate --update-repo-id\n\nThis ensures the database is bound to this repository and prevents accidental\ndatabase sharing between different repositories.\n\nIf this is a fresh clone, run:\n  rm -rf .beads && bd init\n\nNote: Auto-claiming legacy databases is intentionally disabled to prevent\nsilent corruption when databases are copied between repositories.\n"
+time=2026-01-31T20:45:00.680-06:00 level=INFO msg="Daemon started (interval: %v, auto-commit: %v, auto-push: %v)" !BADKEY=5s !BADKEY=false !BADKEY=false
+time=2026-01-31T20:45:00.680-06:00 level=INFO msg="using database" path=/home/lewis/src/oya/.beads/beads.db
+time=2026-01-31T20:45:00.697-06:00 level=INFO msg="database opened" path=/home/lewis/src/oya/.beads/beads.db backend=sqlite freshness_checking=true
+time=2026-01-31T20:45:00.697-06:00 level=INFO msg="upgrading .beads/.gitignore"
+time=2026-01-31T20:45:00.697-06:00 level=WARN msg="failed to upgrade .gitignore" error="open .beads/.gitignore: no such file or directory"
+time=2026-01-31T20:45:00.697-06:00 level=ERROR msg="repository fingerprint validation failed" error="\nLEGACY DATABASE DETECTED!\n\nThis database was created before version 0.17.5 and lacks a repository fingerprint.\nTo continue using this database, you must explicitly set its repository ID:\n\n  bd migrate --update-repo-id\n\nThis ensures the database is bound to this repository and prevents accidental\ndatabase sharing between different repositories.\n\nIf this is a fresh clone, run:\n  rm -rf .beads && bd init\n\nNote: Auto-claiming legacy databases is intentionally disabled to prevent\nsilent corruption when databases are copied between repositories.\n"
+time=2026-01-31T20:45:12.034-06:00 level=INFO msg="Daemon started (interval: %v, auto-commit: %v, auto-push: %v)" !BADKEY=5s !BADKEY=false !BADKEY=false
+time=2026-01-31T20:45:12.034-06:00 level=INFO msg="using database" path=/home/lewis/src/oya/.beads/beads.db
+time=2026-01-31T20:45:12.051-06:00 level=INFO msg="database opened" path=/home/lewis/src/oya/.beads/beads.db backend=sqlite freshness_checking=true
+time=2026-01-31T20:45:12.051-06:00 level=INFO msg="upgrading .beads/.gitignore"
+time=2026-01-31T20:45:12.051-06:00 level=WARN msg="failed to upgrade .gitignore" error="open .beads/.gitignore: no such file or directory"
+time=2026-01-31T20:45:12.051-06:00 level=INFO msg="Repository fingerprint validated: %s" !BADKEY=90471f3f
+time=2026-01-31T20:45:12.051-06:00 level=INFO msg="starting RPC server" socket=/home/lewis/src/oya/.beads/bd.sock
+time=2026-01-31T20:45:12.051-06:00 level=INFO msg="RPC server ready (socket listening)"
+time=2026-01-31T20:45:12.052-06:00 level=INFO msg="registered in global registry"
+time=2026-01-31T20:45:12.052-06:00 level=INFO msg="Starting %s..." !BADKEY="sync cycle"
+time=2026-01-31T20:45:12.054-06:00 level=INFO msg="Exported to JSONL"
+time=2026-01-31T20:45:12.057-06:00 level=INFO msg="Pull failed: %v" !BADKEY="failed to get current branch: exit status 128"
+time=2026-01-31T20:45:12.057-06:00 level=INFO msg="monitoring parent process" pid=0
+time=2026-01-31T20:45:12.057-06:00 level=INFO msg="using event-driven mode"
+time=2026-01-31T20:45:12.057-06:00 level=INFO msg="Auto-pull disabled: use 'git pull' manually to sync remote changes"
+time=2026-01-31T20:45:12.142-06:00 level=INFO msg="JSONL file created: %s" !BADKEY=/home/lewis/src/oya/.beads/issues.jsonl
+time=2026-01-31T20:45:12.143-06:00 level=INFO msg="File change detected: %s" !BADKEY=/home/lewis/src/oya/.beads/issues.jsonl
+time=2026-01-31T20:45:13.144-06:00 level=INFO msg="Import triggered by file change"
+time=2026-01-31T20:45:13.144-06:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-31T20:45:13.144-06:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-31T20:53:16.798-06:00 level=INFO msg="Git ref change detected: %s" !BADKEY=/home/lewis/src/oya/.git/refs/heads/main.lock
+time=2026-01-31T20:53:17.799-06:00 level=INFO msg="Import triggered by file change"
+time=2026-01-31T20:53:17.800-06:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-31T20:53:17.800-06:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-31T20:53:20.165-06:00 level=INFO msg="Git ref change detected: %s" !BADKEY=/home/lewis/src/oya/.git/refs/heads/main.lock
+time=2026-01-31T20:53:21.166-06:00 level=INFO msg="Import triggered by file change"
+time=2026-01-31T20:53:21.166-06:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-31T20:53:21.166-06:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-31T20:53:26.377-06:00 level=INFO msg="Git ref change detected: %s" !BADKEY=/home/lewis/src/oya/.git/refs/heads/main.lock
+time=2026-01-31T20:53:27.383-06:00 level=INFO msg="Import triggered by file change"
+time=2026-01-31T20:53:27.383-06:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-31T20:53:27.383-06:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import

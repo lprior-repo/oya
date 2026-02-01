@@ -5,6 +5,19 @@ Cargo.lock
 # Moon cache (can be large)
 .moon/cache/
 
+# Beads - daemon runtime files (should not be committed)
+.beads/daemon.pid
+.beads/daemon.lock
+.beads/daemon.log
+.beads/daemon-error
+.beads/beads.db-shm
+.beads/beads.db-wal
+.beads/.local_version
+.beads/export-state/
+
+# Gitleaks config (ignore file, not config)
+.gitleaksignore
+
 # IDE
 .idea/
 .vscode/
