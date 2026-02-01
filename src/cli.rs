@@ -116,4 +116,11 @@ pub enum Commands {
         #[arg(long)]
         status: Option<String>,
     },
+
+    /// Say hello from the storm goddess
+    Hello {
+        /// Name to greet
+        #[arg(short, long, default_value = "World")]
+        name: String,
+    },
 }

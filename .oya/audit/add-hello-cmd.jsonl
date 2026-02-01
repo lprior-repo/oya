@@ -1,0 +1,2 @@
+{"timestamp":"2026-02-01T06:15:16.893Z","event_type":"task_created","task_slug":"add-hello-cmd","actor":"lewis","details":"Task created","metadata":{"language":"rust","branch":"feat/add-hello-cmd"}}
+{"timestamp":"2026-02-01T06:16:26.556Z","event_type":"stage_started","task_slug":"add-hello-cmd","actor":"lewis","details":"Stage started: implement","metadata":{"stage":"implement","attempt":"1"}}

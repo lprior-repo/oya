@@ -10,7 +10,7 @@ This document maps OpenCode TypeScript modules to OYA Rust crates and shows inte
 | `tool/` | `crates/opencode/` | ⚠️ Planned | Tool execution via opencode CLI |
 | `mcp/` | `crates/opencode/` | ⚠️ Planned | MCP server integration |
 | `provider/` | `crates/opencode/` | ⚠️ Planned | LLM provider abstraction |
-| `session/` | `crates/factory/` | ⚠️ Partial | Task persistence, workspace isolation |
+| `session/` | `crates/pipeline/` | ⚠️ Partial | Task persistence, workspace isolation |
 | `skill/` | `crates/intent/` | ⚠️ Similar | Intent/KIRK vs OpenCode skills |
 | `config/` | `crates/core/` | ✅ Exists | TOML config, env vars |
 
