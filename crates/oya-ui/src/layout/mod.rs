@@ -1,5 +1,7 @@
 //! Graph layout algorithms
 
+pub mod gravity;
+
 use crate::models::GraphNode;
 
 /// Result type for layout operations

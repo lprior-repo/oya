@@ -1,5 +1,6 @@
 //! Data models for graph visualization
 
+pub mod edge;
 pub mod node;
 
 use serde::{Deserialize, Serialize};
