@@ -6,7 +6,7 @@ use oya_web::{routes, actors::{mock_scheduler, mock_state_manager, AppState}};
 use std::sync::Arc;
 use serde_json::Value;
 
-fn create_test_server() -> TestServer {
+fn create_test_server() -> Result<TestServer, String> {
     let state = AppState {
         scheduler: Arc::new(mock_scheduler()),
         state_manager: Arc::new(mock_state_manager()),
@@ -15,12 +15,13 @@ fn create_test_server() -> TestServer {
     let app = routes::create_router()
         .with_state(state);
 
-    TestServer::new(app).expect("Failed to create test server")
+    TestServer::new(app)
+        .map_err(|e| format!("Failed to create test server: {e}"))
 }
 
 #[tokio::test]
 async fn test_health_check_returns_ok() {
-    let server = create_test_server();
+    let server = create_test_server().unwrap();
 
     let response = server
         .get("/api/health")
@@ -35,7 +36,7 @@ async fn test_health_check_returns_ok() {
 
 #[tokio::test]
 async fn test_create_workflow_returns_201() {
-    let server = create_test_server();
+    let server = create_test_server().unwrap();
 
     let payload = serde_json::json!({
         "bead_spec": "test workflow spec"
@@ -50,12 +51,15 @@ async fn test_create_workflow_returns_201() {
 
     let body: Value = response.json();
     assert!(body["bead_id"].is_string());
-    assert!(body["bead_id"].as_str().unwrap().len() == 26);
+    assert!(matches!(
+        body["bead_id"].as_str(),
+        Some(id) if id.len() == 26
+    ));
 }
 
 #[tokio::test]
 async fn test_get_bead_status_returns_200() {
-    let server = create_test_server();
+    let server = create_test_server().unwrap();
 
     let response = server
         .get("/api/beads/01ARZ3NDEKTSV4RRFFQ69G5FAV")
@@ -74,7 +78,7 @@ async fn test_get_bead_status_returns_200() {
 
 #[tokio::test]
 async fn test_get_bead_status_invalid_ulid_returns_400() {
-    let server = create_test_server();
+    let server = create_test_server().unwrap();
 
     let response = server
         .get("/api/beads/invalid-ulid")
@@ -88,7 +92,7 @@ async fn test_get_bead_status_invalid_ulid_returns_400() {
 
 #[tokio::test]
 async fn test_cancel_bead_returns_200() {
-    let server = create_test_server();
+    let server = create_test_server().unwrap();
 
     let response = server
         .post("/api/beads/01ARZ3NDEKTSV4RRFFQ69G5FAV/cancel")
@@ -102,7 +106,7 @@ async fn test_cancel_bead_returns_200() {
 
 #[tokio::test]
 async fn test_cancel_bead_invalid_ulid_returns_400() {
-    let server = create_test_server();
+    let server = create_test_server().unwrap();
 
     let response = server
         .post("/api/beads/invalid/cancel")
@@ -116,7 +120,7 @@ async fn test_cancel_bead_invalid_ulid_returns_400() {
 
 #[tokio::test]
 async fn test_create_workflow_without_required_field_returns_400() {
-    let server = create_test_server();
+    let server = create_test_server().unwrap();
 
     let payload = serde_json::json!({});
 
@@ -133,7 +137,7 @@ async fn test_create_workflow_without_required_field_returns_400() {
 
 #[tokio::test]
 async fn test_nonexistent_route_returns_404() {
-    let server = create_test_server();
+    let server = create_test_server().unwrap();
 
     let response = server
         .get("/api/nonexistent")

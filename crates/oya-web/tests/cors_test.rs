@@ -25,7 +25,9 @@ async fn test_cors_headers_added() {
                 .allow_headers(tower_http::cors::Any),
         );
 
-    let server = TestServer::new(app).expect("Failed to create test server");
+    let server = TestServer::new(app)
+        .map_err(|e| format!("Failed to create test server: {e}"))
+        .unwrap();
 
     let response = server
         .get("/test")
