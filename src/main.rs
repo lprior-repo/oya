@@ -8,17 +8,18 @@
 
 mod cli;
 
+use std::path::Path;
 use std::time::Instant;
 
 use clap::Parser;
 use oya_factory::{
-    Result, audit,
+    AIStageExecutor, Result, audit,
     domain::{Slug, Task, TaskStatus, filter_stages, get_stage},
     persistence::{list_all_tasks, load_task_record, save_task_record},
     repo::{detect_language, detect_repo_root},
     stages::{execute_stage, execute_stages_dry_run},
-    worktree::create_worktree,
 };
+use oya_opencode::PhaseInput;
 
 use crate::cli::{Cli, Commands, HELP_TEXT};
 
@@ -48,6 +49,13 @@ async fn run() -> Result<()> {
             to,
         } => execute_stage_command(&slug, &stage, dry_run, from.as_deref(), to.as_deref()).await,
 
+        Commands::AiStage {
+            slug,
+            stage,
+            prompt,
+            files,
+        } => execute_ai_stage(&slug, &stage, prompt.as_deref(), &files).await,
+
         Commands::Approve {
             slug,
             strategy,
@@ -72,13 +80,12 @@ async fn execute_new(slug: &str, contract: Option<&str>, interactive: bool) -> R
     let repo_root = detect_repo_root()?;
     let lang = detect_language(&repo_root)?;
 
-    let wt = create_worktree(slug, lang, &repo_root)?;
-
-    let task = Task::new(validated_slug, lang, wt.path.clone());
+    let task = Task::new(validated_slug, lang);
+    let branch = task.branch.clone();
     save_task_record(&task, &repo_root).await?;
 
     // Log task creation to audit trail
-    let _ = audit::log_task_created(&repo_root, slug, lang.as_str(), &wt.branch);
+    let _ = audit::log_task_created(&repo_root, slug, lang.as_str(), &branch);
 
     let contract_info = contract.map_or(String::new(), |c| format!("\nContract: {c}"));
     let interactive_info = if interactive {
@@ -89,8 +96,8 @@ async fn execute_new(slug: &str, contract: Option<&str>, interactive: bool) -> R
 
     println!(
         "Created: {}\nBranch:  {}\nLanguage: {}{}{}",
-        wt.path.display(),
-        wt.branch,
+        slug,
+        branch,
         lang.as_str(),
         contract_info,
         interactive_info
@@ -147,7 +154,7 @@ async fn execute_single_stage(
     let _ = audit::log_stage_started(repo_root, slug, stage_name, 1);
 
     let start_time = Instant::now();
-    let result = execute_stage(stage_name, task.language, &task.worktree_path);
+    let result = execute_stage(stage_name, task.language, Path::new("."));
 
     match result {
         Ok(()) => {
@@ -161,6 +168,82 @@ async fn execute_single_stage(
     }
 }
 
+async fn execute_ai_stage(
+    slug: &str,
+    stage_name: &str,
+    prompt: Option<&str>,
+    files: &[String],
+) -> Result<()> {
+    let _ = Slug::new(slug)?;
+    let repo_root = detect_repo_root()?;
+    let task = load_task_record(slug, &repo_root).await?;
+
+    // Get the stage definition
+    let stage = get_stage(stage_name)?;
+
+    // Create AI executor
+    let ai_executor = AIStageExecutor::new()?;
+
+    // Check if OpenCode is available
+    if !ai_executor.is_available().await {
+        return Err(oya_factory::Error::InvalidRecord {
+            reason: "OpenCode CLI is not available. Please install opencode.".to_string(),
+        });
+    }
+
+    // Check if this stage can be executed by AI
+    if !ai_executor.can_execute(&stage) {
+        return Err(oya_factory::Error::InvalidRecord {
+            reason: format!(
+                "Stage '{}' cannot be executed by AI. Supported stages: implement, test, review, refactor, document",
+                stage_name
+            ),
+        });
+    }
+
+    // Build phase input from prompt and files
+    let input = if prompt.is_some() || !files.is_empty() {
+        let mut phase_input = PhaseInput::default();
+
+        if let Some(p) = prompt {
+            phase_input.text = Some(p.to_string());
+        }
+
+        if !files.is_empty() {
+            phase_input.files = files.to_vec();
+        }
+
+        Some(phase_input)
+    } else {
+        None
+    };
+
+    // Log stage start
+    let _ = audit::log_stage_started(&repo_root, slug, stage_name, 1);
+
+    println!("Executing '{}' with AI assistance...", stage_name);
+
+    // Execute stage with AI
+    let start_time = Instant::now();
+    let result = ai_executor.execute_stage(&task, &stage, input).await?;
+
+    if result.passed {
+        #[allow(clippy::cast_possible_truncation)]
+        let duration_ms = start_time.elapsed().as_millis() as i64;
+        let _ = audit::log_stage_passed(&repo_root, slug, stage_name, duration_ms);
+        println!("\u{2713} {} passed ({} ms)", stage_name, duration_ms);
+        println!("\nAI completed the stage successfully.");
+    } else {
+        let error_msg = result.error.as_deref().unwrap_or("unknown error");
+        println!("\u{2717} {} failed: {}", stage_name, error_msg);
+        return Err(oya_factory::Error::InvalidRecord {
+            reason: format!("AI stage execution failed: {}", error_msg),
+        });
+    }
+
+    Ok(())
+}
+
 async fn execute_approve(slug: &str, strategy: Option<&str>, force: bool) -> Result<()> {
     let _ = Slug::new(slug)?;
     let repo_root = detect_repo_root()?;
@@ -170,10 +253,7 @@ async fn execute_approve(slug: &str, strategy: Option<&str>, force: bool) -> Res
         check_at_least_one_stage_passed(&repo_root, slug)?;
     }
 
-    let strategy_str = strategy
-        .as_deref()
-        .map(|s| s.as_str())
-        .unwrap_or("immediate");
+    let strategy_str = strategy.unwrap_or("immediate");
 
     let approved_task = task.with_status(TaskStatus::Integrated);
     save_task_record(&approved_task, &repo_root).await?;
@@ -211,7 +291,6 @@ async fn execute_show(slug: &str, detailed: bool) -> Result<()> {
         println!("Task: {slug}");
         println!("Status: {}", task.status);
         println!("Branch: {}", task.branch);
-        println!("Worktree: {}", task.worktree_path.display());
         println!("Language: {}", task.language.as_str());
     } else {
         println!("{slug}: {}", task.status);

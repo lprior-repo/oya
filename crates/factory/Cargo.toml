@@ -10,6 +10,7 @@ description = "CI/CD pipeline and task management for OYA"
 
 [dependencies]
 oya-core = { workspace = true }
+oya-opencode = { workspace = true }
 
 serde = { workspace = true }
 serde_json = { workspace = true }

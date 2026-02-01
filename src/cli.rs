@@ -59,6 +59,25 @@ pub enum Commands {
         to: Option<String>,
     },
 
+    /// Run a stage with AI assistance (OpenCode)
+    AiStage {
+        /// Task slug
+        #[arg(short, long)]
+        slug: String,
+
+        /// Stage name to run (implement, test, review, refactor, document)
+        #[arg(long)]
+        stage: String,
+
+        /// Custom prompt/input for the AI
+        #[arg(short, long)]
+        prompt: Option<String>,
+
+        /// Files to include in context
+        #[arg(short, long)]
+        files: Vec<String>,
+    },
+
     /// Approve task for deployment
     Approve {
         /// Task slug
@@ -110,22 +129,25 @@ USAGE:
   factory <COMMAND> [FLAGS]
 
 COMMANDS:
-  new      Create new task
-           factory new -s bd-52.1
+  new       Create new task
+            factory new -s bd-52.1
 
-  stage    Run pipeline stage
-           factory stage -s bd-52.1 --stage implement [-d] [--from X] [--to Y]
+  stage     Run pipeline stage
+            factory stage -s bd-52.1 --stage implement [-d] [--from X] [--to Y]
 
-  approve  Approve for deployment
-           factory approve -s bd-52.1 [--strategy immediate|gradual|canary] [-f]
+  ai-stage  Run stage with AI assistance
+            factory ai-stage -s bd-52.1 --stage implement
 
-  show     Show task details
-           factory show -s bd-52.1 [--detailed]
+  approve   Approve for deployment
+            factory approve -s bd-52.1 [--strategy immediate|gradual|canary] [-f]
 
-  list     List all tasks
-           factory list [--priority P1|P2|P3] [--status open|in_progress|done]
+  show      Show task details
+            factory show -s bd-52.1 [--detailed]
 
-  help     Show this help [--topic COMMAND]
+  list      List all tasks
+            factory list [--priority P1|P2|P3] [--status open|in_progress|done]
+
+  help      Show this help [--topic COMMAND]
 
 SHORT FLAGS:
   -s       --slug
@@ -135,6 +157,7 @@ SHORT FLAGS:
 EXAMPLES:
   factory new -s bd-52.1
   factory stage -s bd-52.1 --stage implement -d
+  factory ai-stage -s bd-52.1 --stage implement
   factory approve -s bd-52.1 --strategy gradual
   factory list --priority P1
 

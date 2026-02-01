@@ -11,7 +11,6 @@
 //! - CI/CD pipeline stages with composable execution
 //! - Audit trail for all operations
 //! - Repository detection and language inference
-//! - Worktree management (JJ/git)
 //! - Process execution with timeout support
 //! - Retry logic with exponential backoff
 //! - Validated types (NonEmpty, Bounded, etc.)
@@ -23,6 +22,7 @@
 //! - **Type-state builders**: Required fields enforced at compile time
 //! - **Functional composition**: Pipelines are built from composable stages
 
+pub mod ai_integration;
 pub mod audit;
 pub mod builder;
 pub mod codegen;
@@ -38,9 +38,9 @@ pub mod repo;
 pub mod retry;
 pub mod stages;
 pub mod types;
-pub mod worktree;
 
 // Re-export commonly used items
+pub use ai_integration::{AIStageExecutor, FactoryPhaseContextBuilder, StagePhaseMapping};
 pub use codegen::{
     BeadSpec, FunctionRequirement, generate_from_bead, parse_bead_spec, simple_function_spec,
     spec_to_prompt, validate_functional_code,
