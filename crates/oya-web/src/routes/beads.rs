@@ -1,4 +1,14 @@
-//! Bead endpoints: GET /api/beads/:id, POST /api/beads/:id/cancel
+//! Bead endpoints: GET /api/beads, GET /api/beads/:id, POST /api/beads/:id/cancel, POST /api/beads/:id/retry
+//!
+//! This module handles all bead-related operations including querying status,
+//! cancellation, retry, and listing.
+//!
+//! ## Endpoints
+//!
+//! - `GET /api/beads` - List all beads
+//! - `GET /api/beads/:id` - Query bead status by ID
+//! - `POST /api/beads/:id/cancel` - Cancel a running bead
+//! - `POST /api/beads/:id/retry` - Retry a failed bead
 
 use super::super::actors::{AppState, SchedulerMessage, StateManagerMessage};
 use super::super::error::{AppError, Result};
@@ -91,5 +101,39 @@ pub async fn retry_bead(
 
     Ok(Json(RetryBeadResponse {
         message: format!("Bead {} retry requested", bead_id),
+    }))
+}
+
+/// Response for listing beads
+#[derive(Debug, Serialize)]
+pub struct ListBeadsResponse {
+    beads: Vec<BeadSummary>,
+    total: usize,
+}
+
+/// Summary of a bead
+#[derive(Debug, Serialize)]
+pub struct BeadSummary {
+    id: String,
+    status: String,
+    phase: String,
+    created_at: String,
+}
+
+/// GET /api/beads - List all beads
+///
+/// Returns a paginated list of all beads in the system.
+/// This is a placeholder implementation that will be replaced with
+/// actual state querying in future beads.
+///
+/// # Returns
+///
+/// `Result<Json<ListBeadsResponse>>` - List of bead summaries
+pub async fn list_beads(State(_state): State<AppState>) -> Result<Json<ListBeadsResponse>> {
+    // Placeholder: return empty list
+    // Future implementation will query StateManager for all beads
+    Ok(Json(ListBeadsResponse {
+        beads: vec![],
+        total: 0,
     }))
 }

@@ -200,7 +200,6 @@ mod message_type_tests {
             spec: spec.clone(),
         };
 
-<<<<<<< HEAD
         if let SchedulerMessage::CreateBead { id: _, spec: s } = msg {
             assert_eq!(s, spec, "Spec should match");
         } else {
@@ -208,13 +207,6 @@ mod message_type_tests {
                 matches!(msg, SchedulerMessage::CreateBead { .. }),
                 "Expected CreateBead variant"
             );
-=======
-        match msg {
-            SchedulerMessage::CreateBead { id: _, spec: s } => {
-                assert_eq!(s, spec, "Spec should match");
-            }
-            _ => panic!("Expected CreateBead variant"),
->>>>>>> origin/feat/workflows-endpoint
         }
     }
 
@@ -482,7 +474,6 @@ mod clone_behavior_tests {
 
         let cloned = original.clone();
 
-<<<<<<< HEAD
         if let (
             SchedulerMessage::CreateBead { id: _, spec: s1 },
             SchedulerMessage::CreateBead { id: _, spec: s2 },
@@ -491,16 +482,6 @@ mod clone_behavior_tests {
             assert_eq!(s1, s2, "Cloned spec should match original");
         } else {
             unreachable!("Both should be CreateBead variants");
-=======
-        match (&original, &cloned) {
-            (
-                SchedulerMessage::CreateBead { id: _, spec: s1 },
-                SchedulerMessage::CreateBead { id: _, spec: s2 },
-            ) => {
-                assert_eq!(s1, s2, "Cloned spec should match original");
-            }
-            _ => panic!("Both should be CreateBead variants"),
->>>>>>> origin/feat/workflows-endpoint
         }
     }
 
@@ -850,7 +831,6 @@ mod property_tests {
             match rt.block_on(async {
                 let scheduler = mock_scheduler();
 
-<<<<<<< HEAD
                 // Send all messages
                 for spec in &specs {
                     let result = scheduler.send(SchedulerMessage::CreateBead {
@@ -866,14 +846,6 @@ mod property_tests {
             }) {
                 Ok(_) => (),
                 Err(e) => return Err(e),
-=======
-            // Send all messages
-            for spec in &specs {
-                let result = scheduler.send(SchedulerMessage::CreateBead { id: Ulid::new(),
-                    spec: spec.clone()
-                });
-                assert!(result.is_ok(), "All messages should send successfully");
->>>>>>> origin/feat/workflows-endpoint
             }
         }
     }
@@ -890,7 +862,6 @@ mod property_tests {
             match rt.block_on(async {
                 let scheduler = mock_scheduler();
 
-<<<<<<< HEAD
                 for i in 0..count {
                     let result = scheduler.send(SchedulerMessage::CreateBead {
                         id: Ulid::new(),
@@ -902,13 +873,6 @@ mod property_tests {
             }) {
                 Ok(_) => (),
                 Err(e) => return Err(e),
-=======
-            for i in 0..count {
-                let result = scheduler.send(SchedulerMessage::CreateBead { id: Ulid::new(),
-                    spec: format!("spec-{}", i),
-                });
-                assert!(result.is_ok(), "Message {} should send successfully", i);
->>>>>>> origin/feat/workflows-endpoint
             }
         }
     }

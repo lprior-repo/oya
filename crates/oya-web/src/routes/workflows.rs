@@ -1,4 +1,11 @@
-//! Workflow endpoints: POST /api/workflows
+//! Workflow endpoints: POST /api/workflows, GET /api/workflows
+//!
+//! This module handles workflow creation and listing operations.
+//!
+//! ## Endpoints
+//!
+//! - `POST /api/workflows` - Create a new workflow/bead
+//! - `GET /api/workflows` - List all workflows
 
 use super::super::actors::{AppState, SchedulerMessage};
 use super::super::error::AppError;
@@ -71,4 +78,39 @@ fn schedule_bead(state: &AppState, bead_id: Ulid, spec: String) -> Result<(), Ap
         .scheduler
         .send(SchedulerMessage::CreateBead { id: bead_id, spec })
         .map_err(|_| AppError::ServiceUnavailable("Scheduler actor unavailable".to_string()))
+}
+
+/// Response for listing workflows
+#[derive(Debug, Serialize)]
+pub struct ListWorkflowsResponse {
+    workflows: Vec<WorkflowSummary>,
+    total: usize,
+}
+
+/// Summary of a workflow
+#[derive(Debug, Serialize)]
+pub struct WorkflowSummary {
+    bead_id: String,
+    status: String,
+    created_at: String,
+}
+
+/// GET /api/workflows - List all workflows
+///
+/// Returns a paginated list of all workflows in the system.
+/// This is a placeholder implementation that will be replaced with
+/// actual state querying in future beads.
+///
+/// # Returns
+///
+/// `Result<Json<ListWorkflowsResponse>>` - List of workflow summaries
+pub async fn list_workflows(
+    State(_state): State<AppState>,
+) -> Result<Json<ListWorkflowsResponse>, AppError> {
+    // Placeholder: return empty list
+    // Future implementation will query StateManager for all workflows
+    Ok(Json(ListWorkflowsResponse {
+        workflows: vec![],
+        total: 0,
+    }))
 }
