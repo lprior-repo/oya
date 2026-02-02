@@ -1,11 +1,18 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> origin/mouse-controls
 //! Mouse event handlers for DAG visualization pan/zoom controls
 //!
 //! This module provides functional, panic-free mouse event handling with proper
 //! coordinate conversion and event data extraction. All operations follow the
 //! Railway-Oriented Programming pattern with Result types.
 
+<<<<<<< HEAD
 use web_sys::{Element, HtmlCanvasElement, MouseEvent, WheelEvent};
+=======
+use web_sys::{HtmlCanvasElement, MouseEvent, WheelEvent};
+>>>>>>> origin/mouse-controls
 
 /// Mouse event data with canvas-relative coordinates
 ///
@@ -59,6 +66,7 @@ pub struct WheelEventData {
 ///
 /// Coordinates are calculated relative to the canvas element's position,
 /// and negative values are clamped to 0.0.
+<<<<<<< HEAD
 =======
 //! Mouse event listeners and data extraction
 //!
@@ -92,11 +100,16 @@ pub struct WheelEventData {
 
 /// Extract mouse coordinates from MouseEvent relative to canvas
 >>>>>>> origin/controls-mouse-2a
+=======
+>>>>>>> origin/mouse-controls
 ///
 /// # Errors
 ///
 /// Returns an error if:
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> origin/mouse-controls
 /// - Canvas bounding rect cannot be retrieved
 /// - Client coordinates are invalid
 ///
@@ -112,6 +125,7 @@ pub struct WheelEventData {
 /// assert!(y >= 0.0);
 /// # Ok(())
 /// # }
+<<<<<<< HEAD
 =======
 /// - Canvas bounding rect cannot be obtained
 /// - Coordinate calculations fail
@@ -128,15 +142,23 @@ pub struct WheelEventData {
 ///     Ok(())
 /// }
 >>>>>>> origin/controls-mouse-2a
+=======
+>>>>>>> origin/mouse-controls
 /// ```
 pub fn get_mouse_coords(
     event: &MouseEvent,
     canvas: &HtmlCanvasElement,
 <<<<<<< HEAD
+<<<<<<< HEAD
 ) -> Result<(f64, f64), String> {
     // Get canvas bounding rect for coordinate conversion
     let element: &Element = canvas.as_ref();
     let rect = element.get_bounding_client_rect();
+=======
+) -> Result<(f64, f64), String> {
+    // Get canvas bounding rect for coordinate conversion
+    let rect = canvas.get_bounding_client_rect();
+>>>>>>> origin/mouse-controls
 
     // Convert client coordinates to canvas-relative coordinates
     let client_x = event.client_x() as f64;
@@ -177,6 +199,7 @@ pub fn get_mouse_coords(
 /// }
 /// # Ok(())
 /// # }
+<<<<<<< HEAD
 =======
 ) -> Result<(f32, f32), String> {
     let rect = canvas.get_bounding_client_rect();
@@ -205,6 +228,8 @@ pub fn get_mouse_coords(
 ///     Ok(())
 /// }
 >>>>>>> origin/controls-mouse-2a
+=======
+>>>>>>> origin/mouse-controls
 /// ```
 pub fn extract_mouse_data(
     event: &MouseEvent,
@@ -220,6 +245,9 @@ pub fn extract_mouse_data(
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> origin/mouse-controls
 /// Extracts wheel event data including scroll delta and coordinates.
 ///
 /// This provides both the scroll amount (delta_y) and the cursor position
@@ -244,6 +272,7 @@ pub fn extract_mouse_data(
 /// }
 /// # Ok(())
 /// # }
+<<<<<<< HEAD
 =======
 /// Extract wheel event data including mouse position
 ///
@@ -263,15 +292,22 @@ pub fn extract_mouse_data(
 ///     Ok(())
 /// }
 >>>>>>> origin/controls-mouse-2a
+=======
+>>>>>>> origin/mouse-controls
 /// ```
 pub fn extract_wheel_data(
     event: &WheelEvent,
     canvas: &HtmlCanvasElement,
 ) -> Result<WheelEventData, String> {
 <<<<<<< HEAD
+<<<<<<< HEAD
     // Get canvas bounding rect for coordinate conversion
     let element: &Element = canvas.as_ref();
     let rect = element.get_bounding_client_rect();
+=======
+    // Get canvas bounding rect for coordinate conversion
+    let rect = canvas.get_bounding_client_rect();
+>>>>>>> origin/mouse-controls
 
     // Convert client coordinates to canvas-relative coordinates
     let client_x = event.client_x() as f64;
@@ -363,6 +399,7 @@ mod tests {
         assert_ne!(data1, data2);
     }
 }
+<<<<<<< HEAD
 =======
     // WheelEvent inherits from MouseEvent, so we can upcast
     let mouse_event: &MouseEvent = event.unchecked_ref();
@@ -378,3 +415,5 @@ mod tests {
 #[cfg(all(test, target_arch = "wasm32"))]
 mod mouse_test;
 >>>>>>> origin/controls-mouse-2a
+=======
+>>>>>>> origin/mouse-controls
