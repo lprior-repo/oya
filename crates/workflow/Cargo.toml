@@ -23,6 +23,7 @@ chrono = { workspace = true, features = ["serde"] }
 
 # IDs
 ulid = { workspace = true, features = ["serde"] }
+uuid = { workspace = true, features = ["v5", "serde"] }
 
 # Error handling
 thiserror = { workspace = true }

@@ -58,6 +58,7 @@
 pub mod engine;
 pub mod error;
 pub mod handler;
+pub mod idempotent;
 pub mod storage;
 pub mod types;
 
