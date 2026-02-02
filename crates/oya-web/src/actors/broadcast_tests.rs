@@ -10,6 +10,7 @@ use super::*;
 use tokio::time::{Duration, timeout};
 
 #[cfg(test)]
+#[allow(clippy::module_inception)]
 mod broadcast_tests {
     use super::*;
     use std::sync::Arc;

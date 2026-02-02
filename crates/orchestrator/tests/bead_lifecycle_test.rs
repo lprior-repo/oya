@@ -8,7 +8,7 @@
 //! NO MOCKS - this is a true integration test
 
 use orchestrator::dag::{DependencyType, WorkflowDAG};
-use orchestrator::scheduler::{BeadScheduleState, SchedulerActor};
+use orchestrator::scheduler::SchedulerActor;
 use std::collections::HashSet;
 
 /// Helper to track execution order of beads
@@ -76,46 +76,46 @@ fn test_bead_lifecycle_with_dependencies() {
     let mut dag = WorkflowDAG::new();
 
     // Add all beads to the DAG
-    dag.add_node("bead-a".to_string())
-        .expect("Failed to add bead-a");
-    dag.add_node("bead-b".to_string())
-        .expect("Failed to add bead-b");
-    dag.add_node("bead-c".to_string())
-        .expect("Failed to add bead-c");
-    dag.add_node("bead-d".to_string())
-        .expect("Failed to add bead-d");
-    dag.add_node("bead-e".to_string())
-        .expect("Failed to add bead-e");
+    let result = dag.add_node("bead-a".to_string());
+    assert!(result.is_ok(), "Failed to add bead-a: {:?}", result);
+    let result = dag.add_node("bead-b".to_string());
+    assert!(result.is_ok(), "Failed to add bead-b: {:?}", result);
+    let result = dag.add_node("bead-c".to_string());
+    assert!(result.is_ok(), "Failed to add bead-c: {:?}", result);
+    let result = dag.add_node("bead-d".to_string());
+    assert!(result.is_ok(), "Failed to add bead-d: {:?}", result);
+    let result = dag.add_node("bead-e".to_string());
+    assert!(result.is_ok(), "Failed to add bead-e: {:?}", result);
 
     // Add dependency edges: A → B → C
-    dag.add_edge(
+    let result = dag.add_edge(
         "bead-a".to_string(),
         "bead-b".to_string(),
         DependencyType::BlockingDependency,
-    )
-    .expect("Failed to add edge A→B");
+    );
+    assert!(result.is_ok(), "Failed to add edge A→B: {:?}", result);
 
-    dag.add_edge(
+    let result = dag.add_edge(
         "bead-b".to_string(),
         "bead-c".to_string(),
         DependencyType::BlockingDependency,
-    )
-    .expect("Failed to add edge B→C");
+    );
+    assert!(result.is_ok(), "Failed to add edge B→C: {:?}", result);
 
     // Add dependency edges: A → D → E
-    dag.add_edge(
+    let result = dag.add_edge(
         "bead-a".to_string(),
         "bead-d".to_string(),
         DependencyType::BlockingDependency,
-    )
-    .expect("Failed to add edge A→D");
+    );
+    assert!(result.is_ok(), "Failed to add edge A→D: {:?}", result);
 
-    dag.add_edge(
+    let result = dag.add_edge(
         "bead-d".to_string(),
         "bead-e".to_string(),
         DependencyType::BlockingDependency,
-    )
-    .expect("Failed to add edge D→E");
+    );
+    assert!(result.is_ok(), "Failed to add edge D→E: {:?}", result);
 
     // Verify DAG structure
     assert_eq!(dag.node_count(), 5, "DAG should have 5 beads");
@@ -126,26 +126,20 @@ fn test_bead_lifecycle_with_dependencies() {
     let workflow_id = "test-workflow-001".to_string();
 
     // Register workflow
-    scheduler
-        .register_workflow(workflow_id.clone())
-        .expect("Failed to register workflow");
+    let result = scheduler.register_workflow(workflow_id.clone());
+    assert!(result.is_ok(), "Failed to register workflow: {:?}", result);
 
     // Schedule all beads
-    scheduler
-        .schedule_bead(workflow_id.clone(), "bead-a".to_string())
-        .expect("Failed to schedule bead-a");
-    scheduler
-        .schedule_bead(workflow_id.clone(), "bead-b".to_string())
-        .expect("Failed to schedule bead-b");
-    scheduler
-        .schedule_bead(workflow_id.clone(), "bead-c".to_string())
-        .expect("Failed to schedule bead-c");
-    scheduler
-        .schedule_bead(workflow_id.clone(), "bead-d".to_string())
-        .expect("Failed to schedule bead-d");
-    scheduler
-        .schedule_bead(workflow_id.clone(), "bead-e".to_string())
-        .expect("Failed to schedule bead-e");
+    let result = scheduler.schedule_bead(workflow_id.clone(), "bead-a".to_string());
+    assert!(result.is_ok(), "Failed to schedule bead-a: {:?}", result);
+    let result = scheduler.schedule_bead(workflow_id.clone(), "bead-b".to_string());
+    assert!(result.is_ok(), "Failed to schedule bead-b: {:?}", result);
+    let result = scheduler.schedule_bead(workflow_id.clone(), "bead-c".to_string());
+    assert!(result.is_ok(), "Failed to schedule bead-c: {:?}", result);
+    let result = scheduler.schedule_bead(workflow_id.clone(), "bead-d".to_string());
+    assert!(result.is_ok(), "Failed to schedule bead-d: {:?}", result);
+    let result = scheduler.schedule_bead(workflow_id.clone(), "bead-e".to_string());
+    assert!(result.is_ok(), "Failed to schedule bead-e: {:?}", result);
 
     // Verify all beads are scheduled
     assert_eq!(
@@ -163,16 +157,14 @@ fn test_bead_lifecycle_with_dependencies() {
     assert_eq!(ready_beads[0], "bead-a", "bead-a should be ready");
 
     // Mark bead-a as ready and execute it
-    scheduler
-        .mark_ready(&"bead-a".to_string())
-        .expect("Failed to mark bead-a ready");
+    let result = scheduler.mark_ready(&"bead-a".to_string());
+    assert!(result.is_ok(), "Failed to mark bead-a ready: {:?}", result);
     assert_eq!(scheduler.ready_count(), 1, "Should have 1 ready bead");
 
     // Simulate execution and completion of bead-a
     tracker.complete_bead("bead-a");
-    scheduler
-        .handle_bead_completed(&"bead-a".to_string())
-        .expect("Failed to complete bead-a");
+    let result = scheduler.handle_bead_completed(&"bead-a".to_string());
+    assert!(result.is_ok(), "Failed to complete bead-a: {:?}", result);
 
     // PHASE 2: After A completes, B and D should become ready
     let ready_beads = get_ready_beads(&dag, &tracker);
@@ -192,12 +184,10 @@ fn test_bead_lifecycle_with_dependencies() {
     );
 
     // Mark B and D as ready and execute them
-    scheduler
-        .mark_ready(&"bead-b".to_string())
-        .expect("Failed to mark bead-b ready");
-    scheduler
-        .mark_ready(&"bead-d".to_string())
-        .expect("Failed to mark bead-d ready");
+    let result = scheduler.mark_ready(&"bead-b".to_string());
+    assert!(result.is_ok(), "Failed to mark bead-b ready: {:?}", result);
+    let result = scheduler.mark_ready(&"bead-d".to_string());
+    assert!(result.is_ok(), "Failed to mark bead-d ready: {:?}", result);
     assert_eq!(
         scheduler.ready_count(),
         2,
@@ -207,12 +197,10 @@ fn test_bead_lifecycle_with_dependencies() {
     // Complete B and D
     tracker.complete_bead("bead-b");
     tracker.complete_bead("bead-d");
-    scheduler
-        .handle_bead_completed(&"bead-b".to_string())
-        .expect("Failed to complete bead-b");
-    scheduler
-        .handle_bead_completed(&"bead-d".to_string())
-        .expect("Failed to complete bead-d");
+    let result = scheduler.handle_bead_completed(&"bead-b".to_string());
+    assert!(result.is_ok(), "Failed to complete bead-b: {:?}", result);
+    let result = scheduler.handle_bead_completed(&"bead-d".to_string());
+    assert!(result.is_ok(), "Failed to complete bead-d: {:?}", result);
 
     // PHASE 3: After B and D complete, C and E should become ready
     let ready_beads = get_ready_beads(&dag, &tracker);
@@ -232,22 +220,18 @@ fn test_bead_lifecycle_with_dependencies() {
     );
 
     // Mark C and E as ready and execute them
-    scheduler
-        .mark_ready(&"bead-c".to_string())
-        .expect("Failed to mark bead-c ready");
-    scheduler
-        .mark_ready(&"bead-e".to_string())
-        .expect("Failed to mark bead-e ready");
+    let result = scheduler.mark_ready(&"bead-c".to_string());
+    assert!(result.is_ok(), "Failed to mark bead-c ready: {:?}", result);
+    let result = scheduler.mark_ready(&"bead-e".to_string());
+    assert!(result.is_ok(), "Failed to mark bead-e ready: {:?}", result);
 
     // Complete C and E
     tracker.complete_bead("bead-c");
     tracker.complete_bead("bead-e");
-    scheduler
-        .handle_bead_completed(&"bead-c".to_string())
-        .expect("Failed to complete bead-c");
-    scheduler
-        .handle_bead_completed(&"bead-e".to_string())
-        .expect("Failed to complete bead-e");
+    let result = scheduler.handle_bead_completed(&"bead-c".to_string());
+    assert!(result.is_ok(), "Failed to complete bead-c: {:?}", result);
+    let result = scheduler.handle_bead_completed(&"bead-e".to_string());
+    assert!(result.is_ok(), "Failed to complete bead-e: {:?}", result);
 
     // FINAL VERIFICATION
     assert_eq!(tracker.completed_count(), 5, "All 5 beads should complete");
@@ -258,11 +242,25 @@ fn test_bead_lifecycle_with_dependencies() {
     assert_eq!(order[0], "bead-a", "A should complete first");
 
     // B and D should complete after A but before C and E
-    let a_pos = order.iter().position(|x| x == "bead-a").unwrap();
-    let b_pos = order.iter().position(|x| x == "bead-b").unwrap();
-    let d_pos = order.iter().position(|x| x == "bead-d").unwrap();
-    let c_pos = order.iter().position(|x| x == "bead-c").unwrap();
-    let e_pos = order.iter().position(|x| x == "bead-e").unwrap();
+    let a_pos = order.iter().position(|x| x == "bead-a");
+    assert!(a_pos.is_some(), "bead-a not found in completion order");
+    let a_pos = a_pos.unwrap_or(0);
+
+    let b_pos = order.iter().position(|x| x == "bead-b");
+    assert!(b_pos.is_some(), "bead-b not found in completion order");
+    let b_pos = b_pos.unwrap_or(0);
+
+    let d_pos = order.iter().position(|x| x == "bead-d");
+    assert!(d_pos.is_some(), "bead-d not found in completion order");
+    let d_pos = d_pos.unwrap_or(0);
+
+    let c_pos = order.iter().position(|x| x == "bead-c");
+    assert!(c_pos.is_some(), "bead-c not found in completion order");
+    let c_pos = c_pos.unwrap_or(0);
+
+    let e_pos = order.iter().position(|x| x == "bead-e");
+    assert!(e_pos.is_some(), "bead-e not found in completion order");
+    let e_pos = e_pos.unwrap_or(0);
 
     assert!(
         b_pos > a_pos,
@@ -302,26 +300,22 @@ fn test_scheduler_actor_state_transitions() {
     let bead_id = "state-test-bead".to_string();
 
     // Register workflow and schedule bead
-    scheduler
-        .register_workflow(workflow_id.clone())
-        .expect("Failed to register workflow");
-    scheduler
-        .schedule_bead(workflow_id.clone(), bead_id.clone())
-        .expect("Failed to schedule bead");
+    let result = scheduler.register_workflow(workflow_id.clone());
+    assert!(result.is_ok(), "Failed to register workflow: {:?}", result);
+    let result = scheduler.schedule_bead(workflow_id.clone(), bead_id.clone());
+    assert!(result.is_ok(), "Failed to schedule bead: {:?}", result);
 
     // Bead should start in Pending state
     assert_eq!(scheduler.pending_count(), 1, "Bead should be pending");
 
     // Mark as ready
-    scheduler
-        .mark_ready(&bead_id)
-        .expect("Failed to mark ready");
+    let result = scheduler.mark_ready(&bead_id);
+    assert!(result.is_ok(), "Failed to mark ready: {:?}", result);
     assert_eq!(scheduler.ready_count(), 1, "Bead should be ready");
 
     // Assign to worker
-    scheduler
-        .assign_to_worker(&bead_id, "worker-001".to_string())
-        .expect("Failed to assign to worker");
+    let result = scheduler.assign_to_worker(&bead_id, "worker-001".to_string());
+    assert!(result.is_ok(), "Failed to assign to worker: {:?}", result);
     assert_eq!(
         scheduler.get_worker_assignment(&bead_id),
         Some(&"worker-001".to_string()),
@@ -329,9 +323,8 @@ fn test_scheduler_actor_state_transitions() {
     );
 
     // Complete the bead
-    scheduler
-        .handle_bead_completed(&bead_id)
-        .expect("Failed to complete bead");
+    let result = scheduler.handle_bead_completed(&bead_id);
+    assert!(result.is_ok(), "Failed to complete bead: {:?}", result);
     assert_eq!(
         scheduler.ready_count(),
         0,
@@ -361,36 +354,40 @@ fn test_complex_dag_diamond_dependency() {
     let mut dag = WorkflowDAG::new();
 
     // Add nodes
-    dag.add_node("bead-a".to_string()).expect("Failed to add A");
-    dag.add_node("bead-b".to_string()).expect("Failed to add B");
-    dag.add_node("bead-c".to_string()).expect("Failed to add C");
-    dag.add_node("bead-d".to_string()).expect("Failed to add D");
+    let result = dag.add_node("bead-a".to_string());
+    assert!(result.is_ok(), "Failed to add A: {:?}", result);
+    let result = dag.add_node("bead-b".to_string());
+    assert!(result.is_ok(), "Failed to add B: {:?}", result);
+    let result = dag.add_node("bead-c".to_string());
+    assert!(result.is_ok(), "Failed to add C: {:?}", result);
+    let result = dag.add_node("bead-d".to_string());
+    assert!(result.is_ok(), "Failed to add D: {:?}", result);
 
     // Add edges
-    dag.add_edge(
+    let result = dag.add_edge(
         "bead-a".to_string(),
         "bead-b".to_string(),
         DependencyType::BlockingDependency,
-    )
-    .expect("Failed to add A→B");
-    dag.add_edge(
+    );
+    assert!(result.is_ok(), "Failed to add A→B: {:?}", result);
+    let result = dag.add_edge(
         "bead-a".to_string(),
         "bead-c".to_string(),
         DependencyType::BlockingDependency,
-    )
-    .expect("Failed to add A→C");
-    dag.add_edge(
+    );
+    assert!(result.is_ok(), "Failed to add A→C: {:?}", result);
+    let result = dag.add_edge(
         "bead-b".to_string(),
         "bead-d".to_string(),
         DependencyType::BlockingDependency,
-    )
-    .expect("Failed to add B→D");
-    dag.add_edge(
+    );
+    assert!(result.is_ok(), "Failed to add B→D: {:?}", result);
+    let result = dag.add_edge(
         "bead-c".to_string(),
         "bead-d".to_string(),
         DependencyType::BlockingDependency,
-    )
-    .expect("Failed to add C→D");
+    );
+    assert!(result.is_ok(), "Failed to add C→D: {:?}", result);
 
     let mut tracker = ExecutionTracker::new();
 
@@ -439,12 +436,10 @@ fn test_workflow_unregister_cleanup() {
     let mut scheduler = SchedulerActor::new();
     let workflow_id = "cleanup-test".to_string();
 
-    scheduler
-        .register_workflow(workflow_id.clone())
-        .expect("Failed to register");
-    scheduler
-        .schedule_bead(workflow_id.clone(), "bead-1".to_string())
-        .expect("Failed to schedule");
+    let result = scheduler.register_workflow(workflow_id.clone());
+    assert!(result.is_ok(), "Failed to register: {:?}", result);
+    let result = scheduler.schedule_bead(workflow_id.clone(), "bead-1".to_string());
+    assert!(result.is_ok(), "Failed to schedule: {:?}", result);
 
     assert_eq!(scheduler.workflow_count(), 1);
 

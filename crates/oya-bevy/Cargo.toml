@@ -1,0 +1,52 @@
+[package]
+name = "oya-bevy"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+
+[dependencies]
+# Bevy game engine with dynamic linking for faster dev builds
+bevy = { version = "0.16", default-features = false, features = [
+    "dynamic_linking",
+    "bevy_core_pipeline",
+    "bevy_render",
+    "bevy_sprite",
+    "bevy_text",
+    "bevy_ui",
+    "bevy_winit",
+    "x11",
+    "wayland",
+    "multi_threaded",
+] }
+
+# UI integration for text input
+bevy_egui = "0.31"
+
+# Async runtime for bridge actor
+tokio = { version = "1", features = ["full"] }
+
+# Actor system integration
+ractor = "0.13"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Local dependencies
+oya-shared = { path = "../oya-shared" }
+orchestrator = { path = "../orchestrator" }
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "rendering"
+harness = false

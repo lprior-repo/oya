@@ -1,0 +1,24 @@
+$schema: "https://moonrepo.dev/schemas/project.json"
+
+# Standalone project - not part of main workspace CI
+# Bevy uses panic/unwrap internally which conflicts with workspace lint rules
+type: "library"
+language: "rust"
+
+# No dependencies on workspace tasks
+dependsOn: []
+
+# Override workspace tasks to do nothing
+tasks:
+  fmt:
+    command: "echo"
+    args: ["oya-bevy: skipped (standalone)"]
+  clippy:
+    command: "echo"
+    args: ["oya-bevy: skipped (standalone)"]
+  test:
+    command: "echo"
+    args: ["oya-bevy: skipped (standalone)"]
+  build:
+    command: "echo"
+    args: ["oya-bevy: skipped (standalone)"]

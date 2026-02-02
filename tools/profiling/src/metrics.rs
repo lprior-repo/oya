@@ -100,6 +100,7 @@ impl MemoryMetrics {
 
     /// Get RSS in megabytes
     #[must_use]
+    #[allow(clippy::cast_precision_loss)] // Acceptable precision loss for display purposes
     pub const fn rss_mb(&self) -> f64 {
         self.rss_kb as f64 / 1024.0
     }

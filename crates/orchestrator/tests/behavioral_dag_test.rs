@@ -464,12 +464,18 @@ fn should_iterate_over_all_edges() {
 
     // THEN: Each edge should have correct components
     let edge1 = edges.iter().find(|e| e.0 == "a");
-    assert!(edge1.is_some(), "Should find edge from 'a'");
-    assert_eq!(edge1.unwrap().1, "b", "Edge 'a' should point to 'b'");
+    if let Some(e1) = edge1 {
+        assert_eq!(e1.1, "b", "Edge 'a' should point to 'b'");
+    } else {
+        panic!("Failed to find edge from 'a': no edge found in iterator");
+    }
 
     let edge2 = edges.iter().find(|e| e.0 == "b");
-    assert!(edge2.is_some(), "Should find edge from 'b'");
-    assert_eq!(edge2.unwrap().1, "c", "Edge 'b' should point to 'c'");
+    if let Some(e2) = edge2 {
+        assert_eq!(e2.1, "c", "Edge 'b' should point to 'c'");
+    } else {
+        panic!("Failed to find edge from 'b': no edge found in iterator");
+    }
 }
 
 #[test]
