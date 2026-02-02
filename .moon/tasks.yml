@@ -229,3 +229,94 @@ tasks:
     options:
       cache: false
       runInCI: false
+
+  # ============================================================================
+  # OYA-SHARED (Shared types for WASM + native)
+  # ============================================================================
+
+  check-shared:
+    command: "cargo check -p oya-shared"
+    description: "Type check oya-shared crate"
+    inputs:
+      - "crates/oya-shared/**/*.rs"
+      - "crates/oya-shared/Cargo.toml"
+    options:
+      cache: true
+
+  test-shared:
+    command: "cargo test -p oya-shared"
+    description: "Run oya-shared tests"
+    inputs:
+      - "crates/oya-shared/**/*.rs"
+      - "crates/oya-shared/Cargo.toml"
+    options:
+      cache: true
+
+  # ============================================================================
+  # OYA-TAURI (Standalone workspace - Tauri desktop app)
+  # ============================================================================
+
+  check-tauri:
+    command: "cd crates/oya-tauri && cargo check"
+    description: "Type check oya-tauri crate (standalone workspace)"
+    inputs:
+      - "crates/oya-tauri/**/*.rs"
+      - "crates/oya-tauri/Cargo.toml"
+      - "crates/oya-shared/**/*.rs"
+    options:
+      cache: true
+
+  test-tauri:
+    command: "cd crates/oya-tauri && cargo test"
+    description: "Run oya-tauri tests"
+    inputs:
+      - "crates/oya-tauri/**/*.rs"
+      - "crates/oya-tauri/Cargo.toml"
+      - "crates/oya-shared/**/*.rs"
+    options:
+      cache: true
+
+  build-tauri:
+    command: "cd crates/oya-tauri && cargo build --release"
+    description: "Build oya-tauri desktop app"
+    inputs:
+      - "crates/oya-tauri/**/*.rs"
+      - "crates/oya-tauri/Cargo.toml"
+      - "crates/oya-shared/**/*.rs"
+    outputs:
+      - "crates/oya-tauri/target/release/oya-tauri"
+    options:
+      cache: true
+
+  # ============================================================================
+  # OYA-UI (Standalone workspace - Leptos frontend)
+  # ============================================================================
+
+  check-ui:
+    command: "cd crates/oya-ui && cargo check"
+    description: "Type check oya-ui crate (standalone workspace)"
+    inputs:
+      - "crates/oya-ui/src/**/*.rs"
+      - "crates/oya-ui/Cargo.toml"
+    options:
+      cache: true
+
+  test-ui:
+    command: "cd crates/oya-ui && cargo test --target x86_64-unknown-linux-gnu"
+    description: "Run oya-ui tests (native target)"
+    inputs:
+      - "crates/oya-ui/src/**/*.rs"
+      - "crates/oya-ui/Cargo.toml"
+    options:
+      cache: true
+
+  # ============================================================================
+  # DESKTOP APP DEVELOPMENT
+  # ============================================================================
+
+  dev-tauri:
+    command: "cd crates/oya-tauri && WEBKIT_DISABLE_DMABUF_RENDERER=1 LIBGL_ALWAYS_SOFTWARE=1 cargo tauri dev"
+    description: "Run Tauri in development mode (software rendering for WebKitGTK compatibility)"
+    options:
+      cache: false
+      runInCI: false

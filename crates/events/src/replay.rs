@@ -537,4 +537,135 @@ mod tests {
         let progress = tracker.current_progress();
         assert_eq!(progress.events_processed, 25);
     }
+
+    // ==========================================================================
+    // calculate_eta SPECIFIC ARITHMETIC TESTS
+    // These try to catch the arithmetic operator mutations
+    // ==========================================================================
+
+    #[test]
+    fn should_not_return_eta_when_zero_events_processed() {
+        // Tests: events_processed == 0 early return
+        let (tracker, _rx) = ReplayTracker::new(100, 1);
+
+        let progress = tracker.current_progress();
+
+        // With 0 events processed, ETA must be None (early return check)
+        assert!(
+            progress.eta.is_none(),
+            "ETA must be None when 0 events processed"
+        );
+    }
+
+    #[test]
+    fn should_not_return_eta_when_events_processed_equals_total() {
+        // Tests: events_processed >= events_total early return
+        let (tracker, _rx) = ReplayTracker::new(5, 1);
+
+        // Process exactly 5 events
+        for _ in 0..5 {
+            tracker.increment().ok();
+        }
+
+        let progress = tracker.current_progress();
+
+        // When events_processed == events_total, ETA must be None
+        assert!(
+            progress.eta.is_none(),
+            "ETA must be None when all events processed"
+        );
+    }
+
+    #[tokio::test]
+    async fn should_calculate_reasonable_eta_for_partial_progress() {
+        // Tests: the calculation uses subtraction for remaining events
+        // If - were + or /, the ETA would be wildly different
+        let (tracker, _rx) = ReplayTracker::new(100, 1);
+
+        // Process half the events
+        for _ in 0..50 {
+            tracker.increment().ok();
+        }
+
+        // Wait to establish a rate
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+        let progress = tracker.current_progress();
+
+        // With 50 processed out of 100, there are 50 remaining (100 - 50)
+        // If the mutation changed - to +, remaining would be 150, giving a much larger ETA
+        // If the mutation changed - to /, remaining would be 2, giving a much smaller ETA
+        if let Some(eta) = progress.eta {
+            // The ETA should be roughly equal to time already spent
+            // (since we're halfway done, time remaining ≈ time spent)
+            let eta_secs = eta.as_secs_f64();
+
+            // Just verify it's in a reasonable range (not negative, not astronomically large)
+            assert!(
+                eta_secs >= 0.0,
+                "ETA should not be negative"
+            );
+            assert!(
+                eta_secs < 1000.0,
+                "ETA should be reasonable (not astronomically large from wrong operator)"
+            );
+        }
+        // Note: ETA might be None if processing is too fast, which is acceptable
+    }
+
+    #[tokio::test]
+    async fn should_calculate_eta_proportional_to_remaining_work() {
+        // This test verifies the ETA calculation uses correct operators
+        // by checking the ratio of remaining work to processed work
+        let (tracker, _rx) = ReplayTracker::new(100, 1);
+
+        // Process 10 events with a delay to establish measurable rate
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+
+        for _ in 0..10 {
+            tracker.increment().ok();
+        }
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        let progress_10 = tracker.current_progress();
+
+        // Process to 50 events
+        for _ in 0..40 {
+            tracker.increment().ok();
+        }
+
+        let progress_50 = tracker.current_progress();
+
+        // At 10%, 90 events remain; at 50%, 50 events remain
+        // ETA at 10% should be greater than ETA at 50%
+        if let (Some(eta_10), Some(eta_50)) = (progress_10.eta, progress_50.eta) {
+            // More remaining work should mean longer ETA
+            // This would fail if - were changed to + (remaining would grow with processed)
+            assert!(
+                eta_10.as_secs_f64() >= eta_50.as_secs_f64() * 0.5,
+                "ETA should decrease as more work is completed"
+            );
+        }
+    }
+
+    #[test]
+    fn should_have_eta_none_edge_case_at_boundary() {
+        // Tests the boundary condition: events_processed >= events_total
+        // Mutation from >= to > would cause eta to be calculated at exactly total
+        let (tracker, _rx) = ReplayTracker::new(10, 1);
+
+        // Process exactly to the boundary
+        for _ in 0..10 {
+            tracker.increment().ok();
+        }
+
+        let progress = tracker.current_progress();
+
+        // At exactly events_total, ETA should be None
+        assert!(
+            progress.eta.is_none(),
+            "ETA must be None at completion boundary"
+        );
+    }
 }

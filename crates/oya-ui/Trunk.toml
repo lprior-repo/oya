@@ -18,7 +18,7 @@ ignore = ["target", "dist"]
 [serve]
 # Development server configuration (use 'addresses' instead of deprecated 'address')
 addresses = ["127.0.0.1"]
-port = 8080
+port = 8888
 # Open browser on serve
 open = false
 # Enable WebSocket for hot reload

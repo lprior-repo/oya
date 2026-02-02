@@ -15,9 +15,14 @@ tracing-subscriber = "0.3"
 
 [dependencies]
 oya-core = { workspace = true }
+oya-events = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 petgraph = { workspace = true }
+
+# Actor framework (Erlang-inspired, 100% Rust)
+# Using native ractor supervision instead of ractor-supervisor due to version compatibility
+ractor = "0.15"

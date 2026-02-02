@@ -9,9 +9,12 @@
     "crates/events",
     "crates/reconciler",
     "crates/oya-web",
+    "crates/oya-shared",
     "tools/profiling",
     # Excluded: oya-ui is standalone workspace (Leptos macro needs panic = deny)
     # "crates/oya-ui",
+    # Excluded: oya-tauri is standalone (Tauri build system)
+    # "crates/oya-tauri",
 ]
 resolver = "2"
 
@@ -44,6 +47,7 @@ oya-events = { path = "crates/events" }
 oya-reconciler = { path = "crates/reconciler" }
 oya-web = { path = "crates/oya-web" }
 oya-ui = { path = "crates/oya-ui" }
+oya-shared = { path = "crates/oya-shared" }
 orchestrator = { path = "crates/orchestrator" }
 merge-queue = { path = "crates/merge-queue" }
 

@@ -1,0 +1,75 @@
+[package]
+name = "oya-tauri"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+authors = ["Lewis Prior <lewis@lewisandquark.com>"]
+license = "MIT"
+repository = "https://github.com/lprior-repo/oya"
+description = "Tauri desktop backend for oya-ui with high-performance IPC"
+
+[lib]
+name = "oya_tauri"
+path = "src/lib.rs"
+
+[[bin]]
+name = "oya-tauri"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# Tauri v2
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+tauri-plugin-fs = "2"
+
+# Internal crates
+oya-shared = { path = "../oya-shared" }
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+futures = "0.3"
+
+# Serialization
+rkyv = { version = "0.8", features = ["bytecheck"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Concurrent data structures
+dashmap = "6"
+parking_lot = "0.12"
+
+# Caching
+moka = { version = "0.12", features = ["future"] }
+
+# Error handling
+thiserror = "2"
+
+# IDs
+ulid = { version = "1", features = ["serde"] }
+
+# Tracing
+tracing = "0.1"
+
+# Standalone workspace (Tauri build system)
+[workspace]
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+unwrap_used = "forbid"
+expect_used = "deny"
+panic = "forbid"
+todo = "warn"
+unimplemented = "forbid"
+# Note: unreachable is NOT forbidden here because Tauri's Result types
+# trigger false positives in command return types
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
