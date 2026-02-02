@@ -45,7 +45,7 @@ use uuid::Uuid;
 ///
 /// - Base namespace: `Uuid::NAMESPACE_DNS` (RFC 4122 DNS namespace)
 /// - Hash algorithm: SHA-1 (as specified by UUID v5)
-/// - Input: bead_id as UTF-8 bytes
+/// - Input: `bead_id` as UTF-8 bytes
 /// - Output: Deterministic UUID v5
 ///
 /// # Determinism Guarantee

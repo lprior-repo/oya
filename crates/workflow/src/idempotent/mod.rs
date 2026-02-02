@@ -8,13 +8,13 @@
 //! Idempotent execution relies on three components:
 //!
 //! 1. **Input Hashing** ([`hash`]) - SHA-256 hashing of arbitrary input data
-//! 2. **Namespace Generation** - UUID v5 namespace from bead_id (future)
+//! 2. **Namespace Generation** ([`namespace`]) - UUID v5 namespace from bead_id
 //! 3. **Key Generation** - UUID v5 from namespace + input hash (future)
 //!
 //! # Example
 //!
 //! ```ignore
-//! use oya_workflow::idempotent::{hash_input, hash_serializable};
+//! use oya_workflow::idempotent::{hash_input, hash_serializable, namespace_from_bead};
 //! use serde::Serialize;
 //!
 //! // Hash raw bytes
@@ -34,8 +34,13 @@
 //! };
 //!
 //! let hash = hash_serializable(&input).expect("serialization failed");
+//!
+//! // Generate namespace from bead_id
+//! let namespace = namespace_from_bead("bead-123");
 //! ```
 
 pub mod hash;
+pub mod namespace;
 
 pub use hash::{hash_input, hash_serializable};
+pub use namespace::namespace_from_bead;
