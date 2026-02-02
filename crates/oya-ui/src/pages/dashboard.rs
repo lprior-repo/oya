@@ -8,7 +8,7 @@
 use leptos::prelude::*;
 
 use crate::models::bead::{Bead, BeadStatus};
-use crate::models::mock::{mock_beads, mock_graph, StatusSummary};
+use crate::models::mock::{StatusSummary, mock_beads, mock_graph};
 use crate::models::{Graph, GraphNode};
 
 /// Dashboard page component

@@ -32,7 +32,9 @@ pub fn health_check(state: State<'_, Arc<AppState>>) -> HealthStatus {
         version: env!("CARGO_PKG_VERSION"),
         cached_beads: state.cache.entry_count(),
         active_streams: state.active_stream_count(),
-        project_root: state.project_root().and_then(|p| p.to_str().map(String::from)),
+        project_root: state
+            .project_root()
+            .and_then(|p| p.to_str().map(String::from)),
     }
 }
 

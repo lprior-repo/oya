@@ -14,9 +14,7 @@ use tracing::{debug, info, warn};
 use oya_events::{BeadEvent, EventBus, EventPattern, EventSubscription};
 
 use crate::dag::BeadId;
-use crate::scheduler::{
-    ScheduledBead, SchedulerStats, WorkflowId, WorkflowState,
-};
+use crate::scheduler::{ScheduledBead, SchedulerStats, WorkflowId, WorkflowState};
 use crate::shutdown::{CheckpointResult, ShutdownCoordinator, ShutdownSignal};
 
 use super::errors::ActorError;
@@ -110,10 +108,8 @@ impl Actor for SchedulerActorDef {
 
         // Subscribe to EventBus for bead events
         if let Some(bus) = &args.event_bus {
-            let pattern = EventPattern::ByTypes(vec![
-                "completed".to_string(),
-                "state_changed".to_string(),
-            ]);
+            let pattern =
+                EventPattern::ByTypes(vec!["completed".to_string(), "state_changed".to_string()]);
             let (sub_id, subscription) = bus.subscribe_with_pattern(pattern).await;
             state._event_subscription_id = Some(sub_id);
 
@@ -158,7 +154,6 @@ impl Actor for SchedulerActorDef {
             // ═══════════════════════════════════════════════════════════════
             // COMMANDS
             // ═══════════════════════════════════════════════════════════════
-
             SchedulerMessage::RegisterWorkflow { workflow_id } => {
                 Self::handle_register_workflow(state, workflow_id);
             }
@@ -181,8 +176,7 @@ impl Actor for SchedulerActorDef {
                 from_bead,
                 to_bead,
             } => {
-                if let Err(e) =
-                    Self::handle_add_dependency(state, &workflow_id, from_bead, to_bead)
+                if let Err(e) = Self::handle_add_dependency(state, &workflow_id, from_bead, to_bead)
                 {
                     warn!(error = %e, "Failed to add dependency");
                 }
@@ -225,7 +219,6 @@ impl Actor for SchedulerActorDef {
             // ═══════════════════════════════════════════════════════════════
             // QUERIES
             // ═══════════════════════════════════════════════════════════════
-
             SchedulerMessage::GetWorkflowReadyBeads { workflow_id, reply } => {
                 let result = Self::handle_get_workflow_ready_beads(state, &workflow_id);
                 // Ignore send error - caller may have timed out
@@ -317,13 +310,13 @@ impl SchedulerActorDef {
                 debug!(bead_id = %bead_id, "Received completion event (workflow lookup needed)");
                 return Ok(());
             }
-            BeadEvent::StateChanged { bead_id, from, to, .. } => {
-                SchedulerMessage::OnStateChanged {
-                    bead_id: bead_id.to_string(),
-                    from: Self::convert_bead_state(&from),
-                    to: Self::convert_bead_state(&to),
-                }
-            }
+            BeadEvent::StateChanged {
+                bead_id, from, to, ..
+            } => SchedulerMessage::OnStateChanged {
+                bead_id: bead_id.to_string(),
+                from: Self::convert_bead_state(&from),
+                to: Self::convert_bead_state(&to),
+            },
             _ => return Ok(()), // Ignore other events
         };
 
@@ -501,12 +494,7 @@ impl SchedulerActorDef {
         let pending_count = state
             .pending_beads
             .values()
-            .filter(|b| {
-                matches!(
-                    b.state,
-                    crate::scheduler::BeadScheduleState::Pending
-                )
-            })
+            .filter(|b| matches!(b.state, crate::scheduler::BeadScheduleState::Pending))
             .count();
 
         SchedulerStats {
@@ -656,7 +644,12 @@ mod tests {
 
         assert!(result.is_ok());
         // Root bead with no dependencies should be ready
-        assert!(result.as_ref().map(|v| v.contains(&"bead-1".to_string())).unwrap_or(false));
+        assert!(
+            result
+                .as_ref()
+                .map(|v| v.contains(&"bead-1".to_string()))
+                .unwrap_or(false)
+        );
     }
 
     #[test]

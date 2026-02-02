@@ -10,9 +10,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// This is the canonical event type for all bead-related state changes.
 /// Events flow from backend to frontend via Tauri's event system.
-#[derive(
-    Debug, Clone, Serialize, Deserialize, Archive, RkyvSerialize, RkyvDeserialize,
-)]
+#[derive(Debug, Clone, Serialize, Deserialize, Archive, RkyvSerialize, RkyvDeserialize)]
 #[serde(tag = "type")]
 pub enum BeadEvent {
     /// A new bead was created
@@ -106,9 +104,7 @@ impl BeadEvent {
 }
 
 /// Stream chunk for high-throughput text streaming
-#[derive(
-    Debug, Clone, Serialize, Deserialize, Archive, RkyvSerialize, RkyvDeserialize,
-)]
+#[derive(Debug, Clone, Serialize, Deserialize, Archive, RkyvSerialize, RkyvDeserialize)]
 pub struct StreamChunk {
     /// Stream identifier
     pub stream_id: String,
@@ -137,9 +133,7 @@ impl StreamChunk {
 }
 
 /// Stream ended event
-#[derive(
-    Debug, Clone, Serialize, Deserialize, Archive, RkyvSerialize, RkyvDeserialize,
-)]
+#[derive(Debug, Clone, Serialize, Deserialize, Archive, RkyvSerialize, RkyvDeserialize)]
 pub struct StreamEnded {
     /// Stream identifier
     pub stream_id: String,

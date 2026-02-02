@@ -63,7 +63,6 @@ pub enum SchedulerMessage {
     // ═══════════════════════════════════════════════════════════════════════
     // COMMANDS (fire-and-forget via cast!)
     // ═══════════════════════════════════════════════════════════════════════
-
     /// Register a new workflow (idempotent - no error if exists).
     RegisterWorkflow {
         /// The workflow ID to register.
@@ -133,7 +132,6 @@ pub enum SchedulerMessage {
     // ═══════════════════════════════════════════════════════════════════════
     // QUERIES (request-response via call! / call_t!)
     // ═══════════════════════════════════════════════════════════════════════
-
     /// Get ready beads for a workflow.
     GetWorkflowReadyBeads {
         /// The workflow to query.

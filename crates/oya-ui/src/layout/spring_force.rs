@@ -209,10 +209,7 @@ pub fn apply_spring_forces(
         .iter()
         .map(|node| {
             let node_id = node.id().as_str();
-            let force = force_map
-                .get(node_id)
-                .copied()
-                .unwrap_or_else(Force::zero);
+            let force = force_map.get(node_id).copied().unwrap_or_else(Force::zero);
 
             let old_pos = node.position();
             let new_pos = Position::new(old_pos.x + force.dx, old_pos.y + force.dy)?;
@@ -403,11 +400,7 @@ mod tests {
         let node2 = Node::with_position("n2", "Node 2", 200.0, 0.0)?;
 
         let nodes = vec![node1, node2];
-        let edge = Edge::new(
-            NodeId::new("n1")?,
-            NodeId::new("n2")?,
-            EdgeType::Dependency,
-        )?;
+        let edge = Edge::new(NodeId::new("n1")?, NodeId::new("n2")?, EdgeType::Dependency)?;
         let edges = vec![edge];
 
         let config = SpringConfig::new(0.1, 75.0)?;
@@ -426,11 +419,7 @@ mod tests {
         let node2 = Node::with_position("n2", "Node 2", 200.0, 0.0)?;
 
         let nodes = vec![node1.clone(), node2.clone()];
-        let edge = Edge::new(
-            NodeId::new("n1")?,
-            NodeId::new("n2")?,
-            EdgeType::Dependency,
-        )?;
+        let edge = Edge::new(NodeId::new("n1")?, NodeId::new("n2")?, EdgeType::Dependency)?;
         let edges = vec![edge];
 
         let config = SpringConfig::new(0.1, 75.0)?;
@@ -456,21 +445,9 @@ mod tests {
 
         let nodes = vec![node1, node2, node3];
         let edges = vec![
-            Edge::new(
-                NodeId::new("n1")?,
-                NodeId::new("n2")?,
-                EdgeType::Dependency,
-            )?,
-            Edge::new(
-                NodeId::new("n2")?,
-                NodeId::new("n3")?,
-                EdgeType::Dependency,
-            )?,
-            Edge::new(
-                NodeId::new("n3")?,
-                NodeId::new("n1")?,
-                EdgeType::Dependency,
-            )?,
+            Edge::new(NodeId::new("n1")?, NodeId::new("n2")?, EdgeType::Dependency)?,
+            Edge::new(NodeId::new("n2")?, NodeId::new("n3")?, EdgeType::Dependency)?,
+            Edge::new(NodeId::new("n3")?, NodeId::new("n1")?, EdgeType::Dependency)?,
         ];
 
         let config = SpringConfig::default();
@@ -514,11 +491,7 @@ mod tests {
         let node2 = Node::with_position("n2", "Node Two", 100.0, 0.0)?;
 
         let nodes = vec![node1, node2];
-        let edge = Edge::new(
-            NodeId::new("n1")?,
-            NodeId::new("n2")?,
-            EdgeType::Dependency,
-        )?;
+        let edge = Edge::new(NodeId::new("n1")?, NodeId::new("n2")?, EdgeType::Dependency)?;
         let edges = vec![edge];
 
         let config = SpringConfig::default();
@@ -538,11 +511,7 @@ mod tests {
         let node2 = Node::with_position("n2", "Node 2", 200.0, 0.0)?;
 
         let original_nodes = vec![node1.clone(), node2.clone()];
-        let edge = Edge::new(
-            NodeId::new("n1")?,
-            NodeId::new("n2")?,
-            EdgeType::Dependency,
-        )?;
+        let edge = Edge::new(NodeId::new("n1")?, NodeId::new("n2")?, EdgeType::Dependency)?;
         let edges = vec![edge];
 
         let config = SpringConfig::default();
@@ -560,11 +529,7 @@ mod tests {
         let mut node1 = Node::with_position("n1", "Node 1", 0.0, 0.0)?;
         let mut node2 = Node::with_position("n2", "Node 2", 200.0, 0.0)?;
 
-        let edge = Edge::new(
-            NodeId::new("n1")?,
-            NodeId::new("n2")?,
-            EdgeType::Dependency,
-        )?;
+        let edge = Edge::new(NodeId::new("n1")?, NodeId::new("n2")?, EdgeType::Dependency)?;
         let edges = vec![edge];
         let config = SpringConfig::new(0.1, 75.0)?;
 
@@ -602,11 +567,7 @@ mod tests {
         let node2 = Node::with_position("n2", "Node 2", 200.0, 0.0)?;
 
         let nodes = vec![node1.clone(), node2.clone()];
-        let edge = Edge::new(
-            NodeId::new("n1")?,
-            NodeId::new("n2")?,
-            EdgeType::Dependency,
-        )?;
+        let edge = Edge::new(NodeId::new("n1")?, NodeId::new("n2")?, EdgeType::Dependency)?;
         let edges = vec![edge];
 
         let config = SpringConfig::new(0.0, 75.0)?;

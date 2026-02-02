@@ -174,7 +174,10 @@ impl Bead {
         self.title.to_lowercase().contains(&search_lower)
             || self.description.to_lowercase().contains(&search_lower)
             || self.id.to_lowercase().contains(&search_lower)
-            || self.tags.iter().any(|t| t.to_lowercase().contains(&search_lower))
+            || self
+                .tags
+                .iter()
+                .any(|t| t.to_lowercase().contains(&search_lower))
     }
 
     /// Check if bead is blocked by dependencies
@@ -319,8 +322,7 @@ mod tests {
             .with_status(BeadStatus::Pending);
         assert!(blocked.is_blocked());
 
-        let not_blocked = Bead::new("bead-10", "Not Blocked")
-            .with_status(BeadStatus::Pending);
+        let not_blocked = Bead::new("bead-10", "Not Blocked").with_status(BeadStatus::Pending);
         assert!(!not_blocked.is_blocked());
 
         let running_with_deps = Bead::new("bead-11", "Running")

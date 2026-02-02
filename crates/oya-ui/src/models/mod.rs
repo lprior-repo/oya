@@ -6,10 +6,12 @@ pub mod edge;
 pub mod event;
 pub mod mock;
 pub mod node;
+pub mod pipeline;
 pub mod task;
 
-// Re-export BeadEvent for convenience
+// Re-export common types for convenience
 pub use event::BeadEvent;
+pub use pipeline::{PipelineState, StageEvent, StageInfo, StageStatus};
 
 use serde::{Deserialize, Serialize};
 

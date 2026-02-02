@@ -5,18 +5,19 @@
 
 use leptos::prelude::*;
 
+use crate::models::BeadEvent;
 use crate::router::AppRouter;
-use crate::state::init_websocket;
+use crate::state::init_backend;
 
 /// Main application component with router integration
 ///
 /// This component serves as the root of the Leptos application,
 /// providing the router and overall layout structure.
-/// WebSocket connection is initialized on mount.
+/// Tauri backend connection is initialized on mount.
 #[component]
 pub fn App() -> impl IntoView {
-    // Initialize WebSocket connection
-    let (ws_state, ws_event) = init_websocket();
+    // Initialize Tauri backend connection
+    let (backend_state, backend_event) = init_backend();
 
     view! {
         <div class="app-container">
@@ -28,10 +29,10 @@ pub fn App() -> impl IntoView {
                     <a href="/tasks">"Tasks"</a>
                     <a href="/beads">"Beads"</a>
                 </nav>
-                <div class="ws-status">
-                    {move || format!("WS: {} | Events: {}",
-                        ws_state.get(),
-                        ws_event.get().as_ref().map(|e| e.event_type()).unwrap_or("none")
+                <div class="backend-status">
+                    {move || format!("Backend: {} | Events: {}",
+                        backend_state.get(),
+                        backend_event.get().as_ref().map(|e: &BeadEvent| e.event_type()).unwrap_or("none")
                     )}
                 </div>
             </header>

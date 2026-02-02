@@ -320,7 +320,11 @@ mod message_type_tests {
         assert_eq!(state.status, "pending", "Status should match");
         assert_eq!(state.phase, "init", "Phase should match");
         assert_eq!(state.events.len(), 1, "Should have one event");
-        assert_eq!(state.title, Some("Test Bead".to_string()), "Title should match");
+        assert_eq!(
+            state.title,
+            Some("Test Bead".to_string()),
+            "Title should match"
+        );
         assert_eq!(state.dependencies.len(), 1, "Should have one dependency");
     }
 }

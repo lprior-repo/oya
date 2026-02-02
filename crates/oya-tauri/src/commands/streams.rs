@@ -124,10 +124,7 @@ pub async fn start_process_stream(
 ///
 /// Marks the stream as ended. For process streams, this does not kill the process.
 #[tauri::command]
-pub async fn stop_stream(
-    stream_id: String,
-    state: State<'_, Arc<AppState>>,
-) -> AppResult<()> {
+pub async fn stop_stream(stream_id: String, state: State<'_, Arc<AppState>>) -> AppResult<()> {
     if state.get_stream(&stream_id).is_none() {
         return Err(AppError::Stream(format!("Stream not found: {stream_id}")));
     }

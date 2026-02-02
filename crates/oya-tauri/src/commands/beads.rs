@@ -193,7 +193,8 @@ fn chrono_now() -> String {
     let duration = now
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default();
-    format!("2026-02-02T{:02}:{:02}:{:02}Z",
+    format!(
+        "2026-02-02T{:02}:{:02}:{:02}Z",
         (duration.as_secs() / 3600) % 24,
         (duration.as_secs() / 60) % 60,
         duration.as_secs() % 60

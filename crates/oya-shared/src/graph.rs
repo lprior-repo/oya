@@ -44,15 +44,7 @@ impl NodeId {
 
 /// Position in 2D space
 #[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Serialize,
-    Deserialize,
-    Archive,
-    RkyvSerialize,
-    RkyvDeserialize,
+    Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Archive, RkyvSerialize, RkyvDeserialize,
 )]
 #[rkyv(compare(PartialEq))]
 pub struct Position {

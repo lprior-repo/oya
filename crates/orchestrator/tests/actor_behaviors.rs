@@ -9,7 +9,7 @@ use std::time::Duration;
 use ractor::ActorRef;
 
 use orchestrator::actors::{
-    spawn_scheduler_with_name, ActorError, SchedulerArguments, SchedulerMessage, WorkflowStatus,
+    ActorError, SchedulerArguments, SchedulerMessage, WorkflowStatus, spawn_scheduler_with_name,
 };
 use orchestrator::scheduler::SchedulerStats;
 
@@ -71,13 +71,12 @@ async fn given_scheduler_when_register_workflow_via_cast_then_workflow_tracked()
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     // Then: Workflow status should be queryable
-    let status: Option<WorkflowStatus> = call_with_timeout(&scheduler, |reply| {
-        SchedulerMessage::GetWorkflowStatus {
+    let status: Option<WorkflowStatus> =
+        call_with_timeout(&scheduler, |reply| SchedulerMessage::GetWorkflowStatus {
             workflow_id: "wf-test-1".to_string(),
             reply,
-        }
-    })
-    .await;
+        })
+        .await;
 
     assert!(status.is_some(), "Workflow should be registered");
     let status = status.expect("Status should exist");
@@ -105,7 +104,10 @@ async fn given_scheduler_when_register_duplicate_workflow_then_idempotent() {
     });
 
     // Then: Operation should succeed (idempotent)
-    assert!(result.is_ok(), "Duplicate registration should be idempotent");
+    assert!(
+        result.is_ok(),
+        "Duplicate registration should be idempotent"
+    );
 
     // Cleanup
     scheduler.stop(None);
@@ -210,13 +212,12 @@ async fn given_workflow_when_schedule_bead_then_bead_tracked() {
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     // Then: Workflow status should reflect the bead
-    let status: Option<WorkflowStatus> = call_with_timeout(&scheduler, |reply| {
-        SchedulerMessage::GetWorkflowStatus {
+    let status: Option<WorkflowStatus> =
+        call_with_timeout(&scheduler, |reply| SchedulerMessage::GetWorkflowStatus {
             workflow_id: "wf-bead".to_string(),
             reply,
-        }
-    })
-    .await;
+        })
+        .await;
 
     let status = status.expect("Workflow should exist");
     assert_eq!(status.total_beads, 1);
@@ -385,8 +386,10 @@ async fn given_ready_bead_when_claimed_then_not_in_all_ready() {
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     // Then: Bead should not appear in GetAllReadyBeads (it's claimed)
-    let all_ready: Vec<(String, String)> =
-        call_with_timeout(&scheduler, |reply| SchedulerMessage::GetAllReadyBeads { reply }).await;
+    let all_ready: Vec<(String, String)> = call_with_timeout(&scheduler, |reply| {
+        SchedulerMessage::GetAllReadyBeads { reply }
+    })
+    .await;
 
     let has_claimed = all_ready.iter().any(|(_, bid)| bid == "bead-x");
     assert!(
@@ -434,8 +437,10 @@ async fn given_claimed_bead_when_released_then_appears_in_ready() {
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     // Then: Bead should appear in GetAllReadyBeads
-    let all_ready: Vec<(String, String)> =
-        call_with_timeout(&scheduler, |reply| SchedulerMessage::GetAllReadyBeads { reply }).await;
+    let all_ready: Vec<(String, String)> = call_with_timeout(&scheduler, |reply| {
+        SchedulerMessage::GetAllReadyBeads { reply }
+    })
+    .await;
 
     let has_released = all_ready.iter().any(|(_, bid)| bid == "bead-y");
     assert!(
@@ -563,13 +568,12 @@ async fn given_complete_workflow_when_get_status_then_shows_complete() {
     tokio::time::sleep(Duration::from_millis(20)).await;
 
     // When: Get workflow status
-    let status: Option<WorkflowStatus> = call_with_timeout(&scheduler, |reply| {
-        SchedulerMessage::GetWorkflowStatus {
+    let status: Option<WorkflowStatus> =
+        call_with_timeout(&scheduler, |reply| SchedulerMessage::GetWorkflowStatus {
             workflow_id: "wf-done".to_string(),
             reply,
-        }
-    })
-    .await;
+        })
+        .await;
 
     // Then: Workflow should show as complete
     let status = status.expect("Workflow should exist");
@@ -720,10 +724,7 @@ async fn given_diamond_dag_when_partial_complete_then_join_not_ready() {
     .await;
 
     let ready_beads = result.expect("Should have ready beads");
-    assert!(
-        ready_beads.contains(&"c".to_string()),
-        "C should be ready"
-    );
+    assert!(ready_beads.contains(&"c".to_string()), "C should be ready");
     assert!(
         !ready_beads.contains(&"d".to_string()),
         "D should NOT be ready (waiting on C)"
@@ -850,12 +851,18 @@ async fn given_multiple_workflows_when_query_all_ready_then_returns_from_all() {
     tokio::time::sleep(Duration::from_millis(20)).await;
 
     // When: Query all ready beads
-    let all_ready: Vec<(String, String)> =
-        call_with_timeout(&scheduler, |reply| SchedulerMessage::GetAllReadyBeads { reply }).await;
+    let all_ready: Vec<(String, String)> = call_with_timeout(&scheduler, |reply| {
+        SchedulerMessage::GetAllReadyBeads { reply }
+    })
+    .await;
 
     // Then: Should include beads from both workflows
-    let has_a1 = all_ready.iter().any(|(wf, bid)| wf == "wf-a" && bid == "bead-a1");
-    let has_b1 = all_ready.iter().any(|(wf, bid)| wf == "wf-b" && bid == "bead-b1");
+    let has_a1 = all_ready
+        .iter()
+        .any(|(wf, bid)| wf == "wf-a" && bid == "bead-a1");
+    let has_b1 = all_ready
+        .iter()
+        .any(|(wf, bid)| wf == "wf-b" && bid == "bead-b1");
 
     assert!(has_a1, "Should include bead-a1 from wf-a");
     assert!(has_b1, "Should include bead-b1 from wf-b");
@@ -905,25 +912,23 @@ async fn given_multiple_workflows_when_unregister_one_then_other_unaffected() {
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     // Then: Other workflow should be unaffected
-    let status: Option<WorkflowStatus> = call_with_timeout(&scheduler, |reply| {
-        SchedulerMessage::GetWorkflowStatus {
+    let status: Option<WorkflowStatus> =
+        call_with_timeout(&scheduler, |reply| SchedulerMessage::GetWorkflowStatus {
             workflow_id: "wf-keep".to_string(),
             reply,
-        }
-    })
-    .await;
+        })
+        .await;
 
     assert!(status.is_some(), "wf-keep should still exist");
     assert_eq!(status.expect("exists").total_beads, 1);
 
     // Removed workflow should not exist
-    let removed_status: Option<WorkflowStatus> = call_with_timeout(&scheduler, |reply| {
-        SchedulerMessage::GetWorkflowStatus {
+    let removed_status: Option<WorkflowStatus> =
+        call_with_timeout(&scheduler, |reply| SchedulerMessage::GetWorkflowStatus {
             workflow_id: "wf-remove".to_string(),
             reply,
-        }
-    })
-    .await;
+        })
+        .await;
 
     assert!(removed_status.is_none(), "wf-remove should not exist");
 
@@ -954,17 +959,19 @@ async fn given_root_bead_when_is_ready_query_then_true() {
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     // When: Query if the bead is ready
-    let is_ready: Result<bool, ActorError> = call_with_timeout(&scheduler, |reply| {
-        SchedulerMessage::IsBeadReady {
+    let is_ready: Result<bool, ActorError> =
+        call_with_timeout(&scheduler, |reply| SchedulerMessage::IsBeadReady {
             workflow_id: "wf-isready".to_string(),
             bead_id: "root-bead".to_string(),
             reply,
-        }
-    })
-    .await;
+        })
+        .await;
 
     // Then: Should be ready (no dependencies)
-    assert!(is_ready.expect("Query should succeed"), "Root bead should be ready");
+    assert!(
+        is_ready.expect("Query should succeed"),
+        "Root bead should be ready"
+    );
 
     // Cleanup
     scheduler.stop(None);
@@ -1002,17 +1009,19 @@ async fn given_blocked_bead_when_is_ready_query_then_false() {
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     // When: Query if B is ready
-    let is_ready: Result<bool, ActorError> = call_with_timeout(&scheduler, |reply| {
-        SchedulerMessage::IsBeadReady {
+    let is_ready: Result<bool, ActorError> =
+        call_with_timeout(&scheduler, |reply| SchedulerMessage::IsBeadReady {
             workflow_id: "wf-blocked".to_string(),
             bead_id: "b".to_string(),
             reply,
-        }
-    })
-    .await;
+        })
+        .await;
 
     // Then: B should NOT be ready (blocked by A)
-    assert!(!is_ready.expect("Query should succeed"), "B should be blocked by A");
+    assert!(
+        !is_ready.expect("Query should succeed"),
+        "B should be blocked by A"
+    );
 
     // Cleanup
     scheduler.stop(None);
@@ -1044,7 +1053,10 @@ async fn given_empty_workflow_when_query_ready_beads_then_empty_list() {
 
     // Then: Should return empty list, not error
     assert!(result.is_ok(), "Query should succeed");
-    assert!(result.expect("ok").is_empty(), "Empty workflow has no ready beads");
+    assert!(
+        result.expect("ok").is_empty(),
+        "Empty workflow has no ready beads"
+    );
 
     scheduler.stop(None);
 }
@@ -1127,7 +1139,11 @@ async fn given_long_chain_when_complete_sequentially_then_unlocks_one_at_a_time(
         }
     })
     .await;
-    assert_eq!(ready.expect("ok").len(), 1, "Only 'a' should be ready initially");
+    assert_eq!(
+        ready.expect("ok").len(),
+        1,
+        "Only 'a' should be ready initially"
+    );
 
     // Complete each bead and verify next becomes ready
     for i in 0..beads.len() - 1 {
@@ -1196,16 +1212,18 @@ async fn given_completed_bead_when_complete_again_then_idempotent() {
     assert!(result.is_ok(), "Duplicate completion should be idempotent");
 
     // Verify workflow state is still consistent
-    let status: Option<WorkflowStatus> = call_with_timeout(&scheduler, |reply| {
-        SchedulerMessage::GetWorkflowStatus {
+    let status: Option<WorkflowStatus> =
+        call_with_timeout(&scheduler, |reply| SchedulerMessage::GetWorkflowStatus {
             workflow_id: "wf-idempotent".to_string(),
             reply,
-        }
-    })
-    .await;
+        })
+        .await;
 
     let status = status.expect("Workflow should exist");
-    assert_eq!(status.completed_beads, 1, "Should still show 1 completed bead");
+    assert_eq!(
+        status.completed_beads, 1,
+        "Should still show 1 completed bead"
+    );
 
     scheduler.stop(None);
 }
@@ -1302,7 +1320,11 @@ async fn given_wide_fan_out_when_root_completes_then_all_children_ready() {
     let ready_list = ready.expect("Query should succeed");
     assert_eq!(ready_list.len(), 5, "All 5 children should be ready");
     for child in &children {
-        assert!(ready_list.contains(&child.to_string()), "{} should be ready", child);
+        assert!(
+            ready_list.contains(&child.to_string()),
+            "{} should be ready",
+            child
+        );
     }
 
     scheduler.stop(None);
@@ -1491,7 +1513,10 @@ async fn given_w_dag_when_complete_in_order_then_correct_unlocks() {
     .await;
     let ready_list = ready.expect("ok");
     assert!(ready_list.contains(&"d".to_string()), "D should be ready");
-    assert!(!ready_list.contains(&"e".to_string()), "E not ready yet (needs D)");
+    assert!(
+        !ready_list.contains(&"e".to_string()),
+        "E not ready yet (needs D)"
+    );
 
     // Complete D -> E should be ready
     scheduler
@@ -1509,7 +1534,10 @@ async fn given_w_dag_when_complete_in_order_then_correct_unlocks() {
         }
     })
     .await;
-    assert!(ready.expect("ok").contains(&"e".to_string()), "E should be ready");
+    assert!(
+        ready.expect("ok").contains(&"e".to_string()),
+        "E should be ready"
+    );
 
     scheduler.stop(None);
 }
@@ -1558,8 +1586,10 @@ async fn given_bead_when_claimed_twice_then_second_claim_fails_or_idempotent() {
 
     // Bead should still not appear in ready list (it's claimed by someone)
     tokio::time::sleep(Duration::from_millis(10)).await;
-    let all_ready: Vec<(String, String)> =
-        call_with_timeout(&scheduler, |reply| SchedulerMessage::GetAllReadyBeads { reply }).await;
+    let all_ready: Vec<(String, String)> = call_with_timeout(&scheduler, |reply| {
+        SchedulerMessage::GetAllReadyBeads { reply }
+    })
+    .await;
 
     let has_bead = all_ready.iter().any(|(_, bid)| bid == "bead-1");
     assert!(!has_bead, "Bead should still be claimed");
@@ -1601,8 +1631,10 @@ async fn given_multiple_beads_when_claim_different_then_all_claimed() {
     tokio::time::sleep(Duration::from_millis(20)).await;
 
     // Then: No beads should appear in ready list (all claimed)
-    let all_ready: Vec<(String, String)> =
-        call_with_timeout(&scheduler, |reply| SchedulerMessage::GetAllReadyBeads { reply }).await;
+    let all_ready: Vec<(String, String)> = call_with_timeout(&scheduler, |reply| {
+        SchedulerMessage::GetAllReadyBeads { reply }
+    })
+    .await;
 
     assert!(all_ready.is_empty(), "All beads should be claimed");
 
@@ -1671,7 +1703,10 @@ async fn given_rapid_messages_when_sent_then_all_processed() {
     // Then: All workflows should be registered
     let stats: SchedulerStats =
         call_with_timeout(&scheduler, |reply| SchedulerMessage::GetStats { reply }).await;
-    assert_eq!(stats.workflow_count, 100, "All 100 workflows should be registered");
+    assert_eq!(
+        stats.workflow_count, 100,
+        "All 100 workflows should be registered"
+    );
 
     scheduler.stop(None);
 }
@@ -1695,13 +1730,12 @@ async fn given_workflow_unregistered_when_query_status_then_returns_none() {
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     // When: Query workflow status
-    let status: Option<WorkflowStatus> = call_with_timeout(&scheduler, |reply| {
-        SchedulerMessage::GetWorkflowStatus {
+    let status: Option<WorkflowStatus> =
+        call_with_timeout(&scheduler, |reply| SchedulerMessage::GetWorkflowStatus {
             workflow_id: "wf-gone".to_string(),
             reply,
-        }
-    })
-    .await;
+        })
+        .await;
 
     // Then: Should return None
     assert!(status.is_none(), "Unregistered workflow should return None");
@@ -1735,13 +1769,12 @@ async fn given_workflow_when_beads_completed_then_status_reflects_progress() {
     tokio::time::sleep(Duration::from_millis(20)).await;
 
     // Initially: 0 completed, 5 total
-    let status: Option<WorkflowStatus> = call_with_timeout(&scheduler, |reply| {
-        SchedulerMessage::GetWorkflowStatus {
+    let status: Option<WorkflowStatus> =
+        call_with_timeout(&scheduler, |reply| SchedulerMessage::GetWorkflowStatus {
             workflow_id: "wf-progress".to_string(),
             reply,
-        }
-    })
-    .await;
+        })
+        .await;
     let status = status.expect("exists");
     assert_eq!(status.total_beads, 5);
     assert_eq!(status.completed_beads, 0);
@@ -1760,13 +1793,12 @@ async fn given_workflow_when_beads_completed_then_status_reflects_progress() {
     tokio::time::sleep(Duration::from_millis(20)).await;
 
     // Then: 3 completed, 5 total, not complete
-    let status: Option<WorkflowStatus> = call_with_timeout(&scheduler, |reply| {
-        SchedulerMessage::GetWorkflowStatus {
+    let status: Option<WorkflowStatus> =
+        call_with_timeout(&scheduler, |reply| SchedulerMessage::GetWorkflowStatus {
             workflow_id: "wf-progress".to_string(),
             reply,
-        }
-    })
-    .await;
+        })
+        .await;
     let status = status.expect("exists");
     assert_eq!(status.total_beads, 5);
     assert_eq!(status.completed_beads, 3);
@@ -1785,13 +1817,12 @@ async fn given_workflow_when_beads_completed_then_status_reflects_progress() {
     tokio::time::sleep(Duration::from_millis(20)).await;
 
     // Then: 5 completed, 5 total, complete!
-    let status: Option<WorkflowStatus> = call_with_timeout(&scheduler, |reply| {
-        SchedulerMessage::GetWorkflowStatus {
+    let status: Option<WorkflowStatus> =
+        call_with_timeout(&scheduler, |reply| SchedulerMessage::GetWorkflowStatus {
             workflow_id: "wf-progress".to_string(),
             reply,
-        }
-    })
-    .await;
+        })
+        .await;
     let status = status.expect("exists");
     assert_eq!(status.total_beads, 5);
     assert_eq!(status.completed_beads, 5);
@@ -1898,7 +1929,10 @@ async fn given_workflows_when_query_one_then_no_cross_contamination() {
     // Then: Should only contain beads from workflow 1
     let ready1_list = ready1.expect("ok");
     assert!(ready1_list.contains(&"bead-from-1".to_string()));
-    assert!(!ready1_list.contains(&"bead-from-2".to_string()), "No cross-contamination");
+    assert!(
+        !ready1_list.contains(&"bead-from-2".to_string()),
+        "No cross-contamination"
+    );
 
     // When: Query workflow 2
     let ready2: Result<Vec<String>, ActorError> = call_with_timeout(&scheduler, |reply| {
@@ -1912,7 +1946,10 @@ async fn given_workflows_when_query_one_then_no_cross_contamination() {
     // Then: Should only contain beads from workflow 2
     let ready2_list = ready2.expect("ok");
     assert!(ready2_list.contains(&"bead-from-2".to_string()));
-    assert!(!ready2_list.contains(&"bead-from-1".to_string()), "No cross-contamination");
+    assert!(
+        !ready2_list.contains(&"bead-from-1".to_string()),
+        "No cross-contamination"
+    );
 
     scheduler.stop(None);
 }
@@ -1958,7 +1995,7 @@ async fn given_workflow_with_self_dependency_when_query_then_blocked() {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 use orchestrator::actors::{
-    spawn_supervisor, MeltdownStatus, SchedulerSupervisorConfig, SupervisorMessage,
+    MeltdownStatus, SchedulerSupervisorConfig, SupervisorMessage, spawn_supervisor,
 };
 
 /// Generate a unique supervisor name for testing.
@@ -2002,9 +2039,15 @@ async fn given_supervisor_when_spawned_then_scheduler_available() {
 
     // Then: Scheduler should be available
     let scheduler_ref: Option<ActorRef<SchedulerMessage>> =
-        supervisor_call_with_timeout(&supervisor, |reply| SupervisorMessage::GetScheduler { reply }).await;
+        supervisor_call_with_timeout(&supervisor, |reply| SupervisorMessage::GetScheduler {
+            reply,
+        })
+        .await;
 
-    assert!(scheduler_ref.is_some(), "Scheduler should be available through supervisor");
+    assert!(
+        scheduler_ref.is_some(),
+        "Scheduler should be available through supervisor"
+    );
 
     // Verify scheduler works
     let scheduler = scheduler_ref.expect("exists");
@@ -2035,7 +2078,10 @@ async fn given_supervisor_when_scheduler_stops_normally_then_no_restart() {
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     let scheduler_ref: Option<ActorRef<SchedulerMessage>> =
-        supervisor_call_with_timeout(&supervisor, |reply| SupervisorMessage::GetScheduler { reply }).await;
+        supervisor_call_with_timeout(&supervisor, |reply| SupervisorMessage::GetScheduler {
+            reply,
+        })
+        .await;
     let scheduler = scheduler_ref.expect("Scheduler should exist");
 
     // When: Scheduler stops normally (via Shutdown message)
@@ -2047,7 +2093,10 @@ async fn given_supervisor_when_scheduler_stops_normally_then_no_restart() {
 
     // Then: Scheduler should NOT be restarted (normal stop = Transient policy)
     let scheduler_ref: Option<ActorRef<SchedulerMessage>> =
-        supervisor_call_with_timeout(&supervisor, |reply| SupervisorMessage::GetScheduler { reply }).await;
+        supervisor_call_with_timeout(&supervisor, |reply| SupervisorMessage::GetScheduler {
+            reply,
+        })
+        .await;
 
     assert!(
         scheduler_ref.is_none(),
@@ -2055,10 +2104,14 @@ async fn given_supervisor_when_scheduler_stops_normally_then_no_restart() {
     );
 
     // Meltdown should NOT have been triggered
-    let status: MeltdownStatus =
-        supervisor_call_with_timeout(&supervisor, |reply| SupervisorMessage::GetMeltdownStatus { reply })
-            .await;
-    assert!(!status.is_meltdown, "Normal stop should not trigger meltdown");
+    let status: MeltdownStatus = supervisor_call_with_timeout(&supervisor, |reply| {
+        SupervisorMessage::GetMeltdownStatus { reply }
+    })
+    .await;
+    assert!(
+        !status.is_meltdown,
+        "Normal stop should not trigger meltdown"
+    );
 
     // Cleanup
     supervisor.stop(None);
@@ -2078,13 +2131,20 @@ async fn given_supervisor_when_check_meltdown_status_then_returns_current_state(
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     // When: Check meltdown status
-    let status: MeltdownStatus =
-        supervisor_call_with_timeout(&supervisor, |reply| SupervisorMessage::GetMeltdownStatus { reply })
-            .await;
+    let status: MeltdownStatus = supervisor_call_with_timeout(&supervisor, |reply| {
+        SupervisorMessage::GetMeltdownStatus { reply }
+    })
+    .await;
 
     // Then: Should show healthy state
-    assert_eq!(status.restart_count, 0, "Fresh supervisor should have 0 restarts");
-    assert!(!status.is_meltdown, "Fresh supervisor should not be in meltdown");
+    assert_eq!(
+        status.restart_count, 0,
+        "Fresh supervisor should have 0 restarts"
+    );
+    assert!(
+        !status.is_meltdown,
+        "Fresh supervisor should not be in meltdown"
+    );
 
     // Cleanup
     supervisor.stop(None);
@@ -2107,7 +2167,10 @@ async fn given_supervisor_config_when_custom_values_then_respected() {
 
     // Then: Configuration should be used (verify scheduler is available)
     let scheduler_ref: Option<ActorRef<SchedulerMessage>> =
-        supervisor_call_with_timeout(&supervisor, |reply| SupervisorMessage::GetScheduler { reply }).await;
+        supervisor_call_with_timeout(&supervisor, |reply| SupervisorMessage::GetScheduler {
+            reply,
+        })
+        .await;
 
     assert!(scheduler_ref.is_some(), "Scheduler should be available");
 

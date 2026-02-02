@@ -18,8 +18,13 @@ pub enum EdgeCurveError {
 impl std::fmt::Display for EdgeCurveError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::ZeroLengthEdge => write!(f, "Edge has zero length (identical source and target positions)"),
-            Self::InvalidOffsetFactor(val) => write!(f, "Invalid offset factor: {} (must be non-negative)", val),
+            Self::ZeroLengthEdge => write!(
+                f,
+                "Edge has zero length (identical source and target positions)"
+            ),
+            Self::InvalidOffsetFactor(val) => {
+                write!(f, "Invalid offset factor: {} (must be non-negative)", val)
+            }
             Self::CanvasError(msg) => write!(f, "Canvas rendering error: {}", msg),
         }
     }
@@ -45,7 +50,12 @@ impl CurvePath {
     ///
     /// # Errors
     /// Returns `EdgeCurveError::ZeroLengthEdge` if start and end are identical
-    pub fn new(start: (f64, f64), control: (f64, f64), end: (f64, f64), sample_count: usize) -> Result<Self, EdgeCurveError> {
+    pub fn new(
+        start: (f64, f64),
+        control: (f64, f64),
+        end: (f64, f64),
+        sample_count: usize,
+    ) -> Result<Self, EdgeCurveError> {
         // Validate non-zero length
         if (start.0 - end.0).abs() < f64::EPSILON && (start.1 - end.1).abs() < f64::EPSILON {
             return Err(EdgeCurveError::ZeroLengthEdge);
@@ -240,12 +250,7 @@ pub fn render_curve_to_canvas(
     ctx.move_to(curve.start.0, curve.start.1);
 
     // Draw quadratic curve
-    ctx.quadratic_curve_to(
-        curve.control.0,
-        curve.control.1,
-        curve.end.0,
-        curve.end.1,
-    );
+    ctx.quadratic_curve_to(curve.control.0, curve.control.1, curve.end.0, curve.end.1);
 
     // Stroke the path
     ctx.stroke();
@@ -277,12 +282,7 @@ mod tests {
 
     #[test]
     fn test_calculate_bezier_curve_valid() {
-        let result = calculate_bezier_curve(
-            (0.0, 0.0),
-            (100.0, 0.0),
-            0.5,
-            0,
-        );
+        let result = calculate_bezier_curve((0.0, 0.0), (100.0, 0.0), 0.5, 0);
 
         assert!(result.is_ok());
         let curve = result.unwrap();
@@ -293,12 +293,7 @@ mod tests {
 
     #[test]
     fn test_calculate_bezier_curve_zero_length() {
-        let result = calculate_bezier_curve(
-            (50.0, 50.0),
-            (50.0, 50.0),
-            0.5,
-            0,
-        );
+        let result = calculate_bezier_curve((50.0, 50.0), (50.0, 50.0), 0.5, 0);
 
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), EdgeCurveError::ZeroLengthEdge);
@@ -306,12 +301,7 @@ mod tests {
 
     #[test]
     fn test_calculate_bezier_curve_negative_offset() {
-        let result = calculate_bezier_curve(
-            (0.0, 0.0),
-            (100.0, 0.0),
-            -0.5,
-            0,
-        );
+        let result = calculate_bezier_curve((0.0, 0.0), (100.0, 0.0), -0.5, 0);
 
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -396,12 +386,7 @@ mod tests {
 
     #[test]
     fn test_curve_path_new_valid() {
-        let result = CurvePath::new(
-            (0.0, 0.0),
-            (50.0, 50.0),
-            (100.0, 0.0),
-            10,
-        );
+        let result = CurvePath::new((0.0, 0.0), (50.0, 50.0), (100.0, 0.0), 10);
 
         assert!(result.is_ok());
         let curve = result.unwrap();
@@ -410,12 +395,7 @@ mod tests {
 
     #[test]
     fn test_curve_path_new_zero_length() {
-        let result = CurvePath::new(
-            (50.0, 50.0),
-            (50.0, 100.0),
-            (50.0, 50.0),
-            10,
-        );
+        let result = CurvePath::new((50.0, 50.0), (50.0, 100.0), (50.0, 50.0), 10);
 
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), EdgeCurveError::ZeroLengthEdge);
@@ -424,28 +404,13 @@ mod tests {
     #[test]
     fn test_multiple_parallel_edges_spacing() {
         // Edge 0 should have minimal offset
-        let curve0 = calculate_bezier_curve(
-            (0.0, 0.0),
-            (100.0, 0.0),
-            1.0,
-            0,
-        ).unwrap();
+        let curve0 = calculate_bezier_curve((0.0, 0.0), (100.0, 0.0), 1.0, 0).unwrap();
 
         // Edge 1 should have positive offset
-        let curve1 = calculate_bezier_curve(
-            (0.0, 0.0),
-            (100.0, 0.0),
-            1.0,
-            1,
-        ).unwrap();
+        let curve1 = calculate_bezier_curve((0.0, 0.0), (100.0, 0.0), 1.0, 1).unwrap();
 
         // Edge 2 should have negative offset
-        let curve2 = calculate_bezier_curve(
-            (0.0, 0.0),
-            (100.0, 0.0),
-            1.0,
-            2,
-        ).unwrap();
+        let curve2 = calculate_bezier_curve((0.0, 0.0), (100.0, 0.0), 1.0, 2).unwrap();
 
         // Control points should be at different Y positions
         assert!(curve0.control.1.abs() < 30.0); // Nearly straight
@@ -468,12 +433,7 @@ mod tests {
     #[test]
     fn test_vertical_edge_curve() {
         // Test vertical edge (dy != 0, dx = 0)
-        let result = calculate_bezier_curve(
-            (50.0, 0.0),
-            (50.0, 100.0),
-            0.5,
-            0,
-        );
+        let result = calculate_bezier_curve((50.0, 0.0), (50.0, 100.0), 0.5, 0);
 
         assert!(result.is_ok());
         let curve = result.unwrap();
@@ -485,18 +445,16 @@ mod tests {
     #[test]
     fn test_diagonal_edge_curve() {
         // Test diagonal edge
-        let result = calculate_bezier_curve(
-            (0.0, 0.0),
-            (100.0, 100.0),
-            0.5,
-            0,
-        );
+        let result = calculate_bezier_curve((0.0, 0.0), (100.0, 100.0), 0.5, 0);
 
         assert!(result.is_ok());
         let curve = result.unwrap();
 
         // Control point should be offset perpendicular to diagonal
-        let mid = ((curve.start.0 + curve.end.0) / 2.0, (curve.start.1 + curve.end.1) / 2.0);
+        let mid = (
+            (curve.start.0 + curve.end.0) / 2.0,
+            (curve.start.1 + curve.end.1) / 2.0,
+        );
 
         // Distance from control to midpoint should be non-zero
         let dist = ((curve.control.0 - mid.0).powi(2) + (curve.control.1 - mid.1).powi(2)).sqrt();

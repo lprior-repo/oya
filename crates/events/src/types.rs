@@ -452,11 +452,7 @@ mod tests {
         ];
 
         for state in non_terminal_states {
-            assert!(
-                !state.is_terminal(),
-                "{:?} should NOT be terminal",
-                state
-            );
+            assert!(!state.is_terminal(), "{:?} should NOT be terminal", state);
         }
     }
 
@@ -600,7 +596,10 @@ mod tests {
 
         assert!(output.success, "success output should have success=true");
         assert_eq!(output.data, data, "success output should preserve data");
-        assert!(output.message.is_none(), "success output should have no message");
+        assert!(
+            output.message.is_none(),
+            "success output should have no message"
+        );
     }
 
     #[test]
@@ -608,7 +607,10 @@ mod tests {
         let output = PhaseOutput::failure("something went wrong");
 
         assert!(!output.success, "failure output should have success=false");
-        assert!(output.data.is_empty(), "failure output should have empty data");
+        assert!(
+            output.data.is_empty(),
+            "failure output should have empty data"
+        );
         assert_eq!(
             output.message,
             Some("something went wrong".to_string()),
@@ -626,9 +628,19 @@ mod tests {
         let result = BeadResult::success(output.clone(), 1000);
 
         assert!(result.success, "success result should have success=true");
-        assert_eq!(result.output, Some(output), "success result should have output");
-        assert!(result.error.is_none(), "success result should have no error");
-        assert_eq!(result.duration_ms, 1000, "success result should preserve duration");
+        assert_eq!(
+            result.output,
+            Some(output),
+            "success result should have output"
+        );
+        assert!(
+            result.error.is_none(),
+            "success result should have no error"
+        );
+        assert_eq!(
+            result.duration_ms, 1000,
+            "success result should preserve duration"
+        );
     }
 
     #[test]
@@ -636,13 +648,19 @@ mod tests {
         let result = BeadResult::failure("task failed", 500);
 
         assert!(!result.success, "failure result should have success=false");
-        assert!(result.output.is_none(), "failure result should have no output");
+        assert!(
+            result.output.is_none(),
+            "failure result should have no output"
+        );
         assert_eq!(
             result.error,
             Some("task failed".to_string()),
             "failure result should have error"
         );
-        assert_eq!(result.duration_ms, 500, "failure result should preserve duration");
+        assert_eq!(
+            result.duration_ms, 500,
+            "failure result should preserve duration"
+        );
     }
 
     // ==========================================================================

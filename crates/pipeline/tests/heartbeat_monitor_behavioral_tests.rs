@@ -17,7 +17,7 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
-use pipeline::{HeartbeatMonitor, HealthStatus, ProcessId};
+use pipeline::{HealthStatus, HeartbeatMonitor, ProcessId};
 
 // ============================================================================
 // BEHAVIOR: Monitoring Configuration
@@ -128,7 +128,10 @@ fn should_remove_worker_from_monitoring() {
     let removed = monitor.unregister_worker(&worker_id);
 
     // Then: The worker should no longer be tracked
-    assert!(removed.is_some(), "Unregistration should return the health check");
+    assert!(
+        removed.is_some(),
+        "Unregistration should return the health check"
+    );
     assert_eq!(monitor.worker_count(), 0, "Worker count should decrease");
     assert!(
         monitor.get_health_status(&worker_id).is_none(),
@@ -206,7 +209,9 @@ fn should_reset_failure_count_when_heartbeat_received() {
     let check_before = monitor.get_health_check(&worker_id);
     assert!(check_before.is_some());
     assert!(
-        check_before.filter(|c| c.consecutive_failures() == 2).is_some(),
+        check_before
+            .filter(|c| c.consecutive_failures() == 2)
+            .is_some(),
         "Should have 2 consecutive failures"
     );
 
@@ -267,10 +272,7 @@ fn should_mark_worker_degraded_after_one_missed_check() {
     let check = monitor.get_health_check(&worker_id);
     assert!(check.is_some());
     let failure_check = check.filter(|c| c.consecutive_failures() == 1);
-    assert!(
-        failure_check.is_some(),
-        "Should have 1 consecutive failure"
-    );
+    assert!(failure_check.is_some(), "Should have 1 consecutive failure");
 }
 
 #[test]

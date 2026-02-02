@@ -6,7 +6,7 @@
 use leptos::prelude::*;
 
 use crate::models::bead::{Bead, BeadFilters, BeadPriority, BeadStatus};
-use crate::models::mock::{mock_beads, StatusSummary};
+use crate::models::mock::{StatusSummary, mock_beads};
 
 /// Beads page component
 #[component]
@@ -40,11 +40,7 @@ pub fn Beads() -> impl IntoView {
 
     // Collect unique tags from all beads
     let all_tags = Memo::new(move |_| {
-        let mut tags: Vec<String> = beads
-            .get()
-            .iter()
-            .flat_map(|b| b.tags.clone())
-            .collect();
+        let mut tags: Vec<String> = beads.get().iter().flat_map(|b| b.tags.clone()).collect();
         tags.sort();
         tags.dedup();
         tags

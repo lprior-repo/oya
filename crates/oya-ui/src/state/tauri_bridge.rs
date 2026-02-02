@@ -20,7 +20,7 @@
 //! });
 //! ```
 
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
@@ -167,18 +167,16 @@ where
     let closure = Closure::wrap(Box::new(callback) as Box<dyn Fn(JsValue)>);
 
     let result = listen_fn
-        .call2(
-            &JsValue::NULL,
-            &JsValue::from_str(event),
-            closure.as_ref(),
-        )
+        .call2(&JsValue::NULL, &JsValue::from_str(event), closure.as_ref())
         .map_err(|e| TauriError::ListenerError(format!("{e:?}")))?;
 
     // Leak the closure to keep it alive (it will be cleaned up when unlisten is called)
     closure.forget();
 
     // Return the unlisten function
-    Ok(result.dyn_into().map_err(|_| TauriError::ListenerError("Failed to get unlisten function".to_string()))?)
+    Ok(result
+        .dyn_into()
+        .map_err(|_| TauriError::ListenerError("Failed to get unlisten function".to_string()))?)
 }
 
 /// Batched bead fetch with request deduplication
@@ -254,7 +252,10 @@ pub async fn health_check() -> TauriResult<HealthStatus> {
 ///
 /// This should be called once when the app initializes.
 /// If Tauri is not available, falls back to browser mode.
-pub fn init_tauri() -> (leptos::prelude::ReadSignal<TauriConnectionState>, Rc<RefCell<Option<HealthStatus>>>) {
+pub fn init_tauri() -> (
+    leptos::prelude::ReadSignal<TauriConnectionState>,
+    Rc<RefCell<Option<HealthStatus>>>,
+) {
     use leptos::prelude::*;
 
     let (state, set_state) = signal(TauriConnectionState::NotAvailable);
@@ -282,6 +283,64 @@ pub fn init_tauri() -> (leptos::prelude::ReadSignal<TauriConnectionState>, Rc<Re
     (state, health)
 }
 
+// Pipeline commands
+
+/// Get pipeline stages definition
+pub async fn get_pipeline_stages() -> TauriResult<Vec<crate::models::pipeline::StageInfo>> {
+    #[derive(serde::Serialize)]
+    struct EmptyArgs {}
+    invoke("get_pipeline_stages", &EmptyArgs {}).await
+}
+
+/// Get pipeline state for a task
+pub async fn get_pipeline_state(
+    task_id: &str,
+) -> TauriResult<crate::models::pipeline::PipelineState> {
+    #[derive(serde::Serialize)]
+    struct Args<'a> {
+        task_id: &'a str,
+    }
+    invoke("get_pipeline_state", &Args { task_id }).await
+}
+
+/// Run a single pipeline stage
+pub async fn run_stage(
+    task_id: &str,
+    stage_name: &str,
+) -> TauriResult<crate::models::pipeline::StageEvent> {
+    #[derive(serde::Serialize)]
+    struct Args<'a> {
+        task_id: &'a str,
+        stage_name: &'a str,
+    }
+    invoke(
+        "run_stage",
+        &Args {
+            task_id,
+            stage_name,
+        },
+    )
+    .await
+}
+
+/// Run the full pipeline
+pub async fn run_pipeline(task_id: &str) -> TauriResult<crate::models::pipeline::PipelineState> {
+    #[derive(serde::Serialize)]
+    struct Args<'a> {
+        task_id: &'a str,
+    }
+    invoke("run_pipeline", &Args { task_id }).await
+}
+
+/// Reset pipeline state for a task
+pub async fn reset_pipeline(task_id: &str) -> TauriResult<crate::models::pipeline::PipelineState> {
+    #[derive(serde::Serialize)]
+    struct Args<'a> {
+        task_id: &'a str,
+    }
+    invoke("reset_pipeline", &Args { task_id }).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -297,7 +356,10 @@ mod tests {
 
     #[test]
     fn test_connection_state_display() {
-        assert_eq!(TauriConnectionState::NotAvailable.to_string(), "Not Available");
+        assert_eq!(
+            TauriConnectionState::NotAvailable.to_string(),
+            "Not Available"
+        );
         assert_eq!(TauriConnectionState::Connected.to_string(), "Connected");
         assert_eq!(TauriConnectionState::Error.to_string(), "Error");
     }

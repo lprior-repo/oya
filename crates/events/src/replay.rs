@@ -199,7 +199,10 @@ mod tests {
 
         // ETA should be None when nothing processed
         let progress = tracker.current_progress();
-        assert!(progress.eta.is_none(), "ETA should be None when no events processed");
+        assert!(
+            progress.eta.is_none(),
+            "ETA should be None when no events processed"
+        );
     }
 
     #[test]
@@ -212,7 +215,10 @@ mod tests {
         }
 
         let progress = tracker.current_progress();
-        assert!(progress.eta.is_none(), "ETA should be None when all events processed");
+        assert!(
+            progress.eta.is_none(),
+            "ETA should be None when all events processed"
+        );
     }
 
     #[tokio::test]
@@ -267,7 +273,10 @@ mod tests {
         let (tracker, _rx) = ReplayTracker::new(0, 10);
 
         let progress = tracker.current_progress();
-        assert_eq!(progress.percent_complete, 100.0, "Zero total should be 100% complete");
+        assert_eq!(
+            progress.percent_complete, 100.0,
+            "Zero total should be 100% complete"
+        );
     }
 
     #[tokio::test]
@@ -284,7 +293,10 @@ mod tests {
         assert!(result.is_ok(), "Should receive progress update at interval");
 
         let progress = rx.borrow().clone();
-        assert_eq!(progress.events_processed, 10, "Progress should show 10 events");
+        assert_eq!(
+            progress.events_processed, 10,
+            "Progress should show 10 events"
+        );
     }
 
     #[tokio::test]
@@ -298,10 +310,16 @@ mod tests {
 
         // Should receive update on completion even though interval (100) wasn't reached
         let result = rx.changed().await;
-        assert!(result.is_ok(), "Should receive progress update on completion");
+        assert!(
+            result.is_ok(),
+            "Should receive progress update on completion"
+        );
 
         let progress = rx.borrow().clone();
-        assert_eq!(progress.events_processed, 5, "Should show all events processed");
+        assert_eq!(
+            progress.events_processed, 5,
+            "Should show all events processed"
+        );
         assert_eq!(progress.percent_complete, 100.0, "Should be 100% complete");
     }
 
@@ -601,10 +619,7 @@ mod tests {
             let eta_secs = eta.as_secs_f64();
 
             // Just verify it's in a reasonable range (not negative, not astronomically large)
-            assert!(
-                eta_secs >= 0.0,
-                "ETA should not be negative"
-            );
+            assert!(eta_secs >= 0.0, "ETA should not be negative");
             assert!(
                 eta_secs < 1000.0,
                 "ETA should be reasonable (not astronomically large from wrong operator)"

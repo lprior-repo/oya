@@ -494,7 +494,11 @@ mod tests {
         let events = tracing_store.read(None).await;
 
         assert!(events.is_ok(), "TracingEventStore should delegate read");
-        assert_eq!(events.unwrap().len(), 1, "Should read events from inner store");
+        assert_eq!(
+            events.unwrap().len(),
+            1,
+            "Should read events from inner store"
+        );
     }
 
     #[tokio::test]
@@ -513,7 +517,10 @@ mod tests {
         let tracing_store = TracingEventStore::new(inner);
         let events = tracing_store.read_for_bead(bead_id).await;
 
-        assert!(events.is_ok(), "TracingEventStore should delegate read_for_bead");
+        assert!(
+            events.is_ok(),
+            "TracingEventStore should delegate read_for_bead"
+        );
         assert_eq!(events.unwrap().len(), 1);
     }
 
@@ -531,7 +538,10 @@ mod tests {
         let tracing_store = TracingEventStore::new(inner);
         let last_id = tracing_store.last_event_id().await;
 
-        assert!(last_id.is_ok(), "TracingEventStore should delegate last_event_id");
+        assert!(
+            last_id.is_ok(),
+            "TracingEventStore should delegate last_event_id"
+        );
         assert_eq!(last_id.unwrap(), Some(expected_id));
     }
 

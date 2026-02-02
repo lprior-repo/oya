@@ -11,12 +11,16 @@ use super::{Graph, GraphEdge, GraphNode};
 pub fn mock_tasks() -> Vec<Task> {
     vec![
         Task::new("src-3s0.1", "Set up project structure")
-            .with_description("Initialize the oya-ui crate with Leptos 0.7 and configure Trunk for WASM builds")
+            .with_description(
+                "Initialize the oya-ui crate with Leptos 0.7 and configure Trunk for WASM builds",
+            )
             .with_status(TaskStatus::Done)
             .with_priority(TaskPriority::High)
             .with_type(TaskType::Feature),
         Task::new("src-3s0.2", "Implement WebSocket client")
-            .with_description("Create Railway-Oriented WebSocket client for real-time event streaming")
+            .with_description(
+                "Create Railway-Oriented WebSocket client for real-time event streaming",
+            )
             .with_status(TaskStatus::Done)
             .with_priority(TaskPriority::High)
             .with_type(TaskType::Feature),

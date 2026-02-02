@@ -22,8 +22,8 @@ impl Default for CacheConfig {
     fn default() -> Self {
         Self {
             max_capacity: 1000,
-            ttl: Duration::from_secs(300),  // 5 minutes
-            tti: Duration::from_secs(120),  // 2 minutes idle
+            ttl: Duration::from_secs(300), // 5 minutes
+            tti: Duration::from_secs(120), // 2 minutes idle
         }
     }
 }
@@ -143,9 +143,7 @@ mod tests {
     #[tokio::test]
     async fn test_cache_arc_insert() {
         let cache = BeadCache::new();
-        let bead = Arc::new(
-            Bead::new("bead-4", "Arc Test").with_status(BeadStatus::Running),
-        );
+        let bead = Arc::new(Bead::new("bead-4", "Arc Test").with_status(BeadStatus::Running));
 
         cache.insert_arc("bead-4".to_string(), bead.clone()).await;
 

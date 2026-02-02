@@ -9,8 +9,12 @@
 pub mod canvas;
 pub mod controls;
 pub mod dashboard;
+pub mod stage_gate;
 pub mod task_list;
 pub mod timeline;
+
+// Re-export main components for convenience
+pub use stage_gate::{PipelineProgress, StageGate, StageIndicator};
 
 // Temporarily commented out due to clippy::panic forbid conflict with Leptos macro
 // See bead src-XXXXX for proper resolution

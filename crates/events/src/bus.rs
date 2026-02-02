@@ -225,7 +225,10 @@ mod tests {
             BeadSpec::new("Test").with_complexity(Complexity::Simple),
         );
 
-        assert!(EventPattern::All.matches(&event), "All pattern should match any event");
+        assert!(
+            EventPattern::All.matches(&event),
+            "All pattern should match any event"
+        );
     }
 
     #[test]
@@ -274,10 +277,8 @@ mod tests {
         let bead_id = BeadId::new();
         let event = BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Ready);
 
-        let pattern = EventPattern::ByTypes(vec![
-            "created".to_string(),
-            "state_changed".to_string(),
-        ]);
+        let pattern =
+            EventPattern::ByTypes(vec!["created".to_string(), "state_changed".to_string()]);
 
         // Should match when type is in list
         assert!(
@@ -285,10 +286,8 @@ mod tests {
             "ByTypes should match when event type is in list"
         );
 
-        let non_matching_pattern = EventPattern::ByTypes(vec![
-            "created".to_string(),
-            "completed".to_string(),
-        ]);
+        let non_matching_pattern =
+            EventPattern::ByTypes(vec!["created".to_string(), "completed".to_string()]);
 
         // Should NOT match when type is not in list
         assert!(
@@ -393,7 +392,10 @@ mod tests {
         // Verify subscriber is removed
         {
             let subscribers = bus.subscribers.read().await;
-            assert!(!subscribers.contains_key(&sub_id), "Subscriber should be removed");
+            assert!(
+                !subscribers.contains_key(&sub_id),
+                "Subscriber should be removed"
+            );
         }
     }
 

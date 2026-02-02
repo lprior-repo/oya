@@ -13,33 +13,17 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "type")]
 pub enum BeadEvent {
     /// A new bead was created
-    Created {
-        bead_id: String,
-        title: String,
-    },
+    Created { bead_id: String, title: String },
     /// Bead started execution
-    Started {
-        bead_id: String,
-    },
+    Started { bead_id: String },
     /// Bead completed successfully
-    Completed {
-        bead_id: String,
-        success: bool,
-    },
+    Completed { bead_id: String, success: bool },
     /// Bead failed
-    Failed {
-        bead_id: String,
-        error: String,
-    },
+    Failed { bead_id: String, error: String },
     /// Bead was cancelled
-    Cancelled {
-        bead_id: String,
-    },
+    Cancelled { bead_id: String },
     /// Phase started within a bead
-    PhaseStarted {
-        bead_id: String,
-        phase: String,
-    },
+    PhaseStarted { bead_id: String, phase: String },
     /// Phase completed within a bead
     PhaseCompleted {
         bead_id: String,
@@ -65,13 +49,9 @@ pub enum BeadEvent {
         message: String,
     },
     /// Heartbeat to keep connection alive
-    Heartbeat {
-        timestamp: u64,
-    },
+    Heartbeat { timestamp: u64 },
     /// Unknown event type (for forward compatibility)
-    Unknown {
-        raw: String,
-    },
+    Unknown { raw: String },
 }
 
 impl BeadEvent {

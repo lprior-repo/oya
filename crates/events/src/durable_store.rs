@@ -418,7 +418,11 @@ mod tests {
         let timestamp = Utc::now();
         let query = EventQuery::new().before(timestamp);
 
-        assert_eq!(query.before, Some(timestamp), "before() should set the before field");
+        assert_eq!(
+            query.before,
+            Some(timestamp),
+            "before() should set the before field"
+        );
     }
 
     #[test]
@@ -441,12 +445,20 @@ mod tests {
         // Query for events before a timestamp in the far future - should include the event
         let query = EventQuery::new().before(future);
         let filtered: Vec<_> = query.filter_events(events.iter()).collect();
-        assert_eq!(filtered.len(), 1, "Event before future timestamp should be included");
+        assert_eq!(
+            filtered.len(),
+            1,
+            "Event before future timestamp should be included"
+        );
 
         // Query for events before a timestamp in the past - should exclude the event
         let query = EventQuery::new().before(past);
         let filtered: Vec<_> = query.filter_events(events.iter()).collect();
-        assert_eq!(filtered.len(), 0, "Event at/after past timestamp should be excluded");
+        assert_eq!(
+            filtered.len(),
+            0,
+            "Event at/after past timestamp should be excluded"
+        );
     }
 
     #[test]
@@ -463,7 +475,11 @@ mod tests {
         // Query for events BEFORE the exact timestamp - should exclude (>= means at or after is excluded)
         let query = EventQuery::new().before(exact_time);
         let filtered: Vec<_> = query.filter_events(events.iter()).collect();
-        assert_eq!(filtered.len(), 0, "Event at exact before timestamp should be excluded");
+        assert_eq!(
+            filtered.len(),
+            0,
+            "Event at exact before timestamp should be excluded"
+        );
     }
 
     #[test]
@@ -480,7 +496,11 @@ mod tests {
         // Query for events AFTER the exact timestamp - should exclude (<= means at or before is excluded)
         let query = EventQuery::new().after(exact_time);
         let filtered: Vec<_> = query.filter_events(events.iter()).collect();
-        assert_eq!(filtered.len(), 0, "Event at exact after timestamp should be excluded");
+        assert_eq!(
+            filtered.len(),
+            0,
+            "Event at exact after timestamp should be excluded"
+        );
     }
 
     #[test]

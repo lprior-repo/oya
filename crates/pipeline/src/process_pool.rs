@@ -224,11 +224,10 @@ impl WorkerProcess {
         };
 
         // Wait for the process to complete
-        let status = self
-            .child
-            .wait()
-            .await
-            .map_err(|e| Error::command_failed(-1, format!("Failed to wait for process: {}", e)))?;
+        let status =
+            self.child.wait().await.map_err(|e| {
+                Error::command_failed(-1, format!("Failed to wait for process: {}", e))
+            })?;
 
         Ok(ProcessResult {
             exit_code: status.code(),
@@ -247,9 +246,9 @@ impl WorkerProcess {
 
     /// Try to kill the process (does not fail if already dead).
     pub fn try_kill(&mut self) -> Result<()> {
-        self.child.start_kill().map_err(|e| {
-            Error::command_failed(-1, format!("Failed to start kill process: {}", e))
-        })
+        self.child
+            .start_kill()
+            .map_err(|e| Error::command_failed(-1, format!("Failed to start kill process: {}", e)))
     }
 }
 

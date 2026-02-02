@@ -249,10 +249,7 @@ impl BeadFilters {
     pub fn matches(&self, bead: &Bead) -> bool {
         let status_match = self.status.map_or(true, |s| s == bead.status);
         let priority_match = self.priority.map_or(true, |p| p == bead.priority);
-        let tag_match = self
-            .tag
-            .as_ref()
-            .map_or(true, |t| bead.tags.contains(t));
+        let tag_match = self.tag.as_ref().map_or(true, |t| bead.tags.contains(t));
 
         status_match && priority_match && tag_match
     }

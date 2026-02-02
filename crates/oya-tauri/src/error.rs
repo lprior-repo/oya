@@ -39,6 +39,10 @@ pub enum AppError {
     /// Internal error
     #[error("Internal error: {0}")]
     Internal(String),
+
+    /// Pipeline error
+    #[error("Pipeline error: {0}")]
+    Pipeline(String),
 }
 
 impl From<std::io::Error> for AppError {

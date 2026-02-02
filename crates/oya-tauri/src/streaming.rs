@@ -100,8 +100,7 @@ impl StreamBuffer {
             // Write to ring buffer (handling wrap-around)
             let end = (self.write_pos + chunk_size) % self.capacity;
             if end > self.write_pos || chunk_size == 0 {
-                self.data[self.write_pos..self.write_pos + chunk_size]
-                    .copy_from_slice(chunk_bytes);
+                self.data[self.write_pos..self.write_pos + chunk_size].copy_from_slice(chunk_bytes);
             } else {
                 // Wrap around
                 let first_part = self.capacity - self.write_pos;

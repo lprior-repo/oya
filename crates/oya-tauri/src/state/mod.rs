@@ -9,7 +9,7 @@ pub use cache::{BeadCache, CacheConfig};
 
 use crate::error::{AppError, AppResult};
 use dashmap::DashMap;
-use oya_shared::Bead;
+use oya_shared::{Bead, PipelineState};
 use parking_lot::RwLock;
 use std::path::PathBuf;
 
@@ -19,6 +19,8 @@ pub struct AppState {
     pub cache: BeadCache,
     /// Active streams (stream_id -> stream info)
     streams: DashMap<String, StreamInfo>,
+    /// Pipeline states per task (task_id -> pipeline state)
+    pipelines: DashMap<String, PipelineState>,
     /// Project root directory
     project_root: RwLock<Option<PathBuf>>,
     /// Beads directory path
@@ -51,6 +53,7 @@ impl AppState {
         Self {
             cache: BeadCache::new(),
             streams: DashMap::new(),
+            pipelines: DashMap::new(),
             project_root: RwLock::new(None),
             beads_dir: RwLock::new(None),
         }
@@ -62,6 +65,7 @@ impl AppState {
         Self {
             cache: BeadCache::with_config(config),
             streams: DashMap::new(),
+            pipelines: DashMap::new(),
             project_root: RwLock::new(None),
             beads_dir: RwLock::new(None),
         }
@@ -97,26 +101,20 @@ impl AppState {
 
         let bead_file = beads_dir.join(format!("{id}.json"));
 
-        let content = tokio::fs::read_to_string(&bead_file)
-            .await
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    AppError::BeadNotFound(id.to_string())
-                } else {
-                    AppError::FileSystem(e.to_string())
-                }
-            })?;
+        let content = tokio::fs::read_to_string(&bead_file).await.map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                AppError::BeadNotFound(id.to_string())
+            } else {
+                AppError::FileSystem(e.to_string())
+            }
+        })?;
 
         let bead: Bead = serde_json::from_str(&content)?;
         Ok(bead)
     }
 
     /// List beads from disk with pagination
-    pub async fn list_beads_paginated(
-        &self,
-        offset: usize,
-        limit: usize,
-    ) -> AppResult<Vec<Bead>> {
+    pub async fn list_beads_paginated(&self, offset: usize, limit: usize) -> AppResult<Vec<Bead>> {
         let beads_dir = self
             .beads_dir()
             .ok_or_else(|| AppError::Config("Beads directory not set".to_string()))?;
@@ -156,6 +154,25 @@ impl AppState {
 
         Ok(beads)
     }
+
+    // Pipeline state management
+
+    /// Get pipeline state for a task
+    pub async fn get_pipeline_state(&self, task_id: &str) -> Option<PipelineState> {
+        self.pipelines.get(task_id).map(|r| r.clone())
+    }
+
+    /// Set pipeline state for a task
+    pub async fn set_pipeline_state(&self, task_id: String, state: PipelineState) {
+        self.pipelines.insert(task_id, state);
+    }
+
+    /// Remove pipeline state for a task
+    pub fn remove_pipeline_state(&self, task_id: &str) {
+        self.pipelines.remove(task_id);
+    }
+
+    // Stream management
 
     /// Register a new stream
     pub fn register_stream(&self, id: String, bead_id: Option<String>) {

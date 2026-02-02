@@ -7,8 +7,10 @@
 
 mod beads;
 mod health;
+mod pipeline;
 mod streams;
 
 pub use beads::*;
 pub use health::*;
+pub use pipeline::*;
 pub use streams::*;

@@ -1116,7 +1116,10 @@ mod tests {
             result.is_err(),
             "Should return error when worker doesn't exist"
         );
-        assert!(pool.is_empty(), "Pool should remain empty after failed update");
+        assert!(
+            pool.is_empty(),
+            "Pool should remain empty after failed update"
+        );
     }
 
     #[test]

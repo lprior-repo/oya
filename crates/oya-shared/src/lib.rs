@@ -22,7 +22,11 @@
 mod bead;
 mod event;
 mod graph;
+mod pipeline;
 
 pub use bead::{Bead, BeadFilters, BeadPriority, BeadStatus};
 pub use event::{BeadEvent, StreamChunk, StreamEnded};
-pub use graph::{Edge, EdgeState, EdgeStyle, EdgeType, Graph, Node, NodeId, NodeShape, NodeState, Position};
+pub use graph::{
+    Edge, EdgeState, EdgeStyle, EdgeType, Graph, Node, NodeId, NodeShape, NodeState, Position,
+};
+pub use pipeline::{PipelineState, StageEvent, StageInfo, StageStatus};

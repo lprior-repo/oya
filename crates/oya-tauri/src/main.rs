@@ -47,6 +47,12 @@ fn main() {
             commands::stop_stream,
             commands::get_stream_status,
             commands::list_active_streams,
+            // Pipeline commands
+            commands::get_pipeline_stages,
+            commands::get_pipeline_state,
+            commands::run_stage,
+            commands::run_pipeline,
+            commands::reset_pipeline,
             // Health commands
             commands::health_check,
             commands::get_system_info,
