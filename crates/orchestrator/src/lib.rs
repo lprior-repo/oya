@@ -9,6 +9,9 @@
 
 pub use oya_core::{Error, Result};
 
+/// Workflow DAG module
+pub mod dag;
+
 /// Orchestrator module for managing agent swarms
 pub mod agent_swarm {}
 

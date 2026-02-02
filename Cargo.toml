@@ -96,6 +96,9 @@ regex = "1"
 # Glob pattern matching
 glob = "0.3"
 
+# Graph data structure (battle-tested)
+petgraph = "0.6"
+
 # Notify for file watching
 notify = "7"
 
