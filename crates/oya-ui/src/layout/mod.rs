@@ -1,6 +1,7 @@
 //! Graph layout algorithms
 
 pub mod gravity;
+pub mod spring_force;
 
 use crate::models::GraphNode;
 
