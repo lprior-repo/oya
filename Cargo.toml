@@ -9,6 +9,7 @@
     "crates/events",
     "crates/reconciler",
     "crates/oya-web",
+    "tools/profiling",
     # Excluded: oya-ui is standalone workspace (Leptos macro needs panic = deny)
     # "crates/oya-ui",
 ]
