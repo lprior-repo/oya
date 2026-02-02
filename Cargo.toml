@@ -15,8 +15,6 @@
     # "crates/oya-ui",
     # Excluded: oya-tauri is standalone (Tauri build system)
     # "crates/oya-tauri",
-    # Excluded: oya-bevy is standalone (Bevy uses panic/unwrap internally)
-    # "crates/oya-bevy",
 ]
 resolver = "2"
 

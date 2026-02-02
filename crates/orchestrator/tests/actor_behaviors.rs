@@ -163,13 +163,13 @@ async fn given_invalid_workflow_when_query_then_returns_error_not_panic() -> Res
     let scheduler = setup_scheduler().await?;
 
     // When: Query ready beads for non-existent workflow
-    let result: Vec<String> = call_with_timeout(&scheduler, |reply| {
+    let result = call_with_timeout(&scheduler, |reply| {
         SchedulerMessage::GetWorkflowReadyBeads {
             workflow_id: "non-existent".to_string(),
             reply,
         }
     })
-    .await?;
+    .await??;
 
     // Then: Should return empty list for non-existent workflow
     assert!(result.is_empty(), "Should return empty list for invalid workflow");
@@ -197,7 +197,7 @@ async fn given_workflow_when_schedule_bead_then_bead_tracked() -> Result<(), Box
         workflow_id: "wf-bead".to_string(),
     });
     assert!(result.is_ok(), "Register failed: {:?}", result);
-    tokio::time::sleep(Duration::from_millis(10)).await?;
+    tokio::time::sleep(Duration::from_millis(10)).await;
 
     // When: Schedule a bead
     let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
@@ -930,14 +930,16 @@ async fn given_multiple_workflows_when_unregister_one_then_other_unaffected() ->
         .await?;
 
     assert!(status.is_some(), "wf-keep should still exist");
-    assert_eq!(status.ok_or_else(|| -> Box<dyn std::error::Error> { "exists".into() })?.total_beads, 1);
+    if let Some(s) = status {
+        assert_eq!(s.total_beads, 1);
+    }
 
     // Removed workflow should not exist
     let removed_status = call_with_timeout(&scheduler, |reply| SchedulerMessage::GetWorkflowStatus {
             workflow_id: "wf-remove".to_string(),
             reply,
         })
-        .await;
+        .await?;
 
     assert!(removed_status.is_none(), "wf-remove should not exist");
 
@@ -970,19 +972,16 @@ async fn given_root_bead_when_is_ready_query_then_true() -> Result<(), Box<dyn s
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     // When: Query if the bead is ready
-    let is_ready: Result<bool, ActorError> =
+    let is_ready =
         call_with_timeout(&scheduler, |reply| SchedulerMessage::IsBeadReady {
             workflow_id: "wf-isready".to_string(),
             bead_id: "root-bead".to_string(),
             reply,
         })
-        .await;
+        .await??;
 
     // Then: Should be ready (no dependencies)
-    assert!(
-        is_ready.ok_or_else(|| -> Box<dyn std::error::Error> { "Query should succeed".into() })?,
-        "Root bead should be ready"
-    );
+    assert!(is_ready, "Root bead should be ready");
 
     // Cleanup
     scheduler.stop(None);
@@ -1022,19 +1021,16 @@ async fn given_blocked_bead_when_is_ready_query_then_false() -> Result<(), Box<d
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     // When: Query if B is ready
-    let is_ready: Result<bool, ActorError> =
+    let is_ready =
         call_with_timeout(&scheduler, |reply| SchedulerMessage::IsBeadReady {
             workflow_id: "wf-blocked".to_string(),
             bead_id: "b".to_string(),
             reply,
         })
-        .await;
+        .await??;
 
     // Then: B should NOT be ready (blocked by A)
-    assert!(
-        !is_ready.ok_or_else(|| -> Box<dyn std::error::Error> { "Query should succeed".into() })?,
-        "B should be blocked by A"
-    );
+    assert!(!is_ready, "B should be blocked by A");
 
     // Cleanup
     scheduler.stop(None);
@@ -1063,14 +1059,10 @@ async fn given_empty_workflow_when_query_ready_beads_then_empty_list() -> Result
             workflow_id: "wf-empty".to_string(),
             reply,
         }
-    }).await?;
+    }).await??;
 
     // Then: Should return empty list, not error
-    assert!(result.is_ok(), "Query should succeed");
-    assert!(
-        result.ok_or_else(|| -> Box<dyn std::error::Error> { "ok".into() })?.is_empty(),
-        "Empty workflow has no ready beads"
-    );
+    assert!(result.is_empty(), "Empty workflow has no ready beads");
 
     scheduler.stop(None);
 
@@ -1155,12 +1147,8 @@ async fn given_long_chain_when_complete_sequentially_then_unlocks_one_at_a_time(
             reply,
         }
     })
-    .await;
-    assert_eq!(
-        ready.ok_or_else(|| -> Box<dyn std::error::Error> { "ok".into() })?.len(),
-        1,
-        "Only 'a' should be ready initially"
-    );
+    .await??;
+    assert_eq!(ready.len(), 1, "Only 'a' should be ready initially");
 
     // Complete each bead and verify next becomes ready
     for i in 0..beads.len() - 1 {
@@ -1179,11 +1167,10 @@ async fn given_long_chain_when_complete_sequentially_then_unlocks_one_at_a_time(
                 reply,
             }
         })
-        .await;
+        .await??;
 
-        let ready_list = ready.ok_or_else(|| -> Box<dyn std::error::Error> { "Query should succeed".into() })?;
         assert!(
-            ready_list.contains(&beads[i + 1].to_string()),
+            ready.contains(&beads[i + 1].to_string()),
             "After completing '{}', '{}' should be ready",
             beads[i],
             beads[i + 1]
@@ -1340,13 +1327,11 @@ async fn given_wide_fan_out_when_root_completes_then_all_children_ready() -> Res
             reply,
         }
     })
-    .await;
-
-    let ready_list = ready.ok_or_else(|| -> Box<dyn std::error::Error> { "Query should succeed".into() })?;
-    assert_eq!(ready_list.len(), 5, "All 5 children should be ready");
+    .await??;
+    assert_eq!(ready.len(), 5, "All 5 children should be ready");
     for child in &children {
         assert!(
-            ready_list.contains(&child.to_string()),
+            ready.contains(&child.to_string()),
             "{} should be ready",
             child
         );
@@ -1416,10 +1401,9 @@ async fn given_wide_fan_in_when_all_parents_complete_then_sink_ready() -> Result
             reply,
         }
     })
-    .await;
-    let ready_list = ready?;
+    .await??;
     assert!(
-        !ready_list.contains(&"sink".to_string()),
+        !ready.contains(&"sink".to_string()),
         "Sink should NOT be ready until all parents complete"
     );
 
@@ -1440,10 +1424,9 @@ async fn given_wide_fan_in_when_all_parents_complete_then_sink_ready() -> Result
             reply,
         }
     })
-    .await;
-    let ready_list = ready?;
+    .await??;
     assert!(
-        ready_list.contains(&"sink".to_string()),
+        ready.contains(&"sink".to_string()),
         "Sink should be ready after all parents complete"
     );
 
@@ -1495,8 +1478,8 @@ async fn given_w_dag_when_complete_in_order_then_correct_unlocks() -> Result<(),
             reply,
         }
     })
-    .await;
-    assert_eq!(ready?, vec!["a".to_string()]);
+    .await??;
+    assert_eq!(ready, vec!["a".to_string()]);
 
     // Complete A -> B and C should be ready
     let result = scheduler.send_message(SchedulerMessage::OnBeadCompleted {
@@ -1513,10 +1496,9 @@ async fn given_w_dag_when_complete_in_order_then_correct_unlocks() -> Result<(),
             reply,
         }
     })
-    .await;
-    let ready_list = ready?;
-    assert!(ready_list.contains(&"b".to_string()), "B should be ready");
-    assert!(ready_list.contains(&"c".to_string()), "C should be ready");
+    .await??;
+    assert!(ready.contains(&"b".to_string()), "B should be ready");
+    assert!(ready.contains(&"c".to_string()), "C should be ready");
 
     // Complete B and C
     let result = scheduler.send_message(SchedulerMessage::OnBeadCompleted {
@@ -1540,11 +1522,10 @@ async fn given_w_dag_when_complete_in_order_then_correct_unlocks() -> Result<(),
             reply,
         }
     })
-    .await;
-    let ready_list = ready?;
-    assert!(ready_list.contains(&"d".to_string()), "D should be ready");
+    .await??;
+    assert!(ready.contains(&"d".to_string()), "D should be ready");
     assert!(
-        !ready_list.contains(&"e".to_string()),
+        !ready.contains(&"e".to_string()),
         "E not ready yet (needs D)"
     );
 
@@ -1563,9 +1544,8 @@ async fn given_w_dag_when_complete_in_order_then_correct_unlocks() -> Result<(),
             reply,
         }
     })
-    .await;
-    assert!(
-        ready.ok_or_else(|| -> Box<dyn std::error::Error> { "ok".into() })?.contains(&"e".to_string()),
+    .await??;
+    assert!(ready.contains(&"e".to_string()),
         "E should be ready"
     );
 
@@ -1969,13 +1949,12 @@ async fn given_workflows_when_query_one_then_no_cross_contamination() -> Result<
             reply,
         }
     })
-    .await;
+    .await??;
 
     // Then: Should only contain beads from workflow 1
-    let ready1_list = ready1.ok_or_else(|| -> Box<dyn std::error::Error> { "ok".into() })?;
-    assert!(ready1_list.contains(&"bead-from-1".to_string()));
+    assert!(ready1.contains(&"bead-from-1".to_string()));
     assert!(
-        !ready1_list.contains(&"bead-from-2".to_string()),
+        !ready1.contains(&"bead-from-2".to_string()),
         "No cross-contamination"
     );
 
@@ -1986,13 +1965,12 @@ async fn given_workflows_when_query_one_then_no_cross_contamination() -> Result<
             reply,
         }
     })
-    .await;
+    .await??;
 
     // Then: Should only contain beads from workflow 2
-    let ready2_list = ready2.ok_or_else(|| -> Box<dyn std::error::Error> { "ok".into() })?;
-    assert!(ready2_list.contains(&"bead-from-2".to_string()));
+    assert!(ready2.contains(&"bead-from-2".to_string()));
     assert!(
-        !ready2_list.contains(&"bead-from-1".to_string()),
+        !ready2.contains(&"bead-from-1".to_string()),
         "No cross-contamination"
     );
 
