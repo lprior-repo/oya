@@ -9,7 +9,7 @@ use std::time::Duration;
 use ractor::ActorRef;
 
 use orchestrator::actors::{
-    ActorError, SchedulerArguments, SchedulerMessage, WorkflowStatus, spawn_scheduler_with_name,
+    ActorError, SchedulerArguments, SchedulerMessage, spawn_scheduler_with_name,
 };
 use orchestrator::scheduler::SchedulerStats;
 
@@ -169,10 +169,11 @@ async fn given_invalid_workflow_when_query_then_returns_error_not_panic() -> Res
             reply,
         }
     })
-    .await??;
+    .await?;
 
-    // Then: Should return empty list for non-existent workflow
-    assert!(result.is_empty(), "Should return empty list for invalid workflow");
+    // Then: Should return error (not panic)
+    assert!(result.is_err(), "Should return error for invalid workflow");
+    assert!(matches!(result, Err(ActorError::WorkflowNotFound(_))));
 
     // Verify actor is still running
     let stats: SchedulerStats =
@@ -462,7 +463,7 @@ async fn given_running_scheduler_when_shutdown_then_stops_cleanly() -> Result<()
     assert_eq!(stats.workflow_count, 0);
 
     // When: Send shutdown message
-    let result = scheduler.send_message(SchedulerMessage::Shutdown)?;
+    let _result = scheduler.send_message(SchedulerMessage::Shutdown)?;
 
     // Then: Actor should stop
     tokio::time::sleep(Duration::from_millis(50)).await;
