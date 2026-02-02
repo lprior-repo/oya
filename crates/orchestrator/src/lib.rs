@@ -14,3 +14,6 @@ pub mod agent_swarm {}
 
 /// Task distribution module
 pub mod distribution {}
+
+/// Scheduler actor for managing workflow DAGs and bead scheduling
+pub mod scheduler;
