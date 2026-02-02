@@ -40,6 +40,12 @@ fn create_app() -> Router {
         broadcast_tx,
     };
 
+    create_app_with_state(state)
+}
+
+/// Create the axum application with a provided state
+/// Used for testing to inject custom state
+pub fn create_app_with_state(state: AppState) -> Router {
     let static_files =
         get_service(ServeDir::new("crates/oya-ui/dist").append_index_html_on_directories(true));
 

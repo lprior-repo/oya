@@ -37,3 +37,4 @@ path = "src/bin/server.rs"
 tokio = { workspace = true }
 axum-test = "18"
 proptest = "1"
+tokio-tungstenite = "0.26"

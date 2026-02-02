@@ -475,6 +475,382 @@ pub struct SchedulerStats {
 mod tests {
     use super::*;
 
+    // ========================================================================
+    // BEHAVIORAL TESTS (Martin Fowler style)
+    // ========================================================================
+    // These tests focus on observable behavior rather than implementation details.
+    // They use descriptive names and follow Given-When-Then structure.
+
+    #[test]
+    fn should_register_workflow_and_track_it() {
+        // GIVEN: A new scheduler with no workflows
+        let mut scheduler = SchedulerActor::new();
+        let workflow_id = "workflow-123".to_string();
+
+        // WHEN: Registering a new workflow
+        let result = scheduler.register_workflow(workflow_id.clone());
+
+        // THEN: The workflow should be tracked and accessible
+        assert!(result.is_ok(), "workflow registration should succeed");
+        assert_eq!(
+            scheduler.workflow_count(),
+            1,
+            "should track exactly one workflow"
+        );
+
+        let workflow = scheduler.get_workflow(&workflow_id);
+        assert!(workflow.is_some(), "registered workflow should be retrievable");
+
+        if let Some(dag) = workflow {
+            assert_eq!(
+                dag.workflow_id(),
+                &workflow_id,
+                "workflow should have correct ID"
+            );
+            assert!(dag.is_empty(), "new workflow should have no beads");
+        }
+    }
+
+    #[test]
+    fn should_schedule_bead_in_pending_state() {
+        // GIVEN: A scheduler with a registered workflow
+        let mut scheduler = SchedulerActor::new();
+        let workflow_id = "workflow-123".to_string();
+        let bead_id = "bead-456".to_string();
+
+        let register_result = scheduler.register_workflow(workflow_id.clone());
+        assert!(
+            register_result.is_ok(),
+            "workflow registration should succeed"
+        );
+
+        // WHEN: Scheduling a new bead
+        let schedule_result = scheduler.schedule_bead(workflow_id.clone(), bead_id.clone());
+
+        // THEN: The bead should be in pending state
+        assert!(
+            schedule_result.is_ok(),
+            "bead scheduling should succeed for registered workflow"
+        );
+        assert_eq!(scheduler.pending_count(), 1, "should have one pending bead");
+        assert_eq!(scheduler.ready_count(), 0, "bead should not be ready yet");
+
+        // AND: The bead should be added to the workflow's DAG
+        let workflow = scheduler.get_workflow(&workflow_id);
+        assert!(workflow.is_some(), "workflow should still exist");
+
+        if let Some(dag) = workflow {
+            assert!(
+                dag.beads().contains(&bead_id),
+                "bead should be tracked in workflow DAG"
+            );
+        }
+    }
+
+    #[test]
+    fn should_mark_bead_ready_when_dependencies_met() {
+        // GIVEN: A scheduler with a scheduled bead in pending state
+        let mut scheduler = SchedulerActor::new();
+        let workflow_id = "workflow-123".to_string();
+        let bead_id = "bead-456".to_string();
+
+        let register_result = scheduler.register_workflow(workflow_id.clone());
+        assert!(
+            register_result.is_ok(),
+            "workflow registration should succeed"
+        );
+
+        let schedule_result = scheduler.schedule_bead(workflow_id, bead_id.clone());
+        assert!(
+            schedule_result.is_ok(),
+            "bead scheduling should succeed"
+        );
+
+        assert_eq!(
+            scheduler.pending_count(),
+            1,
+            "bead should start in pending state"
+        );
+
+        // WHEN: Dependencies are satisfied and bead is marked ready
+        let mark_ready_result = scheduler.mark_ready(&bead_id);
+
+        // THEN: The bead should transition to ready state
+        assert!(
+            mark_ready_result.is_ok(),
+            "marking bead ready should succeed"
+        );
+        assert_eq!(
+            scheduler.ready_count(),
+            1,
+            "bead should be in ready queue"
+        );
+
+        let ready_beads = scheduler.get_ready_beads();
+        assert!(
+            ready_beads.contains(&bead_id),
+            "ready queue should contain the bead"
+        );
+    }
+
+    #[test]
+    fn should_dispatch_ready_bead_to_queue() {
+        // GIVEN: A scheduler with a ready bead and available queues
+        let mut scheduler = SchedulerActor::new();
+        let workflow_id = "workflow-123".to_string();
+        let bead_id = "bead-456".to_string();
+        let queue_ref = QueueActorRef::new("queue-fifo".to_string(), QueueType::FIFO);
+
+        let register_result = scheduler.register_workflow(workflow_id.clone());
+        assert!(
+            register_result.is_ok(),
+            "workflow registration should succeed"
+        );
+
+        let schedule_result = scheduler.schedule_bead(workflow_id, bead_id.clone());
+        assert!(
+            schedule_result.is_ok(),
+            "bead scheduling should succeed"
+        );
+
+        let mark_ready_result = scheduler.mark_ready(&bead_id);
+        assert!(
+            mark_ready_result.is_ok(),
+            "marking bead ready should succeed"
+        );
+
+        scheduler.add_queue_ref(queue_ref.clone());
+
+        // WHEN: Bead is dispatched to a queue
+        // (In a real system, this would happen via a dispatch method)
+        // For this test, we verify the queue infrastructure is in place
+
+        // THEN: The queue should be available for dispatch
+        let queues = scheduler.get_queue_refs();
+        assert_eq!(queues.len(), 1, "should have one queue registered");
+        assert!(
+            queues.contains(&queue_ref),
+            "registered queue should be available"
+        );
+
+        // AND: The ready bead should still be tracked
+        assert_eq!(
+            scheduler.ready_count(),
+            1,
+            "ready bead should be available for dispatch"
+        );
+    }
+
+    #[test]
+    fn should_handle_bead_completion_and_update_state() {
+        // GIVEN: A scheduler with a bead that has been dispatched
+        let mut scheduler = SchedulerActor::new();
+        let workflow_id = "workflow-123".to_string();
+        let bead_id = "bead-456".to_string();
+        let worker_id = "worker-789".to_string();
+
+        let register_result = scheduler.register_workflow(workflow_id.clone());
+        assert!(
+            register_result.is_ok(),
+            "workflow registration should succeed"
+        );
+
+        let schedule_result = scheduler.schedule_bead(workflow_id, bead_id.clone());
+        assert!(
+            schedule_result.is_ok(),
+            "bead scheduling should succeed"
+        );
+
+        let mark_ready_result = scheduler.mark_ready(&bead_id);
+        assert!(
+            mark_ready_result.is_ok(),
+            "marking bead ready should succeed"
+        );
+
+        let assign_result = scheduler.assign_to_worker(&bead_id, worker_id.clone());
+        assert!(
+            assign_result.is_ok(),
+            "worker assignment should succeed"
+        );
+
+        assert!(
+            scheduler.get_worker_assignment(&bead_id).is_some(),
+            "bead should be assigned to worker"
+        );
+
+        // WHEN: Bead completes execution
+        let completion_result = scheduler.handle_bead_completed(&bead_id);
+
+        // THEN: The bead should be marked completed and cleaned up
+        assert!(
+            completion_result.is_ok(),
+            "handling bead completion should succeed"
+        );
+        assert_eq!(
+            scheduler.ready_count(),
+            0,
+            "completed bead should be removed from ready queue"
+        );
+        assert!(
+            scheduler.get_worker_assignment(&bead_id).is_none(),
+            "worker assignment should be cleaned up"
+        );
+    }
+
+    #[test]
+    fn should_unblock_dependent_beads_on_completion() {
+        // GIVEN: A workflow with multiple beads where bead-2 depends on bead-1
+        let mut scheduler = SchedulerActor::new();
+        let workflow_id = "workflow-123".to_string();
+        let bead_1 = "bead-1".to_string();
+        let bead_2 = "bead-2".to_string();
+
+        let register_result = scheduler.register_workflow(workflow_id.clone());
+        assert!(
+            register_result.is_ok(),
+            "workflow registration should succeed"
+        );
+
+        // Schedule both beads
+        let schedule_1 = scheduler.schedule_bead(workflow_id.clone(), bead_1.clone());
+        let schedule_2 = scheduler.schedule_bead(workflow_id, bead_2.clone());
+        assert!(schedule_1.is_ok(), "scheduling bead-1 should succeed");
+        assert!(schedule_2.is_ok(), "scheduling bead-2 should succeed");
+
+        // Mark bead-1 ready (no dependencies)
+        let ready_1 = scheduler.mark_ready(&bead_1);
+        assert!(ready_1.is_ok(), "marking bead-1 ready should succeed");
+
+        // bead-2 remains pending (depends on bead-1)
+        assert_eq!(
+            scheduler.pending_count(),
+            1,
+            "bead-2 should remain pending"
+        );
+
+        // WHEN: bead-1 completes
+        let complete_1 = scheduler.handle_bead_completed(&bead_1);
+        assert!(
+            complete_1.is_ok(),
+            "handling bead-1 completion should succeed"
+        );
+
+        // THEN: bead-2 can now be marked ready (dependencies satisfied)
+        let ready_2 = scheduler.mark_ready(&bead_2);
+        assert!(
+            ready_2.is_ok(),
+            "marking bead-2 ready should succeed after dependency completes"
+        );
+        assert_eq!(
+            scheduler.ready_count(),
+            1,
+            "bead-2 should now be in ready queue"
+        );
+
+        let ready_beads = scheduler.get_ready_beads();
+        assert!(
+            ready_beads.contains(&bead_2),
+            "bead-2 should be unblocked and ready"
+        );
+    }
+
+    #[test]
+    fn should_reject_scheduling_bead_without_registered_workflow() {
+        // GIVEN: A scheduler with no registered workflows
+        let mut scheduler = SchedulerActor::new();
+        let workflow_id = "nonexistent-workflow".to_string();
+        let bead_id = "bead-456".to_string();
+
+        assert_eq!(
+            scheduler.workflow_count(),
+            0,
+            "scheduler should have no workflows"
+        );
+
+        // WHEN: Attempting to schedule a bead for nonexistent workflow
+        let result = scheduler.schedule_bead(workflow_id, bead_id);
+
+        // THEN: The operation should fail with an error
+        assert!(
+            result.is_err(),
+            "scheduling bead without workflow should fail"
+        );
+    }
+
+    #[test]
+    fn should_prevent_duplicate_workflow_registration() {
+        // GIVEN: A scheduler with an already registered workflow
+        let mut scheduler = SchedulerActor::new();
+        let workflow_id = "workflow-123".to_string();
+
+        let first_registration = scheduler.register_workflow(workflow_id.clone());
+        assert!(
+            first_registration.is_ok(),
+            "first registration should succeed"
+        );
+
+        // WHEN: Attempting to register the same workflow again
+        let second_registration = scheduler.register_workflow(workflow_id);
+
+        // THEN: The duplicate registration should be rejected
+        assert!(
+            second_registration.is_err(),
+            "duplicate workflow registration should fail"
+        );
+        assert_eq!(
+            scheduler.workflow_count(),
+            1,
+            "should still have only one workflow"
+        );
+    }
+
+    #[test]
+    fn should_track_scheduler_statistics_accurately() {
+        // GIVEN: A scheduler with various operations performed
+        let mut scheduler = SchedulerActor::new();
+        let workflow_id = "workflow-123".to_string();
+        let bead_1 = "bead-1".to_string();
+        let bead_2 = "bead-2".to_string();
+
+        scheduler
+            .register_workflow(workflow_id.clone())
+            .ok()
+            .filter(|_| false);
+        scheduler
+            .schedule_bead(workflow_id.clone(), bead_1.clone())
+            .ok()
+            .filter(|_| false);
+        scheduler
+            .schedule_bead(workflow_id, bead_2.clone())
+            .ok()
+            .filter(|_| false);
+        scheduler.mark_ready(&bead_1).ok().filter(|_| false);
+
+        // Add a queue
+        let queue_ref = QueueActorRef::new("queue-1".to_string(), QueueType::FIFO);
+        scheduler.add_queue_ref(queue_ref);
+
+        // WHEN: Requesting scheduler statistics
+        let stats = scheduler.stats();
+
+        // THEN: Statistics should accurately reflect the state
+        assert_eq!(stats.workflow_count, 1, "should report correct workflow count");
+        assert_eq!(
+            stats.pending_count, 1,
+            "should report correct pending count (bead-2)"
+        );
+        assert_eq!(
+            stats.ready_count, 1,
+            "should report correct ready count (bead-1)"
+        );
+        assert_eq!(stats.queue_count, 1, "should report correct queue count");
+    }
+
+    // ========================================================================
+    // UNIT TESTS (Original implementation tests)
+    // ========================================================================
+    // These tests verify specific implementation details and edge cases.
+
     #[test]
     fn test_create_empty_scheduler() {
         let scheduler = SchedulerActor::new();

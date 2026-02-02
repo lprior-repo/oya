@@ -17,3 +17,9 @@ pub mod distribution {}
 
 /// Scheduler actor for managing workflow DAGs and bead scheduling
 pub mod scheduler;
+
+/// Graceful shutdown handling with signal management and checkpoint coordination
+pub mod shutdown;
+
+/// Workflow DAG module for managing bead dependencies
+pub mod dag;

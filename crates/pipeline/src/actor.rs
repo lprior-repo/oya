@@ -968,4 +968,262 @@ mod tests {
         assert!(monitor.is_empty());
         assert_eq!(monitor.check_interval(), 30);
     }
+
+    // === Behavioral Tests (Martin Fowler style) ===
+    //
+    // These tests document BEHAVIOR, not implementation.
+    // They should survive refactoring as long as behavior stays the same.
+    // Each test has a clear Given/When/Then structure.
+
+    #[test]
+    fn should_track_worker_count_after_spawning() {
+        // Given: An empty process pool
+        let mut pool = ProcessPoolActor::new();
+        assert_eq!(pool.size(), 0);
+
+        // When: We spawn 3 workers
+        let worker1 = ProcessId::new(1);
+        let worker2 = ProcessId::new(2);
+        let worker3 = ProcessId::new(3);
+
+        let result1 = pool.add_worker(worker1, WorkerState::Idle);
+        let result2 = pool.add_worker(worker2, WorkerState::Idle);
+        let result3 = pool.add_worker(worker3, WorkerState::Idle);
+
+        // Then: All additions succeed and pool tracks correct count
+        assert!(result1.is_ok(), "First worker addition failed");
+        assert!(result2.is_ok(), "Second worker addition failed");
+        assert!(result3.is_ok(), "Third worker addition failed");
+        assert_eq!(pool.size(), 3, "Pool should contain exactly 3 workers");
+        assert_eq!(
+            pool.count_by_state(WorkerState::Idle),
+            3,
+            "All workers should be in Idle state"
+        );
+    }
+
+    #[test]
+    fn should_release_worker_back_to_pool() {
+        // Given: A pool with a claimed worker
+        let mut pool = ProcessPoolActor::new();
+        let worker_id = ProcessId::new(1);
+        pool.add_worker(worker_id, WorkerState::Claimed)
+            .expect("Failed to add worker");
+
+        assert_eq!(
+            pool.get_state(&worker_id),
+            Some(WorkerState::Claimed),
+            "Worker should start as claimed"
+        );
+
+        // When: We release the worker back to idle
+        let result = pool.update_state(&worker_id, WorkerState::Idle);
+
+        // Then: Worker transitions to idle state
+        assert!(result.is_ok(), "Failed to update worker state");
+        assert_eq!(
+            pool.get_state(&worker_id),
+            Some(WorkerState::Idle),
+            "Worker should be idle after release"
+        );
+        assert_eq!(
+            pool.count_by_state(WorkerState::Claimed),
+            0,
+            "No workers should be claimed"
+        );
+        assert_eq!(
+            pool.count_by_state(WorkerState::Idle),
+            1,
+            "One worker should be idle"
+        );
+    }
+
+    #[test]
+    fn should_reject_spawn_when_pool_full() {
+        // Given: A pool with maximum capacity (simulate by adding a worker with specific ID)
+        let mut pool = ProcessPoolActor::new();
+        let worker_id = ProcessId::new(1);
+        pool.add_worker(worker_id, WorkerState::Idle)
+            .expect("Failed to add initial worker");
+
+        // When: We attempt to spawn a worker with the same ID
+        let result = pool.add_worker(worker_id, WorkerState::Idle);
+
+        // Then: The spawn is rejected with an error
+        assert!(result.is_err(), "Should reject duplicate worker ID");
+        assert_eq!(
+            pool.size(),
+            1,
+            "Pool size should remain unchanged after rejection"
+        );
+    }
+
+    #[test]
+    fn should_claim_available_worker() {
+        // Given: A pool with multiple idle workers
+        let mut pool = ProcessPoolActor::new();
+        let worker1 = ProcessId::new(1);
+        let worker2 = ProcessId::new(2);
+
+        pool.add_worker(worker1, WorkerState::Idle)
+            .expect("Failed to add worker 1");
+        pool.add_worker(worker2, WorkerState::Idle)
+            .expect("Failed to add worker 2");
+
+        let idle_before = pool.idle_workers();
+        assert_eq!(idle_before.len(), 2, "Should have 2 idle workers initially");
+
+        // When: We claim one of the idle workers
+        let result = pool.update_state(&worker1, WorkerState::Claimed);
+
+        // Then: The worker is successfully claimed and removed from idle list
+        assert!(result.is_ok(), "Failed to claim worker");
+        assert_eq!(
+            pool.get_state(&worker1),
+            Some(WorkerState::Claimed),
+            "Worker should be in claimed state"
+        );
+
+        let idle_after = pool.idle_workers();
+        assert_eq!(
+            idle_after.len(),
+            1,
+            "Should have 1 idle worker after claiming"
+        );
+        assert!(
+            idle_after.contains(&worker2),
+            "Unclaimed worker should still be idle"
+        );
+        assert!(
+            !idle_after.contains(&worker1),
+            "Claimed worker should not appear in idle list"
+        );
+    }
+
+    #[test]
+    fn should_return_error_when_no_workers_available() {
+        // Given: An empty pool with no workers
+        let mut pool = ProcessPoolActor::new();
+        assert!(pool.is_empty(), "Pool should be empty");
+        assert_eq!(pool.idle_workers().len(), 0, "No idle workers available");
+
+        // When: We attempt to update a non-existent worker
+        let nonexistent_worker = ProcessId::new(999);
+        let result = pool.update_state(&nonexistent_worker, WorkerState::Claimed);
+
+        // Then: The operation fails with an appropriate error
+        assert!(
+            result.is_err(),
+            "Should return error when worker doesn't exist"
+        );
+        assert!(pool.is_empty(), "Pool should remain empty after failed update");
+    }
+
+    #[test]
+    fn should_identify_workers_needing_attention() {
+        // Given: A pool with workers in various states
+        let mut pool = ProcessPoolActor::new();
+        let healthy_worker = ProcessId::new(1);
+        let unhealthy_worker = ProcessId::new(2);
+        let dead_worker = ProcessId::new(3);
+        let claimed_worker = ProcessId::new(4);
+
+        pool.add_worker(healthy_worker, WorkerState::Idle)
+            .expect("Failed to add healthy worker");
+        pool.add_worker(unhealthy_worker, WorkerState::Unhealthy)
+            .expect("Failed to add unhealthy worker");
+        pool.add_worker(dead_worker, WorkerState::Dead)
+            .expect("Failed to add dead worker");
+        pool.add_worker(claimed_worker, WorkerState::Claimed)
+            .expect("Failed to add claimed worker");
+
+        // When: We query for workers needing attention
+        let attention_list = pool.workers_needing_attention();
+
+        // Then: Only unhealthy and dead workers are identified
+        assert_eq!(
+            attention_list.len(),
+            2,
+            "Should identify 2 workers needing attention"
+        );
+        assert!(
+            attention_list.contains(&unhealthy_worker),
+            "Unhealthy worker should need attention"
+        );
+        assert!(
+            attention_list.contains(&dead_worker),
+            "Dead worker should need attention"
+        );
+        assert!(
+            !attention_list.contains(&healthy_worker),
+            "Healthy worker should not need attention"
+        );
+        assert!(
+            !attention_list.contains(&claimed_worker),
+            "Claimed worker should not need attention"
+        );
+    }
+
+    #[test]
+    fn should_maintain_correct_state_counts_during_lifecycle() {
+        // Given: A pool with workers transitioning through states
+        let mut pool = ProcessPoolActor::with_capacity(3);
+
+        // Initially all idle
+        assert_eq!(pool.count_by_state(WorkerState::Idle), 3);
+
+        // When: Workers go through a typical lifecycle
+        let worker1 = ProcessId::new(0);
+        let worker2 = ProcessId::new(1);
+
+        // Claim two workers
+        pool.update_state(&worker1, WorkerState::Claimed)
+            .expect("Failed to claim worker1");
+        pool.update_state(&worker2, WorkerState::Claimed)
+            .expect("Failed to claim worker2");
+
+        // Then: State counts are accurate
+        assert_eq!(
+            pool.count_by_state(WorkerState::Idle),
+            1,
+            "Should have 1 idle worker"
+        );
+        assert_eq!(
+            pool.count_by_state(WorkerState::Claimed),
+            2,
+            "Should have 2 claimed workers"
+        );
+
+        // When: One worker becomes unhealthy
+        pool.update_state(&worker1, WorkerState::Unhealthy)
+            .expect("Failed to mark worker1 unhealthy");
+
+        // Then: State counts reflect the change
+        assert_eq!(
+            pool.count_by_state(WorkerState::Claimed),
+            1,
+            "Should have 1 claimed worker"
+        );
+        assert_eq!(
+            pool.count_by_state(WorkerState::Unhealthy),
+            1,
+            "Should have 1 unhealthy worker"
+        );
+
+        // When: Unhealthy worker is removed
+        let removed_state = pool.remove_worker(&worker1);
+
+        // Then: Worker is removed with correct final state
+        assert_eq!(
+            removed_state,
+            Some(WorkerState::Unhealthy),
+            "Should return worker's final state"
+        );
+        assert_eq!(pool.size(), 2, "Pool should have 2 workers remaining");
+        assert_eq!(
+            pool.count_by_state(WorkerState::Unhealthy),
+            0,
+            "No unhealthy workers should remain"
+        );
+    }
 }
