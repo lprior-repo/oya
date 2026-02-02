@@ -1,11 +1,12 @@
 //! Server setup with Tower middleware
 
-use super::actors::{AppState, mock_scheduler, mock_state_manager};
+use super::actors::{AppState, BroadcastEvent, mock_scheduler, mock_state_manager};
 use super::routes;
 use axum::{Router, routing::get_service};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
+use tokio::sync::broadcast;
 use tower_http::{
     compression::CompressionLayer,
     cors::{Any, CorsLayer},
@@ -29,9 +30,14 @@ pub async fn run_server(addr: SocketAddr) -> Result<(), Box<dyn std::error::Erro
 /// Create the axum application with middleware
 /// Serves both the Leptos WASM frontend AND the API
 fn create_app() -> Router {
+    // Create broadcast channel for WebSocket events
+    // Capacity of 100 allows clients to lag behind without blocking the sender
+    let (broadcast_tx, _) = broadcast::channel::<BroadcastEvent>(100);
+
     let state = AppState {
         scheduler: Arc::new(mock_scheduler()),
         state_manager: Arc::new(mock_state_manager()),
+        broadcast_tx,
     };
 
     let static_files =

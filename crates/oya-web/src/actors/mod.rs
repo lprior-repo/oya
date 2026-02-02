@@ -2,7 +2,7 @@
 
 use axum::extract::State;
 use std::sync::Arc;
-use tokio::sync::mpsc;
+use tokio::sync::{broadcast, mpsc};
 use ulid::Ulid;
 
 /// Placeholder message to SchedulerActor
@@ -50,11 +50,45 @@ pub type SchedulerSender = mpsc::UnboundedSender<SchedulerMessage>;
 /// Placeholder for StateManagerActor sender
 pub type StateManagerSender = mpsc::UnboundedSender<StateManagerMessage>;
 
+/// Broadcast event type sent to all WebSocket clients
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum BroadcastEvent {
+    /// Bead status changed
+    BeadStatusChanged {
+        bead_id: String,
+        status: String,
+        phase: String,
+    },
+    /// Bead event occurred
+    BeadEvent { bead_id: String, event: String },
+    /// General system event
+    SystemEvent { message: String },
+}
+
 /// Shared application state
 #[derive(Clone)]
 pub struct AppState {
     pub scheduler: Arc<SchedulerSender>,
     pub state_manager: Arc<StateManagerSender>,
+    /// Broadcast channel for sending events to all connected WebSocket clients
+    pub broadcast_tx: broadcast::Sender<BroadcastEvent>,
+}
+
+impl AppState {
+    /// Broadcast an event to all connected WebSocket clients
+    ///
+    /// Returns Ok(count) where count is the number of receivers that received the event.
+    /// Returns Err if there are no active receivers (not an error in practice).
+    ///
+    /// This is a fire-and-forget operation - slow clients will lag and fast clients
+    /// will receive the event immediately.
+    pub fn broadcast_event(
+        &self,
+        event: BroadcastEvent,
+    ) -> Result<usize, broadcast::error::SendError<BroadcastEvent>> {
+        self.broadcast_tx.send(event)
+    }
 }
 
 /// Mock scheduler with working receiver (will be replaced with actual actor)
