@@ -40,6 +40,7 @@ pub struct Edge {
     edge_type: EdgeType,
     style: EdgeStyle,
     state: EdgeState,
+    label: Option<String>,
 }
 
 impl Edge {
@@ -59,6 +60,32 @@ impl Edge {
             edge_type,
             style: EdgeStyle::default(),
             state: EdgeState::default(),
+            label: None,
+        })
+    }
+
+    /// Creates a new Edge with an optional label
+    ///
+    /// # Errors
+    /// Returns an error if the source and target are the same (self-referencing edge)
+    pub fn with_label(
+        source: NodeId,
+        target: NodeId,
+        edge_type: EdgeType,
+        label: Option<String>,
+    ) -> Result<Self, String> {
+        // Validation: reject self-referencing edges
+        if source.as_str() == target.as_str() {
+            return Err("Edge cannot reference itself".to_string());
+        }
+
+        Ok(Self {
+            source,
+            target,
+            edge_type,
+            style: EdgeStyle::default(),
+            state: EdgeState::default(),
+            label,
         })
     }
 
@@ -95,6 +122,26 @@ impl Edge {
     /// Sets the edge state
     pub fn set_state(&mut self, state: EdgeState) {
         self.state = state;
+    }
+
+    /// Returns the edge label (if any)
+    pub fn label(&self) -> Option<&str> {
+        self.label.as_deref()
+    }
+
+    /// Sets the edge label
+    pub fn set_label(&mut self, label: Option<String>) {
+        self.label = label;
+    }
+
+    /// Clears the edge label
+    pub fn clear_label(&mut self) {
+        self.label = None;
+    }
+
+    /// Checks if the edge has a label
+    pub fn has_label(&self) -> bool {
+        self.label.is_some()
     }
 }
 
@@ -278,6 +325,187 @@ mod tests {
         assert_eq!(edge1, edge2);
         assert_eq!(edge1.source().as_str(), edge2.source().as_str());
         assert_eq!(edge1.target().as_str(), edge2.target().as_str());
+        Ok(())
+    }
+
+    #[test]
+    fn test_edge_without_label() -> Result<(), String> {
+        let source = NodeId::new("n1")?;
+        let target = NodeId::new("n2")?;
+        let edge = Edge::new(source, target, EdgeType::Dependency)?;
+
+        assert!(!edge.has_label());
+        assert_eq!(edge.label(), None);
+        Ok(())
+    }
+
+    #[test]
+    fn test_edge_with_label() -> Result<(), String> {
+        let source = NodeId::new("n1")?;
+        let target = NodeId::new("n2")?;
+        let label = Some("depends_on".to_string());
+        let edge = Edge::with_label(source, target, EdgeType::Dependency, label)?;
+
+        assert!(edge.has_label());
+        assert_eq!(edge.label(), Some("depends_on"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_edge_with_empty_label() -> Result<(), String> {
+        let source = NodeId::new("n1")?;
+        let target = NodeId::new("n2")?;
+        let edge = Edge::with_label(source, target, EdgeType::Dependency, None)?;
+
+        assert!(!edge.has_label());
+        assert_eq!(edge.label(), None);
+        Ok(())
+    }
+
+    #[test]
+    fn test_set_edge_label() -> Result<(), String> {
+        let source = NodeId::new("n1")?;
+        let target = NodeId::new("n2")?;
+        let mut edge = Edge::new(source, target, EdgeType::Dependency)?;
+
+        assert!(!edge.has_label());
+
+        edge.set_label(Some("triggers".to_string()));
+        assert!(edge.has_label());
+        assert_eq!(edge.label(), Some("triggers"));
+
+        edge.set_label(Some("new_label".to_string()));
+        assert_eq!(edge.label(), Some("new_label"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_clear_edge_label() -> Result<(), String> {
+        let source = NodeId::new("n1")?;
+        let target = NodeId::new("n2")?;
+        let label = Some("data_flow".to_string());
+        let mut edge = Edge::with_label(source, target, EdgeType::DataFlow, label)?;
+
+        assert!(edge.has_label());
+        assert_eq!(edge.label(), Some("data_flow"));
+
+        edge.clear_label();
+        assert!(!edge.has_label());
+        assert_eq!(edge.label(), None);
+        Ok(())
+    }
+
+    #[test]
+    fn test_edge_label_with_unicode() -> Result<(), String> {
+        let source = NodeId::new("n1")?;
+        let target = NodeId::new("n2")?;
+        let label = Some("依赖关系".to_string());
+        let edge = Edge::with_label(source, target, EdgeType::Dependency, label)?;
+
+        assert!(edge.has_label());
+        assert_eq!(edge.label(), Some("依赖关系"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_edge_label_with_special_chars() -> Result<(), String> {
+        let source = NodeId::new("n1")?;
+        let target = NodeId::new("n2")?;
+        let label = Some("depends-on_v2.0!".to_string());
+        let edge = Edge::with_label(source, target, EdgeType::Dependency, label)?;
+
+        assert!(edge.has_label());
+        assert_eq!(edge.label(), Some("depends-on_v2.0!"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_edge_label_serialization() -> Result<(), String> {
+        let source = NodeId::new("source")?;
+        let target = NodeId::new("target")?;
+        let label = Some("test_label".to_string());
+        let edge = Edge::with_label(source, target, EdgeType::DataFlow, label)?;
+
+        let json = serde_json::to_string(&edge).map_err(|e| e.to_string())?;
+        let deserialized: Edge = serde_json::from_str(&json).map_err(|e| e.to_string())?;
+
+        assert_eq!(deserialized.label(), Some("test_label"));
+        assert!(deserialized.has_label());
+        Ok(())
+    }
+
+    #[test]
+    fn test_edge_without_label_serialization() -> Result<(), String> {
+        let source = NodeId::new("source")?;
+        let target = NodeId::new("target")?;
+        let edge = Edge::new(source, target, EdgeType::Dependency)?;
+
+        let json = serde_json::to_string(&edge).map_err(|e| e.to_string())?;
+        let deserialized: Edge = serde_json::from_str(&json).map_err(|e| e.to_string())?;
+
+        assert_eq!(deserialized.label(), None);
+        assert!(!deserialized.has_label());
+        Ok(())
+    }
+
+    #[test]
+    fn test_edge_label_clone() -> Result<(), String> {
+        let source = NodeId::new("n1")?;
+        let target = NodeId::new("n2")?;
+        let label = Some("original".to_string());
+        let edge1 = Edge::with_label(source, target, EdgeType::Dependency, label)?;
+        let edge2 = edge1.clone();
+
+        assert_eq!(edge1.label(), edge2.label());
+        assert_eq!(edge1.label(), Some("original"));
+        assert_eq!(edge2.label(), Some("original"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_edge_label_equality() -> Result<(), String> {
+        let source = NodeId::new("n1")?;
+        let target = NodeId::new("n2")?;
+
+        let edge1 = Edge::with_label(
+            source.clone(),
+            target.clone(),
+            EdgeType::Dependency,
+            Some("label".to_string()),
+        )?;
+
+        let edge2 = Edge::with_label(
+            source.clone(),
+            target.clone(),
+            EdgeType::Dependency,
+            Some("label".to_string()),
+        )?;
+
+        let edge3 = Edge::with_label(
+            source,
+            target,
+            EdgeType::Dependency,
+            Some("different".to_string()),
+        )?;
+
+        assert_eq!(edge1, edge2);
+        assert_ne!(edge1, edge3);
+        Ok(())
+    }
+
+    #[test]
+    fn test_with_label_self_referencing_rejected() -> Result<(), String> {
+        let node = NodeId::new("node1")?;
+        let result = Edge::with_label(
+            node.clone(),
+            node,
+            EdgeType::Dependency,
+            Some("self_ref".to_string()),
+        );
+
+        assert!(result.is_err());
+        let err = result.err().ok_or("Expected error but got Ok")?;
+        assert_eq!(err, "Edge cannot reference itself");
         Ok(())
     }
 }
