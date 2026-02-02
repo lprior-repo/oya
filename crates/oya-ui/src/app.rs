@@ -6,13 +6,18 @@
 use leptos::prelude::*;
 
 use crate::router::AppRouter;
+use crate::state::init_websocket;
 
 /// Main application component with router integration
 ///
 /// This component serves as the root of the Leptos application,
 /// providing the router and overall layout structure.
+/// WebSocket connection is initialized on mount.
 #[component]
 pub fn App() -> impl IntoView {
+    // Initialize WebSocket connection
+    let (ws_state, _set_ws_state) = init_websocket();
+
     view! {
         <div class="app-container">
             <header class="app-header">
@@ -23,6 +28,9 @@ pub fn App() -> impl IntoView {
                     <a href="/tasks">"Tasks"</a>
                     <a href="/beads">"Beads"</a>
                 </nav>
+                <div class="ws-status">
+                    {move || format!("WS: {}", ws_state.get())}
+                </div>
             </header>
             <main class="app-main">
                 <AppRouter />

@@ -25,11 +25,11 @@
 pub mod app;
 pub mod components;
 pub mod error;
-pub mod interaction;
 pub mod layout;
 pub mod models;
 pub mod pages;
 pub mod router;
+pub mod state;
 pub mod utils;
 
 // Re-export main App component for convenience - Trunk will auto-mount it
@@ -74,5 +74,16 @@ mod tests {
         assert_eq!(router::routes::DASHBOARD, "/dashboard");
         assert_eq!(router::routes::TASKS, "/tasks");
         assert_eq!(router::routes::BEADS, "/beads");
+    }
+
+    #[test]
+    fn test_state_module() {
+        // Verify state module is accessible
+        use state::{ConnectionState, WebSocketError};
+        let state = ConnectionState::Disconnected;
+        assert_eq!(state, ConnectionState::Disconnected);
+
+        let err = WebSocketError::InvalidUrl("test".to_string());
+        assert!(err.to_string().contains("Invalid URL"));
     }
 }
