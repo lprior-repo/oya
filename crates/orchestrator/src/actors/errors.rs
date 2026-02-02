@@ -47,6 +47,10 @@ pub enum ActorError {
     /// Channel communication error.
     #[error("Channel error: {0}")]
     ChannelError(String),
+
+    /// Failed to spawn an actor.
+    #[error("Spawn failed: {0}")]
+    SpawnFailed(String),
 }
 
 impl ActorError {
