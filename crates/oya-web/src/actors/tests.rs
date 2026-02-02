@@ -954,3 +954,6 @@ mod property_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod broadcast_tests;

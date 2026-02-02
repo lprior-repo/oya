@@ -3,7 +3,7 @@
 //! Handles real-time bidirectional communication for workflow updates and events.
 //! Uses functional patterns with Result-based error handling.
 
-use super::super::actors::AppState;
+use super::super::actors::{AppState, BroadcastEvent};
 use super::super::error::{AppError, Result};
 use axum::{
     extract::{
@@ -14,6 +14,7 @@ use axum::{
 };
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
+use tokio::sync::broadcast;
 use tracing::{debug, error, info, warn};
 
 /// WebSocket message types sent from client to server
@@ -44,6 +45,8 @@ pub enum ServerMessage {
     },
     /// Event notification
     Event { bead_id: String, event: String },
+    /// Broadcast event from the system
+    Broadcast { event: BroadcastEvent },
     /// Pong response to ping
     Pong,
     /// Error message
@@ -63,7 +66,7 @@ pub async fn websocket_handler(ws: WebSocketUpgrade, State(state): State<AppStat
 
 /// Handle WebSocket connection lifecycle
 ///
-/// Railway track: connect -> message loop -> disconnect
+/// Railway track: connect -> message loop -> broadcast loop -> disconnect
 /// All errors are logged and handled gracefully
 async fn handle_socket(socket: WebSocket, state: AppState) {
     info!("WebSocket connection established");
@@ -71,30 +74,72 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     // Split socket into sender and receiver for independent handling
     let (mut sender, mut receiver) = socket.split();
 
+    // Subscribe to broadcast channel
+    let mut broadcast_rx = state.broadcast_tx.subscribe();
+
     // Track subscriptions for this connection
     let mut subscriptions: Vec<String> = Vec::new();
 
-    // Message processing loop
-    while let Some(msg_result) = receiver.next().await {
-        match process_message(msg_result, &state, &mut subscriptions).await {
-            Ok(Some(response)) => {
-                if let Err(e) = send_message(&mut sender, response).await {
-                    error!("Failed to send message: {}", e);
-                    break;
+    // Run both message processing and broadcast forwarding concurrently
+    loop {
+        tokio::select! {
+            // Handle incoming client messages
+            msg_result = receiver.next() => {
+                match msg_result {
+                    Some(msg) => {
+                        match process_message(msg, &state, &mut subscriptions).await {
+                            Ok(Some(response)) => {
+                                if let Err(e) = send_message(&mut sender, response).await {
+                                    error!("Failed to send message: {}", e);
+                                    break;
+                                }
+                            }
+                            Ok(None) => {
+                                // No response needed (e.g., close message)
+                                debug!("Connection closing gracefully");
+                                break;
+                            }
+                            Err(e) => {
+                                error!("Error processing message: {}", e);
+                                let error_msg = ServerMessage::Error {
+                                    message: e.to_string(),
+                                };
+                                if send_message(&mut sender, error_msg).await.is_err() {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    None => {
+                        // Client disconnected
+                        debug!("Client disconnected");
+                        break;
+                    }
                 }
             }
-            Ok(None) => {
-                // No response needed (e.g., close message)
-                debug!("Connection closing gracefully");
-                break;
-            }
-            Err(e) => {
-                error!("Error processing message: {}", e);
-                let error_msg = ServerMessage::Error {
-                    message: e.to_string(),
-                };
-                if send_message(&mut sender, error_msg).await.is_err() {
-                    break;
+            // Forward broadcast events to this client
+            broadcast_result = broadcast_rx.recv() => {
+                match broadcast_result {
+                    Ok(event) => {
+                        // Filter events based on subscriptions if needed
+                        if should_forward_event(&event, &subscriptions) {
+                            let msg = ServerMessage::Broadcast { event };
+                            if let Err(e) = send_message(&mut sender, msg).await {
+                                error!("Failed to send broadcast message: {}", e);
+                                break;
+                            }
+                        }
+                    }
+                    Err(broadcast::error::RecvError::Lagged(count)) => {
+                        // Client is too slow, missed some messages
+                        warn!("Client lagged behind, missed {} messages", count);
+                        // Continue processing, client will recover
+                    }
+                    Err(broadcast::error::RecvError::Closed) => {
+                        // Broadcast channel closed, should not happen
+                        error!("Broadcast channel closed unexpectedly");
+                        break;
+                    }
                 }
             }
         }
@@ -208,6 +253,24 @@ async fn send_message(
         .map_err(|e| AppError::Internal(format!("Failed to send message: {}", e)))
 }
 
+/// Determine if a broadcast event should be forwarded to this client
+///
+/// If subscriptions list is empty, forward all events (broadcast mode)
+/// Otherwise, only forward events matching subscribed bead_ids
+fn should_forward_event(event: &BroadcastEvent, subscriptions: &[String]) -> bool {
+    // If no specific subscriptions, forward all events
+    if subscriptions.is_empty() {
+        return true;
+    }
+
+    // Check if event matches any subscription
+    match event {
+        BroadcastEvent::BeadStatusChanged { bead_id, .. } => subscriptions.contains(bead_id),
+        BroadcastEvent::BeadEvent { bead_id, .. } => subscriptions.contains(bead_id),
+        BroadcastEvent::SystemEvent { .. } => true, // Always forward system events
+    }
+}
+
 /// Cleanup subscriptions when connection closes
 ///
 /// In a full implementation, this would notify the state manager
@@ -243,6 +306,65 @@ mod tests {
         if let Ok(j) = json {
             assert!(j.contains("subscribed"));
             assert!(j.contains("test-123"));
+        }
+    }
+
+    #[test]
+    fn test_should_forward_event_no_subscriptions() {
+        let subscriptions: Vec<String> = vec![];
+        let event = BroadcastEvent::BeadStatusChanged {
+            bead_id: "bead-123".to_string(),
+            status: "running".to_string(),
+            phase: "build".to_string(),
+        };
+        assert!(should_forward_event(&event, &subscriptions));
+    }
+
+    #[test]
+    fn test_should_forward_event_with_matching_subscription() {
+        let subscriptions = vec!["bead-123".to_string()];
+        let event = BroadcastEvent::BeadStatusChanged {
+            bead_id: "bead-123".to_string(),
+            status: "running".to_string(),
+            phase: "build".to_string(),
+        };
+        assert!(should_forward_event(&event, &subscriptions));
+    }
+
+    #[test]
+    fn test_should_not_forward_event_without_matching_subscription() {
+        let subscriptions = vec!["bead-456".to_string()];
+        let event = BroadcastEvent::BeadStatusChanged {
+            bead_id: "bead-123".to_string(),
+            status: "running".to_string(),
+            phase: "build".to_string(),
+        };
+        assert!(!should_forward_event(&event, &subscriptions));
+    }
+
+    #[test]
+    fn test_should_forward_system_event_always() {
+        let subscriptions = vec!["bead-123".to_string()];
+        let event = BroadcastEvent::SystemEvent {
+            message: "System maintenance".to_string(),
+        };
+        assert!(should_forward_event(&event, &subscriptions));
+    }
+
+    #[test]
+    fn test_broadcast_message_serialization() {
+        let event = BroadcastEvent::BeadStatusChanged {
+            bead_id: "bead-123".to_string(),
+            status: "completed".to_string(),
+            phase: "deploy".to_string(),
+        };
+        let msg = ServerMessage::Broadcast { event };
+        let json = serde_json::to_string(&msg);
+        assert!(json.is_ok());
+        if let Ok(j) = json {
+            assert!(j.contains("broadcast"));
+            assert!(j.contains("bead_status_changed"));
+            assert!(j.contains("bead-123"));
         }
     }
 }
