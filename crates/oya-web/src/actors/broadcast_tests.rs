@@ -57,15 +57,16 @@ mod broadcast_tests {
         assert!(timeout_result.is_ok(), "Should receive within timeout");
 
         if let Ok(Ok(received_event)) = timeout_result {
-            if let (
-                BroadcastEvent::SystemEvent { message: sent },
-                BroadcastEvent::SystemEvent { message: received },
-            ) = (&event, &received_event)
-            {
-                assert_eq!(sent, received, "Event message should match");
-            } else {
-                panic!("Event types should match");
-            }
+            assert!(
+                matches!(
+                    (&event, &received_event),
+                    (
+                        BroadcastEvent::SystemEvent { message: sent },
+                        BroadcastEvent::SystemEvent { message: received }
+                    ) if sent == received
+                ),
+                "Event types and messages should match"
+            );
         }
     }
 

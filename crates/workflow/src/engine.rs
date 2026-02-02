@@ -488,6 +488,7 @@ impl WorkflowEngine {
 }
 
 #[cfg(test)]
+#[allow(unused_variables)]
 mod tests {
     use super::*;
     use crate::handler::NoOpHandler;
