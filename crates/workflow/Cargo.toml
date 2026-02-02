@@ -17,6 +17,10 @@ futures = { workspace = true }
 # Serialization
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+bincode = { workspace = true }
+
+# Cryptography
+sha2 = { workspace = true }
 
 # Time
 chrono = { workspace = true, features = ["serde"] }

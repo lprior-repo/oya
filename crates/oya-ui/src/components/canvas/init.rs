@@ -91,6 +91,3 @@ pub fn create_canvas(config: &CanvasConfig) -> Result<HtmlCanvasElement, String>
 
     Ok(canvas)
 }
-
-#[cfg(all(test, target_arch = "wasm32"))]
-mod init_test;

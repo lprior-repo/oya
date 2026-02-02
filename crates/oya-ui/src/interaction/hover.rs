@@ -6,9 +6,9 @@
 //!
 //! # Architecture
 //!
-//! - **contains_point**: Pure function for hit-testing nodes with viewport transforms
-//! - **circle_hit_test**: Circle hit detection (distance from center <= radius)
-//! - **rectangle_hit_test**: Rectangle hit detection (AABB - Axis-Aligned Bounding Box)
+//! - **`contains_point`**: Pure function for hit-testing nodes with viewport transforms
+//! - **`circle_hit_test`**: Circle hit detection (distance from center <= radius)
+//! - **`rectangle_hit_test`**: Rectangle hit detection (AABB - Axis-Aligned Bounding Box)
 //! - All operations handle viewport transforms (pan/zoom) correctly
 //!
 //! # Performance
@@ -42,11 +42,11 @@
 use crate::components::canvas::coords::{Viewport, screen_to_world};
 use crate::models::node::{Node, NodeShape, Position};
 
-/// Default node radius in world coordinates (must match node_shapes.rs)
+/// Default node radius in world coordinates (must match `node_shapes.rs`)
 const DEFAULT_NODE_RADIUS: f32 = 20.0;
 
 /// Result of a hit test operation
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HitTestResult {
     /// The point is inside the node
     Hit,
@@ -150,13 +150,12 @@ fn circle_hit_test(
     let dy = test_point.y - node_center.y;
 
     // Squared distance (avoids sqrt for performance)
-    let distance_squared = dx * dx + dy * dy;
+    let distance_squared = dx.mul_add(dx, dy * dy);
 
     // Validate intermediate calculation
     if !distance_squared.is_finite() {
         return Err(format!(
-            "Distance calculation produced non-finite value: {}",
-            distance_squared
+            "Distance calculation produced non-finite value: {distance_squared}"
         ));
     }
 
@@ -206,8 +205,7 @@ fn rectangle_hit_test(
     // Validate bounds
     if !x_min.is_finite() || !x_max.is_finite() || !y_min.is_finite() || !y_max.is_finite() {
         return Err(format!(
-            "Bounding box calculation produced non-finite values: ({}, {}, {}, {})",
-            x_min, x_max, y_min, y_max
+            "Bounding box calculation produced non-finite values: ({x_min}, {x_max}, {y_min}, {y_max})"
         ));
     }
 
@@ -558,7 +556,7 @@ mod tests {
             node.set_state(*state);
 
             let is_inside = contains_point(&node, 600.0, 400.0, &viewport)?;
-            assert!(is_inside, "Hit test failed for state: {:?}", state);
+            assert!(is_inside, "Hit test failed for state: {state:?}");
         }
 
         Ok(())

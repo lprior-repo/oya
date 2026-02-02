@@ -1,5 +1,7 @@
 //! WASM-specific tests for canvas resize functionality
 
+#![allow(clippy::expect_used)]
+
 use super::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_test::*;

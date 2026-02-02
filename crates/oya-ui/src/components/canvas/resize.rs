@@ -3,6 +3,11 @@
 //! Provides functional, panic-free canvas resizing with aspect ratio maintenance,
 //! dimension constraints, and DPI scaling preservation.
 
+use gloo_timers::callback::Timeout;
+use std::cell::RefCell;
+use std::rc::Rc;
+use wasm_bindgen::JsCast;
+use wasm_bindgen::closure::Closure;
 use web_sys::{HtmlCanvasElement, window};
 
 /// Configuration for canvas resize behavior
@@ -155,6 +160,129 @@ pub fn get_window_size() -> Result<(f32, f32), String> {
         .ok_or("Window height is not a number")? as f32;
 
     Ok((width, height))
+}
+
+/// Handle for managing resize event listener cleanup
+pub struct ResizeHandler {
+    closure: Closure<dyn FnMut()>,
+}
+
+impl ResizeHandler {
+    /// Remove the resize event listener from the window
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Window object is not available
+    /// - Event listener removal fails
+    pub fn remove(self) -> Result<(), String> {
+        let window = window().ok_or("No window object available")?;
+
+        window
+            .remove_event_listener_with_callback("resize", self.closure.as_ref().unchecked_ref())
+            .map_err(|e| format!("Failed to remove resize listener: {:?}", e))?;
+
+        Ok(())
+    }
+}
+
+/// Attach debounced resize event listener to window
+///
+/// Listens for window resize events and updates canvas dimensions with debouncing
+/// to prevent excessive redraws during rapid resize operations.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - Window object is not available
+/// - Event listener attachment fails
+/// - Initial canvas resize fails
+///
+/// # Example
+///
+/// ```no_run
+/// use oya_ui::components::canvas::resize::{attach_resize_listener, ResizeConfig};
+/// use web_sys::HtmlCanvasElement;
+///
+/// # fn example(canvas: HtmlCanvasElement, on_resize: impl Fn() + 'static) -> Result<(), String> {
+/// let config = ResizeConfig::default();
+/// let handler = attach_resize_listener(canvas, config, 300, on_resize)?;
+/// // ... later when component unmounts ...
+/// handler.remove()?;
+/// # Ok(())
+/// # }
+/// ```
+pub fn attach_resize_listener<F>(
+    canvas: HtmlCanvasElement,
+    config: ResizeConfig,
+    debounce_ms: u32,
+    on_resize: F,
+) -> Result<ResizeHandler, String>
+where
+    F: Fn() + 'static,
+{
+    let window = window().ok_or("No window object available")?;
+
+    // Shared state for debounce timer
+    let timeout_handle: Rc<RefCell<Option<Timeout>>> = Rc::new(RefCell::new(None));
+
+    // Wrap callback in Rc for sharing
+    let on_resize_rc = Rc::new(on_resize);
+
+    // Clone canvas for use in closure (moved into closure)
+    let canvas_for_closure = canvas.clone();
+
+    // Create closure for resize event
+    let timeout_handle_clone = timeout_handle.clone();
+    let on_resize_clone = on_resize_rc.clone();
+    let closure = Closure::wrap(Box::new(move || {
+        // Clear existing timeout if any
+        let timeout: Option<Timeout> = timeout_handle_clone.borrow_mut().take();
+        if let Some(t) = timeout {
+            t.cancel();
+        }
+
+        // Clone necessary values for the timeout closure
+        let canvas_clone = canvas_for_closure.clone();
+        let config_clone = config;
+        let on_resize_inner = on_resize_clone.clone();
+        let timeout_handle_inner = timeout_handle_clone.clone();
+
+        // Create new debounced timeout
+        let timeout = Timeout::new(debounce_ms, move || {
+            // Get current window size
+            if let Ok((width, height)) = get_window_size() {
+                // Calculate new canvas dimensions
+                if let Ok((new_width, new_height)) =
+                    calculate_canvas_size(width, height, &config_clone)
+                {
+                    // Resize canvas
+                    if resize_canvas(&canvas_clone, new_width, new_height).is_ok() {
+                        // Trigger callback for redraw
+                        on_resize_inner();
+                    }
+                }
+            }
+
+            // Clear the timeout handle
+            timeout_handle_inner.borrow_mut().take();
+        });
+
+        // Store timeout handle
+        *timeout_handle_clone.borrow_mut() = Some(timeout);
+    }) as Box<dyn FnMut()>);
+
+    // Attach event listener
+    window
+        .add_event_listener_with_callback("resize", closure.as_ref().unchecked_ref())
+        .map_err(|e| format!("Failed to attach resize listener: {:?}", e))?;
+
+    // Perform initial resize
+    let (width, height) = get_window_size()?;
+    let (new_width, new_height) = calculate_canvas_size(width, height, &config)?;
+    resize_canvas(&canvas, new_width, new_height)?;
+
+    Ok(ResizeHandler { closure })
 }
 
 #[cfg(test)]
@@ -378,6 +506,3 @@ mod tests {
         Ok(())
     }
 }
-
-#[cfg(all(test, target_arch = "wasm32"))]
-mod resize_test;

@@ -22,6 +22,7 @@
 //! - **Type-state builders**: Required fields enforced at compile time
 //! - **Functional composition**: Pipelines are built from composable stages
 
+pub mod actor;
 pub mod ai_integration;
 pub mod audit;
 pub mod builder;

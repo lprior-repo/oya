@@ -1,0 +1,43 @@
+# Trunk build configuration for OYA UI WASM compilation
+# See: https://trunkrs.dev/configuration/
+
+[build]
+# Target HTML file to build (default: index.html)
+target = "index.html"
+# Output directory for production builds
+dist = "dist"
+# Public assets directory
+public_url = "/"
+
+[watch]
+# Watch for changes and trigger rebuilds
+watch = ["src", "index.html", "Cargo.toml"]
+# Ignore patterns
+ignore = ["target", "dist"]
+
+[serve]
+# Development server configuration (use 'addresses' instead of deprecated 'address')
+addresses = ["127.0.0.1"]
+port = 8080
+# Open browser on serve
+open = false
+# Enable WebSocket for hot reload
+ws_protocol = "ws"
+
+[clean]
+# Clean cargo target directory
+cargo = true
+
+# Release build optimizations
+[[hooks]]
+stage = "pre_build"
+command = "echo"
+command_arguments = ["Starting WASM build..."]
+
+[[hooks]]
+stage = "post_build"
+command = "echo"
+command_arguments = ["Build complete!"]
+
+# WASM optimization settings are configured via index.html data attributes
+# See: data-wasm-opt="z" for maximum size optimization

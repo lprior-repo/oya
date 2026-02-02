@@ -3,11 +3,13 @@
 pub mod clear;
 pub mod context;
 pub mod coords;
+pub mod dpi;
 pub mod init;
 pub mod node_labels;
 pub mod node_shapes;
 pub mod resize;
 
+pub use dpi::{apply_dpi_scaling, detect_device_pixel_ratio, setup_dpi_aware_canvas};
 pub use init::{CanvasConfig, create_canvas};
 pub use node_labels::{calculate_label_position, render_node_label, truncate_text};
 pub use node_shapes::{darken_color, render_node};

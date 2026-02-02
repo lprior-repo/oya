@@ -1,0 +1,38 @@
+# Cargo configuration for WASM builds
+# See: https://doc.rust-lang.org/cargo/reference/config.html
+
+[build]
+# Default target for this crate
+target = "wasm32-unknown-unknown"
+
+[target.wasm32-unknown-unknown]
+# WASM-specific build settings
+rustflags = [
+    # Optimize for size
+    "-C", "opt-level=z",
+]
+
+# Profile overrides for WASM builds
+[profile.release]
+# Maximum optimization for size
+opt-level = "z"
+# Enable link-time optimization
+lto = true
+# Single codegen unit for better optimization
+codegen-units = 1
+# Strip debug symbols
+strip = true
+# Panic strategy for smaller binaries
+panic = "abort"
+
+[profile.dev]
+# Faster compilation in dev mode
+opt-level = 0
+# No LTO in dev for faster builds
+lto = false
+# Parallel codegen for faster builds
+codegen-units = 256
+# Keep debug info in dev
+strip = false
+# Use unwinding for better error messages in dev
+panic = "unwind"

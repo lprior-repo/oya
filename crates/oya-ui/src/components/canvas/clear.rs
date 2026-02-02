@@ -211,7 +211,6 @@ mod tests {
         };
 
         clear_canvas(&context, &clear_config)?;
-        assert!(true, "Clear with custom background should succeed");
         Ok(())
     }
 
@@ -233,7 +232,7 @@ mod tests {
         };
 
         clear_canvas(&context, &clear_config)?;
-        assert!(true, "Clear with large dimensions should succeed");
+        Ok(())
     }
 
     #[wasm_bindgen_test]
@@ -254,7 +253,7 @@ mod tests {
         };
 
         clear_canvas(&context, &clear_config)?;
-        assert!(true, "Clear with tiny dimensions should succeed");
+        Ok(())
     }
 
     #[wasm_bindgen_test]
@@ -276,7 +275,6 @@ mod tests {
         };
 
         clear_canvas(&context, &clear_config)?;
-        assert!(true, "Grid rendering should work with odd dimensions");
         Ok(())
     }
 
@@ -298,6 +296,7 @@ mod tests {
             let result = clear_canvas(&context, &clear_config);
             assert!(result.is_ok(), "Rapid clears should all succeed");
         }
+        Ok(())
     }
 
     #[wasm_bindgen_test]

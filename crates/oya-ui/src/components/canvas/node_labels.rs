@@ -260,6 +260,8 @@ mod tests {
 #[cfg(test)]
 #[cfg(target_arch = "wasm32")]
 mod wasm_tests {
+    #![allow(clippy::expect_used)]
+
     use super::*;
     use crate::components::canvas::context::get_2d_context;
     use crate::components::canvas::init::{CanvasConfig, create_canvas};
@@ -321,7 +323,9 @@ mod wasm_tests {
         assert!(truncated.len() < long_text.len());
 
         // Verify truncated text fits
-        let metrics = ctx.measure_text(&truncated)?;
+        let metrics = ctx
+            .measure_text(&truncated)
+            .map_err(|e| format!("Failed to measure text: {:?}", e))?;
         assert!(metrics.width() <= 120.0);
         Ok(())
     }
