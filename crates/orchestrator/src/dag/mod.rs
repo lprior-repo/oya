@@ -1281,7 +1281,7 @@ impl Default for WorkflowDAG {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used)]
+#[allow(clippy::expect_used, clippy::unnecessary_to_owned)]
 mod tests {
     use super::*;
 
