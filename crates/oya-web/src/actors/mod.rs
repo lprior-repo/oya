@@ -23,9 +23,12 @@ pub enum SchedulerResponse {
 }
 
 /// Placeholder message to StateManagerActor
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum StateManagerMessage {
-    QueryBead { id: Ulid },
+    QueryBead {
+        id: Ulid,
+        response: tokio::sync::oneshot::Sender<Option<BeadState>>,
+    },
 }
 
 /// Placeholder response from StateManagerActor
@@ -37,6 +40,8 @@ pub struct BeadState {
     pub events: Vec<String>,
     pub created_at: String,
     pub updated_at: String,
+    pub title: Option<String>,
+    pub dependencies: Vec<String>,
 }
 
 /// Placeholder for SchedulerActor sender
@@ -82,8 +87,10 @@ pub fn mock_state_manager() -> StateManagerSender {
     tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
             match msg {
-                StateManagerMessage::QueryBead { id } => {
+                StateManagerMessage::QueryBead { id, response } => {
                     tracing::debug!("State manager: Querying bead {}", id);
+                    // For now, return None (not found) - actual implementation will query DB
+                    let _ = response.send(None);
                 }
             }
         }
