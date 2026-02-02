@@ -167,16 +167,16 @@ tasks:
   # DEVELOPMENT SERVERS
   # ============================================================================
 
-  serve-ui:
-    command: "cd crates/oya-ui && trunk serve --open"
-    description: "Serve Leptos UI with hot reload (http://localhost:8080)"
+  serve:
+    command: "cargo run --release -p oya-web --bin oya-server"
+    description: "Run full stack server (frontend + API on http://localhost:3000)"
     options:
       cache: false
       runInCI: false
 
-  serve-api:
-    command: "cargo run --bin oya-server"
-    description: "Run API server (http://localhost:3000)"
+  build-ui:
+    command: "cd crates/oya-ui && trunk build --release"
+    description: "Build Leptos frontend to dist/"
     options:
       cache: false
       runInCI: false

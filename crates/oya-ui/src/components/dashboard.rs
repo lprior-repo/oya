@@ -260,27 +260,27 @@ mod tests {
     fn test_task_creation_empty_id() {
         let task = Task::new("", "Test Task", TaskStatus::Open, 1);
         assert!(task.is_err());
-        assert_eq!(task.expect_err("Expected error"), "Task ID cannot be empty");
+        if let Err(e) = task {
+            assert_eq!(e, "Task ID cannot be empty");
+        }
     }
 
     #[test]
     fn test_task_creation_empty_title() {
         let task = Task::new("task-1", "", TaskStatus::Open, 1);
         assert!(task.is_err());
-        assert_eq!(
-            task.expect_err("Expected error"),
-            "Task title cannot be empty"
-        );
+        if let Err(e) = task {
+            assert_eq!(e, "Task title cannot be empty");
+        }
     }
 
     #[test]
     fn test_task_creation_invalid_priority() {
         let task = Task::new("task-1", "Test Task", TaskStatus::Open, 5);
         assert!(task.is_err());
-        assert!(
-            task.expect_err("Expected error")
-                .contains("Priority must be 0-4")
-        );
+        if let Err(e) = task {
+            assert!(e.contains("Priority must be 0-4"));
+        }
     }
 
     #[test]

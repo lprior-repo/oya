@@ -11,6 +11,10 @@ description = "Leptos 0.7 CSR frontend for OYA graph visualization"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[[bin]]
+name = "oya-ui"
+path = "src/main.rs"
+
 [dependencies]
 leptos = { version = "0.7", features = ["csr"] }
 leptos_router = { version = "0.7" }

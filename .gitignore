@@ -29,6 +29,17 @@ Cargo.lock
 .DS_Store
 Thumbs.db
 
+# Node/NPM
+node_modules/
+package-lock.json
+
+# Frontend build artifacts
+crates/oya-ui/dist/
+
+# Screenshots
+*.png
+quick.png
+
 # Testing
 *.profraw
 *.profdata

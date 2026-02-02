@@ -31,16 +31,8 @@ pub mod pages;
 pub mod router;
 pub mod utils;
 
-// Re-export main App component for convenience
+// Re-export main App component for convenience - Trunk will auto-mount it
 pub use app::App;
-
-/// WASM entry point
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen::prelude::wasm_bindgen]
-pub fn hydrate() {
-    console_error_panic_hook::set_once();
-    leptos::mount::mount_to_body(App);
-}
 
 #[cfg(test)]
 mod tests {

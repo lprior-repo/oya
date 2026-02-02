@@ -11,11 +11,12 @@ pub mod health;
 pub mod workflows;
 
 /// Create the main API router
+/// Routes are mounted under /api prefix in server.rs, so paths are relative
 pub fn create_router() -> Router<AppState> {
     Router::new()
-        .route("/api/workflows", post(workflows::create_workflow))
-        .route("/api/beads/{id}", get(beads::get_bead_status))
-        .route("/api/beads/{id}/cancel", post(beads::cancel_bead))
-        .route("/api/beads/{id}/retry", post(beads::retry_bead))
-        .route("/api/health", get(health::health_check))
+        .route("/health", get(health::health_check))
+        .route("/workflows", post(workflows::create_workflow))
+        .route("/beads/{id}", get(beads::get_bead_status))
+        .route("/beads/{id}/cancel", post(beads::cancel_bead))
+        .route("/beads/{id}/retry", post(beads::retry_bead))
 }

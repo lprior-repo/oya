@@ -4,6 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OYA Graph Visualization</title>
+
+    <!-- Trunk will automatically inject WASM and mount Leptos -->
+    
+<script type="module">
+import init, * as bindings from '/oya-ui-3c9171108f694d47.js';
+const wasm = await init({ module_or_path: '/oya-ui-3c9171108f694d47_bg.wasm' });
+
+
+window.wasmBindings = bindings;
+
+
+dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
+
+</script>
+
     <style>
         body {
             margin: 0;
@@ -46,37 +61,66 @@
         button:hover {
             background: #0052a3;
         }
-    </style>
-<link rel="modulepreload" href="/oya-ui-1cc361c788080a64.js" crossorigin="anonymous" integrity="sha384-/5jG/Nh/ynSX2BjcPeNQSAtFGkAxOmqNreV70Ooiz8tGsVlFpkwpPs1tjFoXxj5f"><link rel="preload" href="/oya-ui-1cc361c788080a64_bg.wasm" crossorigin="anonymous" integrity="sha384-EpZbYCgKOPloiryi+SQCozV7D9roSVosBkm2kWJ+YnuyvFQ58uA/61+94KQSyEwg" as="fetch" type="application/wasm"></head>
-<body>
-    <div id="app"></div>
-    <script type="module">
-        // WASM initialization
-        import init, { hydrate } from './pkg/oya_ui.js';
-
-        async function run() {
-            try {
-                await init();
-                hydrate();
-            } catch (error) {
-                console.error('Failed to initialize WASM:', error);
-                document.getElementById('app').innerHTML =
-                    '<div class="error">Failed to load application. Please check the console for details.</div>';
-            }
+        .app-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 0;
+            border-bottom: 2px solid #e0e0e0;
+            margin-bottom: 20px;
         }
-
-        run();
-    </script>
-
-<script type="module">
-import init, * as bindings from '/oya-ui-1cc361c788080a64.js';
-const wasm = await init({ module_or_path: '/oya-ui-1cc361c788080a64_bg.wasm' });
-
-
-window.wasmBindings = bindings;
-
-
-dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
-
-</script></body>
+        .app-nav {
+            display: flex;
+            gap: 20px;
+        }
+        .app-nav a {
+            color: #0066cc;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .app-nav a:hover {
+            color: #0052a3;
+            text-decoration: underline;
+        }
+        .app-main {
+            min-height: 400px;
+        }
+        .app-footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+            text-align: center;
+            color: #666;
+        }
+        .home-page {
+            text-align: center;
+        }
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+        .feature-card {
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 4px;
+            border: 1px solid #e0e0e0;
+        }
+        .feature-card h2 {
+            margin-top: 0;
+            color: #333;
+        }
+        .feature-card a {
+            display: inline-block;
+            margin-top: 10px;
+            color: #0066cc;
+            text-decoration: none;
+        }
+        .feature-card a:hover {
+            text-decoration: underline;
+        }
+    </style>
+<link rel="modulepreload" href="/oya-ui-3c9171108f694d47.js" crossorigin="anonymous" integrity="sha384-t6ig4jGa9i6t2lTGojrw2C98GpYhtR3+hrP0CV90ltETy9hsNe0Y1tr2hk3nHqL4"><link rel="preload" href="/oya-ui-3c9171108f694d47_bg.wasm" crossorigin="anonymous" integrity="sha384-B7KlkwcNVycNbKVk1HUarf5sSVJBJXlw3MkQCxzC7PQIUXFlYAw1ono4SwJ6T1g8" as="fetch" type="application/wasm"></head>
+<body></body>
 </html>

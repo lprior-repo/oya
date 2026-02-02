@@ -34,12 +34,8 @@ fn create_app() -> Router {
         state_manager: Arc::new(mock_state_manager()),
     };
 
-    // Serve static files from the compiled Leptos UI
-    // These will be built by trunk into crates/oya-ui/dist
-    let static_files = get_service(
-        ServeDir::new("crates/oya-ui/dist")
-            .append_index_html_on_directories(true)
-    );
+    let static_files =
+        get_service(ServeDir::new("crates/oya-ui/dist").append_index_html_on_directories(true));
 
     // Combine API routes and static file serving
     Router::new()
