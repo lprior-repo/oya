@@ -666,9 +666,7 @@ mod tests {
         let _ = engine.run(workflow).await;
 
         // Load checkpoint and verify outputs field exists
-        let checkpoint = storage
-            .load_checkpoint(workflow_id, phases[0].id)
-            .await;
+        let checkpoint = storage.load_checkpoint(workflow_id, phases[0].id).await;
         assert!(checkpoint.is_ok());
         assert!(checkpoint
             .as_ref()
@@ -1017,9 +1015,7 @@ mod tests {
 
         // Verify checkpoint structure
         let cp = checkpoint.filter(|c| {
-            c.phase_id == phase_id
-                && c.outputs.is_some()
-                && c.timestamp <= chrono::Utc::now()
+            c.phase_id == phase_id && c.outputs.is_some() && c.timestamp <= chrono::Utc::now()
         });
 
         assert!(cp.is_some());
@@ -1055,8 +1051,7 @@ mod tests {
     #[tokio::test]
     async fn test_checkpoint_journal_correlation() {
         let (engine, storage) = setup_engine();
-        let workflow =
-            Workflow::new("checkpoint-journal").add_phase(Phase::new("build"));
+        let workflow = Workflow::new("checkpoint-journal").add_phase(Phase::new("build"));
 
         let workflow_id = workflow.id;
         let _ = engine.run(workflow).await;
@@ -1068,9 +1063,9 @@ mod tests {
         let has_checkpoint_entry = journal
             .ok()
             .map(|j| {
-                j.entries().iter().any(|e| {
-                    matches!(e, crate::types::JournalEntry::CheckpointCreated { .. })
-                })
+                j.entries()
+                    .iter()
+                    .any(|e| matches!(e, crate::types::JournalEntry::CheckpointCreated { .. }))
             })
             .unwrap_or(false);
 
