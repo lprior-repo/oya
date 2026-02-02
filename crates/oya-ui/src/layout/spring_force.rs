@@ -4,7 +4,7 @@
 //! Connected nodes attract/repel each other toward the rest length distance.
 
 use crate::models::edge::Edge;
-use crate::models::node::{Node, NodeId, Position};
+use crate::models::node::{Node, Position};
 use std::collections::HashMap;
 
 /// Configuration for spring force

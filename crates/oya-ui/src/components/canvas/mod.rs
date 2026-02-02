@@ -12,7 +12,7 @@ pub mod raf;
 pub mod resize;
 
 pub use dpi::{apply_dpi_scaling, detect_device_pixel_ratio, setup_dpi_aware_canvas};
-pub use edge_arrows::{ArrowConfig, ArrowPath, ArrowStyle, calculate_arrow_head, edge_direction};
+pub use edge_arrows::{ArrowConfig, ArrowError, ArrowPath, ArrowStyle, calculate_arrow_head, edge_direction};
 pub use init::{CanvasConfig, create_canvas};
 pub use node_labels::{calculate_label_position, render_node_label, truncate_text};
 pub use node_shapes::{darken_color, render_node};
