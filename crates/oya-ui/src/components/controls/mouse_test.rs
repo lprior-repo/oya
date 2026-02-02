@@ -3,7 +3,7 @@
 //! Run with: wasm-pack test --headless --firefox
 
 use super::*;
-use crate::components::canvas::init::{create_canvas, CanvasConfig};
+use crate::components::canvas::init::{CanvasConfig, create_canvas};
 use wasm_bindgen::JsCast;
 use wasm_bindgen_test::*;
 use web_sys::{Event, MouseEvent, WheelEvent};
@@ -41,11 +41,7 @@ fn create_mouse_event(
 }
 
 /// Helper to create a mock WheelEvent
-fn create_wheel_event(
-    client_x: i32,
-    client_y: i32,
-    delta_y: f64,
-) -> Result<WheelEvent, String> {
+fn create_wheel_event(client_x: i32, client_y: i32, delta_y: f64) -> Result<WheelEvent, String> {
     let event_init = web_sys::WheelEventInit::new();
     event_init.set_client_x(client_x);
     event_init.set_client_y(client_y);
@@ -283,11 +279,7 @@ fn test_multiple_event_types() {
         let event = create_mouse_event(event_type, 100, 100, 0).expect("Event creation failed");
 
         let result = extract_mouse_data(&event, &canvas);
-        assert!(
-            result.is_ok(),
-            "Should handle event type: {}",
-            event_type
-        );
+        assert!(result.is_ok(), "Should handle event type: {}", event_type);
     }
 }
 
