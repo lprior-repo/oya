@@ -551,6 +551,11 @@ impl SchedulerActorDef {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::unnecessary_get_then_check,
+    clippy::unnecessary_to_owned
+)]
 mod tests {
     use super::*;
 
@@ -621,10 +626,9 @@ mod tests {
             "bead-1".to_string(),
         );
 
-        assert!(result.is_err());
         assert!(matches!(
-            result.unwrap_err(),
-            ActorError::WorkflowNotFound(_)
+            result,
+            Err(ActorError::WorkflowNotFound(_))
         ));
     }
 
@@ -699,10 +703,9 @@ mod tests {
             "worker-2".to_string(),
         );
 
-        assert!(result.is_err());
         assert!(matches!(
-            result.unwrap_err(),
-            ActorError::BeadAlreadyClaimed { .. }
+            result,
+            Err(ActorError::BeadAlreadyClaimed { .. })
         ));
     }
 

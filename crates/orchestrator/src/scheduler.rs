@@ -67,7 +67,7 @@ impl WorkflowState {
     pub fn add_bead(&mut self, bead_id: BeadId) -> Result<()> {
         self.dag
             .add_node(bead_id)
-            .map_err(|e| dag_error_to_error(e))
+            .map_err(dag_error_to_error)
     }
 
     /// Add a dependency between beads
@@ -79,7 +79,7 @@ impl WorkflowState {
     ) -> Result<()> {
         self.dag
             .add_edge(from_bead, to_bead, dep_type)
-            .map_err(|e| dag_error_to_error(e))
+            .map_err(dag_error_to_error)
     }
 
     /// Mark a bead as completed
@@ -97,7 +97,7 @@ impl WorkflowState {
     pub fn is_bead_ready(&self, bead_id: &BeadId) -> Result<bool> {
         self.dag
             .is_ready(bead_id, &self.completed)
-            .map_err(|e| dag_error_to_error(e))
+            .map_err(dag_error_to_error)
     }
 
     /// Check if DAG is empty
