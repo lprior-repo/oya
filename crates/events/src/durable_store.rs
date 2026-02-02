@@ -406,4 +406,96 @@ mod tests {
         let filtered: Vec<_> = query.filter_events(events.iter()).collect();
         assert_eq!(filtered.len(), 2);
     }
+
+    // ==========================================================================
+    // EventQuery Builder BEHAVIORAL TESTS (to catch mutation gaps)
+    // ==========================================================================
+
+    #[test]
+    fn should_set_before_timestamp_in_builder() {
+        use chrono::Utc;
+
+        let timestamp = Utc::now();
+        let query = EventQuery::new().before(timestamp);
+
+        assert_eq!(query.before, Some(timestamp), "before() should set the before field");
+    }
+
+    #[test]
+    fn should_filter_events_before_timestamp() {
+        use chrono::{Duration, Utc};
+
+        let bead_id = BeadId::new();
+        let now = Utc::now();
+        let past = now - Duration::seconds(10);
+        let future = now + Duration::seconds(10);
+
+        // Create events at different times (simulated via the created event)
+        let event = BeadEvent::created(
+            bead_id,
+            BeadSpec::new("Test").with_complexity(Complexity::Simple),
+        );
+
+        let events = [event];
+
+        // Query for events before a timestamp in the far future - should include the event
+        let query = EventQuery::new().before(future);
+        let filtered: Vec<_> = query.filter_events(events.iter()).collect();
+        assert_eq!(filtered.len(), 1, "Event before future timestamp should be included");
+
+        // Query for events before a timestamp in the past - should exclude the event
+        let query = EventQuery::new().before(past);
+        let filtered: Vec<_> = query.filter_events(events.iter()).collect();
+        assert_eq!(filtered.len(), 0, "Event at/after past timestamp should be excluded");
+    }
+
+    #[test]
+    fn should_exclude_events_at_exact_before_timestamp() {
+        let bead_id = BeadId::new();
+        let event = BeadEvent::created(
+            bead_id,
+            BeadSpec::new("Test").with_complexity(Complexity::Simple),
+        );
+        let exact_time = event.timestamp();
+
+        let events = [event];
+
+        // Query for events BEFORE the exact timestamp - should exclude (>= means at or after is excluded)
+        let query = EventQuery::new().before(exact_time);
+        let filtered: Vec<_> = query.filter_events(events.iter()).collect();
+        assert_eq!(filtered.len(), 0, "Event at exact before timestamp should be excluded");
+    }
+
+    #[test]
+    fn should_exclude_events_at_exact_after_timestamp() {
+        let bead_id = BeadId::new();
+        let event = BeadEvent::created(
+            bead_id,
+            BeadSpec::new("Test").with_complexity(Complexity::Simple),
+        );
+        let exact_time = event.timestamp();
+
+        let events = [event];
+
+        // Query for events AFTER the exact timestamp - should exclude (<= means at or before is excluded)
+        let query = EventQuery::new().after(exact_time);
+        let filtered: Vec<_> = query.filter_events(events.iter()).collect();
+        assert_eq!(filtered.len(), 0, "Event at exact after timestamp should be excluded");
+    }
+
+    #[test]
+    fn should_return_builder_self_from_before() {
+        use chrono::Utc;
+
+        // Verify builder chaining works (catches Default::default() mutation)
+        let timestamp = Utc::now();
+        let query = EventQuery::new()
+            .with_event_type("created")
+            .before(timestamp)
+            .limit(10);
+
+        assert_eq!(query.event_type, Some("created".to_string()));
+        assert_eq!(query.before, Some(timestamp));
+        assert_eq!(query.limit, Some(10));
+    }
 }

@@ -2,18 +2,6 @@
 //!
 //! Tests cover coordinate extraction, event data structures, and bounds handling.
 
-<<<<<<< HEAD
-#![deny(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-#![deny(clippy::panic)]
-=======
-use super::*;
-use crate::components::canvas::init::{CanvasConfig, create_canvas};
-use wasm_bindgen::JsCast;
-use wasm_bindgen_test::*;
-use web_sys::{Event, MouseEvent, WheelEvent};
->>>>>>> origin/mouse-controls
-
 use super::mouse::{MouseEventData, WheelEventData};
 
 #[test]
@@ -40,7 +28,6 @@ fn test_mouse_event_data_left_button() {
     assert_eq!(data.button, 0); // Left button
 }
 
-<<<<<<< HEAD
 #[test]
 fn test_mouse_event_data_middle_button() {
     let data = MouseEventData {
@@ -48,16 +35,6 @@ fn test_mouse_event_data_middle_button() {
         y: 75.0,
         button: 1,
     };
-=======
-/// Helper to create a mock WheelEvent
-fn create_wheel_event(client_x: i32, client_y: i32, delta_y: f64) -> Result<WheelEvent, String> {
-    let event_init = web_sys::WheelEventInit::new();
-    event_init.set_client_x(client_x);
-    event_init.set_client_y(client_y);
-    event_init.set_delta_y(delta_y);
-    event_init.set_bubbles(true);
-    event_init.set_cancelable(true);
->>>>>>> origin/mouse-controls
 
     assert_eq!(data.button, 1); // Middle button
 }
@@ -405,18 +382,9 @@ fn test_mouse_event_data_copy_semantics() {
     let data2 = data1; // Copy, not move
     let data3 = data1; // Can still use data1
 
-<<<<<<< HEAD
     assert_eq!(data1, data2);
     assert_eq!(data1, data3);
     assert_eq!(data2, data3);
-=======
-    for event_type in event_types {
-        let event = create_mouse_event(event_type, 100, 100, 0).expect("Event creation failed");
-
-        let result = extract_mouse_data(&event, &canvas);
-        assert!(result.is_ok(), "Should handle event type: {}", event_type);
-    }
->>>>>>> origin/mouse-controls
 }
 
 #[test]

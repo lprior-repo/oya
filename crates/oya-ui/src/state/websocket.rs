@@ -7,7 +7,7 @@ use futures::StreamExt;
 use gloo_net::websocket::Message;
 use gloo_net::websocket::futures::WebSocket;
 use leptos::prelude::*;
-use oya_events::BeadEvent;
+use crate::models::BeadEvent;
 use std::fmt;
 use wasm_bindgen_futures::spawn_local;
 

@@ -8,11 +8,14 @@ use oya_web::{
 };
 use serde_json::Value;
 use std::sync::Arc;
+use tokio::sync::broadcast;
 
 fn create_test_server() -> Result<TestServer, String> {
+    let (broadcast_tx, _) = broadcast::channel(100);
     let state = AppState {
         scheduler: Arc::new(mock_scheduler()),
         state_manager: Arc::new(mock_state_manager()),
+        broadcast_tx,
     };
 
     let app = routes::create_router().with_state(state);

@@ -214,6 +214,234 @@ mod tests {
         EventBus::new(store)
     }
 
+    // ==========================================================================
+    // EventPattern BEHAVIORAL TESTS
+    // ==========================================================================
+
+    #[test]
+    fn should_match_all_events_with_all_pattern() {
+        let event = BeadEvent::created(
+            BeadId::new(),
+            BeadSpec::new("Test").with_complexity(Complexity::Simple),
+        );
+
+        assert!(EventPattern::All.matches(&event), "All pattern should match any event");
+    }
+
+    #[test]
+    fn should_match_event_by_exact_type() {
+        let bead_id = BeadId::new();
+        let event = BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Ready);
+
+        // Should match correct type
+        assert!(
+            EventPattern::ByType("state_changed".to_string()).matches(&event),
+            "ByType should match correct event type"
+        );
+
+        // Should NOT match wrong type
+        assert!(
+            !EventPattern::ByType("created".to_string()).matches(&event),
+            "ByType should not match wrong event type"
+        );
+    }
+
+    #[test]
+    fn should_match_event_by_exact_bead_id() {
+        let matching_id = BeadId::new();
+        let different_id = BeadId::new();
+
+        let event = BeadEvent::created(
+            matching_id,
+            BeadSpec::new("Test").with_complexity(Complexity::Simple),
+        );
+
+        // Should match correct bead ID
+        assert!(
+            EventPattern::ByBead(matching_id).matches(&event),
+            "ByBead should match correct bead ID"
+        );
+
+        // Should NOT match different bead ID
+        assert!(
+            !EventPattern::ByBead(different_id).matches(&event),
+            "ByBead should not match different bead ID"
+        );
+    }
+
+    #[test]
+    fn should_match_event_by_multiple_types() {
+        let bead_id = BeadId::new();
+        let event = BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Ready);
+
+        let pattern = EventPattern::ByTypes(vec![
+            "created".to_string(),
+            "state_changed".to_string(),
+        ]);
+
+        // Should match when type is in list
+        assert!(
+            pattern.matches(&event),
+            "ByTypes should match when event type is in list"
+        );
+
+        let non_matching_pattern = EventPattern::ByTypes(vec![
+            "created".to_string(),
+            "completed".to_string(),
+        ]);
+
+        // Should NOT match when type is not in list
+        assert!(
+            !non_matching_pattern.matches(&event),
+            "ByTypes should not match when event type is not in list"
+        );
+    }
+
+    // ==========================================================================
+    // EventBusBuilder BEHAVIORAL TESTS
+    // ==========================================================================
+
+    #[test]
+    fn should_fail_to_build_without_store() {
+        let result = EventBusBuilder::new().build();
+
+        assert!(result.is_err(), "Building without store should fail");
+    }
+
+    #[test]
+    fn should_build_with_store() {
+        let store = Arc::new(InMemoryEventStore::new());
+        let result = EventBusBuilder::new().with_store(store).build();
+
+        assert!(result.is_ok(), "Building with store should succeed");
+    }
+
+    #[test]
+    fn should_use_configured_store() {
+        let store: Arc<dyn crate::store::EventStore> = Arc::new(InMemoryEventStore::new());
+        let bus = EventBusBuilder::new()
+            .with_store(store.clone())
+            .build()
+            .expect("Should build");
+
+        // Verify the store is the one we configured (compare by address)
+        let store_ptr = Arc::as_ptr(&store) as *const ();
+        let bus_store_ptr = Arc::as_ptr(bus.store()) as *const ();
+        assert_eq!(
+            store_ptr, bus_store_ptr,
+            "Bus should use the configured store"
+        );
+    }
+
+    #[tokio::test]
+    async fn should_use_configured_channel_capacity() {
+        let store = Arc::new(InMemoryEventStore::new());
+        let bus = EventBusBuilder::new()
+            .with_store(store)
+            .with_channel_capacity(5) // Small capacity
+            .build()
+            .expect("Should build");
+
+        // Subscribe to create a receiver
+        let _sub = bus.subscribe();
+
+        // Publish events - with capacity 5, we should be able to publish without blocking
+        for i in 0..5 {
+            let event = BeadEvent::created(
+                BeadId::new(),
+                BeadSpec::new(format!("Test {}", i)).with_complexity(Complexity::Simple),
+            );
+            let result = bus.publish(event).await;
+            assert!(result.is_ok(), "Should publish within capacity");
+        }
+    }
+
+    // ==========================================================================
+    // EventBus Subscription BEHAVIORAL TESTS
+    // ==========================================================================
+
+    #[tokio::test]
+    async fn should_assign_unique_subscriber_ids() {
+        let bus = setup_bus();
+
+        let (id1, _sub1) = bus.subscribe_with_pattern(EventPattern::All).await;
+        let (id2, _sub2) = bus.subscribe_with_pattern(EventPattern::All).await;
+        let (id3, _sub3) = bus.subscribe_with_pattern(EventPattern::All).await;
+
+        // All IDs should be unique
+        assert_ne!(id1, id2, "Subscriber IDs should be unique");
+        assert_ne!(id2, id3, "Subscriber IDs should be unique");
+        assert_ne!(id1, id3, "Subscriber IDs should be unique");
+    }
+
+    #[tokio::test]
+    async fn should_remove_subscriber_on_unsubscribe() {
+        let bus = setup_bus();
+
+        // Subscribe
+        let (sub_id, _sub) = bus.subscribe_with_pattern(EventPattern::All).await;
+
+        // Verify subscriber exists (internal check via subscriber count)
+        {
+            let subscribers = bus.subscribers.read().await;
+            assert!(subscribers.contains_key(&sub_id), "Subscriber should exist");
+        }
+
+        // Unsubscribe
+        bus.unsubscribe(&sub_id).await;
+
+        // Verify subscriber is removed
+        {
+            let subscribers = bus.subscribers.read().await;
+            assert!(!subscribers.contains_key(&sub_id), "Subscriber should be removed");
+        }
+    }
+
+    #[tokio::test]
+    async fn should_deliver_events_only_to_matching_pattern_subscribers() {
+        let bus = setup_bus();
+        let bead_id = BeadId::new();
+
+        // Subscribe to only "state_changed" events
+        let (_sub_id, mut state_sub) = bus
+            .subscribe_with_pattern(EventPattern::ByType("state_changed".to_string()))
+            .await;
+
+        // Publish a "created" event (should NOT be delivered)
+        bus.publish(BeadEvent::created(
+            bead_id,
+            BeadSpec::new("Test").with_complexity(Complexity::Simple),
+        ))
+        .await
+        .ok();
+
+        // Give a moment for delivery
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+
+        // Should NOT have received the created event
+        let result = state_sub.try_recv();
+        assert!(result.is_err(), "Should not receive non-matching event");
+
+        // Publish a "state_changed" event (SHOULD be delivered)
+        bus.publish(BeadEvent::state_changed(
+            bead_id,
+            BeadState::Pending,
+            BeadState::Ready,
+        ))
+        .await
+        .ok();
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+
+        // Should have received the state_changed event
+        let result = state_sub.try_recv();
+        assert!(result.is_ok(), "Should receive matching event");
+    }
+
+    // ==========================================================================
+    // Original Tests
+    // ==========================================================================
+
     #[tokio::test]
     async fn test_publish_and_subscribe() {
         let bus = setup_bus();

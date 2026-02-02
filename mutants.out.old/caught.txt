@@ -1,3 +1,71 @@
-crates/core/src/result.rs:55:9: replace <impl ResultExt<T> for Result<T>>::into_option_logged -> Option<T> with None
-crates/core/src/result.rs:175:9: replace <impl OptionExt<T> for Option<T>>::tap_some -> Self with Default::default()
-crates/core/src/result.rs:182:9: replace <impl OptionExt<T> for Option<T>>::tap_none -> Self with Default::default()
+crates/events/src/bus.rs:47:9: replace EventPattern::matches -> bool with true
+crates/events/src/bus.rs:47:9: replace EventPattern::matches -> bool with false
+crates/events/src/bus.rs:49:51: replace == with != in EventPattern::matches
+crates/events/src/bus.rs:50:49: replace == with != in EventPattern::matches
+crates/events/src/bus.rs:51:77: replace == with != in EventPattern::matches
+crates/events/src/bus.rs:91:9: replace EventBus::publish -> Result<EventId> with Ok(Default::default())
+crates/events/src/bus.rs:131:18: replace += with -= in EventBus::subscribe_with_pattern
+crates/events/src/bus.rs:131:18: replace += with *= in EventBus::subscribe_with_pattern
+crates/events/src/bus.rs:141:9: replace EventBus::unsubscribe with ()
+crates/events/src/bus.rs:147:9: replace EventBus::replay_from -> Result<Vec<BeadEvent>> with Ok(vec![])
+crates/events/src/bus.rs:173:9: replace EventBusBuilder::with_store -> Self with Default::default()
+crates/events/src/bus.rs:179:9: replace EventBusBuilder::with_channel_capacity -> Self with Default::default()
+crates/events/src/durable_store.rs:32:9: replace EventQuery::with_stream_id -> Self with Default::default()
+crates/events/src/durable_store.rs:38:9: replace EventQuery::with_event_type -> Self with Default::default()
+crates/events/src/durable_store.rs:44:9: replace EventQuery::after -> Self with Default::default()
+crates/events/src/durable_store.rs:50:9: replace EventQuery::before -> Self with Default::default()
+crates/events/src/durable_store.rs:56:9: replace EventQuery::limit -> Self with Default::default()
+crates/events/src/durable_store.rs:65:9: replace EventQuery::filter_events -> impl Iterator<Item =&'a BeadEvent>+'a with ::std::iter::empty()
+crates/events/src/durable_store.rs:69:40: replace != with == in EventQuery::filter_events
+crates/events/src/durable_store.rs:76:43: replace != with == in EventQuery::filter_events
+crates/events/src/durable_store.rs:83:42: replace <= with > in EventQuery::filter_events
+crates/events/src/durable_store.rs:90:42: replace >= with < in EventQuery::filter_events
+crates/events/src/durable_store.rs:114:9: replace DurableEventStore::append -> Result<EventId> with Ok(Default::default())
+crates/events/src/durable_store.rs:121:9: replace DurableEventStore::get_events -> Result<Vec<BeadEvent>> with Ok(vec![])
+crates/events/src/durable_store.rs:124:37: replace == with != in DurableEventStore::get_events
+crates/events/src/durable_store.rs:132:9: replace DurableEventStore::get_events_since -> Result<Vec<BeadEvent>> with Ok(vec![])
+crates/events/src/durable_store.rs:135:40: replace == with != in DurableEventStore::get_events_since
+crates/events/src/durable_store.rs:136:24: replace + with - in DurableEventStore::get_events_since
+crates/events/src/durable_store.rs:136:24: replace + with * in DurableEventStore::get_events_since
+crates/events/src/durable_store.rs:144:9: replace DurableEventStore::query -> Result<Vec<BeadEvent>> with Ok(vec![])
+crates/events/src/durable_store.rs:149:9: replace DurableEventStore::count -> usize with 0
+crates/events/src/durable_store.rs:149:9: replace DurableEventStore::count -> usize with 1
+crates/events/src/error.rs:35:9: replace <impl fmt::Display for Error>::fmt -> fmt::Result with Ok(Default::default())
+crates/events/src/event.rs:218:9: replace BeadEvent::event_id -> EventId with Default::default()
+crates/events/src/event.rs:234:9: replace BeadEvent::bead_id -> BeadId with Default::default()
+crates/events/src/event.rs:266:9: replace BeadEvent::event_type -> &'static str with ""
+crates/events/src/event.rs:266:9: replace BeadEvent::event_type -> &'static str with "xyzzy"
+crates/events/src/projection.rs:87:9: replace BeadProjection::is_blocked -> bool with true
+crates/events/src/projection.rs:87:9: replace BeadProjection::is_blocked -> bool with false
+crates/events/src/projection.rs:87:9: delete ! in BeadProjection::is_blocked
+crates/events/src/projection.rs:92:9: replace BeadProjection::is_ready -> bool with true
+crates/events/src/projection.rs:92:9: replace BeadProjection::is_ready -> bool with false
+crates/events/src/projection.rs:92:48: replace && with || in BeadProjection::is_ready
+crates/events/src/projection.rs:92:28: replace == with != in BeadProjection::is_ready
+crates/events/src/projection.rs:92:51: delete ! in BeadProjection::is_ready
+crates/events/src/projection.rs:113:9: replace AllBeadsState::get -> Option<&BeadProjection> with None
+crates/events/src/projection.rs:118:9: replace AllBeadsState::in_state -> Vec<&BeadProjection> with vec![]
+crates/events/src/projection.rs:120:41: replace == with != in AllBeadsState::in_state
+crates/events/src/projection.rs:126:9: replace AllBeadsState::ready -> Vec<&BeadProjection> with vec![]
+crates/events/src/projection.rs:131:9: replace AllBeadsState::blocked -> Vec<&BeadProjection> with vec![]
+crates/events/src/projection.rs:151:9: replace <impl Projection for AllBeadsProjection>::apply with ()
+crates/events/src/projection.rs:152:13: delete match arm BeadEvent::Created{bead_id, spec, ..} in <impl Projection for AllBeadsProjection>::apply
+crates/events/src/projection.rs:162:13: delete match arm BeadEvent::StateChanged{bead_id, from, to, ..} in <impl Projection for AllBeadsProjection>::apply
+crates/events/src/projection.rs:176:13: delete match arm BeadEvent::PhaseCompleted{bead_id, phase_id, ..} in <impl Projection for AllBeadsProjection>::apply
+crates/events/src/projection.rs:183:13: delete match arm BeadEvent::DependencyResolved{bead_id, dependency_id, ..} in <impl Projection for AllBeadsProjection>::apply
+crates/events/src/projection.rs:192:13: delete match arm BeadEvent::Claimed{bead_id, agent_id, ..} in <impl Projection for AllBeadsProjection>::apply
+crates/events/src/projection.rs:199:13: delete match arm BeadEvent::Unclaimed{bead_id, ..} in <impl Projection for AllBeadsProjection>::apply
+crates/events/src/projection.rs:158:76: replace += with -= in <impl Projection for AllBeadsProjection>::apply
+crates/events/src/projection.rs:158:76: replace += with *= in <impl Projection for AllBeadsProjection>::apply
+crates/events/src/projection.rs:173:65: replace += with -= in <impl Projection for AllBeadsProjection>::apply
+crates/events/src/projection.rs:189:52: replace != with == in <impl Projection for AllBeadsProjection>::apply
+crates/events/src/projection.rs:239:9: replace ManagedProjection<P>::apply with ()
+crates/events/src/replay.rs:42:9: replace ReplayProgress::calculate_percent -> f64 with 0.0
+crates/events/src/replay.rs:42:9: replace ReplayProgress::calculate_percent -> f64 with 1.0
+crates/events/src/replay.rs:42:9: replace ReplayProgress::calculate_percent -> f64 with -1.0
+crates/events/src/replay.rs:42:30: replace == with != in ReplayProgress::calculate_percent
+crates/events/src/replay.rs:45:71: replace * with + in ReplayProgress::calculate_percent
+crates/events/src/replay.rs:45:71: replace * with / in ReplayProgress::calculate_percent
+crates/events/src/replay.rs:45:43: replace / with % in ReplayProgress::calculate_percent
+crates/events/src/replay.rs:45:43: replace / with * in ReplayProgress::calculate_percent
+crates/events/src/replay.rs:52:9: replace ReplayProgress::update with ()

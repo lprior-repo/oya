@@ -10,6 +10,9 @@ description = "OYA Orchestrator - Agent swarm coordination and task distribution
 [lints]
 workspace = true
 
+[dev-dependencies]
+tracing-subscriber = "0.3"
+
 [dependencies]
 oya-core = { workspace = true }
 tokio = { workspace = true }

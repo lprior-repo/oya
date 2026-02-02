@@ -1,9 +1,15 @@
 //! Data models for graph visualization
 
+pub mod bead;
 pub mod colors;
 pub mod edge;
+pub mod event;
+pub mod mock;
 pub mod node;
 pub mod task;
+
+// Re-export BeadEvent for convenience
+pub use event::BeadEvent;
 
 use serde::{Deserialize, Serialize};
 

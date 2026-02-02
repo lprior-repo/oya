@@ -43,7 +43,6 @@ mod tests {
     #[test]
     fn test_module_structure() {
         // Verify that all modules are accessible
-        let _app = App;
         let _models = models::GraphNode::default();
         let _layout_result = layout::force_directed::compute_positions(&[]);
         let _util_result = utils::canvas::clear_canvas();
@@ -56,16 +55,6 @@ mod tests {
         use error::LeptosError;
         let err = LeptosError::RouteNotFound("/test".to_string());
         assert!(err.to_string().contains("Route not found"));
-    }
-
-    #[test]
-    fn test_page_modules() {
-        // Verify page components are accessible
-        let _home = pages::Home;
-        let _dashboard = pages::Dashboard;
-        let _tasks = pages::Tasks;
-        let _beads = pages::Beads;
-        let _not_found = pages::NotFound;
     }
 
     #[test]

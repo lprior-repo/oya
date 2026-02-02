@@ -42,11 +42,7 @@ impl ExecutionTracker {
 }
 
 /// Helper to check if dependencies are satisfied
-fn dependencies_satisfied(
-    bead_id: &str,
-    dag: &WorkflowDAG,
-    tracker: &ExecutionTracker,
-) -> bool {
+fn dependencies_satisfied(bead_id: &str, dag: &WorkflowDAG, tracker: &ExecutionTracker) -> bool {
     // Get all edges where this bead is the target (dependencies)
     for (from, to, dep_type) in dag.edges() {
         if to == bead_id && matches!(dep_type, DependencyType::BlockingDependency) {
@@ -365,14 +361,10 @@ fn test_complex_dag_diamond_dependency() {
     let mut dag = WorkflowDAG::new();
 
     // Add nodes
-    dag.add_node("bead-a".to_string())
-        .expect("Failed to add A");
-    dag.add_node("bead-b".to_string())
-        .expect("Failed to add B");
-    dag.add_node("bead-c".to_string())
-        .expect("Failed to add C");
-    dag.add_node("bead-d".to_string())
-        .expect("Failed to add D");
+    dag.add_node("bead-a".to_string()).expect("Failed to add A");
+    dag.add_node("bead-b".to_string()).expect("Failed to add B");
+    dag.add_node("bead-c".to_string()).expect("Failed to add C");
+    dag.add_node("bead-d".to_string()).expect("Failed to add D");
 
     // Add edges
     dag.add_edge(

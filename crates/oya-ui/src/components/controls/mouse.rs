@@ -1,18 +1,10 @@
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> origin/mouse-controls
 //! Mouse event handlers for DAG visualization pan/zoom controls
 //!
 //! This module provides functional, panic-free mouse event handling with proper
 //! coordinate conversion and event data extraction. All operations follow the
 //! Railway-Oriented Programming pattern with Result types.
 
-<<<<<<< HEAD
 use web_sys::{Element, HtmlCanvasElement, MouseEvent, WheelEvent};
-=======
-use web_sys::{HtmlCanvasElement, MouseEvent, WheelEvent};
->>>>>>> origin/mouse-controls
 
 /// Mouse event data with canvas-relative coordinates
 ///
@@ -66,50 +58,10 @@ pub struct WheelEventData {
 ///
 /// Coordinates are calculated relative to the canvas element's position,
 /// and negative values are clamped to 0.0.
-<<<<<<< HEAD
-=======
-//! Mouse event listeners and data extraction
-//!
-//! Provides functional, panic-free mouse event handling for canvas interactions.
-//! All DOM operations return Results for proper error handling.
-
-use wasm_bindgen::JsCast;
-use web_sys::{HtmlCanvasElement, MouseEvent, WheelEvent};
-
-/// Mouse event data extracted from DOM events
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct MouseEventData {
-    /// X coordinate relative to canvas
-    pub x: f32,
-    /// Y coordinate relative to canvas
-    pub y: f32,
-    /// Mouse button pressed (0 = left, 1 = middle, 2 = right)
-    pub button: u16,
-}
-
-/// Wheel event data
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct WheelEventData {
-    /// Vertical scroll delta
-    pub delta_y: f32,
-    /// X coordinate relative to canvas
-    pub x: f32,
-    /// Y coordinate relative to canvas
-    pub y: f32,
-}
-
-/// Extract mouse coordinates from MouseEvent relative to canvas
->>>>>>> origin/controls-mouse-2a
-=======
->>>>>>> origin/mouse-controls
 ///
 /// # Errors
 ///
 /// Returns an error if:
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> origin/mouse-controls
 /// - Canvas bounding rect cannot be retrieved
 /// - Client coordinates are invalid
 ///
@@ -125,40 +77,14 @@ pub struct WheelEventData {
 /// assert!(y >= 0.0);
 /// # Ok(())
 /// # }
-<<<<<<< HEAD
-=======
-/// - Canvas bounding rect cannot be obtained
-/// - Coordinate calculations fail
-///
-/// # Example
-///
-/// ```no_run
-/// use oya_ui::components::controls::mouse::get_mouse_coords;
-/// use web_sys::{HtmlCanvasElement, MouseEvent};
-///
-/// fn handle_mouse(event: &MouseEvent, canvas: &HtmlCanvasElement) -> Result<(), String> {
-///     let (x, y) = get_mouse_coords(event, canvas)?;
-///     // Use coordinates...
-///     Ok(())
-/// }
->>>>>>> origin/controls-mouse-2a
-=======
->>>>>>> origin/mouse-controls
 /// ```
 pub fn get_mouse_coords(
     event: &MouseEvent,
     canvas: &HtmlCanvasElement,
-<<<<<<< HEAD
-<<<<<<< HEAD
 ) -> Result<(f64, f64), String> {
     // Get canvas bounding rect for coordinate conversion
     let element: &Element = canvas.as_ref();
     let rect = element.get_bounding_client_rect();
-=======
-) -> Result<(f64, f64), String> {
-    // Get canvas bounding rect for coordinate conversion
-    let rect = canvas.get_bounding_client_rect();
->>>>>>> origin/mouse-controls
 
     // Convert client coordinates to canvas-relative coordinates
     let client_x = event.client_x() as f64;
@@ -199,37 +125,6 @@ pub fn get_mouse_coords(
 /// }
 /// # Ok(())
 /// # }
-<<<<<<< HEAD
-=======
-) -> Result<(f32, f32), String> {
-    let rect = canvas.get_bounding_client_rect();
-
-    let x = (event.client_x() as f32 - rect.left() as f32).max(0.0);
-    let y = (event.client_y() as f32 - rect.top() as f32).max(0.0);
-
-    Ok((x, y))
-}
-
-/// Extract complete mouse event data
-///
-/// # Errors
-///
-/// Returns an error if coordinate extraction fails
-///
-/// # Example
-///
-/// ```no_run
-/// use oya_ui::components::controls::mouse::extract_mouse_data;
-/// use web_sys::{HtmlCanvasElement, MouseEvent};
-///
-/// fn on_mousedown(event: &MouseEvent, canvas: &HtmlCanvasElement) -> Result<(), String> {
-///     let data = extract_mouse_data(event, canvas)?;
-///     println!("Mouse down at ({}, {}) button {}", data.x, data.y, data.button);
-///     Ok(())
-/// }
->>>>>>> origin/controls-mouse-2a
-=======
->>>>>>> origin/mouse-controls
 /// ```
 pub fn extract_mouse_data(
     event: &MouseEvent,
@@ -244,10 +139,6 @@ pub fn extract_mouse_data(
     })
 }
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> origin/mouse-controls
 /// Extracts wheel event data including scroll delta and coordinates.
 ///
 /// This provides both the scroll amount (delta_y) and the cursor position
@@ -272,42 +163,14 @@ pub fn extract_mouse_data(
 /// }
 /// # Ok(())
 /// # }
-<<<<<<< HEAD
-=======
-/// Extract wheel event data including mouse position
-///
-/// # Errors
-///
-/// Returns an error if coordinate extraction fails
-///
-/// # Example
-///
-/// ```no_run
-/// use oya_ui::components::controls::mouse::extract_wheel_data;
-/// use web_sys::{HtmlCanvasElement, WheelEvent};
-///
-/// fn on_wheel(event: &WheelEvent, canvas: &HtmlCanvasElement) -> Result<(), String> {
-///     let data = extract_wheel_data(event, canvas)?;
-///     println!("Wheel delta {} at ({}, {})", data.delta_y, data.x, data.y);
-///     Ok(())
-/// }
->>>>>>> origin/controls-mouse-2a
-=======
->>>>>>> origin/mouse-controls
 /// ```
 pub fn extract_wheel_data(
     event: &WheelEvent,
     canvas: &HtmlCanvasElement,
 ) -> Result<WheelEventData, String> {
-<<<<<<< HEAD
-<<<<<<< HEAD
     // Get canvas bounding rect for coordinate conversion
     let element: &Element = canvas.as_ref();
     let rect = element.get_bounding_client_rect();
-=======
-    // Get canvas bounding rect for coordinate conversion
-    let rect = canvas.get_bounding_client_rect();
->>>>>>> origin/mouse-controls
 
     // Convert client coordinates to canvas-relative coordinates
     let client_x = event.client_x() as f64;
@@ -399,21 +262,3 @@ mod tests {
         assert_ne!(data1, data2);
     }
 }
-<<<<<<< HEAD
-=======
-    // WheelEvent inherits from MouseEvent, so we can upcast
-    let mouse_event: &MouseEvent = event.unchecked_ref();
-    let (x, y) = get_mouse_coords(mouse_event, canvas)?;
-
-    Ok(WheelEventData {
-        delta_y: event.delta_y() as f32,
-        x,
-        y,
-    })
-}
-
-#[cfg(all(test, target_arch = "wasm32"))]
-mod mouse_test;
->>>>>>> origin/controls-mouse-2a
-=======
->>>>>>> origin/mouse-controls

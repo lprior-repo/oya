@@ -1,0 +1,32 @@
+--- crates/events/src/event.rs
++++ replace BeadEvent::event_type -> &'static str with "xyzzy"
+@@ -258,28 +258,17 @@
+             | Self::Unclaimed { timestamp, .. }
+             | Self::PriorityChanged { timestamp, .. }
+             | Self::MetadataUpdated { timestamp, .. } => *timestamp,
+         }
+     }
+ 
+     /// Get the event type name.
+     pub fn event_type(&self) -> &'static str {
+-        match self {
+-            Self::Created { .. } => "created",
+-            Self::StateChanged { .. } => "state_changed",
+-            Self::PhaseCompleted { .. } => "phase_completed",
+-            Self::DependencyResolved { .. } => "dependency_resolved",
+-            Self::Failed { .. } => "failed",
+-            Self::Completed { .. } => "completed",
+-            Self::Claimed { .. } => "claimed",
+-            Self::Unclaimed { .. } => "unclaimed",
+-            Self::PriorityChanged { .. } => "priority_changed",
+-            Self::MetadataUpdated { .. } => "metadata_updated",
+-        }
++        "xyzzy" /* ~ changed by cargo-mutants ~ */
+     }
+ }
+ 
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+     use crate::types::Complexity;
+ 

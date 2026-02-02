@@ -138,3 +138,6 @@ pub type AppStateRef = State<Arc<AppState>>;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod broadcast_tests;

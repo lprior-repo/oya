@@ -426,4 +426,274 @@ mod tests {
         assert_eq!(spec.complexity, Complexity::Simple);
         assert!(spec.dependencies.contains(&dep));
     }
+
+    // ==========================================================================
+    // BeadState::is_terminal BEHAVIORAL TESTS
+    // ==========================================================================
+
+    #[test]
+    fn should_return_true_for_completed_state() {
+        assert!(
+            BeadState::Completed.is_terminal(),
+            "Completed should be terminal"
+        );
+    }
+
+    #[test]
+    fn should_return_false_for_all_non_terminal_states() {
+        let non_terminal_states = [
+            BeadState::Pending,
+            BeadState::Scheduled,
+            BeadState::Ready,
+            BeadState::Running,
+            BeadState::Suspended,
+            BeadState::BackingOff,
+            BeadState::Paused,
+        ];
+
+        for state in non_terminal_states {
+            assert!(
+                !state.is_terminal(),
+                "{:?} should NOT be terminal",
+                state
+            );
+        }
+    }
+
+    // ==========================================================================
+    // ID Types from_ulid/as_ulid BEHAVIORAL TESTS
+    // ==========================================================================
+
+    #[test]
+    fn should_roundtrip_bead_id_through_ulid() {
+        let original_ulid = Ulid::new();
+        let bead_id = BeadId::from_ulid(original_ulid);
+        let extracted_ulid = bead_id.as_ulid();
+
+        assert_eq!(
+            original_ulid, extracted_ulid,
+            "BeadId should roundtrip through ULID"
+        );
+    }
+
+    #[test]
+    fn should_roundtrip_event_id_through_ulid() {
+        let original_ulid = Ulid::new();
+        let event_id = EventId::from_ulid(original_ulid);
+        let extracted_ulid = event_id.as_ulid();
+
+        assert_eq!(
+            original_ulid, extracted_ulid,
+            "EventId should roundtrip through ULID"
+        );
+    }
+
+    #[test]
+    fn should_roundtrip_phase_id_through_ulid() {
+        let original_ulid = Ulid::new();
+        let phase_id = PhaseId::from_ulid(original_ulid);
+        let extracted_ulid = phase_id.as_ulid();
+
+        assert_eq!(
+            original_ulid, extracted_ulid,
+            "PhaseId should roundtrip through ULID"
+        );
+    }
+
+    #[test]
+    fn should_preserve_bead_id_identity_through_from_ulid() {
+        let ulid = Ulid::new();
+        let id1 = BeadId::from_ulid(ulid);
+        let id2 = BeadId::from_ulid(ulid);
+
+        assert_eq!(id1, id2, "Same ULID should produce equal BeadIds");
+    }
+
+    #[test]
+    fn should_preserve_event_id_identity_through_from_ulid() {
+        let ulid = Ulid::new();
+        let id1 = EventId::from_ulid(ulid);
+        let id2 = EventId::from_ulid(ulid);
+
+        assert_eq!(id1, id2, "Same ULID should produce equal EventIds");
+    }
+
+    #[test]
+    fn should_preserve_phase_id_identity_through_from_ulid() {
+        let ulid = Ulid::new();
+        let id1 = PhaseId::from_ulid(ulid);
+        let id2 = PhaseId::from_ulid(ulid);
+
+        assert_eq!(id1, id2, "Same ULID should produce equal PhaseIds");
+    }
+
+    // ==========================================================================
+    // Display Implementation BEHAVIORAL TESTS
+    // ==========================================================================
+
+    #[test]
+    fn should_display_bead_id_as_ulid_string() {
+        let ulid = Ulid::new();
+        let bead_id = BeadId::from_ulid(ulid);
+        let displayed = format!("{}", bead_id);
+
+        assert_eq!(
+            displayed,
+            ulid.to_string(),
+            "BeadId display should match ULID display"
+        );
+    }
+
+    #[test]
+    fn should_display_event_id_as_ulid_string() {
+        let ulid = Ulid::new();
+        let event_id = EventId::from_ulid(ulid);
+        let displayed = format!("{}", event_id);
+
+        assert_eq!(
+            displayed,
+            ulid.to_string(),
+            "EventId display should match ULID display"
+        );
+    }
+
+    #[test]
+    fn should_display_phase_id_as_ulid_string() {
+        let ulid = Ulid::new();
+        let phase_id = PhaseId::from_ulid(ulid);
+        let displayed = format!("{}", phase_id);
+
+        assert_eq!(
+            displayed,
+            ulid.to_string(),
+            "PhaseId display should match ULID display"
+        );
+    }
+
+    #[test]
+    fn should_display_all_bead_states_correctly() {
+        assert_eq!(format!("{}", BeadState::Pending), "pending");
+        assert_eq!(format!("{}", BeadState::Scheduled), "scheduled");
+        assert_eq!(format!("{}", BeadState::Ready), "ready");
+        assert_eq!(format!("{}", BeadState::Running), "running");
+        assert_eq!(format!("{}", BeadState::Suspended), "suspended");
+        assert_eq!(format!("{}", BeadState::BackingOff), "backing_off");
+        assert_eq!(format!("{}", BeadState::Paused), "paused");
+        assert_eq!(format!("{}", BeadState::Completed), "completed");
+    }
+
+    #[test]
+    fn should_display_all_complexity_levels_correctly() {
+        assert_eq!(format!("{}", Complexity::Simple), "simple");
+        assert_eq!(format!("{}", Complexity::Medium), "medium");
+        assert_eq!(format!("{}", Complexity::Complex), "complex");
+    }
+
+    // ==========================================================================
+    // PhaseOutput BEHAVIORAL TESTS
+    // ==========================================================================
+
+    #[test]
+    fn should_create_success_phase_output_with_correct_fields() {
+        let data = vec![1, 2, 3];
+        let output = PhaseOutput::success(data.clone());
+
+        assert!(output.success, "success output should have success=true");
+        assert_eq!(output.data, data, "success output should preserve data");
+        assert!(output.message.is_none(), "success output should have no message");
+    }
+
+    #[test]
+    fn should_create_failure_phase_output_with_correct_fields() {
+        let output = PhaseOutput::failure("something went wrong");
+
+        assert!(!output.success, "failure output should have success=false");
+        assert!(output.data.is_empty(), "failure output should have empty data");
+        assert_eq!(
+            output.message,
+            Some("something went wrong".to_string()),
+            "failure output should have message"
+        );
+    }
+
+    // ==========================================================================
+    // BeadResult BEHAVIORAL TESTS
+    // ==========================================================================
+
+    #[test]
+    fn should_create_success_bead_result_with_correct_fields() {
+        let output = vec![4, 5, 6];
+        let result = BeadResult::success(output.clone(), 1000);
+
+        assert!(result.success, "success result should have success=true");
+        assert_eq!(result.output, Some(output), "success result should have output");
+        assert!(result.error.is_none(), "success result should have no error");
+        assert_eq!(result.duration_ms, 1000, "success result should preserve duration");
+    }
+
+    #[test]
+    fn should_create_failure_bead_result_with_correct_fields() {
+        let result = BeadResult::failure("task failed", 500);
+
+        assert!(!result.success, "failure result should have success=false");
+        assert!(result.output.is_none(), "failure result should have no output");
+        assert_eq!(
+            result.error,
+            Some("task failed".to_string()),
+            "failure result should have error"
+        );
+        assert_eq!(result.duration_ms, 500, "failure result should preserve duration");
+    }
+
+    // ==========================================================================
+    // StateTransition BEHAVIORAL TESTS
+    // ==========================================================================
+
+    #[test]
+    fn should_create_state_transition_with_correct_states() {
+        let transition = StateTransition::new(BeadState::Pending, BeadState::Scheduled);
+
+        assert_eq!(transition.from, BeadState::Pending);
+        assert_eq!(transition.to, BeadState::Scheduled);
+        assert!(transition.reason.is_none());
+    }
+
+    #[test]
+    fn should_add_reason_to_state_transition() {
+        let transition = StateTransition::new(BeadState::Running, BeadState::Completed)
+            .with_reason("task completed successfully");
+
+        assert_eq!(
+            transition.reason,
+            Some("task completed successfully".to_string())
+        );
+    }
+
+    // ==========================================================================
+    // BeadSpec Builder BEHAVIORAL TESTS
+    // ==========================================================================
+
+    #[test]
+    fn should_set_dependencies_via_with_dependencies() {
+        let dep1 = BeadId::new();
+        let dep2 = BeadId::new();
+        let spec = BeadSpec::new("Test").with_dependencies(vec![dep1, dep2]);
+
+        assert_eq!(spec.dependencies.len(), 2);
+        assert!(spec.dependencies.contains(&dep1));
+        assert!(spec.dependencies.contains(&dep2));
+    }
+
+    #[test]
+    fn should_replace_dependencies_when_using_with_dependencies() {
+        let dep1 = BeadId::new();
+        let dep2 = BeadId::new();
+        let spec = BeadSpec::new("Test")
+            .with_dependency(dep1)
+            .with_dependencies(vec![dep2]); // Should replace, not add
+
+        assert_eq!(spec.dependencies.len(), 1);
+        assert!(!spec.dependencies.contains(&dep1));
+        assert!(spec.dependencies.contains(&dep2));
+    }
 }

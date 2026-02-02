@@ -1,0 +1,34 @@
+--- crates/events/src/projection.rs
++++ delete match arm BeadEvent::StateChanged{bead_id, from, to, ..} in <impl Projection for AllBeadsProjection>::apply
+@@ -154,30 +154,17 @@
+                 projection.spec = Some(spec.clone());
+                 projection.dependencies = spec.dependencies.clone();
+ 
+                 // Update state counts
+                 *state.state_counts.entry(BeadState::Pending).or_insert(0) += 1;
+ 
+                 state.beads.insert(*bead_id, projection);
+             }
+-            BeadEvent::StateChanged {
+-                bead_id, from, to, ..
+-            } => {
+-                if let Some(bead) = state.beads.get_mut(bead_id) {
+-                    bead.current_state = *to;
+-                    bead.history.push(StateTransition::new(*from, *to));
+-
+-                    // Update state counts
+-                    if let Some(count) = state.state_counts.get_mut(from) {
+-                        *count = count.saturating_sub(1);
+-                    }
+-                    *state.state_counts.entry(*to).or_insert(0) += 1;
+-                }
+-            }
++             /* ~ changed by cargo-mutants ~ */
+             BeadEvent::PhaseCompleted {
+                 bead_id, phase_id, ..
+             } => {
+                 if let Some(bead) = state.beads.get_mut(bead_id) {
+                     bead.current_phase = Some(*phase_id);
+                 }
+             }
+             BeadEvent::DependencyResolved {

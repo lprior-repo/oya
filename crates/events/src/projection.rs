@@ -273,6 +273,10 @@ mod tests {
     use crate::types::Complexity;
     use std::sync::Arc;
 
+    // ==========================================================================
+    // BeadProjection BEHAVIORAL TESTS
+    // ==========================================================================
+
     #[test]
     fn test_bead_projection_new() {
         let bead_id = BeadId::new();
@@ -281,6 +285,312 @@ mod tests {
         assert_eq!(proj.bead_id, bead_id);
         assert_eq!(proj.current_state, BeadState::Pending);
         assert!(!proj.is_blocked());
+    }
+
+    #[test]
+    fn should_report_blocked_when_blocked_by_is_not_empty() {
+        // Given: a bead with blockers
+        let mut proj = BeadProjection::new(BeadId::new());
+        proj.blocked_by.push(BeadId::new());
+
+        // When/Then: is_blocked returns true
+        assert!(proj.is_blocked(), "Bead with blockers should report as blocked");
+    }
+
+    #[test]
+    fn should_report_not_blocked_when_blocked_by_is_empty() {
+        // Given: a bead with no blockers
+        let proj = BeadProjection::new(BeadId::new());
+
+        // When/Then: is_blocked returns false
+        assert!(!proj.is_blocked(), "Bead without blockers should not be blocked");
+    }
+
+    #[test]
+    fn should_be_ready_only_when_state_is_ready_and_not_blocked() {
+        // Given: a bead in Ready state with no blockers
+        let mut proj = BeadProjection::new(BeadId::new());
+        proj.current_state = BeadState::Ready;
+
+        // When/Then: is_ready returns true
+        assert!(proj.is_ready(), "Ready bead with no blockers should be ready");
+    }
+
+    #[test]
+    fn should_not_be_ready_when_state_is_not_ready() {
+        // Given: a bead in Pending state
+        let proj = BeadProjection::new(BeadId::new());
+        assert_eq!(proj.current_state, BeadState::Pending);
+
+        // When/Then: is_ready returns false
+        assert!(!proj.is_ready(), "Pending bead should not be ready");
+    }
+
+    #[test]
+    fn should_not_be_ready_when_blocked_even_if_state_is_ready() {
+        // Given: a bead in Ready state BUT with blockers
+        let mut proj = BeadProjection::new(BeadId::new());
+        proj.current_state = BeadState::Ready;
+        proj.blocked_by.push(BeadId::new());
+
+        // When/Then: is_ready returns false (blocked overrides ready state)
+        assert!(!proj.is_ready(), "Blocked bead should not be ready even if state is Ready");
+    }
+
+    // ==========================================================================
+    // AllBeadsState BEHAVIORAL TESTS
+    // ==========================================================================
+
+    #[test]
+    fn should_return_bead_when_it_exists() {
+        // Given: state with a bead
+        let bead_id = BeadId::new();
+        let mut state = AllBeadsState::new();
+        state.beads.insert(bead_id, BeadProjection::new(bead_id));
+
+        // When: we get the bead
+        let result = state.get(&bead_id);
+
+        // Then: we get the actual bead, not None
+        assert!(result.is_some(), "Should return Some for existing bead");
+        assert_eq!(result.map(|b| b.bead_id), Some(bead_id), "Should return correct bead");
+    }
+
+    #[test]
+    fn should_return_none_for_nonexistent_bead() {
+        // Given: empty state
+        let state = AllBeadsState::new();
+
+        // When: we query for a nonexistent bead
+        let result = state.get(&BeadId::new());
+
+        // Then: we get None
+        assert!(result.is_none(), "Should return None for nonexistent bead");
+    }
+
+    #[test]
+    fn should_filter_beads_by_state_correctly() {
+        // Given: state with beads in different states
+        let mut state = AllBeadsState::new();
+
+        let pending_id = BeadId::new();
+        let mut pending_bead = BeadProjection::new(pending_id);
+        pending_bead.current_state = BeadState::Pending;
+        state.beads.insert(pending_id, pending_bead);
+
+        let ready_id = BeadId::new();
+        let mut ready_bead = BeadProjection::new(ready_id);
+        ready_bead.current_state = BeadState::Ready;
+        state.beads.insert(ready_id, ready_bead);
+
+        let completed_id = BeadId::new();
+        let mut completed_bead = BeadProjection::new(completed_id);
+        completed_bead.current_state = BeadState::Completed;
+        state.beads.insert(completed_id, completed_bead);
+
+        // When: we filter by Ready state
+        let ready_beads = state.in_state(BeadState::Ready);
+
+        // Then: only the Ready bead is returned
+        assert_eq!(ready_beads.len(), 1, "Should return exactly one Ready bead");
+        assert_eq!(ready_beads[0].bead_id, ready_id, "Should return the correct Ready bead");
+
+        // When: we filter by Pending state
+        let pending_beads = state.in_state(BeadState::Pending);
+
+        // Then: only the Pending bead is returned
+        assert_eq!(pending_beads.len(), 1, "Should return exactly one Pending bead");
+        assert_eq!(pending_beads[0].bead_id, pending_id, "Should return the correct Pending bead");
+    }
+
+    #[test]
+    fn should_return_only_ready_unblocked_beads() {
+        // Given: state with ready/blocked/pending beads
+        let mut state = AllBeadsState::new();
+
+        // Ready and unblocked
+        let ready_id = BeadId::new();
+        let mut ready_bead = BeadProjection::new(ready_id);
+        ready_bead.current_state = BeadState::Ready;
+        state.beads.insert(ready_id, ready_bead);
+
+        // Ready but blocked
+        let blocked_id = BeadId::new();
+        let mut blocked_bead = BeadProjection::new(blocked_id);
+        blocked_bead.current_state = BeadState::Ready;
+        blocked_bead.blocked_by.push(BeadId::new());
+        state.beads.insert(blocked_id, blocked_bead);
+
+        // Pending
+        let pending_id = BeadId::new();
+        state.beads.insert(pending_id, BeadProjection::new(pending_id));
+
+        // When: we get ready beads
+        let ready_beads = state.ready();
+
+        // Then: only the ready AND unblocked bead is returned
+        assert_eq!(ready_beads.len(), 1, "Should return exactly one ready bead");
+        assert_eq!(ready_beads[0].bead_id, ready_id, "Should return the unblocked ready bead");
+    }
+
+    #[test]
+    fn should_return_only_blocked_beads() {
+        // Given: state with blocked and unblocked beads
+        let mut state = AllBeadsState::new();
+
+        // Blocked bead
+        let blocked_id = BeadId::new();
+        let mut blocked_bead = BeadProjection::new(blocked_id);
+        blocked_bead.blocked_by.push(BeadId::new());
+        state.beads.insert(blocked_id, blocked_bead);
+
+        // Unblocked bead
+        let unblocked_id = BeadId::new();
+        state.beads.insert(unblocked_id, BeadProjection::new(unblocked_id));
+
+        // When: we get blocked beads
+        let blocked_beads = state.blocked();
+
+        // Then: only the blocked bead is returned
+        assert_eq!(blocked_beads.len(), 1, "Should return exactly one blocked bead");
+        assert_eq!(blocked_beads[0].bead_id, blocked_id, "Should return the blocked bead");
+    }
+
+    // ==========================================================================
+    // AllBeadsProjection BEHAVIORAL TESTS - Event Application
+    // ==========================================================================
+
+    #[test]
+    fn should_update_state_counts_on_bead_creation() {
+        // Given: projection with no beads
+        let proj = AllBeadsProjection::new();
+        let mut state = proj.initial_state();
+
+        // When: we create a bead
+        let bead_id = BeadId::new();
+        let spec = BeadSpec::new("Test").with_complexity(Complexity::Simple);
+        proj.apply(&mut state, &BeadEvent::created(bead_id, spec));
+
+        // Then: state counts are updated
+        assert_eq!(
+            state.state_counts.get(&BeadState::Pending),
+            Some(&1),
+            "Pending count should be 1 after creation"
+        );
+    }
+
+    #[test]
+    fn should_track_phase_completion() {
+        use crate::types::PhaseOutput;
+
+        // Given: a created bead
+        let proj = AllBeadsProjection::new();
+        let mut state = proj.initial_state();
+        let bead_id = BeadId::new();
+        let spec = BeadSpec::new("Test").with_complexity(Complexity::Simple);
+        proj.apply(&mut state, &BeadEvent::created(bead_id, spec));
+
+        // When: phase completes
+        let phase_id = PhaseId::new();
+        proj.apply(&mut state, &BeadEvent::phase_completed(
+            bead_id,
+            phase_id,
+            "test-phase",
+            PhaseOutput::success(vec![]),
+        ));
+
+        // Then: current_phase is updated
+        assert_eq!(
+            state.beads.get(&bead_id).and_then(|b| b.current_phase),
+            Some(phase_id),
+            "Phase should be tracked after completion"
+        );
+    }
+
+    #[test]
+    fn should_resolve_dependencies() {
+        // Given: a bead blocked by another
+        let proj = AllBeadsProjection::new();
+        let mut state = proj.initial_state();
+        let bead_id = BeadId::new();
+        let blocker_id = BeadId::new();
+
+        let spec = BeadSpec::new("Test")
+            .with_complexity(Complexity::Simple)
+            .with_dependency(blocker_id);
+        proj.apply(&mut state, &BeadEvent::created(bead_id, spec));
+
+        // Manually set up the blocked_by relationship
+        if let Some(bead) = state.beads.get_mut(&bead_id) {
+            bead.blocked_by.push(blocker_id);
+        }
+
+        // Verify it's blocked
+        assert!(state.beads.get(&bead_id).map(|b| b.is_blocked()).unwrap_or(false));
+
+        // When: dependency is resolved
+        proj.apply(&mut state, &BeadEvent::dependency_resolved(bead_id, blocker_id));
+
+        // Then: bead is no longer blocked
+        assert!(
+            !state.beads.get(&bead_id).map(|b| b.is_blocked()).unwrap_or(true),
+            "Bead should not be blocked after dependency resolved"
+        );
+    }
+
+    #[test]
+    fn should_track_claimed_agent() {
+        // Given: a created bead
+        let proj = AllBeadsProjection::new();
+        let mut state = proj.initial_state();
+        let bead_id = BeadId::new();
+        let spec = BeadSpec::new("Test").with_complexity(Complexity::Simple);
+        proj.apply(&mut state, &BeadEvent::created(bead_id, spec));
+
+        // When: bead is claimed
+        let agent_id = "agent-123".to_string();
+        proj.apply(&mut state, &BeadEvent::claimed(bead_id, agent_id.clone()));
+
+        // Then: claimed_by is set
+        assert_eq!(
+            state.beads.get(&bead_id).and_then(|b| b.claimed_by.clone()),
+            Some(agent_id),
+            "Claimed agent should be tracked"
+        );
+    }
+
+    #[test]
+    fn should_clear_claimed_agent_on_unclaim() {
+        // Given: a claimed bead
+        let proj = AllBeadsProjection::new();
+        let mut state = proj.initial_state();
+        let bead_id = BeadId::new();
+        let spec = BeadSpec::new("Test").with_complexity(Complexity::Simple);
+        proj.apply(&mut state, &BeadEvent::created(bead_id, spec));
+        proj.apply(&mut state, &BeadEvent::claimed(bead_id, "agent-123".to_string()));
+
+        // When: bead is unclaimed
+        proj.apply(&mut state, &BeadEvent::unclaimed(bead_id, None));
+
+        // Then: claimed_by is cleared
+        assert_eq!(
+            state.beads.get(&bead_id).and_then(|b| b.claimed_by.clone()),
+            None,
+            "Claimed agent should be cleared on unclaim"
+        );
+    }
+
+    #[test]
+    fn should_return_fresh_initial_state() {
+        // Given: projection
+        let proj = AllBeadsProjection::new();
+
+        // When: we get initial state
+        let state = proj.initial_state();
+
+        // Then: it's empty (not some default with data)
+        assert!(state.beads.is_empty(), "Initial state should have no beads");
+        assert!(state.state_counts.is_empty(), "Initial state should have no counts");
     }
 
     #[test]
@@ -434,5 +744,215 @@ mod tests {
         let progress = rx.borrow().clone();
         assert!(progress.events_processed > 0);
         assert!(progress.percent_complete > 0.0);
+    }
+
+    // ==========================================================================
+    // State Counts ADDITIVE BEHAVIORAL TESTS (catching += vs *= mutation)
+    // ==========================================================================
+
+    #[test]
+    fn should_increment_state_count_additively_on_state_change() {
+        // Given: projection with multiple beads in different states
+        let proj = AllBeadsProjection::new();
+        let mut state = proj.initial_state();
+
+        // Create 3 beads (all start in Pending)
+        let bead1 = BeadId::new();
+        let bead2 = BeadId::new();
+        let bead3 = BeadId::new();
+
+        proj.apply(&mut state, &BeadEvent::created(bead1, BeadSpec::new("Bead 1").with_complexity(Complexity::Simple)));
+        proj.apply(&mut state, &BeadEvent::created(bead2, BeadSpec::new("Bead 2").with_complexity(Complexity::Simple)));
+        proj.apply(&mut state, &BeadEvent::created(bead3, BeadSpec::new("Bead 3").with_complexity(Complexity::Simple)));
+
+        // Verify: 3 beads in Pending
+        assert_eq!(
+            state.state_counts.get(&BeadState::Pending),
+            Some(&3),
+            "Should have 3 Pending beads after creation"
+        );
+
+        // When: transition bead1 from Pending to Scheduled
+        proj.apply(&mut state, &BeadEvent::state_changed(bead1, BeadState::Pending, BeadState::Scheduled));
+
+        // Then: Pending count DECREMENTS, Scheduled count INCREMENTS (additively, not multiplicatively)
+        assert_eq!(
+            state.state_counts.get(&BeadState::Pending),
+            Some(&2),
+            "Pending count should be 2 after one transition out"
+        );
+        assert_eq!(
+            state.state_counts.get(&BeadState::Scheduled),
+            Some(&1),
+            "Scheduled count should be 1 after one transition in"
+        );
+
+        // When: transition bead2 from Pending to Scheduled
+        proj.apply(&mut state, &BeadEvent::state_changed(bead2, BeadState::Pending, BeadState::Scheduled));
+
+        // Then: counts should be 1 and 2 respectively (ADDITIVE: 1+1=2, not MULTIPLICATIVE: 1*1=1)
+        assert_eq!(
+            state.state_counts.get(&BeadState::Pending),
+            Some(&1),
+            "Pending count should be 1 after two transitions out"
+        );
+        assert_eq!(
+            state.state_counts.get(&BeadState::Scheduled),
+            Some(&2),
+            "Scheduled count should be 2 after two transitions in - tests += vs *="
+        );
+    }
+
+    #[test]
+    fn should_correctly_count_multiple_creations() {
+        // This specifically tests the += operator in line 158 (created event)
+        let proj = AllBeadsProjection::new();
+        let mut state = proj.initial_state();
+
+        // Create 5 beads
+        for i in 0..5 {
+            let bead_id = BeadId::new();
+            proj.apply(&mut state, &BeadEvent::created(
+                bead_id,
+                BeadSpec::new(format!("Bead {}", i)).with_complexity(Complexity::Simple),
+            ));
+        }
+
+        // Count should be 5 (0+1+1+1+1+1 = 5), not 0 or 1 (multiplication would give 0*1*1*1*1*1 = 0)
+        assert_eq!(
+            state.state_counts.get(&BeadState::Pending),
+            Some(&5),
+            "Should have 5 Pending beads - tests additive counting"
+        );
+    }
+
+    // ==========================================================================
+    // initial_state BEHAVIORAL TESTS (catching Default::default() mutation)
+    // ==========================================================================
+
+    #[test]
+    fn should_return_correct_type_from_initial_state() {
+        let proj = AllBeadsProjection::new();
+        let state: AllBeadsState = proj.initial_state();
+
+        // Verify it's actually an AllBeadsState with empty collections
+        // (Default::default() would also be empty, but this verifies the type)
+        assert!(state.beads.is_empty());
+        assert!(state.state_counts.is_empty());
+    }
+
+    #[test]
+    fn should_allow_modification_after_initial_state() {
+        // This tests that initial_state returns a usable AllBeadsState
+        let proj = AllBeadsProjection::new();
+        let mut state = proj.initial_state();
+
+        // Should be able to insert beads (proving it's the right type)
+        let bead_id = BeadId::new();
+        state.beads.insert(bead_id, BeadProjection::new(bead_id));
+
+        assert_eq!(state.beads.len(), 1);
+    }
+
+    // ==========================================================================
+    // ManagedProjection::rebuild BEHAVIORAL TESTS (catching Ok(()) mutation)
+    // ==========================================================================
+
+    #[tokio::test]
+    async fn should_actually_rebuild_state_from_store() {
+        // This tests that rebuild() actually rebuilds from the store
+        // (not just returning Ok(()) without doing anything)
+        let store = Arc::new(InMemoryEventStore::new());
+
+        // Add events to the store
+        let bead_id = BeadId::new();
+        store
+            .append(BeadEvent::created(
+                bead_id,
+                BeadSpec::new("Test").with_complexity(Complexity::Simple),
+            ))
+            .await
+            .ok();
+        store
+            .append(BeadEvent::state_changed(
+                bead_id,
+                BeadState::Pending,
+                BeadState::Scheduled,
+            ))
+            .await
+            .ok();
+
+        // Create managed projection (starts with empty state)
+        let managed = ManagedProjection::new(AllBeadsProjection::new());
+
+        // Verify initial state is empty
+        let state_before = managed.state().await;
+        assert!(
+            state_before.beads.is_empty(),
+            "State should be empty before rebuild"
+        );
+
+        // When: rebuild from store
+        let result = managed.rebuild(store.as_ref()).await;
+        assert!(result.is_ok());
+
+        // Then: state should contain the bead from the store
+        let state_after = managed.state().await;
+        assert!(
+            !state_after.beads.is_empty(),
+            "State should NOT be empty after rebuild - tests that rebuild actually processes events"
+        );
+        assert!(
+            state_after.beads.contains_key(&bead_id),
+            "State should contain the bead from the store"
+        );
+        assert_eq!(
+            state_after.beads.get(&bead_id).map(|b| b.current_state),
+            Some(BeadState::Scheduled),
+            "Bead should be in Scheduled state after rebuild"
+        );
+    }
+
+    #[tokio::test]
+    async fn should_replace_existing_state_on_rebuild() {
+        // This ensures rebuild replaces state, not appends to it
+        let store = Arc::new(InMemoryEventStore::new());
+
+        // Add one bead to store
+        let store_bead_id = BeadId::new();
+        store
+            .append(BeadEvent::created(
+                store_bead_id,
+                BeadSpec::new("Store Bead").with_complexity(Complexity::Simple),
+            ))
+            .await
+            .ok();
+
+        // Create managed projection with an existing bead
+        let proj = AllBeadsProjection::new();
+        let mut initial_state = proj.initial_state();
+        let existing_bead_id = BeadId::new();
+        initial_state.beads.insert(existing_bead_id, BeadProjection::new(existing_bead_id));
+
+        let managed = ManagedProjection::with_state(proj, initial_state);
+
+        // Verify existing bead is present
+        let state_before = managed.state().await;
+        assert!(state_before.beads.contains_key(&existing_bead_id));
+        assert!(!state_before.beads.contains_key(&store_bead_id));
+
+        // When: rebuild
+        managed.rebuild(store.as_ref()).await.ok();
+
+        // Then: state should be REPLACED (existing bead gone, store bead present)
+        let state_after = managed.state().await;
+        assert!(
+            !state_after.beads.contains_key(&existing_bead_id),
+            "Existing bead should be gone after rebuild"
+        );
+        assert!(
+            state_after.beads.contains_key(&store_bead_id),
+            "Store bead should be present after rebuild"
+        );
     }
 }

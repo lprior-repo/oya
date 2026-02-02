@@ -155,7 +155,7 @@ impl<S: EventStore> EventStore for TracingEventStore<S> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{BeadSpec, Complexity};
+    use crate::types::{BeadSpec, BeadState, Complexity};
 
     #[tokio::test]
     async fn test_append_and_read() {
@@ -263,5 +263,336 @@ mod tests {
             .ok();
 
         assert_eq!(store.count().await.unwrap_or(0), 1);
+    }
+
+    // ==========================================================================
+    // InMemoryEventStore::new_arc BEHAVIORAL TESTS
+    // ==========================================================================
+
+    #[tokio::test]
+    async fn should_create_arc_wrapped_store() {
+        let store: Arc<InMemoryEventStore> = InMemoryEventStore::new_arc();
+
+        // Verify it's an Arc by cloning and using from multiple places
+        let store2 = Arc::clone(&store);
+
+        // Both should point to the same store
+        let bead_id = BeadId::new();
+        store
+            .append(BeadEvent::created(
+                bead_id,
+                BeadSpec::new("Test").with_complexity(Complexity::Simple),
+            ))
+            .await
+            .ok();
+
+        // Count from store2 should see the event appended via store
+        let count = store2.count().await.unwrap_or(0);
+        assert_eq!(count, 1, "Arc-wrapped stores should share state");
+    }
+
+    #[tokio::test]
+    async fn should_create_empty_store_via_new_arc() {
+        let store = InMemoryEventStore::new_arc();
+
+        let count = store.count().await.unwrap_or(999);
+        assert_eq!(count, 0, "new_arc should create empty store");
+    }
+
+    #[tokio::test]
+    async fn should_create_functional_store_via_new_arc() {
+        // This tests that new_arc creates a FUNCTIONAL store, not just any Arc
+        // Catches mutation: Arc::new(Default::default()) vs Arc::new(Self::new())
+        let store = InMemoryEventStore::new_arc();
+        let bead_id = BeadId::new();
+
+        // Should be able to append events (proves it's a real InMemoryEventStore)
+        let result = store
+            .append(BeadEvent::created(
+                bead_id,
+                BeadSpec::new("Test").with_complexity(Complexity::Simple),
+            ))
+            .await;
+
+        assert!(result.is_ok(), "new_arc store should accept appends");
+
+        // Should be able to read events back
+        let events = store.read(None).await;
+        assert!(events.is_ok(), "new_arc store should support reads");
+        assert_eq!(
+            events.unwrap().len(),
+            1,
+            "new_arc store should persist events"
+        );
+
+        // Count should reflect the append
+        let count = store.count().await.unwrap_or(0);
+        assert_eq!(count, 1, "new_arc store should update count on append");
+    }
+
+    // ==========================================================================
+    // last_event_id BEHAVIORAL TESTS
+    // ==========================================================================
+
+    #[tokio::test]
+    async fn should_return_none_when_store_is_empty() {
+        let store = InMemoryEventStore::new();
+
+        let last_id = store.last_event_id().await;
+        assert!(last_id.is_ok(), "last_event_id should succeed");
+        assert!(
+            last_id.unwrap().is_none(),
+            "Empty store should return None for last_event_id"
+        );
+    }
+
+    #[tokio::test]
+    async fn should_return_some_when_store_has_events() {
+        let store = InMemoryEventStore::new();
+        let bead_id = BeadId::new();
+
+        let event = BeadEvent::created(
+            bead_id,
+            BeadSpec::new("Test").with_complexity(Complexity::Simple),
+        );
+        let appended_id = store.append(event).await.expect("append should succeed");
+
+        let last_id = store.last_event_id().await;
+        assert!(last_id.is_ok(), "last_event_id should succeed");
+        assert_eq!(
+            last_id.unwrap(),
+            Some(appended_id),
+            "last_event_id should return the appended event's ID"
+        );
+    }
+
+    #[tokio::test]
+    async fn should_return_most_recent_event_id() {
+        let store = InMemoryEventStore::new();
+        let bead_id = BeadId::new();
+
+        // Append first event
+        store
+            .append(BeadEvent::created(
+                bead_id,
+                BeadSpec::new("First").with_complexity(Complexity::Simple),
+            ))
+            .await
+            .ok();
+
+        // Append second event
+        let second_id = store
+            .append(BeadEvent::state_changed(
+                bead_id,
+                BeadState::Pending,
+                BeadState::Scheduled,
+            ))
+            .await
+            .expect("append should succeed");
+
+        let last_id = store.last_event_id().await.unwrap();
+        assert_eq!(
+            last_id,
+            Some(second_id),
+            "last_event_id should return the most recently appended event"
+        );
+    }
+
+    // ==========================================================================
+    // read_for_bead with unknown bead BEHAVIORAL TESTS
+    // ==========================================================================
+
+    #[tokio::test]
+    async fn should_return_empty_vec_for_unknown_bead() {
+        let store = InMemoryEventStore::new();
+        let unknown_bead = BeadId::new();
+
+        let events = store.read_for_bead(unknown_bead).await;
+        assert!(events.is_ok(), "read_for_bead should succeed");
+        assert!(
+            events.unwrap().is_empty(),
+            "Unknown bead should return empty vec"
+        );
+    }
+
+    // ==========================================================================
+    // read with non-existent from_id BEHAVIORAL TESTS
+    // ==========================================================================
+
+    #[tokio::test]
+    async fn should_return_all_events_when_from_id_not_found() {
+        let store = InMemoryEventStore::new();
+        let bead_id = BeadId::new();
+
+        // Add some events
+        store
+            .append(BeadEvent::created(
+                bead_id,
+                BeadSpec::new("Test").with_complexity(Complexity::Simple),
+            ))
+            .await
+            .ok();
+        store
+            .append(BeadEvent::state_changed(
+                bead_id,
+                BeadState::Pending,
+                BeadState::Scheduled,
+            ))
+            .await
+            .ok();
+
+        // Read from a non-existent event ID
+        let fake_id = crate::types::EventId::new();
+        let events = store.read(Some(fake_id)).await;
+
+        assert!(events.is_ok(), "read should succeed");
+        assert_eq!(
+            events.unwrap().len(),
+            2,
+            "Should return all events when from_id not found"
+        );
+    }
+
+    // ==========================================================================
+    // TracingEventStore BEHAVIORAL TESTS
+    // ==========================================================================
+
+    #[tokio::test]
+    async fn should_delegate_append_to_inner_store() {
+        let inner = InMemoryEventStore::new();
+        let tracing_store = TracingEventStore::new(inner);
+        let bead_id = BeadId::new();
+
+        let event = BeadEvent::created(
+            bead_id,
+            BeadSpec::new("Test").with_complexity(Complexity::Simple),
+        );
+        let result = tracing_store.append(event).await;
+
+        assert!(result.is_ok(), "TracingEventStore should delegate append");
+
+        // Verify the event was actually stored
+        let count = tracing_store.count().await.unwrap_or(0);
+        assert_eq!(count, 1, "Event should be stored via delegation");
+    }
+
+    #[tokio::test]
+    async fn should_delegate_read_to_inner_store() {
+        let inner = InMemoryEventStore::new();
+        let bead_id = BeadId::new();
+
+        // Add event directly to inner
+        inner
+            .append(BeadEvent::created(
+                bead_id,
+                BeadSpec::new("Test").with_complexity(Complexity::Simple),
+            ))
+            .await
+            .ok();
+
+        let tracing_store = TracingEventStore::new(inner);
+        let events = tracing_store.read(None).await;
+
+        assert!(events.is_ok(), "TracingEventStore should delegate read");
+        assert_eq!(events.unwrap().len(), 1, "Should read events from inner store");
+    }
+
+    #[tokio::test]
+    async fn should_delegate_read_for_bead_to_inner_store() {
+        let inner = InMemoryEventStore::new();
+        let bead_id = BeadId::new();
+
+        inner
+            .append(BeadEvent::created(
+                bead_id,
+                BeadSpec::new("Test").with_complexity(Complexity::Simple),
+            ))
+            .await
+            .ok();
+
+        let tracing_store = TracingEventStore::new(inner);
+        let events = tracing_store.read_for_bead(bead_id).await;
+
+        assert!(events.is_ok(), "TracingEventStore should delegate read_for_bead");
+        assert_eq!(events.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn should_delegate_last_event_id_to_inner_store() {
+        let inner = InMemoryEventStore::new();
+        let bead_id = BeadId::new();
+
+        let event = BeadEvent::created(
+            bead_id,
+            BeadSpec::new("Test").with_complexity(Complexity::Simple),
+        );
+        let expected_id = inner.append(event).await.expect("append should succeed");
+
+        let tracing_store = TracingEventStore::new(inner);
+        let last_id = tracing_store.last_event_id().await;
+
+        assert!(last_id.is_ok(), "TracingEventStore should delegate last_event_id");
+        assert_eq!(last_id.unwrap(), Some(expected_id));
+    }
+
+    #[tokio::test]
+    async fn should_delegate_count_to_inner_store() {
+        let inner = InMemoryEventStore::new();
+        let bead_id = BeadId::new();
+
+        inner
+            .append(BeadEvent::created(
+                bead_id,
+                BeadSpec::new("Test").with_complexity(Complexity::Simple),
+            ))
+            .await
+            .ok();
+        inner
+            .append(BeadEvent::state_changed(
+                bead_id,
+                BeadState::Pending,
+                BeadState::Scheduled,
+            ))
+            .await
+            .ok();
+
+        let tracing_store = TracingEventStore::new(inner);
+        let count = tracing_store.count().await;
+
+        assert!(count.is_ok(), "TracingEventStore should delegate count");
+        assert_eq!(count.unwrap(), 2);
+    }
+
+    #[tokio::test]
+    async fn should_preserve_read_from_semantics_through_tracing() {
+        let inner = InMemoryEventStore::new();
+        let bead_id = BeadId::new();
+
+        let first_id = inner
+            .append(BeadEvent::created(
+                bead_id,
+                BeadSpec::new("First").with_complexity(Complexity::Simple),
+            ))
+            .await
+            .expect("append should succeed");
+
+        inner
+            .append(BeadEvent::state_changed(
+                bead_id,
+                BeadState::Pending,
+                BeadState::Scheduled,
+            ))
+            .await
+            .ok();
+
+        let tracing_store = TracingEventStore::new(inner);
+        let events = tracing_store.read(Some(first_id)).await;
+
+        assert!(events.is_ok());
+        assert_eq!(
+            events.unwrap().len(),
+            1,
+            "Should return events after first_id"
+        );
     }
 }

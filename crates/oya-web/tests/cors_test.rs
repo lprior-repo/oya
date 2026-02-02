@@ -5,12 +5,15 @@ use axum::routing::get;
 use axum_test::TestServer;
 use oya_web::actors::{AppState, mock_scheduler, mock_state_manager};
 use std::sync::Arc;
+use tokio::sync::broadcast;
 
 #[tokio::test]
 async fn test_cors_headers_added() {
+    let (broadcast_tx, _) = broadcast::channel(100);
     let state = AppState {
         scheduler: Arc::new(mock_scheduler()),
         state_manager: Arc::new(mock_state_manager()),
+        broadcast_tx,
     };
 
     let app = Router::new()

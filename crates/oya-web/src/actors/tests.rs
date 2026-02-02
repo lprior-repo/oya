@@ -7,7 +7,7 @@
 //! - Error handling and supervision
 
 use super::*;
-use tokio::sync::mpsc;
+use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::time::{Duration, timeout};
 
 #[cfg(test)]
@@ -128,12 +128,19 @@ mod scheduler_actor_tests {
 mod state_manager_actor_tests {
     use super::*;
 
+    /// Helper to create a QueryBead message with a oneshot channel
+    fn query_bead_message(id: Ulid) -> (StateManagerMessage, oneshot::Receiver<Option<BeadState>>) {
+        let (tx, rx) = oneshot::channel();
+        (StateManagerMessage::QueryBead { id, response: tx }, rx)
+    }
+
     #[tokio::test]
     async fn test_state_manager_spawns_and_receives_messages() {
         let state_manager = mock_state_manager();
         let test_id = Ulid::new();
 
-        let result = state_manager.send(StateManagerMessage::QueryBead { id: test_id });
+        let (msg, _rx) = query_bead_message(test_id);
+        let result = state_manager.send(msg);
 
         assert!(result.is_ok(), "Failed to send message to state manager");
 
@@ -146,7 +153,8 @@ mod state_manager_actor_tests {
         let state_manager = mock_state_manager();
         let bead_id = Ulid::new();
 
-        let result = state_manager.send(StateManagerMessage::QueryBead { id: bead_id });
+        let (msg, _rx) = query_bead_message(bead_id);
+        let result = state_manager.send(msg);
 
         assert!(result.is_ok(), "Should successfully send QueryBead message");
     }
@@ -159,9 +167,13 @@ mod state_manager_actor_tests {
         let id2 = Ulid::new();
         let id3 = Ulid::new();
 
-        let r1 = state_manager.send(StateManagerMessage::QueryBead { id: id1 });
-        let r2 = state_manager.send(StateManagerMessage::QueryBead { id: id2 });
-        let r3 = state_manager.send(StateManagerMessage::QueryBead { id: id3 });
+        let (msg1, _rx1) = query_bead_message(id1);
+        let (msg2, _rx2) = query_bead_message(id2);
+        let (msg3, _rx3) = query_bead_message(id3);
+
+        let r1 = state_manager.send(msg1);
+        let r2 = state_manager.send(msg2);
+        let r3 = state_manager.send(msg3);
 
         assert!(r1.is_ok(), "First query should send successfully");
         assert!(r2.is_ok(), "Second query should send successfully");
@@ -176,14 +188,16 @@ mod state_manager_actor_tests {
         let state_manager = mock_state_manager();
 
         // Send before potential actor startup
-        let r1 = state_manager.send(StateManagerMessage::QueryBead { id: Ulid::new() });
+        let (msg1, _rx1) = query_bead_message(Ulid::new());
+        let r1 = state_manager.send(msg1);
         assert!(r1.is_ok(), "Should send before actor fully initialized");
 
         // Small delay to ensure actor is running
         tokio::time::sleep(Duration::from_millis(5)).await;
 
         // Send after actor is running
-        let r2 = state_manager.send(StateManagerMessage::QueryBead { id: Ulid::new() });
+        let (msg2, _rx2) = query_bead_message(Ulid::new());
+        let r2 = state_manager.send(msg2);
         assert!(r2.is_ok(), "Should send after actor is running");
     }
 }
@@ -275,10 +289,14 @@ mod message_type_tests {
     #[test]
     fn test_state_manager_message_construction() {
         let test_id = Ulid::new();
-        let msg = StateManagerMessage::QueryBead { id: test_id };
+        let (tx, _rx) = oneshot::channel();
+        let msg = StateManagerMessage::QueryBead {
+            id: test_id,
+            response: tx,
+        };
 
         match msg {
-            StateManagerMessage::QueryBead { id } => {
+            StateManagerMessage::QueryBead { id, response: _ } => {
                 assert_eq!(id, test_id, "ID should match");
             }
         }
@@ -294,12 +312,16 @@ mod message_type_tests {
             events: vec!["created".to_string()],
             created_at: "2024-01-01".to_string(),
             updated_at: "2024-01-01".to_string(),
+            title: Some("Test Bead".to_string()),
+            dependencies: vec!["dep-1".to_string()],
         };
 
         assert_eq!(state.id, test_id, "ID should match");
         assert_eq!(state.status, "pending", "Status should match");
         assert_eq!(state.phase, "init", "Phase should match");
         assert_eq!(state.events.len(), 1, "Should have one event");
+        assert_eq!(state.title, Some("Test Bead".to_string()), "Title should match");
+        assert_eq!(state.dependencies.len(), 1, "Should have one dependency");
     }
 }
 
@@ -308,15 +330,22 @@ mod app_state_tests {
     use super::*;
     use std::sync::Arc;
 
-    #[tokio::test]
+    /// Helper to create a QueryBead message with a oneshot channel
+    fn query_bead_message(id: Ulid) -> (StateManagerMessage, oneshot::Receiver<Option<BeadState>>) {
+        let (tx, rx) = oneshot::channel();
+        (StateManagerMessage::QueryBead { id, response: tx }, rx)
+    }
 
+    #[tokio::test]
     async fn test_app_state_construction() {
         let scheduler = mock_scheduler();
         let state_manager = mock_state_manager();
+        let (broadcast_tx, _broadcast_rx) = broadcast::channel(16);
 
         let app_state = AppState {
             scheduler: Arc::new(scheduler),
             state_manager: Arc::new(state_manager),
+            broadcast_tx,
         };
 
         // Verify state can be cloned (required for Axum)
@@ -331,10 +360,12 @@ mod app_state_tests {
     async fn test_app_state_actors_can_receive_messages() {
         let scheduler = mock_scheduler();
         let state_manager = mock_state_manager();
+        let (broadcast_tx, _broadcast_rx) = broadcast::channel(16);
 
         let app_state = AppState {
             scheduler: Arc::new(scheduler),
             state_manager: Arc::new(state_manager),
+            broadcast_tx,
         };
 
         // Send via app state
@@ -343,9 +374,8 @@ mod app_state_tests {
             spec: "test".to_string(),
         });
 
-        let r2 = app_state
-            .state_manager
-            .send(StateManagerMessage::QueryBead { id: Ulid::new() });
+        let (msg, _rx) = query_bead_message(Ulid::new());
+        let r2 = app_state.state_manager.send(msg);
 
         assert!(r1.is_ok(), "Scheduler should receive message");
         assert!(r2.is_ok(), "State manager should receive message");
@@ -355,10 +385,12 @@ mod app_state_tests {
     async fn test_app_state_clone_shares_actors() {
         let scheduler = mock_scheduler();
         let state_manager = mock_state_manager();
+        let (broadcast_tx, _broadcast_rx) = broadcast::channel(16);
 
         let app_state = AppState {
             scheduler: Arc::new(scheduler),
             state_manager: Arc::new(state_manager),
+            broadcast_tx,
         };
 
         let cloned = app_state.clone();
@@ -501,22 +533,8 @@ mod clone_behavior_tests {
         }
     }
 
-    #[test]
-    fn test_state_manager_message_clone() {
-        let test_id = Ulid::new();
-        let original = StateManagerMessage::QueryBead { id: test_id };
-
-        let cloned = original.clone();
-
-        match (&original, &cloned) {
-            (
-                StateManagerMessage::QueryBead { id: id1 },
-                StateManagerMessage::QueryBead { id: id2 },
-            ) => {
-                assert_eq!(id1, id2, "Cloned ID should match original");
-            }
-        }
-    }
+    // Note: StateManagerMessage is not Clone because oneshot::Sender is not Clone.
+    // This is intentional - each query needs its own response channel.
 }
 
 #[cfg(test)]
@@ -557,7 +575,11 @@ mod debug_trait_tests {
 
     #[test]
     fn test_state_manager_message_debug() {
-        let msg = StateManagerMessage::QueryBead { id: Ulid::new() };
+        let (tx, _rx) = oneshot::channel();
+        let msg = StateManagerMessage::QueryBead {
+            id: Ulid::new(),
+            response: tx,
+        };
 
         let debug_output = format!("{:?}", msg);
         assert!(
@@ -570,6 +592,12 @@ mod debug_trait_tests {
 #[cfg(test)]
 mod lifecycle_tests {
     use super::*;
+
+    /// Helper to create a QueryBead message with a oneshot channel
+    fn query_bead_message(id: Ulid) -> (StateManagerMessage, oneshot::Receiver<Option<BeadState>>) {
+        let (tx, rx) = oneshot::channel();
+        (StateManagerMessage::QueryBead { id, response: tx }, rx)
+    }
 
     #[tokio::test]
     async fn test_actor_starts_immediately_after_creation() {
@@ -594,7 +622,8 @@ mod lifecycle_tests {
         // Small delay to ensure tokio::spawn completes
         tokio::time::sleep(Duration::from_millis(1)).await;
 
-        let result = state_manager.send(StateManagerMessage::QueryBead { id: Ulid::new() });
+        let (msg, _rx) = query_bead_message(Ulid::new());
+        let result = state_manager.send(msg);
 
         assert!(result.is_ok(), "Actor should process messages after spawn");
     }
@@ -614,7 +643,8 @@ mod lifecycle_tests {
             id: Ulid::new(),
             spec: "s2".to_string(),
         });
-        let r3 = state_manager.send(StateManagerMessage::QueryBead { id: Ulid::new() });
+        let (msg, _rx) = query_bead_message(Ulid::new());
+        let r3 = state_manager.send(msg);
 
         assert!(r1.is_ok(), "First scheduler should work");
         assert!(r2.is_ok(), "Second scheduler should work");
@@ -809,7 +839,8 @@ mod property_tests {
             match rt.block_on(async {
                 let state_manager = mock_state_manager();
                 let id = Ulid::from_bytes(bytes);
-                let result = state_manager.send(StateManagerMessage::QueryBead { id });
+                let (tx, _rx) = oneshot::channel();
+                let result = state_manager.send(StateManagerMessage::QueryBead { id, response: tx });
                 prop_assert!(result.is_ok(), "State manager should accept any ULID");
                 Ok(())
             }) {
@@ -935,6 +966,8 @@ mod property_tests {
             events in prop::collection::vec("\\PC{1,50}", 0..=10),
             created_at in "\\PC{1,30}",
             updated_at in "\\PC{1,30}",
+            title in prop::option::of("\\PC{1,50}"),
+            dependencies in prop::collection::vec("\\PC{1,30}", 0..=5),
         ) {
             let id = Ulid::from_bytes(bytes);
             let state = BeadState {
@@ -944,6 +977,8 @@ mod property_tests {
                 events: events.clone(),
                 created_at: created_at.clone(),
                 updated_at: updated_at.clone(),
+                title: title.clone(),
+                dependencies: dependencies.clone(),
             };
 
             assert_eq!(state.status, status);
@@ -951,9 +986,8 @@ mod property_tests {
             assert_eq!(state.events, events);
             assert_eq!(state.created_at, created_at);
             assert_eq!(state.updated_at, updated_at);
+            assert_eq!(state.title, title);
+            assert_eq!(state.dependencies, dependencies);
         }
     }
 }
-
-#[cfg(test)]
-mod broadcast_tests;

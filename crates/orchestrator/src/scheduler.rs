@@ -11,39 +11,38 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
+use crate::dag::{DagError, DependencyType, WorkflowDAG};
 use crate::{Error, Result};
 
-// Re-export types from other crates for convenience
-// Note: These would normally come from the events and workflow crates
-// but we'll define the minimal types we need for this actor's state
+// Re-export types from DAG module
+pub use crate::dag::BeadId;
 
-/// Unique identifier for a workflow (placeholder until we can import from workflow crate)
+/// Unique identifier for a workflow
 pub type WorkflowId = String;
 
-/// Unique identifier for a bead (placeholder until we can import from events crate)
-pub type BeadId = String;
-
-/// Reference to a WorkflowDAG (placeholder - actual implementation would be in a dag module)
-/// This represents a directed acyclic graph of beads with their dependencies
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WorkflowDAG {
-    /// Workflow this DAG represents
+/// Wrapper around WorkflowDAG that tracks workflow metadata
+#[derive(Debug, Clone)]
+pub struct WorkflowState {
+    /// The workflow ID this state belongs to
     workflow_id: WorkflowId,
-    /// Beads in this workflow (simplified - full implementation would use petgraph)
-    beads: Vec<BeadId>,
+    /// The underlying DAG with dependency tracking
+    dag: WorkflowDAG,
+    /// Set of completed bead IDs for ready detection
+    completed: HashSet<BeadId>,
 }
 
-impl WorkflowDAG {
-    /// Create a new empty workflow DAG
+impl WorkflowState {
+    /// Create a new workflow state
     #[must_use]
     pub fn new(workflow_id: WorkflowId) -> Self {
         Self {
             workflow_id,
-            beads: Vec::new(),
+            dag: WorkflowDAG::new(),
+            completed: HashSet::new(),
         }
     }
 
@@ -53,30 +52,94 @@ impl WorkflowDAG {
         &self.workflow_id
     }
 
-    /// Get all beads in this DAG
+    /// Get the underlying DAG
     #[must_use]
-    pub fn beads(&self) -> &[BeadId] {
-        &self.beads
+    pub fn dag(&self) -> &WorkflowDAG {
+        &self.dag
     }
 
-    /// Add a bead to the DAG
-    pub fn add_bead(&mut self, bead_id: BeadId) {
-        if !self.beads.contains(&bead_id) {
-            self.beads.push(bead_id);
-        }
+    /// Get a mutable reference to the DAG
+    pub fn dag_mut(&mut self) -> &mut WorkflowDAG {
+        &mut self.dag
+    }
+
+    /// Add a bead to this workflow's DAG
+    pub fn add_bead(&mut self, bead_id: BeadId) -> Result<()> {
+        self.dag
+            .add_node(bead_id)
+            .map_err(|e| dag_error_to_error(e))
+    }
+
+    /// Add a dependency between beads
+    pub fn add_dependency(
+        &mut self,
+        from_bead: BeadId,
+        to_bead: BeadId,
+        dep_type: DependencyType,
+    ) -> Result<()> {
+        self.dag
+            .add_edge(from_bead, to_bead, dep_type)
+            .map_err(|e| dag_error_to_error(e))
+    }
+
+    /// Mark a bead as completed
+    pub fn mark_completed(&mut self, bead_id: &BeadId) {
+        self.completed.insert(bead_id.clone());
+    }
+
+    /// Get all beads that are ready to execute
+    #[must_use]
+    pub fn get_ready_beads(&self) -> Vec<BeadId> {
+        self.dag.get_ready_nodes(&self.completed)
+    }
+
+    /// Check if a specific bead is ready
+    pub fn is_bead_ready(&self, bead_id: &BeadId) -> Result<bool> {
+        self.dag
+            .is_ready(bead_id, &self.completed)
+            .map_err(|e| dag_error_to_error(e))
     }
 
     /// Check if DAG is empty
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.beads.is_empty()
+        self.dag.node_count() == 0
     }
 
     /// Get the number of beads in the DAG
     #[must_use]
     pub fn len(&self) -> usize {
-        self.beads.len()
+        self.dag.node_count()
     }
+
+    /// Get the number of completed beads
+    #[must_use]
+    pub fn completed_count(&self) -> usize {
+        self.completed.len()
+    }
+
+    /// Check if workflow is complete (all beads done)
+    #[must_use]
+    pub fn is_complete(&self) -> bool {
+        self.completed.len() == self.dag.node_count()
+    }
+
+    /// Get all bead IDs in this workflow
+    #[must_use]
+    pub fn beads(&self) -> Vec<BeadId> {
+        self.dag.nodes().cloned().collect()
+    }
+
+    /// Check if a bead exists in this workflow
+    #[must_use]
+    pub fn contains_bead(&self, bead_id: &BeadId) -> bool {
+        self.dag.contains_node(bead_id)
+    }
+}
+
+/// Convert DagError to the crate Error type
+fn dag_error_to_error(e: DagError) -> Error {
+    Error::invalid_record(e.to_string())
 }
 
 /// Reference to a queue actor
@@ -226,14 +289,14 @@ impl ScheduledBead {
 /// Scheduler actor for managing workflow DAGs and bead scheduling.
 ///
 /// Maintains the following invariants:
-/// - One WorkflowDAG per workflow_id
+/// - One WorkflowState per workflow_id
 /// - Each bead is tracked in exactly one workflow
 /// - Event subscriptions are active while actor is running
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct SchedulerActor {
-    /// Map of workflow IDs to their DAGs
-    /// Invariant: One WorkflowDAG per workflow_id
-    workflows: HashMap<WorkflowId, WorkflowDAG>,
+    /// Map of workflow IDs to their state (DAG + completed tracking)
+    /// Invariant: One WorkflowState per workflow_id
+    workflows: HashMap<WorkflowId, WorkflowState>,
 
     /// Pending beads waiting to be scheduled
     pending_beads: HashMap<BeadId, ScheduledBead>,
@@ -277,25 +340,25 @@ impl SchedulerActor {
         }
 
         self.workflows
-            .insert(workflow_id.clone(), WorkflowDAG::new(workflow_id));
+            .insert(workflow_id.clone(), WorkflowState::new(workflow_id));
         Ok(())
     }
 
     /// Unregister a workflow (when it completes)
     ///
-    /// Returns the removed DAG if it existed, None otherwise
-    pub fn unregister_workflow(&mut self, workflow_id: &WorkflowId) -> Option<WorkflowDAG> {
+    /// Returns the removed state if it existed, None otherwise
+    pub fn unregister_workflow(&mut self, workflow_id: &WorkflowId) -> Option<WorkflowState> {
         self.workflows.remove(workflow_id)
     }
 
-    /// Get a workflow DAG by ID
+    /// Get a workflow state by ID
     #[must_use]
-    pub fn get_workflow(&self, workflow_id: &WorkflowId) -> Option<&WorkflowDAG> {
+    pub fn get_workflow(&self, workflow_id: &WorkflowId) -> Option<&WorkflowState> {
         self.workflows.get(workflow_id)
     }
 
-    /// Get a mutable reference to a workflow DAG
-    pub fn get_workflow_mut(&mut self, workflow_id: &WorkflowId) -> Option<&mut WorkflowDAG> {
+    /// Get a mutable reference to a workflow state
+    pub fn get_workflow_mut(&mut self, workflow_id: &WorkflowId) -> Option<&mut WorkflowState> {
         self.workflows.get_mut(workflow_id)
     }
 
@@ -310,23 +373,46 @@ impl SchedulerActor {
     /// Adds the bead to the workflow's DAG and marks it as pending
     pub fn schedule_bead(&mut self, workflow_id: WorkflowId, bead_id: BeadId) -> Result<()> {
         // Ensure workflow exists
-        if !self.workflows.contains_key(&workflow_id) {
-            return Err(Error::invalid_record(format!(
-                "workflow {} not found",
-                workflow_id
-            )));
-        }
+        let workflow_state = self
+            .workflows
+            .get_mut(&workflow_id)
+            .ok_or_else(|| Error::invalid_record(format!("workflow {} not found", workflow_id)))?;
 
         // Add bead to workflow DAG
-        if let Some(dag) = self.workflows.get_mut(&workflow_id) {
-            dag.add_bead(bead_id.clone());
-        }
+        workflow_state.add_bead(bead_id.clone())?;
 
         // Track bead as pending
         let scheduled_bead = ScheduledBead::new(bead_id.clone(), workflow_id);
         self.pending_beads.insert(bead_id, scheduled_bead);
 
         Ok(())
+    }
+
+    /// Add a dependency between beads in a workflow
+    ///
+    /// The `from_bead` must complete before `to_bead` can start
+    pub fn add_dependency(
+        &mut self,
+        workflow_id: &WorkflowId,
+        from_bead: BeadId,
+        to_bead: BeadId,
+    ) -> Result<()> {
+        let workflow_state = self
+            .workflows
+            .get_mut(workflow_id)
+            .ok_or_else(|| Error::invalid_record(format!("workflow {} not found", workflow_id)))?;
+
+        workflow_state.add_dependency(from_bead, to_bead, DependencyType::BlockingDependency)
+    }
+
+    /// Get all beads ready to execute in a workflow (based on DAG dependencies)
+    pub fn get_workflow_ready_beads(&self, workflow_id: &WorkflowId) -> Result<Vec<BeadId>> {
+        let workflow_state = self
+            .workflows
+            .get(workflow_id)
+            .ok_or_else(|| Error::invalid_record(format!("workflow {} not found", workflow_id)))?;
+
+        Ok(workflow_state.get_ready_beads())
     }
 
     /// Mark a bead as ready for dispatch
@@ -499,15 +585,18 @@ mod tests {
         );
 
         let workflow = scheduler.get_workflow(&workflow_id);
-        assert!(workflow.is_some(), "registered workflow should be retrievable");
+        assert!(
+            workflow.is_some(),
+            "registered workflow should be retrievable"
+        );
 
-        if let Some(dag) = workflow {
+        if let Some(state) = workflow {
             assert_eq!(
-                dag.workflow_id(),
+                state.workflow_id(),
                 &workflow_id,
                 "workflow should have correct ID"
             );
-            assert!(dag.is_empty(), "new workflow should have no beads");
+            assert!(state.is_empty(), "new workflow should have no beads");
         }
     }
 
@@ -539,9 +628,9 @@ mod tests {
         let workflow = scheduler.get_workflow(&workflow_id);
         assert!(workflow.is_some(), "workflow should still exist");
 
-        if let Some(dag) = workflow {
+        if let Some(state) = workflow {
             assert!(
-                dag.beads().contains(&bead_id),
+                state.contains_bead(&bead_id),
                 "bead should be tracked in workflow DAG"
             );
         }
@@ -561,10 +650,7 @@ mod tests {
         );
 
         let schedule_result = scheduler.schedule_bead(workflow_id, bead_id.clone());
-        assert!(
-            schedule_result.is_ok(),
-            "bead scheduling should succeed"
-        );
+        assert!(schedule_result.is_ok(), "bead scheduling should succeed");
 
         assert_eq!(
             scheduler.pending_count(),
@@ -580,11 +666,7 @@ mod tests {
             mark_ready_result.is_ok(),
             "marking bead ready should succeed"
         );
-        assert_eq!(
-            scheduler.ready_count(),
-            1,
-            "bead should be in ready queue"
-        );
+        assert_eq!(scheduler.ready_count(), 1, "bead should be in ready queue");
 
         let ready_beads = scheduler.get_ready_beads();
         assert!(
@@ -608,10 +690,7 @@ mod tests {
         );
 
         let schedule_result = scheduler.schedule_bead(workflow_id, bead_id.clone());
-        assert!(
-            schedule_result.is_ok(),
-            "bead scheduling should succeed"
-        );
+        assert!(schedule_result.is_ok(), "bead scheduling should succeed");
 
         let mark_ready_result = scheduler.mark_ready(&bead_id);
         assert!(
@@ -656,10 +735,7 @@ mod tests {
         );
 
         let schedule_result = scheduler.schedule_bead(workflow_id, bead_id.clone());
-        assert!(
-            schedule_result.is_ok(),
-            "bead scheduling should succeed"
-        );
+        assert!(schedule_result.is_ok(), "bead scheduling should succeed");
 
         let mark_ready_result = scheduler.mark_ready(&bead_id);
         assert!(
@@ -668,10 +744,7 @@ mod tests {
         );
 
         let assign_result = scheduler.assign_to_worker(&bead_id, worker_id.clone());
-        assert!(
-            assign_result.is_ok(),
-            "worker assignment should succeed"
-        );
+        assert!(assign_result.is_ok(), "worker assignment should succeed");
 
         assert!(
             scheduler.get_worker_assignment(&bead_id).is_some(),
@@ -722,11 +795,7 @@ mod tests {
         assert!(ready_1.is_ok(), "marking bead-1 ready should succeed");
 
         // bead-2 remains pending (depends on bead-1)
-        assert_eq!(
-            scheduler.pending_count(),
-            1,
-            "bead-2 should remain pending"
-        );
+        assert_eq!(scheduler.pending_count(), 1, "bead-2 should remain pending");
 
         // WHEN: bead-1 completes
         let complete_1 = scheduler.handle_bead_completed(&bead_1);
@@ -834,7 +903,10 @@ mod tests {
         let stats = scheduler.stats();
 
         // THEN: Statistics should accurately reflect the state
-        assert_eq!(stats.workflow_count, 1, "should report correct workflow count");
+        assert_eq!(
+            stats.workflow_count, 1,
+            "should report correct workflow count"
+        );
         assert_eq!(
             stats.pending_count, 1,
             "should report correct pending count (bead-2)"
@@ -907,10 +979,10 @@ mod tests {
         assert_eq!(scheduler.pending_count(), 1);
 
         // Verify bead was added to DAG
-        let dag = scheduler.get_workflow(&workflow_id);
-        assert!(dag.is_some());
-        if let Some(dag) = dag {
-            assert!(dag.beads().contains(&bead_id));
+        let state = scheduler.get_workflow(&workflow_id);
+        assert!(state.is_some());
+        if let Some(state) = state {
+            assert!(state.contains_bead(&bead_id));
         }
     }
 
@@ -1018,35 +1090,40 @@ mod tests {
     }
 
     #[test]
-    fn test_workflow_dag_new() {
+    fn test_workflow_state_new() {
         let workflow_id = "workflow-1".to_string();
-        let dag = WorkflowDAG::new(workflow_id.clone());
+        let state = WorkflowState::new(workflow_id.clone());
 
-        assert_eq!(dag.workflow_id(), &workflow_id);
-        assert!(dag.is_empty());
-        assert_eq!(dag.len(), 0);
+        assert_eq!(state.workflow_id(), &workflow_id);
+        assert!(state.is_empty());
+        assert_eq!(state.len(), 0);
     }
 
     #[test]
-    fn test_workflow_dag_add_bead() {
+    fn test_workflow_state_add_bead() {
         let workflow_id = "workflow-1".to_string();
-        let mut dag = WorkflowDAG::new(workflow_id);
+        let mut state = WorkflowState::new(workflow_id);
         let bead_id = "bead-1".to_string();
 
-        dag.add_bead(bead_id.clone());
-        assert_eq!(dag.len(), 1);
-        assert!(dag.beads().contains(&bead_id));
+        let result = state.add_bead(bead_id.clone());
+        assert!(result.is_ok());
+        assert_eq!(state.len(), 1);
+        assert!(state.contains_bead(&bead_id));
     }
 
     #[test]
-    fn test_workflow_dag_no_duplicates() {
+    fn test_workflow_state_no_duplicates() {
         let workflow_id = "workflow-1".to_string();
-        let mut dag = WorkflowDAG::new(workflow_id);
+        let mut state = WorkflowState::new(workflow_id);
         let bead_id = "bead-1".to_string();
 
-        dag.add_bead(bead_id.clone());
-        dag.add_bead(bead_id); // Add same bead again
-        assert_eq!(dag.len(), 1); // Should still be 1
+        let result1 = state.add_bead(bead_id.clone());
+        assert!(result1.is_ok());
+
+        let result2 = state.add_bead(bead_id); // Add same bead again
+        assert!(result2.is_err()); // Should fail with duplicate error
+
+        assert_eq!(state.len(), 1); // Should still be 1
     }
 
     #[test]
@@ -1095,5 +1172,377 @@ mod tests {
         bead.assign_to_queue(queue_id.clone());
         assert_eq!(bead.assigned_queue, Some(queue_id));
         assert_eq!(bead.state, BeadScheduleState::Dispatched);
+    }
+
+    // ========================================================================
+    // WORKFLOW STATE TESTS
+    // ========================================================================
+    // Tests for WorkflowState wrapper around WorkflowDAG.
+    // WorkflowState tracks workflow_id, dag, and completed beads.
+
+    // --- BASIC OPERATIONS (4 tests) ---
+
+    #[test]
+    fn test_workflow_state_new_initial_state() {
+        // GIVEN: A workflow ID
+        let workflow_id = "workflow-test".to_string();
+
+        // WHEN: Creating a new WorkflowState
+        let state = WorkflowState::new(workflow_id.clone());
+
+        // THEN: The state should be correctly initialized
+        assert_eq!(
+            state.workflow_id(),
+            &workflow_id,
+            "workflow_id should match the provided value"
+        );
+        assert!(state.is_empty(), "new state should have no beads");
+        assert_eq!(state.len(), 0, "new state should have length 0");
+        assert_eq!(
+            state.completed_count(),
+            0,
+            "new state should have no completed beads"
+        );
+        assert!(
+            state.is_complete(),
+            "empty workflow is considered complete (0 == 0)"
+        );
+    }
+
+    #[test]
+    fn test_workflow_state_add_bead_success() {
+        // GIVEN: A new WorkflowState
+        let mut state = WorkflowState::new("workflow-1".to_string());
+        let bead_id = "bead-001".to_string();
+
+        // WHEN: Adding a bead to the state
+        let result = state.add_bead(bead_id.clone());
+
+        // THEN: The bead should be added successfully
+        assert!(result.is_ok(), "add_bead should succeed");
+        assert_eq!(state.len(), 1, "state should contain one bead");
+        assert!(!state.is_empty(), "state should not be empty after add");
+        assert!(
+            state.contains_bead(&bead_id),
+            "state should contain the added bead"
+        );
+    }
+
+    #[test]
+    fn test_workflow_state_add_dependency_success() {
+        // GIVEN: A WorkflowState with two beads
+        let mut state = WorkflowState::new("workflow-1".to_string());
+        let bead_a = "bead-a".to_string();
+        let bead_b = "bead-b".to_string();
+        state.add_bead(bead_a.clone()).ok();
+        state.add_bead(bead_b.clone()).ok();
+
+        // WHEN: Adding a dependency from bead_a to bead_b
+        let result = state.add_dependency(
+            bead_a.clone(),
+            bead_b.clone(),
+            DependencyType::BlockingDependency,
+        );
+
+        // THEN: The dependency should be tracked in the DAG
+        assert!(result.is_ok(), "add_dependency should succeed");
+
+        // Verify via get_ready_beads - only bead_a should be ready initially
+        let ready = state.get_ready_beads();
+        assert!(
+            ready.contains(&bead_a),
+            "bead_a (no dependencies) should be ready"
+        );
+        assert!(
+            !ready.contains(&bead_b),
+            "bead_b (depends on bead_a) should not be ready"
+        );
+    }
+
+    #[test]
+    fn test_workflow_state_contains_bead_existence_check() {
+        // GIVEN: A WorkflowState with one bead
+        let mut state = WorkflowState::new("workflow-1".to_string());
+        let existing_bead = "bead-exists".to_string();
+        let missing_bead = "bead-missing".to_string();
+        state.add_bead(existing_bead.clone()).ok();
+
+        // WHEN: Checking if beads exist
+        let exists = state.contains_bead(&existing_bead);
+        let missing = state.contains_bead(&missing_bead);
+
+        // THEN: Should correctly report existence
+        assert!(exists, "should return true for existing bead");
+        assert!(!missing, "should return false for missing bead");
+    }
+
+    // --- COMPLETION TRACKING (4 tests) ---
+
+    #[test]
+    fn test_workflow_state_mark_completed_tracks_bead() {
+        // GIVEN: A WorkflowState with a bead
+        let mut state = WorkflowState::new("workflow-1".to_string());
+        let bead_id = "bead-001".to_string();
+        state.add_bead(bead_id.clone()).ok();
+
+        assert_eq!(
+            state.completed_count(),
+            0,
+            "initially no beads should be completed"
+        );
+
+        // WHEN: Marking the bead as completed
+        state.mark_completed(&bead_id);
+
+        // THEN: The bead should be tracked as completed
+        assert_eq!(
+            state.completed_count(),
+            1,
+            "one bead should be marked completed"
+        );
+    }
+
+    #[test]
+    fn test_workflow_state_completed_count_accuracy() {
+        // GIVEN: A WorkflowState with multiple beads
+        let mut state = WorkflowState::new("workflow-1".to_string());
+        let bead_1 = "bead-1".to_string();
+        let bead_2 = "bead-2".to_string();
+        let bead_3 = "bead-3".to_string();
+        state.add_bead(bead_1.clone()).ok();
+        state.add_bead(bead_2.clone()).ok();
+        state.add_bead(bead_3.clone()).ok();
+
+        // WHEN: Marking beads completed incrementally
+        assert_eq!(state.completed_count(), 0, "initial count should be 0");
+
+        state.mark_completed(&bead_1);
+        assert_eq!(state.completed_count(), 1, "count after first completion");
+
+        state.mark_completed(&bead_2);
+        assert_eq!(state.completed_count(), 2, "count after second completion");
+
+        // THEN: Count should accurately reflect completed beads
+        // Marking same bead again should not double-count (HashSet semantics)
+        state.mark_completed(&bead_1);
+        assert_eq!(
+            state.completed_count(),
+            2,
+            "re-marking same bead should not increase count"
+        );
+    }
+
+    #[test]
+    fn test_workflow_state_is_complete_all_beads_done() {
+        // GIVEN: A WorkflowState with all beads
+        let mut state = WorkflowState::new("workflow-1".to_string());
+        let bead_1 = "bead-1".to_string();
+        let bead_2 = "bead-2".to_string();
+        state.add_bead(bead_1.clone()).ok();
+        state.add_bead(bead_2.clone()).ok();
+
+        assert!(!state.is_complete(), "should not be complete initially");
+
+        // WHEN: Marking all beads as completed
+        state.mark_completed(&bead_1);
+        state.mark_completed(&bead_2);
+
+        // THEN: Workflow should be marked complete
+        assert!(
+            state.is_complete(),
+            "should be complete when all beads are done"
+        );
+    }
+
+    #[test]
+    fn test_workflow_state_is_complete_partial_beads_done() {
+        // GIVEN: A WorkflowState with multiple beads
+        let mut state = WorkflowState::new("workflow-1".to_string());
+        let bead_1 = "bead-1".to_string();
+        let bead_2 = "bead-2".to_string();
+        let bead_3 = "bead-3".to_string();
+        state.add_bead(bead_1.clone()).ok();
+        state.add_bead(bead_2.clone()).ok();
+        state.add_bead(bead_3.clone()).ok();
+
+        // WHEN: Only some beads are completed
+        state.mark_completed(&bead_1);
+        state.mark_completed(&bead_2);
+        // bead_3 is NOT completed
+
+        // THEN: Workflow should NOT be complete
+        assert!(
+            !state.is_complete(),
+            "should not be complete when some beads are pending"
+        );
+        assert_eq!(state.completed_count(), 2, "two beads completed");
+        assert_eq!(state.len(), 3, "three beads total");
+    }
+
+    // --- READY DETECTION (4 tests) ---
+
+    #[test]
+    fn test_workflow_state_get_ready_beads_roots_are_ready() {
+        // GIVEN: A WorkflowState with root beads (no dependencies)
+        let mut state = WorkflowState::new("workflow-1".to_string());
+        let root_1 = "root-1".to_string();
+        let root_2 = "root-2".to_string();
+        let child = "child".to_string();
+        state.add_bead(root_1.clone()).ok();
+        state.add_bead(root_2.clone()).ok();
+        state.add_bead(child.clone()).ok();
+        state
+            .add_dependency(
+                root_1.clone(),
+                child.clone(),
+                DependencyType::BlockingDependency,
+            )
+            .ok();
+        state
+            .add_dependency(
+                root_2.clone(),
+                child.clone(),
+                DependencyType::BlockingDependency,
+            )
+            .ok();
+
+        // WHEN: Getting ready beads with nothing completed
+        let ready = state.get_ready_beads();
+
+        // THEN: Only root beads (no incoming edges) should be ready
+        assert!(ready.contains(&root_1), "root_1 should be ready");
+        assert!(ready.contains(&root_2), "root_2 should be ready");
+        assert!(
+            !ready.contains(&child),
+            "child with dependencies should not be ready"
+        );
+    }
+
+    #[test]
+    fn test_workflow_state_get_ready_beads_after_dependencies_complete() {
+        // GIVEN: A WorkflowState with a dependency chain: a -> b -> c
+        let mut state = WorkflowState::new("workflow-1".to_string());
+        let bead_a = "bead-a".to_string();
+        let bead_b = "bead-b".to_string();
+        let bead_c = "bead-c".to_string();
+        state.add_bead(bead_a.clone()).ok();
+        state.add_bead(bead_b.clone()).ok();
+        state.add_bead(bead_c.clone()).ok();
+        state
+            .add_dependency(
+                bead_a.clone(),
+                bead_b.clone(),
+                DependencyType::BlockingDependency,
+            )
+            .ok();
+        state
+            .add_dependency(
+                bead_b.clone(),
+                bead_c.clone(),
+                DependencyType::BlockingDependency,
+            )
+            .ok();
+
+        // Initially only a is ready
+        let ready_initial = state.get_ready_beads();
+        assert_eq!(
+            ready_initial,
+            vec![bead_a.clone()],
+            "only a should be ready initially"
+        );
+
+        // WHEN: bead_a completes
+        state.mark_completed(&bead_a);
+        let ready_after_a = state.get_ready_beads();
+
+        // THEN: bead_b should become ready, bead_c still blocked
+        assert!(
+            ready_after_a.contains(&bead_b),
+            "b should be ready after a completes"
+        );
+        assert!(
+            !ready_after_a.contains(&bead_c),
+            "c should still be blocked"
+        );
+        assert!(
+            !ready_after_a.contains(&bead_a),
+            "completed beads should not appear in ready list"
+        );
+
+        // WHEN: bead_b completes
+        state.mark_completed(&bead_b);
+        let ready_after_b = state.get_ready_beads();
+
+        // THEN: bead_c should become ready
+        assert!(
+            ready_after_b.contains(&bead_c),
+            "c should be ready after b completes"
+        );
+    }
+
+    #[test]
+    fn test_workflow_state_is_bead_ready_returns_true() {
+        // GIVEN: A WorkflowState with a root bead and a dependent bead
+        let mut state = WorkflowState::new("workflow-1".to_string());
+        let root = "root".to_string();
+        let dependent = "dependent".to_string();
+        state.add_bead(root.clone()).ok();
+        state.add_bead(dependent.clone()).ok();
+        state
+            .add_dependency(
+                root.clone(),
+                dependent.clone(),
+                DependencyType::BlockingDependency,
+            )
+            .ok();
+
+        // Root is ready immediately
+        let root_ready = state.is_bead_ready(&root);
+        assert!(
+            root_ready.is_ok(),
+            "is_bead_ready should succeed for existing bead"
+        );
+        if let Ok(ready) = root_ready {
+            assert!(ready, "root bead should be ready (no dependencies)");
+        }
+
+        // WHEN: Root completes
+        state.mark_completed(&root);
+
+        // THEN: Dependent should be ready
+        let dependent_ready = state.is_bead_ready(&dependent);
+        assert!(dependent_ready.is_ok(), "is_bead_ready should succeed");
+        if let Ok(ready) = dependent_ready {
+            assert!(ready, "dependent should be ready after root completes");
+        }
+    }
+
+    #[test]
+    fn test_workflow_state_is_bead_ready_returns_false_when_blocked() {
+        // GIVEN: A WorkflowState with a dependency chain
+        let mut state = WorkflowState::new("workflow-1".to_string());
+        let blocker = "blocker".to_string();
+        let blocked = "blocked".to_string();
+        state.add_bead(blocker.clone()).ok();
+        state.add_bead(blocked.clone()).ok();
+        state
+            .add_dependency(
+                blocker.clone(),
+                blocked.clone(),
+                DependencyType::BlockingDependency,
+            )
+            .ok();
+
+        // WHEN: Checking if the blocked bead is ready (blocker not completed)
+        let result = state.is_bead_ready(&blocked);
+
+        // THEN: Should return false - bead is blocked by incomplete dependency
+        assert!(result.is_ok(), "is_bead_ready should succeed");
+        if let Ok(ready) = result {
+            assert!(
+                !ready,
+                "blocked bead should not be ready when dependency is incomplete"
+            );
+        }
     }
 }

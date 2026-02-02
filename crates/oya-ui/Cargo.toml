@@ -37,7 +37,9 @@ gloo-timers = "0.3"
 thiserror = "2.0"
 bincode = "1.3"
 futures = "0.3"
-oya-events = { path = "../events" }
+# oya-events requires tokio which doesn't support WASM target
+# For WASM builds, we duplicate the BeadEvent type locally
+# oya-events = { path = "../events" }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"

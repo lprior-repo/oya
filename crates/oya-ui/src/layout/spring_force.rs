@@ -4,11 +4,7 @@
 //! Connected nodes attract/repel each other toward the rest length distance.
 
 use crate::models::edge::Edge;
-<<<<<<< HEAD
 use crate::models::node::{Node, Position};
-=======
-use crate::models::node::{Node, NodeId, Position};
->>>>>>> origin/edge-curves-bezier
 use std::collections::HashMap;
 
 /// Configuration for spring force
@@ -40,14 +36,10 @@ impl SpringConfig {
             return Err(format!("Rest length must be finite, got: {}", rest_length));
         }
         if rest_length <= 0.0 {
-<<<<<<< HEAD
             return Err(format!(
                 "Rest length must be positive, got: {}",
                 rest_length
             ));
-=======
-            return Err(format!("Rest length must be positive, got: {}", rest_length));
->>>>>>> origin/edge-curves-bezier
         }
 
         Ok(Self {
@@ -217,14 +209,10 @@ pub fn apply_spring_forces(
         .iter()
         .map(|node| {
             let node_id = node.id().as_str();
-<<<<<<< HEAD
-            let force = force_map.get(node_id).copied().unwrap_or_else(Force::zero);
-=======
             let force = force_map
                 .get(node_id)
                 .copied()
                 .unwrap_or_else(Force::zero);
->>>>>>> origin/edge-curves-bezier
 
             let old_pos = node.position();
             let new_pos = Position::new(old_pos.x + force.dx, old_pos.y + force.dy)?;
@@ -240,10 +228,7 @@ pub fn apply_spring_forces(
 mod tests {
     use super::*;
     use crate::models::edge::EdgeType;
-<<<<<<< HEAD
     use crate::models::node::NodeId;
-=======
->>>>>>> origin/edge-curves-bezier
 
     #[test]
     fn test_spring_config_validation() {
@@ -418,15 +403,11 @@ mod tests {
         let node2 = Node::with_position("n2", "Node 2", 200.0, 0.0)?;
 
         let nodes = vec![node1, node2];
-<<<<<<< HEAD
-        let edge = Edge::new(NodeId::new("n1")?, NodeId::new("n2")?, EdgeType::Dependency)?;
-=======
         let edge = Edge::new(
             NodeId::new("n1")?,
             NodeId::new("n2")?,
             EdgeType::Dependency,
         )?;
->>>>>>> origin/edge-curves-bezier
         let edges = vec![edge];
 
         let config = SpringConfig::new(0.1, 75.0)?;
@@ -445,15 +426,11 @@ mod tests {
         let node2 = Node::with_position("n2", "Node 2", 200.0, 0.0)?;
 
         let nodes = vec![node1.clone(), node2.clone()];
-<<<<<<< HEAD
-        let edge = Edge::new(NodeId::new("n1")?, NodeId::new("n2")?, EdgeType::Dependency)?;
-=======
         let edge = Edge::new(
             NodeId::new("n1")?,
             NodeId::new("n2")?,
             EdgeType::Dependency,
         )?;
->>>>>>> origin/edge-curves-bezier
         let edges = vec![edge];
 
         let config = SpringConfig::new(0.1, 75.0)?;
@@ -463,14 +440,10 @@ mod tests {
         let delta2 = result[1].position().x - node2.position().x;
 
         // Movements should be equal and opposite
-<<<<<<< HEAD
         assert!(
             (delta1 + delta2).abs() < 1e-4,
             "Forces should be equal/opposite"
         );
-=======
-        assert!((delta1 + delta2).abs() < 1e-4, "Forces should be equal/opposite");
->>>>>>> origin/edge-curves-bezier
         Ok(())
     }
 
@@ -483,11 +456,6 @@ mod tests {
 
         let nodes = vec![node1, node2, node3];
         let edges = vec![
-<<<<<<< HEAD
-            Edge::new(NodeId::new("n1")?, NodeId::new("n2")?, EdgeType::Dependency)?,
-            Edge::new(NodeId::new("n2")?, NodeId::new("n3")?, EdgeType::Dependency)?,
-            Edge::new(NodeId::new("n3")?, NodeId::new("n1")?, EdgeType::Dependency)?,
-=======
             Edge::new(
                 NodeId::new("n1")?,
                 NodeId::new("n2")?,
@@ -503,7 +471,6 @@ mod tests {
                 NodeId::new("n1")?,
                 EdgeType::Dependency,
             )?,
->>>>>>> origin/edge-curves-bezier
         ];
 
         let config = SpringConfig::default();
@@ -547,15 +514,11 @@ mod tests {
         let node2 = Node::with_position("n2", "Node Two", 100.0, 0.0)?;
 
         let nodes = vec![node1, node2];
-<<<<<<< HEAD
-        let edge = Edge::new(NodeId::new("n1")?, NodeId::new("n2")?, EdgeType::Dependency)?;
-=======
         let edge = Edge::new(
             NodeId::new("n1")?,
             NodeId::new("n2")?,
             EdgeType::Dependency,
         )?;
->>>>>>> origin/edge-curves-bezier
         let edges = vec![edge];
 
         let config = SpringConfig::default();
@@ -575,15 +538,11 @@ mod tests {
         let node2 = Node::with_position("n2", "Node 2", 200.0, 0.0)?;
 
         let original_nodes = vec![node1.clone(), node2.clone()];
-<<<<<<< HEAD
-        let edge = Edge::new(NodeId::new("n1")?, NodeId::new("n2")?, EdgeType::Dependency)?;
-=======
         let edge = Edge::new(
             NodeId::new("n1")?,
             NodeId::new("n2")?,
             EdgeType::Dependency,
         )?;
->>>>>>> origin/edge-curves-bezier
         let edges = vec![edge];
 
         let config = SpringConfig::default();
@@ -601,15 +560,11 @@ mod tests {
         let mut node1 = Node::with_position("n1", "Node 1", 0.0, 0.0)?;
         let mut node2 = Node::with_position("n2", "Node 2", 200.0, 0.0)?;
 
-<<<<<<< HEAD
-        let edge = Edge::new(NodeId::new("n1")?, NodeId::new("n2")?, EdgeType::Dependency)?;
-=======
         let edge = Edge::new(
             NodeId::new("n1")?,
             NodeId::new("n2")?,
             EdgeType::Dependency,
         )?;
->>>>>>> origin/edge-curves-bezier
         let edges = vec![edge];
         let config = SpringConfig::new(0.1, 75.0)?;
 
@@ -647,15 +602,11 @@ mod tests {
         let node2 = Node::with_position("n2", "Node 2", 200.0, 0.0)?;
 
         let nodes = vec![node1.clone(), node2.clone()];
-<<<<<<< HEAD
-        let edge = Edge::new(NodeId::new("n1")?, NodeId::new("n2")?, EdgeType::Dependency)?;
-=======
         let edge = Edge::new(
             NodeId::new("n1")?,
             NodeId::new("n2")?,
             EdgeType::Dependency,
         )?;
->>>>>>> origin/edge-curves-bezier
         let edges = vec![edge];
 
         let config = SpringConfig::new(0.0, 75.0)?;

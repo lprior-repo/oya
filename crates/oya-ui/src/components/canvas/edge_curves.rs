@@ -4,8 +4,6 @@
 //! (edges between the same nodes in the same or opposite directions) with smooth curves
 //! to prevent visual overlap.
 
-use wasm_bindgen::JsValue;
-
 /// Errors that can occur during edge curve calculations
 #[derive(Debug, Clone, PartialEq)]
 pub enum EdgeCurveError {
