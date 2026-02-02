@@ -142,6 +142,43 @@ impl Node {
     pub fn set_shape(&mut self, shape: NodeShape) {
         self.shape = shape;
     }
+
+    /// Tests if a screen-space point is inside this node
+    ///
+    /// This is a convenience method that delegates to the interaction::hover module.
+    /// It handles viewport transforms (pan/zoom) correctly.
+    ///
+    /// # Arguments
+    ///
+    /// * `screen_x` - X coordinate in screen space (pixels)
+    /// * `screen_y` - Y coordinate in screen space (pixels)
+    /// * `viewport` - Current viewport state
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if coordinate transformation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use oya_ui::models::node::Node;
+    /// # use oya_ui::components::canvas::coords::Viewport;
+    /// # fn example() -> Result<(), String> {
+    /// let node = Node::new("test", "Test")?;
+    /// let viewport = Viewport::new(1200.0, 800.0)?;
+    ///
+    /// let is_hovering = node.contains_point(650.0, 425.0, &viewport)?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn contains_point(
+        &self,
+        screen_x: f32,
+        screen_y: f32,
+        viewport: &crate::components::canvas::coords::Viewport,
+    ) -> Result<bool, String> {
+        crate::interaction::hover::contains_point(self, screen_x, screen_y, viewport)
+    }
 }
 
 #[cfg(test)]

@@ -25,6 +25,7 @@
 pub mod app;
 pub mod components;
 pub mod error;
+pub mod interaction;
 pub mod layout;
 pub mod models;
 pub mod pages;
