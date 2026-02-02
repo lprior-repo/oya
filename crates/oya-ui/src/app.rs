@@ -16,7 +16,7 @@ use crate::state::init_websocket;
 #[component]
 pub fn App() -> impl IntoView {
     // Initialize WebSocket connection
-    let (ws_state, _set_ws_state) = init_websocket();
+    let (ws_state, ws_event) = init_websocket();
 
     view! {
         <div class="app-container">
@@ -29,7 +29,10 @@ pub fn App() -> impl IntoView {
                     <a href="/beads">"Beads"</a>
                 </nav>
                 <div class="ws-status">
-                    {move || format!("WS: {}", ws_state.get())}
+                    {move || format!("WS: {} | Events: {}",
+                        ws_state.get(),
+                        ws_event.get().as_ref().map(|e| e.event_type()).unwrap_or("none")
+                    )}
                 </div>
             </header>
             <main class="app-main">

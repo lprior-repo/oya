@@ -47,7 +47,11 @@ impl std::fmt::Display for ArrowError {
         match self {
             Self::ZeroDirectionVector => write!(f, "Direction vector has zero length"),
             Self::InvalidDimensions { length, width } => {
-                write!(f, "Invalid arrow dimensions: length={}, width={}", length, width)
+                write!(
+                    f,
+                    "Invalid arrow dimensions: length={}, width={}",
+                    length, width
+                )
             }
         }
     }
@@ -99,7 +103,11 @@ pub fn calculate_arrow_head(
     arrow_width: f64,
 ) -> Result<ArrowPath, ArrowError> {
     // Validate dimensions
-    if !arrow_length.is_finite() || !arrow_width.is_finite() || arrow_length <= 0.0 || arrow_width <= 0.0 {
+    if !arrow_length.is_finite()
+        || !arrow_width.is_finite()
+        || arrow_length <= 0.0
+        || arrow_width <= 0.0
+    {
         return Err(ArrowError::InvalidDimensions {
             length: arrow_length,
             width: arrow_width,
@@ -160,11 +168,7 @@ pub fn calculate_arrow_head(
 /// assert_eq!(length, 24.0);  // Doubled
 /// assert_eq!(width, 16.0);   // Doubled
 /// ```
-pub fn scale_arrow_with_zoom(
-    base_length: f64,
-    base_width: f64,
-    zoom_factor: f64,
-) -> (f64, f64) {
+pub fn scale_arrow_with_zoom(base_length: f64, base_width: f64, zoom_factor: f64) -> (f64, f64) {
     (base_length * zoom_factor, base_width * zoom_factor)
 }
 
@@ -266,7 +270,7 @@ mod tests {
     #[test]
     fn test_arrow_pointing_up() {
         let tip = (100.0, 100.0);
-        let direction = (0.0, -1.0);  // Pointing up (negative Y)
+        let direction = (0.0, -1.0); // Pointing up (negative Y)
         let result = calculate_arrow_head(tip, direction, 12.0, 8.0);
 
         assert!(result.is_ok());
@@ -284,7 +288,7 @@ mod tests {
     #[test]
     fn test_arrow_pointing_diagonal() {
         let tip = (100.0, 100.0);
-        let direction = (1.0, 1.0);  // 45 degrees
+        let direction = (1.0, 1.0); // 45 degrees
         let result = calculate_arrow_head(tip, direction, 12.0, 8.0);
 
         assert!(result.is_ok());
@@ -293,14 +297,20 @@ mod tests {
         assert_eq!(arrow.tip, (100.0, 100.0));
         // Base should be sqrt(2)*12/2 back in both X and Y
         let offset = 12.0 / 2.0_f64.sqrt();
-        assert!(approx_eq(arrow.wing1.0 + arrow.wing2.0, 2.0 * (100.0 - offset)));
-        assert!(approx_eq(arrow.wing1.1 + arrow.wing2.1, 2.0 * (100.0 - offset)));
+        assert!(approx_eq(
+            arrow.wing1.0 + arrow.wing2.0,
+            2.0 * (100.0 - offset)
+        ));
+        assert!(approx_eq(
+            arrow.wing1.1 + arrow.wing2.1,
+            2.0 * (100.0 - offset)
+        ));
     }
 
     #[test]
     fn test_unnormalized_direction() {
         let tip = (100.0, 100.0);
-        let direction = (3.0, 4.0);  // Magnitude 5
+        let direction = (3.0, 4.0); // Magnitude 5
         let result = calculate_arrow_head(tip, direction, 10.0, 6.0);
 
         assert!(result.is_ok());
@@ -308,14 +318,8 @@ mod tests {
 
         // Should normalize to (0.6, 0.8)
         // Base at tip - 10*(0.6, 0.8) = (94, 92)
-        assert!(approx_eq(
-            (arrow.wing1.0 + arrow.wing2.0) / 2.0,
-            94.0
-        ));
-        assert!(approx_eq(
-            (arrow.wing1.1 + arrow.wing2.1) / 2.0,
-            92.0
-        ));
+        assert!(approx_eq((arrow.wing1.0 + arrow.wing2.0) / 2.0, 94.0));
+        assert!(approx_eq((arrow.wing1.1 + arrow.wing2.1) / 2.0, 92.0));
     }
 
     #[test]
@@ -425,7 +429,10 @@ mod tests {
         let err = ArrowError::ZeroDirectionVector;
         assert_eq!(err.to_string(), "Direction vector has zero length");
 
-        let err = ArrowError::InvalidDimensions { length: -1.0, width: 8.0 };
+        let err = ArrowError::InvalidDimensions {
+            length: -1.0,
+            width: 8.0,
+        };
         assert!(err.to_string().contains("Invalid arrow dimensions"));
     }
 
@@ -445,7 +452,11 @@ mod tests {
             // Verify wings are equidistant from tip
             let dist1 = ((arrow.wing1.0 - tip.0).powi(2) + (arrow.wing1.1 - tip.1).powi(2)).sqrt();
             let dist2 = ((arrow.wing2.0 - tip.0).powi(2) + (arrow.wing2.1 - tip.1).powi(2)).sqrt();
-            assert!(approx_eq(dist1, dist2), "Wings not equidistant at angle {}", angle);
+            assert!(
+                approx_eq(dist1, dist2),
+                "Wings not equidistant at angle {}",
+                angle
+            );
         }
     }
 
