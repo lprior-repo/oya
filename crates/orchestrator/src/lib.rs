@@ -14,3 +14,8 @@ pub mod agent_swarm {}
 
 /// Task distribution module
 pub mod distribution {}
+
+/// Scheduler module for dispatching ready beads to queues
+pub mod scheduler;
+
+pub use scheduler::{DispatchResult, Dispatcher, QueueStrategy};
