@@ -166,7 +166,7 @@ mod tests {
     fn test_start_drag() {
         let state = DragState::Idle;
         let dragging = start_drag(state, 150.0, 250.0);
-        
+
         match dragging {
             DragState::Dragging {
                 start_x,
