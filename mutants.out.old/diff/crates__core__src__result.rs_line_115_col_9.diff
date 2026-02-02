@@ -1,0 +1,24 @@
+--- crates/core/src/result.rs
++++ replace <impl GenericResultExt<T, E> for std::result::Result<T, E>>::tap_ok -> Self with Default::default()
+@@ -107,20 +107,17 @@
+         context: F,
+     ) -> std::result::Result<T, String>
+     where
+         E: std::fmt::Display;
+ }
+ 
+ impl<T, E> GenericResultExt<T, E> for std::result::Result<T, E> {
+     fn tap_ok<F: FnOnce(&T)>(self, f: F) -> Self {
+-        if let Ok(ref v) = self {
+-            f(v);
+-        }
+-        self
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     fn tap_err<F: FnOnce(&E)>(self, f: F) -> Self {
+         if let Err(ref e) = self {
+             f(e);
+         }
+         self
+     }

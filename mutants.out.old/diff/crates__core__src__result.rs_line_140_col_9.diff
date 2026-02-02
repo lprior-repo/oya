@@ -1,0 +1,24 @@
+--- crates/core/src/result.rs
++++ replace <impl GenericResultExt<T, E> for std::result::Result<T, E>>::bimap -> std::result::Result<U, E2> with Ok(Default::default())
+@@ -132,20 +132,17 @@
+         self.and_then(|v| f(&v).map(|()| v))
+     }
+ 
+     fn bimap<U, F, EF, E2>(self, ok_fn: F, err_fn: EF) -> std::result::Result<U, E2>
+     where
+         F: FnOnce(T) -> U,
+         EF: FnOnce(E) -> E2,
+     {
+-        match self {
+-            Ok(v) => Ok(ok_fn(v)),
+-            Err(e) => Err(err_fn(e)),
+-        }
++        Ok(Default::default()) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     fn with_context<C: std::fmt::Display, F: FnOnce() -> C>(
+         self,
+         context: F,
+     ) -> std::result::Result<T, String>
+     where
+         E: std::fmt::Display,

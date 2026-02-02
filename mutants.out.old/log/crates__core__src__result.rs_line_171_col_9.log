@@ -1,0 +1,75 @@
+
+*** crates/core/src/result.rs:171:9: replace <impl OptionExt<T> for Option<T>>::ok_or_else_lazy -> std::result::Result<T, E> with Ok(Default::default())
+
+*** mutation diff:
+--- crates/core/src/result.rs
++++ replace <impl OptionExt<T> for Option<T>>::ok_or_else_lazy -> std::result::Result<T, E> with Ok(Default::default())
+@@ -163,17 +163,17 @@
+     fn tap_some<F: FnOnce(&T)>(self, f: F) -> Self;
+ 
+     /// Tap into None without consuming the Option.
+     fn tap_none<F: FnOnce()>(self, f: F) -> Self;
+ }
+ 
+ impl<T> OptionExt<T> for Option<T> {
+     fn ok_or_else_lazy<E, F: FnOnce() -> E>(self, err: F) -> std::result::Result<T, E> {
+-        self.ok_or_else(err)
++        Ok(Default::default()) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     fn tap_some<F: FnOnce(&T)>(self, f: F) -> Self {
+         if let Some(ref v) = self {
+             f(v);
+         }
+         self
+     }
+
+
+*** /home/lewis/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo test --no-run --verbose --package=oya-core@0.1.0
+       Fresh unicode-ident v1.0.22
+       Fresh proc-macro2 v1.0.106
+       Fresh once_cell v1.21.3
+       Fresh pin-project-lite v0.2.16
+       Fresh either v1.15.0
+       Fresh itoa v1.0.17
+       Fresh memchr v2.7.6
+       Fresh tracing-core v0.1.36
+       Fresh itertools v0.14.0
+       Fresh quote v1.0.44
+       Fresh serde_core v1.0.228
+       Fresh zmij v1.0.19
+       Fresh syn v2.0.114
+       Fresh serde_json v1.0.149
+       Fresh thiserror-impl v2.0.18
+       Fresh tracing-attributes v0.1.31
+       Fresh serde_derive v1.0.228
+       Fresh serde v1.0.228
+       Fresh thiserror v2.0.18
+       Fresh tracing v0.1.44
+       Dirty oya-core v0.1.0 (/tmp/cargo-mutants-oya-B4lXUj.tmp/crates/core): couldn't read metadata for file `target/debug/deps/liboya_core-223db9c19506f4d9.rlib`
+   Compiling oya-core v0.1.0 (/tmp/cargo-mutants-oya-B4lXUj.tmp/crates/core)
+     Running `/home/lewis/.cargo/bin/sccache /home/lewis/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc --crate-name oya_core --edition=2024 crates/core/src/lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type lib --emit=dep-info,metadata,link -C embed-bitcode=no -C debuginfo=2 '--forbid=clippy::unwrap_used' --forbid=unsafe_code '--forbid=clippy::unreachable' '--forbid=clippy::unimplemented' '--warn=clippy::todo' '--forbid=clippy::panic' '--deny=clippy::expect_used' --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values())' -C metadata=f21bb62720581c74 -C extra-filename=-223db9c19506f4d9 --out-dir /tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/deps -C incremental=/tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/incremental -L dependency=/tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/deps --extern itertools=/tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/deps/libitertools-11274a8d9e3a9689.rmeta --extern serde=/tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/deps/libserde-fe166f9ac490eb6e.rmeta --extern serde_json=/tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/deps/libserde_json-d9038d4548f8e3e6.rmeta --extern thiserror=/tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/deps/libthiserror-86f1dcb938a15d13.rmeta --extern tracing=/tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/deps/libtracing-3467aedb706d4073.rmeta`
+     Running `/home/lewis/.cargo/bin/sccache /home/lewis/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc --crate-name oya_core --edition=2024 crates/core/src/lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --emit=dep-info,link -C embed-bitcode=no -C debuginfo=2 '--forbid=clippy::unwrap_used' --forbid=unsafe_code '--forbid=clippy::unreachable' '--forbid=clippy::unimplemented' '--warn=clippy::todo' '--forbid=clippy::panic' '--deny=clippy::expect_used' --test --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values())' -C metadata=93a1f48c1bbf84fa -C extra-filename=-be307b31886b8a9a --out-dir /tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/deps -C incremental=/tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/incremental -L dependency=/tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/deps --extern itertools=/tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/deps/libitertools-11274a8d9e3a9689.rlib --extern serde=/tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/deps/libserde-fe166f9ac490eb6e.rlib --extern serde_json=/tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/deps/libserde_json-d9038d4548f8e3e6.rlib --extern thiserror=/tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/deps/libthiserror-86f1dcb938a15d13.rlib --extern tracing=/tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/deps/libtracing-3467aedb706d4073.rlib`
+error[E0277]: the trait bound `T: Default` is not satisfied
+   --> crates/core/src/result.rs:171:12
+    |
+171 |         Ok(Default::default()) /* ~ changed by cargo-mutants ~ */
+    |            ^^^^^^^^^^^^^^^^^^ the trait `Default` is not implemented for `T`
+    |
+help: consider restricting type parameter `T` with trait `Default`
+    |
+169 | impl<T: std::default::Default> OptionExt<T> for Option<T> {
+    |       +++++++++++++++++++++++
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `oya-core` (lib) due to 1 previous error
+
+Caused by:
+  process didn't exit successfully: `/home/lewis/.cargo/bin/sccache /home/lewis/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc --crate-name oya_core --edition=2024 crates/core/src/lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type lib --emit=dep-info,metadata,link -C embed-bitcode=no -C debuginfo=2 '--forbid=clippy::unwrap_used' --forbid=unsafe_code '--forbid=clippy::unreachable' '--forbid=clippy::unimplemented' '--warn=clippy::todo' '--forbid=clippy::panic' '--deny=clippy::expect_used' --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values())' -C metadata=f21bb62720581c74 -C extra-filename=-223db9c19506f4d9 --out-dir /tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/deps -C incremental=/tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/incremental -L dependency=/tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/deps --extern itertools=/tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/deps/libitertools-11274a8d9e3a9689.rmeta --extern serde=/tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/deps/libserde-fe166f9ac490eb6e.rmeta --extern serde_json=/tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/deps/libserde_json-d9038d4548f8e3e6.rmeta --extern thiserror=/tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/deps/libthiserror-86f1dcb938a15d13.rmeta --extern tracing=/tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/deps/libtracing-3467aedb706d4073.rmeta` (exit status: 1)
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `oya-core` (lib test) due to 1 previous error
+
+Caused by:
+  process didn't exit successfully: `/home/lewis/.cargo/bin/sccache /home/lewis/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc --crate-name oya_core --edition=2024 crates/core/src/lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --emit=dep-info,link -C embed-bitcode=no -C debuginfo=2 '--forbid=clippy::unwrap_used' --forbid=unsafe_code '--forbid=clippy::unreachable' '--forbid=clippy::unimplemented' '--warn=clippy::todo' '--forbid=clippy::panic' '--deny=clippy::expect_used' --test --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values())' -C metadata=93a1f48c1bbf84fa -C extra-filename=-be307b31886b8a9a --out-dir /tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/deps -C incremental=/tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/incremental -L dependency=/tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/deps --extern itertools=/tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/deps/libitertools-11274a8d9e3a9689.rlib --extern serde=/tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/deps/libserde-fe166f9ac490eb6e.rlib --extern serde_json=/tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/deps/libserde_json-d9038d4548f8e3e6.rlib --extern thiserror=/tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/deps/libthiserror-86f1dcb938a15d13.rlib --extern tracing=/tmp/cargo-mutants-oya-B4lXUj.tmp/target/debug/deps/libtracing-3467aedb706d4073.rlib` (exit status: 1)
+
+*** result: Failure(101)

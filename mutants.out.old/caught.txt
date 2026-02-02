@@ -1,0 +1,3 @@
+crates/core/src/result.rs:55:9: replace <impl ResultExt<T> for Result<T>>::into_option_logged -> Option<T> with None
+crates/core/src/result.rs:175:9: replace <impl OptionExt<T> for Option<T>>::tap_some -> Self with Default::default()
+crates/core/src/result.rs:182:9: replace <impl OptionExt<T> for Option<T>>::tap_none -> Self with Default::default()

@@ -1,0 +1,546 @@
+[
+  {
+    "diff": "--- crates/core/src/error.rs\n+++ replace Error::file_read_failed -> Self with Default::default()\n@@ -42,20 +42,17 @@\n     // Generic I/O error wrapper\n     #[error(\"I/O error: {0}\")]\n     Io(#[from] std::io::Error),\n }\n \n impl Error {\n     /// Create a file read error.\n     pub fn file_read_failed(path: impl Into<PathBuf>, reason: impl Into<String>) -> Self {\n-        Self::FileReadFailed {\n-            path: path.into(),\n-            reason: reason.into(),\n-        }\n+        Default::default() /* ~ changed by cargo-mutants ~ */\n     }\n \n     /// Create a file write error.\n     pub fn file_write_failed(path: impl Into<PathBuf>, reason: impl Into<String>) -> Self {\n         Self::FileWriteFailed {\n             path: path.into(),\n             reason: reason.into(),\n         }\n",
+    "file": "crates/core/src/error.rs",
+    "function": {
+      "function_name": "Error::file_read_failed",
+      "return_type": "-> Self",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 54
+        },
+        "start": {
+          "column": 5,
+          "line": 48
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/core/src/error.rs:50:9: replace Error::file_read_failed -> Self with Default::default()",
+    "package": "oya-core",
+    "replacement": "Default::default()",
+    "span": {
+      "end": {
+        "column": 10,
+        "line": 53
+      },
+      "start": {
+        "column": 9,
+        "line": 50
+      }
+    }
+  },
+  {
+    "diff": "--- crates/core/src/error.rs\n+++ replace Error::file_write_failed -> Self with Default::default()\n@@ -50,20 +50,17 @@\n         Self::FileReadFailed {\n             path: path.into(),\n             reason: reason.into(),\n         }\n     }\n \n     /// Create a file write error.\n     pub fn file_write_failed(path: impl Into<PathBuf>, reason: impl Into<String>) -> Self {\n-        Self::FileWriteFailed {\n-            path: path.into(),\n-            reason: reason.into(),\n-        }\n+        Default::default() /* ~ changed by cargo-mutants ~ */\n     }\n \n     /// Create a directory creation error.\n     pub fn directory_creation_failed(path: impl Into<PathBuf>, reason: impl Into<String>) -> Self {\n         Self::DirectoryCreationFailed {\n             path: path.into(),\n             reason: reason.into(),\n         }\n",
+    "file": "crates/core/src/error.rs",
+    "function": {
+      "function_name": "Error::file_write_failed",
+      "return_type": "-> Self",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 62
+        },
+        "start": {
+          "column": 5,
+          "line": 56
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/core/src/error.rs:58:9: replace Error::file_write_failed -> Self with Default::default()",
+    "package": "oya-core",
+    "replacement": "Default::default()",
+    "span": {
+      "end": {
+        "column": 10,
+        "line": 61
+      },
+      "start": {
+        "column": 9,
+        "line": 58
+      }
+    }
+  },
+  {
+    "diff": "--- crates/core/src/error.rs\n+++ replace Error::directory_creation_failed -> Self with Default::default()\n@@ -58,20 +58,17 @@\n         Self::FileWriteFailed {\n             path: path.into(),\n             reason: reason.into(),\n         }\n     }\n \n     /// Create a directory creation error.\n     pub fn directory_creation_failed(path: impl Into<PathBuf>, reason: impl Into<String>) -> Self {\n-        Self::DirectoryCreationFailed {\n-            path: path.into(),\n-            reason: reason.into(),\n-        }\n+        Default::default() /* ~ changed by cargo-mutants ~ */\n     }\n \n     /// Create a JSON parse error.\n     pub fn json_parse_failed(reason: impl Into<String>) -> Self {\n         Self::JsonParseFailed {\n             reason: reason.into(),\n         }\n     }\n",
+    "file": "crates/core/src/error.rs",
+    "function": {
+      "function_name": "Error::directory_creation_failed",
+      "return_type": "-> Self",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 70
+        },
+        "start": {
+          "column": 5,
+          "line": 64
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/core/src/error.rs:66:9: replace Error::directory_creation_failed -> Self with Default::default()",
+    "package": "oya-core",
+    "replacement": "Default::default()",
+    "span": {
+      "end": {
+        "column": 10,
+        "line": 69
+      },
+      "start": {
+        "column": 9,
+        "line": 66
+      }
+    }
+  },
+  {
+    "diff": "--- crates/core/src/error.rs\n+++ replace Error::json_parse_failed -> Self with Default::default()\n@@ -66,19 +66,17 @@\n         Self::DirectoryCreationFailed {\n             path: path.into(),\n             reason: reason.into(),\n         }\n     }\n \n     /// Create a JSON parse error.\n     pub fn json_parse_failed(reason: impl Into<String>) -> Self {\n-        Self::JsonParseFailed {\n-            reason: reason.into(),\n-        }\n+        Default::default() /* ~ changed by cargo-mutants ~ */\n     }\n \n     /// Create an invalid record error.\n     pub fn invalid_record(reason: impl Into<String>) -> Self {\n         Self::InvalidRecord {\n             reason: reason.into(),\n         }\n     }\n",
+    "file": "crates/core/src/error.rs",
+    "function": {
+      "function_name": "Error::json_parse_failed",
+      "return_type": "-> Self",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 77
+        },
+        "start": {
+          "column": 5,
+          "line": 72
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/core/src/error.rs:74:9: replace Error::json_parse_failed -> Self with Default::default()",
+    "package": "oya-core",
+    "replacement": "Default::default()",
+    "span": {
+      "end": {
+        "column": 10,
+        "line": 76
+      },
+      "start": {
+        "column": 9,
+        "line": 74
+      }
+    }
+  },
+  {
+    "diff": "--- crates/core/src/error.rs\n+++ replace Error::invalid_record -> Self with Default::default()\n@@ -73,13 +73,11 @@\n     pub fn json_parse_failed(reason: impl Into<String>) -> Self {\n         Self::JsonParseFailed {\n             reason: reason.into(),\n         }\n     }\n \n     /// Create an invalid record error.\n     pub fn invalid_record(reason: impl Into<String>) -> Self {\n-        Self::InvalidRecord {\n-            reason: reason.into(),\n-        }\n+        Default::default() /* ~ changed by cargo-mutants ~ */\n     }\n }\n",
+    "file": "crates/core/src/error.rs",
+    "function": {
+      "function_name": "Error::invalid_record",
+      "return_type": "-> Self",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 84
+        },
+        "start": {
+          "column": 5,
+          "line": 79
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/core/src/error.rs:81:9: replace Error::invalid_record -> Self with Default::default()",
+    "package": "oya-core",
+    "replacement": "Default::default()",
+    "span": {
+      "end": {
+        "column": 10,
+        "line": 83
+      },
+      "start": {
+        "column": 9,
+        "line": 81
+      }
+    }
+  },
+  {
+    "diff": "--- crates/core/src/result.rs\n+++ replace <impl ResultExt<T> for Result<T>>::into_option_logged -> Option<T> with None\n@@ -47,23 +47,17 @@\n     fn or_default_logged(self, default: T) -> T;\n \n     /// Inspect the error without consuming the Result.\n     fn inspect_error<F: FnOnce(&Error)>(self, f: F) -> Self;\n }\n \n impl<T: std::fmt::Debug> ResultExt<T> for Result<T> {\n     fn into_option_logged(self) -> Option<T> {\n-        match self {\n-            Ok(value) => Some(value),\n-            Err(e) => {\n-                tracing::error!(\"Operation failed: {}\", e);\n-                None\n-            }\n-        }\n+        None /* ~ changed by cargo-mutants ~ */\n     }\n \n     fn or_default_logged(self, default: T) -> T {\n         match self {\n             Ok(value) => value,\n             Err(e) => {\n                 tracing::error!(\"Operation failed, using default: {}\", e);\n                 default\n",
+    "file": "crates/core/src/result.rs",
+    "function": {
+      "function_name": "<impl ResultExt<T> for Result<T>>::into_option_logged",
+      "return_type": "-> Option<T>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 62
+        },
+        "start": {
+          "column": 5,
+          "line": 54
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/core/src/result.rs:55:9: replace <impl ResultExt<T> for Result<T>>::into_option_logged -> Option<T> with None",
+    "package": "oya-core",
+    "replacement": "None",
+    "span": {
+      "end": {
+        "column": 10,
+        "line": 61
+      },
+      "start": {
+        "column": 9,
+        "line": 55
+      }
+    }
+  },
+  {
+    "diff": "--- crates/core/src/result.rs\n+++ replace <impl ResultExt<T> for Result<T>>::into_option_logged -> Option<T> with Some(Default::default())\n@@ -47,23 +47,17 @@\n     fn or_default_logged(self, default: T) -> T;\n \n     /// Inspect the error without consuming the Result.\n     fn inspect_error<F: FnOnce(&Error)>(self, f: F) -> Self;\n }\n \n impl<T: std::fmt::Debug> ResultExt<T> for Result<T> {\n     fn into_option_logged(self) -> Option<T> {\n-        match self {\n-            Ok(value) => Some(value),\n-            Err(e) => {\n-                tracing::error!(\"Operation failed: {}\", e);\n-                None\n-            }\n-        }\n+        Some(Default::default()) /* ~ changed by cargo-mutants ~ */\n     }\n \n     fn or_default_logged(self, default: T) -> T {\n         match self {\n             Ok(value) => value,\n             Err(e) => {\n                 tracing::error!(\"Operation failed, using default: {}\", e);\n                 default\n",
+    "file": "crates/core/src/result.rs",
+    "function": {
+      "function_name": "<impl ResultExt<T> for Result<T>>::into_option_logged",
+      "return_type": "-> Option<T>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 62
+        },
+        "start": {
+          "column": 5,
+          "line": 54
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/core/src/result.rs:55:9: replace <impl ResultExt<T> for Result<T>>::into_option_logged -> Option<T> with Some(Default::default())",
+    "package": "oya-core",
+    "replacement": "Some(Default::default())",
+    "span": {
+      "end": {
+        "column": 10,
+        "line": 61
+      },
+      "start": {
+        "column": 9,
+        "line": 55
+      }
+    }
+  },
+  {
+    "diff": "--- crates/core/src/result.rs\n+++ replace <impl ResultExt<T> for Result<T>>::or_default_logged -> T with Default::default()\n@@ -57,23 +57,17 @@\n             Err(e) => {\n                 tracing::error!(\"Operation failed: {}\", e);\n                 None\n             }\n         }\n     }\n \n     fn or_default_logged(self, default: T) -> T {\n-        match self {\n-            Ok(value) => value,\n-            Err(e) => {\n-                tracing::error!(\"Operation failed, using default: {}\", e);\n-                default\n-            }\n-        }\n+        Default::default() /* ~ changed by cargo-mutants ~ */\n     }\n \n     fn inspect_error<F: FnOnce(&Error)>(self, f: F) -> Self {\n         if let Err(ref e) = self {\n             f(e);\n         }\n         self\n     }\n",
+    "file": "crates/core/src/result.rs",
+    "function": {
+      "function_name": "<impl ResultExt<T> for Result<T>>::or_default_logged",
+      "return_type": "-> T",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 72
+        },
+        "start": {
+          "column": 5,
+          "line": 64
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/core/src/result.rs:65:9: replace <impl ResultExt<T> for Result<T>>::or_default_logged -> T with Default::default()",
+    "package": "oya-core",
+    "replacement": "Default::default()",
+    "span": {
+      "end": {
+        "column": 10,
+        "line": 71
+      },
+      "start": {
+        "column": 9,
+        "line": 65
+      }
+    }
+  },
+  {
+    "diff": "--- crates/core/src/result.rs\n+++ replace <impl ResultExt<T> for Result<T>>::inspect_error -> Self with Default::default()\n@@ -67,20 +67,17 @@\n             Err(e) => {\n                 tracing::error!(\"Operation failed, using default: {}\", e);\n                 default\n             }\n         }\n     }\n \n     fn inspect_error<F: FnOnce(&Error)>(self, f: F) -> Self {\n-        if let Err(ref e) = self {\n-            f(e);\n-        }\n-        self\n+        Default::default() /* ~ changed by cargo-mutants ~ */\n     }\n }\n \n /// Generic extension trait for any Result type (not just oya_core::Result).\n ///\n /// Provides tap-style combinators for side effects and transformations.\n pub trait GenericResultExt<T, E> {\n     /// Perform a side effect on Ok value without consuming the Result.\n",
+    "file": "crates/core/src/result.rs",
+    "function": {
+      "function_name": "<impl ResultExt<T> for Result<T>>::inspect_error",
+      "return_type": "-> Self",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 79
+        },
+        "start": {
+          "column": 5,
+          "line": 74
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/core/src/result.rs:75:9: replace <impl ResultExt<T> for Result<T>>::inspect_error -> Self with Default::default()",
+    "package": "oya-core",
+    "replacement": "Default::default()",
+    "span": {
+      "end": {
+        "column": 13,
+        "line": 78
+      },
+      "start": {
+        "column": 9,
+        "line": 75
+      }
+    }
+  },
+  {
+    "diff": "--- crates/core/src/result.rs\n+++ replace <impl GenericResultExt<T, E> for std::result::Result<T, E>>::tap_ok -> Self with Default::default()\n@@ -107,20 +107,17 @@\n         context: F,\n     ) -> std::result::Result<T, String>\n     where\n         E: std::fmt::Display;\n }\n \n impl<T, E> GenericResultExt<T, E> for std::result::Result<T, E> {\n     fn tap_ok<F: FnOnce(&T)>(self, f: F) -> Self {\n-        if let Ok(ref v) = self {\n-            f(v);\n-        }\n-        self\n+        Default::default() /* ~ changed by cargo-mutants ~ */\n     }\n \n     fn tap_err<F: FnOnce(&E)>(self, f: F) -> Self {\n         if let Err(ref e) = self {\n             f(e);\n         }\n         self\n     }\n",
+    "file": "crates/core/src/result.rs",
+    "function": {
+      "function_name": "<impl GenericResultExt<T, E> for std::result::Result<T, E>>::tap_ok",
+      "return_type": "-> Self",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 119
+        },
+        "start": {
+          "column": 5,
+          "line": 114
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/core/src/result.rs:115:9: replace <impl GenericResultExt<T, E> for std::result::Result<T, E>>::tap_ok -> Self with Default::default()",
+    "package": "oya-core",
+    "replacement": "Default::default()",
+    "span": {
+      "end": {
+        "column": 13,
+        "line": 118
+      },
+      "start": {
+        "column": 9,
+        "line": 115
+      }
+    }
+  },
+  {
+    "diff": "--- crates/core/src/result.rs\n+++ replace <impl GenericResultExt<T, E> for std::result::Result<T, E>>::tap_err -> Self with Default::default()\n@@ -114,20 +114,17 @@\n     fn tap_ok<F: FnOnce(&T)>(self, f: F) -> Self {\n         if let Ok(ref v) = self {\n             f(v);\n         }\n         self\n     }\n \n     fn tap_err<F: FnOnce(&E)>(self, f: F) -> Self {\n-        if let Err(ref e) = self {\n-            f(e);\n-        }\n-        self\n+        Default::default() /* ~ changed by cargo-mutants ~ */\n     }\n \n     fn and_then_do<F: FnOnce(&T) -> std::result::Result<(), E>>(\n         self,\n         f: F,\n     ) -> std::result::Result<T, E> {\n         self.and_then(|v| f(&v).map(|()| v))\n     }\n",
+    "file": "crates/core/src/result.rs",
+    "function": {
+      "function_name": "<impl GenericResultExt<T, E> for std::result::Result<T, E>>::tap_err",
+      "return_type": "-> Self",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 126
+        },
+        "start": {
+          "column": 5,
+          "line": 121
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/core/src/result.rs:122:9: replace <impl GenericResultExt<T, E> for std::result::Result<T, E>>::tap_err -> Self with Default::default()",
+    "package": "oya-core",
+    "replacement": "Default::default()",
+    "span": {
+      "end": {
+        "column": 13,
+        "line": 125
+      },
+      "start": {
+        "column": 9,
+        "line": 122
+      }
+    }
+  },
+  {
+    "diff": "--- crates/core/src/result.rs\n+++ replace <impl GenericResultExt<T, E> for std::result::Result<T, E>>::and_then_do -> std::result::Result<T, E> with Ok(Default::default())\n@@ -124,17 +124,17 @@\n         }\n         self\n     }\n \n     fn and_then_do<F: FnOnce(&T) -> std::result::Result<(), E>>(\n         self,\n         f: F,\n     ) -> std::result::Result<T, E> {\n-        self.and_then(|v| f(&v).map(|()| v))\n+        Ok(Default::default()) /* ~ changed by cargo-mutants ~ */\n     }\n \n     fn bimap<U, F, EF, E2>(self, ok_fn: F, err_fn: EF) -> std::result::Result<U, E2>\n     where\n         F: FnOnce(T) -> U,\n         EF: FnOnce(E) -> E2,\n     {\n         match self {\n",
+    "file": "crates/core/src/result.rs",
+    "function": {
+      "function_name": "<impl GenericResultExt<T, E> for std::result::Result<T, E>>::and_then_do",
+      "return_type": "-> std::result::Result<T, E>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 133
+        },
+        "start": {
+          "column": 5,
+          "line": 128
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/core/src/result.rs:132:9: replace <impl GenericResultExt<T, E> for std::result::Result<T, E>>::and_then_do -> std::result::Result<T, E> with Ok(Default::default())",
+    "package": "oya-core",
+    "replacement": "Ok(Default::default())",
+    "span": {
+      "end": {
+        "column": 45,
+        "line": 132
+      },
+      "start": {
+        "column": 9,
+        "line": 132
+      }
+    }
+  },
+  {
+    "diff": "--- crates/core/src/result.rs\n+++ replace <impl GenericResultExt<T, E> for std::result::Result<T, E>>::bimap -> std::result::Result<U, E2> with Ok(Default::default())\n@@ -132,20 +132,17 @@\n         self.and_then(|v| f(&v).map(|()| v))\n     }\n \n     fn bimap<U, F, EF, E2>(self, ok_fn: F, err_fn: EF) -> std::result::Result<U, E2>\n     where\n         F: FnOnce(T) -> U,\n         EF: FnOnce(E) -> E2,\n     {\n-        match self {\n-            Ok(v) => Ok(ok_fn(v)),\n-            Err(e) => Err(err_fn(e)),\n-        }\n+        Ok(Default::default()) /* ~ changed by cargo-mutants ~ */\n     }\n \n     fn with_context<C: std::fmt::Display, F: FnOnce() -> C>(\n         self,\n         context: F,\n     ) -> std::result::Result<T, String>\n     where\n         E: std::fmt::Display,\n",
+    "file": "crates/core/src/result.rs",
+    "function": {
+      "function_name": "<impl GenericResultExt<T, E> for std::result::Result<T, E>>::bimap",
+      "return_type": "-> std::result::Result<U, E2>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 144
+        },
+        "start": {
+          "column": 5,
+          "line": 135
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/core/src/result.rs:140:9: replace <impl GenericResultExt<T, E> for std::result::Result<T, E>>::bimap -> std::result::Result<U, E2> with Ok(Default::default())",
+    "package": "oya-core",
+    "replacement": "Ok(Default::default())",
+    "span": {
+      "end": {
+        "column": 10,
+        "line": 143
+      },
+      "start": {
+        "column": 9,
+        "line": 140
+      }
+    }
+  },
+  {
+    "diff": "--- crates/core/src/result.rs\n+++ replace <impl GenericResultExt<T, E> for std::result::Result<T, E>>::with_context -> std::result::Result<T, String> with Ok(Default::default())\n@@ -145,17 +145,17 @@\n \n     fn with_context<C: std::fmt::Display, F: FnOnce() -> C>(\n         self,\n         context: F,\n     ) -> std::result::Result<T, String>\n     where\n         E: std::fmt::Display,\n     {\n-        self.map_err(|e| format!(\"{}: {}\", context(), e))\n+        Ok(Default::default()) /* ~ changed by cargo-mutants ~ */\n     }\n }\n \n /// Extension trait for Option types providing Railway-style operations.\n pub trait OptionExt<T> {\n     /// Convert Option to Result with a lazy error message.\n     fn ok_or_else_lazy<E, F: FnOnce() -> E>(self, err: F) -> std::result::Result<T, E>;\n \n",
+    "file": "crates/core/src/result.rs",
+    "function": {
+      "function_name": "<impl GenericResultExt<T, E> for std::result::Result<T, E>>::with_context",
+      "return_type": "-> std::result::Result<T, String>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 154
+        },
+        "start": {
+          "column": 5,
+          "line": 146
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/core/src/result.rs:153:9: replace <impl GenericResultExt<T, E> for std::result::Result<T, E>>::with_context -> std::result::Result<T, String> with Ok(Default::default())",
+    "package": "oya-core",
+    "replacement": "Ok(Default::default())",
+    "span": {
+      "end": {
+        "column": 58,
+        "line": 153
+      },
+      "start": {
+        "column": 9,
+        "line": 153
+      }
+    }
+  },
+  {
+    "diff": "--- crates/core/src/result.rs\n+++ replace <impl OptionExt<T> for Option<T>>::ok_or_else_lazy -> std::result::Result<T, E> with Ok(Default::default())\n@@ -163,17 +163,17 @@\n     fn tap_some<F: FnOnce(&T)>(self, f: F) -> Self;\n \n     /// Tap into None without consuming the Option.\n     fn tap_none<F: FnOnce()>(self, f: F) -> Self;\n }\n \n impl<T> OptionExt<T> for Option<T> {\n     fn ok_or_else_lazy<E, F: FnOnce() -> E>(self, err: F) -> std::result::Result<T, E> {\n-        self.ok_or_else(err)\n+        Ok(Default::default()) /* ~ changed by cargo-mutants ~ */\n     }\n \n     fn tap_some<F: FnOnce(&T)>(self, f: F) -> Self {\n         if let Some(ref v) = self {\n             f(v);\n         }\n         self\n     }\n",
+    "file": "crates/core/src/result.rs",
+    "function": {
+      "function_name": "<impl OptionExt<T> for Option<T>>::ok_or_else_lazy",
+      "return_type": "-> std::result::Result<T, E>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 172
+        },
+        "start": {
+          "column": 5,
+          "line": 170
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/core/src/result.rs:171:9: replace <impl OptionExt<T> for Option<T>>::ok_or_else_lazy -> std::result::Result<T, E> with Ok(Default::default())",
+    "package": "oya-core",
+    "replacement": "Ok(Default::default())",
+    "span": {
+      "end": {
+        "column": 29,
+        "line": 171
+      },
+      "start": {
+        "column": 9,
+        "line": 171
+      }
+    }
+  },
+  {
+    "diff": "--- crates/core/src/result.rs\n+++ replace <impl OptionExt<T> for Option<T>>::tap_some -> Self with Default::default()\n@@ -167,20 +167,17 @@\n }\n \n impl<T> OptionExt<T> for Option<T> {\n     fn ok_or_else_lazy<E, F: FnOnce() -> E>(self, err: F) -> std::result::Result<T, E> {\n         self.ok_or_else(err)\n     }\n \n     fn tap_some<F: FnOnce(&T)>(self, f: F) -> Self {\n-        if let Some(ref v) = self {\n-            f(v);\n-        }\n-        self\n+        Default::default() /* ~ changed by cargo-mutants ~ */\n     }\n \n     fn tap_none<F: FnOnce()>(self, f: F) -> Self {\n         if self.is_none() {\n             f();\n         }\n         self\n     }\n",
+    "file": "crates/core/src/result.rs",
+    "function": {
+      "function_name": "<impl OptionExt<T> for Option<T>>::tap_some",
+      "return_type": "-> Self",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 179
+        },
+        "start": {
+          "column": 5,
+          "line": 174
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/core/src/result.rs:175:9: replace <impl OptionExt<T> for Option<T>>::tap_some -> Self with Default::default()",
+    "package": "oya-core",
+    "replacement": "Default::default()",
+    "span": {
+      "end": {
+        "column": 13,
+        "line": 178
+      },
+      "start": {
+        "column": 9,
+        "line": 175
+      }
+    }
+  },
+  {
+    "diff": "--- crates/core/src/result.rs\n+++ replace <impl OptionExt<T> for Option<T>>::tap_none -> Self with Default::default()\n@@ -174,20 +174,17 @@\n     fn tap_some<F: FnOnce(&T)>(self, f: F) -> Self {\n         if let Some(ref v) = self {\n             f(v);\n         }\n         self\n     }\n \n     fn tap_none<F: FnOnce()>(self, f: F) -> Self {\n-        if self.is_none() {\n-            f();\n-        }\n-        self\n+        Default::default() /* ~ changed by cargo-mutants ~ */\n     }\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n \n     #[test]\n",
+    "file": "crates/core/src/result.rs",
+    "function": {
+      "function_name": "<impl OptionExt<T> for Option<T>>::tap_none",
+      "return_type": "-> Self",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 186
+        },
+        "start": {
+          "column": 5,
+          "line": 181
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/core/src/result.rs:182:9: replace <impl OptionExt<T> for Option<T>>::tap_none -> Self with Default::default()",
+    "package": "oya-core",
+    "replacement": "Default::default()",
+    "span": {
+      "end": {
+        "column": 13,
+        "line": 185
+      },
+      "start": {
+        "column": 9,
+        "line": 182
+      }
+    }
+  }
+]

@@ -180,3 +180,52 @@ tasks:
     options:
       cache: false
       runInCI: false
+
+  # ============================================================================
+  # MUTATION TESTING
+  # ============================================================================
+
+  mutants:
+    command: "cargo mutants --workspace --baseline run"
+    description: "Run mutation testing on all 2000+ mutations"
+    inputs:
+      - "crates/**/*.rs"
+      - ".cargo/mutants.toml"
+    options:
+      cache: false
+      runInCI: false
+
+  mutants-list:
+    command: "cargo mutants --workspace --list"
+    description: "List all 2000+ possible mutations"
+    options:
+      cache: false
+
+  mutants-package:
+    command: "cargo mutants --baseline run"
+    description: "Run mutation testing on specific package (use -p PKG)"
+    options:
+      cache: false
+      runInCI: false
+      mergeArgs: "append"
+
+  mutants-quick:
+    command: "cargo mutants -p oya-core -p oya-workflow -p oya-events --baseline run"
+    description: "Quick mutation test on core packages"
+    options:
+      cache: false
+      runInCI: false
+
+  mutants-diff:
+    command: "cargo mutants --workspace --in-diff main --baseline run"
+    description: "Mutation test only files changed vs main branch"
+    options:
+      cache: false
+      runInCI: false
+
+  mutants-uncaught:
+    command: "cargo mutants --workspace --baseline run --caught"
+    description: "Show only UNCAUGHT mutations (test gaps)"
+    options:
+      cache: false
+      runInCI: false

@@ -1,0 +1,995 @@
+{
+  "outcomes": [
+    {
+      "scenario": "Baseline",
+      "summary": "Success",
+      "log_path": "log/baseline.log",
+      "diff_path": null,
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.505184055,
+          "process_status": "Success",
+          "argv": [
+            "/home/lewis/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=oya-core@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.15064704,
+          "process_status": "Success",
+          "argv": [
+            "/home/lewis/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=oya-core@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/core/src/error.rs:50:9: replace Error::file_read_failed -> Self with Default::default()",
+          "package": "oya-core",
+          "file": "crates/core/src/error.rs",
+          "function": {
+            "function_name": "Error::file_read_failed",
+            "return_type": "-> Self",
+            "span": {
+              "start": {
+                "line": 48,
+                "column": 5
+              },
+              "end": {
+                "line": 54,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 50,
+              "column": 9
+            },
+            "end": {
+              "line": 53,
+              "column": 10
+            }
+          },
+          "replacement": "Default::default()",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__core__src__error.rs_line_50_col_9.log",
+      "diff_path": "diff/crates__core__src__error.rs_line_50_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.100570949,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/home/lewis/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=oya-core@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/core/src/error.rs:58:9: replace Error::file_write_failed -> Self with Default::default()",
+          "package": "oya-core",
+          "file": "crates/core/src/error.rs",
+          "function": {
+            "function_name": "Error::file_write_failed",
+            "return_type": "-> Self",
+            "span": {
+              "start": {
+                "line": 56,
+                "column": 5
+              },
+              "end": {
+                "line": 62,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 58,
+              "column": 9
+            },
+            "end": {
+              "line": 61,
+              "column": 10
+            }
+          },
+          "replacement": "Default::default()",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__core__src__error.rs_line_58_col_9.log",
+      "diff_path": "diff/crates__core__src__error.rs_line_58_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.100549609,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/home/lewis/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=oya-core@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/core/src/error.rs:66:9: replace Error::directory_creation_failed -> Self with Default::default()",
+          "package": "oya-core",
+          "file": "crates/core/src/error.rs",
+          "function": {
+            "function_name": "Error::directory_creation_failed",
+            "return_type": "-> Self",
+            "span": {
+              "start": {
+                "line": 64,
+                "column": 5
+              },
+              "end": {
+                "line": 70,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 66,
+              "column": 9
+            },
+            "end": {
+              "line": 69,
+              "column": 10
+            }
+          },
+          "replacement": "Default::default()",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__core__src__error.rs_line_66_col_9.log",
+      "diff_path": "diff/crates__core__src__error.rs_line_66_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.100516989,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/home/lewis/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=oya-core@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/core/src/error.rs:74:9: replace Error::json_parse_failed -> Self with Default::default()",
+          "package": "oya-core",
+          "file": "crates/core/src/error.rs",
+          "function": {
+            "function_name": "Error::json_parse_failed",
+            "return_type": "-> Self",
+            "span": {
+              "start": {
+                "line": 72,
+                "column": 5
+              },
+              "end": {
+                "line": 77,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 74,
+              "column": 9
+            },
+            "end": {
+              "line": 76,
+              "column": 10
+            }
+          },
+          "replacement": "Default::default()",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__core__src__error.rs_line_74_col_9.log",
+      "diff_path": "diff/crates__core__src__error.rs_line_74_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.100505769,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/home/lewis/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=oya-core@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/core/src/error.rs:81:9: replace Error::invalid_record -> Self with Default::default()",
+          "package": "oya-core",
+          "file": "crates/core/src/error.rs",
+          "function": {
+            "function_name": "Error::invalid_record",
+            "return_type": "-> Self",
+            "span": {
+              "start": {
+                "line": 79,
+                "column": 5
+              },
+              "end": {
+                "line": 84,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 81,
+              "column": 9
+            },
+            "end": {
+              "line": 83,
+              "column": 10
+            }
+          },
+          "replacement": "Default::default()",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__core__src__error.rs_line_81_col_9.log",
+      "diff_path": "diff/crates__core__src__error.rs_line_81_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.10052765,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/home/lewis/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=oya-core@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/core/src/result.rs:55:9: replace <impl ResultExt<T> for Result<T>>::into_option_logged -> Option<T> with None",
+          "package": "oya-core",
+          "file": "crates/core/src/result.rs",
+          "function": {
+            "function_name": "<impl ResultExt<T> for Result<T>>::into_option_logged",
+            "return_type": "-> Option<T>",
+            "span": {
+              "start": {
+                "line": 54,
+                "column": 5
+              },
+              "end": {
+                "line": 62,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 55,
+              "column": 9
+            },
+            "end": {
+              "line": 61,
+              "column": 10
+            }
+          },
+          "replacement": "None",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__core__src__result.rs_line_55_col_9.log",
+      "diff_path": "diff/crates__core__src__result.rs_line_55_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.150463061,
+          "process_status": "Success",
+          "argv": [
+            "/home/lewis/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=oya-core@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.10047958,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/home/lewis/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=oya-core@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/core/src/result.rs:55:9: replace <impl ResultExt<T> for Result<T>>::into_option_logged -> Option<T> with Some(Default::default())",
+          "package": "oya-core",
+          "file": "crates/core/src/result.rs",
+          "function": {
+            "function_name": "<impl ResultExt<T> for Result<T>>::into_option_logged",
+            "return_type": "-> Option<T>",
+            "span": {
+              "start": {
+                "line": 54,
+                "column": 5
+              },
+              "end": {
+                "line": 62,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 55,
+              "column": 9
+            },
+            "end": {
+              "line": 61,
+              "column": 10
+            }
+          },
+          "replacement": "Some(Default::default())",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__core__src__result.rs_line_55_col_9_001.log",
+      "diff_path": "diff/crates__core__src__result.rs_line_55_col_9_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.100561208,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/home/lewis/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=oya-core@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/core/src/result.rs:65:9: replace <impl ResultExt<T> for Result<T>>::or_default_logged -> T with Default::default()",
+          "package": "oya-core",
+          "file": "crates/core/src/result.rs",
+          "function": {
+            "function_name": "<impl ResultExt<T> for Result<T>>::or_default_logged",
+            "return_type": "-> T",
+            "span": {
+              "start": {
+                "line": 64,
+                "column": 5
+              },
+              "end": {
+                "line": 72,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 65,
+              "column": 9
+            },
+            "end": {
+              "line": 71,
+              "column": 10
+            }
+          },
+          "replacement": "Default::default()",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__core__src__result.rs_line_65_col_9.log",
+      "diff_path": "diff/crates__core__src__result.rs_line_65_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.100555599,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/home/lewis/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=oya-core@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/core/src/result.rs:75:9: replace <impl ResultExt<T> for Result<T>>::inspect_error -> Self with Default::default()",
+          "package": "oya-core",
+          "file": "crates/core/src/result.rs",
+          "function": {
+            "function_name": "<impl ResultExt<T> for Result<T>>::inspect_error",
+            "return_type": "-> Self",
+            "span": {
+              "start": {
+                "line": 74,
+                "column": 5
+              },
+              "end": {
+                "line": 79,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 75,
+              "column": 9
+            },
+            "end": {
+              "line": 78,
+              "column": 13
+            }
+          },
+          "replacement": "Default::default()",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__core__src__result.rs_line_75_col_9.log",
+      "diff_path": "diff/crates__core__src__result.rs_line_75_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.15061511,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/home/lewis/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=oya-core@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/core/src/result.rs:115:9: replace <impl GenericResultExt<T, E> for std::result::Result<T, E>>::tap_ok -> Self with Default::default()",
+          "package": "oya-core",
+          "file": "crates/core/src/result.rs",
+          "function": {
+            "function_name": "<impl GenericResultExt<T, E> for std::result::Result<T, E>>::tap_ok",
+            "return_type": "-> Self",
+            "span": {
+              "start": {
+                "line": 114,
+                "column": 5
+              },
+              "end": {
+                "line": 119,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 115,
+              "column": 9
+            },
+            "end": {
+              "line": 118,
+              "column": 13
+            }
+          },
+          "replacement": "Default::default()",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__core__src__result.rs_line_115_col_9.log",
+      "diff_path": "diff/crates__core__src__result.rs_line_115_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.15061631,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/home/lewis/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=oya-core@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/core/src/result.rs:122:9: replace <impl GenericResultExt<T, E> for std::result::Result<T, E>>::tap_err -> Self with Default::default()",
+          "package": "oya-core",
+          "file": "crates/core/src/result.rs",
+          "function": {
+            "function_name": "<impl GenericResultExt<T, E> for std::result::Result<T, E>>::tap_err",
+            "return_type": "-> Self",
+            "span": {
+              "start": {
+                "line": 121,
+                "column": 5
+              },
+              "end": {
+                "line": 126,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 122,
+              "column": 9
+            },
+            "end": {
+              "line": 125,
+              "column": 13
+            }
+          },
+          "replacement": "Default::default()",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__core__src__result.rs_line_122_col_9.log",
+      "diff_path": "diff/crates__core__src__result.rs_line_122_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.15068822,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/home/lewis/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=oya-core@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/core/src/result.rs:132:9: replace <impl GenericResultExt<T, E> for std::result::Result<T, E>>::and_then_do -> std::result::Result<T, E> with Ok(Default::default())",
+          "package": "oya-core",
+          "file": "crates/core/src/result.rs",
+          "function": {
+            "function_name": "<impl GenericResultExt<T, E> for std::result::Result<T, E>>::and_then_do",
+            "return_type": "-> std::result::Result<T, E>",
+            "span": {
+              "start": {
+                "line": 128,
+                "column": 5
+              },
+              "end": {
+                "line": 133,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 132,
+              "column": 9
+            },
+            "end": {
+              "line": 132,
+              "column": 45
+            }
+          },
+          "replacement": "Ok(Default::default())",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__core__src__result.rs_line_132_col_9.log",
+      "diff_path": "diff/crates__core__src__result.rs_line_132_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.150752278,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/home/lewis/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=oya-core@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/core/src/result.rs:140:9: replace <impl GenericResultExt<T, E> for std::result::Result<T, E>>::bimap -> std::result::Result<U, E2> with Ok(Default::default())",
+          "package": "oya-core",
+          "file": "crates/core/src/result.rs",
+          "function": {
+            "function_name": "<impl GenericResultExt<T, E> for std::result::Result<T, E>>::bimap",
+            "return_type": "-> std::result::Result<U, E2>",
+            "span": {
+              "start": {
+                "line": 135,
+                "column": 5
+              },
+              "end": {
+                "line": 144,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 140,
+              "column": 9
+            },
+            "end": {
+              "line": 143,
+              "column": 10
+            }
+          },
+          "replacement": "Ok(Default::default())",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__core__src__result.rs_line_140_col_9.log",
+      "diff_path": "diff/crates__core__src__result.rs_line_140_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.150734999,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/home/lewis/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=oya-core@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/core/src/result.rs:153:9: replace <impl GenericResultExt<T, E> for std::result::Result<T, E>>::with_context -> std::result::Result<T, String> with Ok(Default::default())",
+          "package": "oya-core",
+          "file": "crates/core/src/result.rs",
+          "function": {
+            "function_name": "<impl GenericResultExt<T, E> for std::result::Result<T, E>>::with_context",
+            "return_type": "-> std::result::Result<T, String>",
+            "span": {
+              "start": {
+                "line": 146,
+                "column": 5
+              },
+              "end": {
+                "line": 154,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 153,
+              "column": 9
+            },
+            "end": {
+              "line": 153,
+              "column": 58
+            }
+          },
+          "replacement": "Ok(Default::default())",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__core__src__result.rs_line_153_col_9.log",
+      "diff_path": "diff/crates__core__src__result.rs_line_153_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.15064701,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/home/lewis/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=oya-core@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/core/src/result.rs:171:9: replace <impl OptionExt<T> for Option<T>>::ok_or_else_lazy -> std::result::Result<T, E> with Ok(Default::default())",
+          "package": "oya-core",
+          "file": "crates/core/src/result.rs",
+          "function": {
+            "function_name": "<impl OptionExt<T> for Option<T>>::ok_or_else_lazy",
+            "return_type": "-> std::result::Result<T, E>",
+            "span": {
+              "start": {
+                "line": 170,
+                "column": 5
+              },
+              "end": {
+                "line": 172,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 171,
+              "column": 9
+            },
+            "end": {
+              "line": 171,
+              "column": 29
+            }
+          },
+          "replacement": "Ok(Default::default())",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__core__src__result.rs_line_171_col_9.log",
+      "diff_path": "diff/crates__core__src__result.rs_line_171_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.150677249,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/home/lewis/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=oya-core@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/core/src/result.rs:175:9: replace <impl OptionExt<T> for Option<T>>::tap_some -> Self with Default::default()",
+          "package": "oya-core",
+          "file": "crates/core/src/result.rs",
+          "function": {
+            "function_name": "<impl OptionExt<T> for Option<T>>::tap_some",
+            "return_type": "-> Self",
+            "span": {
+              "start": {
+                "line": 174,
+                "column": 5
+              },
+              "end": {
+                "line": 179,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 175,
+              "column": 9
+            },
+            "end": {
+              "line": 178,
+              "column": 13
+            }
+          },
+          "replacement": "Default::default()",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__core__src__result.rs_line_175_col_9.log",
+      "diff_path": "diff/crates__core__src__result.rs_line_175_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.15062593,
+          "process_status": "Success",
+          "argv": [
+            "/home/lewis/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=oya-core@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.100614208,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/home/lewis/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=oya-core@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/core/src/result.rs:182:9: replace <impl OptionExt<T> for Option<T>>::tap_none -> Self with Default::default()",
+          "package": "oya-core",
+          "file": "crates/core/src/result.rs",
+          "function": {
+            "function_name": "<impl OptionExt<T> for Option<T>>::tap_none",
+            "return_type": "-> Self",
+            "span": {
+              "start": {
+                "line": 181,
+                "column": 5
+              },
+              "end": {
+                "line": 186,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 182,
+              "column": 9
+            },
+            "end": {
+              "line": 185,
+              "column": 13
+            }
+          },
+          "replacement": "Default::default()",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__core__src__result.rs_line_182_col_9.log",
+      "diff_path": "diff/crates__core__src__result.rs_line_182_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.15067669,
+          "process_status": "Success",
+          "argv": [
+            "/home/lewis/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=oya-core@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.100581838,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/home/lewis/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=oya-core@0.1.0"
+          ]
+        }
+      ]
+    }
+  ],
+  "total_mutants": 17,
+  "missed": 0,
+  "caught": 3,
+  "timeout": 0,
+  "unviable": 14,
+  "success": 0,
+  "start_time": "2026-02-02T05:37:32.90855335Z",
+  "end_time": "2026-02-02T05:37:40.053565827Z",
+  "cargo_mutants_version": "26.2.0"
+}

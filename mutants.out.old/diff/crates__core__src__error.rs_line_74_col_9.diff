@@ -1,0 +1,23 @@
+--- crates/core/src/error.rs
++++ replace Error::json_parse_failed -> Self with Default::default()
+@@ -66,19 +66,17 @@
+         Self::DirectoryCreationFailed {
+             path: path.into(),
+             reason: reason.into(),
+         }
+     }
+ 
+     /// Create a JSON parse error.
+     pub fn json_parse_failed(reason: impl Into<String>) -> Self {
+-        Self::JsonParseFailed {
+-            reason: reason.into(),
+-        }
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Create an invalid record error.
+     pub fn invalid_record(reason: impl Into<String>) -> Self {
+         Self::InvalidRecord {
+             reason: reason.into(),
+         }
+     }

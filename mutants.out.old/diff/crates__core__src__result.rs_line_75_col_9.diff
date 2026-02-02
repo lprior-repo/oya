@@ -1,0 +1,24 @@
+--- crates/core/src/result.rs
++++ replace <impl ResultExt<T> for Result<T>>::inspect_error -> Self with Default::default()
+@@ -67,20 +67,17 @@
+             Err(e) => {
+                 tracing::error!("Operation failed, using default: {}", e);
+                 default
+             }
+         }
+     }
+ 
+     fn inspect_error<F: FnOnce(&Error)>(self, f: F) -> Self {
+-        if let Err(ref e) = self {
+-            f(e);
+-        }
+-        self
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ }
+ 
+ /// Generic extension trait for any Result type (not just oya_core::Result).
+ ///
+ /// Provides tap-style combinators for side effects and transformations.
+ pub trait GenericResultExt<T, E> {
+     /// Perform a side effect on Ok value without consuming the Result.

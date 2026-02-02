@@ -1,0 +1,24 @@
+--- crates/core/src/error.rs
++++ replace Error::file_write_failed -> Self with Default::default()
+@@ -50,20 +50,17 @@
+         Self::FileReadFailed {
+             path: path.into(),
+             reason: reason.into(),
+         }
+     }
+ 
+     /// Create a file write error.
+     pub fn file_write_failed(path: impl Into<PathBuf>, reason: impl Into<String>) -> Self {
+-        Self::FileWriteFailed {
+-            path: path.into(),
+-            reason: reason.into(),
+-        }
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Create a directory creation error.
+     pub fn directory_creation_failed(path: impl Into<PathBuf>, reason: impl Into<String>) -> Self {
+         Self::DirectoryCreationFailed {
+             path: path.into(),
+             reason: reason.into(),
+         }

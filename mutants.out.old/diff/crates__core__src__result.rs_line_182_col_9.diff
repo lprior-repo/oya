@@ -1,0 +1,24 @@
+--- crates/core/src/result.rs
++++ replace <impl OptionExt<T> for Option<T>>::tap_none -> Self with Default::default()
+@@ -174,20 +174,17 @@
+     fn tap_some<F: FnOnce(&T)>(self, f: F) -> Self {
+         if let Some(ref v) = self {
+             f(v);
+         }
+         self
+     }
+ 
+     fn tap_none<F: FnOnce()>(self, f: F) -> Self {
+-        if self.is_none() {
+-            f();
+-        }
+-        self
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ }
+ 
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+ 
+     #[test]

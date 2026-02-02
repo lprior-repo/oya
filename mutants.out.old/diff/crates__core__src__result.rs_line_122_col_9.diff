@@ -1,0 +1,24 @@
+--- crates/core/src/result.rs
++++ replace <impl GenericResultExt<T, E> for std::result::Result<T, E>>::tap_err -> Self with Default::default()
+@@ -114,20 +114,17 @@
+     fn tap_ok<F: FnOnce(&T)>(self, f: F) -> Self {
+         if let Ok(ref v) = self {
+             f(v);
+         }
+         self
+     }
+ 
+     fn tap_err<F: FnOnce(&E)>(self, f: F) -> Self {
+-        if let Err(ref e) = self {
+-            f(e);
+-        }
+-        self
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     fn and_then_do<F: FnOnce(&T) -> std::result::Result<(), E>>(
+         self,
+         f: F,
+     ) -> std::result::Result<T, E> {
+         self.and_then(|v| f(&v).map(|()| v))
+     }

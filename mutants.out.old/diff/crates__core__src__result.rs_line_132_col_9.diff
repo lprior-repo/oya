@@ -1,0 +1,21 @@
+--- crates/core/src/result.rs
++++ replace <impl GenericResultExt<T, E> for std::result::Result<T, E>>::and_then_do -> std::result::Result<T, E> with Ok(Default::default())
+@@ -124,17 +124,17 @@
+         }
+         self
+     }
+ 
+     fn and_then_do<F: FnOnce(&T) -> std::result::Result<(), E>>(
+         self,
+         f: F,
+     ) -> std::result::Result<T, E> {
+-        self.and_then(|v| f(&v).map(|()| v))
++        Ok(Default::default()) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     fn bimap<U, F, EF, E2>(self, ok_fn: F, err_fn: EF) -> std::result::Result<U, E2>
+     where
+         F: FnOnce(T) -> U,
+         EF: FnOnce(E) -> E2,
+     {
+         match self {
