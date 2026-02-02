@@ -8,6 +8,7 @@ use axum::{
 
 pub mod beads;
 pub mod health;
+pub mod websocket;
 pub mod workflows;
 
 /// Create the main API router
@@ -19,4 +20,5 @@ pub fn create_router() -> Router<AppState> {
         .route("/beads/{id}", get(beads::get_bead_status))
         .route("/beads/{id}/cancel", post(beads::cancel_bead))
         .route("/beads/{id}/retry", post(beads::retry_bead))
+        .route("/ws", get(websocket::websocket_handler))
 }

@@ -106,7 +106,7 @@ scraper = "0.20"
 url = { version = "2", features = ["serde"] }
 
 # Web framework (latest)
-axum = { version = "0.8", features = ["macros", "tokio"] }
+axum = { version = "0.8", features = ["macros", "tokio", "ws"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip", "fs"] }
 hyper = "1.8"
