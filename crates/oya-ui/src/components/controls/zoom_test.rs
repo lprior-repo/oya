@@ -58,7 +58,7 @@ fn test_zoom_config_negative_sensitivity() {
         result
             .as_ref()
             .err()
-            .map_or(false, |e| e.contains("positive"))
+            .is_some_and(|e| e.contains("positive"))
     );
 }
 
@@ -72,12 +72,7 @@ fn test_zoom_config_zero_sensitivity() {
 fn test_zoom_config_nan_sensitivity() {
     let result = ZoomConfig::new(f32::NAN, 0.5, 2.0);
     assert!(result.is_err());
-    assert!(
-        result
-            .as_ref()
-            .err()
-            .map_or(false, |e| e.contains("finite"))
-    );
+    assert!(result.as_ref().err().is_some_and(|e| e.contains("finite")));
 }
 
 #[test]
@@ -90,7 +85,7 @@ fn test_zoom_config_infinite_sensitivity() {
 fn test_zoom_config_min_factor_too_large() {
     let result = ZoomConfig::new(0.001, 1.5, 2.0);
     assert!(result.is_err());
-    assert!(result.as_ref().err().map_or(false, |e| e.contains("range")));
+    assert!(result.as_ref().err().is_some_and(|e| e.contains("range")));
 }
 
 #[test]
@@ -103,7 +98,7 @@ fn test_zoom_config_min_factor_negative() {
 fn test_zoom_config_max_factor_too_small() {
     let result = ZoomConfig::new(0.001, 0.5, 0.8);
     assert!(result.is_err());
-    assert!(result.as_ref().err().map_or(false, |e| e.contains(">=")));
+    assert!(result.as_ref().err().is_some_and(|e| e.contains(">=")));
 }
 
 #[test]
@@ -219,12 +214,7 @@ fn test_calculate_zoom_factor_nan_delta() {
     let result = calculate_zoom_factor(f64::NAN, &config);
 
     assert!(result.is_err());
-    assert!(
-        result
-            .as_ref()
-            .err()
-            .map_or(false, |e| e.contains("finite"))
-    );
+    assert!(result.as_ref().err().is_some_and(|e| e.contains("finite")));
 }
 
 #[test]
@@ -330,12 +320,7 @@ fn test_apply_zoom_nan_factor() -> Result<(), String> {
     let result = apply_zoom(current, f32::NAN);
 
     assert!(result.is_err());
-    assert!(
-        result
-            .as_ref()
-            .err()
-            .map_or(false, |e| e.contains("finite"))
-    );
+    assert!(result.as_ref().err().is_some_and(|e| e.contains("finite")));
 
     Ok(())
 }
