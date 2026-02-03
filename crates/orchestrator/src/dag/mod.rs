@@ -11,10 +11,10 @@
 //! - Mutation (remove nodes/edges)
 //! - Subgraph extraction
 
-use petgraph::Direction;
 use petgraph::algo::{is_cyclic_directed, tarjan_scc, toposort};
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::{Bfs, Dfs, EdgeRef, Reversed};
+use petgraph::Direction;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::Duration;
 
@@ -313,13 +313,16 @@ impl WorkflowDAG {
     /// ```
     /// use orchestrator::dag::{WorkflowDAG, DependencyType};
     ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut dag = WorkflowDAG::new();
-    /// dag.add_node("a".to_string()).unwrap();
-    /// dag.add_node("b".to_string()).unwrap();
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency).unwrap();
+    /// dag.add_node("a".to_string())?;
+    /// dag.add_node("b".to_string())?;
+    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
     ///
-    /// let dependents = dag.get_dependents(&"a".to_string()).unwrap();
+    /// let dependents = dag.get_dependents(&"a".to_string())?;
     /// assert_eq!(dependents, vec!["b".to_string()]);
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn get_dependents(&self, bead_id: &BeadId) -> DagResult<Vec<BeadId>> {
         let node_index = self.get_node_index(bead_id)?;
@@ -351,16 +354,19 @@ impl WorkflowDAG {
     /// ```
     /// use orchestrator::dag::{WorkflowDAG, DependencyType};
     ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut dag = WorkflowDAG::new();
-    /// dag.add_node("a".to_string()).unwrap();
-    /// dag.add_node("b".to_string()).unwrap();
-    /// dag.add_node("c".to_string()).unwrap();
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency).unwrap();
-    /// dag.add_edge("b".to_string(), "c".to_string(), DependencyType::BlockingDependency).unwrap();
+    /// dag.add_node("a".to_string())?;
+    /// dag.add_node("b".to_string())?;
+    /// dag.add_node("c".to_string())?;
+    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
+    /// dag.add_edge("b".to_string(), "c".to_string(), DependencyType::BlockingDependency)?;
     ///
-    /// let ancestors = dag.get_all_ancestors(&"c".to_string()).unwrap();
+    /// let ancestors = dag.get_all_ancestors(&"c".to_string())?;
     /// assert!(ancestors.contains(&"a".to_string()));
     /// assert!(ancestors.contains(&"b".to_string()));
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn get_all_ancestors(&self, bead_id: &BeadId) -> DagResult<HashSet<BeadId>> {
         let node_index = self.get_node_index(bead_id)?;
@@ -399,16 +405,19 @@ impl WorkflowDAG {
     /// ```
     /// use orchestrator::dag::{WorkflowDAG, DependencyType};
     ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut dag = WorkflowDAG::new();
-    /// dag.add_node("a".to_string()).unwrap();
-    /// dag.add_node("b".to_string()).unwrap();
-    /// dag.add_node("c".to_string()).unwrap();
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency).unwrap();
-    /// dag.add_edge("b".to_string(), "c".to_string(), DependencyType::BlockingDependency).unwrap();
+    /// dag.add_node("a".to_string())?;
+    /// dag.add_node("b".to_string())?;
+    /// dag.add_node("c".to_string())?;
+    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
+    /// dag.add_edge("b".to_string(), "c".to_string(), DependencyType::BlockingDependency)?;
     ///
-    /// let descendants = dag.get_all_descendants(&"a".to_string()).unwrap();
+    /// let descendants = dag.get_all_descendants(&"a".to_string())?;
     /// assert!(descendants.contains(&"b".to_string()));
     /// assert!(descendants.contains(&"c".to_string()));
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn get_all_descendants(&self, bead_id: &BeadId) -> DagResult<HashSet<BeadId>> {
         let node_index = self.get_node_index(bead_id)?;
@@ -441,13 +450,16 @@ impl WorkflowDAG {
     /// ```
     /// use orchestrator::dag::{WorkflowDAG, DependencyType};
     ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut dag = WorkflowDAG::new();
-    /// dag.add_node("a".to_string()).unwrap();
-    /// dag.add_node("b".to_string()).unwrap();
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency).unwrap();
+    /// dag.add_node("a".to_string())?;
+    /// dag.add_node("b".to_string())?;
+    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
     ///
     /// let roots = dag.get_roots();
     /// assert_eq!(roots, vec!["a".to_string()]);
+    /// # Ok(())
+    /// # }
     /// ```
     #[must_use]
     pub fn get_roots(&self) -> Vec<BeadId> {
@@ -476,13 +488,16 @@ impl WorkflowDAG {
     /// ```
     /// use orchestrator::dag::{WorkflowDAG, DependencyType};
     ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut dag = WorkflowDAG::new();
-    /// dag.add_node("a".to_string()).unwrap();
-    /// dag.add_node("b".to_string()).unwrap();
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency).unwrap();
+    /// dag.add_node("a".to_string())?;
+    /// dag.add_node("b".to_string())?;
+    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
     ///
     /// let leaves = dag.get_leaves();
     /// assert_eq!(leaves, vec!["b".to_string()]);
+    /// # Ok(())
+    /// # }
     /// ```
     #[must_use]
     pub fn get_leaves(&self) -> Vec<BeadId> {
