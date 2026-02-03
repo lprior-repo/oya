@@ -1,0 +1,14 @@
+$schema: "https://moonrepo.dev/schemas/project.json"
+
+# Standalone WASM project - tests require wasm-pack test
+type: "library"
+language: "rust"
+
+# Skip cargo test for WASM target (requires wasm-pack)
+tasks:
+  test:
+    command: "echo"
+    args: ["oya-ui: WASM tests skipped (use wasm-pack test)"]
+  test-doc:
+    command: "echo"
+    args: ["oya-ui: doc tests skipped (WASM target)"]

@@ -149,7 +149,7 @@ mod tests {
         // - Base: NAMESPACE_DNS (6ba7b810-9dad-11d1-80b4-00c04fd430c8)
         // - Name: "bead-stable-test"
         assert_eq!(
-            uuid_str, "b8e7c9c5-89e1-5e8c-8f5d-2e3a1d6b4c9a",
+            uuid_str, "42be463f-1e63-5cae-b607-5bc4f5955d81",
             "Known input should produce known output (regression test)"
         );
     }

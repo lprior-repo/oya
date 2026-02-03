@@ -123,8 +123,18 @@ pub fn mock_state_manager() -> StateManagerSender {
             match msg {
                 StateManagerMessage::QueryBead { id, response } => {
                     tracing::debug!("State manager: Querying bead {}", id);
-                    // For now, return None (not found) - actual implementation will query DB
-                    let _ = response.send(None);
+                    // Return mock data for testing
+                    let mock_state = BeadState {
+                        id,
+                        status: "pending".to_string(),
+                        phase: "initializing".to_string(),
+                        events: vec![],
+                        created_at: "2024-01-01T00:00:00Z".to_string(),
+                        updated_at: "2024-01-01T00:00:00Z".to_string(),
+                        title: None,
+                        dependencies: vec![],
+                    };
+                    let _ = response.send(Some(mock_state));
                 }
             }
         }

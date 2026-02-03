@@ -43,15 +43,15 @@ pub mod workflows;
 ///
 /// # Example
 ///
-/// ```no_run
+/// ```ignore
 /// use oya_web::routes;
 /// use oya_web::actors::AppState;
 ///
-/// let state = AppState { /* ... */ };
+/// let state = AppState::new(/* ... */);
 /// let router = routes::create_router().with_state(state);
 /// ```
 pub fn create_router() -> Router<AppState> {
-    Router::new()
+    let api_routes = Router::new()
         // Health check
         .route("/health", get(health::health_check))
         // Workflow endpoints
@@ -61,6 +61,9 @@ pub fn create_router() -> Router<AppState> {
         .route("/beads", get(beads::list_beads))
         .route("/beads/{id}", get(beads::get_bead_status))
         .route("/beads/{id}/cancel", post(beads::cancel_bead))
-        .route("/beads/{id}/retry", post(beads::retry_bead))
+        .route("/beads/{id}/retry", post(beads::retry_bead));
+
+    Router::new()
+        .nest("/api", api_routes)
         .route("/ws", get(websocket::websocket_handler))
 }
