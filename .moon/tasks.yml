@@ -52,6 +52,10 @@ tasks:
     options:
       cache: true
       mergeArgs: "replace"  # Allow overriding with specific test filters
+      mutex: "rust_heavy"
+      runDepsInParallel: false
+    env:
+      CARGO_BUILD_JOBS: "6"
 
   test-doc:
     command: "cargo test --doc --workspace"
@@ -75,6 +79,10 @@ tasks:
       - "/target/coverage/lcov.info"
     options:
       cache: false
+      mutex: "rust_heavy"
+      runDepsInParallel: false
+    env:
+      CARGO_BUILD_JOBS: "4"
 
   # ============================================================================
   # STAGE 3: BUILD
@@ -91,6 +99,10 @@ tasks:
       - "/target/release/oya"
     options:
       cache: true
+      mutex: "rust_heavy"
+      runDepsInParallel: false
+    env:
+      CARGO_BUILD_JOBS: "8"
 
   build-docs:
     command: "cargo doc --no-deps --document-private-items"
