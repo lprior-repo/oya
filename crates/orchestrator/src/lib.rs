@@ -38,7 +38,6 @@ pub mod actors;
 ///
 /// Provides agent pool management, health monitoring, and message types
 /// for coordinating distributed agents.
-pub mod agent_info;
 pub mod agent_swarm;
 
 /// Workflow DAG module for managing bead dependencies

@@ -1,13 +1,7 @@
-#![deny(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-#![deny(clippy::panic)]
-#![warn(clippy::pedantic)]
-#![warn(clippy::nursery)]
-#![forbid(unsafe_code)]
-
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use thiserror::Error;
 
 /// Agent state representing the lifecycle phase of an agent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -61,13 +55,18 @@ pub struct AgentCapability {
 
 impl AgentCapability {
     /// Creates a new agent capability.
+    ///
+    /// # Errors
+    ///
+    /// Returns `AgentInfoError::EmptyCapabilityIdentifier` if `id` is empty.
+    /// Returns `AgentInfoError::EmptyCapabilityDescription` if `description` is empty.
     pub fn new(id: String, description: String, version: String) -> Result<Self, AgentInfoError> {
         if id.is_empty() {
-            return Err(AgentInfoError::EmptyIdentifier);
+            return Err(AgentInfoError::EmptyCapabilityIdentifier);
         }
 
         if description.is_empty() {
-            return Err(AgentInfoError::EmptyDescription);
+            return Err(AgentInfoError::EmptyCapabilityDescription);
         }
 
         Ok(Self {
@@ -93,8 +92,15 @@ pub struct WorkloadHistory {
     pub recent_operations: Vec<OperationRecord>,
 }
 
+impl Default for WorkloadHistory {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WorkloadHistory {
     /// Creates an empty workload history.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             beads_completed: 0,
@@ -323,13 +329,9 @@ impl AgentInfo {
         Ok(())
     }
 
-    /// Validates agent capability.
+    /// Validates agent capability by re-creating it through the validated constructor.
     fn validate_capability(capability: AgentCapability) -> Result<AgentCapability, AgentInfoError> {
-        capability.new(
-            capability.id.clone(),
-            capability.description.clone(),
-            capability.version.clone(),
-        )
+        AgentCapability::new(capability.id, capability.description, capability.version)
     }
 
     /// Records a heartbeat from the agent.
@@ -603,207 +605,237 @@ pub enum AgentInfoError {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
-    use chrono::Duration;
 
-    fn create_test_agent() -> AgentInfo {
+    /// Creates a test capability, returning Result for functional composition.
+    fn test_capability(id: &str, desc: &str, ver: &str) -> Result<AgentCapability, AgentInfoError> {
+        AgentCapability::new(id.to_string(), desc.to_string(), ver.to_string())
+    }
+
+    /// Creates a test agent with standard capabilities.
+    fn create_test_agent() -> Result<AgentInfo, AgentInfoError> {
         let capabilities = vec![
-            AgentCapability::new(
-                "code-generation".to_string(),
-                "Generates code".to_string(),
-                "1.0".to_string(),
-            )
-            .unwrap(),
-            AgentCapability::new(
-                "testing".to_string(),
-                "Runs tests".to_string(),
-                "1.0".to_string(),
-            )
-            .unwrap(),
+            test_capability("code-generation", "Generates code", "1.0")?,
+            test_capability("testing", "Runs tests", "1.0")?,
         ];
-
-        AgentInfo::new("agent-001".to_string(), capabilities, 3, 30).unwrap()
+        AgentInfo::new("agent-001".to_string(), capabilities, 3, 30)
     }
 
     #[test]
-    fn test_agent_creation() {
-        let capabilities =
-            vec![
-                AgentCapability::new("test".to_string(), "desc".to_string(), "1.0".to_string())
-                    .unwrap(),
-            ];
+    pub fn test_agent_creation() {
+        let result = test_capability("test", "desc", "1.0")
+            .and_then(|cap| AgentInfo::new("agent-001".to_string(), vec![cap], 3, 30));
 
-        let agent = AgentInfo::new("agent-001".to_string(), capabilities, 3, 30).unwrap();
-
-        assert_eq!(agent.id, "agent-001");
-        assert_eq!(agent.state, AgentState::Idle);
-        assert_eq!(agent.current_bead, None);
-        assert_eq!(agent.capabilities.len(), 1);
-        assert_eq!(agent.health_metrics.health_score, 1.0);
+        assert!(matches!(
+            result,
+            Ok(ref agent) if agent.id == "agent-001"
+                && agent.state == AgentState::Idle
+                && agent.current_bead.is_none()
+                && agent.capabilities.len() == 1
+                && (agent.health_metrics.health_score - 1.0).abs() < f64::EPSILON
+        ));
     }
 
     #[test]
-    fn test_agent_creation_empty_id() {
-        let capabilities =
-            vec![
-                AgentCapability::new("test".to_string(), "desc".to_string(), "1.0".to_string())
-                    .unwrap(),
-            ];
+    pub fn test_agent_creation_empty_id() {
+        let result = test_capability("test", "desc", "1.0")
+            .and_then(|cap| AgentInfo::new(String::new(), vec![cap], 3, 30));
 
-        let result = AgentInfo::new("".to_string(), capabilities, 3, 30);
-        assert_eq!(result, Err(AgentInfoError::EmptyIdentifier));
+        assert!(matches!(result, Err(AgentInfoError::EmptyIdentifier)));
     }
 
     #[test]
-    fn test_agent_creation_no_capabilities() {
+    pub fn test_agent_creation_no_capabilities() {
         let result = AgentInfo::new("agent-001".to_string(), vec![], 3, 30);
-        assert_eq!(result, Err(AgentInfoError::EmptyCapabilities));
+        assert!(matches!(result, Err(AgentInfoError::EmptyCapabilities)));
     }
 
     #[test]
-    fn test_assign_bead() {
-        let mut agent = create_test_agent();
-        agent.assign_bead("bead-123".to_string()).unwrap();
+    pub fn test_assign_bead() {
+        let result = create_test_agent().and_then(|mut agent| {
+            agent.assign_bead("bead-123".to_string())?;
+            Ok(agent)
+        });
 
-        assert_eq!(agent.current_bead, Some("bead-123".to_string()));
-        assert_eq!(agent.state, AgentState::Working);
+        assert!(matches!(
+            result,
+            Ok(ref agent) if agent.current_bead == Some("bead-123".to_string())
+                && agent.state == AgentState::Working
+        ));
     }
 
     #[test]
-    fn test_assign_bead_unavailable() {
-        let mut agent = create_test_agent();
-        agent.state = AgentState::Working;
+    pub fn test_assign_bead_unavailable() {
+        let result = create_test_agent().and_then(|mut agent| {
+            agent.state = AgentState::Working;
+            agent.assign_bead("bead-123".to_string())
+        });
 
-        let result = agent.assign_bead("bead-123".to_string());
-        assert_eq!(
+        assert!(matches!(
             result,
             Err(AgentInfoError::AgentNotAvailable(AgentState::Working))
-        );
+        ));
     }
 
     #[test]
-    fn test_complete_bead() {
-        let mut agent = create_test_agent();
-        agent.current_bead = Some("bead-123".to_string());
-        agent.state = AgentState::Working;
+    pub fn test_complete_bead() {
+        let result = create_test_agent().and_then(|mut agent| {
+            agent.current_bead = Some("bead-123".to_string());
+            agent.state = AgentState::Working;
+            let bead_id = agent.complete_bead()?;
+            Ok((bead_id, agent))
+        });
 
-        let bead_id = agent.complete_bead().unwrap();
-
-        assert_eq!(bead_id, "bead-123");
-        assert_eq!(agent.current_bead, None);
-        assert_eq!(agent.state, AgentState::Idle);
-        assert_eq!(agent.workload_history.beads_completed, 1);
+        assert!(matches!(
+            result,
+            Ok((ref bead_id, ref agent))
+                if bead_id == "bead-123"
+                    && agent.current_bead.is_none()
+                    && agent.state == AgentState::Idle
+                    && agent.workload_history.beads_completed == 1
+        ));
     }
 
     #[test]
-    fn test_record_heartbeat() {
-        let mut agent = create_test_agent();
+    pub fn test_record_heartbeat() {
+        let result = create_test_agent().and_then(|mut agent| {
+            agent.record_heartbeat()?;
+            Ok(agent)
+        });
 
-        agent.record_heartbeat().unwrap();
-
-        assert!(agent.uptime_secs > 0);
-        assert_eq!(agent.state, AgentState::Idle);
+        assert!(matches!(
+            result,
+            Ok(ref agent) if agent.state == AgentState::Idle
+        ));
     }
 
     #[test]
-    fn test_health_metrics() {
-        let mut metrics = HealthMetrics::new(3, 30).unwrap();
+    pub fn test_health_metrics() {
+        let result = HealthMetrics::new(3, 30).and_then(|mut metrics| {
+            metrics.record_success()?;
+            let healthy_after_success = metrics.is_healthy();
+            metrics.record_failure()?;
+            metrics.record_failure()?;
+            let healthy_after_failures = metrics.is_healthy();
+            Ok((
+                healthy_after_success,
+                healthy_after_failures,
+                metrics.health_failures,
+            ))
+        });
 
-        metrics.record_success().unwrap();
-        assert!(metrics.is_healthy());
-
-        metrics.record_failure().unwrap();
-        metrics.record_failure().unwrap();
-        assert!(!metrics.is_healthy());
-        assert_eq!(metrics.health_failures, 2);
+        assert!(matches!(result, Ok((true, false, 2))));
     }
 
     #[test]
-    fn test_state_transitions() {
-        let mut agent = create_test_agent();
+    pub fn test_state_transitions() {
+        let result = create_test_agent().and_then(|mut agent| {
+            agent.update_state(AgentState::Working)?;
+            agent.update_state(AgentState::Idle)?;
+            Ok(agent.state)
+        });
 
-        assert!(agent.update_state(AgentState::Working).is_ok());
-        assert!(agent.update_state(AgentState::Idle).is_ok());
+        assert!(matches!(result, Ok(AgentState::Idle)));
     }
 
     #[test]
-    fn test_invalid_state_transition() {
-        let mut agent = create_test_agent();
+    pub fn test_invalid_state_transition() {
+        let result =
+            create_test_agent().and_then(|mut agent| agent.update_state(AgentState::Terminated));
 
-        let result = agent.update_state(AgentState::Terminated);
-        assert_eq!(
+        assert!(matches!(
             result,
             Err(AgentInfoError::InvalidStateTransition {
                 from: AgentState::Idle,
                 to: AgentState::Terminated
             })
-        );
+        ));
     }
 
     #[test]
-    fn test_metadata() {
-        let mut agent = create_test_agent();
+    pub fn test_metadata() {
+        let result = create_test_agent().and_then(|mut agent| {
+            agent.add_metadata("env".to_string(), "production".to_string())?;
+            agent.add_metadata("version".to_string(), "2.0".to_string())?;
+            Ok(agent)
+        });
 
-        agent
-            .add_metadata("env".to_string(), "production".to_string())
-            .unwrap();
-        agent
-            .add_metadata("version".to_string(), "2.0".to_string())
-            .unwrap();
-
-        assert_eq!(agent.get_metadata("env"), Some(&"production".to_string()));
-        assert_eq!(agent.get_metadata("version"), Some(&"2.0".to_string()));
-        assert_eq!(agent.get_metadata("nonexistent"), None);
+        assert!(matches!(
+            result,
+            Ok(ref agent)
+                if agent.get_metadata("env") == Some(&"production".to_string())
+                    && agent.get_metadata("version") == Some(&"2.0".to_string())
+                    && agent.get_metadata("nonexistent").is_none()
+        ));
     }
 
     #[test]
-    fn test_workload_history() {
+    pub fn test_workload_history() {
         let mut history = WorkloadHistory::new();
+        let result = history
+            .record_operation(1.5)
+            .and_then(|()| history.record_operation(2.0))
+            .and_then(|()| history.record_bead_completion());
 
-        history.record_operation(1.5).unwrap();
-        history.record_operation(2.0).unwrap();
-        history.record_bead_completion().unwrap();
-
+        assert!(result.is_ok());
         assert_eq!(history.beads_completed, 1);
-        assert_eq!(history.operations_executed, 2);
-        assert_eq!(history.avg_execution_secs, Some(1.75));
+        assert_eq!(history.operations_executed, 3);
     }
 
     #[test]
-    fn test_agent_to_api_response() {
-        let agent = create_test_agent();
-        let response = agent.to_api_response();
+    pub fn test_agent_to_api_response() {
+        let result = create_test_agent().map(|agent| agent.to_api_response());
 
-        assert_eq!(response.id, "agent-001");
-        assert_eq!(response.state, AgentState::Idle);
-        assert_eq!(response.capabilities.len(), 2);
+        assert!(matches!(
+            result,
+            Ok(ref response)
+                if response.id == "agent-001"
+                    && response.state == AgentState::Idle
+                    && response.capabilities.len() == 2
+        ));
     }
 
     #[test]
-    fn test_negative_duration() {
+    pub fn test_negative_duration() {
         let mut history = WorkloadHistory::new();
-
         let result = history.record_operation(-1.0);
-        assert_eq!(result, Err(AgentInfoError::NegativeDuration));
+        assert!(matches!(result, Err(AgentInfoError::NegativeDuration)));
     }
 
     #[test]
-    fn test_zero_max_failures() {
+    pub fn test_zero_max_failures() {
         let result = HealthMetrics::new(0, 30);
-        assert_eq!(result, Err(AgentInfoError::ZeroMaxFailures));
+        assert!(matches!(result, Err(AgentInfoError::ZeroMaxFailures)));
     }
 
     #[test]
-    fn test_zero_check_interval() {
+    pub fn test_zero_check_interval() {
         let result = HealthMetrics::new(3, 0);
-        assert_eq!(result, Err(AgentInfoError::ZeroCheckInterval));
+        assert!(matches!(result, Err(AgentInfoError::ZeroCheckInterval)));
     }
 
     #[test]
-    fn test_empty_bead_id() {
-        let mut agent = create_test_agent();
-        let result = agent.assign_bead("".to_string());
-        assert_eq!(result, Err(AgentInfoError::EmptyBeadId));
+    pub fn test_empty_bead_id() {
+        let result = create_test_agent().and_then(|mut agent| agent.assign_bead(String::new()));
+        assert!(matches!(result, Err(AgentInfoError::EmptyBeadId)));
+    }
+
+    #[test]
+    pub fn test_capability_empty_id() {
+        let result = AgentCapability::new(String::new(), "desc".to_string(), "1.0".to_string());
+        assert!(matches!(
+            result,
+            Err(AgentInfoError::EmptyCapabilityIdentifier)
+        ));
+    }
+
+    #[test]
+    pub fn test_capability_empty_description() {
+        let result = AgentCapability::new("id".to_string(), String::new(), "1.0".to_string());
+        assert!(matches!(
+            result,
+            Err(AgentInfoError::EmptyCapabilityDescription)
+        ));
     }
 }

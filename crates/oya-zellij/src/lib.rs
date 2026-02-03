@@ -12,6 +12,7 @@ const CTX_REQUEST_TYPE: &str = "request_type";
 const CTX_BEADS_LIST: &str = "beads_list";
 const CTX_PIPELINE: &str = "pipeline";
 const CTX_BEAD_ID: &str = "bead_id";
+const CTX_AGENTS_LIST: &str = "agents_list";
 
 // Plugin state
 #[derive(Default)]
@@ -31,6 +32,9 @@ struct State {
 
     // Pipeline data for selected bead
     pipeline_stages: Vec<StageInfo>,
+
+    // Agent data
+    agents: Vec<AgentInfo>,
 }
 
 #[derive(Default, Clone, Copy)]
@@ -39,6 +43,7 @@ enum ViewMode {
     BeadList,
     BeadDetail,
     PipelineView,
+    AgentList,
 }
 
 #[derive(Clone)]
@@ -93,6 +98,57 @@ enum StageStatus {
     Passed,
     Failed,
     Skipped,
+}
+
+#[derive(Clone)]
+struct AgentInfo {
+    id: String,
+    state: AgentState,
+    current_bead: Option<String>,
+    health_score: f64,
+    uptime_secs: u64,
+    capabilities: Vec<String>,
+}
+
+#[derive(Clone, Copy)]
+enum AgentState {
+    Idle,
+    Working,
+    Unhealthy,
+    ShuttingDown,
+    Terminated,
+}
+
+impl AgentState {
+    fn as_str(&self) -> &str {
+        match self {
+            Self::Idle => "idle",
+            Self::Working => "working",
+            Self::Unhealthy => "unhealthy",
+            Self::ShuttingDown => "shutting_down",
+            Self::Terminated => "terminated",
+        }
+    }
+
+    fn color(&self) -> &str {
+        match self {
+            Self::Idle => "\x1b[36m",
+            Self::Working => "\x1b[32m",
+            Self::Unhealthy => "\x1b[31m",
+            Self::ShuttingDown => "\x1b[33m",
+            Self::Terminated => "\x1b[90m",
+        }
+    }
+
+    fn symbol(&self) -> &str {
+        match self {
+            Self::Idle => "○",
+            Self::Working => "●",
+            Self::Unhealthy => "✗",
+            Self::ShuttingDown => "◌",
+            Self::Terminated => "⊘",
+        }
+    }
 }
 
 impl StageStatus {
@@ -200,15 +256,24 @@ impl ZellijPlugin for State {
                         self.load_pipeline_for_selected();
                         true
                     }
+                    BareKey::Char('4') => {
+                        self.mode = ViewMode::AgentList;
+                        self.load_agents();
+                        true
+                    }
                     BareKey::Enter => {
                         // Enter key cycles through views
                         self.mode = match self.mode {
                             ViewMode::BeadList => ViewMode::BeadDetail,
                             ViewMode::BeadDetail => ViewMode::PipelineView,
-                            ViewMode::PipelineView => ViewMode::BeadList,
+                            ViewMode::PipelineView => ViewMode::AgentList,
+                            ViewMode::AgentList => ViewMode::BeadList,
                         };
                         if self.mode == ViewMode::PipelineView {
                             self.load_pipeline_for_selected();
+                        }
+                        if self.mode == ViewMode::AgentList {
+                            self.load_agents();
                         }
                         true
                     }
@@ -257,6 +322,7 @@ impl ZellijPlugin for State {
             ViewMode::BeadList => self.render_bead_list(content_rows, cols),
             ViewMode::BeadDetail => self.render_bead_detail(content_rows, cols),
             ViewMode::PipelineView => self.render_pipeline_view(content_rows, cols),
+            ViewMode::AgentList => self.render_agent_list(content_rows, cols),
         }
 
         // Render footer
@@ -290,6 +356,17 @@ impl State {
         }
     }
 
+    fn load_agents(&mut self) {
+        // Fetch agents from API
+        let url = format!("{}/api/agents", self.server_url);
+
+        let mut context = BTreeMap::new();
+        context.insert(CTX_REQUEST_TYPE.to_string(), CTX_AGENTS_LIST.to_string());
+
+        self.pending_requests += 1;
+        web_request(&url, HttpVerb::Get, BTreeMap::new(), vec![], context);
+    }
+
     fn handle_web_response(
         &mut self,
         status: u16,
@@ -314,6 +391,7 @@ impl State {
         match request_type {
             Some(CTX_BEADS_LIST) => self.parse_beads_response(&body),
             Some(CTX_PIPELINE) => self.parse_pipeline_response(&body),
+            Some(CTX_AGENTS_LIST) => self.parse_agents_response(&body),
             _ => {
                 // Unknown request type, ignore
             }
@@ -396,6 +474,51 @@ impl State {
                             _ => StageStatus::Pending,
                         },
                         duration_ms: s.duration_ms,
+                    })
+                    .collect();
+            }
+            Err(e) => {
+                self.last_error = Some(format!("Parse error: {}", e));
+            }
+        }
+    }
+
+    fn parse_agents_response(&mut self, body: &[u8]) {
+        // Parse JSON response: [{"id": "...", "state": "...", "health_score": ...}]
+        #[derive(serde::Deserialize)]
+        struct ApiAgentInfo {
+            id: String,
+            state: String,
+            #[serde(default)]
+            current_bead: Option<String>,
+            health_score: f64,
+            uptime_secs: u64,
+            #[serde(default)]
+            capabilities: Vec<String>,
+        }
+
+        let Ok(body_str) = std::str::from_utf8(body) else {
+            self.last_error = Some("Invalid UTF-8 in response".to_string());
+            return;
+        };
+
+        match serde_json::from_str::<Vec<ApiAgentInfo>>(body_str) {
+            Ok(api_agents) => {
+                self.agents = api_agents
+                    .into_iter()
+                    .map(|a| AgentInfo {
+                        id: a.id,
+                        state: match a.state.as_str() {
+                            "working" => AgentState::Working,
+                            "unhealthy" => AgentState::Unhealthy,
+                            "shutting_down" => AgentState::ShuttingDown,
+                            "terminated" => AgentState::Terminated,
+                            _ => AgentState::Idle,
+                        },
+                        current_bead: a.current_bead,
+                        health_score: a.health_score,
+                        uptime_secs: a.uptime_secs,
+                        capabilities: a.capabilities,
                     })
                     .collect();
             }
@@ -592,6 +715,77 @@ impl State {
         }
     }
 
+    fn render_agent_list(&self, rows: usize, cols: usize) {
+        if self.agents.is_empty() {
+            println!("\n  \x1b[2mNo agents found\x1b[0m");
+            return;
+        }
+
+        // Header row
+        println!(
+            "\n  \x1b[1m{:<15} {:<12} {:<20} {:<12} Health\x1b[0m",
+            "Agent ID", "State", "Current Bead", "Uptime"
+        );
+        println!("  {}", "─".repeat(cols.saturating_sub(2)));
+
+        // Agent rows
+        for agent in self.agents.iter().take(rows.saturating_sub(3)) {
+            let bead_str = agent.current_bead.as_deref().unwrap_or("-");
+
+            let uptime_str = format_uptime(agent.uptime_secs);
+            let health_color = if agent.health_score >= 0.8 {
+                "\x1b[32m"
+            } else if agent.health_score >= 0.5 {
+                "\x1b[33m"
+            } else {
+                "\x1b[31m"
+            };
+
+            println!(
+                "  {:<15} {}{:<12}\x1b[0m {:<20} {:<12} {}{:.1}%\x1b[0m",
+                agent.id,
+                agent.state.color(),
+                agent.state.as_str(),
+                truncate(bead_str, 20),
+                uptime_str,
+                health_color,
+                agent.health_score * 100.0
+            );
+
+            // Show capabilities if available
+            if !agent.capabilities.is_empty() {
+                let caps_str = agent.capabilities.join(", ");
+                println!(
+                    "    \x1b[2mCapabilities: {}\x1b[0m",
+                    truncate(&caps_str, cols.saturating_sub(6))
+                );
+            }
+        }
+
+        // Summary line
+        let total = self.agents.len();
+        let idle = self
+            .agents
+            .iter()
+            .filter(|a| matches!(a.state, AgentState::Idle))
+            .count();
+        let working = self
+            .agents
+            .iter()
+            .filter(|a| matches!(a.state, AgentState::Working))
+            .count();
+        let unhealthy = self
+            .agents
+            .iter()
+            .filter(|a| matches!(a.state, AgentState::Unhealthy))
+            .count();
+
+        println!(
+            "\n  \x1b[2m{} total | {} idle | {} working | {} unhealthy\x1b[0m",
+            total, idle, working, unhealthy
+        );
+    }
+
     fn render_footer(&self, rows: usize, cols: usize) {
         // Position at bottom
         print!("\x1b[{};1H", rows - 1);
@@ -600,6 +794,7 @@ impl State {
             ViewMode::BeadList => "List",
             ViewMode::BeadDetail => "Detail",
             ViewMode::PipelineView => "Pipeline",
+            ViewMode::AgentList => "Agents",
         };
 
         println!("{}", "─".repeat(cols));
@@ -652,4 +847,16 @@ fn render_progress_bar(progress: f32, width: usize) -> String {
         "░".repeat(empty),
         (progress * 100.0) as u8
     )
+}
+
+fn format_uptime(secs: u64) -> String {
+    if secs < 60 {
+        format!("{}s", secs)
+    } else if secs < 3600 {
+        format!("{}m", secs / 60)
+    } else if secs < 86400 {
+        format!("{}h {}m", secs / 3600, (secs % 3600) / 60)
+    } else {
+        format!("{}d", secs / 86400)
+    }
 }

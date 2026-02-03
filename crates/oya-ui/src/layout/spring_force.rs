@@ -30,18 +30,10 @@ pub struct Position {
 }
 
 impl Position {
-    /// Creates a new position, returning an error if both coordinates are zero
-    ///
-    /// # Errors
-    ///
-    /// Returns `SpringForceError::ZeroLengthEdge` if both coordinates are zero
+    /// Creates a new position
     #[must_use]
-    pub const fn new(x: f64, y: f64) -> Result<Self, SpringForceError> {
-        if x == 0.0 && y == 0.0 {
-            Err(SpringForceError::ZeroLengthEdge)
-        } else {
-            Ok(Self { x, y })
-        }
+    pub const fn new(x: f64, y: f64) -> Self {
+        Self { x, y }
     }
 
     /// Calculates the distance to another position
@@ -57,7 +49,6 @@ impl Position {
     /// # Errors
     ///
     /// Returns `SpringForceError::ZeroLengthEdge` if positions are identical
-    #[must_use]
     pub fn direction_to(&self, other: &Self) -> Result<(f64, f64), SpringForceError> {
         let distance = self.distance(other);
         if distance < EPSILON {
@@ -138,9 +129,9 @@ impl SpringForce {
     ///
     /// # Returns
     ///
-    /// A tuple of (source_force, target_force) where:
-    /// - source_force is applied to the source node
-    /// - target_force is the equal and opposite force applied to the target node
+    /// A tuple of (`source_force`, `target_force`) where:
+    /// - `source_force` is applied to the source node
+    /// - `target_force` is the equal and opposite force applied to the target node
     ///
     /// # Errors
     ///
@@ -172,11 +163,11 @@ impl SpringForce {
     ///
     /// # Arguments
     ///
-    /// * `edges` - Iterator of (source_position, target_position) tuples
+    /// * `edges` - Iterator of (`source_position`, `target_position`) tuples
     ///
     /// # Returns
     ///
-    /// Iterator of (source_force, target_force) tuples
+    /// Iterator of (`source_force`, `target_force`) tuples
     pub fn apply_to_edges<'a, I>(
         &'a self,
         edges: I,
@@ -190,12 +181,14 @@ impl SpringForce {
     }
 
     /// Gets the stiffness coefficient
-    pub fn stiffness(&self) -> f64 {
+    #[must_use]
+    pub const fn stiffness(&self) -> f64 {
         self.stiffness
     }
 
     /// Gets the rest length
-    pub fn rest_length(&self) -> f64 {
+    #[must_use]
+    pub const fn rest_length(&self) -> f64 {
         self.rest_length
     }
 }

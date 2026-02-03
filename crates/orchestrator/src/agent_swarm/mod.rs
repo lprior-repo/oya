@@ -31,7 +31,10 @@ mod health;
 mod messages;
 mod pool;
 
-pub use agent_info::{AgentInfo, AgentState, AgentCapability, WorkloadHistory, HealthMetrics, AgentStats, AgentApiResponse, AgentInfoError};
+pub use agent_info::{
+    AgentApiResponse, AgentCapability, AgentInfo, AgentInfoError, AgentState, AgentStats,
+    HealthMetrics, WorkloadHistory,
+};
 pub use error::{AgentSwarmError, AgentSwarmResult};
 pub use handle::{AgentHandle, AgentState as AgentStateLegacy};
 pub use health::{HealthCheckResult, HealthConfig, HealthMonitor};
