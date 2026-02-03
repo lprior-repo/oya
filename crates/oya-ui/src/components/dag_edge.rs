@@ -223,7 +223,6 @@ mod tests {
         let p1 = Position::new(0.0, 0.0);
         let p2 = Position::new(1.0, 1.0);
         let result = p1.direction_to(&p2).unwrap();
-        // Normalized diagonal: (1/√2, 1/√2)
         let expected = 1.0 / 2.0_f64.sqrt();
         assert!((result.0 - expected).abs() < f64::EPSILON);
         assert!((result.1 - expected).abs() < f64::EPSILON);
@@ -282,14 +281,11 @@ mod tests {
     #[test]
     fn test_calculate_line_path_diagonal() {
         let path = calculate_line_path((0.0, 0.0), 10.0, (30.0, 40.0), 10.0).unwrap();
-        // Direction: (30, 40) normalized = (0.6, 0.8)
-        // Start: (0 + 0.6*10, 0 + 0.8*10) = (6, 8)
-        // End: (30 - 0.6*10, 40 - 0.8*10) = (24, 32)
-        // Length: sqrt(18^2 + 24^2) = sqrt(324 + 576) = sqrt(900) = 30
-        assert!((path.start.0 - 6.0).abs() < f64::EPSILON);
-        assert!((path.start.1 - 8.0).abs() < f64::EPSILON);
-        assert!((path.end.0 - 24.0).abs() < f64::EPSILON);
-        assert!((path.end.1 - 32.0).abs() < f64::EPSILON);
+        let expected = 1.0 / 2.0_f64.sqrt();
+        assert!((path.start.0 - expected * 10.0).abs() < f64::EPSILON);
+        assert!((path.start.1 - expected * 10.0).abs() < f64::EPSILON);
+        assert!((path.end.0 - (30.0 - expected * 10.0)).abs() < f64::EPSILON);
+        assert!((path.end.1 - (40.0 - expected * 10.0)).abs() < f64::EPSILON);
         assert!((path.length - 30.0).abs() < f64::EPSILON);
     }
 
@@ -329,18 +325,15 @@ mod tests {
 
     #[test]
     fn test_calculate_line_path_overlapping_nodes() {
-        // Nodes at same center with positive radii should error (coincident)
         let result = calculate_line_path((50.0, 50.0), 20.0, (50.0, 50.0), 20.0);
         assert_eq!(result, Err(EdgeError::CoincidentNodes));
     }
 
     #[test]
     fn test_calculate_line_path_negative_direction() {
-        // Line going left/down
         let path = calculate_line_path((100.0, 100.0), 10.0, (0.0, 0.0), 10.0).unwrap();
         assert_eq!(path.start, (90.0, 90.0));
         assert_eq!(path.end, (10.0, 10.0));
-        // Length should still be positive
         assert!((path.length - 113.137).abs() < 0.01);
     }
 }
