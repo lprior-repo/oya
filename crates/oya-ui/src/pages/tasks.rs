@@ -304,7 +304,6 @@ mod tests {
     fn test_tasks_module_compiles() {
         // Tasks module compiles successfully
         // Component tests require runtime environment
-        assert!(true);
     }
 
     #[test]

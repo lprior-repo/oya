@@ -247,13 +247,13 @@ mod tests {
     fn test_profiling_summary() {
         let summary = ProfilingSummary {
             sample_count: 360,
-            max_rss_kb: 102400,
-            avg_rss_kb: 51200,
+            max_rss_kb: 102_400,
+            avg_rss_kb: 51_200,
             duration_secs: 3600,
         };
 
         assert_eq!(summary.sample_count(), 360);
-        assert_eq!(summary.max_rss_kb(), 102400);
+        assert_eq!(summary.max_rss_kb(), 102_400);
         assert!((summary.max_rss_mb() - 100.0).abs() < 0.1);
         assert_eq!(summary.avg_rss_kb(), 51200);
         assert!((summary.avg_rss_mb() - 50.0).abs() < 0.1);

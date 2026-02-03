@@ -464,17 +464,21 @@ fn should_iterate_over_all_edges() {
 
     // THEN: Each edge should have correct components
     let edge1 = edges.iter().find(|e| e.0 == "a");
+    assert!(
+        edge1.is_some(),
+        "Failed to find edge from 'a': no edge found in iterator"
+    );
     if let Some(e1) = edge1 {
         assert_eq!(e1.1, "b", "Edge 'a' should point to 'b'");
-    } else {
-        panic!("Failed to find edge from 'a': no edge found in iterator");
     }
 
     let edge2 = edges.iter().find(|e| e.0 == "b");
+    assert!(
+        edge2.is_some(),
+        "Failed to find edge from 'b': no edge found in iterator"
+    );
     if let Some(e2) = edge2 {
         assert_eq!(e2.1, "c", "Edge 'b' should point to 'c'");
-    } else {
-        panic!("Failed to find edge from 'b': no edge found in iterator");
     }
 }
 
@@ -788,7 +792,7 @@ fn should_handle_very_long_node_id() {
     // THEN: Node should be retrievable
     let nodes: Vec<_> = dag.nodes().collect();
     assert!(
-        nodes.iter().any(|n| n.as_str() == &long_id),
+        nodes.iter().any(|n| n.as_str() == long_id.as_str()),
         "Long ID node should exist"
     );
 }

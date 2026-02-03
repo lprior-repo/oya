@@ -407,8 +407,7 @@ mod tests {
         let json = serde_json::to_string(&state);
         assert!(json.is_ok());
 
-        let restored: Result<PipelineState, _> =
-            serde_json::from_str(&json.unwrap_or_default());
+        let restored: Result<PipelineState, _> = serde_json::from_str(&json.unwrap_or_default());
         assert!(restored.is_ok());
     }
 }

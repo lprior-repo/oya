@@ -65,9 +65,7 @@ impl WorkflowState {
 
     /// Add a bead to this workflow's DAG
     pub fn add_bead(&mut self, bead_id: BeadId) -> Result<()> {
-        self.dag
-            .add_node(bead_id)
-            .map_err(dag_error_to_error)
+        self.dag.add_node(bead_id).map_err(dag_error_to_error)
     }
 
     /// Add a dependency between beads

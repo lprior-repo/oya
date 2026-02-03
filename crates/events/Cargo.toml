@@ -38,6 +38,6 @@ surrealdb-core = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 
 [lints.clippy]
-unwrap_used = "forbid"
+unwrap_used = "deny"
 expect_used = "deny"
 panic = "forbid"

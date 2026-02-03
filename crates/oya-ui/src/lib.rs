@@ -69,11 +69,11 @@ mod tests {
     #[test]
     fn test_state_module() {
         // Verify state module is accessible
-        use state::{ConnectionState, WebSocketError};
-        let state = ConnectionState::Disconnected;
-        assert_eq!(state, ConnectionState::Disconnected);
+        use state::{TauriConnectionState, TauriError};
+        let state = TauriConnectionState::NotAvailable;
+        assert_eq!(state, TauriConnectionState::NotAvailable);
 
-        let err = WebSocketError::InvalidUrl("test".to_string());
-        assert!(err.to_string().contains("Invalid URL"));
+        let err = TauriError::InvocationFailed("test".to_string());
+        assert!(err.to_string().contains("Invocation failed"));
     }
 }

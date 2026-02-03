@@ -68,59 +68,59 @@ impl MetricsSnapshot {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemoryMetrics {
     /// Resident Set Size (RSS) in kilobytes
-    rss_kb: u64,
+    rss: u64,
 
-    /// Virtual Memory Size (VmSize) in kilobytes
-    vm_size_kb: u64,
+    /// Virtual Memory Size (`VmSize`) in kilobytes
+    vm_size: u64,
 
     /// Peak RSS in kilobytes
-    vm_peak_kb: u64,
+    vm_peak: u64,
 
     /// Shared memory in kilobytes
-    rss_shared_kb: u64,
+    rss_shared: u64,
 }
 
 impl MemoryMetrics {
     /// Create new memory metrics
     #[must_use]
-    pub const fn new(rss_kb: u64, vm_size_kb: u64, vm_peak_kb: u64, rss_shared_kb: u64) -> Self {
+    pub const fn new(rss: u64, vm_size: u64, vm_peak: u64, rss_shared: u64) -> Self {
         Self {
-            rss_kb,
-            vm_size_kb,
-            vm_peak_kb,
-            rss_shared_kb,
+            rss,
+            vm_size,
+            vm_peak,
+            rss_shared,
         }
     }
 
     /// Get RSS in kilobytes
     #[must_use]
     pub const fn rss_kb(&self) -> u64 {
-        self.rss_kb
+        self.rss
     }
 
     /// Get RSS in megabytes
     #[must_use]
     #[allow(clippy::cast_precision_loss)] // Acceptable precision loss for display purposes
     pub const fn rss_mb(&self) -> f64 {
-        self.rss_kb as f64 / 1024.0
+        self.rss as f64 / 1024.0
     }
 
     /// Get virtual memory size in kilobytes
     #[must_use]
     pub const fn vm_size_kb(&self) -> u64 {
-        self.vm_size_kb
+        self.vm_size
     }
 
     /// Get peak virtual memory in kilobytes
     #[must_use]
     pub const fn vm_peak_kb(&self) -> u64 {
-        self.vm_peak_kb
+        self.vm_peak
     }
 
     /// Get shared memory in kilobytes
     #[must_use]
     pub const fn rss_shared_kb(&self) -> u64 {
-        self.rss_shared_kb
+        self.rss_shared
     }
 
     /// Read memory metrics from /proc/[pid]/status
@@ -184,7 +184,7 @@ impl MemoryMetrics {
     }
 
     /// Parse a value in kilobytes from a /proc line
-    /// Format: "FieldName:    12345 kB"
+    /// Format: "`FieldName`:    12345 kB"
     fn parse_kb_value(line: &str) -> Result<Option<u64>> {
         line.split_whitespace()
             .nth(1)
@@ -207,7 +207,7 @@ pub struct MetricsLogger {
 impl MetricsLogger {
     /// Create a new metrics logger
     #[must_use]
-    pub fn new(output_path: std::path::PathBuf) -> Self {
+    pub const fn new(output_path: std::path::PathBuf) -> Self {
         Self { output_path }
     }
 

@@ -163,7 +163,7 @@ mod tests {
         if result.is_err() {
             assert!(matches!(
                 result,
-                Err(ProfilingError::HeaptrackNotFound) | Err(ProfilingError::ProcessSpawnFailed(_))
+                Err(ProfilingError::HeaptrackNotFound | ProfilingError::ProcessSpawnFailed(_))
             ));
         }
     }

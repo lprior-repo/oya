@@ -613,6 +613,5 @@ mod tests {
     #[test]
     fn test_beads_page_module_compiles() {
         // The Beads module compiles and exports its components
-        assert!(true);
     }
 }

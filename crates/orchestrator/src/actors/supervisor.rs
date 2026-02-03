@@ -26,7 +26,9 @@ pub async fn spawn_scheduler_with_name(
 ) -> Result<ActorRef<SchedulerMessage>, ActorError> {
     let (actor_ref, _handle) = Actor::spawn(Some(name.to_string()), SchedulerActorDef, args)
         .await
-        .map_err(|e| ActorError::SpawnFailed(format!("Failed to spawn scheduler '{}': {}", name, e)))?;
+        .map_err(|e| {
+            ActorError::SpawnFailed(format!("Failed to spawn scheduler '{}': {}", name, e))
+        })?;
     Ok(actor_ref)
 }
 
@@ -122,5 +124,7 @@ pub async fn spawn_supervisor(
     _config: SchedulerSupervisorConfig,
 ) -> Result<ActorRef<SupervisorMessage>, ActorError> {
     // TODO: Implement supervisor actor
-    Err(ActorError::SpawnFailed("Supervisor not yet implemented".to_string()))
+    Err(ActorError::SpawnFailed(
+        "Supervisor not yet implemented".to_string(),
+    ))
 }

@@ -30,7 +30,7 @@ repository = "https://github.com/lprior-repo/oya"
 unsafe_code = "forbid"
 
 [workspace.lints.clippy]
-unwrap_used = "forbid"
+unwrap_used = "deny"
 expect_used = "deny"
 panic = "forbid"
 todo = "warn"

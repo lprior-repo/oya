@@ -626,10 +626,7 @@ mod tests {
             "bead-1".to_string(),
         );
 
-        assert!(matches!(
-            result,
-            Err(ActorError::WorkflowNotFound(_))
-        ));
+        assert!(matches!(result, Err(ActorError::WorkflowNotFound(_))));
     }
 
     #[test]
@@ -703,10 +700,7 @@ mod tests {
             "worker-2".to_string(),
         );
 
-        assert!(matches!(
-            result,
-            Err(ActorError::BeadAlreadyClaimed { .. })
-        ));
+        assert!(matches!(result, Err(ActorError::BeadAlreadyClaimed { .. })));
     }
 
     #[test]

@@ -32,10 +32,7 @@ fn given_empty_dag_when_add_node_then_node_exists_and_count_is_one() {
     assert_eq!(dag.node_count(), 1, "Node count should be 1");
 
     let nodes: Vec<&BeadId> = dag.nodes().collect();
-    assert!(
-        nodes.iter().any(|n| *n == &bead_id),
-        "Node should be retrievable"
-    );
+    assert!(nodes.contains(&&bead_id), "Node should be retrievable");
 }
 
 #[test]
@@ -53,10 +50,7 @@ fn given_dag_with_node_when_remove_node_then_node_gone_and_count_decremented() {
     assert!(result.is_ok(), "Removing node should succeed");
     assert_eq!(dag.node_count(), 0, "Node count should be 0");
     let nodes: Vec<&BeadId> = dag.nodes().collect();
-    assert!(
-        !nodes.iter().any(|n| *n == &bead_id),
-        "Node should not exist"
-    );
+    assert!(!nodes.contains(&&bead_id), "Node should not exist");
 }
 
 #[test]
@@ -468,14 +462,8 @@ fn given_chain_a_to_b_to_c_when_get_all_ancestors_of_c_then_returns_a_and_b() {
     assert!(ancestors.is_ok(), "get_all_ancestors should succeed");
     let ancestors = ancestors.unwrap_or_default();
     assert_eq!(ancestors.len(), 2, "C should have 2 ancestors");
-    assert!(
-        ancestors.contains(&"a".to_string()),
-        "A should be an ancestor"
-    );
-    assert!(
-        ancestors.contains(&"b".to_string()),
-        "B should be an ancestor"
-    );
+    assert!(ancestors.contains("a"), "A should be an ancestor");
+    assert!(ancestors.contains("b"), "B should be an ancestor");
 }
 
 #[test]
@@ -523,18 +511,9 @@ fn given_diamond_a_to_bc_to_d_when_get_all_ancestors_of_d_then_no_duplicates() {
         3,
         "D should have exactly 3 unique ancestors"
     );
-    assert!(
-        ancestors.contains(&"a".to_string()),
-        "A should be an ancestor"
-    );
-    assert!(
-        ancestors.contains(&"b".to_string()),
-        "B should be an ancestor"
-    );
-    assert!(
-        ancestors.contains(&"c".to_string()),
-        "C should be an ancestor"
-    );
+    assert!(ancestors.contains("a"), "A should be an ancestor");
+    assert!(ancestors.contains("b"), "B should be an ancestor");
+    assert!(ancestors.contains("c"), "C should be an ancestor");
 }
 
 // ============================================================================
@@ -869,23 +848,11 @@ fn given_complex_cycle_when_find_cycles_then_returns_participating_nodes() {
 
     // Flatten all cycles to check participating nodes
     let cycle_nodes: HashSet<BeadId> = cycles.into_iter().flatten().collect();
-    assert!(
-        cycle_nodes.contains(&"b".to_string()),
-        "B should be in cycle"
-    );
-    assert!(
-        cycle_nodes.contains(&"c".to_string()),
-        "C should be in cycle"
-    );
-    assert!(
-        cycle_nodes.contains(&"d".to_string()),
-        "D should be in cycle"
-    );
+    assert!(cycle_nodes.contains("b"), "B should be in cycle");
+    assert!(cycle_nodes.contains("c"), "C should be in cycle");
+    assert!(cycle_nodes.contains("d"), "D should be in cycle");
     // A is not in the cycle itself
-    assert!(
-        !cycle_nodes.contains(&"a".to_string()),
-        "A should NOT be in cycle"
-    );
+    assert!(!cycle_nodes.contains("a"), "A should NOT be in cycle");
 }
 
 // ============================================================================

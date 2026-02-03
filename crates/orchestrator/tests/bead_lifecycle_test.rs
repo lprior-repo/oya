@@ -45,10 +45,11 @@ impl ExecutionTracker {
 fn dependencies_satisfied(bead_id: &str, dag: &WorkflowDAG, tracker: &ExecutionTracker) -> bool {
     // Get all edges where this bead is the target (dependencies)
     for (from, to, dep_type) in dag.edges() {
-        if to == bead_id && matches!(dep_type, DependencyType::BlockingDependency) {
-            if !tracker.has_completed(from) {
-                return false;
-            }
+        if to == bead_id
+            && matches!(dep_type, DependencyType::BlockingDependency)
+            && !tracker.has_completed(from)
+        {
+            return false;
         }
     }
     true

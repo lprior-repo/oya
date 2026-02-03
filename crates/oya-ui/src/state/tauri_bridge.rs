@@ -64,10 +64,8 @@ thread_local! {
 /// Check if Tauri is available
 #[must_use]
 pub fn is_tauri_available() -> bool {
-    let window = web_sys::window();
-    window.map_or(false, |w| {
-        js_sys::Reflect::get(&w, &JsValue::from_str("__TAURI__"))
-            .map_or(false, |v| !v.is_undefined())
+    web_sys::window().is_some_and(|w| {
+        js_sys::Reflect::get(&w, &JsValue::from_str("__TAURI__")).is_ok_and(|v| !v.is_undefined())
     })
 }
 
@@ -174,9 +172,9 @@ where
     closure.forget();
 
     // Return the unlisten function
-    Ok(result
+    result
         .dyn_into()
-        .map_err(|_| TauriError::ListenerError("Failed to get unlisten function".to_string()))?)
+        .map_err(|_| TauriError::ListenerError("Failed to get unlisten function".to_string()))
 }
 
 /// Batched bead fetch with request deduplication

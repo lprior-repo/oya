@@ -413,6 +413,7 @@ pub fn StageGate(#[prop(default = "default-task".to_string())] task_id: String) 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::pipeline::StageStatus;
 
     #[test]
     fn test_stage_status_colors() {

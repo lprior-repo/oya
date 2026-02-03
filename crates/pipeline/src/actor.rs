@@ -519,7 +519,6 @@ impl Default for HeartbeatMonitor {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -698,7 +697,9 @@ mod tests {
     fn test_create_monitor_with_custom_interval() {
         let monitor = HeartbeatMonitor::with_interval(60);
         assert!(monitor.is_ok());
-        assert_eq!(monitor.unwrap().check_interval(), 60);
+        if let Ok(mon) = monitor {
+            assert_eq!(mon.check_interval(), 60);
+        }
     }
 
     #[test]
@@ -774,8 +775,10 @@ mod tests {
 
         let check = monitor.get_health_check(&worker_id);
         assert!(check.is_some());
-        assert_eq!(check.unwrap().status(), HealthStatus::Degraded);
-        assert_eq!(check.unwrap().consecutive_failures(), 1);
+        if let Some(c) = check {
+            assert_eq!(c.status(), HealthStatus::Degraded);
+            assert_eq!(c.consecutive_failures(), 1);
+        }
     }
 
     #[test]
@@ -790,8 +793,10 @@ mod tests {
 
         let check = monitor.get_health_check(&worker_id);
         assert!(check.is_some());
-        assert_eq!(check.unwrap().status(), HealthStatus::Unhealthy);
-        assert_eq!(check.unwrap().consecutive_failures(), 3);
+        if let Some(c) = check {
+            assert_eq!(c.status(), HealthStatus::Unhealthy);
+            assert_eq!(c.consecutive_failures(), 3);
+        }
     }
 
     #[test]
@@ -806,8 +811,10 @@ mod tests {
 
         let check = monitor.get_health_check(&worker_id);
         assert!(check.is_some());
-        assert_eq!(check.unwrap().status(), HealthStatus::Healthy);
-        assert_eq!(check.unwrap().consecutive_failures(), 0);
+        if let Some(c) = check {
+            assert_eq!(c.status(), HealthStatus::Healthy);
+            assert_eq!(c.consecutive_failures(), 0);
+        }
     }
 
     #[test]
@@ -1008,8 +1015,8 @@ mod tests {
         // Given: A pool with a claimed worker
         let mut pool = ProcessPoolActor::new();
         let worker_id = ProcessId::new(1);
-        pool.add_worker(worker_id, WorkerState::Claimed)
-            .expect("Failed to add worker");
+        let add_result = pool.add_worker(worker_id, WorkerState::Claimed);
+        assert!(add_result.is_ok(), "Failed to add worker");
 
         assert_eq!(
             pool.get_state(&worker_id),
@@ -1044,8 +1051,8 @@ mod tests {
         // Given: A pool with maximum capacity (simulate by adding a worker with specific ID)
         let mut pool = ProcessPoolActor::new();
         let worker_id = ProcessId::new(1);
-        pool.add_worker(worker_id, WorkerState::Idle)
-            .expect("Failed to add initial worker");
+        let add_result = pool.add_worker(worker_id, WorkerState::Idle);
+        assert!(add_result.is_ok(), "Failed to add initial worker");
 
         // When: We attempt to spawn a worker with the same ID
         let result = pool.add_worker(worker_id, WorkerState::Idle);
@@ -1066,10 +1073,10 @@ mod tests {
         let worker1 = ProcessId::new(1);
         let worker2 = ProcessId::new(2);
 
-        pool.add_worker(worker1, WorkerState::Idle)
-            .expect("Failed to add worker 1");
-        pool.add_worker(worker2, WorkerState::Idle)
-            .expect("Failed to add worker 2");
+        let add1_result = pool.add_worker(worker1, WorkerState::Idle);
+        assert!(add1_result.is_ok(), "Failed to add worker 1");
+        let add2_result = pool.add_worker(worker2, WorkerState::Idle);
+        assert!(add2_result.is_ok(), "Failed to add worker 2");
 
         let idle_before = pool.idle_workers();
         assert_eq!(idle_before.len(), 2, "Should have 2 idle workers initially");
@@ -1132,14 +1139,14 @@ mod tests {
         let dead_worker = ProcessId::new(3);
         let claimed_worker = ProcessId::new(4);
 
-        pool.add_worker(healthy_worker, WorkerState::Idle)
-            .expect("Failed to add healthy worker");
-        pool.add_worker(unhealthy_worker, WorkerState::Unhealthy)
-            .expect("Failed to add unhealthy worker");
-        pool.add_worker(dead_worker, WorkerState::Dead)
-            .expect("Failed to add dead worker");
-        pool.add_worker(claimed_worker, WorkerState::Claimed)
-            .expect("Failed to add claimed worker");
+        let add1 = pool.add_worker(healthy_worker, WorkerState::Idle);
+        assert!(add1.is_ok(), "Failed to add healthy worker");
+        let add2 = pool.add_worker(unhealthy_worker, WorkerState::Unhealthy);
+        assert!(add2.is_ok(), "Failed to add unhealthy worker");
+        let add3 = pool.add_worker(dead_worker, WorkerState::Dead);
+        assert!(add3.is_ok(), "Failed to add dead worker");
+        let add4 = pool.add_worker(claimed_worker, WorkerState::Claimed);
+        assert!(add4.is_ok(), "Failed to add claimed worker");
 
         // When: We query for workers needing attention
         let attention_list = pool.workers_needing_attention();
@@ -1181,10 +1188,10 @@ mod tests {
         let worker2 = ProcessId::new(1);
 
         // Claim two workers
-        pool.update_state(&worker1, WorkerState::Claimed)
-            .expect("Failed to claim worker1");
-        pool.update_state(&worker2, WorkerState::Claimed)
-            .expect("Failed to claim worker2");
+        let claim1 = pool.update_state(&worker1, WorkerState::Claimed);
+        assert!(claim1.is_ok(), "Failed to claim worker1");
+        let claim2 = pool.update_state(&worker2, WorkerState::Claimed);
+        assert!(claim2.is_ok(), "Failed to claim worker2");
 
         // Then: State counts are accurate
         assert_eq!(
@@ -1199,8 +1206,8 @@ mod tests {
         );
 
         // When: One worker becomes unhealthy
-        pool.update_state(&worker1, WorkerState::Unhealthy)
-            .expect("Failed to mark worker1 unhealthy");
+        let unhealthy_result = pool.update_state(&worker1, WorkerState::Unhealthy);
+        assert!(unhealthy_result.is_ok(), "Failed to mark worker1 unhealthy");
 
         // Then: State counts reflect the change
         assert_eq!(

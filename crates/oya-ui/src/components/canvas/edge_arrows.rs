@@ -6,20 +6,15 @@
 use crate::error::{LeptosError, Result};
 
 /// Arrow style variants for edge rendering
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum ArrowStyle {
     /// Filled solid triangle
+    #[default]
     Filled,
     /// Outline stroke only
     Outline,
     /// No arrow (for undirected or weak dependencies)
     None,
-}
-
-impl Default for ArrowStyle {
-    fn default() -> Self {
-        Self::Filled
-    }
 }
 
 /// Arrow head geometry with three triangle vertices

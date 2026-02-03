@@ -126,7 +126,7 @@ impl StageInfo {
 }
 
 /// Overall pipeline state
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PipelineState {
     /// All stages in execution order
     pub stages: Vec<StageInfo>,
@@ -165,18 +165,6 @@ impl PipelineState {
     #[must_use]
     pub fn failed_count(&self) -> usize {
         self.stages.iter().filter(|s| s.status.is_failed()).count()
-    }
-}
-
-impl Default for PipelineState {
-    fn default() -> Self {
-        Self {
-            stages: Vec::new(),
-            current_stage: None,
-            total_duration_ms: 0,
-            all_passed: false,
-            first_failure: None,
-        }
     }
 }
 

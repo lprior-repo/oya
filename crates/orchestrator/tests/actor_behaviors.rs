@@ -41,12 +41,8 @@ async fn call_with_timeout<T: Send + 'static>(
 
     match result {
         ractor::rpc::CallResult::Success(value) => Ok(value),
-        ractor::rpc::CallResult::Timeout => {
-            Err("Call timed out".into())
-        }
-        ractor::rpc::CallResult::SenderError => {
-            Err("Sender error".into())
-        }
+        ractor::rpc::CallResult::Timeout => Err("Call timed out".into()),
+        ractor::rpc::CallResult::SenderError => Err("Sender error".into()),
     }
 }
 
@@ -55,7 +51,8 @@ async fn call_with_timeout<T: Send + 'static>(
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_scheduler_when_register_workflow_via_cast_then_workflow_tracked() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_scheduler_when_register_workflow_via_cast_then_workflow_tracked()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A running scheduler actor
     let scheduler = setup_scheduler().await?;
 
@@ -70,13 +67,14 @@ async fn given_scheduler_when_register_workflow_via_cast_then_workflow_tracked()
 
     // Then: Workflow status should be queryable
     let status = call_with_timeout(&scheduler, |reply| SchedulerMessage::GetWorkflowStatus {
-            workflow_id: "wf-test-1".to_string(),
-            reply,
-        })
-        .await?;
+        workflow_id: "wf-test-1".to_string(),
+        reply,
+    })
+    .await?;
 
     assert!(status.is_some(), "Workflow should be registered");
-    let status = status.ok_or_else(|| -> Box<dyn std::error::Error> { "Status should exist".into() })?;
+    let status =
+        status.ok_or_else(|| -> Box<dyn std::error::Error> { "Status should exist".into() })?;
     assert_eq!(status.workflow_id, "wf-test-1");
     assert_eq!(status.total_beads, 0);
 
@@ -87,7 +85,8 @@ async fn given_scheduler_when_register_workflow_via_cast_then_workflow_tracked()
 }
 
 #[tokio::test]
-async fn given_scheduler_when_register_duplicate_workflow_then_idempotent() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_scheduler_when_register_duplicate_workflow_then_idempotent()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A scheduler with an existing workflow
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
@@ -118,7 +117,8 @@ async fn given_scheduler_when_register_duplicate_workflow_then_idempotent() -> R
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_workflow_when_query_ready_beads_via_call_then_returns_result() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_workflow_when_query_ready_beads_via_call_then_returns_result()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A scheduler with a workflow containing a bead
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
@@ -158,7 +158,8 @@ async fn given_workflow_when_query_ready_beads_via_call_then_returns_result() ->
 }
 
 #[tokio::test]
-async fn given_invalid_workflow_when_query_then_returns_error_not_panic() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_invalid_workflow_when_query_then_returns_error_not_panic()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A running scheduler with no workflows
     let scheduler = setup_scheduler().await?;
 
@@ -191,7 +192,8 @@ async fn given_invalid_workflow_when_query_then_returns_error_not_panic() -> Res
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_workflow_when_schedule_bead_then_bead_tracked() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_workflow_when_schedule_bead_then_bead_tracked()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A scheduler with a registered workflow
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
@@ -210,12 +212,13 @@ async fn given_workflow_when_schedule_bead_then_bead_tracked() -> Result<(), Box
 
     // Then: Workflow status should reflect the bead
     let status = call_with_timeout(&scheduler, |reply| SchedulerMessage::GetWorkflowStatus {
-            workflow_id: "wf-bead".to_string(),
-            reply,
-        })
-        .await?;
+        workflow_id: "wf-bead".to_string(),
+        reply,
+    })
+    .await?;
 
-    let status = status.ok_or_else(|| -> Box<dyn std::error::Error> { "Workflow should exist".into() })?;
+    let status =
+        status.ok_or_else(|| -> Box<dyn std::error::Error> { "Workflow should exist".into() })?;
     assert_eq!(status.total_beads, 1);
 
     // Cleanup
@@ -225,7 +228,8 @@ async fn given_workflow_when_schedule_bead_then_bead_tracked() -> Result<(), Box
 }
 
 #[tokio::test]
-async fn given_beads_with_dependency_when_query_ready_then_only_root_ready() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_beads_with_dependency_when_query_ready_then_only_root_ready()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A workflow with A -> B dependency
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
@@ -261,7 +265,8 @@ async fn given_beads_with_dependency_when_query_ready_then_only_root_ready() -> 
             workflow_id: "wf-dep".to_string(),
             reply,
         }
-    }).await?;
+    })
+    .await?;
 
     // Then: Only A should be ready (B depends on A)
     let ready_beads = result?;
@@ -285,7 +290,8 @@ async fn given_beads_with_dependency_when_query_ready_then_only_root_ready() -> 
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_dependency_when_upstream_completes_then_downstream_becomes_ready() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_dependency_when_upstream_completes_then_downstream_becomes_ready()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A workflow with A -> B dependency
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
@@ -329,7 +335,8 @@ async fn given_dependency_when_upstream_completes_then_downstream_becomes_ready(
             workflow_id: "wf-comp".to_string(),
             reply,
         }
-    }).await?;
+    })
+    .await?;
 
     let ready_beads = result?;
     assert!(
@@ -348,30 +355,38 @@ async fn given_dependency_when_upstream_completes_then_downstream_becomes_ready(
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_ready_bead_when_claimed_then_not_in_all_ready() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_ready_bead_when_claimed_then_not_in_all_ready()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A workflow with a ready bead
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
-            workflow_id: "wf-claim".to_string(),
-        });
+        workflow_id: "wf-claim".to_string(),
+    });
 
-    assert!(result.is_ok(), "Register should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Register should succeed failed: {:?}",
+        result
+    );
 
     let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
-            workflow_id: "wf-claim".to_string(),
-            bead_id: "bead-x".to_string(),
-        });
+        workflow_id: "wf-claim".to_string(),
+        bead_id: "bead-x".to_string(),
+    });
 
-
-    assert!(result.is_ok(), "Schedule should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Schedule should succeed failed: {:?}",
+        result
+    );
 
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     // When: Claim the bead
     let result = scheduler.send_message(SchedulerMessage::ClaimBead {
-            bead_id: "bead-x".to_string(),
-            worker_id: "worker-1".to_string(),
-        });
+        bead_id: "bead-x".to_string(),
+        worker_id: "worker-1".to_string(),
+    });
 
     assert!(result.is_ok(), "Claim should succeed failed: {:?}", result);
 
@@ -380,7 +395,8 @@ async fn given_ready_bead_when_claimed_then_not_in_all_ready() -> Result<(), Box
     // Then: Bead should not appear in GetAllReadyBeads (it's claimed)
     let all_ready: Vec<(String, String)> = call_with_timeout(&scheduler, |reply| {
         SchedulerMessage::GetAllReadyBeads { reply }
-    }).await?;
+    })
+    .await?;
 
     let has_claimed = all_ready.iter().any(|(_, bid)| bid == "bead-x");
     assert!(
@@ -395,28 +411,35 @@ async fn given_ready_bead_when_claimed_then_not_in_all_ready() -> Result<(), Box
 }
 
 #[tokio::test]
-async fn given_claimed_bead_when_released_then_appears_in_ready() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_claimed_bead_when_released_then_appears_in_ready()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A workflow with a claimed bead
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
-            workflow_id: "wf-release".to_string(),
-        });
+        workflow_id: "wf-release".to_string(),
+    });
 
-    assert!(result.is_ok(), "Register should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Register should succeed failed: {:?}",
+        result
+    );
 
     let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
-            workflow_id: "wf-release".to_string(),
-            bead_id: "bead-y".to_string(),
-        });
+        workflow_id: "wf-release".to_string(),
+        bead_id: "bead-y".to_string(),
+    });
 
-
-    assert!(result.is_ok(), "Schedule should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Schedule should succeed failed: {:?}",
+        result
+    );
 
     let result = scheduler.send_message(SchedulerMessage::ClaimBead {
-            bead_id: "bead-y".to_string(),
-            worker_id: "worker-2".to_string(),
-        });
-
+        bead_id: "bead-y".to_string(),
+        worker_id: "worker-2".to_string(),
+    });
 
     assert!(result.is_ok(), "Claim should succeed failed: {:?}", result);
 
@@ -424,17 +447,22 @@ async fn given_claimed_bead_when_released_then_appears_in_ready() -> Result<(), 
 
     // When: Release the bead
     let result = scheduler.send_message(SchedulerMessage::ReleaseBead {
-            bead_id: "bead-y".to_string(),
-        });
+        bead_id: "bead-y".to_string(),
+    });
 
-    assert!(result.is_ok(), "Release should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Release should succeed failed: {:?}",
+        result
+    );
 
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     // Then: Bead should appear in GetAllReadyBeads
     let all_ready: Vec<(String, String)> = call_with_timeout(&scheduler, |reply| {
         SchedulerMessage::GetAllReadyBeads { reply }
-    }).await?;
+    })
+    .await?;
 
     let has_released = all_ready.iter().any(|(_, bid)| bid == "bead-y");
     assert!(
@@ -453,7 +481,8 @@ async fn given_claimed_bead_when_released_then_appears_in_ready() -> Result<(), 
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_running_scheduler_when_shutdown_then_stops_cleanly() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_running_scheduler_when_shutdown_then_stops_cleanly()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A running scheduler
     let scheduler = setup_scheduler().await?;
 
@@ -463,7 +492,7 @@ async fn given_running_scheduler_when_shutdown_then_stops_cleanly() -> Result<()
     assert_eq!(stats.workflow_count, 0);
 
     // When: Send shutdown message
-    let _result = scheduler.send_message(SchedulerMessage::Shutdown)?;
+    scheduler.send_message(SchedulerMessage::Shutdown)?;
 
     // Then: Actor should stop
     tokio::time::sleep(Duration::from_millis(50)).await;
@@ -483,7 +512,8 @@ async fn given_running_scheduler_when_shutdown_then_stops_cleanly() -> Result<()
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_scheduler_with_data_when_get_stats_then_accurate_counts() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_scheduler_with_data_when_get_stats_then_accurate_counts()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A scheduler with workflows and beads
     let scheduler = setup_scheduler().await?;
 
@@ -500,23 +530,35 @@ async fn given_scheduler_with_data_when_get_stats_then_accurate_counts() -> Resu
 
     // Schedule 3 beads across workflows
     let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
-            workflow_id: "wf-stats-1".to_string(),
-            bead_id: "bead-s1".to_string(),
-        });
+        workflow_id: "wf-stats-1".to_string(),
+        bead_id: "bead-s1".to_string(),
+    });
 
-    assert!(result.is_ok(), "Schedule should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Schedule should succeed failed: {:?}",
+        result
+    );
     let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
-            workflow_id: "wf-stats-1".to_string(),
-            bead_id: "bead-s2".to_string(),
-        });
+        workflow_id: "wf-stats-1".to_string(),
+        bead_id: "bead-s2".to_string(),
+    });
 
-    assert!(result.is_ok(), "Schedule should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Schedule should succeed failed: {:?}",
+        result
+    );
     let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
-            workflow_id: "wf-stats-2".to_string(),
-            bead_id: "bead-s3".to_string(),
-        });
+        workflow_id: "wf-stats-2".to_string(),
+        bead_id: "bead-s3".to_string(),
+    });
 
-    assert!(result.is_ok(), "Schedule should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Schedule should succeed failed: {:?}",
+        result
+    );
 
     tokio::time::sleep(Duration::from_millis(20)).await;
 
@@ -539,42 +581,54 @@ async fn given_scheduler_with_data_when_get_stats_then_accurate_counts() -> Resu
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_complete_workflow_when_get_status_then_shows_complete() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_complete_workflow_when_get_status_then_shows_complete()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A workflow where all beads are completed
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
-            workflow_id: "wf-done".to_string(),
-        });
+        workflow_id: "wf-done".to_string(),
+    });
 
-    assert!(result.is_ok(), "Register should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Register should succeed failed: {:?}",
+        result
+    );
 
     let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
-            workflow_id: "wf-done".to_string(),
-            bead_id: "bead-final".to_string(),
-        });
+        workflow_id: "wf-done".to_string(),
+        bead_id: "bead-final".to_string(),
+    });
 
-
-    assert!(result.is_ok(), "Schedule should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Schedule should succeed failed: {:?}",
+        result
+    );
 
     let result = scheduler.send_message(SchedulerMessage::OnBeadCompleted {
-            workflow_id: "wf-done".to_string(),
-            bead_id: "bead-final".to_string(),
-        });
+        workflow_id: "wf-done".to_string(),
+        bead_id: "bead-final".to_string(),
+    });
 
-
-    assert!(result.is_ok(), "Complete should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Complete should succeed failed: {:?}",
+        result
+    );
 
     tokio::time::sleep(Duration::from_millis(20)).await;
 
     // When: Get workflow status
     let status = call_with_timeout(&scheduler, |reply| SchedulerMessage::GetWorkflowStatus {
-            workflow_id: "wf-done".to_string(),
-            reply,
-        })
-        .await?;
+        workflow_id: "wf-done".to_string(),
+        reply,
+    })
+    .await?;
 
     // Then: Workflow should show as complete
-    let status = status.ok_or_else(|| -> Box<dyn std::error::Error> { "Workflow should exist".into() })?;
+    let status =
+        status.ok_or_else(|| -> Box<dyn std::error::Error> { "Workflow should exist".into() })?;
     assert!(status.is_complete, "Workflow should be complete");
     assert_eq!(status.completed_beads, 1);
 
@@ -589,7 +643,8 @@ async fn given_complete_workflow_when_get_status_then_shows_complete() -> Result
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_no_workflow_when_schedule_bead_then_error_logged_not_panic() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_no_workflow_when_schedule_bead_then_error_logged_not_panic()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A scheduler with no workflows
     let scheduler = setup_scheduler().await?;
 
@@ -615,14 +670,19 @@ async fn given_no_workflow_when_schedule_bead_then_error_logged_not_panic() -> R
 }
 
 #[tokio::test]
-async fn given_no_bead_when_claim_then_error_logged_not_panic() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_no_bead_when_claim_then_error_logged_not_panic()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A scheduler with a workflow but no beads
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
-            workflow_id: "wf-empty".to_string(),
-        });
+        workflow_id: "wf-empty".to_string(),
+    });
 
-    assert!(result.is_ok(), "Register should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Register should succeed failed: {:?}",
+        result
+    );
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     // When: Try to claim a non-existent bead
@@ -651,70 +711,103 @@ async fn given_no_bead_when_claim_then_error_logged_not_panic() -> Result<(), Bo
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_diamond_dag_when_partial_complete_then_join_not_ready() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_diamond_dag_when_partial_complete_then_join_not_ready()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A diamond DAG: A -> B, A -> C, B -> D, C -> D
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
-            workflow_id: "wf-diamond".to_string(),
-        });
+        workflow_id: "wf-diamond".to_string(),
+    });
 
-    assert!(result.is_ok(), "Register should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Register should succeed failed: {:?}",
+        result
+    );
 
     // Add beads
     for bead in ["a", "b", "c", "d"] {
         let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
-                workflow_id: "wf-diamond".to_string(),
-                bead_id: bead.to_string(),
-            });
+            workflow_id: "wf-diamond".to_string(),
+            bead_id: bead.to_string(),
+        });
 
-        assert!(result.is_ok(), "Schedule should succeed failed: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Schedule should succeed failed: {:?}",
+            result
+        );
     }
 
     // Add edges: A -> B, A -> C, B -> D, C -> D
     let result = scheduler.send_message(SchedulerMessage::AddDependency {
-            workflow_id: "wf-diamond".to_string(),
-            from_bead: "a".to_string(),
-            to_bead: "b".to_string(),
-        });
+        workflow_id: "wf-diamond".to_string(),
+        from_bead: "a".to_string(),
+        to_bead: "b".to_string(),
+    });
 
-    assert!(result.is_ok(), "Add dependency should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Add dependency should succeed failed: {:?}",
+        result
+    );
     let result = scheduler.send_message(SchedulerMessage::AddDependency {
-            workflow_id: "wf-diamond".to_string(),
-            from_bead: "a".to_string(),
-            to_bead: "c".to_string(),
-        });
+        workflow_id: "wf-diamond".to_string(),
+        from_bead: "a".to_string(),
+        to_bead: "c".to_string(),
+    });
 
-    assert!(result.is_ok(), "Add dependency should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Add dependency should succeed failed: {:?}",
+        result
+    );
     let result = scheduler.send_message(SchedulerMessage::AddDependency {
-            workflow_id: "wf-diamond".to_string(),
-            from_bead: "b".to_string(),
-            to_bead: "d".to_string(),
-        });
+        workflow_id: "wf-diamond".to_string(),
+        from_bead: "b".to_string(),
+        to_bead: "d".to_string(),
+    });
 
-    assert!(result.is_ok(), "Add dependency should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Add dependency should succeed failed: {:?}",
+        result
+    );
     let result = scheduler.send_message(SchedulerMessage::AddDependency {
-            workflow_id: "wf-diamond".to_string(),
-            from_bead: "c".to_string(),
-            to_bead: "d".to_string(),
-        });
+        workflow_id: "wf-diamond".to_string(),
+        from_bead: "c".to_string(),
+        to_bead: "d".to_string(),
+    });
 
-    assert!(result.is_ok(), "Add dependency should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Add dependency should succeed failed: {:?}",
+        result
+    );
 
     tokio::time::sleep(Duration::from_millis(20)).await;
 
     // When: Complete A, then B (but not C)
     let result = scheduler.send_message(SchedulerMessage::OnBeadCompleted {
-            workflow_id: "wf-diamond".to_string(),
-            bead_id: "a".to_string(),
-        });
+        workflow_id: "wf-diamond".to_string(),
+        bead_id: "a".to_string(),
+    });
 
-    assert!(result.is_ok(), "Complete should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Complete should succeed failed: {:?}",
+        result
+    );
     let result = scheduler.send_message(SchedulerMessage::OnBeadCompleted {
-            workflow_id: "wf-diamond".to_string(),
-            bead_id: "b".to_string(),
-        });
+        workflow_id: "wf-diamond".to_string(),
+        bead_id: "b".to_string(),
+    });
 
-    assert!(result.is_ok(), "Complete should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Complete should succeed failed: {:?}",
+        result
+    );
 
     tokio::time::sleep(Duration::from_millis(20)).await;
 
@@ -724,7 +817,8 @@ async fn given_diamond_dag_when_partial_complete_then_join_not_ready() -> Result
             workflow_id: "wf-diamond".to_string(),
             reply,
         }
-    }).await?;
+    })
+    .await?;
 
     let ready_beads = result?;
     assert!(ready_beads.contains(&"c".to_string()), "C should be ready");
@@ -740,64 +834,92 @@ async fn given_diamond_dag_when_partial_complete_then_join_not_ready() -> Result
 }
 
 #[tokio::test]
-async fn given_diamond_dag_when_all_parents_complete_then_join_ready() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_diamond_dag_when_all_parents_complete_then_join_ready()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: Same diamond DAG
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
-            workflow_id: "wf-diamond2".to_string(),
-        });
+        workflow_id: "wf-diamond2".to_string(),
+    });
 
-    assert!(result.is_ok(), "Register should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Register should succeed failed: {:?}",
+        result
+    );
 
     for bead in ["a", "b", "c", "d"] {
         let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
-                workflow_id: "wf-diamond2".to_string(),
-                bead_id: bead.to_string(),
-            });
+            workflow_id: "wf-diamond2".to_string(),
+            bead_id: bead.to_string(),
+        });
 
-        assert!(result.is_ok(), "Schedule should succeed failed: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Schedule should succeed failed: {:?}",
+            result
+        );
     }
 
     let result = scheduler.send_message(SchedulerMessage::AddDependency {
-            workflow_id: "wf-diamond2".to_string(),
-            from_bead: "a".to_string(),
-            to_bead: "b".to_string(),
-        });
+        workflow_id: "wf-diamond2".to_string(),
+        from_bead: "a".to_string(),
+        to_bead: "b".to_string(),
+    });
 
-
-    assert!(result.is_ok(), "Add dependency should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Add dependency should succeed failed: {:?}",
+        result
+    );
     let result = scheduler.send_message(SchedulerMessage::AddDependency {
-            workflow_id: "wf-diamond2".to_string(),
-            from_bead: "a".to_string(),
-            to_bead: "c".to_string(),
-        });
+        workflow_id: "wf-diamond2".to_string(),
+        from_bead: "a".to_string(),
+        to_bead: "c".to_string(),
+    });
 
-    assert!(result.is_ok(), "Add dependency should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Add dependency should succeed failed: {:?}",
+        result
+    );
     let result = scheduler.send_message(SchedulerMessage::AddDependency {
-            workflow_id: "wf-diamond2".to_string(),
-            from_bead: "b".to_string(),
-            to_bead: "d".to_string(),
-        });
+        workflow_id: "wf-diamond2".to_string(),
+        from_bead: "b".to_string(),
+        to_bead: "d".to_string(),
+    });
 
-    assert!(result.is_ok(), "Add dependency should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Add dependency should succeed failed: {:?}",
+        result
+    );
     let result = scheduler.send_message(SchedulerMessage::AddDependency {
-            workflow_id: "wf-diamond2".to_string(),
-            from_bead: "c".to_string(),
-            to_bead: "d".to_string(),
-        });
+        workflow_id: "wf-diamond2".to_string(),
+        from_bead: "c".to_string(),
+        to_bead: "d".to_string(),
+    });
 
-    assert!(result.is_ok(), "Add dependency should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Add dependency should succeed failed: {:?}",
+        result
+    );
 
     tokio::time::sleep(Duration::from_millis(20)).await;
 
     // When: Complete A, B, AND C
     for bead in ["a", "b", "c"] {
         let result = scheduler.send_message(SchedulerMessage::OnBeadCompleted {
-                workflow_id: "wf-diamond2".to_string(),
-                bead_id: bead.to_string(),
-            });
+            workflow_id: "wf-diamond2".to_string(),
+            bead_id: bead.to_string(),
+        });
 
-        assert!(result.is_ok(), "Complete should succeed failed: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Complete should succeed failed: {:?}",
+            result
+        );
     }
 
     tokio::time::sleep(Duration::from_millis(20)).await;
@@ -808,7 +930,8 @@ async fn given_diamond_dag_when_all_parents_complete_then_join_ready() -> Result
             workflow_id: "wf-diamond2".to_string(),
             reply,
         }
-    }).await?;
+    })
+    .await?;
 
     let ready_beads = result?;
     assert!(
@@ -827,42 +950,58 @@ async fn given_diamond_dag_when_all_parents_complete_then_join_ready() -> Result
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_multiple_workflows_when_query_all_ready_then_returns_from_all() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_multiple_workflows_when_query_all_ready_then_returns_from_all()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: Multiple workflows with ready beads
     let scheduler = setup_scheduler().await?;
 
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
-            workflow_id: "wf-a".to_string(),
-        });
+        workflow_id: "wf-a".to_string(),
+    });
 
-
-    assert!(result.is_ok(), "Register should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Register should succeed failed: {:?}",
+        result
+    );
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
-            workflow_id: "wf-b".to_string(),
-        });
+        workflow_id: "wf-b".to_string(),
+    });
 
-    assert!(result.is_ok(), "Register should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Register should succeed failed: {:?}",
+        result
+    );
 
     let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
-            workflow_id: "wf-a".to_string(),
-            bead_id: "bead-a1".to_string(),
-        });
+        workflow_id: "wf-a".to_string(),
+        bead_id: "bead-a1".to_string(),
+    });
 
-
-    assert!(result.is_ok(), "Schedule should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Schedule should succeed failed: {:?}",
+        result
+    );
     let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
-            workflow_id: "wf-b".to_string(),
-            bead_id: "bead-b1".to_string(),
-        });
+        workflow_id: "wf-b".to_string(),
+        bead_id: "bead-b1".to_string(),
+    });
 
-    assert!(result.is_ok(), "Schedule should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Schedule should succeed failed: {:?}",
+        result
+    );
 
     tokio::time::sleep(Duration::from_millis(20)).await;
 
     // When: Query all ready beads
     let all_ready: Vec<(String, String)> = call_with_timeout(&scheduler, |reply| {
         SchedulerMessage::GetAllReadyBeads { reply }
-    }).await?;
+    })
+    .await?;
 
     // Then: Should include beads from both workflows
     let has_a1 = all_ready
@@ -882,53 +1021,72 @@ async fn given_multiple_workflows_when_query_all_ready_then_returns_from_all() -
 }
 
 #[tokio::test]
-async fn given_multiple_workflows_when_unregister_one_then_other_unaffected() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_multiple_workflows_when_unregister_one_then_other_unaffected()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: Two workflows
     let scheduler = setup_scheduler().await?;
 
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
-            workflow_id: "wf-keep".to_string(),
-        });
+        workflow_id: "wf-keep".to_string(),
+    });
 
-
-    assert!(result.is_ok(), "Register should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Register should succeed failed: {:?}",
+        result
+    );
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
-            workflow_id: "wf-remove".to_string(),
-        });
+        workflow_id: "wf-remove".to_string(),
+    });
 
-    assert!(result.is_ok(), "Register should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Register should succeed failed: {:?}",
+        result
+    );
 
     let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
-            workflow_id: "wf-keep".to_string(),
-            bead_id: "bead-1".to_string(),
-        });
+        workflow_id: "wf-keep".to_string(),
+        bead_id: "bead-1".to_string(),
+    });
 
-
-    assert!(result.is_ok(), "Schedule should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Schedule should succeed failed: {:?}",
+        result
+    );
     let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
-            workflow_id: "wf-remove".to_string(),
-            bead_id: "bead-2".to_string(),
-        });
+        workflow_id: "wf-remove".to_string(),
+        bead_id: "bead-2".to_string(),
+    });
 
-    assert!(result.is_ok(), "Schedule should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Schedule should succeed failed: {:?}",
+        result
+    );
 
     tokio::time::sleep(Duration::from_millis(20)).await;
 
     // When: Unregister one workflow
     let result = scheduler.send_message(SchedulerMessage::UnregisterWorkflow {
-            workflow_id: "wf-remove".to_string(),
-        });
+        workflow_id: "wf-remove".to_string(),
+    });
 
-    assert!(result.is_ok(), "Unregister should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Unregister should succeed failed: {:?}",
+        result
+    );
 
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     // Then: Other workflow should be unaffected
     let status = call_with_timeout(&scheduler, |reply| SchedulerMessage::GetWorkflowStatus {
-            workflow_id: "wf-keep".to_string(),
-            reply,
-        })
-        .await?;
+        workflow_id: "wf-keep".to_string(),
+        reply,
+    })
+    .await?;
 
     assert!(status.is_some(), "wf-keep should still exist");
     if let Some(s) = status {
@@ -936,7 +1094,8 @@ async fn given_multiple_workflows_when_unregister_one_then_other_unaffected() ->
     }
 
     // Removed workflow should not exist
-    let removed_status = call_with_timeout(&scheduler, |reply| SchedulerMessage::GetWorkflowStatus {
+    let removed_status =
+        call_with_timeout(&scheduler, |reply| SchedulerMessage::GetWorkflowStatus {
             workflow_id: "wf-remove".to_string(),
             reply,
         })
@@ -959,27 +1118,34 @@ async fn given_root_bead_when_is_ready_query_then_true() -> Result<(), Box<dyn s
     // Given: A workflow with a single bead (root)
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
-            workflow_id: "wf-isready".to_string(),
-        });
+        workflow_id: "wf-isready".to_string(),
+    });
 
-    assert!(result.is_ok(), "Register should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Register should succeed failed: {:?}",
+        result
+    );
     let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
-            workflow_id: "wf-isready".to_string(),
-            bead_id: "root-bead".to_string(),
-        });
+        workflow_id: "wf-isready".to_string(),
+        bead_id: "root-bead".to_string(),
+    });
 
-    assert!(result.is_ok(), "Schedule should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Schedule should succeed failed: {:?}",
+        result
+    );
 
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     // When: Query if the bead is ready
-    let is_ready =
-        call_with_timeout(&scheduler, |reply| SchedulerMessage::IsBeadReady {
-            workflow_id: "wf-isready".to_string(),
-            bead_id: "root-bead".to_string(),
-            reply,
-        })
-        .await??;
+    let is_ready = call_with_timeout(&scheduler, |reply| SchedulerMessage::IsBeadReady {
+        workflow_id: "wf-isready".to_string(),
+        bead_id: "root-bead".to_string(),
+        reply,
+    })
+    .await??;
 
     // Then: Should be ready (no dependencies)
     assert!(is_ready, "Root bead should be ready");
@@ -991,44 +1157,60 @@ async fn given_root_bead_when_is_ready_query_then_true() -> Result<(), Box<dyn s
 }
 
 #[tokio::test]
-async fn given_blocked_bead_when_is_ready_query_then_false() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_blocked_bead_when_is_ready_query_then_false()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A workflow with dependency A -> B
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
-            workflow_id: "wf-blocked".to_string(),
-        });
+        workflow_id: "wf-blocked".to_string(),
+    });
 
-    assert!(result.is_ok(), "Register should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Register should succeed failed: {:?}",
+        result
+    );
     let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
-            workflow_id: "wf-blocked".to_string(),
-            bead_id: "a".to_string(),
-        });
+        workflow_id: "wf-blocked".to_string(),
+        bead_id: "a".to_string(),
+    });
 
-    assert!(result.is_ok(), "Schedule should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Schedule should succeed failed: {:?}",
+        result
+    );
     let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
-            workflow_id: "wf-blocked".to_string(),
-            bead_id: "b".to_string(),
-        });
+        workflow_id: "wf-blocked".to_string(),
+        bead_id: "b".to_string(),
+    });
 
-    assert!(result.is_ok(), "Schedule should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Schedule should succeed failed: {:?}",
+        result
+    );
     let result = scheduler.send_message(SchedulerMessage::AddDependency {
-            workflow_id: "wf-blocked".to_string(),
-            from_bead: "a".to_string(),
-            to_bead: "b".to_string(),
-        });
+        workflow_id: "wf-blocked".to_string(),
+        from_bead: "a".to_string(),
+        to_bead: "b".to_string(),
+    });
 
-    assert!(result.is_ok(), "Add dependency should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Add dependency should succeed failed: {:?}",
+        result
+    );
 
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     // When: Query if B is ready
-    let is_ready =
-        call_with_timeout(&scheduler, |reply| SchedulerMessage::IsBeadReady {
-            workflow_id: "wf-blocked".to_string(),
-            bead_id: "b".to_string(),
-            reply,
-        })
-        .await??;
+    let is_ready = call_with_timeout(&scheduler, |reply| SchedulerMessage::IsBeadReady {
+        workflow_id: "wf-blocked".to_string(),
+        bead_id: "b".to_string(),
+        reply,
+    })
+    .await??;
 
     // Then: B should NOT be ready (blocked by A)
     assert!(!is_ready, "B should be blocked by A");
@@ -1044,14 +1226,19 @@ async fn given_blocked_bead_when_is_ready_query_then_false() -> Result<(), Box<d
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_empty_workflow_when_query_ready_beads_then_empty_list() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_empty_workflow_when_query_ready_beads_then_empty_list()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A workflow with no beads
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
-            workflow_id: "wf-empty".to_string(),
-        });
+        workflow_id: "wf-empty".to_string(),
+    });
 
-    assert!(result.is_ok(), "Register should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Register should succeed failed: {:?}",
+        result
+    );
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     // When: Query ready beads
@@ -1060,7 +1247,8 @@ async fn given_empty_workflow_when_query_ready_beads_then_empty_list() -> Result
             workflow_id: "wf-empty".to_string(),
             reply,
         }
-    }).await??;
+    })
+    .await??;
 
     // Then: Should return empty list, not error
     assert!(result.is_empty(), "Empty workflow has no ready beads");
@@ -1071,22 +1259,31 @@ async fn given_empty_workflow_when_query_ready_beads_then_empty_list() -> Result
 }
 
 #[tokio::test]
-async fn given_many_beads_when_query_all_ready_then_returns_all() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_many_beads_when_query_all_ready_then_returns_all()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A workflow with 50 independent beads
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
-            workflow_id: "wf-many".to_string(),
-        });
+        workflow_id: "wf-many".to_string(),
+    });
 
-    assert!(result.is_ok(), "Register should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Register should succeed failed: {:?}",
+        result
+    );
 
     for i in 0..50 {
         let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
-                workflow_id: "wf-many".to_string(),
-                bead_id: format!("bead-{}", i),
-            });
+            workflow_id: "wf-many".to_string(),
+            bead_id: format!("bead-{}", i),
+        });
 
-        assert!(result.is_ok(), "Schedule should succeed failed: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Schedule should succeed failed: {:?}",
+            result
+        );
     }
 
     tokio::time::sleep(Duration::from_millis(50)).await;
@@ -1097,7 +1294,8 @@ async fn given_many_beads_when_query_all_ready_then_returns_all() -> Result<(), 
             workflow_id: "wf-many".to_string(),
             reply,
         }
-    }).await?;
+    })
+    .await?;
 
     // Then: All 50 should be ready (no dependencies)
     let ready = result?;
@@ -1109,34 +1307,47 @@ async fn given_many_beads_when_query_all_ready_then_returns_all() -> Result<(), 
 }
 
 #[tokio::test]
-async fn given_long_chain_when_complete_sequentially_then_unlocks_one_at_a_time() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_long_chain_when_complete_sequentially_then_unlocks_one_at_a_time()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A linear chain A -> B -> C -> D -> E
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
-            workflow_id: "wf-chain".to_string(),
-        });
+        workflow_id: "wf-chain".to_string(),
+    });
 
-    assert!(result.is_ok(), "Register should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Register should succeed failed: {:?}",
+        result
+    );
 
     let beads = ["a", "b", "c", "d", "e"];
     for bead in &beads {
         let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
-                workflow_id: "wf-chain".to_string(),
-                bead_id: bead.to_string(),
-            });
+            workflow_id: "wf-chain".to_string(),
+            bead_id: bead.to_string(),
+        });
 
-        assert!(result.is_ok(), "Schedule should succeed failed: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Schedule should succeed failed: {:?}",
+            result
+        );
     }
 
     // Add chain dependencies: a -> b -> c -> d -> e
     for i in 0..beads.len() - 1 {
         let result = scheduler.send_message(SchedulerMessage::AddDependency {
-                workflow_id: "wf-chain".to_string(),
-                from_bead: beads[i].to_string(),
-                to_bead: beads[i + 1].to_string(),
-            });
+            workflow_id: "wf-chain".to_string(),
+            from_bead: beads[i].to_string(),
+            to_bead: beads[i + 1].to_string(),
+        });
 
-        assert!(result.is_ok(), "Add dependency should succeed failed: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Add dependency should succeed failed: {:?}",
+            result
+        );
     }
 
     tokio::time::sleep(Duration::from_millis(20)).await;
@@ -1154,11 +1365,15 @@ async fn given_long_chain_when_complete_sequentially_then_unlocks_one_at_a_time(
     // Complete each bead and verify next becomes ready
     for i in 0..beads.len() - 1 {
         let result = scheduler.send_message(SchedulerMessage::OnBeadCompleted {
-                workflow_id: "wf-chain".to_string(),
-                bead_id: beads[i].to_string(),
-            });
+            workflow_id: "wf-chain".to_string(),
+            bead_id: beads[i].to_string(),
+        });
 
-        assert!(result.is_ok(), "Complete should succeed failed: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Complete should succeed failed: {:?}",
+            result
+        );
 
         tokio::time::sleep(Duration::from_millis(10)).await;
 
@@ -1184,30 +1399,41 @@ async fn given_long_chain_when_complete_sequentially_then_unlocks_one_at_a_time(
 }
 
 #[tokio::test]
-async fn given_completed_bead_when_complete_again_then_idempotent() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_completed_bead_when_complete_again_then_idempotent()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A workflow with a completed bead
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
-            workflow_id: "wf-idempotent".to_string(),
-        });
+        workflow_id: "wf-idempotent".to_string(),
+    });
 
-    assert!(result.is_ok(), "Register should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Register should succeed failed: {:?}",
+        result
+    );
 
     let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
-            workflow_id: "wf-idempotent".to_string(),
-            bead_id: "bead-1".to_string(),
-        });
+        workflow_id: "wf-idempotent".to_string(),
+        bead_id: "bead-1".to_string(),
+    });
 
-
-    assert!(result.is_ok(), "Schedule should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Schedule should succeed failed: {:?}",
+        result
+    );
 
     let result = scheduler.send_message(SchedulerMessage::OnBeadCompleted {
-            workflow_id: "wf-idempotent".to_string(),
-            bead_id: "bead-1".to_string(),
-        });
+        workflow_id: "wf-idempotent".to_string(),
+        bead_id: "bead-1".to_string(),
+    });
 
-
-    assert!(result.is_ok(), "First complete should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "First complete should succeed failed: {:?}",
+        result
+    );
 
     tokio::time::sleep(Duration::from_millis(10)).await;
 
@@ -1222,12 +1448,13 @@ async fn given_completed_bead_when_complete_again_then_idempotent() -> Result<()
 
     // Verify workflow state is still consistent
     let status = call_with_timeout(&scheduler, |reply| SchedulerMessage::GetWorkflowStatus {
-            workflow_id: "wf-idempotent".to_string(),
-            reply,
-        })
-        .await?;
+        workflow_id: "wf-idempotent".to_string(),
+        reply,
+    })
+    .await?;
 
-    let status = status.ok_or_else(|| -> Box<dyn std::error::Error> { "Workflow should exist".into() })?;
+    let status =
+        status.ok_or_else(|| -> Box<dyn std::error::Error> { "Workflow should exist".into() })?;
     assert_eq!(
         status.completed_beads, 1,
         "Should still show 1 completed bead"
@@ -1239,14 +1466,19 @@ async fn given_completed_bead_when_complete_again_then_idempotent() -> Result<()
 }
 
 #[tokio::test]
-async fn given_nonexistent_bead_when_complete_then_no_crash() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_nonexistent_bead_when_complete_then_no_crash()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A workflow with no beads
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
-            workflow_id: "wf-ghost".to_string(),
-        });
+        workflow_id: "wf-ghost".to_string(),
+    });
 
-    assert!(result.is_ok(), "Register should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Register should succeed failed: {:?}",
+        result
+    );
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     // When: Try to complete a non-existent bead
@@ -1274,50 +1506,70 @@ async fn given_nonexistent_bead_when_complete_then_no_crash() -> Result<(), Box<
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_wide_fan_out_when_root_completes_then_all_children_ready() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_wide_fan_out_when_root_completes_then_all_children_ready()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A fan-out DAG: ROOT -> [A, B, C, D, E]
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
-            workflow_id: "wf-fanout".to_string(),
-        });
+        workflow_id: "wf-fanout".to_string(),
+    });
 
-    assert!(result.is_ok(), "Register should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Register should succeed failed: {:?}",
+        result
+    );
 
     let children = ["a", "b", "c", "d", "e"];
     let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
-            workflow_id: "wf-fanout".to_string(),
-            bead_id: "root".to_string(),
-        });
+        workflow_id: "wf-fanout".to_string(),
+        bead_id: "root".to_string(),
+    });
 
-    assert!(result.is_ok(), "Schedule should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Schedule should succeed failed: {:?}",
+        result
+    );
 
     for child in &children {
         let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
-                workflow_id: "wf-fanout".to_string(),
-                bead_id: child.to_string(),
-            });
+            workflow_id: "wf-fanout".to_string(),
+            bead_id: child.to_string(),
+        });
 
-        assert!(result.is_ok(), "Schedule should succeed failed: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Schedule should succeed failed: {:?}",
+            result
+        );
 
         let result = scheduler.send_message(SchedulerMessage::AddDependency {
-                workflow_id: "wf-fanout".to_string(),
-                from_bead: "root".to_string(),
-                to_bead: child.to_string(),
-            });
+            workflow_id: "wf-fanout".to_string(),
+            from_bead: "root".to_string(),
+            to_bead: child.to_string(),
+        });
 
-
-        assert!(result.is_ok(), "Add dependency should succeed failed: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Add dependency should succeed failed: {:?}",
+            result
+        );
     }
 
     tokio::time::sleep(Duration::from_millis(20)).await;
 
     // When: Complete root
     let result = scheduler.send_message(SchedulerMessage::OnBeadCompleted {
-            workflow_id: "wf-fanout".to_string(),
-            bead_id: "root".to_string(),
-        });
+        workflow_id: "wf-fanout".to_string(),
+        bead_id: "root".to_string(),
+    });
 
-    assert!(result.is_ok(), "Complete should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Complete should succeed failed: {:?}",
+        result
+    );
 
     tokio::time::sleep(Duration::from_millis(20)).await;
 
@@ -1344,41 +1596,57 @@ async fn given_wide_fan_out_when_root_completes_then_all_children_ready() -> Res
 }
 
 #[tokio::test]
-async fn given_wide_fan_in_when_all_parents_complete_then_sink_ready() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_wide_fan_in_when_all_parents_complete_then_sink_ready()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A fan-in DAG: [A, B, C, D, E] -> SINK
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
-            workflow_id: "wf-fanin".to_string(),
-        });
+        workflow_id: "wf-fanin".to_string(),
+    });
 
-    assert!(result.is_ok(), "Register should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Register should succeed failed: {:?}",
+        result
+    );
 
     let parents = ["a", "b", "c", "d", "e"];
     for parent in &parents {
         let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
-                workflow_id: "wf-fanin".to_string(),
-                bead_id: parent.to_string(),
-            });
+            workflow_id: "wf-fanin".to_string(),
+            bead_id: parent.to_string(),
+        });
 
-        assert!(result.is_ok(), "Schedule should succeed failed: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Schedule should succeed failed: {:?}",
+            result
+        );
     }
 
     let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
-            workflow_id: "wf-fanin".to_string(),
-            bead_id: "sink".to_string(),
-        });
+        workflow_id: "wf-fanin".to_string(),
+        bead_id: "sink".to_string(),
+    });
 
-
-    assert!(result.is_ok(), "Schedule should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Schedule should succeed failed: {:?}",
+        result
+    );
 
     for parent in &parents {
         let result = scheduler.send_message(SchedulerMessage::AddDependency {
-                workflow_id: "wf-fanin".to_string(),
-                from_bead: parent.to_string(),
-                to_bead: "sink".to_string(),
-            });
+            workflow_id: "wf-fanin".to_string(),
+            from_bead: parent.to_string(),
+            to_bead: "sink".to_string(),
+        });
 
-        assert!(result.is_ok(), "Add dependency should succeed failed: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Add dependency should succeed failed: {:?}",
+            result
+        );
     }
 
     tokio::time::sleep(Duration::from_millis(20)).await;
@@ -1386,11 +1654,15 @@ async fn given_wide_fan_in_when_all_parents_complete_then_sink_ready() -> Result
     // Complete all parents except last one
     for parent in &parents[..4] {
         let result = scheduler.send_message(SchedulerMessage::OnBeadCompleted {
-                workflow_id: "wf-fanin".to_string(),
-                bead_id: parent.to_string(),
-            });
+            workflow_id: "wf-fanin".to_string(),
+            bead_id: parent.to_string(),
+        });
 
-        assert!(result.is_ok(), "Complete should succeed failed: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Complete should succeed failed: {:?}",
+            result
+        );
     }
 
     tokio::time::sleep(Duration::from_millis(10)).await;
@@ -1410,11 +1682,15 @@ async fn given_wide_fan_in_when_all_parents_complete_then_sink_ready() -> Result
 
     // When: Complete the last parent
     let result = scheduler.send_message(SchedulerMessage::OnBeadCompleted {
-            workflow_id: "wf-fanin".to_string(),
-            bead_id: "e".to_string(),
-        });
+        workflow_id: "wf-fanin".to_string(),
+        bead_id: "e".to_string(),
+    });
 
-    assert!(result.is_ok(), "Complete should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Complete should succeed failed: {:?}",
+        result
+    );
 
     tokio::time::sleep(Duration::from_millis(10)).await;
 
@@ -1437,37 +1713,50 @@ async fn given_wide_fan_in_when_all_parents_complete_then_sink_ready() -> Result
 }
 
 #[tokio::test]
-async fn given_w_dag_when_complete_in_order_then_correct_unlocks() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_w_dag_when_complete_in_order_then_correct_unlocks()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A W-shaped DAG
     // A -> B -> E
     //   \     /
     //    C -> D
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
-            workflow_id: "wf-w".to_string(),
-        });
+        workflow_id: "wf-w".to_string(),
+    });
 
-    assert!(result.is_ok(), "Register should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Register should succeed failed: {:?}",
+        result
+    );
 
     for bead in ["a", "b", "c", "d", "e"] {
         let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
-                workflow_id: "wf-w".to_string(),
-                bead_id: bead.to_string(),
-            });
+            workflow_id: "wf-w".to_string(),
+            bead_id: bead.to_string(),
+        });
 
-        assert!(result.is_ok(), "Schedule should succeed failed: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Schedule should succeed failed: {:?}",
+            result
+        );
     }
 
     // A -> B, A -> C, B -> E, C -> D, D -> E
     let edges = [("a", "b"), ("a", "c"), ("b", "e"), ("c", "d"), ("d", "e")];
     for (from, to) in &edges {
         let result = scheduler.send_message(SchedulerMessage::AddDependency {
-                workflow_id: "wf-w".to_string(),
-                from_bead: from.to_string(),
-                to_bead: to.to_string(),
-            });
+            workflow_id: "wf-w".to_string(),
+            from_bead: from.to_string(),
+            to_bead: to.to_string(),
+        });
 
-        assert!(result.is_ok(), "Add dependency should succeed failed: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Add dependency should succeed failed: {:?}",
+            result
+        );
     }
 
     tokio::time::sleep(Duration::from_millis(20)).await;
@@ -1484,9 +1773,9 @@ async fn given_w_dag_when_complete_in_order_then_correct_unlocks() -> Result<(),
 
     // Complete A -> B and C should be ready
     let result = scheduler.send_message(SchedulerMessage::OnBeadCompleted {
-            workflow_id: "wf-w".to_string(),
-            bead_id: "a".to_string(),
-        });
+        workflow_id: "wf-w".to_string(),
+        bead_id: "a".to_string(),
+    });
 
     assert!(result.is_ok(), "ok failed: {:?}", result);
     tokio::time::sleep(Duration::from_millis(10)).await;
@@ -1503,15 +1792,15 @@ async fn given_w_dag_when_complete_in_order_then_correct_unlocks() -> Result<(),
 
     // Complete B and C
     let result = scheduler.send_message(SchedulerMessage::OnBeadCompleted {
-            workflow_id: "wf-w".to_string(),
-            bead_id: "b".to_string(),
-        });
+        workflow_id: "wf-w".to_string(),
+        bead_id: "b".to_string(),
+    });
 
     assert!(result.is_ok(), "ok failed: {:?}", result);
     let result = scheduler.send_message(SchedulerMessage::OnBeadCompleted {
-            workflow_id: "wf-w".to_string(),
-            bead_id: "c".to_string(),
-        });
+        workflow_id: "wf-w".to_string(),
+        bead_id: "c".to_string(),
+    });
 
     assert!(result.is_ok(), "ok failed: {:?}", result);
     tokio::time::sleep(Duration::from_millis(10)).await;
@@ -1532,9 +1821,9 @@ async fn given_w_dag_when_complete_in_order_then_correct_unlocks() -> Result<(),
 
     // Complete D -> E should be ready
     let result = scheduler.send_message(SchedulerMessage::OnBeadCompleted {
-            workflow_id: "wf-w".to_string(),
-            bead_id: "d".to_string(),
-        });
+        workflow_id: "wf-w".to_string(),
+        bead_id: "d".to_string(),
+    });
 
     assert!(result.is_ok(), "ok failed: {:?}", result);
     tokio::time::sleep(Duration::from_millis(10)).await;
@@ -1546,9 +1835,7 @@ async fn given_w_dag_when_complete_in_order_then_correct_unlocks() -> Result<(),
         }
     })
     .await??;
-    assert!(ready.contains(&"e".to_string()),
-        "E should be ready"
-    );
+    assert!(ready.contains(&"e".to_string()), "E should be ready");
 
     scheduler.stop(None);
 
@@ -1560,32 +1847,44 @@ async fn given_w_dag_when_complete_in_order_then_correct_unlocks() -> Result<(),
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_bead_when_claimed_twice_then_second_claim_fails_or_idempotent() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_bead_when_claimed_twice_then_second_claim_fails_or_idempotent()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A workflow with a ready bead
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
-            workflow_id: "wf-double-claim".to_string(),
-        });
+        workflow_id: "wf-double-claim".to_string(),
+    });
 
-    assert!(result.is_ok(), "Register should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Register should succeed failed: {:?}",
+        result
+    );
 
     let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
-            workflow_id: "wf-double-claim".to_string(),
-            bead_id: "bead-1".to_string(),
-        });
+        workflow_id: "wf-double-claim".to_string(),
+        bead_id: "bead-1".to_string(),
+    });
 
-
-    assert!(result.is_ok(), "Schedule should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Schedule should succeed failed: {:?}",
+        result
+    );
 
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     // When: First worker claims the bead
     let result = scheduler.send_message(SchedulerMessage::ClaimBead {
-            bead_id: "bead-1".to_string(),
-            worker_id: "worker-1".to_string(),
-        });
+        bead_id: "bead-1".to_string(),
+        worker_id: "worker-1".to_string(),
+    });
 
-    assert!(result.is_ok(), "First claim should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "First claim should succeed failed: {:?}",
+        result
+    );
 
     tokio::time::sleep(Duration::from_millis(10)).await;
 
@@ -1602,7 +1901,8 @@ async fn given_bead_when_claimed_twice_then_second_claim_fails_or_idempotent() -
     tokio::time::sleep(Duration::from_millis(10)).await;
     let all_ready: Vec<(String, String)> = call_with_timeout(&scheduler, |reply| {
         SchedulerMessage::GetAllReadyBeads { reply }
-    }).await?;
+    })
+    .await?;
 
     let has_bead = all_ready.iter().any(|(_, bid)| bid == "bead-1");
     assert!(!has_bead, "Bead should still be claimed");
@@ -1613,22 +1913,31 @@ async fn given_bead_when_claimed_twice_then_second_claim_fails_or_idempotent() -
 }
 
 #[tokio::test]
-async fn given_multiple_beads_when_claim_different_then_all_claimed() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_multiple_beads_when_claim_different_then_all_claimed()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A workflow with multiple ready beads
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
-            workflow_id: "wf-multi-claim".to_string(),
-        });
+        workflow_id: "wf-multi-claim".to_string(),
+    });
 
-    assert!(result.is_ok(), "Register should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Register should succeed failed: {:?}",
+        result
+    );
 
     for i in 0..5 {
         let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
-                workflow_id: "wf-multi-claim".to_string(),
-                bead_id: format!("bead-{}", i),
-            });
+            workflow_id: "wf-multi-claim".to_string(),
+            bead_id: format!("bead-{}", i),
+        });
 
-        assert!(result.is_ok(), "Schedule should succeed failed: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Schedule should succeed failed: {:?}",
+            result
+        );
     }
 
     tokio::time::sleep(Duration::from_millis(20)).await;
@@ -1636,9 +1945,9 @@ async fn given_multiple_beads_when_claim_different_then_all_claimed() -> Result<
     // When: Different workers claim different beads
     for i in 0..5 {
         let result = scheduler.send_message(SchedulerMessage::ClaimBead {
-                bead_id: format!("bead-{}", i),
-                worker_id: format!("worker-{}", i),
-            });
+            bead_id: format!("bead-{}", i),
+            worker_id: format!("worker-{}", i),
+        });
 
         assert!(result.is_ok(), "Claim should succeed failed: {:?}", result);
     }
@@ -1648,7 +1957,8 @@ async fn given_multiple_beads_when_claim_different_then_all_claimed() -> Result<
     // Then: No beads should appear in ready list (all claimed)
     let all_ready: Vec<(String, String)> = call_with_timeout(&scheduler, |reply| {
         SchedulerMessage::GetAllReadyBeads { reply }
-    }).await?;
+    })
+    .await?;
 
     assert!(all_ready.is_empty(), "All beads should be claimed");
 
@@ -1662,22 +1972,30 @@ async fn given_multiple_beads_when_claim_different_then_all_claimed() -> Result<
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_invalid_dependency_when_add_then_no_crash() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_invalid_dependency_when_add_then_no_crash() -> Result<(), Box<dyn std::error::Error>>
+{
     // Given: A workflow
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
-            workflow_id: "wf-invalid-dep".to_string(),
-        });
+        workflow_id: "wf-invalid-dep".to_string(),
+    });
 
-    assert!(result.is_ok(), "Register should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Register should succeed failed: {:?}",
+        result
+    );
 
     let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
-            workflow_id: "wf-invalid-dep".to_string(),
-            bead_id: "a".to_string(),
-        });
+        workflow_id: "wf-invalid-dep".to_string(),
+        bead_id: "a".to_string(),
+    });
 
-
-    assert!(result.is_ok(), "Schedule should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Schedule should succeed failed: {:?}",
+        result
+    );
 
     tokio::time::sleep(Duration::from_millis(10)).await;
 
@@ -1703,17 +2021,22 @@ async fn given_invalid_dependency_when_add_then_no_crash() -> Result<(), Box<dyn
 }
 
 #[tokio::test]
-async fn given_rapid_messages_when_sent_then_all_processed() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_rapid_messages_when_sent_then_all_processed()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A scheduler
     let scheduler = setup_scheduler().await?;
 
     // When: Send 100 register/schedule messages rapidly
     for i in 0..100 {
         let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
-                workflow_id: format!("wf-rapid-{}", i),
-            });
+            workflow_id: format!("wf-rapid-{}", i),
+        });
 
-        assert!(result.is_ok(), "Register should succeed failed: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Register should succeed failed: {:?}",
+            result
+        );
     }
 
     // Allow time for processing
@@ -1733,30 +2056,38 @@ async fn given_rapid_messages_when_sent_then_all_processed() -> Result<(), Box<d
 }
 
 #[tokio::test]
-async fn given_workflow_unregistered_when_query_status_then_returns_none() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_workflow_unregistered_when_query_status_then_returns_none()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A registered then unregistered workflow
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
-            workflow_id: "wf-gone".to_string(),
-        });
+        workflow_id: "wf-gone".to_string(),
+    });
 
-    assert!(result.is_ok(), "Register should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Register should succeed failed: {:?}",
+        result
+    );
 
     let result = scheduler.send_message(SchedulerMessage::UnregisterWorkflow {
-            workflow_id: "wf-gone".to_string(),
-        });
+        workflow_id: "wf-gone".to_string(),
+    });
 
-
-    assert!(result.is_ok(), "Unregister should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Unregister should succeed failed: {:?}",
+        result
+    );
 
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     // When: Query workflow status
     let status = call_with_timeout(&scheduler, |reply| SchedulerMessage::GetWorkflowStatus {
-            workflow_id: "wf-gone".to_string(),
-            reply,
-        })
-        .await?;
+        workflow_id: "wf-gone".to_string(),
+        reply,
+    })
+    .await?;
 
     // Then: Should return None
     assert!(status.is_none(), "Unregistered workflow should return None");
@@ -1771,32 +2102,41 @@ async fn given_workflow_unregistered_when_query_status_then_returns_none() -> Re
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_workflow_when_beads_completed_then_status_reflects_progress() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_workflow_when_beads_completed_then_status_reflects_progress()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A workflow with 5 beads
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
-            workflow_id: "wf-progress".to_string(),
-        });
+        workflow_id: "wf-progress".to_string(),
+    });
 
-    assert!(result.is_ok(), "Register should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Register should succeed failed: {:?}",
+        result
+    );
 
     for i in 0..5 {
         let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
-                workflow_id: "wf-progress".to_string(),
-                bead_id: format!("bead-{}", i),
-            });
+            workflow_id: "wf-progress".to_string(),
+            bead_id: format!("bead-{}", i),
+        });
 
-        assert!(result.is_ok(), "Schedule should succeed failed: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Schedule should succeed failed: {:?}",
+            result
+        );
     }
 
     tokio::time::sleep(Duration::from_millis(20)).await;
 
     // Initially: 0 completed, 5 total
     let status = call_with_timeout(&scheduler, |reply| SchedulerMessage::GetWorkflowStatus {
-            workflow_id: "wf-progress".to_string(),
-            reply,
-        })
-        .await?;
+        workflow_id: "wf-progress".to_string(),
+        reply,
+    })
+    .await?;
     let status = status.ok_or_else(|| -> Box<dyn std::error::Error> { "exists".into() })?;
     assert_eq!(status.total_beads, 5);
     assert_eq!(status.completed_beads, 0);
@@ -1805,21 +2145,25 @@ async fn given_workflow_when_beads_completed_then_status_reflects_progress() -> 
     // Complete 3 beads
     for i in 0..3 {
         let result = scheduler.send_message(SchedulerMessage::OnBeadCompleted {
-                workflow_id: "wf-progress".to_string(),
-                bead_id: format!("bead-{}", i),
-            });
+            workflow_id: "wf-progress".to_string(),
+            bead_id: format!("bead-{}", i),
+        });
 
-        assert!(result.is_ok(), "Complete should succeed failed: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Complete should succeed failed: {:?}",
+            result
+        );
     }
 
     tokio::time::sleep(Duration::from_millis(20)).await;
 
     // Then: 3 completed, 5 total, not complete
     let status = call_with_timeout(&scheduler, |reply| SchedulerMessage::GetWorkflowStatus {
-            workflow_id: "wf-progress".to_string(),
-            reply,
-        })
-        .await?;
+        workflow_id: "wf-progress".to_string(),
+        reply,
+    })
+    .await?;
     let status = status.ok_or_else(|| -> Box<dyn std::error::Error> { "exists".into() })?;
     assert_eq!(status.total_beads, 5);
     assert_eq!(status.completed_beads, 3);
@@ -1828,21 +2172,25 @@ async fn given_workflow_when_beads_completed_then_status_reflects_progress() -> 
     // Complete remaining 2
     for i in 3..5 {
         let result = scheduler.send_message(SchedulerMessage::OnBeadCompleted {
-                workflow_id: "wf-progress".to_string(),
-                bead_id: format!("bead-{}", i),
-            });
+            workflow_id: "wf-progress".to_string(),
+            bead_id: format!("bead-{}", i),
+        });
 
-        assert!(result.is_ok(), "Complete should succeed failed: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Complete should succeed failed: {:?}",
+            result
+        );
     }
 
     tokio::time::sleep(Duration::from_millis(20)).await;
 
     // Then: 5 completed, 5 total, complete!
     let status = call_with_timeout(&scheduler, |reply| SchedulerMessage::GetWorkflowStatus {
-            workflow_id: "wf-progress".to_string(),
-            reply,
-        })
-        .await?;
+        workflow_id: "wf-progress".to_string(),
+        reply,
+    })
+    .await?;
     let status = status.ok_or_else(|| -> Box<dyn std::error::Error> { "exists".into() })?;
     assert_eq!(status.total_beads, 5);
     assert_eq!(status.completed_beads, 5);
@@ -1854,41 +2202,54 @@ async fn given_workflow_when_beads_completed_then_status_reflects_progress() -> 
 }
 
 #[tokio::test]
-async fn given_bead_claimed_and_completed_when_check_stats_then_consistent() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_bead_claimed_and_completed_when_check_stats_then_consistent()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A workflow with beads
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
-            workflow_id: "wf-stats-consistency".to_string(),
-        });
+        workflow_id: "wf-stats-consistency".to_string(),
+    });
 
-    assert!(result.is_ok(), "Register should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Register should succeed failed: {:?}",
+        result
+    );
 
     for i in 0..3 {
         let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
-                workflow_id: "wf-stats-consistency".to_string(),
-                bead_id: format!("bead-{}", i),
-            });
+            workflow_id: "wf-stats-consistency".to_string(),
+            bead_id: format!("bead-{}", i),
+        });
 
-        assert!(result.is_ok(), "Schedule should succeed failed: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Schedule should succeed failed: {:?}",
+            result
+        );
     }
 
     tokio::time::sleep(Duration::from_millis(20)).await;
 
     // Claim one bead
     let result = scheduler.send_message(SchedulerMessage::ClaimBead {
-            bead_id: "bead-0".to_string(),
-            worker_id: "worker-1".to_string(),
-        });
+        bead_id: "bead-0".to_string(),
+        worker_id: "worker-1".to_string(),
+    });
 
     assert!(result.is_ok(), "Claim should succeed failed: {:?}", result);
 
     // Complete another bead
     let result = scheduler.send_message(SchedulerMessage::OnBeadCompleted {
-            workflow_id: "wf-stats-consistency".to_string(),
-            bead_id: "bead-1".to_string(),
-        });
+        workflow_id: "wf-stats-consistency".to_string(),
+        bead_id: "bead-1".to_string(),
+    });
 
-    assert!(result.is_ok(), "Complete should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Complete should succeed failed: {:?}",
+        result
+    );
 
     tokio::time::sleep(Duration::from_millis(20)).await;
 
@@ -1911,35 +2272,50 @@ async fn given_bead_claimed_and_completed_when_check_stats_then_consistent() -> 
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_workflows_when_query_one_then_no_cross_contamination() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_workflows_when_query_one_then_no_cross_contamination()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: Two workflows with different beads
     let scheduler = setup_scheduler().await?;
 
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
-            workflow_id: "wf-isolated-1".to_string(),
-        });
+        workflow_id: "wf-isolated-1".to_string(),
+    });
 
-
-    assert!(result.is_ok(), "Register should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Register should succeed failed: {:?}",
+        result
+    );
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
-            workflow_id: "wf-isolated-2".to_string(),
-        });
+        workflow_id: "wf-isolated-2".to_string(),
+    });
 
-    assert!(result.is_ok(), "Register should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Register should succeed failed: {:?}",
+        result
+    );
 
     let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
-            workflow_id: "wf-isolated-1".to_string(),
-            bead_id: "bead-from-1".to_string(),
-        });
+        workflow_id: "wf-isolated-1".to_string(),
+        bead_id: "bead-from-1".to_string(),
+    });
 
-
-    assert!(result.is_ok(), "Schedule should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Schedule should succeed failed: {:?}",
+        result
+    );
     let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
-            workflow_id: "wf-isolated-2".to_string(),
-            bead_id: "bead-from-2".to_string(),
-        });
+        workflow_id: "wf-isolated-2".to_string(),
+        bead_id: "bead-from-2".to_string(),
+    });
 
-    assert!(result.is_ok(), "Schedule should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Schedule should succeed failed: {:?}",
+        result
+    );
 
     tokio::time::sleep(Duration::from_millis(20)).await;
 
@@ -1981,31 +2357,43 @@ async fn given_workflows_when_query_one_then_no_cross_contamination() -> Result<
 }
 
 #[tokio::test]
-async fn given_workflow_with_self_dependency_when_query_then_blocked() -> Result<(), Box<dyn std::error::Error>> {
+async fn given_workflow_with_self_dependency_when_query_then_blocked()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A workflow where a bead depends on itself (edge case)
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
-            workflow_id: "wf-self".to_string(),
-        });
+        workflow_id: "wf-self".to_string(),
+    });
 
-    assert!(result.is_ok(), "Register should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Register should succeed failed: {:?}",
+        result
+    );
 
     let result = scheduler.send_message(SchedulerMessage::ScheduleBead {
-            workflow_id: "wf-self".to_string(),
-            bead_id: "self-dep".to_string(),
-        });
+        workflow_id: "wf-self".to_string(),
+        bead_id: "self-dep".to_string(),
+    });
 
-
-    assert!(result.is_ok(), "Schedule should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Schedule should succeed failed: {:?}",
+        result
+    );
 
     // Try to add self-dependency
     let result = scheduler.send_message(SchedulerMessage::AddDependency {
-            workflow_id: "wf-self".to_string(),
-            from_bead: "self-dep".to_string(),
-            to_bead: "self-dep".to_string(),
-        });
+        workflow_id: "wf-self".to_string(),
+        from_bead: "self-dep".to_string(),
+        to_bead: "self-dep".to_string(),
+    });
 
-    assert!(result.is_ok(), "Message send should succeed failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Message send should succeed failed: {:?}",
+        result
+    );
 
     tokio::time::sleep(Duration::from_millis(10)).await;
 
@@ -2018,4 +2406,3 @@ async fn given_workflow_with_self_dependency_when_query_then_blocked() -> Result
 
     Ok(())
 }
-

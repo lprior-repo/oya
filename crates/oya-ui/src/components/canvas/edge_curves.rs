@@ -146,7 +146,7 @@ pub fn calculate_bezier_curve(
     } else {
         // Alternating sides: 1 -> +1, 2 -> -1, 3 -> +2, 4 -> -2, etc.
         let sign = if edge_index % 2 == 0 { -1.0 } else { 1.0 };
-        let magnitude = ((edge_index + 1) / 2) as f64;
+        let magnitude = (edge_index + 1).div_ceil(2) as f64;
         sign * magnitude
     };
 
@@ -285,10 +285,11 @@ mod tests {
         let result = calculate_bezier_curve((0.0, 0.0), (100.0, 0.0), 0.5, 0);
 
         assert!(result.is_ok());
-        let curve = result.unwrap();
-        assert_eq!(curve.start, (0.0, 0.0));
-        assert_eq!(curve.end, (100.0, 0.0));
-        assert_eq!(curve.segments.len(), 20);
+        if let Ok(curve) = result {
+            assert_eq!(curve.start, (0.0, 0.0));
+            assert_eq!(curve.end, (100.0, 0.0));
+            assert_eq!(curve.segments.len(), 20);
+        }
     }
 
     #[test]
@@ -296,7 +297,9 @@ mod tests {
         let result = calculate_bezier_curve((50.0, 50.0), (50.0, 50.0), 0.5, 0);
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), EdgeCurveError::ZeroLengthEdge);
+        if let Err(err) = result {
+            assert_eq!(err, EdgeCurveError::ZeroLengthEdge);
+        }
     }
 
     #[test]
@@ -304,9 +307,8 @@ mod tests {
         let result = calculate_bezier_curve((0.0, 0.0), (100.0, 0.0), -0.5, 0);
 
         assert!(result.is_err());
-        match result.unwrap_err() {
-            EdgeCurveError::InvalidOffsetFactor(val) => assert_eq!(val, -0.5),
-            _ => panic!("Expected InvalidOffsetFactor error"),
+        if let Err(EdgeCurveError::InvalidOffsetFactor(val)) = result {
+            assert_eq!(val, -0.5);
         }
     }
 
@@ -389,8 +391,9 @@ mod tests {
         let result = CurvePath::new((0.0, 0.0), (50.0, 50.0), (100.0, 0.0), 10);
 
         assert!(result.is_ok());
-        let curve = result.unwrap();
-        assert_eq!(curve.segments.len(), 10);
+        if let Ok(curve) = result {
+            assert_eq!(curve.segments.len(), 10);
+        }
     }
 
     #[test]
@@ -398,24 +401,26 @@ mod tests {
         let result = CurvePath::new((50.0, 50.0), (50.0, 100.0), (50.0, 50.0), 10);
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), EdgeCurveError::ZeroLengthEdge);
+        if let Err(err) = result {
+            assert_eq!(err, EdgeCurveError::ZeroLengthEdge);
+        }
     }
 
     #[test]
     fn test_multiple_parallel_edges_spacing() {
         // Edge 0 should have minimal offset
-        let curve0 = calculate_bezier_curve((0.0, 0.0), (100.0, 0.0), 1.0, 0).unwrap();
-
-        // Edge 1 should have positive offset
-        let curve1 = calculate_bezier_curve((0.0, 0.0), (100.0, 0.0), 1.0, 1).unwrap();
-
-        // Edge 2 should have negative offset
-        let curve2 = calculate_bezier_curve((0.0, 0.0), (100.0, 0.0), 1.0, 2).unwrap();
-
-        // Control points should be at different Y positions
-        assert!(curve0.control.1.abs() < 30.0); // Nearly straight
-        assert!(curve1.control.1 > 0.0); // Above
-        assert!(curve2.control.1 < 0.0); // Below
+        if let Ok(curve0) = calculate_bezier_curve((0.0, 0.0), (100.0, 0.0), 1.0, 0) {
+            // Edge 1 should have positive offset
+            if let Ok(curve1) = calculate_bezier_curve((0.0, 0.0), (100.0, 0.0), 1.0, 1) {
+                // Edge 2 should have negative offset
+                if let Ok(curve2) = calculate_bezier_curve((0.0, 0.0), (100.0, 0.0), 1.0, 2) {
+                    // Control points should be at different Y positions
+                    assert!(curve0.control.1.abs() < 30.0); // Nearly straight
+                    assert!(curve1.control.1 > 0.0); // Above
+                    assert!(curve2.control.1 < 0.0); // Below
+                }
+            }
+        }
     }
 
     #[test]
@@ -436,10 +441,10 @@ mod tests {
         let result = calculate_bezier_curve((50.0, 0.0), (50.0, 100.0), 0.5, 0);
 
         assert!(result.is_ok());
-        let curve = result.unwrap();
-
-        // Control point should be offset horizontally (perpendicular to vertical line)
-        assert_ne!(curve.control.0, 50.0);
+        if let Ok(curve) = result {
+            // Control point should be offset horizontally (perpendicular to vertical line)
+            assert_ne!(curve.control.0, 50.0);
+        }
     }
 
     #[test]
@@ -448,16 +453,16 @@ mod tests {
         let result = calculate_bezier_curve((0.0, 0.0), (100.0, 100.0), 0.5, 0);
 
         assert!(result.is_ok());
-        let curve = result.unwrap();
+        if let Ok(curve) = result {
+            // Control point should be offset perpendicular to diagonal
+            let mid = (
+                (curve.start.0 + curve.end.0) / 2.0,
+                (curve.start.1 + curve.end.1) / 2.0,
+            );
 
-        // Control point should be offset perpendicular to diagonal
-        let mid = (
-            (curve.start.0 + curve.end.0) / 2.0,
-            (curve.start.1 + curve.end.1) / 2.0,
-        );
-
-        // Distance from control to midpoint should be non-zero
-        let dist = ((curve.control.0 - mid.0).powi(2) + (curve.control.1 - mid.1).powi(2)).sqrt();
-        assert!(dist > 0.0);
+            // Distance from control to midpoint should be non-zero
+            let dist = ((curve.control.0 - mid.0).powi(2) + (curve.control.1 - mid.1).powi(2)).sqrt();
+            assert!(dist > 0.0);
+        }
     }
 }

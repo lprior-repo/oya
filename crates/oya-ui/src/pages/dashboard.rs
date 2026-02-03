@@ -306,6 +306,5 @@ mod tests {
     fn test_dashboard_module_compiles() {
         // Dashboard module compiles successfully
         // Component tests require runtime environment
-        assert!(true);
     }
 }

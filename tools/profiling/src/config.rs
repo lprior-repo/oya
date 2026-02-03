@@ -6,7 +6,7 @@
 
 use crate::error::{ProfilingError, Result};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 /// Maximum allowed profiling duration (safety limit)
@@ -132,7 +132,7 @@ impl ProfilingConfig {
 
     /// Get the output path
     #[must_use]
-    pub fn output_path(&self) -> &PathBuf {
+    pub const fn output_path(&self) -> &PathBuf {
         &self.output_path
     }
 
@@ -150,7 +150,7 @@ impl ProfilingConfig {
 
     /// Get the working directory (if set)
     #[must_use]
-    pub fn working_dir(&self) -> Option<&PathBuf> {
+    pub const fn working_dir(&self) -> Option<&PathBuf> {
         self.working_dir.as_ref()
     }
 
@@ -169,7 +169,7 @@ impl ProfilingConfig {
     }
 
     /// Validate sampling interval (must be >=5s to ensure <10% overhead)
-    fn validate_sampling_interval(interval: &Duration) -> Result<()> {
+    const fn validate_sampling_interval(interval: &Duration) -> Result<()> {
         let secs = interval.as_secs();
         if secs < MIN_SAMPLING_INTERVAL_SECS {
             Err(ProfilingError::SamplingIntervalTooShort(
@@ -182,7 +182,7 @@ impl ProfilingConfig {
     }
 
     /// Validate output path
-    fn validate_output_path(path: &PathBuf) -> Result<()> {
+    fn validate_output_path(path: &Path) -> Result<()> {
         if path.as_os_str().is_empty() {
             Err(ProfilingError::InvalidConfig(
                 "output path cannot be empty".to_string(),

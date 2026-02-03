@@ -56,8 +56,9 @@ impl Default for PanOffset {
 }
 
 /// Drag state for pan operations
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum DragState {
+    #[default]
     Idle,
     Dragging {
         start_x: f64,
@@ -65,12 +66,6 @@ pub enum DragState {
         current_x: f64,
         current_y: f64,
     },
-}
-
-impl Default for DragState {
-    fn default() -> Self {
-        Self::Idle
-    }
 }
 
 #[must_use]
@@ -116,6 +111,10 @@ pub const fn get_drag_delta(state: DragState) -> Option<(f64, f64)> {
     }
 }
 
+/// Applies a pan delta to the current offset with optional bounds checking
+///
+/// # Errors
+/// Returns an error if the provided bounds are invalid (min > max for either axis)
 pub fn apply_pan_delta(
     offset: PanOffset,
     dx: f64,
@@ -128,14 +127,12 @@ pub fn apply_pan_delta(
         Some((min_x, min_y, max_x, max_y)) => {
             if min_x > max_x {
                 return Err(format!(
-                    "Invalid X bounds: min ({}) > max ({})",
-                    min_x, max_x
+                    "Invalid X bounds: min ({min_x}) > max ({max_x})"
                 ));
             }
             if min_y > max_y {
                 return Err(format!(
-                    "Invalid Y bounds: min ({}) > max ({})",
-                    min_y, max_y
+                    "Invalid Y bounds: min ({min_y}) > max ({max_y})"
                 ));
             }
 
@@ -152,8 +149,8 @@ mod tests {
     #[test]
     fn test_pan_offset_new() {
         let offset = PanOffset::new(100.0, 200.0);
-        assert_eq!(offset.x(), 100.0);
-        assert_eq!(offset.y(), 200.0);
+        assert!((offset.x() - 100.0).abs() < 1e-10);
+        assert!((offset.y() - 200.0).abs() < 1e-10);
     }
 
     #[test]
@@ -167,19 +164,17 @@ mod tests {
         let state = DragState::Idle;
         let dragging = start_drag(state, 150.0, 250.0);
 
-        match dragging {
-            DragState::Dragging {
-                start_x,
-                start_y,
-                current_x,
-                current_y,
-            } => {
-                assert_eq!(start_x, 150.0);
-                assert_eq!(start_y, 250.0);
-                assert_eq!(current_x, 150.0);
-                assert_eq!(current_y, 250.0);
-            }
-            _ => panic!("Expected Dragging state"),
+        if let DragState::Dragging {
+            start_x,
+            start_y,
+            current_x,
+            current_y,
+        } = dragging
+        {
+            assert!((start_x - 150.0).abs() < 1e-10);
+            assert!((start_y - 250.0).abs() < 1e-10);
+            assert!((current_x - 150.0).abs() < 1e-10);
+            assert!((current_y - 250.0).abs() < 1e-10);
         }
     }
 
@@ -193,7 +188,11 @@ mod tests {
         };
 
         let delta = get_drag_delta(state);
-        assert_eq!(delta, Some((50.0, 50.0)));
+        assert!(delta.is_some());
+        if let Some((dx, dy)) = delta {
+            assert!((dx - 50.0).abs() < 1e-10);
+            assert!((dy - 50.0).abs() < 1e-10);
+        }
     }
 
     #[test]
@@ -202,8 +201,9 @@ mod tests {
         let result = apply_pan_delta(offset, 50.0, -30.0, None);
 
         assert!(result.is_ok());
-        let new_offset = result.unwrap();
-        assert_eq!(new_offset.x(), 150.0);
-        assert_eq!(new_offset.y(), 170.0);
+        if let Ok(new_offset) = result {
+            assert!((new_offset.x() - 150.0).abs() < 1e-10);
+            assert!((new_offset.y() - 170.0).abs() < 1e-10);
+        }
     }
 }
