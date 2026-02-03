@@ -8,10 +8,40 @@ use std::sync::Arc;
 use surrealdb::engine::any::Any;
 use surrealdb::engine::local::{Db, RocksDb};
 use surrealdb::Surreal;
+use thiserror::Error;
+use tokio::fs::OpenOptions;
+use tokio::io::AsyncWriteExt;
 
 use crate::error::{ConnectionError, Result};
 use crate::event::BeadEvent;
 use crate::types::BeadId;
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum AppendError {
+    #[error("failed to open wal file: {0}")]
+    WalOpenFailed(String),
+
+    #[error("failed to write event to wal: {0}")]
+    WalWriteFailed(String),
+
+    #[error("failed to sync wal to disk: {0}")]
+    WalSyncFailed(String),
+
+    #[error("failed to close wal: {0}")]
+    WalCloseFailed(String),
+
+    #[error("failed to serialize event: {0}")]
+    SerializationFailed(String),
+
+    #[error("database write failed: {0}")]
+    DatabaseWriteFailed(String),
+}
+
+impl From<AppendError> for crate::error::Error {
+    fn from(err: AppendError) -> Self {
+        crate::error::Error::store_failed("append_event", err.to_string())
+    }
+}
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct SerializedEvent {
@@ -203,15 +233,26 @@ pub async fn connect(config: ConnectionConfig) -> Result<Arc<Surreal<Db>>> {
 
 pub struct DurableEventStore {
     db: Arc<Surreal<Any>>,
+    wal_dir: PathBuf,
 }
 
 impl DurableEventStore {
     pub async fn new(db: Arc<Surreal<Any>>) -> Result<Self> {
-        Ok(Self { db })
+        Ok(Self {
+            db,
+            wal_dir: PathBuf::from(".wal"),
+        })
+    }
+
+    pub fn with_wal_dir(mut self, wal_dir: impl Into<PathBuf>) -> Self {
+        self.wal_dir = wal_dir.into();
+        self
     }
 
     pub async fn append_event(&self, event: &BeadEvent) -> Result<()> {
         let serialized = SerializedEvent::from_bead_event(event)?;
+
+        self.append_to_wal(event, &serialized).await?;
 
         self.db
             .create::<Option<SerializedEvent>>(("state_transition", serialized.event_id.clone()))
@@ -224,17 +265,65 @@ impl DurableEventStore {
                 )
             })?;
 
-        self.db
-            .query("SELECT record::id FROM type::thing($table, $id)")
-            .bind(("table", "state_transition"))
-            .bind(("id", format!("{}", event.event_id())))
+        Ok(())
+    }
+
+    async fn append_to_wal(
+        &self,
+        event: &BeadEvent,
+        serialized: &SerializedEvent,
+    ) -> std::result::Result<(), AppendError> {
+        tokio::fs::create_dir_all(&self.wal_dir)
             .await
-            .map_err(|e| {
-                crate::error::Error::store_failed(
-                    "append_event",
-                    format!("failed to verify write: {}", e),
-                )
-            })?;
+            .map_err(|e| AppendError::WalOpenFailed(format!("create wal dir: {}", e)))?;
+
+        let wal_path = self.wal_dir.join(format!("{}.wal", event.bead_id()));
+
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&wal_path)
+            .await
+            .map_err(|e| AppendError::WalOpenFailed(format!("open wal file: {}", e)))?;
+
+        let serialized_data = bincode::serialize(&serialized)
+            .map_err(|e| AppendError::SerializationFailed(format!("{}", e)))?;
+
+        file.write_all(&serialized_data)
+            .await
+            .map_err(|e| AppendError::WalWriteFailed(format!("{}", e)))?;
+
+        file.sync_all()
+            .await
+            .map_err(|e| AppendError::WalSyncFailed(format!("fsync failed: {}", e)))?;
+
+        Ok(())
+    }
+
+    async fn append_to_wal(&self, event: &BeadEvent, serialized: &SerializedEvent) -> std::result::Result<(), AppendError> {
+        tokio::fs::create_dir_all(&self.wal_dir)
+            .await
+            .map_err(|e| AppendError::WalOpenFailed(format!("create wal dir: {}", e)))?;
+
+        let wal_path = self.wal_dir.join(format!("{}.wal", event.bead_id()));
+
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&wal_path)
+            .await
+            .map_err(|e| AppendError::WalOpenFailed(format!("open wal file: {}", e)))?;
+
+        let serialized_data = bincode::serialize(&serialized)
+            .map_err(|e| AppendError::SerializationFailed(format!("{}", e)))?;
+
+        file.write_all(&serialized_data)
+            .await
+            .map_err(|e| AppendError::WalWriteFailed(format!("{}", e)))?;
+
+        file.sync_all()
+            .await
+            .map_err(|e| AppendError::WalSyncFailed(format!("fsync failed: {}", e)))?;
 
         Ok(())
     }
@@ -313,13 +402,13 @@ mod tests {
         let serialized = SerializedEvent::from_bead_event(&event);
         assert!(serialized.is_ok());
 
-        let serialized = serialized.unwrap();
+        let serialized = serialized.expect("serialization should succeed");
         assert_eq!(serialized.event_type, "created");
 
         let deserialized = serialized.to_bead_event();
         assert!(deserialized.is_ok());
 
-        let deserialized = deserialized.unwrap();
+        let deserialized = deserialized.expect("deserialization should succeed");
         assert_eq!(deserialized.event_id(), event.event_id());
         assert_eq!(deserialized.bead_id(), event.bead_id());
         assert_eq!(deserialized.event_type(), "created");
@@ -355,7 +444,7 @@ mod tests {
                 event.event_type()
             );
 
-            let serialized = serialized.unwrap();
+            let serialized = serialized.expect("serialization should succeed");
             let deserialized = serialized.to_bead_event();
             assert!(
                 deserialized.is_ok(),
@@ -363,7 +452,7 @@ mod tests {
                 event.event_type()
             );
 
-            let deserialized = deserialized.unwrap();
+            let deserialized = deserialized.expect("deserialization should succeed");
             assert_eq!(deserialized.event_id(), event.event_id());
             assert_eq!(deserialized.bead_id(), event.bead_id());
             assert_eq!(deserialized.event_type(), event.event_type());
@@ -385,19 +474,18 @@ mod tests {
         let serialized = SerializedEvent::from_bead_event(&event);
         assert!(serialized.is_ok());
 
-        let serialized = serialized.unwrap();
+        let serialized = serialized.expect("serialization should succeed");
         assert_eq!(serialized.event_type, "phase_completed");
 
         let deserialized = serialized.to_bead_event();
         assert!(deserialized.is_ok());
 
-        let deserialized = deserialized.unwrap();
+        let deserialized = deserialized.expect("deserialization should succeed");
         assert_eq!(deserialized.event_id(), event.event_id());
         assert_eq!(deserialized.bead_id(), event.bead_id());
         assert_eq!(deserialized.event_type(), "phase_completed");
     }
 
-    #[test]
     fn test_connection_config_default() {
         let config = ConnectionConfig::default();
         assert_eq!(config.storage_path, PathBuf::from("./data/events"));
@@ -455,5 +543,24 @@ mod tests {
     fn test_connection_config_validate_empty_database() {
         let config = ConnectionConfig::default().with_database("");
         assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_append_error_display() {
+        let err = AppendError::WalWriteFailed("disk full".to_string());
+        assert!(err.to_string().contains("wal"));
+        assert!(err.to_string().contains("disk full"));
+
+        let db_err = AppendError::DatabaseWriteFailed("connection lost".to_string());
+        assert!(db_err.to_string().contains("database"));
+        assert!(db_err.to_string().contains("connection lost"));
+    }
+
+    #[test]
+    fn test_append_error_from_conversion() {
+        let append_err = AppendError::WalSyncFailed("IO error".to_string());
+        let crate_err: crate::error::Error = append_err.into();
+        assert!(crate_err.to_string().contains("append_event"));
+        assert!(crate_err.to_string().contains("IO error"));
     }
 }
