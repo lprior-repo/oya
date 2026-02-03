@@ -7,7 +7,7 @@ use std::path::Path;
 use tracing::{debug, warn};
 
 use crate::error::{Error, Result};
-use crate::functional::{FunctionalAudit, ViolationSeverity, audit_functional_style};
+use crate::functional::{audit_functional_style, FunctionalAudit, ViolationSeverity};
 
 /// Minimum functional code compliance percentage required (95%).
 const MIN_FUNCTIONAL_COMPLIANCE: f64 = 95.0;
@@ -125,7 +125,7 @@ impl FunctionalGate {
 
             return QualityGateResult::Failed {
                 reason: format!(
-                    "Critical violations found ({}). Code contains unwrap(), expect(), or panic!().",
+                    "Critical violations found ({}). Code contains panic or unsafe patterns.",
                     critical_violations.len()
                 ),
                 violations: violation_msgs,

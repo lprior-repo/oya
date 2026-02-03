@@ -29,6 +29,9 @@ pub enum StateManagerMessage {
         id: Ulid,
         response: tokio::sync::oneshot::Sender<Option<BeadState>>,
     },
+    QueryAllAgents {
+        response: tokio::sync::oneshot::Sender<Vec<AgentSummary>>,
+    },
 }
 
 /// Placeholder response from StateManagerActor
@@ -42,6 +45,14 @@ pub struct BeadState {
     pub updated_at: String,
     pub title: Option<String>,
     pub dependencies: Vec<String>,
+}
+
+/// Summary of an agent for listing
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct AgentSummary {
+    pub id: Ulid,
+    pub status: String,
+    pub bead_id: Option<String>,
 }
 
 /// Placeholder for SchedulerActor sender
@@ -135,6 +146,23 @@ pub fn mock_state_manager() -> StateManagerSender {
                         dependencies: vec![],
                     };
                     let _ = response.send(Some(mock_state));
+                }
+                StateManagerMessage::QueryAllAgents { response } => {
+                    tracing::debug!("State manager: Querying all agents");
+                    // Return mock agent list for testing
+                    let agents = vec![
+                        AgentSummary {
+                            id: Ulid::new(),
+                            status: "running".to_string(),
+                            bead_id: Some("bead-001".to_string()),
+                        },
+                        AgentSummary {
+                            id: Ulid::new(),
+                            status: "idle".to_string(),
+                            bead_id: Some("bead-002".to_string()),
+                        },
+                    ];
+                    let _ = response.send(agents);
                 }
             }
         }

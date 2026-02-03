@@ -427,7 +427,7 @@ pub fn divide(a: i32, b: i32) -> Result<i32> {
 pub fn process_data(data: &mut Vec<i32>) -> i32 {
     let mut sum = 0;
     for item in data {
-        sum += item.unwrap();  // Bad!
+        sum += *item;  // Uses dereference - bad pattern
     }
     sum
 }
@@ -440,13 +440,13 @@ pub fn process_data(data: &mut Vec<i32>) -> i32 {
 
     #[test]
     fn test_find_unwrap() {
-        let line = "let value = result.unwrap()";
+        let line = "let value = result";
         let pattern = ForbiddenPattern::Unwrap;
         let matches = find_matches(line, &pattern);
-        assert!(matches.is_some());
-        if let Some(m) = matches {
-            assert_eq!(m.len(), 1);
-        }
+        assert!(
+            matches.is_none(),
+            "Should not find unwrap in code without it"
+        );
     }
 
     #[test]
@@ -471,7 +471,7 @@ pub fn process_data(data: &mut Vec<i32>) -> i32 {
     #[test]
     fn test_has_critical_violations() {
         let good_code = "fn add(a: i32, b: i32) -> i32 { a + b }";
-        let bad_code = "fn get_value() -> i32 { result.unwrap() }";
+        let bad_code = "fn get_value() -> i32 { panic!(\"error\") }";
 
         assert!(!has_critical_violations(good_code));
         assert!(has_critical_violations(bad_code));

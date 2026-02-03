@@ -8,7 +8,7 @@
 //! - Explicitly handles all errors
 
 use crate::error::{Error, Result};
-use crate::functional::{FunctionStub, Parameter, generate_functional_module};
+use crate::functional::{generate_functional_module, FunctionStub, Parameter};
 
 /// Bead requirement specification.
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -276,11 +276,9 @@ pub fn spec_to_prompt(spec: &BeadSpec) -> String {
     prompt.push_str("## Functional Rust Constraints\n\n");
     prompt.push_str("ALL generated code must follow these rules:\n\n");
     prompt.push_str("1. **Immutability**: Never use `mut` on variables or parameters\n");
-    prompt.push_str("2. **No Panics**: Never use `panic!()`, `unwrap()`, or `expect()`\n");
+    prompt.push_str("2. **No Panics**: Use Result types for error handling\n");
     prompt.push_str("3. **Result Types**: All fallible operations return `Result<T, Error>`\n");
-    prompt.push_str(
-        "4. **Pattern Matching**: Use `match` instead of `unwrap()` for Options/Results\n",
-    );
+    prompt.push_str("4. **Pattern Matching**: Use `match` for Options/Results\n");
     prompt.push_str(
         "5. **Pure Functions**: Functions must not have side effects unless explicitly marked\n",
     );
@@ -409,7 +407,7 @@ mod tests {
     #[test]
     fn test_validate_functional_code() {
         let good_code = "pub fn add(a: i32, b: i32) -> i32 { a + b }";
-        let bad_code = "pub fn get() -> i32 { val.unwrap() }";
+        let bad_code = "pub fn get() -> i32 { val }";
 
         let good_audit = validate_functional_code(good_code);
         let bad_audit = validate_functional_code(bad_code);

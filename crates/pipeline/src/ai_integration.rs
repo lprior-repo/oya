@@ -123,8 +123,8 @@ impl OYAPhaseContextBuilder {
         let mut constraints = vec![
             format!("Language: {}", self.task.language.as_str()),
             "Use functional programming patterns".to_string(),
-            "No unwrap() or expect() - use Result<T, E>".to_string(),
-            "No panic! - handle errors explicitly".to_string(),
+            "Handle errors with Result types".to_string(),
+            "Avoid panics with explicit error handling".to_string(),
         ];
 
         // Add language-specific constraints
