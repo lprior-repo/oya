@@ -41,6 +41,7 @@
 #![forbid(clippy::panic)]
 
 pub mod bus;
+pub mod db;
 pub mod durable_store;
 pub mod error;
 pub mod event;
