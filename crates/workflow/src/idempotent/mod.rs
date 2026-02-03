@@ -9,12 +9,15 @@
 //!
 //! 1. **Input Hashing** ([`hash`]) - SHA-256 hashing of arbitrary input data
 //! 2. **Namespace Generation** ([`namespace`]) - UUID v5 namespace from bead_id
-//! 3. **Key Generation** - UUID v5 from namespace + input hash (future)
+//! 3. **Key Generation** ([`keys`]) - UUID v5 from namespace + input hash
+//! 4. **Type Safety** ([`types`]) - IdempotencyKey wrapper type
 //!
 //! # Example
 //!
 //! ```ignore
-//! use oya_workflow::idempotent::{hash_input, hash_serializable, namespace_from_bead};
+//! use oya_workflow::idempotent::{
+//!     hash_input, hash_serializable, namespace_from_bead, idempotency_key,
+//! };
 //! use serde::Serialize;
 //!
 //! // Hash raw bytes
@@ -37,10 +40,17 @@
 //!
 //! // Generate namespace from bead_id
 //! let namespace = namespace_from_bead("bead-123");
+//!
+//! // Generate idempotency key
+//! let key = idempotency_key("bead-123", &input).expect("serialization failed");
 //! ```
 
 pub mod hash;
+pub mod keys;
 pub mod namespace;
+pub mod types;
 
 pub use hash::{hash_input, hash_serializable};
+pub use keys::{idempotency_key, idempotency_key_from_bytes, idempotency_key_from_json};
 pub use namespace::namespace_from_bead;
+pub use types::IdempotencyKey;
