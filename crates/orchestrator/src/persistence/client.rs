@@ -4,11 +4,11 @@
 
 use std::sync::Arc;
 
+use surrealdb::Surreal;
 use surrealdb::engine::any::Any;
 use surrealdb::opt::auth::Root;
-use surrealdb::Surreal;
 
-use super::error::{from_surrealdb_error, PersistenceError, PersistenceResult};
+use super::error::{PersistenceResult, from_surrealdb_error};
 
 /// Configuration for the orchestrator store.
 #[derive(Debug, Clone)]
@@ -57,7 +57,11 @@ impl StoreConfig {
 
     /// Set credentials for authentication.
     #[must_use]
-    pub fn with_credentials(mut self, username: impl Into<String>, password: impl Into<String>) -> Self {
+    pub fn with_credentials(
+        mut self,
+        username: impl Into<String>,
+        password: impl Into<String>,
+    ) -> Self {
         self.credentials = Some(Credentials {
             username: username.into(),
             password: password.into(),
@@ -152,10 +156,7 @@ impl OrchestratorStore {
     pub async fn initialize_schema(&self) -> PersistenceResult<()> {
         let schema = include_str!("schema.surql");
 
-        self.db
-            .query(schema)
-            .await
-            .map_err(from_surrealdb_error)?;
+        self.db.query(schema).await.map_err(from_surrealdb_error)?;
 
         Ok(())
     }
@@ -166,13 +167,10 @@ impl OrchestratorStore {
     ///
     /// Returns an error if the health check fails.
     pub async fn health_check(&self) -> PersistenceResult<()> {
-        // Simple query to verify connectivity
-        let _: Vec<()> = self
-            .db
-            .query("SELECT 1")
+        // Simple query to verify connectivity using INFO statement
+        self.db
+            .query("INFO FOR DB")
             .await
-            .map_err(from_surrealdb_error)?
-            .take(0)
             .map_err(from_surrealdb_error)?;
 
         Ok(())
@@ -209,8 +207,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_store_config_with_credentials() {
-        let config = StoreConfig::in_memory()
-            .with_credentials("root", "secret");
+        let config = StoreConfig::in_memory().with_credentials("root", "secret");
 
         assert!(config.credentials.is_some());
         if let Some(creds) = config.credentials {
@@ -237,7 +234,11 @@ mod tests {
 
         if let Some(store) = store {
             let health = store.health_check().await;
-            assert!(health.is_ok(), "health check should pass");
+            assert!(
+                health.is_ok(),
+                "health check should pass: {:?}",
+                health.err()
+            );
         }
     }
 }

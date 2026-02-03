@@ -89,7 +89,7 @@ impl<SlugState, LangState> TaskBuilder<SlugState, LangState> {
         self
     }
 
-    /// Set a custom branch name (optional, defaults to feat/<slug>).
+    /// Set a custom branch name (optional, defaults to `feat/<slug>`).
     #[must_use]
     pub fn branch(mut self, branch: impl Into<String>) -> Self {
         self.branch = Some(branch.into());

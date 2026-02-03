@@ -55,7 +55,7 @@ futures = "0.3"
 async-trait = "0.1"
 
 # Storage (battle-tested)
-surrealdb = { version = "2", features = ["kv-rocksdb"] }
+surrealdb = { version = "2", features = ["kv-rocksdb", "kv-mem"] }
 surrealdb-core = "2"
 
 # Caching (battle-tested)
@@ -65,8 +65,8 @@ moka = { version = "0.12", features = ["sync"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
-toml = "0.8"
-bincode = "1"
+toml = "0.9"
+bincode = { version = "2", features = ["serde"] }
 
 # Cryptography (battle-tested)
 sha2 = "0.10"
@@ -100,7 +100,7 @@ regex = "1"
 glob = "0.3"
 
 # Graph data structure (battle-tested)
-petgraph = "0.6"
+petgraph = "0.8"
 
 # Notify for file watching
 notify = "7"

@@ -4,6 +4,7 @@
 //! to produce deterministic keys for idempotent execution. The hashes
 //! are used as input to UUID v5 generation.
 
+use bincode::config;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
@@ -62,8 +63,8 @@ pub fn hash_input(data: &[u8]) -> [u8; 32] {
 /// let hash = hash_serializable(&input).expect("serialization failed");
 /// assert_eq!(hash.len(), 32);
 /// ```
-pub fn hash_serializable<T: Serialize>(value: &T) -> Result<[u8; 32], bincode::Error> {
-    let bytes = bincode::serialize(value)?;
+pub fn hash_serializable<T: Serialize>(value: &T) -> Result<[u8; 32], bincode::error::EncodeError> {
+    let bytes = bincode::serde::encode_to_vec(value, config::standard())?;
     Ok(hash_input(&bytes))
 }
 

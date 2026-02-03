@@ -473,11 +473,11 @@ fn given_active_workflow_when_node_removed_then_dag_consistent() {
     );
     assert_eq!(dag.node_count(), 3, "should have 3 nodes left");
 
-    // HOSTILE: Verify no dangling edges remain
+    // HOSTILE: Verify no dangling edges remain (c->d still exists)
     assert_eq!(
         dag.edge_count(),
-        0,
-        "all edges to/from removed node should be gone"
+        1,
+        "only c->d edge should remain after removing b"
     );
 
     // HOSTILE: c and d should now be orphaned (no path from a)

@@ -13,10 +13,10 @@
 //!
 //! # Components
 //!
-//! - [`SchedulerActorDef`]: The main scheduler actor that manages workflow DAGs
-//! - [`SchedulerMessage`]: Messages for communicating with the scheduler
-//! - [`ActorError`]: Business logic errors returned via RPC replies
-//! - [`SchedulerSupervisorConfig`]: Configuration for supervision
+//! - `SchedulerActorDef`: The main scheduler actor that manages workflow DAGs
+//! - `SchedulerMessage`: Messages for communicating with the scheduler
+//! - `ActorError`: Business logic errors returned via RPC replies
+//! - `SchedulerSupervisorConfig`: Configuration for supervision
 //!
 //! # Example
 //!
@@ -58,6 +58,7 @@ pub use messages::{BeadState, SchedulerMessage, WorkflowStatus};
 pub use scheduler::{SchedulerActorDef, SchedulerArguments, SchedulerState};
 pub use supervisor::{
     MeltdownStatus, SchedulerSupervisorConfig, SchedulerSupervisorDef, SpawnError,
-    SupervisorMessage, SupervisorState, calculate_backoff, spawn_scheduler,
-    spawn_scheduler_with_name, spawn_supervised_scheduler, spawn_supervisor,
+    SupervisorActorState, SupervisorArguments, SupervisorMessage, SupervisorState,
+    SupervisorStatus, calculate_backoff, spawn_scheduler, spawn_scheduler_with_name,
+    spawn_supervised_scheduler, spawn_supervisor, spawn_supervisor_with_name,
 };

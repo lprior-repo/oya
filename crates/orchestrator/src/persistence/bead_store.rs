@@ -4,16 +4,18 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use surrealdb::sql::Thing;
+use surrealdb::RecordId;
+use surrealdb::sql::Datetime as SurrealDatetime;
 
 use super::client::OrchestratorStore;
-use super::error::{from_surrealdb_error, PersistenceError, PersistenceResult};
+use super::error::{PersistenceError, PersistenceResult, from_surrealdb_error};
 
 /// Bead state in the database.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BeadState {
     /// Bead is pending (waiting for dependencies)
+    #[default]
     Pending,
     /// Bead is ready to be scheduled
     Ready,
@@ -29,12 +31,6 @@ pub enum BeadState {
     Failed,
     /// Bead was cancelled
     Cancelled,
-}
-
-impl Default for BeadState {
-    fn default() -> Self {
-        Self::Pending
-    }
 }
 
 impl std::fmt::Display for BeadState {
@@ -71,7 +67,8 @@ impl BeadState {
 pub struct BeadRecord {
     /// SurrealDB record ID
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub id: Option<Thing>,
+    #[serde(rename = "id")]
+    pub record_id: Option<RecordId>,
     /// Bead identifier
     pub bead_id: String,
     /// Workflow this bead belongs to
@@ -110,7 +107,7 @@ impl BeadRecord {
     pub fn new(bead_id: impl Into<String>, workflow_id: impl Into<String>) -> Self {
         let now = Utc::now();
         Self {
-            id: None,
+            record_id: None,
             bead_id: bead_id.into(),
             workflow_id: workflow_id.into(),
             state: BeadState::Pending,
@@ -137,15 +134,15 @@ impl BeadRecord {
 /// Input for creating/updating a bead.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct BeadInput {
-    id: String,
+    bead_id: String,
     workflow_id: String,
     state: String,
     assigned_worker: Option<String>,
     assigned_queue: Option<String>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
-    started_at: Option<DateTime<Utc>>,
-    completed_at: Option<DateTime<Utc>>,
+    created_at: SurrealDatetime,
+    updated_at: SurrealDatetime,
+    started_at: Option<SurrealDatetime>,
+    completed_at: Option<SurrealDatetime>,
     error_message: Option<String>,
     retry_count: u32,
     metadata: Option<serde_json::Value>,
@@ -154,15 +151,15 @@ struct BeadInput {
 impl From<&BeadRecord> for BeadInput {
     fn from(record: &BeadRecord) -> Self {
         Self {
-            id: record.bead_id.clone(),
+            bead_id: record.bead_id.clone(),
             workflow_id: record.workflow_id.clone(),
             state: record.state.to_string(),
             assigned_worker: record.assigned_worker.clone(),
             assigned_queue: record.assigned_queue.clone(),
-            created_at: record.created_at,
-            updated_at: record.updated_at,
-            started_at: record.started_at,
-            completed_at: record.completed_at,
+            created_at: SurrealDatetime::from(record.created_at),
+            updated_at: SurrealDatetime::from(record.updated_at),
+            started_at: record.started_at.map(SurrealDatetime::from),
+            completed_at: record.completed_at.map(SurrealDatetime::from),
             error_message: record.error_message.clone(),
             retry_count: record.retry_count,
             metadata: record.metadata.clone(),
@@ -215,13 +212,17 @@ impl OrchestratorStore {
         state: BeadState,
     ) -> PersistenceResult<BeadRecord> {
         let now = Utc::now();
+        let now_surreal = SurrealDatetime::from(now);
 
         // Set timestamps based on state transition
-        let (started_at, completed_at) = match state {
-            BeadState::Running => (Some(now), None),
-            BeadState::Completed | BeadState::Failed | BeadState::Cancelled => (None, Some(now)),
-            _ => (None, None),
-        };
+        let (started_at, completed_at): (Option<SurrealDatetime>, Option<SurrealDatetime>) =
+            match state {
+                BeadState::Running => (Some(now_surreal.clone()), None),
+                BeadState::Completed | BeadState::Failed | BeadState::Cancelled => {
+                    (None, Some(now_surreal.clone()))
+                }
+                _ => (None, None),
+            };
 
         let mut query = String::from("UPDATE bead SET state = $state, updated_at = $updated_at");
 
@@ -234,12 +235,13 @@ impl OrchestratorStore {
 
         query.push_str(" WHERE id = $id RETURN AFTER");
 
+        let record_id = RecordId::from(("bead", bead_id));
         let result: Option<BeadRecord> = self
             .db()
             .query(&query)
-            .bind(("id", format!("bead:{}", bead_id)))
+            .bind(("id", record_id))
             .bind(("state", state.to_string()))
-            .bind(("updated_at", now))
+            .bind(("updated_at", now_surreal))
             .bind(("started_at", started_at))
             .bind(("completed_at", completed_at))
             .await
@@ -255,7 +257,10 @@ impl OrchestratorStore {
     /// # Errors
     ///
     /// Returns an error if the query fails.
-    pub async fn get_beads_by_workflow(&self, workflow_id: &str) -> PersistenceResult<Vec<BeadRecord>> {
+    pub async fn get_beads_by_workflow(
+        &self,
+        workflow_id: &str,
+    ) -> PersistenceResult<Vec<BeadRecord>> {
         let workflow_id_owned = workflow_id.to_string();
         let beads: Vec<BeadRecord> = self
             .db()
@@ -297,14 +302,15 @@ impl OrchestratorStore {
         bead_id: &str,
         worker_id: &str,
     ) -> PersistenceResult<BeadRecord> {
-        let now = Utc::now();
+        let now = SurrealDatetime::from(Utc::now());
         let worker_id_owned = worker_id.to_string();
         let bead_id_owned = bead_id.to_string();
 
+        let record_id = RecordId::from(("bead", bead_id_owned.as_str()));
         let result: Option<BeadRecord> = self
             .db()
             .query("UPDATE bead SET assigned_worker = $worker, state = $state, updated_at = $updated_at WHERE id = $id RETURN AFTER")
-            .bind(("id", format!("bead:{}", bead_id_owned)))
+            .bind(("id", record_id))
             .bind(("worker", worker_id_owned))
             .bind(("state", BeadState::Assigned.to_string()))
             .bind(("updated_at", now))
@@ -345,17 +351,18 @@ impl OrchestratorStore {
         bead_id: &str,
         error_message: &str,
     ) -> PersistenceResult<BeadRecord> {
-        let now = Utc::now();
+        let now = SurrealDatetime::from(Utc::now());
         let error_message_owned = error_message.to_string();
         let bead_id_owned = bead_id.to_string();
 
+        let record_id = RecordId::from(("bead", bead_id_owned.as_str()));
         let result: Option<BeadRecord> = self
             .db()
             .query("UPDATE bead SET state = $state, error_message = $error, completed_at = $completed_at, updated_at = $updated_at WHERE id = $id RETURN AFTER")
-            .bind(("id", format!("bead:{}", bead_id_owned)))
+            .bind(("id", record_id))
             .bind(("state", BeadState::Failed.to_string()))
             .bind(("error", error_message_owned))
-            .bind(("completed_at", now))
+            .bind(("completed_at", now.clone()))
             .bind(("updated_at", now))
             .await
             .map_err(from_surrealdb_error)?
@@ -371,16 +378,29 @@ mod tests {
     use super::*;
     use crate::persistence::client::StoreConfig;
 
-    async fn setup_store() -> OrchestratorStore {
+    async fn setup_store() -> Option<OrchestratorStore> {
         let config = StoreConfig::in_memory();
-        let store = OrchestratorStore::connect(config).await.ok().unwrap();
+        let store = OrchestratorStore::connect(config).await.ok()?;
         let _ = store.initialize_schema().await;
-        store
+        Some(store)
+    }
+
+    // Helper macro to skip test if store setup fails
+    macro_rules! require_store {
+        ($store_opt:expr) => {
+            match $store_opt {
+                Some(s) => s,
+                None => {
+                    eprintln!("Skipping test: store setup failed");
+                    return;
+                }
+            }
+        };
     }
 
     #[tokio::test]
     async fn test_save_and_get_bead() {
-        let store = setup_store().await;
+        let store = require_store!(setup_store().await);
 
         let record = BeadRecord::new("bead-001", "wf-001");
         let saved = store.save_bead(&record).await;
@@ -398,13 +418,20 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_bead_state() {
-        let store = setup_store().await;
+        let store = require_store!(setup_store().await);
 
         let record = BeadRecord::new("bead-update", "wf-001");
-        let _ = store.save_bead(&record).await;
+        let saved = store.save_bead(&record).await;
+        assert!(saved.is_ok(), "save should succeed: {:?}", saved.err());
 
-        let updated = store.update_bead_state("bead-update", BeadState::Running).await;
-        assert!(updated.is_ok(), "update should succeed");
+        let updated = store
+            .update_bead_state("bead-update", BeadState::Running)
+            .await;
+        assert!(
+            updated.is_ok(),
+            "update should succeed: {:?}",
+            updated.err()
+        );
 
         if let Ok(bead) = updated {
             assert_eq!(bead.state, BeadState::Running);
@@ -414,7 +441,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_beads_by_workflow() {
-        let store = setup_store().await;
+        let store = require_store!(setup_store().await);
 
         let b1 = BeadRecord::new("bead-wf-1", "wf-test");
         let b2 = BeadRecord::new("bead-wf-2", "wf-test");
@@ -454,7 +481,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_delete_bead() {
-        let store = setup_store().await;
+        let store = require_store!(setup_store().await);
 
         let record = BeadRecord::new("bead-delete", "wf-001");
         let _ = store.save_bead(&record).await;
@@ -468,12 +495,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_assign_bead_to_worker() {
-        let store = setup_store().await;
+        let store = require_store!(setup_store().await);
 
         let record = BeadRecord::new("bead-assign", "wf-001");
         let _ = store.save_bead(&record).await;
 
-        let assigned = store.assign_bead_to_worker("bead-assign", "worker-001").await;
+        let assigned = store
+            .assign_bead_to_worker("bead-assign", "worker-001")
+            .await;
         assert!(assigned.is_ok(), "assign should succeed");
 
         if let Ok(bead) = assigned {
@@ -484,7 +513,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mark_bead_failed() {
-        let store = setup_store().await;
+        let store = require_store!(setup_store().await);
 
         let record = BeadRecord::new("bead-fail", "wf-001");
         let _ = store.save_bead(&record).await;

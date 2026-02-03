@@ -8,7 +8,7 @@
 
 DEFINE TABLE IF NOT EXISTS workflow SCHEMAFULL;
 
-DEFINE FIELD IF NOT EXISTS id ON workflow TYPE string;
+DEFINE FIELD IF NOT EXISTS workflow_id ON workflow TYPE string;
 DEFINE FIELD IF NOT EXISTS name ON workflow TYPE string;
 DEFINE FIELD IF NOT EXISTS description ON workflow TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS dag_json ON workflow TYPE string;
@@ -28,7 +28,7 @@ DEFINE INDEX IF NOT EXISTS workflow_created ON workflow FIELDS created_at;
 
 DEFINE TABLE IF NOT EXISTS bead SCHEMAFULL;
 
-DEFINE FIELD IF NOT EXISTS id ON bead TYPE string;
+DEFINE FIELD IF NOT EXISTS bead_id ON bead TYPE string;
 DEFINE FIELD IF NOT EXISTS workflow_id ON bead TYPE string;
 DEFINE FIELD IF NOT EXISTS state ON bead TYPE string;
 DEFINE FIELD IF NOT EXISTS assigned_worker ON bead TYPE option<string>;
@@ -52,7 +52,7 @@ DEFINE INDEX IF NOT EXISTS bead_worker ON bead FIELDS assigned_worker;
 
 DEFINE TABLE IF NOT EXISTS checkpoint SCHEMAFULL;
 
-DEFINE FIELD IF NOT EXISTS id ON checkpoint TYPE string;
+DEFINE FIELD IF NOT EXISTS checkpoint_id ON checkpoint TYPE string;
 DEFINE FIELD IF NOT EXISTS scheduler_state ON checkpoint TYPE string;
 DEFINE FIELD IF NOT EXISTS event_sequence ON checkpoint TYPE int;
 DEFINE FIELD IF NOT EXISTS created_at ON checkpoint TYPE datetime;
@@ -69,7 +69,7 @@ DEFINE INDEX IF NOT EXISTS checkpoint_created ON checkpoint FIELDS created_at;
 
 DEFINE TABLE IF NOT EXISTS orchestrator_event SCHEMAFULL;
 
-DEFINE FIELD IF NOT EXISTS id ON orchestrator_event TYPE string;
+DEFINE FIELD IF NOT EXISTS event_id ON orchestrator_event TYPE string;
 DEFINE FIELD IF NOT EXISTS event_type ON orchestrator_event TYPE string;
 DEFINE FIELD IF NOT EXISTS event_data ON orchestrator_event TYPE string;
 DEFINE FIELD IF NOT EXISTS sequence ON orchestrator_event TYPE int;

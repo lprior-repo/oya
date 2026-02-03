@@ -137,10 +137,7 @@ pub fn from_surrealdb_error(err: impl fmt::Display) -> PersistenceError {
     // Categorize based on error message patterns
     if msg.contains("timeout") || msg.contains("Timeout") {
         PersistenceError::timeout(0)
-    } else if msg.contains("connection")
-        || msg.contains("Connection")
-        || msg.contains("connect")
-    {
+    } else if msg.contains("connection") || msg.contains("Connection") || msg.contains("connect") {
         PersistenceError::connection_failed(msg)
     } else if msg.contains("already exists") || msg.contains("duplicate") {
         PersistenceError::already_exists("unknown", msg)
@@ -172,7 +169,10 @@ mod tests {
     #[test]
     fn test_timeout_error() {
         let err = PersistenceError::timeout(5000);
-        assert!(matches!(err, PersistenceError::Timeout { duration_ms: 5000 }));
+        assert!(matches!(
+            err,
+            PersistenceError::Timeout { duration_ms: 5000 }
+        ));
         assert!(err.is_retryable());
     }
 

@@ -9,13 +9,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 # Zellij plugin API
-zellij-tile = "0.41"
-
-# Async runtime (needed for web API calls)
-tokio = { version = "1", features = ["rt", "macros"] }
-
-# HTTP client for calling oya-web API
-reqwest = { version = "0.12", features = ["json"] }
+zellij-tile = "0.43"
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
@@ -28,9 +22,5 @@ anyhow = "1"
 # Shared types from workspace
 oya-shared = { path = "../oya-shared" }
 
-[profile.release]
-opt-level = "z"     # Optimize for size (WASM)
-lto = true          # Enable link-time optimization
-codegen-units = 1   # Single codegen unit for smaller binary
-strip = true        # Strip symbols
-panic = "abort"     # Smaller panic handler
+[lints]
+workspace = true

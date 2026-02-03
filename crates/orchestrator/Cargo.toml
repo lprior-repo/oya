@@ -33,3 +33,6 @@ chrono = { workspace = true }
 
 # Async utilities
 async-trait = { workspace = true }
+
+# UUID generation for message/timer IDs
+uuid = { version = "1.0", features = ["v4"] }

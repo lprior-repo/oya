@@ -27,7 +27,7 @@ use super::messages::{BeadState as MsgBeadState, SchedulerMessage, WorkflowStatu
 pub struct SchedulerActorDef;
 
 /// Arguments passed to the actor on startup.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct SchedulerArguments {
     /// Optional EventBus for subscribing to bead events.
     pub event_bus: Option<Arc<EventBus>>,
