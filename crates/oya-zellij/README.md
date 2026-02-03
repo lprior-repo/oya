@@ -4,11 +4,24 @@ Real-time pipeline orchestration dashboard for Zellij.
 
 ## Features
 
-- **Bead List View**: See all active beads, their status, and current pipeline stage
-- **Detail View**: Deep dive into individual bead execution
-- **Pipeline View**: Visualize stage progression
-- **Live Updates**: Real-time status from oya-web API
-- **Vim Keybindings**: Navigate with j/k, switch views with 1/2/3
+- **Three View Modes**:
+  - **Bead List**: Overview of all beads with status, stage, and progress bars
+  - **Bead Detail**: Complete info on selected bead + quick actions (zjj spawn, oya stage)
+  - **Pipeline View**: Visual pipeline flow with stage status and timing
+
+- **Rich UI**:
+  - Color-coded status (pending/in-progress/completed/failed)
+  - Unicode symbols for pipeline stages (○ pending, ◐ running, ● passed, ✗ failed)
+  - Progress bars with percentage
+  - Summary stats (total/completed/in-progress/failed)
+
+- **Smart Navigation**:
+  - Vim keybindings (j/k, g/G for top/bottom)
+  - Number keys (1/2/3) to switch views
+  - Enter to cycle through views
+  - Auto-refresh every 2 seconds
+
+- **Live Updates**: Real-time status from oya-web API (mock data for now, ready for integration)
 
 ## Building
 
@@ -64,13 +77,21 @@ Ctrl-o + w  # Open plugin manager
 
 ## Keybindings
 
+**View Switching:**
 - `1` - Bead list view
 - `2` - Bead detail view
 - `3` - Pipeline view
-- `j/↓` - Move down
-- `k/↑` - Move up
-- `r` - Refresh from API
-- `q` - Quit plugin
+- `Enter` - Cycle through views (List → Detail → Pipeline → List)
+
+**Navigation:**
+- `j` / `↓` - Move down
+- `k` / `↑` - Move up
+- `g` - Jump to top
+- `G` - Jump to bottom
+
+**Actions:**
+- `r` - Manual refresh (auto-refreshes every 2s anyway)
+- `q` / `Esc` - Quit plugin
 
 ## Configuration
 
@@ -130,10 +151,16 @@ Test manually by loading in Zellij.
 
 ## Roadmap
 
-- [ ] Live API integration with oya-web
-- [ ] Pipeline stage visualization (ASCII art)
-- [ ] Bead dependency graph view
-- [ ] Interactive stage triggering
-- [ ] Logs streaming view
+- [x] Three view modes (List, Detail, Pipeline)
+- [x] Vim-style navigation
+- [x] Color-coded status and progress bars
+- [x] Pipeline stage visualization with Unicode symbols
+- [x] Auto-refresh timer
+- [ ] **Live API integration with oya-web** (replace mock data)
+- [ ] Bead dependency graph view (DAG visualization)
+- [ ] Interactive stage triggering (press 's' to run stage)
+- [ ] Logs streaming view for selected bead
+- [ ] Filter beads by status/stage
+- [ ] Sort beads (by status, progress, ID)
+- [ ] Configurable refresh interval in plugin.yaml
 - [ ] Color themes
-- [ ] Configurable refresh interval

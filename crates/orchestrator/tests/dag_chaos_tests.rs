@@ -7,8 +7,7 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
-use orchestrator::dag::{BeadId, DependencyType, WorkflowDAG};
-use std::collections::HashSet;
+use orchestrator::dag::{DependencyType, WorkflowDAG};
 
 // ============================================================================
 // STATE CORRUPTION TESTS (hostile: what if state is inconsistent?)
@@ -291,12 +290,12 @@ fn given_duplicate_edges_when_add_multiple_times_then_idempotent() {
         "b".to_string(),
         DependencyType::BlockingDependency,
     );
-    let second = dag.add_edge(
+    let _second = dag.add_edge(
         "a".to_string(),
         "b".to_string(),
         DependencyType::BlockingDependency,
     );
-    let third = dag.add_edge(
+    let _third = dag.add_edge(
         "a".to_string(),
         "b".to_string(),
         DependencyType::BlockingDependency,

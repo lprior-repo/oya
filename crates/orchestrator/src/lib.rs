@@ -32,6 +32,9 @@ pub mod agent_swarm {}
 /// Task distribution module
 pub mod distribution {}
 
+/// Persistence layer for workflows, beads, and checkpoints.
+pub mod persistence;
+
 /// Scheduler actor for managing workflow DAGs and bead scheduling
 pub mod scheduler;
 

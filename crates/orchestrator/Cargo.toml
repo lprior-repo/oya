@@ -26,3 +26,10 @@ petgraph = { workspace = true }
 # Actor framework (Erlang-inspired, 100% Rust)
 # Using native ractor supervision instead of ractor-supervisor due to version compatibility
 ractor = "0.15"
+
+# Persistence layer (SurrealDB)
+surrealdb = { workspace = true }
+chrono = { workspace = true }
+
+# Async utilities
+async-trait = { workspace = true }

@@ -7,7 +7,7 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
-use orchestrator::dag::{BeadId, DependencyType, WorkflowDAG};
+use orchestrator::dag::{DependencyType, WorkflowDAG};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
