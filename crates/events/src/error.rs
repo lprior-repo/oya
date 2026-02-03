@@ -52,7 +52,7 @@ pub enum Error {
     /// Internal error.
     Internal(String),
     /// Connection error.
-    Connection(#[from] ConnectionError),
+    Connection(ConnectionError),
 }
 
 impl fmt::Display for Error {
@@ -96,6 +96,12 @@ impl fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
+
+impl From<ConnectionError> for Error {
+    fn from(err: ConnectionError) -> Self {
+        Self::Connection(err)
+    }
+}
 
 impl Error {
     /// Create a store failed error.

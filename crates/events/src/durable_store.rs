@@ -5,13 +5,13 @@
 use chrono::{DateTime, Utc};
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
-use surrealdb::engine::local::RocksDb;
+use surrealdb::engine::any::Any;
+use surrealdb::engine::local::{Db, RocksDb};
 use surrealdb::Surreal;
 
 use crate::error::{ConnectionError, Result};
 use crate::event::BeadEvent;
-use crate::types::{BeadId, EventId};
+use crate::types::BeadId;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct SerializedEvent {
@@ -167,7 +167,7 @@ impl ConnectionConfig {
 /// - Connection cannot be established within the timeout
 /// - Authentication fails
 /// - Database initialization fails
-pub async fn connect(config: ConnectionConfig) -> Result<Arc<Surreal<RocksDb>>> {
+pub async fn connect(config: ConnectionConfig) -> Result<Arc<Surreal<Db>>> {
     config.validate()?;
 
     let db = Surreal::new::<RocksDb>(config.storage_path)
@@ -222,11 +222,8 @@ impl DurableEventStore {
     pub async fn append_event(&self, event: &BeadEvent) -> Result<()> {
         let serialized = SerializedEvent::from_bead_event(event)?;
 
-        let bead_id_str = serialized.bead_id.clone();
-        let timestamp = serialized.timestamp;
-
         self.db
-            .create(("state_transition", serialized.event_id.clone()))
+            .create::<Option<SerializedEvent>>(("state_transition", serialized.event_id.clone()))
             .content(serialized)
             .await
             .map_err(|e| {
@@ -407,5 +404,65 @@ mod tests {
         assert_eq!(deserialized.event_id(), event.event_id());
         assert_eq!(deserialized.bead_id(), event.bead_id());
         assert_eq!(deserialized.event_type(), "phase_completed");
+    }
+
+    #[test]
+    fn test_connection_config_default() {
+        let config = ConnectionConfig::default();
+        assert_eq!(config.storage_path, PathBuf::from("./data/events"));
+        assert_eq!(config.namespace, "oya");
+        assert_eq!(config.database, "events");
+        assert_eq!(config.max_connections, 10);
+        assert_eq!(config.timeout_ms, 30000);
+        assert!(config.username.is_none());
+        assert!(config.password.is_none());
+    }
+
+    #[test]
+    fn test_connection_config_builder() {
+        let config = ConnectionConfig::new("/tmp/test")
+            .with_namespace("test_ns")
+            .with_database("test_db")
+            .with_max_connections(5)
+            .with_timeout_ms(60000)
+            .with_auth("user", "pass");
+
+        assert_eq!(config.storage_path, PathBuf::from("/tmp/test"));
+        assert_eq!(config.namespace, "test_ns");
+        assert_eq!(config.database, "test_db");
+        assert_eq!(config.max_connections, 5);
+        assert_eq!(config.timeout_ms, 60000);
+        assert_eq!(config.username, Some("user".to_string()));
+        assert_eq!(config.password, Some("pass".to_string()));
+    }
+
+    #[test]
+    fn test_connection_config_validate_valid() {
+        let config = ConnectionConfig::default();
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_connection_config_validate_zero_connections() {
+        let config = ConnectionConfig::default().with_max_connections(0);
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_connection_config_validate_zero_timeout() {
+        let config = ConnectionConfig::default().with_timeout_ms(0);
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_connection_config_validate_empty_namespace() {
+        let config = ConnectionConfig::default().with_namespace("");
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_connection_config_validate_empty_database() {
+        let config = ConnectionConfig::default().with_database("");
+        assert!(config.validate().is_err());
     }
 }

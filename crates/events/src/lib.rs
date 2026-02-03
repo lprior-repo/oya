@@ -51,8 +51,8 @@ pub mod types;
 
 // Re-export main types
 pub use bus::{EventBus, EventBusBuilder, EventPattern, EventSubscription};
-pub use durable_store::{DurableEventStore, EventQuery};
-pub use error::{Error, Result};
+pub use durable_store::{connect, ConnectionConfig, DurableEventStore};
+pub use error::{ConnectionError, Error, Result};
 pub use event::BeadEvent;
 pub use projection::{
     AllBeadsProjection, AllBeadsState, BeadProjection, ManagedProjection, Projection,
