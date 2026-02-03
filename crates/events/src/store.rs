@@ -301,7 +301,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn should_create_functional_store_via_new_arc() -> Result<(), Box<dyn std::error::Error>> {
+    async fn should_create_functional_store_via_new_arc() -> Result<()> {
         // This tests that new_arc creates a FUNCTIONAL store, not just any Arc
         // Catches mutation: Arc::new(Default::default()) vs Arc::new(Self::new())
         let store = InMemoryEventStore::new_arc();
@@ -330,16 +330,19 @@ mod tests {
     // ==========================================================================
 
     #[tokio::test]
-    async fn should_return_none_when_store_is_empty() -> Result<(), Box<dyn std::error::Error>> {
+    async fn should_return_none_when_store_is_empty() -> Result<()> {
         let store = InMemoryEventStore::new();
 
         let last_id = store.last_event_id().await?;
-        assert!(last_id.is_none(), "Empty store should return None for last_event_id");
+        assert!(
+            last_id.is_none(),
+            "Empty store should return None for last_event_id"
+        );
         Ok(())
     }
 
     #[tokio::test]
-    async fn should_return_some_when_store_has_events() -> Result<(), Box<dyn std::error::Error>> {
+    async fn should_return_some_when_store_has_events() -> Result<()> {
         let store = InMemoryEventStore::new();
         let bead_id = BeadId::new();
 
@@ -359,7 +362,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn should_return_most_recent_event_id() -> Result<(), Box<dyn std::error::Error>> {
+    async fn should_return_most_recent_event_id() -> Result<()> {
         let store = InMemoryEventStore::new();
         let bead_id = BeadId::new();
 
@@ -394,7 +397,7 @@ mod tests {
     // ==========================================================================
 
     #[tokio::test]
-    async fn should_return_empty_vec_for_unknown_bead() -> Result<(), Box<dyn std::error::Error>> {
+    async fn should_return_empty_vec_for_unknown_bead() -> Result<()> {
         let store = InMemoryEventStore::new();
         let unknown_bead = BeadId::new();
 
@@ -408,7 +411,7 @@ mod tests {
     // ==========================================================================
 
     #[tokio::test]
-    async fn should_return_all_events_when_from_id_not_found() -> Result<(), Box<dyn std::error::Error>> {
+    async fn should_return_all_events_when_from_id_not_found() -> Result<()> {
         let store = InMemoryEventStore::new();
         let bead_id = BeadId::new();
 
@@ -444,7 +447,7 @@ mod tests {
     // ==========================================================================
 
     #[tokio::test]
-    async fn should_delegate_append_to_inner_store() -> Result<(), Box<dyn std::error::Error>> {
+    async fn should_delegate_append_to_inner_store() -> Result<()> {
         let inner = InMemoryEventStore::new();
         let tracing_store = TracingEventStore::new(inner);
         let bead_id = BeadId::new();
@@ -462,7 +465,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn should_delegate_read_to_inner_store() -> Result<(), Box<dyn std::error::Error>> {
+    async fn should_delegate_read_to_inner_store() -> Result<()> {
         let inner = InMemoryEventStore::new();
         let bead_id = BeadId::new();
 
@@ -477,16 +480,12 @@ mod tests {
         let tracing_store = TracingEventStore::new(inner);
         let events = tracing_store.read(None).await?;
 
-        assert_eq!(
-            events.len(),
-            1,
-            "Should read events from inner store"
-        );
+        assert_eq!(events.len(), 1, "Should read events from inner store");
         Ok(())
     }
 
     #[tokio::test]
-    async fn should_delegate_read_for_bead_to_inner_store() -> Result<(), Box<dyn std::error::Error>> {
+    async fn should_delegate_read_for_bead_to_inner_store() -> Result<()> {
         let inner = InMemoryEventStore::new();
         let bead_id = BeadId::new();
 
@@ -505,7 +504,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn should_delegate_last_event_id_to_inner_store() -> Result<(), Box<dyn std::error::Error>> {
+    async fn should_delegate_last_event_id_to_inner_store() -> Result<()> {
         let inner = InMemoryEventStore::new();
         let bead_id = BeadId::new();
 
@@ -523,7 +522,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn should_delegate_count_to_inner_store() -> Result<(), Box<dyn std::error::Error>> {
+    async fn should_delegate_count_to_inner_store() -> Result<()> {
         let inner = InMemoryEventStore::new();
         let bead_id = BeadId::new();
 
@@ -549,7 +548,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn should_preserve_read_from_semantics_through_tracing() -> Result<(), Box<dyn std::error::Error>> {
+    async fn should_preserve_read_from_semantics_through_tracing() -> Result<()> {
         let inner = InMemoryEventStore::new();
         let bead_id = BeadId::new();
 
@@ -571,11 +570,7 @@ mod tests {
         let tracing_store = TracingEventStore::new(inner);
         let events = tracing_store.read(Some(first_id)).await?;
 
-        assert_eq!(
-            events.len(),
-            1,
-            "Should return events after first_id"
-        );
+        assert_eq!(events.len(), 1, "Should return events after first_id");
         Ok(())
     }
 }

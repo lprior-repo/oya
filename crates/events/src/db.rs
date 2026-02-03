@@ -6,7 +6,6 @@
 #![forbid(unsafe_code)]
 
 use surrealdb::engine::local::{Db, RocksDb};
-use surrealdb::opt::Config;
 use surrealdb::Surreal;
 use thiserror::Error;
 use tokio::fs;
@@ -17,7 +16,8 @@ pub struct SurrealDbConfig {
 }
 
 impl SurrealDbConfig {
-    pub fn new(path: String) -> Self {
+    #[must_use]
+    pub const fn new(path: String) -> Self {
         Self { path }
     }
 }
@@ -48,20 +48,33 @@ pub enum DbError {
 
 impl From<surrealdb::Error> for DbError {
     fn from(err: surrealdb::Error) -> Self {
-        DbError::SurrealDb(err.to_string())
+        Self::SurrealDb(err.to_string())
     }
 }
 
 impl SurrealDbClient {
+    /// Connects to `SurrealDB` with the given configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The database directory cannot be created
+    /// - The `RocksDB` instance cannot be initialized
+    /// - The namespace/database cannot be selected
     pub async fn connect(config: SurrealDbConfig) -> Result<Self, DbError> {
         let path = &config.path;
         debug!(path = %path, "Ensuring database directory exists");
         fs::create_dir_all(path).await?;
 
         info!(path = %path, "Connecting to SurrealDB with kv-rocksdb backend");
-        let client = Surreal::new::<RocksDb>(path).map_err(|e| {
-            DbError::ConnectionFailed(format!("Failed to create RocksDb instance: {}", e))
-        })?;
+        let client = match Surreal::new::<RocksDb>(path).await {
+            Ok(c) => c,
+            Err(e) => {
+                return Err(DbError::ConnectionFailed(format!(
+                    "Failed to create RocksDb instance: {e}"
+                )))
+            }
+        };
 
         let namespace = "oya";
         let database = "events";
@@ -77,7 +90,7 @@ impl SurrealDbClient {
             .use_db(database)
             .await
             .map_err(|e| {
-                DbError::ConnectionFailed(format!("Failed to select namespace/database: {}", e))
+                DbError::ConnectionFailed(format!("Failed to select namespace/database: {e}"))
             })?;
 
         Ok(Self {
@@ -87,6 +100,11 @@ impl SurrealDbClient {
         })
     }
 
+    /// Initializes the database schema with the given SQL statements.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any of the schema queries fail to execute.
     pub async fn init_schema(&self, schema_content: &str) -> Result<(), DbError> {
         info!("Initializing database schema");
         let queries: Vec<&str> = schema_content
@@ -123,9 +141,8 @@ impl SurrealDbClient {
                 }
                 Err(e) => {
                     return Err(DbError::SchemaInitFailed(format!(
-                        "Query {} failed: {}",
-                        idx + 1,
-                        e
+                        "Query {} failed: {e}",
+                        idx + 1
                     )));
                 }
             }
@@ -135,24 +152,32 @@ impl SurrealDbClient {
         Ok(())
     }
 
-    pub fn client(&self) -> &Surreal<Db> {
+    #[must_use]
+    pub const fn client(&self) -> &Surreal<Db> {
         &self.client
     }
 
+    #[must_use]
     pub fn namespace(&self) -> &str {
         &self.namespace
     }
 
+    #[must_use]
     pub fn database(&self) -> &str {
         &self.database
     }
 
+    /// Performs a health check on the database connection.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the health check query fails to execute.
     pub async fn health_check(&self) -> Result<(), DbError> {
         debug!("Performing health check");
         self.client
             .query("RETURN true")
             .await
-            .map_err(|e| DbError::QueryFailed(format!("Health check failed: {}", e)))?;
+            .map_err(|e| DbError::QueryFailed(format!("Health check failed: {e}")))?;
         Ok(())
     }
 }
@@ -163,7 +188,7 @@ mod tests {
     use tempfile::tempdir;
 
     #[tokio::test]
-    async fn test_connect_and_health_check() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_connect_and_health_check() -> Result<()> {
         let temp_dir = tempdir()?;
         let db_path = temp_dir
             .path()
@@ -180,7 +205,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_schema_init() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_schema_init() -> Result<()> {
         let temp_dir = tempdir()?;
         let db_path = temp_dir
             .path()
@@ -198,7 +223,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_schema_init_with_errors() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_schema_init_with_errors() -> Result<()> {
         let temp_dir = tempdir()?;
         let db_path = temp_dir
             .path()

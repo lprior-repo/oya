@@ -1,7 +1,7 @@
 //! UUID v5 idempotency key generation from bead ID + input data.
 //!
 //! This module provides the complete key generation pipeline that combines:
-//! 1. Namespace generation (from bead_id)
+//! 1. Namespace generation (from `bead_id`)
 //! 2. Input hashing (SHA-256)
 //! 3. Final UUID v5 key (namespace + hash)
 //!
@@ -91,6 +91,10 @@ use uuid::Uuid;
 ///
 /// Returns `bincode::error::EncodeError` if input cannot be serialized.
 /// This is a pure function - no other failure modes exist.
+///
+/// # Errors
+///
+/// Returns `bincode::error::EncodeError` if the input data cannot be serialized.
 pub fn idempotency_key<T: Serialize>(
     bead_id: &str,
     input: &T,
@@ -284,7 +288,7 @@ mod tests {
 
         let input = TestInput {
             bead_id: bead_id.to_string(),
-            phase: "".to_string(),
+            phase: String::new(),
             data: vec![],
         };
 
@@ -423,7 +427,7 @@ mod tests {
         let input = "shared input";
 
         let keys: Vec<_> = (0..100)
-            .map(|i| idempotency_key_from_bytes(&format!("bead-{:03}", i), input.as_bytes()))
+            .map(|i| idempotency_key_from_bytes(&format!("bead-{i:03}"), input.as_bytes()))
             .collect();
 
         // All keys must be unique
@@ -441,7 +445,7 @@ mod tests {
         let bead_id = "bead-isolation-test";
 
         let keys: Vec<_> = (0..100)
-            .map(|i| idempotency_key_from_bytes(bead_id, format!("input-{:03}", i).as_bytes()))
+            .map(|i| idempotency_key_from_bytes(bead_id, format!("input-{i:03}").as_bytes()))
             .collect();
 
         // All keys must be unique

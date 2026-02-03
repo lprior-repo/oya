@@ -300,34 +300,6 @@ impl DurableEventStore {
         Ok(())
     }
 
-    async fn append_to_wal(&self, event: &BeadEvent, serialized: &SerializedEvent) -> std::result::Result<(), AppendError> {
-        tokio::fs::create_dir_all(&self.wal_dir)
-            .await
-            .map_err(|e| AppendError::WalOpenFailed(format!("create wal dir: {}", e)))?;
-
-        let wal_path = self.wal_dir.join(format!("{}.wal", event.bead_id()));
-
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&wal_path)
-            .await
-            .map_err(|e| AppendError::WalOpenFailed(format!("open wal file: {}", e)))?;
-
-        let serialized_data = bincode::serialize(&serialized)
-            .map_err(|e| AppendError::SerializationFailed(format!("{}", e)))?;
-
-        file.write_all(&serialized_data)
-            .await
-            .map_err(|e| AppendError::WalWriteFailed(format!("{}", e)))?;
-
-        file.sync_all()
-            .await
-            .map_err(|e| AppendError::WalSyncFailed(format!("fsync failed: {}", e)))?;
-
-        Ok(())
-    }
-
     pub async fn read_events(&self, bead_id: &BeadId) -> Result<Vec<BeadEvent>> {
         let bead_id_str = bead_id.to_string();
 
@@ -392,7 +364,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_serialized_event_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_serialized_event_roundtrip() -> Result<()> {
         let bead_id = BeadId::new();
         let event = BeadEvent::created(
             bead_id,
@@ -410,7 +382,7 @@ mod tests {
     }
 
     #[test]
-    fn test_serialized_event_all_types() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_serialized_event_all_types() -> Result<()> {
         let bead_id = BeadId::new();
 
         let events = [
@@ -442,7 +414,7 @@ mod tests {
     }
 
     #[test]
-    fn test_serialized_event_with_complex_data() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_serialized_event_with_complex_data() -> Result<()> {
         let bead_id = BeadId::new();
         let phase_id = crate::types::PhaseId::new();
 
@@ -463,6 +435,7 @@ mod tests {
         Ok(())
     }
 
+    #[test]
     fn test_connection_config_default() {
         let config = ConnectionConfig::default();
         assert_eq!(config.storage_path, PathBuf::from("./data/events"));

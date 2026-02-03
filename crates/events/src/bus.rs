@@ -317,11 +317,9 @@ mod tests {
     }
 
     #[test]
-    fn should_use_configured_store() -> Result<(), Box<dyn std::error::Error>> {
+    fn should_use_configured_store() -> Result<()> {
         let store: Arc<dyn crate::store::EventStore> = Arc::new(InMemoryEventStore::new());
-        let bus = EventBusBuilder::new()
-            .with_store(store.clone())
-            .build()?;
+        let bus = EventBusBuilder::new().with_store(store.clone()).build()?;
 
         // Verify the store is the one we configured (compare by address)
         let store_ptr = Arc::as_ptr(&store) as *const ();
@@ -334,7 +332,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn should_use_configured_channel_capacity() -> Result<(), Box<dyn std::error::Error>> {
+    async fn should_use_configured_channel_capacity() -> Result<()> {
         let store = Arc::new(InMemoryEventStore::new());
         let bus = EventBusBuilder::new()
             .with_store(store)
