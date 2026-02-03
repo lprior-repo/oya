@@ -207,6 +207,7 @@ impl Default for EventBusBuilder {
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::Result;
     use crate::store::InMemoryEventStore;
     use crate::types::{BeadId, BeadSpec, BeadState, Complexity};
 
@@ -317,7 +318,7 @@ mod tests {
     }
 
     #[test]
-    fn should_use_configured_store() -> Result<()> {
+    fn should_use_configured_store() -> crate::Result<()> {
         let store: Arc<dyn crate::store::EventStore> = Arc::new(InMemoryEventStore::new());
         let bus = EventBusBuilder::new().with_store(store.clone()).build()?;
 
@@ -332,7 +333,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn should_use_configured_channel_capacity() -> Result<()> {
+    async fn should_use_configured_channel_capacity() -> crate::Result<()> {
         let store = Arc::new(InMemoryEventStore::new());
         let bus = EventBusBuilder::new()
             .with_store(store)

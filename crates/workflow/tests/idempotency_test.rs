@@ -61,7 +61,7 @@ mod unit_tests {
     fn test_million_iterations_no_panic() {
         // Test that we can generate 1M keys without panicking
         for i in 0..1_000_000 {
-            let _ = idempotency_key_from_bytes(&format!("bead-{}", i), b"test input");
+            let _ = idempotency_key_from_bytes(&format!("bead-{i}"), b"test input");
         }
     }
 
@@ -184,7 +184,7 @@ mod unit_tests {
         let mut keys = std::collections::HashSet::new();
 
         for i in 0..100 {
-            let input = format!("input-{:03}", i);
+            let input = format!("input-{i:03}");
             let key = idempotency_key_from_bytes(bead_id, input.as_bytes());
             keys.insert(key);
         }
@@ -255,7 +255,7 @@ mod unit_tests {
         let mut keys = std::collections::HashSet::new();
 
         for i in 0..100 {
-            let bead_id = format!("bead-{:03}", i);
+            let bead_id = format!("bead-{i:03}");
             let key = idempotency_key_from_bytes(&bead_id, input);
             keys.insert(key);
         }
@@ -271,7 +271,7 @@ mod unit_tests {
         let mut keys = std::collections::HashSet::new();
 
         for i in 0..100 {
-            let input = format!("input-{:03}", i);
+            let input = format!("input-{i:03}");
             let key = idempotency_key_from_bytes(bead_id, input.as_bytes());
             keys.insert(key);
         }

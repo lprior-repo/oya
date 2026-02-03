@@ -140,6 +140,7 @@ impl AgentState {
         }
     }
 
+    #[allow(dead_code)]
     fn symbol(&self) -> &str {
         match self {
             Self::Idle => "○",

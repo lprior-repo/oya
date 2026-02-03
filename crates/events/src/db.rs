@@ -185,6 +185,7 @@ impl SurrealDbClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Result;
     use tempfile::tempdir;
 
     #[tokio::test]
@@ -205,7 +206,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_schema_init() -> Result<()> {
+    async fn test_schema_init() -> crate::Result<()> {
         let temp_dir = tempdir()?;
         let db_path = temp_dir
             .path()
@@ -223,7 +224,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_schema_init_with_errors() -> Result<()> {
+    async fn test_schema_init_with_errors() -> crate::Result<()> {
         let temp_dir = tempdir()?;
         let db_path = temp_dir
             .path()
