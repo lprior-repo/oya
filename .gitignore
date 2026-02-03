@@ -4,6 +4,8 @@ Cargo.lock
 
 # Moon cache (can be large)
 .moon/cache/
+.moon/cache-state/
+.moon/cache-*
 
 # Beads - daemon runtime files (should not be committed)
 .beads/daemon.pid

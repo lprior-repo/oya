@@ -315,6 +315,14 @@ impl AgentInfo {
         Ok(())
     }
 
+    /// Validates bead identifier.
+    fn validate_bead_id(bead_id: &str) -> Result<(), AgentInfoError> {
+        if bead_id.is_empty() {
+            return Err(AgentInfoError::EmptyBeadId);
+        }
+        Ok(())
+    }
+
     /// Validates agent capability.
     fn validate_capability(capability: AgentCapability) -> Result<AgentCapability, AgentInfoError> {
         capability.new(
