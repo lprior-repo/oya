@@ -552,6 +552,53 @@ fn given_dag_with_roots_when_nothing_completed_then_only_roots_are_ready() {
 }
 
 #[test]
+fn given_diamond_when_root_completes_then_children_become_ready_parallel() {
+    // GIVEN: A diamond DAG: A -> B, C -> D
+    //     A
+    //    / \
+    //   B   C
+    //    \ /
+    //     D
+    let mut dag = WorkflowDAG::new();
+    let a = "a".to_string();
+    let b = "b".to_string();
+    let c = "c".to_string();
+    let d = "d".to_string();
+
+    dag.add_node(a.clone()).ok();
+    dag.add_node(b.clone()).ok();
+    dag.add_node(c.clone()).ok();
+    dag.add_node(d.clone()).ok();
+
+    dag.add_edge(a.clone(), b.clone(), DependencyType::BlockingDependency)
+        .ok();
+    dag.add_edge(a.clone(), c.clone(), DependencyType::BlockingDependency)
+        .ok();
+    dag.add_edge(b.clone(), d.clone(), DependencyType::BlockingDependency)
+        .ok();
+    dag.add_edge(c.clone(), d.clone(), DependencyType::BlockingDependency)
+        .ok();
+
+    // WHEN: Root bead A completes
+    let mut completed: HashSet<BeadId> = HashSet::new();
+    completed.insert(a.clone());
+    let ready = dag.get_ready_nodes(&completed);
+
+    // THEN: Both B and C become ready (parallel execution)
+    assert_eq!(ready.len(), 2, "Both B and C should be ready in parallel");
+    assert!(ready.contains(&b), "B should be ready after A completes");
+    assert!(ready.contains(&c), "C should be ready after A completes");
+    assert!(
+        !ready.contains(&a),
+        "A should not be ready (already completed)"
+    );
+    assert!(
+        !ready.contains(&d),
+        "D should not be ready (waiting for B and C)"
+    );
+}
+
+#[test]
 fn given_linear_chain_when_first_completed_then_second_becomes_ready() {
     // GIVEN: A linear chain A --> B --> C
     let mut dag = WorkflowDAG::new();
