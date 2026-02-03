@@ -27,6 +27,7 @@ use axum::{
     routing::{get, post},
 };
 
+pub mod agents;
 pub mod beads;
 pub mod health;
 pub mod websocket;
@@ -61,7 +62,9 @@ pub fn create_router() -> Router<AppState> {
         .route("/beads", get(beads::list_beads))
         .route("/beads/{id}", get(beads::get_bead_status))
         .route("/beads/{id}/cancel", post(beads::cancel_bead))
-        .route("/beads/{id}/retry", post(beads::retry_bead));
+        .route("/beads/{id}/retry", post(beads::retry_bead))
+        // Agents endpoint
+        .route("/agents", get(agents::list_agents));
 
     Router::new()
         .nest("/api", api_routes)
