@@ -126,10 +126,7 @@ impl ConnectionConfig {
     /// Validates the configuration.
     pub fn validate(&self) -> Result<()> {
         if self.max_connections == 0 {
-            return Err(ConnectionError::PoolExhausted {
-                max_connections: 0,
-            }
-            .into());
+            return Err(ConnectionError::PoolExhausted { max_connections: 0 }.into());
         }
 
         if self.timeout_ms == 0 {
@@ -172,10 +169,8 @@ pub async fn connect(config: ConnectionConfig) -> Result<Arc<Surreal<Db>>> {
 
     let db = Surreal::new::<RocksDb>(config.storage_path)
         .await
-        .map_err(|e| {
-            ConnectionError::InitializationFailed {
-                reason: format!("failed to create RocksDB instance: {}", e),
-            }
+        .map_err(|e| ConnectionError::InitializationFailed {
+            reason: format!("failed to create RocksDB instance: {}", e),
         })?;
 
     let db = Arc::new(db);
@@ -186,10 +181,8 @@ pub async fn connect(config: ConnectionConfig) -> Result<Arc<Surreal<Db>>> {
     db.use_ns(ns)
         .use_db(db_name)
         .await
-        .map_err(|e| {
-            ConnectionError::InitializationFailed {
-                reason: format!("failed to initialize namespace/database: {}", e),
-            }
+        .map_err(|e| ConnectionError::InitializationFailed {
+            reason: format!("failed to initialize namespace/database: {}", e),
         })?;
 
     if let (Some(username), Some(password)) = (config.username, config.password) {
@@ -200,10 +193,8 @@ pub async fn connect(config: ConnectionConfig) -> Result<Arc<Surreal<Db>>> {
             password: &password,
         })
         .await
-        .map_err(|e| {
-            ConnectionError::AuthenticationFailed {
-                reason: format!("authentication failed: {}", e),
-            }
+        .map_err(|e| ConnectionError::AuthenticationFailed {
+            reason: format!("authentication failed: {}", e),
         })?;
     }
 
