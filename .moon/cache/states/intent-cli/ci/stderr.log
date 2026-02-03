@@ -1,7 +1,0 @@
-[0m[38;5;13m   Compiled[0m in 0.06s
-intent-cli:build | [0m[38;5;13m   Compiled[0m in 0.05s
-intent-cli:test | [0m[38;5;13m   Compiled[0m in 0.05s
-intent-cli:test | [0m[38;5;13m    Running[0m intent_test.main
-intent-cli:test | {"timestamp":"2026-01-31T10:27:40.458-06:00","action":"test","message":"message"}
-intent-cli:build | [0m[38;5;13m   Compiled[0m in 0.05s
-intent-cli:lint | [0m[38;5;13m   Compiled[0m in 0.05s

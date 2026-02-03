@@ -2,7 +2,7 @@
 //!
 //! Directed Acyclic Graph for workflow dependencies using petgraph.
 //!
-//! This module provides a [`WorkflowDAG`] structure for managing bead dependencies
+//! This module provides a `WorkflowDAG` structure for managing bead dependencies
 //! with support for:
 //! - Query operations (dependencies, dependents, ancestors, descendants)
 //! - Ready detection (which beads can execute given completed set)

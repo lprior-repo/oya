@@ -10,6 +10,7 @@
     "crates/reconciler",
     "crates/oya-web",
     "crates/oya-shared",
+    "crates/oya-ui",
     "tools/profiling",
     # Zellij plugin (WASM target)
     "crates/oya-zellij",

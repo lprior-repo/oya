@@ -1,8 +1,0 @@
-[1m[92m    Blocking[0m waiting for file lock on package cache
-[1m[92m    Blocking[0m waiting for file lock on package cache
-[1m[92m    Blocking[0m waiting for file lock on package cache
-[1m[92m    Blocking[0m waiting for file lock on artifact directory
-[1m[92m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`test` profile [unoptimized + debuginfo]]8;;\ target(s) in 0.24s
-[1m[92m     Running[0m unittests src/main.rs (/home/lewis/src/intent-cli/target/debug/deps/intent-9f4736a08c6263c8)
-[1m[92m     Running[0m unittests src/lib.rs (/home/lewis/src/intent-cli/target/debug/deps/intent_core-47240d722adc377d)
-[1m[92m   Doc-tests[0m intent_core

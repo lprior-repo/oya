@@ -24,14 +24,16 @@
 //! pool.complete_bead(&agent_id).await?;
 //! ```
 
+mod agent_info;
 mod error;
 mod handle;
 mod health;
 mod messages;
 mod pool;
 
+pub use agent_info::{AgentInfo, AgentState, AgentCapability, WorkloadHistory, HealthMetrics, AgentStats, AgentApiResponse, AgentInfoError};
 pub use error::{AgentSwarmError, AgentSwarmResult};
-pub use handle::{AgentHandle, AgentState};
+pub use handle::{AgentHandle, AgentState as AgentStateLegacy};
 pub use health::{HealthCheckResult, HealthConfig, HealthMonitor};
 pub use messages::{AgentMessage, AgentResponse};
 pub use pool::{AgentPool, PoolConfig, PoolStats};

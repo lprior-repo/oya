@@ -13,9 +13,9 @@
 //!
 //! # Key Types
 //!
-//! - [`OrchestratorEvent`]: Enum of all state-changing events
-//! - [`ReplayEngine`]: Recovers state by replaying events
-//! - [`CheckpointManager`]: Creates and manages checkpoints
+//! - `OrchestratorEvent`: Enum of all state-changing events
+//! - `ReplayEngine`: Recovers state by replaying events
+//! - `CheckpointManager`: Creates and manages checkpoints
 
 mod checkpoint;
 mod engine;

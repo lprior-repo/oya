@@ -12,10 +12,10 @@
 //!
 //! # Key Types
 //!
-//! - [`DurableChannel`]: A durable message channel between workflows
-//! - [`Message`]: An envelope containing payload and metadata
-//! - [`MessageRouter`]: Routes messages to appropriate handlers
-//! - [`DeliveryTracker`]: Ensures exactly-once delivery
+//! - `DurableChannel`: A durable message channel between workflows
+//! - `Message`: An envelope containing payload and metadata
+//! - `MessageRouter`: Routes messages to appropriate handlers
+//! - `DeliveryTracker`: Ensures exactly-once delivery
 
 // Allow dead_code until this module is fully integrated
 #![allow(dead_code)]

@@ -13,9 +13,9 @@
 //!
 //! # Key Types
 //!
-//! - [`VirtualObject`]: Trait for implementing stateful objects
-//! - [`ObjectState`]: K/V state store for an object
-//! - [`ObjectManager`]: Manages object lifecycle and routing
+//! - `VirtualObject`: Trait for implementing stateful objects
+//! - `ObjectState`: K/V state store for an object
+//! - `ObjectManager`: Manages object lifecycle and routing
 
 // Allow dead_code until this module is fully integrated
 #![allow(dead_code)]

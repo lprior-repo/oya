@@ -13,9 +13,9 @@
 //!
 //! # Key Types
 //!
-//! - [`DurableTimer`]: A timer that persists and fires at a scheduled time
-//! - [`TimerScheduler`]: Schedules and manages timers
-//! - [`TimerExecutor`]: Executes fired timers
+//! - `DurableTimer`: A timer that persists and fires at a scheduled time
+//! - `TimerScheduler`: Schedules and manages timers
+//! - `TimerExecutor`: Executes fired timers
 
 // Allow dead_code until this module is fully integrated
 #![allow(dead_code)]

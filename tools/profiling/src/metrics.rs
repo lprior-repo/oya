@@ -64,7 +64,7 @@ impl MetricsSnapshot {
     }
 }
 
-/// Memory metrics from /proc/[pid]/status
+/// Memory metrics from `/proc/[pid]/status`
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemoryMetrics {
     /// Resident Set Size (RSS) in kilobytes
@@ -123,12 +123,12 @@ impl MemoryMetrics {
         self.rss_shared
     }
 
-    /// Read memory metrics from /proc/[pid]/status
+    /// Read memory metrics from `/proc/[pid]/status`
     ///
     /// # Errors
     ///
     /// Returns error if:
-    /// - /proc/[pid]/status cannot be read
+    /// - `/proc/[pid]/status` cannot be read
     /// - Required fields are missing
     /// - Values cannot be parsed
     pub fn read_from_proc(pid: u32) -> Result<Self> {

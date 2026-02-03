@@ -1,7 +1,0 @@
-[1m[92m    Blocking[0m waiting for file lock on package cache
-[1m[92m    Blocking[0m waiting for file lock on package cache
-[1m[92m    Blocking[0m waiting for file lock on package cache
-[1m[92m    Blocking[0m waiting for file lock on package cache
-[1m[92m Documenting[0m intent-core v0.1.0 (/home/lewis/src/intent-cli/crates/intent-core)
-[1m[92m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`dev` profile [unoptimized + debuginfo]]8;;\ target(s) in 0.46s
-[1m[92m   Generated[0m ]8;;file://omarchy/home/lewis/src/intent-cli/target/doc/intent_core/index.html\/home/lewis/src/intent-cli/target/doc/intent_core/index.html]8;;\

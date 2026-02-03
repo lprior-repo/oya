@@ -572,15 +572,16 @@ mod tests {
         let past = Utc::now() - chrono::Duration::minutes(5);
         let future = Utc::now() + chrono::Duration::hours(1);
 
-        let result =
-            Schedule::create("test".to_string(), "0 * * * *".to_string(), past).map(|mut schedule| {
+        let result = Schedule::create("test".to_string(), "0 * * * *".to_string(), past).map(
+            |mut schedule| {
                 let is_due_past = schedule.is_due();
                 schedule.next_run = future;
                 let is_due_future = schedule.is_due();
                 schedule.disable();
                 let is_due_disabled = schedule.is_due();
                 (is_due_past, is_due_future, is_due_disabled)
-            });
+            },
+        );
 
         assert!(matches!(result, Ok((true, false, false))));
     }
