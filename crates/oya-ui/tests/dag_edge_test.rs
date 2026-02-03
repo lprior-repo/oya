@@ -10,6 +10,7 @@ use oya_shared::graph::{
 };
 use oya_ui::dag_edge::{calculate_line_path, EdgeError};
 use proptest::prelude::*;
+use proptest::test_runner::TestCaseError;
 
 const EPSILON: f64 = 1e-6;
 
@@ -118,15 +119,16 @@ proptest! {
     ) {
         prop_assume!(source_id != target_id);
 
-        let source = NodeId::new(source_id.clone()).unwrap();
-        let target = NodeId::new(target_id.clone()).unwrap();
+        let source = NodeId::new(source_id.clone())
+            .map_err(|err| TestCaseError::fail(err.to_string()))?;
+        let target = NodeId::new(target_id.clone())
+            .map_err(|err| TestCaseError::fail(err.to_string()))?;
 
         let edge_types = [EdgeType::Dependency, EdgeType::DataFlow, EdgeType::Trigger];
 
         for edge_type in edge_types {
-            let result = Edge::new(source.clone(), target.clone(), edge_type);
-            prop_assert!(result.is_ok());
-            let edge = result.unwrap();
+            let edge = Edge::new(source.clone(), target.clone(), edge_type)
+                .map_err(|err| TestCaseError::fail(err.to_string()))?;
             prop_assert_eq!(edge.source().as_str(), source_id);
             prop_assert_eq!(edge.target().as_str(), target_id);
             prop_assert_eq!(edge.edge_type(), edge_type);
@@ -138,7 +140,8 @@ proptest! {
 proptest! {
     #[test]
     fn prop_self_referencing_edge_fails(id in "[a-z]{1,20}") {
-        let node_id = NodeId::new(id.clone()).unwrap();
+        let node_id = NodeId::new(id.clone())
+            .map_err(|err| TestCaseError::fail(err.to_string()))?;
         let result = Edge::new(node_id.clone(), node_id, EdgeType::Dependency);
         prop_assert!(result.is_err());
     }
@@ -234,10 +237,8 @@ proptest! {
         // Skip coincident positions
         prop_assume!((x1 - x2).abs() > EPSILON || (y1 - y2).abs() > EPSILON);
 
-        let result = calculate_line_path((x1, y1), r1, (x2, y2), r2);
-        prop_assert!(result.is_ok());
-
-        let path = result.unwrap();
+        let path = calculate_line_path((x1, y1), r1, (x2, y2), r2)
+            .map_err(|err| TestCaseError::fail(err.to_string()))?;
         prop_assert!(path.length >= 0.0);
         prop_assert!(path.start.0.is_finite());
         prop_assert!(path.start.1.is_finite());
@@ -258,7 +259,8 @@ proptest! {
         // Skip coincident positions
         prop_assume!((x1 - x2).abs() > EPSILON || (y1 - y2).abs() > EPSILON);
 
-        let path = calculate_line_path((x1, y1), 0.0, (x2, y2), 0.0).unwrap();
+        let path = calculate_line_path((x1, y1), 0.0, (x2, y2), 0.0)
+            .map_err(|err| TestCaseError::fail(err.to_string()))?;
 
         prop_assert!((path.start.0 - x1).abs() < EPSILON);
         prop_assert!((path.start.1 - y1).abs() < EPSILON);
@@ -281,7 +283,8 @@ proptest! {
         // Skip coincident positions
         prop_assume!((x1 - x2).abs() > EPSILON || (y1 - y2).abs() > EPSILON);
 
-        let path = calculate_line_path((x1, y1), r1, (x2, y2), r2).unwrap();
+        let path = calculate_line_path((x1, y1), r1, (x2, y2), r2)
+            .map_err(|err| TestCaseError::fail(err.to_string()))?;
 
         let distance = ((x2 - x1).powi(2) + (y2 - y1).powi(2)).sqrt();
         let expected_length = distance - r1 - r2;
@@ -306,7 +309,8 @@ proptest! {
         // Skip coincident positions
         prop_assume!((x1 - x2).abs() > EPSILON || (y1 - y2).abs() > EPSILON);
 
-        let path = calculate_line_path((x1, y1), r1, (x2, y2), r1).unwrap();
+        let path = calculate_line_path((x1, y1), r1, (x2, y2), r1)
+            .map_err(|err| TestCaseError::fail(err.to_string()))?;
 
         // Vector from source to start should be r1 in direction of target
         let dx = path.start.0 - x1;
@@ -425,7 +429,7 @@ proptest! {
 
 /// Test complete edge rendering pipeline with straight lines
 #[test]
-fn test_integration_edge_rendering() -> Result<(), String> {
+fn test_integration_edge_rendering() -> Result<(), Box<dyn std::error::Error>> {
     // Create nodes with positions
     let source = Node::with_position("source", "Source Node", 50.0, 50.0)?;
     let target = Node::with_position("target", "Target Node", 150.0, 50.0)?;
@@ -478,7 +482,7 @@ fn test_integration_curve_with_arrow() {
 
 /// Test edge state updates affect rendering
 #[test]
-fn test_integration_edge_state_updates() -> Result<(), String> {
+fn test_integration_edge_state_updates() -> Result<(), Box<dyn std::error::Error>> {
     let source = NodeId::new("source")?;
     let target = NodeId::new("target")?;
     let mut edge = Edge::new(source, target, EdgeType::Dependency)?;
@@ -507,7 +511,7 @@ fn test_integration_edge_state_updates() -> Result<(), String> {
 
 /// Test multiple edges between same nodes (parallel edges)
 #[test]
-fn test_integration_parallel_edges() -> Result<(), String> {
+fn test_integration_parallel_edges() -> Result<(), Box<dyn std::error::Error>> {
     let source = NodeId::new("source")?;
     let target = NodeId::new("target")?;
 
@@ -600,9 +604,12 @@ proptest! {
         prop_assume!(source_id != target_id);
 
         // Edge creation
-        let source = NodeId::new(source_id).unwrap();
-        let target = NodeId::new(target_id).unwrap();
-        let edge = Edge::new(source.clone(), target.clone(), EdgeType::Dependency).unwrap();
+        let source = NodeId::new(source_id)
+            .map_err(|err| TestCaseError::fail(err.to_string()))?;
+        let target = NodeId::new(target_id)
+            .map_err(|err| TestCaseError::fail(err.to_string()))?;
+        let edge = Edge::new(source.clone(), target.clone(), EdgeType::Dependency)
+            .map_err(|err| TestCaseError::fail(err.to_string()))?;
 
         // State transitions
         edge.set_state(EdgeState::Highlighted);
@@ -640,8 +647,7 @@ proptest! {
         let result = calculate_line_path((x1, y1), r1, (x2, y2), r2);
 
         // Either success or valid error
-        if result.is_ok() {
-            let path = result.unwrap();
+        if let Ok(path) = result {
             prop_assert!(path.length.is_finite());
             prop_assert!(path.start.0.is_finite());
             prop_assert!(path.start.1.is_finite());

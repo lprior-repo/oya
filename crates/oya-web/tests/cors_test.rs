@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tokio::sync::broadcast;
 
 #[tokio::test]
-async fn test_cors_headers_added() {
+async fn test_cors_headers_added() -> Result<(), String> {
     let (broadcast_tx, _) = broadcast::channel(100);
     let state = AppState {
         scheduler: Arc::new(mock_scheduler()),
@@ -27,8 +27,7 @@ async fn test_cors_headers_added() {
         );
 
     let server = TestServer::new(app)
-        .map_err(|e| format!("Failed to create test server: {e}"))
-        .unwrap();
+        .map_err(|e| format!("Failed to create test server: {e}"))?;
 
     let response = server
         .get("/test")
@@ -37,4 +36,5 @@ async fn test_cors_headers_added() {
 
     assert!(response.status_code().is_success());
     assert_eq!(response.text(), "OK");
+    Ok(())
 }

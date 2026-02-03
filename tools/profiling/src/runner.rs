@@ -46,13 +46,16 @@ impl ProfilingRunner {
     /// # use oya_profiling::{ProfilingConfig, ProfilingRunner};
     /// # use std::time::Duration;
     /// # use std::path::PathBuf;
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let config = ProfilingConfig::one_hour_default(
     ///     "my-app".to_string(),
     ///     vec!["--load-test".to_string()],
-    /// ).unwrap();
+    /// )?;
     ///
     /// let runner = ProfilingRunner::new(config);
     /// let result = runner.run();
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn run(self) -> Result<ProfilingSummary> {
         let logger = MetricsLogger::new(self.config.output_path().clone());

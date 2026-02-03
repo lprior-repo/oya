@@ -25,25 +25,26 @@
 //! use ractor::call;
 //!
 //! #[tokio::main]
-//! async fn main() {
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     // Spawn the scheduler
 //!     let args = SchedulerArguments::new();
-//!     let scheduler = spawn_scheduler(args).await.unwrap();
+//!     let scheduler = spawn_scheduler(args).await?;
 //!
 //!     // Register a workflow (fire-and-forget)
 //!     scheduler.send_message(SchedulerMessage::RegisterWorkflow {
 //!         workflow_id: "wf-123".to_string(),
-//!     }).unwrap();
+//!     })?;
 //!
 //!     // Query ready beads (request-response)
 //!     let ready = call!(scheduler, SchedulerMessage::GetWorkflowReadyBeads {
 //!         workflow_id: "wf-123".to_string(),
-//!     }).unwrap();
+//!     })?;
 //!
 //!     println!("Ready beads: {:?}", ready);
 //!
 //!     // Stop the scheduler
 //!     scheduler.stop(None);
+//!     Ok(())
 //! }
 //! ```
 

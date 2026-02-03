@@ -62,13 +62,14 @@ use uuid::Uuid;
 ///     priority: 1,
 /// };
 ///
-/// let key = idempotency_key("bead-123", &input)
-///     .expect("serialization failed");
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let key = idempotency_key("bead-123", &input)?;
 ///
 /// // Same input produces same key
-/// let key2 = idempotency_key("bead-123", &input)
-///     .expect("serialization failed");
+/// let key2 = idempotency_key("bead-123", &input)?;
 /// assert_eq!(key, key2);
+/// # Ok(())
+/// # }
 /// ```
 ///
 /// # Determinism Properties
@@ -152,7 +153,6 @@ pub fn idempotency_key_from_json(bead_id: &str, json: &str) -> Uuid {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used)] // Tests use expect for clarity
 mod tests {
     use super::*;
     use serde::{Deserialize, Serialize};
@@ -165,7 +165,7 @@ mod tests {
     }
 
     #[test]
-    fn test_idempotency_key_determinism() {
+    fn test_idempotency_key_determinism() -> Result<(), Box<dyn std::error::Error>> {
         let bead_id = "bead-test-123";
         let input = TestInput {
             bead_id: bead_id.to_string(),
@@ -173,32 +173,30 @@ mod tests {
             data: vec![1, 2, 3],
         };
 
-        let key1 =
-            idempotency_key(bead_id, &input).expect("test_idempotency_key_determinism: first key");
-        let key2 =
-            idempotency_key(bead_id, &input).expect("test_idempotency_key_determinism: second key");
+        let key1 = idempotency_key(bead_id, &input)?;
+        let key2 = idempotency_key(bead_id, &input)?;
 
         assert_eq!(key1, key2, "Same input must produce same key");
+        Ok(())
     }
 
     #[test]
-    fn test_different_beads_produce_different_keys() {
+    fn test_different_beads_produce_different_keys() -> Result<(), Box<dyn std::error::Error>> {
         let input = TestInput {
             bead_id: "shared".to_string(),
             phase: "test".to_string(),
             data: vec![1, 2, 3],
         };
 
-        let key1 = idempotency_key("bead-001", &input)
-            .expect("test_different_beads_produce_different_keys: first key");
-        let key2 = idempotency_key("bead-002", &input)
-            .expect("test_different_beads_produce_different_keys: second key");
+        let key1 = idempotency_key("bead-001", &input)?;
+        let key2 = idempotency_key("bead-002", &input)?;
 
         assert_ne!(key1, key2, "Different bead IDs must produce different keys");
+        Ok(())
     }
 
     #[test]
-    fn test_different_inputs_produce_different_keys() {
+    fn test_different_inputs_produce_different_keys() -> Result<(), Box<dyn std::error::Error>> {
         let bead_id = "bead-shared";
 
         let input1 = TestInput {
@@ -213,12 +211,11 @@ mod tests {
             data: vec![4, 5, 6],
         };
 
-        let key1 = idempotency_key(bead_id, &input1)
-            .expect("test_different_inputs_produce_different_keys: first key");
-        let key2 = idempotency_key(bead_id, &input2)
-            .expect("test_different_inputs_produce_different_keys: second key");
+        let key1 = idempotency_key(bead_id, &input1)?;
+        let key2 = idempotency_key(bead_id, &input2)?;
 
         assert_ne!(key1, key2, "Different inputs must produce different keys");
+        Ok(())
     }
 
     #[test]
@@ -282,7 +279,7 @@ mod tests {
     }
 
     #[test]
-    fn test_empty_input() {
+    fn test_empty_input() -> Result<(), Box<dyn std::error::Error>> {
         let bead_id = "bead-empty-test";
 
         let input = TestInput {
@@ -291,14 +288,15 @@ mod tests {
             data: vec![],
         };
 
-        let key1 = idempotency_key(bead_id, &input).expect("test_empty_input: first key");
-        let key2 = idempotency_key(bead_id, &input).expect("test_empty_input: second key");
+        let key1 = idempotency_key(bead_id, &input)?;
+        let key2 = idempotency_key(bead_id, &input)?;
 
         assert_eq!(key1, key2, "Empty input should still be deterministic");
+        Ok(())
     }
 
     #[test]
-    fn test_large_input() {
+    fn test_large_input() -> Result<(), Box<dyn std::error::Error>> {
         let bead_id = "bead-large-test";
 
         let large_data: Vec<u32> = (0..1000).collect();
@@ -308,14 +306,15 @@ mod tests {
             data: large_data,
         };
 
-        let key1 = idempotency_key(bead_id, &input).expect("test_large_input: first key");
-        let key2 = idempotency_key(bead_id, &input).expect("test_large_input: second key");
+        let key1 = idempotency_key(bead_id, &input)?;
+        let key2 = idempotency_key(bead_id, &input)?;
 
         assert_eq!(key1, key2, "Large input should still be deterministic");
+        Ok(())
     }
 
     #[test]
-    fn test_complex_nested_structures() {
+    fn test_complex_nested_structures() -> Result<(), Box<dyn std::error::Error>> {
         #[derive(Serialize, Deserialize, Debug, PartialEq)]
         struct NestedInput {
             outer: Vec<Inner>,
@@ -351,19 +350,18 @@ mod tests {
             },
         };
 
-        let key1 = idempotency_key("bead-complex", &input)
-            .expect("test_complex_nested_structures: first key");
-        let key2 = idempotency_key("bead-complex", &input)
-            .expect("test_complex_nested_structures: second key");
+        let key1 = idempotency_key("bead-complex", &input)?;
+        let key2 = idempotency_key("bead-complex", &input)?;
 
         assert_eq!(
             key1, key2,
             "Complex nested structures must be deterministic"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_unicode_input() {
+    fn test_unicode_input() -> Result<(), Box<dyn std::error::Error>> {
         #[derive(Serialize, Deserialize, Debug, PartialEq)]
         struct UnicodeInput {
             text: String,
@@ -375,10 +373,11 @@ mod tests {
             emoji: "🦀🚀✨".to_string(),
         };
 
-        let key1 = idempotency_key("bead-unicode", &input).expect("test_unicode_input: first key");
-        let key2 = idempotency_key("bead-unicode", &input).expect("test_unicode_input: second key");
+        let key1 = idempotency_key("bead-unicode", &input)?;
+        let key2 = idempotency_key("bead-unicode", &input)?;
 
         assert_eq!(key1, key2, "Unicode input must be deterministic");
+        Ok(())
     }
 
     #[test]
@@ -401,22 +400,21 @@ mod tests {
     }
 
     #[test]
-    fn test_collision_resistance_basic() {
+    fn test_collision_resistance_basic() -> Result<(), Box<dyn std::error::Error>> {
         // Test that small changes produce different keys
         let bead_id = "bead-collision-test";
 
         let input1 = vec![1, 2, 3, 4, 5];
         let input2 = vec![1, 2, 3, 4, 6]; // Last element different
 
-        let key1 =
-            idempotency_key(bead_id, &input1).expect("test_collision_resistance_basic: first key");
-        let key2 =
-            idempotency_key(bead_id, &input2).expect("test_collision_resistance_basic: second key");
+        let key1 = idempotency_key(bead_id, &input1)?;
+        let key2 = idempotency_key(bead_id, &input2)?;
 
         assert_ne!(
             key1, key2,
             "Small input differences must produce different keys"
         );
+        Ok(())
     }
 
     #[test]

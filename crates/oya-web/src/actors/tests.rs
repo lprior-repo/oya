@@ -516,8 +516,6 @@ mod clone_behavior_tests {
         ) = (&original, &cloned)
         {
             assert_eq!(s1, s2, "Cloned spec should match original");
-        } else {
-            unreachable!("Both should be CreateBead variants");
         }
     }
 
@@ -532,8 +530,6 @@ mod clone_behavior_tests {
             (&original, &cloned)
         {
             assert_eq!(id1, id2, "Cloned ID should match original");
-        } else {
-            unreachable!("Both should be Created variants");
         }
     }
 

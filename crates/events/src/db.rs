@@ -163,8 +163,8 @@ mod tests {
     use tempfile::tempdir;
 
     #[tokio::test]
-    async fn test_connect_and_health_check() {
-        let temp_dir = tempdir().unwrap();
+    async fn test_connect_and_health_check() -> Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = tempdir()?;
         let db_path = temp_dir
             .path()
             .join("test_db")
@@ -172,18 +172,16 @@ mod tests {
             .to_string();
 
         let config = SurrealDbConfig::new(db_path);
-        let client = SurrealDbClient::connect(config).await;
-
-        assert!(client.is_ok(), "Connection should succeed");
-        let client = client.unwrap();
+        let client = SurrealDbClient::connect(config).await?;
 
         let health = client.health_check().await;
         assert!(health.is_ok(), "Health check should succeed");
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_schema_init() {
-        let temp_dir = tempdir().unwrap();
+    async fn test_schema_init() -> Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = tempdir()?;
         let db_path = temp_dir
             .path()
             .join("test_db")
@@ -191,16 +189,17 @@ mod tests {
             .to_string();
 
         let config = SurrealDbConfig::new(db_path);
-        let client = SurrealDbClient::connect(config).await.unwrap();
+        let client = SurrealDbClient::connect(config).await?;
 
         let schema = "DEFINE TABLE test SCHEMAFULL;";
         let result = client.init_schema(schema).await;
         assert!(result.is_ok(), "Schema init should succeed");
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_schema_init_with_errors() {
-        let temp_dir = tempdir().unwrap();
+    async fn test_schema_init_with_errors() -> Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = tempdir()?;
         let db_path = temp_dir
             .path()
             .join("test_db")
@@ -208,10 +207,11 @@ mod tests {
             .to_string();
 
         let config = SurrealDbConfig::new(db_path);
-        let client = SurrealDbClient::connect(config).await.unwrap();
+        let client = SurrealDbClient::connect(config).await?;
 
         let schema = "INVALID SQL SYNTAX;";
         let result = client.init_schema(schema).await;
         assert!(result.is_err(), "Invalid schema should fail");
+        Ok(())
     }
 }

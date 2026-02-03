@@ -262,9 +262,10 @@ impl AgentInfo {
     /// use oya::agent_info::{AgentInfo, AgentCapability, AgentState};
     /// use chrono::Utc;
     ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let capabilities = vec![
-    ///     AgentCapability::new("code-generation".to_string(), "Generates code".to_string(), "1.0".to_string()).unwrap(),
-    ///     AgentCapability::new("testing".to_string(), "Runs tests".to_string(), "1.0".to_string()).unwrap(),
+    ///     AgentCapability::new("code-generation".to_string(), "Generates code".to_string(), "1.0".to_string())?,
+    ///     AgentCapability::new("testing".to_string(), "Runs tests".to_string(), "1.0".to_string())?,
     /// ];
     ///
     /// let agent = AgentInfo::new(
@@ -272,8 +273,9 @@ impl AgentInfo {
     ///     capabilities,
     ///     3,
     ///     30,
-    /// )
-    /// .unwrap();
+    /// )?;
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn new(
         agent_id: String,
@@ -371,9 +373,16 @@ impl AgentInfo {
     ///
     /// ```
     /// # use oya::agent_info::AgentInfo;
-    /// # let mut agent = AgentInfo::new("agent-001".to_string(), vec![], 3, 30).unwrap();
-    /// agent.assign_bead("bead-123".to_string()).unwrap();
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// # use oya::agent_info::AgentCapability;
+    /// # let capabilities = vec![
+    /// #     AgentCapability::new("orchestration".to_string(), "Runs workflows".to_string(), "1.0".to_string())?,
+    /// # ];
+    /// let mut agent = AgentInfo::new("agent-001".to_string(), capabilities, 3, 30)?;
+    /// agent.assign_bead("bead-123".to_string())?;
     /// assert_eq!(agent.current_bead, Some("bead-123".to_string()));
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn assign_bead(&mut self, bead_id: String) -> Result<(), AgentInfoError> {
         Self::validate_bead_id(&bead_id)?;

@@ -35,27 +35,26 @@ mod unit_tests {
     }
 
     #[test]
-    fn test_serialization_roundtrip() {
+    fn test_serialization_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let key = IdempotencyKey::new(uuid::Uuid::new_v4());
 
-        let serialized = serde_json::to_string(&key).expect("serialization failed");
-        let deserialized: IdempotencyKey =
-            serde_json::from_str(&serialized).expect("deserialization failed");
+        let serialized = serde_json::to_string(&key)?;
+        let deserialized: IdempotencyKey = serde_json::from_str(&serialized)?;
 
         assert_eq!(deserialized, key);
+        Ok(())
     }
 
     #[test]
-    fn test_bincode_roundtrip() {
+    fn test_bincode_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let key = IdempotencyKey::new(uuid::Uuid::new_v4());
 
-        let encoded = bincode::serde::encode_to_vec(key, bincode::config::standard())
-            .expect("encoding failed");
+        let encoded = bincode::serde::encode_to_vec(key, bincode::config::standard())?;
         let (decoded, _): (IdempotencyKey, _) =
-            bincode::serde::decode_from_slice(&encoded, bincode::config::standard())
-                .expect("decoding failed");
+            bincode::serde::decode_from_slice(&encoded, bincode::config::standard())?;
 
         assert_eq!(decoded, key);
+        Ok(())
     }
 
     #[test]
@@ -141,7 +140,7 @@ mod unit_tests {
     }
 
     #[test]
-    fn test_idempotency_key_wrapper() {
+    fn test_idempotency_key_wrapper() -> Result<(), Box<dyn std::error::Error>> {
         let bead_id = "test-bead";
         let input = b"test input";
 
@@ -152,13 +151,14 @@ mod unit_tests {
         assert_eq!(key.to_string(), uuid.to_string());
 
         let key_str = key.to_string();
-        let parsed: IdempotencyKey = key_str.parse().expect("Failed to parse UUID string");
+        let parsed: IdempotencyKey = key_str.parse()?;
 
         assert_eq!(parsed, key);
+        Ok(())
     }
 
     #[test]
-    fn test_structured_data_determinism() {
+    fn test_structured_data_determinism() -> Result<(), Box<dyn std::error::Error>> {
         #[derive(Serialize, Debug, PartialEq)]
         struct TestStruct {
             bead_id: String,
@@ -170,10 +170,11 @@ mod unit_tests {
             value: 42,
         };
 
-        let key1 = idempotency_key("test-bead", &data).expect("serialization failed");
-        let key2 = idempotency_key("test-bead", &data).expect("serialization failed");
+        let key1 = idempotency_key("test-bead", &data)?;
+        let key2 = idempotency_key("test-bead", &data)?;
 
         assert_eq!(key1, key2);
+        Ok(())
     }
 
     #[test]

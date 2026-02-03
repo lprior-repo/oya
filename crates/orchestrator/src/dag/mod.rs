@@ -110,15 +110,18 @@ impl WorkflowDAG {
     /// ```
     /// use orchestrator::dag::{WorkflowDAG, DependencyType};
     ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut dag = WorkflowDAG::new();
-    /// dag.add_node("bead-001".to_string()).unwrap();
-    /// dag.add_node("bead-002".to_string()).unwrap();
+    /// dag.add_node("bead-001".to_string())?;
+    /// dag.add_node("bead-002".to_string())?;
     /// let result = dag.add_edge(
     ///     "bead-001".to_string(),
     ///     "bead-002".to_string(),
     ///     DependencyType::BlockingDependency
     /// );
     /// assert!(result.is_ok());
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn add_edge(
         &mut self,
@@ -152,11 +155,14 @@ impl WorkflowDAG {
     /// ```
     /// use orchestrator::dag::WorkflowDAG;
     ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut dag = WorkflowDAG::new();
-    /// dag.add_node("bead-001".to_string()).unwrap();
-    /// dag.add_node("bead-002".to_string()).unwrap();
+    /// dag.add_node("bead-001".to_string())?;
+    /// dag.add_node("bead-002".to_string())?;
     /// let nodes: Vec<&String> = dag.nodes().collect();
     /// assert_eq!(nodes.len(), 2);
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn nodes(&self) -> impl Iterator<Item = &BeadId> {
         self.graph.node_weights()
@@ -173,16 +179,19 @@ impl WorkflowDAG {
     /// ```
     /// use orchestrator::dag::{WorkflowDAG, DependencyType};
     ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut dag = WorkflowDAG::new();
-    /// dag.add_node("bead-001".to_string()).unwrap();
-    /// dag.add_node("bead-002".to_string()).unwrap();
+    /// dag.add_node("bead-001".to_string())?;
+    /// dag.add_node("bead-002".to_string())?;
     /// dag.add_edge(
     ///     "bead-001".to_string(),
     ///     "bead-002".to_string(),
     ///     DependencyType::BlockingDependency
-    /// ).unwrap();
+    /// )?;
     /// let edges: Vec<_> = dag.edges().collect();
     /// assert_eq!(edges.len(), 1);
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn edges(&self) -> impl Iterator<Item = (&BeadId, &BeadId, &DependencyType)> {
         self.graph.edge_references().filter_map(move |edge| {
@@ -204,10 +213,13 @@ impl WorkflowDAG {
     /// ```
     /// use orchestrator::dag::WorkflowDAG;
     ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut dag = WorkflowDAG::new();
     /// assert_eq!(dag.node_count(), 0);
-    /// dag.add_node("bead-001".to_string()).unwrap();
+    /// dag.add_node("bead-001".to_string())?;
     /// assert_eq!(dag.node_count(), 1);
+    /// # Ok(())
+    /// # }
     /// ```
     #[must_use]
     pub fn node_count(&self) -> usize {
@@ -225,16 +237,19 @@ impl WorkflowDAG {
     /// ```
     /// use orchestrator::dag::{WorkflowDAG, DependencyType};
     ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut dag = WorkflowDAG::new();
-    /// dag.add_node("bead-001".to_string()).unwrap();
-    /// dag.add_node("bead-002".to_string()).unwrap();
+    /// dag.add_node("bead-001".to_string())?;
+    /// dag.add_node("bead-002".to_string())?;
     /// assert_eq!(dag.edge_count(), 0);
     /// dag.add_edge(
     ///     "bead-001".to_string(),
     ///     "bead-002".to_string(),
     ///     DependencyType::BlockingDependency
-    /// ).unwrap();
+    /// )?;
     /// assert_eq!(dag.edge_count(), 1);
+    /// # Ok(())
+    /// # }
     /// ```
     #[must_use]
     pub fn edge_count(&self) -> usize {
@@ -275,13 +290,16 @@ impl WorkflowDAG {
     /// ```
     /// use orchestrator::dag::{WorkflowDAG, DependencyType};
     ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut dag = WorkflowDAG::new();
-    /// dag.add_node("a".to_string()).unwrap();
-    /// dag.add_node("b".to_string()).unwrap();
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency).unwrap();
+    /// dag.add_node("a".to_string())?;
+    /// dag.add_node("b".to_string())?;
+    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
     ///
-    /// let deps = dag.get_dependencies(&"b".to_string()).unwrap();
+    /// let deps = dag.get_dependencies(&"b".to_string())?;
     /// assert_eq!(deps, vec!["a".to_string()]);
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn get_dependencies(&self, bead_id: &BeadId) -> DagResult<Vec<BeadId>> {
         let node_index = self.get_node_index(bead_id)?;
@@ -534,10 +552,11 @@ impl WorkflowDAG {
     /// use orchestrator::dag::{WorkflowDAG, DependencyType};
     /// use std::collections::HashSet;
     ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut dag = WorkflowDAG::new();
-    /// dag.add_node("a".to_string()).unwrap();
-    /// dag.add_node("b".to_string()).unwrap();
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency).unwrap();
+    /// dag.add_node("a".to_string())?;
+    /// dag.add_node("b".to_string())?;
+    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
     ///
     /// let completed = HashSet::new();
     /// let ready = dag.get_ready_nodes(&completed);
@@ -547,6 +566,8 @@ impl WorkflowDAG {
     /// completed.insert("a".to_string());
     /// let ready = dag.get_ready_nodes(&completed);
     /// assert_eq!(ready, vec!["b".to_string()]);
+    /// # Ok(())
+    /// # }
     /// ```
     #[must_use]
     pub fn get_ready_nodes(&self, completed: &HashSet<BeadId>) -> Vec<BeadId> {
@@ -600,14 +621,17 @@ impl WorkflowDAG {
     /// use orchestrator::dag::{WorkflowDAG, DependencyType};
     /// use std::collections::HashSet;
     ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut dag = WorkflowDAG::new();
-    /// dag.add_node("a".to_string()).unwrap();
-    /// dag.add_node("b".to_string()).unwrap();
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency).unwrap();
+    /// dag.add_node("a".to_string())?;
+    /// dag.add_node("b".to_string())?;
+    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
     ///
     /// let completed = HashSet::new();
     /// let blocked = dag.get_blocked_nodes(&completed);
     /// assert_eq!(blocked, vec!["b".to_string()]);
+    /// # Ok(())
+    /// # }
     /// ```
     #[must_use]
     pub fn get_blocked_nodes(&self, completed: &HashSet<BeadId>) -> Vec<BeadId> {
@@ -661,14 +685,17 @@ impl WorkflowDAG {
     /// use orchestrator::dag::{WorkflowDAG, DependencyType};
     /// use std::collections::HashSet;
     ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut dag = WorkflowDAG::new();
-    /// dag.add_node("a".to_string()).unwrap();
-    /// dag.add_node("b".to_string()).unwrap();
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency).unwrap();
+    /// dag.add_node("a".to_string())?;
+    /// dag.add_node("b".to_string())?;
+    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
     ///
     /// let completed = HashSet::new();
-    /// assert!(dag.is_ready(&"a".to_string(), &completed).unwrap());
-    /// assert!(!dag.is_ready(&"b".to_string(), &completed).unwrap());
+    /// assert!(dag.is_ready(&"a".to_string(), &completed)?);
+    /// assert!(!dag.is_ready(&"b".to_string(), &completed)?);
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn is_ready(&self, bead_id: &BeadId, completed: &HashSet<BeadId>) -> DagResult<bool> {
         let node_index = self.get_node_index(bead_id)?;
@@ -703,20 +730,23 @@ impl WorkflowDAG {
     /// ```
     /// use orchestrator::dag::{WorkflowDAG, DependencyType};
     ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut dag = WorkflowDAG::new();
-    /// dag.add_node("a".to_string()).unwrap();
-    /// dag.add_node("b".to_string()).unwrap();
-    /// dag.add_node("c".to_string()).unwrap();
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency).unwrap();
-    /// dag.add_edge("b".to_string(), "c".to_string(), DependencyType::BlockingDependency).unwrap();
+    /// dag.add_node("a".to_string())?;
+    /// dag.add_node("b".to_string())?;
+    /// dag.add_node("c".to_string())?;
+    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
+    /// dag.add_edge("b".to_string(), "c".to_string(), DependencyType::BlockingDependency)?;
     ///
-    /// let sorted = dag.topological_sort().unwrap();
+    /// let sorted = dag.topological_sort()?;
     /// // a must come before b, b must come before c
-    /// let pos_a = sorted.iter().position(|x| x == "a").unwrap();
-    /// let pos_b = sorted.iter().position(|x| x == "b").unwrap();
-    /// let pos_c = sorted.iter().position(|x| x == "c").unwrap();
+    /// let pos_a = sorted.iter().position(|x| x == "a").ok_or("missing a")?;
+    /// let pos_b = sorted.iter().position(|x| x == "b").ok_or("missing b")?;
+    /// let pos_c = sorted.iter().position(|x| x == "c").ok_or("missing c")?;
     /// assert!(pos_a < pos_b);
     /// assert!(pos_b < pos_c);
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn topological_sort(&self) -> DagResult<Vec<BeadId>> {
         toposort(&self.graph, None)
@@ -751,14 +781,17 @@ impl WorkflowDAG {
     /// ```
     /// use orchestrator::dag::{WorkflowDAG, DependencyType};
     ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut dag = WorkflowDAG::new();
-    /// dag.add_node("a".to_string()).unwrap();
-    /// dag.add_node("b".to_string()).unwrap();
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency).unwrap();
+    /// dag.add_node("a".to_string())?;
+    /// dag.add_node("b".to_string())?;
+    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
     ///
-    /// let sorted = dag.topological_sort_kahn().unwrap();
+    /// let sorted = dag.topological_sort_kahn()?;
     /// assert_eq!(sorted[0], "a");
     /// assert_eq!(sorted[1], "b");
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn topological_sort_kahn(&self) -> DagResult<Vec<BeadId>> {
         let mut in_degree: HashMap<NodeIndex, usize> = HashMap::new();
@@ -831,22 +864,25 @@ impl WorkflowDAG {
     /// use std::collections::HashMap;
     /// use std::time::Duration;
     ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut dag = WorkflowDAG::new();
-    /// dag.add_node("a".to_string()).unwrap();
-    /// dag.add_node("b".to_string()).unwrap();
-    /// dag.add_node("c".to_string()).unwrap();
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency).unwrap();
-    /// dag.add_edge("a".to_string(), "c".to_string(), DependencyType::BlockingDependency).unwrap();
+    /// dag.add_node("a".to_string())?;
+    /// dag.add_node("b".to_string())?;
+    /// dag.add_node("c".to_string())?;
+    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
+    /// dag.add_edge("a".to_string(), "c".to_string(), DependencyType::BlockingDependency)?;
     ///
     /// let mut weights = HashMap::new();
     /// weights.insert("a".to_string(), Duration::from_secs(1));
     /// weights.insert("b".to_string(), Duration::from_secs(5));
     /// weights.insert("c".to_string(), Duration::from_secs(2));
     ///
-    /// let critical = dag.critical_path(&weights).unwrap();
+    /// let critical = dag.critical_path(&weights)?;
     /// // Critical path is a -> b (total 6s) not a -> c (total 3s)
     /// assert!(critical.contains(&"a".to_string()));
     /// assert!(critical.contains(&"b".to_string()));
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn critical_path(&self, weights: &HashMap<BeadId, Duration>) -> DagResult<Vec<BeadId>> {
         let topo_order = self.topological_sort()?;
@@ -929,12 +965,15 @@ impl WorkflowDAG {
     /// ```
     /// use orchestrator::dag::{WorkflowDAG, DependencyType};
     ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut dag = WorkflowDAG::new();
-    /// dag.add_node("a".to_string()).unwrap();
-    /// dag.add_node("b".to_string()).unwrap();
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency).unwrap();
+    /// dag.add_node("a".to_string())?;
+    /// dag.add_node("b".to_string())?;
+    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
     ///
     /// assert!(!dag.has_cycle());
+    /// # Ok(())
+    /// # }
     /// ```
     #[must_use]
     pub fn has_cycle(&self) -> bool {
@@ -1033,12 +1072,15 @@ impl WorkflowDAG {
     /// ```
     /// use orchestrator::dag::{WorkflowDAG, DependencyType};
     ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut dag = WorkflowDAG::new();
-    /// dag.add_node("a".to_string()).unwrap();
-    /// dag.add_node("b".to_string()).unwrap();
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency).unwrap();
+    /// dag.add_node("a".to_string())?;
+    /// dag.add_node("b".to_string())?;
+    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
     ///
     /// assert!(dag.is_connected());
+    /// # Ok(())
+    /// # }
     /// ```
     #[must_use]
     pub fn is_connected(&self) -> bool {
@@ -1093,12 +1135,15 @@ impl WorkflowDAG {
     /// ```
     /// use orchestrator::dag::WorkflowDAG;
     ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut dag = WorkflowDAG::new();
-    /// dag.add_node("a".to_string()).unwrap();
+    /// dag.add_node("a".to_string())?;
     /// assert_eq!(dag.node_count(), 1);
     ///
-    /// dag.remove_node(&"a".to_string()).unwrap();
+    /// dag.remove_node(&"a".to_string())?;
     /// assert_eq!(dag.node_count(), 0);
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn remove_node(&mut self, bead_id: &BeadId) -> DagResult<()> {
         let node_index = self.get_node_index(bead_id)?;
@@ -1132,14 +1177,17 @@ impl WorkflowDAG {
     /// ```
     /// use orchestrator::dag::{WorkflowDAG, DependencyType};
     ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut dag = WorkflowDAG::new();
-    /// dag.add_node("a".to_string()).unwrap();
-    /// dag.add_node("b".to_string()).unwrap();
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency).unwrap();
+    /// dag.add_node("a".to_string())?;
+    /// dag.add_node("b".to_string())?;
+    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
     /// assert_eq!(dag.edge_count(), 1);
     ///
-    /// dag.remove_edge(&"a".to_string(), &"b".to_string()).unwrap();
+    /// dag.remove_edge(&"a".to_string(), &"b".to_string())?;
     /// assert_eq!(dag.edge_count(), 0);
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn remove_edge(&mut self, from: &BeadId, to: &BeadId) -> DagResult<()> {
         let from_index = self.get_node_index(from)?;
@@ -1173,16 +1221,19 @@ impl WorkflowDAG {
     /// ```
     /// use orchestrator::dag::{WorkflowDAG, DependencyType};
     ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut dag = WorkflowDAG::new();
-    /// dag.add_node("a".to_string()).unwrap();
-    /// dag.add_node("b".to_string()).unwrap();
-    /// dag.add_node("c".to_string()).unwrap();
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency).unwrap();
-    /// dag.add_edge("b".to_string(), "c".to_string(), DependencyType::BlockingDependency).unwrap();
+    /// dag.add_node("a".to_string())?;
+    /// dag.add_node("b".to_string())?;
+    /// dag.add_node("c".to_string())?;
+    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
+    /// dag.add_edge("b".to_string(), "c".to_string(), DependencyType::BlockingDependency)?;
     ///
-    /// let subgraph = dag.subgraph(&["a".to_string(), "b".to_string()]).unwrap();
+    /// let subgraph = dag.subgraph(&["a".to_string(), "b".to_string()])?;
     /// assert_eq!(subgraph.node_count(), 2);
     /// assert_eq!(subgraph.edge_count(), 1);
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn subgraph(&self, nodes: &[BeadId]) -> DagResult<WorkflowDAG> {
         let node_set: HashSet<&BeadId> = nodes.iter().collect();
@@ -1234,16 +1285,19 @@ impl WorkflowDAG {
     /// ```
     /// use orchestrator::dag::{WorkflowDAG, DependencyType};
     ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut dag = WorkflowDAG::new();
-    /// dag.add_node("a".to_string()).unwrap();
-    /// dag.add_node("b".to_string()).unwrap();
-    /// dag.add_node("c".to_string()).unwrap();
-    /// dag.add_node("d".to_string()).unwrap(); // disconnected
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency).unwrap();
-    /// dag.add_edge("b".to_string(), "c".to_string(), DependencyType::BlockingDependency).unwrap();
+    /// dag.add_node("a".to_string())?;
+    /// dag.add_node("b".to_string())?;
+    /// dag.add_node("c".to_string())?;
+    /// dag.add_node("d".to_string())?; // disconnected
+    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
+    /// dag.add_edge("b".to_string(), "c".to_string(), DependencyType::BlockingDependency)?;
     ///
-    /// let induced = dag.induced_subgraph(&"b".to_string()).unwrap();
+    /// let induced = dag.induced_subgraph(&"b".to_string())?;
     /// assert_eq!(induced.node_count(), 3); // a, b, c (not d)
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn induced_subgraph(&self, bead_id: &BeadId) -> DagResult<WorkflowDAG> {
         // Verify node exists
@@ -1296,7 +1350,7 @@ impl Default for WorkflowDAG {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used, clippy::unnecessary_to_owned)]
+#[allow(clippy::unnecessary_to_owned)]
 mod tests {
     use super::*;
 
@@ -1316,21 +1370,19 @@ mod tests {
     }
 
     #[test]
-    fn test_add_duplicate_node_fails() {
+    fn test_add_duplicate_node_fails() -> DagResult<()> {
         let mut dag = WorkflowDAG::new();
-        dag.add_node("bead-001".to_string())
-            .expect("First add should succeed");
+        dag.add_node("bead-001".to_string())?;
         let result = dag.add_node("bead-001".to_string());
         assert!(result.is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_add_edge_between_two_nodes() {
+    fn test_add_edge_between_two_nodes() -> DagResult<()> {
         let mut dag = WorkflowDAG::new();
-        dag.add_node("bead-001".to_string())
-            .expect("Should add first node");
-        dag.add_node("bead-002".to_string())
-            .expect("Should add second node");
+        dag.add_node("bead-001".to_string())?;
+        dag.add_node("bead-002".to_string())?;
 
         let result = dag.add_edge(
             "bead-001".to_string(),
@@ -1339,13 +1391,13 @@ mod tests {
         );
         assert!(result.is_ok());
         assert_eq!(dag.edge_count(), 1);
+        Ok(())
     }
 
     #[test]
-    fn test_add_edge_with_nonexistent_source_fails() {
+    fn test_add_edge_with_nonexistent_source_fails() -> DagResult<()> {
         let mut dag = WorkflowDAG::new();
-        dag.add_node("bead-002".to_string())
-            .expect("Should add node");
+        dag.add_node("bead-002".to_string())?;
 
         let result = dag.add_edge(
             "bead-001".to_string(),
@@ -1353,13 +1405,13 @@ mod tests {
             DependencyType::BlockingDependency,
         );
         assert!(result.is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_add_edge_with_nonexistent_target_fails() {
+    fn test_add_edge_with_nonexistent_target_fails() -> DagResult<()> {
         let mut dag = WorkflowDAG::new();
-        dag.add_node("bead-001".to_string())
-            .expect("Should add node");
+        dag.add_node("bead-001".to_string())?;
 
         let result = dag.add_edge(
             "bead-001".to_string(),
@@ -1367,256 +1419,235 @@ mod tests {
             DependencyType::BlockingDependency,
         );
         assert!(result.is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_nodes_iterator() {
+    fn test_nodes_iterator() -> DagResult<()> {
         let mut dag = WorkflowDAG::new();
-        dag.add_node("bead-001".to_string())
-            .expect("Should add first node");
-        dag.add_node("bead-002".to_string())
-            .expect("Should add second node");
+        dag.add_node("bead-001".to_string())?;
+        dag.add_node("bead-002".to_string())?;
 
         let nodes: Vec<&String> = dag.nodes().collect();
         assert_eq!(nodes.len(), 2);
         assert!(nodes.contains(&&"bead-001".to_string()));
         assert!(nodes.contains(&&"bead-002".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn test_edges_iterator() {
+    fn test_edges_iterator() -> DagResult<()> {
         let mut dag = WorkflowDAG::new();
-        dag.add_node("bead-001".to_string())
-            .expect("Should add first node");
-        dag.add_node("bead-002".to_string())
-            .expect("Should add second node");
+        dag.add_node("bead-001".to_string())?;
+        dag.add_node("bead-002".to_string())?;
         dag.add_edge(
             "bead-001".to_string(),
             "bead-002".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("Should add edge");
+        )?;
 
         let edges: Vec<_> = dag.edges().collect();
         assert_eq!(edges.len(), 1);
         assert_eq!(edges[0].0, &"bead-001".to_string());
         assert_eq!(edges[0].1, &"bead-002".to_string());
         assert_eq!(*edges[0].2, DependencyType::BlockingDependency);
+        Ok(())
     }
 
     #[test]
-    fn test_multiple_edges_different_types() {
+    fn test_multiple_edges_different_types() -> DagResult<()> {
         let mut dag = WorkflowDAG::new();
-        dag.add_node("bead-001".to_string())
-            .expect("Should add node 1");
-        dag.add_node("bead-002".to_string())
-            .expect("Should add node 2");
-        dag.add_node("bead-003".to_string())
-            .expect("Should add node 3");
+        dag.add_node("bead-001".to_string())?;
+        dag.add_node("bead-002".to_string())?;
+        dag.add_node("bead-003".to_string())?;
 
         dag.add_edge(
             "bead-001".to_string(),
             "bead-002".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("Should add blocking edge");
+        )?;
 
         dag.add_edge(
             "bead-001".to_string(),
             "bead-003".to_string(),
             DependencyType::PreferredOrder,
-        )
-        .expect("Should add preferred order edge");
+        )?;
 
         assert_eq!(dag.edge_count(), 2);
+        Ok(())
     }
 
     // ==================== Query Method Tests ====================
 
     #[test]
-    fn test_get_dependencies() {
+    fn test_get_dependencies() -> DagResult<()> {
         let mut dag = WorkflowDAG::new();
-        dag.add_node("a".to_string()).expect("add a");
-        dag.add_node("b".to_string()).expect("add b");
-        dag.add_node("c".to_string()).expect("add c");
+        dag.add_node("a".to_string())?;
+        dag.add_node("b".to_string())?;
+        dag.add_node("c".to_string())?;
         dag.add_edge(
             "a".to_string(),
             "c".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge a->c");
+        )?;
         dag.add_edge(
             "b".to_string(),
             "c".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge b->c");
+        )?;
 
-        let deps = dag.get_dependencies(&"c".to_string()).expect("get deps");
+        let deps = dag.get_dependencies(&"c".to_string())?;
         assert_eq!(deps.len(), 2);
         assert!(deps.contains(&"a".to_string()));
         assert!(deps.contains(&"b".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn test_get_dependents() {
+    fn test_get_dependents() -> DagResult<()> {
         let mut dag = WorkflowDAG::new();
-        dag.add_node("a".to_string()).expect("add a");
-        dag.add_node("b".to_string()).expect("add b");
-        dag.add_node("c".to_string()).expect("add c");
+        dag.add_node("a".to_string())?;
+        dag.add_node("b".to_string())?;
+        dag.add_node("c".to_string())?;
         dag.add_edge(
             "a".to_string(),
             "b".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge a->b");
+        )?;
         dag.add_edge(
             "a".to_string(),
             "c".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge a->c");
+        )?;
 
-        let dependents = dag
-            .get_dependents(&"a".to_string())
-            .expect("get dependents");
+        let dependents = dag.get_dependents(&"a".to_string())?;
         assert_eq!(dependents.len(), 2);
         assert!(dependents.contains(&"b".to_string()));
         assert!(dependents.contains(&"c".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn test_get_all_ancestors() {
+    fn test_get_all_ancestors() -> DagResult<()> {
         let mut dag = WorkflowDAG::new();
-        dag.add_node("a".to_string()).expect("add a");
-        dag.add_node("b".to_string()).expect("add b");
-        dag.add_node("c".to_string()).expect("add c");
-        dag.add_node("d".to_string()).expect("add d");
+        dag.add_node("a".to_string())?;
+        dag.add_node("b".to_string())?;
+        dag.add_node("c".to_string())?;
+        dag.add_node("d".to_string())?;
         dag.add_edge(
             "a".to_string(),
             "b".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge");
+        )?;
         dag.add_edge(
             "b".to_string(),
             "c".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge");
+        )?;
         dag.add_edge(
             "c".to_string(),
             "d".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge");
+        )?;
 
-        let ancestors = dag
-            .get_all_ancestors(&"d".to_string())
-            .expect("get ancestors");
+        let ancestors = dag.get_all_ancestors(&"d".to_string())?;
         assert_eq!(ancestors.len(), 3);
         assert!(ancestors.contains(&"a".to_string()));
         assert!(ancestors.contains(&"b".to_string()));
         assert!(ancestors.contains(&"c".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn test_get_all_descendants() {
+    fn test_get_all_descendants() -> DagResult<()> {
         let mut dag = WorkflowDAG::new();
-        dag.add_node("a".to_string()).expect("add a");
-        dag.add_node("b".to_string()).expect("add b");
-        dag.add_node("c".to_string()).expect("add c");
+        dag.add_node("a".to_string())?;
+        dag.add_node("b".to_string())?;
+        dag.add_node("c".to_string())?;
         dag.add_edge(
             "a".to_string(),
             "b".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge");
+        )?;
         dag.add_edge(
             "b".to_string(),
             "c".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge");
+        )?;
 
-        let descendants = dag
-            .get_all_descendants(&"a".to_string())
-            .expect("get descendants");
+        let descendants = dag.get_all_descendants(&"a".to_string())?;
         assert_eq!(descendants.len(), 2);
         assert!(descendants.contains(&"b".to_string()));
         assert!(descendants.contains(&"c".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn test_get_roots() {
+    fn test_get_roots() -> DagResult<()> {
         let mut dag = WorkflowDAG::new();
-        dag.add_node("a".to_string()).expect("add a");
-        dag.add_node("b".to_string()).expect("add b");
-        dag.add_node("c".to_string()).expect("add c");
+        dag.add_node("a".to_string())?;
+        dag.add_node("b".to_string())?;
+        dag.add_node("c".to_string())?;
         dag.add_edge(
             "a".to_string(),
             "c".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge");
+        )?;
         dag.add_edge(
             "b".to_string(),
             "c".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge");
+        )?;
 
         let roots = dag.get_roots();
         assert_eq!(roots.len(), 2);
         assert!(roots.contains(&"a".to_string()));
         assert!(roots.contains(&"b".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn test_get_leaves() {
+    fn test_get_leaves() -> DagResult<()> {
         let mut dag = WorkflowDAG::new();
-        dag.add_node("a".to_string()).expect("add a");
-        dag.add_node("b".to_string()).expect("add b");
-        dag.add_node("c".to_string()).expect("add c");
+        dag.add_node("a".to_string())?;
+        dag.add_node("b".to_string())?;
+        dag.add_node("c".to_string())?;
         dag.add_edge(
             "a".to_string(),
             "b".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge");
+        )?;
         dag.add_edge(
             "a".to_string(),
             "c".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge");
+        )?;
 
         let leaves = dag.get_leaves();
         assert_eq!(leaves.len(), 2);
         assert!(leaves.contains(&"b".to_string()));
         assert!(leaves.contains(&"c".to_string()));
+        Ok(())
     }
 
     // ==================== Ready Detection Tests ====================
 
     #[test]
-    fn test_get_ready_nodes() {
+    fn test_get_ready_nodes() -> DagResult<()> {
         let mut dag = WorkflowDAG::new();
-        dag.add_node("a".to_string()).expect("add a");
-        dag.add_node("b".to_string()).expect("add b");
-        dag.add_node("c".to_string()).expect("add c");
+        dag.add_node("a".to_string())?;
+        dag.add_node("b".to_string())?;
+        dag.add_node("c".to_string())?;
         dag.add_edge(
             "a".to_string(),
             "b".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge");
+        )?;
         dag.add_edge(
             "b".to_string(),
             "c".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge");
+        )?;
 
         // Initially only a is ready
         let completed = HashSet::new();
@@ -1628,176 +1659,174 @@ mod tests {
         completed.insert("a".to_string());
         let ready = dag.get_ready_nodes(&completed);
         assert_eq!(ready, vec!["b".to_string()]);
+        Ok(())
     }
 
     #[test]
-    fn test_preferred_order_does_not_block() {
+    fn test_preferred_order_does_not_block() -> DagResult<()> {
         let mut dag = WorkflowDAG::new();
-        dag.add_node("a".to_string()).expect("add a");
-        dag.add_node("b".to_string()).expect("add b");
+        dag.add_node("a".to_string())?;
+        dag.add_node("b".to_string())?;
         dag.add_edge(
             "a".to_string(),
             "b".to_string(),
             DependencyType::PreferredOrder,
-        )
-        .expect("add edge");
+        )?;
 
         // b should be ready even without a completing (PreferredOrder is non-blocking)
         let completed = HashSet::new();
         let ready = dag.get_ready_nodes(&completed);
         assert!(ready.contains(&"a".to_string()));
         assert!(ready.contains(&"b".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn test_get_blocked_nodes() {
+    fn test_get_blocked_nodes() -> DagResult<()> {
         let mut dag = WorkflowDAG::new();
-        dag.add_node("a".to_string()).expect("add a");
-        dag.add_node("b".to_string()).expect("add b");
+        dag.add_node("a".to_string())?;
+        dag.add_node("b".to_string())?;
         dag.add_edge(
             "a".to_string(),
             "b".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge");
+        )?;
 
         let completed = HashSet::new();
         let blocked = dag.get_blocked_nodes(&completed);
         assert_eq!(blocked, vec!["b".to_string()]);
+        Ok(())
     }
 
     #[test]
-    fn test_is_ready() {
+    fn test_is_ready() -> DagResult<()> {
         let mut dag = WorkflowDAG::new();
-        dag.add_node("a".to_string()).expect("add a");
-        dag.add_node("b".to_string()).expect("add b");
+        dag.add_node("a".to_string())?;
+        dag.add_node("b".to_string())?;
         dag.add_edge(
             "a".to_string(),
             "b".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge");
+        )?;
 
         let completed = HashSet::new();
-        assert!(dag.is_ready(&"a".to_string(), &completed).expect("check"));
-        assert!(!dag.is_ready(&"b".to_string(), &completed).expect("check"));
+        assert!(dag.is_ready(&"a".to_string(), &completed)?);
+        assert!(!dag.is_ready(&"b".to_string(), &completed)?);
+        Ok(())
     }
 
     // ==================== Ordering Tests ====================
 
     #[test]
-    fn test_topological_sort() {
+    fn test_topological_sort() -> Result<(), Box<dyn std::error::Error>> {
         let mut dag = WorkflowDAG::new();
-        dag.add_node("a".to_string()).expect("add a");
-        dag.add_node("b".to_string()).expect("add b");
-        dag.add_node("c".to_string()).expect("add c");
+        dag.add_node("a".to_string())?;
+        dag.add_node("b".to_string())?;
+        dag.add_node("c".to_string())?;
         dag.add_edge(
             "a".to_string(),
             "b".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge");
+        )?;
         dag.add_edge(
             "b".to_string(),
             "c".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge");
+        )?;
 
-        let sorted = dag.topological_sort().expect("sort");
-        let pos_a = sorted.iter().position(|x| x == "a").expect("find a");
-        let pos_b = sorted.iter().position(|x| x == "b").expect("find b");
-        let pos_c = sorted.iter().position(|x| x == "c").expect("find c");
+        let sorted = dag.topological_sort()?;
+        let pos_a = sorted.iter().position(|x| x == "a").ok_or("find a")?;
+        let pos_b = sorted.iter().position(|x| x == "b").ok_or("find b")?;
+        let pos_c = sorted.iter().position(|x| x == "c").ok_or("find c")?;
         assert!(pos_a < pos_b);
         assert!(pos_b < pos_c);
+        Ok(())
     }
 
     #[test]
-    fn test_topological_sort_kahn() {
+    fn test_topological_sort_kahn() -> DagResult<()> {
         let mut dag = WorkflowDAG::new();
-        dag.add_node("a".to_string()).expect("add a");
-        dag.add_node("b".to_string()).expect("add b");
-        dag.add_node("c".to_string()).expect("add c");
+        dag.add_node("a".to_string())?;
+        dag.add_node("b".to_string())?;
+        dag.add_node("c".to_string())?;
         dag.add_edge(
             "a".to_string(),
             "b".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge");
+        )?;
         dag.add_edge(
             "b".to_string(),
             "c".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge");
+        )?;
 
-        let sorted = dag.topological_sort_kahn().expect("sort");
+        let sorted = dag.topological_sort_kahn()?;
         assert_eq!(sorted[0], "a");
         assert_eq!(sorted[1], "b");
         assert_eq!(sorted[2], "c");
+        Ok(())
     }
 
     #[test]
-    fn test_critical_path() {
+    fn test_critical_path() -> DagResult<()> {
         let mut dag = WorkflowDAG::new();
-        dag.add_node("a".to_string()).expect("add a");
-        dag.add_node("b".to_string()).expect("add b");
-        dag.add_node("c".to_string()).expect("add c");
+        dag.add_node("a".to_string())?;
+        dag.add_node("b".to_string())?;
+        dag.add_node("c".to_string())?;
         dag.add_edge(
             "a".to_string(),
             "b".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge");
+        )?;
         dag.add_edge(
             "a".to_string(),
             "c".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge");
+        )?;
 
         let mut weights = HashMap::new();
         weights.insert("a".to_string(), Duration::from_secs(1));
         weights.insert("b".to_string(), Duration::from_secs(5));
         weights.insert("c".to_string(), Duration::from_secs(2));
 
-        let critical = dag.critical_path(&weights).expect("critical path");
+        let critical = dag.critical_path(&weights)?;
         assert!(critical.contains(&"a".to_string()));
         assert!(critical.contains(&"b".to_string()));
         // c is not on critical path since a->b is longer
+        Ok(())
     }
 
     // ==================== Validation Tests ====================
 
     #[test]
-    fn test_has_cycle_false() {
+    fn test_has_cycle_false() -> DagResult<()> {
         let mut dag = WorkflowDAG::new();
-        dag.add_node("a".to_string()).expect("add a");
-        dag.add_node("b".to_string()).expect("add b");
+        dag.add_node("a".to_string())?;
+        dag.add_node("b".to_string())?;
         dag.add_edge(
             "a".to_string(),
             "b".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge");
+        )?;
 
         assert!(!dag.has_cycle());
+        Ok(())
     }
 
     #[test]
-    fn test_find_cycles_empty() {
+    fn test_find_cycles_empty() -> DagResult<()> {
         let mut dag = WorkflowDAG::new();
-        dag.add_node("a".to_string()).expect("add a");
-        dag.add_node("b".to_string()).expect("add b");
+        dag.add_node("a".to_string())?;
+        dag.add_node("b".to_string())?;
         dag.add_edge(
             "a".to_string(),
             "b".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge");
+        )?;
 
         let cycles = dag.find_cycles();
         assert!(cycles.is_empty());
+        Ok(())
     }
 
     #[test]
@@ -1807,135 +1836,132 @@ mod tests {
     }
 
     #[test]
-    fn test_is_connected_true() {
+    fn test_is_connected_true() -> DagResult<()> {
         let mut dag = WorkflowDAG::new();
-        dag.add_node("a".to_string()).expect("add a");
-        dag.add_node("b".to_string()).expect("add b");
+        dag.add_node("a".to_string())?;
+        dag.add_node("b".to_string())?;
         dag.add_edge(
             "a".to_string(),
             "b".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge");
+        )?;
 
         assert!(dag.is_connected());
+        Ok(())
     }
 
     #[test]
-    fn test_is_connected_false() {
+    fn test_is_connected_false() -> DagResult<()> {
         let mut dag = WorkflowDAG::new();
-        dag.add_node("a".to_string()).expect("add a");
-        dag.add_node("b".to_string()).expect("add b");
+        dag.add_node("a".to_string())?;
+        dag.add_node("b".to_string())?;
         // No edge between a and b
 
         assert!(!dag.is_connected());
+        Ok(())
     }
 
     // ==================== Mutation Tests ====================
 
     #[test]
-    fn test_remove_node() {
+    fn test_remove_node() -> DagResult<()> {
         let mut dag = WorkflowDAG::new();
-        dag.add_node("a".to_string()).expect("add a");
-        dag.add_node("b".to_string()).expect("add b");
+        dag.add_node("a".to_string())?;
+        dag.add_node("b".to_string())?;
         dag.add_edge(
             "a".to_string(),
             "b".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge");
+        )?;
 
         assert_eq!(dag.node_count(), 2);
         assert_eq!(dag.edge_count(), 1);
 
-        dag.remove_node(&"a".to_string()).expect("remove a");
+        dag.remove_node(&"a".to_string())?;
         assert_eq!(dag.node_count(), 1);
         assert_eq!(dag.edge_count(), 0);
+        Ok(())
     }
 
     #[test]
-    fn test_remove_edge() {
+    fn test_remove_edge() -> DagResult<()> {
         let mut dag = WorkflowDAG::new();
-        dag.add_node("a".to_string()).expect("add a");
-        dag.add_node("b".to_string()).expect("add b");
+        dag.add_node("a".to_string())?;
+        dag.add_node("b".to_string())?;
         dag.add_edge(
             "a".to_string(),
             "b".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge");
+        )?;
 
         assert_eq!(dag.edge_count(), 1);
-        dag.remove_edge(&"a".to_string(), &"b".to_string())
-            .expect("remove edge");
+        dag.remove_edge(&"a".to_string(), &"b".to_string())?;
         assert_eq!(dag.edge_count(), 0);
+        Ok(())
     }
 
     // ==================== Subgraph Tests ====================
 
     #[test]
-    fn test_subgraph() {
+    fn test_subgraph() -> DagResult<()> {
         let mut dag = WorkflowDAG::new();
-        dag.add_node("a".to_string()).expect("add a");
-        dag.add_node("b".to_string()).expect("add b");
-        dag.add_node("c".to_string()).expect("add c");
+        dag.add_node("a".to_string())?;
+        dag.add_node("b".to_string())?;
+        dag.add_node("c".to_string())?;
         dag.add_edge(
             "a".to_string(),
             "b".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge");
+        )?;
         dag.add_edge(
             "b".to_string(),
             "c".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge");
+        )?;
 
-        let subgraph = dag
-            .subgraph(&["a".to_string(), "b".to_string()])
-            .expect("subgraph");
+        let subgraph = dag.subgraph(&["a".to_string(), "b".to_string()])?;
         assert_eq!(subgraph.node_count(), 2);
         assert_eq!(subgraph.edge_count(), 1);
         assert!(subgraph.contains_node(&"a".to_string()));
         assert!(subgraph.contains_node(&"b".to_string()));
         assert!(!subgraph.contains_node(&"c".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn test_induced_subgraph() {
+    fn test_induced_subgraph() -> DagResult<()> {
         let mut dag = WorkflowDAG::new();
-        dag.add_node("a".to_string()).expect("add a");
-        dag.add_node("b".to_string()).expect("add b");
-        dag.add_node("c".to_string()).expect("add c");
-        dag.add_node("d".to_string()).expect("add d"); // disconnected
+        dag.add_node("a".to_string())?;
+        dag.add_node("b".to_string())?;
+        dag.add_node("c".to_string())?;
+        dag.add_node("d".to_string())?; // disconnected
         dag.add_edge(
             "a".to_string(),
             "b".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge");
+        )?;
         dag.add_edge(
             "b".to_string(),
             "c".to_string(),
             DependencyType::BlockingDependency,
-        )
-        .expect("add edge");
+        )?;
 
-        let induced = dag.induced_subgraph(&"b".to_string()).expect("induced");
+        let induced = dag.induced_subgraph(&"b".to_string())?;
         assert_eq!(induced.node_count(), 3); // a, b, c (not d)
         assert!(induced.contains_node(&"a".to_string()));
         assert!(induced.contains_node(&"b".to_string()));
         assert!(induced.contains_node(&"c".to_string()));
         assert!(!induced.contains_node(&"d".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn test_contains_node() {
+    fn test_contains_node() -> DagResult<()> {
         let mut dag = WorkflowDAG::new();
-        dag.add_node("a".to_string()).expect("add a");
+        dag.add_node("a".to_string())?;
 
         assert!(dag.contains_node(&"a".to_string()));
         assert!(!dag.contains_node(&"b".to_string()));
+        Ok(())
     }
 }

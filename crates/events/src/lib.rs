@@ -17,7 +17,7 @@
 //! use std::sync::Arc;
 //!
 //! #[tokio::main]
-//! async fn main() {
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     // Create event store and bus
 //!     let store = Arc::new(InMemoryEventStore::new());
 //!     let bus = EventBus::new(store.clone());
@@ -28,11 +28,12 @@
 //!     // Publish a bead creation event
 //!     let bead_id = BeadId::new();
 //!     let spec = BeadSpec::new("My task").with_complexity(Complexity::Medium);
-//!     bus.publish(BeadEvent::created(bead_id, spec)).await.unwrap();
+//!     bus.publish(BeadEvent::created(bead_id, spec)).await?;
 //!
 //!     // Receive the event
-//!     let event = sub.recv().await.unwrap();
+//!     let event = sub.recv().await?;
 //!     println!("Received: {:?}", event.event_type());
+//!     Ok(())
 //! }
 //! ```
 

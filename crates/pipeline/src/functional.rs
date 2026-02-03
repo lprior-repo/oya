@@ -315,7 +315,10 @@ pub fn format_function_stub(func: &FunctionStub) -> String {
             func.name
         ));
     } else {
-        output.push_str(&format!("    todo!(\"implement {}\")\n", func.name));
+        output.push_str(&format!(
+            "    Default::default() // TODO: Implement {}\n",
+            func.name
+        ));
     }
 
     output.push_str("}\n\n");

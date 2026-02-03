@@ -7,39 +7,36 @@
 
 use oya_ui::layout::spring_force::{Force, Position, SpringForce, SpringForceError};
 use proptest::prelude::*;
+use proptest::test_runner::TestCaseError;
 
 const EPSILON: f64 = 1e-9;
 
 /// Tests that spring force never panics with valid inputs
 #[test]
-fn test_spring_force_never_panics() {
+fn test_spring_force_never_panics() -> Result<(), SpringForceError> {
     // Test various stiffness and rest length combinations
     let stiffness_values = vec![0.01, 0.05, 0.1, 0.5, 1.0];
     let rest_lengths = vec![25.0, 50.0, 75.0, 100.0];
 
     for stiffness in &stiffness_values {
         for rest_length in &rest_lengths {
-            let result = SpringForce::new(*stiffness, *rest_length);
-            assert!(result.is_ok());
-            let spring = result.unwrap();
+            let spring = SpringForce::new(*stiffness, *rest_length)?;
 
             let p1 = Position::new(0.0, 0.0);
             let p2 = Position::new(60.0, 80.0);
 
-            let force_result = spring.calculate_force(&p1, &p2);
-            assert!(force_result.is_ok());
+            spring.calculate_force(&p1, &p2)?;
         }
     }
+    Ok(())
 }
 
 /// Property test: All valid spring parameters produce a valid struct
 proptest! {
     #[test]
     fn prop_spring_force_valid_params(stiffness in 0.01..=0.1f64, rest_length in 25.0..=100.0f64) {
-        let result = SpringForce::new(stiffness, rest_length);
-        prop_assert!(result.is_ok());
-
-        let spring = result.unwrap();
+        let spring = SpringForce::new(stiffness, rest_length)
+            .map_err(|err| TestCaseError::fail(err.to_string()))?;
         prop_assert!((spring.stiffness() - stiffness).abs() < EPSILON);
         prop_assert!((spring.rest_length() - rest_length).abs() < EPSILON);
     }
@@ -73,10 +70,7 @@ proptest! {
         let p1 = Position::new(x1, y1);
         let p2 = Position::new(x2, y2);
 
-        prop_assert!(p1.is_ok());
-        prop_assert!(p2.is_ok());
-
-        let distance = p1.unwrap().distance(&p2.unwrap());
+        let distance = p1.distance(&p2);
         prop_assert!(distance >= 0.0);
     }
 }
@@ -91,10 +85,9 @@ proptest! {
         let p1 = Position::new(x1, y1);
         let p2 = Position::new(x2, y2);
 
-        let result = p1.direction_to(&p2);
-        prop_assert!(result.is_ok());
-
-        let (dx, dy) = result.unwrap();
+        let (dx, dy) = p1
+            .direction_to(&p2)
+            .map_err(|err| TestCaseError::fail(err.to_string()))?;
         let magnitude = (dx * dx + dy * dy).sqrt();
         prop_assert!((magnitude - 1.0).abs() < 1e-6);
     }
@@ -108,14 +101,14 @@ proptest! {
         rest_length in 50.0..=100.0f64,
         distance in 50.0..=300.0f64
     ) {
-        let spring = SpringForce::new(stiffness, rest_length).unwrap();
+        let spring = SpringForce::new(stiffness, rest_length)
+            .map_err(|err| TestCaseError::fail(err.to_string()))?;
         let p1 = Position::new(0.0, 0.0);
         let p2 = Position::new(distance, 0.0);
 
-        let result = spring.calculate_force(&p1, &p2);
-        prop_assert!(result.is_ok());
-
-        let (source_force, _) = result.unwrap();
+        let (source_force, _) = spring
+            .calculate_force(&p1, &p2)
+            .map_err(|err| TestCaseError::fail(err.to_string()))?;
         let expected_magnitude = stiffness * (distance - rest_length);
         prop_assert!((source_force.magnitude() - expected_magnitude).abs() < 1e-6);
     }
@@ -135,14 +128,14 @@ proptest! {
         // Skip identical positions
         prop_assume!((x1 - x2).abs() > EPSILON || (y1 - y2).abs() > EPSILON);
 
-        let spring = SpringForce::new(stiffness, rest_length).unwrap();
+        let spring = SpringForce::new(stiffness, rest_length)
+            .map_err(|err| TestCaseError::fail(err.to_string()))?;
         let p1 = Position::new(x1, y1);
         let p2 = Position::new(x2, y2);
 
-        let result = spring.calculate_force(&p1, &p2);
-        prop_assert!(result.is_ok());
-
-        let (source_force, target_force) = result.unwrap();
+        let (source_force, target_force) = spring
+            .calculate_force(&p1, &p2)
+            .map_err(|err| TestCaseError::fail(err.to_string()))?;
         let (sx, sy) = source_force.components();
         let (tx, ty) = target_force.components();
 
@@ -160,17 +153,17 @@ proptest! {
         rest_length in 50.0..=100.0f64,
         angle in 0.0f64..=6.28318530718f64 // 0 to 2π
     ) {
-        let spring = SpringForce::new(stiffness, rest_length).unwrap();
+        let spring = SpringForce::new(stiffness, rest_length)
+            .map_err(|err| TestCaseError::fail(err.to_string()))?;
         let p1 = Position::new(0.0, 0.0);
 
         let x = rest_length * angle.cos();
         let y = rest_length * angle.sin();
         let p2 = Position::new(x, y);
 
-        let result = spring.calculate_force(&p1, &p2);
-        prop_assert!(result.is_ok());
-
-        let (source_force, target_force) = result.unwrap();
+        let (source_force, target_force) = spring
+            .calculate_force(&p1, &p2)
+            .map_err(|err| TestCaseError::fail(err.to_string()))?;
         prop_assert!(source_force.magnitude() < 1e-9);
         prop_assert!(target_force.magnitude() < 1e-9);
     }
@@ -185,14 +178,20 @@ proptest! {
         rest_length in 50.0..=100.0f64,
         distance in 100.0..=200.0f64
     ) {
-        let spring1 = SpringForce::new(k1, rest_length).unwrap();
-        let spring2 = SpringForce::new(k2, rest_length).unwrap();
+        let spring1 = SpringForce::new(k1, rest_length)
+            .map_err(|err| TestCaseError::fail(err.to_string()))?;
+        let spring2 = SpringForce::new(k2, rest_length)
+            .map_err(|err| TestCaseError::fail(err.to_string()))?;
 
         let p1 = Position::new(0.0, 0.0);
         let p2 = Position::new(distance, 0.0);
 
-        let result1 = spring1.calculate_force(&p1, &p2).unwrap();
-        let result2 = spring2.calculate_force(&p1, &p2).unwrap();
+        let result1 = spring1
+            .calculate_force(&p1, &p2)
+            .map_err(|err| TestCaseError::fail(err.to_string()))?;
+        let result2 = spring2
+            .calculate_force(&p1, &p2)
+            .map_err(|err| TestCaseError::fail(err.to_string()))?;
 
         let mag1 = result1.0.magnitude();
         let mag2 = result2.0.magnitude();
@@ -213,14 +212,14 @@ proptest! {
         rest_length in 50.0..=100.0f64,
         distance in 60.0..=300.0f64
     ) {
-        let spring = SpringForce::new(stiffness, rest_length).unwrap();
+        let spring = SpringForce::new(stiffness, rest_length)
+            .map_err(|err| TestCaseError::fail(err.to_string()))?;
         let p1 = Position::new(0.0, 0.0);
         let p2 = Position::new(distance, 0.0);
 
-        let result = spring.calculate_force(&p1, &p2);
-        prop_assert!(result.is_ok());
-
-        let (source_force, _) = result.unwrap();
+        let (source_force, _) = spring
+            .calculate_force(&p1, &p2)
+            .map_err(|err| TestCaseError::fail(err.to_string()))?;
         let (fx, _) = source_force.components();
 
         // Source should be pulled toward positive direction
@@ -236,14 +235,14 @@ proptest! {
         rest_length in 50.0..=100.0f64,
         distance in 10.0..=90.0f64
     ) {
-        let spring = SpringForce::new(stiffness, rest_length).unwrap();
+        let spring = SpringForce::new(stiffness, rest_length)
+            .map_err(|err| TestCaseError::fail(err.to_string()))?;
         let p1 = Position::new(0.0, 0.0);
         let p2 = Position::new(distance, 0.0);
 
-        let result = spring.calculate_force(&p1, &p2);
-        prop_assert!(result.is_ok());
-
-        let (source_force, _) = result.unwrap();
+        let (source_force, _) = spring
+            .calculate_force(&p1, &p2)
+            .map_err(|err| TestCaseError::fail(err.to_string()))?;
         let (fx, _) = source_force.components();
 
         // Source should be pulled toward negative direction
@@ -262,7 +261,8 @@ proptest! {
             1..=10
         )
     ) {
-        let spring = SpringForce::new(stiffness, rest_length).unwrap();
+        let spring = SpringForce::new(stiffness, rest_length)
+            .map_err(|err| TestCaseError::fail(err.to_string()))?;
 
         let positions: Vec<_> = edges
             .into_iter()
@@ -292,38 +292,35 @@ proptest! {
 
 /// Test edge cases for numerical stability
 #[test]
-fn test_numerical_stability() {
-    let spring = SpringForce::new(0.1, 50.0).unwrap();
+fn test_numerical_stability() -> Result<(), SpringForceError> {
+    let spring = SpringForce::new(0.1, 50.0)?;
 
     // Very small displacement
     let p1 = Position::new(0.0, 0.0);
     let p2 = Position::new(50.0001, 0.0);
-    let result = spring.calculate_force(&p1, &p2);
-    assert!(result.is_ok());
-    assert!(result.unwrap().0.magnitude() < 1e-4);
+    let result = spring.calculate_force(&p1, &p2)?;
+    assert!(result.0.magnitude() < 1e-4);
 
     // Very large displacement
     let p1 = Position::new(0.0, 0.0);
     let p2 = Position::new(1_000_000.0, 0.0);
-    let result = spring.calculate_force(&p1, &p2);
-    assert!(result.is_ok());
-    assert!(result.unwrap().0.magnitude() > 1.0);
+    let result = spring.calculate_force(&p1, &p2)?;
+    assert!(result.0.magnitude() > 1.0);
 
     // Very small stiffness
-    let spring_small = SpringForce::new(0.0001, 50.0).unwrap();
+    let spring_small = SpringForce::new(0.0001, 50.0)?;
     let p1 = Position::new(0.0, 0.0);
     let p2 = Position::new(100.0, 0.0);
-    let result = spring_small.calculate_force(&p1, &p2);
-    assert!(result.is_ok());
+    let result = spring_small.calculate_force(&p1, &p2)?;
     // Force = 0.0001 * 50 = 0.005
-    assert!((result.unwrap().0.magnitude() - 0.005).abs() < 1e-6);
+    assert!((result.0.magnitude() - 0.005).abs() < 1e-6);
 
     // Very large stiffness
-    let spring_large = SpringForce::new(10.0, 50.0).unwrap();
+    let spring_large = SpringForce::new(10.0, 50.0)?;
     let p1 = Position::new(0.0, 0.0);
     let p2 = Position::new(100.0, 0.0);
-    let result = spring_large.calculate_force(&p1, &p2);
-    assert!(result.is_ok());
+    let result = spring_large.calculate_force(&p1, &p2)?;
     // Force = 10.0 * 50 = 500.0
-    assert!((result.unwrap().0.magnitude() - 500.0).abs() < 1e-6);
+    assert!((result.0.magnitude() - 500.0).abs() < 1e-6);
+    Ok(())
 }

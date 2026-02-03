@@ -36,13 +36,16 @@
 //!     phase: "build".to_string(),
 //! };
 //!
-//! let hash = hash_serializable(&input).expect("serialization failed");
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let hash = hash_serializable(&input)?;
 //!
 //! // Generate namespace from bead_id
 //! let namespace = namespace_from_bead("bead-123");
 //!
 //! // Generate idempotency key
-//! let key = idempotency_key("bead-123", &input).expect("serialization failed");
+//! let key = idempotency_key("bead-123", &input)?;
+//! # Ok(())
+//! # }
 //! ```
 
 pub mod hash;

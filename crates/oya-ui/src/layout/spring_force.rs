@@ -199,37 +199,37 @@ mod tests {
 
     #[test]
     fn test_position_creation() {
-        assert!(Position::new(10.0, 20.0).is_ok());
-        assert!(Position::new(0.0, 1.0).is_ok());
-        assert!(Position::new(1.0, 0.0).is_ok());
-        assert_eq!(
-            Position::new(0.0, 0.0),
-            Err(SpringForceError::ZeroLengthEdge)
-        );
+        let p1 = Position::new(10.0, 20.0);
+        let p2 = Position::new(0.0, 1.0);
+        let p3 = Position::new(1.0, 0.0);
+
+        assert!((p1.distance(&p1) - 0.0).abs() < EPSILON);
+        assert!((p2.distance(&p2) - 0.0).abs() < EPSILON);
+        assert!((p3.distance(&p3) - 0.0).abs() < EPSILON);
     }
 
     #[test]
     fn test_position_distance() {
-        let p1 = Position::new(0.0, 0.0).unwrap();
-        let p2 = Position::new(3.0, 4.0).unwrap();
+        let p1 = Position::new(0.0, 0.0);
+        let p2 = Position::new(3.0, 4.0);
         assert!((p1.distance(&p2) - 5.0).abs() < EPSILON);
     }
 
     #[test]
     fn test_position_direction() {
-        let p1 = Position::new(0.0, 0.0).unwrap();
-        let p2 = Position::new(1.0, 0.0).unwrap();
+        let p1 = Position::new(0.0, 0.0);
+        let p2 = Position::new(1.0, 0.0);
         assert_eq!(p1.direction_to(&p2), Ok((1.0, 0.0)));
 
-        let p3 = Position::new(0.0, 0.0).unwrap();
-        let p4 = Position::new(0.0, 1.0).unwrap();
+        let p3 = Position::new(0.0, 0.0);
+        let p4 = Position::new(0.0, 1.0);
         assert_eq!(p3.direction_to(&p4), Ok((0.0, 1.0)));
     }
 
     #[test]
     fn test_position_direction_zero_length() {
-        let p1 = Position::new(0.0, 0.0).unwrap();
-        let p2 = Position::new(0.0, 0.0).unwrap();
+        let p1 = Position::new(0.0, 0.0);
+        let p2 = Position::new(0.0, 0.0);
         assert_eq!(p1.direction_to(&p2), Err(SpringForceError::ZeroLengthEdge));
     }
 
@@ -272,104 +272,111 @@ mod tests {
     }
 
     #[test]
-    fn test_spring_force_at_rest() {
-        let spring = SpringForce::new(0.1, 50.0).unwrap();
-        let source = Position::new(0.0, 0.0).unwrap();
-        let target = Position::new(50.0, 0.0).unwrap();
+    fn test_spring_force_at_rest() -> Result<(), SpringForceError> {
+        let spring = SpringForce::new(0.1, 50.0)?;
+        let source = Position::new(0.0, 0.0);
+        let target = Position::new(50.0, 0.0);
 
-        let (source_force, target_force) = spring.calculate_force(&source, &target).unwrap();
+        let (source_force, target_force) = spring.calculate_force(&source, &target)?;
         assert!((source_force.magnitude() - 0.0).abs() < EPSILON);
         assert!((target_force.magnitude() - 0.0).abs() < EPSILON);
+        Ok(())
     }
 
     #[test]
-    fn test_spring_force_stretched() {
-        let spring = SpringForce::new(0.1, 50.0).unwrap();
-        let source = Position::new(0.0, 0.0).unwrap();
-        let target = Position::new(60.0, 0.0).unwrap();
+    fn test_spring_force_stretched() -> Result<(), SpringForceError> {
+        let spring = SpringForce::new(0.1, 50.0)?;
+        let source = Position::new(0.0, 0.0);
+        let target = Position::new(60.0, 0.0);
 
-        let (source_force, target_force) = spring.calculate_force(&source, &target).unwrap();
+        let (source_force, target_force) = spring.calculate_force(&source, &target)?;
         // Force = 0.1 * (60 - 50) = 1.0
         let magnitude = (source_force.magnitude() - 1.0).abs();
         assert!(magnitude < EPSILON, "magnitude diff: {magnitude}");
+        Ok(())
     }
 
     #[test]
-    fn test_spring_force_compressed() {
-        let spring = SpringForce::new(0.1, 50.0).unwrap();
-        let source = Position::new(0.0, 0.0).unwrap();
-        let target = Position::new(40.0, 0.0).unwrap();
+    fn test_spring_force_compressed() -> Result<(), SpringForceError> {
+        let spring = SpringForce::new(0.1, 50.0)?;
+        let source = Position::new(0.0, 0.0);
+        let target = Position::new(40.0, 0.0);
 
-        let (source_force, target_force) = spring.calculate_force(&source, &target).unwrap();
+        let (source_force, target_force) = spring.calculate_force(&source, &target)?;
         // Force = 0.1 * (40 - 50) = -1.0
         let magnitude = (source_force.magnitude() - 1.0).abs();
         assert!(magnitude < EPSILON, "magnitude diff: {magnitude}");
+        Ok(())
     }
 
     #[test]
-    fn test_newton_third_law_equal_opposite() {
-        let spring = SpringForce::new(0.1, 50.0).unwrap();
-        let source = Position::new(0.0, 0.0).unwrap();
-        let target = Position::new(60.0, 0.0).unwrap();
+    fn test_newton_third_law_equal_opposite() -> Result<(), SpringForceError> {
+        let spring = SpringForce::new(0.1, 50.0)?;
+        let source = Position::new(0.0, 0.0);
+        let target = Position::new(60.0, 0.0);
 
-        let (source_force, target_force) = spring.calculate_force(&source, &target).unwrap();
+        let (source_force, target_force) = spring.calculate_force(&source, &target)?;
 
         let (sx, sy) = source_force.components();
         let (tx, ty) = target_force.components();
 
         assert!((sx + tx).abs() < EPSILON);
         assert!((sy + ty).abs() < EPSILON);
+        Ok(())
     }
 
     #[test]
-    fn test_stiffness_affects_magnitude() {
-        let spring1 = SpringForce::new(0.01, 50.0).unwrap();
-        let spring2 = SpringForce::new(0.1, 50.0).unwrap();
+    fn test_stiffness_affects_magnitude() -> Result<(), SpringForceError> {
+        let spring1 = SpringForce::new(0.01, 50.0)?;
+        let spring2 = SpringForce::new(0.1, 50.0)?;
 
-        let source = Position::new(0.0, 0.0).unwrap();
-        let target = Position::new(60.0, 0.0).unwrap();
+        let source = Position::new(0.0, 0.0);
+        let target = Position::new(60.0, 0.0);
 
-        let (force1, _) = spring1.calculate_force(&source, &target).unwrap();
-        let (force2, _) = spring2.calculate_force(&source, &target).unwrap();
+        let (force1, _) = spring1.calculate_force(&source, &target)?;
+        let (force2, _) = spring2.calculate_force(&source, &target)?;
 
         // Stiffer spring should have 10x the force
         let ratio = force2.magnitude() / force1.magnitude();
         assert!((ratio - 10.0).abs() < EPSILON);
+        Ok(())
     }
 
     #[test]
-    fn test_diagonal_force() {
-        let spring = SpringForce::new(0.1, 50.0).unwrap();
-        let source = Position::new(0.0, 0.0).unwrap();
-        let target = Position::new(30.0, 40.0).unwrap();
+    fn test_diagonal_force() -> Result<(), SpringForceError> {
+        let spring = SpringForce::new(0.1, 50.0)?;
+        let source = Position::new(0.0, 0.0);
+        let target = Position::new(30.0, 40.0);
 
-        let (source_force, _) = spring.calculate_force(&source, &target).unwrap();
+        let (source_force, _) = spring.calculate_force(&source, &target)?;
 
         let (sx, sy) = source_force.components();
         let magnitude = (sx * sx + sy * sy).sqrt();
         assert!((magnitude - 2.0).abs() < EPSILON);
+        Ok(())
     }
 
     #[test]
-    fn test_zero_length_edge_error() {
-        let spring = SpringForce::new(0.1, 50.0).unwrap();
-        let source = Position::new(10.0, 10.0).unwrap();
-        let target = Position::new(10.0, 10.0).unwrap();
+    fn test_zero_length_edge_error() -> Result<(), SpringForceError> {
+        let spring = SpringForce::new(0.1, 50.0)?;
+        let source = Position::new(10.0, 10.0);
+        let target = Position::new(10.0, 10.0);
 
         assert_eq!(
             spring.calculate_force(&source, &target),
             Err(SpringForceError::ZeroLengthEdge)
         );
+        Ok(())
     }
 
     #[test]
-    fn test_apply_to_edges() {
-        let spring = SpringForce::new(0.1, 50.0).unwrap();
+    fn test_apply_to_edges() -> Result<(), SpringForceError> {
+        let spring = SpringForce::new(0.1, 50.0)?;
 
-        let p1 = Position::new(0.0, 0.0).unwrap();
-        let p2 = Position::new(60.0, 0.0).unwrap();
-        let p3 = Position::new(0.0, 0.0).unwrap();
-        let p4 = Position::new(40.0, 0.0).unwrap();
+        let p1 = Position::new(0.0, 0.0);
+        let p2 = Position::new(60.0, 0.0);
+        let p3 = Position::new(0.0, 0.0);
+        let p4 = Position::new(40.0, 0.0);
 
         let edges = [(&p1, &p2), (&p3, &p4)];
 
@@ -379,18 +386,20 @@ mod tests {
         assert!(results[0].is_ok());
         assert!(results[1].is_ok());
 
-        let (f1, _) = results[0].as_ref().unwrap();
-        let (f2, _) = results[1].as_ref().unwrap();
+        let (f1, _) = results[0].as_ref().map_err(|err| err.clone())?;
+        let (f2, _) = results[1].as_ref().map_err(|err| err.clone())?;
 
         // First edge stretched, second compressed
         assert!((f1.magnitude() - 1.0).abs() < EPSILON);
         assert!((f2.magnitude() - 1.0).abs() < EPSILON);
+        Ok(())
     }
 
     #[test]
-    fn test_accessors() {
-        let spring = SpringForce::new(0.05, 75.0).unwrap();
+    fn test_accessors() -> Result<(), SpringForceError> {
+        let spring = SpringForce::new(0.05, 75.0)?;
         assert!((spring.stiffness() - 0.05).abs() < EPSILON);
         assert!((spring.rest_length() - 75.0).abs() < EPSILON);
+        Ok(())
     }
 }

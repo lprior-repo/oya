@@ -219,13 +219,14 @@ mod tests {
     }
 
     #[test]
-    fn test_position_direction_diagonal() {
+    fn test_position_direction_diagonal() -> Result<(), EdgeError> {
         let p1 = Position::new(0.0, 0.0);
         let p2 = Position::new(1.0, 1.0);
-        let result = p1.direction_to(&p2).unwrap();
+        let result = p1.direction_to(&p2)?;
         let expected = 1.0 / 2.0_f64.sqrt();
         assert!((result.0 - expected).abs() < f64::EPSILON);
         assert!((result.1 - expected).abs() < f64::EPSILON);
+        Ok(())
     }
 
     #[test]
@@ -263,46 +264,51 @@ mod tests {
     }
 
     #[test]
-    fn test_calculate_line_path_horizontal() {
-        let path = calculate_line_path((0.0, 0.0), 10.0, (100.0, 0.0), 10.0).unwrap();
+    fn test_calculate_line_path_horizontal() -> Result<(), EdgeError> {
+        let path = calculate_line_path((0.0, 0.0), 10.0, (100.0, 0.0), 10.0)?;
         assert_eq!(path.start, (10.0, 0.0));
         assert_eq!(path.end, (90.0, 0.0));
         assert_eq!(path.length, 80.0);
+        Ok(())
     }
 
     #[test]
-    fn test_calculate_line_path_vertical() {
-        let path = calculate_line_path((0.0, 0.0), 5.0, (0.0, 50.0), 5.0).unwrap();
+    fn test_calculate_line_path_vertical() -> Result<(), EdgeError> {
+        let path = calculate_line_path((0.0, 0.0), 5.0, (0.0, 50.0), 5.0)?;
         assert_eq!(path.start, (0.0, 5.0));
         assert_eq!(path.end, (0.0, 45.0));
         assert_eq!(path.length, 40.0);
+        Ok(())
     }
 
     #[test]
-    fn test_calculate_line_path_diagonal() {
-        let path = calculate_line_path((0.0, 0.0), 10.0, (30.0, 40.0), 10.0).unwrap();
+    fn test_calculate_line_path_diagonal() -> Result<(), EdgeError> {
+        let path = calculate_line_path((0.0, 0.0), 10.0, (30.0, 40.0), 10.0)?;
         let expected = 1.0 / 2.0_f64.sqrt();
         assert!((path.start.0 - expected * 10.0).abs() < f64::EPSILON);
         assert!((path.start.1 - expected * 10.0).abs() < f64::EPSILON);
         assert!((path.end.0 - (30.0 - expected * 10.0)).abs() < f64::EPSILON);
         assert!((path.end.1 - (40.0 - expected * 10.0)).abs() < f64::EPSILON);
         assert!((path.length - 30.0).abs() < f64::EPSILON);
+        Ok(())
     }
 
     #[test]
-    fn test_calculate_line_path_zero_radius() {
-        let path = calculate_line_path((0.0, 0.0), 0.0, (100.0, 0.0), 0.0).unwrap();
+    fn test_calculate_line_path_zero_radius() -> Result<(), EdgeError> {
+        let path = calculate_line_path((0.0, 0.0), 0.0, (100.0, 0.0), 0.0)?;
         assert_eq!(path.start, (0.0, 0.0));
         assert_eq!(path.end, (100.0, 0.0));
         assert_eq!(path.length, 100.0);
+        Ok(())
     }
 
     #[test]
-    fn test_calculate_line_path_asymmetric_radii() {
-        let path = calculate_line_path((0.0, 0.0), 5.0, (100.0, 0.0), 15.0).unwrap();
+    fn test_calculate_line_path_asymmetric_radii() -> Result<(), EdgeError> {
+        let path = calculate_line_path((0.0, 0.0), 5.0, (100.0, 0.0), 15.0)?;
         assert_eq!(path.start, (5.0, 0.0));
         assert_eq!(path.end, (85.0, 0.0));
         assert_eq!(path.length, 80.0);
+        Ok(())
     }
 
     #[test]
@@ -330,10 +336,11 @@ mod tests {
     }
 
     #[test]
-    fn test_calculate_line_path_negative_direction() {
-        let path = calculate_line_path((100.0, 100.0), 10.0, (0.0, 0.0), 10.0).unwrap();
+    fn test_calculate_line_path_negative_direction() -> Result<(), EdgeError> {
+        let path = calculate_line_path((100.0, 100.0), 10.0, (0.0, 0.0), 10.0)?;
         assert_eq!(path.start, (90.0, 90.0));
         assert_eq!(path.end, (10.0, 10.0));
         assert!((path.length - 113.137).abs() < 0.01);
+        Ok(())
     }
 }

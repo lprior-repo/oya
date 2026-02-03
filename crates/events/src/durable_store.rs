@@ -392,30 +392,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_serialized_event_roundtrip() {
+    fn test_serialized_event_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let bead_id = BeadId::new();
         let event = BeadEvent::created(
             bead_id,
             crate::types::BeadSpec::new("Test").with_complexity(crate::types::Complexity::Simple),
         );
 
-        let serialized = SerializedEvent::from_bead_event(&event);
-        assert!(serialized.is_ok());
-
-        let serialized = serialized.expect("serialization should succeed");
+        let serialized = SerializedEvent::from_bead_event(&event)?;
         assert_eq!(serialized.event_type, "created");
 
-        let deserialized = serialized.to_bead_event();
-        assert!(deserialized.is_ok());
-
-        let deserialized = deserialized.expect("deserialization should succeed");
+        let deserialized = serialized.to_bead_event()?;
         assert_eq!(deserialized.event_id(), event.event_id());
         assert_eq!(deserialized.bead_id(), event.bead_id());
         assert_eq!(deserialized.event_type(), "created");
+        Ok(())
     }
 
     #[test]
-    fn test_serialized_event_all_types() {
+    fn test_serialized_event_all_types() -> Result<(), Box<dyn std::error::Error>> {
         let bead_id = BeadId::new();
 
         let events = [
@@ -437,30 +432,17 @@ mod tests {
         ];
 
         for event in events {
-            let serialized = SerializedEvent::from_bead_event(&event);
-            assert!(
-                serialized.is_ok(),
-                "failed to serialize event type: {}",
-                event.event_type()
-            );
-
-            let serialized = serialized.expect("serialization should succeed");
-            let deserialized = serialized.to_bead_event();
-            assert!(
-                deserialized.is_ok(),
-                "failed to deserialize event type: {}",
-                event.event_type()
-            );
-
-            let deserialized = deserialized.expect("deserialization should succeed");
+            let serialized = SerializedEvent::from_bead_event(&event)?;
+            let deserialized = serialized.to_bead_event()?;
             assert_eq!(deserialized.event_id(), event.event_id());
             assert_eq!(deserialized.bead_id(), event.bead_id());
             assert_eq!(deserialized.event_type(), event.event_type());
         }
+        Ok(())
     }
 
     #[test]
-    fn test_serialized_event_with_complex_data() {
+    fn test_serialized_event_with_complex_data() -> Result<(), Box<dyn std::error::Error>> {
         let bead_id = BeadId::new();
         let phase_id = crate::types::PhaseId::new();
 
@@ -471,19 +453,14 @@ mod tests {
             crate::types::PhaseOutput::success(vec![1, 2, 3, 4, 5]),
         );
 
-        let serialized = SerializedEvent::from_bead_event(&event);
-        assert!(serialized.is_ok());
-
-        let serialized = serialized.expect("serialization should succeed");
+        let serialized = SerializedEvent::from_bead_event(&event)?;
         assert_eq!(serialized.event_type, "phase_completed");
 
-        let deserialized = serialized.to_bead_event();
-        assert!(deserialized.is_ok());
-
-        let deserialized = deserialized.expect("deserialization should succeed");
+        let deserialized = serialized.to_bead_event()?;
         assert_eq!(deserialized.event_id(), event.event_id());
         assert_eq!(deserialized.bead_id(), event.bead_id());
         assert_eq!(deserialized.event_type(), "phase_completed");
+        Ok(())
     }
 
     fn test_connection_config_default() {

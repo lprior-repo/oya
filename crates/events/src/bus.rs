@@ -317,12 +317,11 @@ mod tests {
     }
 
     #[test]
-    fn should_use_configured_store() {
+    fn should_use_configured_store() -> Result<(), Box<dyn std::error::Error>> {
         let store: Arc<dyn crate::store::EventStore> = Arc::new(InMemoryEventStore::new());
         let bus = EventBusBuilder::new()
             .with_store(store.clone())
-            .build()
-            .expect("Should build");
+            .build()?;
 
         // Verify the store is the one we configured (compare by address)
         let store_ptr = Arc::as_ptr(&store) as *const ();
@@ -331,16 +330,16 @@ mod tests {
             store_ptr, bus_store_ptr,
             "Bus should use the configured store"
         );
+        Ok(())
     }
 
     #[tokio::test]
-    async fn should_use_configured_channel_capacity() {
+    async fn should_use_configured_channel_capacity() -> Result<(), Box<dyn std::error::Error>> {
         let store = Arc::new(InMemoryEventStore::new());
         let bus = EventBusBuilder::new()
             .with_store(store)
             .with_channel_capacity(5) // Small capacity
-            .build()
-            .expect("Should build");
+            .build()?;
 
         // Subscribe to create a receiver
         let _sub = bus.subscribe();
@@ -354,6 +353,7 @@ mod tests {
             let result = bus.publish(event).await;
             assert!(result.is_ok(), "Should publish within capacity");
         }
+        Ok(())
     }
 
     // ==========================================================================
