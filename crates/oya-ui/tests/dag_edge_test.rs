@@ -8,7 +8,7 @@
 use oya_shared::graph::{
     Edge, EdgeState, EdgeStyle, EdgeType, Node, NodeId, Position as GraphPosition,
 };
-use oya_ui::dag_edge::{calculate_line_path, EdgeError, PathSegment};
+use oya_ui::dag_edge::{calculate_line_path, EdgeError};
 use proptest::prelude::*;
 
 const EPSILON: f64 = 1e-6;
