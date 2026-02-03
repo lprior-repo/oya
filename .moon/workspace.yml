@@ -23,3 +23,7 @@ unstable_remote:
 # Hasher performance optimization
 hasher:
   optimization: 'performance'
+
+# Limit concurrent heavy builds (system has 32 threads, 123GB RAM)
+runner:
+  concurrency: 8

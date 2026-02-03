@@ -52,8 +52,6 @@ tasks:
     options:
       cache: true
       mergeArgs: "replace"  # Allow overriding with specific test filters
-      mutex: "rust_heavy"
-      runDepsInParallel: false
     env:
       CARGO_BUILD_JOBS: "16"
 
@@ -79,8 +77,6 @@ tasks:
       - "/target/coverage/lcov.info"
     options:
       cache: false
-      mutex: "rust_heavy"
-      runDepsInParallel: false
     env:
       CARGO_BUILD_JOBS: "8"
 
@@ -99,8 +95,6 @@ tasks:
       - "/target/release/oya"
     options:
       cache: true
-      mutex: "rust_heavy"
-      runDepsInParallel: false
     env:
       CARGO_BUILD_JOBS: "24"
 
