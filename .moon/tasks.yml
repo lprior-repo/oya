@@ -55,7 +55,7 @@ tasks:
       mutex: "rust_heavy"
       runDepsInParallel: false
     env:
-      CARGO_BUILD_JOBS: "6"
+      CARGO_BUILD_JOBS: "16"
 
   test-doc:
     command: "cargo test --doc --workspace"
@@ -82,7 +82,7 @@ tasks:
       mutex: "rust_heavy"
       runDepsInParallel: false
     env:
-      CARGO_BUILD_JOBS: "4"
+      CARGO_BUILD_JOBS: "8"
 
   # ============================================================================
   # STAGE 3: BUILD
@@ -102,7 +102,7 @@ tasks:
       mutex: "rust_heavy"
       runDepsInParallel: false
     env:
-      CARGO_BUILD_JOBS: "8"
+      CARGO_BUILD_JOBS: "24"
 
   build-docs:
     command: "cargo doc --no-deps --document-private-items"
