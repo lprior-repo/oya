@@ -311,12 +311,24 @@ tasks:
       cache: true
 
   # ============================================================================
-  # DESKTOP APP DEVELOPMENT
+  # ZELLIJ PLUGIN (WASM)
   # ============================================================================
 
-  dev-tauri:
-    command: "cd crates/oya-tauri && WEBKIT_DISABLE_DMABUF_RENDERER=1 LIBGL_ALWAYS_SOFTWARE=1 cargo tauri dev"
-    description: "Run Tauri in development mode (software rendering for WebKitGTK compatibility)"
+  build-zellij:
+    command: "cargo build --release --target wasm32-wasip1 -p oya-zellij"
+    description: "Build Zellij plugin to WASM"
+    inputs:
+      - "crates/oya-zellij/**/*.rs"
+      - "crates/oya-zellij/Cargo.toml"
+    outputs:
+      - "/target/wasm32-wasip1/release/oya_zellij.wasm"
+    options:
+      cache: true
+
+  install-zellij:
+    command: "mkdir -p ~/.config/zellij/plugins && cp target/wasm32-wasip1/release/oya_zellij.wasm ~/.config/zellij/plugins/ && cp crates/oya-zellij/plugin.yaml ~/.config/zellij/plugins/oya.yaml && echo '✅ Installed oya-zellij plugin to ~/.config/zellij/plugins/'"
+    description: "Install Zellij plugin to user config"
+    deps:
+      - "build-zellij"
     options:
       cache: false
-      runInCI: false

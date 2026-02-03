@@ -11,10 +11,8 @@
     "crates/oya-web",
     "crates/oya-shared",
     "tools/profiling",
-    # Excluded: oya-ui is standalone workspace (Leptos macro needs panic = deny)
-    # "crates/oya-ui",
-    # Excluded: oya-tauri is standalone (Tauri build system)
-    # "crates/oya-tauri",
+    # Zellij plugin (WASM target)
+    "crates/oya-zellij",
 ]
 resolver = "2"
 
