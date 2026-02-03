@@ -79,7 +79,7 @@ pub struct PathSegment {
 impl PathSegment {
     /// Creates a new path segment
     #[must_use]
-    pub const fn new(start: (f64, f64), end: (f64, f64)) -> Self {
+    pub fn new(start: (f64, f64), end: (f64, f64)) -> Self {
         let dx = end.0 - start.0;
         let dy = end.1 - start.1;
         let length = (dx * dx + dy * dy).sqrt();
