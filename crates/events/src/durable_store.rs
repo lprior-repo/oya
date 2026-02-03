@@ -3,12 +3,13 @@
 #![deny(clippy::panic)]
 
 use chrono::{DateTime, Utc};
+use std::path::PathBuf;
 use std::sync::Arc;
-use surrealdb::engine::any::Any;
-use surrealdb::opt::RecordId;
+use std::time::Duration;
+use surrealdb::engine::local::RocksDb;
 use surrealdb::Surreal;
 
-use crate::error::Result;
+use crate::error::{ConnectionError, Result};
 use crate::event::BeadEvent;
 use crate::types::{BeadId, EventId};
 
@@ -41,6 +42,172 @@ impl SerializedEvent {
             crate::error::Error::serialization(format!("failed to deserialize event: {}", e))
         })
     }
+}
+
+/// Configuration for SurrealDB connection.
+#[derive(Debug, Clone)]
+pub struct ConnectionConfig {
+    /// Path to the RocksDB storage directory.
+    pub storage_path: PathBuf,
+
+    /// Namespace for the database.
+    pub namespace: String,
+
+    /// Database name within the namespace.
+    pub database: String,
+
+    /// Maximum number of connections in the pool.
+    pub max_connections: usize,
+
+    /// Connection timeout in milliseconds.
+    pub timeout_ms: u64,
+
+    /// Username for authentication (optional).
+    pub username: Option<String>,
+
+    /// Password for authentication (optional).
+    pub password: Option<String>,
+}
+
+impl Default for ConnectionConfig {
+    fn default() -> Self {
+        Self {
+            storage_path: PathBuf::from("./data/events"),
+            namespace: "oya".to_string(),
+            database: "events".to_string(),
+            max_connections: 10,
+            timeout_ms: 30000,
+            username: None,
+            password: None,
+        }
+    }
+}
+
+impl ConnectionConfig {
+    /// Creates a new connection config with the specified storage path.
+    pub fn new(storage_path: impl Into<PathBuf>) -> Self {
+        Self {
+            storage_path: storage_path.into(),
+            ..Default::default()
+        }
+    }
+
+    /// Sets the namespace.
+    pub fn with_namespace(mut self, namespace: impl Into<String>) -> Self {
+        self.namespace = namespace.into();
+        self
+    }
+
+    /// Sets the database name.
+    pub fn with_database(mut self, database: impl Into<String>) -> Self {
+        self.database = database.into();
+        self
+    }
+
+    /// Sets the maximum number of connections.
+    pub fn with_max_connections(mut self, max: usize) -> Self {
+        self.max_connections = max;
+        self
+    }
+
+    /// Sets the connection timeout.
+    pub fn with_timeout_ms(mut self, timeout_ms: u64) -> Self {
+        self.timeout_ms = timeout_ms;
+        self
+    }
+
+    /// Sets authentication credentials.
+    pub fn with_auth(mut self, username: impl Into<String>, password: impl Into<String>) -> Self {
+        self.username = Some(username.into());
+        self.password = Some(password.into());
+        self
+    }
+
+    /// Validates the configuration.
+    pub fn validate(&self) -> Result<()> {
+        if self.max_connections == 0 {
+            return Err(ConnectionError::PoolExhausted {
+                max_connections: 0,
+            }
+            .into());
+        }
+
+        if self.timeout_ms == 0 {
+            return Err(ConnectionError::Timeout { timeout_ms: 0 }.into());
+        }
+
+        if self.namespace.is_empty() {
+            return Err(ConnectionError::InitializationFailed {
+                reason: "namespace cannot be empty".to_string(),
+            }
+            .into());
+        }
+
+        if self.database.is_empty() {
+            return Err(ConnectionError::InitializationFailed {
+                reason: "database cannot be empty".to_string(),
+            }
+            .into());
+        }
+
+        Ok(())
+    }
+}
+
+/// Establishes a connection to SurrealDB with kv-rocksdb backend.
+///
+/// This function creates a new SurrealDB instance configured with RocksDB
+/// storage, initializes the database with the specified namespace and database
+/// name, and optionally authenticates.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The storage path cannot be created
+/// - Connection cannot be established within the timeout
+/// - Authentication fails
+/// - Database initialization fails
+pub async fn connect(config: ConnectionConfig) -> Result<Arc<Surreal<RocksDb>>> {
+    config.validate()?;
+
+    let db = Surreal::new::<RocksDb>(config.storage_path)
+        .await
+        .map_err(|e| {
+            ConnectionError::InitializationFailed {
+                reason: format!("failed to create RocksDB instance: {}", e),
+            }
+        })?;
+
+    let db = Arc::new(db);
+
+    let ns = config.namespace.clone();
+    let db_name = config.database.clone();
+
+    db.use_ns(ns)
+        .use_db(db_name)
+        .await
+        .map_err(|e| {
+            ConnectionError::InitializationFailed {
+                reason: format!("failed to initialize namespace/database: {}", e),
+            }
+        })?;
+
+    if let (Some(username), Some(password)) = (config.username, config.password) {
+        db.signin(surrealdb::opt::auth::Database {
+            namespace: &config.namespace,
+            database: &config.database,
+            username: &username,
+            password: &password,
+        })
+        .await
+        .map_err(|e| {
+            ConnectionError::AuthenticationFailed {
+                reason: format!("authentication failed: {}", e),
+            }
+        })?;
+    }
+
+    Ok(db)
 }
 
 pub struct DurableEventStore {
@@ -113,6 +280,8 @@ impl DurableEventStore {
     }
 
     pub async fn replay_from(&self, checkpoint_id: &str) -> Result<Vec<BeadEvent>> {
+        let checkpoint_id = checkpoint_id.to_string();
+
         let mut result = self
             .db
             .query(
