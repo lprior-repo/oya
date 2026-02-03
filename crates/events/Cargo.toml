@@ -37,6 +37,7 @@ surrealdb-core = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tempfile = "3"
 
 [lints.clippy]
 unwrap_used = "deny"
