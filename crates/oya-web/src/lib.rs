@@ -11,6 +11,7 @@ pub use error::{AppError, ErrorResponse};
 pub use server::run_server;
 
 pub mod actors;
+pub mod agent_repository;
 pub mod agent_service;
 pub mod error;
 pub mod middleware;

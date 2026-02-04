@@ -84,7 +84,7 @@ pub async fn list_agents(State(state): State<AppState>) -> Result<Json<ListAgent
         .into_iter()
         .map(|agent| AgentSummary {
             id: agent.id,
-            status: agent.state.to_string(),
+            status: agent.status,
             current_bead: agent.current_bead,
             health_score: agent.health_score,
             uptime_secs: agent.uptime_secs,

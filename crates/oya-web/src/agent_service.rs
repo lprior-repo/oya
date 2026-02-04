@@ -13,6 +13,7 @@ use tokio::process::Command;
 use tokio::sync::Mutex;
 use ulid::Ulid;
 
+use crate::agent_repository::{AgentRepository, AgentSnapshot, InMemoryAgentRepository};
 use crate::error::AppError;
 
 const DEFAULT_MAX_AGENTS: usize = 100;
@@ -67,16 +68,6 @@ impl AgentServiceConfig {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct AgentSnapshot {
-    pub id: String,
-    pub state: AgentStateLegacy,
-    pub current_bead: Option<String>,
-    pub health_score: f64,
-    pub uptime_secs: u64,
-    pub capabilities: Vec<String>,
-}
-
 impl AgentSnapshot {
     fn from_handle(handle: &AgentHandle) -> Self {
         let health_score = health_score_for(handle.state());
@@ -84,7 +75,7 @@ impl AgentSnapshot {
 
         Self {
             id: handle.id().to_string(),
-            state: handle.state(),
+            status: handle.state().to_string(),
             current_bead: handle.current_bead().map(String::from),
             health_score,
             uptime_secs,
@@ -110,6 +101,7 @@ pub struct AgentScaleSummary {
 pub struct AgentService {
     pool: AgentPool,
     launcher: Arc<dyn AgentLauncher>,
+    repository: Arc<dyn AgentRepository>,
     processes: Arc<Mutex<HashMap<String, AgentProcessHandle>>>,
     _health_task: tokio::task::JoinHandle<()>,
 }
@@ -117,10 +109,28 @@ pub struct AgentService {
 impl AgentService {
     pub fn new(config: AgentServiceConfig) -> Self {
         let launcher = build_launcher(&config);
-        Self::new_with_launcher(config, launcher)
+        let repository = Arc::new(InMemoryAgentRepository::new());
+        Self::new_with_launcher_and_repository(config, launcher, repository)
     }
 
     pub fn new_with_launcher(config: AgentServiceConfig, launcher: Arc<dyn AgentLauncher>) -> Self {
+        let repository = Arc::new(InMemoryAgentRepository::new());
+        Self::new_with_launcher_and_repository(config, launcher, repository)
+    }
+
+    pub fn new_with_repository(
+        config: AgentServiceConfig,
+        repository: Arc<dyn AgentRepository>,
+    ) -> Self {
+        let launcher = build_launcher(&config);
+        Self::new_with_launcher_and_repository(config, launcher, repository)
+    }
+
+    pub fn new_with_launcher_and_repository(
+        config: AgentServiceConfig,
+        launcher: Arc<dyn AgentLauncher>,
+        repository: Arc<dyn AgentRepository>,
+    ) -> Self {
         let pool = AgentPool::new(PoolConfig::new(config.max_agents, HealthConfig::default()));
         let processes = Arc::new(Mutex::new(HashMap::new()));
         let health_task = pool.start_health_monitoring();
@@ -128,14 +138,17 @@ impl AgentService {
         Self {
             pool,
             launcher,
+            repository,
             processes,
             _health_task: health_task,
         }
     }
 
     pub async fn list_agents(&self) -> Vec<AgentSnapshot> {
-        let agents: Vec<AgentHandle> = self.pool.all_agents().await;
-        agents.iter().map(AgentSnapshot::from_handle).collect()
+        match self.repository.list().await {
+            Ok(agents) if !agents.is_empty() => agents,
+            _ => self.sync_repository().await,
+        }
     }
 
     pub async fn spawn_agents(
@@ -174,6 +187,7 @@ impl AgentService {
     async fn spawn_one(&self, capabilities: &[String]) -> Result<String, AgentServiceError> {
         let agent_id = Ulid::new().to_string();
         self.register_and_launch(&agent_id, capabilities).await?;
+        self.record_agent_snapshot(&agent_id).await;
         Ok(agent_id)
     }
 
@@ -246,6 +260,7 @@ impl AgentService {
         let process = self.take_process(agent_id).await?;
         process.shutdown(agent_id).await?;
         let _ = self.pool.unregister_agent(agent_id).await;
+        let _ = self.repository.remove(agent_id).await;
         Ok(())
     }
 
@@ -278,6 +293,29 @@ impl AgentService {
             .take(count)
             .map(|agent: AgentHandle| agent.id().to_string())
             .collect())
+    }
+
+    async fn snapshot_agent(&self, agent_id: &str) -> Option<AgentSnapshot> {
+        self.pool
+            .get_agent(agent_id)
+            .await
+            .map(|handle| AgentSnapshot::from_handle(&handle))
+    }
+
+    async fn record_agent_snapshot(&self, agent_id: &str) {
+        if let Some(snapshot) = self.snapshot_agent(agent_id).await {
+            let _ = self.repository.upsert(snapshot).await;
+        }
+    }
+
+    async fn sync_repository(&self) -> Vec<AgentSnapshot> {
+        let agents: Vec<AgentHandle> = self.pool.all_agents().await;
+        let snapshots = agents
+            .iter()
+            .map(AgentSnapshot::from_handle)
+            .collect::<Vec<_>>();
+        let _ = self.repository.replace_all(snapshots.clone()).await;
+        snapshots
     }
 }
 
