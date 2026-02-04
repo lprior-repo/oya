@@ -95,19 +95,13 @@ pub fn run_command_with_timeout(
 
     loop {
         if let Some(status) = child.try_wait()? {
-            let stdout = match stdout_handle {
-                Some(handle) => match handle.join() {
-                    Ok(buffer) => buffer,
-                    Err(_) => String::new(),
-                },
+            let stdout: String = match stdout_handle {
+                Some(handle) => handle.join().unwrap_or_default(),
                 None => String::new(),
             };
 
-            let stderr = match stderr_handle {
-                Some(handle) => match handle.join() {
-                    Ok(buffer) => buffer,
-                    Err(_) => String::new(),
-                },
+            let stderr: String = match stderr_handle {
+                Some(handle) => handle.join().unwrap_or_default(),
                 None => String::new(),
             };
 

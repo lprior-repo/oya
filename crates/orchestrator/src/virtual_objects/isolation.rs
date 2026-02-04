@@ -56,11 +56,11 @@ impl ObjectLock {
 
     /// Acquire a write lock.
     pub async fn write(&self) -> ObjectLockGuard {
+        let guard = Arc::clone(&self.lock).write_owned().await;
         {
             let mut count = self.lock_count.write().await;
             *count = count.saturating_add(1);
         }
-        let guard = Arc::clone(&self.lock).write_owned().await;
         ObjectLockGuard::Write(guard)
     }
 
@@ -79,11 +79,12 @@ impl ObjectLock {
         let lock_count = Arc::clone(&self.lock_count);
 
         tokio::time::timeout(timeout, async move {
+            let guard = lock.write_owned().await;
             {
                 let mut count = lock_count.write().await;
                 *count = count.saturating_add(1);
             }
-            lock.write_owned().await
+            guard
         })
         .await
         .ok()

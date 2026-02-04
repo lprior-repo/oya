@@ -53,7 +53,9 @@ def action_swarm [max_concurrent: int, dry_run: bool, filter: string] {
 
     # Setup logging
     let log_dir = ("./.bead_logs" | path expand)
-    mkdir $log_dir
+    if not ($log_dir | path exists) {
+        mkdir $log_dir
+    }
     let swarm_log = ($SWARM_LOG | path expand)
     let start_time = (date now)
 
@@ -86,7 +88,11 @@ def action_swarm [max_concurrent: int, dry_run: bool, filter: string] {
 
     let filtered_count = ($beads_to_run | length)
     if $filtered_count == 0 {
-        print "❌ No beads match filter: '$filter'"
+        if ($filter | is-empty) {
+            print "❌ No beads to run (all executed?)"
+        } else {
+            print "❌ No beads match filter: '$filter'"
+        }
         exit 1
     }
 
@@ -122,7 +128,7 @@ def action_swarm [max_concurrent: int, dry_run: bool, filter: string] {
     }
 
     let swarm_end = (date now)
-    let swarm_duration_secs = (($swarm_end - $swarm_start) | into int) / 1000
+    let swarm_duration_secs = ((($swarm_end - $swarm_start) | into int) / 1000000000)
 
     # Analyze results
     print ""
@@ -324,8 +330,7 @@ def load_all_beads [] {
     )
 
     let combined = ($ready ++ $in_progress)
-    let unique_ids = ($combined | each { |b| $b.id } | uniq)
-    ($combined | where { |b| $b.id in $unique_ids })
+    ($combined | uniq-by id)
 }
 
 # Execute a single bead in the swarm
@@ -386,7 +391,7 @@ def execute_bead_in_swarm [bead: record, dry_run: bool, log_file: string] {
             print $"      └─ ❌ tdd15 failed"
         }
 
-        let duration_ms = (((date now) - $start) | into int)
+        let duration_ms = ((((date now) - $start) | into int) / 1000000)
 
         {
             id: $bead_id,
@@ -399,7 +404,7 @@ def execute_bead_in_swarm [bead: record, dry_run: bool, log_file: string] {
     } catch { |err|
         print $"      └─ ❌ ERROR: ($err)"
 
-        let duration_ms = (((date now) - $start) | into int)
+        let duration_ms = ((((date now) - $start) | into int) / 1000000)
 
         {
             id: $bead_id,

@@ -136,16 +136,11 @@ impl MessageRouter {
     pub async fn register_channel(&self, channel_id: impl Into<ChannelId>) -> Arc<DurableChannel> {
         let id = channel_id.into();
         let id_str = id.as_str().to_string();
-
-        // Check if already exists
-        {
-            let channels = self.channels.read().await;
-            if let Some(channel) = channels.get(&id_str) {
-                return Arc::clone(channel);
-            }
+        let mut channels = self.channels.write().await;
+        if let Some(channel) = channels.get(&id_str) {
+            return Arc::clone(channel);
         }
 
-        // Create new channel
         let channel = if let Some(store) = &self.store {
             Arc::new(DurableChannel::with_store(
                 id,
@@ -160,12 +155,7 @@ impl MessageRouter {
             ))
         };
 
-        // Register
-        {
-            let mut channels = self.channels.write().await;
-            channels.insert(id_str, Arc::clone(&channel));
-        }
-
+        channels.insert(id_str, Arc::clone(&channel));
         channel
     }
 

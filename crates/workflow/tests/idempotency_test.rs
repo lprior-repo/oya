@@ -15,8 +15,6 @@
 use oya_workflow::idempotent::{
     hash_input, idempotency_key, idempotency_key_from_bytes, IdempotencyKey,
 };
-use proptest::prelude::*;
-use proptest::test_runner::TestCaseResult;
 use serde::Serialize;
 
 mod unit_tests {

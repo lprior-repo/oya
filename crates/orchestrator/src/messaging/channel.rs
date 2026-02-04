@@ -165,15 +165,6 @@ impl DurableChannel {
     ) -> PersistenceResult<MessageId> {
         let message_id = message.id().clone();
 
-        // Check queue depth
-        let queue_depth = self.queue.read().await.len();
-        if self.config.max_queue_depth > 0 && queue_depth >= self.config.max_queue_depth {
-            return Err(PersistenceError::query_failed(format!(
-                "Channel queue full (max: {})",
-                self.config.max_queue_depth
-            )));
-        }
-
         // Build metadata
         let metadata = MessageMetadata::default()
             .with_source(self.sender_workflow.as_deref().unwrap_or("unknown"), None)
@@ -197,10 +188,16 @@ impl DurableChannel {
 
         {
             let mut queue = self.queue.write().await;
+            let queue_depth = queue.len();
+            if self.config.max_queue_depth > 0 && queue_depth >= self.config.max_queue_depth {
+                return Err(PersistenceError::query_failed(format!(
+                    "Channel queue full (max: {})",
+                    self.config.max_queue_depth
+                )));
+            }
             queue.push_back(queued.clone());
         }
 
-        // Increment message count
         {
             let mut count = self.message_count.write().await;
             *count = count.saturating_add(1);
@@ -209,11 +206,26 @@ impl DurableChannel {
         // Persist if enabled
         if self.config.persist_messages {
             if let Some(store) = &self.store {
-                self.persist_message(store, &queued).await?;
+                if let Err(err) = self.persist_message(store, &queued).await {
+                    self.rollback_enqueue(&message_id).await;
+                    return Err(err);
+                }
             }
         }
 
         Ok(message_id)
+    }
+
+    async fn rollback_enqueue(&self, message_id: &MessageId) {
+        {
+            let mut queue = self.queue.write().await;
+            if let Some(pos) = queue.iter().position(|q| q.message.id() == message_id) {
+                queue.remove(pos);
+            }
+        }
+
+        let mut count = self.message_count.write().await;
+        *count = count.saturating_sub(1);
     }
 
     /// Receive the next message from the channel.

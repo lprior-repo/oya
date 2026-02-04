@@ -207,7 +207,6 @@ impl Default for EventBusBuilder {
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use crate::Result;
     use crate::store::InMemoryEventStore;
     use crate::types::{BeadId, BeadSpec, BeadState, Complexity};
 
