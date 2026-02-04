@@ -69,6 +69,7 @@ pub struct StageInfo {
     pub name: String,
     pub status: String,
     pub duration_ms: Option<u64>,
+    pub exit_code: Option<i32>,
 }
 
 /// Node in the dependency graph
@@ -248,16 +249,19 @@ pub fn mock_state_manager() -> StateManagerSender {
                             name: "planning".to_string(),
                             status: "passed".to_string(),
                             duration_ms: Some(1200),
+                            exit_code: None,
                         },
                         StageInfo {
                             name: "implementing".to_string(),
                             status: "running".to_string(),
                             duration_ms: None,
+                            exit_code: None,
                         },
                         StageInfo {
                             name: "testing".to_string(),
                             status: "pending".to_string(),
                             duration_ms: None,
+                            exit_code: None,
                         },
                     ];
                     let _ = response.send(stages);

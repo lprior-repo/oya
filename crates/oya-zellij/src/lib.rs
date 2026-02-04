@@ -125,6 +125,7 @@ struct StageInfo {
     name: String,
     status: StageStatus,
     duration_ms: Option<u64>,
+    exit_code: Option<i32>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -555,6 +556,8 @@ impl State {
             status: String,
             #[serde(default)]
             duration_ms: Option<u64>,
+            #[serde(default)]
+            exit_code: Option<i32>,
         }
 
         let parsed = std::str::from_utf8(body)
@@ -578,6 +581,7 @@ impl State {
                             _ => StageStatus::Pending,
                         },
                         duration_ms: s.duration_ms,
+                        exit_code: s.exit_code,
                     })
                     .collect::<Vector<_>>();
             }
@@ -793,12 +797,18 @@ impl State {
 
                 let duration_str = stage
                     .duration_ms
-                    .map(|ms| format!("({:.1}s)", ms as f64 / 1000.0))
-                    .unwrap_or_default();
+                    .map(|ms| format!("({:.1}s)", ms as f64 / 1000.0));
+                let exit_code_str = stage.exit_code.map(|code| format!("(exit {code})"));
+                let details = match (duration_str, exit_code_str) {
+                    (Some(duration), Some(exit_code)) => format!("{duration} {exit_code}"),
+                    (Some(duration), None) => duration,
+                    (None, Some(exit_code)) => exit_code,
+                    (None, None) => String::new(),
+                };
 
                 println!(
                     "  {} {}{}\x1b[0m {:<15} {}",
-                    connector, color, symbol, stage.name, duration_str
+                    connector, color, symbol, stage.name, details
                 );
             });
 
