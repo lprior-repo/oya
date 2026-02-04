@@ -335,6 +335,9 @@ impl ZellijPlugin for State {
             }
             Event::PermissionRequestResult(_) => {
                 self.load_beads();
+                if should_fetch_agents_on_view_load(self.mode) {
+                    self.load_agents();
+                }
                 true
             }
             Event::WebRequestResult(status, _headers, body, context) => {
@@ -882,6 +885,10 @@ impl State {
 }
 
 // Helper functions
+fn should_fetch_agents_on_view_load(mode: ViewMode) -> bool {
+    matches!(mode, ViewMode::AgentList)
+}
+
 fn truncate(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
         s.to_string()
@@ -919,5 +926,28 @@ fn format_uptime(secs: u64) -> String {
         )
     } else {
         format!("{}d", secs.saturating_div(86400))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{should_fetch_agents_on_view_load, ViewMode};
+
+    #[test]
+    fn agent_view_fetches_agents_on_load() {
+        assert!(should_fetch_agents_on_view_load(ViewMode::AgentList));
+    }
+
+    #[test]
+    fn non_agent_views_do_not_fetch_agents_on_load() {
+        let modes = [
+            ViewMode::BeadList,
+            ViewMode::BeadDetail,
+            ViewMode::PipelineView,
+        ];
+
+        for mode in modes {
+            assert!(!should_fetch_agents_on_view_load(mode));
+        }
     }
 }

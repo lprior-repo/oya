@@ -335,11 +335,8 @@ async fn given_rapid_tier1_crash_restart_cycles_then_stable() {
     for i in 0..10 {
         let config = SchedulerSupervisorConfig::for_testing();
         let supervisor_name = unique_name(&format!("chaos-supervisor-cycle-{i}"));
-        let supervisor_result = spawn_supervisor_with_name(
-            supervisor_args(config),
-            &supervisor_name,
-        )
-        .await;
+        let supervisor_result =
+            spawn_supervisor_with_name(supervisor_args(config), &supervisor_name).await;
 
         assert!(
             supervisor_result.is_ok(),
@@ -551,12 +548,7 @@ async fn given_tier1_crashes_then_no_shared_state_corruption() {
             child_args.clone(),
         )
         .await;
-        let _ = spawn_child(
-            &supervisor,
-            &format!("{base_name}-child-{i}-2"),
-            child_args,
-        )
-        .await;
+        let _ = spawn_child(&supervisor, &format!("{base_name}-child-{i}-2"), child_args).await;
 
         sleep(Duration::from_millis(20)).await;
 
