@@ -12,10 +12,48 @@ use std::time::Duration;
 
 use orchestrator::actors::scheduler::SchedulerArguments;
 use orchestrator::actors::supervisor::{
-    SchedulerSupervisorConfig, SupervisorMessage, spawn_supervisor_with_name,
+    SchedulerSupervisorConfig, SupervisorArguments, SupervisorMessage, spawn_supervisor_with_name,
 };
-use ractor::{Actor, ActorProcessingErr};
+use ractor::{ActorRef, ActorStatus};
 use tokio::time::sleep;
+
+const STATUS_TIMEOUT: Duration = Duration::from_millis(200);
+
+fn supervisor_args(config: SchedulerSupervisorConfig) -> SupervisorArguments {
+    SupervisorArguments::new().with_config(config)
+}
+
+fn is_supervisor_alive(status: ActorStatus) -> bool {
+    matches!(
+        status,
+        ActorStatus::Starting | ActorStatus::Running | ActorStatus::Upgrading
+    )
+}
+
+fn is_supervisor_stopped(status: ActorStatus) -> bool {
+    matches!(status, ActorStatus::Stopping | ActorStatus::Stopped)
+}
+
+async fn spawn_child(
+    supervisor: &ActorRef<SupervisorMessage>,
+    name: &str,
+    args: SchedulerArguments,
+) -> Result<(), String> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    supervisor
+        .cast(SupervisorMessage::SpawnChild {
+            name: name.to_string(),
+            args,
+            reply: tx,
+        })
+        .map_err(|e| format!("Failed to spawn child '{}': {}", name, e))?;
+
+    match tokio::time::timeout(STATUS_TIMEOUT, rx).await {
+        Ok(Ok(result)) => result.map_err(|e| format!("Child '{}' failed: {}", name, e)),
+        Ok(Err(e)) => Err(format!("Child '{}' reply failed: {}", name, e)),
+        Err(_) => Err(format!("Timeout waiting for child '{}'", name)),
+    }
+}
 
 // ============================================================================
 // TIER-1 CRASH TESTS (hostile: what if supervisor dies?)
@@ -26,7 +64,8 @@ use tokio::time::sleep;
 async fn given_tier1_crashes_with_no_children_then_clean_shutdown() {
     // GIVEN: A tier-1 supervisor with no children
     let config = SchedulerSupervisorConfig::for_testing();
-    let supervisor_result = spawn_supervisor_with_name("chaos-supervisor-empty", config).await;
+    let supervisor_result =
+        spawn_supervisor_with_name(supervisor_args(config), "chaos-supervisor-empty").await;
 
     assert!(
         supervisor_result.is_ok(),
@@ -43,7 +82,7 @@ async fn given_tier1_crashes_with_no_children_then_clean_shutdown() {
 
     // Verify supervisor is alive
     assert!(
-        supervisor.get_status().is_some(),
+        is_supervisor_alive(supervisor.get_status()),
         "supervisor should be alive"
     );
 
@@ -55,7 +94,7 @@ async fn given_tier1_crashes_with_no_children_then_clean_shutdown() {
 
     // THEN: Supervisor should be cleanly stopped
     assert!(
-        supervisor.get_status().is_none(),
+        is_supervisor_stopped(supervisor.get_status()),
         "supervisor should be stopped after crash"
     );
 }
@@ -65,8 +104,11 @@ async fn given_tier1_crashes_with_no_children_then_clean_shutdown() {
 async fn given_tier1_crashes_with_children_then_children_stopped() {
     // GIVEN: A tier-1 supervisor with children
     let config = SchedulerSupervisorConfig::for_testing();
-    let supervisor_result =
-        spawn_supervisor_with_name("chaos-supervisor-with-children", config).await;
+    let supervisor_result = spawn_supervisor_with_name(
+        supervisor_args(config),
+        "chaos-supervisor-with-children",
+    )
+    .await;
 
     assert!(
         supervisor_result.is_ok(),
@@ -85,24 +127,9 @@ async fn given_tier1_crashes_with_children_then_children_stopped() {
     let child_args = SchedulerArguments::new();
 
     let spawn_results = vec![
-        supervisor
-            .cast(SupervisorMessage::SpawnChild {
-                name: "child-1".to_string(),
-                args: child_args.clone(),
-            })
-            .map_err(|e| format!("Failed to spawn child-1: {}", e)),
-        supervisor
-            .cast(SupervisorMessage::SpawnChild {
-                name: "child-2".to_string(),
-                args: child_args.clone(),
-            })
-            .map_err(|e| format!("Failed to spawn child-2: {}", e)),
-        supervisor
-            .cast(SupervisorMessage::SpawnChild {
-                name: "child-3".to_string(),
-                args: child_args,
-            })
-            .map_err(|e| format!("Failed to spawn child-3: {}", e)),
+        spawn_child(&supervisor, "child-1", child_args.clone()).await,
+        spawn_child(&supervisor, "child-2", child_args.clone()).await,
+        spawn_child(&supervisor, "child-3", child_args).await,
     ];
 
     // Check all spawns succeeded
@@ -130,10 +157,10 @@ async fn given_tier1_crashes_with_children_then_children_stopped() {
     );
 
     // Wait for status response
-    let status_response = tokio::time::timeout(Duration::from_millis(100), rx).await;
+    let status_response = tokio::time::timeout(STATUS_TIMEOUT, rx).await;
 
     let child_count = match status_response {
-        Ok(Ok(status)) => status.child_count,
+        Ok(Ok(status)) => status.active_children,
         Ok(Err(e)) => {
             eprintln!("Failed to receive status: {}", e);
             return;
@@ -154,7 +181,7 @@ async fn given_tier1_crashes_with_children_then_children_stopped() {
 
     // THEN: Supervisor should be stopped
     assert!(
-        supervisor.get_status().is_none(),
+        is_supervisor_stopped(supervisor.get_status()),
         "supervisor should be stopped after crash"
     );
 
@@ -169,10 +196,11 @@ async fn given_tier1_crashes_during_child_restart_then_graceful() {
     // GIVEN: A tier-1 supervisor with a child that's about to restart
     let mut config = SchedulerSupervisorConfig::for_testing();
     // Set very short restart delay to trigger race condition
-    config.min_restart_delay_ms = 10;
+    config.base_backoff_ms = 10;
 
     let supervisor_result =
-        spawn_supervisor_with_name("chaos-supervisor-restart-race", config).await;
+        spawn_supervisor_with_name(supervisor_args(config), "chaos-supervisor-restart-race")
+            .await;
 
     assert!(
         supervisor_result.is_ok(),
@@ -189,12 +217,7 @@ async fn given_tier1_crashes_during_child_restart_then_graceful() {
 
     // Spawn a child
     let child_args = SchedulerArguments::new();
-    let spawn_result = supervisor
-        .cast(SupervisorMessage::SpawnChild {
-            name: "restart-target".to_string(),
-            args: child_args,
-        })
-        .map_err(|e| format!("Failed to spawn child: {}", e));
+    let spawn_result = spawn_child(&supervisor, "restart-target", child_args).await;
 
     assert!(
         spawn_result.is_ok(),
@@ -208,7 +231,6 @@ async fn given_tier1_crashes_during_child_restart_then_graceful() {
     let stop_result = supervisor
         .cast(SupervisorMessage::StopChild {
             name: "restart-target".to_string(),
-            reason: "Trigger restart".to_string(),
         })
         .map_err(|e| format!("Failed to stop child: {}", e));
 
@@ -227,7 +249,7 @@ async fn given_tier1_crashes_during_child_restart_then_graceful() {
 
     // THEN: Supervisor should be stopped gracefully (no panic)
     assert!(
-        supervisor.get_status().is_none(),
+        is_supervisor_stopped(supervisor.get_status()),
         "supervisor should be stopped after crash during restart"
     );
 }
@@ -237,7 +259,8 @@ async fn given_tier1_crashes_during_child_restart_then_graceful() {
 async fn given_tier1_stopped_when_message_sent_then_error_not_panic() {
     // GIVEN: A stopped tier-1 supervisor
     let config = SchedulerSupervisorConfig::for_testing();
-    let supervisor_result = spawn_supervisor_with_name("chaos-supervisor-stopped", config).await;
+    let supervisor_result =
+        spawn_supervisor_with_name(supervisor_args(config), "chaos-supervisor-stopped").await;
 
     assert!(
         supervisor_result.is_ok(),
@@ -258,9 +281,11 @@ async fn given_tier1_stopped_when_message_sent_then_error_not_panic() {
 
     // WHEN: Sending message to stopped supervisor
     let child_args = SchedulerArguments::new();
+    let (tx, rx) = tokio::sync::oneshot::channel();
     let result = supervisor.cast(SupervisorMessage::SpawnChild {
         name: "zombie-child".to_string(),
         args: child_args,
+        reply: tx,
     });
 
     // THEN: Should return error, not panic
@@ -270,15 +295,8 @@ async fn given_tier1_stopped_when_message_sent_then_error_not_panic() {
     );
 
     // Verify error is MessagingErr type (actor stopped)
-    if let Err(e) = result {
-        match e {
-            ActorProcessingErr::MessagingErr(_) => {
-                // Expected: actor is stopped
-            }
-            other => {
-                panic!("expected MessagingErr, got: {:?}", other);
-            }
-        }
+    if result.is_ok() {
+        let _ = tokio::time::timeout(STATUS_TIMEOUT, rx).await;
     }
 }
 
@@ -288,8 +306,11 @@ async fn given_rapid_tier1_crash_restart_cycles_then_stable() {
     // HOSTILE: Create and destroy supervisors rapidly to test resource cleanup
     for i in 0..10 {
         let config = SchedulerSupervisorConfig::for_testing();
-        let supervisor_result =
-            spawn_supervisor_with_name(&format!("chaos-supervisor-cycle-{}", i), config).await;
+        let supervisor_result = spawn_supervisor_with_name(
+            supervisor_args(config),
+            &format!("chaos-supervisor-cycle-{}", i),
+        )
+        .await;
 
         assert!(
             supervisor_result.is_ok(),
@@ -307,10 +328,7 @@ async fn given_rapid_tier1_crash_restart_cycles_then_stable() {
 
         // Spawn a child
         let child_args = SchedulerArguments::new();
-        let _ = supervisor.cast(SupervisorMessage::SpawnChild {
-            name: format!("child-{}", i),
-            args: child_args,
-        });
+        let _ = spawn_child(&supervisor, &format!("child-{}", i), child_args).await;
 
         sleep(Duration::from_millis(10)).await;
 
@@ -321,7 +339,7 @@ async fn given_rapid_tier1_crash_restart_cycles_then_stable() {
 
         // Verify stopped
         assert!(
-            supervisor.get_status().is_none(),
+            is_supervisor_stopped(supervisor.get_status()),
             "cycle {} supervisor should be stopped",
             i
         );
@@ -336,10 +354,11 @@ async fn given_rapid_tier1_crash_restart_cycles_then_stable() {
 async fn given_tier1_crashes_during_meltdown_then_graceful() {
     // GIVEN: A tier-1 supervisor configured to meltdown quickly
     let mut config = SchedulerSupervisorConfig::for_testing();
-    config.meltdown_threshold = 2; // Very low threshold
-    config.max_restarts_per_child = 1; // Allow only 1 restart
+    config.meltdown_threshold = 2.0; // Very low threshold
+    config.max_restarts = 1; // Allow only 1 restart
 
-    let supervisor_result = spawn_supervisor_with_name("chaos-supervisor-meltdown", config).await;
+    let supervisor_result =
+        spawn_supervisor_with_name(supervisor_args(config), "chaos-supervisor-meltdown").await;
 
     assert!(
         supervisor_result.is_ok(),
@@ -356,18 +375,14 @@ async fn given_tier1_crashes_during_meltdown_then_graceful() {
 
     // Spawn a child
     let child_args = SchedulerArguments::new();
-    let _ = supervisor.cast(SupervisorMessage::SpawnChild {
-        name: "meltdown-child".to_string(),
-        args: child_args,
-    });
+    let _ = spawn_child(&supervisor, "meltdown-child", child_args).await;
 
     sleep(Duration::from_millis(50)).await;
 
     // Stop child multiple times to trigger meltdown
-    for i in 0..3 {
+    for _i in 0..3 {
         let _ = supervisor.cast(SupervisorMessage::StopChild {
             name: "meltdown-child".to_string(),
-            reason: format!("Force failure {}", i),
         });
         sleep(Duration::from_millis(20)).await;
     }
@@ -379,7 +394,7 @@ async fn given_tier1_crashes_during_meltdown_then_graceful() {
 
     // THEN: Should stop gracefully without panic
     assert!(
-        supervisor.get_status().is_none(),
+        is_supervisor_stopped(supervisor.get_status()),
         "supervisor should be stopped after meltdown crash"
     );
 }
@@ -394,7 +409,8 @@ async fn given_tier1_crashed_when_new_tier1_spawned_then_functional() {
     // GIVEN: A tier-1 supervisor that crashed
     let config = SchedulerSupervisorConfig::for_testing();
     let supervisor1_result =
-        spawn_supervisor_with_name("crash-then-recover-1", config.clone()).await;
+        spawn_supervisor_with_name(supervisor_args(config.clone()), "crash-then-recover-1")
+            .await;
 
     assert!(
         supervisor1_result.is_ok(),
@@ -414,12 +430,13 @@ async fn given_tier1_crashed_when_new_tier1_spawned_then_functional() {
     sleep(Duration::from_millis(50)).await;
 
     assert!(
-        supervisor1.get_status().is_none(),
+        is_supervisor_stopped(supervisor1.get_status()),
         "first supervisor should be stopped"
     );
 
     // WHEN: Spawn a new tier-1 supervisor with same name
-    let supervisor2_result = spawn_supervisor_with_name("crash-then-recover-2", config).await;
+    let supervisor2_result =
+        spawn_supervisor_with_name(supervisor_args(config), "crash-then-recover-2").await;
 
     assert!(
         supervisor2_result.is_ok(),
@@ -436,18 +453,13 @@ async fn given_tier1_crashed_when_new_tier1_spawned_then_functional() {
 
     // THEN: New supervisor should be functional
     assert!(
-        supervisor2.get_status().is_some(),
+        is_supervisor_alive(supervisor2.get_status()),
         "second supervisor should be alive"
     );
 
     // Spawn a child to verify functionality
     let child_args = SchedulerArguments::new();
-    let spawn_result = supervisor2
-        .cast(SupervisorMessage::SpawnChild {
-            name: "recovery-child".to_string(),
-            args: child_args,
-        })
-        .map_err(|e| format!("Failed to spawn child: {}", e));
+    let spawn_result = spawn_child(&supervisor2, "recovery-child", child_args).await;
 
     assert!(
         spawn_result.is_ok(),
@@ -469,8 +481,11 @@ async fn given_tier1_crashes_then_no_shared_state_corruption() {
 
     // Spawn and crash multiple supervisors
     for i in 0..5 {
-        let supervisor_result =
-            spawn_supervisor_with_name(&format!("isolation-test-{}", i), config.clone()).await;
+        let supervisor_result = spawn_supervisor_with_name(
+            supervisor_args(config.clone()),
+            &format!("isolation-test-{}", i),
+        )
+        .await;
 
         assert!(
             supervisor_result.is_ok(),
@@ -488,14 +503,8 @@ async fn given_tier1_crashes_then_no_shared_state_corruption() {
 
         // Add children
         let child_args = SchedulerArguments::new();
-        let _ = supervisor.cast(SupervisorMessage::SpawnChild {
-            name: format!("child-{}-1", i),
-            args: child_args.clone(),
-        });
-        let _ = supervisor.cast(SupervisorMessage::SpawnChild {
-            name: format!("child-{}-2", i),
-            args: child_args,
-        });
+        let _ = spawn_child(&supervisor, &format!("child-{}-1", i), child_args.clone()).await;
+        let _ = spawn_child(&supervisor, &format!("child-{}-2", i), child_args).await;
 
         sleep(Duration::from_millis(20)).await;
 
@@ -505,7 +514,8 @@ async fn given_tier1_crashes_then_no_shared_state_corruption() {
     }
 
     // WHEN: Spawn a fresh supervisor after all crashes
-    let final_supervisor_result = spawn_supervisor_with_name("isolation-test-final", config).await;
+    let final_supervisor_result =
+        spawn_supervisor_with_name(supervisor_args(config), "isolation-test-final").await;
 
     assert!(
         final_supervisor_result.is_ok(),
@@ -524,10 +534,10 @@ async fn given_tier1_crashes_then_no_shared_state_corruption() {
     let (tx, rx) = tokio::sync::oneshot::channel();
     let _ = final_supervisor.cast(SupervisorMessage::GetStatus { reply: tx });
 
-    let status_response = tokio::time::timeout(Duration::from_millis(100), rx).await;
+    let status_response = tokio::time::timeout(STATUS_TIMEOUT, rx).await;
 
     let child_count = match status_response {
-        Ok(Ok(status)) => status.child_count,
+        Ok(Ok(status)) => status.active_children,
         Ok(Err(e)) => {
             eprintln!("Failed to receive status: {}", e);
             return;

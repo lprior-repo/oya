@@ -5,6 +5,7 @@
 #![deny(clippy::panic)]
 
 use orchestrator::actors::supervisor::SchedulerSupervisorConfig;
+use ractor::ActorStatus;
 use orchestrator::supervision::{Tier1SupervisorKind, Tier1Supervisors, spawn_tier1_supervisors};
 
 fn build_prefix() -> String {
@@ -32,11 +33,32 @@ async fn given_tier1_supervisors_when_spawned_then_all_running() {
         let queue_status = supervisors.queue.actor.get_status();
         let reconciler_status = supervisors.reconciler.actor.get_status();
 
-        assert!(storage_status.is_some(), "storage supervisor should be running");
-        assert!(workflow_status.is_some(), "workflow supervisor should be running");
-        assert!(queue_status.is_some(), "queue supervisor should be running");
         assert!(
-            reconciler_status.is_some(),
+            matches!(
+                storage_status,
+                ActorStatus::Starting | ActorStatus::Running | ActorStatus::Upgrading
+            ),
+            "storage supervisor should be running"
+        );
+        assert!(
+            matches!(
+                workflow_status,
+                ActorStatus::Starting | ActorStatus::Running | ActorStatus::Upgrading
+            ),
+            "workflow supervisor should be running"
+        );
+        assert!(
+            matches!(
+                queue_status,
+                ActorStatus::Starting | ActorStatus::Running | ActorStatus::Upgrading
+            ),
+            "queue supervisor should be running"
+        );
+        assert!(
+            matches!(
+                reconciler_status,
+                ActorStatus::Starting | ActorStatus::Running | ActorStatus::Upgrading
+            ),
             "reconciler supervisor should be running"
         );
 
