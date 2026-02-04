@@ -64,6 +64,9 @@ pub mod replay;
 /// Scheduler actor for managing workflow DAGs and bead scheduling
 pub mod scheduler;
 
+/// Supervision tree helpers for tier-1 supervisors.
+pub mod supervision;
+
 /// Graceful shutdown handling with signal management and checkpoint coordination
 pub mod shutdown;
 
