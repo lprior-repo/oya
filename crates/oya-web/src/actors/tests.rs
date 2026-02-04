@@ -352,6 +352,7 @@ mod app_state_tests {
         let app_state = AppState {
             scheduler: Arc::new(scheduler),
             state_manager: Arc::new(state_manager),
+            agent_service: Arc::new(mock_agent_service()),
             broadcast_tx,
         };
 
@@ -372,6 +373,7 @@ mod app_state_tests {
         let app_state = AppState {
             scheduler: Arc::new(scheduler),
             state_manager: Arc::new(state_manager),
+            agent_service: Arc::new(mock_agent_service()),
             broadcast_tx,
         };
 
@@ -397,6 +399,7 @@ mod app_state_tests {
         let app_state = AppState {
             scheduler: Arc::new(scheduler),
             state_manager: Arc::new(state_manager),
+            agent_service: Arc::new(mock_agent_service()),
             broadcast_tx,
         };
 

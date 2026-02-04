@@ -318,7 +318,7 @@ impl ZellijPlugin for State {
                 if self.pending_requests > 0 {
                     if self
                         .last_request_sent
-                        .map_or(false, |last| last.elapsed() > REQUEST_TIMEOUT)
+                        .is_some_and(|last| last.elapsed() > REQUEST_TIMEOUT)
                     {
                         self.api_connected = false;
                         self.last_error = Some("Network timeout".to_string());
@@ -545,6 +545,7 @@ impl State {
         #[derive(serde::Deserialize)]
         struct ApiAgentInfo {
             id: String,
+            #[serde(alias = "status")]
             state: String,
             #[serde(default)]
             current_bead: Option<String>,
@@ -554,10 +555,17 @@ impl State {
             capabilities: Vec<String>,
         }
 
+        #[derive(serde::Deserialize)]
+        struct ApiAgentsResponse {
+            agents: Vec<ApiAgentInfo>,
+        }
+
         let parsed = std::str::from_utf8(body)
             .map_err(|_| "Invalid UTF-8 in response".to_string())
             .and_then(|body_str| {
-                serde_json::from_str::<Vec<ApiAgentInfo>>(body_str)
+                serde_json::from_str::<ApiAgentsResponse>(body_str)
+                    .map(|response| response.agents)
+                    .or_else(|_| serde_json::from_str::<Vec<ApiAgentInfo>>(body_str))
                     .map_err(|e| format!("Parse error: {}", e))
             });
 

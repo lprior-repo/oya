@@ -1,6 +1,7 @@
 //! Server setup with Tower middleware
 
 use super::actors::{AppState, BroadcastEvent, mock_scheduler, mock_state_manager};
+use crate::agent_service::{AgentService, AgentServiceConfig};
 use super::routes;
 use axum::{Router, routing::get_service};
 use std::net::SocketAddr;
@@ -33,10 +34,16 @@ fn create_app() -> Router {
     // Create broadcast channel for WebSocket events
     // Capacity of 100 allows clients to lag behind without blocking the sender
     let (broadcast_tx, _) = broadcast::channel::<BroadcastEvent>(100);
+    let agent_config = AgentServiceConfig::from_env().unwrap_or_else(|err| {
+        tracing::warn!(error = %err, "Agent config invalid, using defaults");
+        AgentServiceConfig::default()
+    });
+    let agent_service = Arc::new(AgentService::new(agent_config));
 
     let state = AppState {
         scheduler: Arc::new(mock_scheduler()),
         state_manager: Arc::new(mock_state_manager()),
+        agent_service,
         broadcast_tx,
     };
 

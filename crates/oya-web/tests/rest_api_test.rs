@@ -3,7 +3,7 @@
 use axum_test::TestServer;
 use http::StatusCode;
 use oya_web::{
-    actors::{AppState, mock_scheduler, mock_state_manager},
+    actors::{AppState, mock_agent_service, mock_scheduler, mock_state_manager},
     routes,
 };
 use serde_json::Value;
@@ -15,6 +15,7 @@ fn create_test_server() -> Result<TestServer, String> {
     let state = AppState {
         scheduler: Arc::new(mock_scheduler()),
         state_manager: Arc::new(mock_state_manager()),
+        agent_service: Arc::new(mock_agent_service()),
         broadcast_tx,
     };
 

@@ -3,7 +3,7 @@
 use axum::Router;
 use axum::routing::get;
 use axum_test::TestServer;
-use oya_web::actors::{AppState, mock_scheduler, mock_state_manager};
+use oya_web::actors::{AppState, mock_agent_service, mock_scheduler, mock_state_manager};
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
@@ -13,6 +13,7 @@ async fn test_cors_headers_added() -> Result<(), String> {
     let state = AppState {
         scheduler: Arc::new(mock_scheduler()),
         state_manager: Arc::new(mock_state_manager()),
+        agent_service: Arc::new(mock_agent_service()),
         broadcast_tx,
     };
 

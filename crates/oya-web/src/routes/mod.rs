@@ -64,7 +64,9 @@ pub fn create_router() -> Router<AppState> {
         .route("/beads/{id}/cancel", post(beads::cancel_bead))
         .route("/beads/{id}/retry", post(beads::retry_bead))
         // Agents endpoint
-        .route("/agents", get(agents::list_agents));
+        .route("/agents", get(agents::list_agents))
+        .route("/agents/spawn", post(agents::spawn_agents))
+        .route("/agents/scale", post(agents::scale_agents));
 
     Router::new()
         .nest("/api", api_routes)

@@ -5,6 +5,11 @@ use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc};
 use ulid::Ulid;
 
+use crate::agent_service::{
+    AgentLauncher, AgentProcessHandle, AgentService, AgentServiceConfig, AgentServiceError,
+};
+use async_trait::async_trait;
+
 /// Placeholder message to SchedulerActor
 #[derive(Debug, Clone)]
 pub enum SchedulerMessage {
@@ -82,6 +87,7 @@ pub enum BroadcastEvent {
 pub struct AppState {
     pub scheduler: Arc<SchedulerSender>,
     pub state_manager: Arc<StateManagerSender>,
+    pub agent_service: Arc<AgentService>,
     /// Broadcast channel for sending events to all connected WebSocket clients
     pub broadcast_tx: broadcast::Sender<BroadcastEvent>,
 }
@@ -169,6 +175,20 @@ pub fn mock_state_manager() -> StateManagerSender {
     });
 
     tx
+}
+
+/// Mock agent service with noop launcher
+pub fn mock_agent_service() -> AgentService {
+    struct NoopLauncher;
+
+    #[async_trait]
+    impl AgentLauncher for NoopLauncher {
+        async fn launch(&self, _agent_id: &str) -> Result<AgentProcessHandle, AgentServiceError> {
+            Ok(AgentProcessHandle::Noop)
+        }
+    }
+
+    AgentService::new_with_launcher(AgentServiceConfig::default(), Arc::new(NoopLauncher))
 }
 
 /// Helper to extract state in handlers
