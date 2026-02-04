@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use orchestrator::actors::scheduler::SchedulerArguments;
 use orchestrator::actors::supervisor::{
-    spawn_supervisor_with_name, SchedulerSupervisorConfig, SupervisorMessage,
+    SchedulerSupervisorConfig, SupervisorMessage, spawn_supervisor_with_name,
 };
 use ractor::{Actor, ActorProcessingErr};
 use tokio::time::sleep;
@@ -42,7 +42,10 @@ async fn given_tier1_crashes_with_no_children_then_clean_shutdown() {
     };
 
     // Verify supervisor is alive
-    assert!(supervisor.get_status().is_some(), "supervisor should be alive");
+    assert!(
+        supervisor.get_status().is_some(),
+        "supervisor should be alive"
+    );
 
     // WHEN: Tier-1 crashes (simulated by stopping the actor)
     supervisor.stop(Some("Simulated tier-1 crash".to_string()));
@@ -336,8 +339,7 @@ async fn given_tier1_crashes_during_meltdown_then_graceful() {
     config.meltdown_threshold = 2; // Very low threshold
     config.max_restarts_per_child = 1; // Allow only 1 restart
 
-    let supervisor_result =
-        spawn_supervisor_with_name("chaos-supervisor-meltdown", config).await;
+    let supervisor_result = spawn_supervisor_with_name("chaos-supervisor-meltdown", config).await;
 
     assert!(
         supervisor_result.is_ok(),
@@ -391,7 +393,8 @@ async fn given_tier1_crashes_during_meltdown_then_graceful() {
 async fn given_tier1_crashed_when_new_tier1_spawned_then_functional() {
     // GIVEN: A tier-1 supervisor that crashed
     let config = SchedulerSupervisorConfig::for_testing();
-    let supervisor1_result = spawn_supervisor_with_name("crash-then-recover-1", config.clone()).await;
+    let supervisor1_result =
+        spawn_supervisor_with_name("crash-then-recover-1", config.clone()).await;
 
     assert!(
         supervisor1_result.is_ok(),
@@ -502,8 +505,7 @@ async fn given_tier1_crashes_then_no_shared_state_corruption() {
     }
 
     // WHEN: Spawn a fresh supervisor after all crashes
-    let final_supervisor_result =
-        spawn_supervisor_with_name("isolation-test-final", config).await;
+    let final_supervisor_result = spawn_supervisor_with_name("isolation-test-final", config).await;
 
     assert!(
         final_supervisor_result.is_ok(),

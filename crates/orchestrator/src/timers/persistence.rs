@@ -53,10 +53,7 @@ impl TimerRecord {
     /// Returns an error if payload or status data is invalid.
     pub fn into_timer(self) -> PersistenceResult<DurableTimer> {
         let payload: serde_json::Value = serde_json::from_str(&self.payload).map_err(|e| {
-            PersistenceError::serialization_error(format!(
-                "invalid timer payload JSON: {}",
-                e
-            ))
+            PersistenceError::serialization_error(format!("invalid timer payload JSON: {}", e))
         })?;
 
         let status = match self.status.as_str() {
@@ -68,7 +65,7 @@ impl TimerRecord {
                 return Err(PersistenceError::serialization_error(format!(
                     "invalid timer status: {}",
                     other
-                )))
+                )));
             }
         };
 
@@ -138,6 +135,33 @@ impl TimerPersistence {
             )
             .bind(("id", timer_id_str))
             .bind(("status", status_str))
+            .bind(("now", Utc::now()))
+            .await
+            .map_err(|e| PersistenceError::query_failed(e.to_string()))?
+            .take(0)
+            .map_err(|e| PersistenceError::query_failed(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Reschedule a timer by updating status and execution time.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if persistence fails.
+    pub async fn reschedule(&self, timer: &DurableTimer) -> PersistenceResult<()> {
+        let status_str = format!("{:?}", timer.status()).to_lowercase();
+        let timer_id_str = timer.id().as_str().to_string();
+
+        let _: Option<TimerRecord> = self
+            .store
+            .db()
+            .query(
+                "UPDATE type::thing('durable_timer', $id) SET status = $status, execute_at = $execute_at, updated_at = $now",
+            )
+            .bind(("id", timer_id_str))
+            .bind(("status", status_str))
+            .bind(("execute_at", timer.execute_at()))
             .bind(("now", Utc::now()))
             .await
             .map_err(|e| PersistenceError::query_failed(e.to_string()))?

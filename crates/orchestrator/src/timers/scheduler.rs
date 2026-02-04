@@ -269,6 +269,14 @@ impl DurableTimer {
         self.status = TimerStatus::Failed;
         self.updated_at = Utc::now();
     }
+
+    /// Reschedule the timer after a delay.
+    pub fn reschedule_after(&mut self, delay_secs: u64) {
+        let delay_secs = delay_secs.min(i64::MAX as u64) as i64;
+        self.status = TimerStatus::Pending;
+        self.execute_at = Utc::now() + chrono::Duration::seconds(delay_secs);
+        self.updated_at = Utc::now();
+    }
 }
 
 /// Ordering for timers by execution time.
@@ -379,6 +387,37 @@ impl TimerScheduler {
         Ok(timer_id)
     }
 
+    /// Reschedule an existing timer after a delay.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if persistence fails.
+    pub async fn reschedule(
+        &self,
+        mut timer: DurableTimer,
+        delay_secs: u64,
+    ) -> PersistenceResult<()> {
+        timer.reschedule_after(delay_secs);
+        let timer_id = timer.id().clone();
+        let execute_at = timer.execute_at();
+
+        if let Some(persistence) = &self.persistence {
+            persistence.reschedule(&timer).await?;
+        }
+
+        {
+            let mut timers = self.timers.write().await;
+            timers.insert(timer_id.as_str().to_string(), timer);
+        }
+
+        {
+            let mut queue = self.queue.write().await;
+            queue.push(Reverse((execute_at, timer_id)));
+        }
+
+        Ok(())
+    }
+
     /// Cancel a timer.
     ///
     /// # Errors
@@ -433,19 +472,16 @@ impl TimerScheduler {
             let mut queue = self.queue.write().await;
             let mut timers = self.timers.write().await;
 
-            while let Some(Reverse((execute_at, _))) = queue.peek() {
-                if due_timers.len() >= limit || *execute_at > now {
+            while let Some(Reverse((execute_at, timer_id))) = queue.pop() {
+                if due_timers.len() >= limit || execute_at > now {
+                    queue.push(Reverse((execute_at, timer_id)));
                     break;
                 }
-
-                let Some(Reverse((_, timer_id))) = queue.pop() else {
-                    break;
-                };
 
                 if let Some(timer) = timers.get_mut(timer_id.as_str()) {
                     if timer.status().is_pending()
                         && timer.execute_at() <= now
-                        && timer.execute_at() == *execute_at
+                        && timer.execute_at() == execute_at
                     {
                         timer.mark_fired();
                         due_timers.push(timer.clone());
@@ -463,7 +499,10 @@ impl TimerScheduler {
         // Persist status changes
         if let Some(persistence) = &self.persistence {
             for timer in &due_timers {
-                if let Err(err) = persistence.update_status(timer.id(), TimerStatus::Fired).await {
+                if let Err(err) = persistence
+                    .update_status(timer.id(), TimerStatus::Fired)
+                    .await
+                {
                     tracing::error!(timer_id = %timer.id(), error = %err, "Failed to persist timer fired status");
                 }
             }

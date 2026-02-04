@@ -11,10 +11,10 @@
 //! - Mutation (remove nodes/edges)
 //! - Subgraph extraction
 
+use petgraph::Direction;
 use petgraph::algo::{is_cyclic_directed, tarjan_scc, toposort};
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::{Bfs, Dfs, EdgeRef, Reversed};
-use petgraph::Direction;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::Duration;
 

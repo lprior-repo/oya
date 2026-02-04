@@ -65,4 +65,6 @@ pub use supervisor::{
 };
 
 // Re-export restart strategies
-pub use supervisor::strategy::{OneForAll, OneForOne, RestartDecision, RestartStrategy, RestartContext};
+pub use supervisor::strategy::{
+    OneForAll, OneForOne, RestartContext, RestartDecision, RestartStrategy,
+};

@@ -286,9 +286,7 @@ impl TimerExecutor {
 
     async fn available_slots(&self) -> usize {
         let in_flight = self.in_flight.read().await;
-        self.config
-            .max_concurrent
-            .saturating_sub(*in_flight)
+        self.config.max_concurrent.saturating_sub(*in_flight)
     }
 
     /// Get the callback for a timer.

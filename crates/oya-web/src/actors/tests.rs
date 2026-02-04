@@ -299,6 +299,9 @@ mod message_type_tests {
             StateManagerMessage::QueryBead { id, response: _ } => {
                 assert_eq!(id, test_id, "ID should match");
             }
+            StateManagerMessage::QueryAllAgents { .. } => {
+                panic!("Expected QueryBead, got QueryAllAgents");
+            }
         }
     }
 

@@ -95,7 +95,10 @@ impl WorkflowStorage for InMemoryStorage {
     ) -> Result<()> {
         let mut checkpoints = self.checkpoints.write().await;
         let entries = checkpoints.entry(workflow_id).or_default();
-        if let Some(pos) = entries.iter().position(|c| c.phase_id == checkpoint.phase_id) {
+        if let Some(pos) = entries
+            .iter()
+            .position(|c| c.phase_id == checkpoint.phase_id)
+        {
             entries[pos] = checkpoint.clone();
         } else {
             entries.push(checkpoint.clone());

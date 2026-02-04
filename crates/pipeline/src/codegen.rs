@@ -8,7 +8,7 @@
 //! - Explicitly handles all errors
 
 use crate::error::{Error, Result};
-use crate::functional::{generate_functional_module, FunctionStub, Parameter};
+use crate::functional::{FunctionStub, Parameter, generate_functional_module};
 
 /// Bead requirement specification.
 #[derive(Debug, Clone, serde::Deserialize)]

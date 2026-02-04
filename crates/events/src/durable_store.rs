@@ -360,9 +360,10 @@ impl DurableEventStore {
             )
         })?;
 
-        let checkpoint_timestamp = checkpoint_timestamps.into_iter().next().ok_or_else(|| {
-            crate::error::Error::event_not_found(checkpoint_id.clone())
-        })?;
+        let checkpoint_timestamp = checkpoint_timestamps
+            .into_iter()
+            .next()
+            .ok_or_else(|| crate::error::Error::event_not_found(checkpoint_id.clone()))?;
 
         let mut result = self
             .db

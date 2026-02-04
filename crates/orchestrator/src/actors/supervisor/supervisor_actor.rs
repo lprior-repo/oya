@@ -17,7 +17,7 @@ use crate::shutdown::{ShutdownCoordinator, ShutdownSignal};
 use super::super::errors::ActorError;
 use super::super::messages::SchedulerMessage;
 use super::super::scheduler::{SchedulerActorDef, SchedulerArguments};
-use super::strategy::{RestartStrategy, RestartDecision, RestartContext, OneForOne};
+use super::strategy::{OneForOne, RestartContext, RestartDecision, RestartStrategy};
 
 /// Spawn a scheduler actor with a unique generated name.
 pub async fn spawn_scheduler(
@@ -694,10 +694,10 @@ mod tests {
     #[test]
     fn test_backoff_never_exceeds_max() {
         // Test invariant: Backoff never exceeds max (3200ms)
-        let max_backoff = 3200;
+        let max_backoff: u128 = 3200;
 
         for attempt in 0..20 {
-            let backoff = calculate_backoff(attempt, 100, max_backoff);
+            let backoff = calculate_backoff(attempt, 100, max_backoff as u64);
             assert!(
                 backoff.as_millis() <= max_backoff,
                 "Backoff at attempt {} exceeded max: {}ms",

@@ -4,8 +4,15 @@
 //!
 //! Real-time terminal UI for pipeline status, bead execution, and stage progress.
 
+use im::{HashMap, Vector};
 use std::collections::BTreeMap;
+use std::time::{Duration, Instant};
+use tap::{Pipe, Tap};
 use zellij_tile::prelude::*;
+
+// Constants for caching and timeouts
+const CACHE_TTL: Duration = Duration::from_secs(5);
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
 // Context keys for identifying web request responses
 const CTX_REQUEST_TYPE: &str = "request_type";
@@ -15,7 +22,6 @@ const CTX_BEAD_ID: &str = "bead_id";
 const CTX_AGENTS_LIST: &str = "agents_list";
 
 // Plugin state
-#[derive(Default)]
 struct State {
     // Current view mode
     mode: ViewMode,
@@ -26,18 +32,47 @@ struct State {
     last_error: Option<String>,
     pending_requests: u8,
 
+    // Cache with TTL (Using im types for structural sharing)
+    beads_cache: Option<(Vector<BeadInfo>, Instant)>,
+    agents_cache: Option<(Vector<AgentInfo>, Instant)>,
+    pipeline_caches: HashMap<String, (Vector<StageInfo>, Instant)>,
+
+    // Tracking for timeouts
+    last_request_sent: Option<Instant>,
+
     // Bead data
-    beads: Vec<BeadInfo>,
+    beads: Vector<BeadInfo>,
     selected_index: usize,
 
     // Pipeline data for selected bead
-    pipeline_stages: Vec<StageInfo>,
+    pipeline_stages: Vector<StageInfo>,
 
     // Agent data
-    agents: Vec<AgentInfo>,
+    agents: Vector<AgentInfo>,
 }
 
-#[derive(Default, Clone, Copy)]
+#[allow(clippy::derivable_impls)]
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            mode: ViewMode::default(),
+            server_url: String::new(),
+            api_connected: false,
+            last_error: None,
+            pending_requests: 0,
+            beads_cache: None,
+            agents_cache: None,
+            pipeline_caches: HashMap::new(),
+            last_request_sent: None,
+            beads: Vector::new(),
+            selected_index: 0,
+            pipeline_stages: Vector::new(),
+            agents: Vector::new(),
+        }
+    }
+}
+
+#[derive(Default, Clone, Copy, PartialEq)]
 enum ViewMode {
     #[default]
     BeadList,
@@ -46,7 +81,7 @@ enum ViewMode {
     AgentList,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct BeadInfo {
     id: String,
     title: String,
@@ -55,7 +90,7 @@ struct BeadInfo {
     progress: f32, // 0.0 to 1.0
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 enum BeadStatus {
     Pending,
     InProgress,
@@ -83,15 +118,14 @@ impl BeadStatus {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct StageInfo {
     name: String,
     status: StageStatus,
     duration_ms: Option<u64>,
 }
 
-#[derive(Clone, Copy)]
-#[allow(dead_code)]
+#[derive(Clone, Copy, Debug)]
 enum StageStatus {
     Pending,
     Running,
@@ -100,14 +134,14 @@ enum StageStatus {
     Skipped,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct AgentInfo {
     id: String,
     state: AgentState,
     current_bead: Option<String>,
     health_score: f64,
     uptime_secs: u64,
-    capabilities: Vec<String>,
+    capabilities: Vector<String>,
 }
 
 #[derive(Clone, Copy)]
@@ -206,99 +240,95 @@ impl ZellijPlugin for State {
 
     fn update(&mut self, event: Event) -> bool {
         match event {
-            Event::Key(key_with_mod) => {
-                let bare_key = key_with_mod.bare_key;
-
-                // Handle special keys and characters
-                match bare_key {
-                    // Quit
-                    BareKey::Char('q') | BareKey::Esc => {
-                        close_focus();
-                        false
-                    }
-
-                    // Navigation
-                    BareKey::Char('j') | BareKey::Down => {
-                        if self.selected_index < self.beads.len().saturating_sub(1) {
-                            self.selected_index += 1;
-                            if self.mode == ViewMode::PipelineView {
-                                self.load_pipeline_for_selected();
-                            }
-                        }
-                        true
-                    }
-                    BareKey::Char('k') | BareKey::Up => {
-                        self.selected_index = self.selected_index.saturating_sub(1);
-                        if self.mode == ViewMode::PipelineView {
-                            self.load_pipeline_for_selected();
-                        }
-                        true
-                    }
-                    BareKey::Char('g') => {
-                        self.selected_index = 0;
-                        true
-                    }
-                    BareKey::Char('G') => {
-                        self.selected_index = self.beads.len().saturating_sub(1);
-                        true
-                    }
-
-                    // View switching
-                    BareKey::Char('1') => {
-                        self.mode = ViewMode::BeadList;
-                        true
-                    }
-                    BareKey::Char('2') => {
-                        self.mode = ViewMode::BeadDetail;
-                        true
-                    }
-                    BareKey::Char('3') => {
-                        self.mode = ViewMode::PipelineView;
-                        self.load_pipeline_for_selected();
-                        true
-                    }
-                    BareKey::Char('4') => {
-                        self.mode = ViewMode::AgentList;
-                        self.load_agents();
-                        true
-                    }
-                    BareKey::Enter => {
-                        // Enter key cycles through views
-                        self.mode = match self.mode {
-                            ViewMode::BeadList => ViewMode::BeadDetail,
-                            ViewMode::BeadDetail => ViewMode::PipelineView,
-                            ViewMode::PipelineView => ViewMode::AgentList,
-                            ViewMode::AgentList => ViewMode::BeadList,
-                        };
-                        if self.mode == ViewMode::PipelineView {
-                            self.load_pipeline_for_selected();
-                        }
-                        if self.mode == ViewMode::AgentList {
-                            self.load_agents();
-                        }
-                        true
-                    }
-
-                    // Refresh
-                    BareKey::Char('r') => {
-                        self.load_beads();
-                        if self.mode == ViewMode::PipelineView {
-                            self.load_pipeline_for_selected();
-                        }
-                        true
-                    }
-
-                    _ => false,
+            Event::Key(key_with_mod) => match key_with_mod.bare_key {
+                BareKey::Char('q') | BareKey::Esc => close_focus().pipe(|_| false),
+                BareKey::Char('j') | BareKey::Down => {
+                    self.selected_index < self.beads.len().saturating_sub(1)
                 }
-            }
+                .pipe(|can_move| {
+                    if can_move {
+                        self.selected_index = self.selected_index.saturating_add(1);
+                        if self.mode == ViewMode::PipelineView {
+                            self.load_pipeline_for_selected();
+                        }
+                    }
+                    true
+                }),
+                BareKey::Char('k') | BareKey::Up => {
+                    self.selected_index = self.selected_index.saturating_sub(1);
+                    if self.mode == ViewMode::PipelineView {
+                        self.load_pipeline_for_selected();
+                    }
+                    true
+                }
+                BareKey::Char('g') => {
+                    self.selected_index = 0;
+                    true
+                }
+                BareKey::Char('G') => {
+                    self.selected_index = self.beads.len().saturating_sub(1);
+                    true
+                }
+                BareKey::Char('1') => self.mode = ViewMode::BeadList.pipe(|_| true),
+                BareKey::Char('2') => self.mode = ViewMode::BeadDetail.pipe(|_| true),
+                BareKey::Char('3') => {
+                    self.mode = ViewMode::PipelineView;
+                    self.load_pipeline_for_selected();
+                    true
+                }
+                BareKey::Char('4') => {
+                    self.mode = ViewMode::AgentList;
+                    self.load_agents();
+                    true
+                }
+                BareKey::Enter => {
+                    self.mode = match self.mode {
+                        ViewMode::BeadList => ViewMode::BeadDetail,
+                        ViewMode::BeadDetail => ViewMode::PipelineView,
+                        ViewMode::PipelineView => ViewMode::AgentList,
+                        ViewMode::AgentList => ViewMode::BeadList,
+                    };
+                    if self.mode == ViewMode::PipelineView {
+                        self.load_pipeline_for_selected();
+                    }
+                    if self.mode == ViewMode::AgentList {
+                        self.load_agents();
+                    }
+                    true
+                }
+                BareKey::Char('r') => {
+                    self.beads_cache = None;
+                    self.agents_cache = None;
+                    self.pipeline_caches = HashMap::new();
+                    self.load_beads();
+                    if self.mode == ViewMode::PipelineView {
+                        self.load_pipeline_for_selected();
+                    }
+                    true
+                }
+                _ => false,
+            },
             Event::Timer(_) => {
-                // Auto-refresh
+                // Check for network timeouts
+                if self.pending_requests > 0 {
+                    self.last_request_sent
+                        .filter(|last| last.elapsed() > REQUEST_TIMEOUT)
+                        .tap(|_| {
+                            self.api_connected = false;
+                            self.last_error = Some("Network timeout".to_string());
+                            self.pending_requests = 0;
+                            self.last_request_sent = None;
+                        });
+                }
+
                 self.load_beads();
+                if self.mode == ViewMode::AgentList {
+                    self.load_agents();
+                }
                 set_timeout(2.0);
                 true
             }
             Event::PermissionRequestResult(_) => {
-                // Permission granted, now we can make HTTP requests
                 self.load_beads();
                 true
             }
@@ -311,13 +341,8 @@ impl ZellijPlugin for State {
     }
 
     fn render(&mut self, rows: usize, cols: usize) {
-        // Clear and reset
         print!("\x1b[2J\x1b[H");
-
-        // Render header
         self.render_header(cols);
-
-        // Render main content
         let content_rows = rows.saturating_sub(4);
         match self.mode {
             ViewMode::BeadList => self.render_bead_list(content_rows, cols),
@@ -325,47 +350,66 @@ impl ZellijPlugin for State {
             ViewMode::PipelineView => self.render_pipeline_view(content_rows, cols),
             ViewMode::AgentList => self.render_agent_list(content_rows, cols),
         }
-
-        // Render footer
         self.render_footer(rows, cols);
     }
 }
 
 impl State {
     fn load_beads(&mut self) {
-        // Make HTTP request to fetch beads from oya-web API
-        let url = format!("{}/api/beads", self.server_url);
+        if let Some((cached_beads, timestamp)) = &self.beads_cache {
+            if timestamp.elapsed() < CACHE_TTL {
+                self.beads = cached_beads.clone();
+                return;
+            }
+        }
 
-        let mut context = BTreeMap::new();
-        context.insert(CTX_REQUEST_TYPE.to_string(), CTX_BEADS_LIST.to_string());
-
-        self.pending_requests += 1;
-        web_request(&url, HttpVerb::Get, BTreeMap::new(), vec![], context);
+        format!("{}/api/beads", self.server_url).pipe(|url| {
+            let mut context = BTreeMap::new();
+            context.insert(CTX_REQUEST_TYPE.to_string(), CTX_BEADS_LIST.to_string());
+            self.pending_requests = self.pending_requests.saturating_add(1);
+            self.last_request_sent = Some(Instant::now());
+            web_request(&url, HttpVerb::Get, BTreeMap::new(), vec![], context);
+        });
     }
 
     fn load_pipeline_for_selected(&mut self) {
-        // Fetch pipeline stages for selected bead from API
-        if let Some(bead) = self.beads.get(self.selected_index) {
-            let url = format!("{}/api/beads/{}/pipeline", self.server_url, bead.id);
+        self.beads
+            .get(self.selected_index)
+            .cloned()
+            .tap(|bead| {
+                if let Some((cached_stages, timestamp)) = self.pipeline_caches.get(&bead.id) {
+                    if timestamp.elapsed() < CACHE_TTL {
+                        self.pipeline_stages = cached_stages.clone();
+                        return;
+                    }
+                }
 
-            let mut context = BTreeMap::new();
-            context.insert(CTX_REQUEST_TYPE.to_string(), CTX_PIPELINE.to_string());
-            context.insert(CTX_BEAD_ID.to_string(), bead.id.clone());
-
-            self.pending_requests += 1;
-            web_request(&url, HttpVerb::Get, BTreeMap::new(), vec![], context);
-        }
+                format!("{}/api/beads/{}/pipeline", self.server_url, bead.id).pipe(|url| {
+                    let mut context = BTreeMap::new();
+                    context.insert(CTX_REQUEST_TYPE.to_string(), CTX_PIPELINE.to_string());
+                    context.insert(CTX_BEAD_ID.to_string(), bead.id.clone());
+                    self.pending_requests = self.pending_requests.saturating_add(1);
+                    self.last_request_sent = Some(Instant::now());
+                    web_request(&url, HttpVerb::Get, BTreeMap::new(), vec![], context);
+                });
+            });
     }
 
     fn load_agents(&mut self) {
-        // Fetch agents from API
-        let url = format!("{}/api/agents", self.server_url);
+        if let Some((cached_agents, timestamp)) = &self.agents_cache {
+            if timestamp.elapsed() < CACHE_TTL {
+                self.agents = cached_agents.clone();
+                return;
+            }
+        }
 
-        let mut context = BTreeMap::new();
-        context.insert(CTX_REQUEST_TYPE.to_string(), CTX_AGENTS_LIST.to_string());
-
-        self.pending_requests += 1;
-        web_request(&url, HttpVerb::Get, BTreeMap::new(), vec![], context);
+        format!("{}/api/agents", self.server_url).pipe(|url| {
+            let mut context = BTreeMap::new();
+            context.insert(CTX_REQUEST_TYPE.to_string(), CTX_AGENTS_LIST.to_string());
+            self.pending_requests = self.pending_requests.saturating_add(1);
+            self.last_request_sent = Some(Instant::now());
+            web_request(&url, HttpVerb::Get, BTreeMap::new(), vec![], context);
+        });
     }
 
     fn handle_web_response(
@@ -375,32 +419,50 @@ impl State {
         context: BTreeMap<String, String>,
     ) {
         self.pending_requests = self.pending_requests.saturating_sub(1);
+        if self.pending_requests == 0 {
+            self.last_request_sent = None;
+        }
 
-        // Check HTTP status
         if !(200..300).contains(&status) {
             self.api_connected = false;
-            self.last_error = Some(format!("HTTP {}", status));
+            self.last_error = if (500..600).contains(&status) {
+                format!("Server Error: HTTP {}", status)
+            } else {
+                format!("HTTP {}", status)
+            }
+            .pipe(Some);
             return;
         }
 
         self.api_connected = true;
         self.last_error = None;
 
-        // Route response based on request type
-        let request_type = context.get(CTX_REQUEST_TYPE).map(|s| s.as_str());
-
-        match request_type {
-            Some(CTX_BEADS_LIST) => self.parse_beads_response(&body),
-            Some(CTX_PIPELINE) => self.parse_pipeline_response(&body),
-            Some(CTX_AGENTS_LIST) => self.parse_agents_response(&body),
-            _ => {
-                // Unknown request type, ignore
-            }
-        }
+        context
+            .get(CTX_REQUEST_TYPE)
+            .map(|s| s.as_str())
+            .tap(|request_type| match *request_type {
+                Some(CTX_BEADS_LIST) => {
+                    self.parse_beads_response(&body);
+                    self.beads_cache = Some((self.beads.clone(), Instant::now()));
+                }
+                Some(CTX_PIPELINE) => {
+                    self.parse_pipeline_response(&body);
+                    context.get(CTX_BEAD_ID).tap(|bead_id| {
+                        self.pipeline_caches.insert(
+                            bead_id.to_string(),
+                            (self.pipeline_stages.clone(), Instant::now()),
+                        );
+                    });
+                }
+                Some(CTX_AGENTS_LIST) => {
+                    self.parse_agents_response(&body);
+                    self.agents_cache = Some((self.agents.clone(), Instant::now()));
+                }
+                _ => {}
+            });
     }
 
     fn parse_beads_response(&mut self, body: &[u8]) {
-        // Parse JSON response: [{"id": "...", "title": "...", "status": "...", ...}]
         #[derive(serde::Deserialize)]
         struct ApiBeadInfo {
             id: String,
@@ -412,42 +474,38 @@ impl State {
             progress: Option<f32>,
         }
 
-        let Ok(body_str) = std::str::from_utf8(body) else {
-            self.last_error = Some("Invalid UTF-8 in response".to_string());
-            return;
-        };
-
-        match serde_json::from_str::<Vec<ApiBeadInfo>>(body_str) {
-            Ok(api_beads) => {
-                self.beads = api_beads
-                    .into_iter()
-                    .map(|b| BeadInfo {
-                        id: b.id,
-                        title: b.title,
-                        status: match b.status.as_str() {
-                            "in_progress" => BeadStatus::InProgress,
-                            "completed" | "closed" => BeadStatus::Completed,
-                            "failed" => BeadStatus::Failed,
-                            _ => BeadStatus::Pending,
-                        },
-                        current_stage: b.current_stage,
-                        progress: b.progress.unwrap_or(0.0),
-                    })
-                    .collect();
-
-                // Ensure selected index is valid
-                if self.selected_index >= self.beads.len() {
-                    self.selected_index = self.beads.len().saturating_sub(1);
+        std::str::from_utf8(body)
+            .map_err(|_| "Invalid UTF-8 in response".to_string())
+            .and_then(|body_str| {
+                serde_json::from_str::<Vector<ApiBeadInfo>>(body_str)
+                    .map_err(|e| format!("Parse error: {}", e))
+            })
+            .pipe(|res| match res {
+                Ok(api_beads) => {
+                    self.beads = api_beads
+                        .into_iter()
+                        .map(|b| BeadInfo {
+                            id: b.id,
+                            title: b.title,
+                            status: match b.status.as_str() {
+                                "in_progress" => BeadStatus::InProgress,
+                                "completed" | "closed" => BeadStatus::Completed,
+                                "failed" => BeadStatus::Failed,
+                                _ => BeadStatus::Pending,
+                            },
+                            current_stage: b.current_stage,
+                            progress: b.progress.unwrap_or(0.0),
+                        })
+                        .collect();
+                    if self.selected_index >= self.beads.len() {
+                        self.selected_index = self.beads.len().saturating_sub(1);
+                    }
                 }
-            }
-            Err(e) => {
-                self.last_error = Some(format!("Parse error: {}", e));
-            }
-        }
+                Err(e) => self.last_error = Some(e),
+            });
     }
 
     fn parse_pipeline_response(&mut self, body: &[u8]) {
-        // Parse JSON response: [{"name": "...", "status": "...", "duration_ms": ...}]
         #[derive(serde::Deserialize)]
         struct ApiStageInfo {
             name: String,
@@ -456,36 +514,34 @@ impl State {
             duration_ms: Option<u64>,
         }
 
-        let Ok(body_str) = std::str::from_utf8(body) else {
-            self.last_error = Some("Invalid UTF-8 in response".to_string());
-            return;
-        };
-
-        match serde_json::from_str::<Vec<ApiStageInfo>>(body_str) {
-            Ok(api_stages) => {
-                self.pipeline_stages = api_stages
-                    .into_iter()
-                    .map(|s| StageInfo {
-                        name: s.name,
-                        status: match s.status.as_str() {
-                            "running" => StageStatus::Running,
-                            "passed" => StageStatus::Passed,
-                            "failed" => StageStatus::Failed,
-                            "skipped" => StageStatus::Skipped,
-                            _ => StageStatus::Pending,
-                        },
-                        duration_ms: s.duration_ms,
-                    })
-                    .collect();
-            }
-            Err(e) => {
-                self.last_error = Some(format!("Parse error: {}", e));
-            }
-        }
+        std::str::from_utf8(body)
+            .map_err(|_| "Invalid UTF-8 in response".to_string())
+            .and_then(|body_str| {
+                serde_json::from_str::<Vector<ApiStageInfo>>(body_str)
+                    .map_err(|e| format!("Parse error: {}", e))
+            })
+            .pipe(|res| match res {
+                Ok(api_stages) => {
+                    self.pipeline_stages = api_stages
+                        .into_iter()
+                        .map(|s| StageInfo {
+                            name: s.name,
+                            status: match s.status.as_str() {
+                                "running" => StageStatus::Running,
+                                "passed" => StageStatus::Passed,
+                                "failed" => StageStatus::Failed,
+                                "skipped" => StageStatus::Skipped,
+                                _ => StageStatus::Pending,
+                            },
+                            duration_ms: s.duration_ms,
+                        })
+                        .collect();
+                }
+                Err(e) => self.last_error = Some(e),
+            });
     }
 
     fn parse_agents_response(&mut self, body: &[u8]) {
-        // Parse JSON response: [{"id": "...", "state": "...", "health_score": ...}]
         #[derive(serde::Deserialize)]
         struct ApiAgentInfo {
             id: String,
@@ -495,38 +551,37 @@ impl State {
             health_score: f64,
             uptime_secs: u64,
             #[serde(default)]
-            capabilities: Vec<String>,
+            capabilities: Vector<String>,
         }
 
-        let Ok(body_str) = std::str::from_utf8(body) else {
-            self.last_error = Some("Invalid UTF-8 in response".to_string());
-            return;
-        };
-
-        match serde_json::from_str::<Vec<ApiAgentInfo>>(body_str) {
-            Ok(api_agents) => {
-                self.agents = api_agents
-                    .into_iter()
-                    .map(|a| AgentInfo {
-                        id: a.id,
-                        state: match a.state.as_str() {
-                            "working" => AgentState::Working,
-                            "unhealthy" => AgentState::Unhealthy,
-                            "shutting_down" => AgentState::ShuttingDown,
-                            "terminated" => AgentState::Terminated,
-                            _ => AgentState::Idle,
-                        },
-                        current_bead: a.current_bead,
-                        health_score: a.health_score,
-                        uptime_secs: a.uptime_secs,
-                        capabilities: a.capabilities,
-                    })
-                    .collect();
-            }
-            Err(e) => {
-                self.last_error = Some(format!("Parse error: {}", e));
-            }
-        }
+        std::str::from_utf8(body)
+            .map_err(|_| "Invalid UTF-8 in response".to_string())
+            .and_then(|body_str| {
+                serde_json::from_str::<Vector<ApiAgentInfo>>(body_str)
+                    .map_err(|e| format!("Parse error: {}", e))
+            })
+            .pipe(|res| match res {
+                Ok(api_agents) => {
+                    self.agents = api_agents
+                        .into_iter()
+                        .map(|a| AgentInfo {
+                            id: a.id,
+                            state: match a.state.as_str() {
+                                "working" => AgentState::Working,
+                                "unhealthy" => AgentState::Unhealthy,
+                                "shutting_down" => AgentState::ShuttingDown,
+                                "terminated" => AgentState::Terminated,
+                                _ => AgentState::Idle,
+                            },
+                            current_bead: a.current_bead,
+                            health_score: a.health_score,
+                            uptime_secs: a.uptime_secs,
+                            capabilities: a.capabilities,
+                        })
+                        .collect();
+                }
+                Err(e) => self.last_error = Some(e),
+            });
     }
 
     fn render_header(&self, cols: usize) {
@@ -541,7 +596,7 @@ impl State {
         println!(
             "\x1b[1m{}\x1b[0m{}{}{}\x1b[0m",
             title,
-            " ".repeat(cols.saturating_sub(title.len() + 3)),
+            " ".repeat(cols.saturating_sub(title.len().saturating_add(3))),
             status_color,
             status_symbol
         );
@@ -554,37 +609,38 @@ impl State {
             return;
         }
 
-        // Header row
         println!(
             "\n  \x1b[1m{:<12} {:<45} {:<12} {:<15} Progress\x1b[0m",
             "ID", "Title", "Status", "Stage"
         );
         println!("  {}", "─".repeat(cols.saturating_sub(2)));
 
-        // Bead rows
-        for (idx, bead) in self.beads.iter().take(rows.saturating_sub(3)).enumerate() {
-            let selected = idx == self.selected_index;
-            let prefix = if selected { "\x1b[7m> " } else { "  " };
-            let suffix = if selected { "\x1b[0m" } else { "" };
+        self.beads
+            .iter()
+            .take(rows.saturating_sub(3))
+            .enumerate()
+            .for_each(|(idx, bead)| {
+                let selected = idx == self.selected_index;
+                let prefix = if selected { "\x1b[7m> " } else { "  " };
+                let suffix = if selected { "\x1b[0m" } else { "" };
 
-            let title = truncate(&bead.title, 45);
-            let stage = bead.current_stage.as_deref().unwrap_or("-");
-            let progress_bar = render_progress_bar(bead.progress, 15);
+                let title = truncate(&bead.title, 45);
+                let stage = bead.current_stage.as_deref().unwrap_or("-");
+                let progress_bar = render_progress_bar(bead.progress, 15);
 
-            println!(
-                "{}{:<12} {:<45} {}{:<12}\x1b[0m {:<15} {}{}",
-                prefix,
-                bead.id,
-                title,
-                bead.status.color(),
-                bead.status.as_str(),
-                stage,
-                progress_bar,
-                suffix
-            );
-        }
+                println!(
+                    "{}{:<12} {:<45} {}{:<12}\x1b[0m {:<15} {}{}",
+                    prefix,
+                    bead.id,
+                    title,
+                    bead.status.color(),
+                    bead.status.as_str(),
+                    stage,
+                    progress_bar,
+                    suffix
+                );
+            });
 
-        // Summary line
         let total = self.beads.len();
         let completed = self
             .beads
@@ -609,7 +665,7 @@ impl State {
     }
 
     fn render_bead_detail(&self, _rows: usize, cols: usize) {
-        if let Some(bead) = self.beads.get(self.selected_index) {
+        self.beads.get(self.selected_index).tap(|bead| {
             println!("\n  \x1b[1mBead Details\x1b[0m");
             println!("  {}", "─".repeat(cols.saturating_sub(2)));
             println!();
@@ -621,22 +677,20 @@ impl State {
                 bead.status.as_str()
             );
 
-            if let Some(ref stage) = bead.current_stage {
+            bead.current_stage.as_ref().tap(|stage| {
                 println!("  \x1b[1mStage:\x1b[0m    {}", stage);
-            }
+            });
 
             println!(
                 "  \x1b[1mProgress:\x1b[0m {}",
                 render_progress_bar(bead.progress, 30)
             );
 
-            // Show workspace info
             println!();
             println!("  \x1b[1mWorkspace:\x1b[0m");
             println!("    Path:   ~/.local/share/jj/repos/oya/{}", bead.id);
             println!("    Branch: {}", bead.id);
 
-            // Quick actions
             println!();
             println!("  \x1b[1mQuick Actions:\x1b[0m");
             println!(
@@ -647,13 +701,11 @@ impl State {
                 "    \x1b[2moya stage -s {} --stage <name>  # Run stage\x1b[0m",
                 bead.id
             );
-        } else {
-            println!("\n  \x1b[2mNo bead selected\x1b[0m");
-        }
+        });
     }
 
     fn render_pipeline_view(&self, rows: usize, cols: usize) {
-        if let Some(bead) = self.beads.get(self.selected_index) {
+        self.beads.get(self.selected_index).tap(|bead| {
             println!("\n  \x1b[1mPipeline Stages: {}\x1b[0m", bead.id);
             println!("  {}", "─".repeat(cols.saturating_sub(2)));
             println!();
@@ -663,35 +715,31 @@ impl State {
                 return;
             }
 
-            // Visual pipeline flow
             println!("  Pipeline Flow:");
-            for (idx, stage) in self
-                .pipeline_stages
+            self.pipeline_stages
                 .iter()
                 .take(rows.saturating_sub(8))
                 .enumerate()
-            {
-                let symbol = stage.status.symbol();
-                let color = stage.status.color();
-                let connector = if idx < self.pipeline_stages.len() - 1 {
-                    "│"
-                } else {
-                    " "
-                };
+                .for_each(|(idx, stage)| {
+                    let symbol = stage.status.symbol();
+                    let color = stage.status.color();
+                    let connector = if idx < self.pipeline_stages.len().saturating_sub(1) {
+                        "│"
+                    } else {
+                        " "
+                    };
 
-                let duration_str = if let Some(ms) = stage.duration_ms {
-                    format!("({:.1}s)", ms as f64 / 1000.0)
-                } else {
-                    "".to_string()
-                };
+                    let duration_str = stage
+                        .duration_ms
+                        .map(|ms| format!("({:.1}s)", ms as f64 / 1000.0))
+                        .unwrap_or_default();
 
-                println!(
-                    "  {} {}{}\x1b[0m {:<15} {}",
-                    connector, color, symbol, stage.name, duration_str
-                );
-            }
+                    println!(
+                        "  {} {}{}\x1b[0m {:<15} {}",
+                        connector, color, symbol, stage.name, duration_str
+                    );
+                });
 
-            // Overall status
             let passed = self
                 .pipeline_stages
                 .iter()
@@ -711,9 +759,7 @@ impl State {
                 total,
                 render_progress_bar(progress, 20)
             );
-        } else {
-            println!("\n  \x1b[2mNo bead selected\x1b[0m");
-        }
+        });
     }
 
     fn render_agent_list(&self, rows: usize, cols: usize) {
@@ -722,48 +768,53 @@ impl State {
             return;
         }
 
-        // Header row
         println!(
             "\n  \x1b[1m{:<15} {:<12} {:<20} {:<12} Health\x1b[0m",
             "Agent ID", "State", "Current Bead", "Uptime"
         );
         println!("  {}", "─".repeat(cols.saturating_sub(2)));
 
-        // Agent rows
-        for agent in self.agents.iter().take(rows.saturating_sub(3)) {
-            let bead_str = agent.current_bead.as_deref().unwrap_or("-");
+        self.agents
+            .iter()
+            .take(rows.saturating_sub(3))
+            .for_each(|agent| {
+                let bead_str = agent.current_bead.as_deref().unwrap_or("-");
+                let uptime_str = format_uptime(agent.uptime_secs);
+                let health_color = if agent.health_score >= 0.8 {
+                    "\x1b[32m"
+                } else if agent.health_score >= 0.5 {
+                    "\x1b[33m"
+                } else {
+                    "\x1b[31m"
+                };
 
-            let uptime_str = format_uptime(agent.uptime_secs);
-            let health_color = if agent.health_score >= 0.8 {
-                "\x1b[32m"
-            } else if agent.health_score >= 0.5 {
-                "\x1b[33m"
-            } else {
-                "\x1b[31m"
-            };
-
-            println!(
-                "  {:<15} {}{:<12}\x1b[0m {:<20} {:<12} {}{:.1}%\x1b[0m",
-                agent.id,
-                agent.state.color(),
-                agent.state.as_str(),
-                truncate(bead_str, 20),
-                uptime_str,
-                health_color,
-                agent.health_score * 100.0
-            );
-
-            // Show capabilities if available
-            if !agent.capabilities.is_empty() {
-                let caps_str = agent.capabilities.join(", ");
                 println!(
-                    "    \x1b[2mCapabilities: {}\x1b[0m",
-                    truncate(&caps_str, cols.saturating_sub(6))
+                    "  {:<15} {}{:<12}\x1b[0m {:<20} {:<12} {}{:.1}%\x1b[0m",
+                    agent.id,
+                    agent.state.color(),
+                    agent.state.as_str(),
+                    truncate(bead_str, 20),
+                    uptime_str,
+                    health_color,
+                    agent.health_score.saturating_mul(100.0)
                 );
-            }
-        }
 
-        // Summary line
+                if !agent.capabilities.is_empty() {
+                    agent
+                        .capabilities
+                        .iter()
+                        .map(|s| s.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                        .pipe(|caps_str| {
+                            println!(
+                                "    \x1b[2mCapabilities: {}\x1b[0m",
+                                truncate(&caps_str, cols.saturating_sub(6))
+                            );
+                        });
+                }
+            });
+
         let total = self.agents.len();
         let idle = self
             .agents
@@ -788,8 +839,7 @@ impl State {
     }
 
     fn render_footer(&self, rows: usize, cols: usize) {
-        // Position at bottom
-        print!("\x1b[{};1H", rows - 1);
+        print!("\x1b[{};1H", rows.saturating_sub(1));
 
         let view_mode = match self.mode {
             ViewMode::BeadList => "List",
@@ -805,15 +855,15 @@ impl State {
             view_mode
         );
 
-        // Show error if present
-        if let Some(ref err) = self.last_error {
-            println!(
-                "\x1b[31mError: {}\x1b[0m",
-                truncate(err, cols.saturating_sub(7))
-            );
-        } else {
-            println!("{}", help);
-        }
+        self.last_error.as_ref().map_or_else(
+            || println!("{}", help),
+            |err| {
+                println!(
+                    "\x1b[31mError: {}\x1b[0m",
+                    truncate(err, cols.saturating_sub(7))
+                )
+            },
+        );
     }
 }
 
@@ -839,14 +889,14 @@ fn truncate(s: &str, max_len: usize) -> String {
 }
 
 fn render_progress_bar(progress: f32, width: usize) -> String {
-    let filled = (progress * width as f32) as usize;
+    let filled = progress.saturating_mul(width as f32) as usize;
     let empty = width.saturating_sub(filled);
 
     format!(
         "\x1b[32m{}\x1b[90m{}\x1b[0m {}%",
         "█".repeat(filled),
         "░".repeat(empty),
-        (progress * 100.0) as u8
+        progress.saturating_mul(100.0) as u8
     )
 }
 
@@ -854,10 +904,14 @@ fn format_uptime(secs: u64) -> String {
     if secs < 60 {
         format!("{}s", secs)
     } else if secs < 3600 {
-        format!("{}m", secs / 60)
+        format!("{}m", secs.saturating_div(60))
     } else if secs < 86400 {
-        format!("{}h {}m", secs / 3600, (secs % 3600) / 60)
+        format!(
+            "{}h {}m",
+            secs.saturating_div(3600),
+            secs.saturating_rem(3600).saturating_div(60)
+        )
     } else {
-        format!("{}d", secs / 86400)
+        format!("{}d", secs.saturating_div(86400))
     }
 }

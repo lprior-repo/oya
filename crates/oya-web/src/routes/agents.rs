@@ -5,7 +5,7 @@
 
 use crate::actors::{AppState, StateManagerMessage};
 use crate::error::{AppError, Result};
-use axum::{extract::State, response::Json, routing::get};
+use axum::{extract::State, response::Json};
 
 /// Agent summary for API responses
 #[derive(Debug, serde::Serialize)]
@@ -42,9 +42,7 @@ pub struct ListAgentsResponse {
 /// * `AppError::ServiceUnavailable` - If state manager is unavailable
 /// * `AppError::Internal` - If state manager fails to respond
 /// * `AppError::NotFound` - If no agents are found
-pub async fn list_agents(
-    State(state): State<AppState>,
-) -> Result<Json<ListAgentsResponse>> {
+pub async fn list_agents(State(state): State<AppState>) -> Result<Json<ListAgentsResponse>> {
     let (tx, rx) = tokio::sync::oneshot::channel();
 
     state
@@ -52,9 +50,22 @@ pub async fn list_agents(
         .send(StateManagerMessage::QueryAllAgents { response: tx })
         .map_err(|_| AppError::ServiceUnavailable("State manager unavailable".to_string()))?;
 
-    let agents = rx.await
-        .map_err(|_| AppError::Internal("State manager failed to respond".to_string()))?
-        .ok_or_else(|| AppError::NotFound("No agents found".to_string()))?;
+    let agents = rx
+        .await
+        .map_err(|_| AppError::Internal("State manager failed to respond".to_string()))?;
+
+    if agents.is_empty() {
+        return Err(AppError::NotFound("No agents found".to_string()));
+    }
+
+    let agents = agents
+        .into_iter()
+        .map(|agent| AgentSummary {
+            id: agent.id.to_string(),
+            status: agent.status,
+            current_bead: agent.bead_id,
+        })
+        .collect::<Vec<_>>();
 
     Ok(Json(ListAgentsResponse {
         agents,

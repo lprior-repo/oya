@@ -12,8 +12,8 @@
 //! cargo run --example ping_pong
 //! ```
 
-use std::time::Duration;
 use ractor::{Actor, ActorProcessingErr, ActorRef};
+use std::time::Duration;
 use tracing::{debug, info, warn};
 
 /// Ping message sent from PingActor to PongActor.
@@ -199,13 +199,9 @@ async fn spawn_ping_pong(
     max_pings: u32,
 ) -> Result<(ActorRef<PingMessage>, ActorRef<PongMessage>), SpawnError> {
     // Spawn PongActor
-    let (pong_actor, _) = Actor::spawn(
-        Some("pong_actor".to_string()),
-        PongActorDef,
-        (),
-    )
-    .await
-    .map_err(|e| SpawnError(format!("Failed to spawn pong actor: {}", e)))?;
+    let (pong_actor, _) = Actor::spawn(Some("pong_actor".to_string()), PongActorDef, ())
+        .await
+        .map_err(|e| SpawnError(format!("Failed to spawn pong actor: {}", e)))?;
 
     // Spawn PingActor
     let (ping_actor, _) = Actor::spawn(
