@@ -58,6 +58,7 @@ pub async fn list_agents(State(state): State<AppState>) -> Result<Json<ListAgent
         return Err(AppError::NotFound("No agents found".to_string()));
     }
 
+    let total = agents.len();
     let agents = agents
         .into_iter()
         .map(|agent| AgentSummary {
@@ -67,8 +68,5 @@ pub async fn list_agents(State(state): State<AppState>) -> Result<Json<ListAgent
         })
         .collect::<Vec<_>>();
 
-    Ok(Json(ListAgentsResponse {
-        agents,
-        total: agents.len(),
-    }))
+    Ok(Json(ListAgentsResponse { agents, total }))
 }

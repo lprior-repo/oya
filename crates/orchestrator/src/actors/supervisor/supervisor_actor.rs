@@ -450,7 +450,7 @@ impl SchedulerSupervisorDef {
     }
 
     /// Schedule a single child for restart with backoff.
-    async fn schedule_child_restart(
+    fn schedule_child_restart(
         myself: ActorRef<SupervisorMessage>,
         state: &mut SupervisorActorState,
         name: &str,

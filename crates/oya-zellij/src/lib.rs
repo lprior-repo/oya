@@ -7,7 +7,6 @@
 use im::{HashMap, Vector};
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
-use tap::{Pipe, Tap};
 use zellij_tile::prelude::*;
 
 // Constants for caching and timeouts
@@ -72,7 +71,7 @@ impl Default for State {
     }
 }
 
-#[derive(Default, Clone, Copy, PartialEq)]
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
 enum ViewMode {
     #[default]
     BeadList,
@@ -144,7 +143,7 @@ struct AgentInfo {
     capabilities: Vector<String>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 enum AgentState {
     Idle,
     Working,
@@ -241,19 +240,19 @@ impl ZellijPlugin for State {
     fn update(&mut self, event: Event) -> bool {
         match event {
             Event::Key(key_with_mod) => match key_with_mod.bare_key {
-                BareKey::Char('q') | BareKey::Esc => close_focus().pipe(|_| false),
-                BareKey::Char('j') | BareKey::Down => {
-                    self.selected_index < self.beads.len().saturating_sub(1)
+                BareKey::Char('q') | BareKey::Esc => {
+                    close_focus();
+                    false
                 }
-                .pipe(|can_move| {
-                    if can_move {
+                BareKey::Char('j') | BareKey::Down => {
+                    if self.selected_index < self.beads.len().saturating_sub(1) {
                         self.selected_index = self.selected_index.saturating_add(1);
                         if self.mode == ViewMode::PipelineView {
                             self.load_pipeline_for_selected();
                         }
                     }
                     true
-                }),
+                }
                 BareKey::Char('k') | BareKey::Up => {
                     self.selected_index = self.selected_index.saturating_sub(1);
                     if self.mode == ViewMode::PipelineView {
@@ -269,8 +268,14 @@ impl ZellijPlugin for State {
                     self.selected_index = self.beads.len().saturating_sub(1);
                     true
                 }
-                BareKey::Char('1') => self.mode = ViewMode::BeadList.pipe(|_| true),
-                BareKey::Char('2') => self.mode = ViewMode::BeadDetail.pipe(|_| true),
+                BareKey::Char('1') => {
+                    self.mode = ViewMode::BeadList;
+                    true
+                }
+                BareKey::Char('2') => {
+                    self.mode = ViewMode::BeadDetail;
+                    true
+                }
                 BareKey::Char('3') => {
                     self.mode = ViewMode::PipelineView;
                     self.load_pipeline_for_selected();
@@ -311,14 +316,15 @@ impl ZellijPlugin for State {
             Event::Timer(_) => {
                 // Check for network timeouts
                 if self.pending_requests > 0 {
-                    self.last_request_sent
-                        .filter(|last| last.elapsed() > REQUEST_TIMEOUT)
-                        .tap(|_| {
-                            self.api_connected = false;
-                            self.last_error = Some("Network timeout".to_string());
-                            self.pending_requests = 0;
-                            self.last_request_sent = None;
-                        });
+                    if self
+                        .last_request_sent
+                        .map_or(false, |last| last.elapsed() > REQUEST_TIMEOUT)
+                    {
+                        self.api_connected = false;
+                        self.last_error = Some("Network timeout".to_string());
+                        self.pending_requests = 0;
+                        self.last_request_sent = None;
+                    }
                 }
 
                 self.load_beads();
@@ -363,36 +369,33 @@ impl State {
             }
         }
 
-        format!("{}/api/beads", self.server_url).pipe(|url| {
-            let mut context = BTreeMap::new();
-            context.insert(CTX_REQUEST_TYPE.to_string(), CTX_BEADS_LIST.to_string());
-            self.pending_requests = self.pending_requests.saturating_add(1);
-            self.last_request_sent = Some(Instant::now());
-            web_request(&url, HttpVerb::Get, BTreeMap::new(), vec![], context);
-        });
+        let url = format!("{}/api/beads", self.server_url);
+        let mut context = BTreeMap::new();
+        context.insert(CTX_REQUEST_TYPE.to_string(), CTX_BEADS_LIST.to_string());
+        self.pending_requests = self.pending_requests.saturating_add(1);
+        self.last_request_sent = Some(Instant::now());
+        web_request(&url, HttpVerb::Get, BTreeMap::new(), vec![], context);
     }
 
     fn load_pipeline_for_selected(&mut self) {
-        self.beads
-            .get(self.selected_index)
-            .cloned()
-            .tap(|bead| {
-                if let Some((cached_stages, timestamp)) = self.pipeline_caches.get(&bead.id) {
-                    if timestamp.elapsed() < CACHE_TTL {
-                        self.pipeline_stages = cached_stages.clone();
-                        return;
-                    }
-                }
+        let Some(bead) = self.beads.get(self.selected_index) else {
+            return;
+        };
 
-                format!("{}/api/beads/{}/pipeline", self.server_url, bead.id).pipe(|url| {
-                    let mut context = BTreeMap::new();
-                    context.insert(CTX_REQUEST_TYPE.to_string(), CTX_PIPELINE.to_string());
-                    context.insert(CTX_BEAD_ID.to_string(), bead.id.clone());
-                    self.pending_requests = self.pending_requests.saturating_add(1);
-                    self.last_request_sent = Some(Instant::now());
-                    web_request(&url, HttpVerb::Get, BTreeMap::new(), vec![], context);
-                });
-            });
+        if let Some((cached_stages, timestamp)) = self.pipeline_caches.get(&bead.id) {
+            if timestamp.elapsed() < CACHE_TTL {
+                self.pipeline_stages = cached_stages.clone();
+                return;
+            }
+        }
+
+        let url = format!("{}/api/beads/{}/pipeline", self.server_url, bead.id);
+        let mut context = BTreeMap::new();
+        context.insert(CTX_REQUEST_TYPE.to_string(), CTX_PIPELINE.to_string());
+        context.insert(CTX_BEAD_ID.to_string(), bead.id.clone());
+        self.pending_requests = self.pending_requests.saturating_add(1);
+        self.last_request_sent = Some(Instant::now());
+        web_request(&url, HttpVerb::Get, BTreeMap::new(), vec![], context);
     }
 
     fn load_agents(&mut self) {
@@ -403,13 +406,12 @@ impl State {
             }
         }
 
-        format!("{}/api/agents", self.server_url).pipe(|url| {
-            let mut context = BTreeMap::new();
-            context.insert(CTX_REQUEST_TYPE.to_string(), CTX_AGENTS_LIST.to_string());
-            self.pending_requests = self.pending_requests.saturating_add(1);
-            self.last_request_sent = Some(Instant::now());
-            web_request(&url, HttpVerb::Get, BTreeMap::new(), vec![], context);
-        });
+        let url = format!("{}/api/agents", self.server_url);
+        let mut context = BTreeMap::new();
+        context.insert(CTX_REQUEST_TYPE.to_string(), CTX_AGENTS_LIST.to_string());
+        self.pending_requests = self.pending_requests.saturating_add(1);
+        self.last_request_sent = Some(Instant::now());
+        web_request(&url, HttpVerb::Get, BTreeMap::new(), vec![], context);
     }
 
     fn handle_web_response(
@@ -425,41 +427,37 @@ impl State {
 
         if !(200..300).contains(&status) {
             self.api_connected = false;
-            self.last_error = if (500..600).contains(&status) {
+            self.last_error = Some(if (500..600).contains(&status) {
                 format!("Server Error: HTTP {}", status)
             } else {
                 format!("HTTP {}", status)
-            }
-            .pipe(Some);
+            });
             return;
         }
 
         self.api_connected = true;
         self.last_error = None;
 
-        context
-            .get(CTX_REQUEST_TYPE)
-            .map(|s| s.as_str())
-            .tap(|request_type| match *request_type {
-                Some(CTX_BEADS_LIST) => {
-                    self.parse_beads_response(&body);
-                    self.beads_cache = Some((self.beads.clone(), Instant::now()));
+        match context.get(CTX_REQUEST_TYPE).map(|s| s.as_str()) {
+            Some(CTX_BEADS_LIST) => {
+                self.parse_beads_response(&body);
+                self.beads_cache = Some((self.beads.clone(), Instant::now()));
+            }
+            Some(CTX_PIPELINE) => {
+                self.parse_pipeline_response(&body);
+                if let Some(bead_id) = context.get(CTX_BEAD_ID) {
+                    self.pipeline_caches.insert(
+                        bead_id.clone(),
+                        (self.pipeline_stages.clone(), Instant::now()),
+                    );
                 }
-                Some(CTX_PIPELINE) => {
-                    self.parse_pipeline_response(&body);
-                    context.get(CTX_BEAD_ID).tap(|bead_id| {
-                        self.pipeline_caches.insert(
-                            bead_id.to_string(),
-                            (self.pipeline_stages.clone(), Instant::now()),
-                        );
-                    });
-                }
-                Some(CTX_AGENTS_LIST) => {
-                    self.parse_agents_response(&body);
-                    self.agents_cache = Some((self.agents.clone(), Instant::now()));
-                }
-                _ => {}
-            });
+            }
+            Some(CTX_AGENTS_LIST) => {
+                self.parse_agents_response(&body);
+                self.agents_cache = Some((self.agents.clone(), Instant::now()));
+            }
+            _ => {}
+        }
     }
 
     fn parse_beads_response(&mut self, body: &[u8]) {
@@ -474,35 +472,36 @@ impl State {
             progress: Option<f32>,
         }
 
-        std::str::from_utf8(body)
+        let parsed = std::str::from_utf8(body)
             .map_err(|_| "Invalid UTF-8 in response".to_string())
             .and_then(|body_str| {
-                serde_json::from_str::<Vector<ApiBeadInfo>>(body_str)
+                serde_json::from_str::<Vec<ApiBeadInfo>>(body_str)
                     .map_err(|e| format!("Parse error: {}", e))
-            })
-            .pipe(|res| match res {
-                Ok(api_beads) => {
-                    self.beads = api_beads
-                        .into_iter()
-                        .map(|b| BeadInfo {
-                            id: b.id,
-                            title: b.title,
-                            status: match b.status.as_str() {
-                                "in_progress" => BeadStatus::InProgress,
-                                "completed" | "closed" => BeadStatus::Completed,
-                                "failed" => BeadStatus::Failed,
-                                _ => BeadStatus::Pending,
-                            },
-                            current_stage: b.current_stage,
-                            progress: b.progress.unwrap_or(0.0),
-                        })
-                        .collect();
-                    if self.selected_index >= self.beads.len() {
-                        self.selected_index = self.beads.len().saturating_sub(1);
-                    }
-                }
-                Err(e) => self.last_error = Some(e),
             });
+
+        match parsed {
+            Ok(api_beads) => {
+                self.beads = api_beads
+                    .into_iter()
+                    .map(|b| BeadInfo {
+                        id: b.id,
+                        title: b.title,
+                        status: match b.status.as_str() {
+                            "in_progress" => BeadStatus::InProgress,
+                            "completed" | "closed" => BeadStatus::Completed,
+                            "failed" => BeadStatus::Failed,
+                            _ => BeadStatus::Pending,
+                        },
+                        current_stage: b.current_stage,
+                        progress: b.progress.unwrap_or(0.0),
+                    })
+                    .collect::<Vector<_>>();
+                if self.selected_index >= self.beads.len() {
+                    self.selected_index = self.beads.len().saturating_sub(1);
+                }
+            }
+            Err(e) => self.last_error = Some(e),
+        }
     }
 
     fn parse_pipeline_response(&mut self, body: &[u8]) {
@@ -514,31 +513,32 @@ impl State {
             duration_ms: Option<u64>,
         }
 
-        std::str::from_utf8(body)
+        let parsed = std::str::from_utf8(body)
             .map_err(|_| "Invalid UTF-8 in response".to_string())
             .and_then(|body_str| {
-                serde_json::from_str::<Vector<ApiStageInfo>>(body_str)
+                serde_json::from_str::<Vec<ApiStageInfo>>(body_str)
                     .map_err(|e| format!("Parse error: {}", e))
-            })
-            .pipe(|res| match res {
-                Ok(api_stages) => {
-                    self.pipeline_stages = api_stages
-                        .into_iter()
-                        .map(|s| StageInfo {
-                            name: s.name,
-                            status: match s.status.as_str() {
-                                "running" => StageStatus::Running,
-                                "passed" => StageStatus::Passed,
-                                "failed" => StageStatus::Failed,
-                                "skipped" => StageStatus::Skipped,
-                                _ => StageStatus::Pending,
-                            },
-                            duration_ms: s.duration_ms,
-                        })
-                        .collect();
-                }
-                Err(e) => self.last_error = Some(e),
             });
+
+        match parsed {
+            Ok(api_stages) => {
+                self.pipeline_stages = api_stages
+                    .into_iter()
+                    .map(|s| StageInfo {
+                        name: s.name,
+                        status: match s.status.as_str() {
+                            "running" => StageStatus::Running,
+                            "passed" => StageStatus::Passed,
+                            "failed" => StageStatus::Failed,
+                            "skipped" => StageStatus::Skipped,
+                            _ => StageStatus::Pending,
+                        },
+                        duration_ms: s.duration_ms,
+                    })
+                    .collect::<Vector<_>>();
+            }
+            Err(e) => self.last_error = Some(e),
+        }
     }
 
     fn parse_agents_response(&mut self, body: &[u8]) {
@@ -551,37 +551,38 @@ impl State {
             health_score: f64,
             uptime_secs: u64,
             #[serde(default)]
-            capabilities: Vector<String>,
+            capabilities: Vec<String>,
         }
 
-        std::str::from_utf8(body)
+        let parsed = std::str::from_utf8(body)
             .map_err(|_| "Invalid UTF-8 in response".to_string())
             .and_then(|body_str| {
-                serde_json::from_str::<Vector<ApiAgentInfo>>(body_str)
+                serde_json::from_str::<Vec<ApiAgentInfo>>(body_str)
                     .map_err(|e| format!("Parse error: {}", e))
-            })
-            .pipe(|res| match res {
-                Ok(api_agents) => {
-                    self.agents = api_agents
-                        .into_iter()
-                        .map(|a| AgentInfo {
-                            id: a.id,
-                            state: match a.state.as_str() {
-                                "working" => AgentState::Working,
-                                "unhealthy" => AgentState::Unhealthy,
-                                "shutting_down" => AgentState::ShuttingDown,
-                                "terminated" => AgentState::Terminated,
-                                _ => AgentState::Idle,
-                            },
-                            current_bead: a.current_bead,
-                            health_score: a.health_score,
-                            uptime_secs: a.uptime_secs,
-                            capabilities: a.capabilities,
-                        })
-                        .collect();
-                }
-                Err(e) => self.last_error = Some(e),
             });
+
+        match parsed {
+            Ok(api_agents) => {
+                self.agents = api_agents
+                    .into_iter()
+                    .map(|a| AgentInfo {
+                        id: a.id,
+                        state: match a.state.as_str() {
+                            "working" => AgentState::Working,
+                            "unhealthy" => AgentState::Unhealthy,
+                            "shutting_down" => AgentState::ShuttingDown,
+                            "terminated" => AgentState::Terminated,
+                            _ => AgentState::Idle,
+                        },
+                        current_bead: a.current_bead,
+                        health_score: a.health_score,
+                        uptime_secs: a.uptime_secs,
+                        capabilities: a.capabilities.into_iter().collect::<Vector<_>>(),
+                    })
+                    .collect::<Vector<_>>();
+            }
+            Err(e) => self.last_error = Some(e),
+        }
     }
 
     fn render_header(&self, cols: usize) {
@@ -665,101 +666,107 @@ impl State {
     }
 
     fn render_bead_detail(&self, _rows: usize, cols: usize) {
-        self.beads.get(self.selected_index).tap(|bead| {
-            println!("\n  \x1b[1mBead Details\x1b[0m");
-            println!("  {}", "─".repeat(cols.saturating_sub(2)));
-            println!();
-            println!("  \x1b[1mID:\x1b[0m       {}", bead.id);
-            println!("  \x1b[1mTitle:\x1b[0m    {}", bead.title);
-            println!(
-                "  \x1b[1mStatus:\x1b[0m   {}{}\x1b[0m",
-                bead.status.color(),
-                bead.status.as_str()
-            );
+        let Some(bead) = self.beads.get(self.selected_index) else {
+            println!("\n  \x1b[2mNo bead selected\x1b[0m");
+            return;
+        };
 
-            bead.current_stage.as_ref().tap(|stage| {
-                println!("  \x1b[1mStage:\x1b[0m    {}", stage);
-            });
+        println!("\n  \x1b[1mBead Details\x1b[0m");
+        println!("  {}", "─".repeat(cols.saturating_sub(2)));
+        println!();
+        println!("  \x1b[1mID:\x1b[0m       {}", bead.id);
+        println!("  \x1b[1mTitle:\x1b[0m    {}", bead.title);
+        println!(
+            "  \x1b[1mStatus:\x1b[0m   {}{}\x1b[0m",
+            bead.status.color(),
+            bead.status.as_str()
+        );
 
-            println!(
-                "  \x1b[1mProgress:\x1b[0m {}",
-                render_progress_bar(bead.progress, 30)
-            );
+        if let Some(stage) = bead.current_stage.as_ref() {
+            println!("  \x1b[1mStage:\x1b[0m    {}", stage);
+        }
 
-            println!();
-            println!("  \x1b[1mWorkspace:\x1b[0m");
-            println!("    Path:   ~/.local/share/jj/repos/oya/{}", bead.id);
-            println!("    Branch: {}", bead.id);
+        println!(
+            "  \x1b[1mProgress:\x1b[0m {}",
+            render_progress_bar(bead.progress, 30)
+        );
 
-            println!();
-            println!("  \x1b[1mQuick Actions:\x1b[0m");
-            println!(
-                "    \x1b[2mzjj spawn {}  # Open in isolated workspace\x1b[0m",
-                bead.id
-            );
-            println!(
-                "    \x1b[2moya stage -s {} --stage <name>  # Run stage\x1b[0m",
-                bead.id
-            );
-        });
+        println!();
+        println!("  \x1b[1mWorkspace:\x1b[0m");
+        println!("    Path:   ~/.local/share/jj/repos/oya/{}", bead.id);
+        println!("    Branch: {}", bead.id);
+
+        println!();
+        println!("  \x1b[1mQuick Actions:\x1b[0m");
+        println!(
+            "    \x1b[2mzjj spawn {}  # Open in isolated workspace\x1b[0m",
+            bead.id
+        );
+        println!(
+            "    \x1b[2moya stage -s {} --stage <name>  # Run stage\x1b[0m",
+            bead.id
+        );
     }
 
     fn render_pipeline_view(&self, rows: usize, cols: usize) {
-        self.beads.get(self.selected_index).tap(|bead| {
-            println!("\n  \x1b[1mPipeline Stages: {}\x1b[0m", bead.id);
-            println!("  {}", "─".repeat(cols.saturating_sub(2)));
-            println!();
+        let Some(bead) = self.beads.get(self.selected_index) else {
+            println!("\n  \x1b[2mNo bead selected\x1b[0m");
+            return;
+        };
 
-            if self.pipeline_stages.is_empty() {
-                println!("  \x1b[2mNo pipeline stages yet\x1b[0m");
-                return;
-            }
+        println!("\n  \x1b[1mPipeline Stages: {}\x1b[0m", bead.id);
+        println!("  {}", "─".repeat(cols.saturating_sub(2)));
+        println!();
 
-            println!("  Pipeline Flow:");
-            self.pipeline_stages
-                .iter()
-                .take(rows.saturating_sub(8))
-                .enumerate()
-                .for_each(|(idx, stage)| {
-                    let symbol = stage.status.symbol();
-                    let color = stage.status.color();
-                    let connector = if idx < self.pipeline_stages.len().saturating_sub(1) {
-                        "│"
-                    } else {
-                        " "
-                    };
+        if self.pipeline_stages.is_empty() {
+            println!("  \x1b[2mNo pipeline stages yet\x1b[0m");
+            return;
+        }
 
-                    let duration_str = stage
-                        .duration_ms
-                        .map(|ms| format!("({:.1}s)", ms as f64 / 1000.0))
-                        .unwrap_or_default();
+        println!("  Pipeline Flow:");
+        self.pipeline_stages
+            .iter()
+            .take(rows.saturating_sub(8))
+            .enumerate()
+            .for_each(|(idx, stage)| {
+                let symbol = stage.status.symbol();
+                let color = stage.status.color();
+                let connector = if idx < self.pipeline_stages.len().saturating_sub(1) {
+                    "│"
+                } else {
+                    " "
+                };
 
-                    println!(
-                        "  {} {}{}\x1b[0m {:<15} {}",
-                        connector, color, symbol, stage.name, duration_str
-                    );
-                });
+                let duration_str = stage
+                    .duration_ms
+                    .map(|ms| format!("({:.1}s)", ms as f64 / 1000.0))
+                    .unwrap_or_default();
 
-            let passed = self
-                .pipeline_stages
-                .iter()
-                .filter(|s| matches!(s.status, StageStatus::Passed))
-                .count();
-            let total = self.pipeline_stages.len();
-            let progress = if total > 0 {
-                passed as f32 / total as f32
-            } else {
-                0.0
-            };
+                println!(
+                    "  {} {}{}\x1b[0m {:<15} {}",
+                    connector, color, symbol, stage.name, duration_str
+                );
+            });
 
-            println!();
-            println!(
-                "  Overall: {}/{} stages passed {}",
-                passed,
-                total,
-                render_progress_bar(progress, 20)
-            );
-        });
+        let passed = self
+            .pipeline_stages
+            .iter()
+            .filter(|s| matches!(s.status, StageStatus::Passed))
+            .count();
+        let total = self.pipeline_stages.len();
+        let progress = if total > 0 {
+            passed as f32 / total as f32
+        } else {
+            0.0
+        };
+
+        println!();
+        println!(
+            "  Overall: {}/{} stages passed {}",
+            passed,
+            total,
+            render_progress_bar(progress, 20)
+        );
     }
 
     fn render_agent_list(&self, rows: usize, cols: usize) {
@@ -788,6 +795,8 @@ impl State {
                     "\x1b[31m"
                 };
 
+                let health_percent = (agent.health_score * 100.0).clamp(0.0, 100.0);
+
                 println!(
                     "  {:<15} {}{:<12}\x1b[0m {:<20} {:<12} {}{:.1}%\x1b[0m",
                     agent.id,
@@ -796,22 +805,20 @@ impl State {
                     truncate(bead_str, 20),
                     uptime_str,
                     health_color,
-                    agent.health_score.saturating_mul(100.0)
+                    health_percent
                 );
 
                 if !agent.capabilities.is_empty() {
-                    agent
+                    let caps_str = agent
                         .capabilities
                         .iter()
                         .map(|s| s.as_str())
                         .collect::<Vec<_>>()
-                        .join(", ")
-                        .pipe(|caps_str| {
-                            println!(
-                                "    \x1b[2mCapabilities: {}\x1b[0m",
-                                truncate(&caps_str, cols.saturating_sub(6))
-                            );
-                        });
+                        .join(", ");
+                    println!(
+                        "    \x1b[2mCapabilities: {}\x1b[0m",
+                        truncate(&caps_str, cols.saturating_sub(6))
+                    );
                 }
             });
 
@@ -867,18 +874,6 @@ impl State {
     }
 }
 
-// Helper to check if we're in a specific view mode
-impl PartialEq for ViewMode {
-    fn eq(&self, other: &Self) -> bool {
-        matches!(
-            (self, other),
-            (ViewMode::BeadList, ViewMode::BeadList)
-                | (ViewMode::BeadDetail, ViewMode::BeadDetail)
-                | (ViewMode::PipelineView, ViewMode::PipelineView)
-        )
-    }
-}
-
 // Helper functions
 fn truncate(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
@@ -889,14 +884,17 @@ fn truncate(s: &str, max_len: usize) -> String {
 }
 
 fn render_progress_bar(progress: f32, width: usize) -> String {
-    let filled = progress.saturating_mul(width as f32) as usize;
+    let clamped = progress.clamp(0.0, 1.0);
+    let filled = (clamped * width as f32).round() as usize;
+    let filled = filled.min(width);
     let empty = width.saturating_sub(filled);
+    let percent = (clamped * 100.0).round() as u8;
 
     format!(
         "\x1b[32m{}\x1b[90m{}\x1b[0m {}%",
         "█".repeat(filled),
         "░".repeat(empty),
-        progress.saturating_mul(100.0) as u8
+        percent
     )
 }
 
@@ -909,7 +907,8 @@ fn format_uptime(secs: u64) -> String {
         format!(
             "{}h {}m",
             secs.saturating_div(3600),
-            secs.saturating_rem(3600).saturating_div(60)
+            secs.saturating_sub(secs.saturating_div(3600).saturating_mul(3600))
+                .saturating_div(60)
         )
     } else {
         format!("{}d", secs.saturating_div(86400))
