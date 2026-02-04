@@ -50,12 +50,7 @@ impl Tier1Supervisors {
     /// Return all supervisors as an ordered list.
     #[must_use]
     pub fn all(&self) -> Vec<&Tier1SupervisorRef> {
-        vec![
-            &self.storage,
-            &self.workflow,
-            &self.queue,
-            &self.reconciler,
-        ]
+        vec![&self.storage, &self.workflow, &self.queue, &self.reconciler]
     }
 }
 
@@ -74,7 +69,8 @@ pub async fn spawn_tier1_supervisors(
         Err(err) => return Err(err),
     };
 
-    let workflow = spawn_tier1_supervisor(name_prefix, Tier1SupervisorKind::Workflow, &config).await;
+    let workflow =
+        spawn_tier1_supervisor(name_prefix, Tier1SupervisorKind::Workflow, &config).await;
     let workflow = match workflow {
         Ok(supervisor) => {
             spawned.push(supervisor.clone());

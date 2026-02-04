@@ -103,7 +103,7 @@ impl std::fmt::Display for PhaseId {
     }
 }
 
-/// 8-state lifecycle for beads (from nuoc design).
+/// 8-state lifecycle for beads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BeadState {
     /// Waiting for dependencies.

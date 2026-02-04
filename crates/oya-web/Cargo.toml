@@ -12,6 +12,7 @@ description = "OYA Web Server - Axum REST API with Tower middleware"
 oya-core = { workspace = true }
 oya-workflow = { workspace = true }
 oya-events = { workspace = true }
+orchestrator = { path = "../orchestrator" }
 
 tokio = { workspace = true }
 async-trait = "0.1"

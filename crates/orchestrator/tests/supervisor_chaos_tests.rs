@@ -104,11 +104,8 @@ async fn given_tier1_crashes_with_no_children_then_clean_shutdown() {
 async fn given_tier1_crashes_with_children_then_children_stopped() {
     // GIVEN: A tier-1 supervisor with children
     let config = SchedulerSupervisorConfig::for_testing();
-    let supervisor_result = spawn_supervisor_with_name(
-        supervisor_args(config),
-        "chaos-supervisor-with-children",
-    )
-    .await;
+    let supervisor_result =
+        spawn_supervisor_with_name(supervisor_args(config), "chaos-supervisor-with-children").await;
 
     assert!(
         supervisor_result.is_ok(),
@@ -126,7 +123,7 @@ async fn given_tier1_crashes_with_children_then_children_stopped() {
     // Spawn multiple children
     let child_args = SchedulerArguments::new();
 
-    let spawn_results = vec![
+    let spawn_results = [
         spawn_child(&supervisor, "child-1", child_args.clone()).await,
         spawn_child(&supervisor, "child-2", child_args.clone()).await,
         spawn_child(&supervisor, "child-3", child_args).await,
@@ -199,8 +196,7 @@ async fn given_tier1_crashes_during_child_restart_then_graceful() {
     config.base_backoff_ms = 10;
 
     let supervisor_result =
-        spawn_supervisor_with_name(supervisor_args(config), "chaos-supervisor-restart-race")
-            .await;
+        spawn_supervisor_with_name(supervisor_args(config), "chaos-supervisor-restart-race").await;
 
     assert!(
         supervisor_result.is_ok(),
@@ -409,8 +405,7 @@ async fn given_tier1_crashed_when_new_tier1_spawned_then_functional() {
     // GIVEN: A tier-1 supervisor that crashed
     let config = SchedulerSupervisorConfig::for_testing();
     let supervisor1_result =
-        spawn_supervisor_with_name(supervisor_args(config.clone()), "crash-then-recover-1")
-            .await;
+        spawn_supervisor_with_name(supervisor_args(config.clone()), "crash-then-recover-1").await;
 
     assert!(
         supervisor1_result.is_ok(),

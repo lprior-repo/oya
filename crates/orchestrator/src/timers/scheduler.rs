@@ -65,6 +65,17 @@ pub enum TimerStatus {
     Failed,
 }
 
+/// Optional timer metadata for restoration.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TimerMetadata {
+    /// Associated workflow ID
+    pub workflow_id: Option<String>,
+    /// Associated bead ID
+    pub bead_id: Option<String>,
+    /// Callback identifier
+    pub callback_id: Option<String>,
+}
+
 impl TimerStatus {
     /// Check if the timer is pending.
     #[must_use]
@@ -175,9 +186,7 @@ impl DurableTimer {
         status: TimerStatus,
         created_at: DateTime<Utc>,
         updated_at: DateTime<Utc>,
-        workflow_id: Option<String>,
-        bead_id: Option<String>,
-        callback_id: Option<String>,
+        metadata: TimerMetadata,
     ) -> Self {
         Self {
             id,
@@ -186,9 +195,9 @@ impl DurableTimer {
             status,
             created_at,
             updated_at,
-            workflow_id,
-            bead_id,
-            callback_id,
+            workflow_id: metadata.workflow_id,
+            bead_id: metadata.bead_id,
+            callback_id: metadata.callback_id,
         }
     }
 

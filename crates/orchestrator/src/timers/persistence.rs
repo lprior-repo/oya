@@ -3,7 +3,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use super::scheduler::{DurableTimer, TimerId, TimerStatus};
+use super::scheduler::{DurableTimer, TimerId, TimerMetadata, TimerStatus};
 use crate::persistence::{OrchestratorStore, PersistenceError, PersistenceResult};
 
 /// A timer record for persistence.
@@ -76,9 +76,11 @@ impl TimerRecord {
             status,
             self.created_at,
             self.updated_at,
-            self.workflow_id,
-            self.bead_id,
-            self.callback_id,
+            TimerMetadata {
+                workflow_id: self.workflow_id,
+                bead_id: self.bead_id,
+                callback_id: self.callback_id,
+            },
         ))
     }
 }

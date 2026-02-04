@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use orchestrator::agent_swarm::{
-    AgentHandle, AgentPool, AgentState, AgentSwarmError, HealthConfig, PoolConfig,
+    AgentHandle, AgentPool, AgentStateLegacy, AgentSwarmError, HealthConfig, PoolConfig,
 };
 use tokio::process::Command;
 use tokio::sync::Mutex;
@@ -70,7 +70,7 @@ impl AgentServiceConfig {
 #[derive(Debug, Clone)]
 pub struct AgentSnapshot {
     pub id: String,
-    pub state: AgentState,
+    pub state: AgentStateLegacy,
     pub current_bead: Option<String>,
     pub health_score: f64,
     pub uptime_secs: u64,
@@ -107,7 +107,6 @@ pub struct AgentScaleSummary {
     pub terminated: Vec<String>,
 }
 
-#[derive(Debug)]
 pub struct AgentService {
     pool: AgentPool,
     launcher: Arc<dyn AgentLauncher>,
@@ -121,10 +120,7 @@ impl AgentService {
         Self::new_with_launcher(config, launcher)
     }
 
-    pub fn new_with_launcher(
-        config: AgentServiceConfig,
-        launcher: Arc<dyn AgentLauncher>,
-    ) -> Self {
+    pub fn new_with_launcher(config: AgentServiceConfig, launcher: Arc<dyn AgentLauncher>) -> Self {
         let pool = AgentPool::new(PoolConfig::new(config.max_agents, HealthConfig::default()));
         let processes = Arc::new(Mutex::new(HashMap::new()));
         let health_task = pool.start_health_monitoring();
@@ -138,7 +134,7 @@ impl AgentService {
     }
 
     pub async fn list_agents(&self) -> Vec<AgentSnapshot> {
-        let agents = self.pool.all_agents().await;
+        let agents: Vec<AgentHandle> = self.pool.all_agents().await;
         agents.iter().map(AgentSnapshot::from_handle).collect()
     }
 
@@ -161,10 +157,7 @@ impl AgentService {
         Ok(AgentSpawnSummary { agent_ids, total })
     }
 
-    pub async fn scale_to(
-        &self,
-        target: usize,
-    ) -> Result<AgentScaleSummary, AgentServiceError> {
+    pub async fn scale_to(&self, target: usize) -> Result<AgentScaleSummary, AgentServiceError> {
         let previous = self.pool.len().await;
 
         if target == previous {
@@ -178,10 +171,7 @@ impl AgentService {
         self.scale_down(previous, target).await
     }
 
-    async fn spawn_one(
-        &self,
-        capabilities: &[String],
-    ) -> Result<String, AgentServiceError> {
+    async fn spawn_one(&self, capabilities: &[String]) -> Result<String, AgentServiceError> {
         let agent_id = Ulid::new().to_string();
         self.register_and_launch(&agent_id, capabilities).await?;
         Ok(agent_id)
@@ -193,7 +183,10 @@ impl AgentService {
         capabilities: &[String],
     ) -> Result<(), AgentServiceError> {
         let handle = AgentHandle::new(agent_id).with_capabilities(capabilities.to_vec());
-        self.pool.register_agent(handle).await.map_err(map_pool_error)?;
+        self.pool
+            .register_agent(handle)
+            .await
+            .map_err(map_pool_error)?;
 
         match self.launcher.launch(agent_id).await {
             Ok(process) => {
@@ -208,10 +201,7 @@ impl AgentService {
         }
     }
 
-    async fn shutdown_idle_agents(
-        &self,
-        count: usize,
-    ) -> Result<Vec<String>, AgentServiceError> {
+    async fn shutdown_idle_agents(&self, count: usize) -> Result<Vec<String>, AgentServiceError> {
         let idle_ids = self.idle_agent_ids(count).await?;
         let mut terminated = Vec::with_capacity(idle_ids.len());
 
@@ -229,7 +219,12 @@ impl AgentService {
         target: usize,
     ) -> Result<AgentScaleSummary, AgentServiceError> {
         let spawned = self.spawn_agents(target - previous, Vec::new()).await?;
-        Ok(scale_summary(previous, spawned.total, spawned.agent_ids, Vec::new()))
+        Ok(scale_summary(
+            previous,
+            spawned.total,
+            spawned.agent_ids,
+            Vec::new(),
+        ))
     }
 
     async fn scale_down(
@@ -244,17 +239,17 @@ impl AgentService {
     }
 
     async fn shutdown_agent(&self, agent_id: &str) -> Result<(), AgentServiceError> {
-        self.pool.shutdown_agent(agent_id).await.map_err(map_pool_error)?;
+        self.pool
+            .shutdown_agent(agent_id)
+            .await
+            .map_err(map_pool_error)?;
         let process = self.take_process(agent_id).await?;
         process.shutdown(agent_id).await?;
         let _ = self.pool.unregister_agent(agent_id).await;
         Ok(())
     }
 
-    async fn take_process(
-        &self,
-        agent_id: &str,
-    ) -> Result<AgentProcessHandle, AgentServiceError> {
+    async fn take_process(&self, agent_id: &str) -> Result<AgentProcessHandle, AgentServiceError> {
         let mut processes = self.processes.lock().await;
         processes
             .remove(agent_id)
@@ -268,7 +263,7 @@ impl AgentService {
     }
 
     async fn idle_agent_ids(&self, count: usize) -> Result<Vec<String>, AgentServiceError> {
-        let idle_agents = self.pool.get_available_agents().await;
+        let idle_agents: Vec<AgentHandle> = self.pool.get_available_agents().await;
         let available = idle_agents.len();
 
         if available < count {
@@ -281,7 +276,7 @@ impl AgentService {
         Ok(idle_agents
             .into_iter()
             .take(count)
-            .map(|agent| agent.id().to_string())
+            .map(|agent: AgentHandle| agent.id().to_string())
             .collect())
     }
 }
@@ -476,12 +471,12 @@ fn build_launcher(config: &AgentServiceConfig) -> Arc<dyn AgentLauncher> {
 
 fn parse_env_usize(key: &str, default: usize) -> Result<usize, AgentServiceError> {
     match env::var(key) {
-        Ok(value) => value.parse::<usize>().map_err(|_| {
-            AgentServiceError::InvalidEnvValue {
+        Ok(value) => value
+            .parse::<usize>()
+            .map_err(|_| AgentServiceError::InvalidEnvValue {
                 key: key.to_string(),
                 value,
-            }
-        }),
+            }),
         Err(_) => Ok(default),
     }
 }
@@ -584,9 +579,9 @@ fn map_pool_error(error: AgentSwarmError) -> AgentServiceError {
     }
 }
 
-fn health_score_for(state: AgentState) -> f64 {
+fn health_score_for(state: AgentStateLegacy) -> f64 {
     match state {
-        AgentState::Unhealthy | AgentState::Terminated => 0.0,
+        AgentStateLegacy::Unhealthy | AgentStateLegacy::Terminated => 0.0,
         _ => 1.0,
     }
 }

@@ -5,8 +5,8 @@
 #![deny(clippy::panic)]
 
 use orchestrator::actors::supervisor::SchedulerSupervisorConfig;
-use ractor::ActorStatus;
 use orchestrator::supervision::{Tier1SupervisorKind, Tier1Supervisors, spawn_tier1_supervisors};
+use ractor::ActorStatus;
 
 fn build_prefix() -> String {
     format!("tier1-{}", std::process::id())
@@ -75,7 +75,7 @@ async fn given_tier1_supervisors_when_spawned_then_names_unique() {
     assert!(spawn_result.is_ok(), "tier-1 supervisors should spawn");
 
     if let Ok(supervisors) = spawn_result {
-        let names = vec![
+        let names = [
             supervisors.storage.name.clone(),
             supervisors.workflow.name.clone(),
             supervisors.queue.name.clone(),

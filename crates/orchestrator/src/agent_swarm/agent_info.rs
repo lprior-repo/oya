@@ -291,7 +291,7 @@ impl AgentInfo {
 
         let capabilities: Vec<_> = capabilities
             .into_iter()
-            .map(|cap| Self::validate_capability(cap))
+            .map(Self::validate_capability)
             .collect::<Result<Vec<_>, _>>()?;
 
         let health_metrics = HealthMetrics::new(max_health_failures, check_interval_secs)?;
@@ -407,7 +407,7 @@ impl AgentInfo {
         let bead_id = self
             .current_bead
             .take()
-            .ok_or_else(|| AgentInfoError::NoActiveBead)?;
+            .ok_or(AgentInfoError::NoActiveBead)?;
 
         self.workload_history.record_bead_completion()?;
         self.state = AgentState::Idle;
@@ -453,17 +453,17 @@ impl AgentInfo {
 
     /// Validates a state transition.
     fn is_valid_state_transition(&self, from: AgentState, to: AgentState) -> bool {
-        match (from, to) {
-            (AgentState::Idle, AgentState::Working) => true,
-            (AgentState::Working, AgentState::Idle) => true,
-            (AgentState::Idle, AgentState::ShuttingDown) => true,
-            (AgentState::Working, AgentState::ShuttingDown) => true,
-            (AgentState::ShuttingDown, AgentState::Terminated) => true,
-            (AgentState::Unhealthy, AgentState::Idle) => true,
-            (AgentState::Idle, AgentState::Unhealthy) => true,
-            (AgentState::Working, AgentState::Unhealthy) => true,
-            _ => false,
-        }
+        matches!(
+            (from, to),
+            (AgentState::Idle, AgentState::Working)
+                | (AgentState::Working, AgentState::Idle)
+                | (AgentState::Idle, AgentState::ShuttingDown)
+                | (AgentState::Working, AgentState::ShuttingDown)
+                | (AgentState::ShuttingDown, AgentState::Terminated)
+                | (AgentState::Unhealthy, AgentState::Idle)
+                | (AgentState::Idle, AgentState::Unhealthy)
+                | (AgentState::Working, AgentState::Unhealthy)
+        )
     }
 
     /// Adds a custom metadata field.

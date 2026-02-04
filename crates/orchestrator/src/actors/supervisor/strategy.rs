@@ -13,10 +13,10 @@
 //!
 //! # Strategy Types
 //!
-//! - **OneForOne**: When a child crashes, restart only that child (siblings unaffected)
-//! - **OneForAll**: When a child crashes, restart all children
-//! - **RestForOne**: When a child crashes, restart it and other children that depend on it
-//! - **OneForOnePermanently**: Like OneForOne, but restarts permanently (no max_restarts)
+//! - **`OneForOne`**: When a child crashes, restart only that child (siblings unaffected)
+//! - **`OneForAll`**: When a child crashes, restart all children
+//! - **`RestForOne`**: When a child crashes, restart it and other children that depend on it
+//! - **`OneForOnePermanently`**: Like `OneForOne`, but restarts permanently (no `max_restarts`)
 //!
 //! # Example
 //!
@@ -78,8 +78,7 @@ impl<'a> RestartContext<'a> {
         self.state
             .children
             .get(&self.child_name)
-            .map(|c| c.restart_count)
-            .unwrap_or(0)
+            .map_or(0, |c| c.restart_count)
     }
 
     /// Get all child names.
@@ -130,6 +129,10 @@ pub trait RestartStrategy: Send + Sync {
     fn on_child_failure(&self, ctx: &RestartContext<'_>) -> RestartDecision;
 
     /// Validate strategy configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the strategy configuration is invalid.
     fn validate(&self) -> Result<(), StrategyError> {
         Ok(())
     }
