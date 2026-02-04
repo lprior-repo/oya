@@ -17,6 +17,7 @@ use crate::shutdown::{ShutdownCoordinator, ShutdownSignal};
 use super::errors::ActorError;
 use super::messages::SchedulerMessage;
 use super::scheduler::{SchedulerActorDef, SchedulerArguments};
+use super::supervisor::strategy::{RestartStrategy, RestartDecision, OneForOne};
 
 /// Spawn a scheduler actor with a unique generated name.
 pub async fn spawn_scheduler(
@@ -87,7 +88,7 @@ impl Default for SchedulerSupervisorConfig {
             max_restarts: 3,
             restart_window_secs: 60,
             base_backoff_ms: 100,
-            max_backoff_ms: 10000,
+            max_backoff_ms: 3200,
             warning_threshold: 0.5,
             meltdown_threshold: 1.0,
         }
@@ -102,7 +103,7 @@ impl SchedulerSupervisorConfig {
             max_restarts: 3,
             restart_window_secs: 5,
             base_backoff_ms: 10,
-            max_backoff_ms: 100,
+            max_backoff_ms: 320,
             warning_threshold: 1.0,
             meltdown_threshold: 2.0,
         }
@@ -232,6 +233,8 @@ pub struct SupervisorActorState {
     shutdown_coordinator: Option<Arc<ShutdownCoordinator>>,
     /// Shutdown signal receiver.
     _shutdown_rx: Option<broadcast::Receiver<ShutdownSignal>>,
+    /// Restart strategy (boxed to support different strategies at runtime).
+    restart_strategy: Box<dyn RestartStrategy>,
 }
 
 impl SupervisorActorState {
@@ -295,6 +298,7 @@ impl Actor for SchedulerSupervisorDef {
             child_id_counter: 0,
             shutdown_coordinator: args.shutdown_coordinator.clone(),
             _shutdown_rx: None,
+            restart_strategy: Box::new(OneForOne::new()),
         };
 
         // Subscribe to shutdown signals
@@ -410,53 +414,74 @@ impl SchedulerSupervisorDef {
             return;
         }
 
-        // Check if we should restart
-        if let Some(child) = state.children.get_mut(name) {
-            if Self::should_restart(child, &state.config) {
-                let backoff = calculate_backoff(
-                    child.restart_count,
-                    state.config.base_backoff_ms,
-                    state.config.max_backoff_ms,
-                );
+        // Use restart strategy to decide what to do
+        let ctx = strategy::RestartContext::new(name, reason, state);
+        let decision = state.restart_strategy.on_child_failure(&ctx);
 
-                info!(
-                    child = %name,
-                    restart_count = child.restart_count,
-                    backoff_ms = %backoff.as_millis(),
-                    "Scheduling child restart"
-                );
-
-                // Clone what we need for the async block
-                let child_name = name.to_string();
-                let child_args = child.args.clone();
-                let myself_clone = myself.clone();
-
-                // Schedule restart after backoff
-                tokio::spawn(async move {
-                    tokio::time::sleep(backoff).await;
-
-                    // Create reply channel (we don't wait for result)
-                    let (tx, _rx) = tokio::sync::oneshot::channel();
-                    let _ = myself_clone.send_message(SupervisorMessage::SpawnChild {
-                        name: child_name,
-                        args: child_args,
-                        reply: tx,
-                    });
-                });
-
-                child.restart_count = child.restart_count.saturating_add(1);
-                child.last_restart = Some(Instant::now());
-                state.total_restarts = state.total_restarts.saturating_add(1);
-            } else {
+        match decision {
+            RestartDecision::Restart { child_names } => {
+                for child_name in &child_names {
+                    Self::schedule_child_restart(myself.clone(), state, child_name);
+                }
+            }
+            RestartDecision::Stop => {
                 warn!(
                     child = %name,
-                    restart_count = child.restart_count,
-                    "Max restarts exceeded, not restarting child"
+                    restart_count = ctx.restart_count(),
+                    "Max restarts exceeded, stopping supervision"
                 );
                 state.children.remove(name);
             }
+        }
+    }
+
+    /// Schedule a single child for restart with backoff.
+    async fn schedule_child_restart(
+        myself: ActorRef<SupervisorMessage>,
+        state: &mut SupervisorActorState,
+        name: &str,
+    ) {
+        if let Some(child) = state.children.get(name) {
+            let backoff = calculate_backoff(
+                child.restart_count,
+                state.config.base_backoff_ms,
+                state.config.max_backoff_ms,
+            );
+
+            info!(
+                child = %name,
+                restart_count = child.restart_count,
+                backoff_ms = %backoff.as_millis(),
+                "Scheduling child restart via {} strategy",
+                state.restart_strategy.name()
+            );
+
+            // Clone what we need for the async block
+            let child_name = name.to_string();
+            let child_args = child.args.clone();
+            let myself_clone = myself.clone();
+
+            // Schedule restart after backoff
+            tokio::spawn(async move {
+                tokio::time::sleep(backoff).await;
+
+                // Create reply channel (we don't wait for result)
+                let (tx, _rx) = tokio::sync::oneshot::channel();
+                let _ = myself_clone.send_message(SupervisorMessage::SpawnChild {
+                    name: child_name,
+                    args: child_args,
+                    reply: tx,
+                });
+            });
+
+            // Update restart count
+            if let Some(child) = state.children.get_mut(name) {
+                child.restart_count = child.restart_count.saturating_add(1);
+                child.last_restart = Some(Instant::now());
+                state.total_restarts = state.total_restarts.saturating_add(1);
+            }
         } else {
-            debug!(child = %name, "Unknown child exited");
+            debug!(child = %name, "Unknown child, skipping restart");
         }
     }
 
@@ -535,26 +560,6 @@ impl SchedulerSupervisorDef {
                 .actor_ref
                 .stop(Some("Requested by supervisor".to_string()));
         }
-    }
-
-    /// Check if a child should be restarted.
-    fn should_restart(child: &ChildInfo, config: &SchedulerSupervisorConfig) -> bool {
-        // Check restart count
-        if child.restart_count >= config.max_restarts {
-            return false;
-        }
-
-        // Check if we're within the restart window
-        if let Some(last_restart) = child.last_restart {
-            let window = Duration::from_secs(config.restart_window_secs);
-            if last_restart.elapsed() > window {
-                // Window has passed, reset count would be nice but we can't mutate here
-                // For now, just allow restart
-                return true;
-            }
-        }
-
-        true
     }
 
     /// Clean up old failure timestamps.
@@ -637,22 +642,55 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_one_for_one_strategy_default() {
+        let state = SupervisorActorState {
+            config: SchedulerSupervisorConfig::default(),
+            state: SupervisorState::Running,
+            children: std::collections::HashMap::new(),
+            failure_times: Vec::new(),
+            total_restarts: 0,
+            child_id_counter: 0,
+            shutdown_coordinator: None,
+            _shutdown_rx: None,
+            restart_strategy: Box::new(OneForOne::new()),
+        };
+
+        assert_eq!(state.restart_strategy.name(), "one_for_one");
+    }
+
+    #[test]
     fn test_calculate_backoff() {
         // First attempt: 100ms
-        let backoff = calculate_backoff(0, 100, 10000);
+        let backoff = calculate_backoff(0, 100, 3200);
         assert_eq!(backoff.as_millis(), 100);
 
         // Second attempt: 200ms
-        let backoff = calculate_backoff(1, 100, 10000);
+        let backoff = calculate_backoff(1, 100, 3200);
         assert_eq!(backoff.as_millis(), 200);
 
         // Third attempt: 400ms
-        let backoff = calculate_backoff(2, 100, 10000);
+        let backoff = calculate_backoff(2, 100, 3200);
         assert_eq!(backoff.as_millis(), 400);
 
         // Should cap at max
-        let backoff = calculate_backoff(10, 100, 1000);
-        assert_eq!(backoff.as_millis(), 1000);
+        let backoff = calculate_backoff(10, 100, 3200);
+        assert_eq!(backoff.as_millis(), 3200);
+    }
+
+    #[test]
+    fn test_backoff_never_exceeds_max() {
+        // Test invariant: Backoff never exceeds max (3200ms)
+        let max_backoff = 3200;
+
+        for attempt in 0..20 {
+            let backoff = calculate_backoff(attempt, 100, max_backoff);
+            assert!(
+                backoff.as_millis() <= max_backoff,
+                "Backoff at attempt {} exceeded max: {}ms",
+                attempt,
+                backoff.as_millis()
+            );
+        }
     }
 
     #[test]
@@ -666,6 +704,7 @@ mod tests {
             child_id_counter: 0,
             shutdown_coordinator: None,
             _shutdown_rx: None,
+            restart_strategy: Box::new(OneForOne::new()),
         };
 
         assert_eq!(
@@ -685,6 +724,7 @@ mod tests {
             child_id_counter: 0,
             shutdown_coordinator: None,
             _shutdown_rx: None,
+            restart_strategy: Box::new(OneForOne::new()),
         };
 
         // Add failures to trigger warning (0.5 per second over 60 seconds = 30 failures)
@@ -709,6 +749,7 @@ mod tests {
             child_id_counter: 0,
             shutdown_coordinator: None,
             _shutdown_rx: None,
+            restart_strategy: Box::new(OneForOne::new()),
         };
 
         // Add failures to trigger meltdown (1.0 per second over 60 seconds = 60+ failures)
@@ -728,7 +769,7 @@ mod tests {
         assert_eq!(config.max_restarts, 3);
         assert_eq!(config.restart_window_secs, 60);
         assert_eq!(config.base_backoff_ms, 100);
-        assert_eq!(config.max_backoff_ms, 10000);
+        assert_eq!(config.max_backoff_ms, 3200);
     }
 
     #[test]
@@ -777,6 +818,7 @@ mod tests {
             child_id_counter: 0,
             shutdown_coordinator: None,
             _shutdown_rx: None,
+            restart_strategy: Box::new(OneForOne::new()),
         };
 
         let status = SchedulerSupervisorDef::build_status(&state);
@@ -804,6 +846,7 @@ mod tests {
             child_id_counter: 0,
             shutdown_coordinator: None,
             _shutdown_rx: None,
+            restart_strategy: Box::new(OneForOne::new()),
         };
 
         SchedulerSupervisorDef::cleanup_old_failures(&mut state);
