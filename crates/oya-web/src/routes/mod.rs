@@ -6,6 +6,7 @@
 //! ## Route Structure
 //!
 //! - `GET /api/health` - Health check endpoint
+//! - `GET /api/system/health` - System health check endpoint
 //! - `POST /api/workflows` - Create a new workflow/bead
 //! - `GET /api/workflows` - List all workflows
 //! - `GET /api/beads/{id}` - Query bead status by ID
@@ -55,6 +56,7 @@ pub fn create_router() -> Router<AppState> {
     let api_routes = Router::new()
         // Health check
         .route("/health", get(health::health_check))
+        .route("/system/health", get(health::system_health_check))
         // Workflow endpoints
         .route("/workflows", post(workflows::create_workflow))
         .route("/workflows", get(workflows::list_workflows))

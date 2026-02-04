@@ -39,6 +39,20 @@ async fn test_health_check_returns_ok() -> Result<(), String> {
 }
 
 #[tokio::test]
+async fn test_system_health_check_returns_ok() -> Result<(), String> {
+    let server = create_test_server()?;
+
+    let response = server.get("/api/system/health").await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+
+    let body: Value = response.json();
+    assert_eq!(body["status"], "ok");
+    assert!(body["version"].is_string());
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_create_workflow_returns_201() -> Result<(), String> {
     let server = create_test_server()?;
 
