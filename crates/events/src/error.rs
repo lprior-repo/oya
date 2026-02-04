@@ -103,6 +103,26 @@ impl From<ConnectionError> for Error {
     }
 }
 
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Self {
+        Self::Internal(err.to_string())
+    }
+}
+
+// Import DbError from db module and add conversion
+mod db {
+    pub use crate::db::DbError;
+}
+
+impl From<db::DbError> for Error {
+    fn from(err: db::DbError) -> Self {
+        match err {
+            db::DbError::Io(ref e) => Self::Internal(e.to_string()),
+            _ => Self::Connection(db::ConnectionError::ConnectionFailed(err.to_string())),
+        }
+    }
+}
+
 impl Error {
     /// Create a store failed error.
     pub fn store_failed(operation: impl Into<String>, reason: impl Into<String>) -> Self {
