@@ -133,15 +133,23 @@ pub type PersistenceResult<T> = Result<T, PersistenceError>;
 /// Helper to convert SurrealDB errors to PersistenceError.
 pub fn from_surrealdb_error(err: impl fmt::Display) -> PersistenceError {
     let msg = err.to_string();
+    let msg_lower = msg.to_lowercase();
 
     // Categorize based on error message patterns
-    if msg.contains("timeout") || msg.contains("Timeout") {
+    if msg_lower.contains("deserial")
+        || msg_lower.contains("unknown variant")
+        || msg_lower.contains("invalid type")
+        || msg_lower.contains("could not convert")
+        || msg_lower.contains("cannot convert")
+    {
+        PersistenceError::serialization_error(msg)
+    } else if msg_lower.contains("timeout") {
         PersistenceError::timeout(0)
-    } else if msg.contains("connection") || msg.contains("Connection") || msg.contains("connect") {
+    } else if msg_lower.contains("connection") || msg_lower.contains("connect") {
         PersistenceError::connection_failed(msg)
-    } else if msg.contains("already exists") || msg.contains("duplicate") {
+    } else if msg_lower.contains("already exists") || msg_lower.contains("duplicate") {
         PersistenceError::already_exists("unknown", msg)
-    } else if msg.contains("not found") || msg.contains("does not exist") {
+    } else if msg_lower.contains("not found") || msg_lower.contains("does not exist") {
         PersistenceError::not_found("unknown", msg)
     } else {
         PersistenceError::query_failed(msg)

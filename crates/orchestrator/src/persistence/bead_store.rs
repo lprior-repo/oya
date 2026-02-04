@@ -377,6 +377,7 @@ impl OrchestratorStore {
 mod tests {
     use super::*;
     use crate::persistence::client::StoreConfig;
+    use surrealdb::sql::Datetime as SurrealDatetime;
 
     async fn setup_store() -> Option<OrchestratorStore> {
         let config = StoreConfig::in_memory();
@@ -526,5 +527,67 @@ mod tests {
             assert_eq!(bead.error_message, Some("Test error".to_string()));
             assert!(bead.completed_at.is_some());
         }
+    }
+
+    #[tokio::test]
+    async fn test_corrupted_bead_record_returns_serialization_error() {
+        let store = require_store!(setup_store().await);
+        let now = SurrealDatetime::from(Utc::now());
+
+        let create_result: Result<(), PersistenceError> = store
+            .db()
+            .query(
+                "CREATE type::thing('bead', 'corrupt-bead') CONTENT {
+                    bead_id: 'corrupt-bead',
+                    workflow_id: 'wf-corrupt',
+                    state: 'invalid_state',
+                    assigned_worker: NONE,
+                    assigned_queue: NONE,
+                    created_at: $now,
+                    updated_at: $now,
+                    started_at: NONE,
+                    completed_at: NONE,
+                    error_message: 'bad data',
+                    retry_count: 0,
+                    metadata: NONE
+                }",
+            )
+            .bind(("now", now))
+            .await
+            .map_err(from_surrealdb_error)
+            .and_then(|resp| resp.check().map_err(from_surrealdb_error))
+            .map(|_| ());
+
+        assert!(
+            create_result.is_ok(),
+            "setting up corrupted bead should succeed: {:?}",
+            create_result.err()
+        );
+
+        let corrupted = store.get_bead("corrupt-bead").await;
+        assert!(
+            matches!(corrupted, Err(PersistenceError::SerializationError { .. })),
+            "expected serialization error for corrupt bead, got {:?}",
+            corrupted
+        );
+
+        if let Err(PersistenceError::SerializationError { reason }) = corrupted {
+            assert!(
+                reason.contains("invalid_state") || reason.to_lowercase().contains("variant"),
+                "unexpected serialization reason: {}",
+                reason
+            );
+        }
+
+        let healthy = BeadRecord::new("healthy-bead", "wf-corrupt");
+        let saved = store.save_bead(&healthy).await;
+        assert!(saved.is_ok(), "save should succeed for healthy record");
+
+        let retrieved = store.get_bead("healthy-bead").await;
+        assert!(
+            matches!(retrieved, Ok(ref bead) if bead.bead_id == "healthy-bead"),
+            "healthy bead should still be retrievable: {:?}",
+            retrieved
+        );
     }
 }

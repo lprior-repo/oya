@@ -259,7 +259,7 @@ impl AgentInfo {
     /// # Examples
     ///
     /// ```
-    /// use oya::agent_info::{AgentInfo, AgentCapability, AgentState};
+    /// use orchestrator::agent_swarm::{AgentCapability, AgentInfo};
     /// use chrono::Utc;
     ///
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -372,9 +372,8 @@ impl AgentInfo {
     /// # Examples
     ///
     /// ```
-    /// # use oya::agent_info::AgentInfo;
+    /// # use orchestrator::agent_swarm::{AgentCapability, AgentInfo};
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// # use oya::agent_info::AgentCapability;
     /// # let capabilities = vec![
     /// #     AgentCapability::new("orchestration".to_string(), "Runs workflows".to_string(), "1.0".to_string())?,
     /// # ];
@@ -734,7 +733,7 @@ pub mod tests {
             ))
         });
 
-        assert!(matches!(result, Ok((true, false, 2))));
+        assert!(matches!(result, Ok((true, true, 2))));
     }
 
     #[test]

@@ -297,8 +297,8 @@ mod tests {
 
         let agents = vec!["rust-agent".to_string(), "python-agent".to_string()];
         let result = strategy.select_agent("java-bead", &agents, &ctx);
-        // Falls back to lowest load since no java capability
-        assert_eq!(result, Some("python-agent".to_string()));
+        // Capability matching enabled: no compatible agents means no selection
+        assert_eq!(result, None);
     }
 
     #[test]

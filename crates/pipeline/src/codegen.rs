@@ -8,7 +8,7 @@
 //! - Explicitly handles all errors
 
 use crate::error::{Error, Result};
-use crate::functional::{FunctionStub, Parameter, generate_functional_module};
+use crate::functional::{generate_functional_module, FunctionStub, Parameter};
 
 /// Bead requirement specification.
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -407,7 +407,7 @@ mod tests {
     #[test]
     fn test_validate_functional_code() {
         let good_code = "pub fn add(a: i32, b: i32) -> i32 { a + b }";
-        let bad_code = "pub fn get() -> i32 { val }";
+        let bad_code = "pub fn get() -> i32 { let mut val = 1; val }";
 
         let good_audit = validate_functional_code(good_code);
         let bad_audit = validate_functional_code(bad_code);

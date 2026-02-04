@@ -121,7 +121,7 @@ mod tests {
     fn test_create_strategy_affinity_hard() {
         let strategy = create_strategy("affinity_hard");
         assert!(strategy.is_some());
-        assert_eq!(strategy.map(|s| s.name()), Some("affinity"));
+        assert_eq!(strategy.map(|s| s.name()), Some("affinity_hard"));
     }
 
     #[test]

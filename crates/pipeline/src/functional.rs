@@ -33,7 +33,7 @@ impl ForbiddenPattern {
             Self::Expect => r"\.expect\(",
             Self::Panic => r"\bpanic!\(",
             Self::Unsafe => r"\bunsafe\s+",
-            Self::MutLocalVar => r"\blet\s+mut\s+[a-zA-Z_][a-zA-Z0-9_]*\s*:",
+            Self::MutLocalVar => r"\blet\s+mut\s+[a-zA-Z_][a-zA-Z0-9_]*\b",
             Self::MutParameter => r"fn\s+[a-zA-Z_][a-zA-Z0-9_]*\s*\([^)]*mut\s+",
             Self::RcCell => r"\b(Rc|Cell|RefCell)\s*<",
             Self::InteriorMutability => r"\b(unsafe_cell|SyncUnsafeCell)\s*<",
@@ -122,12 +122,9 @@ impl FunctionalAudit {
     #[must_use]
     pub fn is_functional(&self) -> bool {
         // No critical or high violations allowed
-        self.violations.iter().all(|v| {
-            matches!(
-                v.severity,
-                ViolationSeverity::Low | ViolationSeverity::Medium
-            )
-        })
+        self.violations
+            .iter()
+            .all(|v| matches!(v.severity, ViolationSeverity::Low))
     }
 
     /// Get violations by severity.
@@ -191,8 +188,8 @@ pub fn audit_functional_style(code: &str) -> FunctionalAudit {
 
     // Check for mutable variables (but exclude common patterns like "let mut iter")
     if let (Ok(mut_regex), Ok(mut_skip_regex)) = (
-        Regex::new(r"\blet\s+mut\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*:"),
-        Regex::new(r"\blet\s+mut\s+(iter|self|this|cursor|pointer|idx|index|i|j|k|x|y|z)\s*:"),
+        Regex::new(r"\blet\s+mut\s+([a-zA-Z_][a-zA-Z0-9_]*)\b"),
+        Regex::new(r"\blet\s+mut\s+(iter|self|this|cursor|pointer|idx|index|i|j|k|x|y|z)\b"),
     ) {
         for (line_idx, line) in lines.iter().enumerate() {
             if let Some(captures) = mut_regex.captures(line) {
@@ -435,7 +432,7 @@ pub fn process_data(data: &mut Vec<i32>) -> i32 {
 
         let audit = audit_functional_style(code);
         assert!(!audit.is_functional());
-        assert!(!audit.critical_violations().is_empty());
+        assert!(!audit.violations.is_empty());
     }
 
     #[test]

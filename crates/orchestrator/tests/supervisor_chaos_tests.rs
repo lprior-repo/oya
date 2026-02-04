@@ -8,7 +8,7 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use orchestrator::actors::scheduler::SchedulerArguments;
 use orchestrator::actors::supervisor::{
@@ -32,6 +32,14 @@ fn is_supervisor_alive(status: ActorStatus) -> bool {
 
 fn is_supervisor_stopped(status: ActorStatus) -> bool {
     matches!(status, ActorStatus::Stopping | ActorStatus::Stopped)
+}
+
+fn unique_name(label: &str) -> String {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    format!("{label}-{}-{nanos}", std::process::id())
 }
 
 async fn spawn_child(
@@ -64,8 +72,9 @@ async fn spawn_child(
 async fn given_tier1_crashes_with_no_children_then_clean_shutdown() {
     // GIVEN: A tier-1 supervisor with no children
     let config = SchedulerSupervisorConfig::for_testing();
+    let supervisor_name = unique_name("chaos-supervisor-empty");
     let supervisor_result =
-        spawn_supervisor_with_name(supervisor_args(config), "chaos-supervisor-empty").await;
+        spawn_supervisor_with_name(supervisor_args(config), &supervisor_name).await;
 
     assert!(
         supervisor_result.is_ok(),
@@ -104,8 +113,9 @@ async fn given_tier1_crashes_with_no_children_then_clean_shutdown() {
 async fn given_tier1_crashes_with_children_then_children_stopped() {
     // GIVEN: A tier-1 supervisor with children
     let config = SchedulerSupervisorConfig::for_testing();
+    let supervisor_name = unique_name("chaos-supervisor-with-children");
     let supervisor_result =
-        spawn_supervisor_with_name(supervisor_args(config), "chaos-supervisor-with-children").await;
+        spawn_supervisor_with_name(supervisor_args(config), &supervisor_name).await;
 
     assert!(
         supervisor_result.is_ok(),
@@ -124,9 +134,24 @@ async fn given_tier1_crashes_with_children_then_children_stopped() {
     let child_args = SchedulerArguments::new();
 
     let spawn_results = [
-        spawn_child(&supervisor, "child-1", child_args.clone()).await,
-        spawn_child(&supervisor, "child-2", child_args.clone()).await,
-        spawn_child(&supervisor, "child-3", child_args).await,
+        spawn_child(
+            &supervisor,
+            &format!("{supervisor_name}-child-1"),
+            child_args.clone(),
+        )
+        .await,
+        spawn_child(
+            &supervisor,
+            &format!("{supervisor_name}-child-2"),
+            child_args.clone(),
+        )
+        .await,
+        spawn_child(
+            &supervisor,
+            &format!("{supervisor_name}-child-3"),
+            child_args,
+        )
+        .await,
     ];
 
     // Check all spawns succeeded
@@ -195,8 +220,9 @@ async fn given_tier1_crashes_during_child_restart_then_graceful() {
     // Set very short restart delay to trigger race condition
     config.base_backoff_ms = 10;
 
+    let supervisor_name = unique_name("chaos-supervisor-restart-race");
     let supervisor_result =
-        spawn_supervisor_with_name(supervisor_args(config), "chaos-supervisor-restart-race").await;
+        spawn_supervisor_with_name(supervisor_args(config), &supervisor_name).await;
 
     assert!(
         supervisor_result.is_ok(),
@@ -213,7 +239,12 @@ async fn given_tier1_crashes_during_child_restart_then_graceful() {
 
     // Spawn a child
     let child_args = SchedulerArguments::new();
-    let spawn_result = spawn_child(&supervisor, "restart-target", child_args).await;
+    let spawn_result = spawn_child(
+        &supervisor,
+        &format!("{supervisor_name}-restart-target"),
+        child_args,
+    )
+    .await;
 
     assert!(
         spawn_result.is_ok(),
@@ -226,7 +257,7 @@ async fn given_tier1_crashes_during_child_restart_then_graceful() {
     // Stop the child to trigger a restart
     let stop_result = supervisor
         .cast(SupervisorMessage::StopChild {
-            name: "restart-target".to_string(),
+            name: format!("{supervisor_name}-restart-target"),
         })
         .map_err(|e| format!("Failed to stop child: {}", e));
 
@@ -255,8 +286,9 @@ async fn given_tier1_crashes_during_child_restart_then_graceful() {
 async fn given_tier1_stopped_when_message_sent_then_error_not_panic() {
     // GIVEN: A stopped tier-1 supervisor
     let config = SchedulerSupervisorConfig::for_testing();
+    let supervisor_name = unique_name("chaos-supervisor-stopped");
     let supervisor_result =
-        spawn_supervisor_with_name(supervisor_args(config), "chaos-supervisor-stopped").await;
+        spawn_supervisor_with_name(supervisor_args(config), &supervisor_name).await;
 
     assert!(
         supervisor_result.is_ok(),
@@ -279,7 +311,7 @@ async fn given_tier1_stopped_when_message_sent_then_error_not_panic() {
     let child_args = SchedulerArguments::new();
     let (tx, rx) = tokio::sync::oneshot::channel();
     let result = supervisor.cast(SupervisorMessage::SpawnChild {
-        name: "zombie-child".to_string(),
+        name: format!("{supervisor_name}-zombie-child"),
         args: child_args,
         reply: tx,
     });
@@ -302,9 +334,10 @@ async fn given_rapid_tier1_crash_restart_cycles_then_stable() {
     // HOSTILE: Create and destroy supervisors rapidly to test resource cleanup
     for i in 0..10 {
         let config = SchedulerSupervisorConfig::for_testing();
+        let supervisor_name = unique_name(&format!("chaos-supervisor-cycle-{i}"));
         let supervisor_result = spawn_supervisor_with_name(
             supervisor_args(config),
-            &format!("chaos-supervisor-cycle-{}", i),
+            &supervisor_name,
         )
         .await;
 
@@ -324,7 +357,7 @@ async fn given_rapid_tier1_crash_restart_cycles_then_stable() {
 
         // Spawn a child
         let child_args = SchedulerArguments::new();
-        let _ = spawn_child(&supervisor, &format!("child-{}", i), child_args).await;
+        let _ = spawn_child(&supervisor, &format!("{supervisor_name}-child"), child_args).await;
 
         sleep(Duration::from_millis(10)).await;
 
@@ -353,8 +386,9 @@ async fn given_tier1_crashes_during_meltdown_then_graceful() {
     config.meltdown_threshold = 2.0; // Very low threshold
     config.max_restarts = 1; // Allow only 1 restart
 
+    let supervisor_name = unique_name("chaos-supervisor-meltdown");
     let supervisor_result =
-        spawn_supervisor_with_name(supervisor_args(config), "chaos-supervisor-meltdown").await;
+        spawn_supervisor_with_name(supervisor_args(config), &supervisor_name).await;
 
     assert!(
         supervisor_result.is_ok(),
@@ -371,14 +405,19 @@ async fn given_tier1_crashes_during_meltdown_then_graceful() {
 
     // Spawn a child
     let child_args = SchedulerArguments::new();
-    let _ = spawn_child(&supervisor, "meltdown-child", child_args).await;
+    let _ = spawn_child(
+        &supervisor,
+        &format!("{supervisor_name}-meltdown-child"),
+        child_args,
+    )
+    .await;
 
     sleep(Duration::from_millis(50)).await;
 
     // Stop child multiple times to trigger meltdown
     for _i in 0..3 {
         let _ = supervisor.cast(SupervisorMessage::StopChild {
-            name: "meltdown-child".to_string(),
+            name: format!("{supervisor_name}-meltdown-child"),
         });
         sleep(Duration::from_millis(20)).await;
     }
@@ -404,8 +443,9 @@ async fn given_tier1_crashes_during_meltdown_then_graceful() {
 async fn given_tier1_crashed_when_new_tier1_spawned_then_functional() {
     // GIVEN: A tier-1 supervisor that crashed
     let config = SchedulerSupervisorConfig::for_testing();
+    let supervisor_one_name = unique_name("crash-then-recover-1");
     let supervisor1_result =
-        spawn_supervisor_with_name(supervisor_args(config.clone()), "crash-then-recover-1").await;
+        spawn_supervisor_with_name(supervisor_args(config.clone()), &supervisor_one_name).await;
 
     assert!(
         supervisor1_result.is_ok(),
@@ -430,8 +470,9 @@ async fn given_tier1_crashed_when_new_tier1_spawned_then_functional() {
     );
 
     // WHEN: Spawn a new tier-1 supervisor with same name
+    let supervisor_two_name = unique_name("crash-then-recover-2");
     let supervisor2_result =
-        spawn_supervisor_with_name(supervisor_args(config), "crash-then-recover-2").await;
+        spawn_supervisor_with_name(supervisor_args(config), &supervisor_two_name).await;
 
     assert!(
         supervisor2_result.is_ok(),
@@ -454,7 +495,12 @@ async fn given_tier1_crashed_when_new_tier1_spawned_then_functional() {
 
     // Spawn a child to verify functionality
     let child_args = SchedulerArguments::new();
-    let spawn_result = spawn_child(&supervisor2, "recovery-child", child_args).await;
+    let spawn_result = spawn_child(
+        &supervisor2,
+        &format!("{supervisor_two_name}-recovery-child"),
+        child_args,
+    )
+    .await;
 
     assert!(
         spawn_result.is_ok(),
@@ -473,12 +519,13 @@ async fn given_tier1_crashes_then_no_shared_state_corruption() {
     // This test verifies isolation between supervisor instances
 
     let config = SchedulerSupervisorConfig::for_testing();
+    let base_name = unique_name("isolation-test");
 
     // Spawn and crash multiple supervisors
     for i in 0..5 {
         let supervisor_result = spawn_supervisor_with_name(
             supervisor_args(config.clone()),
-            &format!("isolation-test-{}", i),
+            &format!("{base_name}-{i}"),
         )
         .await;
 
@@ -498,8 +545,18 @@ async fn given_tier1_crashes_then_no_shared_state_corruption() {
 
         // Add children
         let child_args = SchedulerArguments::new();
-        let _ = spawn_child(&supervisor, &format!("child-{}-1", i), child_args.clone()).await;
-        let _ = spawn_child(&supervisor, &format!("child-{}-2", i), child_args).await;
+        let _ = spawn_child(
+            &supervisor,
+            &format!("{base_name}-child-{i}-1"),
+            child_args.clone(),
+        )
+        .await;
+        let _ = spawn_child(
+            &supervisor,
+            &format!("{base_name}-child-{i}-2"),
+            child_args,
+        )
+        .await;
 
         sleep(Duration::from_millis(20)).await;
 
@@ -509,8 +566,9 @@ async fn given_tier1_crashes_then_no_shared_state_corruption() {
     }
 
     // WHEN: Spawn a fresh supervisor after all crashes
+    let final_supervisor_name = unique_name("isolation-test-final");
     let final_supervisor_result =
-        spawn_supervisor_with_name(supervisor_args(config), "isolation-test-final").await;
+        spawn_supervisor_with_name(supervisor_args(config), &final_supervisor_name).await;
 
     assert!(
         final_supervisor_result.is_ok(),

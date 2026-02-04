@@ -9,7 +9,11 @@ use orchestrator::supervision::{Tier1SupervisorKind, Tier1Supervisors, spawn_tie
 use ractor::ActorStatus;
 
 fn build_prefix() -> String {
-    format!("tier1-{}", std::process::id())
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    format!("tier1-{}-{}", std::process::id(), nanos)
 }
 
 fn shutdown_all(supervisors: &Tier1Supervisors) {

@@ -9,7 +9,7 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
-use orchestrator::dag::{BeadId, DependencyType, WorkflowDAG};
+use orchestrator::dag::{BeadId, DagError, DependencyType, WorkflowDAG};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
@@ -843,18 +843,22 @@ fn given_self_loop_when_check_cycle_then_returns_true() {
     // GIVEN: A DAG with a self-loop A --> A
     let mut dag = WorkflowDAG::new();
     let _ = dag.add_node("a".to_string());
-    // Note: add_edge currently allows self-loops
-    let _ = dag.add_edge(
+    let result = dag.add_edge(
         "a".to_string(),
         "a".to_string(),
         DependencyType::BlockingDependency,
     );
 
+    assert!(
+        matches!(result, Err(DagError::SelfLoopDetected(_))),
+        "Self-loop should be rejected"
+    );
+
     // WHEN: Checking for cycles
     let has_cycle = dag.has_cycle();
 
-    // THEN: Should return true (self-loop is a cycle)
-    assert!(has_cycle, "Self-loop should be detected as cycle");
+    // THEN: Should return false because the self-loop wasn't added
+    assert!(!has_cycle, "Self-loop should not be present in the DAG");
 }
 
 #[test]
