@@ -5,13 +5,14 @@
 //! Real-time terminal UI for pipeline status, bead execution, and stage progress.
 
 use im::{HashMap, Vector};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::time::{Duration, Instant};
 use zellij_tile::prelude::*;
 
 // Constants for caching and timeouts
 const CACHE_TTL: Duration = Duration::from_secs(5);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+const AGENT_EVENT_LIMIT: usize = 50;
 
 // Context keys for identifying web request responses
 const CTX_REQUEST_TYPE: &str = "request_type";
@@ -48,6 +49,7 @@ struct State {
 
     // Agent data
     agents: Vector<AgentInfo>,
+    agent_events: VecDeque<AgentEvent>,
 }
 
 #[allow(clippy::derivable_impls)]
@@ -67,6 +69,7 @@ impl Default for State {
             selected_index: 0,
             pipeline_stages: Vector::new(),
             agents: Vector::new(),
+            agent_events: VecDeque::new(),
         }
     }
 }
@@ -143,7 +146,46 @@ struct AgentInfo {
     capabilities: Vector<String>,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
+struct AgentEvent {
+    message: String,
+    level: EventLevel,
+    occurred_at: Instant,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum EventLevel {
+    Info,
+    Warning,
+    Error,
+}
+
+impl EventLevel {
+    fn color(&self) -> &str {
+        match self {
+            Self::Info => "\x1b[36m",
+            Self::Warning => "\x1b[33m",
+            Self::Error => "\x1b[31m",
+        }
+    }
+
+    fn symbol(&self) -> &str {
+        match self {
+            Self::Info => "i",
+            Self::Warning => "!",
+            Self::Error => "x",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HealthBand {
+    Healthy,
+    Warning,
+    Critical,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum AgentState {
     Idle,
     Working,
@@ -573,7 +615,7 @@ impl State {
 
         match parsed {
             Ok(api_agents) => {
-                self.agents = api_agents
+                let next_agents = api_agents
                     .into_iter()
                     .map(|a| AgentInfo {
                         id: a.id,
@@ -590,6 +632,8 @@ impl State {
                         capabilities: a.capabilities.into_iter().collect::<Vector<_>>(),
                     })
                     .collect::<Vector<_>>();
+                self.update_agent_events(&next_agents);
+                self.agents = next_agents;
             }
             Err(e) => self.last_error = Some(e),
         }
@@ -785,52 +829,58 @@ impl State {
             return;
         }
 
+        let show_events = rows >= 12 && !self.agent_events.is_empty();
+        let event_lines = if show_events {
+            rows.saturating_div(3).max(4)
+        } else {
+            0
+        };
+        let reserved = 3 + 1 + if show_events { 3 + event_lines } else { 0 };
+        let list_capacity = rows.saturating_sub(reserved);
+
         println!(
             "\n  \x1b[1m{:<15} {:<12} {:<20} {:<12} Health\x1b[0m",
             "Agent ID", "State", "Current Bead", "Uptime"
         );
         println!("  {}", "─".repeat(cols.saturating_sub(2)));
 
-        self.agents
-            .iter()
-            .take(rows.saturating_sub(3))
-            .for_each(|agent| {
-                let bead_str = agent.current_bead.as_deref().unwrap_or("-");
-                let uptime_str = format_uptime(agent.uptime_secs);
-                let health_color = if agent.health_score >= 0.8 {
-                    "\x1b[32m"
-                } else if agent.health_score >= 0.5 {
-                    "\x1b[33m"
-                } else {
-                    "\x1b[31m"
-                };
+        self.agents.iter().take(list_capacity).for_each(|agent| {
+            let bead_str = agent.current_bead.as_deref().unwrap_or("-");
+            let uptime_str = format_uptime(agent.uptime_secs);
+            let health_color = if agent.health_score >= 0.8 {
+                "\x1b[32m"
+            } else if agent.health_score >= 0.5 {
+                "\x1b[33m"
+            } else {
+                "\x1b[31m"
+            };
 
-                let health_percent = (agent.health_score * 100.0).clamp(0.0, 100.0);
+            let health_percent = (agent.health_score * 100.0).clamp(0.0, 100.0);
 
+            println!(
+                "  {:<15} {}{:<12}\x1b[0m {:<20} {:<12} {}{:.1}%\x1b[0m",
+                agent.id,
+                agent.state.color(),
+                agent.state.as_str(),
+                truncate(bead_str, 20),
+                uptime_str,
+                health_color,
+                health_percent
+            );
+
+            if !agent.capabilities.is_empty() {
+                let caps_str = agent
+                    .capabilities
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ");
                 println!(
-                    "  {:<15} {}{:<12}\x1b[0m {:<20} {:<12} {}{:.1}%\x1b[0m",
-                    agent.id,
-                    agent.state.color(),
-                    agent.state.as_str(),
-                    truncate(bead_str, 20),
-                    uptime_str,
-                    health_color,
-                    health_percent
+                    "    \x1b[2mCapabilities: {}\x1b[0m",
+                    truncate(&caps_str, cols.saturating_sub(6))
                 );
-
-                if !agent.capabilities.is_empty() {
-                    let caps_str = agent
-                        .capabilities
-                        .iter()
-                        .map(|s| s.as_str())
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    println!(
-                        "    \x1b[2mCapabilities: {}\x1b[0m",
-                        truncate(&caps_str, cols.saturating_sub(6))
-                    );
-                }
-            });
+            }
+        });
 
         let total = self.agents.len();
         let idle = self
@@ -853,6 +903,13 @@ impl State {
             "\n  \x1b[2m{} total | {} idle | {} working | {} unhealthy\x1b[0m",
             total, idle, working, unhealthy
         );
+
+        if show_events {
+            println!();
+            println!("  \x1b[1mEvent Stream\x1b[0m");
+            println!("  {}", "─".repeat(cols.saturating_sub(2)));
+            self.render_agent_events(event_lines, cols);
+        }
     }
 
     fn render_footer(&self, rows: usize, cols: usize) {
@@ -881,6 +938,125 @@ impl State {
                 )
             },
         );
+    }
+
+    fn update_agent_events(&mut self, next_agents: &Vector<AgentInfo>) {
+        let mut previous_by_id: BTreeMap<String, AgentInfo> = self
+            .agents
+            .iter()
+            .cloned()
+            .map(|agent| (agent.id.clone(), agent))
+            .collect();
+        let next_by_id: BTreeMap<String, AgentInfo> = next_agents
+            .iter()
+            .cloned()
+            .map(|agent| (agent.id.clone(), agent))
+            .collect();
+
+        for (agent_id, next_agent) in next_by_id.iter() {
+            match previous_by_id.remove(agent_id) {
+                None => {
+                    self.push_agent_event(
+                        EventLevel::Info,
+                        format!("Agent {} registered", agent_id),
+                    );
+                }
+                Some(previous) => {
+                    if previous.state != next_agent.state {
+                        let level = match next_agent.state {
+                            AgentState::Unhealthy | AgentState::Terminated => EventLevel::Error,
+                            AgentState::ShuttingDown => EventLevel::Warning,
+                            _ => EventLevel::Info,
+                        };
+                        self.push_agent_event(
+                            level,
+                            format!(
+                                "Agent {} state {} → {}",
+                                agent_id,
+                                previous.state.as_str(),
+                                next_agent.state.as_str()
+                            ),
+                        );
+                    }
+
+                    if previous.current_bead != next_agent.current_bead {
+                        match (&previous.current_bead, &next_agent.current_bead) {
+                            (None, Some(bead)) => {
+                                self.push_agent_event(
+                                    EventLevel::Info,
+                                    format!("Agent {} assigned bead {}", agent_id, bead),
+                                );
+                            }
+                            (Some(bead), None) => {
+                                self.push_agent_event(
+                                    EventLevel::Info,
+                                    format!("Agent {} released bead {}", agent_id, bead),
+                                );
+                            }
+                            (Some(previous_bead), Some(next_bead)) => {
+                                self.push_agent_event(
+                                    EventLevel::Info,
+                                    format!(
+                                        "Agent {} switched bead {} → {}",
+                                        agent_id, previous_bead, next_bead
+                                    ),
+                                );
+                            }
+                            (None, None) => {}
+                        }
+                    }
+
+                    let previous_band = health_band(previous.health_score);
+                    let next_band = health_band(next_agent.health_score);
+                    if previous_band != next_band {
+                        let level = match next_band {
+                            HealthBand::Healthy => EventLevel::Info,
+                            HealthBand::Warning => EventLevel::Warning,
+                            HealthBand::Critical => EventLevel::Error,
+                        };
+                        self.push_agent_event(
+                            level,
+                            format!(
+                                "Agent {} health {:.0}% → {:.0}%",
+                                agent_id,
+                                previous.health_score * 100.0,
+                                next_agent.health_score * 100.0
+                            ),
+                        );
+                    }
+                }
+            }
+        }
+
+        for (agent_id, _) in previous_by_id.iter() {
+            self.push_agent_event(EventLevel::Warning, format!("Agent {} removed", agent_id));
+        }
+    }
+
+    fn push_agent_event(&mut self, level: EventLevel, message: String) {
+        self.agent_events.push_back(AgentEvent {
+            message,
+            level,
+            occurred_at: Instant::now(),
+        });
+        while self.agent_events.len() > AGENT_EVENT_LIMIT {
+            self.agent_events.pop_front();
+        }
+    }
+
+    fn render_agent_events(&self, rows: usize, cols: usize) {
+        let message_width = cols.saturating_sub(12);
+        self.agent_events.iter().rev().take(rows).for_each(|event| {
+            let age = format_event_age(event.occurred_at);
+            let message = truncate(&event.message, message_width);
+            println!(
+                "  {}{}\x1b[0m {:>4} {}",
+                event.level.color(),
+                event.level.symbol(),
+                age,
+                message
+            );
+        });
     }
 }
 
@@ -912,6 +1088,30 @@ fn render_progress_bar(progress: f32, width: usize) -> String {
     )
 }
 
+fn health_band(score: f64) -> HealthBand {
+    if score >= 0.8 {
+        HealthBand::Healthy
+    } else if score >= 0.5 {
+        HealthBand::Warning
+    } else {
+        HealthBand::Critical
+    }
+}
+
+fn format_event_age(occurred_at: Instant) -> String {
+    let elapsed = occurred_at.elapsed();
+    let secs = elapsed.as_secs();
+    if secs < 60 {
+        format!("{}s", secs)
+    } else if secs < 3600 {
+        format!("{}m", secs.saturating_div(60))
+    } else if secs < 86400 {
+        format!("{}h", secs.saturating_div(3600))
+    } else {
+        format!("{}d", secs.saturating_div(86400))
+    }
+}
+
 fn format_uptime(secs: u64) -> String {
     if secs < 60 {
         format!("{}s", secs)
@@ -928,10 +1128,24 @@ fn format_uptime(secs: u64) -> String {
         format!("{}d", secs.saturating_div(86400))
     }
 }
-
 #[cfg(test)]
 mod tests {
-    use super::{should_fetch_agents_on_view_load, ViewMode};
+    use super::*;
+
+    fn build_agent(id: &str, state: AgentState, bead: Option<&str>, health: f64) -> AgentInfo {
+        AgentInfo {
+            id: id.to_string(),
+            state,
+            current_bead: bead.map(|value| value.to_string()),
+            health_score: health,
+            uptime_secs: 42,
+            capabilities: Vector::new(),
+        }
+    }
+
+    fn to_vector(agents: Vec<AgentInfo>) -> Vector<AgentInfo> {
+        agents.into_iter().collect::<Vector<_>>()
+    }
 
     #[test]
     fn agent_view_fetches_agents_on_load() {
@@ -949,5 +1163,44 @@ mod tests {
         for mode in modes {
             assert!(!should_fetch_agents_on_view_load(mode));
         }
+    }
+
+    #[test]
+    fn test_agent_event_registered() {
+        let mut state = State::default();
+        let agents = to_vector(vec![build_agent("agent-1", AgentState::Idle, None, 0.95)]);
+
+        state.update_agent_events(&agents);
+
+        assert_eq!(state.agent_events.len(), 1);
+        assert!(state
+            .agent_events
+            .iter()
+            .any(|event| event.message.contains("registered")));
+    }
+
+    #[test]
+    fn test_agent_event_state_and_bead_change() {
+        let mut state = State::default();
+        let initial = to_vector(vec![build_agent("agent-7", AgentState::Idle, None, 0.9)]);
+        state.agents = initial;
+
+        let updated = to_vector(vec![build_agent(
+            "agent-7",
+            AgentState::Working,
+            Some("bead-1"),
+            0.9,
+        )]);
+
+        state.update_agent_events(&updated);
+
+        assert!(state
+            .agent_events
+            .iter()
+            .any(|event| event.message.contains("state")));
+        assert!(state
+            .agent_events
+            .iter()
+            .any(|event| event.message.contains("assigned")));
     }
 }
