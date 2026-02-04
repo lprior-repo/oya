@@ -295,14 +295,10 @@ mod message_type_tests {
             response: tx,
         };
 
-        match msg {
-            StateManagerMessage::QueryBead { id, response: _ } => {
-                assert_eq!(id, test_id, "ID should match");
-            }
-            StateManagerMessage::QueryAllAgents { .. } => {
-                panic!("Expected QueryBead, got QueryAllAgents");
-            }
-        }
+        assert!(
+            matches!(msg, StateManagerMessage::QueryBead { id, .. } if id == test_id),
+            "Expected QueryBead with matching ID"
+        );
     }
 
     #[test]
@@ -317,6 +313,7 @@ mod message_type_tests {
             updated_at: "2024-01-01".to_string(),
             title: Some("Test Bead".to_string()),
             dependencies: vec!["dep-1".to_string()],
+            progress: 0.0,
         };
 
         assert_eq!(state.id, test_id, "ID should match");
@@ -985,6 +982,7 @@ mod property_tests {
                 updated_at: updated_at.clone(),
                 title: title.clone(),
                 dependencies: dependencies.clone(),
+                progress: 0.0,
             };
 
             assert_eq!(state.status, status);

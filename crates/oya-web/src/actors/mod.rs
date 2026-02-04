@@ -37,6 +37,16 @@ pub enum StateManagerMessage {
     QueryAllAgents {
         response: tokio::sync::oneshot::Sender<Vec<AgentSummary>>,
     },
+    QueryAllBeads {
+        response: tokio::sync::oneshot::Sender<Vec<BeadState>>,
+    },
+    QueryBeadPipeline {
+        id: Ulid,
+        response: tokio::sync::oneshot::Sender<Vec<StageInfo>>,
+    },
+    QueryGraph {
+        response: tokio::sync::oneshot::Sender<GraphResponse>,
+    },
 }
 
 /// Placeholder response from StateManagerActor
@@ -50,6 +60,38 @@ pub struct BeadState {
     pub updated_at: String,
     pub title: Option<String>,
     pub dependencies: Vec<String>,
+    pub progress: f32,
+}
+
+/// Information about a pipeline stage
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct StageInfo {
+    pub name: String,
+    pub status: String,
+    pub duration_ms: Option<u64>,
+}
+
+/// Node in the dependency graph
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct GraphNode {
+    pub id: String,
+    pub label: String,
+    pub status: String,
+}
+
+/// Edge in the dependency graph
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct GraphEdge {
+    pub from: String,
+    pub to: String,
+    pub edge_type: String,
+}
+
+/// Response for graph queries
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct GraphResponse {
+    pub nodes: Vec<GraphNode>,
+    pub edges: Vec<GraphEdge>,
 }
 
 /// Summary of an agent for listing
@@ -150,6 +192,7 @@ pub fn mock_state_manager() -> StateManagerSender {
                         updated_at: "2024-01-01T00:00:00Z".to_string(),
                         title: None,
                         dependencies: vec![],
+                        progress: 0.45,
                     };
                     let _ = response.send(Some(mock_state));
                 }
@@ -169,6 +212,113 @@ pub fn mock_state_manager() -> StateManagerSender {
                         },
                     ];
                     let _ = response.send(agents);
+                }
+                StateManagerMessage::QueryAllBeads { response } => {
+                    tracing::debug!("State manager: Querying all beads");
+                    let beads = vec![
+                        BeadState {
+                            id: Ulid::new(),
+                            status: "in_progress".to_string(),
+                            phase: "implementing".to_string(),
+                            events: vec![],
+                            created_at: "2024-01-01T00:00:00Z".to_string(),
+                            updated_at: "2024-01-01T00:00:00Z".to_string(),
+                            title: Some("Implement agent view".to_string()),
+                            dependencies: vec![],
+                            progress: 0.65,
+                        },
+                        BeadState {
+                            id: Ulid::new(),
+                            status: "pending".to_string(),
+                            phase: "planning".to_string(),
+                            events: vec![],
+                            created_at: "2024-01-01T00:00:00Z".to_string(),
+                            updated_at: "2024-01-01T00:00:00Z".to_string(),
+                            title: Some("Add dashboard tests".to_string()),
+                            dependencies: vec![],
+                            progress: 0.0,
+                        },
+                    ];
+                    let _ = response.send(beads);
+                }
+                StateManagerMessage::QueryBeadPipeline { id, response } => {
+                    tracing::debug!("State manager: Querying pipeline for bead {}", id);
+                    let stages = vec![
+                        StageInfo {
+                            name: "planning".to_string(),
+                            status: "passed".to_string(),
+                            duration_ms: Some(1200),
+                        },
+                        StageInfo {
+                            name: "implementing".to_string(),
+                            status: "running".to_string(),
+                            duration_ms: None,
+                        },
+                        StageInfo {
+                            name: "testing".to_string(),
+                            status: "pending".to_string(),
+                            duration_ms: None,
+                        },
+                    ];
+                    let _ = response.send(stages);
+                }
+                StateManagerMessage::QueryGraph { response } => {
+                    tracing::debug!("State manager: Querying global graph");
+                    let nodes = vec![
+                        GraphNode {
+                            id: "bead-1".to_string(),
+                            label: "Requirement Analysis".to_string(),
+                            status: "completed".to_string(),
+                        },
+                        GraphNode {
+                            id: "bead-2".to_string(),
+                            label: "Implementation".to_string(),
+                            status: "in_progress".to_string(),
+                        },
+                        GraphNode {
+                            id: "bead-3".to_string(),
+                            label: "Testing".to_string(),
+                            status: "pending".to_string(),
+                        },
+                        GraphNode {
+                            id: "bead-4".to_string(),
+                            label: "Documentation".to_string(),
+                            status: "pending".to_string(),
+                        },
+                        GraphNode {
+                            id: "bead-5".to_string(),
+                            label: "Deployment".to_string(),
+                            status: "pending".to_string(),
+                        },
+                    ];
+                    let edges = vec![
+                        GraphEdge {
+                            from: "bead-1".to_string(),
+                            to: "bead-2".to_string(),
+                            edge_type: "blocks".to_string(),
+                        },
+                        GraphEdge {
+                            from: "bead-2".to_string(),
+                            to: "bead-3".to_string(),
+                            edge_type: "blocks".to_string(),
+                        },
+                        GraphEdge {
+                            from: "bead-2".to_string(),
+                            to: "bead-4".to_string(),
+                            edge_type: "blocks".to_string(),
+                        },
+                        GraphEdge {
+                            from: "bead-3".to_string(),
+                            to: "bead-5".to_string(),
+                            edge_type: "blocks".to_string(),
+                        },
+                        GraphEdge {
+                            from: "bead-4".to_string(),
+                            to: "bead-5".to_string(),
+                            edge_type: "blocks".to_string(),
+                        },
+                    ];
+                    let _ = response.send(GraphResponse { nodes, edges });
                 }
             }
         }

@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use chrono::Utc;
+use std::env;
 
 use tracing::{debug, error, info, warn};
 
@@ -26,14 +27,24 @@ pub struct EngineConfig {
     pub max_concurrent: usize,
 }
 
+const DEFAULT_MAX_CONCURRENT: usize = 10;
+
 impl Default for EngineConfig {
     fn default() -> Self {
         Self {
             checkpoint_enabled: true,
             rollback_on_failure: true,
-            max_concurrent: 10,
+            max_concurrent: max_concurrent_from_env(),
         }
     }
+}
+
+fn max_concurrent_from_env() -> usize {
+    env::var("OYA_WORKFLOW_MAX_CONCURRENT")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(DEFAULT_MAX_CONCURRENT)
 }
 
 /// Workflow execution engine.

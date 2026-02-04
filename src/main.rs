@@ -6,6 +6,7 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
+mod agents;
 mod cli;
 
 use std::path::Path;
@@ -21,7 +22,7 @@ use oya_pipeline::{
     stages::{execute_stage, execute_stages_dry_run},
 };
 
-use crate::cli::{Cli, Commands};
+use crate::cli::{AgentCommands, Cli, Commands};
 
 #[tokio::main]
 async fn main() {
@@ -69,6 +70,8 @@ async fn run() -> Result<()> {
         }
 
         Commands::Hello { message } => execute_hello(&message),
+
+        Commands::Agents { server, command } => execute_agents(server.as_deref(), command).await,
     }
 }
 
@@ -338,5 +341,63 @@ async fn execute_list(priority: Option<&str>, status: Option<&str>) -> Result<()
 
 fn execute_hello(message: &str) -> Result<()> {
     println!("{}", message);
+    Ok(())
+}
+
+async fn execute_agents(server: Option<&str>, command: AgentCommands) -> Result<()> {
+    let client = agents::AgentApiClient::new(server);
+
+    match command {
+        AgentCommands::Spawn { count } => execute_spawn(&client, count).await,
+        AgentCommands::Scale { target } => execute_scale(&client, target).await,
+        AgentCommands::List => execute_list_agents(&client).await,
+    }
+}
+
+async fn execute_spawn(client: &agents::AgentApiClient, count: usize) -> Result<()> {
+    let response = client.spawn(count).await?;
+    println!(
+        "Spawned {} agents (total: {})",
+        response.agent_ids.len(),
+        response.total
+    );
+    for agent_id in response.agent_ids {
+        println!("- {}", agent_id);
+    }
+    Ok(())
+}
+
+async fn execute_scale(client: &agents::AgentApiClient, target: usize) -> Result<()> {
+    let response = client.scale(target).await?;
+    println!(
+        "Scaled agents from {} to {}",
+        response.previous, response.total
+    );
+    if !response.spawned.is_empty() {
+        println!("Spawned:");
+        for agent_id in response.spawned {
+            println!("- {}", agent_id);
+        }
+    }
+    if !response.terminated.is_empty() {
+        println!("Terminated:");
+        for agent_id in response.terminated {
+            println!("- {}", agent_id);
+        }
+    }
+    Ok(())
+}
+
+async fn execute_list_agents(client: &agents::AgentApiClient) -> Result<()> {
+    let response = client.list().await?;
+    println!("Agents: {}", response.total);
+    for agent in response.agents {
+        println!(
+            "- {} [{}] bead={}",
+            agent.id,
+            agent.status,
+            agent.current_bead.unwrap_or_else(|| "-".to_string())
+        );
+    }
     Ok(())
 }

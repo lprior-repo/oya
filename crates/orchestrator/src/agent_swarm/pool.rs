@@ -148,6 +148,13 @@ impl AgentPool {
             .collect()
     }
 
+    /// Get all agents in the pool.
+    pub async fn all_agents(&self) -> Vec<AgentHandle> {
+        let agents = self.agents.read().await;
+
+        agents.values().cloned().collect()
+    }
+
     /// Get agents with a specific capability.
     pub async fn get_agents_with_capability(&self, capability: &str) -> Vec<AgentHandle> {
         let agents = self.agents.read().await;

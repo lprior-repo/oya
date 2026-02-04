@@ -1,8 +1,8 @@
 //! Server setup with Tower middleware
 
 use super::actors::{AppState, BroadcastEvent, mock_scheduler, mock_state_manager};
-use crate::agent_service::{AgentService, AgentServiceConfig};
 use super::routes;
+use crate::agent_service::{AgentService, AgentServiceConfig};
 use axum::{Router, routing::get_service};
 use std::net::SocketAddr;
 use std::sync::Arc;

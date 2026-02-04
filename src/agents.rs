@@ -1,7 +1,7 @@
 //! Agent API client for CLI.
 
-use serde::{Deserialize, Serialize};
 use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 
 use oya_pipeline::{Error, Result};
 
@@ -25,20 +25,37 @@ impl AgentApiClient {
     pub async fn spawn(&self, count: usize) -> Result<SpawnAgentsResponse> {
         let url = format!("{}/api/agents/spawn", self.base_url);
         let payload = SpawnAgentsRequest { count };
-        let response = self.client.post(url).json(&payload).send().await?;
+        let response = self
+            .client
+            .post(url)
+            .json(&payload)
+            .send()
+            .await
+            .map_err(map_reqwest_error)?;
         parse_response(response).await
     }
 
     pub async fn scale(&self, target: usize) -> Result<ScaleAgentsResponse> {
         let url = format!("{}/api/agents/scale", self.base_url);
         let payload = ScaleAgentsRequest { target };
-        let response = self.client.post(url).json(&payload).send().await?;
+        let response = self
+            .client
+            .post(url)
+            .json(&payload)
+            .send()
+            .await
+            .map_err(map_reqwest_error)?;
         parse_response(response).await
     }
 
     pub async fn list(&self) -> Result<ListAgentsResponse> {
         let url = format!("{}/api/agents", self.base_url);
-        let response = self.client.get(url).send().await?;
+        let response = self
+            .client
+            .get(url)
+            .send()
+            .await
+            .map_err(map_reqwest_error)?;
         parse_response(response).await
     }
 }
@@ -74,6 +91,7 @@ pub struct ListAgentsResponse {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct AgentSummary {
     pub id: String,
     pub status: String,
@@ -89,7 +107,7 @@ fn normalize_server(server: &str) -> String {
 
 async fn parse_response<T: DeserializeOwned>(response: reqwest::Response) -> Result<T> {
     let status = response.status();
-    let body = response.text().await?;
+    let body = response.text().await.map_err(map_reqwest_error)?;
 
     if !status.is_success() {
         return Err(Error::InvalidRecord {
@@ -102,10 +120,8 @@ async fn parse_response<T: DeserializeOwned>(response: reqwest::Response) -> Res
     })
 }
 
-impl From<reqwest::Error> for Error {
-    fn from(err: reqwest::Error) -> Self {
-        Error::InvalidRecord {
-            reason: format!("HTTP request failed: {}", err),
-        }
+fn map_reqwest_error(err: reqwest::Error) -> Error {
+    Error::InvalidRecord {
+        reason: format!("HTTP request failed: {}", err),
     }
 }
