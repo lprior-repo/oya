@@ -123,4 +123,34 @@ pub enum Commands {
         #[arg(short, long, default_value = "Hello, World!")]
         message: String,
     },
+
+    /// Manage agent pool
+    Agents {
+        /// API server URL (defaults to http://localhost:3000)
+        #[arg(long)]
+        server: Option<String>,
+
+        #[command(subcommand)]
+        command: AgentCommands,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum AgentCommands {
+    /// Spawn new agents
+    Spawn {
+        /// Number of agents to spawn
+        #[arg(long)]
+        count: usize,
+    },
+
+    /// Scale agent pool to target size
+    Scale {
+        /// Target total agents
+        #[arg(long)]
+        target: usize,
+    },
+
+    /// List agents
+    List,
 }

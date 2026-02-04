@@ -315,16 +315,15 @@ impl ZellijPlugin for State {
             },
             Event::Timer(_) => {
                 // Check for network timeouts
-                if self.pending_requests > 0 {
-                    if self
+                if self.pending_requests > 0
+                    && self
                         .last_request_sent
                         .is_some_and(|last| last.elapsed() > REQUEST_TIMEOUT)
-                    {
-                        self.api_connected = false;
-                        self.last_error = Some("Network timeout".to_string());
-                        self.pending_requests = 0;
-                        self.last_request_sent = None;
-                    }
+                {
+                    self.api_connected = false;
+                    self.last_error = Some("Network timeout".to_string());
+                    self.pending_requests = 0;
+                    self.last_request_sent = None;
                 }
 
                 self.load_beads();
