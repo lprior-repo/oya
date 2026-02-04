@@ -3,7 +3,7 @@
 //! This module provides an endpoint to list all agents with their
 //! current status and associated bead (if any).
 
-use crate::actors::AppState;
+use crate::actors::{AppState, StateManagerMessage};
 use crate::error::{AppError, Result};
 use axum::{extract::State, response::Json, routing::get};
 
@@ -50,11 +50,11 @@ pub async fn list_agents(
     state
         .state_manager
         .send(StateManagerMessage::QueryAllAgents { response: tx })
-        .map_err(|_| AppError::ServiceUnavailable("State manager unavailable".to_string())?;
+        .map_err(|_| AppError::ServiceUnavailable("State manager unavailable".to_string()))?;
 
     let agents = rx.await
         .map_err(|_| AppError::Internal("State manager failed to respond".to_string()))?
-        .ok_or_else(|| AppError::NotFound("No agents found".to_string())?;
+        .ok_or_else(|| AppError::NotFound("No agents found".to_string()))?;
 
     Ok(Json(ListAgentsResponse {
         agents,

@@ -11,10 +11,10 @@
 //! - Mutation (remove nodes/edges)
 //! - Subgraph extraction
 
-use petgraph::Direction;
 use petgraph::algo::{is_cyclic_directed, tarjan_scc, toposort};
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::{Bfs, Dfs, EdgeRef, Reversed};
+use petgraph::Direction;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::Duration;
 
@@ -129,6 +129,10 @@ impl WorkflowDAG {
         to_bead: BeadId,
         dep_type: DependencyType,
     ) -> DagResult<()> {
+        if from_bead == to_bead {
+            return Err(DagError::self_loop(from_bead));
+        }
+
         let from_index = self
             .node_map
             .get(&from_bead)
@@ -138,6 +142,10 @@ impl WorkflowDAG {
             .node_map
             .get(&to_bead)
             .ok_or_else(|| DagError::node_not_found(to_bead.clone()))?;
+
+        if self.graph.find_edge(*from_index, *to_index).is_some() {
+            return Err(DagError::edge_already_exists(from_bead, to_bead));
+        }
 
         self.graph.add_edge(*from_index, *to_index, dep_type);
 
@@ -485,7 +493,8 @@ impl WorkflowDAG {
             .node_indices()
             .filter(|&idx| {
                 self.graph
-                    .neighbors_directed(idx, Direction::Incoming)
+                    .edges_directed(idx, Direction::Incoming)
+                    .filter(|edge| *edge.weight() == DependencyType::BlockingDependency)
                     .count()
                     == 0
             })
@@ -910,7 +919,12 @@ impl WorkflowDAG {
             let current_dist = dist.get(bead_id).map(|(d, _)| *d).unwrap_or(Duration::ZERO);
 
             // Update distances to all neighbors
-            for neighbor_idx in self.graph.neighbors_directed(node_idx, Direction::Outgoing) {
+            for edge in self.graph.edges_directed(node_idx, Direction::Outgoing) {
+                if *edge.weight() != DependencyType::BlockingDependency {
+                    continue;
+                }
+
+                let neighbor_idx = edge.target();
                 if let Some(neighbor_id) = self.graph.node_weight(neighbor_idx) {
                     let neighbor_weight =
                         weights.get(neighbor_id).copied().unwrap_or(Duration::ZERO);

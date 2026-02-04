@@ -42,12 +42,12 @@
 //! ```
 
 use std::collections::HashSet;
+use thiserror::Error;
 
-use super::supervisor::SupervisorActorState;
-use super::SchedulerSupervisorConfig;
+use super::{SchedulerSupervisorConfig, SupervisorActorState};
 
 /// Context provided to restart strategies for decision-making.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct RestartContext<'a> {
     /// Name of the child that failed.
     pub child_name: String,
@@ -101,7 +101,7 @@ impl<'a> RestartContext<'a> {
             .children
             .get(&self.child_name)
             .and_then(|c| c.last_restart)
-            .map(|t| t.elapsed())
+            .map(|t: std::time::Instant| t.elapsed())
     }
 }
 
@@ -136,7 +136,7 @@ pub trait RestartStrategy: Send + Sync {
 }
 
 /// Error type for strategy operations.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum StrategyError {
     #[error("invalid configuration: {0}")]
     InvalidConfiguration(String),
@@ -266,7 +266,7 @@ pub struct RestForOne {
 impl RestForOne {
     /// Create a new rest-for-one strategy.
     #[must_use]
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             dependencies: HashSet::new(),
         }
@@ -319,7 +319,9 @@ impl RestartStrategy for RestForOne {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::actors::supervisor::{SupervisorActorState, SupervisorState, SchedulerSupervisorConfig};
+    use crate::actors::supervisor::{
+        SchedulerSupervisorConfig, SupervisorActorState, SupervisorState,
+    };
     use std::sync::Arc;
     use std::time::Instant;
 
@@ -333,6 +335,7 @@ mod tests {
             child_id_counter: 0,
             shutdown_coordinator: None,
             _shutdown_rx: None,
+            restart_strategy: Box::new(OneForOne::new()),
         }
     }
 
@@ -343,34 +346,6 @@ mod tests {
         crate::actors::supervisor::ChildInfo {
             name: name.to_string(),
             actor_ref: unsafe { ractor::ActorRef::cell(format!("test-actor-{}", name)) },
-            restart_count,
-            last_restart: Some(Instant::now()),
-            args: crate::actors::scheduler::SchedulerArguments::new(),
-        }
-    }
-    }
-
-    fn create_child_info(name: &str, restart_count: u32) -> ChildInfo {
-        // Note: ActorRef creation is complex for tests; we create minimal info
-        // The actor_ref field is not directly used by strategy logic
-        let (actor_ref, _handle) = tokio::runtime::Runtime::new()
-            .and_then(|rt| {
-                rt.block_on(ractor::Actor::spawn(
-                    None,
-                    crate::actors::scheduler::SchedulerActorDef,
-                    crate::actors::scheduler::SchedulerArguments::new(),
-                ))
-            })
-            .map_err(|_| ())
-            .unwrap_or_else(|_| {
-                // Fallback: create a placeholder that won't be used in tests
-                // This is a workaround for the complex ActorRef creation
-                panic!("Failed to create ActorRef for test");
-            });
-
-        ChildInfo {
-            name: name.to_string(),
-            actor_ref,
             restart_count,
             last_restart: Some(Instant::now()),
             args: crate::actors::scheduler::SchedulerArguments::new(),

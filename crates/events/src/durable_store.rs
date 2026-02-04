@@ -234,6 +234,7 @@ pub async fn connect(config: ConnectionConfig) -> Result<Arc<Surreal<Db>>> {
 pub struct DurableEventStore {
     db: Arc<Surreal<Any>>,
     wal_dir: PathBuf,
+    wal_lock: tokio::sync::Mutex<()>,
 }
 
 impl DurableEventStore {
@@ -241,6 +242,7 @@ impl DurableEventStore {
         Ok(Self {
             db,
             wal_dir: PathBuf::from(".wal"),
+            wal_lock: tokio::sync::Mutex::new(()),
         })
     }
 
@@ -273,6 +275,7 @@ impl DurableEventStore {
         event: &BeadEvent,
         serialized: &SerializedEvent,
     ) -> std::result::Result<(), AppendError> {
+        let _guard = self.wal_lock.lock().await;
         tokio::fs::create_dir_all(&self.wal_dir)
             .await
             .map_err(|e| AppendError::WalOpenFailed(format!("create wal dir: {}", e)))?;
@@ -288,6 +291,11 @@ impl DurableEventStore {
 
         let serialized_data = bincode::serialize(&serialized)
             .map_err(|e| AppendError::SerializationFailed(format!("{}", e)))?;
+        let length_prefix = (serialized_data.len() as u32).to_be_bytes();
+
+        file.write_all(&length_prefix)
+            .await
+            .map_err(|e| AppendError::WalWriteFailed(format!("{}", e)))?;
 
         file.write_all(&serialized_data)
             .await
@@ -305,7 +313,9 @@ impl DurableEventStore {
 
         let mut result = self
             .db
-            .query("SELECT * FROM state_transition WHERE bead_id = $bead_id ORDER BY timestamp ASC")
+            .query(
+                "SELECT * FROM state_transition WHERE bead_id = $bead_id ORDER BY timestamp ASC, event_id ASC",
+            )
             .bind(("bead_id", bead_id_str))
             .await
             .map_err(|e| {
@@ -331,11 +341,35 @@ impl DurableEventStore {
     pub async fn replay_from(&self, checkpoint_id: &str) -> Result<Vec<BeadEvent>> {
         let checkpoint_id = checkpoint_id.to_string();
 
+        let mut checkpoint_result = self
+            .db
+            .query("SELECT timestamp FROM state_transition WHERE event_id = $checkpoint_id LIMIT 1")
+            .bind(("checkpoint_id", checkpoint_id.clone()))
+            .await
+            .map_err(|e| {
+                crate::error::Error::store_failed(
+                    "replay_from",
+                    format!("failed to query checkpoint: {}", e),
+                )
+            })?;
+
+        let checkpoint_timestamps: Vec<DateTime<Utc>> = checkpoint_result.take(0).map_err(|e| {
+            crate::error::Error::store_failed(
+                "replay_from",
+                format!("failed to extract checkpoint timestamp: {}", e),
+            )
+        })?;
+
+        let checkpoint_timestamp = checkpoint_timestamps.into_iter().next().ok_or_else(|| {
+            crate::error::Error::event_not_found(checkpoint_id.clone())
+        })?;
+
         let mut result = self
             .db
             .query(
-                "SELECT * FROM state_transition WHERE timestamp > (SELECT timestamp FROM state_transition WHERE event_id = $checkpoint_id LIMIT 1) ORDER BY timestamp ASC"
+                "SELECT * FROM state_transition WHERE (timestamp > $checkpoint_timestamp) OR (timestamp = $checkpoint_timestamp AND event_id > $checkpoint_id) ORDER BY timestamp ASC, event_id ASC",
             )
+            .bind(("checkpoint_timestamp", checkpoint_timestamp))
             .bind(("checkpoint_id", checkpoint_id))
             .await
             .map_err(|e| {

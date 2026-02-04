@@ -7,14 +7,17 @@
 #![deny(clippy::panic)]
 
 use std::{
+    io::Read,
     path::Path,
     process::{Command, Output, Stdio},
+    thread,
+    time::{Duration, Instant},
 };
 
 use crate::error::{Error, Result};
 
 /// Default command timeout in milliseconds.
-const DEFAULT_TIMEOUT_MS: u64 = 30_000;
+const DEFAULT_TIMEOUT_MS: u64 = 120_000;
 
 /// Result of command execution.
 #[derive(Debug, Clone)]
@@ -60,16 +63,75 @@ pub fn run_command_with_timeout(
     cmd: &str,
     args: &[&str],
     cwd: &Path,
-    _timeout_ms: u64,
+    timeout_ms: u64,
 ) -> Result<CommandResult> {
-    let output = Command::new(cmd)
+    let mut command = Command::new(cmd);
+    command
         .args(args)
         .current_dir(cwd)
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()?;
+        .stderr(Stdio::piped());
 
-    Ok(parse_output(&output))
+    let mut child = spawn_command(command, cmd)?;
+
+    let stdout_handle = child.stdout.take().map(|mut out| {
+        thread::spawn(move || {
+            let mut buffer = String::new();
+            let _ = out.read_to_string(&mut buffer);
+            buffer
+        })
+    });
+
+    let stderr_handle = child.stderr.take().map(|mut err| {
+        thread::spawn(move || {
+            let mut buffer = String::new();
+            let _ = err.read_to_string(&mut buffer);
+            buffer
+        })
+    });
+
+    let start = Instant::now();
+    let timeout = Duration::from_millis(timeout_ms);
+
+    loop {
+        if let Some(status) = child.try_wait()? {
+            let stdout = match stdout_handle {
+                Some(handle) => match handle.join() {
+                    Ok(buffer) => buffer,
+                    Err(_) => String::new(),
+                },
+                None => String::new(),
+            };
+
+            let stderr = match stderr_handle {
+                Some(handle) => match handle.join() {
+                    Ok(buffer) => buffer,
+                    Err(_) => String::new(),
+                },
+                None => String::new(),
+            };
+
+            return Ok(CommandResult {
+                stdout,
+                stderr,
+                exit_code: status.code().unwrap_or(-1),
+            });
+        }
+
+        if start.elapsed() >= timeout {
+            let _ = child.kill();
+            let _ = child.wait();
+            if let Some(handle) = stdout_handle {
+                let _ = handle.join();
+            }
+            if let Some(handle) = stderr_handle {
+                let _ = handle.join();
+            }
+            return Err(Error::CommandTimeout { timeout_ms });
+        }
+
+        thread::sleep(Duration::from_millis(50));
+    }
 }
 
 /// Execute a command with environment variables.
@@ -90,7 +152,7 @@ pub fn run_command_with_env(
         command.env(key, value);
     }
 
-    let output = command.output()?;
+    let output = command.output().map_err(|e| map_command_error(cmd, e))?;
     Ok(parse_output(&output))
 }
 
@@ -121,6 +183,20 @@ fn parse_output(output: &Output) -> CommandResult {
         stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
         stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
         exit_code: output.status.code().unwrap_or(-1),
+    }
+}
+
+fn spawn_command(mut command: Command, cmd: &str) -> Result<std::process::Child> {
+    command.spawn().map_err(|e| map_command_error(cmd, e))
+}
+
+fn map_command_error(cmd: &str, error: std::io::Error) -> Error {
+    if error.kind() == std::io::ErrorKind::NotFound {
+        Error::CommandNotFound {
+            cmd: cmd.to_string(),
+        }
+    } else {
+        Error::Io(error)
     }
 }
 

@@ -166,10 +166,16 @@ impl WorkerProcess {
 
         // Spawn the process
         let child = command.spawn().map_err(|e| {
-            Error::command_failed(
-                -1,
-                format!("Failed to spawn process '{}': {}", config.command, e),
-            )
+            if e.kind() == std::io::ErrorKind::NotFound {
+                Error::CommandNotFound {
+                    cmd: config.command.clone(),
+                }
+            } else {
+                Error::command_failed(
+                    -1,
+                    format!("Failed to spawn process '{}': {}", config.command, e),
+                )
+            }
         })?;
 
         Ok(Self { child, config })
@@ -183,44 +189,18 @@ impl WorkerProcess {
 
     /// Wait for the process to complete and collect output.
     pub async fn wait_with_output(mut self) -> Result<ProcessResult> {
-        let stdout_lines = if self.config.capture_stdout {
-            if let Some(stdout) = self.child.stdout.take() {
-                let reader = BufReader::new(stdout);
-                let mut lines = reader.lines();
-                let mut collected = Vec::new();
-
-                while let Some(line) = lines.next_line().await.map_err(|e| {
-                    Error::command_failed(-1, format!("Failed to read stdout: {}", e))
-                })? {
-                    collected.push(line);
-                }
-
-                collected
-            } else {
-                Vec::new()
-            }
+        let stdout_task = if self.config.capture_stdout {
+            let stdout = self.child.stdout.take();
+            Some(tokio::spawn(async move { collect_lines(stdout).await }))
         } else {
-            Vec::new()
+            None
         };
 
-        let stderr_lines = if self.config.capture_stderr {
-            if let Some(stderr) = self.child.stderr.take() {
-                let reader = BufReader::new(stderr);
-                let mut lines = reader.lines();
-                let mut collected = Vec::new();
-
-                while let Some(line) = lines.next_line().await.map_err(|e| {
-                    Error::command_failed(-1, format!("Failed to read stderr: {}", e))
-                })? {
-                    collected.push(line);
-                }
-
-                collected
-            } else {
-                Vec::new()
-            }
+        let stderr_task = if self.config.capture_stderr {
+            let stderr = self.child.stderr.take();
+            Some(tokio::spawn(async move { collect_lines(stderr).await }))
         } else {
-            Vec::new()
+            None
         };
 
         // Wait for the process to complete
@@ -228,6 +208,20 @@ impl WorkerProcess {
             self.child.wait().await.map_err(|e| {
                 Error::command_failed(-1, format!("Failed to wait for process: {}", e))
             })?;
+
+        let stdout_lines = match stdout_task {
+            Some(task) => task
+                .await
+                .map_err(|e| Error::command_failed(-1, format!("stdout task failed: {}", e)))??,
+            None => Vec::new(),
+        };
+
+        let stderr_lines = match stderr_task {
+            Some(task) => task
+                .await
+                .map_err(|e| Error::command_failed(-1, format!("stderr task failed: {}", e)))??,
+            None => Vec::new(),
+        };
 
         Ok(ProcessResult {
             exit_code: status.code(),
@@ -250,6 +244,29 @@ impl WorkerProcess {
             .start_kill()
             .map_err(|e| Error::command_failed(-1, format!("Failed to start kill process: {}", e)))
     }
+}
+
+async fn collect_lines<T>(source: Option<T>) -> Result<Vec<String>>
+where
+    T: tokio::io::AsyncRead + Unpin,
+{
+    let Some(stream) = source else {
+        return Ok(Vec::new());
+    };
+
+    let reader = BufReader::new(stream);
+    let mut lines = reader.lines();
+    let mut collected = Vec::new();
+
+    while let Some(line) = lines
+        .next_line()
+        .await
+        .map_err(|e| Error::command_failed(-1, format!("Failed to read output: {}", e)))?
+    {
+        collected.push(line);
+    }
+
+    Ok(collected)
 }
 
 /// Convenience function to spawn and wait for a process.

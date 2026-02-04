@@ -118,7 +118,9 @@ impl From<db::DbError> for Error {
     fn from(err: db::DbError) -> Self {
         match err {
             db::DbError::Io(ref e) => Self::Internal(e.to_string()),
-            _ => Self::Connection(db::ConnectionError::ConnectionFailed(err.to_string())),
+            _ => Self::Connection(ConnectionError::InitializationFailed {
+                reason: err.to_string(),
+            }),
         }
     }
 }

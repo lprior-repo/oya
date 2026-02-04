@@ -53,7 +53,7 @@ impl PriorityStrategy {
 
     /// Get the load for an agent.
     fn get_load(&self, agent_id: &str, ctx: &DistributionContext) -> f64 {
-        ctx.get_agent(agent_id).map(|a| a.load).unwrap_or(0.0)
+        ctx.get_agent(agent_id).map(|a| a.load).unwrap_or(0.5)
     }
 
     /// Check if agent has required capabilities for bead.
@@ -113,6 +113,14 @@ impl DistributionStrategy for PriorityStrategy {
             .collect();
 
         if matching_agents.is_empty() {
+            let has_requirements = ctx
+                .get_bead(bead_id)
+                .map(|bead| !bead.required_capabilities.is_empty())
+                .unwrap_or(false);
+            if self.capability_matching && has_requirements {
+                return None;
+            }
+
             // Fall back to any agent if no matches
             return agents
                 .iter()

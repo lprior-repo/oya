@@ -166,6 +166,32 @@ impl DurableTimer {
         &self.id
     }
 
+    /// Restore a timer from persisted state.
+    #[must_use]
+    pub fn restore(
+        id: TimerId,
+        execute_at: DateTime<Utc>,
+        payload: serde_json::Value,
+        status: TimerStatus,
+        created_at: DateTime<Utc>,
+        updated_at: DateTime<Utc>,
+        workflow_id: Option<String>,
+        bead_id: Option<String>,
+        callback_id: Option<String>,
+    ) -> Self {
+        Self {
+            id,
+            execute_at,
+            payload,
+            status,
+            created_at,
+            updated_at,
+            workflow_id,
+            bead_id,
+            callback_id,
+        }
+    }
+
     /// Get when the timer should execute.
     #[must_use]
     pub fn execute_at(&self) -> DateTime<Utc> {
@@ -182,6 +208,18 @@ impl DurableTimer {
     #[must_use]
     pub fn status(&self) -> TimerStatus {
         self.status
+    }
+
+    /// Get the creation timestamp.
+    #[must_use]
+    pub fn created_at(&self) -> DateTime<Utc> {
+        self.created_at
+    }
+
+    /// Get the updated timestamp.
+    #[must_use]
+    pub fn updated_at(&self) -> DateTime<Utc> {
+        self.updated_at
     }
 
     /// Get the workflow ID.
@@ -379,6 +417,15 @@ impl TimerScheduler {
     ///
     /// Returns timers that are ready to fire.
     pub async fn poll_due(&self) -> Vec<DurableTimer> {
+        self.poll_due_with_limit(usize::MAX).await
+    }
+
+    /// Poll for due timers with a limit.
+    pub async fn poll_due_with_limit(&self, limit: usize) -> Vec<DurableTimer> {
+        if limit == 0 {
+            return Vec::new();
+        }
+
         let now = Utc::now();
         let mut due_timers = Vec::new();
 
@@ -387,17 +434,19 @@ impl TimerScheduler {
             let mut timers = self.timers.write().await;
 
             while let Some(Reverse((execute_at, _))) = queue.peek() {
-                if *execute_at > now {
+                if due_timers.len() >= limit || *execute_at > now {
                     break;
                 }
 
                 let Some(Reverse((_, timer_id))) = queue.pop() else {
-                    // This should never happen since we just peeked
                     break;
                 };
 
                 if let Some(timer) = timers.get_mut(timer_id.as_str()) {
-                    if timer.status().is_pending() {
+                    if timer.status().is_pending()
+                        && timer.execute_at() <= now
+                        && timer.execute_at() == *execute_at
+                    {
                         timer.mark_fired();
                         due_timers.push(timer.clone());
                     }
@@ -414,9 +463,9 @@ impl TimerScheduler {
         // Persist status changes
         if let Some(persistence) = &self.persistence {
             for timer in &due_timers {
-                let _ = persistence
-                    .update_status(timer.id(), TimerStatus::Fired)
-                    .await;
+                if let Err(err) = persistence.update_status(timer.id(), TimerStatus::Fired).await {
+                    tracing::error!(timer_id = %timer.id(), error = %err, "Failed to persist timer fired status");
+                }
             }
         }
 
@@ -447,6 +496,33 @@ impl TimerScheduler {
         fired.retain(|t| t.id() != timer_id);
     }
 
+    /// Finalize a timer (remove from fired list and timer map).
+    pub async fn finalize(&self, timer_id: &TimerId) {
+        self.acknowledge(timer_id).await;
+        let mut timers = self.timers.write().await;
+        timers.remove(timer_id.as_str());
+    }
+
+    /// Mark a timer as failed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if persistence fails.
+    pub async fn mark_failed(&self, timer_id: &TimerId) -> PersistenceResult<()> {
+        if let Some(persistence) = &self.persistence {
+            persistence
+                .update_status(timer_id, TimerStatus::Failed)
+                .await?;
+        }
+
+        let mut timers = self.timers.write().await;
+        if let Some(timer) = timers.get_mut(timer_id.as_str()) {
+            timer.mark_failed();
+        }
+
+        Ok(())
+    }
+
     /// Load pending timers from persistence.
     ///
     /// # Errors
@@ -463,14 +539,24 @@ impl TimerScheduler {
 
         let mut timers = self.timers.write().await;
         let mut queue = self.queue.write().await;
+        let mut loaded = 0usize;
 
         for record in records {
-            let timer = record.into_timer();
+            if timers.len() >= self.config.max_in_memory {
+                break;
+            }
+
+            if timers.contains_key(record.timer_id.as_str()) {
+                continue;
+            }
+
+            let timer = record.into_timer()?;
             queue.push(Reverse((timer.execute_at(), timer.id().clone())));
             timers.insert(timer.id().as_str().to_string(), timer);
+            loaded = loaded.saturating_add(1);
         }
 
-        Ok(count)
+        Ok(loaded.min(count))
     }
 
     /// Clear all timers (for testing).

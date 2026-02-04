@@ -66,14 +66,3 @@ pub use supervisor::{
 
 // Re-export restart strategies
 pub use supervisor::strategy::{OneForAll, OneForOne, RestartDecision, RestartStrategy, RestartContext};
-
-// Re-export main types for convenience
-pub use errors::ActorError;
-pub use messages::{BeadState, SchedulerMessage, WorkflowStatus};
-pub use scheduler::{SchedulerActorDef, SchedulerArguments, SchedulerState};
-pub use supervisor::{
-    MeltdownStatus, SchedulerSupervisorConfig, SchedulerSupervisorDef, SpawnError,
-    SupervisorActorState, SupervisorArguments, SupervisorMessage, SupervisorState,
-    SupervisorStatus, calculate_backoff, spawn_scheduler, spawn_scheduler_with_name,
-    spawn_supervised_scheduler, spawn_supervisor, spawn_supervisor_with_name,
-};

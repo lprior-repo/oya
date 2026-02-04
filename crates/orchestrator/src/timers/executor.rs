@@ -101,6 +101,7 @@ impl Default for TimerExecutorConfig {
 }
 
 /// Executes fired timers.
+#[derive(Clone)]
 pub struct TimerExecutor {
     config: TimerExecutorConfig,
     scheduler: Arc<TimerScheduler>,
@@ -184,21 +185,23 @@ impl TimerExecutor {
                 }
             }
 
-            // Poll for due timers
-            let due_timers = self.scheduler.poll_due().await;
+            let available = self.available_slots().await;
+            if available == 0 {
+                continue;
+            }
+
+            let due_timers = self.scheduler.poll_due_with_limit(available).await;
 
             for timer in due_timers {
-                // Check concurrency limit
-                {
-                    let in_flight = self.in_flight.read().await;
-                    if *in_flight >= self.config.max_concurrent {
-                        debug!("Concurrency limit reached, deferring execution");
-                        break;
-                    }
+                if !self.reserve_slot().await {
+                    debug!("Concurrency limit reached, deferring execution");
+                    break;
                 }
 
-                // Execute timer
-                self.execute_timer(timer).await;
+                let executor = self.clone();
+                tokio::spawn(async move {
+                    executor.execute_timer(timer).await;
+                });
             }
         }
 
@@ -223,12 +226,6 @@ impl TimerExecutor {
 
     /// Execute a single timer.
     async fn execute_timer(&self, timer: DurableTimer) {
-        // Increment in-flight counter
-        {
-            let mut in_flight = self.in_flight.write().await;
-            *in_flight = in_flight.saturating_add(1);
-        }
-
         let timer_id = timer.id().clone();
 
         // Get callback
@@ -240,28 +237,58 @@ impl TimerExecutor {
         match result {
             ExecutionResult::Success => {
                 debug!(timer_id = %timer_id, "Timer execution succeeded");
-                self.scheduler.acknowledge(&timer_id).await;
+                self.scheduler.finalize(&timer_id).await;
             }
             ExecutionResult::Failed { error } => {
                 error!(timer_id = %timer_id, error = %error, "Timer execution failed");
-                self.scheduler.acknowledge(&timer_id).await;
+                let _ = self.scheduler.mark_failed(&timer_id).await;
+                self.scheduler.finalize(&timer_id).await;
             }
             ExecutionResult::Retry { delay_secs } => {
+                let delay = if delay_secs == 0 {
+                    self.config.default_retry_delay_secs
+                } else {
+                    delay_secs
+                };
                 debug!(
                     timer_id = %timer_id,
-                    delay_secs = %delay_secs,
+                    delay_secs = %delay,
                     "Timer execution requested retry"
                 );
-                // Acknowledge and reschedule would go here
-                self.scheduler.acknowledge(&timer_id).await;
+                let reschedule_result = self.scheduler.reschedule(timer, delay).await;
+                if let Err(err) = reschedule_result {
+                    error!(timer_id = %timer_id, error = %err, "Timer reschedule failed");
+                    let _ = self.scheduler.mark_failed(&timer_id).await;
+                    self.scheduler.finalize(&timer_id).await;
+                } else {
+                    self.scheduler.acknowledge(&timer_id).await;
+                }
             }
         }
 
-        // Decrement in-flight counter
-        {
-            let mut in_flight = self.in_flight.write().await;
-            *in_flight = in_flight.saturating_sub(1);
+        self.release_slot().await;
+    }
+
+    async fn reserve_slot(&self) -> bool {
+        let mut in_flight = self.in_flight.write().await;
+        if *in_flight >= self.config.max_concurrent {
+            false
+        } else {
+            *in_flight = in_flight.saturating_add(1);
+            true
         }
+    }
+
+    async fn release_slot(&self) {
+        let mut in_flight = self.in_flight.write().await;
+        *in_flight = in_flight.saturating_sub(1);
+    }
+
+    async fn available_slots(&self) -> usize {
+        let in_flight = self.in_flight.read().await;
+        self.config
+            .max_concurrent
+            .saturating_sub(*in_flight)
     }
 
     /// Get the callback for a timer.
@@ -278,10 +305,19 @@ impl TimerExecutor {
 
     /// Execute a single tick (for testing).
     pub async fn tick(&self) {
-        let due_timers = self.scheduler.poll_due().await;
+        let available = self.available_slots().await;
+        if available == 0 {
+            return;
+        }
+
+        let due_timers = self.scheduler.poll_due_with_limit(available).await;
 
         for timer in due_timers {
-            self.execute_timer(timer).await;
+            if self.reserve_slot().await {
+                self.execute_timer(timer).await;
+            } else {
+                break;
+            }
         }
     }
 }

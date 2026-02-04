@@ -88,6 +88,9 @@ impl DbConnection {
     /// Create new database connection at repo root.
     pub async fn new(repo_root: &Path) -> Result<Self> {
         let db_path = repo_root.join(".OYA").join("db");
+        if let Some(parent) = db_path.parent() {
+            crate::process::create_dir_all(parent)?;
+        }
 
         let db = Surreal::new::<RocksDb>(db_path)
             .await

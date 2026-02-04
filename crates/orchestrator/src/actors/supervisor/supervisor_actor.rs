@@ -14,10 +14,10 @@ use tracing::{debug, error, info, warn};
 
 use crate::shutdown::{ShutdownCoordinator, ShutdownSignal};
 
-use super::errors::ActorError;
-use super::messages::SchedulerMessage;
-use super::scheduler::{SchedulerActorDef, SchedulerArguments};
-use super::supervisor::strategy::{RestartStrategy, RestartDecision, OneForOne};
+use super::super::errors::ActorError;
+use super::super::messages::SchedulerMessage;
+use super::super::scheduler::{SchedulerActorDef, SchedulerArguments};
+use super::strategy::{RestartStrategy, RestartDecision, RestartContext, OneForOne};
 
 /// Spawn a scheduler actor with a unique generated name.
 pub async fn spawn_scheduler(
@@ -188,17 +188,17 @@ pub enum SupervisorState {
 }
 
 /// Information about a supervised child.
-struct ChildInfo {
+pub struct ChildInfo {
     /// Child name.
-    name: String,
+    pub name: String,
     /// Actor reference.
-    actor_ref: ActorRef<SchedulerMessage>,
+    pub actor_ref: ActorRef<SchedulerMessage>,
     /// Number of restarts.
-    restart_count: u32,
+    pub restart_count: u32,
     /// Time of last restart.
-    last_restart: Option<Instant>,
+    pub last_restart: Option<Instant>,
     /// Arguments used to spawn this child.
-    args: SchedulerArguments,
+    pub args: SchedulerArguments,
 }
 
 impl std::fmt::Debug for ChildInfo {
@@ -217,24 +217,24 @@ pub struct SchedulerSupervisorDef;
 /// State for the supervisor actor.
 pub struct SupervisorActorState {
     /// Configuration.
-    config: SchedulerSupervisorConfig,
+    pub config: SchedulerSupervisorConfig,
     /// Current state.
-    state: SupervisorState,
+    pub state: SupervisorState,
     /// Supervised children.
-    children: HashMap<String, ChildInfo>,
+    pub children: HashMap<String, ChildInfo>,
     /// Failure timestamps for meltdown detection.
-    failure_times: Vec<Instant>,
+    pub failure_times: Vec<Instant>,
     /// Total restarts performed.
-    total_restarts: u32,
+    pub total_restarts: u32,
     /// Counter for generating unique child actor names.
-    child_id_counter: u64,
+    pub child_id_counter: u64,
     /// Shutdown coordinator reference.
     #[allow(dead_code)]
-    shutdown_coordinator: Option<Arc<ShutdownCoordinator>>,
+    pub shutdown_coordinator: Option<Arc<ShutdownCoordinator>>,
     /// Shutdown signal receiver.
-    _shutdown_rx: Option<broadcast::Receiver<ShutdownSignal>>,
+    pub _shutdown_rx: Option<broadcast::Receiver<ShutdownSignal>>,
     /// Restart strategy (boxed to support different strategies at runtime).
-    restart_strategy: Box<dyn RestartStrategy>,
+    pub restart_strategy: Box<dyn RestartStrategy>,
 }
 
 impl SupervisorActorState {
@@ -243,6 +243,20 @@ impl SupervisorActorState {
         let id = self.child_id_counter;
         self.child_id_counter = self.child_id_counter.saturating_add(1);
         format!("{}-{}", prefix, id)
+    }
+}
+
+impl std::fmt::Debug for SupervisorActorState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SupervisorActorState")
+            .field("config", &self.config)
+            .field("state", &self.state)
+            .field("children", &self.children)
+            .field("failure_times", &self.failure_times)
+            .field("total_restarts", &self.total_restarts)
+            .field("child_id_counter", &self.child_id_counter)
+            .field("restart_strategy", &self.restart_strategy.name())
+            .finish_non_exhaustive()
     }
 }
 
@@ -415,7 +429,7 @@ impl SchedulerSupervisorDef {
         }
 
         // Use restart strategy to decide what to do
-        let ctx = strategy::RestartContext::new(name, reason, state);
+        let ctx = RestartContext::new(name, reason, state);
         let decision = state.restart_strategy.on_child_failure(&ctx);
 
         match decision {

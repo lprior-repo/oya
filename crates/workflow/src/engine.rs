@@ -3,6 +3,8 @@
 use std::sync::Arc;
 use std::time::Instant;
 
+use chrono::Utc;
+
 use tracing::{debug, error, info, warn};
 
 use crate::error::{Error, Result};
@@ -72,6 +74,10 @@ impl WorkflowEngine {
 
         // Validate workflow
         if workflow.phases.is_empty() {
+            self.transition_state(&mut workflow, WorkflowState::Running)
+                .await?;
+            self.transition_state(&mut workflow, WorkflowState::Completed)
+                .await?;
             return Ok(WorkflowResult::success(workflow.id, Vec::new()));
         }
 
@@ -404,17 +410,28 @@ impl WorkflowEngine {
 
         // Reconstruct outputs from journal
         let mut phase_outputs: Vec<(PhaseId, PhaseOutput)> = Vec::new();
+        let mut failure: Option<String> = None;
 
         for entry in journal.entries() {
-            if let JournalEntry::PhaseCompleted {
-                phase_id, output, ..
-            } = entry
-            {
-                phase_outputs.push((*phase_id, PhaseOutput::success(output.clone())));
+            match entry {
+                JournalEntry::PhaseCompleted {
+                    phase_id, output, ..
+                } => {
+                    phase_outputs.push((*phase_id, PhaseOutput::success(output.clone())));
+                }
+                JournalEntry::PhaseFailed { error, .. } => {
+                    failure = Some(error.clone());
+                    break;
+                }
+                _ => {}
             }
         }
 
-        Ok(WorkflowResult::success(workflow.id, phase_outputs))
+        if let Some(error) = failure {
+            Ok(WorkflowResult::failure(workflow.id, phase_outputs, error))
+        } else {
+            Ok(WorkflowResult::success(workflow.id, phase_outputs))
+        }
     }
 
     /// Resume a paused workflow.
@@ -465,6 +482,7 @@ impl WorkflowEngine {
         }
 
         workflow.state = to;
+        workflow.updated_at = Utc::now();
         self.storage.save_workflow(workflow).await?;
 
         self.storage

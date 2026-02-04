@@ -93,12 +93,13 @@ impl WorkflowStorage for InMemoryStorage {
         workflow_id: WorkflowId,
         checkpoint: &Checkpoint,
     ) -> Result<()> {
-        self.checkpoints
-            .write()
-            .await
-            .entry(workflow_id)
-            .or_default()
-            .push(checkpoint.clone());
+        let mut checkpoints = self.checkpoints.write().await;
+        let entries = checkpoints.entry(workflow_id).or_default();
+        if let Some(pos) = entries.iter().position(|c| c.phase_id == checkpoint.phase_id) {
+            entries[pos] = checkpoint.clone();
+        } else {
+            entries.push(checkpoint.clone());
+        }
         Ok(())
     }
 
@@ -122,7 +123,7 @@ impl WorkflowStorage for InMemoryStorage {
             .read()
             .await
             .get(&workflow_id)
-            .and_then(|cps| cps.iter().find(|c| c.phase_id == phase_id).cloned()))
+            .and_then(|cps| cps.iter().rev().find(|c| c.phase_id == phase_id).cloned()))
     }
 
     async fn append_journal(&self, workflow_id: WorkflowId, entry: JournalEntry) -> Result<()> {

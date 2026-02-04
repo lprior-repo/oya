@@ -38,8 +38,8 @@ impl TimerRecord {
             execute_at: timer.execute_at(),
             payload: timer.payload().to_string(),
             status: format!("{:?}", timer.status()).to_lowercase(),
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            created_at: timer.created_at(),
+            updated_at: timer.updated_at(),
             workflow_id: timer.workflow_id().map(String::from),
             bead_id: timer.bead_id().map(String::from),
             callback_id: timer.callback_id().map(String::from),
@@ -47,33 +47,42 @@ impl TimerRecord {
     }
 
     /// Convert to a timer.
-    #[must_use]
-    pub fn into_timer(self) -> DurableTimer {
-        let payload: serde_json::Value =
-            serde_json::from_str(&self.payload).unwrap_or(serde_json::Value::Null);
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if payload or status data is invalid.
+    pub fn into_timer(self) -> PersistenceResult<DurableTimer> {
+        let payload: serde_json::Value = serde_json::from_str(&self.payload).map_err(|e| {
+            PersistenceError::serialization_error(format!(
+                "invalid timer payload JSON: {}",
+                e
+            ))
+        })?;
 
-        let mut timer = DurableTimer::new(self.execute_at, payload);
+        let status = match self.status.as_str() {
+            "pending" => TimerStatus::Pending,
+            "fired" => TimerStatus::Fired,
+            "cancelled" => TimerStatus::Cancelled,
+            "failed" => TimerStatus::Failed,
+            other => {
+                return Err(PersistenceError::serialization_error(format!(
+                    "invalid timer status: {}",
+                    other
+                )))
+            }
+        };
 
-        // Restore associations
-        if let Some(wf) = self.workflow_id {
-            timer = timer.with_workflow(wf);
-        }
-        if let Some(bead) = self.bead_id {
-            timer = timer.with_bead(bead);
-        }
-        if let Some(cb) = self.callback_id {
-            timer = timer.with_callback(cb);
-        }
-
-        // Restore status
-        match self.status.as_str() {
-            "fired" => timer.mark_fired(),
-            "cancelled" => timer.mark_cancelled(),
-            "failed" => timer.mark_failed(),
-            _ => {} // pending is default
-        }
-
-        timer
+        Ok(DurableTimer::restore(
+            TimerId::from_string(self.timer_id),
+            self.execute_at,
+            payload,
+            status,
+            self.created_at,
+            self.updated_at,
+            self.workflow_id,
+            self.bead_id,
+            self.callback_id,
+        ))
     }
 }
 
@@ -298,10 +307,12 @@ mod tests {
         };
 
         let timer = record.into_timer();
-
-        assert_eq!(timer.workflow_id(), Some("wf-1"));
-        assert_eq!(timer.callback_id(), Some("cb-1"));
-        assert!(timer.status().is_pending());
+        assert!(timer.is_ok());
+        if let Ok(timer) = timer {
+            assert_eq!(timer.workflow_id(), Some("wf-1"));
+            assert_eq!(timer.callback_id(), Some("cb-1"));
+            assert!(timer.status().is_pending());
+        }
     }
 
     #[test]
@@ -319,7 +330,10 @@ mod tests {
         };
 
         let timer = fired_record.into_timer();
-        assert!(timer.status().is_fired());
+        assert!(timer.is_ok());
+        if let Ok(timer) = timer {
+            assert!(timer.status().is_fired());
+        }
 
         let cancelled_record = TimerRecord {
             timer_id: "timer-2".to_string(),
@@ -334,7 +348,10 @@ mod tests {
         };
 
         let timer = cancelled_record.into_timer();
-        assert!(timer.status().is_cancelled());
+        assert!(timer.is_ok());
+        if let Ok(timer) = timer {
+            assert!(timer.status().is_cancelled());
+        }
     }
 
     #[test]

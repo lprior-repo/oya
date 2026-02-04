@@ -272,6 +272,7 @@ impl Retryable for Error {
                 | Error::CommandTimeout { .. }
                 | Error::Io(_)
                 | Error::Core(_)
+                | Error::StageFailed { .. }
         )
     }
 }

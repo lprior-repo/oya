@@ -131,7 +131,11 @@ impl AffinityStrategy {
 
     /// Calculate the load score for an agent (lower load = higher score).
     fn load_score(&self, agent_id: &str, ctx: &DistributionContext) -> f64 {
-        let load = ctx.get_agent(agent_id).map(|a| a.load).unwrap_or(0.5);
+        let load = ctx
+            .get_agent(agent_id)
+            .map(|a| a.load)
+            .filter(|load| load.is_finite())
+            .unwrap_or(0.5);
         1.0 - load
     }
 
@@ -222,7 +226,10 @@ impl DistributionStrategy for AffinityStrategy {
     }
 
     fn name(&self) -> &'static str {
-        "affinity"
+        match self.mode {
+            AffinityMode::Soft => "affinity",
+            AffinityMode::Hard => "affinity_hard",
+        }
     }
 
     fn validate(&self) -> DistributionResult<()> {
