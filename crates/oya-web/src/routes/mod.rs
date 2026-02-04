@@ -23,6 +23,7 @@
 //! - Actor message passing for state management
 
 use super::actors::AppState;
+use crate::middleware::cors_layer;
 use axum::{
     Router,
     routing::{get, post},
@@ -73,4 +74,5 @@ pub fn create_router() -> Router<AppState> {
     Router::new()
         .nest("/api", api_routes)
         .route("/ws", get(websocket::websocket_handler))
+        .layer(cors_layer())
 }

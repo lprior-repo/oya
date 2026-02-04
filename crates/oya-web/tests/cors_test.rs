@@ -1,9 +1,8 @@
 //! Tests for CORS middleware configuration
 
-use axum::Router;
-use axum::routing::get;
 use axum_test::TestServer;
 use oya_web::actors::{AppState, mock_agent_service, mock_scheduler, mock_state_manager};
+use oya_web::routes;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
@@ -17,24 +16,22 @@ async fn test_cors_headers_added() -> Result<(), String> {
         broadcast_tx,
     };
 
-    let app = Router::new()
-        .route("/test", get(|| async { "OK" }))
-        .with_state(state)
-        .layer(
-            tower_http::cors::CorsLayer::new()
-                .allow_origin(tower_http::cors::Any)
-                .allow_methods(tower_http::cors::Any)
-                .allow_headers(tower_http::cors::Any),
-        );
+    let app = routes::create_router().with_state(state);
 
     let server = TestServer::new(app).map_err(|e| format!("Failed to create test server: {e}"))?;
 
     let response = server
-        .get("/test")
+        .get("/api/health")
         .add_header("Origin", "http://localhost:3000")
         .await;
 
     assert!(response.status_code().is_success());
-    assert_eq!(response.text(), "OK");
+    let allow_origin = response
+        .headers()
+        .get("access-control-allow-origin")
+        .and_then(|value| value.to_str().ok())
+        .ok_or_else(|| "Missing Access-Control-Allow-Origin header".to_string())?;
+
+    assert_eq!(allow_origin, "*");
     Ok(())
 }
