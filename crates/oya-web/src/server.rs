@@ -3,17 +3,13 @@
 use super::actors::{AppState, BroadcastEvent, mock_scheduler, mock_state_manager};
 use super::routes;
 use crate::agent_service::{AgentService, AgentServiceConfig};
+use crate::middleware::cors_layer;
 use axum::{Router, routing::get_service};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
-use tower_http::{
-    compression::CompressionLayer,
-    cors::{Any, CorsLayer},
-    services::ServeDir,
-    trace::TraceLayer,
-};
+use tower_http::{compression::CompressionLayer, services::ServeDir, trace::TraceLayer};
 use tracing::info;
 
 /// Run the axum server with Tower middleware
@@ -63,12 +59,7 @@ pub fn create_app_with_state(state: AppState) -> Router {
         // Serve static frontend files for all other routes
         .fallback_service(static_files)
         // Middleware
-        .layer(
-            CorsLayer::new()
-                .allow_origin(Any)
-                .allow_methods(Any)
-                .allow_headers(Any),
-        )
+        .layer(cors_layer())
         .layer(CompressionLayer::new())
         .layer(TraceLayer::new_for_http())
 }
