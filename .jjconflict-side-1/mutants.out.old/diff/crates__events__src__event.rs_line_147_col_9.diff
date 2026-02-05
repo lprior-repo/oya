@@ -1,0 +1,26 @@
+--- crates/events/src/event.rs
++++ replace BeadEvent::dependency_resolved -> Self with Default::default()
+@@ -139,22 +139,17 @@
+             phase_name: phase_name.into(),
+             output,
+             timestamp: Utc::now(),
+         }
+     }
+ 
+     /// Create a new DependencyResolved event.
+     pub fn dependency_resolved(bead_id: BeadId, dependency_id: BeadId) -> Self {
+-        Self::DependencyResolved {
+-            event_id: EventId::new(),
+-            bead_id,
+-            dependency_id,
+-            timestamp: Utc::now(),
+-        }
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Create a new Failed event.
+     pub fn failed(bead_id: BeadId, error: impl Into<String>) -> Self {
+         Self::Failed {
+             event_id: EventId::new(),
+             bead_id,
+             error: error.into(),

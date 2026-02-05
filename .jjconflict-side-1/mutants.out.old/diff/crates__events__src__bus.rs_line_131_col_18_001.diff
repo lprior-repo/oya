@@ -1,0 +1,21 @@
+--- crates/events/src/bus.rs
++++ replace += with *= in EventBus::subscribe_with_pattern
+@@ -123,17 +123,17 @@
+     pub async fn subscribe_with_pattern(
+         &self,
+         pattern: EventPattern,
+     ) -> (String, EventSubscription) {
+         let (sender, receiver) = broadcast::channel(100);
+ 
+         let mut next_id = self.next_id.write().await;
+         let id = format!("sub_{}", *next_id);
+-        *next_id += 1;
++        *next_id *= /* ~ changed by cargo-mutants ~ */ 1;
+ 
+         let mut subscribers = self.subscribers.write().await;
+         subscribers.insert(id.clone(), Subscriber { sender, pattern });
+ 
+         (id, EventSubscription { receiver })
+     }
+ 
+     /// Unsubscribe a pattern-based subscriber.

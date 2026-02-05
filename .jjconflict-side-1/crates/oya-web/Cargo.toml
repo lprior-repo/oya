@@ -1,0 +1,42 @@
+[package]
+name = "oya-web"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "OYA Web Server - Axum REST API with Tower middleware"
+
+[dependencies]
+oya-core = { workspace = true }
+oya-workflow = { workspace = true }
+oya-events = { workspace = true }
+orchestrator = { path = "../orchestrator" }
+
+tokio = { workspace = true }
+async-trait = "0.1"
+serde = { workspace = true }
+serde_json = { workspace = true }
+ulid = { workspace = true }
+
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+hyper = { workspace = true }
+http = { workspace = true }
+futures = { workspace = true }
+
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+thiserror = { workspace = true }
+
+[[bin]]
+name = "oya-server"
+path = "src/bin/server.rs"
+
+[dev-dependencies]
+tokio = { workspace = true }
+axum-test = "18"
+proptest = "1"
+tokio-tungstenite = "0.26"

@@ -1,0 +1,57 @@
+# Build artifacts
+target/
+Cargo.lock
+
+# Moon cache (can be large)
+.moon/cache/
+.moon/cache-state/
+.moon/cache-*
+
+# Beads - daemon runtime files (should not be committed)
+.beads/daemon.pid
+.beads/daemon.lock
+.beads/daemon.log
+.beads/daemon-error
+.beads/beads.db-shm
+.beads/beads.db-wal
+.beads/.local_version
+.beads/export-state/
+
+# Gitleaks config (ignore file, not config)
+.gitleaksignore
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node/NPM
+node_modules/
+package-lock.json
+
+# Frontend build artifacts
+crates/oya-ui/dist/
+
+# Screenshots
+*.png
+quick.png
+
+# Testing
+*.profraw
+*.profdata
+vendor/opencode-sme/
+
+# bv (beads viewer) local config and caches
+.bv/
+
+# zjj local workspaces
+.zjj/workspaces/
+
+# Mutation testing output
+mutants.out/

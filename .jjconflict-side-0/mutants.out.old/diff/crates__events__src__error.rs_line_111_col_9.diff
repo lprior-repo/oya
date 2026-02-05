@@ -1,0 +1,24 @@
+--- crates/events/src/error.rs
++++ replace Error::projection_failed -> Self with Default::default()
+@@ -103,20 +103,17 @@
+     pub fn serialization(reason: impl Into<String>) -> Self {
+         Self::Serialization {
+             reason: reason.into(),
+         }
+     }
+ 
+     /// Create a projection failed error.
+     pub fn projection_failed(projection: impl Into<String>, reason: impl Into<String>) -> Self {
+-        Self::ProjectionFailed {
+-            projection: projection.into(),
+-            reason: reason.into(),
+-        }
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Create a bead not found error.
+     pub fn bead_not_found(bead_id: impl Into<String>) -> Self {
+         Self::BeadNotFound {
+             bead_id: bead_id.into(),
+         }
+     }

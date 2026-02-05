@@ -1,0 +1,340 @@
+$schema: "https://moonrepo.dev/schemas/tasks.json"
+
+# Moon Task Configuration - Local Only (NO GitHub Actions)
+# All commands use cargo with system Rust toolchain
+
+tasks:
+  # ============================================================================
+  # STAGE 1: CODE FORMATTING & LINTING
+  # ============================================================================
+
+  fmt:
+    command: "cargo fmt --all --check"
+    description: "Check code formatting (rustfmt)"
+    inputs:
+      - "crates/**/*.rs"
+      - "Cargo.toml"
+      - "rustfmt.toml"
+    options:
+      cache: true
+
+  fmt-fix:
+    command: "cargo fmt --all"
+    description: "Auto-fix code formatting"
+    inputs:
+      - "crates/**/*.rs"
+      - "Cargo.toml"
+    options:
+      cache: false  # Never cache - always format
+
+  clippy:
+    command: "cargo clippy --workspace --all-targets --all-features -- -D warnings"
+    description: "Lint with Clippy (strict mode)"
+    inputs:
+      - "crates/**/*.rs"
+      - "Cargo.toml"
+      - "/Cargo.lock"
+      - ".clippy.toml"
+    options:
+      cache: true
+
+  # ============================================================================
+  # STAGE 2: TESTING
+  # ============================================================================
+
+  test:
+    command: "cargo test --workspace --all-features"
+    description: "Run all tests"
+    inputs:
+      - "crates/**/*.rs"
+      - "Cargo.toml"
+      - "/Cargo.lock"
+    options:
+      cache: true
+      mergeArgs: "replace"  # Allow overriding with specific test filters
+    env:
+      CARGO_BUILD_JOBS: "16"
+
+  test-doc:
+    command: "cargo test --doc --workspace"
+    description: "Run documentation tests"
+    inputs:
+      - "crates/**/*.rs"
+      - "Cargo.toml"
+      - "/Cargo.lock"
+    options:
+      cache: true
+
+  coverage:
+    command: "cargo tarpaulin --workspace --all-features --out Html --out Lcov --output-dir target/coverage -- --test-threads=1"
+    description: "Generate test coverage report (HTML + LCOV)"
+    inputs:
+      - "crates/**/*.rs"
+      - "Cargo.toml"
+      - "/Cargo.lock"
+    outputs:
+      - "/target/coverage/index.html"
+      - "/target/coverage/lcov.info"
+    options:
+      cache: false
+    env:
+      CARGO_BUILD_JOBS: "8"
+
+  # ============================================================================
+  # STAGE 3: BUILD
+  # ============================================================================
+
+  build:
+    command: "cargo build --release --workspace"
+    description: "Build release binaries"
+    inputs:
+      - "crates/**/*.rs"
+      - "Cargo.toml"
+      - "/Cargo.lock"
+    outputs:
+      - "/target/release/oya"
+    options:
+      cache: true
+    env:
+      CARGO_BUILD_JOBS: "24"
+
+  build-docs:
+    command: "cargo doc --no-deps --document-private-items"
+    description: "Generate Rust documentation"
+    inputs:
+      - "crates/**/*.rs"
+      - "Cargo.toml"
+      - "/Cargo.lock"
+    options:
+      cache: true
+
+  # ============================================================================
+  # COMPOSITE PIPELINES
+  # ============================================================================
+
+  quick:
+    command: "true"
+    description: "Fast lint check (format + clippy in parallel)"
+    deps:
+      - "~:fmt"      # ~ prefix runs in parallel
+      - "~:clippy"
+    options:
+      cache: false  # Composite task - deps handle caching
+
+  ci:
+    command: "true"
+    description: "Full CI pipeline (all checks in parallel where possible)"
+    deps:
+      - "~:fmt"            # Parallel: formatting
+      - "~:clippy"         # Parallel: linting
+      - "~:test"           # Parallel: tests
+      - "~:test-doc"       # Parallel: doc tests
+      - "build"            # Sequential: needs tests to pass
+      - "build-docs"       # Sequential: needs clippy
+    options:
+      cache: false  # Composite task - deps handle caching
+
+  # ============================================================================
+  # CONVENIENCE
+  # ============================================================================
+
+  install:
+    command: "mkdir -p ~/.local/bin && cargo build --release && cp target/release/oya ~/.local/bin/oya && chmod +x ~/.local/bin/oya && echo '✅ Installed oya to ~/.local/bin/oya'"
+    description: "Install oya binary to ~/.local/bin (system-wide)"
+    options:
+      cache: false
+
+  dev:
+    command: "true"
+    description: "Quick development workflow: build + install"
+    deps:
+      - "build"
+      - "install"
+    options:
+      cache: false
+
+  clean:
+    command: "cargo clean"
+    description: "Clean build artifacts"
+    options:
+      cache: false
+
+  check:
+    command: "cargo check --workspace --all-features"
+    description: "Fast type check without building"
+    inputs:
+      - "crates/**/*.rs"
+      - "Cargo.toml"
+      - "/Cargo.lock"
+    options:
+      cache: true
+
+  # ============================================================================
+  # DEVELOPMENT SERVERS
+  # ============================================================================
+
+  serve:
+    command: "cargo run --release -p oya-web --bin oya-server"
+    description: "Run full stack server (frontend + API on http://localhost:3000)"
+    options:
+      cache: false
+      runInCI: false
+
+  build-ui:
+    command: "cd crates/oya-ui && trunk build --release"
+    description: "Build Leptos frontend to dist/"
+    options:
+      cache: false
+      runInCI: false
+
+  # ============================================================================
+  # MUTATION TESTING
+  # ============================================================================
+
+  mutants:
+    command: "cargo mutants --workspace --baseline run"
+    description: "Run mutation testing on all 2000+ mutations"
+    inputs:
+      - "crates/**/*.rs"
+      - ".cargo/mutants.toml"
+    options:
+      cache: false
+      runInCI: false
+
+  mutants-list:
+    command: "cargo mutants --workspace --list"
+    description: "List all 2000+ possible mutations"
+    options:
+      cache: false
+
+  mutants-package:
+    command: "cargo mutants --baseline run"
+    description: "Run mutation testing on specific package (use -p PKG)"
+    options:
+      cache: false
+      runInCI: false
+      mergeArgs: "append"
+
+  mutants-quick:
+    command: "cargo mutants -p oya-core -p oya-workflow -p oya-events --baseline run"
+    description: "Quick mutation test on core packages"
+    options:
+      cache: false
+      runInCI: false
+
+  mutants-diff:
+    command: "cargo mutants --workspace --in-diff main --baseline run"
+    description: "Mutation test only files changed vs main branch"
+    options:
+      cache: false
+      runInCI: false
+
+  mutants-uncaught:
+    command: "cargo mutants --workspace --baseline run --caught"
+    description: "Show only UNCAUGHT mutations (test gaps)"
+    options:
+      cache: false
+      runInCI: false
+
+  # ============================================================================
+  # OYA-SHARED (Shared types for WASM + native)
+  # ============================================================================
+
+  check-shared:
+    command: "cargo check -p oya-shared"
+    description: "Type check oya-shared crate"
+    inputs:
+      - "crates/oya-shared/**/*.rs"
+      - "crates/oya-shared/Cargo.toml"
+    options:
+      cache: true
+
+  test-shared:
+    command: "cargo test -p oya-shared"
+    description: "Run oya-shared tests"
+    inputs:
+      - "crates/oya-shared/**/*.rs"
+      - "crates/oya-shared/Cargo.toml"
+    options:
+      cache: true
+
+  # ============================================================================
+  # OYA-TAURI (Standalone workspace - Tauri desktop app)
+  # ============================================================================
+
+  check-tauri:
+    command: "cd crates/oya-tauri && cargo check"
+    description: "Type check oya-tauri crate (standalone workspace)"
+    inputs:
+      - "crates/oya-tauri/**/*.rs"
+      - "crates/oya-tauri/Cargo.toml"
+      - "crates/oya-shared/**/*.rs"
+    options:
+      cache: true
+
+  test-tauri:
+    command: "cd crates/oya-tauri && cargo test"
+    description: "Run oya-tauri tests"
+    inputs:
+      - "crates/oya-tauri/**/*.rs"
+      - "crates/oya-tauri/Cargo.toml"
+      - "crates/oya-shared/**/*.rs"
+    options:
+      cache: true
+
+  build-tauri:
+    command: "cd crates/oya-tauri && cargo build --release"
+    description: "Build oya-tauri desktop app"
+    inputs:
+      - "crates/oya-tauri/**/*.rs"
+      - "crates/oya-tauri/Cargo.toml"
+      - "crates/oya-shared/**/*.rs"
+    outputs:
+      - "crates/oya-tauri/target/release/oya-tauri"
+    options:
+      cache: true
+
+  # ============================================================================
+  # OYA-UI (Standalone workspace - Leptos frontend)
+  # ============================================================================
+
+  check-ui:
+    command: "cd crates/oya-ui && cargo check"
+    description: "Type check oya-ui crate (standalone workspace)"
+    inputs:
+      - "crates/oya-ui/src/**/*.rs"
+      - "crates/oya-ui/Cargo.toml"
+    options:
+      cache: true
+
+  test-ui:
+    command: "cd crates/oya-ui && cargo test --target x86_64-unknown-linux-gnu"
+    description: "Run oya-ui tests (native target)"
+    inputs:
+      - "crates/oya-ui/src/**/*.rs"
+      - "crates/oya-ui/Cargo.toml"
+    options:
+      cache: true
+
+  # ============================================================================
+  # ZELLIJ PLUGIN (WASM)
+  # ============================================================================
+
+  build-zellij:
+    command: "cargo build --release --target wasm32-wasip1 -p oya-zellij"
+    description: "Build Zellij plugin to WASM"
+    inputs:
+      - "crates/oya-zellij/**/*.rs"
+      - "crates/oya-zellij/Cargo.toml"
+    outputs:
+      - "/target/wasm32-wasip1/release/oya_zellij.wasm"
+    options:
+      cache: true
+
+  install-zellij:
+    command: "mkdir -p ~/.config/zellij/plugins && cp target/wasm32-wasip1/release/oya_zellij.wasm ~/.config/zellij/plugins/ && cp crates/oya-zellij/plugin.yaml ~/.config/zellij/plugins/oya.yaml && echo '✅ Installed oya-zellij plugin to ~/.config/zellij/plugins/'"
+    description: "Install Zellij plugin to user config"
+    deps:
+      - "build-zellij"
+    options:
+      cache: false

@@ -1,0 +1,22 @@
+--- crates/events/src/durable_store.rs
++++ replace EventQuery::with_event_type -> Self with Default::default()
+@@ -30,18 +30,17 @@
+     /// Filter by stream (bead) ID.
+     pub fn with_stream_id(mut self, stream_id: BeadId) -> Self {
+         self.stream_id = Some(stream_id);
+         self
+     }
+ 
+     /// Filter by event type.
+     pub fn with_event_type(mut self, event_type: impl Into<String>) -> Self {
+-        self.event_type = Some(event_type.into());
+-        self
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Filter events after this timestamp.
+     pub fn after(mut self, timestamp: DateTime<Utc>) -> Self {
+         self.after = Some(timestamp);
+         self
+     }
+ 

@@ -1,0 +1,4 @@
+$schema: "https://moonrepo.dev/schemas/toolchain.json"
+
+# Use system-installed Rust toolchain (managed via rustup/rust-toolchain.toml)
+# Moon does not manage Rust directly - we use cargo commands in tasks
