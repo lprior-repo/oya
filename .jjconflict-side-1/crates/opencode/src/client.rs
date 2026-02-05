@@ -432,15 +432,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_execute_via_api_success() {
-        use wiremock::matchers::{body_json_contains, method, path};
+        use wiremock::matchers::{body_json_string, method, path};
         use wiremock::{Mock, MockServer, ResponseTemplate};
 
         let mock_server = MockServer::start().await;
 
         Mock::given(method("POST"))
             .and(path("/execute"))
-            .and(body_json_contains(
-                serde_json::json!({"prompt": "test prompt"}),
+            .and(body_json_string(
+                serde_json::to_string(&serde_json::json!({"prompt": "test prompt"}))
+                    .unwrap()
+                    .into_bytes(),
             ))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "success": true,
@@ -552,8 +554,10 @@ fn test_should_retry_on_timeout() {
 #[test]
 fn test_should_retry_on_http_error() {
     let client = OpencodeClient::default();
-    let http_error =
-        reqwest::Error::from(reqwest::StatusCode::REQUEST_TIMEOUT);
+    let http_error = reqwest::Error::from(
+        reqwest::StatusCode::REQUEST_TIMEOUT,
+    )
+    .with_url("http://example.com/test");
     let error = Error::Http(http_error);
     assert!(client.should_retry(&error));
 }

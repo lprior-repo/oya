@@ -216,10 +216,10 @@ mod tests {
     #[test]
     fn test_format_chunk_status() {
         let formatter = SseFormatter::new();
-        let chunk = StreamChunk::status("Processing...".to_string(), 1);
+        let chunk = StreamChunk::text("Processing...".to_string(), 1);
 
         let message = formatter.format_chunk(chunk).unwrap();
-        assert!(message.contains("event: status"));
+        assert!(message.contains("event: text"));
         assert!(message.contains("data: Processing..."));
     }
 }
