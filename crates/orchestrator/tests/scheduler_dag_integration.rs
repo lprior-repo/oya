@@ -9,9 +9,9 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
+use im::HashSet;
 use orchestrator::dag::{DependencyType, WorkflowDAG};
 use orchestrator::scheduler::{BeadId, SchedulerActor, WorkflowId};
-use std::collections::HashSet;
 
 // ============================================================================
 // DEPENDENCY CHAIN TESTS (5 tests)
@@ -542,7 +542,9 @@ fn given_multiple_roots_when_get_ready_then_all_returned_simultaneously() {
     assert!(result.is_ok(), "Workflow registration should succeed");
 
     // Create 5 independent beads (all roots)
-    let beads: Vec<BeadId> = (1..=5).map(|i| format!("bead-{}", i)).collect();
+    let beads: Vec<BeadId> = (1..=5)
+        .map(|i| format!("bead-{}", i))
+        .collect::<HashSet<_>>();
 
     for bead in &beads {
         let result = scheduler.schedule_bead(workflow_id.clone(), bead.clone());
@@ -843,7 +845,7 @@ fn given_workflow_when_get_all_beads_then_returns_complete_list() {
         // THEN: All beads should be returned
         assert_eq!(all_beads.len(), 4, "Should return all 4 beads");
 
-        let bead_set: HashSet<_> = all_beads.into_iter().collect();
+        let bead_set: HashSet<_> = all_beads.into_iter().collect::<HashSet<_>>();
         for bead in &beads {
             assert!(bead_set.contains(bead), "{} should be in the list", bead);
         }

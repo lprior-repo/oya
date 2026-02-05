@@ -18,9 +18,21 @@ fn build_prefix() -> String {
 
 fn shutdown_all(supervisors: &Tier1Supervisors) {
     supervisors
-        .all()
-        .iter()
-        .for_each(|supervisor| supervisor.actor.stop(Some("test shutdown".to_string())));
+        .storage
+        .actor
+        .stop(Some("test shutdown".to_string()));
+    supervisors
+        .workflow
+        .actor
+        .stop(Some("test shutdown".to_string()));
+    supervisors
+        .queue
+        .actor
+        .stop(Some("test shutdown".to_string()));
+    supervisors
+        .reconciler
+        .actor
+        .stop(Some("test shutdown".to_string()));
 }
 
 #[tokio::test]

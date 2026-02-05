@@ -7,9 +7,9 @@
 //!
 //! NO MOCKS - this is a true integration test
 
+use im::HashSet;
 use orchestrator::dag::{DependencyType, WorkflowDAG};
 use orchestrator::scheduler::SchedulerActor;
-use std::collections::HashSet;
 
 /// Helper to track execution order of beads
 #[derive(Debug, Clone)]
@@ -174,7 +174,7 @@ fn test_bead_lifecycle_with_dependencies() {
         2,
         "After A completes, B and D should be ready"
     );
-    let ready_set: HashSet<_> = ready_beads.iter().cloned().collect();
+    let ready_set: HashSet<_> = ready_beads.iter().cloned().collect::<HashSet<String>>();
     assert!(
         ready_set.contains("bead-b"),
         "bead-b should be ready after A"
@@ -210,7 +210,7 @@ fn test_bead_lifecycle_with_dependencies() {
         2,
         "After B and D complete, C and E should be ready"
     );
-    let ready_set: HashSet<_> = ready_beads.iter().cloned().collect();
+    let ready_set: HashSet<_> = ready_beads.iter().cloned().collect::<HashSet<String>>();
     assert!(
         ready_set.contains("bead-c"),
         "bead-c should be ready after B"
@@ -403,7 +403,7 @@ fn test_complex_dag_diamond_dependency() {
     // Phase 2: B and C should be ready
     let ready = get_ready_beads(&dag, &tracker);
     assert_eq!(ready.len(), 2, "B and C should be ready");
-    let ready_set: HashSet<_> = ready.iter().cloned().collect();
+    let ready_set: HashSet<_> = ready.iter().cloned().collect::<HashSet<String>>();
     assert!(ready_set.contains("bead-b"));
     assert!(ready_set.contains("bead-c"));
 

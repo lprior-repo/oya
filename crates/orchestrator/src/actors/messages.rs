@@ -58,7 +58,7 @@ pub struct WorkflowStatus {
 ///
 /// This enum defines all messages the scheduler can receive.
 /// Commands are fire-and-forget, queries expect responses via RpcReplyPort.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum SchedulerMessage {
     // ═══════════════════════════════════════════════════════════════════════
     // COMMANDS (fire-and-forget via cast!)

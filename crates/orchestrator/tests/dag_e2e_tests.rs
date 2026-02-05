@@ -7,8 +7,8 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
+use im::{HashMap, HashSet};
 use orchestrator::dag::{BeadId, DependencyType, WorkflowDAG};
-use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 // ============================================================================
@@ -564,8 +564,8 @@ fn given_dag_when_serialize_deserialize_then_identical() {
     );
 
     // Verify nodes
-    let original_nodes: HashSet<_> = original.nodes().collect();
-    let restored_nodes: HashSet<_> = restored.nodes().collect();
+    let original_nodes: HashSet<_> = original.nodes().collect::<HashSet<_>>();
+    let restored_nodes: HashSet<_> = restored.nodes().collect::<HashSet<_>>();
     assert_eq!(original_nodes, restored_nodes, "nodes should be identical");
 }
 

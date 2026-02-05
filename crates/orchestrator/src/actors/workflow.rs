@@ -3,9 +3,9 @@
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort};
 use tracing::{debug, info};
 
-use crate::scheduler::{WorkflowId, WorkflowState};
 use crate::actors::supervisor::SupervisableActor;
 use crate::dag::BeadId;
+use crate::scheduler::{WorkflowId, WorkflowState};
 
 pub struct WorkflowActorDef;
 
@@ -14,6 +14,7 @@ pub struct WorkflowStateActor {
     pub state: WorkflowState,
 }
 
+#[derive(Clone)]
 pub enum WorkflowMessage {
     /// Add a bead to the workflow.
     AddBead { bead_id: BeadId },

@@ -7,10 +7,10 @@ use crate::actors::queue::QueueActorDef;
 use crate::actors::reconciler::ReconcilerActorDef;
 use crate::actors::scheduler::SchedulerActorDef;
 use crate::actors::storage::StateManagerActorDef;
-use crate::actors::workflow::WorkflowActorDef;
 use crate::actors::supervisor::{
     SupervisorActorDef, SupervisorArguments, SupervisorConfig, SupervisorMessage,
 };
+use crate::actors::workflow::WorkflowActorDef;
 
 /// Tier-1 supervisor kinds managed by the UniverseSupervisor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,21 +65,30 @@ pub async fn spawn_tier1_supervisors(
     name_prefix: &str,
     config: SupervisorConfig,
 ) -> Result<Tier1Supervisors, ActorError> {
-    let storage =
-        spawn_tier1_supervisor::<StateManagerActorDef>(name_prefix, Tier1SupervisorKind::Storage, &config)
-            .await?;
+    let storage = spawn_tier1_supervisor::<StateManagerActorDef>(
+        name_prefix,
+        Tier1SupervisorKind::Storage,
+        &config,
+    )
+    .await?;
 
-    let workflow =
-        spawn_tier1_supervisor::<WorkflowActorDef>(name_prefix, Tier1SupervisorKind::Workflow, &config)
-            .await?;
+    let workflow = spawn_tier1_supervisor::<WorkflowActorDef>(
+        name_prefix,
+        Tier1SupervisorKind::Workflow,
+        &config,
+    )
+    .await?;
 
     let queue =
         spawn_tier1_supervisor::<QueueActorDef>(name_prefix, Tier1SupervisorKind::Queue, &config)
             .await?;
 
-    let reconciler =
-        spawn_tier1_supervisor::<ReconcilerActorDef>(name_prefix, Tier1SupervisorKind::Reconciler, &config)
-            .await?;
+    let reconciler = spawn_tier1_supervisor::<ReconcilerActorDef>(
+        name_prefix,
+        Tier1SupervisorKind::Reconciler,
+        &config,
+    )
+    .await?;
 
     Ok(Tier1Supervisors {
         storage,

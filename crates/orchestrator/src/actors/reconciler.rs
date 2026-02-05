@@ -26,7 +26,7 @@ impl Actor for ReconcilerActorDef {
         _args: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
         info!("ReconcilerActor starting");
-        
+
         // Spawn the tick loop
         let myself_clone = myself.clone();
         tokio::spawn(async move {

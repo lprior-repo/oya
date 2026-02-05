@@ -1,13 +1,13 @@
 //! UniverseSupervisor - Root of the 3-tier supervision hierarchy.
 
-use std::sync::Arc;
 use ractor::{Actor, ActorProcessingErr, ActorRef};
+use std::sync::Arc;
 use tracing::info;
 
 use crate::actors::ActorError;
 use crate::actors::supervisor::SupervisorConfig;
-use crate::supervision::{Tier1Supervisors, spawn_tier1_supervisors};
 use crate::shutdown::ShutdownCoordinator;
+use crate::supervision::{Tier1Supervisors, spawn_tier1_supervisors};
 
 pub struct UniverseSupervisorDef;
 
@@ -37,7 +37,8 @@ impl Actor for UniverseSupervisorDef {
     ) -> Result<Self::State, ActorProcessingErr> {
         info!("UniverseSupervisor starting");
 
-        let tier1 = spawn_tier1_supervisors(&args.name_prefix, args.config).await
+        let tier1 = spawn_tier1_supervisors(&args.name_prefix, args.config)
+            .await
             .map_err(|e| ActorProcessingErr::from(e.to_string()))?;
 
         // Subscribe to shutdown

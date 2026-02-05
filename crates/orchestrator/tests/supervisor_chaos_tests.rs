@@ -12,7 +12,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use orchestrator::actors::scheduler::{SchedulerActorDef, SchedulerArguments};
 use orchestrator::actors::supervisor::{
-    SupervisorArguments, SupervisorConfig, SupervisorMessage, SupervisorActorDef,
+    SupervisorActorDef, SupervisorArguments, SupervisorConfig, SupervisorMessage,
 };
 use ractor::{Actor, ActorRef, ActorStatus};
 use tokio::time::sleep;
@@ -49,7 +49,7 @@ async fn spawn_child(
 ) -> Result<(), String> {
     let (tx, rx) = tokio::sync::oneshot::channel();
     supervisor
-        .cast(SupervisorMessage::SpawnChild {
+        .cast(SupervisorMessage::<SchedulerActorDef>::SpawnChild {
             name: name.to_string(),
             args,
             reply: tx,
@@ -69,7 +69,7 @@ async fn spawn_supervisor_with_name(
 ) -> Result<ActorRef<SupervisorMessage<SchedulerActorDef>>, String> {
     let (actor, _handle) = Actor::spawn(
         Some(name.to_string()),
-        SupervisorActorDef::new(SchedulerActorDef),
+        SupervisorActorDef::<SchedulerActorDef>::new(SchedulerActorDef),
         args,
     )
     .await
@@ -230,7 +230,7 @@ async fn given_tier1_crashes_with_children_then_children_stopped() {
 #[tokio::test]
 async fn given_tier1_crashes_during_child_restart_then_graceful() {
     // GIVEN: A tier-1 supervisor with a child that's about to restart
-    let mut config = SchedulerSupervisorConfig::for_testing();
+    let mut config = SupervisorConfig::for_testing();
     // Set very short restart delay to trigger race condition
     config.base_backoff_ms = 10;
 
@@ -393,7 +393,7 @@ async fn given_rapid_tier1_crash_restart_cycles_then_stable() {
 #[tokio::test]
 async fn given_tier1_crashes_during_meltdown_then_graceful() {
     // GIVEN: A tier-1 supervisor configured to meltdown quickly
-    let mut config = SchedulerSupervisorConfig::for_testing();
+    let mut config = SupervisorConfig::for_testing();
     config.meltdown_threshold = 2.0; // Very low threshold
     config.max_restarts = 1; // Allow only 1 restart
 

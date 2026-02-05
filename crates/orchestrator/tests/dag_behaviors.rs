@@ -9,8 +9,8 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
+use im::{HashMap, HashSet};
 use orchestrator::dag::{BeadId, DagError, DependencyType, WorkflowDAG};
-use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 // ============================================================================
@@ -31,7 +31,7 @@ fn given_empty_dag_when_add_node_then_node_exists_and_count_is_one() {
     assert!(result.is_ok(), "Adding node should succeed");
     assert_eq!(dag.node_count(), 1, "Node count should be 1");
 
-    let nodes: Vec<&BeadId> = dag.nodes().collect();
+    let nodes: Vec<&BeadId> = dag.nodes().collect::<Vec<_>>();
     assert!(nodes.contains(&&bead_id), "Node should be retrievable");
 }
 
@@ -49,7 +49,7 @@ fn given_dag_with_node_when_remove_node_then_node_gone_and_count_decremented() {
     // THEN: Node is gone and count is decremented
     assert!(result.is_ok(), "Removing node should succeed");
     assert_eq!(dag.node_count(), 0, "Node count should be 0");
-    let nodes: Vec<&BeadId> = dag.nodes().collect();
+    let nodes: Vec<&BeadId> = dag.nodes().collect::<Vec<_>>();
     assert!(!nodes.contains(&&bead_id), "Node should not exist");
 }
 

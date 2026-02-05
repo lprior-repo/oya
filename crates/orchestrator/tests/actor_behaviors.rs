@@ -8,9 +8,7 @@ use std::time::Duration;
 
 use ractor::ActorRef;
 
-use orchestrator::actors::{
-    ActorError, SchedulerArguments, SchedulerMessage, spawn_scheduler_with_name,
-};
+use orchestrator::actors::{ActorError, SchedulerActorDef, SchedulerArguments, SchedulerMessage};
 use orchestrator::scheduler::SchedulerStats;
 
 /// Atomic counter for generating unique actor names.
@@ -26,7 +24,7 @@ fn unique_scheduler_name() -> String {
 async fn setup_scheduler() -> Result<ActorRef<SchedulerMessage>, Box<dyn std::error::Error>> {
     let args = SchedulerArguments::new();
     let name = unique_scheduler_name();
-    let scheduler = spawn_scheduler_with_name(args, &name).await?;
+    let (scheduler, _handle) = ractor::Actor::spawn(Some(name), SchedulerActorDef, args).await?;
     Ok(scheduler)
 }
 

@@ -159,7 +159,9 @@ mod tests {
 
     #[test]
     fn test_error_debug() {
-        let error = Error::DirectoryNotFound { path: PathBuf::from("/test") };
+        let error = Error::DirectoryNotFound {
+            path: PathBuf::from("/test"),
+        };
         let debug = format!("{:?}", error);
         assert!(debug.contains("DirectoryNotFound"));
     }

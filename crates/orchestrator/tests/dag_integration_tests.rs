@@ -7,8 +7,8 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
+use im::{HashMap, HashSet};
 use orchestrator::dag::{DagError, DependencyType, WorkflowDAG};
-use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 // ============================================================================
@@ -266,11 +266,12 @@ fn given_uniform_weights_when_critical_path_then_longest_chain() {
         DependencyType::BlockingDependency,
     );
 
-    let mut weights = HashMap::new();
-    weights.insert("a".to_string(), Duration::from_secs(1));
-    weights.insert("b".to_string(), Duration::from_secs(1));
-    weights.insert("c".to_string(), Duration::from_secs(1));
-    weights.insert("d".to_string(), Duration::from_secs(1));
+    let weights = HashMap::from(vec![
+        ("a".to_string(), Duration::from_secs(1)),
+        ("b".to_string(), Duration::from_secs(1)),
+        ("c".to_string(), Duration::from_secs(1)),
+        ("d".to_string(), Duration::from_secs(1)),
+    ]);
 
     // WHEN: Computing critical path
     let result = dag.critical_path(&weights);
@@ -314,10 +315,11 @@ fn given_varied_weights_when_critical_path_then_heaviest_path() {
         DependencyType::BlockingDependency,
     );
 
-    let mut weights = HashMap::new();
-    weights.insert("a".to_string(), Duration::from_secs(1));
-    weights.insert("b".to_string(), Duration::from_secs(10));
-    weights.insert("c".to_string(), Duration::from_secs(5));
+    let weights = HashMap::from(vec![
+        ("a".to_string(), Duration::from_secs(1)),
+        ("b".to_string(), Duration::from_secs(10)),
+        ("c".to_string(), Duration::from_secs(5)),
+    ]);
 
     // WHEN: Computing critical path
     let result = dag.critical_path(&weights);
@@ -363,11 +365,12 @@ fn given_parallel_paths_when_critical_path_then_bottleneck_found() {
         DependencyType::BlockingDependency,
     );
 
-    let mut weights = HashMap::new();
-    weights.insert("start".to_string(), Duration::from_secs(1));
-    weights.insert("fast1".to_string(), Duration::from_secs(2));
-    weights.insert("slow".to_string(), Duration::from_secs(20)); // Bottleneck
-    weights.insert("end".to_string(), Duration::from_secs(1));
+    let weights = HashMap::from(vec![
+        ("start".to_string(), Duration::from_secs(1)),
+        ("fast1".to_string(), Duration::from_secs(2)),
+        ("slow".to_string(), Duration::from_secs(20)), // Bottleneck
+        ("end".to_string(), Duration::from_secs(1)),
+    ]);
 
     // WHEN: Computing critical path
     let result = dag.critical_path(&weights);

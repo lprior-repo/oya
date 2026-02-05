@@ -116,7 +116,8 @@ impl Actor for SchedulerActorDef {
         if let Some(bus) = &args.event_bus {
             let pattern =
                 EventPattern::ByTypes(vec!["completed".to_string(), "state_changed".to_string()]);
-            let (sub_id, subscription): (String, EventSubscription) = bus.subscribe_with_pattern(pattern).await;
+            let (sub_id, subscription): (String, EventSubscription) =
+                bus.subscribe_with_pattern(pattern).await;
             state._event_subscription_id = Some(sub_id);
 
             // Spawn task to forward events to actor
@@ -269,7 +270,8 @@ impl Actor for SchedulerActorDef {
         // Save checkpoint on graceful shutdown
         if let Some(tx) = &state.checkpoint_tx {
             let result: CheckpointResult = CheckpointResult::success("scheduler", 0);
-            let send_res: Result<(), mpsc::error::SendError<CheckpointResult>> = tx.send(result).await;
+            let send_res: Result<(), mpsc::error::SendError<CheckpointResult>> =
+                tx.send(result).await;
             if send_res.is_err() {
                 warn!("Failed to send checkpoint result");
             }
