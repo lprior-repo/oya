@@ -10,16 +10,16 @@
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use orchestrator::actors::scheduler::SchedulerArguments;
+use orchestrator::actors::scheduler::{SchedulerActorDef, SchedulerArguments};
 use orchestrator::actors::supervisor::{
-    SchedulerSupervisorConfig, SupervisorArguments, SupervisorMessage, spawn_supervisor_with_name,
+    SupervisorArguments, SupervisorConfig, SupervisorMessage, SupervisorActorDef,
 };
-use ractor::{ActorRef, ActorStatus};
+use ractor::{Actor, ActorRef, ActorStatus};
 use tokio::time::sleep;
 
 const STATUS_TIMEOUT: Duration = Duration::from_millis(200);
 
-fn supervisor_args(config: SchedulerSupervisorConfig) -> SupervisorArguments {
+fn supervisor_args(config: SupervisorConfig) -> SupervisorArguments {
     SupervisorArguments::new().with_config(config)
 }
 
@@ -43,7 +43,7 @@ fn unique_name(label: &str) -> String {
 }
 
 async fn spawn_child(
-    supervisor: &ActorRef<SupervisorMessage>,
+    supervisor: &ActorRef<SupervisorMessage<SchedulerActorDef>>,
     name: &str,
     args: SchedulerArguments,
 ) -> Result<(), String> {
@@ -63,6 +63,20 @@ async fn spawn_child(
     }
 }
 
+async fn spawn_supervisor_with_name(
+    args: SupervisorArguments,
+    name: &str,
+) -> Result<ActorRef<SupervisorMessage<SchedulerActorDef>>, String> {
+    let (actor, _handle) = Actor::spawn(
+        Some(name.to_string()),
+        SupervisorActorDef::new(SchedulerActorDef),
+        args,
+    )
+    .await
+    .map_err(|e| format!("Failed to spawn supervisor: {}", e))?;
+    Ok(actor)
+}
+
 // ============================================================================
 // TIER-1 CRASH TESTS (hostile: what if supervisor dies?)
 // ============================================================================
@@ -71,7 +85,7 @@ async fn spawn_child(
 #[tokio::test]
 async fn given_tier1_crashes_with_no_children_then_clean_shutdown() {
     // GIVEN: A tier-1 supervisor with no children
-    let config = SchedulerSupervisorConfig::for_testing();
+    let config = SupervisorConfig::default();
     let supervisor_name = unique_name("chaos-supervisor-empty");
     let supervisor_result =
         spawn_supervisor_with_name(supervisor_args(config), &supervisor_name).await;
@@ -112,7 +126,7 @@ async fn given_tier1_crashes_with_no_children_then_clean_shutdown() {
 #[tokio::test]
 async fn given_tier1_crashes_with_children_then_children_stopped() {
     // GIVEN: A tier-1 supervisor with children
-    let config = SchedulerSupervisorConfig::for_testing();
+    let config = SupervisorConfig::default();
     let supervisor_name = unique_name("chaos-supervisor-with-children");
     let supervisor_result =
         spawn_supervisor_with_name(supervisor_args(config), &supervisor_name).await;
@@ -285,7 +299,7 @@ async fn given_tier1_crashes_during_child_restart_then_graceful() {
 #[tokio::test]
 async fn given_tier1_stopped_when_message_sent_then_error_not_panic() {
     // GIVEN: A stopped tier-1 supervisor
-    let config = SchedulerSupervisorConfig::for_testing();
+    let config = SupervisorConfig::default();
     let supervisor_name = unique_name("chaos-supervisor-stopped");
     let supervisor_result =
         spawn_supervisor_with_name(supervisor_args(config), &supervisor_name).await;
@@ -333,7 +347,7 @@ async fn given_tier1_stopped_when_message_sent_then_error_not_panic() {
 async fn given_rapid_tier1_crash_restart_cycles_then_stable() {
     // HOSTILE: Create and destroy supervisors rapidly to test resource cleanup
     for i in 0..10 {
-        let config = SchedulerSupervisorConfig::for_testing();
+        let config = SupervisorConfig::default();
         let supervisor_name = unique_name(&format!("chaos-supervisor-cycle-{i}"));
         let supervisor_result =
             spawn_supervisor_with_name(supervisor_args(config), &supervisor_name).await;
@@ -439,7 +453,7 @@ async fn given_tier1_crashes_during_meltdown_then_graceful() {
 #[tokio::test]
 async fn given_tier1_crashed_when_new_tier1_spawned_then_functional() {
     // GIVEN: A tier-1 supervisor that crashed
-    let config = SchedulerSupervisorConfig::for_testing();
+    let config = SupervisorConfig::default();
     let supervisor_one_name = unique_name("crash-then-recover-1");
     let supervisor1_result =
         spawn_supervisor_with_name(supervisor_args(config.clone()), &supervisor_one_name).await;
@@ -515,7 +529,7 @@ async fn given_tier1_crashes_then_no_shared_state_corruption() {
     // HOSTILE: Verify that supervisor crashes don't leave behind corrupt global state
     // This test verifies isolation between supervisor instances
 
-    let config = SchedulerSupervisorConfig::for_testing();
+    let config = SupervisorConfig::default();
     let base_name = unique_name("isolation-test");
 
     // Spawn and crash multiple supervisors

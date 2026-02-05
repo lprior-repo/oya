@@ -15,7 +15,8 @@ use petgraph::Direction;
 use petgraph::algo::{is_cyclic_directed, tarjan_scc, toposort};
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::{Bfs, Dfs, EdgeRef, Reversed};
-use std::collections::{HashMap, HashSet, VecDeque};
+use im::{HashMap, HashSet};
+use std::collections::VecDeque;
 use std::time::Duration;
 
 pub mod error;
@@ -838,11 +839,11 @@ impl WorkflowDAG {
         // Check for cycle
         if result.len() != self.graph.node_count() {
             // Find nodes that weren't processed (part of cycle)
-            let processed: HashSet<_> = result.iter().collect();
+            let processed: HashSet<BeadId> = result.iter().cloned().collect();
             let cycle_nodes: Vec<BeadId> = self
                 .graph
                 .node_weights()
-                .filter(|id| !processed.contains(id))
+                .filter(|id| !processed.contains(*id))
                 .cloned()
                 .collect();
             return Err(DagError::cycle_detected(cycle_nodes));
@@ -1117,12 +1118,12 @@ impl WorkflowDAG {
         while let Some(node) = queue.pop_front() {
             // Visit both incoming and outgoing neighbors
             for neighbor in self.graph.neighbors_directed(node, Direction::Outgoing) {
-                if visited.insert(neighbor) {
+                if visited.insert(neighbor).is_none() {
                     queue.push_back(neighbor);
                 }
             }
             for neighbor in self.graph.neighbors_directed(node, Direction::Incoming) {
-                if visited.insert(neighbor) {
+                if visited.insert(neighbor).is_none() {
                     queue.push_back(neighbor);
                 }
             }

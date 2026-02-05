@@ -4,7 +4,7 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
-use orchestrator::actors::supervisor::SchedulerSupervisorConfig;
+use orchestrator::actors::supervisor::SupervisorConfig;
 use orchestrator::supervision::{Tier1SupervisorKind, Tier1Supervisors, spawn_tier1_supervisors};
 use ractor::ActorStatus;
 
@@ -26,7 +26,7 @@ fn shutdown_all(supervisors: &Tier1Supervisors) {
 #[tokio::test]
 async fn given_tier1_supervisors_when_spawned_then_all_running() {
     let prefix = build_prefix();
-    let config = SchedulerSupervisorConfig::for_testing();
+    let config = SupervisorConfig::for_testing();
 
     let spawn_result = spawn_tier1_supervisors(&prefix, config).await;
     assert!(spawn_result.is_ok(), "tier-1 supervisors should spawn");
@@ -73,7 +73,7 @@ async fn given_tier1_supervisors_when_spawned_then_all_running() {
 #[tokio::test]
 async fn given_tier1_supervisors_when_spawned_then_names_unique() {
     let prefix = build_prefix();
-    let config = SchedulerSupervisorConfig::for_testing();
+    let config = SupervisorConfig::for_testing();
 
     let spawn_result = spawn_tier1_supervisors(&prefix, config).await;
     assert!(spawn_result.is_ok(), "tier-1 supervisors should spawn");

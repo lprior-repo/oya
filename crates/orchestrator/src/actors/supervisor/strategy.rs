@@ -42,28 +42,29 @@
 //! ```
 
 use std::collections::HashSet;
+use ractor::Actor;
 use thiserror::Error;
 
-use super::SupervisorActorState;
+use super::{SupervisorActorState, SupervisorConfig};
 
 /// Context provided to restart strategies for decision-making.
 #[derive(Debug, Clone)]
-pub struct RestartContext<'a> {
+pub struct RestartContext<'a, A: Actor> {
     /// Name of the child that failed.
     pub child_name: String,
     /// Reason for failure.
     pub failure_reason: String,
     /// Reference to supervisor state (immutable).
-    pub state: &'a SupervisorActorState,
+    pub state: &'a SupervisorActorState<A>,
 }
 
-impl<'a> RestartContext<'a> {
+impl<'a, A: Actor> RestartContext<'a, A> {
     /// Create a new restart context.
     #[must_use]
     pub fn new(
         child_name: impl Into<String>,
         failure_reason: impl Into<String>,
-        state: &'a SupervisorActorState,
+        state: &'a SupervisorActorState<A>,
     ) -> Self {
         Self {
             child_name: child_name.into(),
@@ -119,14 +120,14 @@ pub enum RestartDecision {
 /// Trait for restart strategies.
 ///
 /// Strategies determine which children to restart when a child crashes.
-pub trait RestartStrategy: Send + Sync {
+pub trait RestartStrategy<A: Actor>: Send + Sync {
     /// Get strategy name.
     fn name(&self) -> &'static str;
 
     /// Determine what to do when a child fails.
     ///
     /// Returns a decision indicating which children to restart or whether to stop.
-    fn on_child_failure(&self, ctx: &RestartContext<'_>) -> RestartDecision;
+    fn on_child_failure(&self, ctx: &RestartContext<'_, A>) -> RestartDecision;
 
     /// Validate strategy configuration.
     ///
@@ -148,23 +149,6 @@ pub enum StrategyError {
 /// One-for-one restart strategy.
 ///
 /// When a child crashes, restart only that child. Siblings are unaffected.
-/// This is the default Erlang/OTP supervision behavior.
-///
-/// # Behavior
-///
-/// - Only the crashed child is restarted
-/// - Other children continue running
-/// - Each child has independent restart count
-/// - Max restarts are tracked per child
-///
-/// # Example
-///
-/// ```ignore
-/// use orchestrator::actors::supervisor::strategy::OneForOne;
-///
-/// let strategy = OneForOne::new();
-/// assert_eq!(strategy.name(), "one_for_one");
-/// ```
 #[derive(Debug, Clone, Default)]
 pub struct OneForOne;
 
@@ -176,12 +160,12 @@ impl OneForOne {
     }
 }
 
-impl RestartStrategy for OneForOne {
+impl<A: Actor> RestartStrategy<A> for OneForOne {
     fn name(&self) -> &'static str {
         "one_for_one"
     }
 
-    fn on_child_failure(&self, ctx: &RestartContext<'_>) -> RestartDecision {
+    fn on_child_failure(&self, ctx: &RestartContext<'_, A>) -> RestartDecision {
         // One-for-one: restart only the crashed child
         if ctx.is_max_restarts_exceeded() {
             RestartDecision::Stop
@@ -195,23 +179,7 @@ impl RestartStrategy for OneForOne {
 
 /// One-for-all restart strategy.
 ///
-/// When a child crashes, restart all children. This is useful when
-/// children share state or when a crash indicates systemic failure.
-///
-/// # Behavior
-///
-/// - All children are restarted when any child crashes
-/// - Total system state is reset
-/// - Can cascade failures if crashes are correlated
-///
-/// # Example
-///
-/// ```ignore
-/// use orchestrator::actors::supervisor::strategy::OneForAll;
-///
-/// let strategy = OneForAll::new();
-/// assert_eq!(strategy.name(), "one_for_all");
-/// ```
+/// When a child crashes, restart all children.
 #[derive(Debug, Clone, Default)]
 pub struct OneForAll;
 
@@ -223,14 +191,13 @@ impl OneForAll {
     }
 }
 
-impl RestartStrategy for OneForAll {
+impl<A: Actor> RestartStrategy<A> for OneForAll {
     fn name(&self) -> &'static str {
         "one_for_all"
     }
 
-    fn on_child_failure(&self, ctx: &RestartContext<'_>) -> RestartDecision {
+    fn on_child_failure(&self, ctx: &RestartContext<'_, A>) -> RestartDecision {
         // One-for-all: restart all children
-        // Stop if the failed child has exceeded max restarts
         if ctx.is_max_restarts_exceeded() {
             RestartDecision::Stop
         } else {
@@ -244,22 +211,6 @@ impl RestartStrategy for OneForAll {
 /// Rest-for-one restart strategy.
 ///
 /// When a child crashes, restart it and other children that depend on it.
-/// This is useful when children form a dependency graph.
-///
-/// # Behavior
-///
-/// - Crashed child is restarted
-/// - Dependent children are also restarted (affected by cascade)
-/// - Independent children continue running
-///
-/// # Example
-///
-/// ```ignore
-/// use orchestrator::actors::supervisor::strategy::RestForOne;
-///
-/// let strategy = RestForOne::new();
-/// assert_eq!(strategy.name(), "rest_for_one");
-/// ```
 #[derive(Debug, Clone, Default)]
 pub struct RestForOne {
     /// Names of children that depend on each child.
@@ -288,12 +239,12 @@ impl RestForOne {
     }
 }
 
-impl RestartStrategy for RestForOne {
+impl<A: Actor> RestartStrategy<A> for RestForOne {
     fn name(&self) -> &'static str {
         "rest_for_one"
     }
 
-    fn on_child_failure(&self, ctx: &RestartContext<'_>) -> RestartDecision {
+    fn on_child_failure(&self, ctx: &RestartContext<'_, A>) -> RestartDecision {
         // Check if max restarts exceeded for this child
         if ctx.is_max_restarts_exceeded() {
             return RestartDecision::Stop;
@@ -319,21 +270,28 @@ impl RestartStrategy for RestForOne {
     }
 }
 
-// FIXME: Tests disabled - ActorRef::cell doesn't exist in ractor 0.15.10
-// These tests need to be rewritten to use proper actor spawning or mocking
-// See: https://github.com/slawlor/ractor/issues (check for testing utilities)
-/*
+// ============================================================================
+// RESTART STRATEGY TESTS
+// ============================================================================
+
+// These tests verify restart strategy logic using pure function testing.
+// No actors are spawned - we test strategy decision-making in isolation.
+//
+// Design principle: Strategies are pure functions of (context) -> decision.
+// The ActorRef is only stored in state, but strategies don't need to use it.
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::actors::supervisor::{
-        SchedulerSupervisorConfig, SupervisorActorState, SupervisorState,
+        SupervisorActorState, SupervisorConfig, SupervisorState,
     };
     use std::time::Instant;
 
-    fn create_test_state() -> SupervisorActorState {
+    // HELPER: Create a minimal SupervisorActorState for testing
+    fn create_test_state() -> SupervisorActorState<crate::actors::scheduler::SchedulerActorDef> {
         SupervisorActorState {
-            config: SchedulerSupervisorConfig::default(),
+            config: SupervisorConfig::default(),
             state: SupervisorState::Running,
             children: std::collections::HashMap::new(),
             failure_times: Vec::new(),
@@ -345,29 +303,61 @@ mod tests {
         }
     }
 
-    // Helper to create minimal ChildInfo for tests
-    // We use a workaround for ActorRef since it requires async runtime
-    #[allow(unsafe_code)]
-    fn create_child_info(name: &str, restart_count: u32) -> crate::actors::supervisor::ChildInfo {
+    // HELPER: Create a minimal ChildInfo for testing
+    // Note: We don't need real ActorRef for testing strategy logic
+    // The strategies only access restart_count, last_restart, and config
+    fn create_child_info(name: &str, restart_count: u32) -> crate::actors::supervisor::ChildInfo<crate::actors::scheduler::SchedulerActorDef> {
         crate::actors::supervisor::ChildInfo {
             name: name.to_string(),
-            actor_ref: unsafe { ractor::ActorRef::cell(format!("test-actor-{}", name)) },
+            actor_ref: create_test_actor_ref(name),
             restart_count,
             last_restart: Some(Instant::now()),
             args: crate::actors::scheduler::SchedulerArguments::new(),
         }
     }
 
+    // HELPER: Create a placeholder ActorRef for testing
+    // Strategy tests only need the ChildInfo struct, not a functional actor reference
+    fn create_test_actor_ref(name: &str) -> ractor::ActorRef<crate::actors::scheduler::SchedulerMessage> {
+        use tokio::runtime::Runtime;
+        use ractor::{Actor, ActorProcessingErr, ActorRef};
+        use crate::actors::scheduler::{SchedulerActorDef, SchedulerArguments};
+
+        // Create a minimal async runtime for spawning test actors
+        let rt = Runtime::new().expect("Runtime creation should succeed");
+
+        rt.block_on(async move {
+            // Spawn a real scheduler actor to get a valid ActorRef
+            // We'll never use it to send messages - just need the reference
+            let (ref_, _handle) = Actor::spawn(
+                Some(format!("test-dummy-{}", name)),
+                SchedulerActorDef,
+                SchedulerArguments::default(),
+            ).await.expect("Scheduler actor spawn should succeed");
+
+            // Leak the ActorRef to return it from async context
+            // This is acceptable for test-only code where we never clean up
+            Box::leak(Box::new(ref_)).clone()
+        })
+    }
+
+    // ========================================================================
+    // ONE-FOR-ONE STRATEGY TESTS
+    // ========================================================================
+
     #[test]
-    fn test_one_for_one_name() {
+    fn given_one_for_one_strategy_when_get_name_then_returns_correct_name() {
         let strategy = OneForOne::new();
-        assert_eq!(strategy.name(), "one_for_one");
+
+        assert_eq!(RestartStrategy::<crate::actors::scheduler::SchedulerActorDef>::name(&strategy), "one_for_one");
     }
 
     #[test]
-    fn test_one_for_one_restart_only_failed_child() {
+    fn given_one_for_one_when_child_fails_then_restart_only_failed_child() {
         let strategy = OneForOne::new();
         let mut state = create_test_state();
+
+        // GIVEN: Three children running
         state
             .children
             .insert("child-1".to_string(), create_child_info("child-1", 0));
@@ -378,41 +368,88 @@ mod tests {
             .children
             .insert("child-3".to_string(), create_child_info("child-3", 0));
 
-        let ctx = RestartContext::new("child-2", "Actor panicked", &state);
+        // WHEN: Child-2 fails
+        let ctx = RestartContext::new("child-2", "Test failure", &state);
         let decision = strategy.on_child_failure(&ctx);
 
-        assert_eq!(
-            decision,
-            RestartDecision::Restart {
-                child_names: vec!["child-2".to_string()],
+        // THEN: Only child-2 should be restarted
+        match decision {
+            RestartDecision::Restart { child_names } => {
+                assert_eq!(child_names, vec!["child-2".to_string()]);
             }
-        );
+            RestartDecision::Stop => {
+                panic!("Expected Restart decision, got Stop");
+            }
+        }
+
+        // Verify other children unchanged
+        assert_eq!(state.children.get("child-1").unwrap().restart_count, 0);
+        assert_eq!(state.children.get("child-2").unwrap().restart_count, 0);
+        assert_eq!(state.children.get("child-3").unwrap().restart_count, 0);
     }
 
     #[test]
-    fn test_one_for_one_stop_when_max_restarts_exceeded() {
+    fn given_one_for_one_when_child_exceeds_max_restarts_then_stop() {
         let strategy = OneForOne::new();
         let mut state = create_test_state();
+        state.config.max_restarts = 3;
+
+        // GIVEN: Child has exceeded max restarts
         state
             .children
-            .insert("child-1".to_string(), create_child_info("child-1", 10));
+            .insert("child-1".to_string(), create_child_info("child-1", 5));
 
-        let ctx = RestartContext::new("child-1", "Max restarts exceeded", &state);
+        // WHEN: Child fails again
+        let ctx = RestartContext::new("child-1", "Test failure", &state);
         let decision = strategy.on_child_failure(&ctx);
 
+        // THEN: Should stop (no restart)
         assert_eq!(decision, RestartDecision::Stop);
     }
 
     #[test]
-    fn test_one_for_all_name() {
+    fn given_one_for_one_when_child_within_max_restarts_then_restart() {
+        let strategy = OneForOne::new();
+        let mut state = create_test_state();
+        state.config.max_restarts = 10;
+
+        // GIVEN: Child has NOT exceeded max restarts
+        state
+            .children
+            .insert("child-1".to_string(), create_child_info("child-1", 5));
+
+        // WHEN: Child fails
+        let ctx = RestartContext::new("child-1", "Test failure", &state);
+        let decision = strategy.on_child_failure(&ctx);
+
+        // THEN: Should restart
+        match decision {
+            RestartDecision::Restart { child_names } => {
+                assert_eq!(child_names, vec!["child-1".to_string()]);
+            }
+            RestartDecision::Stop => {
+                panic!("Expected Restart decision, got Stop");
+            }
+        }
+    }
+
+    // ========================================================================
+    // ONE-FOR-ALL STRATEGY TESTS
+    // ========================================================================
+
+    #[test]
+    fn given_one_for_all_when_get_name_then_returns_correct_name() {
         let strategy = OneForAll::new();
-        assert_eq!(strategy.name(), "one_for_all");
+
+        assert_eq!(RestartStrategy::<crate::actors::scheduler::SchedulerActorDef>::name(&strategy), "one_for_all");
     }
 
     #[test]
-    fn test_one_for_all_restart_all_children() {
+    fn given_one_for_all_when_child_fails_then_restart_all_children() {
         let strategy = OneForAll::new();
         let mut state = create_test_state();
+
+        // GIVEN: Three children running
         state
             .children
             .insert("child-1".to_string(), create_child_info("child-1", 0));
@@ -423,31 +460,67 @@ mod tests {
             .children
             .insert("child-3".to_string(), create_child_info("child-3", 0));
 
-        let ctx = RestartContext::new("child-2", "Actor panicked", &state);
+        // WHEN: Child-2 fails
+        let ctx = RestartContext::new("child-2", "Test failure", &state);
         let decision = strategy.on_child_failure(&ctx);
 
-        let expected_children: Vec<String> = vec!["child-1", "child-2", "child-3"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
-
-        assert!(matches!(decision, RestartDecision::Restart { child_names }
-            if child_names == expected_children));
+        // THEN: All children should be restarted
+        match decision {
+            RestartDecision::Restart { child_names } => {
+                let mut expected_names = vec!["child-1".to_string(), "child-2".to_string(), "child-3".to_string()];
+                expected_names.sort();
+                let mut actual_names = child_names.clone();
+                actual_names.sort();
+                assert_eq!(actual_names, expected_names);
+            }
+            RestartDecision::Stop => {
+                panic!("Expected Restart decision, got Stop");
+            }
+        }
     }
 
     #[test]
-    fn test_rest_for_one_name() {
+    fn given_one_for_all_when_any_child_exceeds_max_restarts_then_stop() {
+        let strategy = OneForAll::new();
+        let mut state = create_test_state();
+        state.config.max_restarts = 3;
+
+        // GIVEN: One child has exceeded max restarts (but others are fine)
+        state
+            .children
+            .insert("child-1".to_string(), create_child_info("child-1", 5));
+        state
+            .children
+            .insert("child-2".to_string(), create_child_info("child-2", 0));
+        state
+            .children
+            .insert("child-3".to_string(), create_child_info("child-3", 0));
+
+        // WHEN: Child-1 fails
+        let ctx = RestartContext::new("child-1", "Test failure", &state);
+        let decision = strategy.on_child_failure(&ctx);
+
+        // THEN: Should stop (one_for_all stops if ANY child exceeds limit)
+        assert_eq!(decision, RestartDecision::Stop);
+    }
+
+    // ========================================================================
+    // REST-FOR-ONE STRATEGY TESTS
+    // ========================================================================
+
+    #[test]
+    fn given_rest_for_one_when_get_name_then_returns_correct_name() {
         let strategy = RestForOne::new();
-        assert_eq!(strategy.name(), "rest_for_one");
+
+        assert_eq!(RestartStrategy::<crate::actors::scheduler::SchedulerActorDef>::name(&strategy), "rest_for_one");
     }
 
     #[test]
-    fn test_rest_for_one_restart_with_dependents() {
-        let strategy = RestForOne::new()
-            .with_dependency("child-1", "child-2")
-            .with_dependency("child-1", "child-3");
-
+    fn given_rest_for_one_when_child_fails_without_deps_then_restart_only_child() {
+        let strategy = RestForOne::new();
         let mut state = create_test_state();
+
+        // GIVEN: Three children with no dependencies configured
         state
             .children
             .insert("child-1".to_string(), create_child_info("child-1", 0));
@@ -458,20 +531,112 @@ mod tests {
             .children
             .insert("child-3".to_string(), create_child_info("child-3", 0));
 
-        let ctx = RestartContext::new("child-1", "Actor panicked", &state);
+        // WHEN: Child-2 fails
+        let ctx = RestartContext::new("child-2", "Test failure", &state);
         let decision = strategy.on_child_failure(&ctx);
 
-        let expected_children: Vec<String> = vec!["child-1", "child-2", "child-3"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
-
-        assert!(matches!(decision, RestartDecision::Restart { child_names }
-            if child_names == expected_children));
+        // THEN: Only child-2 should be restarted (no dependents)
+        match decision {
+            RestartDecision::Restart { child_names } => {
+                assert_eq!(child_names, vec!["child-2".to_string()]);
+            }
+            RestartDecision::Stop => {
+                panic!("Expected Restart decision, got Stop");
+            }
+        }
     }
 
     #[test]
-    fn test_restart_context_restart_count() {
+    fn given_rest_for_one_when_child_fails_with_dependents_then_restart_child_and_dependents() {
+        let strategy = RestForOne::new()
+            .with_dependency("parent-1", "child-1")
+            .with_dependency("parent-1", "child-2")
+            .with_dependency("parent-2", "child-3");
+        let mut state = create_test_state();
+
+        // GIVEN: Children with dependencies configured
+        state
+            .children
+            .insert("parent-1".to_string(), create_child_info("parent-1", 0));
+        state
+            .children
+            .insert("parent-2".to_string(), create_child_info("parent-2", 0));
+        state
+            .children
+            .insert("child-1".to_string(), create_child_info("child-1", 0));
+        state
+            .children
+            .insert("child-2".to_string(), create_child_info("child-2", 0));
+        state
+            .children
+            .insert("child-3".to_string(), create_child_info("child-3", 0));
+
+        // WHEN: parent-1 fails
+        let ctx = RestartContext::new("parent-1", "Test failure", &state);
+        let decision = strategy.on_child_failure(&ctx);
+
+        // THEN: parent-1 AND its dependents (child-1, child-2) should restart
+        match decision {
+            RestartDecision::Restart { child_names } => {
+                let mut expected = vec!["parent-1".to_string(), "child-1".to_string(), "child-2".to_string()];
+                expected.sort();
+                let mut actual = child_names.clone();
+                actual.sort();
+                assert_eq!(actual, expected);
+            }
+            RestartDecision::Stop => {
+                panic!("Expected Restart decision, got Stop");
+            }
+        }
+    }
+
+    #[test]
+    fn given_rest_for_one_when_child_exceeds_max_restarts_then_stop() {
+        let strategy = RestForOne::new();
+        let mut state = create_test_state();
+        state.config.max_restarts = 3;
+
+        // GIVEN: Child has exceeded max restarts
+        state
+            .children
+            .insert("child-1".to_string(), create_child_info("child-1", 5));
+
+        // WHEN: Child fails again
+        let ctx = RestartContext::new("child-1", "Test failure", &state);
+        let decision = strategy.on_child_failure(&ctx);
+
+        // THEN: Should stop (no restart, even with dependents)
+        assert_eq!(decision, RestartDecision::Stop);
+    }
+
+    // ========================================================================
+    // RESTART CONTEXT TESTS
+    // ========================================================================
+
+    #[test]
+    fn given_restart_context_when_get_child_name_then_returns_correct_name() {
+        let mut state = create_test_state();
+        state
+            .children
+            .insert("child-1".to_string(), create_child_info("child-1", 0));
+
+        let ctx = RestartContext::new("child-1", "Test failure", &state);
+        assert_eq!(ctx.child_name, "child-1");
+    }
+
+    #[test]
+    fn given_restart_context_when_get_reason_then_returns_correct_reason() {
+        let mut state = create_test_state();
+        state
+            .children
+            .insert("child-1".to_string(), create_child_info("child-1", 0));
+
+        let ctx = RestartContext::new("child-1", "Test failure", &state);
+        assert_eq!(ctx.failure_reason, "Test failure");
+    }
+
+    #[test]
+    fn given_restart_context_when_get_restart_count_then_returns_child_restart_count() {
         let mut state = create_test_state();
         state
             .children
@@ -482,7 +647,7 @@ mod tests {
     }
 
     #[test]
-    fn test_restart_context_all_children() {
+    fn given_restart_context_when_get_all_children_then_returns_all_child_names() {
         let mut state = create_test_state();
         state
             .children
@@ -500,7 +665,7 @@ mod tests {
     }
 
     #[test]
-    fn test_restart_context_max_restarts_exceeded() {
+    fn given_restart_context_when_check_max_restarts_exceeded_then_returns_true_if_exceeded() {
         let mut state = create_test_state();
         state.config.max_restarts = 5;
         state
@@ -512,21 +677,37 @@ mod tests {
     }
 
     #[test]
-    fn test_restart_context_not_max_restarts_exceeded() {
+    fn given_restart_context_when_check_max_restarts_not_exceeded_then_returns_false() {
         let mut state = create_test_state();
         state.config.max_restarts = 10;
-        // Add minimal child info - only restart_count matters for tests
-        let child_info = crate::actors::supervisor::ChildInfo {
-            name: "child-1".to_string(),
-            actor_ref: unsafe { ractor::ActorRef::cell("test-actor".to_string()) },
-            restart_count: 5,
-            last_restart: Some(Instant::now()),
-            args: crate::actors::scheduler::SchedulerArguments::new(),
-        };
-        state.children.insert("child-1".to_string(), child_info);
+        state
+            .children
+            .insert("child-1".to_string(), create_child_info("child-1", 5));
 
         let ctx = RestartContext::new("child-1", "Test", &state);
         assert!(!ctx.is_max_restarts_exceeded());
     }
+
+    #[test]
+    fn given_restart_context_when_get_time_since_last_restart_then_returns_duration() {
+        let mut state = create_test_state();
+        let now = Instant::now();
+        let child_info = create_child_info("child-1", 0);
+        let mut child_info_with_time = child_info;
+        child_info_with_time.last_restart = Some(now);
+
+        state
+            .children
+            .insert("child-1".to_string(), child_info_with_time);
+
+        let ctx = RestartContext::new("child-1", "Test", &state);
+
+        // Allow some time to pass
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        let elapsed = ctx.time_since_last_restart();
+        assert!(elapsed.is_some());
+        assert!(elapsed.unwrap().as_millis() >= 10);
+    }
 }
-*/
+

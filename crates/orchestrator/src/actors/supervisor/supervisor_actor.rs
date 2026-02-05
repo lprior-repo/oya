@@ -893,14 +893,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_supervisor_get_status() {
-        let args = SupervisorArguments::new().with_config(SchedulerSupervisorConfig::for_testing());
+        let args = SupervisorArguments::new().with_config(SupervisorConfig::for_testing());
 
-        let supervisor = spawn_supervisor(args).await;
+        let supervisor = spawn_supervisor::<SchedulerActorDef>(args).await;
         assert!(supervisor.is_ok());
 
         if let Ok(sup) = supervisor {
             let (tx, rx) = tokio::sync::oneshot::channel();
-            let _ = sup.send_message(SupervisorMessage::GetStatus { reply: tx });
+            let _ = sup.send_message(SupervisorMessage::<SchedulerActorDef>::GetStatus { reply: tx });
 
             let status = rx.await;
             assert!(status.is_ok());
@@ -919,14 +919,14 @@ mod tests {
         // Use unique name to avoid collision with parallel tests
         let child_name = format!("spawn-child-{}", std::process::id());
 
-        let args = SupervisorArguments::new().with_config(SchedulerSupervisorConfig::for_testing());
+        let args = SupervisorArguments::new().with_config(SupervisorConfig::for_testing());
 
-        let supervisor = spawn_supervisor(args).await;
+        let supervisor = spawn_supervisor::<SchedulerActorDef>(args).await;
         assert!(supervisor.is_ok(), "Failed to spawn supervisor");
 
         if let Ok(sup) = supervisor {
             let (tx, rx) = tokio::sync::oneshot::channel();
-            let send_result = sup.send_message(SupervisorMessage::SpawnChild {
+            let send_result = sup.send_message(SupervisorMessage::<SchedulerActorDef>::SpawnChild {
                 name: child_name.clone(),
                 args: SchedulerArguments::new(),
                 reply: tx,
@@ -961,15 +961,15 @@ mod tests {
     async fn test_supervisor_stop_child() {
         let child_name = format!("stop-child-{}", std::process::id());
 
-        let args = SupervisorArguments::new().with_config(SchedulerSupervisorConfig::for_testing());
+        let args = SupervisorArguments::new().with_config(SupervisorConfig::for_testing());
 
-        let supervisor = spawn_supervisor(args).await;
+        let supervisor = spawn_supervisor::<SchedulerActorDef>(args).await;
         assert!(supervisor.is_ok());
 
         if let Ok(sup) = supervisor {
             // Spawn a child
             let (tx, rx) = tokio::sync::oneshot::channel();
-            let _ = sup.send_message(SupervisorMessage::SpawnChild {
+            let _ = sup.send_message(SupervisorMessage::<SchedulerActorDef>::SpawnChild {
                 name: child_name.clone(),
                 args: SchedulerArguments::new(),
                 reply: tx,

@@ -4,7 +4,6 @@
 //! integrating with the EventBus for event-driven coordination and
 //! the ShutdownCoordinator for graceful shutdown.
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use ractor::{Actor, ActorProcessingErr, ActorRef};
@@ -19,12 +18,19 @@ use crate::shutdown::{CheckpointResult, ShutdownCoordinator, ShutdownSignal};
 
 use super::errors::ActorError;
 use super::messages::{BeadState as MsgBeadState, SchedulerMessage, WorkflowStatus};
+use super::supervisor::SupervisableActor;
+
+use im::{HashMap, Vector};
 
 /// The scheduler actor definition.
-///
-/// This implements the ractor Actor trait to enable message-passing
-/// concurrency with supervision support.
+#[derive(Clone, Default)]
 pub struct SchedulerActorDef;
+
+impl SupervisableActor for SchedulerActorDef {
+    fn default_args() -> Self::Arguments {
+        Self::Arguments::default()
+    }
+}
 
 /// Arguments passed to the actor on startup.
 #[derive(Default, Clone)]
@@ -61,7 +67,7 @@ pub struct SchedulerState {
     /// Pending beads waiting to be scheduled.
     pending_beads: HashMap<BeadId, ScheduledBead>,
     /// Ready beads that can be dispatched.
-    ready_beads: Vec<BeadId>,
+    ready_beads: Vector<BeadId>,
     /// Worker assignments (bead_id -> worker_id).
     worker_assignments: HashMap<BeadId, String>,
 
@@ -82,7 +88,7 @@ impl SchedulerState {
         Self {
             workflows: HashMap::new(),
             pending_beads: HashMap::new(),
-            ready_beads: Vec::new(),
+            ready_beads: Vector::new(),
             worker_assignments: HashMap::new(),
             _event_subscription_id: None,
             _shutdown_rx: None,
@@ -110,7 +116,7 @@ impl Actor for SchedulerActorDef {
         if let Some(bus) = &args.event_bus {
             let pattern =
                 EventPattern::ByTypes(vec!["completed".to_string(), "state_changed".to_string()]);
-            let (sub_id, subscription) = bus.subscribe_with_pattern(pattern).await;
+            let (sub_id, subscription): (String, EventSubscription) = bus.subscribe_with_pattern(pattern).await;
             state._event_subscription_id = Some(sub_id);
 
             // Spawn task to forward events to actor
@@ -124,13 +130,13 @@ impl Actor for SchedulerActorDef {
 
         // Subscribe to shutdown signals
         if let Some(coordinator) = &args.shutdown_coordinator {
-            let shutdown_rx = coordinator.subscribe();
+            let shutdown_rx: broadcast::Receiver<ShutdownSignal> = coordinator.subscribe();
             state._shutdown_rx = Some(shutdown_rx);
             state.checkpoint_tx = Some(coordinator.checkpoint_sender());
 
             // Spawn shutdown listener
             let myself_clone = myself.clone();
-            let mut rx = coordinator.subscribe();
+            let mut rx: broadcast::Receiver<ShutdownSignal> = coordinator.subscribe();
             tokio::spawn(async move {
                 if rx.recv().await.is_ok() {
                     // Send shutdown message to actor
@@ -262,8 +268,9 @@ impl Actor for SchedulerActorDef {
 
         // Save checkpoint on graceful shutdown
         if let Some(tx) = &state.checkpoint_tx {
-            let result = CheckpointResult::success("scheduler", 0);
-            if tx.send(result).await.is_err() {
+            let result: CheckpointResult = CheckpointResult::success("scheduler", 0);
+            let send_res: Result<(), mpsc::error::SendError<CheckpointResult>> = tx.send(result).await;
+            if send_res.is_err() {
                 warn!("Failed to send checkpoint result");
             }
         }

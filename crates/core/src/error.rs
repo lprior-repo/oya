@@ -83,3 +83,91 @@ impl Error {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_file_read_failed_factory() {
+        let _path = PathBuf::from("/test/path");
+        let error = Error::file_read_failed(_path.clone(), "permission denied");
+        assert!(matches!(error, Error::FileReadFailed { .. }));
+    }
+
+    #[test]
+    fn test_file_write_failed_factory() {
+        let _path = PathBuf::from("/test/path");
+        let error = Error::file_write_failed(_path.clone(), "disk full");
+        assert!(matches!(error, Error::FileWriteFailed { .. }));
+    }
+
+    #[test]
+    fn test_directory_creation_failed_factory() {
+        let _path = PathBuf::from("/test/dir");
+        let error = Error::directory_creation_failed(_path.clone(), "readonly");
+        assert!(matches!(error, Error::DirectoryCreationFailed { .. }));
+    }
+
+    #[test]
+    fn test_json_parse_failed_factory() {
+        let error = Error::json_parse_failed("bad comma");
+        assert!(matches!(error, Error::JsonParseFailed { .. }));
+    }
+
+    #[test]
+    fn test_invalid_record_factory() {
+        let error = Error::invalid_record("missing field");
+        assert!(matches!(error, Error::InvalidRecord { .. }));
+    }
+
+    #[test]
+    fn test_unknown_factory() {
+        let error = Error::Unknown(String::from("something went wrong"));
+        assert!(matches!(error, Error::Unknown(_)));
+    }
+
+    #[test]
+    fn test_io_error_from_std() {
+        let std_error = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
+        let error = Error::Io(std_error);
+        assert!(matches!(error, Error::Io(_)));
+    }
+
+    #[test]
+    fn test_directory_not_found() {
+        let _path = PathBuf::from("/nonexistent");
+        let error = Error::DirectoryNotFound {
+            path: PathBuf::from("/nonexistent"),
+        };
+        assert!(matches!(error, Error::DirectoryNotFound { .. }));
+    }
+
+    #[test]
+    fn test_error_display() {
+        let errors = vec![
+            Error::file_read_failed(PathBuf::from("/path"), "reason"),
+            Error::json_parse_failed("bad json"),
+            Error::Unknown(String::from("generic")),
+        ];
+
+        for error in errors {
+            let display = format!("{}", error);
+            assert!(!display.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_error_debug() {
+        let error = Error::DirectoryNotFound { path: PathBuf::from("/test") };
+        let debug = format!("{:?}", error);
+        assert!(debug.contains("DirectoryNotFound"));
+    }
+
+    #[test]
+    fn test_error_into_string() {
+        let error = Error::invalid_record("bad record");
+        let error_string = error.to_string();
+        assert!(error_string.contains("bad record"));
+    }
+}

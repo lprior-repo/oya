@@ -16,7 +16,7 @@
 //! - `SchedulerActorDef`: The main scheduler actor that manages workflow DAGs
 //! - `SchedulerMessage`: Messages for communicating with the scheduler
 //! - `ActorError`: Business logic errors returned via RPC replies
-//! - `SchedulerSupervisorConfig`: Configuration for supervision
+//! - `SupervisorConfig`: Configuration for supervision
 //!
 //! # Example
 //!
@@ -50,21 +50,27 @@
 
 pub mod errors;
 pub mod messages;
+pub mod queue;
+pub mod reconciler;
 pub mod scheduler;
+pub mod storage;
 pub mod supervisor;
+pub mod universe;
+pub mod workflow;
 
 // Re-export main types for convenience
 pub use errors::ActorError;
 pub use messages::{BeadState, SchedulerMessage, WorkflowStatus};
+pub use queue::{QueueActorDef, QueueMessage, QueueState};
+pub use reconciler::{ReconcilerActorDef, ReconcilerMessage, ReconcilerState};
 pub use scheduler::{SchedulerActorDef, SchedulerArguments, SchedulerState};
+pub use storage::{
+    EventStoreActorDef, EventStoreMessage, EventStoreState, StateManagerActorDef,
+    StateManagerMessage, StateManagerState,
+};
 pub use supervisor::{
-    MeltdownStatus, SchedulerSupervisorConfig, SchedulerSupervisorDef, SpawnError,
-    SupervisorActorState, SupervisorArguments, SupervisorMessage, SupervisorState,
-    SupervisorStatus, calculate_backoff, spawn_scheduler, spawn_scheduler_with_name,
-    spawn_supervised_scheduler, spawn_supervisor, spawn_supervisor_with_name,
+    MeltdownStatus, SupervisorActorDef, SupervisorActorState, SupervisorArguments,
+    SupervisorConfig, SupervisorMessage, SupervisorState, SupervisorStatus, calculate_backoff,
 };
-
-// Re-export restart strategies
-pub use supervisor::strategy::{
-    OneForAll, OneForOne, RestartContext, RestartDecision, RestartStrategy,
-};
+pub use universe::{UniverseArguments, UniverseMessage, UniverseState, UniverseSupervisorDef};
+pub use workflow::{WorkflowActorDef, WorkflowMessage, WorkflowStateActor};

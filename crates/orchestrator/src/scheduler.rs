@@ -11,7 +11,7 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
-use std::collections::{HashMap, HashSet};
+use im::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -82,7 +82,7 @@ impl WorkflowState {
 
     /// Mark a bead as completed
     pub fn mark_completed(&mut self, bead_id: &BeadId) {
-        self.completed.insert(bead_id.clone());
+        self.completed = self.completed.update(bead_id.clone());
     }
 
     /// Get all beads that are ready to execute
@@ -284,6 +284,8 @@ impl ScheduledBead {
     }
 }
 
+use im::Vector;
+
 /// Scheduler actor for managing workflow DAGs and bead scheduling.
 ///
 /// Maintains the following invariants:
@@ -300,16 +302,16 @@ pub struct SchedulerActor {
     pending_beads: HashMap<BeadId, ScheduledBead>,
 
     /// Ready beads that can be dispatched to queues
-    ready_beads: Vec<BeadId>,
+    ready_beads: Vector<BeadId>,
 
     /// Worker assignments (bead_id -> worker_id)
     worker_assignments: HashMap<BeadId, String>,
 
     /// References to queue actors for dispatching
-    queue_refs: Vec<QueueActorRef>,
+    queue_refs: Vector<QueueActorRef>,
 
     /// Event subscriptions (for bead completion events)
-    event_subscriptions: Vec<EventSubscription>,
+    event_subscriptions: Vector<EventSubscription>,
 }
 
 impl SchedulerActor {
@@ -319,10 +321,10 @@ impl SchedulerActor {
         Self {
             workflows: HashMap::new(),
             pending_beads: HashMap::new(),
-            ready_beads: Vec::new(),
+            ready_beads: Vector::new(),
             worker_assignments: HashMap::new(),
-            queue_refs: Vec::new(),
-            event_subscriptions: Vec::new(),
+            queue_refs: Vector::new(),
+            event_subscriptions: Vector::new(),
         }
     }
 
@@ -423,7 +425,7 @@ impl SchedulerActor {
         bead.set_state(BeadScheduleState::Ready);
 
         if !self.ready_beads.contains(bead_id) {
-            self.ready_beads.push(bead_id.clone());
+            self.ready_beads.push_back(bead_id.clone());
         }
 
         Ok(())
@@ -431,8 +433,8 @@ impl SchedulerActor {
 
     /// Get all ready beads
     #[must_use]
-    pub fn get_ready_beads(&self) -> &[BeadId] {
-        &self.ready_beads
+    pub fn get_ready_beads(&self) -> Vec<BeadId> {
+        self.ready_beads.iter().cloned().collect()
     }
 
     /// Handle a bead completion event
@@ -475,25 +477,25 @@ impl SchedulerActor {
     /// Add a queue actor reference
     pub fn add_queue_ref(&mut self, queue_ref: QueueActorRef) {
         if !self.queue_refs.contains(&queue_ref) {
-            self.queue_refs.push(queue_ref);
+            self.queue_refs.push_back(queue_ref);
         }
     }
 
     /// Get all queue references
     #[must_use]
-    pub fn get_queue_refs(&self) -> &[QueueActorRef] {
-        &self.queue_refs
+    pub fn get_queue_refs(&self) -> Vector<QueueActorRef> {
+        self.queue_refs.clone()
     }
 
     /// Add an event subscription
     pub fn subscribe_to_events(&mut self, subscription: EventSubscription) {
-        self.event_subscriptions.push(subscription);
+        self.event_subscriptions.push_back(subscription);
     }
 
     /// Get all event subscriptions
     #[must_use]
-    pub fn get_subscriptions(&self) -> &[EventSubscription] {
-        &self.event_subscriptions
+    pub fn get_subscriptions(&self) -> Vector<EventSubscription> {
+        self.event_subscriptions.clone()
     }
 
     /// Get the number of pending beads
