@@ -71,6 +71,7 @@ pub use storage::{
 pub use supervisor::{
     MeltdownStatus, SupervisorActorDef, SupervisorActorState, SupervisorArguments,
     SupervisorConfig, SupervisorMessage, SupervisorState, SupervisorStatus, calculate_backoff,
+    GenericSupervisableActor,
 };
 pub use universe::{UniverseArguments, UniverseMessage, UniverseState, UniverseSupervisorDef};
 pub use workflow::{WorkflowActorDef, WorkflowMessage, WorkflowStateActor};

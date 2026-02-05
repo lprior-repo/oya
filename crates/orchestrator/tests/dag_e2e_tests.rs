@@ -564,7 +564,7 @@ fn given_dag_when_serialize_deserialize_then_identical() {
     );
 
     // Verify nodes
-    let original_nodes: HashSet<_> = original.nodes().collect::<HashSet<_>>();
+    let original_nodes: HashSet<BeadId> = original.nodes().cloned().collect::<HashSet<BeadId>>();
     let restored_nodes: HashSet<_> = restored.nodes().collect::<HashSet<_>>();
     assert_eq!(original_nodes, restored_nodes, "nodes should be identical");
 }

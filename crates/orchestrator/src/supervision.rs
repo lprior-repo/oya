@@ -104,8 +104,9 @@ async fn spawn_tier1_supervisor<A>(
     config: &SupervisorConfig,
 ) -> Result<Tier1SupervisorRef<A>, ActorError>
 where
-    A: crate::actors::supervisor::SupervisableActor + Clone + Default,
-    A::Arguments: Clone,
+    A: crate::actors::GenericSupervisableActor + Clone + Default,
+    A::Arguments: Clone + Send + Sync,
+    A::Msg: Clone + Send,
 {
     let name = format!("{}-{}-supervisor", name_prefix, kind.as_str());
     let args = SupervisorArguments::new().with_config(config.clone());

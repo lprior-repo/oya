@@ -3,14 +3,16 @@
 use ractor::{Actor, ActorProcessingErr, ActorRef};
 use tracing::info;
 
-use crate::actors::supervisor::SupervisableActor;
+use crate::actors::supervisor::GenericSupervisableActor;
 
+#[derive(Clone, Default)]
 pub struct StateManagerActorDef;
 
 pub struct StateManagerState {
     // Durable state management
 }
 
+#[derive(Clone)]
 pub enum StateManagerMessage {
     // Virtual object messages
 }
@@ -39,30 +41,20 @@ impl Actor for StateManagerActorDef {
     }
 }
 
-impl SupervisableActor for StateManagerActorDef {
+impl GenericSupervisableActor for StateManagerActorDef {
     fn default_args() -> Self::Arguments {
         ()
     }
 }
 
-impl Clone for StateManagerActorDef {
-    fn clone(&self) -> Self {
-        Self
-    }
-}
-
-impl Default for StateManagerActorDef {
-    fn default() -> Self {
-        Self
-    }
-}
-
+#[derive(Clone, Default)]
 pub struct EventStoreActorDef;
 
 pub struct EventStoreState {
     // Event persistence
 }
 
+#[derive(Clone)]
 pub enum EventStoreMessage {
     // Event storage messages
 }
@@ -91,20 +83,12 @@ impl Actor for EventStoreActorDef {
     }
 }
 
-impl SupervisableActor for EventStoreActorDef {
+impl GenericSupervisableActor for EventStoreActorDef {
+
     fn default_args() -> Self::Arguments {
+
         ()
-    }
-}
 
-impl Clone for EventStoreActorDef {
-    fn clone(&self) -> Self {
-        Self
     }
-}
 
-impl Default for EventStoreActorDef {
-    fn default() -> Self {
-        Self
-    }
 }

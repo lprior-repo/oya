@@ -3,14 +3,16 @@
 use ractor::{Actor, ActorProcessingErr, ActorRef};
 use tracing::info;
 
-use crate::actors::supervisor::SupervisableActor;
+use crate::actors::supervisor::GenericSupervisableActor;
 
+#[derive(Clone, Default)]
 pub struct ReconcilerActorDef;
 
 pub struct ReconcilerState {
     // Reconciliation state
 }
 
+#[derive(Clone)]
 pub enum ReconcilerMessage {
     Tick,
 }
@@ -52,20 +54,12 @@ impl Actor for ReconcilerActorDef {
     }
 }
 
-impl SupervisableActor for ReconcilerActorDef {
+impl GenericSupervisableActor for ReconcilerActorDef {
+
     fn default_args() -> Self::Arguments {
+
         ()
-    }
-}
 
-impl Clone for ReconcilerActorDef {
-    fn clone(&self) -> Self {
-        Self
     }
-}
 
-impl Default for ReconcilerActorDef {
-    fn default() -> Self {
-        Self
-    }
 }

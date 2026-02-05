@@ -8,14 +8,17 @@
 //! Restart strategies for supervisor actor management.
 
 use im::HashSet;
-use ractor::Actor;
 use thiserror::Error;
 
-use super::supervisor_actor::{SupervisorActorState, SupervisorConfig};
+use super::supervisor_actor::{SupervisorActorState, SupervisorConfig, GenericSupervisableActor};
 
 /// Context provided to restart strategies for decision-making.
 #[derive(Debug, Clone)]
-pub struct RestartContext<'a, A: Actor> {
+pub struct RestartContext<'a, A: GenericSupervisableActor>
+where
+    A::Arguments: Clone + Send + Sync,
+    A::Msg: Clone + Send,
+{
     /// Name of the child that failed.
     pub child_name: String,
     /// Reason for failure.
@@ -24,7 +27,11 @@ pub struct RestartContext<'a, A: Actor> {
     pub state: &'a SupervisorActorState<A>,
 }
 
-impl<'a, A: Actor> RestartContext<'a, A> {
+impl<'a, A: GenericSupervisableActor> RestartContext<'a, A>
+where
+    A::Arguments: Clone + Send + Sync,
+    A::Msg: Clone + Send,
+{
     /// Create a new restart context.
     #[must_use]
     pub fn new(
@@ -84,7 +91,11 @@ pub enum RestartDecision {
 }
 
 /// Trait for restart strategies.
-pub trait RestartStrategy<A: Actor>: Send + Sync {
+pub trait RestartStrategy<A: GenericSupervisableActor>: Send + Sync
+where
+    A::Arguments: Clone + Send + Sync,
+    A::Msg: Clone + Send,
+{
     /// Get strategy name.
     fn name(&self) -> &'static str;
 
@@ -119,7 +130,11 @@ impl OneForOne {
     }
 }
 
-impl<A: Actor> RestartStrategy<A> for OneForOne {
+impl<A: GenericSupervisableActor> RestartStrategy<A> for OneForOne 
+where
+    A::Arguments: Clone + Send + Sync,
+    A::Msg: Clone + Send,
+{
     fn name(&self) -> &'static str {
         "one_for_one"
     }
@@ -146,7 +161,11 @@ impl OneForAll {
     }
 }
 
-impl<A: Actor> RestartStrategy<A> for OneForAll {
+impl<A: GenericSupervisableActor> RestartStrategy<A> for OneForAll 
+where
+    A::Arguments: Clone + Send + Sync,
+    A::Msg: Clone + Send,
+{
     fn name(&self) -> &'static str {
         "one_for_all"
     }
@@ -189,7 +208,11 @@ impl RestForOne {
     }
 }
 
-impl<A: Actor> RestartStrategy<A> for RestForOne {
+impl<A: GenericSupervisableActor> RestartStrategy<A> for RestForOne 
+where
+    A::Arguments: Clone + Send + Sync,
+    A::Msg: Clone + Send,
+{
     fn name(&self) -> &'static str {
         "rest_for_one"
     }
@@ -220,6 +243,7 @@ impl<A: Actor> RestartStrategy<A> for RestForOne {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::actors::messages::SchedulerMessage;
     use crate::actors::scheduler::{SchedulerActorDef, SchedulerArguments};
     use crate::actors::supervisor::{SupervisorConfig, SupervisorState};
     use std::time::Instant;
@@ -228,7 +252,7 @@ mod tests {
         SupervisorActorState {
             config: SupervisorConfig::default(),
             state: SupervisorState::Running,
-            children: im::HashMap::new(),
+            children: std::collections::HashMap::new(),
             failure_times: Vec::new(),
             total_restarts: 0,
             child_id_counter: 0,
@@ -251,9 +275,7 @@ mod tests {
         }
     }
 
-    fn create_test_actor_ref(
-        name: &str,
-    ) -> ractor::ActorRef<crate::actors::messages::SchedulerMessage> {
+    fn create_test_actor_ref(name: &str) -> ractor::ActorRef<SchedulerMessage> {
         use ractor::Actor;
         use tokio::runtime::Runtime;
 

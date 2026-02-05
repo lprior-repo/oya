@@ -331,10 +331,9 @@ impl ZellijPlugin for State {
                 }
                 BareKey::Enter => {
                     self.mode = match self.mode {
-                        ViewMode::BeadList => ViewMode::BeadDetail,
-                        ViewMode::BeadDetail => ViewMode::PipelineView,
-                        ViewMode::PipelineView => ViewMode::AgentList,
-                        ViewMode::AgentList => ViewMode::BeadList,
+                        ViewMode::PipelineView => ViewMode::PipelineView,
+                        ViewMode::AgentList => ViewMode::AgentList,
+                        _ => {}
                     };
                     if self.mode == ViewMode::PipelineView {
                         self.load_pipeline_for_selected();

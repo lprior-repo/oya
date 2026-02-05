@@ -3,9 +3,10 @@
 use ractor::{Actor, ActorProcessingErr, ActorRef};
 use tracing::info;
 
-use crate::actors::supervisor::SupervisableActor;
+use crate::actors::supervisor::GenericSupervisableActor;
 use crate::scheduler::QueueType;
 
+#[derive(Clone, Default)]
 pub struct QueueActorDef;
 
 pub struct QueueState {
@@ -14,6 +15,7 @@ pub struct QueueState {
     pub ready_beads: Vec<String>,
 }
 
+#[derive(Clone)]
 pub enum QueueMessage {
     // Add messages as needed
 }
@@ -46,20 +48,12 @@ impl Actor for QueueActorDef {
     }
 }
 
-impl SupervisableActor for QueueActorDef {
+impl GenericSupervisableActor for QueueActorDef {
+
     fn default_args() -> Self::Arguments {
+
         ("default-queue".to_string(), QueueType::FIFO)
-    }
-}
 
-impl Clone for QueueActorDef {
-    fn clone(&self) -> Self {
-        Self
     }
-}
 
-impl Default for QueueActorDef {
-    fn default() -> Self {
-        Self
-    }
 }

@@ -4,7 +4,7 @@
 //! including spawn helpers, supervision strategies, restart with
 //! exponential backoff, and meltdown detection.
 
-use im::HashMap;
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -19,9 +19,10 @@ use super::super::errors::ActorError;
 use super::strategy::{OneForOne, RestartContext, RestartDecision, RestartStrategy};
 
 /// Trait for actors that can be supervised by the GenericSupervisor.
-pub trait SupervisableActor: Actor + Clone
+pub trait GenericSupervisableActor: Actor + Clone
 where
     Self::Arguments: Clone + Send + Sync,
+    Self::Msg: Clone + Send,
 {
     /// Get the default arguments for this actor.
     fn default_args() -> Self::Arguments;
@@ -162,9 +163,10 @@ pub enum SupervisorState {
 
 /// Information about a supervised child.
 #[derive(Clone)]
-pub struct ChildInfo<A: SupervisableActor>
+pub struct ChildInfo<A: GenericSupervisableActor>
 where
     A::Arguments: Clone + Send + Sync,
+    A::Msg: Clone + Send,
 {
     /// Child name.
     pub name: String,
@@ -178,7 +180,11 @@ where
     pub args: A::Arguments,
 }
 
-impl<A: Actor> Debug for ChildInfo<A> {
+impl<A: GenericSupervisableActor> Debug for ChildInfo<A>
+where
+    A::Arguments: Clone + Send + Sync,
+    A::Msg: Clone + Send,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ChildInfo")
             .field("name", &self.name)
@@ -190,17 +196,19 @@ impl<A: Actor> Debug for ChildInfo<A> {
 
 /// Definition for the generic supervisor actor.
 #[derive(Clone)]
-pub struct SupervisorActorDef<A: SupervisableActor>
+pub struct SupervisorActorDef<A: GenericSupervisableActor>
 where
-    A::Arguments: Clone + Sync,
+    A::Arguments: Clone + Send + Sync,
+    A::Msg: Clone + Send,
 {
     _actor: std::marker::PhantomData<A>,
     child_def: A,
 }
 
-impl<A: SupervisableActor> SupervisorActorDef<A>
+impl<A: GenericSupervisableActor> SupervisorActorDef<A>
 where
-    A::Arguments: Clone + Sync,
+    A::Arguments: Clone + Send + Sync,
+    A::Msg: Clone + Send,
 {
     /// Create a new supervisor definition for a specific actor type.
     pub fn new(child_def: A) -> Self {
@@ -212,7 +220,11 @@ where
 }
 
 /// State for the supervisor actor.
-pub struct SupervisorActorState<A: Actor> {
+pub struct SupervisorActorState<A: GenericSupervisableActor>
+where
+    A::Arguments: Clone + Send + Sync,
+    A::Msg: Clone + Send,
+{
     /// Configuration.
     pub config: SupervisorConfig,
     /// Current state.
@@ -233,16 +245,11 @@ pub struct SupervisorActorState<A: Actor> {
     pub restart_strategy: Box<dyn RestartStrategy<A>>,
 }
 
-impl<A: Actor> SupervisorActorState<A> {
-    /// Generate a unique child actor name.
-    fn next_child_name(&mut self, prefix: &str) -> String {
-        let id = self.child_id_counter;
-        self.child_id_counter = self.child_id_counter.saturating_add(1);
-        format!("{}-{}", prefix, id)
-    }
-}
-
-impl<A: Actor> Debug for SupervisorActorState<A> {
+impl<A: GenericSupervisableActor> Debug for SupervisorActorState<A>
+where
+    A::Arguments: Clone + Send + Sync,
+    A::Msg: Clone + Send,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SupervisorActorState")
             .field("config", &self.config)
@@ -295,9 +302,10 @@ impl SupervisorArguments {
     }
 }
 
-impl<A: SupervisableActor> Actor for SupervisorActorDef<A>
+impl<A: GenericSupervisableActor> Actor for SupervisorActorDef<A>
 where
-    A::Arguments: Clone + Sync,
+    A::Arguments: Clone + Send + Sync,
+    A::Msg: Clone + Send,
 {
     type Msg = SupervisorMessage<A>;
     type State = SupervisorActorState<A>;
@@ -348,8 +356,7 @@ where
     ) -> Result<(), ActorProcessingErr> {
         match message {
             SupervisorMessage::ChildExited { name, reason } => {
-                self.handle_child_exited(myself, state, &name, &reason)
-                    .await;
+                self.handle_child_exited(myself, state, &name, &reason).await;
             }
 
             SupervisorMessage::GetStatus { reply } => {
@@ -400,10 +407,18 @@ where
     }
 }
 
-impl<A: SupervisableActor> SupervisorActorDef<A>
+impl<A: GenericSupervisableActor> SupervisorActorDef<A>
 where
-    A::Arguments: Clone + Sync,
+    A::Arguments: Clone + Send + Sync,
+    A::Msg: Clone + Send,
 {
+    /// Generate a unique child actor name.
+    fn next_child_name(child_id_counter: &mut u64, prefix: &str) -> String {
+        let id = *child_id_counter;
+        *child_id_counter = child_id_counter.saturating_add(1);
+        format!("{}-{}", prefix, id)
+    }
+
     /// Handle a child exit event.
     async fn handle_child_exited(
         &self,
@@ -535,20 +550,17 @@ where
         }
 
         // Generate unique actor name to avoid collisions
-        let actor_name = state.next_child_name(&name);
+        let actor_name = Self::next_child_name(&mut state.child_id_counter, &name);
 
-        let (actor_ref, handle) = Actor::spawn(
-            Some(actor_name.clone()),
-            self.child_def.clone(),
-            args.clone(),
-        )
-        .await
-        .map_err(|e| {
-            ActorError::SpawnFailed(format!(
-                "Failed to spawn '{}' (actor: {}): {}",
-                name, actor_name, e
-            ))
-        })?;
+        let (actor_ref, handle) =
+            Actor::spawn(Some(actor_name.clone()), self.child_def.clone(), args.clone())
+                .await
+                .map_err(|e| {
+                    ActorError::SpawnFailed(format!(
+                        "Failed to spawn '{}' (actor: {}): {}",
+                        name, actor_name, e
+                    ))
+                })?;
 
         // Monitor for exit
         let myself_clone = myself.clone();
@@ -639,8 +651,9 @@ pub async fn spawn_supervisor<A>(
     args: SupervisorArguments,
 ) -> Result<ActorRef<SupervisorMessage<A>>, ActorError>
 where
-    A: SupervisableActor + Default,
-    A::Arguments: Clone,
+    A: GenericSupervisableActor + Default,
+    A::Arguments: Clone + Send + Sync,
+    A::Msg: Clone + Send,
 {
     spawn_supervisor_with_name::<A>(args, "supervisor").await
 }
@@ -651,8 +664,9 @@ pub async fn spawn_supervisor_with_name<A>(
     name: &str,
 ) -> Result<ActorRef<SupervisorMessage<A>>, ActorError>
 where
-    A: SupervisableActor + Default,
-    A::Arguments: Clone,
+    A: GenericSupervisableActor + Default,
+    A::Arguments: Clone + Send + Sync,
+    A::Msg: Clone + Send,
 {
     let (actor, _handle) = Actor::spawn(
         Some(name.to_string()),
@@ -743,7 +757,7 @@ mod tests {
     async fn test_spawn_supervisor() {
         let args = SupervisorArguments::new().with_config(SupervisorConfig::for_testing());
 
-        let result = spawn_supervisor::<SchedulerActorDef>(args).await;
+        let result = spawn_supervisor_with_name::<SchedulerActorDef>(args, "test-spawn-supervisor").await;
         assert!(result.is_ok());
 
         if let Ok(supervisor) = result {
@@ -755,13 +769,12 @@ mod tests {
     async fn test_supervisor_get_status() {
         let args = SupervisorArguments::new().with_config(SupervisorConfig::for_testing());
 
-        let supervisor = spawn_supervisor::<SchedulerActorDef>(args).await;
+        let supervisor = spawn_supervisor_with_name::<SchedulerActorDef>(args, "test-get-status").await;
         assert!(supervisor.is_ok());
 
         if let Ok(sup) = supervisor {
             let (tx, rx) = tokio::sync::oneshot::channel();
-            let _ =
-                sup.send_message(SupervisorMessage::<SchedulerActorDef>::GetStatus { reply: tx });
+            let _ = sup.send_message(SupervisorMessage::<SchedulerActorDef>::GetStatus { reply: tx });
 
             let status = rx.await;
             assert!(status.is_ok());
@@ -780,7 +793,7 @@ mod tests {
         let child_name = format!("spawn-child-{}", std::process::id());
         let args = SupervisorArguments::new().with_config(SupervisorConfig::for_testing());
 
-        let supervisor = spawn_supervisor::<SchedulerActorDef>(args).await;
+        let supervisor = spawn_supervisor_with_name::<SchedulerActorDef>(args, "test-spawn-child").await;
         assert!(supervisor.is_ok());
 
         if let Ok(sup) = supervisor {
