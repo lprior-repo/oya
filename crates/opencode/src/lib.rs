@@ -41,6 +41,7 @@ pub mod client;
 pub mod config;
 pub mod error;
 pub mod executor;
+pub mod sse;
 pub mod types;
 
 // Re-export commonly used items

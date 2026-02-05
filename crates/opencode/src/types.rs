@@ -188,6 +188,16 @@ impl StreamChunk {
         }
     }
 
+    /// Create a thinking/reasoning chunk.
+    pub fn thinking(content: impl Into<String>, sequence: u64) -> Self {
+        Self {
+            chunk_type: ChunkType::Thinking,
+            content: content.into(),
+            is_final: false,
+            sequence,
+        }
+    }
+
     /// Create a final chunk.
     pub fn final_chunk(content: impl Into<String>, sequence: u64) -> Self {
         Self {

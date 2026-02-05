@@ -40,6 +40,9 @@ async-trait = "0.1"
 tokio-stream = "0.1"
 pin-project-lite = "0.2"
 
+# Testing
+wiremock = "0.6"
+
 # CLI path detection
 which = "7"
 

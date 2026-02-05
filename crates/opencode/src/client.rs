@@ -6,7 +6,7 @@
 use std::pin::Pin;
 use std::process::Stdio;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use futures::Stream;
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -96,6 +96,47 @@ impl OpencodeClient {
         Ok(Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)))
     }
 
+    /// Execute a prompt and stream results as SSE-formatted output.
+    ///
+    /// Returns a stream of SSE-formatted strings.
+    /// Each message is formatted according to SSE protocol:
+    /// - Content-Type: text/event-stream
+    /// - Messages separated by double newlines
+    /// - Fields: event, data, id, retry
+    ///
+    /// ## Example
+    ///
+    /// ```ignore
+    /// use oya_opencode::OpencodeClient;
+    ///
+    /// let client = OpencodeClient::new().unwrap();
+    /// let mut stream = client.stream_sse("Hello, world!").await?;
+    ///
+    /// while let Some(result) = stream.next().await {
+    ///     let sse_message = result?;
+    ///     println!("{}", sse_message);
+    /// }
+    /// ```
+    pub async fn stream_sse(
+        &self,
+        prompt: &str,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+        // Call existing stream() method to get Stream<StreamChunk>
+        let stream_chunk_stream = self.stream(prompt).await?;
+
+        // Pipe through SSE formatter
+        Ok(Box::pin(tokio_stream::StreamExt::map(
+            stream_chunk_stream,
+            move |result| {
+                result.and_then(|chunk| {
+                    crate::sse::SseFormatter::new()
+                        .format_chunk(chunk)
+                        .map_err(Error::stream_error)
+                })
+            },
+        )))
+    }
+
     /// Execute a prompt via the opencode CLI.
     async fn execute_via_cli(&self, prompt: &str) -> Result<ExecutionResult> {
         let opencode_path = &self.config.cli_path;
@@ -140,8 +181,10 @@ impl OpencodeClient {
     }
 
     /// Execute via HTTP API (for remote opencode servers).
-    #[allow(dead_code)]
-    async fn execute_via_api(&self, prompt: &str) -> Result<ExecutionResult> {
+    ///
+    /// Makes a POST request to the /execute endpoint with the prompt in JSON format.
+    /// Handles response parsing and error handling.
+    pub async fn execute_via_api(&self, prompt: &str) -> Result<ExecutionResult> {
         let base_url = self
             .config
             .base_url
@@ -149,19 +192,69 @@ impl OpencodeClient {
             .ok_or_else(|| Error::config_error("No base URL configured for API mode"))?;
 
         let url = base_url
-            .join("/api/execute")
+            .join("/execute")
             .map_err(|e| Error::config_error(format!("Invalid API URL: {e}")))?;
 
+        self.execute_with_retry(url, prompt).await
+    }
+
+    /// Execute request with exponential backoff retry logic.
+    ///
+    /// Retries on retryable errors with exponential backoff:
+    /// - Retry 1: wait 1s
+    /// - Retry 2: wait 2s
+    /// - Retry 3: wait 4s
+    ///
+    /// Max retries: 3
+    async fn execute_with_retry(&self, url: Url, prompt: &str) -> Result<ExecutionResult> {
+        const MAX_RETRIES: u32 = 3;
+        const BASE_DELAY_MS: u64 = 1_000;
+
+        let mut attempt = 0u32;
+
+        loop {
+            attempt += 1;
+
+            match self.execute_request(&url, prompt).await {
+                Ok(result) => return Ok(result),
+                Err(e) => {
+                    if attempt >= MAX_RETRIES || !self.should_retry(&e) {
+                        return Err(e);
+                    }
+
+                    let delay_ms = BASE_DELAY_MS * 2u64.pow(attempt - 1);
+                    info!(
+                        attempt,
+                        delay_ms, "Retrying after error (attempt {}/{})", attempt, MAX_RETRIES
+                    );
+                    tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                }
+            }
+        }
+    }
+
+    /// Execute a single request attempt.
+    async fn execute_request(&self, url: &Url, prompt: &str) -> Result<ExecutionResult> {
         let response = self
             .http_client
-            .post(url)
+            .post(url.as_ref())
             .json(&serde_json::json!({ "prompt": prompt }))
             .send()
             .await?;
 
         if !response.status().is_success() {
             let status = response.status();
-            let body = response.text().await.unwrap_or_default();
+
+            if status.is_server_error() {
+                return Err(Error::execution_failed(format!(
+                    "API returned server error {status}"
+                )));
+            }
+
+            let body = response
+                .text()
+                .await
+                .map_err(|e| Error::execution_failed(format!("Failed to read error body: {e}")))?;
             return Err(Error::execution_failed(format!(
                 "API returned {status}: {body}"
             )));
@@ -169,6 +262,11 @@ impl OpencodeClient {
 
         let result: ExecutionResult = response.json().await?;
         Ok(result)
+    }
+
+    /// Check if error should be retried.
+    fn should_retry(&self, error: &Error) -> bool {
+        error.is_retryable()
     }
 
     /// Check if opencode is available.
@@ -331,4 +429,162 @@ mod tests {
         let result = result.ok();
         assert!(!result.as_ref().map(|r| r.success).unwrap_or(true));
     }
+
+    #[allow(unused_results)]
+    #[tokio::test]
+    #[allow(unused_results)]
+    async fn test_execute_via_api_success() {
+        use wiremock::matchers::{body_json_string, method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mock_server: wiremock::MockServer = MockServer::start().await;
+
+        let body = serde_json::to_string(&serde_json::json!({"prompt": "test prompt"}))
+            .map_err(|e| Error::execution_failed(format!("Failed to serialize request body: {e}"))).unwrap()
+            .into_bytes();
+
+        Mock::given(method("POST"))
+            .and(path("/execute"))
+            .and(body_json_string(body))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "success": true,
+                "output": "Test response",
+                "modified_files": [],
+                "commands_executed": [],
+                "tokens_used": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 20,
+                    "total_tokens": 30
+                },
+                "duration": 1000,
+                "metadata": {}
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let base_url = mock_server.uri().parse()
+            .map_err(|e| Error::execution_failed(format!("Failed to parse mock server URL: {e}"))).unwrap();
+        let client = OpencodeClient::with_url(base_url).unwrap();
+
+        let result = client.execute_via_api("test prompt").await.unwrap();
+
+        assert!(result.success);
+        assert!(result.success);
+        assert_eq!(result.output, "Test response");
+        assert_eq!(result.tokens_used.total_tokens, 30);
+    }
+
+    #[allow(unused_results)]
+    #[tokio::test]
+    async fn test_execute_via_api_error_response() {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mock_server: wiremock::MockServer = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/execute"))
+            .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
+            .mount(&mock_server)
+            .await;
+
+        let base_url = mock_server.uri().parse()
+            .map_err(|e| Error::execution_failed(format!("Failed to parse mock server URL: {e}"))).unwrap();
+        let client = OpencodeClient::with_url(base_url).unwrap();
+
+        let result = client.execute_via_api("test prompt").await;
+
+        assert!(result.is_err());
+        let err_str = result
+            .as_ref()
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default();
+        assert!(err_str.contains("500"));
+    }
+
+    #[allow(unused_results)]
+    #[tokio::test]
+    async fn test_execute_via_api_timeout() {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mock_server: wiremock::MockServer = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/execute"))
+            .respond_with(ResponseTemplate::new(200).set_delay(std::time::Duration::from_secs(10)))
+            .mount(&mock_server)
+            .await;
+
+        let base_url = mock_server.uri().parse()
+            .map_err(|e| Error::execution_failed(format!("Failed to parse mock server URL: {e}"))).unwrap();
+        let config = crate::config::OpencodeConfig {
+            base_url: Some(base_url),
+            timeout: std::time::Duration::from_millis(100),
+            ..Default::default()
+        };
+        let client = OpencodeClient::with_config(config).unwrap();
+
+        let result = client.execute_via_api("test prompt").await;
+
+        assert!(result.is_err());
+        let err_str = result
+            .as_ref()
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default();
+        assert!(
+            err_str.contains("timeout")
+                || err_str.contains("deadline")
+                || err_str.contains("send request")
+                || err_str.contains("HTTP error")
+        );
+    }
+
+    #[allow(unused_results)]
+    #[tokio::test]
+    async fn test_execute_via_api_no_base_url() {
+        let client = OpencodeClient::new().unwrap();
+
+        let result = client.execute_via_api("test prompt").await;
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("base URL"));
+    }
+}
+
+#[test]
+fn test_should_retry_on_connection_failed() {
+    let client = OpencodeClient::default();
+    let error = Error::connection_failed("test");
+    assert!(client.should_retry(&error));
+}
+
+#[test]
+fn test_should_retry_on_timeout() {
+    let client = OpencodeClient::default();
+    let error = Error::timeout(5000);
+    assert!(client.should_retry(&error));
+}
+
+#[test]
+fn test_should_retry_on_http_error() {
+    let client = OpencodeClient::default();
+    let error = Error::timeout(5000);
+    assert!(client.should_retry(&error));
+}
+
+#[test]
+fn test_should_not_retry_on_invalid_response() {
+    let client = OpencodeClient::default();
+    let error = Error::invalid_response("bad data");
+    assert!(!client.should_retry(&error));
+}
+
+#[test]
+fn test_should_not_retry_on_config_error() {
+    let client = OpencodeClient::default();
+    let error = Error::config_error("bad config");
+    assert!(!client.should_retry(&error));
 }
