@@ -247,68 +247,6 @@ impl ProcessPoolActor {
     pub fn clear(&mut self) {
         self.workers.clear();
     }
-
-    /// Claim a worker for use, transitioning it from Idle to Claimed.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if:
-    /// - The worker doesn't exist
-    /// - The worker is not in Idle state
-    pub fn claim_worker(&mut self, id: ProcessId) -> Result<()> {
-        self.workers
-            .get(&id)
-            .ok_or_else(|| Error::InvalidRecord {
-                reason: format!("worker with id {} not found", id.get()),
-            })
-            .and_then(|&state| {
-                if state == WorkerState::Idle {
-                    Ok(())
-                } else {
-                    Err(Error::InvalidRecord {
-                        reason: format!(
-                            "worker {} is not idle (current state: {:?})",
-                            id.get(),
-                            state
-                        ),
-                    })
-                }
-            })
-            .map(|_| {
-                self.workers.insert(id, WorkerState::Claimed);
-            })
-    }
-
-    /// Release a worker back to the pool, transitioning it from Claimed to Idle.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if:
-    /// - The worker doesn't exist
-    /// - The worker is not in Claimed state
-    pub fn release_worker(&mut self, id: ProcessId) -> Result<()> {
-        self.workers
-            .get(&id)
-            .ok_or_else(|| Error::InvalidRecord {
-                reason: format!("worker with id {} not found", id.get()),
-            })
-            .and_then(|&state| {
-                if state == WorkerState::Claimed {
-                    Ok(())
-                } else {
-                    Err(Error::InvalidRecord {
-                        reason: format!(
-                            "worker {} is not claimed (current state: {:?})",
-                            id.get(),
-                            state
-                        ),
-                    })
-                }
-            })
-            .map(|_| {
-                self.workers.insert(id, WorkerState::Idle);
-            })
-    }
 }
 
 impl Default for ProcessPoolActor {
