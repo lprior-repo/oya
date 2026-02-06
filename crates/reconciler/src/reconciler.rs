@@ -278,10 +278,7 @@ impl Reconciler {
                     if is_unclaimed_running && running_long_enough {
                         actions.push(ReconcileAction::RespawnBead {
                             bead_id: proj.bead_id,
-                            reason: format!(
-                                "worker missing for {}s",
-                                threshold.num_seconds()
-                            ),
+                            reason: format!("worker missing for {}s", threshold.num_seconds()),
                         });
                     }
                 }
@@ -304,10 +301,7 @@ impl Reconciler {
                     if is_running && running_long_enough {
                         actions.push(ReconcileAction::RescheduleBead {
                             bead_id: proj.bead_id,
-                            reason: format!(
-                                "running for {}s",
-                                threshold.num_seconds()
-                            ),
+                            reason: format!("running for {}s", threshold.num_seconds()),
                         });
                     }
                 }

@@ -57,3 +57,9 @@ vendor/opencode-sme/
 # Mutation testing output
 mutants.out/
 .zjj/state.db
+
+# OYA database runtime files
+.OYA/db/
+
+# Test coverage reports
+tarpaulin-report.json

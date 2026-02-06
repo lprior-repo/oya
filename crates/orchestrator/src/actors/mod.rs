@@ -55,8 +55,8 @@ pub mod reconciler;
 pub mod scheduler;
 pub mod storage;
 pub mod supervisor;
-pub mod worker;
 pub mod universe;
+pub mod worker;
 pub mod workflow;
 
 // Re-export main types for convenience
@@ -74,9 +74,9 @@ pub use supervisor::{
     SupervisorArguments, SupervisorConfig, SupervisorMessage, SupervisorState, SupervisorStatus,
     calculate_backoff,
 };
-pub use worker::{
-    CheckpointHandle, CheckpointTimer, WorkerActorDef, WorkerConfig, WorkerMessage, WorkerRetryPolicy,
-    WorkerState,
-};
 pub use universe::{UniverseArguments, UniverseMessage, UniverseState, UniverseSupervisorDef};
+pub use worker::{
+    CheckpointHandle, CheckpointTimer, WorkerActorDef, WorkerConfig, WorkerMessage,
+    WorkerRetryPolicy, WorkerState,
+};
 pub use workflow::{WorkflowActorDef, WorkflowMessage, WorkflowStateActor};

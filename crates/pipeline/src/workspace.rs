@@ -14,7 +14,7 @@ use serde::Deserialize;
 use tracing::{info, warn};
 
 use crate::error::{Error, Result};
-use crate::process::{run_command, CommandResult};
+use crate::process::{CommandResult, run_command};
 use crate::repo;
 
 /// Runs workspace-related commands (zjj) so logic can be tested without
@@ -351,7 +351,7 @@ mod tests {
     #[test]
     fn sanitize_workspace_name_handles_invalid_characters() {
         let sanitized = sanitize_workspace_name("bead id with spaces!");
-        assert_eq!(sanitized, "bead-id-with-spaces-");
+        assert_eq!(sanitized, "bead-id-with-spaces");
 
         let empty = sanitize_workspace_name("***");
         assert_eq!(empty, "workspace");

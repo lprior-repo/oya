@@ -3,7 +3,18 @@ $schema: "https://moonrepo.dev/schemas/workspace.json"
 # Project locations
 projects:
   globs:
-    - "crates/*"
+    - "crates/core"
+    - "crates/pipeline"
+    - "crates/orchestrator"
+    - "crates/merge-queue"
+    - "crates/opencode"
+    - "crates/workflow"
+    - "crates/events"
+    - "crates/reconciler"
+    - "crates/oya-web"
+    - "crates/oya-shared"
+    - "crates/oya-zellij"
+    # Note: oya-ui excluded until implemented (placeholder crate)
 
 # VCS configuration
 vcs:

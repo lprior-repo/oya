@@ -522,8 +522,7 @@ async fn test_checkpoint_state_snapshot_matches_current() -> Result<(), String> 
     // THEN: Verify test checkpoint exists and has correct phase_id
     assert!(test_checkpoint.is_some(), "Test checkpoint should exist");
 
-    let test_checkpoint =
-        test_checkpoint.ok_or_else(|| "Missing test checkpoint".to_string())?;
+    let test_checkpoint = test_checkpoint.ok_or_else(|| "Missing test checkpoint".to_string())?;
     assert_eq!(
         test_checkpoint.phase_id, test_phase_id,
         "Checkpoint phase_id should match test phase"

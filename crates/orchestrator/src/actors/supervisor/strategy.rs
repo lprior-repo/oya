@@ -242,8 +242,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::actors::ActorError;
     use super::*;
+    use crate::actors::ActorError;
     use crate::actors::messages::SchedulerMessage;
     use crate::actors::scheduler::{SchedulerActorDef, SchedulerArguments};
     use crate::actors::supervisor::{SupervisorConfig, SupervisorState};

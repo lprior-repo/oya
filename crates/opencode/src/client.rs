@@ -470,7 +470,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_execute_via_api_error_response()
-        -> std::result::Result<(), Box<dyn std::error::Error>> {
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
         let mock_server = MockServer::start().await;
 
         Mock::given(method("POST"))
@@ -529,7 +529,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_execute_via_api_no_base_url()
-        -> std::result::Result<(), Box<dyn std::error::Error>> {
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
         let client = OpencodeClient::new()?;
 
         let result = client.execute_via_api("test prompt").await;

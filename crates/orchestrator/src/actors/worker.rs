@@ -8,7 +8,7 @@ use ractor::{Actor, ActorProcessingErr, ActorRef};
 use tokio::sync::watch;
 use tracing::{debug, info, warn};
 
-use crate::actors::supervisor::{calculate_backoff, GenericSupervisableActor};
+use crate::actors::supervisor::{GenericSupervisableActor, calculate_backoff};
 
 /// Configuration for worker retry behavior.
 #[derive(Debug, Clone)]
@@ -137,7 +137,8 @@ impl Actor for WorkerActorDef {
                         let myself_clone = myself.clone();
                         tokio::spawn(async move {
                             tokio::time::sleep(delay).await;
-                            let _ = myself_clone.send_message(WorkerMessage::StartBead { bead_id: id });
+                            let _ =
+                                myself_clone.send_message(WorkerMessage::StartBead { bead_id: id });
                         });
                     }
                     (Some(id), None) => {

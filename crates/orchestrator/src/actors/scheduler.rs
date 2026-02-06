@@ -143,7 +143,8 @@ impl Actor for SchedulerActorDef {
 
         // Subscribe to event bus if provided
         if let Some(bus) = args.event_bus {
-            let (subscription_id, subscription) = bus.subscribe_with_pattern(EventPattern::All).await;
+            let (subscription_id, subscription) =
+                bus.subscribe_with_pattern(EventPattern::All).await;
             state._event_subscription_id = Some(subscription_id);
             // Spawn event forwarder
             tokio::spawn(Self::event_forwarder(subscription, myself.clone()));
@@ -177,7 +178,7 @@ impl Actor for SchedulerActorDef {
         if matches!(message, SchedulerMessage::Shutdown) {
             info!("Scheduler shutdown requested");
             state.shutdown_requested = true;
-            myself.stop();
+            myself.stop(Some("Scheduler shutdown requested".to_string()));
             return Ok(());
         }
 
