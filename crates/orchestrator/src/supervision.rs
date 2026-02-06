@@ -5,7 +5,6 @@ use ractor::ActorRef;
 use crate::actors::ActorError;
 use crate::actors::queue::QueueActorDef;
 use crate::actors::reconciler::ReconcilerActorDef;
-use crate::actors::scheduler::SchedulerActorDef;
 use crate::actors::storage::StateManagerActorDef;
 use crate::actors::supervisor::{
     SupervisorActorDef, SupervisorArguments, SupervisorConfig, SupervisorMessage,
@@ -106,7 +105,7 @@ async fn spawn_tier1_supervisor<A>(
 where
     A: crate::actors::GenericSupervisableActor + Clone + Default,
     A::Arguments: Clone + Send + Sync,
-    A::Msg: Clone + Send,
+    A::Msg: Send,
 {
     let name = format!("{}-{}-supervisor", name_prefix, kind.as_str());
     let args = SupervisorArguments::new().with_config(config.clone());

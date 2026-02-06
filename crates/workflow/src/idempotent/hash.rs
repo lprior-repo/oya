@@ -55,12 +55,12 @@ pub fn hash_input(data: &[u8]) -> [u8; 32] {
 ///     phase: String,
 /// }
 ///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let input = TaskInput {
 ///     bead_id: "bead-123".to_string(),
 ///     phase: "build".to_string(),
 /// };
 ///
-/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let hash = hash_serializable(&input)?;
 /// assert_eq!(hash.len(), 32);
 /// # Ok(())

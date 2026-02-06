@@ -57,12 +57,12 @@ use uuid::Uuid;
 ///     priority: u32,
 /// }
 ///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let input = WorkflowInput {
 ///     task: "build".to_string(),
 ///     priority: 1,
 /// };
 ///
-/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let key = idempotency_key("bead-123", &input)?;
 ///
 /// // Same input produces same key
@@ -112,7 +112,7 @@ pub fn idempotency_key<T: Serialize>(
 /// # Examples
 ///
 /// ```
-/// use oya_workflow::idempotency_key_from_bytes;
+/// use oya_workflow::idempotent::idempotency_key_from_bytes;
 ///
 /// let data = b"raw workflow input data";
 /// let key = idempotency_key_from_bytes("bead-456", data);
@@ -142,7 +142,7 @@ pub fn idempotency_key_from_bytes(bead_id: &str, input: &[u8]) -> Uuid {
 /// # Examples
 ///
 /// ```
-/// use oya_workflow::idempotency_key_from_json;
+/// use oya_workflow::idempotent::idempotency_key_from_json;
 ///
 /// let json = r#"{"task":"build","priority":1}"#;
 /// let key = idempotency_key_from_json("bead-789", json);

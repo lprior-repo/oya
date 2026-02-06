@@ -51,7 +51,7 @@ impl IdempotencyKey {
     /// # Examples
     ///
     /// ```
-    /// use oya_workflow::idempotency_key;
+    /// use oya_workflow::idempotent::idempotency_key;
     /// use oya_workflow::idempotent::IdempotencyKey;
     ///
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -70,7 +70,7 @@ impl IdempotencyKey {
     /// # Examples
     ///
     /// ```
-    /// use oya_workflow::idempotency_key_from_bytes;
+    /// use oya_workflow::idempotent::idempotency_key_from_bytes;
     /// use oya_workflow::idempotent::IdempotencyKey;
     ///
     /// let uuid = idempotency_key_from_bytes("bead-123", b"input");
@@ -91,7 +91,7 @@ impl IdempotencyKey {
     /// # Examples
     ///
     /// ```
-    /// use oya_workflow::idempotency_key_from_bytes;
+    /// use oya_workflow::idempotent::idempotency_key_from_bytes;
     /// use oya_workflow::idempotent::IdempotencyKey;
     ///
     /// let uuid = idempotency_key_from_bytes("bead-123", b"input");
@@ -111,7 +111,7 @@ impl IdempotencyKey {
     /// # Examples
     ///
     /// ```
-    /// use oya_workflow::idempotency_key_from_bytes;
+    /// use oya_workflow::idempotent::idempotency_key_from_bytes;
     /// use oya_workflow::idempotent::IdempotencyKey;
     ///
     /// let uuid = idempotency_key_from_bytes("bead-123", b"input");
@@ -133,7 +133,7 @@ impl IdempotencyKey {
     /// # Examples
     ///
     /// ```
-    /// use oya_workflow::idempotency_key_from_bytes;
+    /// use oya_workflow::idempotent::idempotency_key_from_bytes;
     /// use oya_workflow::idempotent::IdempotencyKey;
     ///
     /// let uuid = idempotency_key_from_bytes("bead-123", b"input");
@@ -174,7 +174,7 @@ impl IdempotencyKey {
     /// # Examples
     ///
     /// ```
-    /// use oya_workflow::idempotency_key_from_bytes;
+    /// use oya_workflow::idempotent::idempotency_key_from_bytes;
     /// use oya_workflow::idempotent::IdempotencyKey;
     ///
     /// let uuid = idempotency_key_from_bytes("bead-123", b"input");
@@ -195,7 +195,7 @@ impl IdempotencyKey {
     /// # Examples
     ///
     /// ```
-    /// use oya_workflow::idempotency_key_from_bytes;
+    /// use oya_workflow::idempotent::idempotency_key_from_bytes;
     /// use oya_workflow::idempotent::IdempotencyKey;
     ///
     /// let uuid = idempotency_key_from_bytes("bead-123", b"input");

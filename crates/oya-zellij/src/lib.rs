@@ -333,7 +333,7 @@ impl ZellijPlugin for State {
                     self.mode = match self.mode {
                         ViewMode::PipelineView => ViewMode::PipelineView,
                         ViewMode::AgentList => ViewMode::AgentList,
-                        _ => {}
+                        _ => self.mode,
                     };
                     if self.mode == ViewMode::PipelineView {
                         self.load_pipeline_for_selected();

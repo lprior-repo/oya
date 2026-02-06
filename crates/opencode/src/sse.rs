@@ -37,7 +37,7 @@ impl SseFormatter {
     ///
     /// Returns a formatted SSE message string.
     /// Each message follows the format:
-    /// ```
+    /// ```text
     /// event: <event_type>
     /// data: <content>
     /// id: <sequence_number>

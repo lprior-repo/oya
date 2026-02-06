@@ -4,7 +4,6 @@ use ractor::{Actor, ActorProcessingErr, ActorRef};
 use std::sync::Arc;
 use tracing::info;
 
-use crate::actors::ActorError;
 use crate::actors::supervisor::SupervisorConfig;
 use crate::shutdown::ShutdownCoordinator;
 use crate::supervision::{Tier1Supervisors, spawn_tier1_supervisors};

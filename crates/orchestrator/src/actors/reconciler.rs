@@ -56,6 +56,6 @@ impl Actor for ReconcilerActorDef {
 
 impl GenericSupervisableActor for ReconcilerActorDef {
     fn default_args() -> Self::Arguments {
-        ()
+        Self::Arguments::default()
     }
 }

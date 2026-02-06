@@ -472,7 +472,7 @@ async fn test_checkpoint_nonexistent_workflow() {
 /// WHEN we retrieve the checkpoint state snapshot
 /// THEN the snapshot matches the current workflow state at that point
 #[tokio::test]
-async fn test_checkpoint_state_snapshot_matches_current() {
+async fn test_checkpoint_state_snapshot_matches_current() -> Result<(), String> {
     let (engine, storage) = setup_engine();
 
     // GIVEN: Create and run a workflow with multiple phases
@@ -483,6 +483,7 @@ async fn test_checkpoint_state_snapshot_matches_current() {
 
     let workflow_id = workflow.id;
     let initial_state = workflow.state;
+    let created_at = workflow.created_at;
     let build_phase_id = workflow.phases[0].id;
     let test_phase_id = workflow.phases[1].id;
 
@@ -500,22 +501,16 @@ async fn test_checkpoint_state_snapshot_matches_current() {
     // THEN: Verify build checkpoint exists and has correct phase_id
     assert!(build_checkpoint.is_some(), "Build checkpoint should exist");
 
-    let build_checkpoint = build_checkpoint.ok_or("Missing build checkpoint");
-    assert!(build_checkpoint.is_ok());
-
-    match build_checkpoint {
-        Ok(checkpoint) => {
-            assert_eq!(
-                checkpoint.phase_id, build_phase_id,
-                "Checkpoint phase_id should match build phase"
-            );
-            assert!(
-                checkpoint.timestamp > workflow.created_at,
-                "Checkpoint timestamp should be after workflow creation"
-            );
-        }
-        Err(e) => panic!("Expected checkpoint, got: {}", e),
-    }
+    let build_checkpoint =
+        build_checkpoint.ok_or_else(|| "Missing build checkpoint".to_string())?;
+    assert_eq!(
+        build_checkpoint.phase_id, build_phase_id,
+        "Checkpoint phase_id should match build phase"
+    );
+    assert!(
+        build_checkpoint.timestamp > created_at,
+        "Checkpoint timestamp should be after workflow creation"
+    );
 
     // WHEN: Load checkpoint for test phase
     let test_checkpoint = storage
@@ -527,18 +522,12 @@ async fn test_checkpoint_state_snapshot_matches_current() {
     // THEN: Verify test checkpoint exists and has correct phase_id
     assert!(test_checkpoint.is_some(), "Test checkpoint should exist");
 
-    let test_checkpoint = test_checkpoint.ok_or("Missing test checkpoint");
-    assert!(test_checkpoint.is_ok());
-
-    match test_checkpoint {
-        Ok(checkpoint) => {
-            assert_eq!(
-                checkpoint.phase_id, test_phase_id,
-                "Checkpoint phase_id should match test phase"
-            );
-        }
-        Err(e) => panic!("Expected checkpoint, got: {}", e),
-    }
+    let test_checkpoint =
+        test_checkpoint.ok_or_else(|| "Missing test checkpoint".to_string())?;
+    assert_eq!(
+        test_checkpoint.phase_id, test_phase_id,
+        "Checkpoint phase_id should match test phase"
+    );
 
     // THEN: Verify all checkpoints were created (one per phase)
     let all_checkpoints = storage.load_checkpoints(workflow_id).await;
@@ -566,6 +555,7 @@ async fn test_checkpoint_state_snapshot_matches_current() {
                 "Workflow state should have changed from initial"
             );
         })
-        .ok_or("Missing final workflow")
-        .ok();
+        .ok_or_else(|| "Missing final workflow".to_string())?;
+
+    Ok(())
 }

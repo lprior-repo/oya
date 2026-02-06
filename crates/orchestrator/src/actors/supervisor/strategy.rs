@@ -10,14 +10,14 @@
 use im::HashSet;
 use thiserror::Error;
 
-use super::supervisor_actor::{GenericSupervisableActor, SupervisorActorState, SupervisorConfig};
+use super::supervisor_actor::{GenericSupervisableActor, SupervisorActorState};
 
 /// Context provided to restart strategies for decision-making.
 #[derive(Debug, Clone)]
 pub struct RestartContext<'a, A: GenericSupervisableActor>
 where
     A::Arguments: Clone + Send + Sync,
-    A::Msg: Clone + Send,
+    A::Msg: Send,
 {
     /// Name of the child that failed.
     pub child_name: String,
@@ -30,7 +30,7 @@ where
 impl<'a, A: GenericSupervisableActor> RestartContext<'a, A>
 where
     A::Arguments: Clone + Send + Sync,
-    A::Msg: Clone + Send,
+    A::Msg: Send,
 {
     /// Create a new restart context.
     #[must_use]
@@ -94,7 +94,7 @@ pub enum RestartDecision {
 pub trait RestartStrategy<A: GenericSupervisableActor>: Send + Sync
 where
     A::Arguments: Clone + Send + Sync,
-    A::Msg: Clone + Send,
+    A::Msg: Send,
 {
     /// Get strategy name.
     fn name(&self) -> &'static str;
@@ -133,7 +133,7 @@ impl OneForOne {
 impl<A: GenericSupervisableActor> RestartStrategy<A> for OneForOne
 where
     A::Arguments: Clone + Send + Sync,
-    A::Msg: Clone + Send,
+    A::Msg: Send,
 {
     fn name(&self) -> &'static str {
         "one_for_one"
@@ -164,7 +164,7 @@ impl OneForAll {
 impl<A: GenericSupervisableActor> RestartStrategy<A> for OneForAll
 where
     A::Arguments: Clone + Send + Sync,
-    A::Msg: Clone + Send,
+    A::Msg: Send,
 {
     fn name(&self) -> &'static str {
         "one_for_all"
@@ -211,7 +211,7 @@ impl RestForOne {
 impl<A: GenericSupervisableActor> RestartStrategy<A> for RestForOne
 where
     A::Arguments: Clone + Send + Sync,
-    A::Msg: Clone + Send,
+    A::Msg: Send,
 {
     fn name(&self) -> &'static str {
         "rest_for_one"
@@ -242,6 +242,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::actors::ActorError;
     use super::*;
     use crate::actors::messages::SchedulerMessage;
     use crate::actors::scheduler::{SchedulerActorDef, SchedulerArguments};
@@ -265,32 +266,33 @@ mod tests {
     fn create_child_info(
         name: &str,
         restart_count: u32,
-    ) -> crate::actors::supervisor::ChildInfo<SchedulerActorDef> {
-        crate::actors::supervisor::ChildInfo {
+    ) -> Result<crate::actors::supervisor::ChildInfo<SchedulerActorDef>, ActorError> {
+        Ok(crate::actors::supervisor::ChildInfo {
             name: name.to_string(),
-            actor_ref: create_test_actor_ref(name),
+            actor_ref: create_test_actor_ref(name)?,
             restart_count,
             last_restart: Some(Instant::now()),
             args: SchedulerArguments::default(),
-        }
+        })
     }
 
-    fn create_test_actor_ref(name: &str) -> ractor::ActorRef<SchedulerMessage> {
+    fn create_test_actor_ref(name: &str) -> Result<ractor::ActorRef<SchedulerMessage>, ActorError> {
         use ractor::Actor;
         use tokio::runtime::Runtime;
 
-        let rt = Runtime::new().expect("Runtime creation should succeed");
+        let rt = Runtime::new()
+            .map_err(|err| ActorError::channel_error(format!("runtime init failed: {err}")))?;
 
         rt.block_on(async move {
             let (ref_, _handle) = Actor::spawn(
-                Some(format!("test-dummy-{}", name)),
+                Some(format!("test-dummy-{name}")),
                 SchedulerActorDef,
                 SchedulerArguments::default(),
             )
             .await
-            .expect("Actor spawn should succeed");
+            .map_err(|err| ActorError::channel_error(format!("actor spawn failed: {err}")))?;
 
-            Box::leak(Box::new(ref_)).clone()
+            Ok(ref_)
         })
     }
 
@@ -322,15 +324,17 @@ mod tests {
     }
 
     #[test]
-    fn test_restart_context_fields() {
+    fn test_restart_context_fields() -> Result<(), ActorError> {
         let mut state = create_test_state();
         state
             .children
-            .insert("child-1".to_string(), create_child_info("child-1", 5));
+            .insert("child-1".to_string(), create_child_info("child-1", 5)?);
 
         let ctx = RestartContext::new("child-1", "Test failure", &state);
         assert_eq!(ctx.child_name, "child-1");
         assert_eq!(ctx.failure_reason, "Test failure");
         assert_eq!(ctx.restart_count(), 5);
+
+        Ok(())
     }
 }

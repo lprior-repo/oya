@@ -12,10 +12,10 @@
 //! - Subgraph extraction
 
 use im::{HashMap, HashSet};
-use petgraph::Direction;
 use petgraph::algo::{is_cyclic_directed, tarjan_scc, toposort};
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::{Bfs, Dfs, EdgeRef, Reversed};
+use petgraph::Direction;
 use std::collections::VecDeque;
 use std::time::Duration;
 
@@ -560,7 +560,7 @@ impl WorkflowDAG {
     ///
     /// ```
     /// use orchestrator::dag::{WorkflowDAG, DependencyType};
-    /// use std::collections::HashSet;
+    /// use im::HashSet;
     ///
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut dag = WorkflowDAG::new();
@@ -629,7 +629,7 @@ impl WorkflowDAG {
     ///
     /// ```
     /// use orchestrator::dag::{WorkflowDAG, DependencyType};
-    /// use std::collections::HashSet;
+    /// use im::HashSet;
     ///
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut dag = WorkflowDAG::new();
@@ -693,7 +693,7 @@ impl WorkflowDAG {
     ///
     /// ```
     /// use orchestrator::dag::{WorkflowDAG, DependencyType};
-    /// use std::collections::HashSet;
+    /// use im::HashSet;
     ///
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut dag = WorkflowDAG::new();
@@ -871,7 +871,7 @@ impl WorkflowDAG {
     ///
     /// ```
     /// use orchestrator::dag::{WorkflowDAG, DependencyType};
-    /// use std::collections::HashMap;
+    /// use im::HashMap;
     /// use std::time::Duration;
     ///
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {

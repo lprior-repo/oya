@@ -50,7 +50,7 @@ impl WorkspaceManager {
     pub fn new(repo_root: PathBuf) -> Self {
         Self {
             repo_root,
-            runner: Arc::new(SystemWorkspaceCommandRunner::default()),
+            runner: Arc::new(SystemWorkspaceCommandRunner),
         }
     }
 
@@ -242,9 +242,11 @@ mod tests {
 
     use super::*;
 
+    type CallLog = Vec<(String, Vec<String>, PathBuf)>;
+
     #[derive(Clone, Default)]
     struct StubRunner {
-        calls: Arc<Mutex<Vec<(String, Vec<String>, PathBuf)>>>,
+        calls: Arc<Mutex<CallLog>>,
         responses: Arc<Mutex<Vec<Result<CommandResult>>>>,
     }
 
@@ -271,15 +273,12 @@ mod tests {
             }
 
             let mut responses = self.responses.lock().map_err(|err| {
-                Error::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("mutex poisoned: {err}"),
-                ))
+                Error::Io(std::io::Error::other(format!("mutex poisoned: {err}")))
             })?;
 
             responses.pop().ok_or_else(|| Error::InvalidRecord {
                 reason: "no stubbed response".to_string(),
-            })
+            })?
         }
     }
 
@@ -300,7 +299,7 @@ mod tests {
     }
 
     #[test]
-    fn creates_workspace_and_cleans_up() {
+    fn creates_workspace_and_cleans_up() -> Result<()> {
         let runner = StubRunner::default();
         let status_json =
             r#"{"sessions":[{"name":"bead-123","workspace_path":"/tmp/workspace/bead-123"}]}"#;
@@ -312,20 +311,23 @@ mod tests {
         let manager =
             WorkspaceManager::with_runner(PathBuf::from("/repo"), Arc::new(runner.clone()));
 
-        let mut guard = manager
-            .create_for_bead("bead-123")
-            .expect("workspace created");
+        let mut guard =
+            manager
+                .create_for_bead("bead-123")
+                .map_err(|err| Error::InvalidRecord {
+                    reason: format!("workspace created: {err}"),
+                })?;
         assert_eq!(guard.path(), Path::new("/tmp/workspace/bead-123"));
         assert_eq!(guard.name(), "bead-123");
 
-        let cleanup = guard.cleanup();
-        assert!(cleanup.is_ok());
+        guard.cleanup()?;
 
         let calls = runner.recorded_calls();
         assert_eq!(calls.len(), 3);
         assert_eq!(calls[0].0, "zjj");
         assert_eq!(calls[1].0, "zjj");
         assert_eq!(calls[2].0, "zjj");
+        Ok(())
     }
 
     #[test]
@@ -356,7 +358,7 @@ mod tests {
     }
 
     #[test]
-    fn execute_runs_and_cleans_after_error() {
+    fn execute_runs_and_cleans_after_error() -> Result<()> {
         let runner = StubRunner::default();
         let status_json =
             r#"{"sessions":[{"name":"bead-err","workspace_path":"/tmp/workspace/bead-err"}]}"#;
@@ -368,7 +370,7 @@ mod tests {
         let manager =
             WorkspaceManager::with_runner(PathBuf::from("/repo"), Arc::new(runner.clone()));
 
-        let result = manager.execute_with_workspace("bead-err", |_| {
+        let result: Result<()> = manager.execute_with_workspace("bead-err", |_| {
             Err(Error::InvalidRecord {
                 reason: "boom".to_string(),
             })
@@ -378,6 +380,7 @@ mod tests {
 
         let calls = runner.recorded_calls();
         assert_eq!(calls.len(), 3);
-        assert_eq!(calls[2].1.get(0).cloned().unwrap_or_default(), "remove");
+        assert_eq!(calls[2].1.first().cloned().unwrap_or_default(), "remove");
+        Ok(())
     }
 }

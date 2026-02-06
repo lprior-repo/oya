@@ -187,14 +187,12 @@ impl CheckpointHandle {
 #[derive(Clone, Debug)]
 pub struct CheckpointTimer {
     interval: Duration,
-    stop_tx: watch::Sender<bool>,
 }
 
 impl CheckpointTimer {
     #[must_use]
     pub fn new(interval: Duration) -> Self {
-        let (stop_tx, _stop_rx) = watch::channel(false);
-        Self { interval, stop_tx }
+        Self { interval }
     }
 
     #[must_use]

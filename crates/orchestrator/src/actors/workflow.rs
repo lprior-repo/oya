@@ -1,6 +1,5 @@
 //! WorkflowActor - Manages a single workflow DAG.
 
-use im::Vector;
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort};
 use tracing::info;
 
@@ -25,23 +24,6 @@ pub enum WorkflowMessage {
     GetReadyBeads { reply: RpcReplyPort<Vec<BeadId>> },
     /// Rehydrate state from events.
     Rehydrate { events: Vec<oya_events::BeadEvent> },
-}
-
-impl Clone for WorkflowMessage {
-    fn clone(&self) -> Self {
-        match self {
-            Self::AddBead { bead_id } => Self::AddBead {
-                bead_id: bead_id.clone(),
-            },
-            Self::MarkCompleted { bead_id } => Self::MarkCompleted {
-                bead_id: bead_id.clone(),
-            },
-            Self::Rehydrate { events } => Self::Rehydrate {
-                events: events.clone(),
-            },
-            Self::GetReadyBeads { .. } => panic!("WorkflowMessage::GetReadyBeads cannot be cloned"),
-        }
-    }
 }
 
 /// Effects produced by the functional core of the WorkflowActor.
@@ -105,9 +87,9 @@ mod core {
     pub fn handle(
         state: WorkflowState,
         msg: WorkflowMessage,
-    ) -> (WorkflowState, Vector<WorkflowEffect>) {
+    ) -> (WorkflowState, Vec<WorkflowEffect>) {
         let mut next_state = state;
-        let mut effects = Vector::new();
+        let mut effects = Vec::new();
 
         match msg {
             WorkflowMessage::AddBead { bead_id } => {
@@ -118,7 +100,7 @@ mod core {
             }
             WorkflowMessage::GetReadyBeads { reply } => {
                 let ready = next_state.get_ready_beads();
-                effects.push_back(WorkflowEffect::ReplyReadyBeads {
+                effects.push(WorkflowEffect::ReplyReadyBeads {
                     reply,
                     beads: ready,
                 });

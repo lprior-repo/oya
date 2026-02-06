@@ -168,66 +168,6 @@ pub enum SchedulerMessage {
     },
 }
 
-impl Clone for SchedulerMessage {
-    fn clone(&self) -> Self {
-        match self {
-            Self::RegisterWorkflow { workflow_id } => Self::RegisterWorkflow {
-                workflow_id: workflow_id.clone(),
-            },
-            Self::UnregisterWorkflow { workflow_id } => Self::UnregisterWorkflow {
-                workflow_id: workflow_id.clone(),
-            },
-            Self::ScheduleBead {
-                workflow_id,
-                bead_id,
-            } => Self::ScheduleBead {
-                workflow_id: workflow_id.clone(),
-                bead_id: bead_id.clone(),
-            },
-            Self::AddDependency {
-                workflow_id,
-                from_bead,
-                to_bead,
-            } => Self::AddDependency {
-                workflow_id: workflow_id.clone(),
-                from_bead: from_bead.clone(),
-                to_bead: to_bead.clone(),
-            },
-            Self::OnBeadCompleted {
-                workflow_id,
-                bead_id,
-            } => Self::OnBeadCompleted {
-                workflow_id: workflow_id.clone(),
-                bead_id: bead_id.clone(),
-            },
-            Self::OnStateChanged { bead_id, from, to } => Self::OnStateChanged {
-                bead_id: bead_id.clone(),
-                from: from.clone(),
-                to: to.clone(),
-            },
-            Self::ClaimBead { bead_id, worker_id } => Self::ClaimBead {
-                bead_id: bead_id.clone(),
-                worker_id: worker_id.clone(),
-            },
-            Self::ReleaseBead { bead_id } => Self::ReleaseBead {
-                bead_id: bead_id.clone(),
-            },
-            Self::Shutdown => Self::Shutdown,
-            Self::GetWorkflowReadyBeads { .. } => {
-                panic!("SchedulerMessage::GetWorkflowReadyBeads cannot be cloned")
-            }
-            Self::GetStats { .. } => panic!("SchedulerMessage::GetStats cannot be cloned"),
-            Self::IsBeadReady { .. } => panic!("SchedulerMessage::IsBeadReady cannot be cloned"),
-            Self::GetWorkflowStatus { .. } => {
-                panic!("SchedulerMessage::GetWorkflowStatus cannot be cloned")
-            }
-            Self::GetAllReadyBeads { .. } => {
-                panic!("SchedulerMessage::GetAllReadyBeads cannot be cloned")
-            }
-        }
-    }
-}
-
 pub enum SchedulerQuery {
     // Legacy - removed as variants are back in SchedulerMessage
 }

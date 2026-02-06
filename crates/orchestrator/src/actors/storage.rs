@@ -43,7 +43,7 @@ impl Actor for StateManagerActorDef {
 
 impl GenericSupervisableActor for StateManagerActorDef {
     fn default_args() -> Self::Arguments {
-        ()
+        Self::Arguments::default()
     }
 }
 
@@ -85,6 +85,6 @@ impl Actor for EventStoreActorDef {
 
 impl GenericSupervisableActor for EventStoreActorDef {
     fn default_args() -> Self::Arguments {
-        ()
+        Self::Arguments::default()
     }
 }

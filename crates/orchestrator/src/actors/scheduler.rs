@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort};
 use tokio::sync::{broadcast, mpsc};
-use tracing::{debug, info, warn};
+use tracing::info;
 
 use oya_events::{BeadEvent, EventBus, EventPattern, EventSubscription};
 
@@ -107,7 +107,7 @@ pub enum SchedulerEffect {
     /// Reply to an RPC caller.
     ReplyReadyBeads {
         reply: RpcReplyPort<Result<Vec<BeadId>, ActorError>>,
-        beads: Vec<BeadId>,
+        result: Result<Vec<BeadId>, ActorError>,
     },
     ReplyStats {
         reply: RpcReplyPort<SchedulerStats>,
@@ -115,7 +115,7 @@ pub enum SchedulerEffect {
     },
     ReplyIsReady {
         reply: RpcReplyPort<Result<bool, ActorError>>,
-        is_ready: bool,
+        result: Result<bool, ActorError>,
     },
     ReplyWorkflowStatus {
         reply: RpcReplyPort<Option<WorkflowStatus>>,
@@ -143,21 +143,16 @@ impl Actor for SchedulerActorDef {
 
         // Subscribe to event bus if provided
         if let Some(bus) = args.event_bus {
-            let pattern = EventPattern::bead_all();
-            match bus.subscribe(pattern).await {
-                Ok(subscription) => {
-                    state._event_subscription_id = Some(subscription.id().to_string());
-                    // Spawn event forwarder
-                    tokio::spawn(Self::event_forwarder(subscription, myself.clone()));
-                }
-                Err(e) => warn!(error = %e, "Failed to subscribe to event bus"),
-            }
+            let (subscription_id, subscription) = bus.subscribe_with_pattern(EventPattern::All).await;
+            state._event_subscription_id = Some(subscription_id);
+            // Spawn event forwarder
+            tokio::spawn(Self::event_forwarder(subscription, myself.clone()));
         }
 
         // Subscribe to shutdown coordinator if provided
         if let Some(coordinator) = args.shutdown_coordinator {
             state._shutdown_rx = Some(coordinator.subscribe());
-            state.checkpoint_tx = Some(coordinator.checkpoint_tx());
+            state.checkpoint_tx = Some(coordinator.checkpoint_sender());
 
             // Spawn shutdown listener
             let myself_clone = myself.clone();
@@ -174,7 +169,7 @@ impl Actor for SchedulerActorDef {
 
     async fn handle(
         &self,
-        _myself: ActorRef<Self::Msg>,
+        myself: ActorRef<Self::Msg>,
         message: Self::Msg,
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
@@ -182,6 +177,7 @@ impl Actor for SchedulerActorDef {
         if matches!(message, SchedulerMessage::Shutdown) {
             info!("Scheduler shutdown requested");
             state.shutdown_requested = true;
+            myself.stop();
             return Ok(());
         }
 
@@ -190,14 +186,14 @@ impl Actor for SchedulerActorDef {
 
         for effect in effects {
             match effect {
-                SchedulerEffect::ReplyReadyBeads { reply, beads } => {
-                    let _ = reply.send(Ok(beads));
+                SchedulerEffect::ReplyReadyBeads { reply, result } => {
+                    let _ = reply.send(result);
                 }
                 SchedulerEffect::ReplyStats { reply, stats } => {
                     let _ = reply.send(stats);
                 }
-                SchedulerEffect::ReplyIsReady { reply, is_ready } => {
-                    let _ = reply.send(Ok(is_ready));
+                SchedulerEffect::ReplyIsReady { reply, result } => {
+                    let _ = reply.send(result);
                 }
                 SchedulerEffect::ReplyWorkflowStatus { reply, status } => {
                     let _ = reply.send(status);
@@ -234,14 +230,9 @@ impl SchedulerActorDef {
         mut subscription: EventSubscription,
         actor_ref: ActorRef<SchedulerMessage>,
     ) {
-        loop {
-            match subscription.recv().await {
-                Ok(event) => {
-                    if let Err(_) = Self::forward_event(&actor_ref, event) {
-                        break;
-                    }
-                }
-                Err(_) => break,
+        while let Ok(event) = subscription.recv().await {
+            if Self::forward_event(&actor_ref, event).is_err() {
+                break;
             }
         }
     }
@@ -250,17 +241,15 @@ impl SchedulerActorDef {
         actor_ref: &ActorRef<SchedulerMessage>,
         event: BeadEvent,
     ) -> Result<(), ActorError> {
-        match event {
-            BeadEvent::StateChanged {
-                bead_id, from, to, ..
-            } => {
-                let _ = actor_ref.send_message(SchedulerMessage::OnStateChanged {
-                    bead_id: bead_id.to_string(),
-                    from: Self::convert_bead_state(&from),
-                    to: Self::convert_bead_state(&to),
-                });
-            }
-            _ => {}
+        if let BeadEvent::StateChanged {
+            bead_id, from, to, ..
+        } = event
+        {
+            let _ = actor_ref.send_message(SchedulerMessage::OnStateChanged {
+                bead_id: bead_id.to_string(),
+                from: Self::convert_bead_state(&from),
+                to: Self::convert_bead_state(&to),
+            });
         }
         Ok(())
     }
@@ -283,9 +272,9 @@ mod core {
     pub fn handle(
         state: CoreSchedulerState,
         msg: SchedulerMessage,
-    ) -> (CoreSchedulerState, Vector<SchedulerEffect>) {
+    ) -> (CoreSchedulerState, Vec<SchedulerEffect>) {
         let mut next_state = state;
-        let mut effects = Vector::new();
+        let mut effects = Vec::new();
 
         match msg {
             SchedulerMessage::RegisterWorkflow { workflow_id } => {
@@ -360,27 +349,31 @@ mod core {
                 }
             }
             SchedulerMessage::GetWorkflowReadyBeads { workflow_id, reply } => {
-                let beads = next_state
-                    .workflows
-                    .get(&workflow_id)
-                    .map_or(Vec::new(), |ws| ws.get_ready_beads());
-                effects.push_back(SchedulerEffect::ReplyReadyBeads { reply, beads });
+                let result = match next_state.workflows.get(&workflow_id) {
+                    Some(ws) => Ok(ws
+                        .get_ready_beads()
+                        .into_iter()
+                        .filter(|bead_id| !next_state.worker_assignments.contains_key(bead_id))
+                        .collect()),
+                    None => Err(ActorError::workflow_not_found(workflow_id)),
+                };
+                effects.push(SchedulerEffect::ReplyReadyBeads { reply, result });
             }
             SchedulerMessage::GetStats { reply } => {
                 let stats = build_stats(&next_state);
-                effects.push_back(SchedulerEffect::ReplyStats { reply, stats });
+                effects.push(SchedulerEffect::ReplyStats { reply, stats });
             }
             SchedulerMessage::IsBeadReady {
                 workflow_id,
                 bead_id,
                 reply,
             } => {
-                let is_ready = next_state
+                let result = next_state
                     .workflows
                     .get(&workflow_id)
-                    .and_then(|ws| ws.is_bead_ready(&bead_id).ok())
-                    .unwrap_or(false);
-                effects.push_back(SchedulerEffect::ReplyIsReady { reply, is_ready });
+                    .ok_or_else(|| ActorError::workflow_not_found(workflow_id))
+                    .and_then(|ws| ws.is_bead_ready(&bead_id).map_err(ActorError::from));
+                effects.push(SchedulerEffect::ReplyIsReady { reply, result });
             }
             SchedulerMessage::GetWorkflowStatus { workflow_id, reply } => {
                 let status = next_state
@@ -393,16 +386,18 @@ mod core {
                         ready_beads: ws.get_ready_beads().len(),
                         is_complete: ws.is_complete(),
                     });
-                effects.push_back(SchedulerEffect::ReplyWorkflowStatus { reply, status });
+                effects.push(SchedulerEffect::ReplyWorkflowStatus { reply, status });
             }
             SchedulerMessage::GetAllReadyBeads { reply } => {
                 let mut ready = Vec::new();
                 for (wid, ws) in &next_state.workflows {
                     for bid in ws.get_ready_beads() {
-                        ready.push((wid.clone(), bid));
+                        if !next_state.worker_assignments.contains_key(&bid) {
+                            ready.push((wid.clone(), bid));
+                        }
                     }
                 }
-                effects.push_back(SchedulerEffect::ReplyAllReady { reply, ready });
+                effects.push(SchedulerEffect::ReplyAllReady { reply, ready });
             }
             SchedulerMessage::Shutdown => {} // Handled by shell
         }
@@ -426,6 +421,13 @@ mod core {
     }
 
     fn build_stats(state: &CoreSchedulerState) -> SchedulerStats {
+        let ready_count = state
+            .workflows
+            .values()
+            .flat_map(|ws| ws.get_ready_beads())
+            .filter(|bead_id| !state.worker_assignments.contains_key(bead_id))
+            .count();
+
         SchedulerStats {
             workflow_count: state.workflows.len(),
             pending_count: state
@@ -433,7 +435,7 @@ mod core {
                 .values()
                 .filter(|b| matches!(b.state, crate::scheduler::BeadScheduleState::Pending))
                 .count(),
-            ready_count: state.ready_beads.len(),
+            ready_count,
             assigned_count: state.worker_assignments.len(),
             queue_count: 0,
         }

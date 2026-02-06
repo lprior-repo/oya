@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use chrono::{Duration as ChronoDuration, Utc};
 use oya_events::{BeadEvent, BeadState, EventBus};
 use tracing::{debug, info, warn};
 
@@ -523,9 +523,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_diff_detects_dead_workers() {
-        let mut config = ReconcilerConfig::default();
-        config.detect_dead_workers = true;
-        config.dead_worker_threshold = Duration::from_secs(30);
+        let config = ReconcilerConfig {
+            detect_dead_workers: true,
+            dead_worker_threshold: Duration::from_secs(30),
+            ..Default::default()
+        };
 
         let store = Arc::new(InMemoryEventStore::new());
         let bus = Arc::new(EventBus::new(store));
@@ -554,9 +556,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_diff_detects_stuck_beads() {
-        let mut config = ReconcilerConfig::default();
-        config.detect_stuck_beads = true;
-        config.stuck_bead_threshold = Duration::from_secs(60);
+        let config = ReconcilerConfig {
+            detect_stuck_beads: true,
+            stuck_bead_threshold: Duration::from_secs(60),
+            ..Default::default()
+        };
 
         let store = Arc::new(InMemoryEventStore::new());
         let bus = Arc::new(EventBus::new(store));

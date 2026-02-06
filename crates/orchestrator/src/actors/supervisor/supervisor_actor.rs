@@ -22,7 +22,7 @@ use super::strategy::{OneForOne, RestartContext, RestartDecision, RestartStrateg
 pub trait GenericSupervisableActor: Actor + Clone
 where
     Self::Arguments: Clone + Send + Sync,
-    Self::Msg: Clone + Send,
+    Self::Msg: Send,
 {
     /// Get the default arguments for this actor.
     fn default_args() -> Self::Arguments;
@@ -166,7 +166,7 @@ pub enum SupervisorState {
 pub struct ChildInfo<A: GenericSupervisableActor>
 where
     A::Arguments: Clone + Send + Sync,
-    A::Msg: Clone + Send,
+    A::Msg: Send,
 {
     /// Child name.
     pub name: String,
@@ -183,7 +183,7 @@ where
 impl<A: GenericSupervisableActor> Debug for ChildInfo<A>
 where
     A::Arguments: Clone + Send + Sync,
-    A::Msg: Clone + Send,
+    A::Msg: Send,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ChildInfo")
@@ -199,7 +199,7 @@ where
 pub struct SupervisorActorDef<A: GenericSupervisableActor>
 where
     A::Arguments: Clone + Send + Sync,
-    A::Msg: Clone + Send,
+    A::Msg: Send,
 {
     _actor: std::marker::PhantomData<A>,
     child_def: A,
@@ -208,7 +208,7 @@ where
 impl<A: GenericSupervisableActor> SupervisorActorDef<A>
 where
     A::Arguments: Clone + Send + Sync,
-    A::Msg: Clone + Send,
+    A::Msg: Send,
 {
     /// Create a new supervisor definition for a specific actor type.
     pub fn new(child_def: A) -> Self {
@@ -223,7 +223,7 @@ where
 pub struct SupervisorActorState<A: GenericSupervisableActor>
 where
     A::Arguments: Clone + Send + Sync,
-    A::Msg: Clone + Send,
+    A::Msg: Send,
 {
     /// Configuration.
     pub config: SupervisorConfig,
@@ -248,7 +248,7 @@ where
 impl<A: GenericSupervisableActor> Debug for SupervisorActorState<A>
 where
     A::Arguments: Clone + Send + Sync,
-    A::Msg: Clone + Send,
+    A::Msg: Send,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SupervisorActorState")
@@ -264,20 +264,12 @@ where
 }
 
 /// Arguments for the supervisor actor.
+#[derive(Default)]
 pub struct SupervisorArguments {
     /// Configuration.
     pub config: SupervisorConfig,
     /// Optional shutdown coordinator.
     pub shutdown_coordinator: Option<Arc<ShutdownCoordinator>>,
-}
-
-impl Default for SupervisorArguments {
-    fn default() -> Self {
-        Self {
-            config: SupervisorConfig::default(),
-            shutdown_coordinator: None,
-        }
-    }
 }
 
 impl SupervisorArguments {
@@ -305,7 +297,7 @@ impl SupervisorArguments {
 impl<A: GenericSupervisableActor> Actor for SupervisorActorDef<A>
 where
     A::Arguments: Clone + Send + Sync,
-    A::Msg: Clone + Send,
+    A::Msg: Send,
 {
     type Msg = SupervisorMessage<A>;
     type State = SupervisorActorState<A>;
@@ -411,7 +403,7 @@ where
 impl<A: GenericSupervisableActor> SupervisorActorDef<A>
 where
     A::Arguments: Clone + Send + Sync,
-    A::Msg: Clone + Send,
+    A::Msg: Send,
 {
     /// Generate a unique child actor name.
     fn next_child_name(child_id_counter: &mut u64, prefix: &str) -> String {
@@ -657,7 +649,7 @@ pub async fn spawn_supervisor<A>(
 where
     A: GenericSupervisableActor + Default,
     A::Arguments: Clone + Send + Sync,
-    A::Msg: Clone + Send,
+    A::Msg: Send,
 {
     spawn_supervisor_with_name::<A>(args, "supervisor").await
 }
@@ -670,7 +662,7 @@ pub async fn spawn_supervisor_with_name<A>(
 where
     A: GenericSupervisableActor + Default,
     A::Arguments: Clone + Send + Sync,
-    A::Msg: Clone + Send,
+    A::Msg: Send,
 {
     let (actor, _handle) = Actor::spawn(
         Some(name.to_string()),

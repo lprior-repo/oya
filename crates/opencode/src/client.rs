@@ -433,7 +433,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_execute_via_api_success() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_execute_via_api_success() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let mock_server = MockServer::start().await;
 
         let body = serde_json::to_string(&serde_json::json!({"prompt": "test prompt"}))?;
@@ -469,7 +469,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_execute_via_api_error_response() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_execute_via_api_error_response()
+        -> std::result::Result<(), Box<dyn std::error::Error>> {
         let mock_server = MockServer::start().await;
 
         Mock::given(method("POST"))
@@ -492,7 +493,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_execute_via_api_timeout() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_execute_via_api_timeout() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let mock_server = MockServer::start().await;
 
         Mock::given(method("POST"))
@@ -527,7 +528,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_execute_via_api_no_base_url() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_execute_via_api_no_base_url()
+        -> std::result::Result<(), Box<dyn std::error::Error>> {
         let client = OpencodeClient::new()?;
 
         let result = client.execute_via_api("test prompt").await;
