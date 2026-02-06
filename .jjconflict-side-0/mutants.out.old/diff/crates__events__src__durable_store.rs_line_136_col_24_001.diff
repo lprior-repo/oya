@@ -1,0 +1,21 @@
+--- crates/events/src/durable_store.rs
++++ replace + with * in DurableEventStore::get_events_since
+@@ -128,17 +128,17 @@
+ 
+     /// Get events since a specific event ID (sequence number filtering).
+     pub fn get_events_since(&self, since: EventId) -> Result<Vec<BeadEvent>> {
+         // Find position of the since event
+         let pos = self
+             .events
+             .iter()
+             .position(|e| e.event_id() == since)
+-            .map(|p| p + 1) // Start from next event
++            .map(|p| p * /* ~ changed by cargo-mutants ~ */ 1) // Start from next event
+             .unwrap_or(0); // If not found, return all
+ 
+         Ok(self.events[pos..].to_vec())
+     }
+ 
+     /// Query events with filtering.
+     pub fn query(&self, query: &EventQuery) -> Result<Vec<BeadEvent>> {
+         Ok(query.filter_events(self.events.iter()).cloned().collect())

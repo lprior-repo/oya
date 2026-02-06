@@ -1,0 +1,28 @@
+[package]
+name = "oya-pipeline"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "CI/CD pipeline and task management for OYA"
+
+[dependencies]
+oya-core = { workspace = true }
+oya-opencode = { workspace = true }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+chrono = { workspace = true }
+ulid = { workspace = true }
+regex = { workspace = true }
+glob = { workspace = true }
+surrealdb = { workspace = true }
+surrealdb-core = { workspace = true }
+
+[lints]
+workspace = true

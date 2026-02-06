@@ -1,0 +1,21 @@
+--- crates/events/src/bus.rs
++++ replace == with != in EventPattern::matches
+@@ -41,17 +41,17 @@
+     ByTypes(Vec<String>),
+ }
+ 
+ impl EventPattern {
+     /// Check if an event matches this pattern.
+     pub fn matches(&self, event: &BeadEvent) -> bool {
+         match self {
+             Self::All => true,
+-            Self::ByType(t) => event.event_type() == t,
++            Self::ByType(t) => event.event_type() != /* ~ changed by cargo-mutants ~ */ t,
+             Self::ByBead(id) => event.bead_id() == *id,
+             Self::ByTypes(types) => types.iter().any(|t| event.event_type() == t),
+         }
+     }
+ }
+ 
+ /// Subscriber information.
+ struct Subscriber {

@@ -1,0 +1,26 @@
+--- crates/events/src/event.rs
++++ replace BeadEvent::created -> Self with Default::default()
+@@ -83,22 +83,17 @@
+         metadata: serde_json::Value,
+         timestamp: DateTime<Utc>,
+     },
+ }
+ 
+ impl BeadEvent {
+     /// Create a new Created event.
+     pub fn created(bead_id: BeadId, spec: BeadSpec) -> Self {
+-        Self::Created {
+-            event_id: EventId::new(),
+-            bead_id,
+-            spec,
+-            timestamp: Utc::now(),
+-        }
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Create a new StateChanged event.
+     pub fn state_changed(bead_id: BeadId, from: BeadState, to: BeadState) -> Self {
+         Self::StateChanged {
+             event_id: EventId::new(),
+             bead_id,
+             from,

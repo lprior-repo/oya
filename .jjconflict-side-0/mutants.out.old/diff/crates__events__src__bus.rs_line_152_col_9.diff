@@ -1,0 +1,21 @@
+--- crates/events/src/bus.rs
++++ replace EventBus::store -> &Arc<dyn EventStore> with Box::leak(Box::new(Arc::new(Default::default())))
+@@ -144,17 +144,17 @@
+ 
+     /// Replay events from a given event ID.
+     pub async fn replay_from(&self, from: Option<EventId>) -> Result<Vec<BeadEvent>> {
+         self.store.read(from).await
+     }
+ 
+     /// Get the underlying event store.
+     pub fn store(&self) -> &Arc<dyn EventStore> {
+-        &self.store
++        Box::leak(Box::new(Arc::new(Default::default()))) /* ~ changed by cargo-mutants ~ */
+     }
+ }
+ 
+ /// Builder for EventBus.
+ pub struct EventBusBuilder {
+     store: Option<Arc<dyn EventStore>>,
+     channel_capacity: usize,
+ }

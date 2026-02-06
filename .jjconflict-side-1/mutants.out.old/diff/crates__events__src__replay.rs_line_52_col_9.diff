@@ -1,0 +1,23 @@
+--- crates/events/src/replay.rs
++++ replace ReplayProgress::update with ()
+@@ -44,19 +44,17 @@
+         } else {
+             (self.events_processed as f64 / self.events_total as f64) * 100.0
+         }
+     }
+ 
+     /// Update progress with new event count.
+     #[allow(dead_code)]
+     fn update(&mut self, events_processed: u64, eta: Option<Duration>) {
+-        self.events_processed = events_processed;
+-        self.percent_complete = self.calculate_percent();
+-        self.eta = eta;
++        () /* ~ changed by cargo-mutants ~ */
+     }
+ }
+ 
+ /// Thread-safe progress tracker for event replay.
+ pub struct ReplayTracker {
+     events_total: u64,
+     events_processed: AtomicU64,
+     start_time: Instant,
