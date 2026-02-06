@@ -153,6 +153,60 @@ impl WorkflowDAG {
         Ok(())
     }
 
+    /// Add a dependency relationship between two beads.
+    ///
+    /// This is a semantic alias for `add_edge` that makes the API more expressive.
+    /// The `from` bead is the dependency, and the `to` bead depends on it.
+    ///
+    /// # Arguments
+    ///
+    /// * `from` - The BeadId of the dependency (what `to` depends on)
+    /// * `to` - The BeadId of the dependent (depends on `from`)
+    /// * `dep_type` - The type of dependency relationship
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` if the dependency was added successfully
+    /// * `Err(DagError::SelfLoopDetected)` if from and to are the same
+    /// * `Err(DagError::NodeNotFound)` if either bead doesn't exist
+    /// * `Err(DagError::EdgeAlreadyExists)` if the edge already exists
+    ///
+    /// # Validation
+    ///
+    /// - Prevents self-loops (a bead cannot depend on itself)
+    /// - Validates both beads exist in the DAG
+    /// - Prevents duplicate edges
+    /// - Preserves dependency type
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use orchestrator::dag::{WorkflowDAG, DependencyType};
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut dag = WorkflowDAG::new();
+    /// dag.add_node("build".to_string())?;
+    /// dag.add_node("test".to_string())?;
+    ///
+    /// // test depends on build
+    /// dag.add_dependency(
+    ///     "build".to_string(),
+    ///     "test".to_string(),
+    ///     DependencyType::BlockingDependency
+    /// )?;
+    ///
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn add_dependency(
+        &mut self,
+        from: BeadId,
+        to: BeadId,
+        dep_type: DependencyType,
+    ) -> DagResult<()> {
+        self.add_edge(from, to, dep_type)
+    }
+
     /// Get an iterator over all nodes in the DAG
     ///
     /// # Returns
@@ -1977,6 +2031,151 @@ mod tests {
 
         assert!(dag.contains_node(&"a".to_string()));
         assert!(!dag.contains_node(&"b".to_string()));
+        Ok(())
+    }
+
+    // ==================== Add Dependency Tests ====================
+
+    #[test]
+    fn test_add_dependency_blocking() -> DagResult<()> {
+        let mut dag = WorkflowDAG::new();
+        dag.add_node("task-a".to_string())?;
+        dag.add_node("task-b".to_string())?;
+
+        let result = dag.add_dependency(
+            "task-a".to_string(),
+            "task-b".to_string(),
+            DependencyType::BlockingDependency,
+        );
+        assert!(result.is_ok());
+        assert_eq!(dag.edge_count(), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn test_add_dependency_preferred() -> DagResult<()> {
+        let mut dag = WorkflowDAG::new();
+        dag.add_node("task-a".to_string())?;
+        dag.add_node("task-b".to_string())?;
+
+        let result = dag.add_dependency(
+            "task-a".to_string(),
+            "task-b".to_string(),
+            DependencyType::PreferredOrder,
+        );
+        assert!(result.is_ok());
+        assert_eq!(dag.edge_count(), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn test_add_dependency_self_loop_fails() -> DagResult<()> {
+        let mut dag = WorkflowDAG::new();
+        dag.add_node("task-a".to_string())?;
+
+        let result = dag.add_dependency(
+            "task-a".to_string(),
+            "task-a".to_string(),
+            DependencyType::BlockingDependency,
+        );
+        assert!(result.is_err());
+        assert!(matches!(result, Err(DagError::SelfLoopDetected(_))));
+        Ok(())
+    }
+
+    #[test]
+    fn test_add_dependency_source_not_found_fails() -> DagResult<()> {
+        let mut dag = WorkflowDAG::new();
+        dag.add_node("task-b".to_string())?;
+
+        let result = dag.add_dependency(
+            "task-a".to_string(),
+            "task-b".to_string(),
+            DependencyType::BlockingDependency,
+        );
+        assert!(result.is_err());
+        assert!(matches!(result, Err(DagError::NodeNotFound(_))));
+        Ok(())
+    }
+
+    #[test]
+    fn test_add_dependency_target_not_found_fails() -> DagResult<()> {
+        let mut dag = WorkflowDAG::new();
+        dag.add_node("task-a".to_string())?;
+
+        let result = dag.add_dependency(
+            "task-a".to_string(),
+            "task-b".to_string(),
+            DependencyType::BlockingDependency,
+        );
+        assert!(result.is_err());
+        assert!(matches!(result, Err(DagError::NodeNotFound(_))));
+        Ok(())
+    }
+
+    #[test]
+    fn test_add_dependency_duplicate_edge_fails() -> DagResult<()> {
+        let mut dag = WorkflowDAG::new();
+        dag.add_node("task-a".to_string())?;
+        dag.add_node("task-b".to_string())?;
+
+        // Add first dependency
+        dag.add_dependency(
+            "task-a".to_string(),
+            "task-b".to_string(),
+            DependencyType::BlockingDependency,
+        )?;
+
+        // Try to add duplicate
+        let result = dag.add_dependency(
+            "task-a".to_string(),
+            "task-b".to_string(),
+            DependencyType::BlockingDependency,
+        );
+        assert!(result.is_err());
+        assert!(matches!(result, Err(DagError::EdgeAlreadyExists(_, _))));
+        Ok(())
+    }
+
+    #[test]
+    fn test_add_dependency_preserves_dependency_type() -> DagResult<()> {
+        let mut dag = WorkflowDAG::new();
+        dag.add_node("task-a".to_string())?;
+        dag.add_node("task-b".to_string())?;
+
+        dag.add_dependency(
+            "task-a".to_string(),
+            "task-b".to_string(),
+            DependencyType::BlockingDependency,
+        )?;
+
+        // Verify the edge type was preserved
+        let edges: Vec<_> = dag.edges().collect();
+        assert_eq!(edges.len(), 1);
+        assert_eq!(*edges[0].2, DependencyType::BlockingDependency);
+        Ok(())
+    }
+
+    #[test]
+    fn test_add_dependency_multiple_edges_from_same_source() -> DagResult<()> {
+        let mut dag = WorkflowDAG::new();
+        dag.add_node("task-a".to_string())?;
+        dag.add_node("task-b".to_string())?;
+        dag.add_node("task-c".to_string())?;
+
+        // Add multiple dependencies from the same source
+        dag.add_dependency(
+            "task-a".to_string(),
+            "task-b".to_string(),
+            DependencyType::BlockingDependency,
+        )?;
+        dag.add_dependency(
+            "task-a".to_string(),
+            "task-c".to_string(),
+            DependencyType::PreferredOrder,
+        )?;
+
+        assert_eq!(dag.edge_count(), 2);
         Ok(())
     }
 }
