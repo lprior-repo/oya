@@ -216,7 +216,7 @@ pub struct EventStoreState {
 /// - Commands are fire-and-forget (use `cast!`)
 /// - Queries return responses (use `call!`)
 /// - Business errors are returned in RPC replies, NOT as actor crashes
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum EventStoreMessage {
     // COMMANDS (fire-and-forget via cast!)
     /// Append a bead event to durable storage.
@@ -389,7 +389,7 @@ mod tests {
             .expect("Failed to encode config");
 
         // Test bincode deserialization
-        let decoded: DatabaseConfig =
+        let (decoded, _): (DatabaseConfig, _) =
             bincode::serde::decode_from_slice(&encoded, bincode::config::standard())
                 .expect("Failed to decode config");
 
