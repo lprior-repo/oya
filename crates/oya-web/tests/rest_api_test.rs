@@ -219,6 +219,77 @@ async fn test_create_workflow_handles_empty_string_spec() -> Result<(), String> 
 }
 
 #[tokio::test]
+async fn test_list_workflows_returns_empty_payload_shape() -> Result<(), String> {
+    let server = create_test_server()?;
+
+    let response = server.get("/api/workflows").await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+
+    let body: Value = response.json();
+    assert_eq!(body["total"], 0);
+    assert!(body["workflows"].is_array());
+    assert_eq!(body["workflows"].as_array().map(|v| v.len()), Some(0));
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_list_agents_returns_not_found_when_empty() -> Result<(), String> {
+    let server = create_test_server()?;
+
+    let response = server.get("/api/agents").await;
+
+    assert_eq!(response.status_code(), StatusCode::NOT_FOUND);
+
+    let body: Value = response.json();
+    assert_eq!(body["status"], 404);
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_spawn_agents_rejects_zero_count() -> Result<(), String> {
+    let server = create_test_server()?;
+
+    let payload = serde_json::json!({
+        "count": 0,
+        "capabilities": ["review"]
+    });
+
+    let response = server.post("/api/agents/spawn").json(&payload).await;
+
+    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+
+    let body: Value = response.json();
+    assert_eq!(body["status"], 400);
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_spawn_agents_then_list_agents_reflects_state() -> Result<(), String> {
+    let server = create_test_server()?;
+
+    let payload = serde_json::json!({
+        "count": 2,
+        "capabilities": ["review", "test"]
+    });
+
+    let spawn_response = server.post("/api/agents/spawn").json(&payload).await;
+    assert_eq!(spawn_response.status_code(), StatusCode::OK);
+
+    let spawn_body: Value = spawn_response.json();
+    assert_eq!(spawn_body["total"], 2);
+    assert_eq!(spawn_body["agent_ids"].as_array().map(|v| v.len()), Some(2));
+
+    let list_response = server.get("/api/agents").await;
+    assert_eq!(list_response.status_code(), StatusCode::OK);
+
+    let list_body: Value = list_response.json();
+    assert_eq!(list_body["total"], 2);
+    assert_eq!(list_body["agents"].as_array().map(|v| v.len()), Some(2));
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_create_workflow_response_structure() -> Result<(), String> {
     let server = create_test_server()?;
 
