@@ -74,6 +74,9 @@ pub use supervisor::{
     SupervisorArguments, SupervisorConfig, SupervisorMessage, SupervisorState, SupervisorStatus,
     calculate_backoff,
 };
-pub use worker::{CheckpointHandle, CheckpointTimer};
+pub use worker::{
+    CheckpointHandle, CheckpointTimer, WorkerActorDef, WorkerConfig, WorkerMessage, WorkerRetryPolicy,
+    WorkerState,
+};
 pub use universe::{UniverseArguments, UniverseMessage, UniverseState, UniverseSupervisorDef};
 pub use workflow::{WorkflowActorDef, WorkflowMessage, WorkflowStateActor};
