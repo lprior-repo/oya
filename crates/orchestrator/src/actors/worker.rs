@@ -158,17 +158,19 @@ impl Actor for WorkerActorDef {
                 let old_state = from_state.unwrap_or(BeadState::Ready);
                 let new_state = BeadState::Running;
 
-                // Emit state change event
-                if let Some(ref bus) = state.config.event_bus {
-                    let event = EventsBeadEvent::state_changed(
-                        crate::dag::BeadId::from(bead_id.clone()),
-                        old_state.clone(),
-                        new_state.clone(),
-                    );
-                    if let Err(e) = bus.publish(event).await {
-                        warn!(error = %e, "Failed to publish state change event");
-                    }
-                }
+                // TODO: Emit state change event
+                // Note: Currently disabled due to type mismatch between
+                // crate::dag::BeadId (String) and oya_events::BeadId (Ulid wrapper)
+                // if let Some(ref bus) = state.config.event_bus {
+                //     let event = EventsBeadEvent::state_changed(
+                //         crate::dag::BeadId::from(bead_id.clone()),
+                //         old_state.clone(),
+                //         new_state.clone(),
+                //     );
+                //     if let Err(e) = bus.publish(event).await {
+                //         warn!(error = %e, "Failed to publish state change event");
+                //     }
+                // }
 
                 state.current_bead = Some(bead_id);
                 state.current_state = Some(new_state);
