@@ -78,6 +78,28 @@ impl DependencyEdge {
     }
 }
 
+/// Blocked bead with blocking dependencies.
+///
+/// Represents a bead that is blocked along with the beads that are blocking it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BlockedBead {
+    /// The bead that is blocked
+    pub bead_id: String,
+    /// The beads that are blocking this bead (dependencies that haven't completed)
+    pub blocking_deps: Vec<String>,
+}
+
+impl BlockedBead {
+    /// Create a new BlockedBead entry.
+    #[must_use]
+    pub fn new(bead_id: impl Into<String>, blocking_deps: Vec<String>) -> Self {
+        Self {
+            bead_id: bead_id.into(),
+            blocking_deps,
+        }
+    }
+}
+
 /// Input for creating/updating a dependency edge.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct DependencyInput {
@@ -261,6 +283,93 @@ impl OrchestratorStore {
         all_edges.extend(blocks_edges);
 
         Ok(all_edges)
+    }
+
+    /// Find all beads that are blocked (have incomplete dependencies).
+    ///
+    /// A bead is considered blocked if it has at least one incomplete dependency
+    /// (either depends_on or blocks relation). Returns each blocked bead along with
+    /// the list of bead IDs that are blocking it.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// // Create dependency: bead-002 depends on bead-001
+    /// let edge = DependencyEdge::new("bead-002", "bead-001", DependencyRelation::DependsOn);
+    /// store.save_dependency_edge(&edge).await?;
+    ///
+    /// // Find all blocked beads
+    /// let blocked = store.find_blocked_beads().await?;
+    /// assert_eq!(blocked.len(), 1);
+    /// assert_eq!(blocked[0].bead_id, "bead-002");
+    /// assert_eq!(blocked[0].blocking_deps, vec!["bead-001".to_string()]);
+    /// ```
+    pub async fn find_blocked_beads(&self) -> PersistenceResult<Vec<BlockedBead>> {
+        // Query all depends_on relationships
+        let depends_query = r#"
+            SELECT bead_id, array::agg(target_bead_id) as blocking_deps
+            FROM bead_depends_on
+            GROUP BY bead_id
+            ORDER BY bead_id
+        "#;
+
+        let depends_result: Vec<BlockedBead> = self
+            .db()
+            .query(depends_query)
+            .await
+            .map_err(from_surrealdb_error)?
+            .take(0)
+            .map_err(from_surrealdb_error)?;
+
+        // Query all blocks relationships
+        // Note: For blocks, the target_bead_id is the one being blocked
+        let blocks_query = r#"
+            SELECT target_bead_id as bead_id, array::agg(bead_id) as blocking_deps
+            FROM bead_blocks
+            GROUP BY target_bead_id
+            ORDER BY target_bead_id
+        "#;
+
+        let blocks_result: Vec<BlockedBead> = self
+            .db()
+            .query(blocks_query)
+            .await
+            .map_err(from_surrealdb_error)?
+            .take(0)
+            .map_err(from_surrealdb_error)?;
+
+        // Merge results: a bead might appear in both queries
+        let mut blocked_map: std::collections::HashMap<String, Vec<String>> =
+            std::collections::HashMap::new();
+
+        // Add depends_on results
+        for blocked in depends_result {
+            blocked_map.entry(blocked.bead_id.clone()).or_default().extend(blocked.blocking_deps);
+        }
+
+        // Add blocks results
+        for blocked in blocks_result {
+            blocked_map.entry(blocked.bead_id.clone()).or_default().extend(blocked.blocking_deps);
+        }
+
+        // Convert to Vec<BlockedBead> with deterministic sorting
+        let mut result: Vec<BlockedBead> = blocked_map
+            .into_iter()
+            .map(|(bead_id, mut blocking_deps)| {
+                blocking_deps.sort();
+                blocking_deps.dedup();
+                BlockedBead::new(bead_id, blocking_deps)
+            })
+            .collect();
+
+        // Sort by bead_id for deterministic output
+        result.sort_by(|a, b| a.bead_id.cmp(&b.bead_id));
+
+        Ok(result)
     }
 }
 

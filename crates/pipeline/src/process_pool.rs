@@ -507,7 +507,7 @@ mod tests {
 
         if let Ok(proc) = process {
             // Short timeout to force SIGKILL
-            let result = timeout(
+            let result = tokio::time::timeout(
                 Duration::from_secs(2),
                 proc.graceful_shutdown(Duration::from_millis(100))
             ).await;
@@ -532,7 +532,7 @@ mod tests {
         }
 
         // Shutdown all workers
-        let results = shutdown_all_workers(workers, Duration::from_secs(5)).await;
+        let results: Result<Vec<Result<()>>> = super::shutdown_all_workers(workers, Duration::from_secs(5)).await;
         assert!(results.is_ok());
 
         let shutdown_results = results.unwrap();
@@ -561,7 +561,7 @@ mod tests {
             }
         }
 
-        let results = shutdown_all_workers(workers, Duration::from_secs(1)).await;
+        let results: Result<Vec<Result<()>>> = super::shutdown_all_workers(workers, Duration::from_secs(1)).await;
         assert!(results.is_ok());
 
         let shutdown_results = results.unwrap();

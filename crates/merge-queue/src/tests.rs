@@ -2,14 +2,18 @@
 //!
 //! Validates parallel task merging, conflict detection, and queue operations.
 
-use oya_core::{Error, Result};
+use crate::queue::Queue;
+use crate::conflict::ConflictDetection;
 
 #[test]
 fn test_queue_module_exists() {
-    let _ = oya_merge_queue::Queue::new();
+    let _ = Queue::new();
 }
 
 #[test]
 fn test_conflict_module_exists() {
-    let _ = oya_merge_queue::Conflict::new();
+    let _ = ConflictDetection {
+        has_conflicts: false,
+        conflicting_files: vec![],
+    };
 }

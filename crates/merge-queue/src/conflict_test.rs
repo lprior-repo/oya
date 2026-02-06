@@ -2,12 +2,12 @@
 //!
 //! Validates conflict detection strategies and resolution mechanisms.
 
-use oya_core::Result;
+use crate::conflict::{detect, attempt_rebase, ConflictDetection, RebaseResult};
 
 #[test]
 fn test_conflict_detection() {
     // Test detecting conflicts on merge attempt
-    let conflict = oya_merge_queue::conflict::detect("main", "feature-branch")
+    let conflict = detect("main", "feature-branch")
         .expect("Conflict detection should not fail");
 
     // Should return a conflict result
@@ -17,7 +17,7 @@ fn test_conflict_detection() {
 #[test]
 fn test_conflict_detected_with_conflicts() {
     // Test when conflicts are detected
-    let result = oya_merge_queue::conflict::detect("main", "conflicting-branch");
+    let result = detect("main", "conflicting-branch");
 
     match result {
         Ok(conflict) => {
@@ -35,7 +35,7 @@ fn test_conflict_detected_with_conflicts() {
 #[test]
 fn test_resolution_strategies() {
     // Test automatic rebase
-    let result = oya_merge_queue::conflict::attempt_rebase("feature-branch", "main");
+    let result = attempt_rebase("feature-branch", "main");
 
     match result {
         Ok(rebase_result) => {
@@ -50,7 +50,7 @@ fn test_resolution_strategies() {
 #[test]
 fn test_rebase_with_conflicts_transitions_to_failed() {
     // Test that rebase conflicts properly transition state
-    let result = oya_merge_queue::conflict::attempt_rebase("conflicting-branch", "main");
+    let result = attempt_rebase("conflicting-branch", "main");
 
     match result {
         Ok(rebase_result) => {
