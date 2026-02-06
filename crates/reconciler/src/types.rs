@@ -162,6 +162,12 @@ pub enum ReconcileAction {
     ScheduleBead { bead_id: BeadId },
     /// Delete a bead.
     DeleteBead { bead_id: BeadId },
+    /// Reschedule a bead for later execution.
+    RescheduleBead { bead_id: BeadId, reason: String },
+    /// Respawn a bead after worker failure.
+    RespawnBead { bead_id: BeadId, reason: String },
+    /// Cancel a bead execution.
+    CancelBead { bead_id: BeadId, reason: String },
 }
 
 impl ReconcileAction {
@@ -175,7 +181,10 @@ impl ReconcileAction {
             | Self::MarkComplete { bead_id, .. }
             | Self::UpdateDependencies { bead_id, .. }
             | Self::ScheduleBead { bead_id }
-            | Self::DeleteBead { bead_id } => *bead_id,
+            | Self::DeleteBead { bead_id }
+            | Self::RescheduleBead { bead_id, .. }
+            | Self::RespawnBead { bead_id, .. }
+            | Self::CancelBead { bead_id, .. } => *bead_id,
         }
     }
 
@@ -209,6 +218,15 @@ impl ReconcileAction {
             }
             Self::DeleteBead { bead_id } => {
                 format!("delete bead {bead_id}")
+            }
+            Self::RescheduleBead { bead_id, reason } => {
+                format!("reschedule bead {bead_id}: {reason}")
+            }
+            Self::RespawnBead { bead_id, reason } => {
+                format!("respawn bead {bead_id}: {reason}")
+            }
+            Self::CancelBead { bead_id, reason } => {
+                format!("cancel bead {bead_id}: {reason}")
             }
         }
     }

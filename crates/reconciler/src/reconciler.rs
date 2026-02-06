@@ -1,8 +1,10 @@
 //! Reconciler implementation.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use oya_events::{BeadEvent, BeadState, EventBus};
 use tracing::{debug, info, warn};
 
@@ -20,6 +22,14 @@ pub struct ReconcilerConfig {
     pub auto_retry: bool,
     /// Maximum retry attempts.
     pub max_retries: u32,
+    /// Whether to detect dead workers.
+    pub detect_dead_workers: bool,
+    /// Duration before an unclaimed running bead is treated as dead.
+    pub dead_worker_threshold: Duration,
+    /// Whether to detect stuck beads.
+    pub detect_stuck_beads: bool,
+    /// Duration before a running bead is considered stuck.
+    pub stuck_bead_threshold: Duration,
 }
 
 impl Default for ReconcilerConfig {
@@ -29,6 +39,10 @@ impl Default for ReconcilerConfig {
             auto_start: true,
             auto_retry: true,
             max_retries: 3,
+            detect_dead_workers: true,
+            dead_worker_threshold: Duration::from_secs(60),
+            detect_stuck_beads: true,
+            stuck_bead_threshold: Duration::from_secs(300),
         }
     }
 }
@@ -109,7 +123,11 @@ impl ActionExecutor for EventActionExecutor {
                     .await
                     .map_err(|e| Error::event_error(e.to_string()))?;
             }
-            ReconcileAction::UpdateDependencies { .. } | ReconcileAction::DeleteBead { .. } => {
+            ReconcileAction::UpdateDependencies { .. }
+            | ReconcileAction::DeleteBead { .. }
+            | ReconcileAction::RescheduleBead { .. }
+            | ReconcileAction::RespawnBead { .. }
+            | ReconcileAction::CancelBead { .. } => {
                 // These would require additional event types or storage operations
                 debug!(action = ?action, "Action not implemented via events");
             }
@@ -190,6 +208,12 @@ impl Reconciler {
     /// Compute diff between desired and actual state.
     fn diff(&self, desired: &DesiredState, actual: &ActualState) -> Vec<ReconcileAction> {
         let mut actions = Vec::new();
+        let dead_worker_threshold = ChronoDuration::from_std(self.config.dead_worker_threshold)
+            .map_err(|_| ())
+            .ok();
+        let stuck_bead_threshold = ChronoDuration::from_std(self.config.stuck_bead_threshold)
+            .map_err(|_| ())
+            .ok();
 
         // 1. Create beads that exist in desired but not actual
         for (bead_id, spec) in &desired.beads {
@@ -240,7 +264,69 @@ impl Reconciler {
             }
         }
 
+        // 6. Detect dead workers (running without claim beyond threshold)
+        if self.config.detect_dead_workers {
+            if let Some(threshold) = dead_worker_threshold {
+                for proj in actual.beads.values() {
+                    let is_unclaimed_running =
+                        proj.current_state == BeadState::Running && proj.claimed_by.is_none();
+                    let running_long_enough = self
+                        .running_duration(proj)
+                        .map(|elapsed| elapsed >= threshold)
+                        .unwrap_or_else(|| false);
+
+                    if is_unclaimed_running && running_long_enough {
+                        actions.push(ReconcileAction::RespawnBead {
+                            bead_id: proj.bead_id,
+                            reason: format!(
+                                "worker missing for {}s",
+                                threshold.num_seconds()
+                            ),
+                        });
+                    }
+                }
+            } else {
+                warn!("dead worker threshold invalid; skipping detection");
+            }
+        }
+
+        // 7. Detect stuck beads (running beyond threshold)
+        if self.config.detect_stuck_beads {
+            if let Some(threshold) = stuck_bead_threshold {
+                for proj in actual.beads.values() {
+                    let is_running =
+                        proj.current_state == BeadState::Running && proj.claimed_by.is_some();
+                    let running_long_enough = self
+                        .running_duration(proj)
+                        .map(|elapsed| elapsed >= threshold)
+                        .unwrap_or_else(|| false);
+
+                    if is_running && running_long_enough {
+                        actions.push(ReconcileAction::RescheduleBead {
+                            bead_id: proj.bead_id,
+                            reason: format!(
+                                "running for {}s",
+                                threshold.num_seconds()
+                            ),
+                        });
+                    }
+                }
+            } else {
+                warn!("stuck bead threshold invalid; skipping detection");
+            }
+        }
+
         actions
+    }
+
+    fn running_duration(&self, proj: &oya_events::BeadProjection) -> Option<ChronoDuration> {
+        let running_transition = proj
+            .history
+            .iter()
+            .rev()
+            .find(|transition| transition.to == BeadState::Running);
+
+        running_transition.map(|transition| Utc::now().signed_duration_since(transition.timestamp))
     }
 
     /// Apply a list of actions.
@@ -349,7 +435,7 @@ impl Default for ReconcilerBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oya_events::{BeadId, BeadSpec, Complexity, InMemoryEventStore};
+    use oya_events::{BeadId, BeadSpec, Complexity, InMemoryEventStore, StateTransition};
 
     fn setup_reconciler() -> (Reconciler, Arc<EventBus>) {
         let store = Arc::new(InMemoryEventStore::new());
@@ -433,6 +519,68 @@ mod tests {
             .iter()
             .any(|a| matches!(a, ReconcileAction::DeleteBead { .. }));
         assert!(has_delete);
+    }
+
+    #[tokio::test]
+    async fn test_diff_detects_dead_workers() {
+        let mut config = ReconcilerConfig::default();
+        config.detect_dead_workers = true;
+        config.dead_worker_threshold = Duration::from_secs(30);
+
+        let store = Arc::new(InMemoryEventStore::new());
+        let bus = Arc::new(EventBus::new(store));
+        let reconciler = Reconciler::with_event_executor(bus, config);
+
+        let desired = DesiredState::new();
+        let mut actual = ActualState::new();
+        let bead_id = BeadId::new();
+        let mut proj = oya_events::BeadProjection::new(bead_id);
+        proj.current_state = BeadState::Running;
+        proj.claimed_by = None;
+        proj.history.push(StateTransition {
+            from: BeadState::Ready,
+            to: BeadState::Running,
+            timestamp: Utc::now() - ChronoDuration::seconds(120),
+            reason: None,
+        });
+        actual.update(proj);
+
+        let actions = reconciler.diff(&desired, &actual);
+        let has_respawn = actions
+            .iter()
+            .any(|a| matches!(a, ReconcileAction::RespawnBead { .. }));
+        assert!(has_respawn);
+    }
+
+    #[tokio::test]
+    async fn test_diff_detects_stuck_beads() {
+        let mut config = ReconcilerConfig::default();
+        config.detect_stuck_beads = true;
+        config.stuck_bead_threshold = Duration::from_secs(60);
+
+        let store = Arc::new(InMemoryEventStore::new());
+        let bus = Arc::new(EventBus::new(store));
+        let reconciler = Reconciler::with_event_executor(bus, config);
+
+        let desired = DesiredState::new();
+        let mut actual = ActualState::new();
+        let bead_id = BeadId::new();
+        let mut proj = oya_events::BeadProjection::new(bead_id);
+        proj.current_state = BeadState::Running;
+        proj.claimed_by = Some("agent-1".to_string());
+        proj.history.push(StateTransition {
+            from: BeadState::Ready,
+            to: BeadState::Running,
+            timestamp: Utc::now() - ChronoDuration::seconds(120),
+            reason: None,
+        });
+        actual.update(proj);
+
+        let actions = reconciler.diff(&desired, &actual);
+        let has_reschedule = actions
+            .iter()
+            .any(|a| matches!(a, ReconcileAction::RescheduleBead { .. }));
+        assert!(has_reschedule);
     }
 
     #[tokio::test]
