@@ -55,3 +55,4 @@ vendor/opencode-sme/
 
 # Mutation testing output
 mutants.out/
+.zjj/state.db
