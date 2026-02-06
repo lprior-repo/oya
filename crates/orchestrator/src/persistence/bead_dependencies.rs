@@ -310,50 +310,41 @@ impl OrchestratorStore {
     /// ```
     pub async fn find_blocked_beads(&self) -> PersistenceResult<Vec<BlockedBead>> {
         // Query all depends_on relationships
-        let depends_query = r#"
-            SELECT bead_id, array::agg(target_bead_id) as blocking_deps
-            FROM bead_depends_on
-            GROUP BY bead_id
-            ORDER BY bead_id
-        "#;
-
-        let depends_result: Vec<BlockedBead> = self
+        let depends_edges: Vec<DependencyEdge> = self
             .db()
-            .query(depends_query)
+            .query("SELECT * FROM bead_depends_on")
             .await
             .map_err(from_surrealdb_error)?
             .take(0)
             .map_err(from_surrealdb_error)?;
 
         // Query all blocks relationships
-        // Note: For blocks, the target_bead_id is the one being blocked
-        let blocks_query = r#"
-            SELECT target_bead_id as bead_id, array::agg(bead_id) as blocking_deps
-            FROM bead_blocks
-            GROUP BY target_bead_id
-            ORDER BY target_bead_id
-        "#;
-
-        let blocks_result: Vec<BlockedBead> = self
+        let blocks_edges: Vec<DependencyEdge> = self
             .db()
-            .query(blocks_query)
+            .query("SELECT * FROM bead_blocks")
             .await
             .map_err(from_surrealdb_error)?
             .take(0)
             .map_err(from_surrealdb_error)?;
 
-        // Merge results: a bead might appear in both queries
+        // Group by bead_id in Rust
         let mut blocked_map: std::collections::HashMap<String, Vec<String>> =
             std::collections::HashMap::new();
 
-        // Add depends_on results
-        for blocked in depends_result {
-            blocked_map.entry(blocked.bead_id.clone()).or_default().extend(blocked.blocking_deps);
+        // Process depends_on edges: bead_id depends on target_bead_id
+        for edge in depends_edges {
+            blocked_map
+                .entry(edge.bead_id)
+                .or_default()
+                .push(edge.target_bead_id);
         }
 
-        // Add blocks results
-        for blocked in blocks_result {
-            blocked_map.entry(blocked.bead_id.clone()).or_default().extend(blocked.blocking_deps);
+        // Process blocks edges: target_bead_id is blocked by bead_id
+        for edge in blocks_edges {
+            blocked_map
+                .entry(edge.target_bead_id)
+                .or_default()
+                .push(edge.bead_id);
         }
 
         // Convert to Vec<BlockedBead> with deterministic sorting
@@ -553,5 +544,160 @@ mod tests {
     async fn test_dependency_relation_display() {
         assert_eq!(DependencyRelation::DependsOn.to_string(), "depends_on");
         assert_eq!(DependencyRelation::Blocks.to_string(), "blocks");
+    }
+
+    // ==================== Bead src-9nvt: find_blocked_beads Tests ====================
+
+    #[tokio::test]
+    async fn test_find_blocked_beads_single_blocking_dep() {
+        let store = require_store!(setup_store().await);
+
+        // Create dependency: bead-002 depends on bead-001
+        let edge = DependencyEdge::new("bead-002", "bead-001", DependencyRelation::DependsOn);
+        let _ = store.save_dependency_edge(&edge).await;
+
+        // bead-002 should be in blocked list
+        let blocked: PersistenceResult<Vec<BlockedBead>> = store.find_blocked_beads().await;
+        assert!(blocked.is_ok(), "find_blocked_beads should succeed");
+
+        if let Ok(blocked_beads) = blocked {
+            assert!(!blocked_beads.is_empty(), "should have at least one blocked bead");
+            assert!(
+                blocked_beads.iter().any(|b| b.bead_id == "bead-002"),
+                "bead-002 should be blocked"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_find_blocked_beads_returns_blocking_reasons() {
+        let store = require_store!(setup_store().await);
+
+        // Create dependencies: bead-003 depends on both bead-001 and bead-002
+        let edge1 = DependencyEdge::new("bead-003", "bead-001", DependencyRelation::DependsOn);
+        let edge2 = DependencyEdge::new("bead-003", "bead-002", DependencyRelation::DependsOn);
+        let _ = store.save_dependency_edge(&edge1).await;
+        let _ = store.save_dependency_edge(&edge2).await;
+
+        let blocked: PersistenceResult<Vec<BlockedBead>> = store.find_blocked_beads().await;
+        assert!(blocked.is_ok());
+
+        if let Ok(blocked_beads) = blocked {
+            let bead_003_entry = blocked_beads
+                .iter()
+                .find(|b| b.bead_id == "bead-003");
+
+            assert!(
+                bead_003_entry.is_some(),
+                "bead-003 should be in blocked list"
+            );
+
+            if let Some(entry) = bead_003_entry {
+                // Should have 2 blocking dependencies
+                assert_eq!(entry.blocking_deps.len(), 2,
+                    "bead-003 should have 2 blocking dependencies, got: {:?}", entry.blocking_deps);
+
+                // Check that both blocking beads are listed
+                assert!(
+                    entry.blocking_deps.contains(&"bead-001".to_string()),
+                    "bead-001 should be listed as blocking"
+                );
+                assert!(
+                    entry.blocking_deps.contains(&"bead-002".to_string()),
+                    "bead-002 should be listed as blocking"
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_find_blocked_beads_empty_when_no_dependencies() {
+        let store = require_store!(setup_store().await);
+
+        // No dependencies created
+        let blocked: PersistenceResult<Vec<BlockedBead>> = store.find_blocked_beads().await;
+        assert!(blocked.is_ok());
+
+        if let Ok(blocked_beads) = blocked {
+            assert_eq!(blocked_beads.len(), 0, "should have no blocked beads");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_find_blocked_beads_multiple_blocked_beads() {
+        let store = require_store!(setup_store().await);
+
+        // Create multiple dependency chains
+        // Chain 1: bead-002 -> bead-001
+        // Chain 2: bead-004 -> bead-003
+        let edge1 = DependencyEdge::new("bead-002", "bead-001", DependencyRelation::DependsOn);
+        let edge2 = DependencyEdge::new("bead-004", "bead-003", DependencyRelation::DependsOn);
+        let _ = store.save_dependency_edge(&edge1).await;
+        let _ = store.save_dependency_edge(&edge2).await;
+
+        let blocked: PersistenceResult<Vec<BlockedBead>> = store.find_blocked_beads().await;
+        assert!(blocked.is_ok());
+
+        if let Ok(blocked_beads) = blocked {
+            assert_eq!(blocked_beads.len(), 2, "should have 2 blocked beads");
+
+            let bead_ids: Vec<_> = blocked_beads.iter().map(|b| &b.bead_id).collect();
+            assert!(
+                bead_ids.contains(&&"bead-002".to_string()),
+                "bead-002 should be blocked"
+            );
+            assert!(
+                bead_ids.contains(&&"bead-004".to_string()),
+                "bead-004 should be blocked"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_find_blocked_beads_deterministic_ordering() {
+        let store = require_store!(setup_store().await);
+
+        // Create dependencies in non-alphabetical order
+        let edge1 = DependencyEdge::new("bead-003", "bead-001", DependencyRelation::DependsOn);
+        let edge2 = DependencyEdge::new("bead-002", "bead-001", DependencyRelation::DependsOn);
+        let _ = store.save_dependency_edge(&edge1).await;
+        let _ = store.save_dependency_edge(&edge2).await;
+
+        let blocked: PersistenceResult<Vec<BlockedBead>> = store.find_blocked_beads().await;
+        assert!(blocked.is_ok());
+
+        if let Ok(blocked_beads) = blocked {
+            // Check that results are deterministically sorted by bead_id
+            let bead_ids: Vec<_> = blocked_beads.iter().map(|b| &b.bead_id).collect();
+
+            // Should be sorted: bead-002, bead-003
+            let mut sorted_ids = bead_ids.clone();
+            sorted_ids.sort();
+
+            assert_eq!(
+                bead_ids, sorted_ids,
+                "blocked beads should be deterministically sorted by bead_id"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_find_blocked_beads_with_blocks_relation() {
+        let store = require_store!(setup_store().await);
+
+        // Create a blocks relation: bead-001 blocks bead-002
+        let edge = DependencyEdge::new("bead-001", "bead-002", DependencyRelation::Blocks);
+        let _ = store.save_dependency_edge(&edge).await;
+
+        let blocked: PersistenceResult<Vec<BlockedBead>> = store.find_blocked_beads().await;
+        assert!(blocked.is_ok());
+
+        if let Ok(blocked_beads) = blocked {
+            // bead-002 should be blocked by bead-001 (blocks relation)
+            assert!(
+                blocked_beads.iter().any(|b| b.bead_id == "bead-002"),
+                "bead-002 should be blocked (blocks relation)"
+            );
+        }
     }
 }
