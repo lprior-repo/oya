@@ -54,7 +54,7 @@ impl Default for DatabaseConfig {
 /// - Queries return responses (use `call!`)
 /// - State data uses bincode serialization for storage
 /// - Business errors are returned in RPC replies, NOT as actor crashes
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum StateManagerMessage {
     // COMMANDS (fire-and-forget via cast!)
     /// Save state to persistent storage.
@@ -136,7 +136,7 @@ impl Actor for StateManagerActorDef {
         &self,
         _myself: ActorRef<Self::Msg>,
         message: Self::Msg,
-        state: &mut Self::State,
+        _state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         match message {
             StateManagerMessage::SaveState { key, data, version } => {
@@ -269,7 +269,7 @@ impl Actor for EventStoreActorDef {
         &self,
         _myself: ActorRef<Self::Msg>,
         message: Self::Msg,
-        state: &mut Self::State,
+        _state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         match message {
             EventStoreMessage::AppendEvent { event } => {
