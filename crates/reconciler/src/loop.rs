@@ -25,7 +25,7 @@ pub struct LoopConfig {
 impl Default for LoopConfig {
     fn default() -> Self {
         Self {
-            interval: Duration::from_secs(5),
+            interval: Duration::from_secs(1),
             max_errors: 10,
             stop_on_error: false,
         }
@@ -122,10 +122,11 @@ impl ReconciliationLoop {
         );
 
         let mut consecutive_errors = 0usize;
+        let mut interval = tokio::time::interval(self.config.interval);
 
         loop {
             tokio::select! {
-                _ = tokio::time::sleep(self.config.interval) => {
+                _ = interval.tick() => {
                     match self.reconcile_once().await {
                         Ok(converged) => {
                             consecutive_errors = 0;
