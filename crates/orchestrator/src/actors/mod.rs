@@ -67,8 +67,7 @@ pub use queue::{QueueActorDef, QueueMessage, QueueState};
 pub use reconciler::{ReconcilerActorDef, ReconcilerMessage, ReconcilerState};
 pub use scheduler::{SchedulerActorDef, SchedulerArguments, SchedulerState};
 pub use storage::{
-    DatabaseConfig, EventStoreActorDef, EventStoreMessage, EventStoreState, StateManagerActorDef,
-    StateManagerMessage, StateManagerState,
+    DatabaseConfig, StateManagerActorDef, StateManagerMessage, StateManagerState,
 };
 pub use supervisor::{
     GenericSupervisableActor, MeltdownStatus, SupervisorActorDef, SupervisorActorState,

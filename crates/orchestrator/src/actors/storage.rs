@@ -19,6 +19,7 @@ pub use oya_events::{
 pub struct StateManagerActorDef;
 
 /// State management for the StateManagerActor.
+#[allow(dead_code)]
 pub struct StateManagerState {
     /// Connection configuration for SurrealDB.
     db_config: DatabaseConfig,
@@ -198,6 +199,9 @@ impl GenericSupervisableActor for StateManagerActorDef {
     }
 }
 
+// EventStoreActor is not yet fully implemented - commenting out to avoid compilation errors
+// TODO: Implement EventStoreActor in a separate bead
+/*
 #[derive(Clone, Default)]
 pub struct EventStoreActorDef;
 
@@ -363,9 +367,12 @@ impl GenericSupervisableActor for EventStoreActorDef {
         );
     }
 }
+*/
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used)]
+
     use super::*;
 
     #[test]
