@@ -52,9 +52,9 @@ impl Default for DatabaseConfig {
 /// Design principles:
 /// - Commands are fire-and-forget (use `cast!`)
 /// - Queries return responses (use `call!`)
-/// - All messages use bincode serialization for storage
+/// - State data uses bincode serialization for storage
 /// - Business errors are returned in RPC replies, NOT as actor crashes
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub enum StateManagerMessage {
     // COMMANDS (fire-and-forget via cast!)
     /// Save state to persistent storage.
@@ -272,38 +272,36 @@ impl Actor for EventStoreActorDef {
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         match message {
-            EventStoreMessage::AppendEvent { event, reply } => {
+            EventStoreMessage::AppendEvent { event } => {
                 info!(
                     "Appending event: bead_id={}, event_type={}",
                     event.bead_id(),
                     event.event_type()
                 );
 
-                let result = if let Some(store) = &state.store {
-                    store
-                        .append_event(&event)
-                        .await
-                        .map_err(|e| ActorError::internal(format!("Failed to append event: {}", e)))
+                if let Some(store) = &state.store {
+                    match store.append_event(&event).await {
+                        Ok(()) => {
+                            info!(
+                                "Successfully appended event: {} for bead {}",
+                                event.event_id(),
+                                event.bead_id()
+                            );
+                        }
+                        Err(e) => {
+                            tracing::error!(
+                                "Failed to append event {} for bead {}: {}",
+                                event.event_id(),
+                                event.bead_id(),
+                                e
+                            );
+                            // Note: We log the error but don't crash the actor
+                            // This follows the "graceful degradation" principle
+                        }
+                    }
                 } else {
-                    Err(ActorError::internal("EventStore not initialized"))
-                };
-
-                if result.is_ok() {
-                    info!(
-                        "Successfully appended event: {} for bead {}",
-                        event.event_id(),
-                        event.bead_id()
-                    );
-                } else {
-                    tracing::error!(
-                        "Failed to append event {} for bead {}: {:?}",
-                        event.event_id(),
-                        event.bead_id(),
-                        result
-                    );
+                    tracing::warn!("EventStore not initialized, dropping event");
                 }
-
-                let _ = reply.send(result);
             }
 
             EventStoreMessage::Shutdown => {
@@ -391,11 +389,9 @@ mod tests {
             .expect("Failed to encode config");
 
         // Test bincode deserialization
-        let decoded: DatabaseConfig = bincode::serde::decode_from_slice(
-            &encoded,
-            bincode::config::standard(),
-        )
-        .expect("Failed to decode config");
+        let decoded: DatabaseConfig =
+            bincode::serde::decode_from_slice(&encoded, bincode::config::standard())
+                .expect("Failed to decode config");
 
         assert_eq!(config.storage_path, decoded.storage_path);
         assert_eq!(config.namespace, decoded.namespace);
