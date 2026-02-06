@@ -955,3 +955,120 @@ fn given_queue_types_when_compare_then_distinct_values() {
     // Same type should be equal
     assert_eq!(QueueType::FIFO, QueueType::FIFO, "FIFO == FIFO");
 }
+
+// ============================================================================
+// BEAD COMPLETED EVENT SUBSCRIPTION TESTS (TDD-15 RED PHASE)
+// ============================================================================
+
+#[test]
+fn given_scheduler_with_workflow_when_bead_completed_event_received_then_dag_updated() {
+    // GIVEN: A scheduler with a workflow containing a chain A --> B
+    let mut scheduler = SchedulerActor::new();
+    let workflow_id = "workflow-events".to_string();
+    let _ = scheduler.register_workflow(workflow_id.clone());
+    let _ = scheduler.schedule_bead(workflow_id.clone(), "a".to_string());
+    let _ = scheduler.schedule_bead(workflow_id.clone(), "b".to_string());
+    let _ = scheduler.add_dependency(&workflow_id, "a".to_string(), "b".to_string());
+
+    // Verify initial state: only A is ready
+    let ready_result = scheduler.get_workflow_ready_beads(&workflow_id);
+    assert!(ready_result.is_ok());
+    let ready = ready_result.unwrap_or_default();
+    assert!(
+        ready.contains(&"a".to_string()),
+        "A should be ready initially"
+    );
+    assert!(
+        !ready.contains(&"b".to_string()),
+        "B should NOT be ready initially"
+    );
+
+    // WHEN: A BeadCompleted event is received for bead A
+    let _ = scheduler.handle_bead_completed(&"a".to_string());
+
+    // THEN: Workflow DAG should mark A as completed, making B ready
+    let ready_result = scheduler.get_workflow_ready_beads(&workflow_id);
+    assert!(ready_result.is_ok());
+    let ready = ready_result.unwrap_or_default();
+    assert!(
+        !ready.contains(&"a".to_string()),
+        "A should NOT be ready (completed)"
+    );
+    assert!(
+        ready.contains(&"b".to_string()),
+        "B should be ready after A completes"
+    );
+}
+
+#[test]
+fn given_scheduler_with_diamond_when_beads_complete_then_join_becomes_ready() {
+    // GIVEN: A scheduler with diamond pattern
+    //     A
+    //    / \
+    //   B   C
+    //    \ /
+    //     D
+    let mut scheduler = SchedulerActor::new();
+    let workflow_id = "workflow-diamond-events".to_string();
+    let _ = scheduler.register_workflow(workflow_id.clone());
+    let _ = scheduler.schedule_bead(workflow_id.clone(), "a".to_string());
+    let _ = scheduler.schedule_bead(workflow_id.clone(), "b".to_string());
+    let _ = scheduler.schedule_bead(workflow_id.clone(), "c".to_string());
+    let _ = scheduler.schedule_bead(workflow_id.clone(), "d".to_string());
+    let _ = scheduler.add_dependency(&workflow_id, "a".to_string(), "b".to_string());
+    let _ = scheduler.add_dependency(&workflow_id, "a".to_string(), "c".to_string());
+    let _ = scheduler.add_dependency(&workflow_id, "b".to_string(), "d".to_string());
+    let _ = scheduler.add_dependency(&workflow_id, "c".to_string(), "d".to_string());
+
+    // WHEN: A completes (B and C should become ready)
+    let _ = scheduler.handle_bead_completed(&"a".to_string());
+
+    let ready_result = scheduler.get_workflow_ready_beads(&workflow_id);
+    assert!(ready_result.is_ok());
+    let ready = ready_result.unwrap_or_default();
+    assert!(ready.contains(&"b".to_string()), "B should be ready");
+    assert!(ready.contains(&"c".to_string()), "C should be ready");
+    assert!(
+        !ready.contains(&"d".to_string()),
+        "D should NOT be ready yet"
+    );
+
+    // WHEN: B completes (still waiting on C)
+    let _ = scheduler.handle_bead_completed(&"b".to_string());
+
+    let ready_result = scheduler.get_workflow_ready_beads(&workflow_id);
+    assert!(ready_result.is_ok());
+    let ready = ready_result.unwrap_or_default();
+    assert!(
+        !ready.contains(&"d".to_string()),
+        "D still NOT ready (C not complete)"
+    );
+
+    // WHEN: C completes (D should become ready)
+    let _ = scheduler.handle_bead_completed(&"c".to_string());
+
+    let ready_result = scheduler.get_workflow_ready_beads(&workflow_id);
+    assert!(ready_result.is_ok());
+    let ready = ready_result.unwrap_or_default();
+    assert!(
+        ready.contains(&"d".to_string()),
+        "D should be ready after B and C complete"
+    );
+}
+
+#[test]
+fn given_scheduler_when_nonexistent_bead_completes_then_no_error() {
+    // GIVEN: A scheduler with a workflow
+    let mut scheduler = SchedulerActor::new();
+    let workflow_id = "workflow-robust".to_string();
+    let _ = scheduler.register_workflow(workflow_id.clone());
+    let _ = scheduler.schedule_bead(workflow_id.clone(), "a".to_string());
+
+    // WHEN: BeadCompleted event received for nonexistent bead
+    // THEN: Should handle gracefully without error
+    let _ = scheduler.handle_bead_completed(&"ghost-bead".to_string());
+
+    // Verify scheduler still functional
+    let ready_result = scheduler.get_workflow_ready_beads(&workflow_id);
+    assert!(ready_result.is_ok());
+}

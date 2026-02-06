@@ -1044,4 +1044,200 @@ mod tests {
             "Store bead should be present after rebuild"
         );
     }
+
+    // ==========================================================================
+    // ADDITIONAL QUERY METHODS TESTS
+    // ==========================================================================
+
+    #[test]
+    fn should_filter_beads_by_claimed_agent() {
+        // Given: state with beads claimed by different agents
+        let mut state = AllBeadsState::new();
+
+        let agent1_bead = BeadId::new();
+        let mut agent1_proj = BeadProjection::new(agent1_bead);
+        agent1_proj.claimed_by = Some("agent-1".to_string());
+        state.beads.insert(agent1_bead, agent1_proj);
+
+        let agent2_bead = BeadId::new();
+        let mut agent2_proj = BeadProjection::new(agent2_bead);
+        agent2_proj.claimed_by = Some("agent-2".to_string());
+        state.beads.insert(agent2_bead, agent2_proj);
+
+        let unclaimed_bead = BeadId::new();
+        state.beads.insert(unclaimed_bead, BeadProjection::new(unclaimed_bead));
+
+        // When: query for beads claimed by agent-1
+        let agent1_beads = state.claimed_by("agent-1");
+
+        // Then: only agent-1's bead is returned
+        assert_eq!(agent1_beads.len(), 1);
+        assert_eq!(agent1_beads[0].bead_id, agent1_bead);
+    }
+
+    #[test]
+    fn should_return_unclaimed_beads() {
+        // Given: state with claimed and unclaimed beads
+        let mut state = AllBeadsState::new();
+
+        let claimed_bead = BeadId::new();
+        let mut claimed_proj = BeadProjection::new(claimed_bead);
+        claimed_proj.claimed_by = Some("agent-1".to_string());
+        state.beads.insert(claimed_bead, claimed_proj);
+
+        let unclaimed_bead = BeadId::new();
+        state.beads.insert(unclaimed_bead, BeadProjection::new(unclaimed_bead));
+
+        // When: query for unclaimed beads
+        let unclaimed_beads = state.unclaimed();
+
+        // Then: only the unclaimed bead is returned
+        assert_eq!(unclaimed_beads.len(), 1);
+        assert_eq!(unclaimed_beads[0].bead_id, unclaimed_bead);
+    }
+
+    #[test]
+    fn should_filter_beads_by_phase() {
+        use crate::types::PhaseOutput;
+
+        // Given: state with beads in different phases
+        let proj = AllBeadsProjection::new();
+        let mut state = proj.initial_state();
+
+        let bead1 = BeadId::new();
+        let spec1 = BeadSpec::new("Bead 1").with_complexity(Complexity::Simple);
+        proj.apply(&mut state, &BeadEvent::created(bead1, spec1));
+
+        let phase1_id = PhaseId::new();
+        proj.apply(
+            &mut state,
+            &BeadEvent::phase_completed(bead1, phase1_id, "phase-1", PhaseOutput::success(vec![])),
+        );
+
+        let bead2 = BeadId::new();
+        let spec2 = BeadSpec::new("Bead 2").with_complexity(Complexity::Simple);
+        proj.apply(&mut state, &BeadEvent::created(bead2, spec2));
+
+        let phase2_id = PhaseId::new();
+        proj.apply(
+            &mut state,
+            &BeadEvent::phase_completed(bead2, phase2_id, "phase-2", PhaseOutput::success(vec![])),
+        );
+
+        // When: query for beads in phase1
+        let phase1_beads = state.in_phase(phase1_id);
+
+        // Then: only bead1 is returned
+        assert_eq!(phase1_beads.len(), 1);
+        assert_eq!(phase1_beads[0].bead_id, bead1);
+    }
+
+    #[test]
+    fn should_find_dependents_of_a_bead() {
+        // Given: state with beads having dependencies
+        let proj = AllBeadsProjection::new();
+        let mut state = proj.initial_state();
+
+        let parent = BeadId::new();
+        let parent_spec = BeadSpec::new("Parent").with_complexity(Complexity::Simple);
+        proj.apply(&mut state, &BeadEvent::created(parent, parent_spec));
+
+        let child1 = BeadId::new();
+        let child1_spec = BeadSpec::new("Child 1")
+            .with_complexity(Complexity::Simple)
+            .with_dependency(parent);
+        proj.apply(&mut state, &BeadEvent::created(child1, child1_spec));
+
+        let child2 = BeadId::new();
+        let child2_spec = BeadSpec::new("Child 2")
+            .with_complexity(Complexity::Simple)
+            .with_dependency(parent);
+        proj.apply(&mut state, &BeadEvent::created(child2, child2_spec));
+
+        let unrelated = BeadId::new();
+        let unrelated_spec = BeadSpec::new("Unrelated").with_complexity(Complexity::Simple);
+        proj.apply(&mut state, &BeadEvent::created(unrelated, unrelated_spec));
+
+        // When: query for dependents of parent
+        let dependents = state.dependents_of(parent);
+
+        // Then: child1 and child2 are returned, not unrelated
+        assert_eq!(dependents.len(), 2);
+        let dep_ids: Vec<_> = dependents.iter().map(|b| b.bead_id).collect();
+        assert!(dep_ids.contains(&child1));
+        assert!(dep_ids.contains(&child2));
+        assert!(!dep_ids.contains(&unrelated));
+    }
+
+    #[test]
+    fn should_count_beads_in_state() {
+        // Given: state with beads in different states
+        let proj = AllBeadsProjection::new();
+        let mut state = proj.initial_state();
+
+        // Create 3 Pending beads
+        for _ in 0..3 {
+            let bead_id = BeadId::new();
+            let spec = BeadSpec::new("Test").with_complexity(Complexity::Simple);
+            proj.apply(&mut state, &BeadEvent::created(bead_id, spec));
+        }
+
+        // Transition one to Scheduled
+        let first_bead = *state.beads.keys().next().unwrap();
+        proj.apply(
+            &mut state,
+            &BeadEvent::state_changed(first_bead, BeadState::Pending, BeadState::Scheduled),
+        );
+
+        // When: count Pending beads
+        let pending_count = state.count_in_state(BeadState::Pending);
+
+        // Then: count is 2 (one was transitioned)
+        assert_eq!(pending_count, 2);
+
+        // When: count Scheduled beads
+        let scheduled_count = state.count_in_state(BeadState::Scheduled);
+
+        // Then: count is 1
+        assert_eq!(scheduled_count, 1);
+    }
+
+    #[test]
+    fn should_return_zero_for_nonexistent_state_count() {
+        // Given: empty state
+        let state = AllBeadsState::new();
+
+        // When: count beads in Completed state (which doesn't exist)
+        let count = state.count_in_state(BeadState::Completed);
+
+        // Then: count is 0 (not None or panic)
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn should_sort_beads_by_creation_order() {
+        // Given: state with beads created at different times
+        let mut state = AllBeadsState::new();
+
+        // Create beads with specific timing
+        let bead1 = BeadId::new();
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        let bead2 = BeadId::new();
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        let bead3 = BeadId::new();
+
+        // Insert in random order
+        state.beads.insert(bead3, BeadProjection::new(bead3));
+        state.beads.insert(bead1, BeadProjection::new(bead1));
+        state.beads.insert(bead2, BeadProjection::new(bead2));
+
+        // When: get all sorted
+        let sorted = state.all_sorted();
+
+        // Then: beads are in ULID order (which is time-ordered)
+        assert_eq!(sorted.len(), 3);
+        assert_eq!(sorted[0].bead_id, bead1);
+        assert_eq!(sorted[1].bead_id, bead2);
+        assert_eq!(sorted[2].bead_id, bead3);
+    }
 }
