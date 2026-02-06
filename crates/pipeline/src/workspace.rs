@@ -88,6 +88,63 @@ impl WorkspaceManager {
         ))
     }
 
+    /// Create a workspace using jj workspace add directly (not via zjj wrapper).
+    ///
+    /// This creates an isolated jj workspace with a UUID-based name for uniqueness.
+    /// The returned WorkspaceGuard ensures cleanup via RAII (jj workspace forget on drop).
+    ///
+    /// # Arguments
+    ///
+    /// * `uuid` - Unique identifier for the workspace (typically a ULID)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - jj workspace add command fails
+    /// - workspace directory cannot be determined
+    /// - repo_root is not a valid jj repository
+    pub fn create_workspace(&self, uuid: &str) -> Result<WorkspaceGuard> {
+        // Validate UUID is not empty
+        let workspace_id = if uuid.trim().is_empty() {
+            return Err(Error::InvalidRecord {
+                reason: "workspace UUID cannot be empty".to_string(),
+            });
+        } else {
+            uuid.to_string()
+        };
+
+        // Run: jj workspace add <uuid>
+        let add_args = ["workspace", "add", &workspace_id];
+        let add_result = self.runner.run("jj", &add_args, &self.repo_root)?;
+        add_result.check_success()?;
+
+        // Determine workspace path: <repo_root>/.jj/workspaces/<uuid>
+        let workspace_path = self.repo_root.join(".jj").join("workspaces").join(&workspace_id);
+
+        // Verify workspace directory exists
+        if !workspace_path.exists() {
+            return Err(Error::InvalidRecord {
+                reason: format!(
+                    "workspace directory not found after creation: {}",
+                    workspace_path.display()
+                ),
+            });
+        }
+
+        info!(
+            workspace_uuid = workspace_id,
+            path = %workspace_path.display(),
+            "Workspace created with jj workspace add",
+        );
+
+        Ok(WorkspaceGuard::new(
+            workspace_id,
+            workspace_path,
+            self.repo_root.clone(),
+            Arc::clone(&self.runner),
+        ))
+    }
+
     /// Execute a bead inside an isolated workspace. The executor closure receives
     /// the workspace path. Cleanup is attempted even if execution fails.
     pub fn execute_with_workspace<T, F>(&self, bead_id: &str, executor: F) -> Result<T>
@@ -159,9 +216,9 @@ impl WorkspaceGuard {
             return Ok(());
         }
 
-        let remove_args = ["remove", self.name.as_str(), "-f"]; // force removal, no prompts
-        let remove_result = self.runner.run("zjj", &remove_args, &self.repo_root)?;
-        remove_result.check_success()?;
+        let forget_args = ["workspace", "forget", self.name.as_str()];
+        let forget_result = self.runner.run("jj", &forget_args, &self.repo_root)?;
+        forget_result.check_success()?;
 
         self.cleaned = true;
         Ok(())

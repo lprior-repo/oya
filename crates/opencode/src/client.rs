@@ -294,6 +294,32 @@ impl OpencodeClient {
         let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
         Ok(version)
     }
+
+    /// Perform a health check on the opencode API.
+    ///
+    /// Makes a GET request to the /health endpoint.
+    /// Returns Ok(true) if the API is healthy (HTTP 200), Ok(false) if unhealthy (non-200 status).
+    /// Returns Err if the base URL is not configured or the request fails.
+    pub async fn health_check(&self) -> Result<bool> {
+        let base_url = self
+            .config
+            .base_url
+            .as_ref()
+            .ok_or_else(|| Error::config_error("No base URL configured for API mode"))?;
+
+        let url = base_url
+            .join("/health")
+            .map_err(|e| Error::config_error(format!("Invalid API URL: {e}")))?;
+
+        let response = self
+            .http_client
+            .get(url.as_ref())
+            .send()
+            .await
+            .map_err(|e| Error::connection_failed(format!("Health check failed: {e}")))?;
+
+        Ok(response.status().is_success())
+    }
 }
 
 impl Default for OpencodeClient {

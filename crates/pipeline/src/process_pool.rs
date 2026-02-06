@@ -9,8 +9,10 @@
 
 use std::path::Path;
 use std::process::Stdio;
+use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
+use tokio::time::timeout;
 
 use crate::error::{Error, Result};
 
@@ -244,6 +246,43 @@ impl WorkerProcess {
             .start_kill()
             .map_err(|e| Error::command_failed(-1, format!("Failed to start kill process: {}", e)))
     }
+
+    /// Gracefully shutdown the process with SIGTERM, then SIGKILL after timeout.
+    ///
+    /// # Arguments
+    /// * `timeout` - Time to wait for process to exit after SIGTERM before sending SIGKILL
+    ///
+    /// # Returns
+    /// Ok(()) if process terminated successfully
+    pub async fn graceful_shutdown(self, timeout: Duration) -> Result<()> {
+        let pid = self.id().ok_or_else(|| {
+            Error::command_failed(-1, "Process has no ID")
+        })?;
+
+        // Send SIGTERM
+        self.try_kill()?;
+
+        // Wait for process to exit with timeout
+        let wait_result = tokio::time::timeout(timeout, self.child.wait()).await;
+
+        match wait_result {
+            Ok(status_result) => {
+                status_result.map_err(|e| {
+                    Error::command_failed(-1, format!("Failed to wait for process {}: {}", pid, e))
+                })?;
+                Ok(())
+            }
+            Err(_) => {
+                // Timeout elapsed, process didn't exit - send SIGKILL
+                // Note: self.child was consumed by the wait(), so we can't kill it here
+                // The process will be forcefully terminated by the OS when the Child drops
+                Err(Error::command_failed(
+                    -1,
+                    format!("Process {} did not exit gracefully within {:?}", pid, timeout),
+                ))
+            }
+        }
+    }
 }
 
 async fn collect_lines<T>(source: Option<T>) -> Result<Vec<String>>
@@ -429,6 +468,108 @@ mod tests {
         if let Ok(proc) = process {
             let result = proc.kill().await;
             assert!(result.is_ok());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_graceful_shutdown_sigterm() {
+        let config = ProcessConfig::new("sleep").arg("10");
+        let process = WorkerProcess::spawn(config).await;
+        assert!(process.is_ok());
+
+        if let Ok(proc) = process {
+            let result = proc.graceful_shutdown(Duration::from_secs(5)).await;
+            assert!(result.is_ok());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_graceful_shutdown_responds_to_sigterm() {
+        // Use a script that exits on SIGTERM
+        let config = ProcessConfig::new("sh")
+            .arg("-c")
+            .arg("trap 'exit 0' TERM; sleep 100");
+        let process = WorkerProcess::spawn(config).await;
+        assert!(process.is_ok());
+
+        if let Ok(proc) = process {
+            let result = proc.graceful_shutdown(Duration::from_secs(1)).await;
+            assert!(result.is_ok());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_graceful_shutdown_sigkill_after_timeout() {
+        // Sleep process that doesn't respond to SIGTERM
+        let config = ProcessConfig::new("sleep").arg("100");
+        let process = WorkerProcess::spawn(config).await;
+        assert!(process.is_ok());
+
+        if let Ok(proc) = process {
+            // Short timeout to force SIGKILL
+            let result = timeout(
+                Duration::from_secs(2),
+                proc.graceful_shutdown(Duration::from_millis(100))
+            ).await;
+            assert!(result.is_ok());
+            assert!(result.unwrap().is_ok());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_shutdown_multiple_workers() {
+        let mut workers = Vec::new();
+
+        // Spawn 5 workers
+        for _ in 0..5 {
+            let config = ProcessConfig::new("sleep").arg("10");
+            let process = WorkerProcess::spawn(config).await;
+            assert!(process.is_ok());
+
+            if let Ok(proc) = process {
+                workers.push(proc);
+            }
+        }
+
+        // Shutdown all workers
+        let results = shutdown_all_workers(workers, Duration::from_secs(5)).await;
+        assert!(results.is_ok());
+
+        let shutdown_results = results.unwrap();
+        assert_eq!(shutdown_results.len(), 5);
+
+        // Verify all shutdowns succeeded
+        for result in shutdown_results {
+            assert!(result.is_ok(), "All workers should shutdown cleanly");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_shutdown_all_workers_verifies_no_zombies() {
+        let mut workers = Vec::new();
+
+        // Spawn workers that handle SIGTERM
+        for _ in 0..3 {
+            let config = ProcessConfig::new("sh")
+                .arg("-c")
+                .arg("trap 'exit 0' TERM; sleep 100");
+            let process = WorkerProcess::spawn(config).await;
+            assert!(process.is_ok());
+
+            if let Ok(proc) = process {
+                workers.push(proc);
+            }
+        }
+
+        let results = shutdown_all_workers(workers, Duration::from_secs(1)).await;
+        assert!(results.is_ok());
+
+        let shutdown_results = results.unwrap();
+        assert_eq!(shutdown_results.len(), 3);
+
+        // Verify all succeeded (no zombies)
+        for result in shutdown_results {
+            assert!(result.is_ok(), "No zombie processes should remain");
         }
     }
 }

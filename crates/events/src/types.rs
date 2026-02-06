@@ -37,6 +37,32 @@ impl std::fmt::Display for BeadId {
     }
 }
 
+impl std::str::FromStr for BeadId {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ulid::from_str(s)
+            .map(BeadId)
+            .map_err(|e| format!("Invalid BeadId: {}", e))
+    }
+}
+
+impl TryFrom<&str> for BeadId {
+    type Error = String;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        s.parse()
+    }
+}
+
+impl TryFrom<String> for BeadId {
+    type Error = String;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        s.parse()
+    }
+}
+
 /// Unique identifier for an event.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EventId(Ulid);

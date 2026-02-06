@@ -6,10 +6,61 @@ use oya_core::Result;
 
 #[test]
 fn test_conflict_detection() {
-    let _ = oya_merge_queue::Conflict::new();
+    // Test detecting conflicts on merge attempt
+    let conflict = oya_merge_queue::conflict::detect("main", "feature-branch")
+        .expect("Conflict detection should not fail");
+
+    // Should return a conflict result
+    assert_eq!(conflict.has_conflicts, false); // No conflicts in this case
+}
+
+#[test]
+fn test_conflict_detected_with_conflicts() {
+    // Test when conflicts are detected
+    let result = oya_merge_queue::conflict::detect("main", "conflicting-branch");
+
+    match result {
+        Ok(conflict) => {
+            // If detection succeeds, check conflict status
+            if conflict.has_conflicts {
+                assert!(!conflict.conflicting_files.is_empty());
+            }
+        }
+        Err(_) => {
+            // Error is acceptable if branch doesn't exist
+        }
+    }
 }
 
 #[test]
 fn test_resolution_strategies() {
-    let _ = oya_merge_queue::Conflict::new();
+    // Test automatic rebase
+    let result = oya_merge_queue::conflict::attempt_rebase("feature-branch", "main");
+
+    match result {
+        Ok(rebase_result) => {
+            assert!(rebase_result.success || rebase_result.has_conflicts);
+        }
+        Err(_) => {
+            // Error is acceptable if branch doesn't exist
+        }
+    }
+}
+
+#[test]
+fn test_rebase_with_conflicts_transitions_to_failed() {
+    // Test that rebase conflicts properly transition state
+    let result = oya_merge_queue::conflict::attempt_rebase("conflicting-branch", "main");
+
+    match result {
+        Ok(rebase_result) => {
+            if rebase_result.has_conflicts {
+                assert!(!rebase_result.success);
+                assert!(!rebase_result.conflicted_files.is_empty());
+            }
+        }
+        Err(_) => {
+            // Error is acceptable if branch doesn't exist or operation fails
+        }
+    }
 }

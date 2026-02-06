@@ -429,7 +429,7 @@ impl Default for ReconcilerBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oya_events::{BeadId, BeadProjection, BeadSpec, Complexity, InMemoryEventStore, StateTransition};
+    use oya_events::{BeadId, BeadSpec, Complexity, InMemoryEventStore, StateTransition};
 
     fn setup_reconciler() -> (Reconciler, Arc<EventBus>) {
         let store = Arc::new(InMemoryEventStore::new());

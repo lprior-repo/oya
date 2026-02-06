@@ -9,7 +9,7 @@ use ractor::{Actor, ActorProcessingErr, ActorRef};
 use tokio::sync::watch;
 use tracing::{debug, info, warn};
 
-use oya_events::{BeadEvent as EventsBeadEvent, BeadState, EventBus};
+use oya_events::{BeadState, EventBus};
 
 use crate::actors::supervisor::{GenericSupervisableActor, calculate_backoff};
 
@@ -180,19 +180,21 @@ impl Actor for WorkerActorDef {
                 let bead_id = state.current_bead.clone();
                 let delay = state.next_retry_delay();
 
-                // Emit failed event
-                if let (Some(ref bus), Some(ref bid)) = (
-                    &state.config.event_bus,
-                    &state.current_bead,
-                ) {
-                    let event = EventsBeadEvent::failed(
-                        crate::dag::BeadId::from(bid.clone()),
-                        error.clone(),
-                    );
-                    if let Err(e) = bus.publish(event).await {
-                        warn!(error = %e, "Failed to publish failed event");
-                    }
-                }
+                // TODO: Emit failed event
+                // Note: Currently disabled due to type mismatch between
+                // crate::dag::BeadId (String) and oya_events::BeadId (Ulid wrapper)
+                // if let (Some(ref bus), Some(ref bid)) = (
+                //     &state.config.event_bus,
+                //     &state.current_bead,
+                // ) {
+                //     let event = EventsBeadEvent::failed(
+                //         crate::dag::BeadId::from(bid.clone()),
+                //         error.clone(),
+                //     );
+                //     if let Err(e) = bus.publish(event).await {
+                //         warn!(error = %e, "Failed to publish failed event");
+                //     }
+                // }
 
                 match (bead_id, delay) {
                     (Some(id), Some(delay)) => {
