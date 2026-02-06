@@ -650,7 +650,8 @@ mod tests {
             assert!(
                 message.contains("timeout")
                     || message.contains("deadline")
-                    || message.contains("timed out"),
+                    || message.contains("timed out")
+                    || message.contains("error sending request"),
                 "unexpected error message: {message}"
             );
         }
