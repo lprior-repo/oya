@@ -8,7 +8,7 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use surrealdb::sql::Datetime as SurrealDatetime;
+use surrealdb::sql::{Datetime as SurrealDatetime, Thing};
 
 use super::client::OrchestratorStore;
 use super::error::{PersistenceError, PersistenceResult, from_surrealdb_error};
@@ -38,7 +38,7 @@ pub struct DependencyEdge {
     /// SurrealDB record ID
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "id")]
-    pub record_id: Option<String>,
+    pub record_id: Option<Thing>,
     /// The bead that has the dependency
     pub bead_id: String,
     /// The bead this relationship targets
@@ -80,7 +80,7 @@ impl DependencyEdge {
 
 /// Input for creating/updating a dependency edge.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct DependencyInput {
+pub(super) struct DependencyInput {
     bead_id: String,
     target_bead_id: String,
     relation_type: String,
@@ -373,19 +373,30 @@ mod tests {
         let store = require_store!(setup_store().await);
 
         let metadata = serde_json::json!({"reason": "data dependency", "critical": true});
+        eprintln!("Input metadata: {}", metadata);
         let edge = DependencyEdge::new("bead-005", "bead-001", DependencyRelation::DependsOn)
-            .with_metadata(metadata);
+            .with_metadata(metadata.clone());
+
+        eprintln!("Edge metadata before save: {:?}", edge.metadata);
+        let input = super::DependencyInput::from(&edge);
+        eprintln!("DependencyInput metadata: {:?}", input.metadata);
 
         let saved = store.save_dependency_edge(&edge).await;
         assert!(saved.is_ok(), "save with metadata should succeed");
+
+        if let Ok(saved_edge) = saved {
+            eprintln!("Saved edge metadata: {:?}", saved_edge.metadata);
+        }
 
         let dependencies = store.get_bead_dependencies("bead-005").await;
         assert!(dependencies.is_ok());
 
         if let Ok(deps) = dependencies {
+            eprintln!("Retrieved deps: {:?}", deps);
             assert_eq!(deps.len(), 1);
-            assert!(deps[0].metadata.is_some(), "metadata should be preserved");
+            assert!(deps[0].metadata.is_some(), "metadata should be preserved, got: {:?}", deps[0].metadata);
             if let Some(meta) = &deps[0].metadata {
+                eprintln!("Metadata content: {}", meta);
                 assert_eq!(
                     meta.get("reason").and_then(|v| v.as_str()),
                     Some("data dependency")

@@ -122,7 +122,7 @@ async fn main() {
     info!("🔁 Step 5: Starting Reconciliation Loop...");
     let projection = Arc::new(ManagedProjection::new(AllBeadsProjection::new()));
 
-    let mut loop_runner = ReconciliationLoop::new(
+    let _loop_runner = ReconciliationLoop::new(
         reconciler.clone(),
         desired_state.clone(),
         projection,
@@ -130,7 +130,7 @@ async fn main() {
     );
 
     // Spawn reconciliation loop in background
-    let loop_handle = tokio::spawn(async move {
+    let mut loop_handle = tokio::spawn(async move {
         info!("🔄 Reconciliation loop running");
         // Note: We don't actually run the loop here as it would block
         // In production, this would be: loop_runner.run().await
@@ -150,7 +150,7 @@ async fn main() {
         }
     };
 
-    let api_handle = tokio::spawn(async move {
+    let mut api_handle = tokio::spawn(async move {
         if let Err(e) = run_server(api_addr).await {
             error!("❌ API server error: {}", e);
             Err(())
@@ -191,7 +191,7 @@ async fn main() {
         result = &mut api_handle => {
             match result {
                 Ok(Ok(())) => info!("API server stopped"),
-                Ok(Err(e)) => error!("API server error (should not happen)"),
+                Ok(Err(_e)) => error!("API server error (should not happen)"),
                 Err(e) => error!("API server panicked: {}", e),
             }
         }
@@ -216,31 +216,6 @@ fn init_tracing() {
 /// Initialize SurrealDB connection.
 ///
 /// This is the first initialization step. All other subsystems depend on the database.
-async fn init_database() -> Result<oya_events::db::SurrealDbClient, InitError> {
-    use oya_events::db::SurrealDbConfig;
-
-    // For now, use a local database path
-    // TODO: Make this configurable via environment variables or config file
-    let db_path = std::path::Path::new(".oya/data/db");
-
-    let config = SurrealDbConfig::new(db_path.to_string_lossy().to_string());
-
-    let client = oya_events::db::SurrealDbClient::connect(config)
-        .await
-        .map_err(|e| InitError::Database(format!("Failed to connect: {}", e)))?;
-
-    // Verify database is healthy
-    client
-        .health_check()
-        .await
-        .map_err(|e| InitError::Database(format!("Health check failed: {}", e)))?;
-
-    Ok(client)
-}
-
-// Initialize SurrealDB connection.
-//
-// This is the first initialization step. All other subsystems depend on the database.
 async fn init_database() -> Result<oya_events::db::SurrealDbClient, InitError> {
     use oya_events::db::SurrealDbConfig;
 

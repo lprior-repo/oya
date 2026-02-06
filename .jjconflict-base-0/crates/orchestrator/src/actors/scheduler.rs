@@ -242,15 +242,28 @@ impl SchedulerActorDef {
         actor_ref: &ActorRef<SchedulerMessage>,
         event: BeadEvent,
     ) -> Result<(), ActorError> {
-        if let BeadEvent::StateChanged {
-            bead_id, from, to, ..
-        } = event
-        {
-            let _ = actor_ref.send_message(SchedulerMessage::OnStateChanged {
-                bead_id: bead_id.to_string(),
-                from: Self::convert_bead_state(&from),
-                to: Self::convert_bead_state(&to),
-            });
+        match event {
+            // Handle StateChanged events (including transitions to Completed)
+            BeadEvent::StateChanged {
+                bead_id, from, to, ..
+            } => {
+                let _ = actor_ref.send_message(SchedulerMessage::OnStateChanged {
+                    bead_id: bead_id.to_string(),
+                    from: Self::convert_bead_state(&from),
+                    to: Self::convert_bead_state(&to),
+                });
+            }
+            // Handle BeadCompleted events directly
+            BeadEvent::Completed { bead_id, .. } => {
+                // Convert to OnStateChanged with Completed state
+                let _ = actor_ref.send_message(SchedulerMessage::OnStateChanged {
+                    bead_id: bead_id.to_string(),
+                    from: crate::actors::messages::BeadState::Running,
+                    to: crate::actors::messages::BeadState::Completed,
+                });
+            }
+            // Ignore other event types
+            _ => {}
         }
         Ok(())
     }

@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use surrealdb::RecordId;
 use surrealdb::sql::Datetime as SurrealDatetime;
 
-use super::bead_dependencies::{DependencyEdge, DependencyRelation};
+use super::bead_dependencies::DependencyEdge;
 use super::client::OrchestratorStore;
 use super::error::{PersistenceError, PersistenceResult, from_surrealdb_error};
 
@@ -428,7 +428,7 @@ impl OrchestratorStore {
         let completed_beads: Vec<BeadRecord> = self
             .db()
             .query(
-                "SELECT bead_id FROM bead WHERE workflow_id = $workflow_id \
+                "SELECT * FROM bead WHERE workflow_id = $workflow_id \
                  AND state = 'completed'",
             )
             .bind(("workflow_id", workflow_id.to_string()))
@@ -444,12 +444,16 @@ impl OrchestratorStore {
         let mut blocked_info = Vec::new();
 
         for bead in all_beads {
-            // Get dependencies for this bead
-            let dependencies: Vec<DependencyEdge> = self
+            // Get dependencies for this bead - only need target_bead_id
+            #[derive(Debug, Clone, Serialize, Deserialize)]
+            struct DepTarget {
+                target_bead_id: String,
+            }
+
+            let dependencies: Vec<DepTarget> = self
                 .db()
                 .query(
-                    "SELECT *, 'depends_on' as relation_type \
-                     FROM bead_depends_on WHERE bead_id = $bead_id",
+                    "SELECT target_bead_id FROM bead_depends_on WHERE bead_id = $bead_id",
                 )
                 .bind(("bead_id", bead.bead_id.clone()))
                 .await

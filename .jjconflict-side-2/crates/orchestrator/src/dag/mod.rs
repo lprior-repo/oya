@@ -367,11 +367,14 @@ impl WorkflowDAG {
     pub fn get_dependencies(&self, bead_id: &BeadId) -> DagResult<Vec<BeadId>> {
         let node_index = self.get_node_index(bead_id)?;
 
-        let deps: Vec<BeadId> = self
+        let mut deps: Vec<BeadId> = self
             .graph
             .neighbors_directed(node_index, Direction::Incoming)
             .filter_map(|idx| self.graph.node_weight(idx).cloned())
             .collect();
+
+        // Sort deterministically by BeadId
+        deps.sort();
 
         Ok(deps)
     }
@@ -408,11 +411,14 @@ impl WorkflowDAG {
     pub fn get_dependents(&self, bead_id: &BeadId) -> DagResult<Vec<BeadId>> {
         let node_index = self.get_node_index(bead_id)?;
 
-        let dependents: Vec<BeadId> = self
+        let mut dependents: Vec<BeadId> = self
             .graph
             .neighbors_directed(node_index, Direction::Outgoing)
             .filter_map(|idx| self.graph.node_weight(idx).cloned())
             .collect();
+
+        // Sort deterministically by BeadId
+        dependents.sort();
 
         Ok(dependents)
     }
@@ -635,7 +641,8 @@ impl WorkflowDAG {
     /// ```
     #[must_use]
     pub fn get_ready_nodes(&self, completed: &HashSet<BeadId>) -> Vec<BeadId> {
-        self.graph
+        let mut ready: Vec<BeadId> = self
+            .graph
             .node_indices()
             .filter_map(|idx| {
                 let bead_id = self.graph.node_weight(idx)?;
@@ -663,7 +670,46 @@ impl WorkflowDAG {
                     None
                 }
             })
-            .collect()
+            .collect();
+
+        // Sort deterministically by BeadId
+        ready.sort();
+        ready
+    }
+
+    /// Get all beads that are ready to execute.
+    ///
+    /// Alias for `get_ready_nodes` for consistency with bead terminology.
+    ///
+    /// # Arguments
+    ///
+    /// * `completed` - Set of BeadIds that have already completed
+    ///
+    /// # Returns
+    ///
+    /// Vector of BeadIds that are ready to execute (deterministically sorted)
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use orchestrator::dag::{WorkflowDAG, DependencyType};
+    /// use im::HashSet;
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut dag = WorkflowDAG::new();
+    /// dag.add_node("a".to_string())?;
+    /// dag.add_node("b".to_string())?;
+    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
+    ///
+    /// let completed = HashSet::new();
+    /// let ready = dag.get_ready_beads(&completed);
+    /// assert_eq!(ready, vec!["a".to_string()]);
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn get_ready_beads(&self, completed: &HashSet<BeadId>) -> Vec<BeadId> {
+        self.get_ready_nodes(completed)
     }
 
     /// Get all nodes that are blocked (not ready to execute).
@@ -2824,6 +2870,87 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn test_find_cycles_with_tarjan() -> DagResult<()> {
+        let mut dag = WorkflowDAG::new();
+        dag.add_node("a".to_string())?;
+        dag.add_node("b".to_string())?;
+        dag.add_edge(
+            "a".to_string(),
+            "b".to_string(),
+            DependencyType::BlockingDependency,
+        )?;
+        dag.add_edge(
+            "b".to_string(),
+            "a".to_string(),
+            DependencyType::BlockingDependency,
+        )?;
+
+        let cycles = dag.find_cycles();
+        assert_eq!(cycles.len(), 1);
+        assert!(cycles[0].contains(&"a".to_string()));
+        assert!(cycles[0].contains(&"b".to_string()));
+        Ok(())
+    }
+
+    #[test]
+    fn test_find_cycles_no_cycles() -> DagResult<()> {
+        let mut dag = WorkflowDAG::new();
+        dag.add_node("a".to_string())?;
+        dag.add_node("b".to_string())?;
+        dag.add_node("c".to_string())?;
+        dag.add_edge(
+            "a".to_string(),
+            "b".to_string(),
+            DependencyType::BlockingDependency,
+        )?;
+        dag.add_edge(
+            "b".to_string(),
+            "c".to_string(),
+            DependencyType::BlockingDependency,
+        )?;
+
+        let cycles = dag.find_cycles();
+        assert!(cycles.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn test_find_cycles_multiple_cycles() -> DagResult<()> {
+        let mut dag = WorkflowDAG::new();
+        // Cycle 1: a <-> b
+        dag.add_node("a".to_string())?;
+        dag.add_node("b".to_string())?;
+        dag.add_edge(
+            "a".to_string(),
+            "b".to_string(),
+            DependencyType::BlockingDependency,
+        )?;
+        dag.add_edge(
+            "b".to_string(),
+            "a".to_string(),
+            DependencyType::BlockingDependency,
+        )?;
+
+        // Cycle 2: c <-> d
+        dag.add_node("c".to_string())?;
+        dag.add_node("d".to_string())?;
+        dag.add_edge(
+            "c".to_string(),
+            "d".to_string(),
+            DependencyType::BlockingDependency,
+        )?;
+        dag.add_edge(
+            "d".to_string(),
+            "c".to_string(),
+            DependencyType::BlockingDependency,
+        )?;
+
+        let cycles = dag.find_cycles();
+        assert_eq!(cycles.len(), 2);
+        Ok(())
+    }
+
     // ==================== Bead src-3clb: Deterministic Query Tests ====================
 
     #[test]
@@ -3019,7 +3146,8 @@ mod tests {
         let ready = dag.get_ready_nodes(&completed);
         let duration = start.elapsed();
 
-        assert_eq!(ready.len(), 1); // bead-000 (root)
+        // beads 000, 091-099 are all roots (no incoming edges)
+        assert_eq!(ready.len(), 10);
         assert!(duration.as_millis() < 10, "Query took {:?}", duration);
 
         Ok(())
