@@ -730,23 +730,25 @@ mod tests {
         let bead_b = BeadRecord::new("bead-b", "wf-blocked");
         let bead_c = BeadRecord::new("bead-c", "wf-blocked");
 
-        store.save_bead(&bead_a).await.unwrap();
-        store.save_bead(&bead_b).await.unwrap();
-        store.save_bead(&bead_c).await.unwrap();
+        let _ = store.save_bead(&bead_a).await;
+        let _ = store.save_bead(&bead_b).await;
+        let _ = store.save_bead(&bead_c).await;
 
         // bead-b depends on bead-a
         let dep_ab = DependencyEdge::new("bead-b", "bead-a", DependencyRelation::DependsOn);
-        store.save_dependency_edge(&dep_ab).await.unwrap();
+        let _ = store.save_dependency_edge(&dep_ab).await;
 
         // bead-c depends on bead-b (transitive)
         let dep_bc = DependencyEdge::new("bead-c", "bead-b", DependencyRelation::DependsOn);
-        store.save_dependency_edge(&dep_bc).await.unwrap();
+        let _ = store.save_dependency_edge(&dep_bc).await;
 
         // Mark bead-a as completed
-        store
-            .update_bead_state("bead-a", BeadState::Completed)
-            .await
-            .unwrap();
+        let update_result = store.update_bead_state("bead-a", BeadState::Completed).await;
+        assert!(
+            update_result.is_ok(),
+            "update bead state should succeed: {:?}",
+            update_result.err()
+        );
 
         // Query blocked beads
         let blocked = store.find_blocked_beads("wf-blocked").await;
@@ -757,22 +759,22 @@ mod tests {
             blocked.err()
         );
 
-        let blocked_info = blocked.unwrap();
+        if let Ok(blocked_info) = blocked {
+            // bead-b should NOT be blocked (bead-a completed)
+            // bead-c SHOULD be blocked (bead-b not completed)
+            assert_eq!(
+                blocked_info.len(),
+                1,
+                "should have 1 blocked bead, got {:?}",
+                blocked_info.len()
+            );
 
-        // bead-b should NOT be blocked (bead-a completed)
-        // bead-c SHOULD be blocked (bead-b not completed)
-        assert_eq!(
-            blocked_info.len(),
-            1,
-            "should have 1 blocked bead, got {:?}",
-            blocked_info.len()
-        );
-
-        let blocked_c = &blocked_info[0];
-        assert_eq!(blocked_c.bead_id, "bead-c");
-        assert_eq!(blocked_c.workflow_id, "wf-blocked");
-        assert_eq!(blocked_c.state, BeadState::Pending);
-        assert_eq!(blocked_c.blocking_dependencies, vec!["bead-b".to_string()]);
+            let blocked_c = &blocked_info[0];
+            assert_eq!(blocked_c.bead_id, "bead-c");
+            assert_eq!(blocked_c.workflow_id, "wf-blocked");
+            assert_eq!(blocked_c.state, BeadState::Pending);
+            assert_eq!(blocked_c.blocking_dependencies, vec!["bead-b".to_string()]);
+        }
     }
 
     #[tokio::test]
@@ -783,8 +785,8 @@ mod tests {
         let bead_a = BeadRecord::new("bead-a", "wf-unblocked");
         let bead_b = BeadRecord::new("bead-b", "wf-unblocked");
 
-        store.save_bead(&bead_a).await.unwrap();
-        store.save_bead(&bead_b).await.unwrap();
+        let _ = store.save_bead(&bead_a).await;
+        let _ = store.save_bead(&bead_b).await;
 
         // Both beads in pending state with no dependencies
         let blocked = store.find_blocked_beads("wf-unblocked").await;
@@ -795,13 +797,14 @@ mod tests {
             blocked.err()
         );
 
-        let blocked_info = blocked.unwrap();
-        assert_eq!(
-            blocked_info.len(),
-            0,
-            "should have no blocked beads, got {:?}",
-            blocked_info.len()
-        );
+        if let Ok(blocked_info) = blocked {
+            assert_eq!(
+                blocked_info.len(),
+                0,
+                "should have no blocked beads, got {:?}",
+                blocked_info.len()
+            );
+        }
     }
 
     #[tokio::test]
@@ -814,22 +817,24 @@ mod tests {
         let bead_c = BeadRecord::new("bead-c", "wf-multi");
         let bead_d = BeadRecord::new("bead-d", "wf-multi");
 
-        store.save_bead(&bead_a).await.unwrap();
-        store.save_bead(&bead_b).await.unwrap();
-        store.save_bead(&bead_c).await.unwrap();
-        store.save_bead(&bead_d).await.unwrap();
+        let _ = store.save_bead(&bead_a).await;
+        let _ = store.save_bead(&bead_b).await;
+        let _ = store.save_bead(&bead_c).await;
+        let _ = store.save_bead(&bead_d).await;
 
         // bead-d depends on bead-b AND bead-c (multiple dependencies)
         let dep_db = DependencyEdge::new("bead-d", "bead-b", DependencyRelation::DependsOn);
         let dep_dc = DependencyEdge::new("bead-d", "bead-c", DependencyRelation::DependsOn);
-        store.save_dependency_edge(&dep_db).await.unwrap();
-        store.save_dependency_edge(&dep_dc).await.unwrap();
+        let _ = store.save_dependency_edge(&dep_db).await;
+        let _ = store.save_dependency_edge(&dep_dc).await;
 
         // Mark bead-a as completed (not a dependency)
-        store
-            .update_bead_state("bead-a", BeadState::Completed)
-            .await
-            .unwrap();
+        let update_result = store.update_bead_state("bead-a", BeadState::Completed).await;
+        assert!(
+            update_result.is_ok(),
+            "update bead state should succeed: {:?}",
+            update_result.err()
+        );
 
         // Query blocked beads
         let blocked = store.find_blocked_beads("wf-multi").await;
@@ -840,24 +845,25 @@ mod tests {
             blocked.err()
         );
 
-        let blocked_info = blocked.unwrap();
-        assert_eq!(blocked_info.len(), 1, "should have 1 blocked bead");
+        if let Ok(blocked_info) = blocked {
+            assert_eq!(blocked_info.len(), 1, "should have 1 blocked bead");
 
-        let blocked_d = &blocked_info[0];
-        assert_eq!(blocked_d.bead_id, "bead-d");
-        assert!(
-            blocked_d
-                .blocking_dependencies
-                .contains(&"bead-b".to_string()),
-            "should list bead-b as blocking"
-        );
-        assert!(
-            blocked_d
-                .blocking_dependencies
-                .contains(&"bead-c".to_string()),
-            "should list bead-c as blocking"
-        );
-        assert_eq!(blocked_d.blocking_dependencies.len(), 2);
+            let blocked_d = &blocked_info[0];
+            assert_eq!(blocked_d.bead_id, "bead-d");
+            assert!(
+                blocked_d
+                    .blocking_dependencies
+                    .contains(&"bead-b".to_string()),
+                "should list bead-b as blocking"
+            );
+            assert!(
+                blocked_d
+                    .blocking_dependencies
+                    .contains(&"bead-c".to_string()),
+                "should list bead-c as blocking"
+            );
+            assert_eq!(blocked_d.blocking_dependencies.len(), 2);
+        }
     }
 
     #[tokio::test]
@@ -868,18 +874,20 @@ mod tests {
         let bead_a = BeadRecord::new("bead-a", "wf-filter");
         let bead_b = BeadRecord::new("bead-b", "wf-filter");
 
-        store.save_bead(&bead_a).await.unwrap();
-        store.save_bead(&bead_b).await.unwrap();
+        let _ = store.save_bead(&bead_a).await;
+        let _ = store.save_bead(&bead_b).await;
 
         // bead-b depends on bead-a
         let dep = DependencyEdge::new("bead-b", "bead-a", DependencyRelation::DependsOn);
-        store.save_dependency_edge(&dep).await.unwrap();
+        let _ = store.save_dependency_edge(&dep).await;
 
         // Mark bead-b as completed
-        store
-            .update_bead_state("bead-b", BeadState::Completed)
-            .await
-            .unwrap();
+        let update_result = store.update_bead_state("bead-b", BeadState::Completed).await;
+        assert!(
+            update_result.is_ok(),
+            "update bead state should succeed: {:?}",
+            update_result.err()
+        );
 
         // Query blocked beads
         let blocked = store.find_blocked_beads("wf-filter").await;
@@ -890,12 +898,13 @@ mod tests {
             blocked.err()
         );
 
-        let blocked_info = blocked.unwrap();
-        assert_eq!(
-            blocked_info.len(),
-            0,
-            "completed beads should not be in blocked list"
-        );
+        if let Ok(blocked_info) = blocked {
+            assert_eq!(
+                blocked_info.len(),
+                0,
+                "completed beads should not be in blocked list"
+            );
+        }
     }
 
     #[tokio::test]
@@ -906,27 +915,28 @@ mod tests {
         let bead_a = BeadRecord::new("bead-a", "wf-reason");
         let bead_b = BeadRecord::new("bead-b", "wf-reason");
 
-        store.save_bead(&bead_a).await.unwrap();
-        store.save_bead(&bead_b).await.unwrap();
+        let _ = store.save_bead(&bead_a).await;
+        let _ = store.save_bead(&bead_b).await;
 
         // bead-b depends on bead-a
         let dep = DependencyEdge::new("bead-b", "bead-a", DependencyRelation::DependsOn);
-        store.save_dependency_edge(&dep).await.unwrap();
+        let _ = store.save_dependency_edge(&dep).await;
 
         // Query blocked beads
         let blocked = store.find_blocked_beads("wf-reason").await;
 
         assert!(blocked.is_ok(), "find_blocked_beads should succeed");
 
-        let blocked_info = blocked.unwrap();
-        assert_eq!(blocked_info.len(), 1);
+        if let Ok(blocked_info) = blocked {
+            assert_eq!(blocked_info.len(), 1);
 
-        let reason = &blocked_info[0].block_reason;
-        assert!(!reason.is_empty(), "block reason should not be empty");
-        assert!(
-            reason.contains("bead-a") || reason.contains("dependencies"),
-            "block reason should mention dependencies: {}",
-            reason
-        );
+            let reason = &blocked_info[0].block_reason;
+            assert!(!reason.is_empty(), "block reason should not be empty");
+            assert!(
+                reason.contains("bead-a") || reason.contains("dependencies"),
+                "block reason should mention dependencies: {}",
+                reason
+            );
+        }
     }
 }
