@@ -26,6 +26,7 @@
 //! store.save_workflow(&workflow).await?;
 //! ```
 
+pub mod bead_dependencies;
 pub mod bead_store;
 pub mod checkpoint_store;
 pub mod client;
@@ -33,6 +34,7 @@ pub mod error;
 pub mod workflow_store;
 
 // Re-export main types
+pub use bead_dependencies::{BlockedBead, DependencyEdge, DependencyRelation};
 pub use bead_store::{BeadRecord, BeadState};
 pub use checkpoint_store::CheckpointRecord;
 pub use client::{Credentials, OrchestratorStore, StoreConfig};

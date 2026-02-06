@@ -20,6 +20,7 @@ use std::collections::VecDeque;
 use std::time::Duration;
 
 pub mod error;
+pub mod tarjan;
 pub use error::{DagError, DagResult};
 
 /// Type alias for a Bead identifier
