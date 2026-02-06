@@ -130,6 +130,50 @@ impl AllBeadsState {
     pub fn blocked(&self) -> Vec<&BeadProjection> {
         self.beads.values().filter(|b| b.is_blocked()).collect()
     }
+
+    /// Get beads claimed by a specific agent.
+    pub fn claimed_by(&self, agent_id: &str) -> Vec<&BeadProjection> {
+        self.beads
+            .values()
+            .filter(|b| b.claimed_by.as_deref() == Some(agent_id))
+            .collect()
+    }
+
+    /// Get unclaimed beads (not currently claimed by any agent).
+    pub fn unclaimed(&self) -> Vec<&BeadProjection> {
+        self.beads
+            .values()
+            .filter(|b| b.claimed_by.is_none())
+            .collect()
+    }
+
+    /// Get beads in a specific phase.
+    pub fn in_phase(&self, phase_id: PhaseId) -> Vec<&BeadProjection> {
+        self.beads
+            .values()
+            .filter(|b| b.current_phase == Some(phase_id))
+            .collect()
+    }
+
+    /// Get beads that depend on a specific bead.
+    pub fn dependents_of(&self, bead_id: BeadId) -> Vec<&BeadProjection> {
+        self.beads
+            .values()
+            .filter(|b| b.dependencies.contains(&bead_id))
+            .collect()
+    }
+
+    /// Get count of beads in a specific state.
+    pub fn count_in_state(&self, state: BeadState) -> usize {
+        self.state_counts.get(&state).copied().unwrap_or(0)
+    }
+
+    /// Get all beads sorted by creation order (based on ULID timestamp).
+    pub fn all_sorted(&self) -> Vec<&BeadProjection> {
+        let mut beads: Vec<_> = self.beads.values().collect();
+        beads.sort_by_key(|b| b.bead_id.as_ulid());
+        beads
+    }
 }
 
 /// Projection for all beads.
