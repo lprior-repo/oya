@@ -1,0 +1,30 @@
+--- crates/events/src/projection.rs
++++ delete match arm BeadEvent::Created{bead_id, spec, ..} in <impl Projection for AllBeadsProjection>::apply
+@@ -144,26 +144,17 @@
+ }
+ 
+ #[async_trait]
+ impl Projection for AllBeadsProjection {
+     type State = AllBeadsState;
+ 
+     fn apply(&self, state: &mut Self::State, event: &BeadEvent) {
+         match event {
+-            BeadEvent::Created { bead_id, spec, .. } => {
+-                let mut projection = BeadProjection::new(*bead_id);
+-                projection.spec = Some(spec.clone());
+-                projection.dependencies = spec.dependencies.clone();
+-
+-                // Update state counts
+-                *state.state_counts.entry(BeadState::Pending).or_insert(0) += 1;
+-
+-                state.beads.insert(*bead_id, projection);
+-            }
++             /* ~ changed by cargo-mutants ~ */
+             BeadEvent::StateChanged {
+                 bead_id, from, to, ..
+             } => {
+                 if let Some(bead) = state.beads.get_mut(bead_id) {
+                     bead.current_state = *to;
+                     bead.history.push(StateTransition::new(*from, *to));
+ 
+                     // Update state counts

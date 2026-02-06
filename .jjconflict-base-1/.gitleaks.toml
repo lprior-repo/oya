@@ -1,0 +1,19 @@
+# Gitleaks configuration
+title = "gitleaks config"
+
+[allowlist]
+description = "Allowlist for false positives"
+
+# Allow Moon build cache - contains file content hashes, not secrets
+paths = [
+    '''.moon/cache/''',
+    '''docs/intent-cli/schema-''',
+    '''examples/''',
+]
+
+# Allow documentation examples with mock API keys
+regexes = [
+    '''sk_live_abc123''',
+    '''sk_prod_1234567890abcdef''',
+    '''eyJhbGciOiJIUzI1NiIs''',
+]

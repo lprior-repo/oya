@@ -438,6 +438,9 @@ impl SchedulerActor {
     }
 
     /// Handle a bead completion event
+    ///
+    /// This method is called when a BeadCompleted event is received from the event bus.
+    /// It updates both the bead's schedule state AND the workflow DAG's completed set.
     pub fn handle_bead_completed(&mut self, bead_id: &BeadId) -> Result<()> {
         // Update bead state
         if let Some(bead) = self.pending_beads.get_mut(bead_id) {
@@ -449,6 +452,16 @@ impl SchedulerActor {
 
         // Remove worker assignment
         self.worker_assignments.remove(bead_id);
+
+        // MARK BEAD AS COMPLETED IN WORKFLOW DAG
+        // This is the key change - we need to update the WorkflowState's completed set
+        // so that dependent beads become ready
+        if let Some(scheduled_bead) = self.pending_beads.get(bead_id) {
+            let workflow_id = scheduled_bead.workflow_id.clone();
+            if let Some(workflow_state) = self.workflows.get_mut(&workflow_id) {
+                workflow_state.mark_completed(bead_id);
+            }
+        }
 
         Ok(())
     }

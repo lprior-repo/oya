@@ -1,0 +1,14 @@
+[workspace]
+# Empty workspace table to make this a standalone crate
+
+[package]
+name = "oya-ui"
+version = "0.1.0"
+edition = "2021"
+
+# TODO: Implement oya-ui (Leptos frontend)
+# This is a placeholder crate for future development
+
+[lib]
+# Empty lib for now - will be implemented when the frontend is ready
+path = "src/lib.rs"

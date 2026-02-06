@@ -1,0 +1,30 @@
+--- crates/events/src/bus.rs
++++ replace EventBus::subscribe_with_pattern -> (String, EventSubscription) with ("xyzzy".into(), Default::default())
+@@ -119,26 +119,17 @@
+         }
+     }
+ 
+     /// Subscribe to events matching a pattern.
+     pub async fn subscribe_with_pattern(
+         &self,
+         pattern: EventPattern,
+     ) -> (String, EventSubscription) {
+-        let (sender, receiver) = broadcast::channel(100);
+-
+-        let mut next_id = self.next_id.write().await;
+-        let id = format!("sub_{}", *next_id);
+-        *next_id += 1;
+-
+-        let mut subscribers = self.subscribers.write().await;
+-        subscribers.insert(id.clone(), Subscriber { sender, pattern });
+-
+-        (id, EventSubscription { receiver })
++        ("xyzzy".into(), Default::default()) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Unsubscribe a pattern-based subscriber.
+     pub async fn unsubscribe(&self, subscriber_id: &str) {
+         let mut subscribers = self.subscribers.write().await;
+         subscribers.remove(subscriber_id);
+     }
+ 

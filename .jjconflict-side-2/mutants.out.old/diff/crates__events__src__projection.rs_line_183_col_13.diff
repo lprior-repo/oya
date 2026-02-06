@@ -1,0 +1,29 @@
+--- crates/events/src/projection.rs
++++ delete match arm BeadEvent::DependencyResolved{bead_id, dependency_id, ..} in <impl Projection for AllBeadsProjection>::apply
+@@ -175,25 +175,17 @@
+             }
+             BeadEvent::PhaseCompleted {
+                 bead_id, phase_id, ..
+             } => {
+                 if let Some(bead) = state.beads.get_mut(bead_id) {
+                     bead.current_phase = Some(*phase_id);
+                 }
+             }
+-            BeadEvent::DependencyResolved {
+-                bead_id,
+-                dependency_id,
+-                ..
+-            } => {
+-                if let Some(bead) = state.beads.get_mut(bead_id) {
+-                    bead.blocked_by.retain(|id| id != dependency_id);
+-                }
+-            }
++             /* ~ changed by cargo-mutants ~ */
+             BeadEvent::Claimed {
+                 bead_id, agent_id, ..
+             } => {
+                 if let Some(bead) = state.beads.get_mut(bead_id) {
+                     bead.claimed_by = Some(agent_id.clone());
+                 }
+             }
+             BeadEvent::Unclaimed { bead_id, .. } => {

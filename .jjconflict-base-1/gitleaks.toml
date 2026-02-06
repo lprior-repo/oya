@@ -1,0 +1,22 @@
+title = "Gitleaks Configuration"
+
+# Allowlist .moon cache files (these are build artifacts, not secrets)
+[[allowlist]]
+description = "Moon build cache - file content hashes, not secrets"
+paths = [
+    '''\.moon/cache/''',
+]
+
+# Allowlist documentation examples (example API keys for documentation)
+[[allowlist]]
+description = "Documentation with example API keys"
+paths = [
+    '''docs/.*\.md$''',
+]
+
+# Allowlist example files (mock data for examples)
+[[allowlist]]
+description = "Example files with mock API keys"
+paths = [
+    '''examples/.*\.(json|cue|md)$''',
+]
