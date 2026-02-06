@@ -20,6 +20,63 @@ const CTX_BEADS_LIST: &str = "beads_list";
 const CTX_PIPELINE: &str = "pipeline";
 const CTX_BEAD_ID: &str = "bead_id";
 const CTX_AGENTS_LIST: &str = "agents_list";
+const CTX_GRAPH: &str = "graph";
+
+#[derive(Clone, Debug)]
+struct GraphNode {
+    id: String,
+    label: String,
+    is_on_critical_path: bool,
+    state: NodeState,
+}
+
+#[derive(Clone, Debug)]
+struct GraphEdge {
+    from: String,
+    to: String,
+    is_on_critical_path: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum NodeState {
+    Idle,
+    Running,
+    Blocked,
+    Completed,
+    Failed,
+}
+
+impl NodeState {
+    fn as_str(&self) -> &str {
+        match self {
+            Self::Idle => "idle",
+            Self::Running => "running",
+            Self::Blocked => "blocked",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+        }
+    }
+
+    fn color(&self) -> &str {
+        match self {
+            Self::Idle => "\x1b[90m",
+            Self::Running => "\x1b[33m",
+            Self::Blocked => "\x1b[31m",
+            Self::Completed => "\x1b[32m",
+            Self::Failed => "\x1b[31m",
+        }
+    }
+
+    fn symbol(&self) -> &str {
+        match self {
+            Self::Idle => "○",
+            Self::Running => "◐",
+            Self::Blocked => "⊘",
+            Self::Completed => "●",
+            Self::Failed => "✗",
+        }
+    }
+}
 
 // Plugin state
 struct State {
@@ -50,6 +107,11 @@ struct State {
     // Agent data
     agents: Vector<AgentInfo>,
     agent_events: VecDeque<AgentEvent>,
+
+    // Graph data
+    graph_nodes: Vector<GraphNode>,
+    graph_edges: Vector<GraphEdge>,
+    critical_path: Vector<String>,
 }
 
 #[allow(clippy::derivable_impls)]
@@ -70,6 +132,9 @@ impl Default for State {
             pipeline_stages: Vector::new(),
             agents: Vector::new(),
             agent_events: VecDeque::new(),
+            graph_nodes: Vector::new(),
+            graph_edges: Vector::new(),
+            critical_path: Vector::new(),
         }
     }
 }
@@ -81,6 +146,7 @@ enum ViewMode {
     BeadDetail,
     PipelineView,
     AgentList,
+    GraphView,
 }
 
 #[derive(Clone, Debug)]
@@ -337,10 +403,16 @@ impl ZellijPlugin for State {
                     self.load_agents();
                     true
                 }
+                BareKey::Char('5') => {
+                    self.mode = ViewMode::GraphView;
+                    self.load_graph();
+                    true
+                }
                 BareKey::Enter => {
                     self.mode = match self.mode {
                         ViewMode::PipelineView => ViewMode::PipelineView,
                         ViewMode::AgentList => ViewMode::AgentList,
+                        ViewMode::GraphView => ViewMode::GraphView,
                         _ => self.mode,
                     };
                     if self.mode == ViewMode::PipelineView {
@@ -348,6 +420,9 @@ impl ZellijPlugin for State {
                     }
                     if self.mode == ViewMode::AgentList {
                         self.load_agents();
+                    }
+                    if self.mode == ViewMode::GraphView {
+                        self.load_graph();
                     }
                     true
                 }
@@ -358,6 +433,9 @@ impl ZellijPlugin for State {
                     self.load_beads();
                     if self.mode == ViewMode::PipelineView {
                         self.load_pipeline_for_selected();
+                    }
+                    if self.mode == ViewMode::GraphView {
+                        self.load_graph();
                     }
                     true
                 }
@@ -413,6 +491,7 @@ impl ZellijPlugin for State {
             ViewMode::BeadDetail => self.render_bead_detail(content_rows, cols),
             ViewMode::PipelineView => self.render_pipeline_view(content_rows, cols),
             ViewMode::AgentList => self.render_agent_list(content_rows, cols),
+            ViewMode::GraphView => self.render_graph_view(content_rows, cols),
         }
         self.render_footer(rows, cols);
     }
