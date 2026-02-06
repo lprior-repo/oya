@@ -16,6 +16,7 @@ Cargo.lock
 .beads/beads.db-wal
 .beads/.local_version
 .beads/export-state/
+.beads/.br_history/
 
 # Gitleaks config (ignore file, not config)
 .gitleaksignore
