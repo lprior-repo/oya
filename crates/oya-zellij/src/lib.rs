@@ -145,6 +145,14 @@ struct AgentInfo {
     health_score: f64,
     uptime_secs: u64,
     capabilities: Vector<String>,
+    workload_history: WorkloadHistory,
+}
+
+#[derive(Clone, Debug, Default)]
+struct WorkloadHistory {
+    beads_completed: u64,
+    operations_executed: u64,
+    avg_execution_secs: Option<f64>,
 }
 
 #[derive(Clone, Debug)]
@@ -372,6 +380,9 @@ impl ZellijPlugin for State {
                 if self.mode == ViewMode::AgentList {
                     self.load_agents();
                 }
+                if self.mode == ViewMode::GraphView {
+                    self.load_graph();
+                }
                 set_timeout(2.0);
                 true
             }
@@ -379,6 +390,9 @@ impl ZellijPlugin for State {
                 self.load_beads();
                 if should_fetch_agents_on_view_load(self.mode) {
                     self.load_agents();
+                }
+                if should_fetch_graph_on_view_load(self.mode) {
+                    self.load_graph();
                 }
                 true
             }
@@ -458,6 +472,15 @@ impl State {
         web_request(&url, HttpVerb::Get, BTreeMap::new(), vec![], context);
     }
 
+    fn load_graph(&mut self) {
+        let url = format!("{}/api/graph", self.server_url);
+        let mut context = BTreeMap::new();
+        context.insert(CTX_REQUEST_TYPE.to_string(), CTX_GRAPH.to_string());
+        self.pending_requests = self.pending_requests.saturating_add(1);
+        self.last_request_sent = Some(Instant::now());
+        web_request(&url, HttpVerb::Get, BTreeMap::new(), vec![], context);
+    }
+
     fn handle_web_response(
         &mut self,
         status: u16,
@@ -499,6 +522,9 @@ impl State {
             Some(CTX_AGENTS_LIST) => {
                 self.parse_agents_response(&body);
                 self.agents_cache = Some((self.agents.clone(), Instant::now()));
+            }
+            Some(CTX_GRAPH) => {
+                self.parse_graph_response(&body);
             }
             _ => {}
         }
@@ -600,6 +626,12 @@ impl State {
             uptime_secs: u64,
             #[serde(default)]
             capabilities: Vec<String>,
+            #[serde(default)]
+            beads_completed: u64,
+            #[serde(default)]
+            operations_executed: u64,
+            #[serde(default)]
+            avg_execution_secs: Option<f64>,
         }
 
         #[derive(serde::Deserialize)]
@@ -633,10 +665,87 @@ impl State {
                         health_score: a.health_score,
                         uptime_secs: a.uptime_secs,
                         capabilities: a.capabilities.into_iter().collect::<Vector<_>>(),
+                        workload_history: WorkloadHistory {
+                            beads_completed: a.beads_completed,
+                            operations_executed: a.operations_executed,
+                            avg_execution_secs: a.avg_execution_secs,
+                        },
                     })
                     .collect::<Vector<_>>();
                 self.update_agent_events(&next_agents);
                 self.agents = next_agents;
+            }
+            Err(e) => self.last_error = Some(e),
+        }
+    }
+
+    fn parse_graph_response(&mut self, body: &[u8]) {
+        #[derive(serde::Deserialize)]
+        struct ApiGraphNode {
+            id: String,
+            label: String,
+            state: String,
+        }
+
+        #[derive(serde::Deserialize)]
+        struct ApiGraphEdge {
+            from: String,
+            to: String,
+        }
+
+        #[derive(serde::Deserialize)]
+        struct ApiGraphResponse {
+            nodes: Vec<ApiGraphNode>,
+            edges: Vec<ApiGraphEdge>,
+            critical_path: Vec<String>,
+        }
+
+        let parsed = std::str::from_utf8(body)
+            .map_err(|_| "Invalid UTF-8 in response".to_string())
+            .and_then(|body_str| {
+                serde_json::from_str::<ApiGraphResponse>(body_str)
+                    .map_err(|e| format!("Parse error: {}", e))
+            });
+
+        match parsed {
+            Ok(api_graph) => {
+                let critical_path_set: HashSet<String> =
+                    api_graph.critical_path.into_iter().collect();
+
+                self.graph_nodes = api_graph
+                    .nodes
+                    .into_iter()
+                    .map(|n| GraphNode {
+                        id: n.id.clone(),
+                        label: n.label,
+                        is_on_critical_path: critical_path_set.contains(&n.id),
+                        state: match n.state.as_str() {
+                            "running" => NodeState::Running,
+                            "blocked" => NodeState::Blocked,
+                            "completed" => NodeState::Completed,
+                            "failed" => NodeState::Failed,
+                            _ => NodeState::Idle,
+                        },
+                    })
+                    .collect::<Vector<_>>();
+
+                self.graph_edges = api_graph
+                    .edges
+                    .into_iter()
+                    .map(|e| {
+                        let is_critical =
+                            critical_path_set.contains(&e.from) && critical_path_set.contains(&e.to);
+                        GraphEdge {
+                            from: e.from,
+                            to: e.to,
+                            is_on_critical_path: is_critical,
+                        }
+                    })
+                    .collect::<Vector<_>>();
+
+                self.critical_path = critical_path_set
+                    .into_iter()
+                    .collect::<Vector<_>>();
             }
             Err(e) => self.last_error = Some(e),
         }
@@ -1149,6 +1258,7 @@ mod tests {
             health_score: health,
             uptime_secs: 42,
             capabilities: Vector::new(),
+            workload_history: WorkloadHistory::default(),
         }
     }
 
@@ -1211,5 +1321,48 @@ mod tests {
             .agent_events
             .iter()
             .any(|event| event.message.contains("assigned")));
+    }
+
+    #[test]
+    fn test_agent_workload_history_default() {
+        let agent = build_agent("agent-1", AgentState::Idle, None, 0.95);
+
+        assert_eq!(agent.workload_history.beads_completed, 0);
+        assert_eq!(agent.workload_history.operations_executed, 0);
+        assert!(agent.workload_history.avg_execution_secs.is_none());
+    }
+
+    #[test]
+    fn test_workload_history_with_values() {
+        let history = WorkloadHistory {
+            beads_completed: 42,
+            operations_executed: 150,
+            avg_execution_secs: Some(1.5),
+        };
+
+        assert_eq!(history.beads_completed, 42);
+        assert_eq!(history.operations_executed, 150);
+        assert_eq!(history.avg_execution_secs, Some(1.5));
+    }
+
+    #[test]
+    fn test_agent_with_custom_workload_history() {
+        let agent = AgentInfo {
+            id: "agent-test".to_string(),
+            state: AgentState::Working,
+            current_bead: Some("bead-123".to_string()),
+            health_score: 0.95,
+            uptime_secs: 3600,
+            capabilities: Vector::new(),
+            workload_history: WorkloadHistory {
+                beads_completed: 10,
+                operations_executed: 50,
+                avg_execution_secs: Some(2.3),
+            },
+        };
+
+        assert_eq!(agent.workload_history.beads_completed, 10);
+        assert_eq!(agent.workload_history.operations_executed, 50);
+        assert_eq!(agent.workload_history.avg_execution_secs, Some(2.3));
     }
 }
