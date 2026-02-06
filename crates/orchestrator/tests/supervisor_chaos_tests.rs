@@ -615,3 +615,94 @@ async fn given_tier1_crashes_then_no_shared_state_corruption() {
     // Clean up
     final_supervisor.stop(None);
 }
+
+/// **Attack 6.1**: Kill tier-1 supervisors sequentially and verify system stability
+#[tokio::test]
+async fn given_multiple_tier1_when_killed_sequentially_then_system_stable() {
+    // HOSTILE: Verify system can handle sequential supervisor crashes
+    // This tests the scenario where multiple tier-1 supervisors crash one after another
+
+    let config = SupervisorConfig::default();
+    let base_name = unique_name("sequential-kill");
+
+    // GIVEN: Multiple tier-1 supervisors with children
+    let mut supervisors = Vec::new();
+
+    for i in 0..5 {
+        let supervisor_name = format!("{base_name}-{i}");
+        let supervisor_result =
+            spawn_supervisor_with_name(supervisor_args(config.clone()), &supervisor_name).await;
+
+        assert!(
+            supervisor_result.is_ok(),
+            "supervisor {} should spawn successfully",
+            i
+        );
+
+        let supervisor = match supervisor_result {
+            Ok(sup) => sup,
+            Err(e) => {
+                eprintln!("Failed to spawn supervisor {}: {}", i, e);
+                return;
+            }
+        };
+
+        // Add children to each supervisor
+        let child_args = SchedulerArguments::new();
+        for j in 0..3 {
+            let spawn_result = spawn_child(
+                &supervisor,
+                &format!("{supervisor_name}-child-{j}"),
+                child_args.clone(),
+            )
+            .await;
+
+            assert!(
+                spawn_result.is_ok(),
+                "supervisor {} child {} spawn should succeed: {:?}",
+                i,
+                j,
+                spawn_result
+            );
+        }
+
+        // Verify supervisor is alive
+        assert!(
+            is_supervisor_alive(supervisor.get_status()),
+            "supervisor {} should be alive",
+            i
+        );
+
+        supervisors.push(supervisor);
+
+        // Give time for children to start
+        sleep(Duration::from_millis(50)).await;
+    }
+
+    // WHEN: Kill supervisors sequentially (one after another)
+    for (i, supervisor) in supervisors.iter().enumerate() {
+        // Kill this supervisor
+        supervisor.stop(Some(format!("Sequential kill {}", i)));
+
+        // Give time for shutdown
+        sleep(Duration::from_millis(100)).await;
+
+        // THEN: Verify this supervisor is stopped
+        assert!(
+            is_supervisor_stopped(supervisor.get_status()),
+            "supervisor {} should be stopped after sequential kill",
+            i
+        );
+    }
+
+    // THEN: All supervisors should be stopped, no panic occurred
+    for (i, supervisor) in supervisors.iter().enumerate() {
+        assert!(
+            is_supervisor_stopped(supervisor.get_status()),
+            "supervisor {} should remain stopped",
+            i
+        );
+    }
+
+    // If we reach here without panic, the system survived sequential crashes
+}
