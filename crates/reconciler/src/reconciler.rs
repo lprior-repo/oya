@@ -201,11 +201,15 @@ impl Reconciler {
             }
         }
 
-        // 2. Delete beads that exist in actual but not desired
-        for bead_id in actual.beads.keys() {
-            if !desired.beads.contains_key(bead_id) {
-                actions.push(ReconcileAction::DeleteBead { bead_id: *bead_id });
-            }
+        // 2. Detect orphaned beads (actual without desired) and delete
+        let orphaned = actual.orphaned_beads(desired);
+        if !orphaned.is_empty() {
+            warn!(count = orphaned.len(), "Detected orphaned beads");
+        }
+        for proj in orphaned {
+            actions.push(ReconcileAction::DeleteBead {
+                bead_id: proj.bead_id,
+            });
         }
 
         // 3. Schedule pending beads whose dependencies are met
@@ -411,6 +415,24 @@ mod tests {
         assert!(actions
             .iter()
             .any(|a| matches!(a, ReconcileAction::CreateBead { .. })));
+    }
+
+    #[tokio::test]
+    async fn test_diff_detects_orphaned_beads() {
+        let (reconciler, _) = setup_reconciler();
+        let desired = DesiredState::new();
+        let mut actual = ActualState::new();
+
+        let mut proj = oya_events::BeadProjection::new(BeadId::new());
+        proj.current_state = BeadState::Running;
+        actual.update(proj);
+
+        let actions = reconciler.diff(&desired, &actual);
+
+        let has_delete = actions
+            .iter()
+            .any(|a| matches!(a, ReconcileAction::DeleteBead { .. }));
+        assert!(has_delete);
     }
 
     #[tokio::test]

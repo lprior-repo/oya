@@ -111,6 +111,14 @@ impl ActualState {
             .collect()
     }
 
+    /// Get beads that exist in actual state but not desired state.
+    pub fn orphaned_beads<'a>(&'a self, desired: &DesiredState) -> Vec<&'a BeadProjection> {
+        self.beads
+            .values()
+            .filter(|b| !desired.beads.contains_key(&b.bead_id))
+            .collect()
+    }
+
     /// Increment count for a state.
     fn increment_count(&mut self, state: BeadState) {
         match state {
