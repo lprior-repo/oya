@@ -12,7 +12,6 @@ use std::process::Stdio;
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
-use tokio::time::timeout;
 
 use crate::error::{Error, Result};
 
@@ -254,7 +253,7 @@ impl WorkerProcess {
     ///
     /// # Returns
     /// Ok(()) if process terminated successfully
-    pub async fn graceful_shutdown(self, timeout: Duration) -> Result<()> {
+    pub async fn graceful_shutdown(mut self, timeout: Duration) -> Result<()> {
         let pid = self.id().ok_or_else(|| {
             Error::command_failed(-1, "Process has no ID")
         })?;
@@ -337,6 +336,44 @@ pub async fn run_command_in_dir(
     let result = spawn_and_wait(config).await?;
     result.check_success()?;
     Ok(result)
+}
+
+/// Shutdown multiple worker processes gracefully.
+///
+/// Sends SIGTERM to all workers, waits for the specified timeout,
+/// then ensures all processes are terminated.
+///
+/// # Arguments
+/// * `workers` - Vector of worker processes to shutdown
+/// * `timeout` - Time to wait for each process after SIGTERM
+///
+/// # Returns
+/// Vector of results for each worker shutdown
+pub async fn shutdown_all_workers(
+    workers: Vec<WorkerProcess>,
+    timeout: Duration,
+) -> Result<Vec<Result<()>>> {
+    let mut shutdown_tasks = Vec::new();
+
+    // Spawn graceful shutdown tasks for all workers
+    for worker in workers {
+        let task = tokio::spawn(async move {
+            worker.graceful_shutdown(timeout).await
+        });
+        shutdown_tasks.push(task);
+    }
+
+    let mut results = Vec::new();
+
+    // Wait for all shutdowns to complete
+    for task in shutdown_tasks {
+        let result = task.await.map_err(|e| {
+            Error::command_failed(-1, format!("Shutdown task failed: {}", e))
+        })?;
+        results.push(result);
+    }
+
+    Ok(results)
 }
 
 #[cfg(test)]
