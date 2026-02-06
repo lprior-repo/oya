@@ -445,9 +445,11 @@ mod tests {
         let actual = ActualState::new();
 
         let result = reconciler.reconcile(&desired, &actual).await;
-        assert!(result.is_ok());
-        let result = result.ok();
-        assert!(result.as_ref().map(|r| r.converged).unwrap_or(false));
+        assert!(result.is_ok(), "reconcile should succeed");
+        let result = result.unwrap();
+        assert!(result.converged, "empty system should be converged");
+        assert!(result.actions_taken.is_empty(), "no actions should be taken");
+        assert!(result.actions_failed.is_empty(), "no actions should fail");
     }
 
     #[tokio::test]
@@ -632,5 +634,489 @@ mod tests {
             Some(5)
         );
         assert_eq!(reconciler.map(|r| r.config.auto_start), Some(false));
+    }
+
+    #[tokio::test]
+    async fn test_reconcile_full_convergence() {
+        let (reconciler, _bus) = setup_reconciler();
+        let mut desired = DesiredState::new();
+        let bead_id = BeadId::new();
+        desired.add_bead(
+            bead_id,
+            BeadSpec::new("Test").with_complexity(Complexity::Simple),
+        );
+
+        // Start with empty actual state
+        let actual = ActualState::new();
+
+        // First reconcile should create the bead
+        let result1 = reconciler.reconcile(&desired, &actual).await;
+        assert!(result1.is_ok(), "reconcile should succeed");
+        let result1 = result1.unwrap();
+        assert!(!result1.converged, "should not be converged when actions needed");
+        assert!(!result1.actions_taken.is_empty(), "should have actions");
+    }
+
+    #[tokio::test]
+    async fn test_reconcile_with_dependencies() {
+        let (reconciler, _) = setup_reconciler();
+        let mut desired = DesiredState::new();
+
+        let bead1_id = BeadId::new();
+        let bead2_id = BeadId::new();
+
+        let mut spec2 = BeadSpec::new("Dependent").with_complexity(Complexity::Simple);
+        spec2.dependencies = vec![bead1_id];
+
+        desired.add_bead(
+            bead1_id,
+            BeadSpec::new("Independent").with_complexity(Complexity::Simple),
+        );
+        desired.add_bead(bead2_id, spec2);
+
+        let actual = ActualState::new();
+        let result = reconciler.reconcile(&desired, &actual).await;
+
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert_eq!(result.desired_count, 2);
+    }
+
+    #[tokio::test]
+    async fn test_reconcile_auto_retry_enabled() {
+        let config = ReconcilerConfig {
+            auto_retry: true,
+            max_retries: 3,
+            ..Default::default()
+        };
+
+        let store = Arc::new(InMemoryEventStore::new());
+        let bus = Arc::new(EventBus::new(store));
+        let reconciler = Reconciler::with_event_executor(bus, config);
+
+        let desired = DesiredState::new();
+        let mut actual = ActualState::new();
+
+        let bead_id = BeadId::new();
+        let mut proj = oya_events::BeadProjection::new(bead_id);
+        proj.current_state = BeadState::BackingOff;
+        actual.update(proj);
+
+        let actions = reconciler.diff(&desired, &actual);
+        assert!(!actions.is_empty());
+        assert!(actions
+            .iter()
+            .any(|a| matches!(a, ReconcileAction::RetryBead { .. })));
+    }
+
+    #[tokio::test]
+    async fn test_reconcile_auto_retry_disabled() {
+        let config = ReconcilerConfig {
+            auto_retry: false,
+            ..Default::default()
+        };
+
+        let store = Arc::new(InMemoryEventStore::new());
+        let bus = Arc::new(EventBus::new(store));
+        let reconciler = Reconciler::with_event_executor(bus, config);
+
+        let desired = DesiredState::new();
+        let mut actual = ActualState::new();
+
+        let bead_id = BeadId::new();
+        let mut proj = oya_events::BeadProjection::new(bead_id);
+        proj.current_state = BeadState::BackingOff;
+        actual.update(proj);
+
+        let actions = reconciler.diff(&desired, &actual);
+        // Should not retry when auto_retry is disabled
+        assert!(!actions.iter().any(|a| matches!(a, ReconcileAction::RetryBead { .. })));
+    }
+
+    #[tokio::test]
+    async fn test_reconcile_schedule_pending_beads() {
+        let (reconciler, _) = setup_reconciler();
+        let desired = DesiredState::new();
+        let mut actual = ActualState::new();
+
+        let bead_id = BeadId::new();
+        let mut proj = oya_events::BeadProjection::new(bead_id);
+        proj.current_state = BeadState::Pending;
+        proj.blocked_by = vec![]; // Not blocked
+        actual.update(proj);
+
+        let actions = reconciler.diff(&desired, &actual);
+        assert!(!actions.is_empty());
+        assert!(actions
+            .iter()
+            .any(|a| matches!(a, ReconcileAction::ScheduleBead { .. })));
+    }
+
+    #[tokio::test]
+    async fn test_reconcile_blocked_pending_beads() {
+        let (reconciler, _) = setup_reconciler();
+        let desired = DesiredState::new();
+        let mut actual = ActualState::new();
+
+        let blocker_id = BeadId::new();
+        let bead_id = BeadId::new();
+        let mut proj = oya_events::BeadProjection::new(bead_id);
+        proj.current_state = BeadState::Pending;
+        proj.blocked_by = vec![blocker_id]; // Blocked
+        actual.update(proj);
+
+        let actions = reconciler.diff(&desired, &actual);
+        // Should not schedule blocked beads
+        assert!(!actions.iter().any(|a| matches!(a, ReconcileAction::ScheduleBead { .. })));
+    }
+
+    #[tokio::test]
+    async fn test_reconcile_start_scheduled_beads() {
+        let config = ReconcilerConfig {
+            auto_start: true,
+            max_concurrent: 10,
+            ..Default::default()
+        };
+
+        let store = Arc::new(InMemoryEventStore::new());
+        let bus = Arc::new(EventBus::new(store));
+        let reconciler = Reconciler::with_event_executor(bus, config);
+
+        let desired = DesiredState::new();
+        let mut actual = ActualState::new();
+
+        let bead_id = BeadId::new();
+        let mut proj = oya_events::BeadProjection::new(bead_id);
+        proj.current_state = BeadState::Scheduled;
+        proj.blocked_by = vec![];
+        actual.update(proj);
+
+        let actions = reconciler.diff(&desired, &actual);
+        assert!(!actions.is_empty());
+        assert!(actions
+            .iter()
+            .any(|a| matches!(a, ReconcileAction::StartBead { .. })));
+    }
+
+    #[tokio::test]
+    async fn test_reconcile_start_respects_concurrency_limit() {
+        let config = ReconcilerConfig {
+            auto_start: true,
+            max_concurrent: 2,
+            ..Default::default()
+        };
+
+        let store = Arc::new(InMemoryEventStore::new());
+        let bus = Arc::new(EventBus::new(store));
+        let reconciler = Reconciler::with_event_executor(bus, config);
+
+        let desired = DesiredState::new();
+        let mut actual = ActualState::new();
+
+        // Add 2 running beads (at limit)
+        for _ in 0..2 {
+            let mut proj = oya_events::BeadProjection::new(BeadId::new());
+            proj.current_state = BeadState::Running;
+            actual.update(proj);
+        }
+
+        // Add 2 scheduled beads
+        for _ in 0..2 {
+            let mut proj = oya_events::BeadProjection::new(BeadId::new());
+            proj.current_state = BeadState::Scheduled;
+            proj.blocked_by = vec![];
+            actual.update(proj);
+        }
+
+        let actions = reconciler.diff(&desired, &actual);
+        let start_count = actions
+            .iter()
+            .filter(|a| matches!(a, ReconcileAction::StartBead { .. }))
+            .count();
+
+        assert_eq!(start_count, 0, "Should not start beads when at concurrency limit");
+    }
+
+    #[tokio::test]
+    async fn test_reconcile_start_within_concurrency_limit() {
+        let config = ReconcilerConfig {
+            auto_start: true,
+            max_concurrent: 5,
+            ..Default::default()
+        };
+
+        let store = Arc::new(InMemoryEventStore::new());
+        let bus = Arc::new(EventBus::new(store));
+        let reconciler = Reconciler::with_event_executor(bus, config);
+
+        let desired = DesiredState::new();
+        let mut actual = ActualState::new();
+
+        // Add 2 running beads
+        for _ in 0..2 {
+            let mut proj = oya_events::BeadProjection::new(BeadId::new());
+            proj.current_state = BeadState::Running;
+            actual.update(proj);
+        }
+
+        // Add 4 scheduled beads
+        for _ in 0..4 {
+            let mut proj = oya_events::BeadProjection::new(BeadId::new());
+            proj.current_state = BeadState::Scheduled;
+            proj.blocked_by = vec![];
+            actual.update(proj);
+        }
+
+        let actions = reconciler.diff(&desired, &actual);
+        let start_count = actions
+            .iter()
+            .filter(|a| matches!(a, ReconcileAction::StartBead { .. }))
+            .count();
+
+        assert_eq!(start_count, 3, "Should start up to concurrency limit (5 - 2 = 3)");
+    }
+
+    #[tokio::test]
+    async fn test_running_duration_no_history() {
+        let (reconciler, _) = setup_reconciler();
+
+        let bead_id = BeadId::new();
+        let mut proj = oya_events::BeadProjection::new(bead_id);
+        proj.current_state = BeadState::Running;
+        proj.history = vec![]; // No history
+
+        let duration = reconciler.running_duration(&proj);
+        assert!(duration.is_none(), "Should return None when no running transition in history");
+    }
+
+    #[tokio::test]
+    async fn test_running_duration_with_transition() {
+        let (reconciler, _) = setup_reconciler();
+
+        let bead_id = BeadId::new();
+        let mut proj = oya_events::BeadProjection::new(bead_id);
+        proj.current_state = BeadState::Running;
+        proj.history.push(StateTransition {
+            from: BeadState::Scheduled,
+            to: BeadState::Running,
+            timestamp: Utc::now() - ChronoDuration::seconds(30),
+            reason: None,
+        });
+
+        let duration = reconciler.running_duration(&proj);
+        assert!(duration.is_some(), "Should return duration when running transition exists");
+
+        let duration = duration.unwrap();
+        assert!(duration.num_seconds() >= 29, "Duration should be at least 29 seconds");
+        assert!(duration.num_seconds() <= 31, "Duration should be at most 31 seconds");
+    }
+
+    #[tokio::test]
+    async fn test_multiple_orphaned_beads() {
+        let (reconciler, _) = setup_reconciler();
+        let desired = DesiredState::new();
+        let mut actual = ActualState::new();
+
+        // Add multiple orphaned beads
+        for _ in 0..3 {
+            let mut proj = oya_events::BeadProjection::new(BeadId::new());
+            proj.current_state = BeadState::Running;
+            actual.update(proj);
+        }
+
+        let actions = reconciler.diff(&desired, &actual);
+        let delete_count = actions
+            .iter()
+            .filter(|a| matches!(a, ReconcileAction::DeleteBead { .. }))
+            .count();
+
+        assert_eq!(delete_count, 3, "Should delete all orphaned beads");
+    }
+
+    #[tokio::test]
+    async fn test_reconcile_result_converged() {
+        let result = ReconcileResult::new(vec![], vec![], 5, 5);
+        assert!(result.converged, "Should be converged when no actions taken");
+        assert!(result.all_succeeded(), "All actions should succeed when none failed");
+    }
+
+    #[tokio::test]
+    async fn test_reconcile_result_not_converged() {
+        let action = ReconcileAction::StartBead {
+            bead_id: BeadId::new(),
+        };
+        let result = ReconcileResult::new(vec![action], vec![], 5, 5);
+        assert!(!result.converged, "Should not be converged when actions taken");
+        assert!(result.all_succeeded(), "All actions should succeed when none failed");
+    }
+
+    #[tokio::test]
+    async fn test_reconcile_result_with_failures() {
+        let action = ReconcileAction::StartBead {
+            bead_id: BeadId::new(),
+        };
+        let failed = vec![(action.clone(), "test error".to_string())];
+        let result = ReconcileResult::new(vec![], failed, 5, 5);
+        assert!(!result.converged, "Should not be converged when actions failed");
+        assert!(!result.all_succeeded(), "Should not have all succeeded when there are failures");
+        assert_eq!(result.actions_failed.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_dead_worker_detection_unclaimed_only() {
+        let config = ReconcilerConfig {
+            detect_dead_workers: true,
+            dead_worker_threshold: Duration::from_secs(30),
+            ..Default::default()
+        };
+
+        let store = Arc::new(InMemoryEventStore::new());
+        let bus = Arc::new(EventBus::new(store));
+        let reconciler = Reconciler::with_event_executor(bus, config);
+
+        let desired = DesiredState::new();
+        let mut actual = ActualState::new();
+
+        // Running bead WITH claim (should not be detected as dead)
+        let bead_id = BeadId::new();
+        let mut proj = oya_events::BeadProjection::new(bead_id);
+        proj.current_state = BeadState::Running;
+        proj.claimed_by = Some("agent-1".to_string());
+        proj.history.push(StateTransition {
+            from: BeadState::Ready,
+            to: BeadState::Running,
+            timestamp: Utc::now() - ChronoDuration::seconds(120),
+            reason: None,
+        });
+        actual.update(proj);
+
+        let actions = reconciler.diff(&desired, &actual);
+        assert!(!actions
+            .iter()
+            .any(|a| matches!(a, ReconcileAction::RespawnBead { .. })),
+            "Should not respawn claimed workers");
+    }
+
+    #[tokio::test]
+    async fn test_stuck_bead_detection_claimed_only() {
+        let config = ReconcilerConfig {
+            detect_stuck_beads: true,
+            stuck_bead_threshold: Duration::from_secs(60),
+            ..Default::default()
+        };
+
+        let store = Arc::new(InMemoryEventStore::new());
+        let bus = Arc::new(EventBus::new(store));
+        let reconciler = Reconciler::with_event_executor(bus, config);
+
+        let desired = DesiredState::new();
+        let mut actual = ActualState::new();
+
+        // Running bead WITHOUT claim (should not be detected as stuck)
+        let bead_id = BeadId::new();
+        let mut proj = oya_events::BeadProjection::new(bead_id);
+        proj.current_state = BeadState::Running;
+        proj.claimed_by = None;
+        proj.history.push(StateTransition {
+            from: BeadState::Ready,
+            to: BeadState::Running,
+            timestamp: Utc::now() - ChronoDuration::seconds(120),
+            reason: None,
+        });
+        actual.update(proj);
+
+        let actions = reconciler.diff(&desired, &actual);
+        assert!(!actions
+            .iter()
+            .any(|a| matches!(a, ReconcileAction::RescheduleBead { .. })),
+            "Should not reschedule unclaimed beads as stuck");
+    }
+
+    #[tokio::test]
+    async fn test_reconcile_config_default_values() {
+        let config = ReconcilerConfig::default();
+        assert_eq!(config.max_concurrent, 10);
+        assert!(config.auto_start);
+        assert!(config.auto_retry);
+        assert_eq!(config.max_retries, 3);
+        assert!(config.detect_dead_workers);
+        assert!(config.detect_stuck_beads);
+    }
+
+    #[tokio::test]
+    async fn test_builder_missing_bus() {
+        let result = ReconcilerBuilder::new().build();
+        assert!(result.is_err(), "Should fail when bus is not provided");
+    }
+
+    #[tokio::test]
+    async fn test_builder_with_custom_executor() {
+        let store = Arc::new(InMemoryEventStore::new());
+        let bus = Arc::new(EventBus::new(store));
+
+        struct MockExecutor;
+        #[async_trait]
+        impl ActionExecutor for MockExecutor {
+            async fn execute(&self, _action: &ReconcileAction) -> Result<()> {
+                Ok(())
+            }
+        }
+
+        let result = ReconcilerBuilder::new()
+            .with_bus(bus)
+            .with_executor(Arc::new(MockExecutor))
+            .build();
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_reconcile_getters() {
+        let (reconciler, _bus) = setup_reconciler();
+
+        // Verify config values instead of bus (which doesn't implement Debug)
+        assert_eq!(reconciler.config().max_concurrent, 10);
+        assert!(reconciler.config().auto_start);
+    }
+
+    #[tokio::test]
+    async fn test_diff_multiple_actions() {
+        let (reconciler, _) = setup_reconciler();
+        let mut desired = DesiredState::new();
+
+        // Add a bead to desired state
+        let new_bead_id = BeadId::new();
+        desired.add_bead(
+            new_bead_id,
+            BeadSpec::new("New").with_complexity(Complexity::Simple),
+        );
+
+        let mut actual = ActualState::new();
+
+        // Add an orphaned bead
+        let orphan_id = BeadId::new();
+        let mut proj = oya_events::BeadProjection::new(orphan_id);
+        proj.current_state = BeadState::Running;
+        actual.update(proj);
+
+        // Add a pending bead ready to schedule
+        let pending_id = BeadId::new();
+        let mut pending_proj = oya_events::BeadProjection::new(pending_id);
+        pending_proj.current_state = BeadState::Pending;
+        pending_proj.blocked_by = vec![];
+        actual.update(pending_proj);
+
+        let actions = reconciler.diff(&desired, &actual);
+
+        // Should have create, delete, and schedule actions
+        assert!(actions
+            .iter()
+            .any(|a| matches!(a, ReconcileAction::CreateBead { .. })));
+        assert!(actions
+            .iter()
+            .any(|a| matches!(a, ReconcileAction::DeleteBead { .. })));
+        assert!(actions
+            .iter()
+            .any(|a| matches!(a, ReconcileAction::ScheduleBead { .. })));
     }
 }

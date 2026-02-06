@@ -181,6 +181,68 @@ impl ProcessPoolActor {
         self.workers.is_empty()
     }
 
+    /// Claim a worker for use, transitioning it from Idle to Claimed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The worker doesn't exist
+    /// - The worker is not in Idle state (already claimed or unavailable)
+    pub fn claim_worker(&mut self, id: ProcessId) -> Result<()> {
+        self.workers
+            .get(&id)
+            .ok_or_else(|| crate::error::Error::InvalidRecord {
+                reason: format!("worker with id {} not found", id.get()),
+            })
+            .and_then(|&state| {
+                if state == WorkerState::Idle {
+                    Ok(())
+                } else {
+                    Err(crate::error::Error::InvalidRecord {
+                        reason: format!(
+                            "worker {} is not idle (current state: {:?})",
+                            id.get(),
+                            state
+                        ),
+                    })
+                }
+            })
+            .map(|_| {
+                self.workers.insert(id, WorkerState::Claimed);
+            })
+    }
+
+    /// Release a worker back to the pool, transitioning it from Claimed to Idle.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The worker doesn't exist
+    /// - The worker is not in Claimed state (already idle or in other state)
+    pub fn release_worker(&mut self, id: ProcessId) -> Result<()> {
+        self.workers
+            .get(&id)
+            .ok_or_else(|| crate::error::Error::InvalidRecord {
+                reason: format!("worker with id {} not found", id.get()),
+            })
+            .and_then(|&state| {
+                if state == WorkerState::Claimed {
+                    Ok(())
+                } else {
+                    Err(crate::error::Error::InvalidRecord {
+                        reason: format!(
+                            "worker {} is not claimed (current state: {:?})",
+                            id.get(),
+                            state
+                        ),
+                    })
+                }
+            })
+            .map(|_| {
+                self.workers.insert(id, WorkerState::Idle);
+            })
+    }
+
     /// Clear all workers from the pool.
     pub fn clear(&mut self) {
         self.workers.clear();
@@ -1236,5 +1298,189 @@ mod tests {
             0,
             "No unhealthy workers should remain"
         );
+    }
+
+    // === Claim/Release Worker Tests ===
+
+    #[test]
+    fn claim_idle_worker_should_transition_to_claimed() {
+        // Given: A pool with an idle worker
+        let mut pool = ProcessPoolActor::new();
+        let worker_id = ProcessId::new(1);
+        pool.add_worker(worker_id, WorkerState::Idle)
+            .expect("Failed to add worker");
+
+        assert_eq!(
+            pool.get_state(&worker_id),
+            Some(WorkerState::Idle),
+            "Worker should start as idle"
+        );
+
+        // When: We claim the worker
+        let result = pool.claim_worker(worker_id);
+
+        // Then: Worker transitions to claimed state
+        assert!(result.is_ok(), "Claim should succeed");
+        assert_eq!(
+            pool.get_state(&worker_id),
+            Some(WorkerState::Claimed),
+            "Worker should be claimed"
+        );
+        assert_eq!(
+            pool.count_by_state(WorkerState::Idle),
+            0,
+            "No idle workers should remain"
+        );
+        assert_eq!(
+            pool.count_by_state(WorkerState::Claimed),
+            1,
+            "One worker should be claimed"
+        );
+    }
+
+    #[test]
+    fn claim_already_claimed_worker_should_fail() {
+        // Given: A pool with a claimed worker
+        let mut pool = ProcessPoolActor::new();
+        let worker_id = ProcessId::new(1);
+        pool.add_worker(worker_id, WorkerState::Claimed)
+            .expect("Failed to add worker");
+
+        // When: We attempt to claim an already claimed worker
+        let result = pool.claim_worker(worker_id);
+
+        // Then: Claim fails with appropriate error
+        assert!(result.is_err(), "Claim should fail");
+        let error_matches = result
+            .map(|_| false)
+            .unwrap_or_else(|err| matches!(err, crate::error::Error::InvalidRecord { .. }));
+        assert!(error_matches, "Should return InvalidRecord error");
+    }
+
+    #[test]
+    fn claim_nonexistent_worker_should_fail() {
+        // Given: An empty pool
+        let mut pool = ProcessPoolActor::new();
+        let nonexistent_worker = ProcessId::new(999);
+
+        // When: We attempt to claim a nonexistent worker
+        let result = pool.claim_worker(nonexistent_worker);
+
+        // Then: Claim fails with appropriate error
+        assert!(result.is_err(), "Claim should fail");
+    }
+
+    #[test]
+    fn release_claimed_worker_should_transition_to_idle() {
+        // Given: A pool with a claimed worker
+        let mut pool = ProcessPoolActor::new();
+        let worker_id = ProcessId::new(1);
+        pool.add_worker(worker_id, WorkerState::Claimed)
+            .expect("Failed to add worker");
+
+        assert_eq!(
+            pool.get_state(&worker_id),
+            Some(WorkerState::Claimed),
+            "Worker should start as claimed"
+        );
+
+        // When: We release the worker
+        let result = pool.release_worker(worker_id);
+
+        // Then: Worker transitions to idle state
+        assert!(result.is_ok(), "Release should succeed");
+        assert_eq!(
+            pool.get_state(&worker_id),
+            Some(WorkerState::Idle),
+            "Worker should be idle after release"
+        );
+        assert_eq!(
+            pool.count_by_state(WorkerState::Claimed),
+            0,
+            "No claimed workers should remain"
+        );
+        assert_eq!(
+            pool.count_by_state(WorkerState::Idle),
+            1,
+            "One worker should be idle"
+        );
+    }
+
+    #[test]
+    fn release_already_idle_worker_should_fail() {
+        // Given: A pool with an idle worker
+        let mut pool = ProcessPoolActor::new();
+        let worker_id = ProcessId::new(1);
+        pool.add_worker(worker_id, WorkerState::Idle)
+            .expect("Failed to add worker");
+
+        // When: We attempt to release an already idle worker
+        let result = pool.release_worker(worker_id);
+
+        // Then: Release fails with appropriate error
+        assert!(result.is_err(), "Release should fail");
+        let error_matches = result
+            .map(|_| false)
+            .unwrap_or_else(|err| matches!(err, crate::error::Error::InvalidRecord { .. }));
+        assert!(error_matches, "Should return InvalidRecord error");
+    }
+
+    #[test]
+    fn release_nonexistent_worker_should_fail() {
+        // Given: An empty pool
+        let mut pool = ProcessPoolActor::new();
+        let nonexistent_worker = ProcessId::new(999);
+
+        // When: We attempt to release a nonexistent worker
+        let result = pool.release_worker(nonexistent_worker);
+
+        // Then: Release fails with appropriate error
+        assert!(result.is_err(), "Release should fail");
+    }
+
+    #[test]
+    fn sequential_claim_release_should_maintain_invariants() {
+        // Given: A pool with multiple workers
+        let mut pool = ProcessPoolActor::with_capacity(3);
+        let worker1 = ProcessId::new(0);
+        let worker2 = ProcessId::new(1);
+        let worker3 = ProcessId::new(2);
+
+        // Initial state: all idle
+        assert_eq!(pool.count_by_state(WorkerState::Idle), 3);
+
+        // When: We claim and release workers sequentially
+        let claim1 = pool.claim_worker(worker1);
+        assert!(claim1.is_ok(), "First claim should succeed");
+        assert_eq!(pool.count_by_state(WorkerState::Idle), 2);
+        assert_eq!(pool.count_by_state(WorkerState::Claimed), 1);
+
+        let claim2 = pool.claim_worker(worker2);
+        assert!(claim2.is_ok(), "Second claim should succeed");
+        assert_eq!(pool.count_by_state(WorkerState::Idle), 1);
+        assert_eq!(pool.count_by_state(WorkerState::Claimed), 2);
+
+        let release1 = pool.release_worker(worker1);
+        assert!(release1.is_ok(), "First release should succeed");
+        assert_eq!(pool.count_by_state(WorkerState::Idle), 2);
+        assert_eq!(pool.count_by_state(WorkerState::Claimed), 1);
+
+        let claim3 = pool.claim_worker(worker3);
+        assert!(claim3.is_ok(), "Third claim should succeed");
+        assert_eq!(pool.count_by_state(WorkerState::Idle), 1);
+        assert_eq!(pool.count_by_state(WorkerState::Claimed), 2);
+
+        let release2 = pool.release_worker(worker2);
+        assert!(release2.is_ok(), "Second release should succeed");
+        assert_eq!(pool.count_by_state(WorkerState::Idle), 2);
+        assert_eq!(pool.count_by_state(WorkerState::Claimed), 1);
+
+        let release3 = pool.release_worker(worker3);
+        assert!(release3.is_ok(), "Third release should succeed");
+        assert_eq!(pool.count_by_state(WorkerState::Idle), 3);
+        assert_eq!(pool.count_by_state(WorkerState::Claimed), 0);
+
+        // Then: Pool invariants are maintained
+        assert_eq!(pool.size(), 3, "Pool size should remain constant");
     }
 }

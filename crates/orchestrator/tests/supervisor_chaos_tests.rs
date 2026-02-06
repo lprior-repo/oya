@@ -706,3 +706,299 @@ async fn given_multiple_tier1_when_killed_sequentially_then_system_stable() {
 
     // If we reach here without panic, the system survived sequential crashes
 }
+
+/// **Attack 7.1**: Cascading failure test with 5 simultaneous kills
+///
+/// This test simulates a catastrophic failure scenario where multiple children
+/// are killed simultaneously and verifies the system can recover gracefully.
+#[tokio::test]
+async fn given_five_simultaneous_kills_when_cascading_failure_then_recovers() {
+    // GIVEN: A tier-1 supervisor with 5 children
+    let config = SupervisorConfig::for_testing();
+    let supervisor_name = unique_name("chaos-cascade-5-kills");
+    let supervisor_result =
+        spawn_supervisor_with_name(supervisor_args(config), &supervisor_name).await;
+
+    assert!(
+        supervisor_result.is_ok(),
+        "should spawn supervisor successfully"
+    );
+
+    let supervisor = match supervisor_result {
+        Ok(sup) => sup,
+        Err(e) => {
+            eprintln!("Failed to spawn supervisor: {}", e);
+            return;
+        }
+    };
+
+    // Spawn 5 children
+    let mut child_handles = Vec::new();
+    for i in 0..5 {
+        let child_args = SchedulerArguments::new();
+        let child_name = format!("{supervisor_name}-child-{i}");
+        let spawn_result = spawn_child(&supervisor, &child_name, child_args).await;
+
+        assert!(
+            spawn_result.is_ok(),
+            "child-{i} spawn should succeed: {:?}",
+            spawn_result
+        );
+
+        child_handles.push(child_name);
+    }
+
+    // Give children time to start
+    sleep(Duration::from_millis(100)).await;
+
+    // Verify all children are running
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let status_result = supervisor
+        .cast(SupervisorMessage::GetStatus { reply: tx })
+        .map_err(|e| format!("Failed to get status: {}", e));
+
+    assert!(
+        status_result.is_ok(),
+        "should be able to query supervisor status"
+    );
+
+    let status_response = tokio::time::timeout(STATUS_TIMEOUT, rx).await;
+
+    let initial_child_count = match status_response {
+        Ok(Ok(status)) => status.active_children,
+        Ok(Err(e)) => {
+            eprintln!("Failed to receive status: {}", e);
+            return;
+        }
+        Err(_) => {
+            eprintln!("Timeout waiting for status");
+            return;
+        }
+    };
+
+    assert_eq!(initial_child_count, 5, "should have 5 children before cascade");
+
+    // WHEN: Kill all 5 children simultaneously (simulating cascading failure)
+    let mut stop_results = Vec::new();
+    for (idx, child_name) in child_handles.iter().enumerate() {
+        let result = supervisor.cast(SupervisorMessage::StopChild {
+            name: child_name.clone(),
+        });
+
+        // Collect results - some may fail if actor is already dead
+        stop_results.push((idx, result));
+    }
+
+    // THEN: All stop operations should complete (success or error is acceptable)
+    // The critical requirement is no panic
+    for (idx, result) in stop_results {
+        // We don't assert success here - in a real cascade, some actors
+        // might already be dead when we try to stop them
+        let _ = result.map_err(|e| {
+            // Log but don't fail - this is expected during cascade
+            eprintln!("Child-{} stop result: {:?}", idx, e);
+        });
+    }
+
+    // Give time for supervisor to handle all the failures
+    sleep(Duration::from_millis(200)).await;
+
+    // Verify supervisor is still alive (it survived the cascade)
+    let supervisor_status = supervisor.get_status();
+    assert!(
+        is_supervisor_alive(supervisor_status),
+        "supervisor should survive cascading failure"
+    );
+
+    // Verify children were cleaned up
+    let (tx2, rx2) = tokio::sync::oneshot::channel();
+    let status_result2 = supervisor
+        .cast(SupervisorMessage::GetStatus { reply: tx2 })
+        .map_err(|e| format!("Failed to get status after cascade: {}", e));
+
+    assert!(
+        status_result2.is_ok(),
+        "should be able to query supervisor status after cascade"
+    );
+
+    let status_response2 = tokio::time::timeout(STATUS_TIMEOUT, rx2).await;
+
+    let final_child_count = match status_response2 {
+        Ok(Ok(status)) => status.active_children,
+        Ok(Err(e)) => {
+            eprintln!("Failed to receive status after cascade: {}", e);
+            return;
+        }
+        Err(_) => {
+            eprintln!("Timeout waiting for status after cascade");
+            return;
+        }
+    };
+
+    // After cascade, children should be 0 (all stopped) or restarting
+    // The key invariant: supervisor is still alive and handling the situation
+    assert!(
+        final_child_count < 5,
+        "after cascade, child count should decrease from 5 (got {})",
+        final_child_count
+    );
+
+    // HOSTILE: Verify supervisor can still spawn new children after cascade
+    let new_child_args = SchedulerArguments::new();
+    let recovery_spawn = spawn_child(
+        &supervisor,
+        &format!("{supervisor_name}-recovery-child"),
+        new_child_args,
+    )
+    .await;
+
+    assert!(
+        recovery_spawn.is_ok(),
+        "supervisor should spawn new children after cascade: {:?}",
+        recovery_spawn
+    );
+
+    // Clean up
+    supervisor.stop(Some("Cascade test complete".to_string()));
+    sleep(Duration::from_millis(50)).await;
+}
+
+/// **Attack 7.2**: Cascading failure during supervisor restart window
+#[tokio::test]
+async fn given_cascade_during_restart_then_no_panic() {
+    // GIVEN: A supervisor with aggressive restart config
+    let mut config = SupervisorConfig::for_testing();
+    config.base_backoff_ms = 10; // Very fast restart
+
+    let supervisor_name = unique_name("chaos-cascade-during-restart");
+    let supervisor_result =
+        spawn_supervisor_with_name(supervisor_args(config), &supervisor_name).await;
+
+    assert!(
+        supervisor_result.is_ok(),
+        "should spawn supervisor successfully"
+    );
+
+    let supervisor = match supervisor_result {
+        Ok(sup) => sup,
+        Err(e) => {
+            eprintln!("Failed to spawn supervisor: {}", e);
+            return;
+        }
+    };
+
+    // Spawn 3 children
+    let child_args = SchedulerArguments::new();
+    for i in 0..3 {
+        let spawn_result =
+            spawn_child(&supervisor, &format!("{supervisor_name}-child-{i}"), child_args.clone())
+                .await;
+
+        assert!(
+            spawn_result.is_ok(),
+            "child-{i} spawn should succeed: {:?}",
+            spawn_result
+        );
+    }
+
+    sleep(Duration::from_millis(50)).await;
+
+    // WHEN: Trigger cascade while supervisor might be restarting children
+    // Kill child 0, then immediately cascade kill all
+    let _ = supervisor.cast(SupervisorMessage::StopChild {
+        name: format!("{supervisor_name}-child-0"),
+    });
+
+    sleep(Duration::from_millis(5)).await; // Small delay to trigger restart
+
+    // Now cascade kill all children
+    for i in 0..3 {
+        let _ = supervisor.cast(SupervisorMessage::StopChild {
+            name: format!("{supervisor_name}-child-{i}"),
+        });
+    }
+
+    // THEN: Supervisor should handle without panic
+    sleep(Duration::from_millis(100)).await;
+
+    let supervisor_status = supervisor.get_status();
+    assert!(
+        is_supervisor_alive(supervisor_status),
+        "supervisor should survive cascade during restart"
+    );
+
+    // Clean up
+    supervisor.stop(Some("Cascade during restart test complete".to_string()));
+}
+
+/// **Attack 7.3**: Cascading failure with supervisor meltdown
+#[tokio::test]
+async fn given_cascade_triggers_meltdown_then_handled_gracefully() {
+    // GIVEN: A supervisor configured to meltdown easily
+    let mut config = SupervisorConfig::for_testing();
+    config.max_restarts = 2; // Low restart threshold
+    config.meltdown_threshold = 1.5; // Low meltdown threshold
+
+    let supervisor_name = unique_name("chaos-cascade-meltdown");
+    let supervisor_result =
+        spawn_supervisor_with_name(supervisor_args(config), &supervisor_name).await;
+
+    assert!(
+        supervisor_result.is_ok(),
+        "should spawn supervisor successfully"
+    );
+
+    let supervisor = match supervisor_result {
+        Ok(sup) => sup,
+        Err(e) => {
+            eprintln!("Failed to spawn supervisor: {}", e);
+            return;
+        }
+    };
+
+    // Spawn 3 children
+    let child_args = SchedulerArguments::new();
+    for i in 0..3 {
+        let spawn_result =
+            spawn_child(&supervisor, &format!("{supervisor_name}-child-{i}"), child_args.clone())
+                .await;
+
+        assert!(
+            spawn_result.is_ok(),
+            "child-{i} spawn should succeed: {:?}",
+            spawn_result
+        );
+    }
+
+    sleep(Duration::from_millis(50)).await;
+
+    // WHEN: Cascading failure that triggers multiple restart cycles
+    // Kill all children, wait for restart, kill again
+    for cycle in 0..2 {
+        for i in 0..3 {
+            let _ = supervisor.cast(SupervisorMessage::StopChild {
+                name: format!("{supervisor_name}-child-{i}"),
+            });
+        }
+
+        sleep(Duration::from_millis(50)).await;
+
+        // Verify supervisor is still handling it
+        let status = supervisor.get_status();
+        assert!(
+            is_supervisor_alive(status),
+            "supervisor should be alive during cycle {}",
+            cycle
+        );
+    }
+
+    // THEN: Supervisor should still be running (even if in meltdown state)
+    let final_status = supervisor.get_status();
+    assert!(
+        is_supervisor_alive(final_status),
+        "supervisor should survive even after meltdown-triggering cascade"
+    );
+
+    // Clean up
+    supervisor.stop(Some("Cascade meltdown test complete".to_string()));
+}

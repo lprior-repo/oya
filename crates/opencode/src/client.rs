@@ -576,4 +576,92 @@ mod tests {
         let error = Error::config_error("bad config");
         assert!(!client.should_retry(&error));
     }
+
+    #[tokio::test]
+    async fn test_health_check_success() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/health"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "status": "ok"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let base_url = mock_server.uri().parse::<Url>()?;
+        let client = OpencodeClient::with_url(base_url)?;
+
+        let result = client.health_check().await?;
+
+        assert!(result);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_health_check_timeout() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/health"))
+            .respond_with(ResponseTemplate::new(200).set_delay(std::time::Duration::from_secs(10)))
+            .mount(&mock_server)
+            .await;
+
+        let base_url = mock_server.uri().parse::<Url>()?;
+        let config = crate::config::OpencodeConfig {
+            base_url: Some(base_url),
+            timeout: std::time::Duration::from_secs(5),
+            ..Default::default()
+        };
+        let client = OpencodeClient::with_config(config)?;
+
+        let result = client.health_check().await;
+
+        assert!(result.is_err());
+        if let Err(error) = result {
+            let message = error.to_string();
+            assert!(
+                message.contains("timeout")
+                    || message.contains("deadline")
+                    || message.contains("timed out"),
+                "unexpected error message: {message}"
+            );
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_health_check_non_200_response() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/health"))
+            .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
+            .mount(&mock_server)
+            .await;
+
+        let base_url = mock_server.uri().parse::<Url>()?;
+        let client = OpencodeClient::with_url(base_url)?;
+
+        let result = client.health_check().await?;
+
+        assert!(!result);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_health_check_no_base_url() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let client = OpencodeClient::new()?;
+
+        let result = client.health_check().await;
+
+        assert!(result.is_err());
+        if let Err(error) = result {
+            assert!(error.to_string().contains("base URL"));
+        }
+
+        Ok(())
+    }
 }

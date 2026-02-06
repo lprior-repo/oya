@@ -2,11 +2,14 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use ractor::{Actor, ActorProcessingErr, ActorRef};
 use tokio::sync::watch;
 use tracing::{debug, info, warn};
+
+use oya_events::{BeadEvent as EventsBeadEvent, BeadState, EventBus};
 
 use crate::actors::supervisor::{GenericSupervisableActor, calculate_backoff};
 
@@ -44,10 +47,21 @@ impl WorkerRetryPolicy {
 }
 
 /// Worker configuration.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct WorkerConfig {
     pub checkpoint_interval: Duration,
     pub retry_policy: WorkerRetryPolicy,
+    pub event_bus: Option<Arc<EventBus>>,
+}
+
+impl std::fmt::Debug for WorkerConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WorkerConfig")
+            .field("checkpoint_interval", &self.checkpoint_interval)
+            .field("retry_policy", &self.retry_policy)
+            .field("event_bus", &self.event_bus.as_ref().map(|_| "<EventBus>"))
+            .finish()
+    }
 }
 
 impl Default for WorkerConfig {
@@ -55,14 +69,23 @@ impl Default for WorkerConfig {
         Self {
             checkpoint_interval: Duration::from_secs(60),
             retry_policy: WorkerRetryPolicy::default(),
+            event_bus: None,
         }
+    }
+}
+
+impl WorkerConfig {
+    #[must_use]
+    pub fn with_event_bus(mut self, bus: Arc<EventBus>) -> Self {
+        self.event_bus = Some(bus);
+        self
     }
 }
 
 /// Messages handled by the BeadWorker actor.
 #[derive(Clone, Debug)]
 pub enum WorkerMessage {
-    StartBead { bead_id: String },
+    StartBead { bead_id: String, from_state: Option<BeadState> },
     FailBead { error: String },
     CheckpointTick,
     Stop { reason: Option<String> },
@@ -71,6 +94,7 @@ pub enum WorkerMessage {
 /// State for the BeadWorker actor.
 pub struct WorkerState {
     current_bead: Option<String>,
+    current_state: Option<BeadState>,
     retry_attempts: u32,
     config: WorkerConfig,
     checkpoint_handle: Option<CheckpointHandle>,
@@ -81,6 +105,7 @@ impl WorkerState {
     pub fn new(config: WorkerConfig) -> Self {
         Self {
             current_bead: None,
+            current_state: None,
             retry_attempts: 0,
             config,
             checkpoint_handle: None,
@@ -94,6 +119,11 @@ impl WorkerState {
     fn next_retry_delay(&mut self) -> Option<Duration> {
         self.retry_attempts = self.retry_attempts.saturating_add(1);
         self.config.retry_policy.next_delay(self.retry_attempts)
+    }
+
+    #[must_use]
+    pub fn current_state(&self) -> Option<&BeadState> {
+        self.current_state.as_ref()
     }
 }
 
@@ -124,21 +154,53 @@ impl Actor for WorkerActorDef {
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         match message {
-            WorkerMessage::StartBead { bead_id } => {
+            WorkerMessage::StartBead { bead_id, from_state } => {
+                let old_state = from_state.unwrap_or(BeadState::Ready);
+                let new_state = BeadState::Running;
+
+                // Emit state change event
+                if let Some(ref bus) = state.config.event_bus {
+                    let event = EventsBeadEvent::state_changed(
+                        crate::dag::BeadId::from(bead_id.clone()),
+                        old_state.clone(),
+                        new_state.clone(),
+                    );
+                    if let Err(e) = bus.publish(event).await {
+                        warn!(error = %e, "Failed to publish state change event");
+                    }
+                }
+
                 state.current_bead = Some(bead_id);
+                state.current_state = Some(new_state);
                 state.reset_retries();
             }
             WorkerMessage::FailBead { error } => {
                 let bead_id = state.current_bead.clone();
                 let delay = state.next_retry_delay();
+
+                // Emit failed event
+                if let (Some(ref bus), Some(ref bid)) = (
+                    &state.config.event_bus,
+                    &state.current_bead,
+                ) {
+                    let event = EventsBeadEvent::failed(
+                        crate::dag::BeadId::from(bid.clone()),
+                        error.clone(),
+                    );
+                    if let Err(e) = bus.publish(event).await {
+                        warn!(error = %e, "Failed to publish failed event");
+                    }
+                }
+
                 match (bead_id, delay) {
                     (Some(id), Some(delay)) => {
                         warn!(bead_id = %id, error = %error, delay_ms = delay.as_millis(), "Retrying bead after failure");
                         let myself_clone = myself.clone();
+                        let from_state = state.current_state.clone();
                         tokio::spawn(async move {
                             tokio::time::sleep(delay).await;
                             let _ =
-                                myself_clone.send_message(WorkerMessage::StartBead { bead_id: id });
+                                myself_clone.send_message(WorkerMessage::StartBead { bead_id: id, from_state });
                         });
                     }
                     (Some(id), None) => {
