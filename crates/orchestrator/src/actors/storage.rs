@@ -391,4 +391,14 @@ mod tests {
             .expect("Failed to encode config");
 
         // Test bincode deserialization
+        let decoded: DatabaseConfig = bincode::serde::decode_from_slice(
+            &encoded,
+            bincode::config::standard(),
+        )
+        .expect("Failed to decode config");
+
+        assert_eq!(config.storage_path, decoded.storage_path);
+        assert_eq!(config.namespace, decoded.namespace);
+        assert_eq!(config.database, decoded.database);
+    }
 }
