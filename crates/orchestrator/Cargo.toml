@@ -31,6 +31,9 @@ ractor = "0.15"
 surrealdb = { workspace = true }
 chrono = { workspace = true }
 
+# Serialization for state persistence
+bincode = { workspace = true }
+
 # Async utilities
 async-trait = { workspace = true }
 

@@ -51,6 +51,10 @@ pub enum ActorError {
     /// Failed to spawn an actor.
     #[error("Spawn failed: {0}")]
     SpawnFailed(String),
+
+    /// Internal actor error.
+    #[error("Internal error: {0}")]
+    Internal(String),
 }
 
 impl ActorError {
@@ -100,6 +104,11 @@ impl ActorError {
     /// Create a channel error.
     pub fn channel_error(msg: impl Into<String>) -> Self {
         Self::ChannelError(msg.into())
+    }
+
+    /// Create an internal error.
+    pub fn internal(msg: impl Into<String>) -> Self {
+        Self::Internal(msg.into())
     }
 }
 

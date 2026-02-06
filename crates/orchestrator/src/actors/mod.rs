@@ -49,6 +49,7 @@
 //! ```
 
 pub mod errors;
+pub mod lifecycle;
 pub mod messages;
 pub mod queue;
 pub mod reconciler;
@@ -66,7 +67,7 @@ pub use queue::{QueueActorDef, QueueMessage, QueueState};
 pub use reconciler::{ReconcilerActorDef, ReconcilerMessage, ReconcilerState};
 pub use scheduler::{SchedulerActorDef, SchedulerArguments, SchedulerState};
 pub use storage::{
-    EventStoreActorDef, EventStoreMessage, EventStoreState, StateManagerActorDef,
+    DatabaseConfig, EventStoreActorDef, EventStoreMessage, EventStoreState, StateManagerActorDef,
     StateManagerMessage, StateManagerState,
 };
 pub use supervisor::{
