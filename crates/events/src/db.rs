@@ -5,7 +5,7 @@
 #![warn(clippy::nursery)]
 #![forbid(unsafe_code)]
 
-use futures::stream::StreamExt;
+use futures::stream::{iter, StreamExt, TryStreamExt};
 use surrealdb::engine::local::{Db, RocksDb};
 use surrealdb::Surreal;
 use thiserror::Error;
@@ -161,8 +161,6 @@ async fn execute_schema_queries(client: &Surreal<Db>, queries: &[&str]) -> Resul
     let total = queries.len();
 
     // Use functional fold with async processing via futures::stream
-    use futures::stream::{iter, TryStreamExt};
-
     iter(queries.iter().enumerate())
         .then(|(idx, query): (usize, &&str)| async move {
             let trimmed = query.trim();
