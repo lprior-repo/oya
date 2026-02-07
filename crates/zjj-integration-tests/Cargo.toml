@@ -1,0 +1,10 @@
+[package]
+name = "zjj-integration-tests"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dev-dependencies]
+tempfile = "3.13"
+serde_json = "1"
+chrono = "0.4"
