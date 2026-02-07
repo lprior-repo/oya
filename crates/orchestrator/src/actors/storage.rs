@@ -749,24 +749,16 @@ mod tests {
         // Create multiple events
         let phase_id = PhaseId::new();
 
-        actor
-            .send_message(EventStoreMessage::AppendEvent {
-                event: BeadEvent::created(
-                    bead_id,
-                    BeadSpec::new("Test").with_complexity(Complexity::Simple),
-                ),
-            })
-            .expect("Failed to send created event");
+        let _ = ractor::call!(actor, EventStoreMessage::AppendEvent {
+            event: BeadEvent::created(
+                bead_id,
+                BeadSpec::new("Test").with_complexity(Complexity::Simple),
+            ),
+        }, tokio::time::Duration::from_secs(5)).await;
 
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-
-        actor
-            .send_message(EventStoreMessage::AppendEvent {
-                event: BeadEvent::phase_started(bead_id, phase_id, "test_phase"),
-            })
-            .expect("Failed to send phase_started event");
-
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        let _ = ractor::call!(actor, EventStoreMessage::AppendEvent {
+            event: BeadEvent::phase_started(bead_id, phase_id, "test_phase"),
+        }, tokio::time::Duration::from_secs(5)).await;
 
         // Read all events to get checkpoint ID
         let all_events = ractor::call!(actor, EventStoreMessage::ReadEvents {
