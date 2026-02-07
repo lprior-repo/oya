@@ -1209,6 +1209,7 @@ impl State {
         }
     }
 
+    fn render_footer(&self, rows: usize, cols: usize) {
         print!("\x1b[{};1H", rows.saturating_sub(1));
 
         let view_mode = match self.mode {
@@ -1216,7 +1217,6 @@ impl State {
             ViewMode::BeadDetail => "Detail",
             ViewMode::PipelineView => "Pipeline",
             ViewMode::AgentList => "Agents",
-            ViewMode::GraphView => "Graph",
             ViewMode::GraphView => "Graph",
         };
 
