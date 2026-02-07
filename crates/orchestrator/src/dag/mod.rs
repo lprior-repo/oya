@@ -2591,7 +2591,6 @@ fn test_get_ready_nodes_multiple_roots_sorted() -> DagResult<()> {
 }
 
 #[test]
-#[test]
 fn test_query_performance_100_nodes() -> DagResult<()> {
     use std::time::Instant;
     let mut dag = WorkflowDAG::new();
