@@ -635,9 +635,7 @@ impl ZellijPlugin for State {
         }
         self.render_footer(rows, cols);
     }
-}
 
-impl State {
     fn load_beads(&mut self) {
         if let Some((cached_beads, timestamp)) = &self.beads_cache {
             if timestamp.elapsed() < CACHE_TTL {
@@ -734,7 +732,7 @@ impl State {
 
     fn handle_command_pane_opened(
         &mut self,
-        _pane_id: u64,
+        _pane_id: u32,
         _context: BTreeMap<String, String>,
     ) {
         // TODO: Implement command pane opened tracking
@@ -743,21 +741,29 @@ impl State {
 
     fn handle_command_pane_exited(
         &mut self,
-        _pane_id: u64,
+        _pane_id: u32,
         _exit_code: i32,
         _context: BTreeMap<String, String>,
     ) {
-        // TODO: Implement command pane exited tracking
-        // This will be implemented in a separate bead
+        // Command pane exited - refresh pipeline to show updated stage status
+        if self.mode == ViewMode::PipelineView {
+            self.pipeline_caches = HashMap::new();
+            self.load_pipeline_for_selected();
+        }
     }
 
     fn handle_command_pane_rerun(
         &mut self,
-        _pane_id: u64,
-        _context: BTreeMap<String, String>,
+        _pane_id: u32,
+        context: BTreeMap<String, String>,
     ) {
-        // TODO: Implement command pane rerun tracking
-        // This will be implemented in a separate bead
+        // Handle CommandPaneReRun event - rerun the stage
+        let bead_id = context.get("bead_id");
+        let stage_name = context.get("stage_name");
+
+        if let (Some(bead_id), Some(stage_name)) = (bead_id, stage_name) {
+            self.open_command_pane_for_stage(bead_id, stage_name);
+        }
     }
 
     fn handle_web_response(
@@ -1822,6 +1828,7 @@ mod tests {
     }
 }
 
+
     #[test]
     fn test_view_mode_has_seven_variants() {
         // Verify all 7 ViewMode variants are present and usable
@@ -1837,3 +1844,4 @@ mod tests {
         let default_mode = ViewMode::default();
         assert_eq!(default_mode, ViewMode::BeadList);
     }
+}
