@@ -16,7 +16,7 @@ use std::time::Duration;
 // ============================================================================
 
 #[test]
-fn given_ci_pipeline_dag_when_execute_then_correct_order() {
+fn given_ci_pipeline_dag_when_execute_then_correct_order() -> Result<(), Box<dyn std::error::Error>> {
     // GIVEN: A realistic CI/CD pipeline
     //        checkout -> [build, lint] -> test -> [docker, deploy]
     let dag = WorkflowDAG::builder()
@@ -32,8 +32,7 @@ fn given_ci_pipeline_dag_when_execute_then_correct_order() {
             ]
             .map(|(a, b, t)| (a.to_string(), b.to_string(), t)),
         )
-        .build()
-        .expect("builder should succeed");
+        .build()?;
 
     // WHEN: Simulating execution progression
     let mut completed: HashSet<BeadId> = HashSet::new();
@@ -89,6 +88,8 @@ fn given_ci_pipeline_dag_when_execute_then_correct_order() {
     assert_eq!(ready_5.len(), 2, "Docker and deploy should run in parallel");
     assert!(ready_5.contains(&"docker".to_string()));
     assert!(ready_5.contains(&"deploy".to_string()));
+
+    Ok(())
 }
 
 #[test]

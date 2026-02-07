@@ -11,8 +11,7 @@ use ractor::ActorStatus;
 fn build_prefix() -> String {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_nanos())
-        .unwrap_or_default();
+        .map_or(0u128, |duration| duration.as_nanos());
     format!("tier1-{}-{}", std::process::id(), nanos)
 }
 

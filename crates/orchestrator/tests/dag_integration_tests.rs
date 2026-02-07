@@ -33,7 +33,7 @@ fn given_empty_dag_when_toposort_then_empty_vec() {
 #[test]
 fn given_linear_chain_when_toposort_then_correct_order() {
     // GIVEN: A linear chain a -> b -> c -> d
-    let dag = WorkflowDAG::builder()
+    let build_result = WorkflowDAG::builder()
         .with_nodes(["a", "b", "c", "d"].map(String::from))
         .with_edges(
             [
@@ -43,8 +43,13 @@ fn given_linear_chain_when_toposort_then_correct_order() {
             ]
             .map(|(a, b, t)| (a.to_string(), b.to_string(), t)),
         )
-        .build()
-        .expect("builder should succeed");
+        .build();
+
+    assert!(build_result.is_ok(), "builder should succeed");
+    let dag = match build_result {
+        Ok(dag) => dag,
+        Err(_) => return,
+    };
 
     // WHEN: Performing topological sort
     let result = dag.topological_sort();
@@ -66,7 +71,7 @@ fn given_linear_chain_when_toposort_then_correct_order() {
 #[test]
 fn given_diamond_when_toposort_then_valid_order() {
     // GIVEN: A diamond DAG: a -> b,c -> d
-    let dag = WorkflowDAG::builder()
+    let build_result = WorkflowDAG::builder()
         .with_nodes(["a", "b", "c", "d"].map(String::from))
         .with_edges(
             [
@@ -77,8 +82,13 @@ fn given_diamond_when_toposort_then_valid_order() {
             ]
             .map(|(a, b, t)| (a.to_string(), b.to_string(), t)),
         )
-        .build()
-        .expect("builder should succeed");
+        .build();
+
+    assert!(build_result.is_ok(), "builder should succeed");
+    let dag = match build_result {
+        Ok(dag) => dag,
+        Err(_) => return,
+    };
 
     // WHEN: Performing topological sort
     let result = dag.topological_sort();
@@ -95,7 +105,7 @@ fn given_diamond_when_toposort_then_valid_order() {
 #[test]
 fn given_disconnected_components_when_toposort_then_all_included() {
     // GIVEN: Two disconnected components: (a -> b) and (c -> d)
-    let dag = WorkflowDAG::builder()
+    let build_result = WorkflowDAG::builder()
         .with_nodes(["a", "b", "c", "d"].map(String::from))
         .with_edges(
             [
@@ -104,8 +114,13 @@ fn given_disconnected_components_when_toposort_then_all_included() {
             ]
             .map(|(a, b, t)| (a.to_string(), b.to_string(), t)),
         )
-        .build()
-        .expect("builder should succeed");
+        .build();
+
+    assert!(build_result.is_ok(), "builder should succeed");
+    let dag = match build_result {
+        Ok(dag) => dag,
+        Err(_) => return,
+    };
 
     // WHEN: Performing topological sort
     let result = dag.topological_sort();
@@ -158,7 +173,7 @@ fn given_cycle_when_toposort_then_error() {
 #[test]
 fn given_complex_dag_when_toposort_kahn_vs_dfs_then_both_valid() {
     // GIVEN: A complex DAG with multiple valid orderings
-    let dag = WorkflowDAG::builder()
+    let build_result = WorkflowDAG::builder()
         .with_nodes((0..10).map(|i| format!("node-{}", i)))
         .with_edges(
             [
@@ -170,8 +185,13 @@ fn given_complex_dag_when_toposort_kahn_vs_dfs_then_both_valid() {
             ]
             .map(|(a, b, t)| (a.to_string(), b.to_string(), t)),
         )
-        .build()
-        .expect("builder should succeed");
+        .build();
+
+    assert!(build_result.is_ok(), "builder should succeed");
+    let dag = match build_result {
+        Ok(dag) => dag,
+        Err(_) => return,
+    };
 
     // WHEN: Using both algorithms
     let dfs_result = dag.topological_sort();

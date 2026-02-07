@@ -21,8 +21,10 @@ fn test_builder_basic() {
         .build();
 
     // THEN: Should successfully build DAG
-    assert!(result.is_ok(), "Builder should succeed");
-    let dag = result.expect("build should succeed");
+    let dag = match result {
+        Ok(dag) => dag,
+        Err(e) => panic!("Builder should succeed but failed with: {:?}", e),
+    };
     assert_eq!(dag.node_count(), 3);
     assert_eq!(dag.edge_count(), 2);
 }
@@ -42,8 +44,10 @@ fn test_builder_with_large_dag() {
         .build();
 
     // THEN: Should successfully build large DAG
-    assert!(result.is_ok(), "Builder should succeed for large DAG");
-    let dag = result.expect("build should succeed");
+    let dag = match result {
+        Ok(dag) => dag,
+        Err(e) => panic!("Builder should succeed for large DAG but failed with: {:?}", e),
+    };
     assert_eq!(dag.node_count(), 100);
     assert_eq!(dag.edge_count(), 90);
 }
@@ -61,8 +65,10 @@ fn test_builder_single_edge() {
         .build();
 
     // THEN: Should successfully build DAG
-    assert!(result.is_ok());
-    let dag = result.expect("build should succeed");
+    let dag = match result {
+        Ok(dag) => dag,
+        Err(e) => panic!("Builder should succeed but failed with: {:?}", e),
+    };
     assert_eq!(dag.node_count(), 2);
     assert_eq!(dag.edge_count(), 1);
 }

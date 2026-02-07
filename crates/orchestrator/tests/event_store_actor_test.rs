@@ -9,14 +9,14 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
-use events::durable_store::DurableEventStore;
-use events::event::BeadEvent;
-use events::types::{BeadId, BeadSpec, BeadState, Complexity};
-use orchestrator::actors::storage::{EventStoreActorDef, EventStoreMessage, EventStoreState};
-use ractor::{Actor, ActorRef, RpcReplyPort};
+use oya_events::durable_store::DurableEventStore;
+use oya_events::event::BeadEvent;
+use oya_events::types::{BeadId, BeadSpec, BeadState, Complexity};
+use orchestrator::actors::storage::{EventStoreActorDef, EventStoreMessage};
+use ractor::{Actor, ActorRef};
 use std::sync::Arc;
 use surrealdb::Surreal;
-use surrealdb::engine::local::{Db, RocksDb};
+use surrealdb::engine::local::RocksDb;
 use tokio::sync::oneshot;
 
 /// Helper to spawn an EventStoreActor for testing.
@@ -40,7 +40,7 @@ async fn spawn_event_store_actor() -> Result<ActorRef<EventStoreMessage>, Box<dy
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?
         .with_wal_dir(temp_dir.join("wal"));
 
-    let (actor, _) = EventStoreActorDef::spawn(EventStoreActorDef, Some(Arc::new(store))).await?;
+    let (actor, _) = Actor::spawn(None, EventStoreActorDef, Some(Arc::new(store))).await?;
 
     // Give the actor a moment to start
     tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
@@ -96,13 +96,13 @@ async fn test_read_events_happy_path() -> Result<(), Box<dyn std::error::Error>>
 
     // WHEN: Reading events for the bead
     let (tx, rx) = oneshot::channel();
-    actor.send_message(EventStoreMessage::ReadEvents { bead_id, reply: tx })?;
+    actor.send_message(EventStoreMessage::ReadEvents { bead_id, reply: tx.into() })?;
 
     // THEN: Should receive Ok with events
-    let result = tokio::time::timeout(tokio::time::Duration::from_secs(1), rx).await??;
+    let result: Result<Vec<BeadEvent>, _> = tokio::time::timeout(tokio::time::Duration::from_secs(1), rx).await??;
 
     assert!(result.is_ok(), "ReadEvents should succeed");
-    let events = result.ok_or("Expected Ok value")?;
+    let events = result.map_err(|_| "Expected Ok value")?;
     assert!(!events.is_empty(), "Should have at least one event");
     Ok(())
 }
@@ -115,16 +115,16 @@ async fn test_read_events_not_found() -> Result<(), Box<dyn std::error::Error>> 
     // WHEN: Reading events for a non-existent bead
     let bead_id = BeadId::new();
     let (tx, rx) = oneshot::channel();
-    actor.send_message(EventStoreMessage::ReadEvents { bead_id, reply: tx })?;
+    actor.send_message(EventStoreMessage::ReadEvents { bead_id, reply: tx.into() })?;
 
     // THEN: Should receive Ok with empty vec (not an error)
-    let result = tokio::time::timeout(tokio::time::Duration::from_secs(1), rx).await??;
+    let result: Result<Vec<BeadEvent>, _> = tokio::time::timeout(tokio::time::Duration::from_secs(1), rx).await??;
 
     assert!(
         result.is_ok(),
         "ReadEvents should succeed even if no events"
     );
-    let events = result.ok_or("Expected Ok value")?;
+    let events = result.map_err(|_| "Expected Ok value")?;
     assert!(
         events.is_empty(),
         "Should have no events for non-existent bead"
@@ -159,7 +159,7 @@ async fn test_replay_events_happy_path() -> Result<(), Box<dyn std::error::Error
     let (tx2, _) = oneshot::channel();
     actor.send_message(EventStoreMessage::AppendEvent {
         event: event2.clone(),
-        reply: tx2,
+        reply: tx2.into(),
     })?;
 
     tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
@@ -176,7 +176,7 @@ async fn test_replay_events_happy_path() -> Result<(), Box<dyn std::error::Error
     let result = tokio::time::timeout(tokio::time::Duration::from_secs(1), rx).await??;
 
     assert!(result.is_ok(), "ReplayEvents should succeed");
-    let events = result.ok_or("Expected Ok value")?;
+    let events = result.map_err(|_| "Expected Ok value")?;
     assert!(!events.is_empty(), "Should have events after checkpoint");
     Ok(())
 }
@@ -236,16 +236,16 @@ async fn test_append_event_preserves_fsync_guarantee() -> Result<(), Box<dyn std
     let (tx_read, rx_read) = oneshot::channel();
     actor.send_message(EventStoreMessage::ReadEvents {
         bead_id,
-        reply: tx_read,
+        reply: tx_read.into(),
     })?;
 
-    let read_result = tokio::time::timeout(tokio::time::Duration::from_secs(1), rx_read).await??;
+    let read_result: Result<Vec<BeadEvent>, _> = tokio::time::timeout(tokio::time::Duration::from_secs(1), rx_read).await??;
 
     assert!(
         read_result.is_ok(),
         "Should be able to read persisted event"
     );
-    let events = read_result.ok_or("Expected Ok value")?;
+    let events = read_result.map_err(|_| "Expected Ok value")?;
     assert_eq!(events.len(), 1, "Should have exactly one persisted event");
     Ok(())
 }

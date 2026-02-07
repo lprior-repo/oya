@@ -50,8 +50,8 @@ fn test_bead_status_serialization() {
 
     for status in statuses {
         let json = serde_json::to_string(&status);
-        let deserialized: BeadStatus = serde_json::from_str(&json).expect("Should deserialize");
-        assert_eq!(deserialized, status);
+        let deserialized: Result<BeadStatus, _> = serde_json::from_str(&json);
+        assert_eq!(deserialized.as_ref().map_or(false, |s| s == &status), true);
     }
 }
 

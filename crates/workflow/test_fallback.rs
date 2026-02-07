@@ -205,7 +205,8 @@ async fn test_handler_chain_primary_succeeds() {
     let ctx = handler::PhaseContext::new("test".to_string());
     let result = chain.execute(&ctx).await;
     assert!(result.is_ok());
-    assert!(result.unwrap().success);
+    let output = result.as_ref().map_or(false, |o| o.success);
+    assert!(output);
 }
 
 #[tokio::test]
@@ -219,7 +220,8 @@ async fn test_handler_chain_fallback_succeeds() {
     let ctx = handler::PhaseContext::new("test".to_string());
     let result = chain.execute(&ctx).await;
     assert!(result.is_ok());
-    assert!(result.unwrap().success);
+    let output = result.as_ref().map_or(false, |o| o.success);
+    assert!(output);
 }
 
 #[tokio::test]
@@ -254,7 +256,8 @@ async fn test_handler_chain_multiple_fallbacks() {
     let ctx = handler::PhaseContext::new("test".to_string());
     let result = chain.execute(&ctx).await;
     assert!(result.is_ok());
-    assert!(result.unwrap().success);
+    let output = result.as_ref().map_or(false, |o| o.success);
+    assert!(output);
 }
 
 fn main() {

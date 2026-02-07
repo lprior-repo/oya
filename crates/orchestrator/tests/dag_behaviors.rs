@@ -66,8 +66,11 @@ fn given_dag_with_edges_when_remove_node_then_all_connected_edges_removed() {
             ]
             .map(|(a, b, t)| (a.to_string(), b.to_string(), t)),
         )
-        .build()
-        .expect("builder should succeed");
+        .build();
+
+    // Verify builder succeeded before continuing
+    assert!(dag.is_ok(), "builder should succeed");
+    let mut dag = dag.unwrap_or_else(|_| WorkflowDAG::new());
 
     assert_eq!(dag.edge_count(), 2, "Precondition: DAG should have 2 edges");
 
@@ -96,7 +99,7 @@ fn given_dag_with_node_when_add_duplicate_then_error_contains_node_id() {
 
     // THEN: Error should be returned and contain the node ID
     assert!(result.is_err(), "Duplicate add should fail");
-    let err = result.err().map(|e| e.to_string()).unwrap_or_default();
+    let err = result.err().map(|e| e.to_string()).unwrap_or_else(|| String::from("No error message"));
     assert!(
         err.contains(&bead_id),
         "Error message '{}' should contain node ID '{}'",
@@ -132,7 +135,7 @@ fn given_empty_string_node_id_when_add_node_then_error_invalid_id() {
     // THEN: Should return error for invalid ID
     // Note: Current implementation allows empty strings - this test documents desired behavior
     assert!(result.is_err(), "Empty string ID should be rejected");
-    let err = result.err().map(|e| e.to_string()).unwrap_or_default();
+    let err = result.err().map(|e| e.to_string()).unwrap_or_else(|| String::from("No error message"));
     assert!(
         err.to_lowercase().contains("invalid"),
         "Error should indicate invalid ID"
@@ -166,7 +169,7 @@ fn given_10000_char_node_id_when_add_node_then_error_id_too_long() {
     // THEN: Should return error for ID too long
     // Note: Current implementation allows any length - this test documents desired behavior
     assert!(result.is_err(), "Very long ID should be rejected");
-    let err = result.err().map(|e| e.to_string()).unwrap_or_default();
+    let err = result.err().map(|e| e.to_string()).unwrap_or_else(|| String::from("No error message"));
     assert!(
         err.to_lowercase().contains("long") || err.to_lowercase().contains("length"),
         "Error should indicate ID too long"
@@ -245,7 +248,7 @@ fn given_missing_source_node_when_add_edge_then_error_source_not_found() {
         result.is_err(),
         "Adding edge with missing source should fail"
     );
-    let err = result.err().map(|e| e.to_string()).unwrap_or_default();
+    let err = result.err().map(|e| e.to_string()).unwrap_or_else(|| String::from("No error message"));
     assert!(
         err.contains("nonexistent-source") || err.to_lowercase().contains("not found"),
         "Error '{}' should reference the missing source",
@@ -271,7 +274,7 @@ fn given_missing_target_node_when_add_edge_then_error_target_not_found() {
         result.is_err(),
         "Adding edge with missing target should fail"
     );
-    let err = result.err().map(|e| e.to_string()).unwrap_or_default();
+    let err = result.err().map(|e| e.to_string()).unwrap_or_else(|| String::from("No error message"));
     assert!(
         err.contains("nonexistent-target") || err.to_lowercase().contains("not found"),
         "Error '{}' should reference the missing target",
@@ -296,7 +299,7 @@ fn given_same_source_and_target_when_add_edge_then_error_self_loop_forbidden() {
     // THEN: Should return error indicating self-loop forbidden
     // Note: Current implementation allows self-loops - this documents desired behavior
     assert!(result.is_err(), "Self-loop should be rejected");
-    let err = result.err().map(|e| e.to_string()).unwrap_or_default();
+    let err = result.err().map(|e| e.to_string()).unwrap_or_else(|| String::from("No error message"));
     assert!(
         err.to_lowercase().contains("self") || err.to_lowercase().contains("loop"),
         "Error should indicate self-loop forbidden"
@@ -373,7 +376,7 @@ fn given_node_with_one_blocking_dep_when_get_dependencies_then_returns_that_dep(
 
     // THEN: Should return A
     assert!(deps.is_ok(), "get_dependencies should succeed");
-    let deps = deps.unwrap_or_default();
+    let deps = deps.unwrap_or_else(|_| Vec::new());
     assert_eq!(deps.len(), 1, "B should have one dependency");
     assert!(
         deps.contains(&"a".to_string()),
@@ -409,7 +412,7 @@ fn given_node_with_five_blocking_deps_when_get_dependencies_then_returns_all_fiv
 
     // THEN: Should return all five dependencies
     assert!(deps.is_ok(), "get_dependencies should succeed");
-    let deps = deps.unwrap_or_default();
+    let deps = deps.unwrap_or_else(|_| Vec::new());
     assert_eq!(deps.len(), 5, "F should have 5 dependencies");
     for name in &deps_names {
         assert!(
@@ -458,7 +461,7 @@ fn given_chain_a_to_b_to_c_when_get_all_ancestors_of_c_then_returns_a_and_b() {
 
     // THEN: Should return A and B
     assert!(ancestors.is_ok(), "get_all_ancestors should succeed");
-    let ancestors = ancestors.unwrap_or_default();
+    let ancestors = ancestors.unwrap_or_else(|_| HashSet::new());
     assert_eq!(ancestors.len(), 2, "C should have 2 ancestors");
     assert!(ancestors.contains("a"), "A should be an ancestor");
     assert!(ancestors.contains("b"), "B should be an ancestor");
@@ -503,7 +506,7 @@ fn given_diamond_a_to_bc_to_d_when_get_all_ancestors_of_d_then_no_duplicates() {
 
     // THEN: Should return A, B, C with no duplicates (HashSet guarantees this)
     assert!(ancestors.is_ok(), "get_all_ancestors should succeed");
-    let ancestors = ancestors.unwrap_or_default();
+    let ancestors = ancestors.unwrap_or_else(|_| HashSet::new());
     assert_eq!(
         ancestors.len(),
         3,
@@ -931,7 +934,7 @@ fn given_linear_chain_when_topological_sort_then_order_is_preserved() {
 
     // THEN: Order should be A before B before C
     assert!(sorted.is_ok(), "topological_sort should succeed");
-    let sorted = sorted.unwrap_or_default();
+    let sorted = sorted.unwrap_or_else(|_| Vec::new());
 
     let pos_a = sorted.iter().position(|x| x == "a");
     let pos_b = sorted.iter().position(|x| x == "b");
@@ -965,7 +968,7 @@ fn given_kahn_sort_on_linear_chain_then_same_order() {
 
     // THEN: Order should be A, B, C
     assert!(sorted.is_ok(), "topological_sort_kahn should succeed");
-    let sorted = sorted.unwrap_or_default();
+    let sorted = sorted.unwrap_or_else(|_| Vec::new());
     assert_eq!(sorted.len(), 3, "Should have 3 nodes");
     assert_eq!(sorted[0], "a", "First should be A");
     assert_eq!(sorted[1], "b", "Second should be B");
@@ -1033,7 +1036,7 @@ fn given_parallel_paths_when_critical_path_then_returns_longest() {
 
     // THEN: Should return A -> B (total 6s) not A -> C (total 3s)
     assert!(critical.is_ok(), "critical_path should succeed");
-    let critical = critical.unwrap_or_default();
+    let critical = critical.unwrap_or_else(|_| HashSet::new());
     assert!(
         critical.contains(&"a".to_string()),
         "A should be on critical path"
@@ -1097,7 +1100,7 @@ fn given_dag_when_extract_subgraph_then_only_specified_nodes_included() {
 
     // THEN: Should contain only A and B with edge between them
     assert!(subgraph.is_ok(), "subgraph should succeed");
-    let subgraph = subgraph.unwrap_or_default();
+    let subgraph = subgraph.unwrap_or_else(|_| WorkflowDAG::new());
     assert_eq!(subgraph.node_count(), 2, "Should have 2 nodes");
     assert_eq!(subgraph.edge_count(), 1, "Should have 1 edge");
     assert!(subgraph.contains_node(&"a".to_string()), "Should contain A");
@@ -1138,7 +1141,7 @@ fn given_node_when_induced_subgraph_then_contains_ancestors_and_descendants() {
 
     // THEN: Should contain A (ancestor), B, C, D (descendants) but not E
     assert!(induced.is_ok(), "induced_subgraph should succeed");
-    let induced = induced.unwrap_or_default();
+    let induced = induced.unwrap_or_else(|_| WorkflowDAG::new());
     assert_eq!(induced.node_count(), 4, "Should have 4 nodes (a,b,c,d)");
     assert!(induced.contains_node(&"a".to_string()), "Should contain A");
     assert!(induced.contains_node(&"b".to_string()), "Should contain B");
