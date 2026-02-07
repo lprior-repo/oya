@@ -248,23 +248,34 @@ async fn test_append_event_concurrent() {
 
     // WHEN: Appending multiple events concurrently
     let bead_id = BeadId::new();
+    let actor_ref = store.actor().clone();
     let mut handles = Vec::new();
 
     for i in 0..10 {
-        let store_clone = &store; // Shared reference
+        let actor = actor_ref.clone();
         let bead_id = bead_id;
 
         handles.push(tokio::spawn(async move {
             let event = if i == 0 {
                 BeadEvent::created(
                     bead_id,
-                    BeadSpec::new(&format!("test-bead-{}", i)).with_complexity(Complexity::Simple),
+                    BeadSpec::new(&format!("test-bead-{}", i))
+                        .with_complexity(Complexity::Simple),
                 )
             } else {
                 create_state_change_event(bead_id)
             };
 
-            store_clone.append_event(event).await
+            let (tx, rx) = oneshot::channel();
+            let _ = actor.send_message(EventStoreMessage::AppendEvent {
+                event,
+                reply: tx.into(),
+            });
+
+            tokio::time::timeout(tokio::time::Duration::from_secs(1), rx)
+                .await
+                .map_err(|_| ActorError::rpc_timeout(tokio::time::Duration::from_secs(1)))?
+                .map_err(|e| ActorError::channel_error(e.to_string()))?
         }));
     }
 
@@ -303,19 +314,32 @@ async fn test_append_event_different_beads_concurrent() {
         .expect("Failed to create test event store");
 
     // WHEN: Appending events for different beads concurrently
+    let actor_ref = store.actor().clone();
     let mut handles = Vec::new();
 
     for i in 0..5 {
-        let store_clone = &store;
+        let actor = actor_ref.clone();
         let bead_id = BeadId::new(); // Different bead each time
 
         handles.push(tokio::spawn(async move {
             let event = BeadEvent::created(
                 bead_id,
-                BeadSpec::new(&format!("test-bead-{}", i)).with_complexity(Complexity::Simple),
+                BeadSpec::new(&format!("test-bead-{}", i))
+                    .with_complexity(Complexity::Simple),
             );
 
-            (bead_id, store_clone.append_event(event).await)
+            let (tx, rx) = oneshot::channel();
+            let _ = actor.send_message(EventStoreMessage::AppendEvent {
+                event,
+                reply: tx.into(),
+            });
+
+            let result = tokio::time::timeout(tokio::time::Duration::from_secs(1), rx)
+                .await
+                .map_err(|_| ActorError::rpc_timeout(tokio::time::Duration::from_secs(1)))?
+                .map_err(|e| ActorError::channel_error(e.to_string()))?;
+
+            Ok::<(BeadId, Result<(), ActorError>), ActorError>((bead_id, result))
         }));
     }
 
@@ -328,9 +352,12 @@ async fn test_append_event_different_beads_concurrent() {
 
     assert_eq!(results.len(), 5, "All 5 concurrent appends should complete");
 
-    for (bead_id, result) in results {
+    for result in results {
+        let (bead_id, append_result) = result
+            .map_err(|e| format!("Task failed: {:?}", e))
+            .expect("Task should succeed");
         assert!(
-            result.is_ok(),
+            append_result.is_ok(),
             "Each append should succeed for bead {}",
             bead_id
         );
@@ -669,21 +696,43 @@ async fn test_concurrent_append_and_read() {
         .expect("Failed to create test event store");
 
     let bead_id = BeadId::new();
+    let actor_ref = store.actor().clone();
 
     // WHEN: Concurrently appending and reading
-    let store_ref = &store;
+    let append_actor = actor_ref.clone();
+    let read_actor = actor_ref.clone();
 
     let append_handle = tokio::spawn(async move {
         let event = BeadEvent::created(
             bead_id,
             BeadSpec::new("test-bead").with_complexity(Complexity::Simple),
         );
-        store_ref.append_event(event).await
+
+        let (tx, rx) = oneshot::channel();
+        let _ = append_actor.send_message(EventStoreMessage::AppendEvent {
+            event,
+            reply: tx.into(),
+        });
+
+        tokio::time::timeout(tokio::time::Duration::from_secs(1), rx)
+            .await
+            .map_err(|_| ActorError::rpc_timeout(tokio::time::Duration::from_secs(1)))?
+            .map_err(|e| ActorError::channel_error(e.to_string()))?
     });
 
     let read_handle = tokio::spawn(async move {
         tokio::time::sleep(tokio::time::Duration::from_millis(25)).await;
-        store_ref.read_events(bead_id).await
+
+        let (tx, rx) = oneshot::channel();
+        let _ = read_actor.send_message(EventStoreMessage::ReadEvents {
+            bead_id,
+            reply: tx.into(),
+        });
+
+        tokio::time::timeout(tokio::time::Duration::from_secs(1), rx)
+            .await
+            .map_err(|_| ActorError::rpc_timeout(tokio::time::Duration::from_secs(1)))?
+            .map_err(|e| ActorError::channel_error(e.to_string()))?
     });
 
     // THEN: Both operations should complete without error

@@ -271,7 +271,7 @@ async fn given_tier1_with_multiple_children_when_killed_then_state_preserved() {
     );
 
     let (supervisor, _child_names) = match spawn_result {
-        Ok((sup, _children)) => (sup, Vec::new()),
+        Ok((sup, _children)) => (sup, _children),
         Err(e) => {
             eprintln!("Failed to spawn supervisor: {}", e);
             return;
@@ -329,7 +329,7 @@ async fn given_rapid_kill_cycles_when_state_preserved_then_stable() {
         );
 
         let (supervisor, _children) = match spawn_result {
-            Ok((sup, _children)) => (sup, Vec::new()),
+            Ok((sup, _children)) => (sup, _children),
             Err(e) => {
                 eprintln!("Failed to spawn supervisor in cycle {}: {}", cycle, e);
                 continue;
@@ -379,7 +379,7 @@ async fn given_supervisor_stopped_when_state_queried_then_accessible() {
     );
 
     let (supervisor, _children) = match spawn_result {
-        Ok((sup, _children)) => (sup, Vec::new()),
+        Ok((sup, _children)) => (sup, _children),
         Err(e) => {
             eprintln!("Failed to spawn supervisor: {}", e);
             return;
@@ -427,7 +427,7 @@ async fn given_supervisor_lifecycle_when_metrics_collected_then_complete() {
     );
 
     let (supervisor, _children) = match spawn_result {
-        Ok((sup, _children)) => (sup, Vec::new()),
+        Ok((sup, _children)) => (sup, _children),
         Err(e) => {
             eprintln!("Failed to spawn supervisor: {}", e);
             return;
@@ -538,7 +538,7 @@ async fn given_tier1_crashed_when_new_spawned_then_independent() {
     );
 
     let (supervisor1, _children1) = match spawn1_result {
-        Ok((sup, _children)) => (sup, Vec::new()),
+        Ok((sup, _children)) => (sup, _children),
         Err(e) => {
             eprintln!("Failed to spawn first supervisor: {}", e);
             return;
@@ -565,7 +565,7 @@ async fn given_tier1_crashed_when_new_spawned_then_independent() {
     );
 
     let (supervisor2, _children2) = match spawn2_result {
-        Ok((sup, _children)) => (sup, Vec::new()),
+        Ok((sup, _children)) => (sup, _children),
         Err(e) => {
             eprintln!("Failed to spawn second supervisor: {}", e);
             return;
@@ -617,7 +617,7 @@ async fn given_multiple_crash_cycles_when_state_preserved_then_recoverable() {
         );
 
         let (supervisor, _children) = match spawn_result {
-            Ok((sup, _children)) => (sup, Vec::new()),
+            Ok((sup, _children)) => (sup, _children),
             Err(e) => {
                 eprintln!("Failed to spawn supervisor in cycle {}: {}", cycle, e);
                 continue;

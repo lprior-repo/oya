@@ -161,7 +161,7 @@ fn demo_cache_behavior() -> Result<(), Box<dyn std::error::Error>> {
     )?;
 
     // Create new layout with updated DAG
-    let mut layout = dag.create_memoized_layout(0.1, 100.0)?;
+    let layout = dag.create_memoized_layout(0.1, 100.0)?;
 
     let start = std::time::Instant::now();
     let positions3 = layout.compute_node_positions();
