@@ -454,11 +454,9 @@ fn parse_workspace_list(output: &str) -> Result<Vec<WorkspaceInfo>> {
 fn parse_age_from_timestamp(timestamp: &str) -> Result<u64> {
     use chrono::{DateTime, Utc};
 
-    let dt: DateTime<Utc> = timestamp
-        .parse()
-        .map_err(|err| Error::InvalidRecord {
-            reason: format!("invalid timestamp '{timestamp}': {err}"),
-        })?;
+    let dt: DateTime<Utc> = timestamp.parse().map_err(|err| Error::InvalidRecord {
+        reason: format!("invalid timestamp '{timestamp}': {err}"),
+    })?;
 
     let now = Utc::now();
     let duration = now.signed_duration_since(dt);
@@ -747,7 +745,10 @@ workspace-2 user@example.com 2024-01-02 13:00:00
 
         let cleaned = manager.cleanup_orphaned_workspaces(2, &active_workspaces)?;
 
-        assert_eq!(cleaned, 0, "Should not clean up workspaces younger than threshold");
+        assert_eq!(
+            cleaned, 0,
+            "Should not clean up workspaces younger than threshold"
+        );
 
         let calls = runner.recorded_calls();
         assert_eq!(calls.len(), 1);
@@ -798,7 +799,10 @@ ws3 user@example.com 2024-01-03 14:00:00
 
         // Age should be approximately 2 hours (7200 seconds)
         // Allow 10 second tolerance for test execution time
-        assert!(age >= 7190 && age <= 7210, "Age should be ~7200 seconds, got {age}");
+        assert!(
+            age >= 7190 && age <= 7210,
+            "Age should be ~7200 seconds, got {age}"
+        );
         Ok(())
     }
 

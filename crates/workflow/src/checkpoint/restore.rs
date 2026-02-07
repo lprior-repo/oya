@@ -393,8 +393,8 @@ mod tests {
         };
 
         // Serialize
-        let serialized =
-            bincode::encode_to_vec(&original, bincode::config::standard()).expect("serialization should succeed");
+        let serialized = bincode::encode_to_vec(&original, bincode::config::standard())
+            .expect("serialization should succeed");
 
         // Deserialize
         let restored: TestState =

@@ -297,11 +297,18 @@ async fn given_worker_when_health_check_fails_then_emits_worker_unhealthy_event(
 
     // Verify event contains worker_id and reason
     match event {
-        oya_events::BeadEvent::WorkerUnhealthy { worker_id, reason: event_reason, .. } => {
+        oya_events::BeadEvent::WorkerUnhealthy {
+            worker_id,
+            reason: event_reason,
+            ..
+        } => {
             assert!(!worker_id.is_empty(), "worker_id should not be empty");
             assert_eq!(event_reason, reason);
         }
-        _ => panic!("Expected WorkerUnhealthy event, got {:?}", event.event_type()),
+        _ => panic!(
+            "Expected WorkerUnhealthy event, got {:?}",
+            event.event_type()
+        ),
     }
 
     // Cleanup

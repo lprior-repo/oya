@@ -43,6 +43,7 @@ surrealdb-core = { workspace = true }
 zstd = { workspace = true }
 
 [dev-dependencies]
+oya-events = { path = "../events" }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 proptest = "1"
 

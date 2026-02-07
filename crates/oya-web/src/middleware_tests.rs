@@ -2,10 +2,10 @@
 
 use super::*;
 use axum::{
-    body::Body,
-    http::{header, HeaderValue, Method, StatusCode},
-    routing::get,
     Router,
+    body::Body,
+    http::{HeaderValue, Method, StatusCode, header},
+    routing::get,
 };
 use tower::ServiceExt;
 use tower_http::compression::CompressionLayer;
@@ -244,7 +244,11 @@ mod middleware_stack_tests {
     /// Test middleware stack with error handler
     #[tokio::test]
     async fn test_middleware_with_error_handler() {
-        use axum::{middleware, http::StatusCode, response::{IntoResponse, Response}};
+        use axum::{
+            http::StatusCode,
+            middleware,
+            response::{IntoResponse, Response},
+        };
 
         async fn test_handler() -> Result<&'static str, StatusCode> {
             Err(StatusCode::INTERNAL_SERVER_ERROR)
@@ -283,9 +287,7 @@ mod middleware_stack_tests {
             .layer(cors_layer())
             .layer(CompressionLayer::new())
             .layer(tower_http::trace::TraceLayer::new_for_http())
-            .layer(middleware::from_fn(
-                catch_panic_middleware,
-            ));
+            .layer(middleware::from_fn(catch_panic_middleware));
 
         let response = app
             .oneshot(

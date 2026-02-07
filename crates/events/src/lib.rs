@@ -59,7 +59,9 @@ pub use event::BeadEvent;
 pub use projection::{
     AllBeadsProjection, AllBeadsState, BeadProjection, ManagedProjection, Projection,
 };
-pub use replay::{create_tracker, ReplayProgress, ReplayTracker};
+pub use replay::{
+    create_tracker, EventFilter, EventLoader, LoadError, ReplayProgress, ReplayTracker,
+};
 pub use store::{EventStore, InMemoryEventStore, TracingEventStore};
 pub use types::{
     BeadId, BeadResult, BeadSpec, BeadState, Complexity, EventId, PhaseId, PhaseOutput,

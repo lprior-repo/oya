@@ -404,8 +404,7 @@ fn given_duplicate_dependency_events_when_apply_then_no_double_blocking() {
 
     if let Ok(dependencies) = deps {
         // Verify we don't have duplicate dependencies
-        let unique_deps: std::collections::HashSet<_> =
-            dependencies.iter().collect();
+        let unique_deps: std::collections::HashSet<_> = dependencies.iter().collect();
         assert_eq!(
             dependencies.len(),
             unique_deps.len(),

@@ -93,7 +93,12 @@ struct State {
     beads_cache: Option<(Vector<BeadInfo>, Instant)>,
     agents_cache: Option<(Vector<AgentInfo>, Instant)>,
     pipeline_caches: HashMap<String, (Vector<StageInfo>, Instant)>,
-    graph_cache: Option<(Vector<GraphNode>, Vector<GraphEdge>, Vector<String>, Instant)>,
+    graph_cache: Option<(
+        Vector<GraphNode>,
+        Vector<GraphEdge>,
+        Vector<String>,
+        Instant,
+    )>,
 
     // Tracking for timeouts
     last_request_sent: Option<Instant>,
@@ -379,9 +384,7 @@ impl ZellijPlugin for State {
                         }
                         BareKey::Char('u') => {
                             // Page up: move backward by PAGE_SIZE
-                            self.selected_index = self
-                                .selected_index
-                                .saturating_sub(PAGE_SIZE);
+                            self.selected_index = self.selected_index.saturating_sub(PAGE_SIZE);
                             if self.mode == ViewMode::PipelineView {
                                 self.load_pipeline_for_selected();
                             }
@@ -393,90 +396,90 @@ impl ZellijPlugin for State {
 
                 // Regular key handling
                 match key_with_mod.bare_key {
-                BareKey::Char('q') | BareKey::Esc => {
-                    close_focus();
-                    false
-                }
-                BareKey::Char('j') | BareKey::Down => {
-                    if self.selected_index < self.beads.len().saturating_sub(1) {
-                        self.selected_index = self.selected_index.saturating_add(1);
+                    BareKey::Char('q') | BareKey::Esc => {
+                        close_focus();
+                        false
+                    }
+                    BareKey::Char('j') | BareKey::Down => {
+                        if self.selected_index < self.beads.len().saturating_sub(1) {
+                            self.selected_index = self.selected_index.saturating_add(1);
+                            if self.mode == ViewMode::PipelineView {
+                                self.load_pipeline_for_selected();
+                            }
+                        }
+                        true
+                    }
+                    BareKey::Char('k') | BareKey::Up => {
+                        self.selected_index = self.selected_index.saturating_sub(1);
                         if self.mode == ViewMode::PipelineView {
                             self.load_pipeline_for_selected();
                         }
+                        true
                     }
-                    true
-                }
-                BareKey::Char('k') | BareKey::Up => {
-                    self.selected_index = self.selected_index.saturating_sub(1);
-                    if self.mode == ViewMode::PipelineView {
+                    BareKey::Char('g') => {
+                        self.selected_index = 0;
+                        true
+                    }
+                    BareKey::Char('G') => {
+                        self.selected_index = self.beads.len().saturating_sub(1);
+                        true
+                    }
+                    BareKey::Char('1') => {
+                        self.mode = ViewMode::BeadList;
+                        true
+                    }
+                    BareKey::Char('2') => {
+                        self.mode = ViewMode::BeadDetail;
+                        true
+                    }
+                    BareKey::Char('3') => {
+                        self.mode = ViewMode::PipelineView;
                         self.load_pipeline_for_selected();
+                        true
                     }
-                    true
-                }
-                BareKey::Char('g') => {
-                    self.selected_index = 0;
-                    true
-                }
-                BareKey::Char('G') => {
-                    self.selected_index = self.beads.len().saturating_sub(1);
-                    true
-                }
-                BareKey::Char('1') => {
-                    self.mode = ViewMode::BeadList;
-                    true
-                }
-                BareKey::Char('2') => {
-                    self.mode = ViewMode::BeadDetail;
-                    true
-                }
-                BareKey::Char('3') => {
-                    self.mode = ViewMode::PipelineView;
-                    self.load_pipeline_for_selected();
-                    true
-                }
-                BareKey::Char('4') => {
-                    self.mode = ViewMode::AgentList;
-                    self.load_agents();
-                    true
-                }
-                BareKey::Char('5') => {
-                    self.mode = ViewMode::GraphView;
-                    // TODO: Implement load_graph when backend API is ready
-                    // self.load_graph();
-                    true
-                }
-                BareKey::Enter => {
-                    self.mode = match self.mode {
-                        ViewMode::PipelineView => ViewMode::PipelineView,
-                        ViewMode::AgentList => ViewMode::AgentList,
-                        ViewMode::GraphView => ViewMode::GraphView,
-                        _ => self.mode,
-                    };
-                    if self.mode == ViewMode::PipelineView {
-                        self.load_pipeline_for_selected();
-                    }
-                    if self.mode == ViewMode::AgentList {
+                    BareKey::Char('4') => {
+                        self.mode = ViewMode::AgentList;
                         self.load_agents();
+                        true
                     }
-                    if self.mode == ViewMode::GraphView {
-                        self.load_graph();
+                    BareKey::Char('5') => {
+                        self.mode = ViewMode::GraphView;
+                        // TODO: Implement load_graph when backend API is ready
+                        // self.load_graph();
+                        true
                     }
-                    true
-                }
-                BareKey::Char('r') => {
-                    self.beads_cache = None;
-                    self.agents_cache = None;
-                    self.pipeline_caches = HashMap::new();
-                    self.load_beads();
-                    if self.mode == ViewMode::PipelineView {
-                        self.load_pipeline_for_selected();
+                    BareKey::Enter => {
+                        self.mode = match self.mode {
+                            ViewMode::PipelineView => ViewMode::PipelineView,
+                            ViewMode::AgentList => ViewMode::AgentList,
+                            ViewMode::GraphView => ViewMode::GraphView,
+                            _ => self.mode,
+                        };
+                        if self.mode == ViewMode::PipelineView {
+                            self.load_pipeline_for_selected();
+                        }
+                        if self.mode == ViewMode::AgentList {
+                            self.load_agents();
+                        }
+                        if self.mode == ViewMode::GraphView {
+                            self.load_graph();
+                        }
+                        true
                     }
-                    if self.mode == ViewMode::GraphView {
-                        self.load_graph();
+                    BareKey::Char('r') => {
+                        self.beads_cache = None;
+                        self.agents_cache = None;
+                        self.pipeline_caches = HashMap::new();
+                        self.load_beads();
+                        if self.mode == ViewMode::PipelineView {
+                            self.load_pipeline_for_selected();
+                        }
+                        if self.mode == ViewMode::GraphView {
+                            self.load_graph();
+                        }
+                        true
                     }
-                    true
-                }
-                _ => false,
+                    _ => false,
                 }
             }
             Event::Timer(_) => {
@@ -608,10 +611,7 @@ impl State {
     }
 
     fn open_command_pane_for_stage(&self, bead_id: &str, stage_name: &str) {
-        let command = format!(
-            "oya stage -s {} --stage {}",
-            bead_id, stage_name
-        );
+        let command = format!("oya stage -s {} --stage {}", bead_id, stage_name);
 
         // Create context for the command pane
         let mut context = BTreeMap::new();
@@ -1592,7 +1592,6 @@ mod tests {
         assert!(agent.workload_history.avg_execution_secs.is_none());
     }
 
-
     #[test]
     fn test_stage_selection_navigation() {
         let mut state = State::default();
@@ -1610,40 +1609,38 @@ mod tests {
                 exit_code: Some(1),
             },
         ]);
-        
+
         state.selected_stage_index = 0;
-        
+
         // Simulate Down key
         if state.selected_stage_index < state.pipeline_stages.len().saturating_sub(1) {
             state.selected_stage_index = state.selected_stage_index.saturating_add(1);
         }
         assert_eq!(state.selected_stage_index, 1);
-        
+
         // Simulate Up key
         state.selected_stage_index = state.selected_stage_index.saturating_sub(1);
         assert_eq!(state.selected_stage_index, 0);
     }
-    
+
     #[test]
     fn test_stage_selection_bounds() {
         let mut state = State::default();
-        state.pipeline_stages = to_vector_stages(vec![
-            StageInfo {
-                name: "stage-1".to_string(),
-                status: StageStatus::Pending,
-                duration_ms: None,
-                exit_code: None,
-            },
-        ]);
-        
+        state.pipeline_stages = to_vector_stages(vec![StageInfo {
+            name: "stage-1".to_string(),
+            status: StageStatus::Pending,
+            duration_ms: None,
+            exit_code: None,
+        }]);
+
         state.selected_stage_index = 0;
-        
+
         // Try to go down when at the last stage
         if state.selected_stage_index < state.pipeline_stages.len().saturating_sub(1) {
             state.selected_stage_index = state.selected_stage_index.saturating_add(1);
         }
         assert_eq!(state.selected_stage_index, 0);
-        
+
         // Try to go up when at the first stage
         state.selected_stage_index = state.selected_stage_index.saturating_sub(1);
         assert_eq!(state.selected_stage_index, 0);

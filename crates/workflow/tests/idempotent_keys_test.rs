@@ -30,10 +30,8 @@ async fn test_determinism_same_bead_same_input() {
     };
 
     // When: Generate keys twice
-    let key1 = idempotency_key(bead_id, &input)
-        .expect("Should generate key");
-    let key2 = idempotency_key(bead_id, &input)
-        .expect("Should generate key");
+    let key1 = idempotency_key(bead_id, &input).expect("Should generate key");
+    let key2 = idempotency_key(bead_id, &input).expect("Should generate key");
 
     // Then: Keys must be identical
     assert_eq!(key1, key2, "Same inputs should produce same UUID");
@@ -87,7 +85,10 @@ async fn test_uniqueness_different_input() {
         .expect("Should generate key");
 
     // Then: Keys must be different
-    assert_ne!(key1, key2, "Different inputs should produce different UUIDs");
+    assert_ne!(
+        key1, key2,
+        "Different inputs should produce different UUIDs"
+    );
 }
 
 #[test]
@@ -107,7 +108,10 @@ async fn test_uniqueness_different_bead_id() {
         .expect("Should generate key");
 
     // Then: Keys must be different (namespaced by bead_id)
-    assert_ne!(key1, key2, "Different bead IDs should produce different UUIDs");
+    assert_ne!(
+        key1, key2,
+        "Different bead IDs should produce different UUIDs"
+    );
 }
 
 #[test]
@@ -120,11 +124,14 @@ async fn test_uuid_format_valid() {
     };
 
     // When: Generate key
-    let key = idempotency_key(bead_id, &input)
-        .expect("Should generate key");
+    let key = idempotency_key(bead_id, &input).expect("Should generate key");
 
     // Then: UUID must be valid v5
-    assert_eq!(key.get_version(), Some(uuid::Version::Sha1), "UUID should be v5");
+    assert_eq!(
+        key.get_version(),
+        Some(uuid::Version::Sha1),
+        "UUID should be v5"
+    );
 
     // Verify it's a valid UUID (not nil)
     assert_ne!(key, Uuid::nil(), "UUID should not be nil");
@@ -201,7 +208,10 @@ async fn test_special_characters_in_input() {
     let key2 = idempotency_key(bead_id, &input)
         .await
         .expect("Should generate same key");
-    assert_eq!(key, key2, "Special characters should not affect determinism");
+    assert_eq!(
+        key, key2,
+        "Special characters should not affect determinism"
+    );
 }
 
 #[test]

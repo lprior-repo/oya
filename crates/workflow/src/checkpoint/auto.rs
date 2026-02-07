@@ -147,10 +147,7 @@ async fn auto_checkpoint_loop(
         let checkpoint = Checkpoint::new(phase_id, state_data.clone(), vec![]);
 
         // Persist checkpoint
-        match storage
-            .save_checkpoint(workflow_id, &checkpoint)
-            .await
-        {
+        match storage.save_checkpoint(workflow_id, &checkpoint).await {
             Ok(()) => {
                 info!(
                     workflow_id = %workflow_id,
@@ -398,9 +395,7 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(250)).await;
 
         // Shutdown gracefully
-        let result = timer
-            .shutdown(Duration::from_millis(500))
-            .await;
+        let result = timer.shutdown(Duration::from_millis(500)).await;
         assert!(result.is_ok(), "Shutdown should succeed");
 
         // Verify some checkpoints were created
@@ -426,7 +421,10 @@ mod tests {
                 Ok(())
             }
 
-            async fn load_workflow(&self, _id: WorkflowId) -> Result<Option<crate::types::Workflow>> {
+            async fn load_workflow(
+                &self,
+                _id: WorkflowId,
+            ) -> Result<Option<crate::types::Workflow>> {
                 Ok(None)
             }
 
@@ -466,7 +464,10 @@ mod tests {
                 Ok(())
             }
 
-            async fn load_journal(&self, _workflow_id: WorkflowId) -> Result<crate::types::Journal> {
+            async fn load_journal(
+                &self,
+                _workflow_id: WorkflowId,
+            ) -> Result<crate::types::Journal> {
                 Ok(crate::types::Journal::default())
             }
 

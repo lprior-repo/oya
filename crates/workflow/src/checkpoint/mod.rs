@@ -13,9 +13,7 @@ pub use auto::{
     start_auto_checkpoint, AutoCheckpointConfig, AutoCheckpointTimer, StateProvider,
     DEFAULT_AUTO_CHECKPOINT_INTERVAL,
 };
-pub use compression::{
-    compress, compression_ratio, decompress, space_savings, CompressionLevel,
-};
+pub use compression::{compress, compression_ratio, decompress, space_savings, CompressionLevel};
 pub use restore::{restore_checkpoint, CheckpointId, RestoreError, RestoreResult};
 pub use serialize::{serialize_state, SerializeError, SerializeResult, CHECKPOINT_VERSION};
 pub use storage::{

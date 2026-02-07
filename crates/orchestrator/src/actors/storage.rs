@@ -4,8 +4,8 @@
 //! Messages support both fire-and-forget commands and query-response patterns.
 
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort};
-use surrealdb::engine::local::{Db, RocksDb};
 use surrealdb::Surreal;
+use surrealdb::engine::local::{Db, RocksDb};
 use tracing::{error, info};
 
 use crate::actors::errors::ActorError;
@@ -167,10 +167,7 @@ impl Actor for StateManagerActorDef {
             .use_db(&args.database)
             .await
             .map_err(|e| {
-                ActorProcessingErr::from(format!(
-                    "Failed to initialize namespace/database: {}",
-                    e
-                ))
+                ActorProcessingErr::from(format!("Failed to initialize namespace/database: {}", e))
             })?;
 
         info!(
@@ -212,11 +209,10 @@ impl Actor for StateManagerActorDef {
 
             StateManagerMessage::LoadState { key, reply } => {
                 let result = async {
-                    let record: Option<StateRecord> = state
-                        .db
-                        .select(("state", key.clone()))
-                        .await
-                        .map_err(|e| ActorError::internal(format!("Failed to load state: {}", e)))?;
+                    let record: Option<StateRecord> =
+                        state.db.select(("state", key.clone())).await.map_err(|e| {
+                            ActorError::internal(format!("Failed to load state: {}", e))
+                        })?;
 
                     match record {
                         Some(rec) => {
@@ -238,11 +234,8 @@ impl Actor for StateManagerActorDef {
             StateManagerMessage::StateExists { key, reply } => {
                 let result = async {
                     // Try to select the record - if it exists, we get Some, otherwise None
-                    let record: Option<StateRecord> = state
-                        .db
-                        .select(("state", key.clone()))
-                        .await
-                        .map_err(|e| {
+                    let record: Option<StateRecord> =
+                        state.db.select(("state", key.clone())).await.map_err(|e| {
                             ActorError::internal(format!("Failed to check state: {}", e))
                         })?;
 
@@ -258,20 +251,14 @@ impl Actor for StateManagerActorDef {
 
             StateManagerMessage::GetStateVersion { key, reply } => {
                 let result = async {
-                    let record: Option<StateRecord> = state
-                        .db
-                        .select(("state", key.clone()))
-                        .await
-                        .map_err(|e| {
+                    let record: Option<StateRecord> =
+                        state.db.select(("state", key.clone())).await.map_err(|e| {
                             ActorError::internal(format!("Failed to get state version: {}", e))
                         })?;
 
                     match record {
                         Some(rec) => {
-                            info!(
-                                "Got state version: key={}, version={:?}",
-                                key, rec.version
-                            );
+                            info!("Got state version: key={}, version={:?}", key, rec.version);
                             Ok(rec.version)
                         }
                         None => Err(ActorError::bead_not_found(key)),
@@ -297,9 +284,9 @@ impl Actor for StateManagerActorDef {
                         query_builder = query_builder.bind(("prefix", pattern));
                     }
 
-                    let mut result = query_builder.await.map_err(|e| {
-                        ActorError::internal(format!("Failed to list keys: {}", e))
-                    })?;
+                    let mut result = query_builder
+                        .await
+                        .map_err(|e| ActorError::internal(format!("Failed to list keys: {}", e)))?;
 
                     let records: Vec<StateRecord> = result.take(0).map_err(|e| {
                         ActorError::internal(format!("Failed to extract keys result: {}", e))
@@ -307,11 +294,7 @@ impl Actor for StateManagerActorDef {
 
                     let keys: Vec<String> = records.into_iter().map(|r| r.key).collect();
 
-                    info!(
-                        "Listed keys: prefix={:?}, count={}",
-                        prefix,
-                        keys.len()
-                    );
+                    info!("Listed keys: prefix={:?}, count={}", prefix, keys.len());
                     Ok(keys)
                 }
                 .await;
@@ -462,10 +445,9 @@ impl Actor for EventStoreActorDef {
                 checkpoint_id,
                 reply,
             } => {
-                let result =
-                    state.store.replay_from(&checkpoint_id).await.map_err(|e| {
-                        ActorError::internal(format!("Failed to replay from checkpoint: {}", e))
-                    });
+                let result = state.store.replay_from(&checkpoint_id).await.map_err(|e| {
+                    ActorError::internal(format!("Failed to replay from checkpoint: {}", e))
+                });
 
                 info!(
                     "Replay from checkpoint {}: result={}",

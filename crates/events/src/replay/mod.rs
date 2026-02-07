@@ -2,6 +2,21 @@
 //!
 //! This module provides progress tracking for event replay operations,
 //! allowing monitoring of replay progress through a watch channel.
+//!
+//! ## Architecture
+//!
+//! This module provides a comprehensive replay system with:
+//! - Streaming event loading
+//! - Deterministic state application
+//! - Error recovery and retry logic
+//! - Checkpoint-based resume
+//! - Replay lifecycle state machine
+
+pub mod apply;
+pub mod loader;
+pub mod recovery;
+pub mod resume;
+pub mod state;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -10,6 +25,12 @@ use std::time::{Duration, Instant};
 use tokio::sync::watch;
 
 use crate::error::Result;
+
+// Re-export loader types for convenience
+pub use loader::{EventFilter, EventLoader, LoadError};
+// Re-export recovery types for convenience
+pub use recovery::{is_transient_error, RecoveryConfig, RecoveryStrategy, RetryPolicy};
+pub use state::ReplayState;
 
 /// Progress information for event replay.
 #[derive(Debug, Clone, PartialEq)]

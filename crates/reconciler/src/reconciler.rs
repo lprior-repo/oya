@@ -448,10 +448,7 @@ mod tests {
         assert!(result.is_ok(), "reconcile should succeed");
         if let Ok(r) = result {
             assert!(r.converged, "empty system should be converged");
-            assert!(
-                r.actions_taken.is_empty(),
-                "no actions should be taken"
-            );
+            assert!(r.actions_taken.is_empty(), "no actions should be taken");
             assert!(r.actions_failed.is_empty(), "no actions should fail");
         }
     }
@@ -657,10 +654,7 @@ mod tests {
         let result1 = reconciler.reconcile(&desired, &actual).await;
         assert!(result1.is_ok(), "reconcile should succeed");
         if let Ok(r1) = result1 {
-            assert!(
-                !r1.converged,
-                "should not be converged when actions needed"
-            );
+            assert!(!r1.converged, "should not be converged when actions needed");
             assert!(!r1.actions_taken.is_empty(), "should have actions");
         }
     }

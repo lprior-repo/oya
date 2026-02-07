@@ -270,9 +270,9 @@ async fn test_concurrent_different_keys() {
         let key = format!("key-{}", i % 10); // Only 10 unique keys
         let input = format!("input-{}", i);
 
-        handles.push(tokio::spawn(async move {
-            exec.execute(&key, &input).await
-        }));
+        handles.push(tokio::spawn(
+            async move { exec.execute(&key, &input).await },
+        ));
     }
 
     // Wait for all
@@ -334,9 +334,9 @@ async fn test_concurrent_stress() {
         let key = format!("stress-key-{}", i % 10);
         let input = format!("input-{}", i);
 
-        handles.push(tokio::spawn(async move {
-            exec.execute(&key, &input).await
-        }));
+        handles.push(tokio::spawn(
+            async move { exec.execute(&key, &input).await },
+        ));
     }
 
     let results: Vec<_> = futures::future::join_all(handles)

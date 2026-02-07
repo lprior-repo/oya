@@ -280,7 +280,9 @@ mod tests {
         };
 
         storage.store_checkpoint(vec![1, 2, 3], metadata1).unwrap();
-        storage.store_checkpoint(vec![4, 5, 6, 7, 8], metadata2).unwrap();
+        storage
+            .store_checkpoint(vec![4, 5, 6, 7, 8], metadata2)
+            .unwrap();
 
         let ids = storage.list_checkpoints().unwrap();
         assert_eq!(ids.len(), 2);

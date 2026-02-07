@@ -155,9 +155,8 @@ async fn test_concurrent_execution_only_one_executes() {
         let key_owned = key.to_string();
         let input_owned = input.to_string();
 
-        let handle = tokio::spawn(async move {
-            executor_clone.execute(&key_owned, &input_owned).await
-        });
+        let handle =
+            tokio::spawn(async move { executor_clone.execute(&key_owned, &input_owned).await });
         handles.push(handle);
     }
 
@@ -201,8 +200,14 @@ async fn test_different_keys_execute_independently() {
     assert!(result3.is_ok(), "Third execution should succeed");
 
     // And: Results should be different
-    assert_ne!(result1, result2, "Different keys should produce different results");
-    assert_ne!(result2, result3, "Different keys should produce different results");
+    assert_ne!(
+        result1, result2,
+        "Different keys should produce different results"
+    );
+    assert_ne!(
+        result2, result3,
+        "Different keys should produce different results"
+    );
 
     // And: Each key should execute once
     assert_eq!(idem_executor.executor.execution_count("key-1").await, 1);
@@ -267,7 +272,10 @@ async fn test_cache_persists_across_calls() {
     // When: Execute 5 more times
     for _ in 0..5 {
         let result = idem_executor.execute(key, input).await;
-        assert!(result.is_ok(), "Subsequent executions should return cached result");
+        assert!(
+            result.is_ok(),
+            "Subsequent executions should return cached result"
+        );
     }
 
     // Then: Execution count should still be 1 (cached)

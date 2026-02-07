@@ -49,6 +49,8 @@ pub enum Error {
     BeadNotFound { bead_id: String },
     /// Invalid state transition.
     InvalidTransition { from: String, to: String },
+    /// Invalid state for operation.
+    InvalidState { current: String, attempted: String },
     /// Internal error.
     Internal(String),
     /// Connection error.
@@ -84,6 +86,9 @@ impl fmt::Display for Error {
             }
             Self::InvalidTransition { from, to } => {
                 write!(f, "invalid state transition from '{from}' to '{to}'")
+            }
+            Self::InvalidState { current, attempted } => {
+                write!(f, "invalid state '{current}' for operation '{attempted}'")
             }
             Self::Internal(msg) => {
                 write!(f, "internal error: {msg}")

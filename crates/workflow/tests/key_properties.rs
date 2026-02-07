@@ -62,10 +62,10 @@ proptest! {
         };
 
         let key1 = idempotency_key(&bead_id1, &input)
-            
+
             .expect("Should generate key");
         let key2 = idempotency_key(&bead_id2, &input)
-            
+
             .expect("Should generate key");
 
         prop_assert_ne!(key1, key2, "Different bead_ids must produce different UUIDs");
@@ -97,10 +97,10 @@ proptest! {
         };
 
         let key1 = idempotency_key(&bead_id, &input1)
-            
+
             .expect("Should generate key");
         let key2 = idempotency_key(&bead_id, &input2)
-            
+
             .expect("Should generate key");
 
         prop_assert_ne!(key1, key2, "Different inputs must produce different UUIDs");
@@ -120,7 +120,7 @@ proptest! {
         };
 
         let key = idempotency_key(&bead_id, &input)
-            
+
             .expect("Should generate key");
 
         // Verify version is v5 (SHA-1 based)
@@ -157,7 +157,7 @@ proptest! {
         let mut keys = Vec::new();
         for _ in 0..5 {
             let key = idempotency_key(&bead_id, &input)
-                
+
                 .expect("Should generate key");
             keys.push(key);
         }
@@ -185,9 +185,7 @@ fn test_collision_resistance_random_inputs() {
             c: vec![i % 2 == 0, i % 3 == 0, i % 5 == 0],
         };
 
-        let key = idempotency_key(&bead_id, &input)
-            
-            .expect("Should generate key");
+        let key = idempotency_key(&bead_id, &input).expect("Should generate key");
 
         // Check for collision
         if keys.contains(&key) {

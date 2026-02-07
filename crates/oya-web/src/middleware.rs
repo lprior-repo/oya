@@ -30,10 +30,7 @@ pub fn cors_layer() -> CorsLayer {
 ///
 /// This middleware wraps all handlers and catches any errors that
 /// propagate up, logging them with appropriate context.
-pub async fn error_handler_middleware(
-    req: Request,
-    next: Next,
-) -> Result<Response, Response> {
+pub async fn error_handler_middleware(req: Request, next: Next) -> Result<Response, Response> {
     let uri = req.uri().clone();
     let method = req.method().clone();
 

@@ -48,10 +48,9 @@ impl Default for CompressionLevel {
 ///
 /// Returns an error if compression fails.
 pub fn compress(data: &[u8]) -> Result<Vec<u8>> {
-    zstd::bulk::compress(data, 3)
-        .map_err(|e| Error::CheckpointFailed {
-            reason: format!("zstd compression failed: {}", e),
-        })
+    zstd::bulk::compress(data, 3).map_err(|e| Error::CheckpointFailed {
+        reason: format!("zstd compression failed: {}", e),
+    })
 }
 
 /// Compress data using zstd with specified level.

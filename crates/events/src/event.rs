@@ -363,7 +363,8 @@ impl BeadEvent {
     /// let event = BeadEvent::from_bincode(&bytes)?;
     /// ```
     pub fn from_bincode(bytes: &[u8]) -> SerializationResult<Self> {
-        bincode::deserialize(bytes).map_err(|e| SerializationError::BincodeDeserialize(e.to_string()))
+        bincode::deserialize(bytes)
+            .map_err(|e| SerializationError::BincodeDeserialize(e.to_string()))
     }
 }
 
@@ -407,7 +408,9 @@ mod tests {
 
         assert_eq!(event.event_type(), "worker_unhealthy");
         match event {
-            BeadEvent::WorkerUnhealthy { worker_id, reason, .. } => {
+            BeadEvent::WorkerUnhealthy {
+                worker_id, reason, ..
+            } => {
                 assert_eq!(worker_id, "worker-123");
                 assert_eq!(reason, "health check timeout");
             }
