@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 pub fn benchmark_vec_build(c: &mut Criterion) {

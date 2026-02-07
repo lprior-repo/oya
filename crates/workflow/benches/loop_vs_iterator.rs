@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 pub fn benchmark_loop_vs_iterator(c: &mut Criterion) {

@@ -11,6 +11,7 @@ members = [
     "crates/oya-web",
     "crates/oya-shared",
     "tools/profiling",
+    "crates/zjj-integration-tests",
 ]
 exclude = [
     "crates/oya-zellij",  # Standalone WASM plugin (requires Rust 1.83 + wasm32-wasi)

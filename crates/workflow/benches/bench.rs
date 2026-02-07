@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 // Main benchmark entry point
 // Run individual benchmarks with:
 //   cargo bench --bench loop_vs_iterator
