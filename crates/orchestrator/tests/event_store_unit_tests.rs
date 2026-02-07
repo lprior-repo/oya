@@ -573,14 +573,14 @@ async fn test_replay_events_nonexistent_checkpoint() {
     );
 
     let error = result
-        .map_err(|e| format!("Expected error, got: {:?}", e))
         .expect_err("Should have error");
 
     match error {
         ActorError::Internal(msg) => {
             assert!(
                 msg.contains("Failed to replay from checkpoint") || msg.contains("checkpoint"),
-                "Error should mention checkpoint failure"
+                "Error should mention checkpoint failure, got: {}",
+                msg
             );
         }
         _ => {
@@ -857,13 +857,13 @@ async fn test_all_event_types_persist() {
             BeadSpec::new("test-bead").with_complexity(Complexity::Simple),
         ),
         BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Scheduled),
-        BeadEvent::phase_started(bead_id, phase_id),
         BeadEvent::phase_completed(
             bead_id,
             phase_id,
-            PhaseOutput::success("test output".to_string()),
+            "test-phase",
+            PhaseOutput::success(b"test output".to_vec()),
         ),
-        BeadEvent::claimed(bead_id, "worker-1".to_string()),
+        BeadEvent::dependency_resolved(bead_id, BeadId::new()),
     ];
 
     for event in events {
@@ -879,7 +879,7 @@ async fn test_all_event_types_persist() {
     let events = result
         .map_err(|e| format!("Failed to read events: {:?}", e))
         .expect("Should have events");
-    assert_eq!(events.len(), 5, "Should have all 5 event types");
+    assert_eq!(events.len(), 4, "Should have all 4 event types");
 }
 
 // ============================================================================
