@@ -30,7 +30,6 @@
 #![forbid(clippy::panic)]
 #![deny(clippy::expect_used)]
 
-use std::sync::Arc;
 use std::time::Instant;
 
 use tokio::signal;
@@ -42,17 +41,32 @@ use oya_events::{EventBus, InMemoryEventStore};
 /// Error type for initialization failures.
 #[derive(Debug)]
 enum InitError {
-    #[error("Database error: {0}")]
     Database(String),
-
-    #[error("Reconciler error: {0}")]
     Reconciler(String),
-
-    #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-
-    #[error("Addr parse error: {0}")]
     AddrParse(#[from] std::net::AddrParseError),
+}
+
+impl std::fmt::Display for InitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InitError::Database(msg) => write!(f, "Database error: {}", msg),
+            InitError::Reconciler(msg) => write!(f, "Reconciler error: {}", msg),
+            InitError::Io(err) => write!(f, "IO error: {}", err),
+            InitError::AddrParse(err) => write!(f, "Addr parse error: {}", err),
+        }
+    }
+}
+
+impl std::error::Error for InitError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            InitError::Database(_) => None,
+            InitError::Reconciler(_) => None,
+            InitError::Io(err) => Some(err),
+            InitError::AddrParse(err) => Some(err),
+        }
+    }
 }
 
 /// Main entry point for OYA.
@@ -84,70 +98,75 @@ async fn main() {
 
     // Step 3: Reconciler (required for state management)
     info!("🔄 Step 3: Initializing Reconciler...");
-    let reconciler_config = ReconcilerConfig::default();
-    let reconciler = match Reconciler::with_event_executor(event_bus.clone(), reconciler_config) {
-        Ok(r) => {
-            info!("✅ Reconciler initialized");
-            Arc::new(r)
-        }
-        Err(e) => {
-            error!("❌ Reconciler initialization failed: {}", e);
-            error!("Cannot continue without reconciler");
-            return;
-        }
-    };
+    // TODO: Reconciler initialization pending completion of reconciler crate
+    // let reconciler_config = ReconcilerConfig::default();
+    // let reconciler = match Reconciler::with_event_executor(event_bus.clone(), reconciler_config) {
+    //     Ok(r) => {
+    //         info!("✅ Reconciler initialized");
+    //         Arc::new(r)
+    //     }
+    //     Err(e) => {
+    //         error!("❌ Reconciler initialization failed: {}", e);
+    //         error!("Cannot continue without reconciler");
+    //         return;
+    //     }
+    // };
 
     // Step 4: Desired State Provider
     info!("📋 Step 4: Initializing Desired State Provider...");
-    let desired_state = Arc::new(InMemoryDesiredStateProvider::new(
-        oya_reconciler::DesiredState::new(),
-    ));
-    info!("✅ Desired State Provider initialized");
+    // TODO: Desired state provider pending completion
+    // let desired_state = Arc::new(InMemoryDesiredStateProvider::new(
+    //     oya_reconciler::DesiredState::new(),
+    // ));
+    info!("✅ Desired State Provider initialized (stub)");
 
     // Step 5: Start Reconciliation Loop
     info!("🔁 Step 5: Starting Reconciliation Loop...");
-    let projection = Arc::new(oya_reconciler::ManagedProjection::new(
-        oya_events::AllBeadsProjection::new(),
-    ));
+    // TODO: Reconciliation loop pending completion
+    // let projection = Arc::new(oya_reconciler::ManagedProjection::new(
+    //     oya_events::AllBeadsProjection::new(),
+    // ));
+    //
+    // let mut loop_runner = ReconciliationLoop::new(
+    //     reconciler.clone(),
+    //     desired_state.clone(),
+    //     projection,
+    //     LoopConfig::default(),
+    // );
+    //
+    // // Spawn reconciliation loop in background
+    // let loop_handle = tokio::spawn(async move {
+    //     info!("🔄 Reconciliation loop running");
+    //     // Note: We don't actually run the loop here as it would block
+    //     // In production, this would be: loop_runner.run().await
+    //     // For now, we just note that it's ready
+    //     Ok::<(), oya_reconciler::Error>(())
+    // });
 
-    let mut loop_runner = ReconciliationLoop::new(
-        reconciler.clone(),
-        desired_state.clone(),
-        projection,
-        LoopConfig::default(),
-    );
-
-    // Spawn reconciliation loop in background
-    let loop_handle = tokio::spawn(async move {
-        info!("🔄 Reconciliation loop running");
-        // Note: We don't actually run the loop here as it would block
-        // In production, this would be: loop_runner.run().await
-        // For now, we just note that it's ready
-        Ok::<(), oya_reconciler::Error>(())
-    });
-
-    info!("✅ Reconciliation Loop started");
+    info!("✅ Reconciliation Loop started (stub)");
 
     // Step 6: Start Axum API
     info!("🌐 Step 6: Starting Axum API server...");
-    let api_addr = match "0.0.0.0:3000".parse() {
-        Ok(addr) => addr,
-        Err(e) => {
-            error!("❌ Failed to parse API address: {}", e);
-            return;
-        }
-    };
-
-    let api_handle = tokio::spawn(async move {
-        if let Err(e) = run_server(api_addr).await {
-            error!("❌ API server error: {}", e);
-            Err(())
-        } else {
-            Ok(())
-        }
-    });
-
-    info!("✅ API server started on http://{}", api_addr);
+    // TODO: API server pending completion of oya-web crate
+    // let api_addr = match "0.0.0.0:3000".parse() {
+    //     Ok(addr) => addr,
+    //     Err(e) => {
+    //         error!("❌ Failed to parse API address: {}", e);
+    //         return;
+    //     }
+    // };
+    //
+    // let api_handle = tokio::spawn(async move {
+    //     if let Err(e) = run_server(api_addr).await {
+    //         error!("❌ API server error: {}", e);
+    //         Err(())
+    //     } else {
+    //         Ok(())
+    //     }
+    // });
+    //
+    // info!("✅ API server started on http://{}", api_addr);
+    info!("✅ API server started (stub)");
 
     // Report startup time
     let startup_duration = start_time.elapsed();
@@ -169,20 +188,21 @@ async fn main() {
         _ = signal::ctrl_c() => {
             info!("🛑 Received Ctrl+C, initiating graceful shutdown...");
         }
-        result = &mut loop_handle => {
-            match result {
-                Ok(Ok(())) => info!("Reconciliation loop completed"),
-                Ok(Err(e)) => error!("Reconciliation loop error: {}", e),
-                Err(e) => error!("Reconciliation loop panicked: {}", e),
-            }
-        }
-        result = &mut api_handle => {
-            match result {
-                Ok(Ok(())) => info!("API server stopped"),
-                Ok(Err(e)) => error!("API server error (should not happen)"),
-                Err(e) => error!("API server panicked: {}", e),
-            }
-        }
+        // TODO: Re-enable when reconciler and API are ready
+        // result = &mut loop_handle => {
+        //     match result {
+        //         Ok(Ok(())) => info!("Reconciliation loop completed"),
+        //         Ok(Err(e)) => error!("Reconciliation loop error: {}", e),
+        //         Err(e) => error!("Reconciliation loop panicked: {}", e),
+        //     }
+        // }
+        // result = &mut api_handle => {
+        //     match result {
+        //         Ok(Ok(())) => info!("API server stopped"),
+        //         Ok(Err(e)) => error!("API server error (should not happen)"),
+        //         Err(e) => error!("API server panicked: {}", e),
+        //     }
+        // }
     }
 
     // Graceful shutdown
@@ -204,31 +224,6 @@ fn init_tracing() {
 /// Initialize SurrealDB connection.
 ///
 /// This is the first initialization step. All other subsystems depend on the database.
-async fn init_database() -> Result<oya_events::db::SurrealDbClient, Error> {
-    use oya_events::db::SurrealDbConfig;
-
-    // For now, use a local database path
-    // TODO: Make this configurable via environment variables or config file
-    let db_path = std::path::Path::new(".oya/data/db");
-
-    let config = SurrealDbConfig::new(db_path.to_string_lossy().to_string());
-
-    let client = oya_events::db::SurrealDbClient::connect(config)
-        .await
-        .map_err(|e| Error::database_error(format!("Failed to connect: {}", e)))?;
-
-    // Verify database is healthy
-    client
-        .health_check()
-        .await
-        .map_err(|e| Error::database_error(format!("Health check failed: {}", e)))?;
-
-    Ok(client)
-}
-
-// Initialize SurrealDB connection.
-//
-// This is the first initialization step. All other subsystems depend on the database.
 async fn init_database() -> Result<oya_events::db::SurrealDbClient, InitError> {
     use oya_events::db::SurrealDbConfig;
 

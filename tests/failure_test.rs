@@ -13,9 +13,9 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::timeout;
 
-use oya_events::{BeadId, BeadSpec, Complexity, BeadState, BeadResult};
 use oya_events::EventBus;
 use oya_events::InMemoryEventStore;
+use oya_events::{BeadId, BeadResult, BeadSpec, BeadState, Complexity};
 
 /// Test that a workflow with a failing bead eventually fails when retries are exhausted.
 ///
@@ -37,8 +37,7 @@ async fn test_bead_failure_with_retry_exhaustion() -> Result<(), Box<dyn std::er
 
     // Create a bead spec configured to fail (e.g., invalid command)
     let bead_id = BeadId::new();
-    let bead_spec = BeadSpec::new("failing-bead")
-        .with_complexity(Complexity::Simple);
+    let bead_spec = BeadSpec::new("failing-bead").with_complexity(Complexity::Simple);
 
     // Publish bead creation event
     event_bus
@@ -52,7 +51,11 @@ async fn test_bead_failure_with_retry_exhaustion() -> Result<(), Box<dyn std::er
     let event = timeout(Duration::from_secs(1), sub.recv())
         .await
         .map_err(|_| "Timeout waiting for creation event")??;
-    assert_eq!(event.bead_id(), bead_id, "Creation event should be for our bead");
+    assert_eq!(
+        event.bead_id(),
+        bead_id,
+        "Creation event should be for our bead"
+    );
 
     // WHEN: Bead fails and retries are exhausted
 
@@ -73,7 +76,9 @@ async fn test_bead_failure_with_retry_exhaustion() -> Result<(), Box<dyn std::er
             .map_err(|_| "Timeout waiting for failure event")??;
 
         match event {
-            oya_events::BeadEvent::Failed { bead_id: id, error, .. } => {
+            oya_events::BeadEvent::Failed {
+                bead_id: id, error, ..
+            } => {
                 assert_eq!(id, bead_id, "Failure event should be for our bead");
                 assert_eq!(error, error_message, "Error message should match");
 
@@ -108,10 +113,18 @@ async fn test_bead_failure_with_retry_exhaustion() -> Result<(), Box<dyn std::er
         .map_err(|_| "Timeout waiting for final Completed event")??;
 
     match event {
-        oya_events::BeadEvent::Completed { bead_id: id, result, .. } => {
+        oya_events::BeadEvent::Completed {
+            bead_id: id,
+            result,
+            ..
+        } => {
             assert_eq!(id, bead_id, "Completed event should be for our bead");
             assert!(!result.success, "Result should indicate failure");
-            assert_eq!(result.error, Some(error_message.to_string()), "Error should match");
+            assert_eq!(
+                result.error,
+                Some(error_message.to_string()),
+                "Error should match"
+            );
         }
         _ => {
             return Err(format!("Expected Completed event, got {:?}", event.event_type()).into());
@@ -125,16 +138,16 @@ async fn test_bead_failure_with_retry_exhaustion() -> Result<(), Box<dyn std::er
 ///
 /// This is a higher-level workflow state test.
 #[tokio::test]
-async fn test_workflow_state_failed_after_bead_retry_exhaustion() -> Result<(), Box<dyn std::error::Error>> {
-    use oya_workflow::{Workflow, Phase, WorkflowState};
+async fn test_workflow_state_failed_after_bead_retry_exhaustion()
+-> Result<(), Box<dyn std::error::Error>> {
+    use oya_workflow::{Phase, Workflow, WorkflowState};
 
     // GIVEN: A workflow with a single phase that will fail
-    let mut workflow = Workflow::new("test-failing-workflow")
-        .add_phase(
-            Phase::new("failing-phase")
-                .with_timeout(Duration::from_secs(5))
-                .with_retries(3), // 3 retries = 4 total attempts
-        );
+    let mut workflow = Workflow::new("test-failing-workflow").add_phase(
+        Phase::new("failing-phase")
+            .with_timeout(Duration::from_secs(5))
+            .with_retries(3), // 3 retries = 4 total attempts
+    );
 
     // Initial state should be Pending
     assert_eq!(workflow.state, WorkflowState::Pending);
@@ -160,7 +173,10 @@ async fn test_workflow_state_failed_after_bead_retry_exhaustion() -> Result<(), 
     workflow.state = WorkflowState::Failed;
 
     assert_eq!(workflow.state, WorkflowState::Failed);
-    assert!(workflow.state.is_terminal(), "Failed state should be terminal");
+    assert!(
+        workflow.state.is_terminal(),
+        "Failed state should be terminal"
+    );
 
     Ok(())
 }
@@ -178,19 +194,35 @@ async fn test_retry_exhaustion_error_message() -> Result<(), Box<dyn std::error:
     );
 
     // THEN: Error message should contain key information
-    assert!(retry_exhaustion_msg.contains("exhausted"), "Should mention exhaustion");
-    assert!(retry_exhaustion_msg.contains("4"), "Should mention attempt count");
-    assert!(retry_exhaustion_msg.contains("retry"), "Should mention retry");
-    assert!(retry_exhaustion_msg.contains(&bead_id.to_string()), "Should mention bead ID");
-    assert!(retry_exhaustion_msg.contains(error_message), "Should include original error");
+    assert!(
+        retry_exhaustion_msg.contains("exhausted"),
+        "Should mention exhaustion"
+    );
+    assert!(
+        retry_exhaustion_msg.contains("4"),
+        "Should mention attempt count"
+    );
+    assert!(
+        retry_exhaustion_msg.contains("retry"),
+        "Should mention retry"
+    );
+    assert!(
+        retry_exhaustion_msg.contains(&bead_id.to_string()),
+        "Should mention bead ID"
+    );
+    assert!(
+        retry_exhaustion_msg.contains(error_message),
+        "Should include original error"
+    );
 
     Ok(())
 }
 
 /// Test that workflow with multiple beads fails when one bead exhausts retries.
 #[tokio::test]
-async fn test_multi_bead_workflow_fails_on_single_bead_exhaustion() -> Result<(), Box<dyn std::error::Error>> {
-    use oya_workflow::{Workflow, Phase, WorkflowState};
+async fn test_multi_bead_workflow_fails_on_single_bead_exhaustion()
+-> Result<(), Box<dyn std::error::Error>> {
+    use oya_workflow::{Phase, Workflow, WorkflowState};
 
     // GIVEN: A workflow with multiple phases
     let mut workflow = Workflow::new("multi-phase-workflow")

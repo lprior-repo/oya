@@ -301,7 +301,10 @@ async fn test_state_exists_returns_actor_unavailable() -> Result<(), Box<dyn std
 
     // THEN: Should return ActorUnavailable error
     let exists_result = result?;
-    assert!(exists_result.is_err(), "StateExists should return ActorError");
+    assert!(
+        exists_result.is_err(),
+        "StateExists should return ActorError"
+    );
     let actor_error = exists_result.unwrap_err();
 
     assert!(
@@ -337,7 +340,10 @@ async fn test_get_state_version_returns_actor_unavailable() -> Result<(), Box<dy
 
     // THEN: Should return ActorUnavailable error
     let version_result = result?;
-    assert!(version_result.is_err(), "GetStateVersion should return ActorError");
+    assert!(
+        version_result.is_err(),
+        "GetStateVersion should return ActorError"
+    );
     let actor_error = version_result.unwrap_err();
 
     assert!(
@@ -371,11 +377,9 @@ async fn test_list_keys_returns_actor_unavailable() -> Result<(), Box<dyn std::e
     .await;
 
     // THEN: Should return ActorUnavailable error
-    assert!(result.is_err(), "ListKeys should return error");
-    let error = result.unwrap_err();
-    let actor_error = error
-        .downcast_ref::<ActorError>()
-        .ok_or("Error should be ActorError")?;
+    let keys_result = result?;
+    assert!(keys_result.is_err(), "ListKeys should return ActorError");
+    let actor_error = keys_result.unwrap_err();
 
     assert!(
         matches!(actor_error, ActorError::ActorUnavailable),
@@ -409,7 +413,8 @@ async fn test_list_keys_with_no_prefix_returns_actor_unavailable()
     .await;
 
     // THEN: Should return ActorUnavailable error
-    assert!(result.is_err(), "ListKeys should return error");
+    let keys_result = result?;
+    assert!(keys_result.is_err(), "ListKeys should return ActorError");
 
     // Verify actor is still running
     verify_actor_running(&actor)?;

@@ -83,6 +83,13 @@ pub enum BeadEvent {
         metadata: serde_json::Value,
         timestamp: DateTime<Utc>,
     },
+    /// Worker health check failed.
+    WorkerUnhealthy {
+        event_id: EventId,
+        worker_id: String,
+        reason: String,
+        timestamp: DateTime<Utc>,
+    },
 }
 
 impl BeadEvent {
@@ -213,6 +220,16 @@ impl BeadEvent {
         }
     }
 
+    /// Create a new WorkerUnhealthy event.
+    pub fn worker_unhealthy(worker_id: impl Into<String>, reason: impl Into<String>) -> Self {
+        Self::WorkerUnhealthy {
+            event_id: EventId::new(),
+            worker_id: worker_id.into(),
+            reason: reason.into(),
+            timestamp: Utc::now(),
+        }
+    }
+
     /// Get the event ID.
     pub fn event_id(&self) -> EventId {
         match self {
@@ -225,7 +242,8 @@ impl BeadEvent {
             | Self::Claimed { event_id, .. }
             | Self::Unclaimed { event_id, .. }
             | Self::PriorityChanged { event_id, .. }
-            | Self::MetadataUpdated { event_id, .. } => *event_id,
+            | Self::MetadataUpdated { event_id, .. }
+            | Self::WorkerUnhealthy { event_id, .. } => *event_id,
         }
     }
 

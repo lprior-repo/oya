@@ -446,13 +446,14 @@ mod tests {
 
         let result = reconciler.reconcile(&desired, &actual).await;
         assert!(result.is_ok(), "reconcile should succeed");
-        let result = result.unwrap();
-        assert!(result.converged, "empty system should be converged");
-        assert!(
-            result.actions_taken.is_empty(),
-            "no actions should be taken"
-        );
-        assert!(result.actions_failed.is_empty(), "no actions should fail");
+        if let Ok(r) = result {
+            assert!(r.converged, "empty system should be converged");
+            assert!(
+                r.actions_taken.is_empty(),
+                "no actions should be taken"
+            );
+            assert!(r.actions_failed.is_empty(), "no actions should fail");
+        }
     }
 
     #[tokio::test]
@@ -655,12 +656,13 @@ mod tests {
         // First reconcile should create the bead
         let result1 = reconciler.reconcile(&desired, &actual).await;
         assert!(result1.is_ok(), "reconcile should succeed");
-        let result1 = result1.unwrap();
-        assert!(
-            !result1.converged,
-            "should not be converged when actions needed"
-        );
-        assert!(!result1.actions_taken.is_empty(), "should have actions");
+        if let Ok(r1) = result1 {
+            assert!(
+                !r1.converged,
+                "should not be converged when actions needed"
+            );
+            assert!(!r1.actions_taken.is_empty(), "should have actions");
+        }
     }
 
     #[tokio::test]
@@ -684,8 +686,9 @@ mod tests {
         let result = reconciler.reconcile(&desired, &actual).await;
 
         assert!(result.is_ok());
-        let result = result.unwrap();
-        assert_eq!(result.desired_count, 2);
+        if let Ok(r) = result {
+            assert_eq!(r.desired_count, 2);
+        }
     }
 
     #[tokio::test]

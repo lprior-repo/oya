@@ -22,7 +22,10 @@ fn load_schema() -> String {
 #[tokio::test]
 async fn test_schema_file_exists() {
     let schema_content = load_schema();
-    assert!(!schema_content.is_empty(), "Schema file should not be empty");
+    assert!(
+        !schema_content.is_empty(),
+        "Schema file should not be empty"
+    );
 }
 
 #[tokio::test]
@@ -74,9 +77,7 @@ async fn test_sync_mode_full_configured() {
     // Check for sync_mode configuration
     // This should be in comments or as part of the setup
     assert!(
-        schema.contains("sync_mode")
-            || schema.contains("fsync")
-            || schema.contains("SYNC"),
+        schema.contains("sync_mode") || schema.contains("fsync") || schema.contains("SYNC"),
         "Schema should mention sync_mode or fsync configuration"
     );
 }
@@ -86,13 +87,7 @@ async fn test_indexes_defined() {
     let schema = load_schema();
 
     // Check for important indexes
-    let expected_indexes = [
-        "INDEX",
-        "event_id",
-        "bead_id",
-        "workflow_id",
-        "timestamp",
-    ];
+    let expected_indexes = ["INDEX", "event_id", "bead_id", "workflow_id", "timestamp"];
 
     let index_count = expected_indexes
         .iter()
@@ -158,8 +153,7 @@ async fn test_idempotency_key_table_unique() {
 
     // Should enforce uniqueness
     assert!(
-        schema.contains("DEFINE FIELD key")
-            || schema.contains("DEFINE FIELD id"),
+        schema.contains("DEFINE FIELD key") || schema.contains("DEFINE FIELD id"),
         "Schema should define key field for idempotency"
     );
 }
