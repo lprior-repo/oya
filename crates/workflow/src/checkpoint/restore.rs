@@ -12,38 +12,23 @@
 //! - Each step returns `Result<T, RestoreError>`
 //! - Errors are propagated with `?` operator
 //! - Zero panics, zero unwraps
-//!
-//! # Example
-//!
-//! ```ignore
-//! use oya_workflow::checkpoint::{restore_checkpoint, CheckpointId};
-//!
-//! let checkpoint_id = CheckpointId::new();
-//! let state: MyState = restore_checkpoint(&checkpoint_id)?;
-//! ```
 
+use bincode::Decode;
 use serde::de::DeserializeOwned;
-
-use crate::Error;
 
 /// Version header for checkpoint compatibility.
 const CHECKPOINT_VERSION: u32 = 1;
 const VERSION_HEADER_SIZE: usize = 4;
 
 /// Unique identifier for a checkpoint.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct CheckpointId([u8; 16]);
 
 impl CheckpointId {
     /// Create a new checkpoint ID.
     #[must_use]
     pub fn new() -> Self {
-        Self(uuid::Uuid::new_v4().as_bytes().try_into().unwrap_or_else(|_| {
-            // Fallback: generate random bytes
-            let mut id = [0u8; 16];
-            let _ = getrandom::getrandom(&mut id);
-            id
-        }))
+        Self(*uuid::Uuid::new_v4().as_bytes())
     }
 
     /// Create from bytes.
@@ -67,7 +52,7 @@ impl Default for CheckpointId {
 
 impl std::fmt::Display for CheckpointId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // Format as UUID-like string
+        // Format as UUID string
         let uuid = uuid::Uuid::from_bytes(self.0);
         write!(f, "{uuid}")
     }
@@ -196,12 +181,12 @@ pub type RestoreResult<T> = Result<T, RestoreError>;
 ///
 /// Returns `RestoreError::CheckpointNotFound` if the checkpoint doesn't exist.
 /// Returns `RestoreError::StorageFailed` if the storage operation fails.
-fn load_checkpoint_data(
-    checkpoint_id: &CheckpointId,
-) -> RestoreResult<Vec<u8>> {
+fn load_checkpoint_data(checkpoint_id: &CheckpointId) -> RestoreResult<Vec<u8>> {
     // TODO: Integrate with actual storage layer (OrchestratorStore)
     // For now, this is a placeholder that returns not found
-    Err(RestoreError::checkpoint_not_found(checkpoint_id.to_string()))
+    Err(RestoreError::checkpoint_not_found(
+        checkpoint_id.to_string(),
+    ))
 }
 
 /// Decompress checkpoint data using zstd.
@@ -211,10 +196,8 @@ fn load_checkpoint_data(
 /// Returns `RestoreError::DecompressionFailed` if decompression fails.
 fn decompress_checkpoint(compressed: &[u8]) -> RestoreResult<Vec<u8>> {
     // Use zstd streaming decompressor for better memory efficiency
-    let mut decompressor = zstd::stream::decode_all(compressed)
-        .map_err(|e| RestoreError::decompression_failed(e.to_string()))?;
-
-    Ok(decompressor)
+    zstd::stream::decode_all(compressed)
+        .map_err(|e| RestoreError::decompression_failed(e.to_string()))
 }
 
 /// Deserialize checkpoint data from bytes.
@@ -222,8 +205,12 @@ fn decompress_checkpoint(compressed: &[u8]) -> RestoreResult<Vec<u8>> {
 /// # Errors
 ///
 /// Returns `RestoreError::DeserializationFailed` if deserialization fails.
-fn deserialize_checkpoint<T: DeserializeOwned>(data: &[u8]) -> RestoreResult<T> {
-    bincode::deserialize(data)
+fn deserialize_checkpoint<T>(data: &[u8]) -> RestoreResult<T>
+where
+    T: serde::de::DeserializeOwned + bincode::Decode<()>,
+{
+    bincode::decode_from_slice(data, bincode::config::standard())
+        .map(|(value, _)| value)
         .map_err(|e| RestoreError::deserialization_failed(e.to_string()))
 }
 
@@ -263,7 +250,7 @@ fn validate_version(data: &[u8]) -> RestoreResult<()> {
 ///
 /// # Type Parameters
 ///
-/// * `T` - The type to deserialize. Must implement `DeserializeOwned`.
+/// * `T` - The type to deserialize. Must implement `DeserializeOwned` and `Decode`.
 ///
 /// # Arguments
 ///
@@ -282,22 +269,7 @@ fn validate_version(data: &[u8]) -> RestoreResult<()> {
 /// * `DeserializationFailed` - bincode deserialization failed
 /// * `InvalidData` - Checkpoint data is corrupted
 /// * `StorageFailed` - Storage layer operation failed
-///
-/// # Example
-///
-/// ```ignore
-/// use oya_workflow::checkpoint::{restore_checkpoint, CheckpointId};
-///
-/// #[derive(serde::Deserialize)]
-/// struct MyState {
-///     counter: u64,
-/// }
-///
-/// let checkpoint_id = CheckpointId::new();
-/// let state: MyState = restore_checkpoint(&checkpoint_id)?;
-/// println!("Restored counter: {}", state.counter);
-/// ```
-pub fn restore_checkpoint<T: DeserializeOwned>(
+pub fn restore_checkpoint<T: DeserializeOwned + Decode<()>>(
     checkpoint_id: &CheckpointId,
 ) -> RestoreResult<T> {
     // Step 1: Load compressed data from storage
@@ -319,7 +291,7 @@ pub fn restore_checkpoint<T: DeserializeOwned>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde::Serialize;
+    use serde::Deserialize;
 
     /// Test: CheckpointId generates unique IDs.
     #[test]
@@ -356,7 +328,10 @@ mod tests {
         let wrong_version = 99u32.to_le_bytes();
         let result = validate_version(&wrong_version);
         assert!(result.is_err(), "should reject wrong version");
-        if let Err(RestoreError::VersionMismatch { expected, found, .. }) = result {
+        if let Err(RestoreError::VersionMismatch {
+            expected, found, ..
+        }) = result
+        {
             assert_eq!(expected, CHECKPOINT_VERSION);
             assert_eq!(found, 99);
         } else {
@@ -388,7 +363,7 @@ mod tests {
     /// Test: Deserialization fails on invalid data.
     #[test]
     fn test_deserialize_invalid_data() {
-        #[derive(Debug, Serialize, Deserialize, PartialEq)]
+        #[derive(Debug, serde::Serialize, Deserialize, PartialEq)]
         struct TestState {
             value: u64,
         }
@@ -406,7 +381,7 @@ mod tests {
     /// Test: Round-trip serialization and deserialization.
     #[test]
     fn test_serialize_deserialize_roundtrip() {
-        #[derive(Debug, Serialize, Deserialize, PartialEq)]
+        #[derive(Debug, serde::Serialize, Deserialize, PartialEq)]
         struct TestState {
             counter: u64,
             name: String,
@@ -419,7 +394,7 @@ mod tests {
 
         // Serialize
         let serialized =
-            bincode::serialize(&original).expect("serialization should succeed");
+            bincode::encode_to_vec(&original, bincode::config::standard()).expect("serialization should succeed");
 
         // Deserialize
         let restored: TestState =
@@ -435,7 +410,7 @@ mod tests {
     /// THEN the original state is recovered exactly
     #[test]
     fn test_restore_checkpoint_full_pipeline() -> Result<(), RestoreError> {
-        #[derive(Debug, Serialize, Deserialize, PartialEq)]
+        #[derive(Debug, serde::Serialize, Deserialize, PartialEq)]
         struct TestState {
             workflows: Vec<String>,
             current_phase: String,

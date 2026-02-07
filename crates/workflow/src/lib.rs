@@ -66,7 +66,10 @@ pub mod types;
 
 // Re-export main types
 pub use checkpoint::{
-    CheckpointId, CheckpointMetadata, CheckpointStorage, CompressionConfig, StorageStats,
+    restore_checkpoint, start_auto_checkpoint, AutoCheckpointConfig, AutoCheckpointTimer,
+    CheckpointId, CheckpointMetadata, CheckpointStorage, RestoreError,
+    RestoreResult, StateProvider, StorageStats, DEFAULT_AUTO_CHECKPOINT_INTERVAL,
+    compress, compression_ratio, decompress, space_savings,
 };
 pub use engine::{EngineConfig, WorkflowEngine};
 pub use error::{Error, Result};

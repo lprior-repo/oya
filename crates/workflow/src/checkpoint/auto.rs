@@ -10,7 +10,6 @@ use std::time::Duration;
 
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
-use tokio::time::interval;
 use tracing::{error, info, warn};
 
 use crate::error::Result;
@@ -120,7 +119,7 @@ async fn auto_checkpoint_loop(
     interval: Duration,
     state_provider: StateProvider,
 ) -> Result<()> {
-    let mut ticker = interval(interval);
+    let mut ticker = tokio::time::interval(interval);
     ticker.tick().await; // First tick completes immediately
 
     info!(
@@ -210,7 +209,7 @@ impl AutoCheckpointTimer {
         let (shutdown_tx, mut shutdown_rx) = mpsc::channel(1);
 
         let handle = tokio::spawn(async move {
-            let mut ticker = interval(interval);
+            let mut ticker = tokio::time::interval(interval);
             ticker.tick().await; // First tick completes immediately
 
             info!(
