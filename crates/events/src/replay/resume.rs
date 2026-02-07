@@ -542,8 +542,10 @@ mod tests {
 
         let result = resume_from_checkpoint(&checkpoint_id, &store, &log);
 
-        assert!(result.is_ok(), "Should successfully create replay state");
-        let state = result.unwrap(); // Safe: asserted is_ok above
+        let state = result
+            .as_ref()
+            .filter(|_| result.is_ok())
+            .expect("Should successfully create replay state");
         assert_eq!(state.events_replayed, 0, "Should have zero events replayed");
         assert!(
             state.last_event_timestamp.is_none(),
