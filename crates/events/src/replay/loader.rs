@@ -247,8 +247,9 @@ impl EventLoader {
         bead_id: BeadId,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<BeadEvent>> + Send>>> {
         let events = self.store.read_events(&bead_id).await?;
+        let events_clone = events.to_vec();
 
-        let stream = stream::iter(events).map(Ok);
+        let stream = stream::iter(events_clone).map(Ok);
 
         Ok(Box::pin(stream))
     }
@@ -259,8 +260,9 @@ impl EventLoader {
         checkpoint_id: String,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<BeadEvent>> + Send>>> {
         let events = self.store.replay_from(&checkpoint_id).await?;
+        let events_clone = events.to_vec();
 
-        let stream = stream::iter(events).map(Ok);
+        let stream = stream::iter(events_clone).map(Ok);
 
         Ok(Box::pin(stream))
     }

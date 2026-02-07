@@ -307,7 +307,7 @@ impl DurableEventStore {
         Ok(())
     }
 
-    pub async fn read_events(&self, bead_id: &BeadId) -> Result<Vec<BeadEvent>> {
+    pub async fn read_events(&self, bead_id: &BeadId) -> Result<Arc<[BeadEvent]>> {
         let bead_id_str = bead_id.to_string();
 
         let mut result = self
@@ -331,13 +331,15 @@ impl DurableEventStore {
             )
         })?;
 
-        serialized_events
-            .iter()
-            .map(|se| se.to_bead_event())
-            .collect()
+        Ok(Arc::from(
+            serialized_events
+                .iter()
+                .map(|se| se.to_bead_event())
+                .collect::<Result<Vec<_>>>()?,
+        ))
     }
 
-    pub async fn replay_from(&self, checkpoint_id: &str) -> Result<Vec<BeadEvent>> {
+    pub async fn replay_from(&self, checkpoint_id: &str) -> Result<Arc<[BeadEvent]>> {
         let checkpoint_id = checkpoint_id.to_string();
 
         // Query to get the checkpoint event's timestamp
@@ -395,10 +397,12 @@ impl DurableEventStore {
             )
         })?;
 
-        serialized_events
-            .iter()
-            .map(|se| se.to_bead_event())
-            .collect()
+        Ok(Arc::from(
+            serialized_events
+                .iter()
+                .map(|se| se.to_bead_event())
+                .collect::<Result<Vec<_>>>()?,
+        ))
     }
 }
 

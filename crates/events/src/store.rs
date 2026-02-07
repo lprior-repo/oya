@@ -17,10 +17,10 @@ pub trait EventStore: Send + Sync {
     async fn append(&self, event: BeadEvent) -> Result<EventId>;
 
     /// Read events starting from a given event ID.
-    async fn read(&self, from: Option<EventId>) -> Result<Vec<BeadEvent>>;
+    async fn read(&self, from: Option<EventId>) -> Result<Arc<[BeadEvent]>>;
 
     /// Read events for a specific bead.
-    async fn read_for_bead(&self, bead_id: BeadId) -> Result<Vec<BeadEvent>>;
+    async fn read_for_bead(&self, bead_id: BeadId) -> Result<Arc<[BeadEvent]>>;
 
     /// Get the last event ID.
     async fn last_event_id(&self) -> Result<Option<EventId>>;
@@ -32,14 +32,17 @@ pub trait EventStore: Send + Sync {
 /// In-memory event store for testing.
 #[derive(Default)]
 pub struct InMemoryEventStore {
-    events: RwLock<Vec<BeadEvent>>,
+    events: RwLock<Arc<[BeadEvent]>>,
     bead_index: RwLock<HashMap<BeadId, Vec<usize>>>,
 }
 
 impl InMemoryEventStore {
     /// Create a new in-memory event store.
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            events: RwLock::new(Arc::new([])),
+            bead_index: RwLock::new(HashMap::new()),
+        }
     }
 
     /// Create a new in-memory event store wrapped in an Arc.
@@ -56,7 +59,11 @@ impl EventStore for InMemoryEventStore {
 
         let mut events = self.events.write().await;
         let index = events.len();
-        events.push(event);
+
+        // Create new Arc with the appended event
+        let mut new_events = events.to_vec();
+        new_events.push(event);
+        *events = Arc::from(new_events);
 
         // Update bead index
         let mut bead_index = self.bead_index.write().await;
@@ -65,33 +72,34 @@ impl EventStore for InMemoryEventStore {
         Ok(event_id)
     }
 
-    async fn read(&self, from: Option<EventId>) -> Result<Vec<BeadEvent>> {
+    async fn read(&self, from: Option<EventId>) -> Result<Arc<[BeadEvent]>> {
         let events = self.events.read().await;
 
         if let Some(from_id) = from {
             // Find the position of the event and return all after it
             if let Some(pos) = events.iter().position(|e| e.event_id() == from_id) {
-                Ok(events[pos + 1..].to_vec())
+                Ok(Arc::from(&events[pos + 1..]))
             } else {
                 // Event not found, return all events
-                Ok(events.clone())
+                Ok(Arc::clone(&events))
             }
         } else {
-            Ok(events.clone())
+            Ok(Arc::clone(&events))
         }
     }
 
-    async fn read_for_bead(&self, bead_id: BeadId) -> Result<Vec<BeadEvent>> {
+    async fn read_for_bead(&self, bead_id: BeadId) -> Result<Arc<[BeadEvent]>> {
         let events = self.events.read().await;
         let bead_index = self.bead_index.read().await;
 
         if let Some(indices) = bead_index.get(&bead_id) {
-            Ok(indices
+            let bead_events: Vec<BeadEvent> = indices
                 .iter()
                 .filter_map(|&i| events.get(i).cloned())
-                .collect())
+                .collect();
+            Ok(Arc::from(bead_events))
         } else {
-            Ok(Vec::new())
+            Ok(Arc::new([]))
         }
     }
 
@@ -133,12 +141,12 @@ impl<S: EventStore> EventStore for TracingEventStore<S> {
         result
     }
 
-    async fn read(&self, from: Option<EventId>) -> Result<Vec<BeadEvent>> {
+    async fn read(&self, from: Option<EventId>) -> Result<Arc<[BeadEvent]>> {
         tracing::debug!(from = ?from, "Reading events");
         self.inner.read(from).await
     }
 
-    async fn read_for_bead(&self, bead_id: BeadId) -> Result<Vec<BeadEvent>> {
+    async fn read_for_bead(&self, bead_id: BeadId) -> Result<Arc<[BeadEvent]>> {
         tracing::debug!(bead_id = %bead_id, "Reading events for bead");
         self.inner.read_for_bead(bead_id).await
     }

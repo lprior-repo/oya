@@ -143,7 +143,7 @@ impl EventBus {
     }
 
     /// Replay events from a given event ID.
-    pub async fn replay_from(&self, from: Option<EventId>) -> Result<Vec<BeadEvent>> {
+    pub async fn replay_from(&self, from: Option<EventId>) -> Result<Arc<[BeadEvent]>> {
         self.store.read(from).await
     }
 
