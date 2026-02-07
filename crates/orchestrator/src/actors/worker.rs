@@ -191,7 +191,7 @@ impl Actor for WorkerActorDef {
                 let delay = state.next_retry_delay();
 
                 // Emit failed event (best-effort)
-                if let (Some(ref bus), Some(ref bid)) = (&state.config.event_bus, &bead_id) {
+                if let (Some(bus), Some(bid)) = (&state.config.event_bus, &bead_id) {
                     let result: Result<BeadId, _> = bid.parse();
                     if let Ok(event_bead_id) = result {
                         let event = BeadEvent::failed(event_bead_id, error.clone());
