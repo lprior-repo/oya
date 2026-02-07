@@ -356,7 +356,39 @@ impl ZellijPlugin for State {
 
     fn update(&mut self, event: Event) -> bool {
         match event {
-            Event::Key(key_with_mod) => match key_with_mod.bare_key {
+            Event::Key(key_with_mod) => {
+                // Handle Ctrl-d (page down) and Ctrl-u (page up) first
+                if key_with_mod.key_modifiers.contains(KeyModifier::Ctrl) {
+                    const PAGE_SIZE: usize = 20;
+
+                    return match key_with_mod.bare_key {
+                        BareKey::Char('d') => {
+                            // Page down: move forward by PAGE_SIZE
+                            self.selected_index = self
+                                .selected_index
+                                .saturating_add(PAGE_SIZE)
+                                .min(self.beads.len().saturating_sub(1));
+                            if self.mode == ViewMode::PipelineView {
+                                self.load_pipeline_for_selected();
+                            }
+                            true
+                        }
+                        BareKey::Char('u') => {
+                            // Page up: move backward by PAGE_SIZE
+                            self.selected_index = self
+                                .selected_index
+                                .saturating_sub(PAGE_SIZE);
+                            if self.mode == ViewMode::PipelineView {
+                                self.load_pipeline_for_selected();
+                            }
+                            true
+                        }
+                        _ => false,
+                    };
+                }
+
+                // Regular key handling
+                match key_with_mod.bare_key {
                 BareKey::Char('q') | BareKey::Esc => {
                     close_focus();
                     false

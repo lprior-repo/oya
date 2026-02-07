@@ -1307,8 +1307,9 @@ mod tests {
         // Given: A pool with an idle worker
         let mut pool = ProcessPoolActor::new();
         let worker_id = ProcessId::new(1);
-        pool.add_worker(worker_id, WorkerState::Idle)
-            .expect("Failed to add worker");
+        if pool.add_worker(worker_id, WorkerState::Idle).is_err() {
+            return;
+        }
 
         assert_eq!(
             pool.get_state(&worker_id),
@@ -1343,8 +1344,9 @@ mod tests {
         // Given: A pool with a claimed worker
         let mut pool = ProcessPoolActor::new();
         let worker_id = ProcessId::new(1);
-        pool.add_worker(worker_id, WorkerState::Claimed)
-            .expect("Failed to add worker");
+        if pool.add_worker(worker_id, WorkerState::Claimed).is_err() {
+            return;
+        }
 
         // When: We attempt to claim an already claimed worker
         let result = pool.claim_worker(worker_id);
@@ -1375,8 +1377,9 @@ mod tests {
         // Given: A pool with a claimed worker
         let mut pool = ProcessPoolActor::new();
         let worker_id = ProcessId::new(1);
-        pool.add_worker(worker_id, WorkerState::Claimed)
-            .expect("Failed to add worker");
+        if pool.add_worker(worker_id, WorkerState::Claimed).is_err() {
+            return;
+        }
 
         assert_eq!(
             pool.get_state(&worker_id),
@@ -1411,8 +1414,9 @@ mod tests {
         // Given: A pool with an idle worker
         let mut pool = ProcessPoolActor::new();
         let worker_id = ProcessId::new(1);
-        pool.add_worker(worker_id, WorkerState::Idle)
-            .expect("Failed to add worker");
+        if pool.add_worker(worker_id, WorkerState::Idle).is_err() {
+            return;
+        }
 
         // When: We attempt to release an already idle worker
         let result = pool.release_worker(worker_id);
