@@ -20,7 +20,7 @@ struct TestInput {
     count: u32,
 }
 
-#[tokio::test]
+#[test]
 async fn test_determinism_same_bead_same_input() {
     // Given: Same bead_id and input
     let bead_id = "test-bead-123";
@@ -39,7 +39,7 @@ async fn test_determinism_same_bead_same_input() {
     assert_eq!(key1, key2, "Same inputs should produce same UUID");
 }
 
-#[tokio::test]
+#[test]
 async fn test_determinism_multiple_calls() {
     // Given: Same bead_id and input
     let bead_id = "test-bead-456";
@@ -63,7 +63,7 @@ async fn test_determinism_multiple_calls() {
     }
 }
 
-#[tokio::test]
+#[test]
 async fn test_uniqueness_different_input() {
     // Given: Same bead_id but different inputs
     let bead_id = "test-bead-789";
@@ -90,7 +90,7 @@ async fn test_uniqueness_different_input() {
     assert_ne!(key1, key2, "Different inputs should produce different UUIDs");
 }
 
-#[tokio::test]
+#[test]
 async fn test_uniqueness_different_bead_id() {
     // Given: Different bead_id but same input
     let input = TestInput {
@@ -110,7 +110,7 @@ async fn test_uniqueness_different_bead_id() {
     assert_ne!(key1, key2, "Different bead IDs should produce different UUIDs");
 }
 
-#[tokio::test]
+#[test]
 async fn test_uuid_format_valid() {
     // Given: Valid inputs
     let bead_id = "test-bead-format";
@@ -135,7 +135,7 @@ async fn test_uuid_format_valid() {
     assert_eq!(key, parsed, "UUID should round-trip through string");
 }
 
-#[tokio::test]
+#[test]
 async fn test_collision_resistance_different_values() {
     // Given: Many different inputs
     let bead_id = "test-collision";
@@ -183,7 +183,7 @@ async fn test_collision_resistance_different_values() {
     }
 }
 
-#[tokio::test]
+#[test]
 async fn test_special_characters_in_input() {
     // Given: Input with special characters
     let bead_id = "test-special";
@@ -204,7 +204,7 @@ async fn test_special_characters_in_input() {
     assert_eq!(key, key2, "Special characters should not affect determinism");
 }
 
-#[tokio::test]
+#[test]
 async fn test_empty_input() {
     // Given: Empty input struct
     #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -225,7 +225,7 @@ async fn test_empty_input() {
     assert_eq!(key1, key2, "Empty input should be deterministic");
 }
 
-#[tokio::test]
+#[test]
 async fn test_numeric_values() {
     // Given: Numeric inputs that should produce different keys
     let bead_id = "test-numeric";

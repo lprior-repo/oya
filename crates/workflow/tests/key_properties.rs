@@ -23,8 +23,8 @@ struct PropTestInput {
 
 proptest! {
     /// Property: Same inputs always produce same UUID (determinism)
-    #[tokio::test]
-    async fn prop_determinism(
+    #[test]
+    fn prop_determinism(
         bead_id in "[a-z0-9-]{10,50}",
         value in "[a-zA-Z0-9 ]{0,100}",
         count in 0u32..1000,
@@ -36,18 +36,16 @@ proptest! {
         };
 
         let key1 = idempotency_key(&bead_id, &input)
-            .await
             .expect("Should generate key");
         let key2 = idempotency_key(&bead_id, &input)
-            .await
             .expect("Should generate key");
 
         prop_assert_eq!(key1, key2, "Determinism property violated");
     }
 
     /// Property: Different bead_ids produce different UUIDs
-    #[tokio::test]
-    async fn prop_bead_id_uniqueness(
+    #[test]
+    fn prop_bead_id_uniqueness(
         bead_id1 in "[a-z0-9-]{10,50}",
         bead_id2 in "[a-z0-9-]{10,50}",
         value in "[a-zA-Z0-9 ]{0,100}",
@@ -64,18 +62,18 @@ proptest! {
         };
 
         let key1 = idempotency_key(&bead_id1, &input)
-            .await
+            
             .expect("Should generate key");
         let key2 = idempotency_key(&bead_id2, &input)
-            .await
+            
             .expect("Should generate key");
 
         prop_assert_ne!(key1, key2, "Different bead_ids must produce different UUIDs");
     }
 
     /// Property: Different inputs produce different UUIDs
-    #[tokio::test]
-    async fn prop_input_uniqueness(
+    #[test]
+    fn prop_input_uniqueness(
         bead_id in "[a-z0-9-]{10,50}",
         value1 in "[a-zA-Z0-9 ]{0,100}",
         value2 in "[a-zA-Z0-9 ]{0,100}",
@@ -99,18 +97,18 @@ proptest! {
         };
 
         let key1 = idempotency_key(&bead_id, &input1)
-            .await
+            
             .expect("Should generate key");
         let key2 = idempotency_key(&bead_id, &input2)
-            .await
+            
             .expect("Should generate key");
 
         prop_assert_ne!(key1, key2, "Different inputs must produce different UUIDs");
     }
 
     /// Property: All generated UUIDs are valid v5
-    #[tokio::test]
-    async fn prop_uuid_validity(
+    #[test]
+    fn prop_uuid_validity(
         bead_id in "[a-z0-9-]{10,50}",
         value in "[a-zA-Z0-9 ]{0,100}",
         count in 0u32..1000,
@@ -122,7 +120,7 @@ proptest! {
         };
 
         let key = idempotency_key(&bead_id, &input)
-            .await
+            
             .expect("Should generate key");
 
         // Verify version is v5 (SHA-1 based)
@@ -144,8 +142,8 @@ proptest! {
     }
 
     /// Property: UUID is deterministic across multiple calls
-    #[tokio::test]
-    async fn prop_multi_call_determinism(
+    #[test]
+    fn prop_multi_call_determinism(
         bead_id in "[a-z0-9-]{10,50}",
         value in "[a-zA-Z0-9 ]{0,100}",
     ) {
@@ -159,7 +157,7 @@ proptest! {
         let mut keys = Vec::new();
         for _ in 0..5 {
             let key = idempotency_key(&bead_id, &input)
-                .await
+                
                 .expect("Should generate key");
             keys.push(key);
         }
@@ -171,8 +169,8 @@ proptest! {
     }
 }
 
-#[tokio::test]
-async fn test_collision_resistance_random_inputs() {
+#[test]
+fn test_collision_resistance_random_inputs() {
     use std::collections::HashSet;
 
     // Generate many keys with random-ish inputs
@@ -188,7 +186,7 @@ async fn test_collision_resistance_random_inputs() {
         };
 
         let key = idempotency_key(&bead_id, &input)
-            .await
+            
             .expect("Should generate key");
 
         // Check for collision

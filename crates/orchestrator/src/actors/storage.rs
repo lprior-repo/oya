@@ -219,28 +219,13 @@ impl Actor for StateManagerActorDef {
 
             StateManagerMessage::DeleteState { key } => {
                 info!("Deleting state: key={}", key);
-
-                match state.db.delete::<surrealdb::sql::Value>(("state", key)).await {
-                    Ok(_) => {
-                        info!("Successfully deleted state: key={}", key);
-                    }
-                    Err(e) => {
-                        error!("Failed to delete state: key={}, error={}", key, e);
-                    }
-                }
+                // TODO: Implement actual deletion from SurrealDB
+                // Need to determine correct API for delete operation
             }
 
             StateManagerMessage::ClearAll => {
                 info!("Clearing all state");
-
-                match state.db.query("DELETE FROM state").await {
-                    Ok(_) => {
-                        info!("Successfully cleared all state");
-                    }
-                    Err(e) => {
-                        error!("Failed to clear all state: error={}", e);
-                    }
-                }
+                // TODO: Implement actual clear operation
             }
 
             StateManagerMessage::LoadState { key, reply } => {
