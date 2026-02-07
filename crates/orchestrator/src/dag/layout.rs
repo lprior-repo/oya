@@ -229,28 +229,26 @@ impl MemoizedLayout {
                     *forces.entry(node.clone()).or_insert(Force::new(0.0, 0.0)) += repulsive_force;
                 }
             });
-        });
 
             // Spring forces from connected edges
             if let Some((source_force, target_force)) = edge_forces.get(&(node.clone(), node.clone())) {
                 // This is a self-loop, skip
-                continue;
+                return;
             }
 
             // Find edges where this node is the source
             edge_forces.iter().filter(|(from, _, _)| *from == node).for_each(|(from, to, (source_force, _))| {
                 *forces.entry(from.clone()).or_insert(Force::new(0.0, 0.0)) += source_force;
             });
-            }
 
             // Find edges where this node is the target
-            for (from, to, (_, target_force)) in edge_forces.iter().filter(|(_, to, _)| *to == node) {
+            edge_forces.iter().filter(|(_, to, _)| *to == node).for_each(|(from, to, (_, target_force))| {
                 *forces.entry(to.clone()).or_insert(Force::new(0.0, 0.0)) += target_force;
-            }
-        }
+            });
+        });
 
         // Update positions based on forces
-        for (node, force) in forces {
+        forces.into_iter().for_each(|(node, force)| {
             if let Some(pos) = positions.get_mut(&node) {
                 let force_x = force.x * STEP_SIZE * DAMPING;
                 let force_y = force.y * STEP_SIZE * DAMPING;
@@ -267,7 +265,7 @@ impl MemoizedLayout {
                     pos.y += force_y;
                 }
             }
-        }
+        });
     }
 
     /// Compute hash of current graph structure for cache validation

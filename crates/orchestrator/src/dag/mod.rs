@@ -23,10 +23,11 @@ use std::time::Duration;
 pub mod error;
 pub mod tarjan;
 pub mod layout;
+pub mod layout_standalone;
 pub mod layout_benchmark;
 pub mod layout_demo;
 pub use error::{DagError, DagResult};
-pub use layout::{MemoizedLayout, LayoutCache};
+pub use layout_standalone::{MemoizedLayout, LayoutCache, SpringForce, Position, Force, PathSegment, SpringForceError};
 pub use layout_benchmark::{benchmark_layout_performance, analysis};
 pub use layout_demo::run_demo;
 

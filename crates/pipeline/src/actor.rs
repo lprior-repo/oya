@@ -1591,7 +1591,7 @@ mod tests {
 
     // === Cache Tests ===
 
-    #[test]
+  #[test]
       fn test_cache_initialization() {
         let pool = ProcessPoolActor::new();
 
@@ -1602,8 +1602,8 @@ mod tests {
         assert_eq!(pool.needing_attention_count(), 0);
     }
 
-    #[test]
-    fn test_cache_populates_on_first_access() {
+  #[test]
+  fn test_cache_populates_on_first_access() {
         let mut pool = ProcessPoolActor::new();
 
         // Add some workers
@@ -1645,7 +1645,7 @@ mod tests {
     }
 
     #[test]
-    fn test_cache_invalidation_on_worker_remove() {
+  fn test_cache_invalidation_on_worker_remove() {
         let mut pool = ProcessPoolActor::new();
 
         // Add workers
@@ -1667,7 +1667,7 @@ mod tests {
     }
 
     #[test]
-    fn test_cache_invalidation_on_state_update() {
+  fn test_cache_invalidation_on_state_update() {
         let mut pool = ProcessPoolActor::new();
 
         // Add idle worker
@@ -1687,7 +1687,7 @@ mod tests {
     }
 
     #[test]
-    fn test_cache_consistency_with_count_by_state() {
+  fn test_cache_consistency_with_count_by_state() {
         let mut pool = ProcessPoolActor::new();
 
         // Add workers in various states

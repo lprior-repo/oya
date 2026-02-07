@@ -452,22 +452,34 @@ impl Reconciler {
 
     /// Format a Duration into a human-readable string with caching.
     /// This avoids repeated string conversions for the same duration values.
-    fn format_duration(&self, duration: Duration) -> &str {
-        self.duration_cache.get_or_init(|| HashMap::new())
-            .get(&duration)
-            .unwrap_or_else(|| {
-                // If not in cache, format it and cache it
-                let formatted = if duration.as_secs() > 60 {
-                    format!("{}m {}s",
-                        duration.as_secs() / 60,
-                        duration.as_secs() % 60)
-                } else {
-                    format!("{}s", duration.as_secs())
-                };
-                // We can't modify the cache here because get_or_init returns an immutable reference
-                // This implementation won't work as intended
-                formatted.as_str()
-            })
+    fn format_duration(&self, duration: Duration) -> String {
+        // Use OnceLock to store the cache, compute once per reconciler instance
+        let cache = self.duration_cache.get_or_init(|| {
+            // Pre-populate with common durations
+            let mut map = HashMap::new();
+
+            // Common threshold values
+            map.insert(Duration::from_secs(60), "1m 0s".to_string());
+            map.insert(Duration::from_secs(120), "2m 0s".to_string());
+            map.insert(Duration::from_secs(300), "5m 0s".to_string());
+            map.insert(Duration::from_secs(600), "10m 0s".to_string());
+
+            map
+        });
+
+        // Look up the duration in the cache
+        if let Some(cached) = cache.get(&duration) {
+            cached.clone()
+        } else {
+            // If not in cache, compute it
+            if duration.as_secs() > 60 {
+                format!("{}m {}s",
+                    duration.as_secs() / 60,
+                    duration.as_secs() % 60)
+            } else {
+                format!("{}s", duration.as_secs())
+            }
+        }
     }
 
     /// Apply a list of actions with parallel execution and error collection.
