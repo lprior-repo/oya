@@ -7,6 +7,7 @@
 //! Creates a zjj workspace per bead, returns the workspace path for execution,
 //! and guarantees cleanup through RAII.
 
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -175,6 +176,101 @@ impl WorkspaceManager {
             }
         }
     }
+
+    /// List all jj workspaces in the repository.
+    ///
+    /// Uses `jj workspace list` to get all workspace names and their metadata.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - jj workspace list command fails
+    /// - output cannot be parsed
+    pub fn list_workspaces(&self) -> Result<Vec<WorkspaceInfo>> {
+        let list_args = ["workspace", "list"];
+        let list_result = self.runner.run("jj", &list_args, &self.repo_root)?;
+        list_result.check_success()?;
+
+        parse_workspace_list(&list_result.stdout)
+    }
+
+    /// Cleanup orphaned workspaces.
+    ///
+    /// A workspace is considered orphaned if:
+    /// - It is older than the given age threshold
+    /// - It is not in the set of active workspace names
+    ///
+    /// # Arguments
+    ///
+    /// * `age_threshold_hours` - Minimum age in hours for a workspace to be considered orphaned
+    /// * `active_workspace_names` - Set of workspace names that are currently active (associated with running beads)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - listing workspaces fails
+    /// - forgetting a workspace fails
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of workspaces cleaned up.
+    pub fn cleanup_orphaned_workspaces(
+        &self,
+        age_threshold_hours: u64,
+        active_workspace_names: &HashSet<String>,
+    ) -> Result<usize> {
+        let workspaces = self.list_workspaces()?;
+        let threshold_secs = age_threshold_hours * 3600;
+
+        let mut cleaned_count = 0usize;
+
+        for workspace in workspaces {
+            // Skip if workspace is in active set
+            if active_workspace_names.contains(&workspace.name) {
+                continue;
+            }
+
+            // Skip if workspace is too young
+            if workspace.age_seconds < threshold_secs {
+                continue;
+            }
+
+            // Cleanup this orphaned workspace
+            match self.forget_workspace(&workspace.name) {
+                Ok(()) => {
+                    info!(
+                        workspace = %workspace.name,
+                        age_hours = workspace.age_seconds / 3600,
+                        "Cleaned up orphaned workspace",
+                    );
+                    cleaned_count += 1;
+                }
+                Err(e) => {
+                    warn!(
+                        workspace = %workspace.name,
+                        error = %e,
+                        "Failed to cleanup orphaned workspace",
+                    );
+                    // Continue with other workspaces even if one fails
+                }
+            }
+        }
+
+        Ok(cleaned_count)
+    }
+
+    /// Forget (delete) a workspace by name.
+    ///
+    /// Uses `jj workspace forget` to remove the workspace.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the jj command fails.
+    fn forget_workspace(&self, workspace_name: &str) -> Result<()> {
+        let forget_args = ["workspace", "forget", workspace_name];
+        let forget_result = self.runner.run("jj", &forget_args, &self.repo_root)?;
+        forget_result.check_success()
+    }
 }
 
 /// RAII guard that cleans up a workspace on drop.
@@ -295,6 +391,85 @@ struct ZjjStatusEnvelope {
 struct ZjjSession {
     name: String,
     workspace_path: PathBuf,
+}
+
+/// Information about a jj workspace.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorkspaceInfo {
+    /// Workspace name.
+    pub name: String,
+    /// Age of the workspace in seconds (since creation).
+    pub age_seconds: u64,
+}
+
+/// Parse `jj workspace list` output.
+///
+/// Expected format:
+/// ```text
+/// workspace-1  example@example.com 2024-01-01 12:00:00
+/// workspace-2  example@example.com 2024-01-02 13:00:00
+/// ```
+///
+/// # Errors
+///
+/// Returns an error if the output cannot be parsed.
+fn parse_workspace_list(output: &str) -> Result<Vec<WorkspaceInfo>> {
+    let mut workspaces = Vec::new();
+
+    for line in output.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        // Parse format: "name email timestamp"
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() < 3 {
+            return Err(Error::InvalidRecord {
+                reason: format!("invalid workspace list line: {line}"),
+            });
+        }
+
+        let name = parts[0].to_string();
+
+        // Parse timestamp (format: YYYY-MM-DD HH:MM:SS)
+        // We need to reconstruct the timestamp from parts[2] and parts[3]
+        let timestamp_str = if parts.len() >= 4 {
+            format!("{} {}", parts[2], parts[3])
+        } else {
+            parts[2].to_string()
+        };
+
+        let age_seconds = parse_age_from_timestamp(&timestamp_str)?;
+
+        workspaces.push(WorkspaceInfo { name, age_seconds });
+    }
+
+    Ok(workspaces)
+}
+
+/// Parse a timestamp string and calculate age in seconds.
+///
+/// Expected format: "YYYY-MM-DD HH:MM:SS"
+fn parse_age_from_timestamp(timestamp: &str) -> Result<u64> {
+    use chrono::{DateTime, Utc};
+
+    let dt: DateTime<Utc> = timestamp
+        .parse()
+        .map_err(|err| Error::InvalidRecord {
+            reason: format!("invalid timestamp '{timestamp}': {err}"),
+        })?;
+
+    let now = Utc::now();
+    let duration = now.signed_duration_since(dt);
+
+    if duration.num_seconds() < 0 {
+        return Err(Error::InvalidRecord {
+            reason: format!("timestamp '{timestamp}' is in the future"),
+        });
+    }
+
+    Ok(duration.num_seconds() as u64)
 }
 
 #[cfg(test)]
@@ -442,6 +617,217 @@ mod tests {
         let calls = runner.recorded_calls();
         assert_eq!(calls.len(), 3);
         assert_eq!(calls[2].1.first().cloned().unwrap_or_default(), "remove");
+        Ok(())
+    }
+
+    #[test]
+    fn list_workspaces_parses_jj_output() -> Result<()> {
+        let runner = StubRunner::default();
+        let list_output = r#"workspace-1 user@example.com 2024-01-01 12:00:00
+workspace-2 user@example.com 2024-01-02 13:00:00
+"#;
+
+        runner.push_response(success(list_output));
+
+        let manager =
+            WorkspaceManager::with_runner(PathBuf::from("/repo"), Arc::new(runner.clone()));
+
+        let workspaces = manager.list_workspaces()?;
+
+        assert_eq!(workspaces.len(), 2);
+        assert_eq!(workspaces[0].name, "workspace-1");
+        assert_eq!(workspaces[1].name, "workspace-2");
+        // Age should be calculated based on current time
+        assert!(workspaces[0].age_seconds > 0);
+        assert!(workspaces[1].age_seconds > 0);
+
+        let calls = runner.recorded_calls();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0, "jj");
+        assert_eq!(calls[0].1[0], "workspace");
+        assert_eq!(calls[0].1[1], "list");
+        Ok(())
+    }
+
+    #[test]
+    fn cleanup_orphaned_workspaces_removes_old_inactive_workspaces() -> Result<()> {
+        let runner = StubRunner::default();
+
+        // Create a timestamp that's 3 hours old
+        let old_timestamp = chrono::Utc::now() - chrono::Duration::hours(3);
+        let old_timestamp_str = old_timestamp.format("%Y-%m-%d %H:%M:%S").to_string();
+
+        // Create a timestamp that's 1 hour old
+        let new_timestamp = chrono::Utc::now() - chrono::Duration::hours(1);
+        let new_timestamp_str = new_timestamp.format("%Y-%m-%d %H:%M:%S").to_string();
+
+        let list_output = format!(
+            "old-workspace user@example.com {old_timestamp_str}\n\
+             new-workspace user@example.com {new_timestamp_str}\n\
+             active-workspace user@example.com {old_timestamp_str}\n"
+        );
+
+        // Responses: forget for old-workspace only
+        runner.push_response(success("")); // forget old-workspace
+        runner.push_response(success(&list_output)); // list
+
+        let manager =
+            WorkspaceManager::with_runner(PathBuf::from("/repo"), Arc::new(runner.clone()));
+
+        // Only active-workspace is active, old-workspace is orphaned (3 hours old)
+        // new-workspace is too young (1 hour old)
+        let mut active_workspaces = HashSet::new();
+        active_workspaces.insert("active-workspace".to_string());
+
+        let cleaned = manager.cleanup_orphaned_workspaces(2, &active_workspaces)?;
+
+        assert_eq!(cleaned, 1, "Should clean up one orphaned workspace");
+
+        let calls = runner.recorded_calls();
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0].0, "jj");
+        assert_eq!(calls[0].1[0], "workspace");
+        assert_eq!(calls[0].1[1], "list");
+        assert_eq!(calls[1].0, "jj");
+        assert_eq!(calls[1].1[0], "workspace");
+        assert_eq!(calls[1].1[1], "forget");
+        assert_eq!(calls[1].1[2], "old-workspace");
+        Ok(())
+    }
+
+    #[test]
+    fn cleanup_orphaned_workspaces_skips_active_workspaces() -> Result<()> {
+        let runner = StubRunner::default();
+
+        let old_timestamp = chrono::Utc::now() - chrono::Duration::hours(3);
+        let old_timestamp_str = old_timestamp.format("%Y-%m-%d %H:%M:%S").to_string();
+
+        let list_output = format!(
+            "workspace-1 user@example.com {old_timestamp_str}\n\
+             workspace-2 user@example.com {old_timestamp_str}\n"
+        );
+
+        // No forget calls expected
+        runner.push_response(success(&list_output));
+
+        let manager =
+            WorkspaceManager::with_runner(PathBuf::from("/repo"), Arc::new(runner.clone()));
+
+        // Both workspaces are active
+        let mut active_workspaces = HashSet::new();
+        active_workspaces.insert("workspace-1".to_string());
+        active_workspaces.insert("workspace-2".to_string());
+
+        let cleaned = manager.cleanup_orphaned_workspaces(2, &active_workspaces)?;
+
+        assert_eq!(cleaned, 0, "Should not clean up active workspaces");
+
+        let calls = runner.recorded_calls();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].1[0], "workspace");
+        assert_eq!(calls[0].1[1], "list");
+        Ok(())
+    }
+
+    #[test]
+    fn cleanup_orphaned_workspaces_skips_young_workspaces() -> Result<()> {
+        let runner = StubRunner::default();
+
+        let recent_timestamp = chrono::Utc::now() - chrono::Duration::minutes(30);
+        let recent_timestamp_str = recent_timestamp.format("%Y-%m-%d %H:%M:%S").to_string();
+
+        let list_output = format!("young-workspace user@example.com {recent_timestamp_str}\n");
+
+        runner.push_response(success(&list_output));
+
+        let manager =
+            WorkspaceManager::with_runner(PathBuf::from("/repo"), Arc::new(runner.clone()));
+
+        let active_workspaces = HashSet::new(); // No active workspaces
+
+        let cleaned = manager.cleanup_orphaned_workspaces(2, &active_workspaces)?;
+
+        assert_eq!(cleaned, 0, "Should not clean up workspaces younger than threshold");
+
+        let calls = runner.recorded_calls();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].1[0], "workspace");
+        assert_eq!(calls[0].1[1], "list");
+        Ok(())
+    }
+
+    #[test]
+    fn parse_workspace_list_handles_empty_input() -> Result<()> {
+        let output = "";
+        let workspaces = parse_workspace_list(output)?;
+
+        assert!(workspaces.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn parse_workspace_list_handles_multiple_lines() -> Result<()> {
+        let output = r#"ws1 user@example.com 2024-01-01 12:00:00
+ws2 user@example.com 2024-01-02 13:00:00
+ws3 user@example.com 2024-01-03 14:00:00
+"#;
+        let workspaces = parse_workspace_list(output)?;
+
+        assert_eq!(workspaces.len(), 3);
+        assert_eq!(workspaces[0].name, "ws1");
+        assert_eq!(workspaces[1].name, "ws2");
+        assert_eq!(workspaces[2].name, "ws3");
+        Ok(())
+    }
+
+    #[test]
+    fn parse_workspace_list_rejects_invalid_format() {
+        let output = "invalid-line-format";
+        let result = parse_workspace_list(output);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_age_from_timestamp_calculates_correct_age() -> Result<()> {
+        // Create a timestamp 2 hours ago
+        let timestamp = chrono::Utc::now() - chrono::Duration::hours(2);
+        let timestamp_str = timestamp.format("%Y-%m-%d %H:%M:%S").to_string();
+
+        let age = parse_age_from_timestamp(&timestamp_str)?;
+
+        // Age should be approximately 2 hours (7200 seconds)
+        // Allow 10 second tolerance for test execution time
+        assert!(age >= 7190 && age <= 7210, "Age should be ~7200 seconds, got {age}");
+        Ok(())
+    }
+
+    #[test]
+    fn parse_age_from_timestamp_rejects_future_timestamp() {
+        let future = chrono::Utc::now() + chrono::Duration::hours(1);
+        let future_str = future.format("%Y-%m-%d %H:%M:%S").to_string();
+
+        let result = parse_age_from_timestamp(&future_str);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn forget_workspace_calls_correct_command() -> Result<()> {
+        let runner = StubRunner::default();
+        runner.push_response(success(""));
+
+        let manager =
+            WorkspaceManager::with_runner(PathBuf::from("/repo"), Arc::new(runner.clone()));
+
+        manager.forget_workspace("test-workspace")?;
+
+        let calls = runner.recorded_calls();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0, "jj");
+        assert_eq!(calls[0].1[0], "workspace");
+        assert_eq!(calls[0].1[1], "forget");
+        assert_eq!(calls[0].1[2], "test-workspace");
         Ok(())
     }
 }

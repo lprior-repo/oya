@@ -58,3 +58,4 @@ pub use process_pool::{
     ProcessConfig, ProcessResult, WorkerProcess, run_command, run_command_in_dir, spawn_and_wait,
 };
 pub use quality_gates::{FunctionalGate, QualityGateResult, enforce_functional_quality};
+pub use workspace::{WorkspaceInfo, WorkspaceManager};

@@ -44,8 +44,8 @@ use oya_events::{EventBus, InMemoryEventStore};
 enum InitError {
     Database(String),
     Reconciler(String),
-    Io(#[from] std::io::Error),
-    AddrParse(#[from] std::net::AddrParseError),
+    Io(std::io::Error),
+    AddrParse(std::net::AddrParseError),
 }
 
 impl std::fmt::Display for InitError {
@@ -67,6 +67,18 @@ impl std::error::Error for InitError {
             InitError::Io(err) => Some(err),
             InitError::AddrParse(err) => Some(err),
         }
+    }
+}
+
+impl From<std::io::Error> for InitError {
+    fn from(err: std::io::Error) -> Self {
+        InitError::Io(err)
+    }
+}
+
+impl From<std::net::AddrParseError> for InitError {
+    fn from(err: std::net::AddrParseError) -> Self {
+        InitError::AddrParse(err)
     }
 }
 

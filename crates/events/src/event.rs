@@ -5,6 +5,25 @@ use serde::{Deserialize, Serialize};
 
 use crate::types::{BeadId, BeadResult, BeadSpec, BeadState, EventId, PhaseId, PhaseOutput};
 
+/// Serialization error type.
+pub type SerializationResult<T> = std::result::Result<T, SerializationError>;
+
+/// Error during bincode serialization/deserialization.
+#[derive(Debug, thiserror::Error)]
+pub enum SerializationError {
+    /// Bincode serialization error.
+    #[error("bincode serialization error: {0}")]
+    BincodeSerialize(String),
+
+    /// Bincode deserialization error.
+    #[error("bincode deserialization error: {0}")]
+    BincodeDeserialize(String),
+
+    /// Serialized data exceeds maximum size.
+    #[error("serialized size {0} bytes exceeds maximum {1} bytes")]
+    SizeExceeded(usize, usize),
+}
+
 /// Bead events for inter-bead coordination.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum BeadEvent {
@@ -298,6 +317,53 @@ impl BeadEvent {
             Self::MetadataUpdated { .. } => "metadata_updated",
             Self::WorkerUnhealthy { .. } => "worker_unhealthy",
         }
+    }
+
+    /// Serialize event to bincode binary format.
+    ///
+    /// Uses compact binary representation for efficient WebSocket transmission.
+    /// Ensures serialized size < 1KB as per system constraints.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SerializationError` if:
+    /// - Bincode serialization fails
+    /// - Serialized size exceeds 1KB (1024 bytes)
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let event = BeadEvent::completed(bead_id, result);
+    /// let bytes = event.to_bincode()?;
+    /// assert!(bytes.len() < 1024);
+    /// ```
+    pub fn to_bincode(&self) -> SerializationResult<Vec<u8>> {
+        const MAX_SIZE: usize = 1024;
+
+        bincode::serialize(self)
+            .map_err(|e| SerializationError::BincodeSerialize(e.to_string()))
+            .and_then(|bytes: Vec<u8>| {
+                if bytes.len() > MAX_SIZE {
+                    Err(SerializationError::SizeExceeded(bytes.len(), MAX_SIZE))
+                } else {
+                    Ok(bytes)
+                }
+            })
+    }
+
+    /// Deserialize event from bincode binary format.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SerializationError` if deserialization fails.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let event = BeadEvent::from_bincode(&bytes)?;
+    /// ```
+    pub fn from_bincode(bytes: &[u8]) -> SerializationResult<Self> {
+        bincode::deserialize(bytes).map_err(|e| SerializationError::BincodeDeserialize(e.to_string()))
     }
 }
 

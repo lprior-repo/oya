@@ -315,19 +315,19 @@ impl Actor for WorkerActorDef {
                 bead_id,
                 from_state,
             } => {
-                let old_state = match from_state {
+                let _old_state = match from_state {
                     Some(state) => state,
                     None => BeadState::Ready,
                 };
                 let new_state = BeadState::Running;
 
                 // Create execution context with workspace path and execute bead
-                let exec_result = if let Some(ref workspace_manager) =
+                let _exec_result = if let Some(ref workspace_manager) =
                     state.config.workspace_manager
                 {
                     match workspace_manager.execute_with_workspace(&bead_id, |workspace_path| {
                         // Create execution context with workspace path
-                        let exec_ctx = BeadExecutionContext::new(
+                        let _exec_ctx = BeadExecutionContext::new(
                             bead_id.clone(),
                             workspace_path.to_path_buf(),
                         );

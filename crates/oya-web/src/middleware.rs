@@ -92,3 +92,16 @@ pub async fn catch_panic_middleware(req: Request, next: Next) -> Response {
 
     response
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test that CORS layer can be created
+    #[test]
+    fn test_cors_layer_creation() {
+        let layer = cors_layer();
+        // Just verify it can be created without panicking
+        assert!(true);
+    }
+}

@@ -16,5 +16,7 @@ pub mod agent_service;
 pub mod error;
 pub mod metrics;
 pub mod middleware;
+#[cfg(test)]
+mod middleware_tests;
 pub mod routes;
 pub mod server;
