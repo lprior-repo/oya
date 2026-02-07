@@ -81,10 +81,8 @@ impl ProcessPoolActor {
     #[must_use]
     pub fn with_capacity(size: usize) -> Self {
         let workers = (0..size)
-            .map(|i| {
-                let id = u64::try_from(i).unwrap_or(0);
-                (ProcessId::new(id), WorkerState::Idle)
-            })
+            .filter_map(|i| u64::try_from(i).ok())
+            .map(|id| (ProcessId::new(id), WorkerState::Idle))
             .collect();
 
         Self { workers }

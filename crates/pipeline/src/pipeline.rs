@@ -110,7 +110,7 @@ impl PipelineResult {
                     format!(
                         "{}: {}",
                         s.stage_name,
-                        s.error.as_deref().unwrap_or("unknown")
+                        s.error.as_deref().map_or("unknown", |e| e)
                     )
                 })
                 .unwrap_or_else(|| "unknown failure".to_string());

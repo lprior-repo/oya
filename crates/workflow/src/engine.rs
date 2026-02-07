@@ -44,7 +44,7 @@ fn max_concurrent_from_env() -> usize {
         .ok()
         .and_then(|value| value.parse::<usize>().ok())
         .filter(|value| *value > 0)
-        .unwrap_or(DEFAULT_MAX_CONCURRENT)
+        .map_or(DEFAULT_MAX_CONCURRENT, |value| value)
 }
 
 /// Workflow execution engine.

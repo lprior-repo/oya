@@ -371,15 +371,26 @@ pub enum EventStoreMessage {
 impl Actor for EventStoreActorDef {
     type Msg = EventStoreMessage;
     type State = EventStoreState;
-    type Arguments = std::sync::Arc<DurableEventStore>;
+    type Arguments = Option<std::sync::Arc<DurableEventStore>>;
 
     async fn pre_start(
         &self,
         _myself: ActorRef<Self::Msg>,
         args: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
-        info!("EventStoreActor starting");
-        Ok(EventStoreState { store: args })
+        match args {
+            Some(store) => {
+                info!("EventStoreActor starting with provided store");
+                Ok(EventStoreState { store })
+            }
+            None => {
+                error!("EventStoreActor requires a DurableEventStore instance");
+                Err(ActorProcessingErr::from(
+                    "EventStoreActor requires a DurableEventStore instance. \
+                     Use EventStoreActorDef::spawn() with Some(Arc::new(store))."
+                ))
+            }
+        }
     }
 
     async fn handle(
@@ -464,12 +475,9 @@ impl Actor for EventStoreActorDef {
 
 impl GenericSupervisableActor for EventStoreActorDef {
     fn default_args() -> Self::Arguments {
-        // EventStoreActor requires a DurableEventStore instance.
-        // Use EventStoreActorDef::spawn() with an actual store instance.
-        panic!(
-            "EventStoreActor requires a DurableEventStore instance. \
-             Use EventStoreActorDef::spawn() with an actual store."
-        );
+        // EventStoreActor requires a DurableEventStore instance at runtime.
+        // Returns None to indicate that explicit arguments are required.
+        None
     }
 }
 

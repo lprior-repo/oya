@@ -761,8 +761,9 @@ impl State {
 
             // Update the pipeline stage status if this was a stage run
             if pane.action == "run_stage" {
-                if let (Some(bead_id), Some(stage_name)) = (&pane.bead_id, &pane.stage_name) {
-                    self.update_stage_status(bead_id, stage_name, code);
+                if let Some(stage_name) = pane.stage_name.clone() {
+                    let bead_id = pane.bead_id.clone();
+                    self.update_stage_status(&bead_id, &stage_name, code);
                 }
             }
         }
@@ -782,7 +783,7 @@ impl State {
         }
     }
 
-    fn update_stage_status(&mut self, bead_id: &str, stage_name: &str, exit_code: i32) {
+    fn update_stage_status(&mut self, _bead_id: &str, stage_name: &str, exit_code: i32) {
         // Find the stage in the current pipeline and update its status
         let new_status = if exit_code == 0 {
             StageStatus::Passed
@@ -1715,7 +1716,9 @@ fn format_uptime(secs: u64) -> String {
         format!("{}d", secs.saturating_div(86400))
     }
 }
+#[cfg(test)]
 mod tests {
+    use super::*;
 
     fn build_agent(id: &str, state: AgentState, bead: Option<&str>, health: f64) -> AgentInfo {
         AgentInfo {
@@ -1737,6 +1740,7 @@ mod tests {
         stages.into_iter().collect::<Vector<_>>()
     }
 
+    #[test]
     fn agent_view_fetches_agents_on_load() {
         assert!(should_fetch_agents_on_view_load(ViewMode::AgentView));
     }

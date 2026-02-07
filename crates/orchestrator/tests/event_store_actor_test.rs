@@ -40,7 +40,7 @@ async fn spawn_event_store_actor() -> Result<ActorRef<EventStoreMessage>, Box<dy
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?
         .with_wal_dir(temp_dir.join("wal"));
 
-    let (actor, _) = EventStoreActorDef::spawn(EventStoreActorDef, Arc::new(store)).await?;
+    let (actor, _) = EventStoreActorDef::spawn(EventStoreActorDef, Some(Arc::new(store))).await?;
 
     // Give the actor a moment to start
     tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;

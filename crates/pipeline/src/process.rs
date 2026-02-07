@@ -108,7 +108,7 @@ pub fn run_command_with_timeout(
             return Ok(CommandResult {
                 stdout,
                 stderr,
-                exit_code: status.code().unwrap_or(-1),
+                exit_code: status.code().map_or(-1, |code| code),
             });
         }
 
@@ -176,7 +176,7 @@ fn parse_output(output: &Output) -> CommandResult {
     CommandResult {
         stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
         stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-        exit_code: output.status.code().unwrap_or(-1),
+        exit_code: output.status.code().map_or(-1, |code| code),
     }
 }
 

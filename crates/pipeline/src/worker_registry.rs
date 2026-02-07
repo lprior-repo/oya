@@ -40,15 +40,6 @@ macro_rules! register_worker {
         let worker_id = ProcessId::new($id);
         $monitor.register_worker(worker_id)
     }};
-
-    // Register with explicit ID, unwrap with context (for tests)
-    ($monitor:expr, $id:expr, unwrap) => {{
-        use $crate::actor::ProcessId;
-        let worker_id = ProcessId::new($id);
-        $monitor
-            .register_worker(worker_id)
-            .unwrap_or_else(|e| panic!("Failed to register worker {}: {}", $id, e))
-    }};
 }
 
 /// Macro for batch registering multiple workers.
@@ -140,23 +131,25 @@ mod tests {
     }
 
     #[test]
-    fn register_worker_macro_unwrap_variant_works() {
+    fn register_worker_macro_result_is_ok() {
         let mut monitor = HeartbeatMonitor::new();
 
-        // This should not panic
-        register_worker!(monitor, 1, unwrap);
+        // This should return Ok
+        let result = register_worker!(monitor, 1);
 
+        assert!(result.is_ok(), "Worker registration should succeed");
         assert_eq!(monitor.worker_count(), 1);
     }
 
     #[test]
-    #[should_panic(expected = "Failed to register worker")]
-    fn register_worker_macro_unwrap_panics_on_duplicate() {
+    fn register_worker_macro_returns_err_on_duplicate() {
         let mut monitor = HeartbeatMonitor::new();
 
-        register_worker!(monitor, 1, unwrap);
-        // This should panic
-        register_worker!(monitor, 1, unwrap);
+        let _ = register_worker!(monitor, 1);
+        // This should return Err, not panic
+        let result = register_worker!(monitor, 1);
+
+        assert!(result.is_err(), "Duplicate registration should return Err");
     }
 
     #[test]
