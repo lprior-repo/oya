@@ -352,7 +352,7 @@ fn given_node_with_no_incoming_edges_when_get_dependencies_then_empty_vec() {
     // THEN: Should return empty vec
     assert!(deps.is_ok(), "get_dependencies should succeed");
     assert!(
-        deps.map(|d| d.is_empty()).unwrap_or(false),
+        deps.map_or(false, |d| d.is_empty()),
         "Root node should have no dependencies"
     );
 }
@@ -1061,7 +1061,7 @@ fn given_empty_dag_when_critical_path_then_empty_vec() {
         "critical_path should succeed on empty DAG"
     );
     assert!(
-        critical.map(|p| p.is_empty()).unwrap_or(false),
+        critical.map_or(false, |p| p.is_empty()),
         "Critical path of empty DAG should be empty"
     );
 }

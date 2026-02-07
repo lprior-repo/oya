@@ -47,7 +47,7 @@ impl ConcurrentExecutor {
 
     async fn execution_count(&self, key: &str) -> usize {
         let execs = self.executions.read().await;
-        *execs.get(key).unwrap_or(&0)
+        execs.get(key).copied().unwrap_or(0)
     }
 
     async fn result(&self, key: &str) -> Option<String> {
@@ -84,7 +84,7 @@ impl SafeIdempotentExecutor {
         // Acquire execution lock
         let should_execute = {
             let mut executing = self.executing.write().await;
-            if executing.get(key).copied().unwrap_or(false) {
+            if executing.get(key).copied().map_or(false, |v| v) {
                 // Someone else is executing, wait and retry
                 drop(executing);
                 drop(cache_guard()); // Explicit drop
@@ -193,7 +193,7 @@ impl ArcSafeExecutor {
         // Try to acquire lock
         {
             let mut executing = self.inner.executing.write().await;
-            if executing.get(key).copied().unwrap_or(false) {
+            if executing.get(key).copied().map_or(false, |v| v) {
                 drop(executing);
                 tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 

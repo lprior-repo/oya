@@ -6,6 +6,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use chrono::{Duration as ChronoDuration, Utc};
 use either::Either;
+use itertools::Itertools;
 use oya_events::{BeadEvent, BeadState, EventBus};
 use tracing::{debug, info, warn};
 
@@ -215,7 +216,7 @@ impl Reconciler {
             .map_err(|_| ())
             .ok();
 
-        let mut actions = vec![
+        let actions = vec![
             // 1. Create beads that exist in desired but not actual
             self.create_missing_beads(desired, actual),
             // 2. Detect orphaned beads (actual without desired) and delete
@@ -401,30 +402,23 @@ impl Reconciler {
         &self,
         actions: Vec<ReconcileAction>,
     ) -> (Vec<ReconcileAction>, Vec<(ReconcileAction, String)>) {
-        let results: Vec<(ReconcileAction, Result<()>)> = futures::future::join_all(
-            actions
-                .into_iter()
-                .map(|action| {
-                    debug!(action = ?action, "Applying action");
-                    let executor = self.executor.clone();
-                    async move {
-                        let result = executor.execute(&action).await;
-                        (action, result)
-                    }
-                })
-        ).await;
+        let results: Vec<(ReconcileAction, Result<()>)> = actions
+            .into_iter()
+            .map(|action| async move {
+                debug!(action = ?action, "Applying action");
+                let result = self.executor.execute(&action).await;
+                (action, result)
+            })
+            .collect::<futures::future::JoinAll<_>>()
+            .await;
 
-        let (taken, failed): (Vec<_>, Vec<_>) = results.into_iter().partition_map(|(action, result)| {
-            match result {
-                Ok(()) => Either::Left(action),
-                Err(e) => {
-                    warn!(action = ?action, error = %e, "Action failed");
-                    Either::Right((action, e.to_string()))
-                }
+        results.into_iter().partition_map(|(action, result)| match result {
+            Ok(()) => Either::Left(action),
+            Err(e) => {
+                warn!(action = ?action, error = %e, "Action failed");
+                Either::Right((action, e.to_string()))
             }
-        });
-
-        (taken, failed)
+        })
     }
 
     /// Get the event bus.

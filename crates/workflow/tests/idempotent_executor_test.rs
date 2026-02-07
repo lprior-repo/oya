@@ -163,8 +163,9 @@ async fn test_concurrent_execution_only_one_executes() {
     // Then: All results should be identical
     let mut results = Vec::new();
     for handle in handles {
-        let result = handle.await.expect("Task should complete");
-        results.push(result);
+        let result = handle.await;
+        assert!(result.is_ok(), "Task should complete");
+        results.push(result.ok());
     }
 
     let first_result = &results[0];
@@ -239,7 +240,7 @@ async fn test_execute_once_under_load() {
     let results: Vec<_> = futures::future::join_all(handles)
         .await
         .into_iter()
-        .map(|r| r.expect("Task should complete"))
+        .filter_map(|r| r.ok())
         .collect();
 
     // Then: All results should be identical

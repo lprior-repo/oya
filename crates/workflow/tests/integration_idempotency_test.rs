@@ -82,7 +82,7 @@ impl Database {
 
     async fn get_execution_count(&self, key: &IdempotencyKey) -> u32 {
         let records = self.records.read().await;
-        records.get(key).map(|r| r.execution_count).unwrap_or(0)
+        records.get(key).map(|r| r.execution_count).map_or(0, |v| v)
     }
 }
 
@@ -157,7 +157,7 @@ impl IdempotentExecutor {
     /// Get actual execution count from internal tracker
     async fn get_actual_execution_count(&self, key: &IdempotencyKey) -> u32 {
         let counts = self.execution_count.read().await;
-        counts.get(key).copied().unwrap_or(0)
+        counts.get(key).copied().map_or(0, |v| v)
     }
 }
 
@@ -245,9 +245,13 @@ async fn test_concurrent_execution_with_same_key_only_executes_once() {
     // Then: All executions should succeed
     let mut results = Vec::new();
     for handle in handles {
-        let result = handle.await.expect("Task should complete");
-        assert!(result.is_ok(), "Concurrent execution should succeed");
-        results.push(result.ok());
+        let result = handle.await;
+        assert!(result.is_ok(), "Task should complete");
+        let inner_result = result.ok();
+        assert!(inner_result.is_some(), "Task result should exist");
+        let unwrapped = inner_result.map_or(Err("No result".to_string()), |r| r);
+        assert!(unwrapped.is_ok(), "Concurrent execution should succeed");
+        results.push(unwrapped.ok());
     }
 
     // And: All results should be identical

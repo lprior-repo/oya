@@ -152,7 +152,7 @@ impl ReplayEngine {
 
         self.current_sequence = events
             .iter()
-            .fold(self.current_sequence, |seq, event_record| {
+            .fold(self.current_sequence, |_seq, event_record| {
                 projection.apply(&event_record.event);
                 event_record.sequence
             });

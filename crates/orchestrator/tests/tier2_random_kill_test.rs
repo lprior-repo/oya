@@ -145,7 +145,7 @@ async fn given_random_tier2_kills_when_100_percent_recovery_required_then_all_re
     // Verify all children are tracked
     let child_count_before = get_supervisor_status(&supervisor).await;
     assert_eq!(
-        child_count_before.unwrap_or(0),
+        child_count_before.map_or(0, |v| v),
         child_count,
         "supervisor should track {} children",
         child_count
@@ -175,7 +175,7 @@ async fn given_random_tier2_kills_when_100_percent_recovery_required_then_all_re
         sleep(Duration::from_millis(10)).await;
 
         // Check recovery
-        let current_count = get_supervisor_status(&supervisor).await.unwrap_or(0);
+        let current_count = get_supervisor_status(&supervisor).await.map_or(0, |v| v);
         if current_count == child_count {
             recovery_count.fetch_add(1, Ordering::SeqCst);
         }
@@ -187,7 +187,7 @@ async fn given_random_tier2_kills_when_100_percent_recovery_required_then_all_re
     // THEN: Verify 100% recovery rate
     let final_count = get_supervisor_status(&supervisor).await;
     assert_eq!(
-        final_count.unwrap_or(0),
+        final_count.map_or(0, |v| v),
         child_count,
         "all tier-2 actors should be recovered after chaos (100% recovery rate)"
     );
@@ -271,7 +271,7 @@ async fn given_extended_chaos_when_metrics_tracked_then_recovery_is_100_percent(
         sleep(Duration::from_millis(50)).await;
         let current_count = get_supervisor_status(&supervisor).await;
         assert_eq!(
-            current_count.unwrap_or(0),
+            current_count.map_or(0, |v| v),
             child_count,
             "round {}: all children should recover (100% recovery)",
             round
@@ -283,7 +283,7 @@ async fn given_extended_chaos_when_metrics_tracked_then_recovery_is_100_percent(
     let final_count = get_supervisor_status(&supervisor).await;
 
     assert_eq!(
-        final_count.unwrap_or(0),
+        final_count.map_or(0, |v| v),
         child_count,
         "after {} successful kills, all tier-2 actors should be recovered (100% rate)",
         successful_kills

@@ -514,7 +514,9 @@ async fn test_concurrent_checkpoint_operations() -> Result<(), String> {
         let semaphore_clone = semaphore.clone();
 
         let handle = tokio::spawn(async move {
-            let _permit = semaphore_clone.acquire().await.unwrap();
+            let permit = semaphore_clone.acquire().await;
+            assert!(permit.is_ok(), "Semaphore acquire should succeed");
+            let _permit = permit.ok();
 
             let state = EventSourcedState {
                 bead_states: HashMap::new(),

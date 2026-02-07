@@ -245,23 +245,23 @@ fn test_bead_lifecycle_with_dependencies() {
     // B and D should complete after A but before C and E
     let a_pos = order.iter().position(|x| x == "bead-a");
     assert!(a_pos.is_some(), "bead-a not found in completion order");
-    let a_pos = a_pos.unwrap_or(0);
+    let a_pos = a_pos.map_or(0, |v| v);
 
     let b_pos = order.iter().position(|x| x == "bead-b");
     assert!(b_pos.is_some(), "bead-b not found in completion order");
-    let b_pos = b_pos.unwrap_or(0);
+    let b_pos = b_pos.map_or(0, |v| v);
 
     let d_pos = order.iter().position(|x| x == "bead-d");
     assert!(d_pos.is_some(), "bead-d not found in completion order");
-    let d_pos = d_pos.unwrap_or(0);
+    let d_pos = d_pos.map_or(0, |v| v);
 
     let c_pos = order.iter().position(|x| x == "bead-c");
     assert!(c_pos.is_some(), "bead-c not found in completion order");
-    let c_pos = c_pos.unwrap_or(0);
+    let c_pos = c_pos.map_or(0, |v| v);
 
     let e_pos = order.iter().position(|x| x == "bead-e");
     assert!(e_pos.is_some(), "bead-e not found in completion order");
-    let e_pos = e_pos.unwrap_or(0);
+    let e_pos = e_pos.map_or(0, |v| v);
 
     assert!(
         b_pos > a_pos,

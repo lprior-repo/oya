@@ -736,12 +736,12 @@ fn given_workflow_when_check_bead_ready_individually_then_respects_dependencies(
         // A should be ready (no dependencies)
         let a_ready = state.is_bead_ready(&a);
         assert!(a_ready.is_ok(), "Checking A readiness should succeed");
-        assert!(a_ready.unwrap_or(false), "A should be ready");
+        assert!(a_ready.map_or(false, |v| v), "A should be ready");
 
         // B should not be ready (depends on A)
         let b_ready = state.is_bead_ready(&b);
         assert!(b_ready.is_ok(), "Checking B readiness should succeed");
-        assert!(!b_ready.unwrap_or(true), "B should not be ready");
+        assert!(!b_ready.map_or(true, |v| v), "B should not be ready");
     }
 
     // Complete A
@@ -755,7 +755,7 @@ fn given_workflow_when_check_bead_ready_individually_then_respects_dependencies(
         let b_ready = state.is_bead_ready(&b);
         assert!(b_ready.is_ok(), "Checking B readiness should succeed");
         assert!(
-            b_ready.unwrap_or(false),
+            b_ready.map_or(false, |v| v),
             "B should be ready after A completes"
         );
     }
@@ -930,7 +930,7 @@ fn given_scheduler_with_chain_when_bead_completed_event_then_dependents_become_r
     if let Some(state) = workflow {
         assert_eq!(state.completed_count(), 2, "Should have 2 completed beads");
         assert!(
-            state.is_bead_ready(&c).unwrap_or(false),
+            state.is_bead_ready(&c).map_or(false, |v| v),
             "C should be ready"
         );
     }

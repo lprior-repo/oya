@@ -6,10 +6,6 @@
 //        or: zellij --layout /path/to/oya.kdl
 
 layout {
-    tab_bar {
-        default_tab "oya-dashboard"
-    }
-
     tab name="oya-dashboard" {
         pane {
             name "oya"

@@ -412,13 +412,13 @@ mod tests {
             prompt
                 .as_ref()
                 .map(|p| p.contains("implement"))
-                .unwrap_or(false)
+                .map_or(false, |v| v)
         );
         assert!(
             prompt
                 .as_ref()
                 .map(|p| p.contains("No unsafe code"))
-                .unwrap_or(false)
+                .map_or(false, |v| v)
         );
     }
 

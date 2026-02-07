@@ -20,13 +20,15 @@ proptest! {
         let compressed = compress(&data);
         prop_assert!(compressed.is_ok(), "Compression should succeed for any input");
 
-        let compressed = compressed.map_err(|e| prop_assert_err::Error::Mismatch(e))?;
-        let decompressed = decompress(&compressed, data.len());
-        prop_assert!(decompressed.is_ok(), "Decompression should succeed");
+        if let Ok(compressed_value) = compressed {
+            let decompressed = decompress(&compressed_value, data.len());
+            prop_assert!(decompressed.is_ok(), "Decompression should succeed");
 
-        // THEN: Original data is preserved exactly
-        let decompressed = decompressed.map_err(|e| prop_assert_err::Error::Mismatch(e))?;
-        prop_assert_eq!(decompressed, data, "Round-trip should preserve data exactly");
+            // THEN: Original data is preserved exactly
+            if let Ok(decompressed_value) = decompressed {
+                prop_assert_eq!(decompressed_value, data, "Round-trip should preserve data exactly");
+            }
+        }
     }
 }
 
@@ -103,7 +105,7 @@ fn test_compression_achieves_50_percent_target() {
     let compressed = compress(&repetitive_data);
     assert!(compressed.is_ok(), "Compression should succeed");
 
-    let compressed = compressed.unwrap();
+    let compressed = compressed.map_err(|e| format!("Compression failed: {}", e))?;
     let compressed_size = compressed.len();
 
     // THEN: Should achieve at least 50% size reduction
@@ -186,15 +188,18 @@ proptest! {
         // THEN: Should succeed
         prop_assert!(result.is_ok(), "Should compress any data");
 
-        let compressed = result.unwrap();
-        prop_assert!(!compressed.is_empty(), "Compressed data should not be empty");
+        if let Ok(compressed) = result {
+            prop_assert!(!compressed.is_empty(), "Compressed data should not be empty");
 
-        // WHEN: Decompressed
-        let decompressed = decompress(&compressed, data.len());
+            // WHEN: Decompressed
+            let decompressed = decompress(&compressed, data.len());
 
-        // THEN: Should match original
-        prop_assert!(decompressed.is_ok(), "Should decompress successfully");
-        prop_assert_eq!(decompressed.unwrap(), data, "Round-trip should preserve data");
+            // THEN: Should match original
+            prop_assert!(decompressed.is_ok(), "Should decompress successfully");
+            if let Ok(decompressed_value) = decompressed {
+                prop_assert_eq!(decompressed_value, data, "Round-trip should preserve data");
+            }
+        }
     }
 }
 
@@ -207,9 +212,10 @@ fn test_edge_cases_compress_decompress() {
     let empty = vec![];
     let compressed = compress(&empty);
     assert!(compressed.is_ok(), "Empty data should compress");
-    let decompressed = decompress(&compressed.unwrap(), 0);
+    let compressed_inner = compressed.map_err(|e| format!("Compression failed: {}", e))?;
+    let decompressed = decompress(&compressed_inner, 0);
     assert!(decompressed.is_ok(), "Empty data should decompress");
-    assert_eq!(decompressed.unwrap(), empty, "Empty round-trip should work");
+    assert_eq!(decompressed.map_err(|e| format!("Decompression failed: {}", e))?, empty, "Empty round-trip should work");
 
     // Single byte
     let single = vec![42u8];
@@ -248,17 +254,18 @@ proptest! {
         let compressed = compress(&data);
         prop_assert!(compressed.is_ok(), "Compression should succeed");
 
-        let compressed = compressed.unwrap();
-        let compressed_size = compressed.len();
+        if let Ok(compressed_data) = compressed {
+            let compressed_size = compressed_data.len();
 
-        // THEN: Compressed size should be reasonable
-        // Allow up to 110% expansion for incompressible data
-        let max_allowed = (original_size as f64 * 1.1) as usize;
-        prop_assert!(
-            compressed_size <= max_allowed,
-            "Compression should not exceed 110% of original: {} > {}",
-            compressed_size,
-            max_allowed
-        );
+            // THEN: Compressed size should be reasonable
+            // Allow up to 110% expansion for incompressible data
+            let max_allowed = (original_size as f64 * 1.1) as usize;
+            prop_assert!(
+                compressed_size <= max_allowed,
+                "Compression should not exceed 110% of original: {} > {}",
+                compressed_size,
+                max_allowed
+            );
+        }
     }
 }

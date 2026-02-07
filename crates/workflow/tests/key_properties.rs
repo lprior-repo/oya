@@ -185,17 +185,18 @@ fn test_collision_resistance_random_inputs() {
             c: vec![i % 2 == 0, i % 3 == 0, i % 5 == 0],
         };
 
-        let key = idempotency_key(&bead_id, &input).expect("Should generate key");
+        let key = idempotency_key(&bead_id, &input);
+        assert!(key.is_ok(), "Should generate key");
+        let key = key.ok();
 
         // Check for collision
-        if keys.contains(&key) {
-            panic!(
-                "Collision detected! Key {} already generated from previous input",
-                key
-            );
+        if let Some(k) = key {
+            if keys.contains(&k) {
+                assert!(false, "Collision detected! Key {} already generated from previous input", k);
+            }
+            keys.insert(k);
         }
 
-        keys.insert(key);
         inputs.push((bead_id, input));
     }
 

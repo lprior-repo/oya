@@ -17,6 +17,7 @@ futures = { workspace = true }
 
 # Functional programming
 either = "1.12"
+itertools = "0.13"
 
 # Serialization
 serde = { workspace = true, features = ["derive"] }

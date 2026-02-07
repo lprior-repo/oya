@@ -148,7 +148,7 @@ async fn given_tier2_actor_killed_when_supervisor_active_then_full_recovery() {
     // Verify child is tracked
     let child_count_before = get_supervisor_status(&supervisor).await;
     assert_eq!(
-        child_count_before.unwrap_or(0),
+        child_count_before.map_or(0, |v| v),
         1,
         "supervisor should track 1 child"
     );
@@ -172,7 +172,7 @@ async fn given_tier2_actor_killed_when_supervisor_active_then_full_recovery() {
     // Verify recovery: child should be restarted
     let child_count_after = get_supervisor_status(&supervisor).await;
     assert_eq!(
-        child_count_after.unwrap_or(0),
+        child_count_after.map_or(0, |v| v),
         1,
         "supervisor should have 1 child after recovery"
     );
@@ -236,7 +236,7 @@ async fn given_multiple_tier2_killed_when_simultaneous_then_all_recover() {
     // Verify all children are tracked
     let child_count_before = get_supervisor_status(&supervisor).await;
     assert_eq!(
-        child_count_before.unwrap_or(0),
+        child_count_before.map_or(0, |v| v),
         child_count,
         "supervisor should track {} children",
         child_count
@@ -262,7 +262,7 @@ async fn given_multiple_tier2_killed_when_simultaneous_then_all_recover() {
     // Verify recovery: all children should be restarted
     let child_count_after = get_supervisor_status(&supervisor).await;
     assert_eq!(
-        child_count_after.unwrap_or(0),
+        child_count_after.map_or(0, |v| v),
         child_count,
         "supervisor should have {} children after recovery",
         child_count
@@ -327,7 +327,7 @@ async fn given_chaos_monkey_kills_random_tier2_when_100_cycles_then_100_percent_
     // Verify all children are tracked
     let child_count_before = get_supervisor_status(&supervisor).await;
     assert_eq!(
-        child_count_before.unwrap_or(0),
+        child_count_before.map_or(0, |v| v),
         child_count,
         "supervisor should track {} children",
         child_count
@@ -357,7 +357,7 @@ async fn given_chaos_monkey_kills_random_tier2_when_100_cycles_then_100_percent_
         sleep(Duration::from_millis(10)).await;
 
         // Check recovery
-        let current_count = get_supervisor_status(&supervisor).await.unwrap_or(0);
+        let current_count = get_supervisor_status(&supervisor).await.map_or(0, |v| v);
         if current_count == child_count {
             recovery_count.fetch_add(1, Ordering::SeqCst);
         }
@@ -369,7 +369,7 @@ async fn given_chaos_monkey_kills_random_tier2_when_100_cycles_then_100_percent_
     // THEN: Verify 100% recovery rate
     let final_count = get_supervisor_status(&supervisor).await;
     assert_eq!(
-        final_count.unwrap_or(0),
+        final_count.map_or(0, |v| v),
         child_count,
         "all tier-2 actors should be recovered after chaos"
     );
@@ -444,7 +444,7 @@ async fn given_cascading_tier2_failures_when_rapid_kills_then_supervisor_survive
 
     let final_count = get_supervisor_status(&supervisor).await;
     assert_eq!(
-        final_count.unwrap_or(0),
+        final_count.map_or(0, |v| v),
         child_count,
         "all children should recover after cascade"
     );
@@ -569,7 +569,7 @@ async fn given_continuous_chaos_when_5_seconds_then_stable_recovery() {
 
     let final_count = get_supervisor_status(&supervisor).await;
     assert_eq!(
-        final_count.unwrap_or(0),
+        final_count.map_or(0, |v| v),
         child_count,
         "all tier-2 actors should recover after continuous chaos"
     );
@@ -637,7 +637,7 @@ async fn given_100_tier2_kills_when_all_recover_then_rate_is_100_percent() {
         sleep(Duration::from_millis(50)).await;
         let current_count = get_supervisor_status(&supervisor).await;
         assert_eq!(
-            current_count.unwrap_or(0),
+            current_count.map_or(0, |v| v),
             child_count,
             "round {}: all children should recover",
             round
@@ -647,7 +647,7 @@ async fn given_100_tier2_kills_when_all_recover_then_rate_is_100_percent() {
     // THEN: Final verification - 100% recovery rate
     let final_count = get_supervisor_status(&supervisor).await;
     assert_eq!(
-        final_count.unwrap_or(0),
+        final_count.map_or(0, |v| v),
         child_count,
         "after {} kills, all tier-2 actors should be recovered (100% rate)",
         total_kills
@@ -717,7 +717,7 @@ async fn given_continuous_chaos_when_5min_random_kills_then_100_percent_recovery
     // Verify all children are tracked
     let child_count_before = get_supervisor_status(&supervisor).await;
     assert_eq!(
-        child_count_before.unwrap_or(0),
+        child_count_before.map_or(0, |v| v),
         child_count,
         "supervisor should track {} children",
         child_count
@@ -750,7 +750,7 @@ async fn given_continuous_chaos_when_5min_random_kills_then_100_percent_recovery
         // Every 30 seconds, verify recovery is still working
         if kill_count % 600 == 0 {
             // ~30 seconds at 20 kills/second
-            let current_count = get_supervisor_status(&supervisor).await.unwrap_or(0);
+            let current_count = get_supervisor_status(&supervisor).await.map_or(0, |v| v);
             eprintln!(
                 "Chaos check at {}s: {}/{} children recovered, {} kills attempted",
                 start.elapsed().unwrap_or_default().as_secs(),
@@ -789,14 +789,14 @@ async fn given_continuous_chaos_when_5min_random_kills_then_100_percent_recovery
     // THEN: Verify 100% recovery rate after 5 minutes of chaos
     let final_count = get_supervisor_status(&supervisor).await;
 
-    let recovery_rate = if final_count.unwrap_or(0) >= child_count {
+    let recovery_rate = if final_count.map_or(0, |v| v) >= child_count {
         100.0
     } else {
-        (final_count.unwrap_or(0) as f64 / child_count as f64) * 100.0
+        (final_count.map_or(0, |v| v) as f64 / child_count as f64) * 100.0
     };
 
     assert_eq!(
-        final_count.unwrap_or(0),
+        final_count.map_or(0, |v| v),
         child_count,
         "after 5 minutes of chaos ({} kills), all tier-2 actors must be recovered \
          - achieved {:.1}% recovery rate, expected 100%",

@@ -228,7 +228,7 @@ async fn given_actor_killed_when_restarted_then_p99_latency_under_1s() {
     let p50 = calculate_percentile(&latencies, 50.0);
     let p95 = calculate_percentile(&latencies, 95.0);
     let p99 = calculate_percentile(&latencies, 99.0);
-    let max = latencies.last().copied().unwrap_or(Duration::ZERO);
+    let max = latencies.last().copied().map_or(Duration::ZERO, |v| v);
 
     println!("\n=== Restart Latency Performance Results ===");
     println!("Trials completed: {}", latencies.len());

@@ -901,14 +901,14 @@ mod tests {
 
         // Verify all checkpoints exist
         let checkpoints_before = storage.load_checkpoints(workflow_id).await;
-        assert_eq!(checkpoints_before.map(|c| c.len()).unwrap_or(0), 3);
+        assert_eq!(checkpoints_before.map(|c| c.len()).map_or(0, |len| len), 3);
 
         // Rewind to first checkpoint
         let _ = engine.rewind(workflow_id, build_phase_id).await;
 
         // Verify only first checkpoint remains
         let checkpoints_after = storage.load_checkpoints(workflow_id).await;
-        assert_eq!(checkpoints_after.map(|c| c.len()).unwrap_or(0), 1);
+        assert_eq!(checkpoints_after.map(|c| c.len()).map_or(0, |len| len), 1);
     }
 
     #[tokio::test]
@@ -925,14 +925,14 @@ mod tests {
         let _ = engine.run(workflow).await;
 
         let journal_before = storage.load_journal(workflow_id).await;
-        let entries_before = journal_before.map(|j| j.len()).unwrap_or(0);
+        let entries_before = journal_before.map(|j| j.len()).map_or(0, |len| len);
 
         // Rewind
         let _ = engine.rewind(workflow_id, build_phase_id).await;
 
         // Verify rewind was recorded in journal
         let journal_after = storage.load_journal(workflow_id).await;
-        let entries_after = journal_after.map(|j| j.len()).unwrap_or(0);
+        let entries_after = journal_after.map(|j| j.len()).map_or(0, |len| len);
         assert!(entries_after > entries_before);
     }
 
@@ -995,7 +995,7 @@ mod tests {
         // Verify no checkpoints were created
         let checkpoints = storage.load_checkpoints(workflow_id).await;
         assert!(checkpoints.is_ok());
-        assert_eq!(checkpoints.map(|c| c.len()).unwrap_or(999), 0);
+        assert_eq!(checkpoints.map(|c| c.len()).map_or(999, |len| len), 0);
     }
 
     #[tokio::test]
@@ -1021,7 +1021,7 @@ mod tests {
         assert!(result
             .as_ref()
             .map(|r| r.state == WorkflowState::Completed)
-            .unwrap_or(false));
+            .map_or(false, |completed| completed));
     }
 
     #[tokio::test]
@@ -1075,7 +1075,7 @@ mod tests {
         assert!(rewind2.is_ok());
 
         // Verify workflow is at correct position
-        assert_eq!(rewind2.map(|w| w.current_phase).unwrap_or(999), 1);
+        assert_eq!(rewind2.map(|w| w.current_phase).map_or(999, |idx| idx), 1);
     }
 
     #[tokio::test]
@@ -1097,7 +1097,7 @@ mod tests {
                     .iter()
                     .any(|e| matches!(e, crate::types::JournalEntry::CheckpointCreated { .. }))
             })
-            .unwrap_or(false);
+            .map_or(false, |has_entry| has_entry);
 
         assert!(has_checkpoint_entry);
     }
