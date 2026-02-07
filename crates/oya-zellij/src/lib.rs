@@ -1833,11 +1833,3 @@ mod tests {
         assert_eq!(default_mode, ViewMode::BeadList);
     }
 }
-        let _ = ViewMode::SystemHealth;
-        let _ = ViewMode::LogAggregator;
-
-        // Verify default is BeadList
-        let default_mode = ViewMode::default();
-        assert_eq!(default_mode, ViewMode::BeadList);
-    }
-}
