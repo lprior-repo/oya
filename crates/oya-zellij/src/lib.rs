@@ -1818,27 +1818,6 @@ mod tests {
     }
 
     #[test]
-    fn test_open_command_pane_function_exists() {
-        // This test verifies the open_command_pane_for_stage function is callable
-        // The actual pane opening happens via zellij API which we can't test directly
-        let state = State::default();
-        // Function signature: open_command_pane_for_stage(&self, bead_id: &str, stage_name: &str)
-        // We just verify state is valid
-        let _ = state;
-    }
-}
-
-
-    #[test]
-    fn test_view_mode_has_seven_variants() {
-        // Verify all 7 ViewMode variants are present and usable
-        let _ = ViewMode::BeadList;
-        let _ = ViewMode::BeadDetail;
-        let _ = ViewMode::PipelineView;
-        let _ = ViewMode::AgentView;
-        let _ = ViewMode::GraphView;
-        let _ = ViewMode::SystemHealth;
-        let _ = ViewMode::LogAggregator;
 
         // Verify default is BeadList
         let default_mode = ViewMode::default();
