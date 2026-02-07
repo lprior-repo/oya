@@ -5,7 +5,7 @@
 //! Real-time terminal UI for pipeline status, bead execution, and stage progress.
 
 use im::{HashMap, Vector};
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::time::{Duration, Instant};
 use zellij_tile::prelude::*;
 
@@ -1110,6 +1110,106 @@ impl State {
     }
 
     fn render_footer(&self, rows: usize, cols: usize) {
+    fn render_graph_view(&self, rows: usize, cols: usize) {
+        if self.graph_nodes.is_empty() {
+            println!("\n  \x1b[2mNo graph data available\x1b[0m");
+            println!("  \x1b[2mPress 'r' to refresh from server\x1b[0m");
+            return;
+        }
+
+        println!("\n  \x1b[1mDependency Graph (Critical Path Highlighted)\x1b[0m");
+        println!("  {}", "─".repeat(cols.saturating_sub(2)));
+        println!();
+
+        // Count critical path items
+        let critical_count = self
+            .graph_nodes
+            .iter()
+            .filter(|n| n.is_on_critical_path)
+            .count();
+
+        let total_nodes = self.graph_nodes.len();
+        let total_edges = self.graph_edges.len();
+
+        // Display legend
+        println!(
+            "  \x1b[1mLegend:\x1b[0m \x1b[33m★\x1b[0m Critical Path | \x1b[90m○\x1b[0m Normal"
+        );
+        println!(
+            "  \x1b[1mNodes:\x1b[0m {} total | {} on critical path",
+            total_nodes, critical_count
+        );
+        println!(
+            "  \x1b[1mEdges:\x1b[0m {} total", total_edges
+        );
+        println!();
+
+        // Display nodes with critical path highlighting
+        let max_rows = rows.saturating_sub(12);
+        println!("  \x1b[1mNodes:\x1b[0m");
+        self.graph_nodes
+            .iter()
+            .take(max_rows)
+            .for_each(|node| {
+                let critical_marker = if node.is_on_critical_path { "\x1b[33m★\x1b[0m" } else { "\x1b[90m○\x1b[0m" };
+                let node_color = if node.is_on_critical_path {
+                    "\x1b[33m"  // Yellow for critical path
+                } else {
+                    "\x1b[90m"  // Gray for normal
+                };
+
+                println!(
+                    "  {} {}{}\x1b[0m {} {}{}",
+                    critical_marker,
+                    node_color,
+                    node.symbol(),
+                    truncate(&node.label, 30),
+                    node.state.color(),
+                    node.state.as_str()
+                );
+            });
+
+        if self.graph_nodes.len() > max_rows {
+            println!(
+                "  \x1b[2m... and {} more nodes\x1b[0m",
+                self.graph_nodes.len().saturating_sub(max_rows)
+            );
+        }
+
+        println!();
+
+        // Display edges with critical path highlighting
+        let edge_max_rows = max_rows.saturating_sub(2);
+        println!("  \x1b[1mEdges:\x1b[0m");
+        self.graph_edges
+            .iter()
+            .take(edge_max_rows)
+            .for_each(|edge| {
+                let edge_color = if edge.is_on_critical_path {
+                    "\x1b[33m"  // Yellow for critical path
+                } else {
+                    "\x1b[90m"  // Gray for normal
+                };
+
+                let critical_marker = if edge.is_on_critical_path { "★" } else { "○" };
+
+                println!(
+                    "  {} {}{} → {}\x1b[0m",
+                    critical_marker,
+                    edge_color,
+                    truncate(&edge.from, 20),
+                    truncate(&edge.to, 20)
+                );
+            });
+
+        if self.graph_edges.len() > edge_max_rows {
+            println!(
+                "  \x1b[2m... and {} more edges\x1b[0m",
+                self.graph_edges.len().saturating_sub(edge_max_rows)
+            );
+        }
+    }
+
         print!("\x1b[{};1H", rows.saturating_sub(1));
 
         let view_mode = match self.mode {
@@ -1117,12 +1217,14 @@ impl State {
             ViewMode::BeadDetail => "Detail",
             ViewMode::PipelineView => "Pipeline",
             ViewMode::AgentList => "Agents",
+            ViewMode::GraphView => "Graph",
+            ViewMode::GraphView => "Graph",
         };
 
         println!("{}", "─".repeat(cols));
 
         let help = format!(
-            "\x1b[2m[{}] 1:List 2:Detail 3:Pipeline | j/k:Navigate g/G:Top/Bottom Enter:Cycle r:Refresh q:Quit\x1b[0m",
+            "\x1b[2m[{}] 1:List 2:Detail 3:Pipeline 4:Agents 5:Graph | j/k:Navigate g/G:Top/Bottom Enter:Cycle r:Refresh q:Quit\x1b[0m",
             view_mode
         );
 
@@ -1260,6 +1362,10 @@ impl State {
 // Helper functions
 fn should_fetch_agents_on_view_load(mode: ViewMode) -> bool {
     matches!(mode, ViewMode::AgentList)
+}
+
+fn should_fetch_graph_on_view_load(mode: ViewMode) -> bool {
+    matches!(mode, ViewMode::GraphView)
 }
 
 fn truncate(s: &str, max_len: usize) -> String {
