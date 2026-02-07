@@ -744,13 +744,27 @@ impl State {
     fn handle_command_pane_exited(
         &mut self,
         _pane_id: u32,
-        _exit_code: i32,
+        exit_code: Option<i32>,
         _context: BTreeMap<String, String>,
     ) {
         // Command pane exited - refresh pipeline to show updated stage status
         if self.mode == ViewMode::PipelineView {
             self.pipeline_caches = HashMap::new();
             self.load_pipeline_for_selected();
+        }
+
+        // Track command pane completion
+        let pane_id_str = _pane_id.to_string();
+        if let Some(pane) = self.command_panes.get_mut(&pane_id_str) {
+            let code = exit_code.unwrap_or(-1);
+            pane.mark_completed(code);
+
+            // Update the pipeline stage status if this was a stage run
+            if pane.action == "run_stage" {
+                if let (Some(bead_id), Some(stage_name)) = (&pane.bead_id, &pane.stage_name) {
+                    self.update_stage_status(bead_id, stage_name, code);
+                }
+            }
         }
     }
 
@@ -766,6 +780,31 @@ impl State {
         if let (Some(bead_id), Some(stage_name)) = (bead_id, stage_name) {
             self.open_command_pane_for_stage(bead_id, stage_name);
         }
+    }
+
+    fn update_stage_status(&mut self, bead_id: &str, stage_name: &str, exit_code: i32) {
+        // Find the stage in the current pipeline and update its status
+        let new_status = if exit_code == 0 {
+            StageStatus::Passed
+        } else {
+            StageStatus::Failed
+        };
+
+        self.pipeline_stages = self
+            .pipeline_stages
+            .iter()
+            .map(|stage| {
+                if stage.name == stage_name {
+                    StageInfo {
+                        status: new_status,
+                        exit_code: Some(exit_code),
+                        ..stage.clone()
+                    }
+                } else {
+                    stage.clone()
+                }
+            })
+            .collect();
     }
 
     fn handle_web_response(
