@@ -1562,6 +1562,14 @@ fn should_fetch_graph_on_view_load(mode: ViewMode) -> bool {
     matches!(mode, ViewMode::GraphView)
 }
 
+fn should_fetch_system_health_on_view_load(mode: ViewMode) -> bool {
+    matches!(mode, ViewMode::SystemHealth)
+}
+
+fn should_fetch_log_aggregator_on_view_load(mode: ViewMode) -> bool {
+    matches!(mode, ViewMode::LogAggregator)
+}
+
 fn truncate(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
         s.to_string()
