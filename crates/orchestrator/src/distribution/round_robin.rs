@@ -304,14 +304,13 @@ mod tests {
             "agent-3".to_string(),
         ];
 
-        let mut counts = std::collections::HashMap::new();
-
-        // Select 300 times
-        for _ in 0..300 {
-            if let Some(agent) = strategy.select_agent("bead", &agents, &ctx) {
-                *counts.entry(agent).or_insert(0) += 1;
-            }
-        }
+        // Use functional approach to count agent selections
+        let counts: std::collections::HashMap<_, _> = (0..300)
+            .filter_map(|_| strategy.select_agent("bead", &agents, &ctx))
+            .fold(std::collections::HashMap::new(), |mut acc, agent| {
+                *acc.entry(agent).or_insert(0) += 1;
+                acc
+            });
 
         // Each agent should be selected exactly 100 times
         assert_eq!(counts.get("agent-1"), Some(&100));
