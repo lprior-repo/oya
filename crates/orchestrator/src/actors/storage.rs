@@ -220,7 +220,7 @@ impl Actor for StateManagerActorDef {
             StateManagerMessage::DeleteState { key } => {
                 info!("Deleting state: key={}", key);
 
-                match state.db.delete(("state", key)).await {
+                match state.db.delete::<surrealdb::sql::Value>(("state", key)).await {
                     Ok(_) => {
                         info!("Successfully deleted state: key={}", key);
                     }

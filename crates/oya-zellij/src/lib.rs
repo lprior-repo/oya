@@ -1522,6 +1522,10 @@ mod tests {
         agents.into_iter().collect::<Vector<_>>()
     }
 
+    fn to_vector_stages(stages: Vec<StageInfo>) -> Vector<StageInfo> {
+        stages.into_iter().collect::<Vector<_>>()
+    }
+
     #[test]
     fn agent_view_fetches_agents_on_load() {
         assert!(should_fetch_agents_on_view_load(ViewMode::AgentList));
@@ -1657,5 +1661,4 @@ mod tests {
         // We just verify state is valid
         let _ = state;
     }
-}
 }
