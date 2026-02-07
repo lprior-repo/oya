@@ -23,7 +23,7 @@
 //! - Actor message passing for state management
 
 use super::actors::AppState;
-use crate::middleware::cors_layer;
+use crate::middleware::{catch_panic_middleware, cors_layer, error_handler_middleware};
 use axum::{
     Router,
     routing::{get, post},
@@ -69,7 +69,11 @@ pub fn create_router() -> Router<AppState> {
         // Agents endpoint
         .route("/agents", get(agents::list_agents))
         .route("/agents/spawn", post(agents::spawn_agents))
-        .route("/agents/scale", post(agents::scale_agents));
+        .route("/agents/scale", post(agents::scale_agents))
+        // Apply error handling middleware to API routes
+        .layer(axum::middleware::from_fn(error_handler_middleware))
+        // Apply panic catching middleware
+        .layer(axum::middleware::from_fn(catch_panic_middleware));
 
     Router::new()
         .nest("/api", api_routes)

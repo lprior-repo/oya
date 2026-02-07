@@ -1109,7 +1109,6 @@ impl State {
         }
     }
 
-    fn render_footer(&self, rows: usize, cols: usize) {
     fn render_graph_view(&self, rows: usize, cols: usize) {
         if self.graph_nodes.is_empty() {
             println!("\n  \x1b[2mNo graph data available\x1b[0m");
