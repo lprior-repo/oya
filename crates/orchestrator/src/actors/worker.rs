@@ -321,14 +321,25 @@ impl Actor for WorkerActorDef {
                 };
                 let new_state = BeadState::Running;
 
-                // Create workspace for bead execution
-                let _exec_result = if let Some(ref workspace_manager) =
+                // Create execution context with workspace path and execute bead
+                let exec_result = if let Some(ref workspace_manager) =
                     state.config.workspace_manager
                 {
-                    match workspace_manager.execute_with_workspace(&bead_id, |_workspace_path| {
-                        // TODO: Execute actual bead work here
+                    match workspace_manager.execute_with_workspace(&bead_id, |workspace_path| {
+                        // Create execution context with workspace path
+                        let exec_ctx = BeadExecutionContext::new(
+                            bead_id.clone(),
+                            workspace_path.to_path_buf(),
+                        );
+
+                        info!(
+                            bead_id = %bead_id,
+                            workspace_path = %workspace_path.display(),
+                            "Executing bead in isolated workspace with context"
+                        );
+
+                        // TODO: Execute actual bead work here using exec_ctx
                         // For now, simulate successful execution
-                        info!(bead_id = %bead_id, "Executing bead in isolated workspace");
                         Ok::<(), oya_pipeline::error::Error>(())
                     }) {
                         Ok(()) => {
@@ -585,5 +596,26 @@ mod tests {
         let second_result =
             ctx.mark_completed(WorkspaceExecutionResult::failure("fail".to_string()));
         assert!(second_result.is_err());
+    }
+
+    #[test]
+    fn test_bead_execution_context_contains_workspace_path() {
+        let workspace_path = PathBuf::from("/tmp/workspace/test-bead-abc123");
+        let ctx = BeadExecutionContext::new("test-bead-abc123", workspace_path.clone());
+
+        assert_eq!(ctx.bead_id(), "test-bead-abc123");
+        assert_eq!(ctx.workspace_path(), &workspace_path);
+        assert!(!ctx.has_completed());
+    }
+
+    #[test]
+    fn test_bead_execution_context_workspace_path_is_valid_path() {
+        let workspace_path = PathBuf::from("/var/oya/workspaces/bead-xyz");
+        let ctx = BeadExecutionContext::new("bead-xyz", workspace_path.clone());
+
+        // Verify workspace_path is accessible and matches expected path
+        let retrieved_path = ctx.workspace_path();
+        assert_eq!(retrieved_path, &workspace_path);
+        assert!(retrieved_path.is_absolute());
     }
 }

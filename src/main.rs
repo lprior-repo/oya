@@ -30,6 +30,7 @@
 #![forbid(clippy::panic)]
 #![deny(clippy::expect_used)]
 
+use std::sync::Arc;
 use std::time::Instant;
 
 use tokio::signal;
