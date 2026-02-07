@@ -63,3 +63,7 @@ mutants.out/
 
 # Test coverage reports
 tarpaulin-report.json
+
+# Beads SQLite database (use JSONL for git tracking)
+.beads/beads.db
+.beads/beads.db-*
