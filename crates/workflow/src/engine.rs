@@ -683,7 +683,7 @@ mod tests {
 
         let result = engine.run(workflow).await;
         assert!(result.is_err());
-        if let Ok(WorkflowResult::Failure { error, .. }) = result {
+        if let Ok(crate::types::WorkflowResult::Failure { error, .. }) = result {
             assert!(error.contains("all handlers"));
         }
     }

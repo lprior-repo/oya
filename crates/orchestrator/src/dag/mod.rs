@@ -18,7 +18,7 @@ use petgraph::algo::{is_cyclic_directed, tarjan_scc, toposort};
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::{Bfs, Dfs, EdgeRef, Reversed};
 use std::collections::VecDeque;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 pub mod error;
 pub mod layout_benchmark;
@@ -1011,7 +1011,7 @@ impl WorkflowDAG {
 
         // Initialize all distances
         for bead_id in &topo_order {
-            let weight = weights.get(bead_id).copied().map_or(Duration::ZERO, |w| w);
+            let weight = weights.get(bead_id).copied().unwrap_or(Duration::ZERO);
             dist.insert(bead_id.clone(), (weight, None));
         }
 
@@ -1025,7 +1025,7 @@ impl WorkflowDAG {
             let current_dist = dist
                 .get(bead_id)
                 .map(|(d, _)| *d)
-                .map_or(Duration::ZERO, |d| d);
+                .unwrap_or(Duration::ZERO);
 
             // Update distances to all neighbors
             for edge in self.graph.edges_directed(node_idx, Direction::Outgoing) {
@@ -1038,7 +1038,7 @@ impl WorkflowDAG {
                     let neighbor_weight = weights
                         .get(neighbor_id)
                         .copied()
-                        .map_or(Duration::ZERO, |w| w);
+                        .unwrap_or(Duration::ZERO);
                     let new_dist = current_dist + neighbor_weight;
 
                     let should_update = dist
@@ -2591,7 +2591,9 @@ fn test_get_ready_nodes_multiple_roots_sorted() -> DagResult<()> {
 }
 
 #[test]
+#[test]
 fn test_query_performance_100_nodes() -> DagResult<()> {
+    use std::time::Instant;
     let mut dag = WorkflowDAG::new();
 
     // Create 100 nodes

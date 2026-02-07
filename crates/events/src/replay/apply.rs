@@ -342,8 +342,10 @@ mod tests {
         );
 
         let recorded = context.last_events.get(&bead_id);
-        assert!(recorded.is_some(), "Should retrieve recorded event");
-        let recorded_meta = recorded.unwrap(); // Safe: asserted is_some above
+        let recorded_meta = recorded
+            .as_ref()
+            .filter(|_| recorded.is_some())
+            .expect("Should retrieve recorded event");
         assert_eq!(
             recorded_meta.event_id,
             event.event_id().to_string(),
@@ -365,14 +367,14 @@ mod tests {
         context.record_applied(bead_id, &event2);
         let second_recorded = context.last_events.get(&bead_id);
 
-        assert!(first_recorded.is_some(), "Should have first recorded event");
-        assert!(
-            second_recorded.is_some(),
-            "Should have second recorded event"
-        );
-
-        let first_meta = first_recorded.unwrap(); // Safe: asserted is_some above
-        let second_meta = second_recorded.unwrap(); // Safe: asserted is_some above
+        let first_meta = first_recorded
+            .as_ref()
+            .filter(|_| first_recorded.is_some())
+            .expect("Should have first recorded event");
+        let second_meta = second_recorded
+            .as_ref()
+            .filter(|_| second_recorded.is_some())
+            .expect("Should have second recorded event");
         assert_ne!(
             first_meta.event_id, second_meta.event_id,
             "Event IDs should differ"
@@ -423,8 +425,10 @@ mod tests {
         context.record_applied(bead_id, &event);
         let result = context.last_event(&bead_id);
 
-        assert!(result.is_some(), "Should return Some for known bead");
-        let result_meta = result.unwrap(); // Safe: asserted is_some above
+        let result_meta = result
+            .as_ref()
+            .filter(|_| result.is_some())
+            .expect("Should return Some for known bead");
         assert_eq!(
             result_meta.event_id,
             event.event_id().to_string(),
@@ -444,9 +448,11 @@ mod tests {
 
         let result = context.is_in_order(&event);
 
-        assert!(result.is_ok(), "Should not error for first event");
-        let is_ordered = result.unwrap(); // Safe: asserted is_ok above
-        assert!(is_ordered, "First event should always be in order");
+        let is_ordered = result
+            .as_ref()
+            .filter(|_| result.is_ok())
+            .expect("Should not error for first event");
+        assert!(*is_ordered, "First event should always be in order");
     }
 
     #[test]
