@@ -191,10 +191,16 @@ pub fn tarjan_scc(dag: &WorkflowDAG) -> Vec<Vec<BeadId>> {
     let mut local_graph = DiGraph::new();
     let mut index_map: HashMap<BeadId, NodeIndex> = HashMap::new();
 
+    // Debug: check for duplicates
+    eprintln!("Node list from DAG: {} nodes", node_list.len());
+
     for bead_id in &node_list {
         let idx = local_graph.add_node(bead_id.clone());
         index_map.insert(bead_id.clone(), idx);
     }
+
+    // Debug: check local_graph
+    eprintln!("Local graph has {} nodes", local_graph.node_count());
 
     // Add edges
     for (from, to, _dep_type) in dag.edges() {
@@ -214,10 +220,16 @@ pub fn tarjan_scc(dag: &WorkflowDAG) -> Vec<Vec<BeadId>> {
         .filter(|node| !state.is_visited(*node))
         .collect();
 
+    // Debug: check unvisited count
+    eprintln!("Unvisited nodes: {}", unvisited.len());
+
     // Now process each unvisited node with mutable state
+    // Check again if still unvisited since DFS might have visited it
     for node in unvisited {
-        let sccs = state.visit(&local_graph, node);
-        all_sccs.extend(sccs);
+        if !state.is_visited(node) {
+            let sccs = state.visit(&local_graph, node);
+            all_sccs.extend(sccs);
+        }
     }
 
     // Convert NodeIndices to BeadIds

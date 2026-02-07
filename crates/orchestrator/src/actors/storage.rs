@@ -2,6 +2,14 @@
 //!
 //! This module provides actors for managing durable state with bincode serialization.
 //! Messages support both fire-and-forget commands and query-response patterns.
+//!
+//! # Submodules
+//!
+//! - [`surreal_integration`]: SurrealDB connection pooling and retry logic
+//! - State management actors with persistent storage
+//! - Event store actors with fsync guarantees
+
+pub mod surreal_integration;
 
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort};
 use surrealdb::Surreal;
@@ -200,7 +208,9 @@ impl Actor for StateManagerActorDef {
                         .create(("state", key.clone()))
                         .content(record)
                         .await
-                        .map_err(|e| ActorError::internal(format!("Failed to save state: {}", e)))?;
+                        .map_err(|e| {
+                            ActorError::internal(format!("Failed to save state: {}", e))
+                        })?;
 
                     info!(
                         "Successfully saved state: key={}, size={} bytes, version={:?}",
@@ -222,11 +232,10 @@ impl Actor for StateManagerActorDef {
             StateManagerMessage::DeleteState { key } => {
                 let result: Result<(), ActorError> = async {
                     // Delete the record from the database
-                    let _: Option<StateRecord> = state
-                        .db
-                        .delete(("state", key.clone()))
-                        .await
-                        .map_err(|e| ActorError::internal(format!("Failed to delete state: {}", e)))?;
+                    let _: Option<StateRecord> =
+                        state.db.delete(("state", key.clone())).await.map_err(|e| {
+                            ActorError::internal(format!("Failed to delete state: {}", e))
+                        })?;
 
                     info!("Successfully deleted state: key={}", key);
                     Ok(())
@@ -310,11 +319,10 @@ impl Actor for StateManagerActorDef {
                 let result = async {
                     let keys: Vec<String> = if let Some(prefix_val) = &prefix {
                         // For prefix filtering, fetch all keys and filter in Rust
-                        let all_records: Vec<StateRecord> = state
-                            .db
-                            .select("state")
-                            .await
-                            .map_err(|e| ActorError::internal(format!("Failed to list keys: {}", e)))?;
+                        let all_records: Vec<StateRecord> =
+                            state.db.select("state").await.map_err(|e| {
+                                ActorError::internal(format!("Failed to list keys: {}", e))
+                            })?;
 
                         all_records
                             .into_iter()
@@ -323,11 +331,10 @@ impl Actor for StateManagerActorDef {
                             .collect()
                     } else {
                         // No prefix filter, get all keys
-                        let all_records: Vec<StateRecord> = state
-                            .db
-                            .select("state")
-                            .await
-                            .map_err(|e| ActorError::internal(format!("Failed to list keys: {}", e)))?;
+                        let all_records: Vec<StateRecord> =
+                            state.db.select("state").await.map_err(|e| {
+                                ActorError::internal(format!("Failed to list keys: {}", e))
+                            })?;
 
                         all_records.into_iter().map(|r| r.key).collect()
                     };

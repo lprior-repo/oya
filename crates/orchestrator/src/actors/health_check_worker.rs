@@ -249,7 +249,7 @@ impl HealthCheckWorkerState {
     /// Increment the failure count and return whether threshold is exceeded.
     fn increment_failures(&mut self) -> bool {
         self.failure_count = self.failure_count.saturating_add(1);
-        self.failure_count >= self.config.max_failures
+        self.failure_count > self.config.max_failures
     }
 
     /// Update health status and emit event if configured.

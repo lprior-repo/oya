@@ -315,14 +315,39 @@ impl Actor for WorkerActorDef {
                 bead_id,
                 from_state,
             } => {
-                let _old_state = match from_state {
+                let old_state = match from_state {
                     Some(state) => state,
                     None => BeadState::Ready,
                 };
                 let new_state = BeadState::Running;
 
+                // Emit StateChanged event for transition to Running
+                if let Some(ref event_bus) = state.config.event_bus {
+                    if let Ok(parsed_id) = oya_events::BeadId::try_from(bead_id.clone()) {
+                        let event =
+                            oya_events::BeadEvent::state_changed(parsed_id, old_state, new_state);
+
+                        let event_bus_clone = event_bus.clone();
+                        let bead_id_clone = bead_id.clone();
+                        tokio::spawn(async move {
+                            if let Err(err) = event_bus_clone.publish(event).await {
+                                tracing::error!(
+                                    error = %err,
+                                    bead_id = %bead_id_clone,
+                                    "Failed to publish StateChanged event"
+                                );
+                            }
+                        });
+                    } else {
+                        tracing::error!(
+                            bead_id = %bead_id,
+                            "Failed to parse BeadId for StateChanged event"
+                        );
+                    }
+                }
+
                 // Create execution context with workspace path and execute bead
-                let _exec_result = if let Some(ref workspace_manager) =
+                let exec_result = if let Some(ref workspace_manager) =
                     state.config.workspace_manager
                 {
                     match workspace_manager.execute_with_workspace(&bead_id, |workspace_path| {
@@ -356,6 +381,9 @@ impl Actor for WorkerActorDef {
                     WorkspaceExecutionResult::success()
                 };
 
+                // Note: We don't emit Completed/Failed events here - only StateChanged
+                // Completion events should come from explicit completion/failure, not from state transitions
+
                 state.current_bead = Some(bead_id.clone());
                 state.current_state = Some(new_state);
                 state.reset_retries();
@@ -366,6 +394,32 @@ impl Actor for WorkerActorDef {
             WorkerMessage::FailBead { error } => {
                 let bead_id = state.current_bead.clone();
                 let delay = state.next_retry_delay();
+
+                // Emit Failed event if we have an active bead
+                if let Some(ref id) = bead_id {
+                    if let Some(ref event_bus) = state.config.event_bus {
+                        if let Ok(parsed_id) = oya_events::BeadId::try_from(id.clone()) {
+                            let event = oya_events::BeadEvent::failed(parsed_id, error.clone());
+
+                            let event_bus_clone = event_bus.clone();
+                            let id_for_log = id.clone();
+                            tokio::spawn(async move {
+                                if let Err(err) = event_bus_clone.publish(event).await {
+                                    tracing::error!(
+                                        error = %err,
+                                        bead_id = %id_for_log,
+                                        "Failed to publish Failed event"
+                                    );
+                                }
+                            });
+                        } else {
+                            tracing::error!(
+                                bead_id = %id,
+                                "Failed to parse BeadId for Failed event"
+                            );
+                        }
+                    }
+                }
 
                 match (bead_id, delay) {
                     (Some(id), Some(delay)) => {
