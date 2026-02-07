@@ -655,3 +655,163 @@ async fn given_100_tier2_kills_when_all_recover_then_rate_is_100_percent() {
     // Clean up
     supervisor.stop(Some("Recovery rate test complete".to_string()));
 }
+
+/// **Attack 6.1**: Continuous chaos for 5 minutes with random kills
+///
+/// This is an extended duration chaos test that runs for 5 minutes to verify
+/// the system can maintain 100% recovery under sustained random failures.
+/// Marked as ignored due to long runtime - run explicitly with:
+///   cargo test given_continuous_chaos_when_5min_random_kills_then_100_percent_recovery -- --ignored
+#[tokio::test]
+#[ignore]
+async fn given_continuous_chaos_when_5min_random_kills_then_100_percent_recovery() {
+    // GIVEN: A tier-1 supervisor with multiple tier-2 children
+    let mut config = SupervisorConfig::for_testing();
+    config.max_restarts = 5000; // High limit for extended chaos
+    config.base_backoff_ms = 1; // Very fast restart to handle chaos volume
+
+    let supervisor_name = unique_name("chaos-tier2-continuous-5min");
+    let supervisor_result =
+        spawn_supervisor_with_name(supervisor_args(config), &supervisor_name).await;
+
+    assert!(
+        supervisor_result.is_ok(),
+        "should spawn supervisor successfully"
+    );
+
+    let supervisor = match supervisor_result {
+        Ok(sup) => sup,
+        Err(e) => {
+            eprintln!("Failed to spawn supervisor: {}", e);
+            return;
+        }
+    };
+
+    // Spawn 12 tier-2 children (more targets for chaos)
+    let child_count = 12;
+    let child_names: Vec<String> = (0..child_count)
+        .map(|i| format!("{supervisor_name}-continuous-5min-{i}"))
+        .collect();
+
+    for child_name in &child_names {
+        let child_args = SchedulerArguments::new();
+        let spawn_result = spawn_child(&supervisor, child_name, child_args).await;
+
+        assert!(
+            spawn_result.is_ok(),
+            "child '{}' spawn should succeed: {:?}",
+            child_name,
+            spawn_result
+        );
+    }
+
+    // Give children time to start
+    sleep(Duration::from_millis(200)).await;
+
+    // Verify all children are tracked
+    let child_count_before = get_supervisor_status(&supervisor).await;
+    assert_eq!(
+        child_count_before.unwrap_or(0), child_count,
+        "supervisor should track {} children",
+        child_count
+    );
+
+    // WHEN: Run continuous chaos for 5 minutes (300 seconds)
+    let chaos_duration = Duration::from_secs(300); // 5 minutes
+    let start = SystemTime::now();
+    let mut kill_count = 0usize;
+    let mut successful_kills = 0usize;
+    let mut recovery_checks = 0usize;
+
+    eprintln!("Starting 5-minute continuous chaos test at {:?}", start);
+
+    while SystemTime::now()
+        .duration_since(start)
+        .unwrap_or_default()
+        < chaos_duration
+    {
+        // Kill a random child (round-robin through all children)
+        let victim_index = kill_count % child_count;
+        let victim_name = &child_names[victim_index];
+
+        let stop_result = supervisor.cast(SupervisorMessage::StopChild {
+            name: victim_name.clone(),
+        });
+
+        if stop_result.is_ok() {
+            successful_kills += 1;
+        }
+
+        kill_count += 1;
+
+        // Every 30 seconds, verify recovery is still working
+        if kill_count % 600 == 0 {
+            // ~30 seconds at 20 kills/second
+            let current_count = get_supervisor_status(&supervisor).await.unwrap_or(0);
+            eprintln!(
+                "Chaos check at {}s: {}/{} children recovered, {} kills attempted",
+                start.elapsed().unwrap_or_default().as_secs(),
+                current_count,
+                child_count,
+                kill_count
+            );
+            recovery_checks += 1;
+
+            // Assert recovery is still working (allow brief fluctuation)
+            assert!(
+                current_count >= child_count - 2,
+                "at {}s: recovery degraded too much ({}/{} children), kills: {}",
+                start.elapsed().unwrap_or_default().as_secs(),
+                current_count,
+                child_count,
+                kill_count
+            );
+        }
+
+        // Kill rate: ~20 kills/second (50ms between kills)
+        sleep(Duration::from_millis(50)).await;
+    }
+
+    eprintln!(
+        "Chaos completed: {} kills in {:.1}s, {} successful kills, {} recovery checks",
+        kill_count,
+        start.elapsed().unwrap_or_default().as_secs_f64(),
+        successful_kills,
+        recovery_checks
+    );
+
+    // Give time for final recovery after chaos ends
+    sleep(Duration::from_secs(2)).await;
+
+    // THEN: Verify 100% recovery rate after 5 minutes of chaos
+    let final_count = get_supervisor_status(&supervisor).await;
+
+    let recovery_rate = if final_count.unwrap_or(0) >= child_count {
+        100.0
+    } else {
+        (final_count.unwrap_or(0) as f64 / child_count as f64) * 100.0
+    };
+
+    assert_eq!(
+        final_count.unwrap_or(0), child_count,
+        "after 5 minutes of chaos ({} kills), all tier-2 actors must be recovered \
+         - achieved {:.1}% recovery rate, expected 100%",
+        kill_count,
+        recovery_rate
+    );
+
+    // Verify supervisor survived the extended chaos
+    assert!(
+        is_actor_alive(supervisor.get_status()),
+        "supervisor must survive 5 minutes of continuous chaos"
+    );
+
+    eprintln!(
+        "SUCCESS: 5-minute chaos test passed with 100% recovery rate \
+         ({} kills, {:.1}% recovery rate)",
+        kill_count, recovery_rate
+    );
+
+    // Clean up
+    supervisor.stop(Some("5-minute chaos test complete".to_string()));
+}

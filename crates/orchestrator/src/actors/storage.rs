@@ -199,16 +199,16 @@ impl GenericSupervisableActor for StateManagerActorDef {
     }
 }
 
-// EventStoreActor is not yet fully implemented - commenting out to avoid compilation errors
-// TODO: Implement EventStoreActor in a separate bead
-/*
+/// Event store actor for durable event persistence.
+///
+/// This actor manages event storage with fsync guarantees using the DurableEventStore.
 #[derive(Clone, Default)]
 pub struct EventStoreActorDef;
 
 /// Event store state for the EventStoreActor.
 pub struct EventStoreState {
     /// The durable event store backend.
-    store: Option<std::sync::Arc<DurableEventStore>>,
+    store: std::sync::Arc<DurableEventStore>,
 }
 
 /// Messages for the EventStoreActor.
@@ -217,27 +217,27 @@ pub struct EventStoreState {
 /// All events are serialized using bincode before storage.
 ///
 /// # Design Principles
-/// - Commands are fire-and-forget (use `cast!`)
-/// - Queries return responses (use `call!`)
+/// - All operations use request-response pattern (use `call!`)
 /// - Business errors are returned in RPC replies, NOT as actor crashes
+/// - AppendEvent preserves fsync guarantees (only replies after sync)
 #[derive(Debug)]
 pub enum EventStoreMessage {
-    // COMMANDS (fire-and-forget via cast!)
-    /// Append a bead event to durable storage.
+    /// Append a bead event to durable storage with fsync guarantee.
     ///
     /// This will:
     /// 1. Serialize the event using bincode
     /// 2. Write to WAL (write-ahead log)
-    /// 3. Persist to SurrealDB
+    /// 3. Fsync to disk before replying
+    /// 4. Persist to SurrealDB
+    ///
+    /// The reply is only sent after successful fsync, guaranteeing durability.
     AppendEvent {
         /// The event to append.
         event: BeadEvent,
+        /// Reply port for the response (sent after fsync).
+        reply: RpcReplyPort<Result<(), ActorError>>,
     },
 
-    /// Initiate graceful shutdown.
-    Shutdown,
-
-    // QUERIES (request-response via call! / call_t!)
     /// Read all events for a specific bead.
     ReadEvents {
         /// The bead ID to read events for.
@@ -247,7 +247,7 @@ pub enum EventStoreMessage {
     },
 
     /// Replay events from a specific checkpoint.
-    ReplayFrom {
+    ReplayEvents {
         /// The checkpoint event ID to start replaying from.
         checkpoint_id: String,
         /// Reply port for the response.
@@ -266,62 +266,59 @@ impl Actor for EventStoreActorDef {
         args: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
         info!("EventStoreActor starting");
-        Ok(EventStoreState { store: Some(args) })
+        Ok(EventStoreState { store: args })
     }
 
     async fn handle(
         &self,
         _myself: ActorRef<Self::Msg>,
         message: Self::Msg,
-        _state: &mut Self::State,
+        state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         match message {
-            EventStoreMessage::AppendEvent { event } => {
+            EventStoreMessage::AppendEvent { event, reply } => {
                 info!(
                     "Appending event: bead_id={}, event_type={}",
                     event.bead_id(),
                     event.event_type()
                 );
 
-                if let Some(store) = &state.store {
-                    match store.append_event(&event).await {
-                        Ok(()) => {
-                            info!(
-                                "Successfully appended event: {} for bead {}",
-                                event.event_id(),
-                                event.bead_id()
-                            );
-                        }
-                        Err(e) => {
-                            tracing::error!(
-                                "Failed to append event {} for bead {}: {}",
-                                event.event_id(),
-                                event.bead_id(),
-                                e
-                            );
-                            // Note: We log the error but don't crash the actor
-                            // This follows the "graceful degradation" principle
-                        }
-                    }
-                } else {
-                    tracing::warn!("EventStore not initialized, dropping event");
-                }
-            }
+                // Append with fsync guarantee - DurableEventStore ensures
+                // file.sync_all() is called before returning Ok(())
+                let result = state
+                    .store
+                    .append_event(&event)
+                    .await
+                    .map_err(|e| ActorError::internal(format!("Failed to append event: {}", e)));
 
-            EventStoreMessage::Shutdown => {
-                info!("EventStoreActor shutting down");
-                // TODO: Implement graceful shutdown if needed
+                match &result {
+                    Ok(()) => {
+                        info!(
+                            "Successfully appended event: {} for bead {}",
+                            event.event_id(),
+                            event.bead_id()
+                        );
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            "Failed to append event {} for bead {}: {}",
+                            event.event_id(),
+                            event.bead_id(),
+                            e
+                        );
+                    }
+                }
+
+                // Send reply after fsync completes (success or failure)
+                let _ = reply.send(result);
             }
 
             EventStoreMessage::ReadEvents { bead_id, reply } => {
-                let result = if let Some(store) = &state.store {
-                    store
-                        .read_events(&bead_id)
-                        .await
-                        .map_err(|e| ActorError::internal(format!("Failed to read events: {}", e)))
-                } else {
-                    Err(ActorError::internal("EventStore not initialized"))
-                };
+                let result = state
+                    .store
+                    .read_events(&bead_id)
+                    .await
+                    .map_err(|e| ActorError::internal(format!("Failed to read events: {}", e)));
 
                 info!(
                     "Read events for bead {}: result={}",
@@ -332,17 +329,15 @@ impl Actor for EventStoreActorDef {
                 let _ = reply.send(result);
             }
 
-            EventStoreMessage::ReplayFrom {
+            EventStoreMessage::ReplayEvents {
                 checkpoint_id,
                 reply,
             } => {
-                let result = if let Some(store) = &state.store {
-                    store.replay_from(&checkpoint_id).await.map_err(|e| {
-                        ActorError::internal(format!("Failed to replay from checkpoint: {}", e))
-                    })
-                } else {
-                    Err(ActorError::internal("EventStore not initialized"))
-                };
+                let result = state
+                    .store
+                    .replay_from(&checkpoint_id)
+                    .await
+                    .map_err(|e| ActorError::internal(format!("Failed to replay from checkpoint: {}", e)));
 
                 info!(
                     "Replay from checkpoint {}: result={}",
@@ -359,15 +354,14 @@ impl Actor for EventStoreActorDef {
 
 impl GenericSupervisableActor for EventStoreActorDef {
     fn default_args() -> Self::Arguments {
-        // TODO: This is a placeholder - in production, the EventStoreActor
-        // should be initialized with an actual DurableEventStore instance
-        // For now, we create a dummy store since DurableEventStore::new() requires async
+        // EventStoreActor requires a DurableEventStore instance.
+        // Use EventStoreActorDef::spawn() with an actual store instance.
         panic!(
-            "EventStoreActor requires a DurableEventStore instance. Use spawn_event_store() helper instead."
+            "EventStoreActor requires a DurableEventStore instance. \
+             Use EventStoreActorDef::spawn() with an actual store."
         );
     }
 }
-*/
 
 #[cfg(test)]
 mod tests {
@@ -403,5 +397,401 @@ mod tests {
         assert_eq!(config.storage_path, decoded.storage_path);
         assert_eq!(config.namespace, decoded.namespace);
         assert_eq!(config.database, decoded.database);
+    }
+
+    // ============================================================================
+    // StateManagerActor Integration Tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_state_manager_save_and_load() {
+        let temp_dir = tempfile::tempdir().ok();
+        let storage_path = temp_dir
+            .as_ref()
+            .map(|d| d.path().to_str().unwrap())
+            .unwrap_or("/tmp/test_state_manager");
+
+        let config = DatabaseConfig {
+            storage_path: storage_path.to_string(),
+            namespace: "test_ns".to_string(),
+            database: "test_db".to_string(),
+        };
+
+        let (actor, handle) = Actor::spawn(None, StateManagerActorDef, config)
+            .await
+            .expect("Failed to spawn StateManagerActor");
+
+        let key = "test_key_1".to_string();
+        let data = vec![1, 2, 3, 4, 5];
+
+        // Test SaveState (fire-and-forget)
+        actor
+            .send_message(StateManagerMessage::SaveState {
+                key: key.clone(),
+                data: data.clone(),
+                version: None,
+            })
+            .expect("Failed to send SaveState");
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+        // Test LoadState (query)
+        let loaded = ractor::call!(actor, StateManagerMessage::LoadState {
+            key: key.clone(),
+        }, tokio::time::Duration::from_secs(5)).await;
+
+        assert!(loaded.is_ok(), "LoadState should succeed");
+        let loaded_data = loaded.ok().unwrap();
+        assert!(loaded_data.is_ok(), "LoadState result should be Ok");
+        assert_eq!(loaded_data.ok().unwrap(), data, "Loaded data should match saved data");
+
+        actor.stop(None);
+        handle.await.expect("Actor shutdown failed");
+    }
+
+    #[tokio::test]
+    async fn test_state_manager_delete() {
+        let temp_dir = tempfile::tempdir().ok();
+        let storage_path = temp_dir
+            .as_ref()
+            .map(|d| d.path().to_str().unwrap())
+            .unwrap_or("/tmp/test_state_manager_delete");
+
+        let config = DatabaseConfig {
+            storage_path: storage_path.to_string(),
+            namespace: "test_ns".to_string(),
+            database: "test_db".to_string(),
+        };
+
+        let (actor, handle) = Actor::spawn(None, StateManagerActorDef, config)
+            .await
+            .expect("Failed to spawn StateManagerActor");
+
+        let key = "test_key_delete".to_string();
+        let data = vec![10, 20, 30];
+
+        // Save then delete
+        actor
+            .send_message(StateManagerMessage::SaveState {
+                key: key.clone(),
+                data,
+                version: None,
+            })
+            .expect("Failed to send SaveState");
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+        actor
+            .send_message(StateManagerMessage::DeleteState { key: key.clone() })
+            .expect("Failed to send DeleteState");
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+        // Verify deleted
+        let loaded = ractor::call!(actor, StateManagerMessage::LoadState {
+            key,
+        }, tokio::time::Duration::from_secs(5)).await;
+
+        assert!(loaded.is_ok());
+        let result = loaded.ok().unwrap();
+        assert!(result.is_err(), "Deleted key should return error");
+
+        actor.stop(None);
+        handle.await.expect("Actor shutdown failed");
+    }
+
+    #[tokio::test]
+    async fn test_state_manager_exists() {
+        let temp_dir = tempfile::tempdir().ok();
+        let storage_path = temp_dir
+            .as_ref()
+            .map(|d| d.path().to_str().unwrap())
+            .unwrap_or("/tmp/test_state_manager_exists");
+
+        let config = DatabaseConfig {
+            storage_path: storage_path.to_string(),
+            namespace: "test_ns".to_string(),
+            database: "test_db".to_string(),
+        };
+
+        let (actor, handle) = Actor::spawn(None, StateManagerActorDef, config)
+            .await
+            .expect("Failed to spawn StateManagerActor");
+
+        let key = "test_key_exists".to_string();
+
+        // Check non-existent key
+        let exists = ractor::call!(actor, StateManagerMessage::StateExists {
+            key: key.clone(),
+        }, tokio::time::Duration::from_secs(5)).await;
+
+        assert!(exists.is_ok());
+        assert_eq!(exists.ok().unwrap().ok().unwrap(), false);
+
+        // Save key
+        actor
+            .send_message(StateManagerMessage::SaveState {
+                key: key.clone(),
+                data: vec![1, 2, 3],
+                version: None,
+            })
+            .expect("Failed to send SaveState");
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+        // Check exists
+        let exists = ractor::call!(actor, StateManagerMessage::StateExists {
+            key,
+        }, tokio::time::Duration::from_secs(5)).await;
+
+        assert!(exists.is_ok());
+        assert_eq!(exists.ok().unwrap().ok().unwrap(), true);
+
+        actor.stop(None);
+        handle.await.expect("Actor shutdown failed");
+    }
+
+    #[tokio::test]
+    async fn test_state_manager_list_keys() {
+        let temp_dir = tempfile::tempdir().ok();
+        let storage_path = temp_dir
+            .as_ref()
+            .map(|d| d.path().to_str().unwrap())
+            .unwrap_or("/tmp/test_state_manager_list");
+
+        let config = DatabaseConfig {
+            storage_path: storage_path.to_string(),
+            namespace: "test_ns".to_string(),
+            database: "test_db".to_string(),
+        };
+
+        let (actor, handle) = Actor::spawn(None, StateManagerActorDef, config)
+            .await
+            .expect("Failed to spawn StateManagerActor");
+
+        // Save multiple keys with different prefixes
+        for i in 1..=3 {
+            actor
+                .send_message(StateManagerMessage::SaveState {
+                    key: format!("workflow:{}", i),
+                    data: vec![i as u8],
+                    version: None,
+                })
+                .expect("Failed to send SaveState");
+        }
+
+        for i in 1..=2 {
+            actor
+                .send_message(StateManagerMessage::SaveState {
+                    key: format!("checkpoint:{}", i),
+                    data: vec![i as u8],
+                    version: None,
+                })
+                .expect("Failed to send SaveState");
+        }
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+        // List all keys
+        let all_keys = ractor::call!(actor, StateManagerMessage::ListKeys {
+            prefix: None,
+        }, tokio::time::Duration::from_secs(5)).await;
+
+        assert!(all_keys.is_ok());
+        let keys = all_keys.ok().unwrap().ok().unwrap();
+        assert_eq!(keys.len(), 5);
+
+        // List with prefix
+        let workflow_keys = ractor::call!(actor, StateManagerMessage::ListKeys {
+            prefix: Some("workflow:".to_string()),
+        }, tokio::time::Duration::from_secs(5)).await;
+
+        assert!(workflow_keys.is_ok());
+        let keys = workflow_keys.ok().unwrap().ok().unwrap();
+        assert_eq!(keys.len(), 3);
+
+        actor.stop(None);
+        handle.await.expect("Actor shutdown failed");
+    }
+
+    #[tokio::test]
+    async fn test_state_manager_version() {
+        let temp_dir = tempfile::tempdir().ok();
+        let storage_path = temp_dir
+            .as_ref()
+            .map(|d| d.path().to_str().unwrap())
+            .unwrap_or("/tmp/test_state_manager_version");
+
+        let config = DatabaseConfig {
+            storage_path: storage_path.to_string(),
+            namespace: "test_ns".to_string(),
+            database: "test_db".to_string(),
+        };
+
+        let (actor, handle) = Actor::spawn(None, StateManagerActorDef, config)
+            .await
+            .expect("Failed to spawn StateManagerActor");
+
+        let key = "versioned_key".to_string();
+
+        // Save with version
+        actor
+            .send_message(StateManagerMessage::SaveState {
+                key: key.clone(),
+                data: vec![1, 2, 3],
+                version: Some(5),
+            })
+            .expect("Failed to send SaveState");
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+        // Get version
+        let version = ractor::call!(actor, StateManagerMessage::GetStateVersion {
+            key,
+        }, tokio::time::Duration::from_secs(5)).await;
+
+        assert!(version.is_ok());
+        assert_eq!(version.ok().unwrap().ok().unwrap(), Some(5));
+
+        actor.stop(None);
+        handle.await.expect("Actor shutdown failed");
+    }
+
+    // ============================================================================
+    // EventStoreActor Integration Tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_event_store_append_and_read() {
+        use oya_events::durable_store::{self, ConnectionConfig};
+
+        let temp_dir = tempfile::tempdir().ok();
+        let storage_path = temp_dir
+            .as_ref()
+            .map(|d| d.path().to_str().unwrap())
+            .unwrap_or("/tmp/test_event_store");
+
+        // Connect to test database
+        let db = durable_store::connect(ConnectionConfig {
+            storage_path: storage_path.into(),
+            namespace: "test_ns".to_string(),
+            database: "test_events".to_string(),
+            ..Default::default()
+        })
+        .await
+        .expect("Failed to connect to test DB");
+
+        let store = DurableEventStore::new(db)
+            .await
+            .expect("Failed to create DurableEventStore")
+            .with_wal_dir(format!("{}/.wal", storage_path));
+
+        let (actor, handle) = Actor::spawn(None, EventStoreActorDef, std::sync::Arc::new(store))
+            .await
+            .expect("Failed to spawn EventStoreActor");
+
+        let bead_id = BeadId::new();
+        let spec = BeadSpec::new("Test Event").with_complexity(Complexity::Simple);
+
+        // Append event (with fsync guarantee)
+        let append_result = ractor::call!(actor, EventStoreMessage::AppendEvent {
+            event: BeadEvent::created(bead_id, spec),
+        }, tokio::time::Duration::from_secs(5)).await;
+
+        assert!(append_result.is_ok(), "AppendEvent should succeed");
+        assert!(append_result.ok().unwrap().is_ok(), "AppendEvent result should be Ok");
+
+        // Read events
+        let events = ractor::call!(actor, EventStoreMessage::ReadEvents {
+            bead_id,
+        }, tokio::time::Duration::from_secs(5)).await;
+
+        assert!(events.is_ok(), "ReadEvents should succeed");
+        let event_list = events.ok().unwrap();
+        assert!(event_list.is_ok(), "ReadEvents result should be Ok");
+        assert_eq!(event_list.ok().unwrap().len(), 1, "Should have one event");
+
+        actor.stop(None);
+        handle.await.expect("Actor shutdown failed");
+    }
+
+    #[tokio::test]
+    async fn test_event_store_replay() {
+        use oya_events::durable_store::{self, ConnectionConfig};
+
+        let temp_dir = tempfile::tempdir().ok();
+        let storage_path = temp_dir
+            .as_ref()
+            .map(|d| d.path().to_str().unwrap())
+            .unwrap_or("/tmp/test_event_store_replay");
+
+        // Connect to test database
+        let db = durable_store::connect(ConnectionConfig {
+            storage_path: storage_path.into(),
+            namespace: "test_ns".to_string(),
+            database: "test_events_replay".to_string(),
+            ..Default::default()
+        })
+        .await
+        .expect("Failed to connect to test DB");
+
+        let store = DurableEventStore::new(db)
+            .await
+            .expect("Failed to create DurableEventStore")
+            .with_wal_dir(format!("{}/.wal", storage_path));
+
+        let (actor, handle) = Actor::spawn(None, EventStoreActorDef, std::sync::Arc::new(store))
+            .await
+            .expect("Failed to spawn EventStoreActor");
+
+        let bead_id = BeadId::new();
+
+        // Create multiple events
+        let phase_id = PhaseId::new();
+
+        actor
+            .send_message(EventStoreMessage::AppendEvent {
+                event: BeadEvent::created(
+                    bead_id,
+                    BeadSpec::new("Test").with_complexity(Complexity::Simple),
+                ),
+            })
+            .expect("Failed to send created event");
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        actor
+            .send_message(EventStoreMessage::AppendEvent {
+                event: BeadEvent::phase_started(bead_id, phase_id, "test_phase"),
+            })
+            .expect("Failed to send phase_started event");
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        // Read all events to get checkpoint ID
+        let all_events = ractor::call!(actor, EventStoreMessage::ReadEvents {
+            bead_id,
+        }, tokio::time::Duration::from_secs(5)).await;
+
+        assert!(all_events.is_ok());
+        let event_list = all_events.ok().unwrap().ok().unwrap();
+        assert_eq!(event_list.len(), 2);
+
+        let checkpoint_id = event_list[0].event_id().to_string();
+
+        // Replay from checkpoint
+        let replayed = ractor::call!(actor, EventStoreMessage::ReplayEvents {
+            checkpoint_id,
+        }, tokio::time::Duration::from_secs(5)).await;
+
+        assert!(replayed.is_ok(), "ReplayEvents should succeed");
+        let replayed_events = replayed.ok().unwrap();
+        assert!(replayed_events.is_ok(), "ReplayEvents result should be Ok");
+        // Should have events after checkpoint (could be 1 or 2 depending on timestamp)
+        let replayed_count = replayed_events.ok().unwrap().len();
+        assert!(replayed_count >= 1, "Should have at least one replayed event");
+
+        actor.stop(None);
+        handle.await.expect("Actor shutdown failed");
     }
 }

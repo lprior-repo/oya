@@ -16,6 +16,7 @@ tracing-subscriber = "0.3"
 [dependencies]
 oya-core = { workspace = true }
 oya-events = { workspace = true }
+oya-pipeline = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

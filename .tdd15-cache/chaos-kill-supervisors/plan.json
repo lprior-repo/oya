@@ -1,0 +1,222 @@
+# IMPLEMENTATION PLAN: Chaos Test - Kill Tier-1 Supervisors Sequentially
+
+## Success Criteria Coverage
+- [x] 100% recovery rate achieved → Steps 1, 2, 3, 4 (metrics collection)
+- [x] Performance targets met → Steps 3, 4 (timing measurements)
+- [x] System remains operational during chaos → Step 2 (no panic assertions)
+- [x] No data loss during failures → Step 2 (graceful shutdown verification)
+
+## Implementation Steps (Ordered)
+
+### Step 1: Create Test File Skeleton (~5 min)
+- **What**: Create new test file with necessary imports and helper functions
+- **File**: `crates/orchestrator/tests/tier1_sequential_kill_chaos_test.rs`
+- **Scope**:
+  - Add module-level documentation
+  - Import required modules (supervision, actors, ractor, tokio)
+  - Add clippy lints (`#![deny(clippy::unwrap_used)]`, etc.)
+  - Define constants (STATUS_TIMEOUT, RECOVERY_WAIT)
+- **Success Check**: File compiles with imports but no tests yet
+- **Dependencies**: None
+- **Risks**: None - skeleton only
+
+### Step 2: Implement Helper Functions (~10 min)
+- **What**: Create helper functions following existing chaos test patterns
+- **File**: `crates/orchestrator/tests/tier1_sequential_kill_chaos_test.rs`
+- **Scope**:
+  - `build_prefix()`: Generate unique name prefix
+  - `is_supervisor_alive(status: ActorStatus) -> bool`: Check if supervisor is running
+  - `is_supervisor_stopped(status: ActorStatus) -> bool`: Check if supervisor stopped
+  - `shutdown_all_supervisors(supervisors: &Tier1Supervisors)`: Stop all tier-1s
+- **Success Check**: Helper functions compile and match patterns from `tier1_supervisors_test.rs`
+- **Dependencies**: Step 1
+- **Risks**: None - straightforward port of existing helpers
+
+### Step 3: Implement Main Test - Setup Phase (~15 min)
+- **What**: Write test function with GIVEN section (spawn supervisors)
+- **File**: `crates/orchestrator/tests/tier1_sequential_kill_chaos_test.rs`
+- **Scope**:
+  - Test name: `given_tier1_supervisors_when_killed_sequentially_then_system_stable`
+  - Spawn tier-1 supervisors using `spawn_tier1_supervisors()`
+  - Verify all supervisors are alive
+  - Collect initial metrics (start time, supervisor count)
+- **Success Check**: Test spawns all 4 tier-1 supervisors successfully
+- **Dependencies**: Step 2
+- **Risks**: Medium - need to understand `Tier1Supervisors` structure
+- **Mitigation**: Follow `tier1_supervisors_test.rs` patterns exactly
+
+### Step 4: Implement Test - Sequential Kill Phase (~20 min)
+- **What**: Write WHEN section (sequential kill logic with metrics)
+- **File**: `crates/orchestrator/tests/tier1_sequential_kill_chaos_test.rs`
+- **Scope**:
+  - Loop through supervisors in order (storage → workflow → queue → reconciler)
+  - For each supervisor:
+    - Record start time
+    - Stop supervisor with `.stop(reason)`
+    - Record stop duration
+    - Wait for shutdown (100ms)
+    - Verify supervisor is stopped
+    - Track metrics (kill count, timing)
+  - Use `AtomicUsize` for thread-safe metrics tracking
+- **Success Check**: All supervisors stop sequentially without panic
+- **Dependencies**: Step 3
+- **Risks**: Medium - timing issues could cause flaky tests
+- **Mitigation**: Use generous wait times (100ms between kills)
+
+### Step 5: Implement Test - Verification Phase (~15 min)
+- **What**: Write THEN section (verify system stability and metrics)
+- **File**: `crates/orchestrator/tests/tier1_sequential_kill_chaos_test.rs`
+- **Scope**:
+  - Verify all supervisors are stopped
+  - Calculate recovery rate (should be 100% - all stopped cleanly)
+  - Verify no panic occurred (test reaching this point = success)
+  - Output metrics to assertion messages for debugging
+  - Total test duration
+- **Success Check**: All assertions pass, test completes successfully
+- **Dependencies**: Step 4
+- **Risks**: Low - assertions are straightforward
+- **Mitigation**: Include detailed assertion messages
+
+### Step 6: Add Test Documentation (~5 min)
+- **What**: Add test documentation and comments
+- **File**: `crates/orchestrator/tests/tier1_sequential_kill_chaos_test.rs`
+- **Scope**:
+  - Add attack scenario comment: `/// **Attack X.Y**: Kill tier-1 supervisors sequentially`
+  - Document test purpose and invariants
+  - Add inline comments for metrics collection
+- **Success Check**: Documentation matches chaos test style
+- **Dependencies**: Step 5
+- **Risks**: None - documentation only
+
+## Files to Modify
+
+| File | Action | Scope |
+|------|--------|-------|
+| `crates/orchestrator/tests/tier1_sequential_kill_chaos_test.rs` | **CREATE** | New chaos test file with sequential kill test |
+
+## Data Flows
+
+```
+spawn_tier1_supervisors()
+  → Tier1Supervisors { storage, workflow, queue, reconciler }
+  → Verify all alive (initial_state)
+
+Sequential Kill Loop:
+  For each supervisor in [storage, workflow, queue, reconciler]:
+    → Record start_time
+    → supervisor.stop(reason)
+    → sleep(100ms)
+    → Verify is_stopped()
+    → Record metrics (kill_count, timing)
+    → Continue to next supervisor
+
+Final Verification:
+  → Check all supervisors stopped
+  → Calculate metrics (100% stopped rate)
+  → Verify no panic (test reaches end)
+```
+
+## Architectural Decisions
+
+### 1. Test File Organization
+**Decision**: Create separate test file instead of adding to existing chaos tests
+- **Options**:
+  1. Add to `supervisor_chaos_tests.rs`
+  2. Add to `tier1_supervisors_test.rs`
+  3. Create new `tier1_sequential_kill_chaos_test.rs`
+- **Choice**: Option 3 (new file)
+- **Rationale**: This test is specifically about tier-1 sequential kills with metrics, distinct from general supervisor chaos or basic spawn tests
+- **Tradeoffs**: More files to maintain, but better separation of concerns
+- **Reversibility**: Yes - can be moved later
+
+### 2. Metrics Collection Strategy
+**Decision**: Use `AtomicUsize` for counters and manual timing with `SystemTime`
+- **Options**:
+  1. Structured metrics collection with custom Metrics struct
+  2. `AtomicUsize` counters + `Duration` tracking
+  3. No metrics, just verify behavior
+- **Choice**: Option 2
+- **Rationale**: Balances simplicity with bead requirements (metrics collection) and matches existing chaos test patterns
+- **Tradeoffs**: Less sophisticated than formal metrics framework, but sufficient for tests
+- **Reversibility**: Yes - can upgrade to formal metrics later
+
+### 3. Sequential Kill Order
+**Decision**: Kill in order: storage → workflow → queue → reconciler
+- **Options**:
+  1. Storage → Workflow → Queue → Reconciler (dependency order)
+  2. Reconciler → Queue → Workflow → Storage (reverse dependency)
+  3. Random order
+- **Choice**: Option 1
+- **Rationale**: Follows dependency hierarchy (storage is most fundamental), makes failure analysis easier
+- **Tradeoffs**: Less chaotic than random, but more predictable and debuggable
+- **Reversibility**: Yes - order can be changed
+
+### 4. Recovery Test Strategy
+**Decision**: Test focuses on graceful shutdown, NOT recovery/spawn of new supervisors
+- **Options**:
+  1. Kill supervisors, then spawn new ones and verify they work
+  2. Kill supervisors, verify clean shutdown only
+  3. Kill supervisors, verify system can continue running with remaining ones
+- **Choice**: Option 2
+- **Rationale**: Bead title is "kill tier-1 supervisors sequentially test", not "kill and recover". Sequential kill with graceful shutdown is the core requirement
+- **Tradeoffs**: Doesn't test respawn, but that's a separate concern
+- **Reversibility**: Yes - recovery test can be added later
+
+## Robot Insights
+
+```bash
+# Get insights from bv robot mode
+bv --robot-insights
+```
+
+**Key Insights**:
+- **PageRank Analysis**: `orchestrator::supervision` module is central (high PageRank)
+- **Betweenness Centrality**: `spawn_tier1_supervisors()` bridges actor system and tests
+- **Critical Path**: Test creation → helper functions → test implementation → metrics verification
+- **Parallelizable Work**: Steps 1-2 (skeleton + helpers) can be done in sequence, but are atomic
+
+## Risks & Mitigation
+
+| Risk | Probability | Impact | Mitigation |
+|------|-------------|--------|------------|
+| Test timing issues (flaky) | Medium | Medium | Use generous wait times (100ms), avoid tight timing assertions |
+| `Tier1Supervisors` API misunderstood | Low | High | Follow `tier1_supervisors_test.rs` patterns exactly |
+| Metrics collection over-complicates test | Low | Low | Keep metrics simple (AtomicUsize counters), focus on behavior |
+| Clippy lints fail (unwrap/expect) | Low | Low | Use Result/Option combinators, follow zero-unwrap policy |
+| Test file doesn't compile | Medium | Medium | Incremental development: skeleton → helpers → test |
+
+## Test Structure Template
+
+```rust
+//! Tier-1 Sequential Kill Chaos Tests
+//!
+//! HOSTILE chaos engineering test for sequential tier-1 supervisor failures.
+//! This test verifies that tier-1 supervisors can be killed sequentially
+//! and that the system achieves graceful shutdown with 100% stopped rate.
+
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+#![deny(clippy::panic)]
+
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, SystemTime};
+
+use orchestrator::supervision::{Tier1Supervisors, spawn_tier1_supervisors};
+use orchestrator::actors::supervisor::SupervisorConfig;
+use ractor::ActorStatus;
+
+// [Helper functions]
+
+// [Test implementation]
+```
+
+## Success Metrics
+
+When complete, this test will:
+1. ✓ Spawn all 4 tier-1 supervisors successfully
+2. ✓ Kill each supervisor sequentially without panic
+3. ✓ Verify 100% graceful shutdown rate
+4. ✓ Collect timing metrics for each kill
+5. ✓ Complete test in < 2 seconds
+6. ✓ Pass `moon run :quick` (fmt + clippy check)

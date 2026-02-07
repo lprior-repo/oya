@@ -590,9 +590,12 @@ where
     }
 
     /// Stop a specific child.
+    ///
+    /// Note: This simulates a crash for chaos testing. The child remains in
+    /// state and will be restarted when the ChildExited message is processed.
     fn stop_child(&self, state: &mut SupervisorActorState<A>, name: &str) {
-        if let Some(child) = state.children.remove(name) {
-            debug!(child = %name, "Stopping child");
+        if let Some(child) = state.children.get(name) {
+            debug!(child = %name, "Stopping child (will be restarted by supervision)");
             child
                 .actor_ref
                 .stop(Some("Requested by supervisor".to_string()));

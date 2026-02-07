@@ -9,7 +9,7 @@ use ractor::{Actor, ActorProcessingErr, ActorRef};
 use tokio::sync::watch;
 use tracing::{debug, info, warn};
 
-use oya_events::{BeadState, EventBus};
+use oya_events::{BeadState, EventBus, BeadEvent, BeadId};
 
 use crate::actors::supervisor::{GenericSupervisableActor, calculate_backoff};
 
@@ -158,19 +158,29 @@ impl Actor for WorkerActorDef {
                 let old_state = from_state.unwrap_or(BeadState::Ready);
                 let new_state = BeadState::Running;
 
-                // TODO: Emit state change event
-                // Note: Currently disabled due to type mismatch between
-                // crate::dag::BeadId (String) and oya_events::BeadId (Ulid wrapper)
-                // if let Some(ref bus) = state.config.event_bus {
-                //     let event = EventsBeadEvent::state_changed(
-                //         crate::dag::BeadId::from(bead_id.clone()),
-                //         old_state.clone(),
-                //         new_state.clone(),
-                //     );
-                //     if let Err(e) = bus.publish(event).await {
-                //         warn!(error = %e, "Failed to publish state change event");
-                //     }
-                // }
+                // Emit state change event (best-effort)
+                if let Some(ref bus) = state.config.event_bus {
+                    // Parse bead_id as BeadId (ULID)
+                    let result: Result<BeadId, _> = bead_id.parse();
+                    if let Ok(bid) = result {
+                        let event = BeadEvent::state_changed(bid, old_state.clone(), new_state.clone());
+                        match bus.publish(event).await {
+                            Ok(_) => {
+                                debug!(
+                                    bead_id = %bead_id,
+                                    from = ?old_state,
+                                    to = ?new_state,
+                                    "Emitted state change event"
+                                );
+                            }
+                            Err(e) => {
+                                warn!(error = %e, "Failed to publish state change event");
+                            }
+                        }
+                    } else {
+                        warn!(bead_id = %bead_id, "Invalid bead ID format, skipping event emission");
+                    }
+                }
 
                 state.current_bead = Some(bead_id);
                 state.current_state = Some(new_state);
@@ -180,21 +190,23 @@ impl Actor for WorkerActorDef {
                 let bead_id = state.current_bead.clone();
                 let delay = state.next_retry_delay();
 
-                // TODO: Emit failed event
-                // Note: Currently disabled due to type mismatch between
-                // crate::dag::BeadId (String) and oya_events::BeadId (Ulid wrapper)
-                // if let (Some(ref bus), Some(ref bid)) = (
-                //     &state.config.event_bus,
-                //     &state.current_bead,
-                // ) {
-                //     let event = EventsBeadEvent::failed(
-                //         crate::dag::BeadId::from(bid.clone()),
-                //         error.clone(),
-                //     );
-                //     if let Err(e) = bus.publish(event).await {
-                //         warn!(error = %e, "Failed to publish failed event");
-                //     }
-                // }
+                // Emit failed event (best-effort)
+                if let (Some(ref bus), Some(ref bid)) = (&state.config.event_bus, &bead_id) {
+                    let result: Result<BeadId, _> = bid.parse();
+                    if let Ok(event_bead_id) = result {
+                        let event = BeadEvent::failed(event_bead_id, error.clone());
+                        match bus.publish(event).await {
+                            Ok(_) => {
+                                debug!(bead_id = %bid, error = %error, "Emitted failed event");
+                            }
+                            Err(e) => {
+                                warn!(error = %e, "Failed to publish failed event");
+                            }
+                        }
+                    } else {
+                        warn!(bead_id = %bid, "Invalid bead ID format, skipping event emission");
+                    }
+                }
 
                 match (bead_id, delay) {
                     (Some(id), Some(delay)) => {
