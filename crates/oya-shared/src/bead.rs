@@ -5,6 +5,7 @@
 
 use rkyv::{Archive, Deserialize as RkyvDeserialize, Serialize as RkyvSerialize};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 /// Bead status enumeration matching the backend BeadScheduleState
 #[derive(
@@ -129,11 +130,22 @@ impl BeadPriority {
 }
 
 /// Bead data structure representing an issue/work item
-#[derive(
-    Debug, Clone, PartialEq, Serialize, Deserialize, Archive, RkyvSerialize, RkyvDeserialize,
-)]
+#[derive(Debug, Clone, PartialEq, Archive, RkyvSerialize, RkyvDeserialize)]
 #[rkyv(compare(PartialEq))]
 pub struct Bead {
+    pub id: Arc<str>,
+    pub title: Arc<str>,
+    pub description: Arc<str>,
+    pub status: BeadStatus,
+    pub priority: BeadPriority,
+    pub dependencies: Vec<Arc<str>>,
+    pub tags: Vec<Arc<str>>,
+    pub created_at: Arc<str>,
+    pub updated_at: Arc<str>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BeadSerde {
     pub id: String,
     pub title: String,
     pub description: String,
@@ -145,70 +157,118 @@ pub struct Bead {
     pub updated_at: String,
 }
 
+impl Serialize for Bead {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let serde_bead = BeadSerde {
+            id: self.id.to_string(),
+            title: self.title.to_string(),
+            description: self.description.to_string(),
+            status: self.status,
+            priority: self.priority,
+            dependencies: self.dependencies.iter().map(|s| s.to_string()).collect(),
+            tags: self.tags.iter().map(|s| s.to_string()).collect(),
+            created_at: self.created_at.to_string(),
+            updated_at: self.updated_at.to_string(),
+        };
+        serde_bead.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Bead {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let serde_bead: BeadSerde = BeadSerde::deserialize(deserializer)?;
+        Ok(Bead {
+            id: serde_bead.id.into(),
+            title: serde_bead.title.into(),
+            description: serde_bead.description.into(),
+            status: serde_bead.status,
+            priority: serde_bead.priority,
+            dependencies: serde_bead
+                .dependencies
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+            tags: serde_bead.tags.into_iter().map(Into::into).collect(),
+            created_at: serde_bead.created_at.into(),
+            updated_at: serde_bead.updated_at.into(),
+        })
+    }
+}
+
 impl Bead {
     /// Creates a new bead with minimal required fields
     #[must_use]
     pub fn new(id: impl Into<String>, title: impl Into<String>) -> Self {
         let now = "2026-02-02T00:00:00Z".to_string();
         Self {
-            id: id.into(),
-            title: title.into(),
-            description: String::new(),
+            id: id.into().into(),
+            title: title.into().into(),
+            description: String::new().into(),
             status: BeadStatus::default(),
             priority: BeadPriority::default(),
             dependencies: Vec::new(),
             tags: Vec::new(),
-            created_at: now.clone(),
-            updated_at: now,
+            created_at: now.clone().into(),
+            updated_at: now.into(),
         }
     }
 
     /// Builder: set description
     #[must_use]
-    pub fn with_description(mut self, description: impl Into<String>) -> Self {
-        self.description = description.into();
-        self
+    pub fn with_description(self, description: impl Into<String>) -> Self {
+        Self {
+            description: description.into().into(),
+            ..self
+        }
     }
 
     /// Builder: set status
     #[must_use]
-    pub const fn with_status(mut self, status: BeadStatus) -> Self {
-        self.status = status;
-        self
+    pub fn with_status(self, status: BeadStatus) -> Self {
+        Self { status, ..self }
     }
 
     /// Builder: set priority
     #[must_use]
-    pub const fn with_priority(mut self, priority: BeadPriority) -> Self {
-        self.priority = priority;
-        self
+    pub fn with_priority(self, priority: BeadPriority) -> Self {
+        Self { priority, ..self }
     }
 
     /// Builder: set dependencies
     #[must_use]
-    pub fn with_dependencies(mut self, dependencies: Vec<String>) -> Self {
-        self.dependencies = dependencies;
-        self
+    pub fn with_dependencies(self, dependencies: Vec<String>) -> Self {
+        Self {
+            dependencies: dependencies.into_iter().map(Into::into).collect(),
+            ..self
+        }
     }
 
     /// Builder: add a single dependency
     #[must_use]
     pub fn with_dependency(mut self, dep: impl Into<String>) -> Self {
-        self.dependencies.push(dep.into());
+        self.dependencies.push(dep.into().into());
         self
     }
 
     /// Builder: set tags
     #[must_use]
-    pub fn with_tags(mut self, tags: Vec<String>) -> Self {
-        self.tags = tags;
-        self
+    pub fn with_tags(self, tags: Vec<String>) -> Self {
+        Self {
+            tags: tags.into_iter().map(Into::into).collect(),
+            ..self
+        }
     }
 
     /// Builder: add a single tag
     #[must_use]
     pub fn with_tag(mut self, tag: impl Into<String>) -> Self {
-        self.tags.push(tag.into());
+        self.tags.push(tag.into().into());
         self
     }
 
@@ -240,7 +300,7 @@ impl Bead {
 pub struct BeadFilters {
     pub status: Option<BeadStatus>,
     pub priority: Option<BeadPriority>,
-    pub tag: Option<String>,
+    pub tag: Option<Arc<str>>,
 }
 
 impl BeadFilters {
@@ -262,9 +322,9 @@ mod tests {
     #[test]
     fn test_bead_creation() {
         let bead = Bead::new("bead-1", "Test Bead");
-        assert_eq!(bead.id, "bead-1");
-        assert_eq!(bead.title, "Test Bead");
-        assert_eq!(bead.description, "");
+        assert_eq!(&*bead.id, "bead-1");
+        assert_eq!(&*bead.title, "Test Bead");
+        assert_eq!(&*bead.description, "");
         assert_eq!(bead.status, BeadStatus::Pending);
         assert_eq!(bead.priority, BeadPriority::Medium);
         assert!(bead.dependencies.is_empty());
@@ -280,11 +340,11 @@ mod tests {
             .with_dependency("bead-1")
             .with_tag("feature");
 
-        assert_eq!(bead.description, "Test description");
+        assert_eq!(&*bead.description, "Test description");
         assert_eq!(bead.status, BeadStatus::Running);
         assert_eq!(bead.priority, BeadPriority::High);
-        assert_eq!(bead.dependencies, vec!["bead-1".to_string()]);
-        assert_eq!(bead.tags, vec!["feature".to_string()]);
+        assert_eq!(&*bead.dependencies[0], "bead-1");
+        assert_eq!(&*bead.tags[0], "feature");
     }
 
     #[test]
@@ -347,7 +407,7 @@ mod tests {
         let filters = BeadFilters {
             status: Some(BeadStatus::Running),
             priority: Some(BeadPriority::High),
-            tag: Some("feature".to_string()),
+            tag: Some("feature".into()),
         };
 
         let matching = Bead::new("bead-1", "Test")
