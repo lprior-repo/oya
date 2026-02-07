@@ -55,6 +55,7 @@
 #![deny(clippy::expect_used)]
 #![forbid(clippy::panic)]
 
+pub mod checkpoint;
 pub mod engine;
 pub mod error;
 pub mod handler;
