@@ -16,8 +16,6 @@ use orchestrator::actors::supervisor::SupervisorConfig;
 use orchestrator::supervision::{Tier1Supervisors, spawn_tier1_supervisors};
 use ractor::ActorStatus;
 
-const STATUS_TIMEOUT: Duration = Duration::from_millis(200);
-const RECOVERY_WAIT: Duration = Duration::from_millis(500);
 
 fn build_prefix() -> String {
     let nanos = SystemTime::now()

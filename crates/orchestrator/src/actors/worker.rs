@@ -2,6 +2,7 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -9,7 +10,8 @@ use ractor::{Actor, ActorProcessingErr, ActorRef};
 use tokio::sync::watch;
 use tracing::{debug, info, warn};
 
-use oya_events::{BeadState, EventBus, BeadEvent, BeadId};
+use oya_events::{BeadState, EventBus};
+use oya_pipeline::workspace::WorkspaceManager;
 
 use crate::actors::supervisor::{GenericSupervisableActor, calculate_backoff};
 
@@ -52,6 +54,7 @@ pub struct WorkerConfig {
     pub checkpoint_interval: Duration,
     pub retry_policy: WorkerRetryPolicy,
     pub event_bus: Option<Arc<EventBus>>,
+    pub workspace_manager: Option<Arc<WorkspaceManager>>,
 }
 
 impl std::fmt::Debug for WorkerConfig {
@@ -60,6 +63,7 @@ impl std::fmt::Debug for WorkerConfig {
             .field("checkpoint_interval", &self.checkpoint_interval)
             .field("retry_policy", &self.retry_policy)
             .field("event_bus", &self.event_bus.as_ref().map(|_| "<EventBus>"))
+            .field("workspace_manager", &self.workspace_manager.as_ref().map(|_| "<WorkspaceManager>"))
             .finish()
     }
 }
@@ -70,6 +74,7 @@ impl Default for WorkerConfig {
             checkpoint_interval: Duration::from_secs(60),
             retry_policy: WorkerRetryPolicy::default(),
             event_bus: None,
+            workspace_manager: None,
         }
     }
 }
@@ -79,6 +84,133 @@ impl WorkerConfig {
     pub fn with_event_bus(mut self, bus: Arc<EventBus>) -> Self {
         self.event_bus = Some(bus);
         self
+    }
+
+    #[must_use]
+    pub fn with_workspace_manager(mut self, manager: Arc<WorkspaceManager>) -> Self {
+        self.workspace_manager = Some(manager);
+        self
+    }
+}
+
+/// Result of executing a bead in an isolated workspace.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkspaceExecutionResult {
+    succeeded: bool,
+    error: Option<String>,
+    exit_code: Option<i32>,
+}
+
+impl WorkspaceExecutionResult {
+    /// Create a successful execution result.
+    #[must_use]
+    pub fn success() -> Self {
+        Self {
+            succeeded: true,
+            error: None,
+            exit_code: Some(0),
+        }
+    }
+
+    /// Create a failed execution result.
+    #[must_use]
+    pub fn failure(error: String) -> Self {
+        Self {
+            succeeded: false,
+            error: Some(error),
+            exit_code: Some(1),
+        }
+    }
+
+    /// Create a result from an exit code.
+    #[must_use]
+    pub fn from_exit_code(code: i32) -> Self {
+        Self {
+            succeeded: code == 0,
+            error: if code == 0 {
+                None
+            } else {
+                Some(format!("exit code: {code}"))
+            },
+            exit_code: Some(code),
+        }
+    }
+
+    /// Whether the execution succeeded.
+    #[must_use]
+    pub fn succeeded(&self) -> bool {
+        self.succeeded
+    }
+
+    /// Error message if execution failed.
+    #[must_use]
+    pub fn error(&self) -> Option<&str> {
+        self.error.as_deref()
+    }
+
+    /// Exit code from execution.
+    #[must_use]
+    pub fn exit_code(&self) -> Option<i32> {
+        self.exit_code
+    }
+}
+
+/// Execution context for a bead running in an isolated workspace.
+#[derive(Debug, Clone)]
+pub struct BeadExecutionContext {
+    bead_id: String,
+    workspace_path: PathBuf,
+    execution_result: Option<WorkspaceExecutionResult>,
+}
+
+impl BeadExecutionContext {
+    /// Create a new execution context.
+    #[must_use]
+    pub fn new(bead_id: impl Into<String>, workspace_path: PathBuf) -> Self {
+        Self {
+            bead_id: bead_id.into(),
+            workspace_path,
+            execution_result: None,
+        }
+    }
+
+    /// The bead ID being executed.
+    #[must_use]
+    pub fn bead_id(&self) -> &str {
+        &self.bead_id
+    }
+
+    /// Path to the isolated workspace.
+    #[must_use]
+    pub fn workspace_path(&self) -> &PathBuf {
+        &self.workspace_path
+    }
+
+    /// Whether execution has completed.
+    #[must_use]
+    pub fn has_completed(&self) -> bool {
+        self.execution_result.is_some()
+    }
+
+    /// The execution result if available.
+    #[must_use]
+    pub fn execution_result(&self) -> Option<&WorkspaceExecutionResult> {
+        self.execution_result.as_ref()
+    }
+
+    /// Mark execution as completed with a result.
+    ///
+    /// # Errors
+    /// Returns an error if the context is already marked as completed.
+    pub fn mark_completed(&mut self, result: WorkspaceExecutionResult) -> Result<(), String> {
+        if self.execution_result.is_some() {
+            return Err(format!(
+                "bead '{}' execution already completed",
+                self.bead_id
+            ));
+        }
+        self.execution_result = Some(result);
+        Ok(())
     }
 }
 
@@ -98,6 +230,7 @@ pub struct WorkerState {
     retry_attempts: u32,
     config: WorkerConfig,
     checkpoint_handle: Option<CheckpointHandle>,
+    execution_context: Option<BeadExecutionContext>,
 }
 
 impl WorkerState {
@@ -109,6 +242,7 @@ impl WorkerState {
             retry_attempts: 0,
             config,
             checkpoint_handle: None,
+            execution_context: None,
         }
     }
 
@@ -124,6 +258,10 @@ impl WorkerState {
     #[must_use]
     pub fn current_state(&self) -> Option<&BeadState> {
         self.current_state.as_ref()
+    }
+
+    fn clear_execution_context(&mut self) {
+        self.execution_context = None;
     }
 }
 
@@ -158,55 +296,38 @@ impl Actor for WorkerActorDef {
                 let old_state = from_state.unwrap_or(BeadState::Ready);
                 let new_state = BeadState::Running;
 
-                // Emit state change event (best-effort)
-                if let Some(ref bus) = state.config.event_bus {
-                    // Parse bead_id as BeadId (ULID)
-                    let result: Result<BeadId, _> = bead_id.parse();
-                    if let Ok(bid) = result {
-                        let event = BeadEvent::state_changed(bid, old_state.clone(), new_state.clone());
-                        match bus.publish(event).await {
-                            Ok(_) => {
-                                debug!(
-                                    bead_id = %bead_id,
-                                    from = ?old_state,
-                                    to = ?new_state,
-                                    "Emitted state change event"
-                                );
-                            }
-                            Err(e) => {
-                                warn!(error = %e, "Failed to publish state change event");
-                            }
+                // Create workspace for bead execution
+                let exec_result = if let Some(ref workspace_manager) = state.config.workspace_manager {
+                    match workspace_manager.execute_with_workspace(&bead_id, |_workspace_path| {
+                        // TODO: Execute actual bead work here
+                        // For now, simulate successful execution
+                        info!(bead_id = %bead_id, "Executing bead in isolated workspace");
+                        Ok::<(), oya_pipeline::error::Error>(())
+                    }) {
+                        Ok(()) => {
+                            info!(bead_id = %bead_id, "Bead execution completed successfully");
+                            WorkspaceExecutionResult::success()
                         }
-                    } else {
-                        warn!(bead_id = %bead_id, "Invalid bead ID format, skipping event emission");
+                        Err(e) => {
+                            warn!(bead_id = %bead_id, error = %e, "Bead execution failed");
+                            WorkspaceExecutionResult::failure(e.to_string())
+                        }
                     }
-                }
+                } else {
+                    warn!(bead_id = %bead_id, "No workspace manager configured, skipping execution");
+                    WorkspaceExecutionResult::success()
+                };
 
-                state.current_bead = Some(bead_id);
+                state.current_bead = Some(bead_id.clone());
                 state.current_state = Some(new_state);
                 state.reset_retries();
+
+                // Clear any previous execution context
+                state.clear_execution_context();
             }
             WorkerMessage::FailBead { error } => {
                 let bead_id = state.current_bead.clone();
                 let delay = state.next_retry_delay();
-
-                // Emit failed event (best-effort)
-                if let (Some(bus), Some(bid)) = (&state.config.event_bus, &bead_id) {
-                    let result: Result<BeadId, _> = bid.parse();
-                    if let Ok(event_bead_id) = result {
-                        let event = BeadEvent::failed(event_bead_id, error.clone());
-                        match bus.publish(event).await {
-                            Ok(_) => {
-                                debug!(bead_id = %bid, error = %error, "Emitted failed event");
-                            }
-                            Err(e) => {
-                                warn!(error = %e, "Failed to publish failed event");
-                            }
-                        }
-                    } else {
-                        warn!(bead_id = %bid, "Invalid bead ID format, skipping event emission");
-                    }
-                }
 
                 match (bead_id, delay) {
                     (Some(id), Some(delay)) => {
@@ -335,5 +456,71 @@ mod tests {
     fn test_checkpoint_timer_interval() {
         let timer = CheckpointTimer::new(Duration::from_secs(60));
         assert_eq!(timer.interval(), Duration::from_secs(60));
+    }
+
+    #[test]
+    fn test_workspace_execution_result_success() {
+        let result = WorkspaceExecutionResult::success();
+        assert!(result.succeeded());
+        assert!(result.error().is_none());
+        assert_eq!(result.exit_code(), Some(0));
+    }
+
+    #[test]
+    fn test_workspace_execution_result_failure() {
+        let result = WorkspaceExecutionResult::failure("command failed".to_string());
+        assert!(!result.succeeded());
+        assert_eq!(result.error(), Some("command failed"));
+        assert_eq!(result.exit_code(), Some(1));
+    }
+
+    #[test]
+    fn test_workspace_execution_result_from_exit_code() {
+        let success = WorkspaceExecutionResult::from_exit_code(0);
+        assert!(success.succeeded());
+
+        let failure = WorkspaceExecutionResult::from_exit_code(1);
+        assert!(!failure.succeeded());
+    }
+
+    #[test]
+    fn test_bead_execution_context_new() {
+        let ctx = BeadExecutionContext::new(
+            "test-bead-123",
+            PathBuf::from("/tmp/workspace/test-bead-123"),
+        );
+
+        assert_eq!(ctx.bead_id(), "test-bead-123");
+        assert_eq!(ctx.workspace_path(), PathBuf::from("/tmp/workspace/test-bead-123"));
+        assert!(!ctx.has_completed());
+    }
+
+    #[test]
+    fn test_bead_execution_context_mark_completed() {
+        let mut ctx = BeadExecutionContext::new(
+            "test-bead-456",
+            PathBuf::from("/tmp/workspace/test-bead-456"),
+        );
+
+        assert!(!ctx.has_completed());
+
+        let result = WorkspaceExecutionResult::success();
+        ctx.mark_completed(result);
+
+        assert!(ctx.has_completed());
+        assert!(ctx.execution_result().unwrap().succeeded());
+    }
+
+    #[test]
+    fn test_bead_execution_context_double_complete_returns_error() {
+        let mut ctx = BeadExecutionContext::new(
+            "test-bead-789",
+            PathBuf::from("/tmp/workspace/test-bead-789"),
+        );
+
+        ctx.mark_completed(WorkspaceExecutionResult::success());
+
+        let second_result = ctx.mark_completed(WorkspaceExecutionResult::failure("fail".to_string()));
+        assert!(second_result.is_err());
     }
 }
