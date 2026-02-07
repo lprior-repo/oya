@@ -14,7 +14,7 @@
 
 use orchestrator::actors::ActorError;
 use orchestrator::actors::storage::{DatabaseConfig, StateManagerActorDef, StateManagerMessage};
-use ractor::{Actor, ActorRef};
+use ractor::{Actor, ActorRef, RpcReplyPort};
 use std::time::Duration;
 
 // ═══════════════════════════════════════════════════════════════════════════════

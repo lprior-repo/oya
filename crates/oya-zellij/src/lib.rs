@@ -1551,3 +1551,59 @@ mod tests {
         assert_eq!(agent.workload_history.avg_execution_secs, Some(2.3));
     }
 }
+
+    #[test]
+    fn test_stage_selection_navigation() {
+        let mut state = State::default();
+        state.pipeline_stages = to_vector(vec![
+            StageInfo {
+                name: "stage-1".to_string(),
+                status: StageStatus::Passed,
+                duration_ms: Some(100),
+                exit_code: Some(0),
+            },
+            StageInfo {
+                name: "stage-2".to_string(),
+                status: StageStatus::Failed,
+                duration_ms: Some(200),
+                exit_code: Some(1),
+            },
+        ]);
+        
+        state.selected_stage_index = 0;
+        
+        // Simulate Down key
+        if state.selected_stage_index < state.pipeline_stages.len().saturating_sub(1) {
+            state.selected_stage_index = state.selected_stage_index.saturating_add(1);
+        }
+        assert_eq!(state.selected_stage_index, 1);
+        
+        // Simulate Up key
+        state.selected_stage_index = state.selected_stage_index.saturating_sub(1);
+        assert_eq!(state.selected_stage_index, 0);
+    }
+    
+    #[test]
+    fn test_stage_selection_bounds() {
+        let mut state = State::default();
+        state.pipeline_stages = to_vector(vec![
+            StageInfo {
+                name: "stage-1".to_string(),
+                status: StageStatus::Pending,
+                duration_ms: None,
+                exit_code: None,
+            },
+        ]);
+        
+        state.selected_stage_index = 0;
+        
+        // Try to go down when at the last stage
+        if state.selected_stage_index < state.pipeline_stages.len().saturating_sub(1) {
+            state.selected_stage_index = state.selected_stage_index.saturating_add(1);
+        }
+        assert_eq!(state.selected_stage_index, 0);
+        
+        // Try to go up when at the first stage
+        state.selected_stage_index = state.selected_stage_index.saturating_sub(1);
+        assert_eq!(state.selected_stage_index, 0);
+    }
