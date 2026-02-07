@@ -93,6 +93,7 @@ struct State {
     beads_cache: Option<(Vector<BeadInfo>, Instant)>,
     agents_cache: Option<(Vector<AgentInfo>, Instant)>,
     pipeline_caches: HashMap<String, (Vector<StageInfo>, Instant)>,
+    graph_cache: Option<(Vector<GraphNode>, Vector<GraphEdge>, Vector<String>, Instant)>,
 
     // Tracking for timeouts
     last_request_sent: Option<Instant>,
@@ -127,6 +128,7 @@ impl Default for State {
             beads_cache: None,
             agents_cache: None,
             pipeline_caches: HashMap::new(),
+            graph_cache: None,
             last_request_sent: None,
             beads: Vector::new(),
             selected_index: 0,
@@ -439,7 +441,8 @@ impl ZellijPlugin for State {
                 }
                 BareKey::Char('5') => {
                     self.mode = ViewMode::GraphView;
-                    self.load_graph();
+                    // TODO: Implement load_graph when backend API is ready
+                    // self.load_graph();
                     true
                 }
                 BareKey::Enter => {
@@ -586,13 +589,29 @@ impl State {
         web_request(&url, HttpVerb::Get, BTreeMap::new(), vec![], context);
     }
 
+    fn load_graph(&mut self) {
+        if let Some((cached_nodes, cached_edges, cached_path, timestamp)) = &self.graph_cache {
+            if timestamp.elapsed() < CACHE_TTL {
+                self.graph_nodes = cached_nodes.clone();
+                self.graph_edges = cached_edges.clone();
+                self.critical_path = cached_path.clone();
+                return;
+            }
+        }
+
+        let url = format!("{}/api/graph", self.server_url);
+        let mut context = BTreeMap::new();
+        context.insert(CTX_REQUEST_TYPE.to_string(), CTX_GRAPH.to_string());
+        self.pending_requests = self.pending_requests.saturating_add(1);
+        self.last_request_sent = Some(Instant::now());
+        web_request(&url, HttpVerb::Get, BTreeMap::new(), vec![], context);
+    }
+
     fn open_command_pane_for_stage(&self, bead_id: &str, stage_name: &str) {
         let command = format!(
             "oya stage -s {} --stage {}",
             bead_id, stage_name
         );
-
-        let pane_name = format!("stage-{}", stage_name);
 
         // Create context for the command pane
         let mut context = BTreeMap::new();
@@ -650,6 +669,12 @@ impl State {
             }
             Some(CTX_GRAPH) => {
                 self.parse_graph_response(&body);
+                self.graph_cache = Some((
+                    self.graph_nodes.clone(),
+                    self.graph_edges.clone(),
+                    self.critical_path.clone(),
+                    Instant::now(),
+                ));
             }
             _ => (),
         }

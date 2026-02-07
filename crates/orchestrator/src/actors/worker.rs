@@ -231,6 +231,9 @@ pub enum WorkerMessage {
         error: String,
     },
     CheckpointTick,
+    HealthCheckFailed {
+        reason: String,
+    },
     Stop {
         reason: Option<String>,
     },
@@ -238,6 +241,7 @@ pub enum WorkerMessage {
 
 /// State for the BeadWorker actor.
 pub struct WorkerState {
+    worker_id: String,
     current_bead: Option<String>,
     current_state: Option<BeadState>,
     retry_attempts: u32,
@@ -249,7 +253,9 @@ pub struct WorkerState {
 impl WorkerState {
     #[must_use]
     pub fn new(config: WorkerConfig) -> Self {
+        let worker_id = format!("worker-{}", uuid::Uuid::new_v4());
         Self {
+            worker_id,
             current_bead: None,
             current_state: None,
             retry_attempts: 0,
@@ -371,6 +377,13 @@ impl Actor for WorkerActorDef {
             WorkerMessage::CheckpointTick => {
                 if let Some(ref bead_id) = state.current_bead {
                     debug!(bead_id = %bead_id, "Checkpoint timer fired");
+                }
+            }
+            WorkerMessage::HealthCheckFailed { reason } => {
+                warn!(reason = %reason, "Health check failed");
+                if let Some(ref bead_id) = state.current_bead {
+                    warn!(bead_id = %bead_id, "Marking bead as unhealthy");
+                    // TODO: Emit BeadEvent::health_check_failed and transition to failed state
                 }
             }
             WorkerMessage::Stop { reason } => {

@@ -338,3 +338,127 @@ fn given_self_referential_dependency_when_add_edge_then_rejected_or_handled() {
     }
     // If rejected, that's also valid - we just verify no panic
 }
+
+// ============================================================================
+// DUPLICATE EVENTS IDEMPOTENCE (hostile: replay/de-dupe scenarios)
+// ============================================================================
+
+#[test]
+fn given_duplicate_created_events_when_apply_then_idempotent_no_double_processing() {
+    // GIVEN: A DAG and a Created event
+    let mut dag = WorkflowDAG::new();
+    let node_id = "bead-1";
+    let _ = dag.add_node(node_id.to_string());
+
+    // WHEN: Applying the same node addition twice (simulating duplicate events)
+    let first_result = dag.add_node(node_id.to_string());
+    let second_result = dag.add_node(node_id.to_string());
+
+    // THEN: Should not create duplicate nodes (idempotent)
+    // Implementation either rejects duplicate add_node calls or handles them gracefully
+    assert!(
+        first_result.is_ok() || second_result.is_ok(),
+        "at least one node addition should succeed"
+    );
+
+    // Verify node count doesn't double-count
+    let count = dag.node_count();
+    assert!(
+        count == 1,
+        "node count should be 1, not {} (duplicate events caused double-counting)",
+        count
+    );
+}
+
+#[test]
+fn given_duplicate_dependency_events_when_apply_then_no_double_blocking() {
+    // GIVEN: A DAG with two nodes and a dependency
+    let mut dag = WorkflowDAG::new();
+    let _ = dag.add_node("a".to_string());
+    let _ = dag.add_node("b".to_string());
+    let _ = dag.add_edge(
+        "a".to_string(),
+        "b".to_string(),
+        DependencyType::BlockingDependency,
+    );
+
+    // WHEN: Receiving duplicate dependency resolution events (simulating event replay)
+    let first_result = dag.add_edge(
+        "a".to_string(),
+        "b".to_string(),
+        DependencyType::BlockingDependency,
+    );
+    let _second_result = dag.add_edge(
+        "a".to_string(),
+        "b".to_string(),
+        DependencyType::BlockingDependency,
+    );
+
+    // THEN: Dependencies should not multiply (no double-blocking)
+    let deps = dag.get_dependencies(&"b".to_string());
+
+    assert!(
+        deps.is_ok(),
+        "should be able to query dependencies after duplicate events"
+    );
+
+    if let Ok(dependencies) = deps {
+        // Verify we don't have duplicate dependencies
+        let unique_deps: std::collections::HashSet<_> =
+            dependencies.iter().collect();
+        assert_eq!(
+            dependencies.len(),
+            unique_deps.len(),
+            "duplicate events should not create duplicate dependencies"
+        );
+    }
+}
+
+#[test]
+fn given_event_replay_when_rebuild_state_then_consistent_result() {
+    // GIVEN: A sequence of DAG operations
+    let mut dag = WorkflowDAG::new();
+    let _ = dag.add_node("a".to_string());
+    let _ = dag.add_node("b".to_string());
+    let _ = dag.add_edge(
+        "a".to_string(),
+        "b".to_string(),
+        DependencyType::BlockingDependency,
+    );
+
+    let original_count = dag.node_count();
+    let original_edges = dag.edge_count();
+
+    // WHEN: Simulating event replay by re-applying same operations
+    let mut replay_dag = WorkflowDAG::new();
+    let _ = replay_dag.add_node("a".to_string());
+    let _ = replay_dag.add_node("b".to_string());
+    let _ = replay_dag.add_node("a".to_string()); // Duplicate: event replay
+    let _ = replay_dag.add_node("b".to_string()); // Duplicate: event replay
+    let _ = replay_dag.add_edge(
+        "a".to_string(),
+        "b".to_string(),
+        DependencyType::BlockingDependency,
+    );
+    let _ = replay_dag.add_edge(
+        "a".to_string(),
+        "b".to_string(),
+        DependencyType::BlockingDependency,
+    ); // Duplicate
+
+    // THEN: State should be identical (no double-processing from replay)
+    assert_eq!(
+        replay_dag.node_count(),
+        original_count,
+        "replay should produce same node count as original"
+    );
+
+    // Edge count should be consistent (either 1 or 2 depending on implementation,
+    // but NOT random or multiplying)
+    let replay_edges = replay_dag.edge_count();
+    assert!(
+        replay_edges == 1 || replay_edges == 2,
+        "replay should produce consistent edge count, got {}",
+        replay_edges
+    );
+}

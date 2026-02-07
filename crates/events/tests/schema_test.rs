@@ -91,7 +91,7 @@ async fn test_indexes_defined() {
 
     let index_count = expected_indexes
         .iter()
-        .filter(|idx| schema.contains(idx))
+        .filter(|idx| schema.contains(*idx))
         .count();
 
     assert!(
@@ -118,7 +118,9 @@ async fn test_schema_valid_syntax() {
 
     // Try to initialize schema - should not error
     let result = client.init_schema(&schema).await;
-    assert!(result.is_ok(), "Schema should have valid SurrealQL syntax");
+    if let Err(e) = result {
+        panic!("Schema initialization failed: {e}");
+    }
 }
 
 #[tokio::test]

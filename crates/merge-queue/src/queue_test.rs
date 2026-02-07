@@ -46,5 +46,9 @@ fn test_dequeue_task() {
     let dequeued = queue.dequeue();
 
     assert!(dequeued.is_some());
-    assert_eq!(dequeued.unwrap().id, "task-1");
+    let task = match dequeued {
+        Some(t) => t,
+        None => panic!("Expected Some task, got None"),
+    };
+    assert_eq!(task.id, "task-1");
 }
