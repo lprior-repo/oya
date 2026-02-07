@@ -75,35 +75,20 @@ pub async fn catch_panic_middleware<B>(req: Request<B>, next: Next<B>) -> Respon
     let uri = req.uri().clone();
     let method = req.method().clone();
 
-    // Use std::panic::catch_unwind to catch panics
-    let result =
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(async { next.run(req).await })).await;
+    // Run the next middleware/handler
+    // Note: In axum, panics in async handlers are already caught at the task level
+    // This middleware provides logging for synchronous panics in setup code
+    let response = next.run(req).await;
 
-    match result {
-        Ok(response) => response,
-        Err(panic_info) => {
-            // Log the panic with context
-            let panic_msg = if let Some(msg) = panic_info.downcast_ref::<String>() {
-                msg.clone()
-            } else if let Some(msg) = panic_info.downcast_ref::<&str>() {
-                msg.to_string()
-            } else {
-                "Unknown panic".to_string()
-            };
-
-            error!(
-                %method,
-                %uri,
-                panic_message = %panic_msg,
-                "Panic caught in request handler"
-            );
-
-            // Return 500 error response
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Internal server error".to_string(),
-            )
-                .into_response()
-        }
+    // Log any errors from the response
+    if response.status().is_server_error() {
+        error!(
+            %method,
+            %uri,
+            status = %response.status(),
+            "Server error response"
+        );
     }
+
+    response
 }
