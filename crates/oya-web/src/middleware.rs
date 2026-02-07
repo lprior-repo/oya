@@ -30,9 +30,9 @@ pub fn cors_layer() -> CorsLayer {
 ///
 /// This middleware wraps all handlers and catches any errors that
 /// propagate up, logging them with appropriate context.
-pub async fn error_handler_middleware<B>(
-    req: Request<B>,
-    next: Next<B>,
+pub async fn error_handler_middleware(
+    req: Request,
+    next: Next,
 ) -> Result<Response, Response> {
     let uri = req.uri().clone();
     let method = req.method().clone();
@@ -71,7 +71,7 @@ pub async fn error_handler_middleware<B>(
 ///
 /// This is a safety net to prevent panics from crashing the server.
 /// All panics are logged before conversion to error responses.
-pub async fn catch_panic_middleware<B>(req: Request<B>, next: Next<B>) -> Response {
+pub async fn catch_panic_middleware(req: Request, next: Next) -> Response {
     let uri = req.uri().clone();
     let method = req.method().clone();
 
