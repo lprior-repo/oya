@@ -563,7 +563,12 @@ mod tests {
         registry.register_fallback_chain("test", primary, vec![fallback]);
 
         assert!(registry.has("test"));
-        let handler = registry.get("test").unwrap();
+        let handler = registry.get("test");
+        assert!(handler.is_some(), "handler should be found in test");
+        let handler = handler.map_or(
+            std::sync::Arc::new(NoOpHandler::new("fallback")) as std::sync::Arc<dyn PhaseHandler>,
+            |h| h,
+        );
         let ctx = make_context();
         let result = handler.execute(&ctx).await;
         assert!(result.is_ok());
@@ -578,7 +583,12 @@ mod tests {
         registry.register_fallback_chain("test", primary, vec![fallback]);
 
         assert!(registry.has("test"));
-        let handler = registry.get("test").unwrap();
+        let handler = registry.get("test");
+        assert!(handler.is_some(), "handler should be found in test");
+        let handler = handler.map_or(
+            std::sync::Arc::new(NoOpHandler::new("fallback")) as std::sync::Arc<dyn PhaseHandler>,
+            |h| h,
+        );
         let ctx = make_context();
         let result = handler.execute(&ctx).await;
         assert!(result.is_err());
@@ -594,7 +604,12 @@ mod tests {
         registry.register_fallback_chain("test", primary, vec![fallback1, fallback2]);
 
         assert!(registry.has("test"));
-        let handler = registry.get("test").unwrap();
+        let handler = registry.get("test");
+        assert!(handler.is_some(), "handler should be found in test");
+        let handler = handler.map_or(
+            std::sync::Arc::new(NoOpHandler::new("fallback")) as std::sync::Arc<dyn PhaseHandler>,
+            |h| h,
+        );
         let ctx = make_context();
         let result = handler.execute(&ctx).await;
         assert!(result.is_ok());

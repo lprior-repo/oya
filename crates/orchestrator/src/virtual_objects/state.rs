@@ -106,6 +106,7 @@ impl StateValue {
 
     /// Try to get as float.
     #[must_use]
+    #[allow(clippy::cast_precision_loss)]
     pub fn as_f64(&self) -> Option<f64> {
         match self {
             Self::Float(v) => Some(*v),

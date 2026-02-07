@@ -11,7 +11,6 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use futures::stream::{self, TryStreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{RwLock, broadcast, mpsc};
 use tokio::time::timeout;
@@ -145,6 +144,12 @@ impl ShutdownCoordinator {
     }
 
     /// Initiate graceful shutdown
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if shutdown has already been initiated (duplicate signal).
+    /// However, this is treated as a no-op rather than a failure - the function
+    /// will return Ok(()) but no action is taken.
     pub async fn initiate_shutdown(&self, signal: ShutdownSignal) -> Result<()> {
         // Check if already shutting down
         if self
@@ -177,6 +182,16 @@ impl ShutdownCoordinator {
     }
 
     /// Execute graceful shutdown sequence
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Checkpoint saving fails catastrophically (timeout, I/O errors)
+    /// - Actor shutdown encounters unrecoverable errors
+    /// - Internal state corruption is detected
+    ///
+    /// Note: Non-fatal errors during checkpoint saving or actor shutdown
+    /// are logged as warnings but don't cause this function to fail.
     pub async fn shutdown(&self) -> Result<ShutdownStats> {
         let start = std::time::Instant::now();
         let mut stats = ShutdownStats::default();
@@ -220,6 +235,16 @@ impl ShutdownCoordinator {
     }
 
     /// Save all checkpoints with timeout
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The checkpoint channel is closed unexpectedly
+    /// - Internal state is corrupted during checkpoint collection
+    /// - Unexpected runtime errors occur during result processing
+    ///
+    /// Note: Timeout conditions return an empty Vec of results rather than
+    /// an error, as this is treated as a graceful degradation.
     async fn save_checkpoints(&self) -> Result<Vec<CheckpointResult>> {
         info!("Saving checkpoints before shutdown");
 
@@ -255,6 +280,13 @@ impl ShutdownCoordinator {
     }
 
     /// Stop all actors gracefully
+    ///
+    /// # Errors
+    ///
+    /// Currently returns Ok(()) always, as actor shutdown is coordinated
+    /// through subscription-based notifications rather than direct calls.
+    /// Future implementations may return errors if critical actor shutdown
+    /// failures need to be propagated.
     async fn stop_actors(&self) -> Result<()> {
         info!("Stopping actors");
         // Actor shutdown logic will be implemented by components that subscribe
@@ -265,6 +297,12 @@ impl ShutdownCoordinator {
     }
 
     /// Wait for shutdown with overall timeout
+    ///
+    /// # Errors
+    ///
+    /// Returns `Error::invalid_record` if the shutdown sequence exceeds
+    /// the configured timeout (30 seconds), indicating that graceful shutdown
+    /// could not be completed within the acceptable timeframe.
     pub async fn wait_with_timeout(&self) -> Result<ShutdownStats> {
         match timeout(SHUTDOWN_TIMEOUT, self.shutdown()).await {
             Ok(stats) => stats,
@@ -302,6 +340,13 @@ pub struct ShutdownStats {
 }
 
 /// Install OS signal handlers (SIGTERM, SIGINT)
+///
+/// # Errors
+///
+/// Returns an error if:
+    /// - Signal installation fails on Unix systems (SIGTERM/SIGINT handlers)
+    /// - Ctrl+C handler installation fails on Windows
+    /// - Internal system errors prevent signal handler setup
 pub async fn install_signal_handlers(
     coordinator: Arc<ShutdownCoordinator>,
 ) -> Result<tokio::task::JoinHandle<()>> {

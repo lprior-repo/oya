@@ -9,7 +9,7 @@ fn generate_test_data(size: usize) -> Vec<u8> {
 }
 
 /// Benchmark function for the original iterator chain implementation
-fn benchmark_original_impl(data: &[u8]) -> Vec<u8> {
+pub fn benchmark_original_impl(data: &[u8]) -> Vec<u8> {
     // Simulate the original iterator chain approach
     let header = MAGIC_BYTES
         .iter()
@@ -21,7 +21,7 @@ fn benchmark_original_impl(data: &[u8]) -> Vec<u8> {
 }
 
 /// Benchmark function for the optimized pre-allocated Vec implementation
-fn benchmark_optimized_impl(data: &[u8]) -> Vec<u8> {
+pub fn benchmark_optimized_impl(data: &[u8]) -> Vec<u8> {
     // Use the optimized implementation from the source
     let mut header = Vec::with_capacity(MAGIC_BYTES.len() + 4 + data.len());
     header.extend_from_slice(MAGIC_BYTES);
@@ -58,7 +58,9 @@ fn criterion_benchmark(c: &mut Criterion) {
 
         // Benchmark the actual function from the source
         group.bench_function("actual_function", |b| {
-            b.iter(|| black_box(add_version_header(test_data.clone())).unwrap())
+            b.iter(|| {
+                black_box(add_version_header(test_data.clone()).unwrap_or_else(|_| Vec::new()))
+            })
         });
 
         group.finish();

@@ -560,18 +560,17 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
         // Test LoadState (query)
-        let loaded = ractor::call!(
+        let loaded = ractor::call_t!(
             actor,
-            StateManagerMessage::LoadState { key: key.clone() },
-            tokio::time::Duration::from_secs(5)
-        )
-        .await;
+            |reply| StateManagerMessage::LoadState { key: key.clone(), reply },
+            5000
+        );
 
         assert!(loaded.is_ok(), "LoadState should succeed");
-        let loaded_data = loaded.ok().unwrap();
+        let loaded_data = loaded.unwrap();
         assert!(loaded_data.is_ok(), "LoadState result should be Ok");
         assert_eq!(
-            loaded_data.ok().unwrap(),
+            loaded_data.unwrap(),
             data,
             "Loaded data should match saved data"
         );
@@ -619,15 +618,14 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
         // Verify deleted
-        let loaded = ractor::call!(
+        let loaded = ractor::call_t!(
             actor,
-            StateManagerMessage::LoadState { key },
-            tokio::time::Duration::from_secs(5)
-        )
-        .await;
+            |reply| StateManagerMessage::LoadState { key: key.clone(), reply },
+            5000
+        );
 
         assert!(loaded.is_ok());
-        let result = loaded.ok().unwrap();
+        let result = loaded.unwrap();
         assert!(result.is_err(), "Deleted key should return error");
 
         actor.stop(None);
@@ -655,15 +653,14 @@ mod tests {
         let key = "test_key_exists".to_string();
 
         // Check non-existent key
-        let exists = ractor::call!(
+        let exists = ractor::call_t!(
             actor,
-            StateManagerMessage::StateExists { key: key.clone() },
-            tokio::time::Duration::from_secs(5)
-        )
-        .await;
+            |reply| StateManagerMessage::StateExists { key: key.clone(), reply },
+            5000
+        );
 
         assert!(exists.is_ok());
-        assert_eq!(exists.ok().unwrap().ok().unwrap(), false);
+        assert_eq!(exists.unwrap().ok().unwrap(), false);
 
         // Save key
         actor
@@ -677,15 +674,14 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
         // Check exists
-        let exists = ractor::call!(
+        let exists = ractor::call_t!(
             actor,
-            StateManagerMessage::StateExists { key },
-            tokio::time::Duration::from_secs(5)
-        )
-        .await;
+            |reply| StateManagerMessage::StateExists { key: key.clone(), reply },
+            5000
+        );
 
         assert!(exists.is_ok());
-        assert_eq!(exists.ok().unwrap().ok().unwrap(), true);
+        assert_eq!(exists.unwrap().ok().unwrap(), true);
 
         actor.stop(None);
         handle.await.expect("Actor shutdown failed");
@@ -733,29 +729,28 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
 
         // List all keys
-        let all_keys = ractor::call!(
+        let all_keys = ractor::call_t!(
             actor,
-            StateManagerMessage::ListKeys { prefix: None },
-            tokio::time::Duration::from_secs(5)
-        )
-        .await;
+            |reply| StateManagerMessage::ListKeys { prefix: None, reply },
+            5000
+        );
 
         assert!(all_keys.is_ok());
-        let keys = all_keys.ok().unwrap().ok().unwrap();
+        let keys = all_keys.unwrap().ok().unwrap();
         assert_eq!(keys.len(), 5);
 
         // List with prefix
-        let workflow_keys = ractor::call!(
+        let workflow_keys = ractor::call_t!(
             actor,
-            StateManagerMessage::ListKeys {
+            |reply| StateManagerMessage::ListKeys {
                 prefix: Some("workflow:".to_string()),
+                reply,
             },
-            tokio::time::Duration::from_secs(5)
-        )
-        .await;
+            5000
+        );
 
         assert!(workflow_keys.is_ok());
-        let keys = workflow_keys.ok().unwrap().ok().unwrap();
+        let keys = workflow_keys.unwrap().ok().unwrap();
         assert_eq!(keys.len(), 3);
 
         actor.stop(None);
@@ -794,15 +789,14 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
         // Get version
-        let version = ractor::call!(
+        let version = ractor::call_t!(
             actor,
-            StateManagerMessage::GetStateVersion { key },
-            tokio::time::Duration::from_secs(5)
-        )
-        .await;
+            |reply| StateManagerMessage::GetStateVersion { key: key.clone(), reply },
+            5000
+        );
 
         assert!(version.is_ok());
-        assert_eq!(version.ok().unwrap().ok().unwrap(), Some(5));
+        assert_eq!(version.unwrap().ok().unwrap(), Some(5));
 
         actor.stop(None);
         handle.await.expect("Actor shutdown failed");
@@ -837,7 +831,7 @@ mod tests {
             .expect("Failed to create DurableEventStore")
             .with_wal_dir(format!("{}/.wal", storage_path));
 
-        let (actor, handle) = Actor::spawn(None, EventStoreActorDef, std::sync::Arc::new(store))
+        let (actor, handle) = Actor::spawn(None, EventStoreActorDef, Some(std::sync::Arc::new(store)))
             .await
             .expect("Failed to spawn EventStoreActor");
 
@@ -845,33 +839,32 @@ mod tests {
         let spec = BeadSpec::new("Test Event").with_complexity(Complexity::Simple);
 
         // Append event (with fsync guarantee)
-        let append_result = ractor::call!(
+        let append_result = ractor::call_t!(
             actor,
-            EventStoreMessage::AppendEvent {
+            |reply| EventStoreMessage::AppendEvent {
                 event: BeadEvent::created(bead_id, spec),
+                reply,
             },
-            tokio::time::Duration::from_secs(5)
-        )
-        .await;
+            5000
+        );
 
         assert!(append_result.is_ok(), "AppendEvent should succeed");
         assert!(
-            append_result.ok().unwrap().is_ok(),
+            append_result.unwrap().is_ok(),
             "AppendEvent result should be Ok"
         );
 
         // Read events
-        let events = ractor::call!(
+        let events = ractor::call_t!(
             actor,
-            EventStoreMessage::ReadEvents { bead_id },
-            tokio::time::Duration::from_secs(5)
-        )
-        .await;
+            |reply| EventStoreMessage::ReadEvents { bead_id, reply },
+            5000
+        );
 
         assert!(events.is_ok(), "ReadEvents should succeed");
-        let event_list = events.ok().unwrap();
+        let event_list = events.unwrap();
         assert!(event_list.is_ok(), "ReadEvents result should be Ok");
-        assert_eq!(event_list.ok().unwrap().len(), 1, "Should have one event");
+        assert_eq!(event_list.unwrap().len(), 1, "Should have one event");
 
         actor.stop(None);
         handle.await.expect("Actor shutdown failed");
@@ -902,60 +895,58 @@ mod tests {
             .expect("Failed to create DurableEventStore")
             .with_wal_dir(format!("{}/.wal", storage_path));
 
-        let (actor, handle) = Actor::spawn(None, EventStoreActorDef, std::sync::Arc::new(store))
+        let (actor, handle) = Actor::spawn(None, EventStoreActorDef, Some(std::sync::Arc::new(store)))
             .await
             .expect("Failed to spawn EventStoreActor");
 
         let bead_id = BeadId::new();
 
         // Create multiple events
-        let phase_id = PhaseId::new();
+        let _phase_id = PhaseId::new();
 
-        let _ = ractor::call!(
+        let _ = ractor::call_t!(
             actor,
-            EventStoreMessage::AppendEvent {
+            |reply| EventStoreMessage::AppendEvent {
                 event: BeadEvent::created(
                     bead_id,
                     BeadSpec::new("Test").with_complexity(Complexity::Simple),
                 ),
+                reply,
             },
-            tokio::time::Duration::from_secs(5)
-        )
-        .await;
+            5000
+        );
 
-        let _ = ractor::call!(
+        let _ = ractor::call_t!(
             actor,
-            EventStoreMessage::AppendEvent {
-                event: BeadEvent::phase_started(bead_id, phase_id, "test_phase"),
+            |reply| EventStoreMessage::AppendEvent {
+                event: BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Scheduled),
+                reply,
             },
-            tokio::time::Duration::from_secs(5)
-        )
-        .await;
+            5000
+        );
 
         // Read all events to get checkpoint ID
-        let all_events = ractor::call!(
+        let all_events = ractor::call_t!(
             actor,
-            EventStoreMessage::ReadEvents { bead_id },
-            tokio::time::Duration::from_secs(5)
-        )
-        .await;
+            |reply| EventStoreMessage::ReadEvents { bead_id, reply },
+            5000
+        );
 
         assert!(all_events.is_ok());
-        let event_list = all_events.ok().unwrap().ok().unwrap();
+        let event_list = all_events.unwrap().ok().unwrap();
         assert_eq!(event_list.len(), 2);
 
         let checkpoint_id = event_list[0].event_id().to_string();
 
         // Replay from checkpoint
-        let replayed = ractor::call!(
+        let replayed = ractor::call_t!(
             actor,
-            EventStoreMessage::ReplayEvents { checkpoint_id },
-            tokio::time::Duration::from_secs(5)
-        )
-        .await;
+            |reply| EventStoreMessage::ReplayEvents { checkpoint_id: checkpoint_id.clone(), reply },
+            5000
+        );
 
         assert!(replayed.is_ok(), "ReplayEvents should succeed");
-        let replayed_events = replayed.ok().unwrap();
+        let replayed_events = replayed.unwrap();
         assert!(replayed_events.is_ok(), "ReplayEvents result should be Ok");
         // Should have events after checkpoint (could be 1 or 2 depending on timestamp)
         let replayed_count = replayed_events.ok().unwrap().len();

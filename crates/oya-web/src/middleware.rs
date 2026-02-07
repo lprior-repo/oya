@@ -202,7 +202,7 @@ pub async fn logging_middleware(req: Request, next: Next) -> Result<Response, St
 /// let app = apply_middleware(app, middleware);
 /// ```
 pub fn apply_middleware<'a>(
-    mut app: axum::Router,
+    app: axum::Router,
     middleware: impl IntoIterator<Item = &'a Middleware>,
 ) -> axum::Router {
     middleware.into_iter().fold(app, |acc, mw| match mw {
@@ -229,9 +229,7 @@ mod tests {
     /// Test that CORS layer can be created
     #[test]
     fn test_cors_layer_creation() {
-        let layer = cors_layer();
-        // Just verify it can be created without panicking
-        assert!(true);
+        let _layer = cors_layer();
     }
 
     /// Test RequestContext extraction from request
@@ -316,10 +314,7 @@ mod tests {
         let app = Router::new().route("/test", get(|| async { "OK" }));
 
         let middleware: Vec<Middleware> = vec![];
-        let result = apply_middleware(app, &middleware);
-
-        // Should still be able to build the router
-        assert!(true);
+        let _result = apply_middleware(app, &middleware);
     }
 
     /// Test middleware functional composition with CORS
@@ -328,10 +323,7 @@ mod tests {
         let app = Router::new().route("/test", get(|| async { "OK" }));
 
         let middleware = vec![Middleware::Cors];
-        let result = apply_middleware(app, &middleware);
-
-        // Should still be able to build the router
-        assert!(true);
+        let _result = apply_middleware(app, &middleware);
     }
 
     /// Test middleware functional composition with multiple layers
@@ -344,10 +336,7 @@ mod tests {
             Middleware::ErrorHandler,
             Middleware::Logging,
         ];
-        let result = apply_middleware(app, &middleware);
-
-        // Should still be able to build the router
-        assert!(true);
+        let _result = apply_middleware(app, &middleware);
     }
 
     /// Test middleware enum variants

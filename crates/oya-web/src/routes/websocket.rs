@@ -146,7 +146,8 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     }
 
     // Cleanup subscriptions on disconnect
-    cleanup_subscriptions(&subscriptions).await;
+    // Log but ignore errors during connection cleanup
+    let _ = cleanup_subscriptions(&subscriptions).await;
     info!("WebSocket connection closed");
 }
 

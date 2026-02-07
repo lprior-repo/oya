@@ -82,17 +82,16 @@ impl PipelineBuilder {
             })?;
 
             // Check for duplicate stage names
-            let stage_names: Vec<&String> = self.stages.iter().map(|s| &s.name).collect();
+            let stage_names: Vec<&str> = self.stages.iter().map(|s| s.name()).collect();
             let mut seen = HashSet::new();
-            let duplicates: Vec<&String> = stage_names
+            let duplicates: Vec<&str> = stage_names
                 .iter()
-                .filter(|&&name| !seen.insert(name.clone()))
-                .cloned()
+                .filter(|&&name| !seen.insert(name))
+                .copied()
                 .collect();
 
             if !duplicates.is_empty() {
-                let duplicate_names: Vec<&str> =
-                    duplicates.iter().map(|s: &&String| s.as_str()).collect();
+                let duplicate_names: Vec<&str> = duplicates.into_iter().collect();
                 return Err(Box::new(Error::DuplicateStages {
                     stages: duplicate_names.join(", "),
                 }) as Box<dyn std::error::Error>);

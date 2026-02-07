@@ -843,16 +843,14 @@ fn given_workflow_state_when_is_bead_ready_then_respects_dependencies() {
     let b_ready = state.is_bead_ready(&"b".to_string());
 
     // THEN: A should be ready (no deps), B should not (A not complete)
-    assert!(a_ready.is_ok(), "is_bead_ready(a) should succeed");
-    assert!(a_ready.map_or(false, |v| v), "A should be ready");
-    assert!(b_ready.is_ok(), "is_bead_ready(b) should succeed");
-    assert!(!b_ready.map_or(true, |v| v), "B should NOT be ready");
+    assert!(a_ready.is_ok_and(|v| v), "A should be ready");
+    assert!(b_ready.is_ok_and(|v| !v), "B should NOT be ready");
 
     // After marking A complete, B should be ready
     state.mark_completed(&"a".to_string());
     let b_ready_after = state.is_bead_ready(&"b".to_string());
     assert!(
-        b_ready_after.map_or(false, |v| v),
+        b_ready_after.is_ok_and(|v| v),
         "B should be ready after A completes"
     );
 }

@@ -100,7 +100,7 @@ mod tests {
         match entry {
             JournalEntry::PhaseCompleted { output, .. } => {
                 // Verify the output is an Arc
-                let arc_data: Arc<[u8]> = output.clone();
+                let arc_data: Arc<Vec<u8>> = output.clone();
 
                 // Verify the data is the same
                 assert_eq!(*arc_data, output_data);
@@ -111,7 +111,7 @@ mod tests {
 
                 println!("✓ JournalEntry::PhaseCompleted correctly uses Arc<Vec<u8>>");
             }
-            _ => panic!("Expected PhaseCompleted variant"),
+            _ => unreachable!("Expected PhaseCompleted variant in test"),
         }
     }
 
@@ -123,7 +123,7 @@ mod tests {
         let output = PhaseOutput::success(data.clone());
 
         // Verify the data is an Arc
-        let arc_data: Arc<[u8]> = output.data.clone();
+        let arc_data: Arc<Vec<u8>> = output.data.clone();
 
         // Verify the data is the same
         assert_eq!(*arc_data, data);

@@ -161,11 +161,11 @@ mod tests {
         let compressed = compress(data);
         assert!(compressed.is_ok(), "Compression should succeed");
 
-        let compressed = compressed.expect("compressed should be available");
+        let compressed = compressed.ok().map_or(Vec::new(), |c| c);
         let decompressed = decompress(&compressed, data.len());
         assert!(decompressed.is_ok(), "Decompression should succeed");
 
-        let decompressed = decompressed.expect("decompressed should be available");
+        let decompressed = decompressed.ok().map_or(Vec::new(), |d| d);
         assert_eq!(
             decompressed, data,
             "Decompressed data should match original"

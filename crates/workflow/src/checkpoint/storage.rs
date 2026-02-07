@@ -260,10 +260,8 @@ mod tests {
             compression_ratio: 1.5,
         };
 
-        storage
-            .store_checkpoint(data, metadata)
-            .map_err(|e| format!("{:?}", e))
-            .unwrap();
+        let result = storage.store_checkpoint(data, metadata);
+        assert!(result.is_ok(), "store should succeed");
 
         // Delete
         let result = storage.delete_checkpoint(&id);
@@ -298,14 +296,10 @@ mod tests {
             compression_ratio: 1.6667,
         };
 
-        storage
-            .store_checkpoint(vec![1, 2, 3], metadata1)
-            .map_err(|e| format!("{:?}", e))
-            .unwrap();
-        storage
-            .store_checkpoint(vec![4, 5, 6, 7, 8], metadata2)
-            .map_err(|e| format!("{:?}", e))
-            .unwrap();
+        let result = storage.store_checkpoint(vec![1, 2, 3], metadata1);
+        assert!(result.is_ok(), "store should succeed");
+        let result = storage.store_checkpoint(vec![4, 5, 6, 7, 8], metadata2);
+        assert!(result.is_ok(), "store should succeed");
 
         let ids = storage.list_checkpoints().map_or(vec![], |v| v);
         assert_eq!(ids.len(), 2);
@@ -327,10 +321,8 @@ mod tests {
             compression_ratio: 2.0,
         };
 
-        storage
-            .store_checkpoint(vec![0u8; 100], metadata)
-            .map_err(|e| format!("{:?}", e))
-            .unwrap();
+        let result = storage.store_checkpoint(vec![0u8; 100], metadata);
+        assert!(result.is_ok(), "store should succeed");
 
         let stats = storage.get_stats().map_or(StorageStats::default(), |v| v);
         assert_eq!(stats.total_checkpoints, 1);
@@ -353,10 +345,8 @@ mod tests {
             compression_ratio: 1.5,
         };
 
-        storage
-            .store_checkpoint(vec![1, 2, 3], metadata)
-            .map_err(|e| format!("{:?}", e))
-            .unwrap();
+        let result = storage.store_checkpoint(vec![1, 2, 3], metadata);
+        assert!(result.is_ok(), "store should succeed");
 
         // Clear
         let result = storage.clear_all();

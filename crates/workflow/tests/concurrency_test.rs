@@ -57,11 +57,6 @@ impl ConcurrentExecutor {
         let execs = self.executions.read().await;
         execs.get(key).map_or(0, |v| *v)
     }
-
-    async fn result(&self, key: &str) -> Option<String> {
-        let results = self.results.read().await;
-        results.get(key).cloned()
-    }
 }
 
 /// Idempotent wrapper with concurrent safety
@@ -93,10 +88,10 @@ impl SafeIdempotentExecutor {
         // Acquire execution lock
         let should_execute = {
             let mut executing = self.executing.write().await;
-            if executing.get(key).copied().map_or(false, |v| v) {
+            if executing.get(key).copied().is_some_and(|v| v) {
                 // Someone else is executing, wait and retry
                 drop(executing);
-                drop(cache_guard()); // Explicit drop
+                // Explicit drop before sleep
                 tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
                 // Retry from cache
@@ -131,8 +126,6 @@ impl SafeIdempotentExecutor {
         result
     }
 }
-
-fn cache_guard() {}
 
 #[tokio::test]
 async fn test_concurrent_safety_same_key() {
@@ -202,7 +195,7 @@ impl ArcSafeExecutor {
         // Try to acquire lock
         {
             let mut executing = self.inner.executing.write().await;
-            if executing.get(key).copied().map_or(false, |v| v) {
+            if executing.get(key).copied().is_some_and(|v| v) {
                 drop(executing);
                 tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 

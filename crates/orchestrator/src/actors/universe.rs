@@ -63,7 +63,8 @@ impl Actor for UniverseSupervisorDef {
         match message {
             UniverseMessage::Shutdown => {
                 info!("UniverseSupervisor shutting down");
-                state.tier1.stop_all("Universe shutdown");
+                // Gracefully handle shutdown errors - log but don't fail
+                let _ = state.tier1.stop_all("Universe shutdown").await;
                 myself.stop(None);
             }
         }

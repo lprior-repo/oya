@@ -371,7 +371,7 @@ impl Actor for WorkerActorDef {
                     (Some(id), Some(delay)) => {
                         warn!(bead_id = %id, error = %error, delay_ms = delay.as_millis(), "Retrying bead after failure");
                         let myself_clone = myself.clone();
-                        let from_state = state.current_state.clone();
+                        let from_state = state.current_state;
                         tokio::spawn(async move {
                             tokio::time::sleep(delay).await;
                             let _ = myself_clone.send_message(WorkerMessage::StartBead {

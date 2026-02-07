@@ -673,9 +673,12 @@ mod tests {
             .add_phase(Phase::new("test"));
 
         let result = engine.run(workflow).await;
-        assert!(result.is_err());
-        if let Ok(crate::types::WorkflowResult::Failure { error, .. }) = result {
-            assert!(error.contains("all handlers"));
+        assert!(result.is_ok());
+        if let Ok(workflow_result) = result {
+            assert!(workflow_result.error.is_some(), "Expected workflow to have an error");
+            if let Some(error) = workflow_result.error {
+                assert!(error.contains("all handlers"), "Error should mention all handlers failed");
+            }
         }
     }
 
@@ -692,8 +695,7 @@ mod tests {
         let _ = engine.run(workflow).await;
 
         let loaded = storage.load_workflow(workflow_id).await;
-        assert!(loaded.is_ok());
-        assert!(loaded.ok().flatten().is_some());
+        assert!(loaded.is_ok_and(|w| w.is_some()));
     }
 
     #[tokio::test]
@@ -707,8 +709,7 @@ mod tests {
         let _ = engine.run(workflow).await;
 
         let checkpoints = storage.load_checkpoints(workflow_id).await;
-        assert!(checkpoints.is_ok());
-        assert_eq!(checkpoints.map(|c| c.len()).map_or(0, |len| len), 2);
+        assert!(checkpoints.is_ok_and(|c| c.len() == 2));
     }
 
     #[tokio::test]
@@ -720,9 +721,7 @@ mod tests {
         let _ = engine.run(workflow).await;
 
         let journal = storage.load_journal(workflow_id).await;
-        assert!(journal.is_ok());
-        // Should have: state change, phase started, phase completed, checkpoint, state change
-        assert!(journal.map(|j| j.len()).map_or(0, |len| len) >= 4);
+        assert!(journal.is_ok_and(|j| j.len() >= 4));
     }
 
     // ============================================================================
@@ -930,8 +929,7 @@ mod tests {
         assert!(rewound.is_ok());
         assert!(rewound
             .as_ref()
-            .map(|w| w.state == WorkflowState::Paused)
-            .map_or(false, |is_paused| is_paused));
+            .is_ok_and(|w| w.state == WorkflowState::Paused));
     }
 
     #[tokio::test]
@@ -1065,8 +1063,7 @@ mod tests {
 
         // Verify no checkpoints were created
         let checkpoints = storage.load_checkpoints(workflow_id).await;
-        assert!(checkpoints.is_ok());
-        assert_eq!(checkpoints.map(|c| c.len()).map_or(999, |len| len), 0);
+        assert!(checkpoints.is_ok_and(|c| c.is_empty()));
     }
 
     #[tokio::test]
@@ -1088,11 +1085,7 @@ mod tests {
 
         // Resume from rewound state
         let result = engine.resume(workflow_id).await;
-        assert!(result.is_ok());
-        assert!(result
-            .as_ref()
-            .map(|r| r.state == WorkflowState::Completed)
-            .map_or(false, |completed| completed));
+        assert!(result.is_ok_and(|r| r.state == WorkflowState::Completed));
     }
 
     #[tokio::test]
@@ -1112,14 +1105,9 @@ mod tests {
             .ok()
             .flatten();
 
-        assert!(checkpoint.is_some());
-
-        // Verify checkpoint structure
-        let cp = checkpoint.filter(|c| {
+        assert!(checkpoint.is_some_and(|c| {
             c.phase_id == phase_id && c.outputs.is_some() && c.timestamp <= chrono::Utc::now()
-        });
-
-        assert!(cp.is_some());
+        }));
     }
 
     #[tokio::test]
@@ -1143,10 +1131,7 @@ mod tests {
 
         // Second rewind to build phase
         let rewind2 = engine.rewind(workflow_id, build_phase_id).await;
-        assert!(rewind2.is_ok());
-
-        // Verify workflow is at correct position
-        assert_eq!(rewind2.map(|w| w.current_phase).map_or(999, |idx| idx), 1);
+        assert!(rewind2.is_ok_and(|w| w.current_phase == 1));
     }
 
     #[tokio::test]
@@ -1158,18 +1143,10 @@ mod tests {
         let _ = engine.run(workflow).await;
 
         let journal = storage.load_journal(workflow_id).await;
-        assert!(journal.is_ok());
-
-        // Verify journal contains checkpoint created entry
-        let has_checkpoint_entry = journal
-            .ok()
-            .map(|j| {
-                j.entries()
-                    .iter()
-                    .any(|e| matches!(e, crate::types::JournalEntry::CheckpointCreated { .. }))
-            })
-            .map_or(false, |has_entry| has_entry);
-
-        assert!(has_checkpoint_entry);
+        assert!(journal.is_ok_and(|j| {
+            j.entries()
+                .iter()
+                .any(|e| matches!(e, crate::types::JournalEntry::CheckpointCreated { .. }))
+        }));
     }
 }

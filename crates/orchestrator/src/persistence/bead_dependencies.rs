@@ -243,7 +243,7 @@ impl OrchestratorStore {
         } else {
             Err(PersistenceError::not_found(
                 "dependency_edge",
-                &format!("{}:{}", bead_id, target_bead_id),
+                format!("{}:{}", bead_id, target_bead_id),
             ))
         }
     }

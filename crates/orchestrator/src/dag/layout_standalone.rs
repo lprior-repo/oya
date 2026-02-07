@@ -1,6 +1,6 @@
 //! # DAG Layout with Memoized Spring Forces (Standalone)
 //!
-//! This module provides memoized layout calculations for WorkflowDAGs using spring force physics.
+//! This module provides memoized layout calculations for `WorkflowDAGs` using spring force physics.
 //! It caches layout results to achieve 5-20x speedups for repeated calculations on the same graph structure.
 
 #![deny(clippy::unwrap_used)]
@@ -28,6 +28,10 @@ pub struct SpringForce {
 
 impl SpringForce {
     /// Creates a new spring force with validation
+    ///
+    /// # Errors
+    /// Returns `SpringForceError::InvalidStiffness` if stiffness is <= 0.0
+    /// Returns `SpringForceError::InvalidRestLength` if `rest_length` < 0.0
     pub fn new(stiffness: f64, rest_length: f64) -> Result<Self, SpringForceError> {
         if stiffness <= 0.0 {
             return Err(SpringForceError::InvalidStiffness(stiffness));
@@ -41,6 +45,9 @@ impl SpringForce {
     }
 
     /// Calculates the spring force between two positions
+    ///
+    /// # Errors
+    /// Returns `SpringForceError::ZeroLengthEdge` if positions are too close
     pub fn calculate_force(
         &self,
         source: &Position,
@@ -62,11 +69,15 @@ impl SpringForce {
     }
 
     /// Returns the stiffness coefficient
+    #[must_use]
+    #[allow(clippy::missing_const_for_fn)]
     pub fn stiffness(&self) -> f64 {
         self.stiffness
     }
 
     /// Returns the rest length
+    #[must_use]
+    #[allow(clippy::missing_const_for_fn)]
     pub fn rest_length(&self) -> f64 {
         self.rest_length
     }
@@ -80,16 +91,23 @@ pub struct Position {
 }
 
 impl Position {
+    #[must_use]
+    #[allow(clippy::missing_const_for_fn)]
     pub fn new(x: f64, y: f64) -> Self {
         Self { x, y }
     }
 
+    #[must_use]
     pub fn distance(&self, other: &Self) -> f64 {
         let dx = other.x - self.x;
         let dy = other.y - self.y;
         dx.hypot(dy)
     }
 
+    /// Returns the unit direction vector from this position to the other
+    ///
+    /// # Errors
+    /// Returns `SpringForceError::ZeroLengthEdge` if positions are identical
     pub fn direction_to(&self, other: &Self) -> Result<(f64, f64), SpringForceError> {
         let distance = self.distance(other);
         if distance < f64::EPSILON {
@@ -100,6 +118,8 @@ impl Position {
         Ok((dx / distance, dy / distance))
     }
 
+    #[must_use]
+    #[allow(clippy::missing_const_for_fn)]
     pub fn as_tuple(&self) -> (f64, f64) {
         (self.x, self.y)
     }
@@ -113,16 +133,22 @@ pub struct Force {
 }
 
 impl Force {
+    #[must_use]
+    #[allow(clippy::missing_const_for_fn)]
     pub fn new(x: f64, y: f64) -> Self {
         Self { x, y }
     }
 
+    #[must_use]
+    #[allow(clippy::missing_const_for_fn)]
     pub fn magnitude(&self) -> f64 {
         self.x.hypot(self.y)
     }
 
-    pub fn add(&self, other: &Force) -> Force {
-        Force::new(self.x + other.x, self.y + other.y)
+    #[must_use]
+    #[allow(clippy::missing_const_for_fn, clippy::use_self)]
+    pub fn add(&self, other: &Force) -> Self {
+        Self::new(self.x + other.x, self.y + other.y)
     }
 }
 
@@ -142,15 +168,20 @@ pub struct PathSegment {
 }
 
 impl PathSegment {
+    #[must_use]
     pub fn new(start: (f64, f64), end: (f64, f64)) -> Self {
         let dx = end.0 - start.0;
         let dy = end.1 - start.1;
-        let length = (dx * dx + dy * dy).sqrt();
+        let length = dx.hypot(dy);
         Self { start, end, length }
     }
 }
 
 /// Calculate line path between two nodes
+///
+/// # Errors
+/// Returns "Radius must be non-negative" if `source_radius` or `target_radius` < 0.0
+/// Returns "Coincident nodes" if positions are identical
 pub fn calculate_line_path(
     source_pos: (f64, f64),
     source_radius: f64,
@@ -169,19 +200,21 @@ pub fn calculate_line_path(
         .map_err(|_| "Coincident nodes".to_string())?;
 
     let start = (
-        source.x + dir_x * source_radius,
-        source.y + dir_y * source_radius,
+        dir_x.mul_add(source_radius, source.x),
+        dir_y.mul_add(source_radius, source.y),
     );
 
     let end = (
-        target.x - dir_x * target_radius,
-        target.y - dir_y * target_radius,
+        dir_x.mul_add(-target_radius, target.x),
+        dir_y.mul_add(-target_radius, target.y),
     );
 
     Ok(PathSegment::new(start, end))
 }
 
 impl Position {
+    #[must_use]
+    #[allow(clippy::missing_const_for_fn)]
     pub fn from_tuple(pos: (f64, f64)) -> Self {
         Self { x: pos.0, y: pos.1 }
     }
@@ -209,13 +242,13 @@ pub struct LayoutCache {
     pub graph_hash: u64,
 }
 
-/// Memoized layout calculator for WorkflowDAG
+/// Memoized layout calculator for `WorkflowDAG`
 pub struct MemoizedLayout {
     /// The DAG to compute layouts for
     dag: WorkflowDAG,
     /// Spring force configuration
     spring_force: SpringForce,
-    /// Layout cache with OnceLock for thread safety
+    /// Layout cache with `OnceLock` for thread safety
     cache: OnceLock<LayoutCache>,
     /// Cache key based on graph structure
     cache_key: String,
@@ -226,7 +259,7 @@ impl MemoizedLayout {
     ///
     /// # Arguments
     ///
-    /// * `dag` - The WorkflowDAG to compute layouts for
+    /// * `dag` - The `WorkflowDAG` to compute layouts for
     /// * `stiffness` - Spring stiffness coefficient (higher = stiffer)
     /// * `rest_length` - Rest length for springs
     ///
@@ -252,12 +285,12 @@ impl MemoizedLayout {
     }
 
     /// Returns a reference to the spring force configuration
-    pub fn spring_force(&self) -> &SpringForce {
+    pub const fn spring_force(&self) -> &SpringForce {
         &self.spring_force
     }
 
     /// Returns a reference to the DAG
-    pub fn dag(&self) -> &WorkflowDAG {
+    pub const fn dag(&self) -> &WorkflowDAG {
         &self.dag
     }
 
@@ -271,15 +304,17 @@ impl MemoizedLayout {
 
         // Hash all nodes deterministically
         let nodes: Vec<_> = dag.nodes().collect();
-        nodes.iter().for_each(|node| node.hash(&mut hasher));
+        for node in &nodes {
+            node.hash(&mut hasher);
+        }
 
         // Hash all edges deterministically
         let edges: Vec<_> = dag.edges().collect();
-        edges.iter().for_each(|(from, to, dep_type)| {
+        for (from, to, dep_type) in &edges {
             from.hash(&mut hasher);
             to.hash(&mut hasher);
             (*dep_type).hash(&mut hasher);
-        });
+        }
 
         format!("layout_cache_{}", hasher.finish())
     }
@@ -288,7 +323,7 @@ impl MemoizedLayout {
     ///
     /// # Returns
     ///
-    /// HashMap of BeadId to Position
+    /// `HashMap` of `BeadId` to Position
     pub fn compute_node_positions(&self) -> HashMap<BeadId, Position> {
         self.get_or_compute_cache().positions.clone()
     }
@@ -297,7 +332,7 @@ impl MemoizedLayout {
     ///
     /// # Returns
     ///
-    /// HashMap of (from, to) -> (source_force, target_force)
+    /// `HashMap` of (from, to) -> (`source_force`, `target_force`)
     pub fn compute_edge_forces(&self) -> HashMap<(BeadId, BeadId), (Force, Force)> {
         self.get_or_compute_cache().edge_forces.clone()
     }
@@ -321,30 +356,17 @@ impl MemoizedLayout {
             let (from, to, _) = edge;
 
             // Get positions for both nodes, skip if missing
-            let from_pos = match positions.get(from) {
-                Some(pos) => pos,
-                None => continue,
-            };
-            let to_pos = match positions.get(to) {
-                Some(pos) => pos,
-                None => continue,
-            };
+            let Some(from_pos) = positions.get(from) else { continue };
+            let Some(to_pos) = positions.get(to) else { continue };
 
-            match self.spring_force.calculate_force(from_pos, to_pos) {
-                Ok((source_force, target_force)) => {
-                    edge_forces.insert((from.clone(), to.clone()), (source_force, target_force));
-                }
-                Err(_) =>
-                // Skip invalid edges (zero length)
-                {
-                    continue;
-                }
+            if let Ok((source_force, target_force)) = self.spring_force.calculate_force(from_pos, to_pos) {
+                edge_forces.insert((from.clone(), to.clone()), (source_force, target_force));
             }
         }
 
         // Apply additional layout optimization iterations
         for _ in 0..5 {
-            self.optimize_layout(&mut positions, &edge_forces);
+            Self::optimize_layout(&mut positions, &edge_forces);
         }
 
         // Calculate graph hash for cache validation
@@ -358,6 +380,7 @@ impl MemoizedLayout {
     }
 
     /// Initialize node positions using a simple circular layout
+    #[allow(clippy::cast_precision_loss)]
     fn initialize_positions(&self) -> HashMap<BeadId, Position> {
         let node_count = self.dag.node_count();
         if node_count == 0 {
@@ -388,8 +411,7 @@ impl MemoizedLayout {
     }
 
     /// Optimize layout positions using computed forces
-    fn optimize_layout(
-        &self,
+    pub(crate) fn optimize_layout(
         positions: &mut HashMap<BeadId, Position>,
         edge_forces: &HashMap<(BeadId, BeadId), (Force, Force)>,
     ) {
@@ -487,7 +509,7 @@ impl MemoizedLayout {
     ///
     /// # Returns
     ///
-    /// HashMap of (from, to) -> PathSegment
+    /// `HashMap` of (from, to) -> `PathSegment`
     pub fn compute_edge_paths(&self, node_radius: f64) -> HashMap<(BeadId, BeadId), PathSegment> {
         let positions = self.compute_node_positions();
         let mut paths = HashMap::new();
@@ -495,18 +517,11 @@ impl MemoizedLayout {
         for edge in self.dag.edges() {
             let (from, to, _) = edge;
             if let (Some(from_pos), Some(to_pos)) = (
-                positions.get(from).map(|p| p.as_tuple()),
-                positions.get(to).map(|p| p.as_tuple()),
+                positions.get(from).map(Position::as_tuple),
+                positions.get(to).map(Position::as_tuple),
             ) {
-                match calculate_line_path(from_pos, node_radius, to_pos, node_radius) {
-                    Ok(path) => {
-                        paths.insert((from.clone(), to.clone()), path);
-                    }
-                    Err(_) =>
-                    // Skip invalid paths
-                    {
-                        continue;
-                    }
+                if let Ok(path) = calculate_line_path(from_pos, node_radius, to_pos, node_radius) {
+                    paths.insert((from.clone(), to.clone()), path);
                 }
             }
         }
@@ -518,26 +533,24 @@ impl MemoizedLayout {
     ///
     /// # Arguments
     ///
-    /// * `weights` - Map from BeadId to estimated Duration
+    /// * `weights` - Map from `BeadId` to estimated Duration
     ///
     /// # Returns
     ///
-    /// Tuple of (critical_path_beads, their_positions)
+    /// Tuple of (`critical_path_beads`, `their_positions`)
     pub fn get_critical_path_with_positions(
         &self,
         weights: &HashMap<BeadId, std::time::Duration>,
     ) -> (Vec<BeadId>, HashMap<BeadId, Position>) {
-        if let Ok(critical_path) = self.dag.critical_path(weights) {
+        self.dag.critical_path(weights).map_or_else(|_| (Vec::new(), HashMap::new()), |critical_path| {
             let positions = self.compute_node_positions();
             let critical_positions: HashMap<BeadId, Position> = critical_path
                 .iter()
-                .filter_map(|node| positions.get(node).cloned().map(|pos| (node.clone(), pos)))
+                .filter_map(|node| positions.get(node).copied().map(|pos| (node.clone(), pos)))
                 .collect();
 
             (critical_path, critical_positions)
-        } else {
-            (Vec::new(), HashMap::new())
-        }
+        })
     }
 }
 
@@ -566,10 +579,13 @@ impl Default for MemoizedLayout {
 
 /// Performance benchmark utilities
 pub mod benchmark {
-    use super::*;
+    use super::{WorkflowDAG, SpringForceError, MemoizedLayout};
     use std::time::Instant;
 
     /// Benchmark layout computation performance
+    ///
+    /// # Errors
+    /// Returns `SpringForceError` if memoized layout creation fails
     pub fn benchmark_layout_computation(
         dag: &WorkflowDAG,
         iterations: usize,
@@ -595,6 +611,8 @@ pub mod benchmark {
     }
 
     /// Calculate speedup ratio
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)]
     pub fn calculate_speedup(
         cold_time: std::time::Duration,
         warm_time: std::time::Duration,
@@ -681,7 +699,7 @@ mod tests {
         let mut layout = MemoizedLayout::new(dag.clone(), 0.1, 50.0).unwrap();
 
         // First computation
-        let positions1 = layout.compute_node_positions();
+        let _positions1 = layout.compute_node_positions();
 
         // Invalidate cache
         layout.invalidate_cache();
@@ -762,7 +780,12 @@ mod tests {
             .unwrap();
         }
 
-        let (cold_time, warm_time) = benchmark::benchmark_layout_computation(&dag, 10);
+        let result = benchmark::benchmark_layout_computation(&dag, 10);
+        assert!(result.is_ok(), "benchmark should succeed");
+        let (cold_time, warm_time) = result.ok().unwrap_or((
+            std::time::Duration::from_millis(1),
+            std::time::Duration::from_millis(1),
+        ));
 
         assert!(cold_time > std::time::Duration::from_millis(1));
         assert!(warm_time < cold_time); // Should be faster with cache

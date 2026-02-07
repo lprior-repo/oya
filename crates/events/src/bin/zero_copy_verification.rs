@@ -12,7 +12,7 @@ async fn main() {
     let spec = BeadSpec::new("Zero-Copy Test").with_complexity(Complexity::Simple);
 
     // Add 100 events
-    for i in 0..100 {
+    for _i in 0..100 {
         let event = BeadEvent::created(bead_id, spec.clone());
         match store.append(event).await {
             Ok(_) => (),

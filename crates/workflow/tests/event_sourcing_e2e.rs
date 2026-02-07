@@ -16,7 +16,7 @@ use std::time::Duration;
 
 use oya_events::{
     connect, BeadEvent, BeadId, BeadSpec, BeadState, Complexity, ConnectionConfig,
-    DurableEventStore, PhaseId, PhaseOutput,
+    DurableEventStore, EventId, PhaseId, PhaseOutput,
 };
 use tokio::time::Instant;
 
@@ -256,7 +256,7 @@ async fn test_e2e_append_and_replay() -> Result<(), String> {
 
     let all_events: Vec<BeadEvent> = before_checkpoint
         .into_iter()
-        .chain(replayed_events.into_iter())
+        .chain(replayed_events.iter().cloned())
         .collect();
 
     let final_verify_result = verify_event_sequence(&all_events, bead_id, 1000);
@@ -286,8 +286,8 @@ async fn test_e2e_append_and_replay() -> Result<(), String> {
     for (i, (original, reconstructed)) in
         final_read_events.iter().zip(all_events.iter()).enumerate()
     {
-        let original_id: oya_events::EventId = original.event_id();
-        let reconstructed_id: oya_events::EventId = reconstructed.event_id();
+        let original_id: EventId = original.event_id();
+        let reconstructed_id: EventId = reconstructed.event_id();
         if original_id != reconstructed_id {
             return Err(format!(
                 "Event {} mismatch: original_id={}, reconstructed_id={}",

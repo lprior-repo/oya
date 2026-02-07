@@ -1,6 +1,5 @@
 //! Tier-1 supervision helpers for the orchestrator.
 
-use futures::stream::{self, TryStreamExt};
 use ractor::ActorRef;
 
 use crate::actors::ActorError;
@@ -85,6 +84,12 @@ impl Tier1Supervisors {
 }
 
 /// Spawn all tier-1 supervisors with a shared naming prefix.
+///
+/// # Errors
+///
+/// Returns an `ActorError` if any of the tier-1 supervisors fail to spawn.
+/// This includes failures in creating actor processes, network issues, or
+/// configuration errors that prevent supervisor initialization.
 pub async fn spawn_tier1_supervisors(
     name_prefix: &str,
     config: SupervisorConfig,
@@ -122,6 +127,15 @@ pub async fn spawn_tier1_supervisors(
     })
 }
 
+/// Spawn a tier-1 supervisor actor.
+///
+/// # Errors
+///
+/// Returns `ActorError::SpawnFailed` if the actor cannot be created due to:
+/// - Process creation failures
+/// - Invalid configuration
+/// - Resource limitations
+/// - Network connectivity issues
 async fn spawn_tier1_supervisor<A>(
     name_prefix: &str,
     kind: Tier1SupervisorKind,

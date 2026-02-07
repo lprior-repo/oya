@@ -14,9 +14,15 @@ async fn main() {
     // Add 1000 events
     println!("Adding 1000 events...");
     let start = Instant::now();
-    for i in 0..1000 {
+    for _i in 0..1000 {
         let event = BeadEvent::created(bead_id, spec.clone());
-        store.append(event).await.unwrap();
+        match store.append(event).await {
+            Ok(_) => (),
+            Err(e) => {
+                eprintln!("Failed to append event: {}", e);
+                std::process::exit(1);
+            }
+        }
     }
     let append_time = start.elapsed();
     println!("Append time: {:?}", append_time);
@@ -24,7 +30,13 @@ async fn main() {
     // Test event retrieval - this should now be zero-copy
     println!("Testing event retrieval...");
     let start = Instant::now();
-    let events = store.read_for_bead(bead_id).await.unwrap();
+    let events = match store.read_for_bead(bead_id).await {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("Failed to read events: {}", e);
+            std::process::exit(1);
+        }
+    };
     let read_time = start.elapsed();
     println!("Retrieved {} events in {:?}", events.len(), read_time);
 
@@ -32,7 +44,13 @@ async fn main() {
     println!("Testing multiple retrievals...");
     let start = Instant::now();
     for _ in 0..100 {
-        let events_clone = store.read_for_bead(bead_id).await.unwrap();
+        let events_clone = match store.read_for_bead(bead_id).await {
+            Ok(e) => e,
+            Err(e) => {
+                eprintln!("Failed to read events: {}", e);
+                std::process::exit(1);
+            }
+        };
         // Arc::clone is O(1), so this should be very fast
         assert_eq!(events_clone.len(), 1000);
     }
@@ -40,8 +58,20 @@ async fn main() {
     println!("100 retrievals in {:?}", multi_read_time);
 
     // Verify we're getting the same events (zero-copy)
-    let first_retrieval = store.read_for_bead(bead_id).await.unwrap();
-    let second_retrieval = store.read_for_bead(bead_id).await.unwrap();
+    let first_retrieval = match store.read_for_bead(bead_id).await {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("Failed to read events: {}", e);
+            std::process::exit(1);
+        }
+    };
+    let second_retrieval = match store.read_for_bead(bead_id).await {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("Failed to read events: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     // These should be the same Arc instance (same pointer)
     let first_ptr = Arc::as_ptr(&first_retrieval) as *const ();

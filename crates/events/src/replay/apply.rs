@@ -329,7 +329,7 @@ mod tests {
     // ==========================================================================
 
     #[test]
-    fn should_record_first_event_for_bead() {
+    fn should_record_first_event_for_bead() -> Result<(), Box<dyn std::error::Error>> {
         let mut context = ApplyContext::new();
         let bead_id = BeadId::new();
         let event = BeadEvent::created(bead_id, BeadSpec::new("Test"));
@@ -341,20 +341,18 @@ mod tests {
             "Context should contain recorded bead"
         );
 
-        let recorded = context.last_events.get(&bead_id);
-        let recorded_meta = recorded
-            .as_ref()
-            .filter(|_| recorded.is_some())
-            .expect("Should retrieve recorded event");
+        let recorded_meta = context.last_events.get(&bead_id)
+            .ok_or("Should retrieve recorded event")?;
         assert_eq!(
             recorded_meta.event_id,
             event.event_id().to_string(),
             "Recorded event ID should match"
         );
+        Ok(())
     }
 
     #[test]
-    fn should_overwrite_previous_event_for_same_bead() {
+    fn should_overwrite_previous_event_for_same_bead() -> Result<(), Box<dyn std::error::Error>> {
         let mut context = ApplyContext::new();
         let bead_id = BeadId::new();
 
@@ -368,17 +366,14 @@ mod tests {
         let second_recorded = context.last_events.get(&bead_id);
 
         let first_meta = first_recorded
-            .as_ref()
-            .filter(|_| first_recorded.is_some())
-            .expect("Should have first recorded event");
+            .ok_or("Should have first recorded event")?;
         let second_meta = second_recorded
-            .as_ref()
-            .filter(|_| second_recorded.is_some())
-            .expect("Should have second recorded event");
+            .ok_or("Should have second recorded event")?;
         assert_ne!(
             first_meta.event_id, second_meta.event_id,
             "Event IDs should differ"
         );
+        Ok(())
     }
 
     #[test]
@@ -417,7 +412,7 @@ mod tests {
     }
 
     #[test]
-    fn should_return_recorded_event_for_known_bead() {
+    fn should_return_recorded_event_for_known_bead() -> Result<(), Box<dyn std::error::Error>> {
         let mut context = ApplyContext::new();
         let bead_id = BeadId::new();
         let event = BeadEvent::created(bead_id, BeadSpec::new("Test"));
@@ -426,14 +421,13 @@ mod tests {
         let result = context.last_event(&bead_id);
 
         let result_meta = result
-            .as_ref()
-            .filter(|_| result.is_some())
-            .expect("Should return Some for known bead");
+            .ok_or("Should return Some for known bead")?;
         assert_eq!(
             result_meta.event_id,
             event.event_id().to_string(),
             "Returned event should match recorded"
         );
+        Ok(())
     }
 
     // ==========================================================================
@@ -441,7 +435,7 @@ mod tests {
     // ==========================================================================
 
     #[test]
-    fn should_return_true_for_first_event_of_bead() {
+    fn should_return_true_for_first_event_of_bead() -> Result<(), Box<dyn std::error::Error>> {
         let context = ApplyContext::new();
         let bead_id = BeadId::new();
         let event = BeadEvent::created(bead_id, BeadSpec::new("Test"));
@@ -449,10 +443,9 @@ mod tests {
         let result = context.is_in_order(&event);
 
         let is_ordered = result
-            .as_ref()
-            .filter(|_| result.is_ok())
-            .expect("Should not error for first event");
-        assert!(*is_ordered, "First event should always be in order");
+            .map_err(|e| format!("Should not error for first event: {}", e))?;
+        assert!(is_ordered, "First event should always be in order");
+        Ok(())
     }
 
     #[test]
@@ -503,10 +496,11 @@ mod tests {
     // ==========================================================================
 
     #[test]
-    fn should_apply_first_event_successfully() {
+    fn should_apply_first_event_successfully() -> Result<(), Box<dyn std::error::Error>> {
         // This test requires a mock EventSourcedState implementation
         // For now, we just verify the signature compiles
         // In a real test, we'd create a test state implementation
+        Ok(())
     }
 
     // ==========================================================================
@@ -514,20 +508,23 @@ mod tests {
     // ==========================================================================
 
     #[test]
-    fn should_apply_empty_event_list() {
+    fn should_apply_empty_event_list() -> Result<(), Box<dyn std::error::Error>> {
         // This test requires a mock EventSourcedState implementation
         // For now, we just verify the signature compiles
+        Ok(())
     }
 
     #[test]
-    fn should_apply_multiple_events_in_order() {
+    fn should_apply_multiple_events_in_order() -> Result<(), Box<dyn std::error::Error>> {
         // This test requires a mock EventSourcedState implementation
         // For now, we just verify the signature compiles
+        Ok(())
     }
 
     #[test]
-    fn should_stop_on_first_error() {
+    fn should_stop_on_first_error() -> Result<(), Box<dyn std::error::Error>> {
         // This test requires a mock EventSourcedState implementation
         // For now, we just verify the signature compiles
+        Ok(())
     }
 }

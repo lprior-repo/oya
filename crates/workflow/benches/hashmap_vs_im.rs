@@ -1,7 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use im::HashMap as ImHashMap;
 
-fn benchmark_hashmap_insert(c: &mut Criterion) {
+pub fn benchmark_hashmap_insert(c: &mut Criterion) {
     c.bench_function("std_hashmap_insert", |b| {
         b.iter(|| {
             let mut map = std::collections::HashMap::new();
@@ -23,7 +23,7 @@ fn benchmark_hashmap_insert(c: &mut Criterion) {
     });
 }
 
-fn benchmark_hashmap_lookup(c: &mut Criterion) {
+pub fn benchmark_hashmap_lookup(c: &mut Criterion) {
     let mut std_map = std::collections::HashMap::new();
     let mut im_map = ImHashMap::new();
     for i in 0..100 {
@@ -48,7 +48,7 @@ fn benchmark_hashmap_lookup(c: &mut Criterion) {
     });
 }
 
-fn benchmark_hashmap_clone(c: &mut Criterion) {
+pub fn benchmark_hashmap_clone(c: &mut Criterion) {
     let std_map: std::collections::HashMap<_, _> = (0..100).map(|i| (i, i * 2)).collect();
     let im_map: ImHashMap<_, _> = (0..100).map(|i| (i, i * 2)).collect();
 
@@ -59,7 +59,7 @@ fn benchmark_hashmap_clone(c: &mut Criterion) {
     c.bench_function("im_hashmap_clone", |b| b.iter(|| black_box(im_map.clone())));
 }
 
-fn benchmark_hashmap_iteration(c: &mut Criterion) {
+pub fn benchmark_hashmap_iteration(c: &mut Criterion) {
     let std_map: std::collections::HashMap<_, _> = (0..100).map(|i| (i, i * 2)).collect();
     let im_map: ImHashMap<_, _> = (0..100).map(|i| (i, i * 2)).collect();
 

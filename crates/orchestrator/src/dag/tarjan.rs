@@ -392,7 +392,7 @@ mod tests {
         }
 
         // All nodes should be present
-        let all_nodes: Vec<&BeadId> = sccs.iter().flat_map(|scc| scc.iter()).collect_vec();
+        let all_nodes: Vec<&BeadId> = sccs.iter().flat_map(|scc| scc.iter()).collect();
         assert_eq!(all_nodes.len(), 4);
     }
 

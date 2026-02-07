@@ -1,7 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use std::sync::Arc;
 
-fn benchmark_clone_vs_arc(c: &mut Criterion) {
+pub fn benchmark_clone_vs_arc(c: &mut Criterion) {
     let large_data = vec![0u8; 10_000];
 
     c.bench_function("deep_clone", |b| b.iter(|| black_box(large_data.clone())));
@@ -10,7 +10,7 @@ fn benchmark_clone_vs_arc(c: &mut Criterion) {
     c.bench_function("arc_clone", |b| b.iter(|| black_box(Arc::clone(&arc_data))));
 }
 
-fn benchmark_arc_read_performance(c: &mut Criterion) {
+pub fn benchmark_arc_read_performance(c: &mut Criterion) {
     let data = vec![42u8; 1_000];
     let cloned_data = data.clone();
     let arc_data = Arc::new(data);
@@ -30,16 +30,16 @@ fn benchmark_arc_read_performance(c: &mut Criterion) {
     });
 }
 
-fn benchmark_struct_clone_vs_arc(c: &mut Criterion) {
+pub fn benchmark_struct_clone_vs_arc(c: &mut Criterion) {
     #[derive(Clone)]
     struct LargeStruct {
-        data: Vec<u64>,
-        metadata: Vec<String>,
+        _data: Vec<u64>,
+        _metadata: Vec<String>,
     }
 
     let large_struct = LargeStruct {
-        data: (0..1000).collect(),
-        metadata: (0..100).map(|i| format!("item_{}", i)).collect(),
+        _data: (0..1000).collect(),
+        _metadata: (0..100).map(|i| format!("item_{}", i)).collect(),
     };
 
     c.bench_function("struct_clone", |b| {

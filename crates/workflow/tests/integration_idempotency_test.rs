@@ -12,7 +12,6 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
-use itertools::Itertools;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;

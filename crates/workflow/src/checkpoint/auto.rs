@@ -374,8 +374,8 @@ mod tests {
         let result = handle.await;
         assert!(result.is_ok(), "Task should complete successfully");
         let result = result
-            .map_err(|_| "task failed".to_string())
-            .and_then(|v| v);
+            .map_err(|e| format!("task failed: {e}"))
+            .and_then(|inner| inner.map_err(|e| format!("{e}")));
         assert!(result.is_ok(), "Auto-checkpoint should succeed");
 
         // Verify checkpoints were created
@@ -502,8 +502,8 @@ mod tests {
         let result = handle.await;
         assert!(result.is_ok(), "Task should complete");
         let result = result
-            .map_err(|_| "task failed".to_string())
-            .and_then(|v| v);
+            .map_err(|e| format!("task failed: {e}"))
+            .and_then(|inner| inner.map_err(|e| format!("{e}")));
         assert!(result.is_ok(), "Should handle errors gracefully");
     }
 }

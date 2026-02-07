@@ -174,9 +174,9 @@ mod tests {
     #[test]
     fn test_add_version_header() {
         let data = b"test data".to_vec();
-        let with_header = add_version_header(data)
-            .map_err(|e| format!("{:?}", e))
-            .unwrap();
+        let with_header = add_version_header(data);
+        assert!(with_header.is_ok(), "add_version_header should succeed");
+        let with_header = with_header.ok().filter(|_| true).unwrap_or_default();
 
         // Check magic bytes
         assert_eq!(
@@ -216,9 +216,9 @@ mod tests {
         };
 
         // Use serde_json for test (simpler, no bincode Encode trait needed)
-        let serialized = serde_json::to_vec(&state)
-            .map_err(|e| format!("{:?}", e))
-            .unwrap();
+        let serialized = serde_json::to_vec(&state);
+        assert!(serialized.is_ok(), "serde_json::to_vec should succeed");
+        let serialized = serialized.ok().map_or(Vec::new(), |s| s);
         assert!(
             !serialized.is_empty(),
             "serialized data should not be empty"
@@ -255,12 +255,12 @@ mod tests {
         };
 
         // Test serialization + header (without compression for simplicity)
-        let serialized = serde_json::to_vec(&state)
-            .map_err(|e| format!("{:?}", e))
-            .unwrap();
-        let with_header = add_version_header(serialized)
-            .map_err(|e| format!("{:?}", e))
-            .unwrap();
+        let serialized = serde_json::to_vec(&state);
+        assert!(serialized.is_ok(), "serde_json::to_vec should succeed");
+        let serialized = serialized.ok().map_or(Vec::new(), |s| s);
+        let with_header = add_version_header(serialized);
+        assert!(with_header.is_ok(), "add_version_header should succeed");
+        let with_header = with_header.ok().map_or(Vec::new(), |h| h);
 
         assert!(
             !with_header.is_empty(),

@@ -83,6 +83,7 @@ fn demo_basic_usage() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[allow(clippy::cast_precision_loss)]
 fn demo_performance_comparison() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n2. Performance Comparison\n");
 
@@ -97,7 +98,7 @@ fn demo_performance_comparison() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     for (stiffness, rest_length, description) in configs {
-        println!("\nTesting: {}", description);
+        println!("\nTesting: {description}");
 
         let layout = dag.create_memoized_layout(stiffness, rest_length)?;
 
@@ -113,9 +114,9 @@ fn demo_performance_comparison() -> Result<(), Box<dyn std::error::Error>> {
 
         let speedup = cold_time.as_nanos() as f64 / warm_time.as_nanos() as f64;
 
-        println!("  Cold cache: {:?}", cold_time);
-        println!("  Warm cache: {:?}", warm_time);
-        println!("  Speedup: {:.1}x", speedup);
+        println!("  Cold cache: {cold_time:?}");
+        println!("  Warm cache: {warm_time:?}");
+        println!("  Speedup: {speedup:.1}x");
     }
 
     Ok(())
@@ -133,13 +134,13 @@ fn demo_cache_behavior() -> Result<(), Box<dyn std::error::Error>> {
     let start = std::time::Instant::now();
     let positions1 = layout.compute_node_positions();
     let cold_time = start.elapsed();
-    println!("First access (cold cache): {:?}", cold_time);
+    println!("First access (cold cache): {cold_time:?}");
 
     // Second access - warm cache
     let start = std::time::Instant::now();
     let positions2 = layout.compute_node_positions();
     let warm_time = start.elapsed();
-    println!("Second access (warm cache): {:?}", warm_time);
+    println!("Second access (warm cache): {warm_time:?}");
 
     // Verify positions are the same (cached)
     assert_eq!(positions1.len(), positions2.len());
@@ -165,7 +166,7 @@ fn demo_cache_behavior() -> Result<(), Box<dyn std::error::Error>> {
     let start = std::time::Instant::now();
     let positions3 = layout.compute_node_positions();
     let recompute_time = start.elapsed();
-    println!("After cache invalidation: {:?}", recompute_time);
+    println!("After cache invalidation: {recompute_time:?}");
 
     // Verify positions changed
     assert!(positions3.len() == positions1.len() + 1);
@@ -174,6 +175,7 @@ fn demo_cache_behavior() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[allow(clippy::cast_precision_loss)]
 fn demo_realistic_workflow() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n4. Realistic Workflow Example\n");
 
@@ -200,10 +202,10 @@ fn demo_realistic_workflow() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let total_time = start.elapsed();
-    let avg_time = total_time.as_nanos() as f64 / updates as f64;
+    let avg_time = total_time.as_nanos() as f64 / f64::from(updates);
 
-    println!("Total time for {} UI updates: {:?}", updates, total_time);
-    println!("Average time per update: {:.2} ns", avg_time);
+    println!("Total time for {updates} UI updates: {total_time:?}");
+    println!("Average time per update: {avg_time:.2} ns");
 
     // Show workflow structure
     println!("\nWorkflow structure:");
@@ -215,7 +217,7 @@ fn demo_realistic_workflow() -> Result<(), Box<dyn std::error::Error>> {
         } else {
             "BLOCKED"
         };
-        println!("  {}: {}", bead, ready_status);
+        println!("  {bead}: {ready_status}");
     }
 
     Ok(())
@@ -227,7 +229,7 @@ fn create_sample_workflow_dag(size: usize) -> Result<WorkflowDAG, Box<dyn std::e
 
     // Add nodes
     for i in 0..size {
-        dag.add_node(format!("node-{}", i))?;
+        dag.add_node(format!("node-{i}"))?;
     }
 
     // Create dependencies in a realistic pattern
@@ -235,19 +237,19 @@ fn create_sample_workflow_dag(size: usize) -> Result<WorkflowDAG, Box<dyn std::e
         if i % 5 == 0 && i + 1 < size {
             // Branch every 5th node
             dag.add_dependency(
-                format!("node-{}", i),
+                format!("node-{i}"),
                 format!("node-{}", i + 1),
                 DependencyType::BlockingDependency,
             )?;
             dag.add_dependency(
-                format!("node-{}", i),
+                format!("node-{i}"),
                 format!("node-{}", i + 2),
                 DependencyType::BlockingDependency,
             )?;
         } else if i + 1 < size {
             // Linear chain
             dag.add_dependency(
-                format!("node-{}", i),
+                format!("node-{i}"),
                 format!("node-{}", i + 1),
                 DependencyType::BlockingDependency,
             )?;

@@ -1,6 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
-fn benchmark_loop_vs_iterator(c: &mut Criterion) {
+pub fn benchmark_loop_vs_iterator(c: &mut Criterion) {
     let data: Vec<usize> = (0..1000).collect();
 
     c.bench_function("imperative_loop", |b| {
@@ -21,7 +21,7 @@ fn benchmark_loop_vs_iterator(c: &mut Criterion) {
     });
 }
 
-fn benchmark_filter_operations(c: &mut Criterion) {
+pub fn benchmark_filter_operations(c: &mut Criterion) {
     let data: Vec<usize> = (0..1000).collect();
 
     c.bench_function("imperative_filter", |b| {
@@ -44,7 +44,7 @@ fn benchmark_filter_operations(c: &mut Criterion) {
     });
 }
 
-fn benchmark_nested_loops(c: &mut Criterion) {
+pub fn benchmark_nested_loops(c: &mut Criterion) {
     let data1: Vec<usize> = (0..100).collect();
     let data2: Vec<usize> = (0..100).collect();
 

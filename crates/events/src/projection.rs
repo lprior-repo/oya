@@ -620,8 +620,7 @@ mod tests {
             state
                 .beads
                 .get(&bead_id)
-                .map(|b| b.is_blocked())
-                .is_some_and(|blocked| blocked),
+                .is_some_and(|b| b.is_blocked()),
             "Bead should be blocked before dependency resolution"
         );
 
@@ -636,8 +635,7 @@ mod tests {
             state
                 .beads
                 .get(&bead_id)
-                .map(|b| b.is_blocked())
-                .is_none_or(|blocked| !blocked),
+                .is_none_or(|b| !b.is_blocked()),
             "Bead should not be blocked after dependency resolved"
         );
     }

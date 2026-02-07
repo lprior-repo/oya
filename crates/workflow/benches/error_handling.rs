@@ -1,19 +1,19 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 #[derive(Debug)]
-enum ComputationError {
+pub enum ComputationError {
     DivisionByZero,
 }
 
 // Functional approach with Result and ?
-fn functional_divide(a: f64, b: f64) -> Result<f64, ComputationError> {
+pub fn functional_divide(a: f64, b: f64) -> Result<f64, ComputationError> {
     if b == 0.0 {
         return Err(ComputationError::DivisionByZero);
     }
     Ok(a / b)
 }
 
-fn functional_computation(input: f64) -> Result<f64, ComputationError> {
+pub fn functional_computation(input: f64) -> Result<f64, ComputationError> {
     let step1 = functional_divide(input, 2.0)?;
     let step2 = functional_divide(step1, 3.0)?;
     let step3 = functional_divide(step2, 4.0)?;
@@ -21,7 +21,7 @@ fn functional_computation(input: f64) -> Result<f64, ComputationError> {
 }
 
 // Imperative match-based approach
-fn imperative_computation(input: f64) -> Result<f64, ComputationError> {
+pub fn imperative_computation(input: f64) -> Result<f64, ComputationError> {
     let step1 = functional_divide(input, 2.0)?;
     let step2 = functional_divide(step1, 3.0)?;
     let step3 = functional_divide(step2, 4.0)?;
@@ -29,7 +29,7 @@ fn imperative_computation(input: f64) -> Result<f64, ComputationError> {
     Ok(step3)
 }
 
-fn benchmark_error_propagation(c: &mut Criterion) {
+pub fn benchmark_error_propagation(c: &mut Criterion) {
     let input = 1000.0;
 
     c.bench_function("functional_error_handling", |b| {
@@ -41,7 +41,7 @@ fn benchmark_error_propagation(c: &mut Criterion) {
     });
 }
 
-fn benchmark_error_path(c: &mut Criterion) {
+pub fn benchmark_error_path(c: &mut Criterion) {
     let input = 1000.0;
 
     c.bench_function("functional_error_path", |b| {
@@ -53,7 +53,7 @@ fn benchmark_error_path(c: &mut Criterion) {
     });
 }
 
-fn benchmark_chained_results(c: &mut Criterion) {
+pub fn benchmark_chained_results(c: &mut Criterion) {
     fn add_one(x: i32) -> Result<i32, ComputationError> {
         Ok(x + 1)
     }

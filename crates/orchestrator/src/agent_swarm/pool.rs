@@ -353,13 +353,15 @@ impl AgentPool {
             ..Default::default()
         };
 
-        agents.values().for_each(|agent| match agent.state() {
-            AgentState::Idle => stats.idle += 1,
-            AgentState::Working => stats.working += 1,
-            AgentState::Unhealthy => stats.unhealthy += 1,
-            AgentState::ShuttingDown => stats.shutting_down += 1,
-            AgentState::Terminated => stats.terminated += 1,
-        });
+        for agent in agents.values() {
+            match agent.state() {
+                AgentState::Idle => stats.idle += 1,
+                AgentState::Working => stats.working += 1,
+                AgentState::Unhealthy => stats.unhealthy += 1,
+                AgentState::ShuttingDown => stats.shutting_down += 1,
+                AgentState::Terminated => stats.terminated += 1,
+            }
+        }
 
         stats
     }

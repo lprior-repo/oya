@@ -255,7 +255,7 @@ mod tests {
     /// When the loop runs one cycle
     /// Then it should report converged
     #[tokio::test]
-    async fn empty_system_is_converged() {
+    async fn empty_system_is_converged() -> Result<()> {
         let (reconciler, desired_provider, projection, _) = setup();
         let config = LoopConfig {
             interval: Duration::from_millis(10),
@@ -263,14 +263,9 @@ mod tests {
         };
         let loop_runner = ReconciliationLoop::new(reconciler, desired_provider, projection, config);
 
-        match loop_runner.reconcile_once().await {
-            Ok(converged) => assert!(converged, "Empty system should be converged"),
-            Err(e) => {
-                // In test code, we need to fail the test on error
-                // Since panic/unwrap are forbidden, we use assert!
-                assert!(false, "reconcile_once should succeed: {:?}", e);
-            }
-        }
+        let converged = loop_runner.reconcile_once().await?;
+        assert!(converged, "Empty system should be converged");
+        Ok(())
     }
 
     /// Given a desired state with one bead
@@ -278,7 +273,7 @@ mod tests {
     /// When the loop runs one cycle
     /// Then it should not be converged (actions needed)
     #[tokio::test]
-    async fn missing_beads_triggers_actions() {
+    async fn missing_beads_triggers_actions() -> Result<()> {
         let (reconciler, desired_provider, projection, _) = setup();
 
         // Add a bead to desired state
@@ -295,23 +290,19 @@ mod tests {
         let config = LoopConfig::default();
         let loop_runner = ReconciliationLoop::new(reconciler, desired_provider, projection, config);
 
-        match loop_runner.reconcile_once().await {
-            Ok(converged) => assert!(
-                !converged,
-                "System with missing bead should not be converged"
-            ),
-            Err(e) => {
-                // In test code, we need to fail the test on error
-                assert!(false, "reconcile_once should succeed: {:?}", e);
-            }
-        }
+        let converged = loop_runner.reconcile_once().await?;
+        assert!(
+            !converged,
+            "System with missing bead should not be converged"
+        );
+        Ok(())
     }
 
     /// Given a loop that is running
     /// When stop() is called
     /// Then the loop should exit gracefully
     #[tokio::test]
-    async fn stop_signal_terminates_loop() {
+    async fn stop_signal_terminates_loop() -> Result<()> {
         let (reconciler, desired_provider, projection, _) = setup();
         let config = LoopConfig {
             interval: Duration::from_millis(100),
@@ -332,10 +323,12 @@ mod tests {
         stopper.stop();
 
         // Should complete without error
-        let result = tokio::time::timeout(Duration::from_secs(1), handle).await;
-        assert!(result.is_ok(), "Loop should stop within timeout");
-        let inner = result.ok().and_then(|r| r.ok());
-        assert!(inner.is_some());
+        let result = tokio::time::timeout(Duration::from_secs(1), handle).await
+            .map_err(|e| Error::reconcile_failed(format!("Loop should stop within timeout: {}", e)))?;
+        
+        let inner = result.map_err(|e| Error::reconcile_failed(format!("Join failed: {}", e)))?;
+        assert!(inner.is_ok());
+        Ok(())
     }
 
     /// Given a loop configured with stop_on_error=true
@@ -358,16 +351,12 @@ mod tests {
     /// When modify() is called
     /// Then subsequent calls to get_desired_state() should reflect changes
     #[tokio::test]
-    async fn desired_state_provider_reflects_modifications() {
+    async fn desired_state_provider_reflects_modifications() -> Result<()> {
         let provider = InMemoryDesiredStateProvider::new(DesiredState::new());
 
         // Initially empty
-        match provider.get_desired_state().await {
-            Ok(state) => assert!(state.is_empty()),
-            Err(e) => {
-                assert!(false, "get_desired_state should succeed: {:?}", e);
-            }
-        }
+        let state = provider.get_desired_state().await?;
+        assert!(state.is_empty());
 
         // Add a bead
         let bead_id = BeadId::new();
@@ -381,9 +370,9 @@ mod tests {
             .await;
 
         // Now should have one bead
-        let state2 = provider.get_desired_state().await;
-        assert!(state2.is_ok());
-        assert_eq!(state2.ok().map(|s| s.len()), Some(1));
+        let state2 = provider.get_desired_state().await?;
+        assert_eq!(state2.len(), 1);
+        Ok(())
     }
 
     /// Given actual state from a projection

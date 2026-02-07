@@ -1,6 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
-fn benchmark_vec_build(c: &mut Criterion) {
+pub fn benchmark_vec_build(c: &mut Criterion) {
     c.bench_function("imperative_vec_build", |b| {
         b.iter(|| {
             let mut result = Vec::new();
@@ -19,7 +19,7 @@ fn benchmark_vec_build(c: &mut Criterion) {
     });
 }
 
-fn benchmark_vec_transform(c: &mut Criterion) {
+pub fn benchmark_vec_transform(c: &mut Criterion) {
     let data: Vec<usize> = (0..1000).collect();
 
     c.bench_function("imperative_vec_transform", |b| {
@@ -40,7 +40,7 @@ fn benchmark_vec_transform(c: &mut Criterion) {
     });
 }
 
-fn benchmark_vec_filter_map(c: &mut Criterion) {
+pub fn benchmark_vec_filter_map(c: &mut Criterion) {
     let data: Vec<usize> = (0..1000).collect();
 
     c.bench_function("imperative_filter_map", |b| {
@@ -63,7 +63,7 @@ fn benchmark_vec_filter_map(c: &mut Criterion) {
     });
 }
 
-fn benchmark_vec_partition(c: &mut Criterion) {
+pub fn benchmark_vec_partition(c: &mut Criterion) {
     let data: Vec<usize> = (0..1000).collect();
 
     c.bench_function("imperative_partition", |b| {
@@ -89,7 +89,7 @@ fn benchmark_vec_partition(c: &mut Criterion) {
     });
 }
 
-fn benchmark_vec_fold(c: &mut Criterion) {
+pub fn benchmark_vec_fold(c: &mut Criterion) {
     let data: Vec<usize> = (0..1000).collect();
 
     c.bench_function("imperative_fold", |b| {

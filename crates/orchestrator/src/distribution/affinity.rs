@@ -89,6 +89,7 @@ impl AffinityStrategy {
     }
 
     /// Calculate the capability score for an agent.
+    #[allow(clippy::cast_precision_loss)]
     fn capability_score(&self, agent_id: &str, bead_id: &str, ctx: &DistributionContext) -> f64 {
         let bead = match ctx.get_bead(bead_id) {
             Some(b) => b,

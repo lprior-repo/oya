@@ -609,6 +609,7 @@ where
     }
 
     /// Check meltdown status based on failure rate.
+    #[allow(clippy::cast_precision_loss)]
     fn check_meltdown(&self, state: &SupervisorActorState<A>) -> MeltdownStatus {
         if state.failure_times.is_empty() {
             return MeltdownStatus::Normal;

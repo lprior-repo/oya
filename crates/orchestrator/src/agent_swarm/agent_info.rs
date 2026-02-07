@@ -112,6 +112,7 @@ impl WorkloadHistory {
     }
 
     /// Records a completed operation.
+    #[allow(clippy::cast_precision_loss)]
     pub fn record_operation(&mut self, duration_secs: f64) -> Result<(), AgentInfoError> {
         if duration_secs < 0.0 {
             return Err(AgentInfoError::NegativeDuration);

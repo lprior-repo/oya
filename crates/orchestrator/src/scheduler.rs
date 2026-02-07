@@ -64,11 +64,26 @@ impl WorkflowState {
     }
 
     /// Add a bead to this workflow's DAG
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The bead ID already exists in the DAG (duplicate node)
+    /// - The DAG structure becomes invalid due to the addition
+    /// - Internal graph operations fail
     pub fn add_bead(&mut self, bead_id: BeadId) -> Result<()> {
         self.dag.add_node(bead_id).map_err(dag_error_to_error)
     }
 
     /// Add a dependency between beads
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Either bead doesn't exist in the DAG
+    /// - Adding the edge would create a cycle in the DAG
+    /// - The dependency type is invalid for the operation
+    /// - The dependency already exists with a different type
     pub fn add_dependency(
         &mut self,
         from_bead: BeadId,
@@ -92,6 +107,13 @@ impl WorkflowState {
     }
 
     /// Check if a specific bead is ready
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The bead ID doesn't exist in the DAG
+    /// - The bead ID is invalid or malformed
+    /// - Internal graph validation fails
     pub fn is_bead_ready(&self, bead_id: &BeadId) -> Result<bool> {
         self.dag
             .is_ready(bead_id, &self.completed)
@@ -330,7 +352,14 @@ impl SchedulerActor {
 
     /// Register a new workflow with the scheduler
     ///
-    /// Returns Ok(()) if registered successfully, Err if workflow already exists
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - A workflow with the same ID is already registered
+    /// - The workflow ID is invalid or empty
+    /// - Memory allocation fails for the new workflow state
+    ///
+    /// Returns Ok(()) if registered successfully
     pub fn register_workflow(&mut self, workflow_id: WorkflowId) -> Result<()> {
         if self.workflows.contains_key(&workflow_id) {
             return Err(Error::invalid_record(format!(
@@ -370,6 +399,14 @@ impl SchedulerActor {
 
     /// Schedule a bead in a workflow
     ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The workflow ID doesn't exist or has been unregistered
+    /// - The bead ID is already scheduled in any workflow
+    /// - Adding the bead to the workflow DAG fails (duplicate, invalid structure)
+    /// - Memory allocation fails for tracking the scheduled bead
+    ///
     /// Adds the bead to the workflow's DAG and marks it as pending
     pub fn schedule_bead(&mut self, workflow_id: WorkflowId, bead_id: BeadId) -> Result<()> {
         // Ensure workflow exists
@@ -390,6 +427,14 @@ impl SchedulerActor {
 
     /// Add a dependency between beads in a workflow
     ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The workflow ID doesn't exist or has been unregistered
+    /// - Either bead ID doesn't exist in the workflow DAG
+    /// - Adding the dependency would create a cycle in the DAG
+    /// - The dependency type is invalid for the operation
+    ///
     /// The `from_bead` must complete before `to_bead` can start
     pub fn add_dependency(
         &mut self,
@@ -406,6 +451,15 @@ impl SchedulerActor {
     }
 
     /// Get all beads ready to execute in a workflow (based on DAG dependencies)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The workflow ID doesn't exist or has been unregistered
+    /// - The workflow DAG is in an invalid state
+    /// - Internal graph traversal fails
+    ///
+    /// Returns a vector of bead IDs that are ready for execution
     pub fn get_workflow_ready_beads(&self, workflow_id: &WorkflowId) -> Result<Vec<BeadId>> {
         let workflow_state = self
             .workflows
@@ -416,6 +470,15 @@ impl SchedulerActor {
     }
 
     /// Mark a bead as ready for dispatch
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The bead ID doesn't exist in the pending beads registry
+    /// - The bead is already in a terminal state (completed, failed)
+    /// - The bead is already marked as ready
+    ///
+    /// Moves the bead from pending to ready state for worker assignment
     pub fn mark_ready(&mut self, bead_id: &BeadId) -> Result<()> {
         let bead = self
             .pending_beads
@@ -438,6 +501,14 @@ impl SchedulerActor {
     }
 
     /// Handle a bead completion event
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The bead ID doesn't exist in any workflow or the pending registry
+    /// - The bead is already in a completed state
+    /// - Updating the workflow DAG's completed set fails (cycle detection, etc.)
+    /// - Internal state consistency checks fail
     ///
     /// This method is called when a BeadCompleted event is received from the event bus.
     /// It updates both the bead's schedule state AND the workflow DAG's completed set.
@@ -467,6 +538,16 @@ impl SchedulerActor {
     }
 
     /// Assign a bead to a worker
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The bead ID doesn't exist in the pending beads registry
+    /// - The bead is already assigned to another worker
+    /// - The bead is in an invalid state (already completed, failed)
+    /// - The worker ID is invalid or empty
+    ///
+    /// Marks the bead as assigned and records the worker assignment
     pub fn assign_to_worker(&mut self, bead_id: &BeadId, worker_id: String) -> Result<()> {
         if !self.pending_beads.contains_key(bead_id) {
             return Err(Error::invalid_record(format!("bead {} not found", bead_id)));
