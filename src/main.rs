@@ -38,13 +38,9 @@ use tracing::{error, info, warn};
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
 use oya_events::{EventBus, InMemoryEventStore};
-use oya_reconciler::{
-    InMemoryDesiredStateProvider, LoopConfig, Reconciler, ReconcilerConfig, ReconciliationLoop,
-};
-use oya_web::run_server;
 
 /// Error type for initialization failures.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
 enum InitError {
     #[error("Database error: {0}")]
     Database(String),

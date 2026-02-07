@@ -264,11 +264,10 @@ async fn test_load_state_returns_actor_unavailable() -> Result<(), Box<dyn std::
     .await;
 
     // THEN: Should return ActorUnavailable error (not panic or crash)
-    assert!(result.is_err(), "LoadState should return error");
-    let error = result.unwrap_err();
-    let actor_error = error
-        .downcast_ref::<ActorError>()
-        .ok_or("Error should be ActorError")?;
+    // The RPC call succeeds, but the result contains the ActorError
+    let load_result = result?;
+    assert!(load_result.is_err(), "LoadState should return ActorError");
+    let actor_error = load_result.unwrap_err();
 
     assert!(
         matches!(actor_error, ActorError::ActorUnavailable),
@@ -301,11 +300,9 @@ async fn test_state_exists_returns_actor_unavailable() -> Result<(), Box<dyn std
     .await;
 
     // THEN: Should return ActorUnavailable error
-    assert!(result.is_err(), "StateExists should return error");
-    let error = result.unwrap_err();
-    let actor_error = error
-        .downcast_ref::<ActorError>()
-        .ok_or("Error should be ActorError")?;
+    let exists_result = result?;
+    assert!(exists_result.is_err(), "StateExists should return ActorError");
+    let actor_error = exists_result.unwrap_err();
 
     assert!(
         matches!(actor_error, ActorError::ActorUnavailable),

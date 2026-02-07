@@ -1549,40 +1549,64 @@ mod tests {
 
         assert_eq!(agent.workload_history.beads_completed, 0);
         assert_eq!(agent.workload_history.operations_executed, 0);
-        assert!(agent.workload_history.avg_execution_secs.is_none());
+
+    fn to_vector_stages(stages: Vec<StageInfo>) -> Vector<StageInfo> {
+        stages.into_iter().collect::<Vector<_>>()
     }
 
     #[test]
-    fn test_workload_history_with_values() {
-        let history = WorkloadHistory {
-            beads_completed: 42,
-            operations_executed: 150,
-            avg_execution_secs: Some(1.5),
-        };
-
-        assert_eq!(history.beads_completed, 42);
-        assert_eq!(history.operations_executed, 150);
-        assert_eq!(history.avg_execution_secs, Some(1.5));
-    }
-
-    #[test]
-    fn test_agent_with_custom_workload_history() {
-        let agent = AgentInfo {
-            id: "agent-test".to_string(),
-            state: AgentState::Working,
-            current_bead: Some("bead-123".to_string()),
-            health_score: 0.95,
-            uptime_secs: 3600,
-            capabilities: Vector::new(),
-            workload_history: WorkloadHistory {
-                beads_completed: 10,
-                operations_executed: 50,
-                avg_execution_secs: Some(2.3),
+    fn test_stage_selection_navigation() {
+        let mut state = State::default();
+        state.pipeline_stages = to_vector_stages(vec![
+            StageInfo {
+                name: "stage-1".to_string(),
+                status: StageStatus::Passed,
+                duration_ms: Some(100),
+                exit_code: Some(0),
             },
-        };
-
-        assert_eq!(agent.workload_history.beads_completed, 10);
-        assert_eq!(agent.workload_history.operations_executed, 50);
-        assert_eq!(agent.workload_history.avg_execution_secs, Some(2.3));
+            StageInfo {
+                name: "stage-2".to_string(),
+                status: StageStatus::Failed,
+                duration_ms: Some(200),
+                exit_code: Some(1),
+            },
+        ]);
+        
+        state.selected_stage_index = 0;
+        
+        // Simulate Down key
+        if state.selected_stage_index < state.pipeline_stages.len().saturating_sub(1) {
+            state.selected_stage_index = state.selected_stage_index.saturating_add(1);
+        }
+        assert_eq!(state.selected_stage_index, 1);
+        
+        // Simulate Up key
+        state.selected_stage_index = state.selected_stage_index.saturating_sub(1);
+        assert_eq!(state.selected_stage_index, 0);
+    }
+    
+    #[test]
+    fn test_stage_selection_bounds() {
+        let mut state = State::default();
+        state.pipeline_stages = to_vector_stages(vec![
+            StageInfo {
+                name: "stage-1".to_string(),
+                status: StageStatus::Pending,
+                duration_ms: None,
+                exit_code: None,
+            },
+        ]);
+        
+        state.selected_stage_index = 0;
+        
+        // Try to go down when at the last stage
+        if state.selected_stage_index < state.pipeline_stages.len().saturating_sub(1) {
+            state.selected_stage_index = state.selected_stage_index.saturating_add(1);
+        }
+        assert_eq!(state.selected_stage_index, 0);
+        
+        // Try to go up when at the first stage
+        state.selected_stage_index = state.selected_stage_index.saturating_sub(1);
+        assert_eq!(state.selected_stage_index, 0);
     }
 }

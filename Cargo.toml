@@ -144,9 +144,13 @@ oya-opencode = { workspace = true }
 oya-workflow = { workspace = true }
 oya-events = { workspace = true }
 oya-reconciler = { workspace = true }
+oya-web = { workspace = true }
+oya-shared = { workspace = true }
+orchestrator = { workspace = true }
 
 tokio = { workspace = true }
 clap = { workspace = true }
+thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 serde = { workspace = true }
