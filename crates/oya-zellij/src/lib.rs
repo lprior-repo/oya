@@ -1299,7 +1299,7 @@ impl State {
         println!("  {}", "─".repeat(cols.saturating_sub(2)));
 
         self.agents.iter().take(list_capacity).for_each(|agent| {
-            let bead_str = agent.current_bead.as_deref().unwrap_or("-");
+            let bead_str = agent.current_bead.as_deref().map_or("-", |s| s);
             let uptime_str = format_uptime(agent.uptime_secs);
             let health_color = if agent.health_score >= 0.8 {
                 "\x1b[32m"

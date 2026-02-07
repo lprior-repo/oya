@@ -102,20 +102,20 @@ impl ReplayEngine {
             .take(0)
             .map_err(|e| PersistenceError::query_failed(e.to_string()))?;
 
-        let mut records = Vec::new();
-        for input in inputs {
-            let event: OrchestratorEvent = serde_json::from_str(&input.event_data)
-                .map_err(|e| PersistenceError::serialization_error(e.to_string()))?;
+        inputs
+            .into_iter()
+            .map(|input| {
+                let event: OrchestratorEvent = serde_json::from_str(&input.event_data)
+                    .map_err(|e| PersistenceError::serialization_error(e.to_string()))?;
 
-            records.push(EventRecord {
-                id: input.event_id,
-                sequence: input.sequence,
-                event,
-                timestamp: DateTime::<Utc>::from(input.timestamp),
-            });
-        }
-
-        Ok(records)
+                Ok(EventRecord {
+                    id: input.event_id,
+                    sequence: input.sequence,
+                    event,
+                    timestamp: DateTime::<Utc>::from(input.timestamp),
+                })
+            })
+            .collect()
     }
 
     /// Recover state from the latest checkpoint and replay events.

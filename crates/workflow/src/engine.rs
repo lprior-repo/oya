@@ -549,7 +549,7 @@ mod tests {
         assert!(result
             .as_ref()
             .map(|r| r.state == WorkflowState::Completed)
-            .unwrap_or(false));
+            .map_or(false, |completed| completed));
     }
 
     #[tokio::test]
@@ -564,8 +564,8 @@ mod tests {
         assert!(result
             .as_ref()
             .map(|r| r.state == WorkflowState::Completed)
-            .unwrap_or(false));
-        assert_eq!(result.map(|r| r.phase_outputs.len()).unwrap_or(0), 1);
+            .map_or(false, |completed| completed));
+        assert_eq!(result.map(|r| r.phase_outputs.len()).map_or(0, |len| len), 1);
     }
 
     #[tokio::test]
@@ -582,8 +582,8 @@ mod tests {
         assert!(result
             .as_ref()
             .map(|r| r.state == WorkflowState::Completed)
-            .unwrap_or(false));
-        assert_eq!(result.map(|r| r.phase_outputs.len()).unwrap_or(0), 3);
+            .map_or(false, |completed| completed));
+        assert_eq!(result.map(|r| r.phase_outputs.len()).map_or(0, |len| len), 3);
     }
 
     #[tokio::test]
@@ -620,7 +620,7 @@ mod tests {
 
         let checkpoints = storage.load_checkpoints(workflow_id).await;
         assert!(checkpoints.is_ok());
-        assert_eq!(checkpoints.map(|c| c.len()).unwrap_or(0), 2);
+        assert_eq!(checkpoints.map(|c| c.len()).map_or(0, |len| len), 2);
     }
 
     #[tokio::test]
@@ -634,7 +634,7 @@ mod tests {
         let journal = storage.load_journal(workflow_id).await;
         assert!(journal.is_ok());
         // Should have: state change, phase started, phase completed, checkpoint, state change
-        assert!(journal.map(|j| j.len()).unwrap_or(0) >= 4);
+        assert!(journal.map(|j| j.len()).map_or(0, |len| len) >= 4);
     }
 
     // ============================================================================
@@ -657,12 +657,12 @@ mod tests {
         assert!(result
             .as_ref()
             .map(|r| r.state == WorkflowState::Completed)
-            .unwrap_or(false));
+            .map_or(false, |completed| completed));
 
         // Verify checkpoints were created for all phases
         let checkpoints = storage.load_checkpoints(workflow_id).await;
         assert!(checkpoints.is_ok());
-        assert_eq!(checkpoints.map(|c| c.len()).unwrap_or(0), 3);
+        assert_eq!(checkpoints.map(|c| c.len()).map_or(0, |len| len), 3);
     }
 
     #[tokio::test]
@@ -683,7 +683,7 @@ mod tests {
             .ok()
             .and_then(|c| c.as_ref())
             .map(|c| c.phase_id == phase_id)
-            .unwrap_or(false));
+            .map_or(false, |is_match| is_match));
     }
 
     #[tokio::test]
@@ -703,7 +703,7 @@ mod tests {
             .ok()
             .and_then(|c| c.as_ref())
             .map(|c| c.outputs.is_some())
-            .unwrap_or(false));
+            .map_or(false, |has_outputs| has_outputs));
     }
 
     #[tokio::test]
@@ -792,7 +792,7 @@ mod tests {
         assert!(result
             .as_ref()
             .map(|r| r.state == WorkflowState::Completed)
-            .unwrap_or(false));
+            .map_or(false, |completed| completed));
     }
 
     #[tokio::test]
@@ -837,7 +837,7 @@ mod tests {
         assert!(result.is_ok());
 
         // Should have executed phase 1 (test) and phase 2 (deploy)
-        assert_eq!(result.map(|r| r.phase_outputs.len()).unwrap_or(0), 2);
+        assert_eq!(result.map(|r| r.phase_outputs.len()).map_or(0, |len| len), 2);
     }
 
     #[tokio::test]

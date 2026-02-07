@@ -151,62 +151,81 @@ impl FunctionalAudit {
     /// Get count of violations by severity.
     #[must_use]
     pub fn violation_counts(&self) -> std::collections::HashMap<ViolationSeverity, usize> {
-        let mut counts = std::collections::HashMap::new();
-        for violation in &self.violations {
-            *counts.entry(violation.severity).or_insert(0) += 1;
-        }
-        counts
+        self.violations
+            .iter()
+            .fold(std::collections::HashMap::new(), |mut counts, violation| {
+                *counts.entry(violation.severity).or_insert(0) += 1;
+                counts
+            })
     }
 }
 
 /// Audit code for functional Rust patterns.
 pub fn audit_functional_style(code: &str) -> FunctionalAudit {
-    let mut violations = Vec::new();
     let lines: Vec<&str> = code.lines().collect();
     let total_lines = lines.len();
 
-    for (line_idx, line) in lines.iter().enumerate() {
-        for pattern in &[
-            ForbiddenPattern::Unwrap,
-            ForbiddenPattern::Expect,
-            ForbiddenPattern::Panic,
-            ForbiddenPattern::Unsafe,
-            ForbiddenPattern::StaticMut,
-        ] {
-            if let Some(matches) = find_matches(line, pattern) {
-                for (col, _) in matches {
-                    violations.push(Violation::new(
-                        pattern.clone(),
-                        line_idx + 1,
-                        col,
-                        line.to_string(),
-                    ));
-                }
-            }
-        }
-    }
+    let patterns = [
+        ForbiddenPattern::Unwrap,
+        ForbiddenPattern::Expect,
+        ForbiddenPattern::Panic,
+        ForbiddenPattern::Unsafe,
+        ForbiddenPattern::StaticMut,
+    ];
+
+    // Check for forbidden patterns using functional pipelines
+    let violations: Vec<Violation> = lines
+        .iter()
+        .enumerate()
+        .flat_map(|(line_idx, line)| {
+            patterns.iter().flat_map(move |pattern| {
+                find_matches(line, pattern)
+                    .into_iter()
+                    .flatten()
+                    .map(move |(col, _)| {
+                        Violation::new(
+                            pattern.clone(),
+                            line_idx + 1,
+                            col,
+                            line.to_string(),
+                        )
+                    })
+            })
+        })
+        .collect();
 
     // Check for mutable variables (but exclude common patterns like "let mut iter")
-    if let (Ok(mut_regex), Ok(mut_skip_regex)) = (
+    let mut_violations: Vec<Violation> = if let (Ok(mut_regex), Ok(mut_skip_regex)) = (
         Regex::new(r"\blet\s+mut\s+([a-zA-Z_][a-zA-Z0-9_]*)\b"),
         Regex::new(r"\blet\s+mut\s+(iter|self|this|cursor|pointer|idx|index|i|j|k|x|y|z)\b"),
     ) {
-        for (line_idx, line) in lines.iter().enumerate() {
-            if let Some(captures) = mut_regex.captures(line) {
-                if let Some(var_name) = captures.get(1) {
-                    let _var = var_name.as_str();
-                    if !mut_skip_regex.is_match(line) {
-                        violations.push(Violation::new(
-                            ForbiddenPattern::MutLocalVar,
-                            line_idx + 1,
-                            var_name.start(),
-                            line.to_string(),
-                        ));
-                    }
-                }
-            }
-        }
-    }
+        lines
+            .iter()
+            .enumerate()
+            .filter_map(|(line_idx, line)| {
+                mut_regex.captures(line).and_then(|captures| {
+                    captures
+                        .get(1)
+                        .filter(|var_name| !mut_skip_regex.is_match(line))
+                        .map(|var_name| {
+                            Violation::new(
+                                ForbiddenPattern::MutLocalVar,
+                                line_idx + 1,
+                                var_name.start(),
+                                line.to_string(),
+                            )
+                        })
+                })
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    let violations: Vec<Violation> = violations
+        .into_iter()
+        .chain(mut_violations)
+        .collect();
 
     // Calculate functional score
     let violation_count = violations.len();
@@ -242,29 +261,31 @@ fn find_matches<'a>(line: &'a str, pattern: &ForbiddenPattern) -> Option<Vec<(us
 /// Generate functional Rust code stub for a module.
 #[must_use]
 pub fn generate_functional_module(module_name: &str, functions: &[FunctionStub]) -> String {
-    let mut output = String::new();
-
     // Module header
-    output.push_str(&format!("//! {module_name}\n"));
-    output.push_str("//!\n");
-    output.push_str("//! Functional Rust module - all functions are pure and return Result.\n");
-    output.push_str("//!\n");
-    output.push_str("//! # Design Principles\n");
-    output.push_str("//!\n");
-    output.push_str("//! - Immutable by default\n");
-    output.push_str("//! - Pure functions (no side effects)\n");
-    output.push_str("//! - Railway-Oriented Programming (Result types)\n");
-    output.push_str("//! - Zero panics\n");
-    output.push_str("//! - Explicit error handling\n");
-    output.push_str("//!\n");
-    output.push_str("//! ## Functions\n");
-    output.push_str("//!\n");
+    let header = format!(
+        "//! {}\n\
+         //!\n\
+         //! Functional Rust module - all functions are pure and return Result.\n\
+         //!\n\
+         //! # Design Principles\n\
+         //!\n\
+         //! - Immutable by default\n\
+         //! - Pure functions (no side effects)\n\
+         //! - Railway-Oriented Programming (Result types)\n\
+         //! - Zero panics\n\
+         //! - Explicit error handling\n\
+         //!\n\
+         //! ## Functions\n\
+         //!\n",
+        module_name
+    );
 
-    for func in functions {
-        output.push_str(&format_function_stub(func));
-    }
+    let function_stubs: String = functions
+        .iter()
+        .map(format_function_stub)
+        .collect();
 
-    output
+    header + &function_stubs
 }
 
 /// Generate a single function stub.
@@ -344,40 +365,53 @@ pub struct Parameter {
 /// Convert a list of violations to a report string.
 #[must_use]
 pub fn format_violations_report(audit: &FunctionalAudit) -> Vec<String> {
-    let mut report = Vec::new();
-
     if audit.violations.is_empty() {
-        report.push("✓ Code passes functional style requirements".to_string());
-        return report;
+        return vec!["✓ Code passes functional style requirements".to_string()];
     }
 
-    report.push(format!(
-        "Functional style audit: {:.1}% compliance",
-        audit.functional_percentage
-    ));
+    let mut report = vec![
+        format!(
+            "Functional style audit: {:.1}% compliance",
+            audit.functional_percentage
+        )
+    ];
 
     // Group by severity
-    for severity in [
+    let severity_sections: Vec<String> = [
         ViolationSeverity::Critical,
         ViolationSeverity::High,
         ViolationSeverity::Medium,
         ViolationSeverity::Low,
-    ] {
+    ]
+    .iter()
+    .flat_map(|&severity| {
         let violations = audit.violations_by_severity(severity);
-        if !violations.is_empty() {
-            report.push(format!("\n{severity:?} violations ({}):", violations.len()));
+        if violations.is_empty() {
+            return Vec::new();
+        }
 
-            for v in violations {
-                report.push(format!(
+        let mut section = vec![
+            format!("\n{severity:?} violations ({}):", violations.len())
+        ];
+
+        let violation_lines: Vec<String> = violations
+            .iter()
+            .map(|v| {
+                format!(
                     "  Line {}: {} - {}",
                     v.line,
                     v.pattern.description(),
                     v.line_content.trim()
-                ));
-            }
-        }
-    }
+                )
+            })
+            .collect();
 
+        section.extend(violation_lines);
+        section
+    })
+    .collect();
+
+    report.extend(severity_sections);
     report
 }
 

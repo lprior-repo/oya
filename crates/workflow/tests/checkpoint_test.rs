@@ -49,12 +49,12 @@ async fn test_checkpoint_created_after_phase() {
     assert!(result
         .as_ref()
         .map(|r| r.state == WorkflowState::Completed)
-        .unwrap_or(false));
+        .map_or(false, |v| v));
 
     // Verify checkpoint was created
     let checkpoints = storage.load_checkpoints(workflow_id).await;
     assert!(checkpoints.is_ok());
-    assert_eq!(checkpoints.map(|c| c.len()).unwrap_or(0), 1);
+    assert_eq!(checkpoints.map(|c| c.len()).map_or(0, |len| len), 1);
 }
 
 /// Test: Multiple phases create multiple checkpoints.
@@ -74,7 +74,7 @@ async fn test_multiple_checkpoints() {
     // Verify three checkpoints created (one per phase)
     let checkpoints = storage.load_checkpoints(workflow_id).await;
     assert!(checkpoints.is_ok());
-    assert_eq!(checkpoints.map(|c| c.len()).unwrap_or(0), 3);
+    assert_eq!(checkpoints.map(|c| c.len()).map_or(0, |len| len), 3);
 }
 
 /// Test: Checkpoint disabled when config.checkpoint_enabled = false.
@@ -101,7 +101,7 @@ async fn test_checkpoint_disabled() {
     // Verify no checkpoints created
     let checkpoints = storage.load_checkpoints(workflow_id).await;
     assert!(checkpoints.is_ok());
-    assert_eq!(checkpoints.map(|c| c.len()).unwrap_or(0), 0);
+    assert_eq!(checkpoints.map(|c| c.len()).map_or(0, |len| len), 0);
 }
 
 /// Test: Load specific checkpoint by phase ID.
@@ -143,7 +143,7 @@ async fn test_rewind_to_checkpoint() {
     // Verify all three checkpoints exist
     let checkpoints = storage.load_checkpoints(workflow_id).await;
     assert!(checkpoints.is_ok());
-    assert_eq!(checkpoints.map(|c| c.len()).unwrap_or(0), 3);
+    assert_eq!(checkpoints.map(|c| c.len()).map_or(0, |len| len), 3);
 
     // Rewind to build phase
     let rewound = engine.rewind(workflow_id, build_phase_id).await;
@@ -161,7 +161,7 @@ async fn test_rewind_to_checkpoint() {
     let checkpoints_after_rewind = storage.load_checkpoints(workflow_id).await;
     assert!(checkpoints_after_rewind.is_ok());
     // Should have build checkpoint only (cleared test and deploy)
-    assert_eq!(checkpoints_after_rewind.map(|c| c.len()).unwrap_or(0), 1);
+    assert_eq!(checkpoints_after_rewind.map(|c| c.len()).map_or(0, |len| len), 1);
 }
 
 /// Test: Resume workflow from paused state.
@@ -192,7 +192,7 @@ async fn test_resume_workflow() {
     assert!(result
         .as_ref()
         .map(|r| r.state == WorkflowState::Completed)
-        .unwrap_or(false));
+        .map_or(false, |v| v));
 }
 
 /// Test: Journal records checkpoint creation.
@@ -217,7 +217,7 @@ async fn test_journal_records_checkpoint() {
             .any(|e| matches!(e, oya_workflow::JournalEntry::CheckpointCreated { .. }))
     });
 
-    assert!(has_checkpoint_entry.unwrap_or(false));
+    assert!(has_checkpoint_entry.map_or(false, |v| v));
 }
 
 /// Test: Journal records rewind initiation.
@@ -247,7 +247,7 @@ async fn test_journal_records_rewind() {
             .any(|e| matches!(e, oya_workflow::JournalEntry::RewindInitiated { .. }))
     });
 
-    assert!(has_rewind_entry.unwrap_or(false));
+    assert!(has_rewind_entry.map_or(false, |v| v));
 }
 
 /// Test: Replay workflow from journal.
@@ -296,7 +296,7 @@ async fn test_manual_checkpoint_creation() {
     // Verify checkpoint was saved
     let checkpoints = storage.load_checkpoints(workflow_id).await;
     assert!(checkpoints.is_ok());
-    assert_eq!(checkpoints.map(|c| c.len()).unwrap_or(0), 1);
+    assert_eq!(checkpoints.map(|c| c.len()).map_or(0, |len| len), 1);
 }
 
 /// Test: Checkpoint contains output data.
@@ -318,7 +318,7 @@ async fn test_checkpoint_contains_output_data() {
     // Verify checkpoint has outputs
     let checkpoint = checkpoint.ok().flatten();
     assert!(checkpoint.is_some());
-    assert!(checkpoint.map(|c| c.outputs.is_some()).unwrap_or(false));
+    assert!(checkpoint.map(|c| c.outputs.is_some()).map_or(false, |v| v));
 }
 
 /// Test: Clear checkpoints after a specific phase.
@@ -339,7 +339,7 @@ async fn test_clear_checkpoints_after() {
     // Verify three checkpoints exist
     let before = storage.load_checkpoints(workflow_id).await;
     assert!(before.is_ok());
-    assert_eq!(before.map(|c| c.len()).unwrap_or(0), 3);
+    assert_eq!(before.map(|c| c.len()).map_or(0, |len| len), 3);
 
     // Clear checkpoints after test phase
     let cleared = storage
@@ -350,7 +350,7 @@ async fn test_clear_checkpoints_after() {
     // Verify only build and test checkpoints remain
     let after = storage.load_checkpoints(workflow_id).await;
     assert!(after.is_ok());
-    assert_eq!(after.map(|c| c.len()).unwrap_or(0), 2);
+    assert_eq!(after.map(|c| c.len()).map_or(0, |len| len), 2);
 }
 
 /// Test: Checkpoint round-trip preserves exact state.
@@ -413,9 +413,9 @@ async fn test_concurrent_checkpoints() {
     let c2 = storage.load_checkpoints(id2).await;
     let c3 = storage.load_checkpoints(id3).await;
 
-    assert_eq!(c1.map(|c| c.len()).unwrap_or(0), 1);
-    assert_eq!(c2.map(|c| c.len()).unwrap_or(0), 1);
-    assert_eq!(c3.map(|c| c.len()).unwrap_or(0), 1);
+    assert_eq!(c1.map(|c| c.len()).map_or(0, |len| len), 1);
+    assert_eq!(c2.map(|c| c.len()).map_or(0, |len| len), 1);
+    assert_eq!(c3.map(|c| c.len()).map_or(0, |len| len), 1);
 }
 
 /// Test: Error handling when rewinding to non-existent checkpoint.
@@ -532,7 +532,7 @@ async fn test_checkpoint_state_snapshot_matches_current() -> Result<(), String> 
     let all_checkpoints = storage.load_checkpoints(workflow_id).await;
     assert!(all_checkpoints.is_ok(), "Should load all checkpoints");
 
-    let checkpoint_count = all_checkpoints.map(|c| c.len()).unwrap_or(0);
+    let checkpoint_count = all_checkpoints.map(|c| c.len()).map_or(0, |len| len);
 
     assert_eq!(checkpoint_count, 3, "Should have checkpoint for each phase");
 

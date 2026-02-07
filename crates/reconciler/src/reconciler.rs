@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use chrono::{Duration as ChronoDuration, Utc};
+use either::Either;
 use oya_events::{BeadEvent, BeadState, EventBus};
 use tracing::{debug, info, warn};
 
@@ -207,7 +208,6 @@ impl Reconciler {
 
     /// Compute diff between desired and actual state.
     fn diff(&self, desired: &DesiredState, actual: &ActualState) -> Vec<ReconcileAction> {
-        let mut actions = Vec::new();
         let dead_worker_threshold = ChronoDuration::from_std(self.config.dead_worker_threshold)
             .map_err(|_| ())
             .ok();
@@ -215,102 +215,175 @@ impl Reconciler {
             .map_err(|_| ())
             .ok();
 
-        // 1. Create beads that exist in desired but not actual
-        for (bead_id, spec) in &desired.beads {
-            if !actual.beads.contains_key(bead_id) {
-                actions.push(ReconcileAction::CreateBead {
-                    bead_id: *bead_id,
-                    spec: spec.clone(),
-                });
-            }
-        }
+        let mut actions = vec![
+            // 1. Create beads that exist in desired but not actual
+            self.create_missing_beads(desired, actual),
+            // 2. Detect orphaned beads (actual without desired) and delete
+            self.delete_orphaned_beads(desired, actual),
+            // 3. Schedule pending beads whose dependencies are met
+            self.schedule_pending_beads(actual),
+            // 4. Auto-start scheduled beads (if below concurrency limit)
+            self.start_scheduled_beads(actual),
+            // 5. Retry backed-off beads (if auto-retry enabled)
+            self.retry_backing_off_beads(actual),
+            // 6. Detect dead workers (running without claim beyond threshold)
+            self.detect_dead_workers(actual, dead_worker_threshold),
+            // 7. Detect stuck beads (running beyond threshold)
+            self.detect_stuck_beads(actual, stuck_bead_threshold),
+        ];
 
-        // 2. Detect orphaned beads (actual without desired) and delete
+        actions.into_iter().flatten().collect()
+    }
+
+    /// Create actions for beads that exist in desired but not actual.
+    fn create_missing_beads(
+        &self,
+        desired: &DesiredState,
+        actual: &ActualState,
+    ) -> Vec<ReconcileAction> {
+        desired
+            .beads
+            .iter()
+            .filter(|(bead_id, _)| !actual.beads.contains_key(bead_id))
+            .map(|(bead_id, spec)| ReconcileAction::CreateBead {
+                bead_id: *bead_id,
+                spec: spec.clone(),
+            })
+            .collect()
+    }
+
+    /// Create actions to delete orphaned beads (actual without desired).
+    fn delete_orphaned_beads(
+        &self,
+        desired: &DesiredState,
+        actual: &ActualState,
+    ) -> Vec<ReconcileAction> {
         let orphaned = actual.orphaned_beads(desired);
         if !orphaned.is_empty() {
             warn!(count = orphaned.len(), "Detected orphaned beads");
         }
-        for proj in orphaned {
-            actions.push(ReconcileAction::DeleteBead {
+        orphaned
+            .into_iter()
+            .map(|proj| ReconcileAction::DeleteBead {
                 bead_id: proj.bead_id,
-            });
+            })
+            .collect()
+    }
+
+    /// Create actions to schedule pending beads whose dependencies are met.
+    fn schedule_pending_beads(&self, actual: &ActualState) -> Vec<ReconcileAction> {
+        actual
+            .beads
+            .iter()
+            .filter(|(_, proj)| proj.current_state == BeadState::Pending && !proj.is_blocked())
+            .map(|(bead_id, _)| ReconcileAction::ScheduleBead { bead_id: *bead_id })
+            .collect()
+    }
+
+    /// Create actions to auto-start scheduled beads (if below concurrency limit).
+    fn start_scheduled_beads(&self, actual: &ActualState) -> Vec<ReconcileAction> {
+        if !(self.config.auto_start && actual.running_count < self.config.max_concurrent) {
+            return Vec::new();
         }
 
-        // 3. Schedule pending beads whose dependencies are met
-        for (bead_id, proj) in &actual.beads {
-            if proj.current_state == BeadState::Pending && !proj.is_blocked() {
-                actions.push(ReconcileAction::ScheduleBead { bead_id: *bead_id });
-            }
+        let ready = actual.ready_to_run();
+        let slots_available = self.config.max_concurrent - actual.running_count;
+
+        ready
+            .into_iter()
+            .take(slots_available)
+            .map(|proj| ReconcileAction::StartBead {
+                bead_id: proj.bead_id,
+            })
+            .collect()
+    }
+
+    /// Create actions to retry backed-off beads (if auto-retry enabled).
+    fn retry_backing_off_beads(&self, actual: &ActualState) -> Vec<ReconcileAction> {
+        if !self.config.auto_retry {
+            return Vec::new();
         }
 
-        // 4. Auto-start scheduled beads (if below concurrency limit)
-        if self.config.auto_start && actual.running_count < self.config.max_concurrent {
-            let ready = actual.ready_to_run();
-            let slots_available = self.config.max_concurrent - actual.running_count;
+        actual
+            .beads
+            .iter()
+            .filter(|(_, proj)| proj.current_state == BeadState::BackingOff)
+            .map(|(bead_id, _)| ReconcileAction::RetryBead { bead_id: *bead_id })
+            .collect()
+    }
 
-            for proj in ready.into_iter().take(slots_available) {
-                actions.push(ReconcileAction::StartBead {
-                    bead_id: proj.bead_id,
-                });
-            }
+    /// Create actions for dead workers (running without claim beyond threshold).
+    fn detect_dead_workers(
+        &self,
+        actual: &ActualState,
+        threshold: Option<ChronoDuration>,
+    ) -> Vec<ReconcileAction> {
+        if !self.config.detect_dead_workers {
+            return Vec::new();
         }
 
-        // 5. Retry backed-off beads (if auto-retry enabled)
-        if self.config.auto_retry {
-            for (bead_id, proj) in &actual.beads {
-                if proj.current_state == BeadState::BackingOff {
-                    actions.push(ReconcileAction::RetryBead { bead_id: *bead_id });
-                }
-            }
-        }
-
-        // 6. Detect dead workers (running without claim beyond threshold)
-        if self.config.detect_dead_workers {
-            if let Some(threshold) = dead_worker_threshold {
-                for proj in actual.beads.values() {
-                    let is_unclaimed_running =
-                        proj.current_state == BeadState::Running && proj.claimed_by.is_none();
-                    let running_long_enough = self
-                        .running_duration(proj)
-                        .map(|elapsed| elapsed >= threshold)
-                        .unwrap_or_else(|| false);
-
-                    if is_unclaimed_running && running_long_enough {
-                        actions.push(ReconcileAction::RespawnBead {
-                            bead_id: proj.bead_id,
-                            reason: format!("worker missing for {}s", threshold.num_seconds()),
-                        });
-                    }
-                }
-            } else {
+        let threshold = match threshold {
+            Some(t) => t,
+            None => {
                 warn!("dead worker threshold invalid; skipping detection");
+                return Vec::new();
             }
+        };
+
+        actual
+            .beads
+            .values()
+            .filter(|proj| {
+                let is_unclaimed_running =
+                    proj.current_state == BeadState::Running && proj.claimed_by.is_none();
+                let running_long_enough = self
+                    .running_duration(proj)
+                    .map(|elapsed| elapsed >= threshold)
+                    .unwrap_or_else(|| false);
+                is_unclaimed_running && running_long_enough
+            })
+            .map(|proj| ReconcileAction::RespawnBead {
+                bead_id: proj.bead_id,
+                reason: format!("worker missing for {}s", threshold.num_seconds()),
+            })
+            .collect()
+    }
+
+    /// Create actions for stuck beads (running beyond threshold).
+    fn detect_stuck_beads(
+        &self,
+        actual: &ActualState,
+        threshold: Option<ChronoDuration>,
+    ) -> Vec<ReconcileAction> {
+        if !self.config.detect_stuck_beads {
+            return Vec::new();
         }
 
-        // 7. Detect stuck beads (running beyond threshold)
-        if self.config.detect_stuck_beads {
-            if let Some(threshold) = stuck_bead_threshold {
-                for proj in actual.beads.values() {
-                    let is_running =
-                        proj.current_state == BeadState::Running && proj.claimed_by.is_some();
-                    let running_long_enough = self
-                        .running_duration(proj)
-                        .map(|elapsed| elapsed >= threshold)
-                        .unwrap_or_else(|| false);
-
-                    if is_running && running_long_enough {
-                        actions.push(ReconcileAction::RescheduleBead {
-                            bead_id: proj.bead_id,
-                            reason: format!("running for {}s", threshold.num_seconds()),
-                        });
-                    }
-                }
-            } else {
+        let threshold = match threshold {
+            Some(t) => t,
+            None => {
                 warn!("stuck bead threshold invalid; skipping detection");
+                return Vec::new();
             }
-        }
+        };
 
-        actions
+        actual
+            .beads
+            .values()
+            .filter(|proj| {
+                let is_running =
+                    proj.current_state == BeadState::Running && proj.claimed_by.is_some();
+                let running_long_enough = self
+                    .running_duration(proj)
+                    .map(|elapsed| elapsed >= threshold)
+                    .unwrap_or_else(|| false);
+                is_running && running_long_enough
+            })
+            .map(|proj| ReconcileAction::RescheduleBead {
+                bead_id: proj.bead_id,
+                reason: format!("running for {}s", threshold.num_seconds()),
+            })
+            .collect()
     }
 
     fn running_duration(&self, proj: &oya_events::BeadProjection) -> Option<ChronoDuration> {
@@ -328,22 +401,28 @@ impl Reconciler {
         &self,
         actions: Vec<ReconcileAction>,
     ) -> (Vec<ReconcileAction>, Vec<(ReconcileAction, String)>) {
-        let mut taken = Vec::new();
-        let mut failed = Vec::new();
+        let results: Vec<(ReconcileAction, Result<()>)> = futures::future::join_all(
+            actions
+                .into_iter()
+                .map(|action| {
+                    debug!(action = ?action, "Applying action");
+                    let executor = self.executor.clone();
+                    async move {
+                        let result = executor.execute(&action).await;
+                        (action, result)
+                    }
+                })
+        ).await;
 
-        for action in actions {
-            debug!(action = ?action, "Applying action");
-
-            match self.executor.execute(&action).await {
-                Ok(()) => {
-                    taken.push(action);
-                }
+        let (taken, failed): (Vec<_>, Vec<_>) = results.into_iter().partition_map(|(action, result)| {
+            match result {
+                Ok(()) => Either::Left(action),
                 Err(e) => {
                     warn!(action = ?action, error = %e, "Action failed");
-                    failed.push((action, e.to_string()));
+                    Either::Right((action, e.to_string()))
                 }
             }
-        }
+        });
 
         (taken, failed)
     }
@@ -377,33 +456,40 @@ impl ReconcilerBuilder {
     }
 
     /// Set the event bus.
-    pub fn with_bus(mut self, bus: Arc<EventBus>) -> Self {
-        self.bus = Some(bus);
-        self
+    pub fn with_bus(self, bus: Arc<EventBus>) -> Self {
+        Self { bus: Some(bus), ..self }
     }
 
     /// Set a custom action executor.
-    pub fn with_executor(mut self, executor: Arc<dyn ActionExecutor>) -> Self {
-        self.executor = Some(executor);
-        self
+    pub fn with_executor(self, executor: Arc<dyn ActionExecutor>) -> Self {
+        Self { executor: Some(executor), ..self }
     }
 
     /// Set the configuration.
-    pub fn with_config(mut self, config: ReconcilerConfig) -> Self {
-        self.config = config;
-        self
+    pub fn with_config(self, config: ReconcilerConfig) -> Self {
+        Self { config, ..self }
     }
 
     /// Set max concurrent beads.
-    pub fn max_concurrent(mut self, max: usize) -> Self {
-        self.config.max_concurrent = max;
-        self
+    pub fn max_concurrent(self, max: usize) -> Self {
+        Self {
+            config: ReconcilerConfig {
+                max_concurrent: max,
+                ..self.config
+            },
+            ..self
+        }
     }
 
     /// Enable/disable auto-start.
-    pub fn auto_start(mut self, enabled: bool) -> Self {
-        self.config.auto_start = enabled;
-        self
+    pub fn auto_start(self, enabled: bool) -> Self {
+        Self {
+            config: ReconcilerConfig {
+                auto_start: enabled,
+                ..self.config
+            },
+            ..self
+        }
     }
 
     /// Build the reconciler.

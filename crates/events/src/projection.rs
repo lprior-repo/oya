@@ -165,7 +165,7 @@ impl AllBeadsState {
 
     /// Get count of beads in a specific state.
     pub fn count_in_state(&self, state: BeadState) -> usize {
-        self.state_counts.get(&state).copied().unwrap_or(0)
+        self.state_counts.get(&state).copied().map_or(0, |c| c)
     }
 
     /// Get all beads sorted by creation order (based on ULID timestamp).
@@ -613,11 +613,14 @@ mod tests {
         }
 
         // Verify it's blocked
-        assert!(state
-            .beads
-            .get(&bead_id)
-            .map(|b| b.is_blocked())
-            .unwrap_or(false));
+        assert!(
+            state
+                .beads
+                .get(&bead_id)
+                .map(|b| b.is_blocked())
+                .map_or(false, |blocked| blocked),
+            "Bead should be blocked before dependency resolution"
+        );
 
         // When: dependency is resolved
         proj.apply(
@@ -627,11 +630,11 @@ mod tests {
 
         // Then: bead is no longer blocked
         assert!(
-            !state
+            state
                 .beads
                 .get(&bead_id)
                 .map(|b| b.is_blocked())
-                .unwrap_or(true),
+                .map_or(true, |blocked| !blocked),
             "Bead should not be blocked after dependency resolved"
         );
     }

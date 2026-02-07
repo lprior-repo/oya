@@ -170,7 +170,7 @@ mod tests {
 
         let events = store.read(None).await;
         assert!(events.is_ok());
-        assert_eq!(events.map(|e| e.len()).unwrap_or(0), 1);
+        assert_eq!(events.map(|e| e.len()).map_or(0, |v| v), 1);
     }
 
     #[tokio::test]
@@ -208,12 +208,12 @@ mod tests {
         // Read events for bead1
         let events = store.read_for_bead(bead1).await;
         assert!(events.is_ok());
-        assert_eq!(events.map(|e| e.len()).unwrap_or(0), 2);
+        assert_eq!(events.map(|e| e.len()).map_or(0, |v| v), 2);
 
         // Read events for bead2
         let events = store.read_for_bead(bead2).await;
         assert!(events.is_ok());
-        assert_eq!(events.map(|e| e.len()).unwrap_or(0), 1);
+        assert_eq!(events.map(|e| e.len()).map_or(0, |v| v), 1);
     }
 
     #[tokio::test]
@@ -245,7 +245,7 @@ mod tests {
         // Read from event1 should return 2 events (after event1)
         let events = store.read(event1_id).await;
         assert!(events.is_ok());
-        assert_eq!(events.map(|e| e.len()).unwrap_or(0), 2);
+        assert_eq!(events.map(|e| e.len()).map_or(0, |v| v), 2);
     }
 
     #[tokio::test]
@@ -253,7 +253,7 @@ mod tests {
         let store = InMemoryEventStore::new();
         let bead_id = BeadId::new();
 
-        assert_eq!(store.count().await.unwrap_or(0), 0);
+        assert_eq!(store.count().await.map_or(0, |v| v), 0);
 
         store
             .append(BeadEvent::created(
@@ -263,7 +263,7 @@ mod tests {
             .await
             .ok();
 
-        assert_eq!(store.count().await.unwrap_or(0), 1);
+        assert_eq!(store.count().await.map_or(0, |v| v), 1);
     }
 
     // ==========================================================================
@@ -288,7 +288,7 @@ mod tests {
             .ok();
 
         // Count from store2 should see the event appended via store
-        let count = store2.count().await.unwrap_or(0);
+        let count = store2.count().await.map_or(0, |v| v);
         assert_eq!(count, 1, "Arc-wrapped stores should share state");
     }
 
@@ -296,7 +296,7 @@ mod tests {
     async fn should_create_empty_store_via_new_arc() {
         let store = InMemoryEventStore::new_arc();
 
-        let count = store.count().await.unwrap_or(999);
+        let count = store.count().await.map_or(999, |v| v);
         assert_eq!(count, 0, "new_arc should create empty store");
     }
 

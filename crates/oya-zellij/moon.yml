@@ -1,0 +1,53 @@
+$schema: https://moonrepo.dev/schemas/project.json
+
+language: rust
+
+tasks:
+  # Build WASM plugin
+  build:
+    description: Build Zellij plugin WASM binary
+    command: cargo build --release --target wasm32-wasip1 -p oya-zellij
+    outputs:
+      - target/wasm32-wasip1/release/oya_zellij.wasm
+
+  # Quick build (debug mode)
+  build-dev:
+    description: Build Zellij plugin in debug mode (faster)
+    command: cargo build --target wasm32-wasip1 -p oya-zellij
+    outputs:
+      - target/wasm32-wasip1/debug/oya_zellij.wasm
+
+  # Full installation
+  install:
+    description: Build and install Zellij plugin to ~/.local/share/zellij/plugins
+    command: bash scripts/install-zellij-plugin.sh
+    deps:
+      - build
+
+  # Quick update during development
+  update:
+    description: Quick rebuild and reinstall (for development iteration)
+    command: bash scripts/update-zellij-plugin.sh
+
+  # Clean build artifacts
+  clean:
+    description: Clean WASM build artifacts
+    command: cargo clean -p oya-zellij
+
+  # Check WASM file size
+  size:
+    description: Check WASM binary size
+    command: ls -lh target/wasm32-wasip1/release/oya_zellij.wasm 2>/dev/null || echo "Build first with: moon run :build"
+
+  # Release workflow
+  release:
+    description: Full release workflow: clean, build, install, verify
+    command: |
+      set -e
+      echo "🧹 Cleaning old builds..."
+      cargo clean -p oya-zellij
+      echo "🔨 Building release..."
+      cargo build --release --target wasm32-wasip1 -p oya-zellij
+      echo "📦 Installing to Zellij..."
+      bash scripts/install-zellij-plugin.sh
+      echo "✅ Release complete!"

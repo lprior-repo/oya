@@ -1,0 +1,21 @@
+// OYA Pipeline Orchestration Dashboard - Zellij Layout
+//
+// Launches the OYA Zellij plugin dashboard
+//
+// Usage: zellij --layout oya
+//        or: zellij --layout /path/to/oya.kdl
+
+layout {
+    tab_bar {
+        default_tab "oya-dashboard"
+    }
+
+    tab name="oya-dashboard" {
+        pane {
+            name "oya"
+            plugin location="file:~/.local/share/zellij/plugins/oya_zellij.wasm" {
+                _server_url "http://localhost:3000"
+            }
+        }
+    }
+}

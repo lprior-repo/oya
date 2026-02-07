@@ -534,7 +534,7 @@ mod tests {
         // Replay from the first event
         let events = bus.replay_from(first_id).await;
         assert!(events.is_ok());
-        assert_eq!(events.map(|e| e.len()).unwrap_or(0), 2); // Events after first
+        assert_eq!(events.map(|e| e.len()).map_or(0, |len| len), 2); // Events after first
     }
 
     #[tokio::test]

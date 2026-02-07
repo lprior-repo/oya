@@ -497,7 +497,7 @@ mod tests {
                 assert_eq!(attempt, 1, "Should increment attempt to 1");
                 assert_eq!(delay, Duration::from_millis(100), "Should use base backoff");
             }
-            _ => panic!("Expected Retry strategy for transient error"),
+            other => assert!(matches!(other, RecoveryStrategy::Retry { .. }), "Expected Retry strategy for transient error, got {:?}", other),
         }
     }
 
@@ -514,7 +514,7 @@ mod tests {
                 assert_eq!(attempt, 2, "Should increment attempt to 2");
                 assert_eq!(delay, Duration::from_millis(200), "Should double backoff");
             }
-            _ => panic!("Expected Retry strategy for transient error"),
+            other => assert!(matches!(other, RecoveryStrategy::Retry { .. }), "Expected Retry strategy for transient error, got {:?}", other),
         }
     }
 
@@ -535,7 +535,7 @@ mod tests {
                     "Should quadruple backoff"
                 );
             }
-            _ => panic!("Expected Retry strategy for transient error"),
+            other => assert!(matches!(other, RecoveryStrategy::Retry { .. }), "Expected Retry strategy for transient error, got {:?}", other),
         }
     }
 
@@ -549,7 +549,7 @@ mod tests {
             RecoveryStrategy::SkipToDlq => {
                 // Expected
             }
-            _ => panic!("Expected SkipToDlq after max retries"),
+            other => assert!(matches!(other, RecoveryStrategy::SkipToDlq), "Expected SkipToDlq after max retries, got {:?}", other),
         }
     }
 
@@ -564,7 +564,7 @@ mod tests {
             RecoveryStrategy::Fail => {
                 // Expected
             }
-            _ => panic!("Expected Fail when DLQ disabled after max retries"),
+            other => assert!(matches!(other, RecoveryStrategy::Fail), "Expected Fail when DLQ disabled after max retries, got {:?}", other),
         }
     }
 
@@ -580,7 +580,7 @@ mod tests {
             RecoveryStrategy::SkipToDlq => {
                 // Expected
             }
-            _ => panic!("Expected SkipToDlq for permanent error with DLQ enabled"),
+            other => assert!(matches!(other, RecoveryStrategy::SkipToDlq), "Expected SkipToDlq for permanent error with DLQ enabled, got {:?}", other),
         }
     }
 
@@ -597,7 +597,7 @@ mod tests {
             RecoveryStrategy::Fail => {
                 // Expected
             }
-            _ => panic!("Expected Fail for permanent error with DLQ disabled"),
+            other => assert!(matches!(other, RecoveryStrategy::Fail), "Expected Fail for permanent error with DLQ disabled, got {:?}", other),
         }
     }
 
@@ -615,7 +615,7 @@ mod tests {
             RecoveryStrategy::SkipToDlq => {
                 // With DLQ, permanent errors go to DLQ
             }
-            _ => panic!("Expected SkipToDlq for permanent error"),
+            other => assert!(matches!(other, RecoveryStrategy::SkipToDlq), "Expected SkipToDlq for permanent error, got {:?}", other),
         }
     }
 

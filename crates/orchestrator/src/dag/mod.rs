@@ -659,8 +659,7 @@ impl WorkflowDAG {
                     .all(|edge| {
                         self.graph
                             .node_weight(edge.source())
-                            .map(|dep_id| completed.contains(dep_id))
-                            .unwrap_or(false)
+                            .map_or(false, |dep_id| completed.contains(dep_id))
                     });
 
                 if all_blocking_deps_complete {
@@ -762,8 +761,7 @@ impl WorkflowDAG {
                     .any(|edge| {
                         self.graph
                             .node_weight(edge.source())
-                            .map(|dep_id| !completed.contains(dep_id))
-                            .unwrap_or(true)
+                            .map_or(true, |dep_id| !completed.contains(dep_id))
                     });
 
                 if has_incomplete_blocking_dep {
@@ -816,8 +814,7 @@ impl WorkflowDAG {
             .all(|edge| {
                 self.graph
                     .node_weight(edge.source())
-                    .map(|dep_id| completed.contains(dep_id))
-                    .unwrap_or(false)
+                    .map_or(false, |dep_id| completed.contains(dep_id))
             });
 
         Ok(all_blocking_deps_complete)
@@ -1005,7 +1002,7 @@ impl WorkflowDAG {
 
         // Initialize all distances
         for bead_id in &topo_order {
-            let weight = weights.get(bead_id).copied().unwrap_or(Duration::ZERO);
+            let weight = weights.get(bead_id).copied().map_or(Duration::ZERO, |w| w);
             dist.insert(bead_id.clone(), (weight, None));
         }
 
@@ -1016,7 +1013,7 @@ impl WorkflowDAG {
                 None => continue,
             };
 
-            let current_dist = dist.get(bead_id).map(|(d, _)| *d).unwrap_or(Duration::ZERO);
+            let current_dist = dist.get(bead_id).map(|(d, _)| *d).map_or(Duration::ZERO, |d| d);
 
             // Update distances to all neighbors
             for edge in self.graph.edges_directed(node_idx, Direction::Outgoing) {
@@ -1027,13 +1024,13 @@ impl WorkflowDAG {
                 let neighbor_idx = edge.target();
                 if let Some(neighbor_id) = self.graph.node_weight(neighbor_idx) {
                     let neighbor_weight =
-                        weights.get(neighbor_id).copied().unwrap_or(Duration::ZERO);
+                        weights.get(neighbor_id).copied().map_or(Duration::ZERO, |w| w);
                     let new_dist = current_dist + neighbor_weight;
 
                     let should_update = dist
                         .get(neighbor_id)
                         .map(|(d, _)| new_dist > *d)
-                        .unwrap_or(true);
+                        .map_or(true, |v| v);
 
                     if should_update {
                         dist.insert(neighbor_id.clone(), (new_dist, Some(bead_id.clone())));

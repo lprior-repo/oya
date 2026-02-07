@@ -710,11 +710,11 @@ mod tests {
 
         let cancelled = scheduler.cancel(&timer_id).await;
         assert!(cancelled.is_ok());
-        assert!(cancelled.unwrap_or(false));
+        assert!(cancelled.map_or(false, |v| v));
 
         let timer = scheduler.get(&timer_id).await;
         assert!(timer.is_some());
-        assert!(timer.map(|t| t.status().is_cancelled()).unwrap_or(false));
+        assert!(timer.map_or(false, |t| t.status().is_cancelled()));
     }
 
     #[tokio::test]

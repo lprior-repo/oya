@@ -370,8 +370,7 @@ mod tests {
             result.is_err(),
             "Should return error when checkpoint not found"
         );
-        let err = result.unwrap_err();
-        let err_msg = err.to_string();
+        let err_msg = result.as_ref().err().map(|e| e.to_string()).unwrap_or_default();
         assert!(
             err_msg.contains("not found") || err_msg.contains("missing"),
             "Error should indicate checkpoint not found: {}",
@@ -398,7 +397,7 @@ mod tests {
         let result = resume_from_checkpoint(&checkpoint_id, &store, &log);
 
         assert!(result.is_ok(), "Should successfully create replay state");
-        let state = result.expect("test should return Ok");
+        let state = result.as_ref().expect("test should return Ok");
         assert_eq!(state.checkpoint_id.as_str(), "test");
         assert_eq!(state.checkpoint_timestamp, timestamp);
         assert_eq!(state.events_replayed, 0);
@@ -441,7 +440,7 @@ mod tests {
         let result = resume_from_checkpoint(&checkpoint_id, &store, &log);
 
         assert!(result.is_ok());
-        let state = result.expect("test should return Ok");
+        let state = result.as_ref().expect("test should return Ok");
         assert_eq!(
             state.events_replayed, 3,
             "Should count all events after checkpoint"
@@ -507,7 +506,7 @@ mod tests {
         let result = resume_from_checkpoint(&checkpoint_id, &store, &log);
 
         assert!(result.is_ok());
-        let state = result.expect("test should return Ok");
+        let state = result.as_ref().expect("test should return Ok");
         assert_eq!(
             state.last_event_timestamp,
             Some(event2_ts),
@@ -534,7 +533,7 @@ mod tests {
         let result = resume_from_checkpoint(&checkpoint_id, &store, &log);
 
         assert!(result.is_ok());
-        let state = result.expect("test should return Ok");
+        let state = result.as_ref().expect("test should return Ok");
         assert_eq!(state.events_replayed, 0, "Should have zero events replayed");
         assert!(
             state.last_event_timestamp.is_none(),
