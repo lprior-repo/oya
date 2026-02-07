@@ -180,7 +180,13 @@ mod deterministic_replay_tests {
         // GIVEN: A store with 1000 events
         let store = InMemoryEventStore::new();
         let bead_id = BeadId::new();
-        let _spec = BeadSpec::new("Performance Test").with_complexity(Complexity::Complex);
+        let spec = BeadSpec::new("Performance Test").with_complexity(Complexity::Complex);
+
+        // Create the bead first
+        store
+            .append(BeadEvent::created(bead_id, spec))
+            .await
+            .expect("append should succeed");
 
         // Add 1000 events
         for i in 0..1000 {

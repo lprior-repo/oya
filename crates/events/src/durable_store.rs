@@ -340,6 +340,7 @@ impl DurableEventStore {
     pub async fn replay_from(&self, checkpoint_id: &str) -> Result<Vec<BeadEvent>> {
         let checkpoint_id = checkpoint_id.to_string();
 
+        // Query to get the checkpoint event's timestamp
         let mut checkpoint_result = self
             .db
             .query("SELECT timestamp FROM state_transition WHERE event_id = $checkpoint_id LIMIT 1")
@@ -352,16 +353,19 @@ impl DurableEventStore {
                 )
             })?;
 
-        let checkpoint_timestamps: Vec<DateTime<Utc>> = checkpoint_result.take(0).map_err(|e| {
-            crate::error::Error::store_failed(
-                "replay_from",
-                format!("failed to extract checkpoint timestamp: {}", e),
-            )
-        })?;
-
-        let checkpoint_timestamp = checkpoint_timestamps
+        // Extract the timestamp from the query result
+        let checkpoint_timestamp: Option<DateTime<Utc>> = checkpoint_result
+            .take(0)
+            .map_err(|e| {
+                crate::error::Error::store_failed(
+                    "replay_from",
+                    format!("failed to extract checkpoint timestamp: {}", e),
+                )
+            })?
             .into_iter()
-            .next()
+            .next();
+
+        let checkpoint_timestamp = checkpoint_timestamp
             .ok_or_else(|| crate::error::Error::event_not_found(checkpoint_id.clone()))?;
 
         let mut result = self

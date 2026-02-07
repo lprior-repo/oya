@@ -11,10 +11,9 @@ use oya_workflow::{
 };
 use proptest::prelude::*;
 
-/// Test: Compress → decompress round-trip preserves data for any input.
-///
-/// This property test verifies that for any byte vector, compressing and
-/// then decompressing returns the original data exactly.
+// Test: Compress → decompress round-trip preserves data for any input.
+// This property test verifies that for any byte vector, compressing and
+// then decompressing returns the original data exactly.
 proptest! {
     #[test]
     fn prop_compress_decompress_roundtrip(data in prop::collection::vec(any::<u8>(), 0..10000)) {
@@ -33,11 +32,10 @@ proptest! {
     }
 }
 
-/// Test: Compression ratio is calculated correctly.
-///
-/// Verifies the compression_ratio function returns accurate values:
-/// - ratio = uncompressed_size / compressed_size
-/// - Returns 1.0 when compressed_size is 0 (edge case)
+// Test: Compression ratio is calculated correctly.
+// Verifies the compression_ratio function returns accurate values:
+// - ratio = uncompressed_size / compressed_size
+// - Returns 1.0 when compressed_size is 0 (edge case)
 proptest! {
     #[test]
     fn prop_compression_ratio_calculation(
