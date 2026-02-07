@@ -56,7 +56,7 @@ where
     F: FnOnce(RpcReplyPort<T>) -> StateManagerMessage,
 {
     let (tx, rx) = tokio::sync::oneshot::channel();
-    actor.send_message(msg_builder(tx))?;
+    actor.send_message(msg_builder(tx.into()))?;
 
     let result = tokio::time::timeout(Duration::from_millis(timeout_ms), rx).await??;
     Ok(result)

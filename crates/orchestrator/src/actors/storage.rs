@@ -4,7 +4,9 @@
 //! Messages support both fire-and-forget commands and query-response patterns.
 
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort};
-use tracing::info;
+use surrealdb::engine::local::{Db, RocksDb};
+use surrealdb::Surreal;
+use tracing::{error, info};
 
 use crate::actors::errors::ActorError;
 use crate::actors::supervisor::GenericSupervisableActor;
@@ -15,6 +17,21 @@ pub use oya_events::{
     durable_store::DurableEventStore,
 };
 
+/// State record stored in SurrealDB.
+///
+/// This represents a single state entry with binary data and optional versioning.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[allow(dead_code)]
+struct StateRecord {
+    /// State key (unique identifier)
+    key: String,
+    /// Serialized state data (bincode-encoded)
+    data: Vec<u8>,
+    /// Optional version for optimistic locking
+    #[serde(skip_serializing_if = "Option::is_none")]
+    version: Option<u64>,
+}
+
 #[derive(Clone, Default)]
 pub struct StateManagerActorDef;
 
@@ -22,6 +39,7 @@ pub struct StateManagerActorDef;
 #[allow(dead_code)]
 pub struct StateManagerState {
     /// Connection configuration for SurrealDB.
+    #[allow(dead_code)]
     db_config: DatabaseConfig,
 }
 
@@ -137,7 +155,7 @@ impl Actor for StateManagerActorDef {
         &self,
         _myself: ActorRef<Self::Msg>,
         message: Self::Msg,
-        _state: &mut Self::State,
+        state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         match message {
             StateManagerMessage::SaveState { key, data, version } => {
@@ -179,180 +197,13 @@ impl Actor for StateManagerActorDef {
                 let result = Err(ActorError::actor_unavailable());
                 info!("Getting state version: key={}, result={:?}", key, result);
                 // TODO: Implement actual version check
-    async fn handle(
-        &self,
-        _myself: ActorRef<Self::Msg>,
-        message: Self::Msg,
-        state: &mut Self::State,
-    ) -> Result<(), ActorProcessingErr> {
-        match message {
-            StateManagerMessage::SaveState { key, data, version } => {
-                info!(
-                    "Saving state: key={}, size={} bytes, version={:?}",
-                    key,
-                    data.len(),
-                    version
-                );
-
-                let record = StateRecord {
-                    key: key.clone(),
-                    data: data.clone(),
-                    version: version.clone(),
-                };
-
-                match state
-                    .db
-                    .create::<Option<StateRecord>>(("state", key.clone()))
-                    .content(&record)
-                    .await
-                {
-                    Ok(_) => {
-                        info!("Successfully saved state: key={}", key);
-                    }
-                    Err(e) => {
-                        error!("Failed to save state: key={}, error={}", key, e);
-                    }
-                }
-            }
-
-            StateManagerMessage::DeleteState { key } => {
-                info!("Deleting state: key={}", key);
-
-                match state.db.delete(("state", key)).await {
-                    Ok(_) => {
-                        info!("Successfully deleted state: key={}", key);
-                    }
-                    Err(e) => {
-                        error!("Failed to delete state: key={}, error={}", key, e);
-                    }
-                }
-            }
-
-            StateManagerMessage::ClearAll => {
-                info!("Clearing all state");
-
-                match state.db.query("DELETE FROM state").await {
-                    Ok(_) => {
-                        info!("Successfully cleared all state");
-                    }
-                    Err(e) => {
-                        error!("Failed to clear all state: error={}", e);
-                    }
-                }
-            }
-
-            StateManagerMessage::LoadState { key, reply } => {
-                let result = async {
-                    let mut result = state
-                        .db
-                        .select(("state", key.clone()))
-                        .await
-                        .map_err(|e| ActorError::internal(format!("Failed to load state: {}", e)))?;
-
-                    let record: Option<StateRecord> = result.take(0).map_err(|e| {
-                        ActorError::internal(format!("Failed to extract state record: {}", e))
-                    })?;
-
-                    match record {
-                        Some(rec) => {
-                            info!("Successfully loaded state: key={}, size={} bytes", key, rec.data.len());
-                            Ok(rec.data)
-                        }
-                        None => Err(ActorError::bead_not_found(key)),
-                    }
-                }
-                .await;
-
-                let _ = reply.send(result);
-            }
-
-            StateManagerMessage::StateExists { key, reply } => {
-                let result = async {
-                    let mut result = state
-                        .db
-                        .query("SELECT count() FROM type::thing($table, $key)")
-                        .bind(("table", "state"))
-                        .bind(("key", key.clone()))
-                        .await
-                        .map_err(|e| ActorError::internal(format!("Failed to check state: {}", e)))?;
-
-                    let count: Option<usize> = result.take(0).map_err(|e| {
-                        ActorError::internal(format!("Failed to extract exists result: {}", e))
-                    })?;
-
-                    let exists = count.is_some_and(|c| c > 0);
-
-                    info!("State exists check: key={}, exists={}", key, exists);
-                    Ok(exists)
-                }
-                .await;
-
-                let _ = reply.send(result);
-            }
-
-            StateManagerMessage::GetStateVersion { key, reply } => {
-                let result = async {
-                    let mut result = state
-                        .db
-                        .query("SELECT version FROM type::thing($table, $key)")
-                        .bind(("table", "state"))
-                        .bind(("key", key.clone()))
-                        .await
-                        .map_err(|e| {
-                            ActorError::internal(format!("Failed to get state version: {}", e))
-                        })?;
-
-                    let record: Option<StateRecord> = result.take(0).map_err(|e| {
-                        ActorError::internal(format!("Failed to extract version result: {}", e))
-                    })?;
-
-                    match record {
-                        Some(rec) => {
-                            info!("Got state version: key={}, version={:?}", key, rec.version);
-                            Ok(rec.version)
-                        }
-                        None => Err(ActorError::bead_not_found(key)),
-                    }
-                }
-                .await;
-
                 let _ = reply.send(result);
             }
 
             StateManagerMessage::ListKeys { prefix, reply } => {
-                let result = async {
-                    let query = if prefix.is_some() {
-                        "SELECT key FROM state WHERE key =~ $prefix ORDER BY key ASC"
-                    } else {
-                        "SELECT key FROM state ORDER BY key ASC"
-                    };
-
-                    let mut query_builder = state.db.query(query);
-
-                    if let Some(prefix_val) = &prefix {
-                        let pattern = format!("^{}", prefix_val);
-                        query_builder = query_builder.bind(("prefix", pattern));
-                    }
-
-                    let mut result = query_builder.await.map_err(|e| {
-                        ActorError::internal(format!("Failed to list keys: {}", e))
-                    })?;
-
-                    let records: Vec<StateRecord> = result.take(0).map_err(|e| {
-                        ActorError::internal(format!("Failed to extract keys result: {}", e))
-                    })?;
-
-                    let keys: Vec<String> = records.into_iter().map(|r| r.key).collect();
-
-                    info!(
-                        "Listed keys: prefix={:?}, count={}",
-                        prefix,
-                        keys.len()
-                    );
-                    Ok(keys)
-                }
-                .await;
-
+                let result = Err(ActorError::actor_unavailable());
+                info!("Listing keys: prefix={:?}, result={:?}", prefix, result);
+                // TODO: Implement actual list operation
                 let _ = reply.send(result);
             }
         }

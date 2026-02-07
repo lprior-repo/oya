@@ -358,7 +358,7 @@ impl ZellijPlugin for State {
         match event {
             Event::Key(key_with_mod) => {
                 // Handle Ctrl-d (page down) and Ctrl-u (page up) first
-                if key_with_mod.key_modifiers.contains(KeyModifier::Ctrl) {
+                if key_with_mod.key_modifiers.contains(&KeyModifier::Ctrl) {
                     const PAGE_SIZE: usize = 20;
 
                     return match key_with_mod.bare_key {
@@ -1191,7 +1191,7 @@ impl State {
                 "  {} {}{}\x1b[0m {} {}{}",
                 critical_marker,
                 node_color,
-                node.symbol(),
+                node.state.symbol(),
                 truncate(&node.label, 30),
                 node.state.color(),
                 node.state.as_str()

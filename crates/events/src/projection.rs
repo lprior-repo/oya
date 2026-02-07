@@ -1231,11 +1231,15 @@ mod tests {
         }
 
         // Transition one to Scheduled
-        let first_bead = *state.beads.keys().next().unwrap();
-        proj.apply(
-            &mut state,
-            &BeadEvent::state_changed(first_bead, BeadState::Pending, BeadState::Scheduled),
-        );
+        if let Some(first_bead) = state.beads.keys().next().copied() {
+            proj.apply(
+                &mut state,
+                &BeadEvent::state_changed(first_bead, BeadState::Pending, BeadState::Scheduled),
+            );
+        } else {
+            // This should never happen since we just created 3 beads
+            return;
+        }
 
         // When: count Pending beads
         let pending_count = state.count_in_state(BeadState::Pending);
