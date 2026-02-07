@@ -812,8 +812,8 @@ impl State {
                     .edges
                     .into_iter()
                     .map(|e| {
-                        let is_critical =
-                            critical_path_set.contains(&e.from) && critical_path_set.contains(&e.to);
+                        let is_critical = critical_path_set.contains(&e.from)
+                            && critical_path_set.contains(&e.to);
                         GraphEdge {
                             from: e.from,
                             to: e.to,
@@ -822,9 +822,7 @@ impl State {
                     })
                     .collect::<Vector<_>>();
 
-                self.critical_path = critical_path_set
-                    .into_iter()
-                    .collect::<Vector<_>>();
+                self.critical_path = critical_path_set.into_iter().collect::<Vector<_>>();
             }
             Err(e) => self.last_error = Some(e),
         }
@@ -1138,35 +1136,34 @@ impl State {
             "  \x1b[1mNodes:\x1b[0m {} total | {} on critical path",
             total_nodes, critical_count
         );
-        println!(
-            "  \x1b[1mEdges:\x1b[0m {} total", total_edges
-        );
+        println!("  \x1b[1mEdges:\x1b[0m {} total", total_edges);
         println!();
 
         // Display nodes with critical path highlighting
         let max_rows = rows.saturating_sub(12);
         println!("  \x1b[1mNodes:\x1b[0m");
-        self.graph_nodes
-            .iter()
-            .take(max_rows)
-            .for_each(|node| {
-                let critical_marker = if node.is_on_critical_path { "\x1b[33m★\x1b[0m" } else { "\x1b[90m○\x1b[0m" };
-                let node_color = if node.is_on_critical_path {
-                    "\x1b[33m"  // Yellow for critical path
-                } else {
-                    "\x1b[90m"  // Gray for normal
-                };
+        self.graph_nodes.iter().take(max_rows).for_each(|node| {
+            let critical_marker = if node.is_on_critical_path {
+                "\x1b[33m★\x1b[0m"
+            } else {
+                "\x1b[90m○\x1b[0m"
+            };
+            let node_color = if node.is_on_critical_path {
+                "\x1b[33m" // Yellow for critical path
+            } else {
+                "\x1b[90m" // Gray for normal
+            };
 
-                println!(
-                    "  {} {}{}\x1b[0m {} {}{}",
-                    critical_marker,
-                    node_color,
-                    node.symbol(),
-                    truncate(&node.label, 30),
-                    node.state.color(),
-                    node.state.as_str()
-                );
-            });
+            println!(
+                "  {} {}{}\x1b[0m {} {}{}",
+                critical_marker,
+                node_color,
+                node.symbol(),
+                truncate(&node.label, 30),
+                node.state.color(),
+                node.state.as_str()
+            );
+        });
 
         if self.graph_nodes.len() > max_rows {
             println!(
@@ -1185,12 +1182,16 @@ impl State {
             .take(edge_max_rows)
             .for_each(|edge| {
                 let edge_color = if edge.is_on_critical_path {
-                    "\x1b[33m"  // Yellow for critical path
+                    "\x1b[33m" // Yellow for critical path
                 } else {
-                    "\x1b[90m"  // Gray for normal
+                    "\x1b[90m" // Gray for normal
                 };
 
-                let critical_marker = if edge.is_on_critical_path { "★" } else { "○" };
+                let critical_marker = if edge.is_on_critical_path {
+                    "★"
+                } else {
+                    "○"
+                };
 
                 println!(
                     "  {} {}{} → {}\x1b[0m",
