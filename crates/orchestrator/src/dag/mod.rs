@@ -8,8 +8,21 @@
 //! - Ready detection (which beads can execute given completed set)
 //! - Topological ordering (DFS and Kahn's algorithm)
 //! - Validation (cycle detection, connectivity)
-//! - Mutation (remove nodes/edges)
+//! - Mutation (add/remove nodes/edges)
 //! - Subgraph extraction
+//!
+//! ## Cycle Detection
+//!
+//! The `add_dependency` method uses **Tarjan's Strongly Connected Components (SCC)**
+//! algorithm to detect cycles when adding new edges. When a dependency is added:
+//!
+//! 1. The edge is temporarily added to the graph
+//! 2. Tarjan's SCC algorithm computes all strongly connected components
+//! 3. If any SCC has more than one node, a cycle exists
+//! 4. The edge is removed and an error is returned if a cycle is detected
+//!
+//! This approach guarantees O(V + E) time complexity for cycle detection,
+//! where V is the number of vertices and E is the number of edges.
 
 use im::{HashMap, HashSet};
 use itertools::Itertools;
@@ -20,6 +33,7 @@ use petgraph::visit::{Bfs, Dfs, EdgeRef, Reversed};
 use std::collections::VecDeque;
 use std::time::Duration;
 
+pub mod dependencies;
 pub mod error;
 pub mod layout_benchmark;
 pub mod layout_demo;
@@ -180,12 +194,14 @@ impl WorkflowDAG {
     /// * `Err(DagError::SelfLoopDetected)` if from and to are the same
     /// * `Err(DagError::NodeNotFound)` if either bead doesn't exist
     /// * `Err(DagError::EdgeAlreadyExists)` if the edge already exists
+    /// * `Err(DagError::CycleDetected)` if adding the edge would create a cycle
     ///
     /// # Validation
     ///
     /// - Prevents self-loops (a bead cannot depend on itself)
     /// - Validates both beads exist in the DAG
     /// - Prevents duplicate edges
+    /// - Detects cycles using Tarjan's SCC algorithm
     /// - Preserves dependency type
     ///
     /// # Examples
@@ -214,7 +230,37 @@ impl WorkflowDAG {
         to: BeadId,
         dep_type: DependencyType,
     ) -> DagResult<()> {
-        self.add_edge(from, to, dep_type)
+        // Validate basic edge constraints
+        self.add_edge(from.clone(), to.clone(), dep_type)?;
+
+        // Check for cycles using Tarjan's SCC algorithm
+        // If adding this edge creates a cycle, there will be a strongly connected
+        // component with more than one node, or a single node with a self-loop
+        let sccs = tarjan_scc(&self.graph);
+
+        for scc in sccs {
+            // A cycle exists if SCC has more than one node
+            if scc.len() > 1 {
+                // Extract the cycle nodes
+                let cycle_nodes: Vec<BeadId> = scc
+                    .into_iter()
+                    .filter_map(|idx| self.graph.node_weight(idx).cloned())
+                    .collect();
+
+                // Remove the edge we just added
+                let from_index = self.node_map.get(&from);
+                let to_index = self.node_map.get(&to);
+                if let (Some(&from_idx), Some(&to_idx)) = (from_index, to_index) {
+                    if let Some(edge_idx) = self.graph.find_edge(from_idx, to_idx) {
+                        self.graph.remove_edge(edge_idx);
+                    }
+                }
+
+                return Err(DagError::cycle_detected(cycle_nodes));
+            }
+        }
+
+        Ok(())
     }
 
     /// Get an iterator over all nodes in the DAG

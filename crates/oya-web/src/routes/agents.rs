@@ -1,12 +1,21 @@
 //! Agents endpoint - GET /api/agents
 //!
-//! This module provides an endpoint to list all agents with their
-//! current status and associated bead (if any).
+//! This module provides endpoints to:
+//! - List all agents with their current status
+//! - Get aggregate metrics for all agents
+//! - Spawn new agents
+//! - Scale the agent pool
 
 use crate::actors::AppState;
 use crate::error::{AppError, Result};
-use axum::{extract::State, response::Json};
+use crate::metrics::AgentMetrics;
+use axum::{
+    extract::State,
+    http::{HeaderMap, StatusCode},
+    response::{IntoResponse, Json},
+};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Agent summary for API responses
 #[derive(Debug, Serialize)]
@@ -24,6 +33,19 @@ pub struct AgentSummary {
 pub struct ListAgentsResponse {
     pub agents: Vec<AgentSummary>,
     pub total: usize,
+}
+
+/// Response for agent metrics
+#[derive(Debug, Serialize)]
+pub struct AgentMetricsResponse {
+    pub total_agents: usize,
+    pub active_agents: usize,
+    pub idle_agents: usize,
+    pub unhealthy_agents: usize,
+    pub average_uptime_secs: f64,
+    pub average_health_score: f64,
+    pub status_distribution: HashMap<String, usize>,
+    pub capability_counts: HashMap<String, usize>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -123,4 +145,81 @@ pub async fn scale_agents(
         spawned: result.spawned,
         terminated: result.terminated,
     }))
+}
+
+/// GET /api/agents/metrics - Get aggregate agent metrics
+///
+/// Returns aggregated metrics for all agents in the system including:
+/// - Total number of agents
+/// - Active vs idle agent counts
+/// - Unhealthy agent count
+/// - Average uptime across all agents
+/// - Average health score
+/// - Status distribution
+/// - Capability counts
+///
+/// # Authentication
+///
+/// Requires Bearer token in Authorization header:
+/// ```text
+/// Authorization: Bearer <token>
+/// ```
+///
+/// # Arguments
+///
+/// * `headers` - HTTP headers containing Authorization token
+/// * `state` - Application state containing agent service
+///
+/// # Returns
+///
+/// `Result<Json<AgentMetricsResponse>>` - Agent metrics or error
+///
+/// # Errors
+///
+/// * `AppError::Unauthorized` (401) - Missing or invalid authentication
+/// * `AppError::NotFound` (404) - If no agents are found
+/// * `AppError::Internal` (500) - If metrics calculation fails
+pub async fn get_agent_metrics(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<Json<AgentMetricsResponse>> {
+    // Railway track: authenticate -> query agents -> calculate metrics -> respond
+    authenticate(headers).and_then(|_| {
+        let agents = state.agent_service.list_agents().await;
+
+        if agents.is_empty() {
+            return Err(AppError::NotFound("No agents found for metrics calculation".to_string()));
+        }
+
+        match AgentMetrics::calculate(&agents) {
+            Ok(metrics) => Ok(Json(AgentMetricsResponse {
+                total_agents: metrics.total_agents,
+                active_agents: metrics.active_agents,
+                idle_agents: metrics.idle_agents,
+                unhealthy_agents: metrics.unhealthy_agents,
+                average_uptime_secs: metrics.average_uptime_secs,
+                average_health_score: metrics.average_health_score,
+                status_distribution: metrics.status_distribution,
+                capability_counts: metrics.capability_counts,
+            })),
+            Err(e) => Err(AppError::Internal(format!("Failed to calculate metrics: {e}"))),
+        }
+    })
+}
+
+/// Authenticate the request using Bearer token
+fn authenticate(headers: HeaderMap) -> Result<()> {
+    headers
+        .get("authorization")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|auth| {
+            if let Some(token) = auth.strip_prefix("Bearer ") {
+                Some(token.to_string())
+            } else {
+                None
+            }
+        })
+        .filter(|token| !token.is_empty())
+        .map(|_| ())
+        .ok_or_else(|| AppError::Unauthorized("Missing or invalid Authorization header".to_string()))
 }

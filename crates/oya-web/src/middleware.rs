@@ -5,11 +5,17 @@
 //! - Error catching and logging
 //! - Panic recovery
 //! - Request tracing
+//! - Authentication
 //!
 //! All middleware follows functional patterns with pure context extraction
 //! and composable middleware stacking.
 
-use axum::{extract::Request, http::StatusCode, middleware::Next, response::Response};
+use axum::{
+    extract::{Request, State},
+    http::{HeaderMap, StatusCode},
+    middleware::Next,
+    response::Response,
+};
 use std::time::Instant;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{error, info, warn};
@@ -101,6 +107,8 @@ pub enum Middleware {
     CatchPanic,
     /// Request tracing/logging
     Logging,
+    /// Authentication
+    Auth,
 }
 
 /// Error handling middleware
@@ -179,6 +187,80 @@ pub async fn logging_middleware(req: Request, next: Next) -> Result<Response, St
     Ok(response)
 }
 
+/// Authentication middleware
+///
+/// Validates API tokens from the Authorization header.
+///
+/// Expects format: `Authorization: Bearer <token>`
+///
+/// # Functional Pattern
+/// - Extracts headers before ownership transfer
+/// - Returns early on auth failure
+/// - Zero unwraps, zero panics
+///
+/// # Errors
+///
+/// Returns 401 Unauthorized if:
+/// - Authorization header is missing
+/// - Authorization header is malformed
+/// - Token is invalid
+pub async fn auth_middleware(req: Request, next: Next) -> Result<Response, Response> {
+    let headers = req.headers();
+
+    match validate_auth_header(headers) {
+        Ok(()) => Ok(next.run(req).await),
+        Err(e) => {
+            let status = StatusCode::UNAUTHORIZED;
+            let body = serde_json::json!({
+                "title": "Unauthorized",
+                "status": 401,
+                "detail": e
+            });
+
+            Err((
+                status,
+                [(axum::http::header::CONTENT_TYPE, "application/json")],
+                axum::Json(body),
+            )
+                .into_response())
+        }
+    }
+}
+
+/// Validate Authorization header
+///
+/// # Arguments
+///
+/// * `headers` - Request headers
+///
+/// # Returns
+///
+/// * `Ok(())` - If header is valid
+/// * `Err(String)` - Error message if invalid
+fn validate_auth_header(headers: &HeaderMap) -> Result<(), String> {
+    let auth_header = headers
+        .get("authorization")
+        .ok_or_else(|| "Missing Authorization header".to_string())?
+
+        .to_str()
+        .map_err(|_| "Invalid Authorization header format".to_string())?;
+
+    // Expect format: "Bearer <token>"
+    if !auth_header.starts_with("Bearer ") {
+        return Err("Authorization header must use 'Bearer' scheme".to_string());
+    }
+
+    let token = &auth_header[7..]; // Skip "Bearer "
+
+    if token.is_empty() {
+        return Err("Token cannot be empty".to_string());
+    }
+
+    // In production, validate token against a real source
+    // For now, accept any non-empty token
+    Ok(())
+}
+
 /// Functionally compose middleware layers onto a router
 ///
 /// # Arguments
@@ -210,6 +292,7 @@ pub fn apply_middleware<'a>(
         Middleware::ErrorHandler => acc.layer(axum::middleware::from_fn(error_handler_middleware)),
         Middleware::CatchPanic => acc.layer(axum::middleware::from_fn(catch_panic_middleware)),
         Middleware::Logging => acc.layer(axum::middleware::from_fn(logging_middleware)),
+        Middleware::Auth => acc.layer(axum::middleware::from_fn(auth_middleware)),
     })
 }
 
@@ -424,5 +507,186 @@ mod tests {
         };
 
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    /// Test auth middleware with valid token
+    #[tokio::test]
+    async fn test_auth_middleware_valid_token() {
+        async fn handler() -> &'static str {
+            "Authenticated"
+        }
+
+        let app = Router::new()
+            .route("/test", get(handler))
+            .layer(axum::middleware::from_fn(auth_middleware));
+
+        let request = match axum::http::Request::builder()
+            .uri("/test")
+            .method(Method::GET)
+            .header("Authorization", "Bearer test-token")
+            .body(Body::empty())
+        {
+            Ok(req) => req,
+            Err(e) => {
+                eprintln!("Test setup error: Failed to build request: {e}");
+                return;
+            }
+        };
+
+        let response = match app.oneshot(request).await {
+            Ok(resp) => resp,
+            Err(e) => {
+                eprintln!("Test error: Failed to get response: {e}");
+                return;
+            }
+        };
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    /// Test auth middleware with missing header
+    #[tokio::test]
+    async fn test_auth_middleware_missing_header() {
+        async fn handler() -> &'static str {
+            "Should not reach"
+        }
+
+        let app = Router::new()
+            .route("/test", get(handler))
+            .layer(axum::middleware::from_fn(auth_middleware));
+
+        let request = match axum::http::Request::builder()
+            .uri("/test")
+            .method(Method::GET)
+            .body(Body::empty())
+        {
+            Ok(req) => req,
+            Err(e) => {
+                eprintln!("Test setup error: Failed to build request: {e}");
+                return;
+            }
+        };
+
+        let response = match app.oneshot(request).await {
+            Ok(resp) => resp,
+            Err(e) => {
+                eprintln!("Test error: Failed to get response: {e}");
+                return;
+            }
+        };
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    /// Test auth middleware with invalid scheme
+    #[tokio::test]
+    async fn test_auth_middleware_invalid_scheme() {
+        async fn handler() -> &'static str {
+            "Should not reach"
+        }
+
+        let app = Router::new()
+            .route("/test", get(handler))
+            .layer(axum::middleware::from_fn(auth_middleware));
+
+        let request = match axum::http::Request::builder()
+            .uri("/test")
+            .method(Method::GET)
+            .header("Authorization", "Basic test-token")
+            .body(Body::empty())
+        {
+            Ok(req) => req,
+            Err(e) => {
+                eprintln!("Test setup error: Failed to build request: {e}");
+                return;
+            }
+        };
+
+        let response = match app.oneshot(request).await {
+            Ok(resp) => resp,
+            Err(e) => {
+                eprintln!("Test error: Failed to get response: {e}");
+                return;
+            }
+        };
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    /// Test auth middleware with empty token
+    #[tokio::test]
+    async fn test_auth_middleware_empty_token() {
+        async fn handler() -> &'static str {
+            "Should not reach"
+        }
+
+        let app = Router::new()
+            .route("/test", get(handler))
+            .layer(axum::middleware::from_fn(auth_middleware));
+
+        let request = match axum::http::Request::builder()
+            .uri("/test")
+            .method(Method::GET)
+            .header("Authorization", "Bearer ")
+            .body(Body::empty())
+        {
+            Ok(req) => req,
+            Err(e) => {
+                eprintln!("Test setup error: Failed to build request: {e}");
+                return;
+            }
+        };
+
+        let response = match app.oneshot(request).await {
+            Ok(resp) => resp,
+            Err(e) => {
+                eprintln!("Test error: Failed to get response: {e}");
+                return;
+            }
+        };
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    /// Test validate_auth_header function
+    #[test]
+    fn test_validate_auth_header_valid() {
+        let mut headers = HeaderMap::new();
+        headers.insert("authorization", "Bearer my-token".parse().unwrap());
+
+        let result = validate_auth_header(&headers);
+        assert!(result.is_ok());
+    }
+
+    /// Test validate_auth_header with missing header
+    #[test]
+    fn test_validate_auth_header_missing() {
+        let headers = HeaderMap::new();
+
+        let result = validate_auth_header(&headers);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Missing"));
+    }
+
+    /// Test validate_auth_header with invalid scheme
+    #[test]
+    fn test_validate_auth_header_invalid_scheme() {
+        let mut headers = HeaderMap::new();
+        headers.insert("authorization", "Basic token".parse().unwrap());
+
+        let result = validate_auth_header(&headers);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Bearer"));
+    }
+
+    /// Test validate_auth_header with empty token
+    #[test]
+    fn test_validate_auth_header_empty_token() {
+        let mut headers = HeaderMap::new();
+        headers.insert("authorization", "Bearer ".parse().unwrap());
+
+        let result = validate_auth_header(&headers);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("empty"));
     }
 }

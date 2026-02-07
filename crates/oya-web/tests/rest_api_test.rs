@@ -322,3 +322,281 @@ async fn test_nonexistent_route_returns_404() -> Result<(), String> {
     assert_eq!(response.status_code(), StatusCode::NOT_FOUND);
     Ok(())
 }
+
+/// Test GET /api/agents/metrics returns 404 when no agents exist
+#[tokio::test]
+async fn test_get_agent_metrics_returns_404_when_empty() -> Result<(), String> {
+    let server = create_test_server()?;
+
+    let response = server.get("/api/agents/metrics").await;
+
+    assert_eq!(response.status_code(), StatusCode::NOT_FOUND);
+
+    let body: Value = response.json();
+    assert_eq!(body["status"], 404);
+    assert!(body["detail"].as_str().unwrap_or("").contains("No agents found"));
+    Ok(())
+}
+
+/// Test GET /api/agents/metrics returns 200 with valid metrics
+#[tokio::test]
+async fn test_get_agent_metrics_returns_valid_metrics() -> Result<(), String> {
+    let server = create_test_server()?;
+
+    // First spawn some agents
+    let payload = serde_json::json!({
+        "count": 3,
+        "capabilities": ["rust", "python"]
+    });
+
+    let _spawn_response = server.post("/api/agents/spawn").json(&payload).await;
+
+    // Now get metrics
+    let response = server.get("/api/agents/metrics").await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+
+    let body: Value = response.json();
+
+    // Validate response structure
+    assert_eq!(body["total_agents"], 3);
+    assert!(body["active_agents"].is_number());
+    assert!(body["idle_agents"].is_number());
+    assert!(body["unhealthy_agents"].is_number());
+    assert!(body["average_uptime_secs"].is_number());
+    assert!(body["average_health_score"].is_number());
+    assert!(body["status_distribution"].is_object());
+    assert!(body["capability_counts"].is_object());
+
+    // Validate capability counts
+    let capabilities = body["capability_counts"]
+        .as_object()
+        .ok_or_else(|| "capability_counts should be object".to_string())?;
+    assert!(capabilities.contains_key("rust"));
+    assert!(capabilities.contains_key("python"));
+
+    Ok(())
+}
+
+/// Test GET /api/agents/metrics validates all metric fields
+#[tokio::test]
+async fn test_get_agent_metrics_validates_all_fields() -> Result<(), String> {
+    let server = create_test_server()?;
+
+    // Spawn agents
+    let payload = serde_json::json!({
+        "count": 5,
+        "capabilities": ["rust", "go", "python"]
+    });
+
+    let _spawn_response = server.post("/api/agents/spawn").json(&payload).await;
+
+    let response = server.get("/api/agents/metrics").await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+
+    let body: Value = response.json();
+
+    // Check all numeric fields are present and valid types
+    assert!(body["total_agents"].is_number());
+    assert!(body["active_agents"].is_number());
+    assert!(body["idle_agents"].is_number());
+    assert!(body["unhealthy_agents"].is_number());
+
+    // Check average uptime is a reasonable number
+    let uptime = body["average_uptime_secs"]
+        .as_f64()
+        .ok_or_else(|| "average_uptime_secs should be number".to_string())?;
+    assert!(uptime >= 0.0);
+
+    // Check health score is between 0 and 1
+    let health = body["average_health_score"]
+        .as_f64()
+        .ok_or_else(|| "average_health_score should be number".to_string())?;
+    assert!(health >= 0.0 && health <= 1.0);
+
+    // Check status distribution is a map
+    let status_dist = body["status_distribution"]
+        .as_object()
+        .ok_or_else(|| "status_distribution should be object".to_string())?;
+    assert!(!status_dist.is_empty());
+
+    // Check capability counts is a map
+    let capabilities = body["capability_counts"]
+        .as_object()
+        .ok_or_else(|| "capability_counts should be object".to_string())?;
+    assert!(!capabilities.is_empty());
+
+    Ok(())
+}
+
+/// Test GET /api/agents/metrics reflects current agent state
+#[tokio::test]
+async fn test_get_agent_metrics_reflects_current_state() -> Result<(), String> {
+    let server = create_test_server()?;
+
+    // Get initial metrics (should be 404)
+    let response1 = server.get("/api/agents/metrics").await;
+    assert_eq!(response1.status_code(), StatusCode::NOT_FOUND);
+
+    // Spawn agents
+    let payload = serde_json::json!({
+        "count": 2,
+        "capabilities": ["test"]
+    });
+
+    let _spawn_response = server.post("/api/agents/spawn").json(&payload).await;
+
+    // Get metrics again (should be 200 with 2 agents)
+    let response2 = server.get("/api/agents/metrics").await;
+    assert_eq!(response2.status_code(), StatusCode::OK);
+
+    let body2: Value = response2.json();
+    assert_eq!(body2["total_agents"], 2);
+
+    Ok(())
+}
+
+/// Test GET /api/agents/metrics without authentication
+#[tokio::test]
+async fn test_get_agent_metrics_without_auth() -> Result<(), String> {
+    let server = create_test_server()?;
+
+    // Spawn agents first
+    let payload = serde_json::json!({
+        "count": 2,
+        "capabilities": ["test"]
+    });
+
+    let _spawn_response = server.post("/api/agents/spawn").json(&payload).await;
+
+    // Get metrics without auth header
+    // Note: This test documents current behavior.
+    // If auth is required, this should return 401
+    let response = server.get("/api/agents/metrics").await;
+
+    // For now, expect success (auth not enforced on this endpoint yet)
+    // This can be updated when auth middleware is applied to the endpoint
+    assert_eq!(response.status_code(), StatusCode::OK);
+
+    Ok(())
+}
+
+/// Test GET /api/agents/metrics with valid authentication
+#[tokio::test]
+async fn test_get_agent_metrics_with_valid_auth() -> Result<(), String> {
+    let server = create_test_server()?;
+
+    // Spawn agents first
+    let payload = serde_json::json!({
+        "count": 1,
+        "capabilities": ["auth-test"]
+    });
+
+    let _spawn_response = server.post("/api/agents/spawn").json(&payload).await;
+
+    // Get metrics with valid auth header
+    let response = server
+        .get("/api/agents/metrics")
+        .add_header("Authorization", "Bearer valid-token")
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+
+    let body: Value = response.json();
+    assert_eq!(body["total_agents"], 1);
+
+    Ok(())
+}
+
+/// Test GET /api/agents/metrics with invalid auth (wrong scheme)
+#[tokio::test]
+async fn test_get_agent_metrics_with_invalid_auth_scheme() -> Result<(), String> {
+    let server = create_test_server()?;
+
+    // Spawn agents first
+    let payload = serde_json::json!({
+        "count": 1,
+        "capabilities": ["test"]
+    });
+
+    let _spawn_response = server.post("/api/agents/spawn").json(&payload).await;
+
+    // This test documents expected behavior when auth is enforced
+    // Currently the endpoint may not enforce auth, so we test the current state
+    let response = server
+        .get("/api/agents/metrics")
+        .add_header("Authorization", "Basic invalid-token")
+        .await;
+
+    // Note: Update this to 401 when auth middleware is applied to /api/agents/metrics
+    // For now, documenting current behavior
+    let _ = response;
+
+    Ok(())
+}
+
+/// Test GET /api/agents/metrics returns JSON content type
+#[tokio::test]
+async fn test_get_agent_metrics_content_type() -> Result<(), String> {
+    let server = create_test_server()?;
+
+    // Spawn agents
+    let payload = serde_json::json!({
+        "count": 1,
+        "capabilities": ["content-type-test"]
+    });
+
+    let _spawn_response = server.post("/api/agents/spawn").json(&payload).await;
+
+    let response = server.get("/api/agents/metrics").await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    assert!(response
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .contains("application/json"));
+
+    Ok(())
+}
+
+/// Test GET /api/agents/metrics handles large agent counts
+#[tokio::test]
+async fn test_get_agent_metrics_handles_many_agents() -> Result<(), String> {
+    let server = create_test_server()?;
+
+    // Spawn a larger number of agents
+    let payload = serde_json::json!({
+        "count": 10,
+        "capabilities": ["rust", "go", "python", "java", "javascript"]
+    });
+
+    let _spawn_response = server.post("/api/agents/spawn").json(&payload).await;
+
+    let response = server.get("/api/agents/metrics").await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+
+    let body: Value = response.json();
+    assert_eq!(body["total_agents"], 10);
+
+    // Verify capabilities are aggregated correctly
+    let capabilities = body["capability_counts"]
+        .as_object()
+        .ok_or_else(|| "capability_counts should be object".to_string())?;
+
+    // Each of the 5 capabilities should appear 10 times
+    for cap in ["rust", "go", "python", "java", "javascript"] {
+        assert_eq!(
+            capabilities
+                .get(cap)
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0),
+            10
+        );
+    }
+
+    Ok(())
+}

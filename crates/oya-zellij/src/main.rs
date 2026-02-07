@@ -69,7 +69,9 @@
 //! ```
 
 mod command_pane;
+mod graph;
 mod log_stream;
+mod ui;
 
 use im::{HashMap, Vector};
 use std::collections::{BTreeMap, HashSet, VecDeque};
@@ -252,10 +254,11 @@ struct BeadInfo {
     status: BeadStatus,
     current_stage: Option<String>,
     progress: f32, // 0.0 to 1.0
+    history: Vector<ui::bead_detail::HistoryEntry>,
 }
 
-#[derive(Clone, Copy, Debug)]
-enum BeadStatus {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BeadStatus {
     Pending,
     InProgress,
     Completed,
@@ -263,7 +266,7 @@ enum BeadStatus {
 }
 
 impl BeadStatus {
-    fn as_str(&self) -> &str {
+    pub fn as_str(&self) -> &str {
         match self {
             Self::Pending => "pending",
             Self::InProgress => "in_progress",
@@ -272,12 +275,21 @@ impl BeadStatus {
         }
     }
 
-    fn color(&self) -> &str {
+    pub fn color(&self) -> &str {
         match self {
             Self::Pending => "\x1b[90m",    // gray
             Self::InProgress => "\x1b[33m", // yellow
             Self::Completed => "\x1b[32m",  // green
             Self::Failed => "\x1b[31m",     // red
+        }
+    }
+
+    pub fn symbol(&self) -> &str {
+        match self {
+            Self::Pending => "○",
+            Self::InProgress => "◐",
+            Self::Completed => "●",
+            Self::Failed => "✗",
         }
     }
 }
@@ -1080,6 +1092,7 @@ impl State {
                         },
                         current_stage: b.current_stage,
                         progress: b.progress.map_or(0.0, |p| p),
+                        history: Vector::new(),
                     })
                     .collect::<Vector<_>>();
                 if self.selected_index >= self.beads.len() {
@@ -1361,47 +1374,34 @@ impl State {
         );
     }
 
-    fn render_bead_detail(&self, _rows: usize, cols: usize) {
+    fn render_bead_detail(&self, rows: usize, cols: usize) {
         let Some(bead) = self.beads.get(self.selected_index) else {
             println!("\n  \x1b[2mNo bead selected\x1b[0m");
             return;
         };
 
-        println!("\n  \x1b[1mBead Details\x1b[0m");
-        println!("  {}", "─".repeat(cols.saturating_sub(2)));
-        println!();
-        println!("  \x1b[1mID:\x1b[0m       {}", bead.id);
-        println!("  \x1b[1mTitle:\x1b[0m    {}", bead.title);
-        println!(
-            "  \x1b[1mStatus:\x1b[0m   {}{}\x1b[0m",
-            bead.status.color(),
-            bead.status.as_str()
+        // Convert BeadInfo to BeadDetail for rendering
+        let bead_detail = ui::bead_detail::BeadDetail::new(
+            bead.id.clone(),
+            bead.title.clone(),
+            bead.status,
+            bead.progress,
         );
 
-        if let Some(stage) = bead.current_stage.as_ref() {
-            println!("  \x1b[1mStage:\x1b[0m    {}", stage);
-        }
+        // Add stage if present
+        let bead_detail = if let Some(stage) = bead.current_stage.as_ref() {
+            bead_detail.with_stage(stage.clone())
+        } else {
+            bead_detail
+        };
 
-        println!(
-            "  \x1b[1mProgress:\x1b[0m {}",
-            render_progress_bar(bead.progress, 30)
-        );
+        // Add history entries
+        let bead_detail = bead.history.iter().fold(bead_detail, |detail, entry| {
+            detail.with_history_entry(entry.clone())
+        });
 
-        println!();
-        println!("  \x1b[1mWorkspace:\x1b[0m");
-        println!("    Path:   ~/.local/share/jj/repos/oya/{}", bead.id);
-        println!("    Branch: {}", bead.id);
-
-        println!();
-        println!("  \x1b[1mQuick Actions:\x1b[0m");
-        println!(
-            "    \x1b[2mzjj spawn {}  # Open in isolated workspace\x1b[0m",
-            bead.id
-        );
-        println!(
-            "    \x1b[2moya stage -s {} --stage <name>  # Run stage\x1b[0m",
-            bead.id
-        );
+        // Render the bead detail with history section
+        bead_detail.render(rows, cols);
     }
 
     fn render_pipeline_view(&self, rows: usize, cols: usize) {

@@ -146,9 +146,9 @@ oya-opencode = { workspace = true }
 oya-workflow = { workspace = true }
 oya-events = { workspace = true }
 oya-reconciler = { workspace = true }
-oya-web = { workspace = true }
-oya-shared = { workspace = true }
-orchestrator = { workspace = true }
+# oya-web = { workspace = true }  # TODO: Temporarily disabled due to compilation errors
+# oya-shared = { workspace = true }  # TODO: Temporarily disabled
+# orchestrator = { workspace = true }  # TODO: Temporarily disabled
 
 tokio = { workspace = true }
 clap = { workspace = true }

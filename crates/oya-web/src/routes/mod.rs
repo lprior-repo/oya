@@ -13,6 +13,7 @@
 //! - `POST /api/beads/{id}/cancel` - Cancel a running bead
 //! - `POST /api/beads/{id}/retry` - Retry a failed bead
 //! - `GET /api/beads` - List all beads
+//! - `GET /api/scheduler/metrics` - Scheduler metrics (authenticated)
 //!
 //! ## Design Principles
 //!
@@ -32,6 +33,7 @@ use axum::{
 pub mod agents;
 pub mod beads;
 pub mod health;
+pub mod scheduler;
 pub mod websocket;
 pub mod workflows;
 
@@ -70,6 +72,9 @@ pub fn create_router() -> Router<AppState> {
         .route("/agents", get(agents::list_agents))
         .route("/agents/spawn", post(agents::spawn_agents))
         .route("/agents/scale", post(agents::scale_agents))
+        .route("/agents/metrics", get(agents::get_agent_metrics))
+        // Scheduler metrics endpoint (authenticated)
+        .route("/scheduler/metrics", get(scheduler::get_scheduler_metrics))
         // Apply error handling middleware to API routes
         .layer(axum::middleware::from_fn(error_handler_middleware))
         // Apply panic catching middleware

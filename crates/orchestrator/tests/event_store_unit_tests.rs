@@ -1,4 +1,3 @@
-
 //! Comprehensive unit tests for EventStore actors using tokio-test.
 //!
 //! This test suite covers:
