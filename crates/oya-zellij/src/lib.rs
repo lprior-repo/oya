@@ -1592,9 +1592,6 @@ mod tests {
         assert!(agent.workload_history.avg_execution_secs.is_none());
     }
 
-    fn to_vector_stages(stages: Vec<StageInfo>) -> Vector<StageInfo> {
-        stages.into_iter().collect::<Vector<_>>()
-    }
 
     #[test]
     fn test_stage_selection_navigation() {

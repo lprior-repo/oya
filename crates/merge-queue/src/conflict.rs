@@ -48,11 +48,8 @@ mod tests {
         let result = detect("main", "feature-branch");
         assert!(result.is_ok());
 
-        let detection = match result {
-            Ok(d) => d,
-            Err(e) => panic!("Expected Ok, got Err: {:?}", e),
-        };
-        assert_eq!(detection.has_conflicts, false);
+        let detection = result.expect("detect should return Ok");
+        assert!(!detection.has_conflicts);
         assert!(detection.conflicting_files.is_empty());
     }
 
@@ -61,12 +58,9 @@ mod tests {
         let result = attempt_rebase("feature-branch", "main");
         assert!(result.is_ok());
 
-        let rebase_result = match result {
-            Ok(r) => r,
-            Err(e) => panic!("Expected Ok, got Err: {:?}", e),
-        };
-        assert_eq!(rebase_result.success, true);
-        assert_eq!(rebase_result.has_conflicts, false);
+        let rebase_result = result.expect("attempt_rebase should return Ok");
+        assert!(rebase_result.success);
+        assert!(!rebase_result.has_conflicts);
         assert!(rebase_result.conflicted_files.is_empty());
     }
 
