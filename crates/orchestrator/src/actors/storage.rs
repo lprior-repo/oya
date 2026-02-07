@@ -186,20 +186,57 @@ impl Actor for StateManagerActorDef {
     ) -> Result<(), ActorProcessingErr> {
         match message {
             StateManagerMessage::SaveState { key, data, version } => {
-                info!(
-                    "Saving state: key={}, size={} bytes, version={:?}",
-                    key,
-                    data.len(),
-                    version
-                );
-                // TODO: Implement actual persistence to SurrealDB
-                // The SurrealDB API chain needs to be verified
+                let result: Result<(), ActorError> = async {
+                    // Create or update the state record
+                    let record = StateRecord {
+                        key: key.clone(),
+                        data: data.clone(),
+                        version,
+                    };
+
+                    // Use .create() to insert or .upsert() to modify existing record
+                    let _: Option<StateRecord> = state
+                        .db
+                        .create(("state", key.clone()))
+                        .content(record)
+                        .await
+                        .map_err(|e| ActorError::internal(format!("Failed to save state: {}", e)))?;
+
+                    info!(
+                        "Successfully saved state: key={}, size={} bytes, version={:?}",
+                        key,
+                        data.len(),
+                        version
+                    );
+
+                    Ok(())
+                }
+                .await;
+
+                // Log error but don't crash the actor
+                if let Err(e) = result {
+                    error!("Failed to save state for key {}: {:?}", key, e);
+                }
             }
 
             StateManagerMessage::DeleteState { key } => {
-                info!("Deleting state: key={}", key);
-                // TODO: Implement actual deletion from SurrealDB
-                // Need to determine correct API for delete operation
+                let result: Result<(), ActorError> = async {
+                    // Delete the record from the database
+                    let _: Option<StateRecord> = state
+                        .db
+                        .delete(("state", key.clone()))
+                        .await
+                        .map_err(|e| ActorError::internal(format!("Failed to delete state: {}", e)))?;
+
+                    info!("Successfully deleted state: key={}", key);
+                    Ok(())
+                }
+                .await;
+
+                // Log error but don't crash the actor
+                if let Err(e) = result {
+                    error!("Failed to delete state for key {}: {:?}", key, e);
+                }
             }
 
             StateManagerMessage::ClearAll => {
@@ -271,28 +308,29 @@ impl Actor for StateManagerActorDef {
 
             StateManagerMessage::ListKeys { prefix, reply } => {
                 let result = async {
-                    let query = if prefix.is_some() {
-                        "SELECT key FROM state WHERE key =~ $prefix ORDER BY key ASC"
+                    let keys: Vec<String> = if let Some(prefix_val) = &prefix {
+                        // For prefix filtering, fetch all keys and filter in Rust
+                        let all_records: Vec<StateRecord> = state
+                            .db
+                            .select("state")
+                            .await
+                            .map_err(|e| ActorError::internal(format!("Failed to list keys: {}", e)))?;
+
+                        all_records
+                            .into_iter()
+                            .filter(|r| r.key.starts_with(prefix_val))
+                            .map(|r| r.key)
+                            .collect()
                     } else {
-                        "SELECT key FROM state ORDER BY key ASC"
+                        // No prefix filter, get all keys
+                        let all_records: Vec<StateRecord> = state
+                            .db
+                            .select("state")
+                            .await
+                            .map_err(|e| ActorError::internal(format!("Failed to list keys: {}", e)))?;
+
+                        all_records.into_iter().map(|r| r.key).collect()
                     };
-
-                    let mut query_builder = state.db.query(query);
-
-                    if let Some(prefix_val) = &prefix {
-                        let pattern = format!("^{}", prefix_val);
-                        query_builder = query_builder.bind(("prefix", pattern));
-                    }
-
-                    let mut result = query_builder
-                        .await
-                        .map_err(|e| ActorError::internal(format!("Failed to list keys: {}", e)))?;
-
-                    let records: Vec<StateRecord> = result.take(0).map_err(|e| {
-                        ActorError::internal(format!("Failed to extract keys result: {}", e))
-                    })?;
-
-                    let keys: Vec<String> = records.into_iter().map(|r| r.key).collect();
 
                     info!("Listed keys: prefix={:?}, count={}", prefix, keys.len());
                     Ok(keys)
