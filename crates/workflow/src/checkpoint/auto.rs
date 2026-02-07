@@ -308,7 +308,9 @@ impl AutoCheckpointTimer {
                 Ok(Ok(result)) => result,
                 Ok(Err(e)) => {
                     error!(error = ?e, "Auto-checkpoint task panicked");
-                    Err(e)
+                    Err(crate::error::Error::CheckpointFailed {
+                        reason: format!("Task panicked: {}", e),
+                    })
                 }
                 Err(_) => {
                     warn!("Auto-checkpoint shutdown timeout, aborting task");
