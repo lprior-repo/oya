@@ -315,7 +315,7 @@ impl Actor for WorkerActorDef {
                 bead_id,
                 from_state,
             } => {
-                let old_state = from_state.unwrap_or(BeadState::Ready);
+                let old_state = from_state.unwrap_or_else(|| BeadState::Ready);
                 let new_state = BeadState::Running;
 
                 // Create workspace for bead execution
