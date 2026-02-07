@@ -223,3 +223,57 @@ fn authenticate(headers: HeaderMap) -> Result<()> {
         .map(|_| ())
         .ok_or_else(|| AppError::Unauthorized("Missing or invalid Authorization header".to_string()))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::HeaderValue;
+
+    /// Test authentication with valid token
+    #[test]
+    fn test_authenticate_valid_token() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "authorization",
+            HeaderValue::from_static("Bearer test-token"),
+        );
+
+        let result = authenticate(headers);
+        assert!(result.is_ok());
+    }
+
+    /// Test authentication fails with missing header
+    #[test]
+    fn test_authenticate_missing_header() {
+        let headers = HeaderMap::new();
+
+        let result = authenticate(headers);
+        assert!(result.is_err());
+        match result {
+            Err(AppError::Unauthorized(msg)) => {
+                assert!(msg.contains("Missing or invalid"));
+            }
+            _ => panic!("Expected Unauthorized error"),
+        }
+    }
+
+    /// Test authentication fails with invalid scheme
+    #[test]
+    fn test_authenticate_invalid_scheme() {
+        let mut headers = HeaderMap::new();
+        headers.insert("authorization", HeaderValue::from_static("Basic token"));
+
+        let result = authenticate(headers);
+        assert!(result.is_err());
+    }
+
+    /// Test authentication fails with empty token
+    #[test]
+    fn test_authenticate_empty_token() {
+        let mut headers = HeaderMap::new();
+        headers.insert("authorization", HeaderValue::from_static("Bearer "));
+
+        let result = authenticate(headers);
+        assert!(result.is_err());
+    }
+}

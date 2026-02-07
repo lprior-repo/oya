@@ -226,7 +226,7 @@ where
     /// ```
     pub fn add_child(mut self, child_id: ID) -> Self {
         if !self.children.contains(&child_id) {
-            self.children = self.children.push_back(child_id);
+            self.children.push_back(child_id);
         }
         self
     }
@@ -236,7 +236,7 @@ where
     /// This is a functional update - returns a new node with the parent added.
     pub fn add_parent(mut self, parent_id: ID) -> Self {
         if !self.parents.contains(&parent_id) {
-            self.parents = self.parents.push_back(parent_id);
+            self.parents.push_back(parent_id);
         }
         self
     }
@@ -486,7 +486,7 @@ where
             return; // Already visited
         }
 
-        result.visited.push(self.id.clone());
+        result.visited.push_back(self.id.clone());
         let should_continue = visitor(&self.id, self);
 
         if should_continue {
@@ -547,7 +547,7 @@ where
             return; // Already visited (cycle detection)
         }
 
-        result.visited.push(self.id.clone());
+        result.visited.push_back(self.id.clone());
         let should_continue = visitor(&self.id, self);
 
         if should_continue {
@@ -812,6 +812,15 @@ where
     /// Check if a specific ID was visited
     pub fn contains(&self, id: &ID) -> bool {
         self.visited.iter().any(|visited_id| visited_id == id)
+    }
+}
+
+impl<ID> Default for TraversalResult<ID>
+where
+    ID: Clone + Hash + Eq,
+{
+    fn default() -> Self {
+        Self::new()
     }
 }
 
