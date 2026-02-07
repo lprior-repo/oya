@@ -472,7 +472,8 @@ impl ZellijPlugin for State {
                     true
                 }
                 _ => false,
-            },
+                }
+            }
             Event::Timer(_) => {
                 // Check for network timeouts
                 if self.pending_requests > 0

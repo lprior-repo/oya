@@ -551,7 +551,9 @@ mod tests {
             )
             .await;
             assert!(result.is_ok());
-            assert!(result.unwrap().is_ok());
+            if let Ok(inner) = result {
+                assert!(inner.is_ok());
+            }
         }
     }
 
@@ -575,7 +577,10 @@ mod tests {
             super::shutdown_all_workers(workers, Duration::from_secs(5)).await;
         assert!(results.is_ok());
 
-        let shutdown_results = results.unwrap();
+        let shutdown_results = match results {
+            Ok(r) => r,
+            Err(_) => return,
+        };
         assert_eq!(shutdown_results.len(), 5);
 
         // Verify all shutdowns succeeded
@@ -605,7 +610,10 @@ mod tests {
             super::shutdown_all_workers(workers, Duration::from_secs(1)).await;
         assert!(results.is_ok());
 
-        let shutdown_results = results.unwrap();
+        let shutdown_results = match results {
+            Ok(r) => r,
+            Err(_) => return,
+        };
         assert_eq!(shutdown_results.len(), 3);
 
         // Verify all succeeded (no zombies)
