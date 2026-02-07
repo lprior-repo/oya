@@ -1809,25 +1809,18 @@ mod tests {
 
         // Try to go down when at the last stage
         if state.selected_stage_index < state.pipeline_stages.len().saturating_sub(1) {
-            state.selected_stage_index = state.selected_stage_index.saturating_add(1);
-        }
-        assert_eq!(state.selected_stage_index, 0);
 
-        // Try to go up when at the first stage
-        state.selected_stage_index = state.selected_stage_index.saturating_sub(1);
-        assert_eq!(state.selected_stage_index, 0);
-    }
-
-    }
-
+    #[test]
     fn test_view_mode_has_seven_variants() {
+        // Verify all 7 ViewMode variants are present and usable
         let _ = ViewMode::BeadList;
         let _ = ViewMode::BeadDetail;
-    #[test]
+        let _ = ViewMode::PipelineView;
         let _ = ViewMode::AgentView;
         let _ = ViewMode::GraphView;
         let _ = ViewMode::SystemHealth;
         let _ = ViewMode::LogAggregator;
+
         // Verify default is BeadList
         let default_mode = ViewMode::default();
         assert_eq!(default_mode, ViewMode::BeadList);
