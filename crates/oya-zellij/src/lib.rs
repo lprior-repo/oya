@@ -367,11 +367,14 @@ impl ZellijPlugin for State {
             PermissionType::WebAccess,
         ]);
 
-        // Subscribe to events (WebRequestResult for HTTP responses)
+        // Subscribe to events (WebRequestResult for HTTP responses, command pane events)
         subscribe(&[
             EventType::Key,
             EventType::Timer,
             EventType::WebRequestResult,
+            EventType::CommandPaneOpened,
+            EventType::CommandPaneExited,
+            EventType::CommandPaneReRun,
         ]);
 
         // Set timer for auto-refresh (every 2 seconds)
@@ -1818,3 +1821,19 @@ mod tests {
         let _ = state;
     }
 }
+
+    #[test]
+    fn test_view_mode_has_seven_variants() {
+        // Verify all 7 ViewMode variants are present and usable
+        let _ = ViewMode::BeadList;
+        let _ = ViewMode::BeadDetail;
+        let _ = ViewMode::PipelineView;
+        let _ = ViewMode::AgentView;
+        let _ = ViewMode::GraphView;
+        let _ = ViewMode::SystemHealth;
+        let _ = ViewMode::LogAggregator;
+
+        // Verify default is BeadList
+        let default_mode = ViewMode::default();
+        assert_eq!(default_mode, ViewMode::BeadList);
+    }

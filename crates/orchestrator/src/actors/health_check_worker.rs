@@ -688,7 +688,7 @@ mod tests {
         let mut state = HealthCheckWorkerState::new(config, None);
 
         // Add more than 100 results
-        for i in 0..150 {
+        for _i in 0..150 {
             let result = HealthCheckResult::healthy(200);
             state.add_to_history(result);
         }
