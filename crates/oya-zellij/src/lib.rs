@@ -1657,40 +1657,6 @@ mod tests {
         stages.into_iter().collect::<Vector<_>>()
     }
 
-    #[test]
-
-fn should_fetch_system_health_on_view_load(mode: ViewMode) -> bool {
-    matches!(mode, ViewMode::SystemHealth)
-}
-
-fn should_fetch_log_aggregator_on_view_load(mode: ViewMode) -> bool {
-    matches!(mode, ViewMode::LogAggregator)
-}
-
-fn render_workload_sparkline(beads_completed: u64, operations_executed: u64, width: usize) -> String {
-    if beads_completed == 0 && operations_executed == 0 {
-        return "\x1b[90m···\x1b[0m".to_string();
-    }
-
-    // Create a simple sparkline representation
-    // Use different characters to show relative workload
-    let ratio = if operations_executed > 0 {
-        beads_completed as f64 / operations_executed as f64
-    } else {
-        0.0
-    };
-
-    let filled = (ratio * width as f64).ceil() as usize;
-    let filled = filled.min(width);
-    let empty = width.saturating_sub(filled);
-
-    format!(
-        "\x1b[36m{}\x1b[90m{}\x1b[0m",
-        "█".repeat(filled),
-        "░".repeat(empty)
-    )
-}
-
     fn agent_view_fetches_agents_on_load() {
         assert!(should_fetch_agents_on_view_load(ViewMode::AgentView));
     }

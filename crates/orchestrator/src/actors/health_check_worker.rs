@@ -8,7 +8,6 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -17,8 +16,6 @@ use tokio::sync::watch;
 use tracing::{debug, info, warn};
 
 use oya_events::{BeadEvent, EventBus};
-
-use crate::actors::supervisor::calculate_backoff;
 
 /// Configuration for health check polling behavior.
 #[derive(Debug, Clone)]

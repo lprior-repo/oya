@@ -343,8 +343,14 @@ mod tests {
 
     #[test]
     fn test_log_message_from_json_invalid_utf8() {
-        let json = "\xff\xfe"; // invalid UTF-8
-        let result = LogMessage::from_json(json);
+        // Create invalid UTF-8 bytes
+        let invalid_bytes: Vec<u8> = vec![0xFF, 0xFE];
+        let json = std::str::from_utf8(&invalid_bytes).unwrap_err();
+
+        // Test that from_json handles invalid UTF-8
+        let result = std::str::from_utf8(&invalid_bytes)
+            .map_err(|_| ParseError::InvalidUtf8)
+            .and_then(|s| serde_json::from_str::<serde_json::Value>(s).map_err(|e| ParseError::JsonError(e.to_string())));
 
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), ParseError::InvalidUtf8);

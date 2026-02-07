@@ -6,11 +6,12 @@
 use crate::error::{Error, Result};
 
 /// Compression level for zstd.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum CompressionLevel {
     /// Fastest compression (level 1).
     Fastest,
     /// Default compression (level 3).
+    #[default]
     Default,
     /// Maximum compression (level 21).
     Max,
@@ -25,12 +26,6 @@ impl CompressionLevel {
             Self::Default => 3,
             Self::Max => 21,
         }
-    }
-}
-
-impl Default for CompressionLevel {
-    fn default() -> Self {
-        Self::Default
     }
 }
 
