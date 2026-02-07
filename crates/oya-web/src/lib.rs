@@ -14,6 +14,7 @@ pub mod actors;
 pub mod agent_repository;
 pub mod agent_service;
 pub mod error;
+pub mod metrics;
 pub mod middleware;
 pub mod routes;
 pub mod server;
