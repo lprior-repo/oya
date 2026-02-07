@@ -14,7 +14,7 @@ serde = { version = "1", features = ["derive"] }
 rkyv = { version = "0.8", features = ["bytecheck"] }
 
 # Bytes for zero-copy streaming
-bytes = "1.9"
+bytes = { version = "1.9", features = ["serde"] }
 
 # IDs
 ulid = { version = "1", features = ["serde"] }

@@ -3,6 +3,7 @@
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
+use tracing::warn;
 
 use crate::error::{Error, Result};
 use crate::types::{PhaseContext, PhaseOutput};
@@ -81,13 +82,14 @@ impl HandlerRegistry {
         primary: Arc<dyn PhaseHandler>,
         fallbacks: Vec<Arc<dyn PhaseHandler>>,
     ) {
-        let mut chain = HandlerChain::new(name.clone(), primary);
+        let name_string = name.into();
+        let mut chain = HandlerChain::new(name_string.clone(), primary.clone());
         for fallback in fallbacks {
             chain = chain.with_fallback(fallback);
         }
-        self.fallback_chains.insert(name.into(), chain);
+        self.fallback_chains.insert(name_string.clone(), chain);
         // Also register primary as individual handler
-        self.handlers.insert(name.into(), primary);
+        self.handlers.insert(name_string, primary);
     }
 
     /// Get a handler by phase name.
@@ -326,6 +328,7 @@ impl PhaseHandler for ChainHandler {
 ///
 /// Executes the primary handler first, then falls back to fallback handlers
 /// if the primary fails. All handlers must succeed for the chain to succeed.
+#[derive(Clone)]
 pub struct HandlerChain {
     name: String,
     primary: Arc<dyn PhaseHandler>,
@@ -372,7 +375,8 @@ impl HandlerChain {
         }
 
         // All handlers failed
-        let fallback_names: Vec<String> = self.fallbacks
+        let fallback_names: Vec<String> = self
+            .fallbacks
             .iter()
             .map(|h| h.name().to_string())
             .collect();
@@ -499,8 +503,7 @@ mod tests {
         let primary = Arc::new(NoOpHandler::new("primary"));
         let fallback = Arc::new(FailingHandler::new("fallback", "should not be used"));
 
-        let chain = HandlerChain::new("test-chain", primary)
-            .with_fallback(fallback);
+        let chain = HandlerChain::new("test-chain", primary).with_fallback(fallback);
 
         let ctx = make_context();
         let result = chain.execute(&ctx).await;
@@ -513,8 +516,7 @@ mod tests {
         let primary = Arc::new(FailingHandler::new("primary", "expected failure"));
         let fallback = Arc::new(NoOpHandler::new("fallback"));
 
-        let chain = HandlerChain::new("test-chain", primary)
-            .with_fallback(fallback);
+        let chain = HandlerChain::new("test-chain", primary).with_fallback(fallback);
 
         let ctx = make_context();
         let result = chain.execute(&ctx).await;
@@ -527,8 +529,7 @@ mod tests {
         let primary = Arc::new(FailingHandler::new("primary", "primary failed"));
         let fallback = Arc::new(FailingHandler::new("fallback", "fallback failed"));
 
-        let chain = HandlerChain::new("test-chain", primary)
-            .with_fallback(fallback);
+        let chain = HandlerChain::new("test-chain", primary).with_fallback(fallback);
 
         let ctx = make_context();
         let result = chain.execute(&ctx).await;
@@ -608,8 +609,7 @@ mod tests {
         let primary = Arc::new(FailingHandler::new("primary", "failed"));
         let fallback = Arc::new(NoOpHandler::new("fallback"));
 
-        let chain = HandlerChain::new("test-chain", primary)
-            .with_fallback(fallback);
+        let chain = HandlerChain::new("test-chain", primary).with_fallback(fallback);
 
         let ctx = make_context();
         // Execute should succeed with fallback
@@ -628,8 +628,7 @@ mod tests {
         let fallback2 = Arc::new(NoOpHandler::new("fallback2"));
 
         let fallbacks = vec![fallback1, fallback2];
-        let chain = HandlerChain::new("test-chain", primary)
-            .with_fallbacks(fallbacks);
+        let chain = HandlerChain::new("test-chain", primary).with_fallbacks(fallbacks);
 
         let ctx = make_context();
         let result = chain.execute(&ctx).await;

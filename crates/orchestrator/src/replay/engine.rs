@@ -58,8 +58,7 @@ impl ReplayEngine {
             self.current_sequence
         );
 
-        let event_data =
-            serde_json::to_string(&event).map_err(|e| PersistenceError::serialization_error(e))?;
+        let event_data = serde_json::to_string(&event)?;
 
         let input = EventInput {
             event_id: event_id.clone(),
@@ -77,7 +76,7 @@ impl ReplayEngine {
             .create(("orchestrator_event", &event_id))
             .content(input)
             .await
-            .map_err(|e| PersistenceError::query_failed(e))?;
+            .map_err(PersistenceError::from)?;
 
         if result.is_some() {
             Ok(EventRecord::new(event_id, self.current_sequence, event))
@@ -98,15 +97,14 @@ impl ReplayEngine {
             .query("SELECT * FROM orchestrator_event WHERE sequence > $seq ORDER BY sequence ASC")
             .bind(("seq", sequence))
             .await
-            .map_err(|e| PersistenceError::query_failed(e.to_string()))?
+            .map_err(PersistenceError::from)?
             .take(0)
-            .map_err(|e| PersistenceError::query_failed(e))?;
+            .map_err(PersistenceError::from)?;
 
         inputs
             .into_iter()
             .map(|input| {
-                let event: OrchestratorEvent = serde_json::from_str(&input.event_data)
-                    .map_err(|e| PersistenceError::serialization_error(e))?;
+                let event: OrchestratorEvent = serde_json::from_str(&input.event_data)?;
 
                 Ok(EventRecord {
                     id: input.event_id,

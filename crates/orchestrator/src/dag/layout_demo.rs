@@ -10,9 +10,9 @@
 #![warn(clippy::nursery)]
 #![forbid(unsafe_code)]
 
-use std::time::Duration;
+use crate::dag::{DependencyType, MemoizedLayout, WorkflowDAG};
 use std::collections::HashMap;
-use crate::dag::{WorkflowDAG, MemoizedLayout, DependencyType};
+use std::time::Duration;
 
 /// Run the demo to show memoization benefits
 pub fn run_demo() {
@@ -33,11 +33,23 @@ fn demo_basic_usage() {
     dag.add_node("build".to_string()).unwrap();
     dag.add_node("test".to_string()).unwrap();
     dag.add_node("deploy".to_string()).unwrap();
-    dag.add_dependency("build".to_string(), "test".to_string(), DependencyType::BlockingDependency).unwrap();
-    dag.add_dependency("test".to_string(), "deploy".to_string(), DependencyType::BlockingDependency).unwrap();
+    dag.add_dependency(
+        "build".to_string(),
+        "test".to_string(),
+        DependencyType::BlockingDependency,
+    )
+    .unwrap();
+    dag.add_dependency(
+        "test".to_string(),
+        "deploy".to_string(),
+        DependencyType::BlockingDependency,
+    )
+    .unwrap();
 
     // Create memoized layout
-    let layout = dag.create_memoized_layout(0.1, 100.0).expect("Should create layout");
+    let layout = dag
+        .create_memoized_layout(0.1, 100.0)
+        .expect("Should create layout");
 
     // Get node positions
     let positions = layout.compute_node_positions();
@@ -50,8 +62,13 @@ fn demo_basic_usage() {
     let forces = layout.compute_edge_forces();
     println!("\nEdge forces:");
     for ((from, to), (source_force, target_force)) in forces {
-        println!("  {} -> {}: source: {:.2}, target: {:.2}",
-                from, to, source_force.magnitude(), target_force.magnitude());
+        println!(
+            "  {} -> {}: source: {:.2}, target: {:.2}",
+            from,
+            to,
+            source_force.magnitude(),
+            target_force.magnitude()
+        );
     }
 
     // Get edge paths for rendering
@@ -78,7 +95,9 @@ fn demo_performance_comparison() {
     for (stiffness, rest_length, description) in configs {
         println!("\nTesting: {}", description);
 
-        let layout = dag.create_memoized_layout(stiffness, rest_length).expect("Should create layout");
+        let layout = dag
+            .create_memoized_layout(stiffness, rest_length)
+            .expect("Should create layout");
 
         // Cold cache (first computation)
         let cold_start = std::time::Instant::now();
@@ -104,7 +123,9 @@ fn demo_cache_behavior() {
     let mut dag = create_sample_workflow_dag(20);
 
     // Create initial layout
-    let mut layout = dag.create_memoized_layout(0.1, 100.0).expect("Should create layout");
+    let mut layout = dag
+        .create_memoized_layout(0.1, 100.0)
+        .expect("Should create layout");
 
     // First access - cold cache
     let start = std::time::Instant::now();
@@ -120,11 +141,22 @@ fn demo_cache_behavior() {
 
     // Verify positions are the same (cached)
     assert_eq!(positions1.len(), positions2.len());
-    println!("Positions match: {}", positions1.iter().zip(&positions2).all(|(a, b)| a.0 == b.0 && a.1 == b.1));
+    println!(
+        "Positions match: {}",
+        positions1
+            .iter()
+            .zip(&positions2)
+            .all(|(a, b)| a.0 == b.0 && a.1 == b.1)
+    );
 
     // Add a new node to the DAG
     dag.add_node("new-node".to_string()).unwrap();
-    dag.add_dependency("node-19".to_string(), "new-node".to_string(), DependencyType::BlockingDependency).unwrap();
+    dag.add_dependency(
+        "node-19".to_string(),
+        "new-node".to_string(),
+        DependencyType::BlockingDependency,
+    )
+    .unwrap();
 
     // Invalidate cache and recompute
     layout.invalidate_cache();
@@ -146,7 +178,9 @@ fn demo_realistic_workflow() {
     let workflow_dag = create_ci_cd_workflow();
 
     // Create layout with appropriate parameters
-    let layout = workflow_dag.create_memoized_layout(0.15, 120.0).expect("Should create layout");
+    let layout = workflow_dag
+        .create_memoized_layout(0.15, 120.0)
+        .expect("Should create layout");
 
     // Compute positions and paths
     let positions = layout.compute_node_positions();
@@ -174,7 +208,7 @@ fn demo_realistic_workflow() {
     println!("\nWorkflow structure:");
     let beads = workflow_dag.nodes().collect::<Vec<_>>();
     for bead in beads {
-        let ready_beads = workflow_dag.get_ready_beads(&std::collections::HashSet::new());
+        let ready_beads = workflow_dag.get_ready_beads(&im::HashSet::new());
         let ready_status = if ready_beads.contains(bead) {
             "READY"
         } else {
@@ -197,11 +231,26 @@ fn create_sample_workflow_dag(size: usize) -> WorkflowDAG {
     for i in 0..size {
         if i % 5 == 0 && i + 1 < size {
             // Branch every 5th node
-            dag.add_dependency(format!("node-{}", i), format!("node-{}", i + 1), DependencyType::BlockingDependency).unwrap();
-            dag.add_dependency(format!("node-{}", i), format!("node-{}", i + 2), DependencyType::BlockingDependency).unwrap();
+            dag.add_dependency(
+                format!("node-{}", i),
+                format!("node-{}", i + 1),
+                DependencyType::BlockingDependency,
+            )
+            .unwrap();
+            dag.add_dependency(
+                format!("node-{}", i),
+                format!("node-{}", i + 2),
+                DependencyType::BlockingDependency,
+            )
+            .unwrap();
         } else if i + 1 < size {
             // Linear chain
-            dag.add_dependency(format!("node-{}", i), format!("node-{}", i + 1), DependencyType::BlockingDependency).unwrap();
+            dag.add_dependency(
+                format!("node-{}", i),
+                format!("node-{}", i + 1),
+                DependencyType::BlockingDependency,
+            )
+            .unwrap();
         }
     }
 
@@ -213,7 +262,13 @@ fn create_ci_cd_workflow() -> WorkflowDAG {
 
     // Define CI/CD stages
     let stages = vec![
-        "setup", "lint", "test", "build", "security", "deploy-staging", "deploy-prod"
+        "setup",
+        "lint",
+        "test",
+        "build",
+        "security",
+        "deploy-staging",
+        "deploy-prod",
     ];
 
     // Add all stages as nodes
@@ -233,7 +288,12 @@ fn create_ci_cd_workflow() -> WorkflowDAG {
     ];
 
     for (from, to) in dependencies {
-        dag.add_dependency(from.to_string(), to.to_string(), DependencyType::BlockingDependency).unwrap();
+        dag.add_dependency(
+            from.to_string(),
+            to.to_string(),
+            DependencyType::BlockingDependency,
+        )
+        .unwrap();
     }
 
     dag
@@ -258,7 +318,17 @@ mod tests {
         assert_eq!(workflow.node_count(), 7);
 
         // Check some key dependencies exist
-        assert!(workflow.get_dependencies(&"test".to_string()).unwrap().contains(&"lint".to_string()));
-        assert!(workflow.get_dependencies(&"deploy-prod".to_string()).unwrap().contains(&"deploy-staging".to_string()));
+        assert!(
+            workflow
+                .get_dependencies(&"test".to_string())
+                .unwrap()
+                .contains(&"lint".to_string())
+        );
+        assert!(
+            workflow
+                .get_dependencies(&"deploy-prod".to_string())
+                .unwrap()
+                .contains(&"deploy-staging".to_string())
+        );
     }
 }

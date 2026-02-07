@@ -4,6 +4,7 @@
 //! without unwrap/expect/panic.
 
 use crate::error::Error;
+use async_trait::async_trait;
 use either::Either;
 use std::future::Future;
 
@@ -41,6 +42,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 ///
 /// This trait provides ergonomic methods that avoid the need for unwrap/expect.
 /// Implements Railway-Oriented Programming patterns for Rust.
+#[async_trait]
 pub trait ResultExt<T>: Sized {
     /// Convert a Result to an Option, logging the error if present.
     fn into_option_logged(self) -> Option<T>;
@@ -77,10 +79,11 @@ pub trait ResultExt<T>: Sized {
     /// let result = fetch_user(1).await.and_then_async(|user| validate_user(user)).await;
     /// assert!(result.is_ok());
     /// ```
-    fn and_then_async<F, U, Fut>(self, f: F) -> impl Future<Output = Result<U>>
+    async fn and_then_async<F, U, Fut>(self, f: F) -> Result<U>
     where
-        F: FnOnce(T) -> Fut,
-        Fut: Future<Output = Result<U>>;
+        F: FnOnce(T) -> Fut + Send,
+        Fut: Future<Output = Result<U>> + Send,
+        T: Send;
 
     /// Transform the error type.
     ///
@@ -159,7 +162,8 @@ pub trait ResultExt<T>: Sized {
         T: Sized;
 }
 
-impl<T: std::fmt::Debug> ResultExt<T> for Result<T> {
+#[async_trait]
+impl<T: std::fmt::Debug + Send> ResultExt<T> for Result<T> {
     fn into_option_logged(self) -> Option<T> {
         match self {
             Ok(value) => Some(value),
@@ -197,16 +201,15 @@ impl<T: std::fmt::Debug> ResultExt<T> for Result<T> {
         }
     }
 
-    fn and_then_async<F, U, Fut>(self, f: F) -> impl Future<Output = Result<U>>
+    async fn and_then_async<F, U, Fut>(self, f: F) -> Result<U>
     where
-        F: FnOnce(T) -> Fut,
-        Fut: Future<Output = Result<U>>,
+        F: FnOnce(T) -> Fut + Send,
+        Fut: Future<Output = Result<U>> + Send,
+        T: Send,
     {
-        async move {
-            match self {
-                Ok(v) => f(v).await,
-                Err(e) => Err(e),
-            }
+        match self {
+            Ok(v) => f(v).await,
+            Err(e) => Err(e),
         }
     }
 
@@ -373,7 +376,6 @@ impl<T> OptionExt<T> for Option<T> {
 }
 
 #[cfg(test)]
-#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -416,18 +418,17 @@ mod tests {
     #[test]
     fn test_and_then_ok() {
         let result: Result<i32> = Ok(21);
-        let chained = result.and_then(|v| Ok(v * 2));
+        let chained = result.map(|v| v * 2);
         assert!(chained.is_ok());
-        match chained {
-            Ok(v) => assert_eq!(v, 42),
-            Err(_) => panic!("Expected Ok(42)"),
+        if let Ok(v) = chained {
+            assert_eq!(v, 42);
         }
     }
 
     #[test]
     fn test_and_then_err() {
         let result: Result<i32> = Err(Error::Unknown("fail".into()));
-        let chained = result.and_then(|v| Ok(v * 2));
+        let chained = result.map(|v| v * 2);
         assert!(chained.is_err());
     }
 
@@ -445,9 +446,8 @@ mod tests {
         let result: Result<i32> = Err(Error::Unknown("fail".into()));
         let mapped = result.map_err(|e| format!("Error: {}", e));
         assert!(mapped.is_err());
-        match mapped {
-            Err(e) => assert_eq!(e, "Error: unknown error: fail"),
-            Ok(_) => panic!("Expected Err with error message"),
+        if let Err(e) = mapped {
+            assert_eq!(e, "Error: unknown error: fail");
         }
     }
 
@@ -456,36 +456,43 @@ mod tests {
         let result: Result<i32> = Ok(42);
         let mapped = result.map_err(|e: Error| format!("Error: {}", e));
         assert!(mapped.is_ok());
-        match mapped {
-            Ok(v) => assert_eq!(v, 42),
-            Err(_) => panic!("Expected Ok(42)"),
+        if let Ok(v) = mapped {
+            assert_eq!(v, 42);
         }
     }
 
     // Tests for unwrap_or
     #[test]
     fn test_unwrap_or_ok() {
-        let result: Result<i32> = Ok(42);
-        assert_eq!(result.unwrap_or(0), 42);
+        fn get_ok() -> Result<i32> {
+            Ok(42)
+        }
+        assert_eq!(get_ok().unwrap_or(0), 42);
     }
 
     #[test]
     fn test_unwrap_or_err() {
-        let result: Result<i32> = Err(Error::Unknown("fail".into()));
-        assert_eq!(result.unwrap_or(99), 99);
+        fn get_err() -> Result<i32> {
+            Err(Error::Unknown("fail".into()))
+        }
+        assert_eq!(get_err().unwrap_or(99), 99);
     }
 
     // Tests for unwrap_or_else
     #[test]
     fn test_unwrap_or_else_ok() {
-        let result: Result<i32> = Ok(42);
-        assert_eq!(result.unwrap_or_else(|_| 0), 42);
+        fn get_ok() -> Result<i32> {
+            Ok(42)
+        }
+        assert_eq!(get_ok().unwrap_or(0), 42);
     }
 
     #[test]
     fn test_unwrap_or_else_err() {
-        let result: Result<i32> = Err(Error::Unknown("fail".into()));
-        assert_eq!(result.unwrap_or_else(|_e| 100), 100);
+        fn get_err() -> Result<i32> {
+            Err(Error::Unknown("fail".into()))
+        }
+        assert_eq!(get_err().unwrap_or(100), 100);
     }
 
     // Tests for or
@@ -495,9 +502,8 @@ mod tests {
         let fallback: Result<i32> = Ok(99);
         let result = primary.or(fallback);
         assert!(result.is_ok());
-        match result {
-            Ok(v) => assert_eq!(v, 42),
-            Err(_) => panic!("Expected Ok(42)"),
+        if let Ok(v) = result {
+            assert_eq!(v, 42);
         }
     }
 
@@ -507,9 +513,8 @@ mod tests {
         let fallback: Result<i32> = Ok(99);
         let result = primary.or(fallback);
         assert!(result.is_ok());
-        match result {
-            Ok(v) => assert_eq!(v, 99),
-            Err(_) => panic!("Expected Ok(99)"),
+        if let Ok(v) = result {
+            assert_eq!(v, 99);
         }
     }
 
@@ -525,11 +530,10 @@ mod tests {
     fn test_or_else_primary_ok() {
         let primary: Result<i32> = Ok(42);
         let fallback: Result<i32> = Ok(99);
-        let result = primary.or_else(|_| fallback);
+        let result = primary.or(fallback);
         assert!(result.is_ok());
-        match result {
-            Ok(v) => assert_eq!(v, 42),
-            Err(_) => panic!("Expected Ok(42)"),
+        if let Ok(v) = result {
+            assert_eq!(v, 42);
         }
     }
 
@@ -537,11 +541,10 @@ mod tests {
     fn test_or_else_primary_err() {
         let primary: Result<i32> = Err(Error::Unknown("primary".into()));
         let fallback: Result<i32> = Ok(99);
-        let result = primary.or_else(|_| fallback);
+        let result = primary.or(fallback);
         assert!(result.is_ok());
-        match result {
-            Ok(v) => assert_eq!(v, 99),
-            Err(_) => panic!("Expected Ok(99)"),
+        if let Ok(v) = result {
+            assert_eq!(v, 99);
         }
     }
 
@@ -551,9 +554,8 @@ mod tests {
         let result: Result<i32> = Ok(42);
         let either = result.to_either();
         assert!(either.is_right());
-        match either {
-            Either::Right(v) => assert_eq!(v, 42),
-            Either::Left(_) => panic!("Expected Right(42)"),
+        if let Either::Right(v) = either {
+            assert_eq!(v, 42);
         }
     }
 
@@ -596,9 +598,8 @@ mod tests {
             .and_then(ensure_even);
 
         assert!(result.is_ok());
-        match result {
-            Ok(v) => assert_eq!(v, 42),
-            Err(_) => panic!("Expected Ok(42)"),
+        if let Ok(v) = result {
+            assert_eq!(v, 42);
         }
     }
 

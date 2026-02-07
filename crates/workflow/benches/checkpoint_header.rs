@@ -1,6 +1,6 @@
 //! Benchmark for checkpoint header creation optimization.
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use oya_workflow::checkpoint::serialize::{add_version_header, CHECKPOINT_VERSION, MAGIC_BYTES};
 
 /// Generate test data of various sizes
@@ -33,11 +33,11 @@ fn benchmark_optimized_impl(data: &[u8]) -> Vec<u8> {
 fn criterion_benchmark(c: &mut Criterion) {
     // Test various data sizes to show performance characteristics
     let test_sizes = [
-        10,      // Very small (few bytes)
-        100,     // Small
-        1000,    // Medium
-        10000,   // Large
-        100000,  // Very large
+        10,     // Very small (few bytes)
+        100,    // Small
+        1000,   // Medium
+        10000,  // Large
+        100000, // Very large
     ];
 
     for &size in &test_sizes {
@@ -48,23 +48,17 @@ fn criterion_benchmark(c: &mut Criterion) {
 
         // Benchmark original implementation
         group.bench_function("original", |b| {
-            b.iter(|| {
-                black_box(benchmark_original_impl(&test_data))
-            })
+            b.iter(|| black_box(benchmark_original_impl(&test_data)))
         });
 
         // Benchmark optimized implementation
         group.bench_function("optimized", |b| {
-            b.iter(|| {
-                black_box(benchmark_optimized_impl(&test_data))
-            })
+            b.iter(|| black_box(benchmark_optimized_impl(&test_data)))
         });
 
         // Benchmark the actual function from the source
         group.bench_function("actual_function", |b| {
-            b.iter(|| {
-                black_box(add_version_header(test_data.clone())).unwrap()
-            })
+            b.iter(|| black_box(add_version_header(test_data.clone())).unwrap())
         });
 
         group.finish();

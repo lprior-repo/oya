@@ -109,7 +109,7 @@ impl OpencodeClient {
     /// ```ignore
     /// use oya_opencode::OpencodeClient;
     ///
-    /// let client = OpencodeClient::new().unwrap();
+    /// let client = OpencodeClient::new()?;
     /// let mut stream = client.stream_sse("Hello, world!").await?;
     ///
     /// while let Some(result) = stream.next().await {
@@ -131,7 +131,7 @@ impl OpencodeClient {
                 result.and_then(|chunk| {
                     crate::sse::SseFormatter::new()
                         .format_chunk(chunk)
-                        .map_err(|e| Error::stream_error(format!("{}", e)))
+                        .map_err(|e| Error::stream_error(e.to_string()))
                 })
             },
         )))

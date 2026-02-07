@@ -441,6 +441,7 @@ impl Actor for EventStoreActorDef {
                     .store
                     .read_events(&bead_id)
                     .await
+                    .map(|events| events.to_vec())
                     .map_err(|e| ActorError::internal(format!("Failed to read events: {}", e)));
 
                 info!(
@@ -456,9 +457,14 @@ impl Actor for EventStoreActorDef {
                 checkpoint_id,
                 reply,
             } => {
-                let result = state.store.replay_from(&checkpoint_id).await.map_err(|e| {
-                    ActorError::internal(format!("Failed to replay from checkpoint: {}", e))
-                });
+                let result = state
+                    .store
+                    .replay_from(&checkpoint_id)
+                    .await
+                    .map(|events| events.to_vec())
+                    .map_err(|e| {
+                        ActorError::internal(format!("Failed to replay from checkpoint: {}", e))
+                    });
 
                 info!(
                     "Replay from checkpoint {}: result={}",

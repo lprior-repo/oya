@@ -1,4 +1,4 @@
-use oya_events::{InMemoryEventStore, BeadEvent, BeadId, BeadSpec, Complexity, EventStore};
+use oya_events::{BeadEvent, BeadId, BeadSpec, Complexity, EventStore, InMemoryEventStore};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -21,12 +21,24 @@ async fn main() {
     let first_read = store.read_for_bead(bead_id).await.unwrap();
     let second_read = store.read_for_bead(bead_id).await.unwrap();
 
-    println!("First read: {} events, ptr: {:?}", first_read.len(), Arc::as_ptr(&first_read) as *const ());
-    println!("Second read: {} events, ptr: {:?}", second_read.len(), Arc::as_ptr(&second_read) as *const ());
+    println!(
+        "First read: {} events, ptr: {:?}",
+        first_read.len(),
+        Arc::as_ptr(&first_read) as *const ()
+    );
+    println!(
+        "Second read: {} events, ptr: {:?}",
+        second_read.len(),
+        Arc::as_ptr(&second_read) as *const ()
+    );
 
     // Clone the Arc - this should be O(1) and very fast
     let cloned_first = Arc::clone(&first_read);
-    println!("Cloned first read: {} events, ptr: {:?}", cloned_first.len(), Arc::as_ptr(&cloned_first) as *const ());
+    println!(
+        "Cloned first read: {} events, ptr: {:?}",
+        cloned_first.len(),
+        Arc::as_ptr(&cloned_first) as *const ()
+    );
 
     // Verify they point to the same data
     let first_ptr = Arc::as_ptr(&first_read) as *const ();
@@ -51,9 +63,15 @@ async fn main() {
     let original_count = events_vec.len();
     events_vec.clear();
 
-    println!("\nOriginal Arc length after modifying vector: {}", first_read.len());
+    println!(
+        "\nOriginal Arc length after modifying vector: {}",
+        first_read.len()
+    );
     println!("Vector length after clearing: {}", original_count);
-    println!("Arc sharing maintains reference semantics: {}", first_read.len() == 100);
+    println!(
+        "Arc sharing maintains reference semantics: {}",
+        first_read.len() == 100
+    );
 
     println!("\n✅ Zero-copy optimization verified!");
     println!("   - Arc<[BeadEvent]> provides O(1) cloning");

@@ -2,7 +2,6 @@
 
 use std::collections::HashMap;
 
-use either::Either;
 use itertools::Itertools;
 use oya_events::{BeadId, BeadProjection, BeadResult, BeadSpec, BeadState};
 use serde::{Deserialize, Serialize};

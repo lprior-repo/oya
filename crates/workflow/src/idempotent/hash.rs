@@ -287,7 +287,13 @@ pub fn memoized_hash_input_single_threaded(data: &[u8]) -> [u8; 32] {
     static CACHE: OnceLock<Mutex<HashMap<Vec<u8>, [u8; 32]>>> = OnceLock::new();
 
     let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-    let mut cache = cache.lock().unwrap();
+    let mut cache = match cache.lock() {
+        Ok(guard) => guard,
+        Err(_) => {
+            // Fallback to non-memoized hash if lock is poisoned
+            return hash_input(data);
+        }
+    };
 
     if let Some(cached) = cache.get(data) {
         return *cached;
@@ -312,7 +318,13 @@ pub fn memoized_hash_serializable_single_threaded<T: Serialize>(
 
     let bytes = bincode::serde::encode_to_vec(value, config::standard())?;
     let cache = SERIALIZATION_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-    let mut cache = cache.lock().unwrap();
+    let mut cache = match cache.lock() {
+        Ok(guard) => guard,
+        Err(_) => {
+            // Fallback to non-memoized hash if lock is poisoned
+            return Ok(hash_input(&bytes));
+        }
+    };
 
     if let Some(cached) = cache.get(&bytes) {
         return Ok(*cached);

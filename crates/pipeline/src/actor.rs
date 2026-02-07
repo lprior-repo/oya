@@ -236,22 +236,23 @@ impl ProcessPoolActor {
     /// Get cached worker statistics (lazily computed).
     #[must_use]
     pub fn get_stats(&self) -> &WorkerStats {
-        self.query_cache.get_or_init(|| {
-            WorkerStats {
-                total: self.workers.len(),
-                available: self.workers
-                    .values()
-                    .filter(|&&state| state.is_available())
-                    .count(),
-                busy: self.workers
-                    .values()
-                    .filter(|&&state| !state.is_available() && !state.needs_attention())
-                    .count(),
-                needing_attention: self.workers
-                    .values()
-                    .filter(|&&state| state.needs_attention())
-                    .count(),
-            }
+        self.query_cache.get_or_init(|| WorkerStats {
+            total: self.workers.len(),
+            available: self
+                .workers
+                .values()
+                .filter(|&&state| state.is_available())
+                .count(),
+            busy: self
+                .workers
+                .values()
+                .filter(|&&state| !state.is_available() && !state.needs_attention())
+                .count(),
+            needing_attention: self
+                .workers
+                .values()
+                .filter(|&&state| state.needs_attention())
+                .count(),
         })
     }
 
@@ -1591,8 +1592,8 @@ mod tests {
 
     // === Cache Tests ===
 
-  #[test]
-      fn test_cache_initialization() {
+    #[test]
+    fn test_cache_initialization() {
         let pool = ProcessPoolActor::new();
 
         // Cache should be empty initially
@@ -1602,21 +1603,24 @@ mod tests {
         assert_eq!(pool.needing_attention_count(), 0);
     }
 
-  #[test]
-  fn test_cache_populates_on_first_access() {
+    #[test]
+    fn test_cache_populates_on_first_access() {
         let mut pool = ProcessPoolActor::new();
 
         // Add some workers
-        pool.add_worker(ProcessId::new(1), WorkerState::Idle).unwrap();
-        pool.add_worker(ProcessId::new(2), WorkerState::Claimed).unwrap();
-        pool.add_worker(ProcessId::new(3), WorkerState::Unhealthy).unwrap();
+        pool.add_worker(ProcessId::new(1), WorkerState::Idle)
+            .unwrap();
+        pool.add_worker(ProcessId::new(2), WorkerState::Claimed)
+            .unwrap();
+        pool.add_worker(ProcessId::new(3), WorkerState::Unhealthy)
+            .unwrap();
 
         // First access should populate cache
         let stats = pool.get_stats();
         assert_eq!(stats.total, 3);
-        assert_eq!(stats.available, 1);  // Only worker 1 is Idle
-        assert_eq!(stats.busy, 1);      // Only worker 2 is Claimed
-        assert_eq!(stats.needing_attention, 1);  // Worker 3 is Unhealthy
+        assert_eq!(stats.available, 1); // Only worker 1 is Idle
+        assert_eq!(stats.busy, 1); // Only worker 2 is Claimed
+        assert_eq!(stats.needing_attention, 1); // Worker 3 is Unhealthy
 
         // Subsequent accesses should use cache
         assert_eq!(pool.available_count(), 1);
@@ -1629,28 +1633,32 @@ mod tests {
         let mut pool = ProcessPoolActor::new();
 
         // Add initial worker
-        pool.add_worker(ProcessId::new(1), WorkerState::Idle).unwrap();
+        pool.add_worker(ProcessId::new(1), WorkerState::Idle)
+            .unwrap();
 
         // Access cache to populate it
         let _stats = pool.get_stats();
         assert_eq!(pool.available_count(), 1);
 
         // Add new worker - should invalidate cache
-        pool.add_worker(ProcessId::new(2), WorkerState::Claimed).unwrap();
+        pool.add_worker(ProcessId::new(2), WorkerState::Claimed)
+            .unwrap();
 
         // Cache should be repopulated
         assert_eq!(pool.size(), 2);
-        assert_eq!(pool.available_count(), 1);  // Only worker 1 is Idle
-        assert_eq!(pool.busy_count(), 1);      // Only worker 2 is Claimed
+        assert_eq!(pool.available_count(), 1); // Only worker 1 is Idle
+        assert_eq!(pool.busy_count(), 1); // Only worker 2 is Claimed
     }
 
     #[test]
-  fn test_cache_invalidation_on_worker_remove() {
+    fn test_cache_invalidation_on_worker_remove() {
         let mut pool = ProcessPoolActor::new();
 
         // Add workers
-        pool.add_worker(ProcessId::new(1), WorkerState::Idle).unwrap();
-        pool.add_worker(ProcessId::new(2), WorkerState::Claimed).unwrap();
+        pool.add_worker(ProcessId::new(1), WorkerState::Idle)
+            .unwrap();
+        pool.add_worker(ProcessId::new(2), WorkerState::Claimed)
+            .unwrap();
 
         // Access cache to populate it
         let _stats = pool.get_stats();
@@ -1662,16 +1670,17 @@ mod tests {
 
         // Cache should be repopulated
         assert_eq!(pool.size(), 1);
-        assert_eq!(pool.available_count(), 0);  // No Idle workers remaining
-        assert_eq!(pool.busy_count(), 1);      // Worker 2 is still Claimed
+        assert_eq!(pool.available_count(), 0); // No Idle workers remaining
+        assert_eq!(pool.busy_count(), 1); // Worker 2 is still Claimed
     }
 
     #[test]
-  fn test_cache_invalidation_on_state_update() {
+    fn test_cache_invalidation_on_state_update() {
         let mut pool = ProcessPoolActor::new();
 
         // Add idle worker
-        pool.add_worker(ProcessId::new(1), WorkerState::Idle).unwrap();
+        pool.add_worker(ProcessId::new(1), WorkerState::Idle)
+            .unwrap();
 
         // Access cache to populate it
         let _stats = pool.get_stats();
@@ -1679,28 +1688,34 @@ mod tests {
         assert_eq!(pool.busy_count(), 0);
 
         // Update state to claimed - should invalidate cache
-        pool.update_state(&ProcessId::new(1), WorkerState::Claimed).unwrap();
+        pool.update_state(&ProcessId::new(1), WorkerState::Claimed)
+            .unwrap();
 
         // Cache should be repopulated
-        assert_eq!(pool.available_count(), 0);  // No Idle workers
-        assert_eq!(pool.busy_count(), 1);      // Worker 1 is now busy
+        assert_eq!(pool.available_count(), 0); // No Idle workers
+        assert_eq!(pool.busy_count(), 1); // Worker 1 is now busy
     }
 
     #[test]
-  fn test_cache_consistency_with_count_by_state() {
+    fn test_cache_consistency_with_count_by_state() {
         let mut pool = ProcessPoolActor::new();
 
         // Add workers in various states
-        pool.add_worker(ProcessId::new(1), WorkerState::Idle).unwrap();
-        pool.add_worker(ProcessId::new(2), WorkerState::Idle).unwrap();
-        pool.add_worker(ProcessId::new(3), WorkerState::Claimed).unwrap();
-        pool.add_worker(ProcessId::new(4), WorkerState::Unhealthy).unwrap();
-        pool.add_worker(ProcessId::new(5), WorkerState::Dead).unwrap();
+        pool.add_worker(ProcessId::new(1), WorkerState::Idle)
+            .unwrap();
+        pool.add_worker(ProcessId::new(2), WorkerState::Idle)
+            .unwrap();
+        pool.add_worker(ProcessId::new(3), WorkerState::Claimed)
+            .unwrap();
+        pool.add_worker(ProcessId::new(4), WorkerState::Unhealthy)
+            .unwrap();
+        pool.add_worker(ProcessId::new(5), WorkerState::Dead)
+            .unwrap();
 
         // Use cached methods
-        assert_eq!(pool.available_count(), 2);  // Two Idle workers
-        assert_eq!(pool.busy_count(), 1);      // One Claimed worker
-        assert_eq!(pool.needing_attention_count(), 2);  // One Unhealthy + one Dead
+        assert_eq!(pool.available_count(), 2); // Two Idle workers
+        assert_eq!(pool.busy_count(), 1); // One Claimed worker
+        assert_eq!(pool.needing_attention_count(), 2); // One Unhealthy + one Dead
 
         // Verify with non-cached method
         assert_eq!(pool.count_by_state(WorkerState::Idle), 2);

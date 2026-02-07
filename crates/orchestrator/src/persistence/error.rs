@@ -156,6 +156,18 @@ pub fn from_surrealdb_error(err: impl fmt::Display) -> PersistenceError {
     }
 }
 
+impl From<serde_json::Error> for PersistenceError {
+    fn from(err: serde_json::Error) -> Self {
+        PersistenceError::serialization_error(err.to_string())
+    }
+}
+
+impl From<surrealdb::Error> for PersistenceError {
+    fn from(err: surrealdb::Error) -> Self {
+        from_surrealdb_error(err)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

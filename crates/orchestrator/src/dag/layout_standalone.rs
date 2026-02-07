@@ -10,21 +10,22 @@
 #![warn(clippy::nursery)]
 #![forbid(unsafe_code)]
 
-use std::sync::OnceLock;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use im::{HashMap, HashSet};
 use petgraph::Direction;
 use petgraph::graph::NodeIndex;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+use std::ops::AddAssign;
+use std::sync::OnceLock;
 
-use crate::dag::{WorkflowDAG, DagError, DependencyType, BeadId};
+use crate::dag::{BeadId, DagError, DependencyType, WorkflowDAG};
 use thiserror::Error;
 
 /// Spring force configuration using Hooke's law
 #[derive(Debug, Clone, PartialEq)]
 pub struct SpringForce {
-    stiffness: f64,
-    rest_length: f64,
+    pub stiffness: f64,
+    pub rest_length: f64,
 }
 
 impl SpringForce {
@@ -61,13 +62,23 @@ impl SpringForce {
 
         Ok((source_force, target_force))
     }
+
+    /// Returns the stiffness coefficient
+    pub fn stiffness(&self) -> f64 {
+        self.stiffness
+    }
+
+    /// Returns the rest length
+    pub fn rest_length(&self) -> f64 {
+        self.rest_length
+    }
 }
 
 /// Represents a 2D position
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Position {
-    x: f64,
-    y: f64,
+    pub x: f64,
+    pub y: f64,
 }
 
 impl Position {
@@ -97,7 +108,7 @@ impl Position {
 }
 
 /// Represents a force vector
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Force {
     x: f64,
     y: f64,
@@ -114,6 +125,13 @@ impl Force {
 
     pub fn add(&self, other: &Force) -> Force {
         Force::new(self.x + other.x, self.y + other.y)
+    }
+}
+
+impl AddAssign for Force {
+    fn add_assign(&mut self, other: Self) {
+        self.x += other.x;
+        self.y += other.y;
     }
 }
 
@@ -148,7 +166,9 @@ pub fn calculate_line_path(
     let source = Position::from_tuple(source_pos);
     let target = Position::from_tuple(target_pos);
 
-    let (dir_x, dir_y) = source.direction_to(&target).map_err(|_| "Coincident nodes".to_string())?;
+    let (dir_x, dir_y) = source
+        .direction_to(&target)
+        .map_err(|_| "Coincident nodes".to_string())?;
 
     let start = (
         source.x + dir_x * source_radius,
@@ -198,7 +218,7 @@ pub struct MemoizedLayout {
     /// Spring force configuration
     spring_force: SpringForce,
     /// Layout cache with OnceLock for thread safety
-    cache: OnceLock<Option<LayoutCache>>,
+    cache: OnceLock<LayoutCache>,
     /// Cache key based on graph structure
     cache_key: String,
 }
@@ -215,7 +235,11 @@ impl MemoizedLayout {
     /// # Errors
     ///
     /// Returns `SpringForceError` if parameters are invalid
-    pub fn new(dag: WorkflowDAG, stiffness: f64, rest_length: f64) -> Result<Self, SpringForceError> {
+    pub fn new(
+        dag: WorkflowDAG,
+        stiffness: f64,
+        rest_length: f64,
+    ) -> Result<Self, SpringForceError> {
         let spring_force = SpringForce::new(stiffness, rest_length)?;
 
         // Create cache key based on graph structure
@@ -227,6 +251,16 @@ impl MemoizedLayout {
             cache: OnceLock::new(),
             cache_key,
         })
+    }
+
+    /// Returns a reference to the spring force configuration
+    pub fn spring_force(&self) -> &SpringForce {
+        &self.spring_force
+    }
+
+    /// Returns a reference to the DAG
+    pub fn dag(&self) -> &WorkflowDAG {
+        &self.dag
     }
 
     /// Create a deterministic cache key from graph structure
@@ -246,7 +280,7 @@ impl MemoizedLayout {
         edges.iter().for_each(|(from, to, dep_type)| {
             from.hash(&mut hasher);
             to.hash(&mut hasher);
-            dep_type.hash(&mut hasher);
+            (*dep_type).hash(&mut hasher);
         });
 
         format!("layout_cache_{}", hasher.finish())
@@ -258,8 +292,7 @@ impl MemoizedLayout {
     ///
     /// HashMap of BeadId to Position
     pub fn compute_node_positions(&self) -> HashMap<BeadId, Position> {
-        let cache_entry = self.get_or_compute_cache();
-        cache_entry.positions.clone()
+        self.get_or_compute_cache().positions.clone()
     }
 
     /// Compute or retrieve cached spring forces for all edges
@@ -268,30 +301,12 @@ impl MemoizedLayout {
     ///
     /// HashMap of (from, to) -> (source_force, target_force)
     pub fn compute_edge_forces(&self) -> HashMap<(BeadId, BeadId), (Force, Force)> {
-        let cache_entry = self.get_or_compute_cache();
-        cache_entry.edge_forces.clone()
+        self.get_or_compute_cache().edge_forces.clone()
     }
 
     /// Get or compute the layout cache
     fn get_or_compute_cache(&self) -> &LayoutCache {
-        self.cache.get_or_init(|| {
-            // Check if we need to recompute (graph structure changed)
-            let current_key = Self::create_cache_key(&self.dag);
-            if current_key != self.cache_key {
-                // Graph structure changed, compute fresh layout
-                Some(self.compute_layout_fresh())
-            } else {
-                // Try to use cached layout
-                self.cache.get().and_then(|cached| {
-                    // Verify cache is still valid
-                    if cached.graph_hash == self.hash_graph_structure() {
-                        Some(cached.clone())
-                    } else {
-                        Some(self.compute_layout_fresh())
-                    }
-                })
-            }
-        }).as_ref().expect("Cache should always contain Some value after initialization")
+        self.cache.get_or_init(|| self.compute_layout_fresh())
     }
 
     /// Compute layout from scratch
@@ -306,15 +321,26 @@ impl MemoizedLayout {
         // Compute spring forces for all edges
         for edge in self.dag.edges() {
             let (from, to, _) = edge;
-            let from_pos = positions.get(from).unwrap();
-            let to_pos = positions.get(to).unwrap();
+
+            // Get positions for both nodes, skip if missing
+            let from_pos = match positions.get(from) {
+                Some(pos) => pos,
+                None => continue,
+            };
+            let to_pos = match positions.get(to) {
+                Some(pos) => pos,
+                None => continue,
+            };
 
             match self.spring_force.calculate_force(from_pos, to_pos) {
                 Ok((source_force, target_force)) => {
                     edge_forces.insert((from.clone(), to.clone()), (source_force, target_force));
                 }
-                Err(_) => // Skip invalid edges (zero length)
-                    continue,
+                Err(_) =>
+                // Skip invalid edges (zero length)
+                {
+                    continue;
+                }
             }
         }
 
@@ -351,7 +377,7 @@ impl MemoizedLayout {
 
         // Arrange nodes in a circle
         let radius = 100.0;
-        let angle_step = 2.0 * std::f64::PI / node_count as f64;
+        let angle_step = 2.0 * std::f64::consts::PI / node_count as f64;
 
         for (i, node) in nodes.iter().enumerate() {
             let angle = i as f64 * angle_step;
@@ -364,18 +390,22 @@ impl MemoizedLayout {
     }
 
     /// Optimize layout positions using computed forces
-    fn optimize_layout(&self, positions: &mut HashMap<BeadId, Position>, edge_forces: &HashMap<(BeadId, BeadId), (Force, Force)>) {
+    fn optimize_layout(
+        &self,
+        positions: &mut HashMap<BeadId, Position>,
+        edge_forces: &HashMap<(BeadId, BeadId), (Force, Force)>,
+    ) {
         const DAMPING: f64 = 0.8;
         const STEP_SIZE: f64 = 0.1;
 
         let mut forces: HashMap<BeadId, Force> = HashMap::new();
 
         // Compute forces on each node
-        for (node, pos) in positions {
+        for (node, pos) in positions.iter() {
             // Repulsive forces from other nodes (simplified)
-            for (other, other_pos) in positions {
+            for (other, other_pos) in positions.iter() {
                 if node != other {
-                    let distance = pos.distance(other_pos);
+                    let distance: f64 = pos.distance(other_pos);
                     if distance > 0.0 && distance < 200.0 {
                         let repulsion = 500.0 / (distance * distance);
                         let direction = pos.direction_to(other_pos).unwrap_or((0.0, 0.0));
@@ -384,25 +414,35 @@ impl MemoizedLayout {
                             -repulsion * direction.1 * STEP_SIZE,
                         );
 
-                        *forces.entry(node.clone()).or_insert(Force::new(0.0, 0.0)) += repulsive_force;
+                        *forces.entry(node.clone()).or_insert(Force::new(0.0, 0.0)) +=
+                            repulsive_force;
                     }
                 }
             }
 
             // Spring forces from connected edges
-            if let Some((source_force, target_force)) = edge_forces.get(&(node.clone(), node.clone())) {
+            if let Some((source_force, target_force)) =
+                edge_forces.get(&(node.clone(), node.clone()))
+            {
                 // This is a self-loop, skip
                 continue;
             }
 
             // Find edges where this node is the source
-            for (from, to, (source_force, _)) in edge_forces.iter().filter(|(from, _, _)| *from == node) {
-                *forces.entry(from.clone()).or_insert(Force::new(0.0, 0.0)) += source_force;
+            for ((from, to), (source_force, _)) in edge_forces
+                .iter()
+                .filter(|((from, _), _)| from.as_str() == node.as_str())
+            {
+                *forces.entry(from.clone()).or_insert(Force::new(0.0, 0.0)) += *source_force;
             }
 
             // Find edges where this node is the target
-            for (from, to, (_, target_force)) in edge_forces.iter().filter(|(_, to, _)| *to == node) {
-                *forces.entry(to.clone()).or_insert(Force::new(0.0, 0.0)) += target_force;
+            for ((from, to), (_, target_force)) in edge_forces
+                .iter()
+                .filter(|((_, to), _)| to.as_str() == node.as_str())
+            {
+                // Functional pattern: dereference to avoid clone, Force is small (Copy-like)
+                *forces.entry(to.clone()).or_insert(Force::new(0.0, 0.0)) += *target_force;
             }
         }
 
@@ -435,16 +475,6 @@ impl MemoizedLayout {
         hasher.finish()
     }
 
-    /// Get current DAG reference
-    pub fn dag(&self) -> &WorkflowDAG {
-        &self.dag
-    }
-
-    /// Get spring force configuration
-    pub fn spring_force(&self) -> &SpringForce {
-        &self.spring_force
-    }
-
     /// Invalidate the cache (call when graph structure changes)
     pub fn invalidate_cache(&mut self) {
         self.cache = OnceLock::new();
@@ -468,14 +498,17 @@ impl MemoizedLayout {
             let (from, to, _) = edge;
             if let (Some(from_pos), Some(to_pos)) = (
                 positions.get(from).map(|p| p.as_tuple()),
-                positions.get(to).map(|p| p.as_tuple())
+                positions.get(to).map(|p| p.as_tuple()),
             ) {
-                match calculate_line_path(*from_pos, node_radius, *to_pos, node_radius) {
+                match calculate_line_path(from_pos, node_radius, to_pos, node_radius) {
                     Ok(path) => {
                         paths.insert((from.clone(), to.clone()), path);
                     }
-                    Err(_) => // Skip invalid paths
-                        continue,
+                    Err(_) =>
+                    // Skip invalid paths
+                    {
+                        continue;
+                    }
                 }
             }
         }
@@ -492,15 +525,15 @@ impl MemoizedLayout {
     /// # Returns
     ///
     /// Tuple of (critical_path_beads, their_positions)
-    pub fn get_critical_path_with_positions(&self, weights: &HashMap<BeadId, std::time::Duration>) ->
-        (Vec<BeadId>, HashMap<BeadId, Position>) {
+    pub fn get_critical_path_with_positions(
+        &self,
+        weights: &HashMap<BeadId, std::time::Duration>,
+    ) -> (Vec<BeadId>, HashMap<BeadId, Position>) {
         if let Ok(critical_path) = self.dag.critical_path(weights) {
             let positions = self.compute_node_positions();
             let critical_positions: HashMap<BeadId, Position> = critical_path
                 .iter()
-                .filter_map(|node| {
-                    positions.get(node).cloned().map(|pos| (node.clone(), pos))
-                })
+                .filter_map(|node| positions.get(node).cloned().map(|pos| (node.clone(), pos)))
                 .collect();
 
             (critical_path, critical_positions)
@@ -513,7 +546,23 @@ impl MemoizedLayout {
 impl Default for MemoizedLayout {
     fn default() -> Self {
         let dag = WorkflowDAG::new();
-        Self::new(dag, 0.1, 50.0).expect("Default layout parameters should be valid")
+        // Default parameters are guaranteed valid (stiffness=0.1 > 0, rest_length=50.0 >= 0)
+        // Use fallback values if validation fails (should never happen with these constants)
+        let spring_force = SpringForce::new(0.1, 50.0).unwrap_or_else(|_| {
+            tracing::error!("SpringForce validation failed for default parameters (0.1, 50.0). Using emergency fallback.");
+            // Emergency fallback with known-valid values
+            SpringForce { stiffness: 1.0, rest_length: 10.0 }
+        });
+
+        // Create cache key from the empty DAG
+        let cache_key = Self::create_cache_key(&dag);
+
+        Self {
+            dag,
+            spring_force,
+            cache: OnceLock::new(),
+            cache_key,
+        }
     }
 }
 
@@ -523,10 +572,12 @@ pub mod benchmark {
     use std::time::Instant;
 
     /// Benchmark layout computation performance
-    pub fn benchmark_layout_computation(dag: &WorkflowDAG, iterations: usize) -> (std::time::Duration, std::time::Duration) {
+    pub fn benchmark_layout_computation(
+        dag: &WorkflowDAG,
+        iterations: usize,
+    ) -> Result<(std::time::Duration, std::time::Duration), SpringForceError> {
         // Create memoized layout
-        let layout = MemoizedLayout::new(dag.clone(), 0.1, 50.0)
-            .expect("Layout creation should succeed");
+        let layout = MemoizedLayout::new(dag.clone(), 0.1, 50.0)?;
 
         // Benchmark first computation (cold cache)
         let start = Instant::now();
@@ -542,11 +593,14 @@ pub mod benchmark {
         }
         let warm_time = start.elapsed();
 
-        (cold_time, warm_time)
+        Ok((cold_time, warm_time))
     }
 
     /// Calculate speedup ratio
-    pub fn calculate_speedup(cold_time: std::time::Duration, warm_time: std::time::Duration) -> f64 {
+    pub fn calculate_speedup(
+        cold_time: std::time::Duration,
+        warm_time: std::time::Duration,
+    ) -> f64 {
         if warm_time.as_nanos() == 0 {
             return 0.0;
         }
@@ -583,7 +637,12 @@ mod tests {
         let mut dag = WorkflowDAG::new();
         dag.add_node("a".to_string()).unwrap();
         dag.add_node("b".to_string()).unwrap();
-        dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency).unwrap();
+        dag.add_edge(
+            "a".to_string(),
+            "b".to_string(),
+            DependencyType::BlockingDependency,
+        )
+        .unwrap();
 
         let layout = MemoizedLayout::new(dag, 0.1, 50.0).unwrap();
         let positions = layout.compute_node_positions();
@@ -641,7 +700,12 @@ mod tests {
         let mut dag = WorkflowDAG::new();
         dag.add_node("a".to_string()).unwrap();
         dag.add_node("b".to_string()).unwrap();
-        dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency).unwrap();
+        dag.add_edge(
+            "a".to_string(),
+            "b".to_string(),
+            DependencyType::BlockingDependency,
+        )
+        .unwrap();
 
         let layout = MemoizedLayout::new(dag, 0.1, 50.0).unwrap();
         let paths = layout.compute_edge_paths(10.0);
@@ -656,8 +720,18 @@ mod tests {
         dag.add_node("a".to_string()).unwrap();
         dag.add_node("b".to_string()).unwrap();
         dag.add_node("c".to_string()).unwrap();
-        dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency).unwrap();
-        dag.add_edge("b".to_string(), "c".to_string(), DependencyType::BlockingDependency).unwrap();
+        dag.add_edge(
+            "a".to_string(),
+            "b".to_string(),
+            DependencyType::BlockingDependency,
+        )
+        .unwrap();
+        dag.add_edge(
+            "b".to_string(),
+            "c".to_string(),
+            DependencyType::BlockingDependency,
+        )
+        .unwrap();
 
         let layout = MemoizedLayout::new(dag, 0.1, 50.0).unwrap();
 
@@ -681,7 +755,12 @@ mod tests {
             dag.add_node(format!("node-{}", i)).unwrap();
         }
         for i in 0..9 {
-            dag.add_edge(format!("node-{}", i), format!("node-{}", i + 1), DependencyType::BlockingDependency).unwrap();
+            dag.add_edge(
+                format!("node-{}", i),
+                format!("node-{}", i + 1),
+                DependencyType::BlockingDependency,
+            )
+            .unwrap();
         }
 
         let (cold_time, warm_time) = benchmark::benchmark_layout_computation(&dag, 10);
@@ -697,12 +776,22 @@ mod tests {
         let mut dag1 = WorkflowDAG::new();
         dag1.add_node("a".to_string()).unwrap();
         dag1.add_node("b".to_string()).unwrap();
-        dag1.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency).unwrap();
+        dag1.add_edge(
+            "a".to_string(),
+            "b".to_string(),
+            DependencyType::BlockingDependency,
+        )
+        .unwrap();
 
         let mut dag2 = WorkflowDAG::new();
         dag2.add_node("a".to_string()).unwrap();
         dag2.add_node("b".to_string()).unwrap();
-        dag2.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency).unwrap();
+        dag2.add_edge(
+            "a".to_string(),
+            "b".to_string(),
+            DependencyType::BlockingDependency,
+        )
+        .unwrap();
 
         let key1 = MemoizedLayout::create_cache_key(&dag1);
         let key2 = MemoizedLayout::create_cache_key(&dag2);
@@ -724,12 +813,21 @@ mod tests {
     #[test]
     fn test_spring_force_error_cases() {
         let result1 = SpringForce::new(0.0, 50.0);
-        assert!(matches!(result1, Err(SpringForceError::InvalidStiffness(0.0))));
+        assert!(matches!(
+            result1,
+            Err(SpringForceError::InvalidStiffness(0.0))
+        ));
 
         let result2 = SpringForce::new(-0.1, 50.0);
-        assert!(matches!(result2, Err(SpringForceError::InvalidStiffness(-0.1))));
+        assert!(matches!(
+            result2,
+            Err(SpringForceError::InvalidStiffness(-0.1))
+        ));
 
         let result3 = SpringForce::new(0.1, -10.0);
-        assert!(matches!(result3, Err(SpringForceError::InvalidRestLength(-10.0))));
+        assert!(matches!(
+            result3,
+            Err(SpringForceError::InvalidRestLength(-10.0))
+        ));
     }
 }

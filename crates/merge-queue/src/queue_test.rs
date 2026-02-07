@@ -42,13 +42,16 @@ fn test_dequeue_task() {
         target: "main".to_string(),
     };
 
-    queue.enqueue(task).expect("Enqueue should succeed");
+    let enqueue_result = queue.enqueue(task);
+    assert!(enqueue_result.is_ok(), "Enqueue should succeed");
+
     let dequeued = queue.dequeue();
 
     assert!(dequeued.is_some());
+
     let task = match dequeued {
         Some(t) => t,
-        None => panic!("Expected Some task, got None"),
+        None => return, // Test can't continue if no task
     };
     assert_eq!(task.id, "task-1");
 }

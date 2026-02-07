@@ -28,7 +28,6 @@
 
 use crate::idempotent::{hash::hash_serializable, namespace::namespace_from_bead};
 use serde::Serialize;
-use std::collections::HashSet;
 use uuid::Uuid;
 
 /// Generates a deterministic idempotency key from bead ID and input.
@@ -160,7 +159,9 @@ pub fn idempotency_key_from_json(bead_id: &str, json: &str) -> Uuid {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use itertools::Itertools;
     use serde::{Deserialize, Serialize};
+    use std::collections::HashSet;
 
     #[derive(Serialize, Deserialize, Debug, PartialEq)]
     struct TestInput {

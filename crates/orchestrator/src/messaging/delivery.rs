@@ -361,8 +361,7 @@ impl DeliveryTracker {
         store: &OrchestratorStore,
         record: &DeliveryRecord,
     ) -> PersistenceResult<()> {
-        let json =
-            serde_json::to_string(record).map_err(|e| PersistenceError::serialization_error(e))?;
+        let json = serde_json::to_string(record)?;
 
         let record_id = record.message_id.as_str().to_string();
 
@@ -372,9 +371,9 @@ impl DeliveryTracker {
             .bind(("id", record_id))
             .bind(("data", json))
             .await
-            .map_err(|e| PersistenceError::query_failed(e.to_string()))?
+            .map_err(PersistenceError::from)?
             .take(0)
-            .map_err(|e| PersistenceError::query_failed(e))?;
+            .map_err(PersistenceError::from)?;
 
         Ok(())
     }

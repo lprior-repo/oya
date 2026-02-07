@@ -21,21 +21,22 @@ use std::collections::VecDeque;
 use std::time::Duration;
 
 pub mod error;
-pub mod tarjan;
-pub mod layout;
-pub mod layout_standalone;
 pub mod layout_benchmark;
 pub mod layout_demo;
+pub mod layout_standalone;
+pub mod tarjan;
 pub use error::{DagError, DagResult};
-pub use layout_standalone::{MemoizedLayout, LayoutCache, SpringForce, Position, Force, PathSegment, SpringForceError};
-pub use layout_benchmark::{benchmark_layout_performance, analysis};
+pub use layout_benchmark::{analysis, benchmark_layout_performance};
 pub use layout_demo::run_demo;
+pub use layout_standalone::{
+    Force, LayoutCache, MemoizedLayout, PathSegment, Position, SpringForce, SpringForceError,
+};
 
 /// Type alias for a Bead identifier
 pub type BeadId = String;
 
 /// Dependency relationship types between beads
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DependencyType {
     /// Bead must complete before dependent can start
     BlockingDependency,
@@ -1476,7 +1477,11 @@ impl WorkflowDAG {
     /// # Errors
     ///
     /// Returns `SpringForceError` if parameters are invalid
-    pub fn create_memoized_layout(&self, stiffness: f64, rest_length: f64) -> Result<MemoizedLayout, layout::SpringForceError> {
+    pub fn create_memoized_layout(
+        &self,
+        stiffness: f64,
+        rest_length: f64,
+    ) -> Result<MemoizedLayout, SpringForceError> {
         MemoizedLayout::new(self.clone(), stiffness, rest_length)
     }
 }

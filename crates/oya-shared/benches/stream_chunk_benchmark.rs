@@ -4,50 +4,50 @@
 //! vs the new Bytes zero-copy implementation.
 
 use bytes::Bytes;
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use std::time::Duration;
 
 // Simulate the old Vec<u8> implementation
 #[derive(Debug, Clone)]
 struct StreamChunkOld {
-    stream_id: String,
+    _stream_id: String,
     data: Vec<u8>,
-    offset: u64,
+    _offset: u64,
 }
 
 impl StreamChunkOld {
     fn new(stream_id: impl Into<String>, data: Vec<u8>, offset: u64) -> Self {
         Self {
-            stream_id: stream_id.into(),
+            _stream_id: stream_id.into(),
             data,
-            offset,
+            _offset: offset,
         }
     }
 
     fn slice(&self, start: usize, end: usize) -> Vec<u8> {
-        self.data[start..end].to_vec()  // This copies!
+        self.data[start..end].to_vec() // This copies!
     }
 }
 
 // New implementation with Bytes
 #[derive(Debug, Clone)]
 struct StreamChunkNew {
-    stream_id: String,
+    _stream_id: String,
     data: Bytes,
-    offset: u64,
+    _offset: u64,
 }
 
 impl StreamChunkNew {
     fn new(stream_id: impl Into<String>, data: Vec<u8>, offset: u64) -> Self {
         Self {
-            stream_id: stream_id.into(),
+            _stream_id: stream_id.into(),
             data: Bytes::from(data),
-            offset,
+            _offset: offset,
         }
     }
 
     fn slice(&self, start: usize, end: usize) -> Bytes {
-        self.data.slice(start..end)  // Zero-copy!
+        self.data.slice(start..end) // Zero-copy!
     }
 }
 
@@ -59,11 +59,11 @@ fn generate_test_data(size: usize) -> Vec<u8> {
 fn criterion_benchmark(c: &mut Criterion) {
     // Test various data sizes to show performance characteristics
     let test_sizes = [
-        10,      // Very small (few bytes)
-        100,     // Small
-        1000,    // Medium
-        10000,   // Large
-        100000,  // Very large
+        10,     // Very small (few bytes)
+        100,    // Small
+        1000,   // Medium
+        10000,  // Large
+        100000, // Very large
     ];
 
     for &size in &test_sizes {
@@ -77,7 +77,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         // Benchmark old implementation
         group.bench_function("vec_copy", |b| {
             b.iter(|| {
-                let slice = chunk_old.slice(black_box(0..size / 2));
+                let slice = chunk_old.slice(black_box(0), black_box(size / 2));
                 black_box(slice);
             })
         });
@@ -85,7 +85,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         // Benchmark new implementation
         group.bench_function("bytes_zero_copy", |b| {
             b.iter(|| {
-                let slice = chunk_new.slice(black_box(0..size / 2));
+                let slice = chunk_new.slice(black_box(0), black_box(size / 2));
                 black_box(slice);
             })
         });
@@ -95,11 +95,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 }
 
 fn criterion_benchmark_construction(c: &mut Criterion) {
-    let test_sizes = [
-        100,
-        1000,
-        10000,
-    ];
+    let test_sizes = [100, 1000, 10000];
 
     for &size in &test_sizes {
         let test_data = generate_test_data(size);
@@ -128,10 +124,7 @@ fn criterion_benchmark_construction(c: &mut Criterion) {
 }
 
 fn criterion_benchmark_cloning(c: &mut Criterion) {
-    let test_sizes = [
-        1000,
-        10000,
-    ];
+    let test_sizes = [1000, 10000];
 
     for &size in &test_sizes {
         let test_data = generate_test_data(size);

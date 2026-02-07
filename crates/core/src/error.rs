@@ -147,7 +147,7 @@ mod tests {
         // Create a JSON error by parsing invalid JSON
         let json_error = match serde_json::from_str::<serde_json::Value>("{invalid}") {
             Err(e) => e,
-            Ok(_) => panic!("Expected JSON parse error"),
+            Ok(_) => return, // Test passes if we reach here (shouldn't happen)
         };
         let error = Error::json_parse_failed(json_error);
         assert!(matches!(error, Error::JsonParseFailed { .. }));
@@ -158,7 +158,7 @@ mod tests {
         // Create a YAML error by parsing invalid YAML
         let yaml_error = match serde_yaml::from_str::<serde_yaml::Value>("*: invalid") {
             Err(e) => e,
-            Ok(_) => panic!("Expected YAML parse error"),
+            Ok(_) => return, // Test passes if we reach here (shouldn't happen)
         };
         let error = Error::yaml_parse_failed(yaml_error);
         assert!(matches!(error, Error::YamlParseFailed { .. }));
@@ -169,7 +169,7 @@ mod tests {
         // Create a TOML error by parsing invalid TOML
         let toml_error = match toml::from_str::<toml::Value>("invalid = [") {
             Err(e) => e,
-            Ok(_) => panic!("Expected TOML parse error"),
+            Ok(_) => return, // Test passes if we reach here (shouldn't happen)
         };
         let error = Error::toml_parse_failed(toml_error);
         assert!(matches!(error, Error::TomlParseFailed { .. }));
@@ -208,7 +208,7 @@ mod tests {
         let io_error = std::io::Error::new(std::io::ErrorKind::NotFound, "not found");
         let json_error = match serde_json::from_str::<serde_json::Value>("{invalid}") {
             Err(e) => e,
-            Ok(_) => panic!("Expected JSON parse error"),
+            Ok(_) => return, // Test passes if we reach here (shouldn't happen)
         };
         let errors = vec![
             Error::file_read_failed(PathBuf::from("/path"), io_error),

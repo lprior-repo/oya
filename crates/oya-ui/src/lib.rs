@@ -1,8 +1,17 @@
 //! # Oya UI
 //!
-//! This crate is a placeholder for the future Leptos-based frontend.
-//! It will be implemented in a future iteration.
+//! UI components and layout calculations for OYA.
 
 #![warn(missing_docs)]
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+#![deny(clippy::panic)]
+#![warn(clippy::pedantic)]
+#![warn(clippy::nursery)]
+#![forbid(unsafe_code)]
 
-// Placeholder - no implementation yet
+// Layout modules
+pub mod layout;
+
+// Re-exports for convenience
+pub use layout::spring_force::{Force, Position, SpringForce, SpringForceError};

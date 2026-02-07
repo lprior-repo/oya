@@ -51,19 +51,36 @@ pub struct Tier1Supervisors {
 }
 
 impl Tier1Supervisors {
-    /// Return all supervisors as an ordered list.
-    pub fn stop_all(&self, reason: &str) {
-        let supervisors = vec![&self.storage, &self.workflow, &self.queue, &self.reconciler];
+    /// Stop all supervisors.
+    ///
+    /// Uses functional pattern with join! for parallel execution.
+    pub async fn stop_all(&self, reason: &str) {
+        let reason = reason.to_string();
 
-        // Use fail-fast pattern for supervisor shutdown
-        let _ = stream::iter(supervisors)
-            .map(|supervisor| async move {
-                supervisor.actor.stop(Some(reason.to_string()));
-                Ok::<(), ActorError>(())
-            })
-            .buffer_unordered(4) // Stop in parallel with limit
-            .try_collect()
-            .await;
+        // Process each supervisor individually since they have different types
+        // Use join! for parallel execution without requiring homogeneous collection
+        let storage_stop = async {
+            self.storage.actor.stop(Some(reason.clone()));
+            Ok::<(), ActorError>(())
+        };
+
+        let workflow_stop = async {
+            self.workflow.actor.stop(Some(reason.clone()));
+            Ok::<(), ActorError>(())
+        };
+
+        let queue_stop = async {
+            self.queue.actor.stop(Some(reason.clone()));
+            Ok::<(), ActorError>(())
+        };
+
+        let reconciler_stop = async {
+            self.reconciler.actor.stop(Some(reason.clone()));
+            Ok::<(), ActorError>(())
+        };
+
+        // Run all stops in parallel, ignoring errors (fail-fast pattern)
+        let _ = futures::join!(storage_stop, workflow_stop, queue_stop, reconciler_stop);
     }
 }
 

@@ -384,7 +384,8 @@ pub fn execute_stage_with_retry(
     // Use functional approach with fold to count attempts
     let attempts = retry_on_retryable(retry_config, || {
         execute_stage(&stage.name, language, worktree_path)
-    }).is_ok() as u32;
+    })
+    .is_ok() as u32;
 
     match retry_on_retryable(retry_config, || {
         execute_stage(&stage.name, language, worktree_path)

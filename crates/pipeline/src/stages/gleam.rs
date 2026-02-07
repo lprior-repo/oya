@@ -64,7 +64,8 @@ fn gleam_coverage(cwd: &Path) -> Result<()> {
     let test_files = find_gleam_files(cwd)?
         .into_iter()
         .filter(|p| {
-            let file_name = p.file_name().unwrap().to_string_lossy();
+            // Functional pattern: map_or instead of unwrap_or
+            let file_name = p.file_name().and_then(|n| n.to_str()).map_or("", |s| s);
             file_name.ends_with("_test.gleam") || file_name.starts_with("test_")
         })
         .collect::<Vec<_>>();

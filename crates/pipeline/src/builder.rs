@@ -376,16 +376,27 @@ impl PipelineBuilder {
     /// - No duplicate stage names
     /// - No circular dependencies (when implemented)
     pub fn validate(self) -> Result<Self> {
-        match self.validate_cache() {
-            Ok(()) => (),
-            Err(e) => return Err(e.clone()),
-        };
+        // Railway-Oriented Programming: validate each check, composing results
+        // Perform validation directly to avoid reference issues with cached Result
 
-        debug!(
-            language = %self.language.as_ref().unwrap(),
-            stage_count = self.stages.len(),
-            "Pipeline validation successful"
-        );
+        // Check language is set
+        let _language = self.language.ok_or_else(|| Error::InvalidRecord {
+            reason: "language must be set".to_string(),
+        })?;
+
+        // Check for duplicate stage names using itertools
+        let stage_names: Vec<&String> = self.stages.iter().map(|s| &s.name).collect();
+        let duplicates: Vec<&String> = stage_names.iter().duplicates().cloned().collect();
+
+        if !duplicates.is_empty() {
+            let duplicate_names: Vec<&str> = duplicates.iter().map(|s| s.as_str()).collect();
+            return Err(Error::DuplicateStages {
+                stages: duplicate_names.join(", "),
+            });
+        }
+
+        // Check for circular dependencies (placeholder for future implementation)
+        self.check_circular_deps()?;
 
         Ok(self)
     }

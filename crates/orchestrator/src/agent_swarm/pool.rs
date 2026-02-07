@@ -353,14 +353,12 @@ impl AgentPool {
             ..Default::default()
         };
 
-        agents.values().for_each(|agent| {
-            match agent.state() {
-                AgentState::Idle => stats.idle += 1,
-                AgentState::Working => stats.working += 1,
-                AgentState::Unhealthy => stats.unhealthy += 1,
-                AgentState::ShuttingDown => stats.shutting_down += 1,
-                AgentState::Terminated => stats.terminated += 1,
-            }
+        agents.values().for_each(|agent| match agent.state() {
+            AgentState::Idle => stats.idle += 1,
+            AgentState::Working => stats.working += 1,
+            AgentState::Unhealthy => stats.unhealthy += 1,
+            AgentState::ShuttingDown => stats.shutting_down += 1,
+            AgentState::Terminated => stats.terminated += 1,
         });
 
         stats
@@ -401,9 +399,9 @@ impl AgentPool {
             agents.keys().cloned().collect_vec()
         };
 
-        agent_ids.into_iter().for_each(|agent_id| {
+        for agent_id in agent_ids {
             let _ = self.shutdown_agent(&agent_id).await;
-        });
+        }
     }
 
     /// Get the pool configuration.

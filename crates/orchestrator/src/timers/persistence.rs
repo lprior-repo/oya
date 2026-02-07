@@ -52,9 +52,7 @@ impl TimerRecord {
     ///
     /// Returns an error if payload or status data is invalid.
     pub fn into_timer(self) -> PersistenceResult<DurableTimer> {
-        let payload: serde_json::Value = serde_json::from_str(&self.payload).map_err(|e| {
-            PersistenceError::serialization_error(format!("invalid timer payload JSON: {}", e))
-        })?;
+        let payload: serde_json::Value = serde_json::from_str(&self.payload)?;
 
         let status = match self.status.as_str() {
             "pending" => TimerStatus::Pending,
@@ -111,7 +109,7 @@ impl TimerPersistence {
             .create(("durable_timer", timer.id().as_str()))
             .content(record)
             .await
-            .map_err(|e| PersistenceError::query_failed(e))?;
+            .map_err(PersistenceError::from)?;
 
         Ok(())
     }
@@ -139,9 +137,9 @@ impl TimerPersistence {
             .bind(("status", status_str))
             .bind(("now", Utc::now()))
             .await
-            .map_err(|e| PersistenceError::query_failed(e.to_string()))?
+            .map_err(PersistenceError::from)?
             .take(0)
-            .map_err(|e| PersistenceError::query_failed(e))?;
+            .map_err(PersistenceError::from)?;
 
         Ok(())
     }
@@ -166,9 +164,9 @@ impl TimerPersistence {
             .bind(("execute_at", timer.execute_at()))
             .bind(("now", Utc::now()))
             .await
-            .map_err(|e| PersistenceError::query_failed(e.to_string()))?
+            .map_err(PersistenceError::from)?
             .take(0)
-            .map_err(|e| PersistenceError::query_failed(e))?;
+            .map_err(PersistenceError::from)?;
 
         Ok(())
     }
@@ -184,7 +182,7 @@ impl TimerPersistence {
             .db()
             .select(("durable_timer", timer_id.as_str()))
             .await
-            .map_err(|e| PersistenceError::query_failed(e))?;
+            .map_err(PersistenceError::from)?;
 
         record.ok_or_else(|| PersistenceError::not_found("durable_timer", timer_id.as_str()))
     }
@@ -206,9 +204,9 @@ impl TimerPersistence {
             )
             .bind(("until", until))
             .await
-            .map_err(|e| PersistenceError::query_failed(e.to_string()))?
+            .map_err(PersistenceError::from)?
             .take(0)
-            .map_err(|e| PersistenceError::query_failed(e))?;
+            .map_err(PersistenceError::from)?;
 
         Ok(records)
     }
@@ -224,9 +222,9 @@ impl TimerPersistence {
             .db()
             .query("SELECT * FROM durable_timer WHERE status = 'pending' ORDER BY execute_at ASC")
             .await
-            .map_err(|e| PersistenceError::query_failed(e.to_string()))?
+            .map_err(PersistenceError::from)?
             .take(0)
-            .map_err(|e| PersistenceError::query_failed(e))?;
+            .map_err(PersistenceError::from)?;
 
         Ok(records)
     }
@@ -242,7 +240,7 @@ impl TimerPersistence {
             .db()
             .delete(("durable_timer", timer_id.as_str()))
             .await
-            .map_err(|e| PersistenceError::query_failed(e))?;
+            .map_err(PersistenceError::from)?;
 
         Ok(())
     }
@@ -261,9 +259,9 @@ impl TimerPersistence {
             )
             .bind(("cutoff", older_than))
             .await
-            .map_err(|e| PersistenceError::query_failed(e.to_string()))?
+            .map_err(PersistenceError::from)?
             .take(0)
-            .map_err(|e| PersistenceError::query_failed(e))?;
+            .map_err(PersistenceError::from)?;
 
         Ok(result.len() as u64)
     }
@@ -294,7 +292,7 @@ impl TimerPersistence {
             .db()
             .query(schema)
             .await
-            .map_err(|e| PersistenceError::query_failed(e))?;
+            .map_err(PersistenceError::from)?;
 
         Ok(())
     }

@@ -263,12 +263,14 @@ mod tests {
         };
         let loop_runner = ReconciliationLoop::new(reconciler, desired_provider, projection, config);
 
-        let result = loop_runner.reconcile_once().await;
-        assert!(result.is_ok());
-        assert!(
-            result.ok().unwrap_or(false),
-            "Empty system should be converged"
-        );
+        match loop_runner.reconcile_once().await {
+            Ok(converged) => assert!(converged, "Empty system should be converged"),
+            Err(e) => {
+                // In test code, we need to fail the test on error
+                // Since panic/unwrap are forbidden, we use assert!
+                assert!(false, "reconcile_once should succeed: {:?}", e);
+            }
+        }
     }
 
     /// Given a desired state with one bead
@@ -293,13 +295,16 @@ mod tests {
         let config = LoopConfig::default();
         let loop_runner = ReconciliationLoop::new(reconciler, desired_provider, projection, config);
 
-        let result = loop_runner.reconcile_once().await;
-        assert!(result.is_ok());
-        // Should NOT be converged because a bead needs to be created
-        assert!(
-            !result.ok().unwrap_or(true),
-            "System with missing bead should not be converged"
-        );
+        match loop_runner.reconcile_once().await {
+            Ok(converged) => assert!(
+                !converged,
+                "System with missing bead should not be converged"
+            ),
+            Err(e) => {
+                // In test code, we need to fail the test on error
+                assert!(false, "reconcile_once should succeed: {:?}", e);
+            }
+        }
     }
 
     /// Given a loop that is running
@@ -357,9 +362,12 @@ mod tests {
         let provider = InMemoryDesiredStateProvider::new(DesiredState::new());
 
         // Initially empty
-        let state1 = provider.get_desired_state().await;
-        assert!(state1.is_ok());
-        assert!(state1.ok().map(|s| s.is_empty()).unwrap_or(false));
+        match provider.get_desired_state().await {
+            Ok(state) => assert!(state.is_empty()),
+            Err(e) => {
+                assert!(false, "get_desired_state should succeed: {:?}", e);
+            }
+        }
 
         // Add a bead
         let bead_id = BeadId::new();

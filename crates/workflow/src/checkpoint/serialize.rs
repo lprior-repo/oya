@@ -21,7 +21,7 @@ pub const CHECKPOINT_VERSION: u32 = 1;
 const VERSION_HEADER_SIZE: usize = 4;
 
 /// Magic bytes for checkpoint format identification.
-const MAGIC_BYTES: &[u8; 8] = b"OYACPT01";
+pub const MAGIC_BYTES: &[u8; 8] = b"OYACPT01";
 
 /// Checkpoint serialization errors.
 #[derive(Debug, Clone)]
@@ -106,7 +106,7 @@ fn serialize_state_bincode<T: Serialize + bincode::Encode>(state: &T) -> Seriali
 /// # Errors
 ///
 /// This function is infallible but returns Result for API consistency.
-fn add_version_header(data: Vec<u8>) -> SerializeResult<Vec<u8>> {
+pub fn add_version_header(data: Vec<u8>) -> SerializeResult<Vec<u8>> {
     // Optimized: Pre-allocate Vec for better performance
     let mut header = Vec::with_capacity(MAGIC_BYTES.len() + 4 + data.len());
     header.extend_from_slice(MAGIC_BYTES);

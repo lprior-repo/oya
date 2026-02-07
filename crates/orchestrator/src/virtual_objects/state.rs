@@ -429,11 +429,10 @@ impl ObjectState {
             .db()
             .select(("object_state", self.object_id.as_str()))
             .await
-            .map_err(|e| PersistenceError::query_failed(e))?;
+            .map_err(PersistenceError::from)?;
 
         if let Some(record) = result {
-            let state: HashMap<String, StateValue> = serde_json::from_str(&record.state)
-                .map_err(|e| PersistenceError::serialization_error(e))?;
+            let state: HashMap<String, StateValue> = serde_json::from_str(&record.state)?;
 
             self.kv_store = state;
             self.version = record.version;
@@ -452,8 +451,7 @@ impl ObjectState {
             updated_at: DateTime<Utc>,
         }
 
-        let state_json = serde_json::to_string(&self.kv_store)
-            .map_err(|e| PersistenceError::serialization_error(e.to_string()))?;
+        let state_json = serde_json::to_string(&self.kv_store)?;
 
         let object_id_str = self.object_id.as_str().to_string();
 
@@ -468,15 +466,11 @@ impl ObjectState {
             .db()
             .query("UPSERT type::thing('object_state', $id) CONTENT $data")
             .bind(("id", object_id_str))
-            .bind((
-                "data",
-                serde_json::to_value(input)
-                    .map_err(|e| PersistenceError::serialization_error(e.to_string()))?,
-            ))
+            .bind(("data", serde_json::to_value(input)?))
             .await
-            .map_err(|e| PersistenceError::query_failed(e.to_string()))?
+            .map_err(PersistenceError::from)?
             .take(0)
-            .map_err(|e| PersistenceError::query_failed(e))?;
+            .map_err(PersistenceError::from)?;
 
         Ok(())
     }
@@ -500,7 +494,7 @@ impl ObjectState {
             .db()
             .query(schema)
             .await
-            .map_err(|e| PersistenceError::query_failed(e))?;
+            .map_err(PersistenceError::from)?;
 
         Ok(())
     }

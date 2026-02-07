@@ -7,8 +7,15 @@ use crate::conflict::{detect, attempt_rebase, ConflictDetection, RebaseResult};
 #[test]
 fn test_conflict_detection() {
     // Test detecting conflicts on merge attempt
-    let conflict = detect("main", "feature-branch")
-        .expect("Conflict detection should not fail");
+    let result = detect("main", "feature-branch");
+
+    // Verify detection succeeded
+    assert!(result.is_ok(), "Conflict detection should not fail");
+
+    let conflict = match result {
+        Ok(c) => c,
+        Err(_) => return, // Test can't continue if detection fails
+    };
 
     // Should return a conflict result
     assert_eq!(conflict.has_conflicts, false); // No conflicts in this case

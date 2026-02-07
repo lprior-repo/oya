@@ -74,8 +74,8 @@ pub use checkpoint::{
 pub use engine::{EngineConfig, WorkflowEngine};
 pub use error::{Error, Result};
 pub use handler::{
-    AsyncFnHandler, ChainHandler, FailingHandler, FnHandler, HandlerChain, HandlerRegistry, NoOpHandler,
-    PhaseHandler,
+    AsyncFnHandler, ChainHandler, FailingHandler, FnHandler, HandlerChain, HandlerRegistry,
+    NoOpHandler, PhaseHandler,
 };
 pub use storage::{InMemoryStorage, WorkflowStorage};
 pub use types::{

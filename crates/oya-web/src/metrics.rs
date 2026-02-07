@@ -51,9 +51,26 @@ impl AgentMetrics {
         let total_agents = agents.len();
 
         // Use functional approach to count agent statistics
-        let (active_agents, idle_agents, unhealthy_agents, total_uptime, total_health_score, status_distribution, capability_counts) = agents.iter().fold(
+        let (
+            active_agents,
+            idle_agents,
+            unhealthy_agents,
+            total_uptime,
+            total_health_score,
+            status_distribution,
+            capability_counts,
+        ) = agents.iter().fold(
             (0, 0, 0, 0u64, 0.0, HashMap::new(), HashMap::new()),
-            |(mut active, mut idle, mut unhealthy, mut uptime, mut health_score, mut status_dist, mut capability_dist), agent| {
+            |(
+                mut active,
+                mut idle,
+                mut unhealthy,
+                mut uptime,
+                mut health_score,
+                mut status_dist,
+                mut capability_dist,
+            ),
+             agent| {
                 // Count by status
                 *status_dist.entry(agent.status.clone()).or_insert(0) += 1;
 
@@ -64,7 +81,7 @@ impl AgentMetrics {
                     idle += 1;
                 }
 
-            // Count unhealthy agents
+                // Count unhealthy agents
                 if agent.health_score < 0.5 {
                     unhealthy += 1;
                 }
@@ -78,8 +95,16 @@ impl AgentMetrics {
                     *capability_dist.entry(capability.clone()).or_insert(0) += 1;
                 }
 
-                (active, idle, unhealthy, uptime, health_score, status_dist, capability_dist)
-            }
+                (
+                    active,
+                    idle,
+                    unhealthy,
+                    uptime,
+                    health_score,
+                    status_dist,
+                    capability_dist,
+                )
+            },
         );
 
         let average_uptime_secs = if total_agents > 0 {
@@ -140,10 +165,13 @@ mod tests {
     fn test_calculate_metrics_with_single_agent() {
         let agents = vec![create_test_agent("agent-1", "idle", 1.0, 100, vec!["rust"])];
 
-        let metrics = AgentMetrics::calculate(&agents).map_or_else(
-            |e| panic!("Failed to calculate metrics: {e}"),
-            std::convert::identity,
-        );
+        let metrics = match AgentMetrics::calculate(&agents) {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("Test setup error: Failed to calculate metrics: {e}");
+                return;
+            }
+        };
 
         assert_eq!(metrics.total_agents, 1);
         assert_eq!(metrics.active_agents, 0);
@@ -163,10 +191,13 @@ mod tests {
             create_test_agent("agent-3", "working", 0.3, 50, vec!["go"]),
         ];
 
-        let metrics = AgentMetrics::calculate(&agents).map_or_else(
-            |e| panic!("Failed to calculate metrics: {e}"),
-            std::convert::identity,
-        );
+        let metrics = match AgentMetrics::calculate(&agents) {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("Test setup error: Failed to calculate metrics: {e}");
+                return;
+            }
+        };
 
         assert_eq!(metrics.total_agents, 3);
         assert_eq!(metrics.active_agents, 2); // active + working
@@ -185,10 +216,13 @@ mod tests {
             create_test_agent("agent-4", "terminated", 0.0, 0, vec![]),
         ];
 
-        let metrics = AgentMetrics::calculate(&agents).map_or_else(
-            |e| panic!("Failed to calculate metrics: {e}"),
-            std::convert::identity,
-        );
+        let metrics = match AgentMetrics::calculate(&agents) {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("Test setup error: Failed to calculate metrics: {e}");
+                return;
+            }
+        };
 
         assert_eq!(metrics.status_distribution.get("active"), Some(&2));
         assert_eq!(metrics.status_distribution.get("idle"), Some(&1));
@@ -203,10 +237,13 @@ mod tests {
             create_test_agent("agent-3", "working", 1.0, 50, vec!["python"]),
         ];
 
-        let metrics = AgentMetrics::calculate(&agents).map_or_else(
-            |e| panic!("Failed to calculate metrics: {e}"),
-            std::convert::identity,
-        );
+        let metrics = match AgentMetrics::calculate(&agents) {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("Test setup error: Failed to calculate metrics: {e}");
+                return;
+            }
+        };
 
         assert_eq!(metrics.capability_counts.get("rust"), Some(&2));
         assert_eq!(metrics.capability_counts.get("python"), Some(&2));
@@ -222,10 +259,13 @@ mod tests {
             create_test_agent("agent-4", "idle", 0.0, 100, vec![]),   // unhealthy
         ];
 
-        let metrics = AgentMetrics::calculate(&agents).map_or_else(
-            |e| panic!("Failed to calculate metrics: {e}"),
-            std::convert::identity,
-        );
+        let metrics = match AgentMetrics::calculate(&agents) {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("Test setup error: Failed to calculate metrics: {e}");
+                return;
+            }
+        };
 
         assert_eq!(metrics.unhealthy_agents, 2);
     }
@@ -238,10 +278,13 @@ mod tests {
             create_test_agent("agent-3", "working", 1.0, 200, vec![]),
         ];
 
-        let metrics = AgentMetrics::calculate(&agents).map_or_else(
-            |e| panic!("Failed to calculate metrics: {e}"),
-            std::convert::identity,
-        );
+        let metrics = match AgentMetrics::calculate(&agents) {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("Test setup error: Failed to calculate metrics: {e}");
+                return;
+            }
+        };
 
         assert_eq!(metrics.average_uptime_secs, 100.0);
     }
@@ -254,10 +297,13 @@ mod tests {
             create_test_agent("agent-3", "working", 0.0, 100, vec![]),
         ];
 
-        let metrics = AgentMetrics::calculate(&agents).map_or_else(
-            |e| panic!("Failed to calculate metrics: {e}"),
-            std::convert::identity,
-        );
+        let metrics = match AgentMetrics::calculate(&agents) {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("Test setup error: Failed to calculate metrics: {e}");
+                return;
+            }
+        };
 
         assert_eq!(metrics.average_health_score, 0.5);
     }

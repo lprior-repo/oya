@@ -89,6 +89,15 @@ pub struct MemoryMetrics {
     rss_shared: u64,
 }
 
+/// Intermediate accumulator for parsed metrics
+#[derive(Debug, Default)]
+struct MetricsAccumulator {
+    rss: Option<u64>,
+    vm_size: Option<u64>,
+    vm_peak: Option<u64>,
+    rss_shared: Option<u64>,
+}
+
 impl MemoryMetrics {
     /// Create new memory metrics
     #[must_use]
@@ -152,15 +161,6 @@ impl MemoryMetrics {
 
         let reader = BufReader::new(file);
 
-        /// Intermediate accumulator for parsed metrics
-        #[derive(Debug, Default)]
-        struct MetricsAccumulator {
-            rss_kb: Option<u64>,
-            vm_size_kb: Option<u64>,
-            vm_peak_kb: Option<u64>,
-            rss_shared_kb: Option<u64>,
-        }
-
         // Functional iterator pipeline: read lines -> parse -> fold into accumulator
         let accumulator = reader
             .lines()
@@ -178,29 +178,29 @@ impl MemoryMetrics {
                 MetricsAccumulator::default(),
                 |mut acc, (metric_type, value)| {
                     match metric_type {
-                        MetricType::VmRss => acc.rss_kb = Some(value),
-                        MetricType::VmSize => acc.vm_size_kb = Some(value),
-                        MetricType::VmPeak => acc.vm_peak_kb = Some(value),
-                        MetricType::RssAnon => acc.rss_shared_kb = Some(value),
+                        MetricType::VmRss => acc.rss = Some(value),
+                        MetricType::VmSize => acc.vm_size = Some(value),
+                        MetricType::VmPeak => acc.vm_peak = Some(value),
+                        MetricType::RssAnon => acc.rss_shared = Some(value),
                     }
                     acc
                 },
             );
 
         let rss_kb = accumulator
-            .rss_kb
+            .rss
             .ok_or_else(|| ProfilingError::MetricsReadFailed(pid, "VmRSS not found".to_string()))?;
 
-        let vm_size_kb = accumulator.vm_size_kb.ok_or_else(|| {
+        let vm_size_kb = accumulator.vm_size.ok_or_else(|| {
             ProfilingError::MetricsReadFailed(pid, "VmSize not found".to_string())
         })?;
 
-        let vm_peak_kb = accumulator.vm_peak_kb.ok_or_else(|| {
+        let vm_peak_kb = accumulator.vm_peak.ok_or_else(|| {
             ProfilingError::MetricsReadFailed(pid, "VmPeak not found".to_string())
         })?;
 
         // RssAnon is optional (older kernels may not have it)
-        let rss_shared_kb = accumulator.rss_shared_kb.unwrap_or(0);
+        let rss_shared_kb = accumulator.rss_shared.unwrap_or(0);
 
         Ok(Self::new(rss_kb, vm_size_kb, vm_peak_kb, rss_shared_kb))
     }

@@ -143,7 +143,7 @@ impl StreamChunk {
     }
 
     /// Get the data as a string (fallible conversion)
-    #[must_use]
+    #[must_use = "Returns the UTF-8 string slice if valid"]
     pub fn as_str(&self) -> Result<&str, std::str::Utf8Error> {
         std::str::from_utf8(&self.data)
     }
@@ -168,8 +168,20 @@ impl StreamChunk {
 
     /// Get a reference to the underlying bytes
     #[must_use]
-    pub fn as_ref(&self) -> &Bytes {
+    pub fn as_bytes(&self) -> &Bytes {
         &self.data
+    }
+}
+
+impl AsRef<Bytes> for StreamChunk {
+    fn as_ref(&self) -> &Bytes {
+        &self.data
+    }
+}
+
+impl AsRef<[u8]> for StreamChunk {
+    fn as_ref(&self) -> &[u8] {
+        self.data.as_ref()
     }
 }
 
@@ -264,7 +276,8 @@ mod tests {
     #[test]
     fn test_stream_chunk_as_str() {
         let chunk = StreamChunk::new("stream-1", b"Hello, world!".to_vec(), 0);
-        assert_eq!(chunk.as_str().unwrap(), "Hello, world!");
+        assert!(chunk.as_str().is_ok());
+        assert_eq!(chunk.as_str().map_or("", |s| s), "Hello, world!");
     }
 
     #[test]
@@ -277,7 +290,7 @@ mod tests {
     fn test_stream_chunk_slice() {
         let chunk = StreamChunk::new("stream-1", b"Hello, world!".to_vec(), 0);
         let slice = chunk.slice(0..5);
-        assert_eq!(slice, b"Hello");
+        assert_eq!(&slice[..], b"Hello");
         assert_eq!(slice.len(), 5);
     }
 
@@ -294,10 +307,10 @@ mod tests {
     }
 
     #[test]
-    fn test_stream_chunk_slice() {
+    fn test_stream_chunk_methods() {
         let chunk = StreamChunk::new("stream-1", b"Hello, world!".to_vec(), 0);
         let slice = chunk.slice(0..5);
-        assert_eq!(slice, b"Hello");
+        assert_eq!(&slice[..], b"Hello");
         assert_eq!(slice.len(), 5);
     }
 }

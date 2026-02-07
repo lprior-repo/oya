@@ -1,8 +1,8 @@
 //! Test file to verify pipeline validation cache implementation
 //! This can be run with `cargo run --bin test_pipeline_cache`
 
-use std::sync::OnceLock;
 use std::collections::HashMap;
+use std::sync::OnceLock;
 
 // Mock the error type for testing
 #[derive(Debug)]
@@ -19,7 +19,9 @@ struct Stage {
 
 impl Stage {
     fn new(name: &str) -> Self {
-        Self { name: name.to_string() }
+        Self {
+            name: name.to_string(),
+        }
     }
 
     fn name(&self) -> &str {

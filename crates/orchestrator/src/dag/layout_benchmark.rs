@@ -10,9 +10,8 @@
 #![warn(clippy::nursery)]
 #![forbid(unsafe_code)]
 
-use std::time::Duration;
-use crate::dag::{WorkflowDAG, MemoizedLayout, DependencyType};
-use std::collections::HashMap;
+use crate::dag::{DependencyType, MemoizedLayout, WorkflowDAG};
+use std::time::{Duration, Instant};
 
 /// Benchmark DAG layout performance with memoization
 pub fn benchmark_layout_performance() {
@@ -72,24 +71,36 @@ fn benchmark_graph_size(size: usize) {
     });
 }
 
-fn benchmark_layout_computation(layout: &MemoizedLayout, iterations: usize, cold_cache: bool) -> Duration {
+fn benchmark_layout_computation(
+    layout: &MemoizedLayout,
+    iterations: usize,
+    cold_cache: bool,
+) -> Duration {
     use std::time::Instant;
 
     // Force cache invalidation for cold cache test
     if cold_cache {
         // Create a fresh layout for cold cache test
         let dag = layout.dag().clone();
-        let fresh_layout = WorkflowDAG::create_memoized_layout(&dag, layout.spring_force().stiffness(), layout.spring_force().rest_length())
-            .expect("Should succeed");
+        let fresh_layout = WorkflowDAG::create_memoized_layout(
+            &dag,
+            layout.spring_force().stiffness(),
+            layout.spring_force().rest_length(),
+        )
+        .expect("Should succeed");
 
         let start = Instant::now();
-        (0..iterations).for_each(|_| fresh_layout.compute_node_positions());
+        for _ in 0..iterations {
+            let _ = fresh_layout.compute_node_positions();
+        }
         return start.elapsed();
     }
 
     // Warm cache test
     let start = Instant::now();
-    (0..iterations).for_each(|_| layout.compute_node_positions());
+    for _ in 0..iterations {
+        let _ = layout.compute_node_positions();
+    }
     start.elapsed()
 }
 
@@ -97,35 +108,50 @@ fn benchmark_repeated_access() {
     let dag = create_test_dag(50);
 
     // Create layout
-    let layout = WorkflowDAG::create_memoized_layout(&dag, 0.1, 100.0)
-        .expect("Should succeed");
+    let layout = WorkflowDAG::create_memoized_layout(&dag, 0.1, 100.0).expect("Should succeed");
 
     let iterations = 1000;
 
     // Test repeated access to node positions
-    println!("  Repeated node position access ({} iterations):", iterations);
+    println!(
+        "  Repeated node position access ({} iterations):",
+        iterations
+    );
     let start = Instant::now();
-    (0..iterations).for_each(|_| layout.compute_node_positions());
+    for _ in 0..iterations {
+        let _ = layout.compute_node_positions();
+    }
     let access_time = start.elapsed();
     println!("    Time: {:?}", access_time);
 
     // Test repeated access to edge forces
-    println!("  Repeated edge force calculation ({} iterations):", iterations);
+    println!(
+        "  Repeated edge force calculation ({} iterations):",
+        iterations
+    );
     let start = Instant::now();
-    (0..iterations).for_each(|_| layout.compute_edge_forces());
+    for _ in 0..iterations {
+        let _ = layout.compute_edge_forces();
+    }
     let force_time = start.elapsed();
     println!("    Time: {:?}", force_time);
 
     // Test mixed access pattern
     println!("  Mixed access pattern ({} iterations):", iterations);
     let start = Instant::now();
-    (0..iterations).for_each(|i| {
+    for i in 0..iterations {
         match i % 3 {
-            0 => layout.compute_node_positions(),
-            1 => layout.compute_edge_forces(),
-            _ => layout.compute_edge_paths(10.0),
+            0 => {
+                let _ = layout.compute_node_positions();
+            }
+            1 => {
+                let _ = layout.compute_edge_forces();
+            }
+            _ => {
+                let _ = layout.compute_edge_paths(10.0);
+            }
         }
-    });
+    }
     let mixed_time = start.elapsed();
     println!("    Time: {:?}", mixed_time);
 }
@@ -134,15 +160,19 @@ fn benchmark_cache_invalidation() {
     let mut dag = create_test_dag(20);
 
     // Create initial layout
-    let mut layout = WorkflowDAG::create_memoized_layout(&dag, 0.1, 100.0)
-        .expect("Should succeed");
+    let mut layout = WorkflowDAG::create_memoized_layout(&dag, 0.1, 100.0).expect("Should succeed");
 
     let initial_time = benchmark_layout_computation(&layout, 100, false);
     println!("  Initial layout computation: {:?}", initial_time);
 
     // Add a node and invalidate cache
     dag.add_node("new_node".to_string()).unwrap();
-    dag.add_edge("node-19".to_string(), "new_node".to_string(), DependencyType::BlockingDependency).unwrap();
+    dag.add_edge(
+        "node-19".to_string(),
+        "new_node".to_string(),
+        DependencyType::BlockingDependency,
+    )
+    .unwrap();
 
     layout.invalidate_cache();
 
@@ -165,11 +195,26 @@ fn create_test_dag(size: usize) -> WorkflowDAG {
     for i in 0..(size - 1) {
         if i % 4 == 0 && i + 2 < size {
             // Create branching every 4th node
-            dag.add_edge(format!("node-{}", i), format!("node-{}", i + 1), DependencyType::BlockingDependency).unwrap();
-            dag.add_edge(format!("node-{}", i), format!("node-{}", i + 2), DependencyType::BlockingDependency).unwrap();
+            dag.add_edge(
+                format!("node-{}", i),
+                format!("node-{}", i + 1),
+                DependencyType::BlockingDependency,
+            )
+            .unwrap();
+            dag.add_edge(
+                format!("node-{}", i),
+                format!("node-{}", i + 2),
+                DependencyType::BlockingDependency,
+            )
+            .unwrap();
         } else if i + 1 < size {
             // Normal chain
-            dag.add_edge(format!("node-{}", i), format!("node-{}", i + 1), DependencyType::BlockingDependency).unwrap();
+            dag.add_edge(
+                format!("node-{}", i),
+                format!("node-{}", i + 1),
+                DependencyType::BlockingDependency,
+            )
+            .unwrap();
         }
     }
 
@@ -226,8 +271,8 @@ pub mod analysis {
         for size in cache_sizes {
             println!("Testing cache size: {} accesses", size);
 
-            let layout = WorkflowDAG::create_memoized_layout(&dag, 0.1, 100.0)
-                .expect("Should succeed");
+            let layout =
+                WorkflowDAG::create_memoized_layout(&dag, 0.1, 100.0).expect("Should succeed");
 
             // Simulate repeated access
             let start = std::time::Instant::now();

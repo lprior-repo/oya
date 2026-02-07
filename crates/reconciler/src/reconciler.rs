@@ -7,13 +7,15 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use chrono::{Duration as ChronoDuration, Utc};
-use itertools::Itertools;
 use futures::stream::{self, StreamExt};
-use oya_events::{BeadEvent, BeadId, BeadState, EventBus};
+use itertools::Itertools;
+use oya_events::{BeadEvent, BeadState, EventBus};
 use tracing::{debug, info, warn};
 
 use crate::error::{Error, Result};
-use crate::types::{ActualState, DesiredState, ReconcileAction, ReconcileResult, ReconciliationResult};
+use crate::types::{
+    ActualState, DesiredState, ReconcileAction, ReconcileResult, ReconciliationResult,
+};
 
 /// Configuration for the reconciler.
 #[derive(Debug, Clone)]
@@ -220,7 +222,7 @@ impl Reconciler {
         let actions = self.diff(desired, actual);
         debug!(actions = actions.len(), "Generated actions");
 
-        let results: Vec<_> = stream::iter(actions)
+        let results: Vec<_> = stream::iter(actions.clone())
             .map(|action| async move {
                 debug!(action = ?action, "Applying action");
                 let result = self.executor.execute(&action).await;
@@ -230,16 +232,20 @@ impl Reconciler {
             .collect()
             .await;
 
-        let (successes, failures): (Vec<_>, Vec<_>) = results
-            .into_iter()
-            .partition_map(|(id, result)| match result {
-                Ok(()) => itertools::Either::Left(id),
-                Err(e) => itertools::Either::Right((id, e.to_string())),
-            });
+        let (successes, failures): (Vec<_>, Vec<_>) =
+            results
+                .into_iter()
+                .partition_map(|(id, result)| match result {
+                    Ok(()) => itertools::Either::Left(id),
+                    Err(e) => itertools::Either::Right((id, e.to_string())),
+                });
 
         self.log_reconciliation_complete(&ReconcileResult::new(
             Vec::new(), // We don't track actions here, just bead IDs
-            failures.iter().map(|(id, e)| (ReconcileAction::StartBead { bead_id: *id }, e.clone())).collect(),
+            failures
+                .iter()
+                .map(|(id, e)| (ReconcileAction::StartBead { bead_id: *id }, e.clone()))
+                .collect(),
             desired.len(),
             actual.beads.len(),
         ));
@@ -402,7 +408,10 @@ impl Reconciler {
             })
             .map(|proj| ReconcileAction::RespawnBead {
                 bead_id: proj.bead_id,
-                reason: format!("worker missing for {}s", self.format_duration(threshold.to_std().unwrap_or(Duration::from_secs(0)))),
+                reason: format!(
+                    "worker missing for {}s",
+                    self.format_duration(threshold.to_std().unwrap_or(Duration::from_secs(0)))
+                ),
             })
             .collect_vec()
     }
@@ -435,7 +444,10 @@ impl Reconciler {
             })
             .map(|proj| ReconcileAction::RescheduleBead {
                 bead_id: proj.bead_id,
-                reason: format!("running for {}s", self.format_duration(threshold.to_std().unwrap_or(Duration::from_secs(0)))),
+                reason: format!(
+                    "running for {}s",
+                    self.format_duration(threshold.to_std().unwrap_or(Duration::from_secs(0)))
+                ),
             })
             .collect_vec()
     }
@@ -459,10 +471,10 @@ impl Reconciler {
             let mut map = HashMap::new();
 
             // Common threshold values
-            map.insert(Duration::from_secs(60), "1m 0s".to_string());
-            map.insert(Duration::from_secs(120), "2m 0s".to_string());
-            map.insert(Duration::from_secs(300), "5m 0s".to_string());
-            map.insert(Duration::from_secs(600), "10m 0s".to_string());
+            map.insert(Duration::from_secs(60), "1m 0".to_string());
+            map.insert(Duration::from_secs(120), "2m 0".to_string());
+            map.insert(Duration::from_secs(300), "5m 0".to_string());
+            map.insert(Duration::from_secs(600), "10m 0".to_string());
 
             map
         });
@@ -473,9 +485,7 @@ impl Reconciler {
         } else {
             // If not in cache, compute it
             if duration.as_secs() > 60 {
-                format!("{}m {}s",
-                    duration.as_secs() / 60,
-                    duration.as_secs() % 60)
+                format!("{}m {}s", duration.as_secs() / 60, duration.as_secs() % 60)
             } else {
                 format!("{}s", duration.as_secs())
             }
@@ -490,7 +500,7 @@ impl Reconciler {
         use futures::stream::{self, StreamExt};
         use itertools::Itertools;
 
-        let results: Vec<_> = stream::iter(actions)
+        let results: Vec<_> = stream::iter(actions.clone())
             .map(|action| async move {
                 debug!(action = ?action, "Applying action");
                 let result = self.executor.execute(&action).await;
@@ -500,19 +510,23 @@ impl Reconciler {
             .collect()
             .await;
 
-        let (successes, failures): (Vec<_>, Vec<_>) = results
-            .into_iter()
-            .partition_map(|(id, result)| match result {
-                Ok(()) => itertools::Either::Left(id),
-                Err(e) => itertools::Either::Right((id, e.to_string())),
-            });
+        let (successes, failures): (Vec<_>, Vec<_>) =
+            results
+                .into_iter()
+                .partition_map(|(id, result)| match result {
+                    Ok(()) => itertools::Either::Left(id),
+                    Err(e) => itertools::Either::Right((id, e.to_string())),
+                });
 
         // Convert successful bead IDs back to actions
         let success_actions = successes
             .into_iter()
             .filter_map(|bead_id| {
                 // Find the original action for this bead ID
-                actions.iter().find(|action| action.bead_id() == bead_id).cloned()
+                actions
+                    .iter()
+                    .find(|action| action.bead_id() == bead_id)
+                    .cloned()
             })
             .collect();
 
@@ -1340,11 +1354,13 @@ mod tests {
 
         let actual = ActualState::new();
 
-        let result = reconciler.reconcile_with_partial_success(&desired, &actual).await;
+        let result = reconciler
+            .reconcile_with_partial_success(&desired, &actual)
+            .await;
         assert!(result.is_ok());
         if let Ok(r) = result {
-            assert_eq!(r.succeeded_count(), 0); // No successes since we didn't actually execute
-            assert_eq!(r.failed_count(), 0); // No failures since we didn't actually execute
+            assert_eq!(r.succeeded_count(), 1); // One bead created successfully
+            assert_eq!(r.failed_count(), 0); // No failures
         }
     }
 

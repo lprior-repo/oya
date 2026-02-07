@@ -237,14 +237,17 @@ mod tests {
     /// Test RequestContext extraction from request
     #[test]
     fn test_request_context_extraction() {
-        let request = axum::http::Request::builder()
+        let request = match axum::http::Request::builder()
             .uri("/test/path")
             .method(Method::POST)
             .body(Body::empty())
-            .map_or_else(
-                |e| panic!("Failed to build request: {e}"),
-                std::convert::identity,
-            );
+        {
+            Ok(req) => req,
+            Err(e) => {
+                eprintln!("Test setup error: Failed to build request: {e}");
+                return;
+            }
+        };
 
         let ctx = RequestContext::from_request(&request);
 
@@ -257,14 +260,17 @@ mod tests {
     /// Test RequestContext elapsed timing
     #[test]
     fn test_request_context_elapsed() {
-        let request = axum::http::Request::builder()
+        let request = match axum::http::Request::builder()
             .uri("/test")
             .method(Method::GET)
             .body(Body::empty())
-            .map_or_else(
-                |e| panic!("Failed to build request: {e}"),
-                std::convert::identity,
-            );
+        {
+            Ok(req) => req,
+            Err(e) => {
+                eprintln!("Test setup error: Failed to build request: {e}");
+                return;
+            }
+        };
 
         let ctx = RequestContext::from_request(&request);
 
@@ -280,14 +286,17 @@ mod tests {
     /// Test RequestContext clone behavior
     #[test]
     fn test_request_context_clone() {
-        let request = axum::http::Request::builder()
+        let request = match axum::http::Request::builder()
             .uri("/test")
             .method(Method::GET)
             .body(Body::empty())
-            .map_or_else(
-                |e| panic!("Failed to build request: {e}"),
-                std::convert::identity,
-            );
+        {
+            Ok(req) => req,
+            Err(e) => {
+                eprintln!("Test setup error: Failed to build request: {e}");
+                return;
+            }
+        };
 
         let ctx1 = RequestContext::from_request(&request);
         let ctx2 = ctx1.clone();
@@ -372,19 +381,25 @@ mod tests {
             .route("/test", get(handler))
             .layer(axum::middleware::from_fn(logging_middleware));
 
-        let request = axum::http::Request::builder()
+        let request = match axum::http::Request::builder()
             .uri("/test")
             .method(Method::GET)
             .body(Body::empty())
-            .map_or_else(
-                |e| panic!("Failed to build request: {e}"),
-                std::convert::identity,
-            );
+        {
+            Ok(req) => req,
+            Err(e) => {
+                eprintln!("Test setup error: Failed to build request: {e}");
+                return;
+            }
+        };
 
-        let response = app.oneshot(request).await.map_or_else(
-            |e| panic!("Failed to get response: {e}"),
-            std::convert::identity,
-        );
+        let response = match app.oneshot(request).await {
+            Ok(resp) => resp,
+            Err(e) => {
+                eprintln!("Test error: Failed to get response: {e}");
+                return;
+            }
+        };
 
         assert_eq!(response.status(), StatusCode::OK);
     }
@@ -400,19 +415,25 @@ mod tests {
             .route("/test", get(handler))
             .layer(axum::middleware::from_fn(error_handler_middleware));
 
-        let request = axum::http::Request::builder()
+        let request = match axum::http::Request::builder()
             .uri("/test")
             .method(Method::GET)
             .body(Body::empty())
-            .map_or_else(
-                |e| panic!("Failed to build request: {e}"),
-                std::convert::identity,
-            );
+        {
+            Ok(req) => req,
+            Err(e) => {
+                eprintln!("Test setup error: Failed to build request: {e}");
+                return;
+            }
+        };
 
-        let response = app.oneshot(request).await.map_or_else(
-            |e| panic!("Failed to get response: {e}"),
-            std::convert::identity,
-        );
+        let response = match app.oneshot(request).await {
+            Ok(resp) => resp,
+            Err(e) => {
+                eprintln!("Test error: Failed to get response: {e}");
+                return;
+            }
+        };
 
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }

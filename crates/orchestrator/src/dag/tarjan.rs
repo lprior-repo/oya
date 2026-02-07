@@ -208,10 +208,17 @@ pub fn tarjan_scc(dag: &WorkflowDAG) -> Vec<Vec<BeadId>> {
     let mut all_sccs = Vec::new();
 
     // Visit all unvisited nodes
-    local_graph.node_indices().filter(|node| !state.is_visited(*node)).for_each(|node| {
+    // Collect unvisited nodes first to avoid borrow checker issues
+    let unvisited: Vec<_> = local_graph
+        .node_indices()
+        .filter(|node| !state.is_visited(*node))
+        .collect();
+
+    // Now process each unvisited node with mutable state
+    for node in unvisited {
         let sccs = state.visit(&local_graph, node);
         all_sccs.extend(sccs);
-    });
+    }
 
     // Convert NodeIndices to BeadIds
     all_sccs
@@ -273,7 +280,9 @@ pub fn find_cycles_tarjan(dag: &WorkflowDAG) -> Vec<Vec<BeadId>> {
                 let bead_id = &scc[0];
 
                 // Check if there's a self-loop in the DAG
-                dag.edges().any(|(from, to, _dep_type)| from == to && from == bead_id)
+                return dag
+                    .edges()
+                    .any(|(from, to, _dep_type)| from == to && from == bead_id);
             }
 
             false
