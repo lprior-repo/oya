@@ -340,12 +340,10 @@ mod tests {
         let event = BeadEvent::worker_unhealthy("worker-123", "health check timeout");
 
         assert_eq!(event.event_type(), "worker_unhealthy");
-        if let BeadEvent::WorkerUnhealthy { worker_id, reason, .. } = event {
-            assert_eq!(worker_id, "worker-123");
-            assert_eq!(reason, "health check timeout");
-        } else {
-            // Test fails if we don't get WorkerUnhealthy
-            return;
-        }
+        let BeadEvent::WorkerUnhealthy { worker_id, reason, .. } = event else {
+            panic!("Expected WorkerUnhealthy event");
+        };
+        assert_eq!(worker_id, "worker-123");
+        assert_eq!(reason, "health check timeout");
     }
 }

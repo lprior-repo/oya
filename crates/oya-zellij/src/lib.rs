@@ -1585,6 +1585,8 @@ mod tests {
 
         assert_eq!(agent.workload_history.beads_completed, 0);
         assert_eq!(agent.workload_history.operations_executed, 0);
+        assert!(agent.workload_history.avg_execution_secs.is_none());
+    }
 
     fn to_vector_stages(stages: Vec<StageInfo>) -> Vector<StageInfo> {
         stages.into_iter().collect::<Vector<_>>()
@@ -1645,7 +1647,6 @@ mod tests {
         state.selected_stage_index = state.selected_stage_index.saturating_sub(1);
         assert_eq!(state.selected_stage_index, 0);
     }
-}
 
     #[test]
     fn test_open_command_pane_function_exists() {
@@ -1656,4 +1657,5 @@ mod tests {
         // We just verify state is valid
         let _ = state;
     }
+}
 }

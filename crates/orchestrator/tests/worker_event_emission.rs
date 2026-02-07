@@ -274,3 +274,105 @@ async fn given_worker_when_stop_then_no_state_event_emitted()
         Err(_) => Ok(()), // Timeout is expected - no events should be emitted
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// HEALTH CHECK EVENT EMISSION TESTS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+#[tokio::test]
+async fn given_worker_when_health_check_fails_then_emits_worker_unhealthy_event()
+-> Result<(), Box<dyn std::error::Error>> {
+    // Given: A worker actor with event bus
+    let (worker, bus, _store) = setup_worker_with_event_bus().await?;
+
+    // When: Health check fails
+    let reason = "health check timeout after 5s";
+    worker.send_message(WorkerMessage::HealthCheckFailed {
+        reason: reason.to_string(),
+    })?;
+
+    // Then: WorkerUnhealthy event should be emitted
+    let event = wait_for_event(&bus, 500).await?;
+    assert_eq!(event.event_type(), "worker_unhealthy");
+
+    // Verify event contains worker_id and reason
+    match event {
+        oya_events::BeadEvent::WorkerUnhealthy { worker_id, reason: event_reason, .. } => {
+            assert!(!worker_id.is_empty(), "worker_id should not be empty");
+            assert_eq!(event_reason, reason);
+        }
+        _ => panic!("Expected WorkerUnhealthy event, got {:?}", event.event_type()),
+    }
+
+    // Cleanup
+    worker.stop(Some("test complete".to_string()));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn given_worker_with_active_bead_when_health_check_fails_then_emits_unhealthy_and_fails_bead()
+-> Result<(), Box<dyn std::error::Error>> {
+    // Given: A worker actor with event bus and an active bead
+    let (worker, bus, _store) = setup_worker_with_event_bus().await?;
+
+    let bead_id = oya_events::BeadId::new();
+    let bead_id_str = bead_id.to_string();
+    worker.send_message(WorkerMessage::StartBead {
+        bead_id: bead_id_str.clone(),
+        from_state: Some(oya_events::BeadState::Ready),
+    })?;
+
+    // Wait for the start event
+    let _start_event = wait_for_event(&bus, 500).await?;
+
+    // When: Health check fails
+    let reason = "worker not responding";
+    worker.send_message(WorkerMessage::HealthCheckFailed {
+        reason: reason.to_string(),
+    })?;
+
+    // Then: WorkerUnhealthy event should be emitted
+    let unhealthy_event = wait_for_event(&bus, 500).await?;
+    assert_eq!(unhealthy_event.event_type(), "worker_unhealthy");
+
+    // Then: Bead should also fail
+    let fail_event = wait_for_event(&bus, 500).await?;
+    assert_eq!(fail_event.event_type(), "failed");
+    assert_eq!(fail_event.bead_id(), bead_id);
+
+    // Cleanup
+    worker.stop(Some("test complete".to_string()));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn given_worker_when_no_event_bus_then_health_check_fails_continues_normally()
+-> Result<(), Box<dyn std::error::Error>> {
+    // Given: A worker actor WITHOUT event bus
+    let config = WorkerConfig {
+        checkpoint_interval: Duration::from_secs(60),
+        retry_policy: WorkerRetryPolicy::default(),
+        event_bus: None, // No event bus
+        workspace_manager: None,
+    };
+
+    let (worker, _handle) = ractor::Actor::spawn(None, WorkerActorDef, config).await?;
+
+    // When: Health check fails (should not panic or fail)
+    let result = worker.send_message(WorkerMessage::HealthCheckFailed {
+        error: "health check failed".to_string(),
+    });
+
+    // Then: Message should be sent successfully
+    assert!(result.is_ok(), "Send should succeed without event bus");
+
+    // Allow time for message processing
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    // Cleanup
+    worker.stop(Some("test complete".to_string()));
+
+    Ok(())
+}

@@ -380,10 +380,33 @@ impl Actor for WorkerActorDef {
                 }
             }
             WorkerMessage::HealthCheckFailed { reason } => {
-                warn!(reason = %reason, "Health check failed");
+                warn!(worker_id = %state.worker_id, reason = %reason, "Health check failed");
+
+                // Emit WorkerUnhealthy event if event bus is available
+                if let Some(ref event_bus) = state.config.event_bus {
+                    let event = oya_events::BeadEvent::worker_unhealthy(
+                        state.worker_id.clone(),
+                        reason.clone(),
+                    );
+
+                    // Publish the event asynchronously
+                    let event_bus_clone = event_bus.clone();
+                    tokio::spawn(async move {
+                        if let Err(err) = event_bus_clone.publish(event).await {
+                            tracing::error!(
+                                error = %err,
+                                "Failed to publish WorkerUnhealthy event"
+                            );
+                        }
+                    });
+                }
+
+                // Fail the current bead if one is active
                 if let Some(ref bead_id) = state.current_bead {
-                    warn!(bead_id = %bead_id, "Marking bead as unhealthy");
-                    // TODO: Emit BeadEvent::health_check_failed and transition to failed state
+                    warn!(bead_id = %bead_id, "Marking bead as unhealthy due to health check failure");
+                    let _ = myself.send_message(WorkerMessage::FailBead {
+                        error: reason.clone(),
+                    });
                 }
             }
             WorkerMessage::Stop { reason } => {

@@ -21,7 +21,6 @@ pub use oya_events::{
 ///
 /// This represents a single state entry with binary data and optional versioning.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[allow(dead_code)]
 struct StateRecord {
     /// State key (unique identifier)
     key: String,
@@ -36,11 +35,9 @@ struct StateRecord {
 pub struct StateManagerActorDef;
 
 /// State management for the StateManagerActor.
-#[allow(dead_code)]
 pub struct StateManagerState {
-    /// Connection configuration for SurrealDB.
-    #[allow(dead_code)]
-    db_config: DatabaseConfig,
+    /// Active SurrealDB connection.
+    db: std::sync::Arc<Surreal<Db>>,
 }
 
 /// Database configuration for state persistence.
@@ -148,7 +145,40 @@ impl Actor for StateManagerActorDef {
         args: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
         info!("StateManagerActor starting with config: {:?}", args);
-        Ok(StateManagerState { db_config: args })
+
+        // Create storage directory if it doesn't exist
+        tokio::fs::create_dir_all(&args.storage_path)
+            .await
+            .map_err(|e| {
+                ActorProcessingErr::from(format!("Failed to create storage directory: {}", e))
+            })?;
+
+        // Connect to SurrealDB
+        let db = Surreal::new::<RocksDb>(&args.storage_path)
+            .await
+            .map_err(|e| {
+                ActorProcessingErr::from(format!("Failed to connect to database: {}", e))
+            })?;
+
+        let db = std::sync::Arc::new(db);
+
+        // Initialize namespace and database
+        db.use_ns(&args.namespace)
+            .use_db(&args.database)
+            .await
+            .map_err(|e| {
+                ActorProcessingErr::from(format!(
+                    "Failed to initialize namespace/database: {}",
+                    e
+                ))
+            })?;
+
+        info!(
+            "StateManagerActor connected to namespace={}, database={}",
+            args.namespace, args.database
+        );
+
+        Ok(StateManagerState { db })
     }
 
     async fn handle(
@@ -165,45 +195,160 @@ impl Actor for StateManagerActorDef {
                     data.len(),
                     version
                 );
-                // TODO: Implement actual persistence to SurrealDB
-                // For now, this is a stub that logs the operation
+
+                let record = StateRecord {
+                    key: key.clone(),
+                    data: data.clone(),
+                    version: version.clone(),
+                };
+
+                match state
+                    .db
+                    .create::<Option<StateRecord>>(("state", key.clone()))
+                    .content(&record)
+                    .await
+                {
+                    Ok(_) => {
+                        info!("Successfully saved state: key={}", key);
+                    }
+                    Err(e) => {
+                        error!("Failed to save state: key={}, error={}", key, e);
+                    }
+                }
             }
 
             StateManagerMessage::DeleteState { key } => {
                 info!("Deleting state: key={}", key);
-                // TODO: Implement actual deletion from SurrealDB
+
+                match state.db.delete(("state", key)).await {
+                    Ok(_) => {
+                        info!("Successfully deleted state: key={}", key);
+                    }
+                    Err(e) => {
+                        error!("Failed to delete state: key={}, error={}", key, e);
+                    }
+                }
             }
 
             StateManagerMessage::ClearAll => {
                 info!("Clearing all state");
-                // TODO: Implement actual clear operation
+
+                match state.db.query("DELETE FROM state").await {
+                    Ok(_) => {
+                        info!("Successfully cleared all state");
+                    }
+                    Err(e) => {
+                        error!("Failed to clear all state: error={}", e);
+                    }
+                }
             }
 
             StateManagerMessage::LoadState { key, reply } => {
-                let result = Err(ActorError::actor_unavailable());
-                info!("Loading state: key={}, result={:?}", key, result);
-                // TODO: Implement actual load from SurrealDB
+                let result = async {
+                    let record: Option<StateRecord> = state
+                        .db
+                        .select(("state", key.clone()))
+                        .await
+                        .map_err(|e| ActorError::internal(format!("Failed to load state: {}", e)))?;
+
+                    match record {
+                        Some(rec) => {
+                            info!(
+                                "Successfully loaded state: key={}, size={} bytes",
+                                key,
+                                rec.data.len()
+                            );
+                            Ok(rec.data)
+                        }
+                        None => Err(ActorError::bead_not_found(key)),
+                    }
+                }
+                .await;
+
                 let _ = reply.send(result);
             }
 
             StateManagerMessage::StateExists { key, reply } => {
-                let result = Err(ActorError::actor_unavailable());
-                info!("Checking state exists: key={}, result={:?}", key, result);
-                // TODO: Implement actual exists check
+                let result = async {
+                    // Try to select the record - if it exists, we get Some, otherwise None
+                    let record: Option<StateRecord> = state
+                        .db
+                        .select(("state", key.clone()))
+                        .await
+                        .map_err(|e| {
+                            ActorError::internal(format!("Failed to check state: {}", e))
+                        })?;
+
+                    let exists = record.is_some();
+
+                    info!("State exists check: key={}, exists={}", key, exists);
+                    Ok(exists)
+                }
+                .await;
+
                 let _ = reply.send(result);
             }
 
             StateManagerMessage::GetStateVersion { key, reply } => {
-                let result = Err(ActorError::actor_unavailable());
-                info!("Getting state version: key={}, result={:?}", key, result);
-                // TODO: Implement actual version check
+                let result = async {
+                    let record: Option<StateRecord> = state
+                        .db
+                        .select(("state", key.clone()))
+                        .await
+                        .map_err(|e| {
+                            ActorError::internal(format!("Failed to get state version: {}", e))
+                        })?;
+
+                    match record {
+                        Some(rec) => {
+                            info!(
+                                "Got state version: key={}, version={:?}",
+                                key, rec.version
+                            );
+                            Ok(rec.version)
+                        }
+                        None => Err(ActorError::bead_not_found(key)),
+                    }
+                }
+                .await;
+
                 let _ = reply.send(result);
             }
 
             StateManagerMessage::ListKeys { prefix, reply } => {
-                let result = Err(ActorError::actor_unavailable());
-                info!("Listing keys: prefix={:?}, result={:?}", prefix, result);
-                // TODO: Implement actual list operation
+                let result = async {
+                    let query = if prefix.is_some() {
+                        "SELECT key FROM state WHERE key =~ $prefix ORDER BY key ASC"
+                    } else {
+                        "SELECT key FROM state ORDER BY key ASC"
+                    };
+
+                    let mut query_builder = state.db.query(query);
+
+                    if let Some(prefix_val) = &prefix {
+                        let pattern = format!("^{}", prefix_val);
+                        query_builder = query_builder.bind(("prefix", pattern));
+                    }
+
+                    let mut result = query_builder.await.map_err(|e| {
+                        ActorError::internal(format!("Failed to list keys: {}", e))
+                    })?;
+
+                    let records: Vec<StateRecord> = result.take(0).map_err(|e| {
+                        ActorError::internal(format!("Failed to extract keys result: {}", e))
+                    })?;
+
+                    let keys: Vec<String> = records.into_iter().map(|r| r.key).collect();
+
+                    info!(
+                        "Listed keys: prefix={:?}, count={}",
+                        prefix,
+                        keys.len()
+                    );
+                    Ok(keys)
+                }
+                .await;
+
                 let _ = reply.send(result);
             }
         }
@@ -350,9 +495,10 @@ impl Actor for EventStoreActorDef {
                 checkpoint_id,
                 reply,
             } => {
-                let result = state.store.replay_from(&checkpoint_id).await.map_err(|e| {
-                    ActorError::internal(format!("Failed to replay from checkpoint: {}", e))
-                });
+                let result =
+                    state.store.replay_from(&checkpoint_id).await.map_err(|e| {
+                        ActorError::internal(format!("Failed to replay from checkpoint: {}", e))
+                    });
 
                 info!(
                     "Replay from checkpoint {}: result={}",
