@@ -39,6 +39,9 @@ tracing = { workspace = true }
 surrealdb = { workspace = true }
 surrealdb-core = { workspace = true }
 
+# Compression
+zstd = { workspace = true }
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 proptest = "1"

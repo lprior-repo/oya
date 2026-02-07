@@ -67,6 +67,9 @@ serde_yaml = "0.9"
 toml = "0.9"
 bincode = { version = "2", features = ["serde"] }
 
+# Compression (battle-tested)
+zstd = "0.13"
+
 # Cryptography (battle-tested)
 sha2 = "0.10"
 
