@@ -8,14 +8,13 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use orchestrator::actors::supervisor::SupervisorConfig;
 use orchestrator::supervision::{Tier1Supervisors, spawn_tier1_supervisors};
 use ractor::ActorStatus;
-
 
 fn build_prefix() -> String {
     let nanos = SystemTime::now()
@@ -34,25 +33,6 @@ fn is_supervisor_alive(status: ActorStatus) -> bool {
 
 fn is_supervisor_stopped(status: ActorStatus) -> bool {
     matches!(status, ActorStatus::Stopping | ActorStatus::Stopped)
-}
-
-fn shutdown_all_supervisors(supervisors: &Tier1Supervisors) {
-    supervisors
-        .storage
-        .actor
-        .stop(Some("test shutdown".to_string()));
-    supervisors
-        .workflow
-        .actor
-        .stop(Some("test shutdown".to_string()));
-    supervisors
-        .queue
-        .actor
-        .stop(Some("test shutdown".to_string()));
-    supervisors
-        .reconciler
-        .actor
-        .stop(Some("test shutdown".to_string()));
 }
 
 /// **Attack 1.1**: Kill tier-1 supervisors sequentially and verify system stability
@@ -111,7 +91,6 @@ async fn given_tier1_supervisors_when_killed_sequentially_then_system_stable() {
     // Kill order: storage → workflow → queue → reconciler
 
     // Kill storage supervisor
-    let storage_start = SystemTime::now();
     supervisors
         .storage
         .actor
@@ -126,7 +105,6 @@ async fn given_tier1_supervisors_when_killed_sequentially_then_system_stable() {
     );
 
     // Kill workflow supervisor
-    let workflow_start = SystemTime::now();
     supervisors
         .workflow
         .actor
@@ -141,7 +119,6 @@ async fn given_tier1_supervisors_when_killed_sequentially_then_system_stable() {
     );
 
     // Kill queue supervisor
-    let queue_start = SystemTime::now();
     supervisors
         .queue
         .actor
@@ -156,7 +133,6 @@ async fn given_tier1_supervisors_when_killed_sequentially_then_system_stable() {
     );
 
     // Kill reconciler supervisor
-    let reconciler_start = SystemTime::now();
     supervisors
         .reconciler
         .actor
@@ -177,9 +153,7 @@ async fn given_tier1_supervisors_when_killed_sequentially_then_system_stable() {
     assert_eq!(
         final_kills, total_supervisors,
         "all supervisors should be stopped: {}/{} ({}% stopped rate)",
-        final_kills,
-        total_supervisors,
-        stopped_rate
+        final_kills, total_supervisors, stopped_rate
     );
 
     // Verify all remain stopped (no unexpected restarts)

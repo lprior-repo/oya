@@ -878,8 +878,14 @@ fn given_scheduler_with_chain_when_bead_completed_event_then_dependents_become_r
     assert!(ready_initial.is_ok());
     let ready_initial = ready_initial.unwrap_or_default();
     assert!(ready_initial.contains(&a), "A should be ready initially");
-    assert!(!ready_initial.contains(&b), "B should NOT be ready initially");
-    assert!(!ready_initial.contains(&c), "C should NOT be ready initially");
+    assert!(
+        !ready_initial.contains(&b),
+        "B should NOT be ready initially"
+    );
+    assert!(
+        !ready_initial.contains(&c),
+        "C should NOT be ready initially"
+    );
 
     // WHEN: Simulate BeadCompleted event for A
     let _ = scheduler.handle_bead_completed(&a);
@@ -888,9 +894,18 @@ fn given_scheduler_with_chain_when_bead_completed_event_then_dependents_become_r
     let ready_after_a = scheduler.get_workflow_ready_beads(&workflow_id);
     assert!(ready_after_a.is_ok());
     let ready_after_a = ready_after_a.unwrap_or_default();
-    assert!(!ready_after_a.contains(&a), "A should NOT be ready (completed)");
-    assert!(ready_after_a.contains(&b), "B should be ready after A completes");
-    assert!(!ready_after_a.contains(&c), "C should NOT be ready (B not complete)");
+    assert!(
+        !ready_after_a.contains(&a),
+        "A should NOT be ready (completed)"
+    );
+    assert!(
+        ready_after_a.contains(&b),
+        "B should be ready after A completes"
+    );
+    assert!(
+        !ready_after_a.contains(&c),
+        "C should NOT be ready (B not complete)"
+    );
 
     // WHEN: Simulate BeadCompleted event for B
     let _ = scheduler.handle_bead_completed(&b);
@@ -900,15 +915,24 @@ fn given_scheduler_with_chain_when_bead_completed_event_then_dependents_become_r
     assert!(ready_after_b.is_ok());
     let ready_after_b = ready_after_b.unwrap_or_default();
     assert!(!ready_after_b.contains(&a), "A should NOT be ready");
-    assert!(!ready_after_b.contains(&b), "B should NOT be ready (completed)");
-    assert!(ready_after_b.contains(&c), "C should be ready after B completes");
+    assert!(
+        !ready_after_b.contains(&b),
+        "B should NOT be ready (completed)"
+    );
+    assert!(
+        ready_after_b.contains(&c),
+        "C should be ready after B completes"
+    );
 
     // Verify workflow state reflects completions
     let workflow = scheduler.get_workflow(&workflow_id);
     assert!(workflow.is_some());
     if let Some(state) = workflow {
         assert_eq!(state.completed_count(), 2, "Should have 2 completed beads");
-        assert!(state.is_bead_ready(&c).unwrap_or(false), "C should be ready");
+        assert!(
+            state.is_bead_ready(&c).unwrap_or(false),
+            "C should be ready"
+        );
     }
 }
 

@@ -9,8 +9,8 @@
 use axum::{
     extract::Request,
     http::StatusCode,
-    response::{IntoResponse, Response},
     middleware::Next,
+    response::{IntoResponse, Response},
 };
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{error, warn};
@@ -71,18 +71,13 @@ pub async fn error_handler_middleware<B>(
 ///
 /// This is a safety net to prevent panics from crashing the server.
 /// All panics are logged before conversion to error responses.
-pub async fn catch_panic_middleware<B>(
-    req: Request<B>,
-    next: Next<B>,
-) -> Response {
+pub async fn catch_panic_middleware<B>(req: Request<B>, next: Next<B>) -> Response {
     let uri = req.uri().clone();
     let method = req.method().clone();
 
     // Use std::panic::catch_unwind to catch panics
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(async {
-        next.run(req).await
-    }))
-    .await;
+    let result =
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(async { next.run(req).await })).await;
 
     match result {
         Ok(response) => response,
@@ -107,7 +102,8 @@ pub async fn catch_panic_middleware<B>(
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Internal server error".to_string(),
-            ).into_response()
+            )
+                .into_response()
         }
     }
 }

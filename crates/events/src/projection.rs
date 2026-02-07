@@ -1109,7 +1109,9 @@ mod tests {
         state.beads.insert(agent2_bead, agent2_proj);
 
         let unclaimed_bead = BeadId::new();
-        state.beads.insert(unclaimed_bead, BeadProjection::new(unclaimed_bead));
+        state
+            .beads
+            .insert(unclaimed_bead, BeadProjection::new(unclaimed_bead));
 
         // When: query for beads claimed by agent-1
         let agent1_beads = state.claimed_by("agent-1");
@@ -1130,7 +1132,9 @@ mod tests {
         state.beads.insert(claimed_bead, claimed_proj);
 
         let unclaimed_bead = BeadId::new();
-        state.beads.insert(unclaimed_bead, BeadProjection::new(unclaimed_bead));
+        state
+            .beads
+            .insert(unclaimed_bead, BeadProjection::new(unclaimed_bead));
 
         // When: query for unclaimed beads
         let unclaimed_beads = state.unclaimed();

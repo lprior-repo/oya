@@ -74,11 +74,12 @@ impl AgentMetrics {
             }
 
             // Accumulate uptime and health scores
-            total_uptime = total_uptime
-                .checked_add(agent.uptime_secs)
-                .ok_or(MetricsError::InvalidUptime {
-                    value: agent.uptime_secs,
-                })?;
+            total_uptime =
+                total_uptime
+                    .checked_add(agent.uptime_secs)
+                    .ok_or(MetricsError::InvalidUptime {
+                        value: agent.uptime_secs,
+                    })?;
             total_health_score += agent.health_score;
 
             // Count capabilities
@@ -210,9 +211,9 @@ mod tests {
     fn test_calculate_metrics_unhealthy_threshold() {
         let agents = vec![
             create_test_agent("agent-1", "active", 0.6, 100, vec![]), // healthy
-            create_test_agent("agent-2", "idle", 0.5, 100, vec![]), // healthy (boundary)
+            create_test_agent("agent-2", "idle", 0.5, 100, vec![]),   // healthy (boundary)
             create_test_agent("agent-3", "active", 0.4, 100, vec![]), // unhealthy
-            create_test_agent("agent-4", "idle", 0.0, 100, vec![]), // unhealthy
+            create_test_agent("agent-4", "idle", 0.0, 100, vec![]),   // unhealthy
         ];
 
         let metrics = AgentMetrics::calculate(&agents).expect("metrics should calculate");

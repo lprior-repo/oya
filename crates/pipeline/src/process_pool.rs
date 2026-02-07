@@ -254,9 +254,9 @@ impl WorkerProcess {
     /// # Returns
     /// Ok(()) if process terminated successfully
     pub async fn graceful_shutdown(mut self, timeout: Duration) -> Result<()> {
-        let pid = self.id().ok_or_else(|| {
-            Error::command_failed(-1, "Process has no ID")
-        })?;
+        let pid = self
+            .id()
+            .ok_or_else(|| Error::command_failed(-1, "Process has no ID"))?;
 
         // Send SIGTERM
         self.try_kill()?;
@@ -277,7 +277,10 @@ impl WorkerProcess {
                 // The process will be forcefully terminated by the OS when the Child drops
                 Err(Error::command_failed(
                     -1,
-                    format!("Process {} did not exit gracefully within {:?}", pid, timeout),
+                    format!(
+                        "Process {} did not exit gracefully within {:?}",
+                        pid, timeout
+                    ),
                 ))
             }
         }
@@ -357,9 +360,7 @@ pub async fn shutdown_all_workers(
 
     // Spawn graceful shutdown tasks for all workers
     for worker in workers {
-        let task = tokio::spawn(async move {
-            worker.graceful_shutdown(timeout).await
-        });
+        let task = tokio::spawn(async move { worker.graceful_shutdown(timeout).await });
         shutdown_tasks.push(task);
     }
 
@@ -367,9 +368,9 @@ pub async fn shutdown_all_workers(
 
     // Wait for all shutdowns to complete
     for task in shutdown_tasks {
-        let result = task.await.map_err(|e| {
-            Error::command_failed(-1, format!("Shutdown task failed: {}", e))
-        })?;
+        let result = task
+            .await
+            .map_err(|e| Error::command_failed(-1, format!("Shutdown task failed: {}", e)))?;
         results.push(result);
     }
 
@@ -546,8 +547,9 @@ mod tests {
             // Short timeout to force SIGKILL
             let result = tokio::time::timeout(
                 Duration::from_secs(2),
-                proc.graceful_shutdown(Duration::from_millis(100))
-            ).await;
+                proc.graceful_shutdown(Duration::from_millis(100)),
+            )
+            .await;
             assert!(result.is_ok());
             assert!(result.unwrap().is_ok());
         }
@@ -569,7 +571,8 @@ mod tests {
         }
 
         // Shutdown all workers
-        let results: Result<Vec<Result<()>>> = super::shutdown_all_workers(workers, Duration::from_secs(5)).await;
+        let results: Result<Vec<Result<()>>> =
+            super::shutdown_all_workers(workers, Duration::from_secs(5)).await;
         assert!(results.is_ok());
 
         let shutdown_results = results.unwrap();
@@ -598,7 +601,8 @@ mod tests {
             }
         }
 
-        let results: Result<Vec<Result<()>>> = super::shutdown_all_workers(workers, Duration::from_secs(1)).await;
+        let results: Result<Vec<Result<()>>> =
+            super::shutdown_all_workers(workers, Duration::from_secs(1)).await;
         assert!(results.is_ok());
 
         let shutdown_results = results.unwrap();

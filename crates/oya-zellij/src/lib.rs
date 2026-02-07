@@ -605,7 +605,7 @@ impl State {
             Some(CTX_GRAPH) => {
                 self.parse_graph_response(&body);
             }
-            _ => {}
+            _ => (),
         }
     }
 

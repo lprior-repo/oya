@@ -119,7 +119,11 @@ impl WorkspaceManager {
         add_result.check_success()?;
 
         // Determine workspace path: <repo_root>/.jj/workspaces/<uuid>
-        let workspace_path = self.repo_root.join(".jj").join("workspaces").join(&workspace_id);
+        let workspace_path = self
+            .repo_root
+            .join(".jj")
+            .join("workspaces")
+            .join(&workspace_id);
 
         // Verify workspace directory exists
         if !workspace_path.exists() {

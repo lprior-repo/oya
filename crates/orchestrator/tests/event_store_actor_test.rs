@@ -13,7 +13,7 @@ use events::durable_store::DurableEventStore;
 use events::event::BeadEvent;
 use events::types::{BeadId, BeadSpec, BeadState, Complexity};
 use orchestrator::actors::storage::{EventStoreActorDef, EventStoreMessage, EventStoreState};
-use ractor::{Actor, ActorRef};
+use ractor::{Actor, ActorRef, RpcReplyPort};
 use std::sync::Arc;
 use surrealdb::Surreal;
 use surrealdb::engine::local::{Db, RocksDb};
@@ -63,7 +63,7 @@ async fn test_append_event_happy_path() -> Result<(), Box<dyn std::error::Error>
     let (tx, rx) = oneshot::channel();
     actor.send_message(EventStoreMessage::AppendEvent {
         event: event.clone(),
-        reply: tx,
+        reply: tx.into(),
     })?;
 
     // THEN: Should receive Ok response with fsync guarantee
@@ -88,7 +88,7 @@ async fn test_read_events_happy_path() -> Result<(), Box<dyn std::error::Error>>
     let (tx_append, _rx_append) = oneshot::channel();
     actor.send_message(EventStoreMessage::AppendEvent {
         event: event.clone(),
-        reply: tx_append,
+        reply: tx_append.into(),
     })?;
 
     // Give time for append
@@ -151,7 +151,7 @@ async fn test_replay_events_happy_path() -> Result<(), Box<dyn std::error::Error
     let (tx1, _) = oneshot::channel();
     actor.send_message(EventStoreMessage::AppendEvent {
         event: event1.clone(),
-        reply: tx1,
+        reply: tx1.into(),
     })?;
 
     tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
@@ -169,7 +169,7 @@ async fn test_replay_events_happy_path() -> Result<(), Box<dyn std::error::Error
     let (tx, rx) = oneshot::channel();
     actor.send_message(EventStoreMessage::ReplayEvents {
         checkpoint_id,
-        reply: tx,
+        reply: tx.into(),
     })?;
 
     // THEN: Should receive Ok with events after checkpoint
@@ -191,7 +191,7 @@ async fn test_replay_events_empty_stream() -> Result<(), Box<dyn std::error::Err
     let (tx, rx) = oneshot::channel();
     actor.send_message(EventStoreMessage::ReplayEvents {
         checkpoint_id,
-        reply: tx,
+        reply: tx.into(),
     })?;
 
     // THEN: Should return Err
@@ -219,7 +219,7 @@ async fn test_append_event_preserves_fsync_guarantee() -> Result<(), Box<dyn std
     let (tx, rx) = oneshot::channel();
     actor.send_message(EventStoreMessage::AppendEvent {
         event: event.clone(),
-        reply: tx,
+        reply: tx.into(),
     })?;
 
     // THEN: The reply should only come after fsync succeeds

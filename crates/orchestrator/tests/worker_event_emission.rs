@@ -13,9 +13,14 @@ use orchestrator::actors::worker::{
 };
 
 /// Helper to setup a worker actor with an event bus for testing.
-async fn setup_worker_with_event_bus(
-) -> Result<(ActorRef<WorkerMessage>, Arc<EventBus>, Arc<InMemoryEventStore>), Box<dyn std::error::Error>>
-{
+async fn setup_worker_with_event_bus() -> Result<
+    (
+        ActorRef<WorkerMessage>,
+        Arc<EventBus>,
+        Arc<InMemoryEventStore>,
+    ),
+    Box<dyn std::error::Error>,
+> {
     // Create event store and bus
     let store = Arc::new(InMemoryEventStore::new());
     let bus = Arc::new(EventBus::new(store.clone()));
@@ -25,6 +30,7 @@ async fn setup_worker_with_event_bus(
         checkpoint_interval: Duration::from_secs(60),
         retry_policy: WorkerRetryPolicy::default(),
         event_bus: Some(bus.clone()),
+        workspace_manager: None,
     };
 
     // Spawn worker actor
@@ -165,6 +171,7 @@ async fn given_worker_when_no_event_bus_then_continues_normally()
         checkpoint_interval: Duration::from_secs(60),
         retry_policy: WorkerRetryPolicy::default(),
         event_bus: None, // No event bus
+        workspace_manager: None,
     };
 
     let (worker, _handle) = ractor::Actor::spawn(None, WorkerActorDef, config).await?;

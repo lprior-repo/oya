@@ -2,8 +2,8 @@
 //!
 //! Validates parallel task merging, conflict detection, and queue operations.
 
-use crate::queue::Queue;
 use crate::conflict::ConflictDetection;
+use crate::queue::Queue;
 
 #[test]
 fn test_queue_module_exists() {

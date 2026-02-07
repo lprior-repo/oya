@@ -12,11 +12,9 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
-use orchestrator::actors::storage::{
-    DatabaseConfig, StateManagerActorDef, StateManagerMessage,
-};
 use orchestrator::actors::ActorError;
-use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort};
+use orchestrator::actors::storage::{DatabaseConfig, StateManagerActorDef, StateManagerMessage};
+use ractor::{Actor, ActorRef};
 use std::time::Duration;
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -24,8 +22,8 @@ use std::time::Duration;
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /// Spawn a StateManagerActor for testing with a unique name.
-async fn spawn_state_manager(
-) -> Result<ActorRef<StateManagerMessage>, Box<dyn std::error::Error>> {
+async fn spawn_state_manager() -> Result<ActorRef<StateManagerMessage>, Box<dyn std::error::Error>>
+{
     let name = format!("state-manager-test-{}", uuid::Uuid::new_v4());
     let config = DatabaseConfig::default();
 
@@ -255,10 +253,15 @@ async fn test_load_state_returns_actor_unavailable() -> Result<(), Box<dyn std::
     let actor = spawn_state_manager().await?;
 
     // WHEN: Querying LoadState (unimplemented)
-    let result = call_with_timeout(&actor, |reply| StateManagerMessage::LoadState {
-        key: "test-key".to_string(),
-        reply,
-    }, 1000).await;
+    let result = call_with_timeout(
+        &actor,
+        |reply| StateManagerMessage::LoadState {
+            key: "test-key".to_string(),
+            reply,
+        },
+        1000,
+    )
+    .await;
 
     // THEN: Should return ActorUnavailable error (not panic or crash)
     assert!(result.is_err(), "LoadState should return error");
@@ -287,10 +290,15 @@ async fn test_state_exists_returns_actor_unavailable() -> Result<(), Box<dyn std
     let actor = spawn_state_manager().await?;
 
     // WHEN: Querying StateExists
-    let result = call_with_timeout(&actor, |reply| StateManagerMessage::StateExists {
-        key: "test-key".to_string(),
-        reply,
-    }, 1000).await;
+    let result = call_with_timeout(
+        &actor,
+        |reply| StateManagerMessage::StateExists {
+            key: "test-key".to_string(),
+            reply,
+        },
+        1000,
+    )
+    .await;
 
     // THEN: Should return ActorUnavailable error
     assert!(result.is_err(), "StateExists should return error");
@@ -314,15 +322,21 @@ async fn test_state_exists_returns_actor_unavailable() -> Result<(), Box<dyn std
 }
 
 #[tokio::test]
-async fn test_get_state_version_returns_actor_unavailable() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_get_state_version_returns_actor_unavailable() -> Result<(), Box<dyn std::error::Error>>
+{
     // GIVEN: A running StateManagerActor
     let actor = spawn_state_manager().await?;
 
     // WHEN: Querying GetStateVersion
-    let result = call_with_timeout(&actor, |reply| StateManagerMessage::GetStateVersion {
-        key: "test-key".to_string(),
-        reply,
-    }, 1000).await;
+    let result = call_with_timeout(
+        &actor,
+        |reply| StateManagerMessage::GetStateVersion {
+            key: "test-key".to_string(),
+            reply,
+        },
+        1000,
+    )
+    .await;
 
     // THEN: Should return ActorUnavailable error
     assert!(result.is_err(), "GetStateVersion should return error");
@@ -351,10 +365,15 @@ async fn test_list_keys_returns_actor_unavailable() -> Result<(), Box<dyn std::e
     let actor = spawn_state_manager().await?;
 
     // WHEN: Querying ListKeys
-    let result = call_with_timeout(&actor, |reply| StateManagerMessage::ListKeys {
-        prefix: Some("workflow:".to_string()),
-        reply,
-    }, 1000).await;
+    let result = call_with_timeout(
+        &actor,
+        |reply| StateManagerMessage::ListKeys {
+            prefix: Some("workflow:".to_string()),
+            reply,
+        },
+        1000,
+    )
+    .await;
 
     // THEN: Should return ActorUnavailable error
     assert!(result.is_err(), "ListKeys should return error");
@@ -378,16 +397,21 @@ async fn test_list_keys_returns_actor_unavailable() -> Result<(), Box<dyn std::e
 }
 
 #[tokio::test]
-async fn test_list_keys_with_no_prefix_returns_actor_unavailable(
-) -> Result<(), Box<dyn std::error::Error>> {
+async fn test_list_keys_with_no_prefix_returns_actor_unavailable()
+-> Result<(), Box<dyn std::error::Error>> {
     // GIVEN: A running StateManagerActor
     let actor = spawn_state_manager().await?;
 
     // WHEN: Querying ListKeys without prefix
-    let result = call_with_timeout(&actor, |reply| StateManagerMessage::ListKeys {
-        prefix: None,
-        reply,
-    }, 1000).await;
+    let result = call_with_timeout(
+        &actor,
+        |reply| StateManagerMessage::ListKeys {
+            prefix: None,
+            reply,
+        },
+        1000,
+    )
+    .await;
 
     // THEN: Should return ActorUnavailable error
     assert!(result.is_err(), "ListKeys should return error");

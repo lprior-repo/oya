@@ -2225,205 +2225,204 @@ mod tests {
     }
 }
 
-    // ==================== Bead src-3clb: Deterministic Query Tests ====================
+// ==================== Bead src-3clb: Deterministic Query Tests ====================
 
-    #[test]
-    fn test_get_dependencies_deterministic_ordering() -> DagResult<()> {
-        let mut dag = WorkflowDAG::new();
-        dag.add_node("c".to_string())?;
-        dag.add_node("a".to_string())?;
-        dag.add_node("b".to_string())?;
-        dag.add_node("d".to_string())?;
+#[test]
+fn test_get_dependencies_deterministic_ordering() -> DagResult<()> {
+    let mut dag = WorkflowDAG::new();
+    dag.add_node("c".to_string())?;
+    dag.add_node("a".to_string())?;
+    dag.add_node("b".to_string())?;
+    dag.add_node("d".to_string())?;
 
-        // Add dependencies in non-alphabetical order
-        dag.add_edge(
-            "c".to_string(),
-            "d".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
-        dag.add_edge(
-            "a".to_string(),
-            "d".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
-        dag.add_edge(
-            "b".to_string(),
-            "d".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
+    // Add dependencies in non-alphabetical order
+    dag.add_edge(
+        "c".to_string(),
+        "d".to_string(),
+        DependencyType::BlockingDependency,
+    )?;
+    dag.add_edge(
+        "a".to_string(),
+        "d".to_string(),
+        DependencyType::BlockingDependency,
+    )?;
+    dag.add_edge(
+        "b".to_string(),
+        "d".to_string(),
+        DependencyType::BlockingDependency,
+    )?;
 
-        let deps = dag.get_dependencies(&"d".to_string())?;
+    let deps = dag.get_dependencies(&"d".to_string())?;
 
-        // Must be deterministically sorted by BeadId
-        assert_eq!(deps, vec!["a".to_string(), "b".to_string(), "c".to_string()]);
+    // Must be deterministically sorted by BeadId
+    assert_eq!(
+        deps,
+        vec!["a".to_string(), "b".to_string(), "c".to_string()]
+    );
 
-        // No duplicates allowed
-        let unique_deps: std::collections::HashSet<_> = deps.iter().collect();
-        assert_eq!(unique_deps.len(), deps.len());
+    // No duplicates allowed
+    let unique_deps: std::collections::HashSet<_> = deps.iter().collect();
+    assert_eq!(unique_deps.len(), deps.len());
 
-        Ok(())
+    Ok(())
+}
+
+#[test]
+fn test_get_dependents_deterministic_ordering() -> DagResult<()> {
+    let mut dag = WorkflowDAG::new();
+    dag.add_node("a".to_string())?;
+    dag.add_node("d".to_string())?;
+    dag.add_node("c".to_string())?;
+    dag.add_node("b".to_string())?;
+
+    // Add dependents in non-alphabetical order
+    dag.add_edge(
+        "a".to_string(),
+        "c".to_string(),
+        DependencyType::BlockingDependency,
+    )?;
+    dag.add_edge(
+        "a".to_string(),
+        "d".to_string(),
+        DependencyType::BlockingDependency,
+    )?;
+    dag.add_edge(
+        "a".to_string(),
+        "b".to_string(),
+        DependencyType::BlockingDependency,
+    )?;
+
+    let dependents = dag.get_dependents(&"a".to_string())?;
+
+    // Must be deterministically sorted by BeadId
+    assert_eq!(
+        dependents,
+        vec!["b".to_string(), "c".to_string(), "d".to_string()]
+    );
+
+    // No duplicates allowed
+    let unique_dependents: std::collections::HashSet<_> = dependents.iter().collect();
+    assert_eq!(unique_dependents.len(), dependents.len());
+
+    Ok(())
+}
+
+#[test]
+fn test_get_ready_beads_basic() -> DagResult<()> {
+    let mut dag = WorkflowDAG::new();
+    dag.add_node("a".to_string())?;
+    dag.add_node("b".to_string())?;
+    dag.add_node("c".to_string())?;
+    dag.add_edge(
+        "a".to_string(),
+        "b".to_string(),
+        DependencyType::BlockingDependency,
+    )?;
+    dag.add_edge(
+        "b".to_string(),
+        "c".to_string(),
+        DependencyType::BlockingDependency,
+    )?;
+
+    // Initially only a is ready (in-degree=0)
+    let completed = HashSet::new();
+    let ready = dag.get_ready_beads(&completed);
+
+    // Must be deterministically sorted
+    assert_eq!(ready, vec!["a".to_string()]);
+
+    // After a completes, b is ready
+    let mut completed = HashSet::new();
+    completed.insert("a".to_string());
+    let ready = dag.get_ready_beads(&completed);
+    assert_eq!(ready, vec!["b".to_string()]);
+
+    Ok(())
+}
+
+#[test]
+fn test_get_ready_nodes_multiple_roots_sorted() -> DagResult<()> {
+    let mut dag = WorkflowDAG::new();
+    dag.add_node("c".to_string())?;
+    dag.add_node("a".to_string())?;
+    dag.add_node("b".to_string())?;
+    dag.add_node("d".to_string())?;
+
+    // Add edges to create multiple roots
+    dag.add_edge(
+        "a".to_string(),
+        "d".to_string(),
+        DependencyType::BlockingDependency,
+    )?;
+    dag.add_edge(
+        "b".to_string(),
+        "d".to_string(),
+        DependencyType::BlockingDependency,
+    )?;
+    dag.add_edge(
+        "c".to_string(),
+        "d".to_string(),
+        DependencyType::BlockingDependency,
+    )?;
+
+    // All three roots should be ready, sorted
+    let completed = HashSet::new();
+    let ready = dag.get_ready_nodes(&completed);
+
+    // Must be deterministically sorted: a, b, c
+    assert_eq!(
+        ready,
+        vec!["a".to_string(), "b".to_string(), "c".to_string()]
+    );
+
+    Ok(())
+}
+
+#[test]
+fn test_query_performance_100_nodes() -> DagResult<()> {
+    use std::time::Instant;
+
+    let mut dag = WorkflowDAG::new();
+
+    // Create 100 nodes
+    for i in 0..100 {
+        dag.add_node(format!("bead-{:03}", i))?;
     }
 
-    #[test]
-    fn test_get_dependents_deterministic_ordering() -> DagResult<()> {
-        let mut dag = WorkflowDAG::new();
-        dag.add_node("a".to_string())?;
-        dag.add_node("d".to_string())?;
-        dag.add_node("c".to_string())?;
-        dag.add_node("b".to_string())?;
-
-        // Add dependents in non-alphabetical order
+    // Create some dependencies
+    for i in 0..90 {
         dag.add_edge(
-            "a".to_string(),
-            "c".to_string(),
+            format!("bead-{:03}", i),
+            format!("bead-{:03}", i + 1),
             DependencyType::BlockingDependency,
         )?;
-        dag.add_edge(
-            "a".to_string(),
-            "d".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
-        dag.add_edge(
-            "a".to_string(),
-            "b".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
-
-        let dependents = dag.get_dependents(&"a".to_string())?;
-
-        // Must be deterministically sorted by BeadId
-        assert_eq!(
-            dependents,
-            vec!["b".to_string(), "c".to_string(), "d".to_string()]
-        );
-
-        // No duplicates allowed
-        let unique_dependents: std::collections::HashSet<_> = dependents.iter().collect();
-        assert_eq!(unique_dependents.len(), dependents.len());
-
-        Ok(())
     }
 
-    #[test]
-    fn test_get_ready_beads_basic() -> DagResult<()> {
-        let mut dag = WorkflowDAG::new();
-        dag.add_node("a".to_string())?;
-        dag.add_node("b".to_string())?;
-        dag.add_node("c".to_string())?;
-        dag.add_edge(
-            "a".to_string(),
-            "b".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
-        dag.add_edge(
-            "b".to_string(),
-            "c".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
+    // Test get_dependencies performance
+    let start = Instant::now();
+    let deps = dag.get_dependencies(&"bead-050".to_string())?;
+    let duration = start.elapsed();
 
-        // Initially only a is ready (in-degree=0)
-        let completed = HashSet::new();
-        let ready = dag.get_ready_beads(&completed);
+    assert_eq!(deps.len(), 1); // bead-049
+    assert!(duration.as_millis() < 10, "Query took {:?}", duration);
 
-        // Must be deterministically sorted
-        assert_eq!(ready, vec!["a".to_string()]);
+    // Test get_dependents performance
+    let start = Instant::now();
+    let dependents = dag.get_dependents(&"bead-050".to_string())?;
+    let duration = start.elapsed();
 
-        // After a completes, b is ready
-        let mut completed = HashSet::new();
-        completed.insert("a".to_string());
-        let ready = dag.get_ready_beads(&completed);
-        assert_eq!(ready, vec!["b".to_string()]);
+    assert_eq!(dependents.len(), 1); // bead-051
+    assert!(duration.as_millis() < 10, "Query took {:?}", duration);
 
-        Ok(())
-    }
+    // Test get_ready_beads performance
+    let completed = HashSet::new();
+    let start = Instant::now();
+    let ready = dag.get_ready_beads(&completed);
+    let duration = start.elapsed();
 
-    #[test]
-    fn test_get_ready_nodes_multiple_roots_sorted() -> DagResult<()> {
-        let mut dag = WorkflowDAG::new();
-        dag.add_node("c".to_string())?;
-        dag.add_node("a".to_string())?;
-        dag.add_node("b".to_string())?;
-        dag.add_node("d".to_string())?;
+    // beads 000, 091-099 are all roots (no incoming edges)
+    assert_eq!(ready.len(), 10);
+    assert!(duration.as_millis() < 10, "Query took {:?}", duration);
 
-        // Add edges to create multiple roots
-        dag.add_edge(
-            "a".to_string(),
-            "d".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
-        dag.add_edge(
-            "b".to_string(),
-            "d".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
-        dag.add_edge(
-            "c".to_string(),
-            "d".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
-
-        // All three roots should be ready, sorted
-        let completed = HashSet::new();
-        let ready = dag.get_ready_nodes(&completed);
-
-        // Must be deterministically sorted: a, b, c
-        assert_eq!(
-            ready,
-            vec![
-                "a".to_string(),
-                "b".to_string(),
-                "c".to_string()
-            ]
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_query_performance_100_nodes() -> DagResult<()> {
-        use std::time::Instant;
-
-        let mut dag = WorkflowDAG::new();
-
-        // Create 100 nodes
-        for i in 0..100 {
-            dag.add_node(format!("bead-{:03}", i))?;
-        }
-
-        // Create some dependencies
-        for i in 0..90 {
-            dag.add_edge(
-                format!("bead-{:03}", i),
-                format!("bead-{:03}", i + 1),
-                DependencyType::BlockingDependency,
-            )?;
-        }
-
-        // Test get_dependencies performance
-        let start = Instant::now();
-        let deps = dag.get_dependencies(&"bead-050".to_string())?;
-        let duration = start.elapsed();
-
-        assert_eq!(deps.len(), 1); // bead-049
-        assert!(duration.as_millis() < 10, "Query took {:?}", duration);
-
-        // Test get_dependents performance
-        let start = Instant::now();
-        let dependents = dag.get_dependents(&"bead-050".to_string())?;
-        let duration = start.elapsed();
-
-        assert_eq!(dependents.len(), 1); // bead-051
-        assert!(duration.as_millis() < 10, "Query took {:?}", duration);
-
-        // Test get_ready_beads performance
-        let completed = HashSet::new();
-        let start = Instant::now();
-        let ready = dag.get_ready_beads(&completed);
-        let duration = start.elapsed();
-
-        // beads 000, 091-099 are all roots (no incoming edges)
-        assert_eq!(ready.len(), 10);
-        assert!(duration.as_millis() < 10, "Query took {:?}", duration);
-
-        Ok(())
-    }
+    Ok(())
+}

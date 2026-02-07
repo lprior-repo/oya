@@ -9,9 +9,9 @@
 #![deny(clippy::panic)]
 
 use std::collections::HashMap;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use orchestrator::actors::scheduler::{SchedulerActorDef, SchedulerArguments};
 use orchestrator::actors::supervisor::{
@@ -148,7 +148,8 @@ async fn given_tier2_actor_killed_when_supervisor_active_then_full_recovery() {
     // Verify child is tracked
     let child_count_before = get_supervisor_status(&supervisor).await;
     assert_eq!(
-        child_count_before.unwrap_or(0), 1,
+        child_count_before.unwrap_or(0),
+        1,
         "supervisor should track 1 child"
     );
 
@@ -171,7 +172,8 @@ async fn given_tier2_actor_killed_when_supervisor_active_then_full_recovery() {
     // Verify recovery: child should be restarted
     let child_count_after = get_supervisor_status(&supervisor).await;
     assert_eq!(
-        child_count_after.unwrap_or(0), 1,
+        child_count_after.unwrap_or(0),
+        1,
         "supervisor should have 1 child after recovery"
     );
 
@@ -234,7 +236,8 @@ async fn given_multiple_tier2_killed_when_simultaneous_then_all_recover() {
     // Verify all children are tracked
     let child_count_before = get_supervisor_status(&supervisor).await;
     assert_eq!(
-        child_count_before.unwrap_or(0), child_count,
+        child_count_before.unwrap_or(0),
+        child_count,
         "supervisor should track {} children",
         child_count
     );
@@ -259,7 +262,8 @@ async fn given_multiple_tier2_killed_when_simultaneous_then_all_recover() {
     // Verify recovery: all children should be restarted
     let child_count_after = get_supervisor_status(&supervisor).await;
     assert_eq!(
-        child_count_after.unwrap_or(0), child_count,
+        child_count_after.unwrap_or(0),
+        child_count,
         "supervisor should have {} children after recovery",
         child_count
     );
@@ -323,7 +327,8 @@ async fn given_chaos_monkey_kills_random_tier2_when_100_cycles_then_100_percent_
     // Verify all children are tracked
     let child_count_before = get_supervisor_status(&supervisor).await;
     assert_eq!(
-        child_count_before.unwrap_or(0), child_count,
+        child_count_before.unwrap_or(0),
+        child_count,
         "supervisor should track {} children",
         child_count
     );
@@ -364,7 +369,8 @@ async fn given_chaos_monkey_kills_random_tier2_when_100_cycles_then_100_percent_
     // THEN: Verify 100% recovery rate
     let final_count = get_supervisor_status(&supervisor).await;
     assert_eq!(
-        final_count.unwrap_or(0), child_count,
+        final_count.unwrap_or(0),
+        child_count,
         "all tier-2 actors should be recovered after chaos"
     );
 
@@ -438,7 +444,8 @@ async fn given_cascading_tier2_failures_when_rapid_kills_then_supervisor_survive
 
     let final_count = get_supervisor_status(&supervisor).await;
     assert_eq!(
-        final_count.unwrap_or(0), child_count,
+        final_count.unwrap_or(0),
+        child_count,
         "all children should recover after cascade"
     );
 
@@ -544,11 +551,7 @@ async fn given_continuous_chaos_when_5_seconds_then_stable_recovery() {
     let start = SystemTime::now();
     let mut kill_count = 0;
 
-    while SystemTime::now()
-        .duration_since(start)
-        .unwrap_or_default()
-        < chaos_duration
-    {
+    while SystemTime::now().duration_since(start).unwrap_or_default() < chaos_duration {
         // Kill a random child
         let victim_index = kill_count as usize % child_count;
         let victim_name = &child_names[victim_index];
@@ -566,7 +569,8 @@ async fn given_continuous_chaos_when_5_seconds_then_stable_recovery() {
 
     let final_count = get_supervisor_status(&supervisor).await;
     assert_eq!(
-        final_count.unwrap_or(0), child_count,
+        final_count.unwrap_or(0),
+        child_count,
         "all tier-2 actors should recover after continuous chaos"
     );
 
@@ -633,7 +637,8 @@ async fn given_100_tier2_kills_when_all_recover_then_rate_is_100_percent() {
         sleep(Duration::from_millis(50)).await;
         let current_count = get_supervisor_status(&supervisor).await;
         assert_eq!(
-            current_count.unwrap_or(0), child_count,
+            current_count.unwrap_or(0),
+            child_count,
             "round {}: all children should recover",
             round
         );
@@ -642,7 +647,8 @@ async fn given_100_tier2_kills_when_all_recover_then_rate_is_100_percent() {
     // THEN: Final verification - 100% recovery rate
     let final_count = get_supervisor_status(&supervisor).await;
     assert_eq!(
-        final_count.unwrap_or(0), child_count,
+        final_count.unwrap_or(0),
+        child_count,
         "after {} kills, all tier-2 actors should be recovered (100% rate)",
         total_kills
     );
@@ -711,7 +717,8 @@ async fn given_continuous_chaos_when_5min_random_kills_then_100_percent_recovery
     // Verify all children are tracked
     let child_count_before = get_supervisor_status(&supervisor).await;
     assert_eq!(
-        child_count_before.unwrap_or(0), child_count,
+        child_count_before.unwrap_or(0),
+        child_count,
         "supervisor should track {} children",
         child_count
     );
@@ -725,11 +732,7 @@ async fn given_continuous_chaos_when_5min_random_kills_then_100_percent_recovery
 
     eprintln!("Starting 5-minute continuous chaos test at {:?}", start);
 
-    while SystemTime::now()
-        .duration_since(start)
-        .unwrap_or_default()
-        < chaos_duration
-    {
+    while SystemTime::now().duration_since(start).unwrap_or_default() < chaos_duration {
         // Kill a random child (round-robin through all children)
         let victim_index = kill_count % child_count;
         let victim_name = &child_names[victim_index];
@@ -793,7 +796,8 @@ async fn given_continuous_chaos_when_5min_random_kills_then_100_percent_recovery
     };
 
     assert_eq!(
-        final_count.unwrap_or(0), child_count,
+        final_count.unwrap_or(0),
+        child_count,
         "after 5 minutes of chaos ({} kills), all tier-2 actors must be recovered \
          - achieved {:.1}% recovery rate, expected 100%",
         kill_count,

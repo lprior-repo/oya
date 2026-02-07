@@ -63,7 +63,13 @@ impl std::fmt::Debug for WorkerConfig {
             .field("checkpoint_interval", &self.checkpoint_interval)
             .field("retry_policy", &self.retry_policy)
             .field("event_bus", &self.event_bus.as_ref().map(|_| "<EventBus>"))
-            .field("workspace_manager", &self.workspace_manager.as_ref().map(|_| "<WorkspaceManager>"))
+            .field(
+                "workspace_manager",
+                &self
+                    .workspace_manager
+                    .as_ref()
+                    .map(|_| "<WorkspaceManager>"),
+            )
             .finish()
     }
 }
@@ -217,10 +223,17 @@ impl BeadExecutionContext {
 /// Messages handled by the BeadWorker actor.
 #[derive(Clone, Debug)]
 pub enum WorkerMessage {
-    StartBead { bead_id: String, from_state: Option<BeadState> },
-    FailBead { error: String },
+    StartBead {
+        bead_id: String,
+        from_state: Option<BeadState>,
+    },
+    FailBead {
+        error: String,
+    },
     CheckpointTick,
-    Stop { reason: Option<String> },
+    Stop {
+        reason: Option<String>,
+    },
 }
 
 /// State for the BeadWorker actor.
@@ -292,12 +305,17 @@ impl Actor for WorkerActorDef {
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         match message {
-            WorkerMessage::StartBead { bead_id, from_state } => {
+            WorkerMessage::StartBead {
+                bead_id,
+                from_state,
+            } => {
                 let old_state = from_state.unwrap_or(BeadState::Ready);
                 let new_state = BeadState::Running;
 
                 // Create workspace for bead execution
-                let exec_result = if let Some(ref workspace_manager) = state.config.workspace_manager {
+                let exec_result = if let Some(ref workspace_manager) =
+                    state.config.workspace_manager
+                {
                     match workspace_manager.execute_with_workspace(&bead_id, |_workspace_path| {
                         // TODO: Execute actual bead work here
                         // For now, simulate successful execution
@@ -336,8 +354,10 @@ impl Actor for WorkerActorDef {
                         let from_state = state.current_state.clone();
                         tokio::spawn(async move {
                             tokio::time::sleep(delay).await;
-                            let _ =
-                                myself_clone.send_message(WorkerMessage::StartBead { bead_id: id, from_state });
+                            let _ = myself_clone.send_message(WorkerMessage::StartBead {
+                                bead_id: id,
+                                from_state,
+                            });
                         });
                     }
                     (Some(id), None) => {
@@ -491,7 +511,10 @@ mod tests {
         );
 
         assert_eq!(ctx.bead_id(), "test-bead-123");
-        assert_eq!(ctx.workspace_path(), PathBuf::from("/tmp/workspace/test-bead-123"));
+        assert_eq!(
+            ctx.workspace_path(),
+            PathBuf::from("/tmp/workspace/test-bead-123")
+        );
         assert!(!ctx.has_completed());
     }
 
@@ -520,7 +543,8 @@ mod tests {
 
         ctx.mark_completed(WorkspaceExecutionResult::success());
 
-        let second_result = ctx.mark_completed(WorkspaceExecutionResult::failure("fail".to_string()));
+        let second_result =
+            ctx.mark_completed(WorkspaceExecutionResult::failure("fail".to_string()));
         assert!(second_result.is_err());
     }
 }

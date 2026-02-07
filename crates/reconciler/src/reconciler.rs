@@ -448,7 +448,10 @@ mod tests {
         assert!(result.is_ok(), "reconcile should succeed");
         let result = result.unwrap();
         assert!(result.converged, "empty system should be converged");
-        assert!(result.actions_taken.is_empty(), "no actions should be taken");
+        assert!(
+            result.actions_taken.is_empty(),
+            "no actions should be taken"
+        );
         assert!(result.actions_failed.is_empty(), "no actions should fail");
     }
 
@@ -653,7 +656,10 @@ mod tests {
         let result1 = reconciler.reconcile(&desired, &actual).await;
         assert!(result1.is_ok(), "reconcile should succeed");
         let result1 = result1.unwrap();
-        assert!(!result1.converged, "should not be converged when actions needed");
+        assert!(
+            !result1.converged,
+            "should not be converged when actions needed"
+        );
         assert!(!result1.actions_taken.is_empty(), "should have actions");
     }
 
@@ -730,7 +736,9 @@ mod tests {
 
         let actions = reconciler.diff(&desired, &actual);
         // Should not retry when auto_retry is disabled
-        assert!(!actions.iter().any(|a| matches!(a, ReconcileAction::RetryBead { .. })));
+        assert!(!actions
+            .iter()
+            .any(|a| matches!(a, ReconcileAction::RetryBead { .. })));
     }
 
     #[tokio::test]
@@ -767,7 +775,9 @@ mod tests {
 
         let actions = reconciler.diff(&desired, &actual);
         // Should not schedule blocked beads
-        assert!(!actions.iter().any(|a| matches!(a, ReconcileAction::ScheduleBead { .. })));
+        assert!(!actions
+            .iter()
+            .any(|a| matches!(a, ReconcileAction::ScheduleBead { .. })));
     }
 
     #[tokio::test]
@@ -834,7 +844,10 @@ mod tests {
             .filter(|a| matches!(a, ReconcileAction::StartBead { .. }))
             .count();
 
-        assert_eq!(start_count, 0, "Should not start beads when at concurrency limit");
+        assert_eq!(
+            start_count, 0,
+            "Should not start beads when at concurrency limit"
+        );
     }
 
     #[tokio::test]
@@ -873,7 +886,10 @@ mod tests {
             .filter(|a| matches!(a, ReconcileAction::StartBead { .. }))
             .count();
 
-        assert_eq!(start_count, 3, "Should start up to concurrency limit (5 - 2 = 3)");
+        assert_eq!(
+            start_count, 3,
+            "Should start up to concurrency limit (5 - 2 = 3)"
+        );
     }
 
     #[tokio::test]
@@ -886,7 +902,10 @@ mod tests {
         proj.history = vec![]; // No history
 
         let duration = reconciler.running_duration(&proj);
-        assert!(duration.is_none(), "Should return None when no running transition in history");
+        assert!(
+            duration.is_none(),
+            "Should return None when no running transition in history"
+        );
     }
 
     #[tokio::test]
@@ -904,11 +923,20 @@ mod tests {
         });
 
         let duration = reconciler.running_duration(&proj);
-        assert!(duration.is_some(), "Should return duration when running transition exists");
+        assert!(
+            duration.is_some(),
+            "Should return duration when running transition exists"
+        );
 
         let duration = duration.unwrap();
-        assert!(duration.num_seconds() >= 29, "Duration should be at least 29 seconds");
-        assert!(duration.num_seconds() <= 31, "Duration should be at most 31 seconds");
+        assert!(
+            duration.num_seconds() >= 29,
+            "Duration should be at least 29 seconds"
+        );
+        assert!(
+            duration.num_seconds() <= 31,
+            "Duration should be at most 31 seconds"
+        );
     }
 
     #[tokio::test]
@@ -936,8 +964,14 @@ mod tests {
     #[tokio::test]
     async fn test_reconcile_result_converged() {
         let result = ReconcileResult::new(vec![], vec![], 5, 5);
-        assert!(result.converged, "Should be converged when no actions taken");
-        assert!(result.all_succeeded(), "All actions should succeed when none failed");
+        assert!(
+            result.converged,
+            "Should be converged when no actions taken"
+        );
+        assert!(
+            result.all_succeeded(),
+            "All actions should succeed when none failed"
+        );
     }
 
     #[tokio::test]
@@ -946,8 +980,14 @@ mod tests {
             bead_id: BeadId::new(),
         };
         let result = ReconcileResult::new(vec![action], vec![], 5, 5);
-        assert!(!result.converged, "Should not be converged when actions taken");
-        assert!(result.all_succeeded(), "All actions should succeed when none failed");
+        assert!(
+            !result.converged,
+            "Should not be converged when actions taken"
+        );
+        assert!(
+            result.all_succeeded(),
+            "All actions should succeed when none failed"
+        );
     }
 
     #[tokio::test]
@@ -957,8 +997,14 @@ mod tests {
         };
         let failed = vec![(action.clone(), "test error".to_string())];
         let result = ReconcileResult::new(vec![], failed, 5, 5);
-        assert!(!result.converged, "Should not be converged when actions failed");
-        assert!(!result.all_succeeded(), "Should not have all succeeded when there are failures");
+        assert!(
+            !result.converged,
+            "Should not be converged when actions failed"
+        );
+        assert!(
+            !result.all_succeeded(),
+            "Should not have all succeeded when there are failures"
+        );
         assert_eq!(result.actions_failed.len(), 1);
     }
 
@@ -991,10 +1037,12 @@ mod tests {
         actual.update(proj);
 
         let actions = reconciler.diff(&desired, &actual);
-        assert!(!actions
-            .iter()
-            .any(|a| matches!(a, ReconcileAction::RespawnBead { .. })),
-            "Should not respawn claimed workers");
+        assert!(
+            !actions
+                .iter()
+                .any(|a| matches!(a, ReconcileAction::RespawnBead { .. })),
+            "Should not respawn claimed workers"
+        );
     }
 
     #[tokio::test]
@@ -1026,10 +1074,12 @@ mod tests {
         actual.update(proj);
 
         let actions = reconciler.diff(&desired, &actual);
-        assert!(!actions
-            .iter()
-            .any(|a| matches!(a, ReconcileAction::RescheduleBead { .. })),
-            "Should not reschedule unclaimed beads as stuck");
+        assert!(
+            !actions
+                .iter()
+                .any(|a| matches!(a, ReconcileAction::RescheduleBead { .. })),
+            "Should not reschedule unclaimed beads as stuck"
+        );
     }
 
     #[tokio::test]

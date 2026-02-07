@@ -776,7 +776,10 @@ async fn given_five_simultaneous_kills_when_cascading_failure_then_recovers() {
         }
     };
 
-    assert_eq!(initial_child_count, 5, "should have 5 children before cascade");
+    assert_eq!(
+        initial_child_count, 5,
+        "should have 5 children before cascade"
+    );
 
     // WHEN: Kill all 5 children simultaneously (simulating cascading failure)
     let mut stop_results = Vec::new();
@@ -890,9 +893,12 @@ async fn given_cascade_during_restart_then_no_panic() {
     // Spawn 3 children
     let child_args = SchedulerArguments::new();
     for i in 0..3 {
-        let spawn_result =
-            spawn_child(&supervisor, &format!("{supervisor_name}-child-{i}"), child_args.clone())
-                .await;
+        let spawn_result = spawn_child(
+            &supervisor,
+            &format!("{supervisor_name}-child-{i}"),
+            child_args.clone(),
+        )
+        .await;
 
         assert!(
             spawn_result.is_ok(),
@@ -959,9 +965,12 @@ async fn given_cascade_triggers_meltdown_then_handled_gracefully() {
     // Spawn 3 children
     let child_args = SchedulerArguments::new();
     for i in 0..3 {
-        let spawn_result =
-            spawn_child(&supervisor, &format!("{supervisor_name}-child-{i}"), child_args.clone())
-                .await;
+        let spawn_result = spawn_child(
+            &supervisor,
+            &format!("{supervisor_name}-child-{i}"),
+            child_args.clone(),
+        )
+        .await;
 
         assert!(
             spawn_result.is_ok(),

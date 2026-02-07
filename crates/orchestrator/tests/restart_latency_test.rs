@@ -203,11 +203,7 @@ async fn given_actor_killed_when_restarted_then_p99_latency_under_1s() {
                 latencies.push(latency);
                 // Print progress for slow runs
                 if i % 20 == 0 {
-                    println!(
-                        "Trial {}: {}ms",
-                        i,
-                        latency.as_millis()
-                    );
+                    println!("Trial {}: {}ms", i, latency.as_millis());
                 }
             }
             Err(e) => {

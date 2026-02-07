@@ -94,7 +94,7 @@ pub mod queue {
 }
 
 /// Conflict resolution module
-pub use conflict::{detect, attempt_rebase, ConflictDetection, RebaseResult};
+pub use conflict::{ConflictDetection, RebaseResult, attempt_rebase, detect};
 
 // Include test modules
 #[cfg(test)]

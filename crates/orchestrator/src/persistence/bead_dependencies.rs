@@ -561,7 +561,10 @@ mod tests {
         assert!(blocked.is_ok(), "find_blocked_beads should succeed");
 
         if let Ok(blocked_beads) = blocked {
-            assert!(!blocked_beads.is_empty(), "should have at least one blocked bead");
+            assert!(
+                !blocked_beads.is_empty(),
+                "should have at least one blocked bead"
+            );
             assert!(
                 blocked_beads.iter().any(|b| b.bead_id == "bead-002"),
                 "bead-002 should be blocked"
@@ -583,9 +586,7 @@ mod tests {
         assert!(blocked.is_ok());
 
         if let Ok(blocked_beads) = blocked {
-            let bead_003_entry = blocked_beads
-                .iter()
-                .find(|b| b.bead_id == "bead-003");
+            let bead_003_entry = blocked_beads.iter().find(|b| b.bead_id == "bead-003");
 
             assert!(
                 bead_003_entry.is_some(),
@@ -594,8 +595,12 @@ mod tests {
 
             if let Some(entry) = bead_003_entry {
                 // Should have 2 blocking dependencies
-                assert_eq!(entry.blocking_deps.len(), 2,
-                    "bead-003 should have 2 blocking dependencies, got: {:?}", entry.blocking_deps);
+                assert_eq!(
+                    entry.blocking_deps.len(),
+                    2,
+                    "bead-003 should have 2 blocking dependencies, got: {:?}",
+                    entry.blocking_deps
+                );
 
                 // Check that both blocking beads are listed
                 assert!(

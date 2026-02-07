@@ -11,12 +11,12 @@
 use std::collections::HashSet;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use orchestrator::actors::GenericSupervisableActor;
 use orchestrator::actors::scheduler::{SchedulerActorDef, SchedulerArguments};
 use orchestrator::actors::storage::{StateManagerActorDef, StateManagerArguments};
 use orchestrator::actors::supervisor::{
     SupervisorActorDef, SupervisorArguments, SupervisorConfig, SupervisorMessage,
 };
-use orchestrator::actors::GenericSupervisableActor;
 use ractor::{Actor, ActorRef, ActorStatus};
 use tokio::time::sleep;
 
@@ -293,8 +293,7 @@ async fn given_multiple_tier2_actors_when_killed_sequentially_then_all_recover()
     }
 
     assert_eq!(
-        alive_count,
-        5,
+        alive_count, 5,
         "100% of supervisors should survive sequential child kills"
     );
 
@@ -370,8 +369,7 @@ async fn given_multiple_tier2_actors_when_killed_simultaneously_then_system_reco
     }
 
     assert_eq!(
-        alive_count,
-        5,
+        alive_count, 5,
         "100% of supervisors should survive cascading child kills"
     );
 
@@ -460,7 +458,11 @@ async fn given_mixed_tier2_types_when_killed_then_all_recover() {
     let state_name = format!("{}-state", base_name);
     let state_sup = spawn_tier2_actor::<StateManagerActorDef>(&state_name, config.clone()).await;
 
-    assert!(state_sup.is_ok(), "should spawn state manager: {:?}", state_sup);
+    assert!(
+        state_sup.is_ok(),
+        "should spawn state manager: {:?}",
+        state_sup
+    );
 
     let state_sup = state_sup.unwrap();
 
@@ -475,7 +477,10 @@ async fn given_mixed_tier2_types_when_killed_then_all_recover() {
         is_actor_alive(scheduler_status),
         "scheduler should be alive"
     );
-    assert!(is_actor_alive(state_status), "state manager should be alive");
+    assert!(
+        is_actor_alive(state_status),
+        "state manager should be alive"
+    );
 
     // WHEN: Kill both actors
     scheduler_sup.stop(Some("Scheduler chaos test".to_string()));
@@ -563,13 +568,9 @@ async fn given_continuous_chaos_when_tier2_killed_then_100_percent_recovery() {
     let recovery_rate = (alive_count as f64 / supervisors_count as f64) * 100.0;
 
     assert_eq!(
-        alive_count,
-        supervisors_count,
+        alive_count, supervisors_count,
         "100% recovery rate required: {}/{} supervisors survived ({}%), kills: {}",
-        alive_count,
-        supervisors_count,
-        recovery_rate,
-        kill_count
+        alive_count, supervisors_count, recovery_rate, kill_count
     );
 
     // Clean up
@@ -628,11 +629,7 @@ async fn given_tier2_crashes_then_no_shared_state_corruption() {
         if let Ok(sup) = supervisor_result {
             // Verify supervisor starts with clean state (0 children)
             let child_count = get_supervisor_status(&sup).await;
-            assert!(
-                child_count.is_ok(),
-                "should get status: {:?}",
-                child_count
-            );
+            assert!(child_count.is_ok(), "should get status: {:?}", child_count);
             assert_eq!(
                 child_count.unwrap(),
                 0,

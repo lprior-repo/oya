@@ -198,10 +198,7 @@ pub fn tarjan_scc(dag: &WorkflowDAG) -> Vec<Vec<BeadId>> {
 
     // Add edges
     for (from, to, _dep_type) in dag.edges() {
-        if let (Some(&from_idx), Some(&to_idx)) = (
-            index_map.get(from),
-            index_map.get(to),
-        ) {
+        if let (Some(&from_idx), Some(&to_idx)) = (index_map.get(from), index_map.get(to)) {
             local_graph.add_edge(from_idx, to_idx, DependencyType::BlockingDependency);
         }
     }
@@ -312,11 +309,7 @@ mod tests {
 
         // Add all edges
         for (from, to) in edges {
-            let _ = dag.add_edge(
-                from.clone(),
-                to.clone(),
-                DependencyType::BlockingDependency,
-            );
+            let _ = dag.add_edge(from.clone(), to.clone(), DependencyType::BlockingDependency);
         }
 
         dag

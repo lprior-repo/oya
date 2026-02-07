@@ -660,7 +660,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_health_check_non_200_response() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    async fn test_health_check_non_200_response()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
         let mock_server = MockServer::start().await;
 
         Mock::given(method("GET"))
@@ -679,7 +680,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_health_check_no_base_url() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    async fn test_health_check_no_base_url() -> std::result::Result<(), Box<dyn std::error::Error>>
+    {
         let client = OpencodeClient::new()?;
 
         let result = client.health_check().await;

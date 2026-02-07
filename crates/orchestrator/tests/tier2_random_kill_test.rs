@@ -7,8 +7,8 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use orchestrator::actors::scheduler::{SchedulerActorDef, SchedulerArguments};
@@ -145,7 +145,8 @@ async fn given_random_tier2_kills_when_100_percent_recovery_required_then_all_re
     // Verify all children are tracked
     let child_count_before = get_supervisor_status(&supervisor).await;
     assert_eq!(
-        child_count_before.unwrap_or(0), child_count,
+        child_count_before.unwrap_or(0),
+        child_count,
         "supervisor should track {} children",
         child_count
     );
@@ -180,13 +181,14 @@ async fn given_random_tier2_kills_when_100_percent_recovery_required_then_all_re
         }
     }
 
-    // Wait for final recovery
-    sleep(RECOVERY_WAIT).await;
+    // Wait for final recovery (give time for all ChildExited messages to be processed)
+    sleep(Duration::from_secs(2)).await;
 
     // THEN: Verify 100% recovery rate
     let final_count = get_supervisor_status(&supervisor).await;
     assert_eq!(
-        final_count.unwrap_or(0), child_count,
+        final_count.unwrap_or(0),
+        child_count,
         "all tier-2 actors should be recovered after chaos (100% recovery rate)"
     );
 
@@ -269,7 +271,8 @@ async fn given_extended_chaos_when_metrics_tracked_then_recovery_is_100_percent(
         sleep(Duration::from_millis(50)).await;
         let current_count = get_supervisor_status(&supervisor).await;
         assert_eq!(
-            current_count.unwrap_or(0), child_count,
+            current_count.unwrap_or(0),
+            child_count,
             "round {}: all children should recover (100% recovery)",
             round
         );
@@ -280,7 +283,8 @@ async fn given_extended_chaos_when_metrics_tracked_then_recovery_is_100_percent(
     let final_count = get_supervisor_status(&supervisor).await;
 
     assert_eq!(
-        final_count.unwrap_or(0), child_count,
+        final_count.unwrap_or(0),
+        child_count,
         "after {} successful kills, all tier-2 actors should be recovered (100% rate)",
         successful_kills
     );
