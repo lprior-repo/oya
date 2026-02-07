@@ -756,7 +756,7 @@ impl State {
         // Track command pane completion
         let pane_id_str = _pane_id.to_string();
         if let Some(pane) = self.command_panes.get_mut(&pane_id_str) {
-            let code = exit_code.unwrap_or(-1);
+            let code = exit_code.map_or(-1, |c| c);
             pane.mark_completed(code);
 
             // Update the pipeline stage status if this was a stage run
@@ -896,7 +896,7 @@ impl State {
                             _ => BeadStatus::Pending,
                         },
                         current_stage: b.current_stage,
-                        progress: b.progress.unwrap_or(0.0),
+                        progress: b.progress.map_or(0.0, |p| p),
                     })
                     .collect::<Vector<_>>();
                 if self.selected_index >= self.beads.len() {
@@ -1123,7 +1123,7 @@ impl State {
                 let suffix = if selected { "\x1b[0m" } else { "" };
 
                 let title = truncate(&bead.title, 45);
-                let stage = bead.current_stage.as_deref().unwrap_or("-");
+                let stage = bead.current_stage.as_deref().map_or("-", |s| s);
                 let progress_bar = render_progress_bar(bead.progress, 15);
 
                 println!(

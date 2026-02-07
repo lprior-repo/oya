@@ -78,8 +78,12 @@ impl<T: Clone> NonEmpty<T> {
     /// Get the head (first) and tail (rest) of the collection.
     #[must_use]
     pub fn uncons(&self) -> (&T, &[T]) {
-        let (head, tail) = self.0.split_first().unwrap_or((&self.0[0], &[]));
-        (head, tail)
+        match self.0.split_first() {
+            Some(pair) => pair,
+            // This should never happen since NonEmpty is guaranteed non-empty,
+            // but we handle it defensively for the type system.
+            None => unreachable!("NonEmpty should never be empty"),
+        }
     }
 
     /// Get the length of the collection (always >= 1).
