@@ -86,6 +86,11 @@ impl HandlerRegistry {
         self.handlers.keys().map(|s| s.as_str()).collect()
     }
 
+    /// Get all registered handler keys.
+    pub fn keys(&self) -> Vec<&String> {
+        self.handlers.keys().collect()
+    }
+
     /// Get the number of registered handlers.
     pub fn len(&self) -> usize {
         self.handlers.len()
@@ -314,7 +319,7 @@ mod tests {
         let ctx = make_context();
         let result = handler.execute(&ctx).await;
         assert!(result.is_ok());
-        assert_eq!(result.map(|r| r.data).unwrap_or_default(), vec![2, 4, 6]);
+        assert_eq!(*result.map(|r| r.data).unwrap_or_default(), vec![2, 4, 6]);
     }
 
     #[tokio::test]

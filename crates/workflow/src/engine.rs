@@ -1,9 +1,11 @@
 //! Workflow execution engine.
 
 use std::sync::Arc;
+use std::sync::OnceLock;
 use std::time::Instant;
 
 use chrono::Utc;
+use itertools::Itertools;
 use std::env;
 
 use tracing::{debug, error, info, warn};
@@ -63,6 +65,8 @@ pub struct WorkflowEngine {
     handlers: Arc<HandlerRegistry>,
     /// Engine configuration.
     config: EngineConfig,
+    /// Lazy cache for handler validation.
+    validation_cache: OnceLock<Result<()>>,
 }
 
 impl WorkflowEngine {
@@ -76,7 +80,32 @@ impl WorkflowEngine {
             storage,
             handlers,
             config,
+            validation_cache: OnceLock::new(),
         }
+    }
+
+    /// Validate handlers using cached result.
+    ///
+    /// This method uses OnceLock to cache the validation result, so it only
+    /// computes the validation once until the cache is invalidated.
+    pub fn validate_handlers(&self) -> Result<()> {
+        self.validation_cache
+            .get_or_init(|| {
+                // Check for duplicate handler names
+                let names: Vec<_> = self.handlers.keys().into_iter().collect();
+                if let Some(dup) = names.iter().duplicates().next() {
+                    return Err(Error::duplicate_handler(dup.to_string()));
+                }
+                Ok(())
+            })
+            .clone()
+    }
+
+    /// Invalidate the validation cache.
+    ///
+    /// This should be called when handlers are added, removed, or modified.
+    pub fn invalidate_cache(&mut self) {
+        let _ = self.validation_cache.take();
     }
 
     /// Run a workflow to completion.
@@ -92,12 +121,8 @@ impl WorkflowEngine {
             return Ok(WorkflowResult::success(workflow.id, Vec::new()));
         }
 
-        // Check all handlers exist
-        for phase in &workflow.phases {
-            if !self.handlers.has(&phase.name) {
-                return Err(Error::handler_not_found(&phase.name));
-            }
-        }
+        // Check all handlers exist (using cached validation)
+        self.validate_handlers()?;
 
         // Transition to running
         self.transition_state(&mut workflow, WorkflowState::Running)
@@ -105,7 +130,7 @@ impl WorkflowEngine {
 
         let start = Instant::now();
         let mut phase_outputs: Vec<(PhaseId, PhaseOutput)> = Vec::new();
-        let mut last_output: Option<Vec<u8>> = None;
+        let mut last_output: Option<Arc<Vec<u8>>> = None;
 
         // Execute each phase
         while !workflow.is_complete() {
@@ -150,7 +175,7 @@ impl WorkflowEngine {
                             JournalEntry::phase_completed(
                                 phase.id,
                                 &phase.name,
-                                output.data.clone(),
+                                (*output.data).clone(),
                             ),
                         )
                         .await?;
@@ -161,7 +186,7 @@ impl WorkflowEngine {
                     }
 
                     // Store output for next phase
-                    last_output = Some(output.data.clone());
+                    last_output = Some(Arc::clone(&output.data));
                     phase_outputs.push((phase.id, output));
 
                     // Advance to next phase
@@ -222,7 +247,7 @@ impl WorkflowEngine {
         &self,
         workflow: &Workflow,
         phase: &crate::types::Phase,
-        previous_output: Option<Vec<u8>>,
+        previous_output: Option<Arc<Vec<u8>>>,
     ) -> Result<PhaseOutput> {
         let handler = self
             .handlers
@@ -236,7 +261,8 @@ impl WorkflowEngine {
             let mut ctx = PhaseContext::new(workflow.id, phase.clone()).with_attempt(attempt);
 
             if let Some(ref output) = previous_output {
-                ctx = ctx.with_previous_output(output.clone());
+                // Convert Arc<Vec<u8>> to &[u8] for the context
+                ctx = ctx.with_previous_output(output.as_ref().clone());
             }
 
             if let Some(ref metadata) = workflow.metadata {
@@ -306,7 +332,7 @@ impl WorkflowEngine {
         output: &PhaseOutput,
     ) -> Result<()> {
         let checkpoint =
-            Checkpoint::new(phase.id, Vec::new(), Vec::new()).with_outputs(output.data.clone());
+            Checkpoint::new(phase.id, Vec::new(), Vec::new()).with_outputs((*output.data).clone());
 
         self.storage
             .save_checkpoint(workflow.id, &checkpoint)
@@ -341,6 +367,7 @@ impl WorkflowEngine {
                 .find(|p| p.id == *phase_id)
                 .ok_or_else(|| Error::phase_not_found(phase_id.to_string()))?;
 
+            // Rollback if handler exists
             if let Some(handler) = self.handlers.get(&phase.name) {
                 let ctx = PhaseContext::new(workflow.id, phase.clone());
                 if let Err(e) = handler.rollback(&ctx).await {
@@ -420,23 +447,26 @@ impl WorkflowEngine {
         let journal = self.storage.load_journal(workflow_id).await?;
 
         // Reconstruct outputs from journal
-        let mut phase_outputs: Vec<(PhaseId, PhaseOutput)> = Vec::new();
-        let mut failure: Option<String> = None;
-
-        for entry in journal.entries() {
-            match entry {
-                JournalEntry::PhaseCompleted {
-                    phase_id, output, ..
-                } => {
-                    phase_outputs.push((*phase_id, PhaseOutput::success(output.clone())));
-                }
-                JournalEntry::PhaseFailed { error, .. } => {
-                    failure = Some(error.clone());
-                    break;
-                }
-                _ => {}
-            }
-        }
+        let (phase_outputs, failure): (Vec<(PhaseId, PhaseOutput)>, Option<String>) = journal
+            .entries()
+            .iter()
+            .try_fold(
+                (Vec::new(), None),
+                |(mut outputs, mut failure), entry| match entry {
+                    JournalEntry::PhaseCompleted {
+                        phase_id, output, ..
+                    } => {
+                        outputs.push((*phase_id, PhaseOutput::success(output.to_vec())));
+                        Ok((outputs, failure))
+                    }
+                    JournalEntry::PhaseFailed { error, .. } => {
+                        failure = Some(error.clone());
+                        Err((outputs, failure))
+                    }
+                    _ => Ok((outputs, failure)),
+                },
+            )
+            .unwrap_or_else(|(outputs, failure)| (outputs, failure));
 
         if let Some(error) = failure {
             Ok(WorkflowResult::failure(workflow.id, phase_outputs, error))
@@ -565,7 +595,10 @@ mod tests {
             .as_ref()
             .map(|r| r.state == WorkflowState::Completed)
             .map_or(false, |completed| completed));
-        assert_eq!(result.map(|r| r.phase_outputs.len()).map_or(0, |len| len), 1);
+        assert_eq!(
+            result.map(|r| r.phase_outputs.len()).map_or(0, |len| len),
+            1
+        );
     }
 
     #[tokio::test]
@@ -583,7 +616,10 @@ mod tests {
             .as_ref()
             .map(|r| r.state == WorkflowState::Completed)
             .map_or(false, |completed| completed));
-        assert_eq!(result.map(|r| r.phase_outputs.len()).map_or(0, |len| len), 3);
+        assert_eq!(
+            result.map(|r| r.phase_outputs.len()).map_or(0, |len| len),
+            3
+        );
     }
 
     #[tokio::test]
@@ -837,7 +873,10 @@ mod tests {
         assert!(result.is_ok());
 
         // Should have executed phase 1 (test) and phase 2 (deploy)
-        assert_eq!(result.map(|r| r.phase_outputs.len()).map_or(0, |len| len), 2);
+        assert_eq!(
+            result.map(|r| r.phase_outputs.len()).map_or(0, |len| len),
+            2
+        );
     }
 
     #[tokio::test]

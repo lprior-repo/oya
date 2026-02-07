@@ -37,6 +37,8 @@ pub enum Error {
     Serialization { reason: String },
     /// Handler not registered.
     HandlerNotFound { phase_name: String },
+    /// Duplicate handler name registered.
+    DuplicateHandler { handler_name: String },
     /// Maximum retries exceeded.
     MaxRetriesExceeded { phase_name: String, attempts: u32 },
 }
@@ -85,6 +87,9 @@ impl fmt::Display for Error {
             }
             Self::HandlerNotFound { phase_name } => {
                 write!(f, "handler not found for phase '{phase_name}'")
+            }
+            Self::DuplicateHandler { handler_name } => {
+                write!(f, "duplicate handler registered: '{handler_name}'")
             }
             Self::MaxRetriesExceeded {
                 phase_name,
@@ -195,6 +200,13 @@ impl Error {
     pub fn handler_not_found(phase_name: impl Into<String>) -> Self {
         Self::HandlerNotFound {
             phase_name: phase_name.into(),
+        }
+    }
+
+    /// Create a duplicate handler error.
+    pub fn duplicate_handler(handler_name: impl Into<String>) -> Self {
+        Self::DuplicateHandler {
+            handler_name: handler_name.into(),
         }
     }
 
