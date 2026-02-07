@@ -14,8 +14,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use surrealdb::engine::local::{Db, RocksDb};
 use surrealdb::Surreal;
+use surrealdb::engine::local::{Db, RocksDb};
 use thiserror::Error;
 use tokio::sync::Semaphore;
 use tracing::{debug, error, info, warn};
@@ -202,7 +202,9 @@ impl SurrealConnectionManager {
 
         tokio::fs::create_dir_all(&config.database.storage_path)
             .await
-            .map_err(|e| SurrealError::ConnectionFailed(format!("Failed to create storage directory: {e}")))?;
+            .map_err(|e| {
+                SurrealError::ConnectionFailed(format!("Failed to create storage directory: {e}"))
+            })?;
 
         let client = Self::connect_with_retry(&config).await?;
         let semaphore = Arc::new(Semaphore::new(config.max_connections));
@@ -215,7 +217,9 @@ impl SurrealConnectionManager {
         })
     }
 
-    async fn connect_with_retry(config: &ConnectionManagerConfig) -> Result<Arc<Surreal<Db>>, SurrealError> {
+    async fn connect_with_retry(
+        config: &ConnectionManagerConfig,
+    ) -> Result<Arc<Surreal<Db>>, SurrealError> {
         let mut attempt: u32 = 0;
 
         loop {
@@ -229,18 +233,26 @@ impl SurrealConnectionManager {
                 Err(e) => {
                     if config.retry_policy.is_retryable(attempt) {
                         let backoff = config.retry_policy.calculate_backoff(attempt);
-                        warn!("Connection attempt {} failed, retrying in {:?}: {}", attempt, backoff, e);
+                        warn!(
+                            "Connection attempt {} failed, retrying in {:?}: {}",
+                            attempt, backoff, e
+                        );
                         tokio::time::sleep(backoff).await;
                     } else {
                         error!("Failed to connect after {} attempts: {}", attempt, e);
-                        return Err(SurrealError::RetryLimitExceeded(format!("Connection failed after {} attempts", config.retry_policy.max_attempts)));
+                        return Err(SurrealError::RetryLimitExceeded(format!(
+                            "Connection failed after {} attempts",
+                            config.retry_policy.max_attempts
+                        )));
                     }
                 }
             }
         }
     }
 
-    async fn attempt_connection(config: &ConnectionManagerConfig) -> Result<Arc<Surreal<Db>>, SurrealError> {
+    async fn attempt_connection(
+        config: &ConnectionManagerConfig,
+    ) -> Result<Arc<Surreal<Db>>, SurrealError> {
         let client = Surreal::new::<RocksDb>(&config.database.storage_path)
             .await
             .map_err(|e| SurrealError::ConnectionFailed(format!("Failed to create client: {e}")))?;
@@ -251,7 +263,11 @@ impl SurrealConnectionManager {
             .use_ns(&config.database.namespace)
             .use_db(&config.database.database)
             .await
-            .map_err(|e| SurrealError::ConnectionFailed(format!("Failed to initialize namespace/database: {e}")))?;
+            .map_err(|e| {
+                SurrealError::ConnectionFailed(format!(
+                    "Failed to initialize namespace/database: {e}"
+                ))
+            })?;
 
         Ok(client)
     }
@@ -261,7 +277,9 @@ impl SurrealConnectionManager {
             return Err(SurrealError::NotInitialized);
         }
 
-        self.semaphore.acquire().await
+        self.semaphore
+            .acquire()
+            .await
             .map_err(|_| SurrealError::PoolExhausted(self.config.max_connections))?;
 
         Ok(PooledConnection {
@@ -281,23 +299,33 @@ impl SurrealConnectionManager {
             attempt = attempt.saturating_add(1);
             let conn = self.get_connection().await?;
 
-            let timeout_result = tokio::time::timeout(self.config.query_timeout, operation(conn)).await;
+            let timeout_result =
+                tokio::time::timeout(self.config.query_timeout, operation(conn)).await;
 
             match timeout_result {
                 Ok(Ok(result)) => return Ok(result),
                 Ok(Err(e)) => {
                     if self.config.retry_policy.is_retryable(attempt) {
                         let backoff = self.config.retry_policy.calculate_backoff(attempt);
-                        warn!("Operation attempt {} failed, retrying in {:?}: {}", attempt, backoff, e);
+                        warn!(
+                            "Operation attempt {} failed, retrying in {:?}: {}",
+                            attempt, backoff, e
+                        );
                         tokio::time::sleep(backoff).await;
                     } else {
-                        return Err(SurrealError::RetryLimitExceeded(format!("Operation failed: {}", e)));
+                        return Err(SurrealError::RetryLimitExceeded(format!(
+                            "Operation failed: {}",
+                            e
+                        )));
                     }
                 }
                 Err(_) => {
                     if self.config.retry_policy.is_retryable(attempt) {
                         let backoff = self.config.retry_policy.calculate_backoff(attempt);
-                        warn!("Operation attempt {} timed out, retrying in {:?}", attempt, backoff);
+                        warn!(
+                            "Operation attempt {} timed out, retrying in {:?}",
+                            attempt, backoff
+                        );
                         tokio::time::sleep(backoff).await;
                     } else {
                         return Err(SurrealError::QueryTimeout(self.config.query_timeout));

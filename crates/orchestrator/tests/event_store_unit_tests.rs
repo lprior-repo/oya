@@ -1,3 +1,4 @@
+
 //! Comprehensive unit tests for EventStore actors using tokio-test.
 //!
 //! This test suite covers:
@@ -259,8 +260,7 @@ async fn test_append_event_concurrent() {
             let event = if i == 0 {
                 BeadEvent::created(
                     bead_id,
-                    BeadSpec::new(&format!("test-bead-{}", i))
-                        .with_complexity(Complexity::Simple),
+                    BeadSpec::new(&format!("test-bead-{}", i)).with_complexity(Complexity::Simple),
                 )
             } else {
                 create_state_change_event(bead_id)
@@ -324,8 +324,7 @@ async fn test_append_event_different_beads_concurrent() {
         handles.push(tokio::spawn(async move {
             let event = BeadEvent::created(
                 bead_id,
-                BeadSpec::new(&format!("test-bead-{}", i))
-                    .with_complexity(Complexity::Simple),
+                BeadSpec::new(&format!("test-bead-{}", i)).with_complexity(Complexity::Simple),
             );
 
             let (tx, rx) = oneshot::channel();
@@ -599,8 +598,7 @@ async fn test_replay_events_nonexistent_checkpoint() {
         "ReplayEvents should fail for non-existent checkpoint"
     );
 
-    let error = result
-        .expect_err("Should have error");
+    let error = result.expect_err("Should have error");
 
     match error {
         ActorError::Internal(msg) => {

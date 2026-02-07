@@ -294,7 +294,9 @@ async fn given_tier1_with_multiple_children_when_killed_then_state_preserved() {
 
     // WHEN: Kill supervisor
     metrics.record_kill();
-    supervisor.stop(Some("Chaos test: killing supervisor with many children".to_string()));
+    supervisor.stop(Some(
+        "Chaos test: killing supervisor with many children".to_string(),
+    ));
 
     // Wait for shutdown
     sleep(Duration::from_millis(100)).await;

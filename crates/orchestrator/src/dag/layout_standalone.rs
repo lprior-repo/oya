@@ -850,7 +850,10 @@ mod tests {
         // Cold time includes one cold computation + cached ones
         // Warm time is all cached
         // Warm should be <= cold (could be equal if caching is very fast)
-        assert!(warm_time <= cold_time, "warm cache should be faster or equal to cold");
+        assert!(
+            warm_time <= cold_time,
+            "warm cache should be faster or equal to cold"
+        );
 
         // If there's measurable time, calculate speedup
         if !cold_time.is_zero() && !warm_time.is_zero() {

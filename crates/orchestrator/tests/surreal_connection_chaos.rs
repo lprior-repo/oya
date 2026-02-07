@@ -4,10 +4,10 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
-use std::time::{Duration, Instant};
 use oya_orchestrator::actors::storage::surreal_integration::{
     ConnectionManagerConfig, DatabaseConfig, RetryPolicy, SurrealConnectionManager, SurrealError,
 };
+use std::time::{Duration, Instant};
 use tokio::time::timeout;
 use tracing::debug;
 
@@ -29,8 +29,17 @@ async fn chaos_test_basic_connection() {
         .await
         .expect("Failed to create manager");
 
-    let conn = manager.get_connection().await.expect("Failed to get connection");
-    assert!(conn.client().use_ns("chaos_ns").use_db("chaos_db_basic").await.is_ok());
+    let conn = manager
+        .get_connection()
+        .await
+        .expect("Failed to get connection");
+    assert!(
+        conn.client()
+            .use_ns("chaos_ns")
+            .use_db("chaos_db_basic")
+            .await
+            .is_ok()
+    );
     drop(conn);
 }
 
@@ -46,13 +55,17 @@ async fn chaos_test_pool_exhaustion() {
     let conn3 = manager.get_connection().await.expect("Failed to get conn3");
 
     let start = Instant::now();
-    let _result: Result<Result<_, SurrealError>, _> = timeout(Duration::from_millis(200), manager.get_connection()).await;
+    let _result: Result<Result<_, SurrealError>, _> =
+        timeout(Duration::from_millis(200), manager.get_connection()).await;
     let elapsed = start.elapsed();
 
     assert!(elapsed >= Duration::from_millis(150));
 
     drop(conn1);
-    let _conn4 = manager.get_connection().await.expect("Should get connection after drop");
+    let _conn4 = manager
+        .get_connection()
+        .await
+        .expect("Should get connection after drop");
 }
 
 #[tokio::test]
@@ -88,7 +101,8 @@ async fn chaos_test_connection_cleanup() {
     let conn2 = manager.get_connection().await.expect("Failed to get conn2");
 
     let start = Instant::now();
-    let _result: Result<Result<_, SurrealError>, _> = timeout(Duration::from_millis(100), manager.get_connection()).await;
+    let _result: Result<Result<_, SurrealError>, _> =
+        timeout(Duration::from_millis(100), manager.get_connection()).await;
     let elapsed = start.elapsed();
     assert!(elapsed >= Duration::from_millis(90));
 
@@ -97,7 +111,10 @@ async fn chaos_test_connection_cleanup() {
 
     tokio::time::sleep(Duration::from_millis(50)).await;
 
-    let _conn3 = manager.get_connection().await.expect("Should acquire after cleanup");
+    let _conn3 = manager
+        .get_connection()
+        .await
+        .expect("Should acquire after cleanup");
 }
 
 #[tokio::test]

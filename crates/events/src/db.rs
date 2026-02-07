@@ -94,7 +94,9 @@ impl SurrealDbClient {
                         || error_msg.contains("permission denied")
                     {
                         let lock_path_display = lock_path.display().to_string();
-                        return Err(DbError::DatabaseLocked { path: lock_path_display });
+                        return Err(DbError::DatabaseLocked {
+                            path: lock_path_display,
+                        });
                     }
                     return Err(DbError::ConnectionFailed(format!(
                         "Failed to create RocksDb instance: {e}"
