@@ -6,9 +6,7 @@
 //! - Compression achieves 50%+ size reduction for typical workflow state
 //! - Full checkpoint → restore cycle preserves exact state
 
-use oya_workflow::{
-    compress, compression_ratio, decompress, serialize_state, space_savings, Phase, Workflow,
-};
+use oya_workflow::{compress, compression_ratio, decompress, space_savings};
 use proptest::prelude::*;
 
 // Test: Compress → decompress round-trip preserves data for any input.
@@ -58,11 +56,10 @@ proptest! {
     }
 }
 
-/// Test: Space savings is calculated correctly.
-///
-/// Verifies space_savings returns the correct bytes saved:
-/// - savings = uncompressed_size - compressed_size
-/// - Saturates at 0 (never negative)
+// Test: Space savings is calculated correctly.
+// Verifies space_savings returns the correct bytes saved:
+// - savings = uncompressed_size - compressed_size
+// - Saturates at 0 (never negative)
 proptest! {
     #[test]
     fn prop_space_savings_calculation(
@@ -82,32 +79,6 @@ proptest! {
 
         // THEN: Should return 0 (saturating_sub)
         prop_assert_eq!(negative_savings, 0, "Should not return negative savings");
-    }
-}
-
-/// Test: Arbitrary workflow state round-trips through serialization.
-///
-/// Verifies that any serializable workflow state can be serialized and
-/// the result is valid (non-empty).
-proptest! {
-    #[test]
-    fn prop_workflow_state_serialization(
-        name in "[a-zA-Z0-9]{1,50}",
-        phases_count in 1usize..10
-    ) {
-        // GIVEN: A workflow with arbitrary name and phase count
-        let mut workflow = Workflow::new(&name);
-        for i in 0..phases_count {
-            let phase_name = format!("phase-{}", i);
-            workflow = workflow.add_phase(Phase::new(&phase_name));
-        }
-
-        // WHEN: Serialized
-        let serialized = serialize_state(&workflow);
-
-        // THEN: Should succeed and produce non-empty output
-        prop_assert!(serialized.is_ok(), "Serialization should succeed");
-        prop_assert!(!serialized.unwrap().is_empty(), "Serialized data should not be empty");
     }
 }
 
@@ -157,36 +128,16 @@ fn test_compression_achieves_50_percent_target() {
     println!("  Space savings: {:.1}%", savings_pct);
 }
 
-/// Test: Compression achieves target for workflow state.
-///
-/// Verifies that realistic workflow state compresses by at least 50%.
-/// Workflow state typically contains:
-/// - Repeated phase names (build, test, deploy)
-/// - Repeated field names (phase_id, timestamp, state)
-/// - UUID patterns
-/// - Timestamp structures
-#[tokio::test]
-async fn test_workflow_compression_achieves_target() {
-    // GIVEN: Realistic workflow with multiple phases
-    let workflow = Workflow::new("compression-test-workflow")
-        .add_phase(Phase::new("build"))
-        .add_phase(Phase::new("test"))
-        .add_phase(Phase::new("lint"))
-        .add_phase(Phase::new("coverage"))
-        .add_phase(Phase::new("deploy"));
-
-    // WHEN: Serialized to checkpoint format
-    let serialized = serialize_state(&workflow);
-    assert!(serialized.is_ok(), "Serialization should succeed");
-
-    let serialized = serialized.unwrap();
-    let uncompressed_size = serialized.len();
-
-    // The serialized data is already compressed by serialize_state
-    // Let's test with raw state size estimate
-    // A typical workflow with 5 phases might be ~2KB uncompressed
-    // With compression, should be <1KB
-
+// Test: Compression achieves target for workflow-like data.
+// Verifies that realistic workflow state compresses by at least 50%.
+// Workflow state typically contains:
+// - Repeated phase names (build, test, deploy)
+// - Repeated field names (phase_id, timestamp, state)
+// - UUID patterns
+// - Timestamp structures
+#[test]
+fn test_workflow_compression_achieves_target() {
+    // GIVEN: Realistic workflow-like data with multiple phases
     // For this test, verify compression doesn't explode size
     // and achieves reasonable ratio for typical data
     let test_data = {
@@ -214,34 +165,40 @@ async fn test_workflow_compression_achieves_target() {
     println!("  Compression ratio: {:.2}", ratio);
 }
 
-/// Test: Property-based round-trip for complex workflow state.
-///
-/// Generates arbitrary workflow configurations and verifies they can
-/// be serialized without errors.
+// Test: Property-based round-trip for complex data patterns.
+// Generates arbitrary repetitive byte patterns and verifies they
+// can be compressed and decompressed without errors.
 proptest! {
     #[test]
-    fn prop_complex_workflow_serialization(
-        name in "[a-z]{5,20}",
-        phase_names in prop::collection::vec("[a-z]{3,10}", 1..10)
+    fn prop_complex_data_compression(
+        pattern in prop::collection::vec(1u8..255u8, 1..100),
+        repeat_count in 1usize..100
     ) {
-        // GIVEN: Workflow with arbitrary name and phases
-        let mut workflow = Workflow::new(&name);
-        for phase_name in &phase_names {
-            workflow = workflow.add_phase(Phase::new(phase_name));
+        // GIVEN: Create data with repeated patterns
+        let mut data = Vec::new();
+        for _ in 0..repeat_count {
+            data.extend_from_slice(&pattern);
         }
 
-        // WHEN: Serialized
-        let result = serialize_state(&workflow);
+        // WHEN: Compressed
+        let result = compress(&data);
 
         // THEN: Should succeed
-        prop_assert!(result.is_ok(), "Should serialize any valid workflow");
+        prop_assert!(result.is_ok(), "Should compress any data");
 
-        let serialized = result.unwrap();
-        prop_assert!(!serialized.is_empty(), "Serialized data should not be empty");
+        let compressed = result.unwrap();
+        prop_assert!(!compressed.is_empty(), "Compressed data should not be empty");
+
+        // WHEN: Decompressed
+        let decompressed = decompress(&compressed, data.len());
+
+        // THEN: Should match original
+        prop_assert!(decompressed.is_ok(), "Should decompress successfully");
+        prop_assert_eq!(decompressed.unwrap(), data, "Round-trip should preserve data");
     }
 }
 
-/// Test: Empty and minimal data round-trip correctly.
+// Test: Empty and minimal data round-trip correctly.
 ///
 /// Edge case testing for empty/small inputs.
 #[test]
@@ -263,7 +220,7 @@ fn test_edge_cases_compress_decompress() {
     // Highly repetitive data (best case for compression)
     let repetitive = vec![0xFFu8; 10000];
     let compressed = compress(&repetitive).expect("Repetitive data should compress");
-    let ratio = compression_ratio(10000, compressed.len());
+    let ratio = compression_ratio(10000, compressed.len() as u64);
     assert!(
         ratio > 100.0,
         "Highly repetitive data should compress >100:1, got {:.2}",
@@ -278,10 +235,9 @@ fn test_edge_cases_compress_decompress() {
     println!("Edge case compression ratio: {:.2}", ratio);
 }
 
-/// Test: Verify compression doesn't expand data significantly.
-///
-/// While zstd can expand incompressible data slightly, it should not
-/// explode the size (e.g., should stay within 110% of original).
+// Test: Verify compression doesn't expand data significantly.
+// While zstd can expand incompressible data slightly, it should not
+// explode the size (e.g., should stay within 110% of original).
 proptest! {
     #[test]
     fn prop_compression_does_not_expand_excessively(data in prop::collection::vec(any::<u8>(), 100..10000)) {

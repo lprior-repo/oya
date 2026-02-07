@@ -136,10 +136,6 @@ description = "OYA SDLC System - Storm goddess of transformation. 100x developer
 keywords = ["sdlc", "tdd", "ai", "agents", "automation"]
 categories = ["development-tools", "command-line-utilities"]
 
-[[bin]]
-name = "oya"
-path = "src/main.rs"
-
 [dependencies]
 oya-core = { workspace = true }
 oya-pipeline = { workspace = true }

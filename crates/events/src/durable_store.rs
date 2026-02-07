@@ -354,18 +354,23 @@ impl DurableEventStore {
             })?;
 
         // Extract the timestamp from the query result
-        let checkpoint_timestamp: Option<DateTime<Utc>> = checkpoint_result
-            .take(0)
-            .map_err(|e| {
+        #[derive(Debug, serde::Deserialize)]
+        struct CheckpointTimestamp {
+            timestamp: DateTime<Utc>,
+        }
+
+        let checkpoint_records: Vec<CheckpointTimestamp> =
+            checkpoint_result.take(0).map_err(|e| {
                 crate::error::Error::store_failed(
                     "replay_from",
                     format!("failed to extract checkpoint timestamp: {}", e),
                 )
-            })?
-            .into_iter()
-            .next();
+            })?;
 
-        let checkpoint_timestamp = checkpoint_timestamp
+        let checkpoint_timestamp = checkpoint_records
+            .into_iter()
+            .next()
+            .map(|r| r.timestamp)
             .ok_or_else(|| crate::error::Error::event_not_found(checkpoint_id.clone()))?;
 
         let mut result = self
