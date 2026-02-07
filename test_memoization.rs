@@ -1,41 +1,40 @@
 use oya_pipeline::file_discovery::{
     cache_stats, clear_cache, find_javascript_files, find_python_files, find_rust_files,
 };
-use std::path::Path;
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Testing file discovery memoization...");
 
     // Create a test directory structure
     let test_dir = std::env::temp_dir().join("oya_memoization_test");
-    std::fs::create_dir_all(&test_dir).unwrap();
+    std::fs::create_dir_all(&test_dir)?;
 
     // Create test files
-    std::fs::write(test_dir.join("main.rs"), "fn main() {}").unwrap();
-    std::fs::write(test_dir.join("lib.rs"), "pub fn lib() {}").unwrap();
-    std::fs::write(test_dir.join("app.py"), "print('hello')").unwrap();
-    std::fs::write(test_dir.join("main.py"), "def main(): pass").unwrap();
-    std::fs::write(test_dir.join("app.js"), "console.log('hello');").unwrap();
-    std::fs::write(test_dir.join("app.ts"), "const x = 1;").unwrap();
+    std::fs::write(test_dir.join("main.rs"), "fn main() {}")?;
+    std::fs::write(test_dir.join("lib.rs"), "pub fn lib() {}")?;
+    std::fs::write(test_dir.join("app.py"), "print('hello')")?;
+    std::fs::write(test_dir.join("main.py"), "def main(): pass")?;
+    std::fs::write(test_dir.join("app.js"), "console.log('hello');")?;
+    std::fs::write(test_dir.join("app.ts"), "const x = 1;")?;
 
     // Create subdirectory
     let sub_dir = test_dir.join("subdir");
-    std::fs::create_dir_all(&sub_dir).unwrap();
-    std::fs::write(sub_dir.join("helper.rs"), "pub fn helper() {}").unwrap();
-    std::fs::write(sub_dir.join("tool.py"), "def tool(): pass").unwrap();
-    std::fs::write(sub_dir.join("util.js"), "function util() {}").unwrap();
+    std::fs::create_dir_all(&sub_dir)?;
+    std::fs::write(sub_dir.join("helper.rs"), "pub fn helper() {}")?;
+    std::fs::write(sub_dir.join("tool.py"), "def tool(): pass")?;
+    std::fs::write(sub_dir.join("util.js"), "function util() {}")?;
 
     println!("Created test directory: {}", test_dir.display());
 
     // First call - should populate cache
     println!("\n=== First call (cache miss) ===");
-    let rust_files1 = find_rust_files(&test_dir).unwrap();
+    let rust_files1 = find_rust_files(&test_dir)?;
     println!("Found {} Rust files", rust_files1.len());
 
-    let python_files1 = find_python_files(&test_dir).unwrap();
+    let python_files1 = find_python_files(&test_dir)?;
     println!("Found {} Python files", python_files1.len());
 
-    let js_files1 = find_javascript_files(&test_dir).unwrap();
+    let js_files1 = find_javascript_files(&test_dir)?;
     println!("Found {} JavaScript/TypeScript files", js_files1.len());
 
     let (entries1, total_files1) = cache_stats();
@@ -43,13 +42,13 @@ fn main() {
 
     // Second call - should use cache
     println!("\n=== Second call (cache hit) ===");
-    let rust_files2 = find_rust_files(&test_dir).unwrap();
+    let rust_files2 = find_rust_files(&test_dir)?;
     println!("Found {} Rust files", rust_files2.len());
 
-    let python_files2 = find_python_files(&test_dir).unwrap();
+    let python_files2 = find_python_files(&test_dir)?;
     println!("Found {} Python files", python_files2.len());
 
-    let js_files2 = find_javascript_files(&test_dir).unwrap();
+    let js_files2 = find_javascript_files(&test_dir)?;
     println!("Found {} JavaScript/TypeScript files", js_files2.len());
 
     let (entries2, total_files2) = cache_stats();
@@ -75,5 +74,6 @@ fn main() {
     println!("\n=== Test completed successfully! ===");
 
     // Cleanup
-    std::fs::remove_dir_all(&test_dir).unwrap();
+    std::fs::remove_dir_all(&test_dir)?;
+    Ok(())
 }

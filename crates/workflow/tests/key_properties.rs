@@ -10,7 +10,6 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
-use itertools::Itertools;
 use oya_workflow::idempotent::keys::idempotency_key;
 use proptest::prelude::*;
 use serde::Serialize;
@@ -37,9 +36,9 @@ proptest! {
         };
 
         let key1 = idempotency_key(&bead_id, &input)
-            .map_err(|e| format!("{:?}", e)).unwrap();
+            .map_err(|e| TestCaseError::fail(e.to_string()))?;
         let key2 = idempotency_key(&bead_id, &input)
-            .map_err(|e| format!("{:?}", e)).unwrap();
+            .map_err(|e| TestCaseError::fail(e.to_string()))?;
 
         prop_assert_eq!(key1, key2, "Determinism property violated");
     }
@@ -63,11 +62,9 @@ proptest! {
         };
 
         let key1 = idempotency_key(&bead_id1, &input)
-
-            .map_err(|e| format!("{:?}", e)).unwrap();
+            .map_err(|e| TestCaseError::fail(e.to_string()))?;
         let key2 = idempotency_key(&bead_id2, &input)
-
-            .map_err(|e| format!("{:?}", e)).unwrap();
+            .map_err(|e| TestCaseError::fail(e.to_string()))?;
 
         prop_assert_ne!(key1, key2, "Different bead_ids must produce different UUIDs");
     }
@@ -98,11 +95,9 @@ proptest! {
         };
 
         let key1 = idempotency_key(&bead_id, &input1)
-
-            .map_err(|e| format!("{:?}", e)).unwrap();
+            .map_err(|e| TestCaseError::fail(e.to_string()))?;
         let key2 = idempotency_key(&bead_id, &input2)
-
-            .map_err(|e| format!("{:?}", e)).unwrap();
+            .map_err(|e| TestCaseError::fail(e.to_string()))?;
 
         prop_assert_ne!(key1, key2, "Different inputs must produce different UUIDs");
     }
@@ -121,8 +116,7 @@ proptest! {
         };
 
         let key = idempotency_key(&bead_id, &input)
-
-            .map_err(|e| format!("{:?}", e)).unwrap();
+            .map_err(|e| TestCaseError::fail(e.to_string()))?;
 
         // Verify version is v5 (SHA-1 based)
         prop_assert_eq!(
@@ -155,9 +149,12 @@ proptest! {
         };
 
         // Generate 5 keys
-        let keys: Vec<_> = (0..5)
-            .map(|_| idempotency_key(&bead_id, &input).map_err(|e| format!("{:?}", e)).unwrap())
-            .collect();
+        let mut keys = Vec::new();
+        for _ in 0..5 {
+            let key = idempotency_key(&bead_id, &input)
+                .map_err(|e| TestCaseError::fail(e.to_string()))?;
+            keys.push(key);
+        }
 
         // All must be equal
         prop_assert!(

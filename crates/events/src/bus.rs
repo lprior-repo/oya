@@ -1,7 +1,7 @@
 //! Event bus for pub/sub coordination.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
 use tokio::sync::{broadcast, RwLock};
@@ -730,7 +730,7 @@ mod tests {
             .with_store(Arc::new(InMemoryEventStore::new()))
             .with_failure_threshold(2)
             .build()
-            .unwrap();
+            .expect("Failed to build EventBus");
 
         let bead_id = BeadId::new();
 
@@ -791,13 +791,13 @@ mod tests {
             .with_store(Arc::new(InMemoryEventStore::new()))
             .with_failure_threshold(2)
             .build()
-            .unwrap();
+            .expect("Failed to build EventBus");
 
         let bead_id = BeadId::new();
 
         // Subscribe to state_changed events
         let pattern = EventPattern::ByType("state_changed".to_string());
-        let (sub_id, mut sub) = bus.subscribe_with_pattern(pattern.clone()).await;
+        let (sub_id, _sub) = bus.subscribe_with_pattern(pattern.clone()).await;
 
         // Create a dropping receiver to simulate failure
         let (_handle, test_sub) = bus.subscribe_with_pattern(pattern).await;
@@ -810,7 +810,7 @@ mod tests {
             BeadState::Scheduled,
         ))
         .await
-        .unwrap();
+        .expect("Failed to publish event");
 
         // Second event - failure, count = 2 (circuit opens)
         bus.publish(BeadEvent::state_changed(
@@ -819,7 +819,7 @@ mod tests {
             BeadState::Ready,
         ))
         .await
-        .unwrap();
+        .expect("Failed to publish event");
 
         // Third event - should be blocked
         bus.publish(BeadEvent::state_changed(
@@ -828,10 +828,12 @@ mod tests {
             BeadState::Completed,
         ))
         .await
-        .unwrap();
+        .expect("Failed to publish event");
 
         // Create a new subscriber that should work
-        let (sub_id2, mut sub2) = bus.subscribe_with_pattern(EventPattern::ByType("state_changed".to_string())).await;
+        let (sub_id2, mut sub2) = bus
+            .subscribe_with_pattern(EventPattern::ByType("state_changed".to_string()))
+            .await;
 
         // Publish another event - should be delivered to working subscriber
         let result = bus
@@ -861,7 +863,7 @@ mod tests {
             .with_store(Arc::new(InMemoryEventStore::new()))
             .with_failure_threshold(1)
             .build()
-            .unwrap();
+            .expect("Failed to build EventBus");
 
         assert_eq!(bus.failure_threshold(), 1, "Should use custom threshold");
 

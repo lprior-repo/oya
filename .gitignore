@@ -67,3 +67,7 @@ tarpaulin-report.json
 # Beads SQLite database (use JSONL for git tracking)
 .beads/beads.db
 .beads/beads.db-*
+
+# Large test artifacts (temporary debugging files)
+simple_streamchunk_test
+test_cache

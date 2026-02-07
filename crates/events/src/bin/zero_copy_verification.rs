@@ -14,12 +14,30 @@ async fn main() {
     // Add 100 events
     for i in 0..100 {
         let event = BeadEvent::created(bead_id, spec.clone());
-        store.append(event).await.unwrap();
+        match store.append(event).await {
+            Ok(_) => (),
+            Err(e) => {
+                eprintln!("Failed to append event: {}", e);
+                std::process::exit(1);
+            }
+        };
     }
 
     // Get events twice
-    let first_read = store.read_for_bead(bead_id).await.unwrap();
-    let second_read = store.read_for_bead(bead_id).await.unwrap();
+    let first_read = match store.read_for_bead(bead_id).await {
+        Ok(events) => events,
+        Err(e) => {
+            eprintln!("Failed to read events for bead: {}", e);
+            std::process::exit(1);
+        }
+    };
+    let second_read = match store.read_for_bead(bead_id).await {
+        Ok(events) => events,
+        Err(e) => {
+            eprintln!("Failed to read events for bead: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     println!(
         "First read: {} events, ptr: {:?}",

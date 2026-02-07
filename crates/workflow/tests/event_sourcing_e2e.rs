@@ -286,12 +286,12 @@ async fn test_e2e_append_and_replay() -> Result<(), String> {
     for (i, (original, reconstructed)) in
         final_read_events.iter().zip(all_events.iter()).enumerate()
     {
-        if original.event_id() != reconstructed.event_id() {
+        let original_id: oya_events::EventId = original.event_id();
+        let reconstructed_id: oya_events::EventId = reconstructed.event_id();
+        if original_id != reconstructed_id {
             return Err(format!(
                 "Event {} mismatch: original_id={}, reconstructed_id={}",
-                i,
-                original.event_id(),
-                reconstructed.event_id()
+                i, original_id, reconstructed_id
             ));
         }
     }

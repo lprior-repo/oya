@@ -433,7 +433,7 @@ mod tests {
         let json = r#"{"success":true,"output":"Hello","modified_files":[],"commands_executed":[],"tokens_used":{"prompt_tokens":0,"completion_tokens":0,"total_tokens":0},"duration":0}"#;
         let result = parse_cli_json_output(json);
         assert!(result.is_ok());
-        assert!(result.as_ref().map(|r| r.success).map_or(false, |v| v));
+        assert!(result.as_ref().map(|r| r.success).is_ok_and(|v| v));
     }
 
     #[test]
@@ -442,7 +442,7 @@ mod tests {
         let result = parse_cli_json_output(output);
         assert!(result.is_ok());
         let result = result.ok();
-        assert!(result.as_ref().map(|r| r.success).map_or(false, |v| v));
+        assert!(result.as_ref().map(|r| r.success).is_some_and(|v| v));
         assert_eq!(
             result.map(|r| r.output),
             Some("This is plain text output".to_string())
@@ -455,7 +455,7 @@ mod tests {
         let result = parse_cli_json_output(output);
         assert!(result.is_ok());
         let result = result.ok();
-        assert!(!result.as_ref().map(|r| r.success).map_or(true, |v| v));
+        assert!(!result.as_ref().map(|r| r.success).is_none_or(|v| v));
     }
 
     #[tokio::test]

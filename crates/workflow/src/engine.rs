@@ -550,7 +550,7 @@ impl WorkflowEngine {
 #[allow(unused_variables)]
 mod tests {
     use super::*;
-    use crate::handler::NoOpHandler;
+    use crate::handler::{FailingHandler, NoOpHandler};
     use crate::storage::InMemoryStorage;
     use crate::types::Phase;
     use std::time::Duration;
@@ -687,514 +687,518 @@ mod tests {
             assert!(error.contains("all handlers"));
         }
     }
-}
-
-#[tokio::test]
-async fn test_workflow_persisted() {
-    let (engine, storage) = setup_engine();
-    let workflow = Workflow::new("persist").add_phase(Phase::new("build"));
-
-    let workflow_id = workflow.id;
-    let _ = engine.run(workflow).await;
-
-    let loaded = storage.load_workflow(workflow_id).await;
-    assert!(loaded.is_ok());
-    assert!(loaded.ok().flatten().is_some());
-}
-
-#[tokio::test]
-async fn test_checkpoints_created() {
-    let (engine, storage) = setup_engine();
-    let workflow = Workflow::new("checkpoints")
-        .add_phase(Phase::new("build"))
-        .add_phase(Phase::new("test"));
-
-    let workflow_id = workflow.id;
-    let _ = engine.run(workflow).await;
-
-    let checkpoints = storage.load_checkpoints(workflow_id).await;
-    assert!(checkpoints.is_ok());
-    assert_eq!(checkpoints.map(|c| c.len()).map_or(0, |len| len), 2);
-}
-
-#[tokio::test]
-async fn test_journal_recorded() {
-    let (engine, storage) = setup_engine();
-    let workflow = Workflow::new("journal").add_phase(Phase::new("build"));
-
-    let workflow_id = workflow.id;
-    let _ = engine.run(workflow).await;
-
-    let journal = storage.load_journal(workflow_id).await;
-    assert!(journal.is_ok());
-    // Should have: state change, phase started, phase completed, checkpoint, state change
-    assert!(journal.map(|j| j.len()).map_or(0, |len| len) >= 4);
-}
-
-// ============================================================================
-// CHECKPOINT/RESUME CYCLE TESTS
-// ============================================================================
-
-#[tokio::test]
-async fn test_checkpoint_created_after_each_phase() {
-    let (engine, storage) = setup_engine();
-    let workflow = Workflow::new("checkpoint-test")
-        .add_phase(Phase::new("build"))
-        .add_phase(Phase::new("test"))
-        .add_phase(Phase::new("deploy"));
-
-    let workflow_id = workflow.id;
-    let result = engine.run(workflow).await;
-
-    // Verify workflow completed successfully
-    assert!(result.is_ok());
-    assert!(result
-        .as_ref()
-        .map(|r| r.state == WorkflowState::Completed)
-        .map_or(false, |completed| completed));
-
-    // Verify checkpoints were created for all phases
-    let checkpoints = storage.load_checkpoints(workflow_id).await;
-    assert!(checkpoints.is_ok());
-    assert_eq!(checkpoints.map(|c| c.len()).map_or(0, |len| len), 3);
-}
-
-#[tokio::test]
-async fn test_checkpoint_contains_phase_id() {
-    let (engine, storage) = setup_engine();
-    let build_phase = Phase::new("build");
-    let phase_id = build_phase.id;
-    let workflow = Workflow::new("checkpoint-phase-id").add_phase(build_phase);
-
-    let workflow_id = workflow.id;
-    let _ = engine.run(workflow).await;
-
-    // Load checkpoint and verify phase ID
-    let checkpoint = storage.load_checkpoint(workflow_id, phase_id).await;
-    assert!(checkpoint.is_ok());
-    assert!(checkpoint
-        .as_ref()
-        .ok()
-        .and_then(|c| c.as_ref())
-        .map(|c| c.phase_id == phase_id)
-        .map_or(false, |is_match| is_match));
-}
-
-#[tokio::test]
-async fn test_checkpoint_contains_output_data() {
-    let (engine, storage) = setup_engine();
-    let workflow = Workflow::new("checkpoint-output").add_phase(Phase::new("build"));
-
-    let workflow_id = workflow.id;
-    let phases = workflow.phases.clone();
-    let _ = engine.run(workflow).await;
-
-    // Load checkpoint and verify outputs field exists
-    let checkpoint = storage.load_checkpoint(workflow_id, phases[0].id).await;
-    assert!(checkpoint.is_ok());
-    assert!(checkpoint
-        .as_ref()
-        .ok()
-        .and_then(|c| c.as_ref())
-        .map(|c| c.outputs.is_some())
-        .map_or(false, |has_outputs| has_outputs));
-}
-
-#[tokio::test]
-async fn test_checkpoint_timestamp_recorded() {
-    let (engine, storage) = setup_engine();
-    let workflow = Workflow::new("checkpoint-timestamp").add_phase(Phase::new("build"));
-
-    let workflow_id = workflow.id;
-    let phase_id = workflow.phases[0].id;
-    let before = chrono::Utc::now();
-
-    let _ = engine.run(workflow).await;
-
-    let after = chrono::Utc::now();
-
-    // Load checkpoint and verify timestamp is within expected range
-    let checkpoint = storage.load_checkpoint(workflow_id, phase_id).await;
-    assert!(checkpoint.is_ok());
-    let timestamp = checkpoint
-        .ok()
-        .flatten()
-        .map(|c| c.timestamp)
-        .filter(|t| *t >= before && *t <= after);
-    assert!(timestamp.is_some());
-}
-
-#[tokio::test]
-async fn test_manual_checkpoint_creation() {
-    let (engine, storage) = setup_engine();
-    let workflow = Workflow::new("manual-checkpoint").add_phase(Phase::new("build"));
-
-    let workflow_id = workflow.id;
-
-    // Save workflow without running
-    storage.save_workflow(&workflow).await.ok();
-
-    // Create manual checkpoint at current phase
-    let checkpoint = engine.checkpoint(workflow_id).await;
-    assert!(checkpoint.is_ok());
-
-    // Verify checkpoint was saved
-    let phase_id = workflow.phases[0].id;
-    let loaded = storage.load_checkpoint(workflow_id, phase_id).await;
-    assert!(loaded.is_ok());
-    assert!(loaded.ok().flatten().is_some());
-}
-
-#[tokio::test]
-async fn test_manual_checkpoint_fails_on_nonexistent_workflow() {
-    let (engine, _) = setup_engine();
-    let fake_id = WorkflowId::new();
-
-    let result = engine.checkpoint(fake_id).await;
-    assert!(result.is_err());
-}
-
-#[tokio::test]
-async fn test_manual_checkpoint_fails_on_workflow_without_phases() {
-    let (engine, storage) = setup_engine();
-    let workflow = Workflow::new("no-phases");
-    let workflow_id = workflow.id;
-
-    storage.save_workflow(&workflow).await.ok();
-
-    let result = engine.checkpoint(workflow_id).await;
-    assert!(result.is_err());
-}
-
-#[tokio::test]
-async fn test_resume_paused_workflow() {
-    let (engine, storage) = setup_engine();
-    let mut workflow = Workflow::new("resume-test")
-        .add_phase(Phase::new("build"))
-        .add_phase(Phase::new("test"));
-
-    let workflow_id = workflow.id;
-
-    // Manually set workflow to paused state after first phase
-    workflow.current_phase = 1;
-    workflow.state = WorkflowState::Paused;
-    storage.save_workflow(&workflow).await.ok();
-
-    // Resume workflow
-    let result = engine.resume(workflow_id).await;
-    assert!(result.is_ok());
-    assert!(result
-        .as_ref()
-        .map(|r| r.state == WorkflowState::Completed)
-        .map_or(false, |completed| completed));
-}
-
-#[tokio::test]
-async fn test_resume_non_paused_workflow_fails() {
-    let (engine, storage) = setup_engine();
-    let workflow = Workflow::new("resume-fail").add_phase(Phase::new("build"));
-
-    let workflow_id = workflow.id;
-    storage.save_workflow(&workflow).await.ok();
-
-    // Try to resume workflow that's in Pending state
-    let result = engine.resume(workflow_id).await;
-    assert!(result.is_err());
-}
-
-#[tokio::test]
-async fn test_resume_nonexistent_workflow_fails() {
-    let (engine, _) = setup_engine();
-    let fake_id = WorkflowId::new();
-
-    let result = engine.resume(fake_id).await;
-    assert!(result.is_err());
-}
-
-#[tokio::test]
-async fn test_resume_continues_from_correct_phase() {
-    let (engine, storage) = setup_engine();
-    let mut workflow = Workflow::new("resume-phase-check")
-        .add_phase(Phase::new("build"))
-        .add_phase(Phase::new("test"))
-        .add_phase(Phase::new("deploy"));
-
-    let workflow_id = workflow.id;
-
-    // Set workflow to paused after first phase
-    workflow.current_phase = 1;
-    workflow.state = WorkflowState::Paused;
-    storage.save_workflow(&workflow).await.ok();
-
-    // Resume and verify remaining phases execute
-    let result = engine.resume(workflow_id).await;
-    assert!(result.is_ok());
-
-    // Should have executed phase 1 (test) and phase 2 (deploy)
-    assert_eq!(
-        result.map(|r| r.phase_outputs.len()).map_or(0, |len| len),
-        2
-    );
-}
-
-#[tokio::test]
-async fn test_rewind_to_previous_checkpoint() {
-    let (engine, storage) = setup_engine();
-    let workflow = Workflow::new("rewind-test")
-        .add_phase(Phase::new("build"))
-        .add_phase(Phase::new("test"))
-        .add_phase(Phase::new("deploy"));
-
-    let workflow_id = workflow.id;
-    let build_phase_id = workflow.phases[0].id;
-
-    // Run workflow to completion
-    let _ = engine.run(workflow).await;
-
-    // Rewind to first checkpoint
-    let rewound = engine.rewind(workflow_id, build_phase_id).await;
-    assert!(rewound.is_ok());
-    assert!(rewound
-        .as_ref()
-        .map(|w| w.state == WorkflowState::Paused)
-        .map_or(false, |is_paused| is_paused));
-}
-
-#[tokio::test]
-async fn test_rewind_sets_correct_phase_index() {
-    let (engine, storage) = setup_engine();
-    let workflow = Workflow::new("rewind-phase-index")
-        .add_phase(Phase::new("build"))
-        .add_phase(Phase::new("test"))
-        .add_phase(Phase::new("deploy"));
-
-    let workflow_id = workflow.id;
-    let test_phase_id = workflow.phases[1].id;
-
-    // Run workflow to completion
-    let _ = engine.run(workflow).await;
-
-    // Rewind to second phase
-    let rewound = engine.rewind(workflow_id, test_phase_id).await;
-    assert!(rewound.is_ok());
-
-    // Current phase should be set to index 2 (next phase after test)
-    assert_eq!(rewound.map(|w| w.current_phase).map_or(999, |idx| idx), 2);
-}
-
-#[tokio::test]
-async fn test_rewind_clears_later_checkpoints() {
-    let (engine, storage) = setup_engine();
-    let workflow = Workflow::new("rewind-clear-checkpoints")
-        .add_phase(Phase::new("build"))
-        .add_phase(Phase::new("test"))
-        .add_phase(Phase::new("deploy"));
-
-    let workflow_id = workflow.id;
-    let build_phase_id = workflow.phases[0].id;
-
-    // Run workflow to completion (creates 3 checkpoints)
-    let _ = engine.run(workflow).await;
-
-    // Verify all checkpoints exist
-    let checkpoints_before = storage.load_checkpoints(workflow_id).await;
-    assert_eq!(checkpoints_before.map(|c| c.len()).map_or(0, |len| len), 3);
-
-    // Rewind to first checkpoint
-    let _ = engine.rewind(workflow_id, build_phase_id).await;
-
-    // Verify only first checkpoint remains
-    let checkpoints_after = storage.load_checkpoints(workflow_id).await;
-    assert_eq!(checkpoints_after.map(|c| c.len()).map_or(0, |len| len), 1);
-}
-
-#[tokio::test]
-async fn test_rewind_records_journal_entry() {
-    let (engine, storage) = setup_engine();
-    let workflow = Workflow::new("rewind-journal")
-        .add_phase(Phase::new("build"))
-        .add_phase(Phase::new("test"));
-
-    let workflow_id = workflow.id;
-    let build_phase_id = workflow.phases[0].id;
-
-    // Run workflow
-    let _ = engine.run(workflow).await;
-
-    let journal_before = storage.load_journal(workflow_id).await;
-    let entries_before = journal_before.map(|j| j.len()).map_or(0, |len| len);
-
-    // Rewind
-    let _ = engine.rewind(workflow_id, build_phase_id).await;
-
-    // Verify rewind was recorded in journal
-    let journal_after = storage.load_journal(workflow_id).await;
-    let entries_after = journal_after.map(|j| j.len()).map_or(0, |len| len);
-    assert!(entries_after > entries_before);
-}
-
-#[tokio::test]
-async fn test_rewind_nonexistent_workflow_fails() {
-    let (engine, _) = setup_engine();
-    let fake_workflow_id = WorkflowId::new();
-    let fake_phase_id = PhaseId::new();
-
-    let result = engine.rewind(fake_workflow_id, fake_phase_id).await;
-    assert!(result.is_err());
-}
-
-#[tokio::test]
-async fn test_rewind_nonexistent_phase_fails() {
-    let (engine, storage) = setup_engine();
-    let workflow = Workflow::new("rewind-bad-phase").add_phase(Phase::new("build"));
-    let workflow_id = workflow.id;
-
-    storage.save_workflow(&workflow).await.ok();
-    let _ = engine.run(workflow).await;
-
-    let fake_phase_id = PhaseId::new();
-    let result = engine.rewind(workflow_id, fake_phase_id).await;
-    assert!(result.is_err());
-}
-
-#[tokio::test]
-async fn test_rewind_without_checkpoint_fails() {
-    let (engine, storage) = setup_engine();
-    let workflow = Workflow::new("rewind-no-checkpoint").add_phase(Phase::new("build"));
-    let workflow_id = workflow.id;
-    let phase_id = workflow.phases[0].id;
-
-    // Save workflow but don't run it (no checkpoint created)
-    storage.save_workflow(&workflow).await.ok();
-
-    let result = engine.rewind(workflow_id, phase_id).await;
-    assert!(result.is_err());
-}
-
-#[tokio::test]
-async fn test_checkpoint_disabled_in_config() {
-    let storage = Arc::new(InMemoryStorage::new());
-    let mut registry = HandlerRegistry::new();
-    registry.register("build", Arc::new(NoOpHandler::new("build")));
-
-    // Create engine with checkpointing disabled
-    let config = EngineConfig {
-        checkpoint_enabled: false,
-        ..Default::default()
-    };
-    let engine = WorkflowEngine::new(storage.clone(), Arc::new(registry), config);
-
-    let workflow = Workflow::new("no-checkpoints").add_phase(Phase::new("build"));
-    let workflow_id = workflow.id;
-
-    let _ = engine.run(workflow).await;
-
-    // Verify no checkpoints were created
-    let checkpoints = storage.load_checkpoints(workflow_id).await;
-    assert!(checkpoints.is_ok());
-    assert_eq!(checkpoints.map(|c| c.len()).map_or(999, |len| len), 0);
-}
-
-#[tokio::test]
-async fn test_resume_after_rewind() {
-    let (engine, storage) = setup_engine();
-    let workflow = Workflow::new("rewind-then-resume")
-        .add_phase(Phase::new("build"))
-        .add_phase(Phase::new("test"))
-        .add_phase(Phase::new("deploy"));
-
-    let workflow_id = workflow.id;
-    let build_phase_id = workflow.phases[0].id;
-
-    // Run workflow to completion
-    let _ = engine.run(workflow).await;
-
-    // Rewind to first checkpoint (sets state to Paused)
-    let _ = engine.rewind(workflow_id, build_phase_id).await;
-
-    // Resume from rewound state
-    let result = engine.resume(workflow_id).await;
-    assert!(result.is_ok());
-    assert!(result
-        .as_ref()
-        .map(|r| r.state == WorkflowState::Completed)
-        .map_or(false, |completed| completed));
-}
-
-#[tokio::test]
-async fn test_checkpoint_data_integrity() {
-    let (engine, storage) = setup_engine();
-    let build_phase = Phase::new("build");
-    let phase_id = build_phase.id;
-    let workflow = Workflow::new("data-integrity").add_phase(build_phase);
-
-    let workflow_id = workflow.id;
-    let _ = engine.run(workflow).await;
-
-    // Load checkpoint
-    let checkpoint = storage
-        .load_checkpoint(workflow_id, phase_id)
-        .await
-        .ok()
-        .flatten();
-
-    assert!(checkpoint.is_some());
-
-    // Verify checkpoint structure
-    let cp = checkpoint.filter(|c| {
-        c.phase_id == phase_id && c.outputs.is_some() && c.timestamp <= chrono::Utc::now()
-    });
-
-    assert!(cp.is_some());
-}
-
-#[tokio::test]
-async fn test_multiple_rewinds() {
-    let (engine, storage) = setup_engine();
-    let workflow = Workflow::new("multiple-rewinds")
-        .add_phase(Phase::new("build"))
-        .add_phase(Phase::new("test"))
-        .add_phase(Phase::new("deploy"));
-
-    let workflow_id = workflow.id;
-    let build_phase_id = workflow.phases[0].id;
-    let test_phase_id = workflow.phases[1].id;
-
-    // Run to completion
-    let _ = engine.run(workflow).await;
-
-    // First rewind to test phase
-    let rewind1 = engine.rewind(workflow_id, test_phase_id).await;
-    assert!(rewind1.is_ok());
-
-    // Second rewind to build phase
-    let rewind2 = engine.rewind(workflow_id, build_phase_id).await;
-    assert!(rewind2.is_ok());
-
-    // Verify workflow is at correct position
-    assert_eq!(rewind2.map(|w| w.current_phase).map_or(999, |idx| idx), 1);
-}
-
-#[tokio::test]
-async fn test_checkpoint_journal_correlation() {
-    let (engine, storage) = setup_engine();
-    let workflow = Workflow::new("checkpoint-journal").add_phase(Phase::new("build"));
-
-    let workflow_id = workflow.id;
-    let _ = engine.run(workflow).await;
-
-    let journal = storage.load_journal(workflow_id).await;
-    assert!(journal.is_ok());
-
-    // Verify journal contains checkpoint created entry
-    let has_checkpoint_entry = journal
-        .ok()
-        .map(|j| {
-            j.entries()
-                .iter()
-                .any(|e| matches!(e, crate::types::JournalEntry::CheckpointCreated { .. }))
-        })
-        .map_or(false, |has_entry| has_entry);
-
-    assert!(has_checkpoint_entry);
+
+    // ==========================================================================
+    // PERSISTENCE TESTS
+    // ==========================================================================
+
+    #[tokio::test]
+    async fn test_workflow_persisted() {
+        let (engine, storage) = setup_engine();
+        let workflow = Workflow::new("persist").add_phase(Phase::new("build"));
+
+        let workflow_id = workflow.id;
+        let _ = engine.run(workflow).await;
+
+        let loaded = storage.load_workflow(workflow_id).await;
+        assert!(loaded.is_ok());
+        assert!(loaded.ok().flatten().is_some());
+    }
+
+    #[tokio::test]
+    async fn test_checkpoints_created() {
+        let (engine, storage) = setup_engine();
+        let workflow = Workflow::new("checkpoints")
+            .add_phase(Phase::new("build"))
+            .add_phase(Phase::new("test"));
+
+        let workflow_id = workflow.id;
+        let _ = engine.run(workflow).await;
+
+        let checkpoints = storage.load_checkpoints(workflow_id).await;
+        assert!(checkpoints.is_ok());
+        assert_eq!(checkpoints.map(|c| c.len()).map_or(0, |len| len), 2);
+    }
+
+    #[tokio::test]
+    async fn test_journal_recorded() {
+        let (engine, storage) = setup_engine();
+        let workflow = Workflow::new("journal").add_phase(Phase::new("build"));
+
+        let workflow_id = workflow.id;
+        let _ = engine.run(workflow).await;
+
+        let journal = storage.load_journal(workflow_id).await;
+        assert!(journal.is_ok());
+        // Should have: state change, phase started, phase completed, checkpoint, state change
+        assert!(journal.map(|j| j.len()).map_or(0, |len| len) >= 4);
+    }
+
+    // ============================================================================
+    // CHECKPOINT/RESUME CYCLE TESTS
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_checkpoint_created_after_each_phase() {
+        let (engine, storage) = setup_engine();
+        let workflow = Workflow::new("checkpoint-test")
+            .add_phase(Phase::new("build"))
+            .add_phase(Phase::new("test"))
+            .add_phase(Phase::new("deploy"));
+
+        let workflow_id = workflow.id;
+        let result = engine.run(workflow).await;
+
+        // Verify workflow completed successfully
+        assert!(result.is_ok());
+        assert!(result
+            .as_ref()
+            .map(|r| r.state == WorkflowState::Completed)
+            .map_or(false, |completed| completed));
+
+        // Verify checkpoints were created for all phases
+        let checkpoints = storage.load_checkpoints(workflow_id).await;
+        assert!(checkpoints.is_ok());
+        assert_eq!(checkpoints.map(|c| c.len()).map_or(0, |len| len), 3);
+    }
+
+    #[tokio::test]
+    async fn test_checkpoint_contains_phase_id() {
+        let (engine, storage) = setup_engine();
+        let build_phase = Phase::new("build");
+        let phase_id = build_phase.id;
+        let workflow = Workflow::new("checkpoint-phase-id").add_phase(build_phase);
+
+        let workflow_id = workflow.id;
+        let _ = engine.run(workflow).await;
+
+        // Load checkpoint and verify phase ID
+        let checkpoint = storage.load_checkpoint(workflow_id, phase_id).await;
+        assert!(checkpoint.is_ok());
+        assert!(checkpoint
+            .as_ref()
+            .ok()
+            .and_then(|c| c.as_ref())
+            .map(|c| c.phase_id == phase_id)
+            .map_or(false, |is_match| is_match));
+    }
+
+    #[tokio::test]
+    async fn test_checkpoint_contains_output_data() {
+        let (engine, storage) = setup_engine();
+        let workflow = Workflow::new("checkpoint-output").add_phase(Phase::new("build"));
+
+        let workflow_id = workflow.id;
+        let phases = workflow.phases.clone();
+        let _ = engine.run(workflow).await;
+
+        // Load checkpoint and verify outputs field exists
+        let checkpoint = storage.load_checkpoint(workflow_id, phases[0].id).await;
+        assert!(checkpoint.is_ok());
+        assert!(checkpoint
+            .as_ref()
+            .ok()
+            .and_then(|c| c.as_ref())
+            .map(|c| c.outputs.is_some())
+            .map_or(false, |has_outputs| has_outputs));
+    }
+
+    #[tokio::test]
+    async fn test_checkpoint_timestamp_recorded() {
+        let (engine, storage) = setup_engine();
+        let workflow = Workflow::new("checkpoint-timestamp").add_phase(Phase::new("build"));
+
+        let workflow_id = workflow.id;
+        let phase_id = workflow.phases[0].id;
+        let before = chrono::Utc::now();
+
+        let _ = engine.run(workflow).await;
+
+        let after = chrono::Utc::now();
+
+        // Load checkpoint and verify timestamp is within expected range
+        let checkpoint = storage.load_checkpoint(workflow_id, phase_id).await;
+        assert!(checkpoint.is_ok());
+        let timestamp = checkpoint
+            .ok()
+            .flatten()
+            .map(|c| c.timestamp)
+            .filter(|t| *t >= before && *t <= after);
+        assert!(timestamp.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_manual_checkpoint_creation() {
+        let (engine, storage) = setup_engine();
+        let workflow = Workflow::new("manual-checkpoint").add_phase(Phase::new("build"));
+
+        let workflow_id = workflow.id;
+
+        // Save workflow without running
+        storage.save_workflow(&workflow).await.ok();
+
+        // Create manual checkpoint at current phase
+        let checkpoint = engine.checkpoint(workflow_id).await;
+        assert!(checkpoint.is_ok());
+
+        // Verify checkpoint was saved
+        let phase_id = workflow.phases[0].id;
+        let loaded = storage.load_checkpoint(workflow_id, phase_id).await;
+        assert!(loaded.is_ok());
+        assert!(loaded.ok().flatten().is_some());
+    }
+
+    #[tokio::test]
+    async fn test_manual_checkpoint_fails_on_nonexistent_workflow() {
+        let (engine, _) = setup_engine();
+        let fake_id = WorkflowId::new();
+
+        let result = engine.checkpoint(fake_id).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_manual_checkpoint_fails_on_workflow_without_phases() {
+        let (engine, storage) = setup_engine();
+        let workflow = Workflow::new("no-phases");
+        let workflow_id = workflow.id;
+
+        storage.save_workflow(&workflow).await.ok();
+
+        let result = engine.checkpoint(workflow_id).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_resume_paused_workflow() {
+        let (engine, storage) = setup_engine();
+        let mut workflow = Workflow::new("resume-test")
+            .add_phase(Phase::new("build"))
+            .add_phase(Phase::new("test"));
+
+        let workflow_id = workflow.id;
+
+        // Manually set workflow to paused state after first phase
+        workflow.current_phase = 1;
+        workflow.state = WorkflowState::Paused;
+        storage.save_workflow(&workflow).await.ok();
+
+        // Resume workflow
+        let result = engine.resume(workflow_id).await;
+        assert!(result.is_ok());
+        assert!(result
+            .as_ref()
+            .map(|r| r.state == WorkflowState::Completed)
+            .map_or(false, |completed| completed));
+    }
+
+    #[tokio::test]
+    async fn test_resume_non_paused_workflow_fails() {
+        let (engine, storage) = setup_engine();
+        let workflow = Workflow::new("resume-fail").add_phase(Phase::new("build"));
+
+        let workflow_id = workflow.id;
+        storage.save_workflow(&workflow).await.ok();
+
+        // Try to resume workflow that's in Pending state
+        let result = engine.resume(workflow_id).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_resume_nonexistent_workflow_fails() {
+        let (engine, _) = setup_engine();
+        let fake_id = WorkflowId::new();
+
+        let result = engine.resume(fake_id).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_resume_continues_from_correct_phase() {
+        let (engine, storage) = setup_engine();
+        let mut workflow = Workflow::new("resume-phase-check")
+            .add_phase(Phase::new("build"))
+            .add_phase(Phase::new("test"))
+            .add_phase(Phase::new("deploy"));
+
+        let workflow_id = workflow.id;
+
+        // Set workflow to paused after first phase
+        workflow.current_phase = 1;
+        workflow.state = WorkflowState::Paused;
+        storage.save_workflow(&workflow).await.ok();
+
+        // Resume and verify remaining phases execute
+        let result = engine.resume(workflow_id).await;
+        assert!(result.is_ok());
+
+        // Should have executed phase 1 (test) and phase 2 (deploy)
+        assert_eq!(
+            result.map(|r| r.phase_outputs.len()).map_or(0, |len| len),
+            2
+        );
+    }
+
+    #[tokio::test]
+    async fn test_rewind_to_previous_checkpoint() {
+        let (engine, storage) = setup_engine();
+        let workflow = Workflow::new("rewind-test")
+            .add_phase(Phase::new("build"))
+            .add_phase(Phase::new("test"))
+            .add_phase(Phase::new("deploy"));
+
+        let workflow_id = workflow.id;
+        let build_phase_id = workflow.phases[0].id;
+
+        // Run workflow to completion
+        let _ = engine.run(workflow).await;
+
+        // Rewind to first checkpoint
+        let rewound = engine.rewind(workflow_id, build_phase_id).await;
+        assert!(rewound.is_ok());
+        assert!(rewound
+            .as_ref()
+            .map(|w| w.state == WorkflowState::Paused)
+            .map_or(false, |is_paused| is_paused));
+    }
+
+    #[tokio::test]
+    async fn test_rewind_sets_correct_phase_index() {
+        let (engine, storage) = setup_engine();
+        let workflow = Workflow::new("rewind-phase-index")
+            .add_phase(Phase::new("build"))
+            .add_phase(Phase::new("test"))
+            .add_phase(Phase::new("deploy"));
+
+        let workflow_id = workflow.id;
+        let test_phase_id = workflow.phases[1].id;
+
+        // Run workflow to completion
+        let _ = engine.run(workflow).await;
+
+        // Rewind to second phase
+        let rewound = engine.rewind(workflow_id, test_phase_id).await;
+        assert!(rewound.is_ok());
+
+        // Current phase should be set to index 2 (next phase after test)
+        assert_eq!(rewound.map(|w| w.current_phase).map_or(999, |idx| idx), 2);
+    }
+
+    #[tokio::test]
+    async fn test_rewind_clears_later_checkpoints() {
+        let (engine, storage) = setup_engine();
+        let workflow = Workflow::new("rewind-clear-checkpoints")
+            .add_phase(Phase::new("build"))
+            .add_phase(Phase::new("test"))
+            .add_phase(Phase::new("deploy"));
+
+        let workflow_id = workflow.id;
+        let build_phase_id = workflow.phases[0].id;
+
+        // Run workflow to completion (creates 3 checkpoints)
+        let _ = engine.run(workflow).await;
+
+        // Verify all checkpoints exist
+        let checkpoints_before = storage.load_checkpoints(workflow_id).await;
+        assert_eq!(checkpoints_before.map(|c| c.len()).map_or(0, |len| len), 3);
+
+        // Rewind to first checkpoint
+        let _ = engine.rewind(workflow_id, build_phase_id).await;
+
+        // Verify only first checkpoint remains
+        let checkpoints_after = storage.load_checkpoints(workflow_id).await;
+        assert_eq!(checkpoints_after.map(|c| c.len()).map_or(0, |len| len), 1);
+    }
+
+    #[tokio::test]
+    async fn test_rewind_records_journal_entry() {
+        let (engine, storage) = setup_engine();
+        let workflow = Workflow::new("rewind-journal")
+            .add_phase(Phase::new("build"))
+            .add_phase(Phase::new("test"));
+
+        let workflow_id = workflow.id;
+        let build_phase_id = workflow.phases[0].id;
+
+        // Run workflow
+        let _ = engine.run(workflow).await;
+
+        let journal_before = storage.load_journal(workflow_id).await;
+        let entries_before = journal_before.map(|j| j.len()).map_or(0, |len| len);
+
+        // Rewind
+        let _ = engine.rewind(workflow_id, build_phase_id).await;
+
+        // Verify rewind was recorded in journal
+        let journal_after = storage.load_journal(workflow_id).await;
+        let entries_after = journal_after.map(|j| j.len()).map_or(0, |len| len);
+        assert!(entries_after > entries_before);
+    }
+
+    #[tokio::test]
+    async fn test_rewind_nonexistent_workflow_fails() {
+        let (engine, _) = setup_engine();
+        let fake_workflow_id = WorkflowId::new();
+        let fake_phase_id = PhaseId::new();
+
+        let result = engine.rewind(fake_workflow_id, fake_phase_id).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_rewind_nonexistent_phase_fails() {
+        let (engine, storage) = setup_engine();
+        let workflow = Workflow::new("rewind-bad-phase").add_phase(Phase::new("build"));
+        let workflow_id = workflow.id;
+
+        storage.save_workflow(&workflow).await.ok();
+        let _ = engine.run(workflow).await;
+
+        let fake_phase_id = PhaseId::new();
+        let result = engine.rewind(workflow_id, fake_phase_id).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_rewind_without_checkpoint_fails() {
+        let (engine, storage) = setup_engine();
+        let workflow = Workflow::new("rewind-no-checkpoint").add_phase(Phase::new("build"));
+        let workflow_id = workflow.id;
+        let phase_id = workflow.phases[0].id;
+
+        // Save workflow but don't run it (no checkpoint created)
+        storage.save_workflow(&workflow).await.ok();
+
+        let result = engine.rewind(workflow_id, phase_id).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_checkpoint_disabled_in_config() {
+        let storage = Arc::new(InMemoryStorage::new());
+        let mut registry = HandlerRegistry::new();
+        registry.register("build", Arc::new(NoOpHandler::new("build")));
+
+        // Create engine with checkpointing disabled
+        let config = EngineConfig {
+            checkpoint_enabled: false,
+            ..Default::default()
+        };
+        let engine = WorkflowEngine::new(storage.clone(), Arc::new(registry), config);
+
+        let workflow = Workflow::new("no-checkpoints").add_phase(Phase::new("build"));
+        let workflow_id = workflow.id;
+
+        let _ = engine.run(workflow).await;
+
+        // Verify no checkpoints were created
+        let checkpoints = storage.load_checkpoints(workflow_id).await;
+        assert!(checkpoints.is_ok());
+        assert_eq!(checkpoints.map(|c| c.len()).map_or(999, |len| len), 0);
+    }
+
+    #[tokio::test]
+    async fn test_resume_after_rewind() {
+        let (engine, storage) = setup_engine();
+        let workflow = Workflow::new("rewind-then-resume")
+            .add_phase(Phase::new("build"))
+            .add_phase(Phase::new("test"))
+            .add_phase(Phase::new("deploy"));
+
+        let workflow_id = workflow.id;
+        let build_phase_id = workflow.phases[0].id;
+
+        // Run workflow to completion
+        let _ = engine.run(workflow).await;
+
+        // Rewind to first checkpoint (sets state to Paused)
+        let _ = engine.rewind(workflow_id, build_phase_id).await;
+
+        // Resume from rewound state
+        let result = engine.resume(workflow_id).await;
+        assert!(result.is_ok());
+        assert!(result
+            .as_ref()
+            .map(|r| r.state == WorkflowState::Completed)
+            .map_or(false, |completed| completed));
+    }
+
+    #[tokio::test]
+    async fn test_checkpoint_data_integrity() {
+        let (engine, storage) = setup_engine();
+        let build_phase = Phase::new("build");
+        let phase_id = build_phase.id;
+        let workflow = Workflow::new("data-integrity").add_phase(build_phase);
+
+        let workflow_id = workflow.id;
+        let _ = engine.run(workflow).await;
+
+        // Load checkpoint
+        let checkpoint = storage
+            .load_checkpoint(workflow_id, phase_id)
+            .await
+            .ok()
+            .flatten();
+
+        assert!(checkpoint.is_some());
+
+        // Verify checkpoint structure
+        let cp = checkpoint.filter(|c| {
+            c.phase_id == phase_id && c.outputs.is_some() && c.timestamp <= chrono::Utc::now()
+        });
+
+        assert!(cp.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_multiple_rewinds() {
+        let (engine, storage) = setup_engine();
+        let workflow = Workflow::new("multiple-rewinds")
+            .add_phase(Phase::new("build"))
+            .add_phase(Phase::new("test"))
+            .add_phase(Phase::new("deploy"));
+
+        let workflow_id = workflow.id;
+        let build_phase_id = workflow.phases[0].id;
+        let test_phase_id = workflow.phases[1].id;
+
+        // Run to completion
+        let _ = engine.run(workflow).await;
+
+        // First rewind to test phase
+        let rewind1 = engine.rewind(workflow_id, test_phase_id).await;
+        assert!(rewind1.is_ok());
+
+        // Second rewind to build phase
+        let rewind2 = engine.rewind(workflow_id, build_phase_id).await;
+        assert!(rewind2.is_ok());
+
+        // Verify workflow is at correct position
+        assert_eq!(rewind2.map(|w| w.current_phase).map_or(999, |idx| idx), 1);
+    }
+
+    #[tokio::test]
+    async fn test_checkpoint_journal_correlation() {
+        let (engine, storage) = setup_engine();
+        let workflow = Workflow::new("checkpoint-journal").add_phase(Phase::new("build"));
+
+        let workflow_id = workflow.id;
+        let _ = engine.run(workflow).await;
+
+        let journal = storage.load_journal(workflow_id).await;
+        assert!(journal.is_ok());
+
+        // Verify journal contains checkpoint created entry
+        let has_checkpoint_entry = journal
+            .ok()
+            .map(|j| {
+                j.entries()
+                    .iter()
+                    .any(|e| matches!(e, crate::types::JournalEntry::CheckpointCreated { .. }))
+            })
+            .map_or(false, |has_entry| has_entry);
+
+        assert!(has_checkpoint_entry);
+    }
 }

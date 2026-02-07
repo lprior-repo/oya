@@ -128,6 +128,10 @@ pub enum Error {
     #[error("database error: {reason}")]
     DatabaseError { reason: String },
 
+    // Test/Unknown errors
+    #[error("unknown error: {message}")]
+    Unknown { message: String },
+
     // Core error wrapper
     #[error(transparent)]
     Core(#[from] oya_core::Error),
@@ -199,6 +203,13 @@ impl Error {
     pub fn invalid_record(reason: impl Into<String>) -> Self {
         Self::InvalidRecord {
             reason: reason.into(),
+        }
+    }
+
+    /// Create an unknown error (primarily for test error handling).
+    pub fn unknown(message: impl Into<String>) -> Self {
+        Self::Unknown {
+            message: message.into(),
         }
     }
 }

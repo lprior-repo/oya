@@ -1,6 +1,6 @@
 //! Functional checkpoint manager state machine tests.
 
-use oya_workflow::checkpoint::{CheckpointDecision, CheckpointManager, CheckpointStrategy};
+use oya_workflow::checkpoint::{CheckpointManager, CheckpointStrategy};
 use oya_workflow::PhaseOutput;
 
 /// Helper to create a successful phase output.

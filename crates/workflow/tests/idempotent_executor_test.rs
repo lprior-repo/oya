@@ -9,7 +9,6 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
-use itertools::Itertools;
 use proptest::prelude::*;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -48,11 +47,6 @@ impl MockExecutor {
     async fn execution_count(&self, key: &str) -> usize {
         let counts = self.execution_count.read().await;
         counts.get(key).copied().unwrap_or(0)
-    }
-
-    async fn get_result(&self, key: &str) -> Option<String> {
-        let results = self.results.read().await;
-        results.get(key).cloned()
     }
 }
 

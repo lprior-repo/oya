@@ -57,7 +57,7 @@ fn benchmark_vec_filter_map(c: &mut Criterion) {
 
     c.bench_function("functional_filter_map", |b| {
         b.iter(|| {
-            let result: Vec<usize> = data.iter().filter(|x| x % 2 == 0).map(|x| x * 2).collect();
+            let result: Vec<usize> = data.iter().filter(|x| *x % 2 == 0).map(|x| x * 2).collect();
             black_box(result)
         })
     });
@@ -83,7 +83,7 @@ fn benchmark_vec_partition(c: &mut Criterion) {
 
     c.bench_function("functional_partition", |b| {
         b.iter(|| {
-            let (evens, odds): (Vec<_>, Vec<_>) = data.iter().partition(|x| x % 2 == 0);
+            let (evens, odds): (Vec<&usize>, Vec<&usize>) = data.iter().partition(|x| *x % 2 == 0);
             black_box((evens, odds))
         })
     });

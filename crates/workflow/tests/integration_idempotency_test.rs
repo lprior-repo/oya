@@ -17,9 +17,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use oya_workflow::idempotent::{
-    hash_input, idempotency_key, idempotency_key_from_bytes, IdempotencyKey,
-};
+use oya_workflow::idempotent::{hash_input, idempotency_key_from_bytes, IdempotencyKey};
 
 /// Mock operation result
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -106,7 +104,7 @@ impl IdempotentExecutor {
     /// Execute operation idempotently
     async fn execute(&self, bead_id: &str, input: &str) -> Result<OperationResult, String> {
         // Generate idempotency key
-        let key = idempotency_key_from_bytes(bead_id, input.as_bytes());
+        let key = IdempotencyKey::new(idempotency_key_from_bytes(bead_id, input.as_bytes()));
 
         // Check cache first
         if let Some(cached) = self.cache.get(&key).await {
@@ -212,7 +210,7 @@ async fn test_execute_three_times_same_key_only_executes_once() {
     assert_eq!(r2, r3, "Second and third results should be identical");
 
     // And: Operation should only execute once
-    let key = idempotency_key_from_bytes(bead_id, input.as_bytes());
+    let key = IdempotencyKey::new(idempotency_key_from_bytes(bead_id, input.as_bytes()));
     let actual_count = executor.get_actual_execution_count(&key).await;
     assert_eq!(actual_count, 1, "Operation should only execute once");
 
@@ -247,15 +245,11 @@ async fn test_concurrent_execution_with_same_key_only_executes_once() {
     let results: Vec<_> = futures::future::join_all(handles)
         .await
         .into_iter()
-        .map(|r| r.ok())
-        .flatten()
-        .map(|r| r.ok())
+        .filter_map(|r| r.ok())
+        .filter_map(|r| r.ok())
         .collect();
 
-    assert!(
-        results.iter().all(|r| r.is_some()),
-        "All tasks should complete successfully"
-    );
+    assert_eq!(results.len(), 10, "All tasks should complete successfully");
 
     // And: All results should be identical
     assert!(
@@ -264,7 +258,7 @@ async fn test_concurrent_execution_with_same_key_only_executes_once() {
     );
 
     // And: Operation should only execute once (not 10 times)
-    let key = idempotency_key_from_bytes(bead_id, input.as_bytes());
+    let key = IdempotencyKey::new(idempotency_key_from_bytes(bead_id, input.as_bytes()));
     let actual_count = executor.get_actual_execution_count(&key).await;
     assert_eq!(
         actual_count, 1,
@@ -299,7 +293,7 @@ async fn test_cache_db_consistency() {
     let result = executor.execute(bead_id, input).await;
     assert!(result.is_ok(), "Execution should succeed");
 
-    let key = idempotency_key_from_bytes(bead_id, input.as_bytes());
+    let key = IdempotencyKey::new(idempotency_key_from_bytes(bead_id, input.as_bytes()));
 
     // Then: Cache and DB should both contain the result
     let cached = cache.get(&key).await;
@@ -340,8 +334,8 @@ async fn test_different_inputs_produce_different_keys() {
     let input2 = "input-two";
 
     // When: Generate keys
-    let key1 = idempotency_key_from_bytes(bead_id, input1.as_bytes());
-    let key2 = idempotency_key_from_bytes(bead_id, input2.as_bytes());
+    let key1 = IdempotencyKey::new(idempotency_key_from_bytes(bead_id, input1.as_bytes()));
+    let key2 = IdempotencyKey::new(idempotency_key_from_bytes(bead_id, input2.as_bytes()));
 
     // Then: Keys should be different
     assert_ne!(key1, key2, "Different inputs should produce different keys");
@@ -355,8 +349,8 @@ async fn test_different_bead_ids_produce_different_keys() {
     let input = "shared-input";
 
     // When: Generate keys
-    let key1 = idempotency_key_from_bytes(bead_id1, input.as_bytes());
-    let key2 = idempotency_key_from_bytes(bead_id2, input.as_bytes());
+    let key1 = IdempotencyKey::new(idempotency_key_from_bytes(bead_id1, input.as_bytes()));
+    let key2 = IdempotencyKey::new(idempotency_key_from_bytes(bead_id2, input.as_bytes()));
 
     // Then: Keys should be different
     assert_ne!(
@@ -385,9 +379,9 @@ async fn test_sequential_operations_maintain_independence() {
     assert!(result3.is_ok());
 
     // And: Each should execute exactly once
-    let key1 = idempotency_key_from_bytes(bead_id, b"operation-1");
-    let key2 = idempotency_key_from_bytes(bead_id, b"operation-2");
-    let key3 = idempotency_key_from_bytes(bead_id, b"operation-3");
+    let key1 = IdempotencyKey::new(idempotency_key_from_bytes(bead_id, b"operation-1"));
+    let key2 = IdempotencyKey::new(idempotency_key_from_bytes(bead_id, b"operation-2"));
+    let key3 = IdempotencyKey::new(idempotency_key_from_bytes(bead_id, b"operation-3"));
 
     assert_eq!(executor.get_actual_execution_count(&key1).await, 1);
     assert_eq!(executor.get_actual_execution_count(&key2).await, 1);
@@ -421,7 +415,7 @@ async fn test_repeated_execution_returns_cached_result() {
     let result1 = executor.execute(bead_id, input).await;
     assert!(result1.is_ok());
 
-    let key = idempotency_key_from_bytes(bead_id, input.as_bytes());
+    let key = IdempotencyKey::new(idempotency_key_from_bytes(bead_id, input.as_bytes()));
     let count_after_first = executor.get_actual_execution_count(&key).await;
     assert_eq!(count_after_first, 1, "Should execute once on first call");
 
@@ -454,9 +448,9 @@ async fn test_idempotency_key_determinism() {
     let input = "determinism-test";
 
     // When: Generate keys multiple times
-    let key1 = idempotency_key_from_bytes(bead_id, input.as_bytes());
-    let key2 = idempotency_key_from_bytes(bead_id, input.as_bytes());
-    let key3 = idempotency_key_from_bytes(bead_id, input.as_bytes());
+    let key1 = IdempotencyKey::new(idempotency_key_from_bytes(bead_id, input.as_bytes()));
+    let key2 = IdempotencyKey::new(idempotency_key_from_bytes(bead_id, input.as_bytes()));
+    let key3 = IdempotencyKey::new(idempotency_key_from_bytes(bead_id, input.as_bytes()));
 
     // Then: All keys should be identical
     assert_eq!(key1, key2, "Key generation should be deterministic");
@@ -489,17 +483,17 @@ async fn test_empty_input_generates_valid_key() {
     let input = "";
 
     // When: Generate key
-    let key = idempotency_key_from_bytes(bead_id, input.as_bytes());
+    let key = IdempotencyKey::new(idempotency_key_from_bytes(bead_id, input.as_bytes()));
 
     // Then: Key should be valid UUID v5
-    assert_eq!(key.get_version(), Some(uuid::Version::Sha1));
-    assert_eq!(key.get_variant(), uuid::Variant::RFC4122);
+    assert_eq!(key.version(), Some(uuid::Version::Sha1));
+    assert_eq!(key.variant(), uuid::Variant::RFC4122);
 
     // And: Key should not be nil
     assert!(!key.is_nil(), "Empty input should still generate valid key");
 
     // And: Should be deterministic
-    let key2 = idempotency_key_from_bytes(bead_id, input.as_bytes());
+    let key2 = IdempotencyKey::new(idempotency_key_from_bytes(bead_id, input.as_bytes()));
     assert_eq!(key, key2, "Empty input key should be deterministic");
 }
 
@@ -510,13 +504,13 @@ async fn test_large_input_generates_valid_key() {
     let large_input = vec![42u8; 10_000];
 
     // When: Generate key
-    let key = idempotency_key_from_bytes(bead_id, &large_input);
+    let key = IdempotencyKey::new(idempotency_key_from_bytes(bead_id, &large_input));
 
     // Then: Key should be valid UUID v5
-    assert_eq!(key.get_version(), Some(uuid::Version::Sha1));
-    assert_eq!(key.get_variant(), uuid::Variant::RFC4122);
+    assert_eq!(key.version(), Some(uuid::Version::Sha1));
+    assert_eq!(key.variant(), uuid::Variant::RFC4122);
 
     // And: Should be deterministic
-    let key2 = idempotency_key_from_bytes(bead_id, &large_input);
+    let key2 = IdempotencyKey::new(idempotency_key_from_bytes(bead_id, &large_input));
     assert_eq!(key, key2, "Large input key should be deterministic");
 }

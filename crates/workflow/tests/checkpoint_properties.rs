@@ -89,7 +89,7 @@ proptest! {
 /// This test verifies that typical workflow state (which often contains
 /// repetitive strings, IDs, and patterns) achieves at least 50% compression.
 #[test]
-fn test_compression_achieves_50_percent_target() {
+fn test_compression_achieves_50_percent_target() -> Result<(), Box<dyn std::error::Error>> {
     // GIVEN: Typical workflow state with repetitive patterns
     let repetitive_data = {
         let mut data = Vec::new();
@@ -128,6 +128,7 @@ fn test_compression_achieves_50_percent_target() {
     println!("  Compressed size: {} bytes", compressed_size);
     println!("  Compression ratio: {:.2}", ratio);
     println!("  Space savings: {:.1}%", savings_pct);
+    Ok(())
 }
 
 // Test: Compression achieves target for workflow-like data.
@@ -138,7 +139,7 @@ fn test_compression_achieves_50_percent_target() {
 // - UUID patterns
 // - Timestamp structures
 #[test]
-fn test_workflow_compression_achieves_target() {
+fn test_workflow_compression_achieves_target() -> Result<(), Box<dyn std::error::Error>> {
     // GIVEN: Realistic workflow-like data with multiple phases
     // For this test, verify compression doesn't explode size
     // and achieves reasonable ratio for typical data
@@ -165,6 +166,7 @@ fn test_workflow_compression_achieves_target() {
     println!("  Test data size: {} bytes", test_data.len());
     println!("  Compressed size: {} bytes", compressed.len());
     println!("  Compression ratio: {:.2}", ratio);
+    Ok(())
 }
 
 // Test: Property-based round-trip for complex data patterns.
@@ -207,7 +209,7 @@ proptest! {
 ///
 /// Edge case testing for empty/small inputs.
 #[test]
-fn test_edge_cases_compress_decompress() {
+fn test_edge_cases_compress_decompress() -> Result<(), Box<dyn std::error::Error>> {
     // Empty data
     let empty = vec![];
     let compressed = compress(&empty);
@@ -245,6 +247,7 @@ fn test_edge_cases_compress_decompress() {
     );
 
     println!("Edge case compression ratio: {:.2}", ratio);
+    Ok(())
 }
 
 // Test: Verify compression doesn't expand data significantly.

@@ -424,7 +424,7 @@ impl Actor for WorkerActorDef {
                 }
             }
             WorkerMessage::Stop { reason } => {
-                let reason_text = reason.unwrap_or_else(|| "shutdown".to_string());
+                let reason_text = reason.unwrap_or_else(|| String::from("shutdown"));
                 info!(reason = %reason_text, "BeadWorkerActor stopping");
                 if let Some(handle) = state.checkpoint_handle.take() {
                     handle.stop();
@@ -581,7 +581,7 @@ mod tests {
         ctx.mark_completed(result);
 
         assert!(ctx.has_completed());
-        assert!(ctx.execution_result().unwrap().succeeded());
+        assert!(ctx.execution_result().map_or(false, |r| r.succeeded()));
     }
 
     #[test]

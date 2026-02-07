@@ -6,16 +6,23 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
-use itertools::Itertools;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Thread-safe executor for concurrent testing
-#[derive(Clone)]
 struct ConcurrentExecutor {
     executions: Arc<RwLock<HashMap<String, usize>>>,
     results: Arc<RwLock<HashMap<String, String>>>,
+}
+
+impl Clone for ConcurrentExecutor {
+    fn clone(&self) -> Self {
+        Self {
+            executions: Arc::clone(&self.executions),
+            results: Arc::clone(&self.results),
+        }
+    }
 }
 
 impl ConcurrentExecutor {
@@ -58,6 +65,7 @@ impl ConcurrentExecutor {
 }
 
 /// Idempotent wrapper with concurrent safety
+#[derive(Clone)]
 struct SafeIdempotentExecutor {
     executor: ConcurrentExecutor,
     cache: Arc<RwLock<HashMap<String, String>>>,
@@ -129,34 +137,34 @@ fn cache_guard() {}
 #[tokio::test]
 async fn test_concurrent_safety_same_key() {
     let executor = ConcurrentExecutor::new();
-    let idem_executor = SafeIdempotentExecutor::new(executor);
+    let idem_executor = SafeIdempotentExecutor::new(executor.clone());
     let key = "safe-key";
 
     // Spawn 20 concurrent tasks with same key
     let mut handles = Vec::new();
     for i in 0..20 {
-        let exec = idem_executor.clone(); // Need impl Clone
+        let exec = idem_executor.clone();
         let key_owned = key.to_string();
         let input = format!("input-{}", i);
 
         handles.push(tokio::spawn(async move {
-            // Note: This won't compile without Clone impl
-            // For now, just use Arc wrapper
             exec.execute(&key_owned, &input).await
         }));
     }
 
     // Wait for all
-    let results: Vec<_> = futures::future::join_all(handles)
+    let _results: Vec<_> = futures::future::join_all(handles)
         .await
         .into_iter()
         .filter_map(|r| r.ok())
         .collect();
 
     // Verify only one execution occurred
-    // Note: This test needs Clone impl for SafeIdempotentExecutor
-    // For now, just verify the structure compiles
-    assert!(results.len() <= 20, "Should have results");
+    assert_eq!(
+        executor.execution_count(key).await,
+        1,
+        "Should only execute once"
+    );
 }
 
 // Helper: Make it cloneable by wrapping in Arc

@@ -200,7 +200,7 @@ pub fn audit_functional_style(code: &str) -> FunctionalAudit {
                 mut_regex.captures(line).and_then(|captures| {
                     captures
                         .get(1)
-                        .filter(|var_name| !mut_skip_regex.is_match(line))
+                        .filter(|_var_name| !mut_skip_regex.is_match(line))
                         .map(|var_name| {
                             Violation::new(
                                 ForbiddenPattern::MutLocalVar,

@@ -410,10 +410,8 @@ mod tests {
 
     #[test]
     fn test_event_loader_new() {
-        // We can't easily create a full DurableEventStore without a database,
-        // but we can test the API structure
-        // This test will be expanded when integration tests are added
-        assert!(true);
+        // Placeholder test for future integration testing
+        // Will expand when DurableEventStore integration tests are added
     }
 
     // ==========================================================================

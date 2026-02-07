@@ -7,7 +7,7 @@
 //! Creates a zjj workspace per bead, returns the workspace path for execution,
 //! and guarantees cleanup through RAII.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -367,7 +367,7 @@ fn sanitize_workspace_name(bead_id: &str) -> String {
 
 fn parse_workspace_path(status_json: &str, workspace_name: &str) -> Result<PathBuf> {
     let parsed: ZjjStatusEnvelope =
-        serde_json::from_str(status_json).map_err(|err| Error::json_parse_failed(err))?;
+        serde_json::from_str(status_json).map_err(Error::json_parse_failed)?;
 
     let maybe_session = parsed
         .sessions

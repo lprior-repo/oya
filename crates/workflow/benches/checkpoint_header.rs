@@ -1,6 +1,6 @@
 //! Benchmark for checkpoint header creation optimization.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use oya_workflow::checkpoint::serialize::{add_version_header, CHECKPOINT_VERSION, MAGIC_BYTES};
 
 /// Generate test data of various sizes

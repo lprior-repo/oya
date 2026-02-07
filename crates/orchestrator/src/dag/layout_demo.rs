@@ -10,46 +10,48 @@
 #![warn(clippy::nursery)]
 #![forbid(unsafe_code)]
 
-use crate::dag::{DependencyType, MemoizedLayout, WorkflowDAG};
-use std::collections::HashMap;
-use std::time::Duration;
+use crate::dag::{DependencyType, WorkflowDAG};
 
 /// Run the demo to show memoization benefits
 pub fn run_demo() {
     println!("=== DAG Layout Memoization Demo ===\n");
 
     // Create test scenarios
-    demo_basic_usage();
-    demo_performance_comparison();
-    demo_cache_behavior();
-    demo_realistic_workflow();
+    if let Err(e) = demo_basic_usage() {
+        eprintln!("Error in basic usage demo: {e}");
+    }
+    if let Err(e) = demo_performance_comparison() {
+        eprintln!("Error in performance comparison: {e}");
+    }
+    if let Err(e) = demo_cache_behavior() {
+        eprintln!("Error in cache behavior demo: {e}");
+    }
+    if let Err(e) = demo_realistic_workflow() {
+        eprintln!("Error in realistic workflow demo: {e}");
+    }
 }
 
-fn demo_basic_usage() {
+fn demo_basic_usage() -> Result<(), Box<dyn std::error::Error>> {
     println!("1. Basic Usage Example\n");
 
     // Create a simple DAG
     let mut dag = WorkflowDAG::new();
-    dag.add_node("build".to_string()).unwrap();
-    dag.add_node("test".to_string()).unwrap();
-    dag.add_node("deploy".to_string()).unwrap();
+    dag.add_node("build".to_string())?;
+    dag.add_node("test".to_string())?;
+    dag.add_node("deploy".to_string())?;
     dag.add_dependency(
         "build".to_string(),
         "test".to_string(),
         DependencyType::BlockingDependency,
-    )
-    .unwrap();
+    )?;
     dag.add_dependency(
         "test".to_string(),
         "deploy".to_string(),
         DependencyType::BlockingDependency,
-    )
-    .unwrap();
+    )?;
 
     // Create memoized layout
-    let layout = dag
-        .create_memoized_layout(0.1, 100.0)
-        .expect("Should create layout");
+    let layout = dag.create_memoized_layout(0.1, 100.0)?;
 
     // Get node positions
     let positions = layout.compute_node_positions();
@@ -77,13 +79,15 @@ fn demo_basic_usage() {
     for ((from, to), path) in paths {
         println!("  {} -> {}: length: {:.2}", from, to, path.length);
     }
+
+    Ok(())
 }
 
-fn demo_performance_comparison() {
+fn demo_performance_comparison() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n2. Performance Comparison\n");
 
     // Create a larger test DAG
-    let dag = create_sample_workflow_dag(50);
+    let dag = create_sample_workflow_dag(50)?;
 
     // Test different configurations
     let configs = [
@@ -95,9 +99,7 @@ fn demo_performance_comparison() {
     for (stiffness, rest_length, description) in configs {
         println!("\nTesting: {}", description);
 
-        let layout = dag
-            .create_memoized_layout(stiffness, rest_length)
-            .expect("Should create layout");
+        let layout = dag.create_memoized_layout(stiffness, rest_length)?;
 
         // Cold cache (first computation)
         let cold_start = std::time::Instant::now();
@@ -115,17 +117,17 @@ fn demo_performance_comparison() {
         println!("  Warm cache: {:?}", warm_time);
         println!("  Speedup: {:.1}x", speedup);
     }
+
+    Ok(())
 }
 
-fn demo_cache_behavior() {
+fn demo_cache_behavior() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n3. Cache Behavior\n");
 
-    let mut dag = create_sample_workflow_dag(20);
+    let mut dag = create_sample_workflow_dag(20)?;
 
     // Create initial layout
-    let mut layout = dag
-        .create_memoized_layout(0.1, 100.0)
-        .expect("Should create layout");
+    let mut layout = dag.create_memoized_layout(0.1, 100.0)?;
 
     // First access - cold cache
     let start = std::time::Instant::now();
@@ -150,13 +152,12 @@ fn demo_cache_behavior() {
     );
 
     // Add a new node to the DAG
-    dag.add_node("new-node".to_string()).unwrap();
+    dag.add_node("new-node".to_string())?;
     dag.add_dependency(
         "node-19".to_string(),
         "new-node".to_string(),
         DependencyType::BlockingDependency,
-    )
-    .unwrap();
+    )?;
 
     // Invalidate cache and recompute
     layout.invalidate_cache();
@@ -169,22 +170,22 @@ fn demo_cache_behavior() {
     // Verify positions changed
     assert!(positions3.len() == positions1.len() + 1);
     println!("After adding node, positions count: {}", positions3.len());
+
+    Ok(())
 }
 
-fn demo_realistic_workflow() {
+fn demo_realistic_workflow() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n4. Realistic Workflow Example\n");
 
     // Create a realistic CI/CD workflow DAG
-    let workflow_dag = create_ci_cd_workflow();
+    let workflow_dag = create_ci_cd_workflow()?;
 
     // Create layout with appropriate parameters
-    let layout = workflow_dag
-        .create_memoized_layout(0.15, 120.0)
-        .expect("Should create layout");
+    let layout = workflow_dag.create_memoized_layout(0.15, 120.0)?;
 
     // Compute positions and paths
-    let positions = layout.compute_node_positions();
-    let paths = layout.compute_edge_paths(20.0);
+    let _positions = layout.compute_node_positions();
+    let _paths = layout.compute_edge_paths(20.0);
 
     // Simulate repeated access (like in a UI that updates frequently)
     println!("Simulating UI updates with repeated layout access...");
@@ -216,15 +217,17 @@ fn demo_realistic_workflow() {
         };
         println!("  {}: {}", bead, ready_status);
     }
+
+    Ok(())
 }
 
 // Helper functions
-fn create_sample_workflow_dag(size: usize) -> WorkflowDAG {
+fn create_sample_workflow_dag(size: usize) -> Result<WorkflowDAG, Box<dyn std::error::Error>> {
     let mut dag = WorkflowDAG::new();
 
     // Add nodes
     for i in 0..size {
-        dag.add_node(format!("node-{}", i)).unwrap();
+        dag.add_node(format!("node-{}", i))?;
     }
 
     // Create dependencies in a realistic pattern
@@ -235,29 +238,26 @@ fn create_sample_workflow_dag(size: usize) -> WorkflowDAG {
                 format!("node-{}", i),
                 format!("node-{}", i + 1),
                 DependencyType::BlockingDependency,
-            )
-            .unwrap();
+            )?;
             dag.add_dependency(
                 format!("node-{}", i),
                 format!("node-{}", i + 2),
                 DependencyType::BlockingDependency,
-            )
-            .unwrap();
+            )?;
         } else if i + 1 < size {
             // Linear chain
             dag.add_dependency(
                 format!("node-{}", i),
                 format!("node-{}", i + 1),
                 DependencyType::BlockingDependency,
-            )
-            .unwrap();
+            )?;
         }
     }
 
-    dag
+    Ok(dag)
 }
 
-fn create_ci_cd_workflow() -> WorkflowDAG {
+fn create_ci_cd_workflow() -> Result<WorkflowDAG, Box<dyn std::error::Error>> {
     let mut dag = WorkflowDAG::new();
 
     // Define CI/CD stages
@@ -273,7 +273,7 @@ fn create_ci_cd_workflow() -> WorkflowDAG {
 
     // Add all stages as nodes
     for stage in stages {
-        dag.add_node(stage.to_string()).unwrap();
+        dag.add_node(stage.to_string())?;
     }
 
     // Define dependencies
@@ -292,11 +292,10 @@ fn create_ci_cd_workflow() -> WorkflowDAG {
             from.to_string(),
             to.to_string(),
             DependencyType::BlockingDependency,
-        )
-        .unwrap();
+        )?;
     }
 
-    dag
+    Ok(dag)
 }
 
 #[cfg(test)]
@@ -306,29 +305,26 @@ mod tests {
     #[test]
     fn test_demo_functions() {
         // Test that demo functions run without errors
-        demo_basic_usage();
-        demo_performance_comparison();
-        demo_cache_behavior();
-        demo_realistic_workflow();
+        demo_basic_usage().expect("basic usage demo should succeed");
+        demo_performance_comparison().expect("performance comparison should succeed");
+        demo_cache_behavior().expect("cache behavior demo should succeed");
+        demo_realistic_workflow().expect("realistic workflow demo should succeed");
     }
 
     #[test]
     fn test_ci_cd_workflow_creation() {
-        let workflow = create_ci_cd_workflow();
+        let workflow = create_ci_cd_workflow().expect("workflow creation should succeed");
         assert_eq!(workflow.node_count(), 7);
 
         // Check some key dependencies exist
-        assert!(
-            workflow
-                .get_dependencies(&"test".to_string())
-                .unwrap()
-                .contains(&"lint".to_string())
-        );
-        assert!(
-            workflow
-                .get_dependencies(&"deploy-prod".to_string())
-                .unwrap()
-                .contains(&"deploy-staging".to_string())
-        );
+        let test_deps = workflow
+            .get_dependencies(&"test".to_string())
+            .expect("test node should exist");
+        assert!(test_deps.contains(&"lint".to_string()));
+
+        let deploy_deps = workflow
+            .get_dependencies(&"deploy-prod".to_string())
+            .expect("deploy-prod node should exist");
+        assert!(deploy_deps.contains(&"deploy-staging".to_string()));
     }
 }

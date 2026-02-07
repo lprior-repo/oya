@@ -18,7 +18,7 @@ use petgraph::algo::{is_cyclic_directed, tarjan_scc, toposort};
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::{Bfs, Dfs, EdgeRef, Reversed};
 use std::collections::VecDeque;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 pub mod error;
 pub mod layout_benchmark;
@@ -668,7 +668,7 @@ impl WorkflowDAG {
                     .all(|edge| {
                         self.graph
                             .node_weight(edge.source())
-                            .map_or(false, |dep_id| completed.contains(dep_id))
+                            .is_none_or(|dep_id| completed.contains(dep_id))
                     });
 
                 if all_blocking_deps_complete {
@@ -770,7 +770,7 @@ impl WorkflowDAG {
                     .any(|edge| {
                         self.graph
                             .node_weight(edge.source())
-                            .map_or(true, |dep_id| !completed.contains(dep_id))
+                            .is_none_or(|dep_id| !completed.contains(dep_id))
                     });
 
                 if has_incomplete_blocking_dep {
@@ -823,7 +823,7 @@ impl WorkflowDAG {
             .all(|edge| {
                 self.graph
                     .node_weight(edge.source())
-                    .map_or(false, |dep_id| completed.contains(dep_id))
+                    .is_none_or(|dep_id| completed.contains(dep_id))
             });
 
         Ok(all_blocking_deps_complete)
@@ -1044,7 +1044,7 @@ impl WorkflowDAG {
                     let should_update = dist
                         .get(neighbor_id)
                         .map(|(d, _)| new_dist > *d)
-                        .map_or(true, |v| v);
+                        .is_none_or(|v| v);
 
                     if should_update {
                         dist.insert(neighbor_id.clone(), (new_dist, Some(bead_id.clone())));
@@ -2592,8 +2592,6 @@ fn test_get_ready_nodes_multiple_roots_sorted() -> DagResult<()> {
 
 #[test]
 fn test_query_performance_100_nodes() -> DagResult<()> {
-    use std::time::Instant;
-
     let mut dag = WorkflowDAG::new();
 
     // Create 100 nodes

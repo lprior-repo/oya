@@ -80,10 +80,7 @@ fn find_files_impl(dir: &Path, extension: &str) -> Result<Vec<PathBuf>> {
             if path.is_dir() {
                 if !is_hidden_dir(&path) {
                     // Recursively search in subdirectories
-                    match find_files_impl(&path, extension) {
-                        Ok(sub_files) => Some(sub_files),
-                        Err(_) => None,
-                    }
+                    find_files_impl(&path, extension).ok()
                 } else {
                     None
                 }
@@ -180,30 +177,30 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
-    fn test_memoized_file_discovery() {
-        let temp_dir = tempdir().unwrap();
+    fn test_memoized_file_discovery() -> Result<()> {
+        let temp_dir = tempdir()?;
         let test_dir = temp_dir.path();
 
         // Create test files
-        fs::write(test_dir.join("main.rs"), "fn main() {}").unwrap();
-        fs::write(test_dir.join("lib.rs"), "pub fn lib() {}").unwrap();
-        fs::write(test_dir.join("README.md"), "# Test").unwrap();
+        fs::write(test_dir.join("main.rs"), "fn main() {}")?;
+        fs::write(test_dir.join("lib.rs"), "pub fn lib() {}")?;
+        fs::write(test_dir.join("README.md"), "# Test")?;
 
         let subdir = test_dir.join("subdir");
-        fs::create_dir_all(&subdir).unwrap();
-        fs::write(subdir.join("helper.rs"), "pub fn helper() {}").unwrap();
-        fs::write(subdir.join("script.py"), "print('hello')").unwrap();
+        fs::create_dir_all(&subdir)?;
+        fs::write(subdir.join("helper.rs"), "pub fn helper() {}")?;
+        fs::write(subdir.join("script.py"), "print('hello')")?;
 
         // First call - should populate cache
-        let rust_files = find_rust_files(test_dir).unwrap();
+        let rust_files = find_rust_files(test_dir)?;
         assert_eq!(rust_files.len(), 3);
 
         // Second call - should use cache
-        let rust_files2 = find_rust_files(test_dir).unwrap();
+        let rust_files2 = find_rust_files(test_dir)?;
         assert_eq!(rust_files2.len(), 3);
 
         // Python files
-        let python_files = find_python_files(test_dir).unwrap();
+        let python_files = find_python_files(test_dir)?;
         assert_eq!(python_files.len(), 1);
 
         // Check cache stats
@@ -215,24 +212,26 @@ mod tests {
         clear_cache();
         let (entries_after, _) = cache_stats();
         assert_eq!(entries_after, 0);
+        Ok(())
     }
 
     #[test]
-    fn test_hidden_dirs_are_skipped() {
-        let temp_dir = tempdir().unwrap();
+    fn test_hidden_dirs_are_skipped() -> Result<()> {
+        let temp_dir = tempdir()?;
         let test_dir = temp_dir.path();
 
         // Create various directories
-        fs::create_dir_all(test_dir.join(".git")).unwrap();
-        fs::create_dir_all(test_dir.join("target")).unwrap();
-        fs::create_dir_all(test_dir.join("src")).unwrap();
-        fs::create_dir_all(test_dir.join("tests")).unwrap();
+        fs::create_dir_all(test_dir.join(".git"))?;
+        fs::create_dir_all(test_dir.join("target"))?;
+        fs::create_dir_all(test_dir.join("src"))?;
+        fs::create_dir_all(test_dir.join("tests"))?;
 
         // Test that hidden dirs are skipped
         assert!(is_hidden_dir(&test_dir.join(".git")));
         assert!(is_hidden_dir(&test_dir.join("target")));
         assert!(!is_hidden_dir(&test_dir.join("src")));
         assert!(!is_hidden_dir(&test_dir.join("tests")));
+        Ok(())
     }
 
     #[test]
@@ -252,28 +251,33 @@ mod tests {
     }
 
     #[test]
-    fn test_javascript_file_discovery() {
-        let temp_dir = tempdir().unwrap();
+    fn test_javascript_file_discovery() -> Result<()> {
+        let temp_dir = tempdir()?;
         let test_dir = temp_dir.path();
 
         // Create test files
-        fs::write(test_dir.join("app.js"), "console.log('hello');").unwrap();
-        fs::write(test_dir.join("app.ts"), "const x = 1;").unwrap();
-        fs::write(test_dir.join("app.jsx"), "React.render();").unwrap();
-        fs::write(test_dir.join("app.tsx"), "const Comp = () => {}").unwrap();
-        fs::write(test_dir.join("README.md"), "# Test").unwrap();
+        fs::write(test_dir.join("app.js"), "console.log('hello');")?;
+        fs::write(test_dir.join("app.ts"), "const x = 1;")?;
+        fs::write(test_dir.join("app.jsx"), "React.render();")?;
+        fs::write(test_dir.join("app.tsx"), "const Comp = () => {}")?;
+        fs::write(test_dir.join("README.md"), "# Test")?;
 
-        let js_files = find_javascript_files(test_dir).unwrap();
+        let js_files = find_javascript_files(test_dir)?;
         assert_eq!(js_files.len(), 4);
 
         // Verify all extensions are included
         let file_names: Vec<String> = js_files
             .iter()
-            .map(|p| p.file_name().unwrap().to_string_lossy().to_string())
-            .collect();
+            .map(|p| {
+                p.file_name()
+                    .ok_or_else(|| Error::unknown("no file name"))
+                    .map(|n: &std::ffi::OsStr| n.to_string_lossy().to_string())
+            })
+            .collect::<Result<Vec<_>>>()?;
         assert!(file_names.contains(&"app.js".to_string()));
         assert!(file_names.contains(&"app.ts".to_string()));
         assert!(file_names.contains(&"app.jsx".to_string()));
         assert!(file_names.contains(&"app.tsx".to_string()));
+        Ok(())
     }
 }

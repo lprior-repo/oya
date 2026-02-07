@@ -294,7 +294,7 @@ pub fn spec_to_prompt(spec: &BeadSpec) -> String {
 
 /// Parse a bead spec from JSON string.
 pub fn parse_bead_spec(json_str: &str) -> Result<BeadSpec> {
-    serde_json::from_str(json_str).map_err(|e| Error::json_parse_failed(e))
+    serde_json::from_str(json_str).map_err(Error::json_parse_failed)
 }
 
 /// Create a minimal bead spec for a simple function.

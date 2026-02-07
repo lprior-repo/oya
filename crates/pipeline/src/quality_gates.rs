@@ -276,21 +276,6 @@ pub fn find_rust_files(worktree_path: &Path) -> Result<Vec<String>> {
     })
 }
 
-/// Check if a directory should be skipped (hidden or common build dirs).
-#[must_use]
-fn is_hidden_dir(path: &Path) -> bool {
-    if let Some(name) = path.file_name() {
-        let name_str = name.to_string_lossy();
-        let name = name_str.as_ref();
-        return name.starts_with('.')
-            || matches!(
-                name,
-                "target" | "node_modules" | "build" | "dist" | ".git" | "vendor"
-            );
-    }
-    false
-}
-
 /// Run functional quality gate and return Result.
 pub fn enforce_functional_quality(worktree_path: &Path) -> Result<()> {
     let gate = FunctionalGate::audit_directory(worktree_path)?;
@@ -316,6 +301,20 @@ mod tests {
     use super::*;
     use std::fs;
     use std::path::PathBuf;
+
+    /// Check if a directory should be skipped (hidden or common build dirs).
+    fn is_hidden_dir(path: &Path) -> bool {
+        if let Some(name) = path.file_name() {
+            let name_str = name.to_string_lossy();
+            let name = name_str.as_ref();
+            return name.starts_with('.')
+                || matches!(
+                    name,
+                    "target" | "node_modules" | "build" | "dist" | ".git" | "vendor"
+                );
+        }
+        false
+    }
 
     #[test]
     fn test_find_rust_files() {

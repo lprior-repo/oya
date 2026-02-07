@@ -41,7 +41,13 @@ pub fn benchmark_layout_performance() {
 
 fn benchmark_graph_size(size: usize) {
     // Create test DAG
-    let dag = create_test_dag(size);
+    let dag = match create_test_dag_with_result(size) {
+        Ok(dag) => dag,
+        Err(e) => {
+            eprintln!("Failed to create test DAG: {}", e);
+            return;
+        }
+    };
 
     // Test with different layout parameters
     let stiffness_values = [0.05, 0.1, 0.2];
@@ -76,18 +82,21 @@ fn benchmark_layout_computation(
     iterations: usize,
     cold_cache: bool,
 ) -> Duration {
-    use std::time::Instant;
-
     // Force cache invalidation for cold cache test
     if cold_cache {
         // Create a fresh layout for cold cache test
         let dag = layout.dag().clone();
-        let fresh_layout = WorkflowDAG::create_memoized_layout(
+        let fresh_layout = match WorkflowDAG::create_memoized_layout(
             &dag,
             layout.spring_force().stiffness(),
             layout.spring_force().rest_length(),
-        )
-        .expect("Should succeed");
+        ) {
+            Ok(layout) => layout,
+            Err(e) => {
+                eprintln!("Failed to create layout for benchmark: {}", e);
+                return Duration::ZERO;
+            }
+        };
 
         let start = Instant::now();
         for _ in 0..iterations {
@@ -105,10 +114,22 @@ fn benchmark_layout_computation(
 }
 
 fn benchmark_repeated_access() {
-    let dag = create_test_dag(50);
+    let dag = match create_test_dag_with_result(50) {
+        Ok(dag) => dag,
+        Err(e) => {
+            eprintln!("Failed to create test DAG: {}", e);
+            return;
+        }
+    };
 
     // Create layout
-    let layout = WorkflowDAG::create_memoized_layout(&dag, 0.1, 100.0).expect("Should succeed");
+    let layout = match WorkflowDAG::create_memoized_layout(&dag, 0.1, 100.0) {
+        Ok(layout) => layout,
+        Err(e) => {
+            eprintln!("Failed to create layout for benchmark: {}", e);
+            return;
+        }
+    };
 
     let iterations = 1000;
 
@@ -157,22 +178,39 @@ fn benchmark_repeated_access() {
 }
 
 fn benchmark_cache_invalidation() {
-    let mut dag = create_test_dag(20);
+    let mut dag = match create_test_dag_with_result(20) {
+        Ok(dag) => dag,
+        Err(e) => {
+            eprintln!("Failed to create test DAG: {}", e);
+            return;
+        }
+    };
 
     // Create initial layout
-    let mut layout = WorkflowDAG::create_memoized_layout(&dag, 0.1, 100.0).expect("Should succeed");
+    let mut layout = match WorkflowDAG::create_memoized_layout(&dag, 0.1, 100.0) {
+        Ok(layout) => layout,
+        Err(e) => {
+            eprintln!("Failed to create layout for benchmark: {}", e);
+            return;
+        }
+    };
 
     let initial_time = benchmark_layout_computation(&layout, 100, false);
     println!("  Initial layout computation: {:?}", initial_time);
 
     // Add a node and invalidate cache
-    dag.add_node("new_node".to_string()).unwrap();
-    dag.add_edge(
+    if let Err(e) = dag.add_node("new_node".to_string()) {
+        eprintln!("Failed to add node: {}", e);
+        return;
+    }
+    if let Err(e) = dag.add_edge(
         "node-19".to_string(),
         "new_node".to_string(),
         DependencyType::BlockingDependency,
-    )
-    .unwrap();
+    ) {
+        eprintln!("Failed to add edge: {}", e);
+        return;
+    }
 
     layout.invalidate_cache();
 
@@ -183,16 +221,17 @@ fn benchmark_cache_invalidation() {
     println!("  Recomputation overhead: {:.2}x", overhead);
 }
 
-fn create_test_dag(size: usize) -> WorkflowDAG {
+fn create_test_dag_with_result(size: usize) -> Result<WorkflowDAG, String> {
     let mut dag = WorkflowDAG::new();
 
     // Add nodes
     for i in 0..size {
-        dag.add_node(format!("node-{}", i)).unwrap();
+        dag.add_node(format!("node-{}", i))
+            .map_err(|e| format!("Failed to add node {}: {}", i, e))?;
     }
 
     // Create a chain structure with some branching
-    for i in 0..(size - 1) {
+    for i in 0..(size.saturating_sub(1)) {
         if i % 4 == 0 && i + 2 < size {
             // Create branching every 4th node
             dag.add_edge(
@@ -200,13 +239,27 @@ fn create_test_dag(size: usize) -> WorkflowDAG {
                 format!("node-{}", i + 1),
                 DependencyType::BlockingDependency,
             )
-            .unwrap();
+            .map_err(|e| {
+                format!(
+                    "Failed to add edge from node-{} to node-{}: {}",
+                    i,
+                    i + 1,
+                    e
+                )
+            })?;
             dag.add_edge(
                 format!("node-{}", i),
                 format!("node-{}", i + 2),
                 DependencyType::BlockingDependency,
             )
-            .unwrap();
+            .map_err(|e| {
+                format!(
+                    "Failed to add edge from node-{} to node-{}: {}",
+                    i,
+                    i + 2,
+                    e
+                )
+            })?;
         } else if i + 1 < size {
             // Normal chain
             dag.add_edge(
@@ -214,11 +267,18 @@ fn create_test_dag(size: usize) -> WorkflowDAG {
                 format!("node-{}", i + 1),
                 DependencyType::BlockingDependency,
             )
-            .unwrap();
+            .map_err(|e| {
+                format!(
+                    "Failed to add edge from node-{} to node-{}: {}",
+                    i,
+                    i + 1,
+                    e
+                )
+            })?;
         }
     }
 
-    dag
+    Ok(dag)
 }
 
 #[cfg(test)]
@@ -235,16 +295,16 @@ mod tests {
 
     #[test]
     fn test_create_test_dag() {
-        let small_dag = create_test_dag(5);
+        let small_dag = create_test_dag_with_result(5).unwrap();
         assert_eq!(small_dag.node_count(), 5);
 
-        let medium_dag = create_test_dag(20);
+        let medium_dag = create_test_dag_with_result(20).unwrap();
         assert_eq!(medium_dag.node_count(), 20);
     }
 
     #[test]
     fn test_layout_creation_performance() {
-        let dag = create_test_dag(25);
+        let dag = create_test_dag_with_result(25).unwrap();
         let layout = WorkflowDAG::create_memoized_layout(&dag, 0.1, 100.0);
         assert!(layout.is_ok());
 
@@ -263,7 +323,13 @@ pub mod analysis {
     pub fn analyze_cache_effectiveness() {
         println!("\n=== Cache Effectiveness Analysis ===");
 
-        let dag = create_test_dag(30);
+        let dag = match create_test_dag_with_result(30) {
+            Ok(dag) => dag,
+            Err(e) => {
+                eprintln!("Failed to create test DAG: {}", e);
+                return;
+            }
+        };
 
         // Test different cache sizes
         let cache_sizes = [10, 50, 100, 500];
@@ -271,8 +337,13 @@ pub mod analysis {
         for size in cache_sizes {
             println!("Testing cache size: {} accesses", size);
 
-            let layout =
-                WorkflowDAG::create_memoized_layout(&dag, 0.1, 100.0).expect("Should succeed");
+            let layout = match WorkflowDAG::create_memoized_layout(&dag, 0.1, 100.0) {
+                Ok(layout) => layout,
+                Err(e) => {
+                    eprintln!("Failed to create layout: {}", e);
+                    return;
+                }
+            };
 
             // Simulate repeated access
             let start = std::time::Instant::now();

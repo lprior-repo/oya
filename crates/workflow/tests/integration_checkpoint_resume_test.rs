@@ -103,47 +103,6 @@ impl EventSourcedState {
 
         Ok(())
     }
-
-    /// Verify equality with another state.
-    fn verify_equals(&self, other: &EventSourcedState) -> Result<(), String> {
-        if self.events_applied != other.events_applied {
-            return Err(format!(
-                "events_applied mismatch: {} vs {}",
-                self.events_applied, other.events_applied
-            ));
-        }
-
-        if self.bead_states.len() != other.bead_states.len() {
-            return Err(format!(
-                "bead_states count mismatch: {} vs {}",
-                self.bead_states.len(),
-                other.bead_states.len()
-            ));
-        }
-
-        for (bead_id, entry) in &self.bead_states {
-            let other_entry = other
-                .bead_states
-                .get(bead_id)
-                .ok_or_else(|| format!("missing bead_id in restored state: {}", bead_id))?;
-
-            if entry != other_entry {
-                return Err(format!(
-                    "bead state mismatch for {}: {:?} vs {:?}",
-                    bead_id, entry, other_entry
-                ));
-            }
-        }
-
-        if self.last_event_timestamp != other.last_event_timestamp {
-            return Err(format!(
-                "last_event_timestamp mismatch: {:?} vs {:?}",
-                self.last_event_timestamp, other.last_event_timestamp
-            ));
-        }
-
-        Ok(())
-    }
 }
 
 impl Default for EventSourcedState {

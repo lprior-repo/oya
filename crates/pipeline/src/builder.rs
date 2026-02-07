@@ -15,7 +15,6 @@
 //! ```
 
 use std::marker::PhantomData;
-use std::sync::OnceLock;
 
 use crate::domain::{Language, Priority, Slug, Task, TaskStatus};
 use crate::error::{Error, Result};
@@ -217,8 +216,6 @@ impl Task {
 // StageBuilder - Builder for custom stages
 // =============================================================================
 
-use tracing::debug;
-
 /// Builder for creating custom Stage definitions.
 #[derive(Debug, Default)]
 pub struct StageBuilder {
@@ -298,7 +295,6 @@ pub struct PipelineBuilder {
     retry_config: RetryConfig,
     failure_strategy: FailureStrategy,
     dry_run: bool,
-    validation_cache: OnceLock<Result<()>>,
 }
 
 impl Default for PipelineBuilder {
@@ -317,7 +313,6 @@ impl PipelineBuilder {
             retry_config: RetryConfig::default(),
             failure_strategy: FailureStrategy::default(),
             dry_run: false,
-            validation_cache: OnceLock::new(),
         }
     }
 
@@ -325,7 +320,6 @@ impl PipelineBuilder {
     #[must_use]
     pub fn language(mut self, language: Language) -> Self {
         self.language = Some(language);
-        self.invalidate_cache();
         self
     }
 
@@ -333,7 +327,6 @@ impl PipelineBuilder {
     #[must_use]
     pub fn with_stage(mut self, stage: Stage) -> Self {
         self.stages.push(stage);
-        self.invalidate_cache();
         self
     }
 
@@ -341,7 +334,6 @@ impl PipelineBuilder {
     #[must_use]
     pub fn with_stages(mut self, stages: impl IntoIterator<Item = Stage>) -> Self {
         self.stages.extend(stages);
-        self.invalidate_cache();
         self
     }
 
@@ -409,42 +401,6 @@ impl PipelineBuilder {
         // TODO: Implement circular dependency detection when stage dependencies are added
         // For now, all stages are independent, so no cycles possible
         Ok(())
-    }
-
-    /// Validate the pipeline configuration with caching.
-    ///
-    /// Uses lazy evaluation with OnceLock to cache validation results.
-    /// This avoids recomputing validation on every call to validate() or build().
-    fn validate_cache(&self) -> &Result<()> {
-        self.validation_cache.get_or_init(|| {
-            // Check language is set
-            let _language = self.language.ok_or_else(|| Error::InvalidRecord {
-                reason: "language must be set".to_string(),
-            })?;
-
-            // Check for duplicate stage names using itertools
-            let stage_names: Vec<&String> = self.stages.iter().map(|s| &s.name).collect();
-            let duplicates: Vec<&String> = stage_names.iter().duplicates().cloned().collect();
-
-            if !duplicates.is_empty() {
-                let duplicate_names: Vec<&str> = duplicates.iter().map(|s| s.as_str()).collect();
-                return Err(Error::DuplicateStages {
-                    stages: duplicate_names.join(", "),
-                });
-            }
-
-            // Check for circular dependencies (placeholder for future implementation)
-            self.check_circular_deps()?;
-
-            Ok(())
-        })
-    }
-
-    /// Invalidate the validation cache.
-    ///
-    /// This should be called when stages, language, or other validation-relevant fields are modified.
-    fn invalidate_cache(&mut self) {
-        let _ = self.validation_cache.take();
     }
 
     /// Build the Pipeline using Railway-Oriented Programming.
@@ -581,7 +537,7 @@ mod tests {
     }
 
     #[test]
-    fn test_pipeline_builder_validate_missing_language() {
+    fn test_pipeline_builder_validate_missing_language() -> Result<()> {
         let result = PipelineBuilder::new()
             .with_stage(Stage::new("test", "test passes", 0))
             .validate();
@@ -589,13 +545,14 @@ mod tests {
         assert!(result.is_err());
         if let Err(Error::InvalidRecord { reason }) = result {
             assert!(reason.contains("language"));
+            Ok(())
         } else {
-            panic!("Expected InvalidRecord error");
+            Err(Error::unknown("Expected InvalidRecord error"))
         }
     }
 
     #[test]
-    fn test_pipeline_builder_validate_duplicate_stages() {
+    fn test_pipeline_builder_validate_duplicate_stages() -> Result<()> {
         let result = PipelineBuilder::new()
             .language(Language::Rust)
             .with_stage(Stage::new("duplicate", "first", 0))
@@ -606,8 +563,9 @@ mod tests {
         assert!(result.is_err());
         if let Err(Error::DuplicateStages { stages }) = result {
             assert!(stages.contains("duplicate"));
+            Ok(())
         } else {
-            panic!("Expected DuplicateStages error");
+            Err(Error::unknown("Expected DuplicateStages error"))
         }
     }
 

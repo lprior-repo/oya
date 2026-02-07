@@ -1,20 +1,19 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 #[derive(Debug)]
-enum computationError {
+enum ComputationError {
     DivisionByZero,
-    InvalidInput,
 }
 
 // Functional approach with Result and ?
-fn functional_divide(a: f64, b: f64) -> Result<f64, computationError> {
+fn functional_divide(a: f64, b: f64) -> Result<f64, ComputationError> {
     if b == 0.0 {
-        return Err(computationError::DivisionByZero);
+        return Err(ComputationError::DivisionByZero);
     }
     Ok(a / b)
 }
 
-fn functional_computation(input: f64) -> Result<f64, computationError> {
+fn functional_computation(input: f64) -> Result<f64, ComputationError> {
     let step1 = functional_divide(input, 2.0)?;
     let step2 = functional_divide(step1, 3.0)?;
     let step3 = functional_divide(step2, 4.0)?;
@@ -22,21 +21,10 @@ fn functional_computation(input: f64) -> Result<f64, computationError> {
 }
 
 // Imperative match-based approach
-fn imperative_computation(input: f64) -> Result<f64, computationError> {
-    let step1 = match functional_divide(input, 2.0) {
-        Ok(v) => v,
-        Err(e) => return Err(e),
-    };
-
-    let step2 = match functional_divide(step1, 3.0) {
-        Ok(v) => v,
-        Err(e) => return Err(e),
-    };
-
-    let step3 = match functional_divide(step2, 4.0) {
-        Ok(v) => v,
-        Err(e) => return Err(e),
-    };
+fn imperative_computation(input: f64) -> Result<f64, ComputationError> {
+    let step1 = functional_divide(input, 2.0)?;
+    let step2 = functional_divide(step1, 3.0)?;
+    let step3 = functional_divide(step2, 4.0)?;
 
     Ok(step3)
 }
@@ -61,28 +49,25 @@ fn benchmark_error_path(c: &mut Criterion) {
     });
 
     c.bench_function("imperative_error_path", |b| {
-        b.iter(|| match functional_divide(input, 0.0) {
-            Ok(v) => Ok(v),
-            Err(e) => Err(e),
-        })
+        b.iter(|| functional_divide(input, 0.0))
     });
 }
 
 fn benchmark_chained_results(c: &mut Criterion) {
-    fn add_one(x: i32) -> Result<i32, computationError> {
+    fn add_one(x: i32) -> Result<i32, ComputationError> {
         Ok(x + 1)
     }
 
-    fn multiply_two(x: i32) -> Result<i32, computationError> {
+    fn multiply_two(x: i32) -> Result<i32, ComputationError> {
         Ok(x * 2)
     }
 
     c.bench_function("functional_chain", |b| {
         b.iter(|| {
             let result = Ok(10);
-            let result = result.and_then(|x| add_one(x));
-            let result = result.and_then(|x| multiply_two(x));
-            let result = result.and_then(|x| add_one(x));
+            let result = result.and_then(add_one);
+            let result = result.and_then(multiply_two);
+            let result = result.and_then(add_one);
             black_box(result)
         })
     });

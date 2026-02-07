@@ -254,17 +254,6 @@ impl Pipeline {
         })
     }
 
-    fn should_stop_on_failure(&self, passed: bool) -> bool {
-        if passed {
-            return false;
-        }
-
-        matches!(
-            self.failure_strategy,
-            FailureStrategy::StopOnFirst | FailureStrategy::SkipDependents
-        )
-    }
-
     fn find_first_failure(executions: &[StageExecution]) -> Option<usize> {
         executions.iter().position(|e| !e.passed)
     }
@@ -445,31 +434,31 @@ mod tests {
     }
 
     #[test]
-    fn test_dry_run_pipeline() {
+    fn test_dry_run_pipeline() -> Result<()> {
         let stages = standard_pipeline();
         let result = Pipeline::new(Language::Rust)
             .with_stages(stages)
             .dry_run()
-            .execute()
-            .expect("dry run should always succeed");
+            .execute()?;
 
         assert!(result.all_passed);
         assert_eq!(result.stages.len(), 9);
+        Ok(())
     }
 
     #[test]
-    fn test_railway_oriented_execution() {
+    fn test_railway_oriented_execution() -> Result<()> {
         let stages = standard_pipeline();
 
         // Railway-Oriented Programming: execute returns Result
         let result = Pipeline::new(Language::Rust)
             .with_stages(stages)
             .dry_run()
-            .execute()
-            .expect("dry run execution should succeed");
+            .execute()?;
 
         assert!(result.all_passed);
         assert!(!result.stages.is_empty());
+        Ok(())
     }
 
     #[test]
@@ -502,7 +491,7 @@ mod tests {
     }
 
     #[test]
-    fn test_iterator_chain_execution() {
+    fn test_iterator_chain_execution() -> Result<()> {
         let stages = vec![
             Stage::new("stage1", "stage1 passes", 0),
             Stage::new("stage2", "stage2 passes", 0),
@@ -512,11 +501,10 @@ mod tests {
         let pipeline = Pipeline::new(Language::Rust).with_stages(stages).dry_run();
 
         // Verify stages are executed via iterator chain internally
-        let result = pipeline
-            .execute()
-            .expect("dry run execution should succeed");
+        let result = pipeline.execute()?;
 
         assert_eq!(result.stages.len(), 3);
         assert!(result.all_passed);
+        Ok(())
     }
 }

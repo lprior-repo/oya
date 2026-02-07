@@ -262,7 +262,7 @@ mod deterministic_replay_tests {
                 // THEN: Replay should succeed
                 prop_assert!(result.is_ok(), "Rebuild should succeed: {:?}", result.err());
 
-                let state = unwrap_option(result, "rebuild result");
+                let state = unwrap_result(result, "rebuild result");
 
                 // Performance: Should scale reasonably (allow 5ms per event as upper bound)
                 let expected_max_duration = Duration::from_millis(event_count as u64 * 5);
@@ -399,7 +399,7 @@ mod deterministic_replay_tests {
 
         // THEN: Should succeed with empty state
         assert!(result.is_ok(), "Rebuild of empty store should succeed");
-        let state = unwrap_option(result, "state");
+        let state = unwrap_result(result, "state");
         assert_eq!(state.beads.len(), 0, "State should have no beads");
     }
 
@@ -419,7 +419,7 @@ mod deterministic_replay_tests {
 
         // THEN: Should succeed with one bead
         assert!(result.is_ok(), "Rebuild should succeed");
-        let state = unwrap_option(result, "state");
+        let state = unwrap_result(result, "state");
         assert_eq!(state.beads.len(), 1, "State should have one bead");
         assert!(
             state.beads.contains_key(&bead_id),
@@ -460,7 +460,7 @@ mod deterministic_replay_tests {
 
         // THEN: Should have all three beads
         assert!(result.is_ok(), "Rebuild should succeed");
-        let state = unwrap_option(result, "state");
+        let state = unwrap_result(result, "state");
         assert_eq!(state.beads.len(), 3, "State should have 3 beads");
         assert!(state.beads.contains_key(&bead1));
         assert!(state.beads.contains_key(&bead2));

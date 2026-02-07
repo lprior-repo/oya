@@ -407,10 +407,6 @@ impl HandlerChain {
 
         Ok(())
     }
-
-    fn name(&self) -> &str {
-        &self.name
-    }
 }
 
 #[async_trait]
@@ -627,12 +623,12 @@ mod tests {
         let fallback1 = Arc::new(FailingHandler::new("fallback1", "failed"));
         let fallback2 = Arc::new(NoOpHandler::new("fallback2"));
 
-        let fallbacks = vec![fallback1, fallback2];
+        let fallbacks: Vec<Arc<dyn PhaseHandler>> = vec![fallback1, fallback2];
         let chain = HandlerChain::new("test-chain", primary).with_fallbacks(fallbacks);
 
         let ctx = make_context();
         let result = chain.execute(&ctx).await;
         assert!(result.is_ok());
-        assert!(result.map(|r| r.success).unwrap_or(false));
+        assert!(result.is_ok_and(|r| r.success));
     }
 }

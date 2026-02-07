@@ -10,15 +10,13 @@
 #![warn(clippy::nursery)]
 #![forbid(unsafe_code)]
 
-use im::{HashMap, HashSet};
-use petgraph::Direction;
-use petgraph::graph::NodeIndex;
+use im::HashMap;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::ops::AddAssign;
 use std::sync::OnceLock;
 
-use crate::dag::{BeadId, DagError, DependencyType, WorkflowDAG};
+use crate::dag::{BeadId, WorkflowDAG};
 use thiserror::Error;
 
 /// Spring force configuration using Hooke's law
@@ -421,7 +419,7 @@ impl MemoizedLayout {
             }
 
             // Spring forces from connected edges
-            if let Some((source_force, target_force)) =
+            if let Some((_source_force, _target_force)) =
                 edge_forces.get(&(node.clone(), node.clone()))
             {
                 // This is a self-loop, skip
@@ -429,7 +427,7 @@ impl MemoizedLayout {
             }
 
             // Find edges where this node is the source
-            for ((from, to), (source_force, _)) in edge_forces
+            for ((from, _to), (source_force, _)) in edge_forces
                 .iter()
                 .filter(|((from, _), _)| from.as_str() == node.as_str())
             {
@@ -437,7 +435,7 @@ impl MemoizedLayout {
             }
 
             // Find edges where this node is the target
-            for ((from, to), (_, target_force)) in edge_forces
+            for ((_from, to), (_, target_force)) in edge_forces
                 .iter()
                 .filter(|((_, to), _)| to.as_str() == node.as_str())
             {
@@ -611,6 +609,7 @@ pub mod benchmark {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dag::DependencyType;
     use std::time::Duration;
 
     #[test]
