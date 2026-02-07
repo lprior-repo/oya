@@ -248,6 +248,8 @@ impl BeadEvent {
     }
 
     /// Get the bead ID.
+    ///
+    /// Returns a default BeadId for events without a bead_id field (e.g., WorkerUnhealthy).
     pub fn bead_id(&self) -> BeadId {
         match self {
             Self::Created { bead_id, .. }
@@ -260,6 +262,7 @@ impl BeadEvent {
             | Self::Unclaimed { bead_id, .. }
             | Self::PriorityChanged { bead_id, .. }
             | Self::MetadataUpdated { bead_id, .. } => *bead_id,
+            Self::WorkerUnhealthy { .. } => BeadId::default(),
         }
     }
 
@@ -275,7 +278,8 @@ impl BeadEvent {
             | Self::Claimed { timestamp, .. }
             | Self::Unclaimed { timestamp, .. }
             | Self::PriorityChanged { timestamp, .. }
-            | Self::MetadataUpdated { timestamp, .. } => *timestamp,
+            | Self::MetadataUpdated { timestamp, .. }
+            | Self::WorkerUnhealthy { timestamp, .. } => *timestamp,
         }
     }
 
@@ -292,6 +296,7 @@ impl BeadEvent {
             Self::Unclaimed { .. } => "unclaimed",
             Self::PriorityChanged { .. } => "priority_changed",
             Self::MetadataUpdated { .. } => "metadata_updated",
+            Self::WorkerUnhealthy { .. } => "worker_unhealthy",
         }
     }
 }
@@ -328,5 +333,19 @@ mod tests {
 
         assert_eq!(event.bead_id(), bead_id);
         assert_eq!(event.event_type(), "completed");
+    }
+
+    #[test]
+    fn test_worker_unhealthy_event() {
+        let event = BeadEvent::worker_unhealthy("worker-123", "health check timeout");
+
+        assert_eq!(event.event_type(), "worker_unhealthy");
+        match event {
+            BeadEvent::WorkerUnhealthy { worker_id, reason, .. } => {
+                assert_eq!(worker_id, "worker-123");
+                assert_eq!(reason, "health check timeout");
+            }
+            _ => panic!("Expected WorkerUnhealthy event"),
+        }
     }
 }
