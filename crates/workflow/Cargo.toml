@@ -42,12 +42,42 @@ surrealdb-core = { workspace = true }
 # Compression
 zstd = { workspace = true }
 
+# Persistent data structures
+im = "15.1"
+
+# Functional utilities
+itertools = { workspace = true }
+
+# Caching
+moka = { workspace = true }
+
 [dev-dependencies]
 oya-events = { path = "../events" }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 proptest = "1"
+criterion = "0.5"
 
 [lints.clippy]
 unwrap_used = "forbid"
 expect_used = "deny"
 panic = "forbid"
+
+[[bench]]
+name = "loop_vs_iterator"
+harness = false
+
+[[bench]]
+name = "clone_vs_arc"
+harness = false
+
+[[bench]]
+name = "hashmap_vs_im"
+harness = false
+
+[[bench]]
+name = "error_handling"
+harness = false
+
+[[bench]]
+name = "vec_operations"
+harness = false
