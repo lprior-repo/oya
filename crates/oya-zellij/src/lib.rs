@@ -1677,7 +1677,6 @@ fn format_uptime(secs: u64) -> String {
     }
 }
 mod tests {
-    use super::*;
 
     fn build_agent(id: &str, state: AgentState, bead: Option<&str>, health: f64) -> AgentInfo {
         AgentInfo {
