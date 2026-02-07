@@ -928,15 +928,16 @@ mod tests {
             "Should return duration when running transition exists"
         );
 
-        let duration = duration.unwrap();
-        assert!(
-            duration.num_seconds() >= 29,
-            "Duration should be at least 29 seconds"
-        );
-        assert!(
-            duration.num_seconds() <= 31,
-            "Duration should be at most 31 seconds"
-        );
+        if let Some(d) = duration {
+            assert!(
+                d.num_seconds() >= 29,
+                "Duration should be at least 29 seconds"
+            );
+            assert!(
+                d.num_seconds() <= 31,
+                "Duration should be at most 31 seconds"
+            );
+        }
     }
 
     #[tokio::test]

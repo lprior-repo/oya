@@ -336,11 +336,9 @@ async fn test_get_state_version_returns_actor_unavailable() -> Result<(), Box<dy
     .await;
 
     // THEN: Should return ActorUnavailable error
-    assert!(result.is_err(), "GetStateVersion should return error");
-    let error = result.unwrap_err();
-    let actor_error = error
-        .downcast_ref::<ActorError>()
-        .ok_or("Error should be ActorError")?;
+    let version_result = result?;
+    assert!(version_result.is_err(), "GetStateVersion should return ActorError");
+    let actor_error = version_result.unwrap_err();
 
     assert!(
         matches!(actor_error, ActorError::ActorUnavailable),
