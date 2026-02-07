@@ -5,7 +5,7 @@
 
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
-#![deny(clippy::panic)];
+#![deny(clippy::panic)]
 
 /// Macro for registering a worker with the heartbeat monitor.
 ///
@@ -115,8 +115,8 @@ macro_rules! register_worker_full {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::actor::{ProcessPoolActor, WorkerState};
+    use crate::actor::{HeartbeatMonitor, ProcessId, ProcessPoolActor, WorkerState};
+    use crate::error::Result;
 
     #[test]
     fn register_worker_macro_adds_single_worker() {

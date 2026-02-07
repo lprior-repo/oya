@@ -16,6 +16,10 @@ const CACHE_TTL: Duration = Duration::from_secs(5);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 const AGENT_EVENT_LIMIT: usize = 50;
 
+// Log streaming backpressure constants
+const MAX_LOG_MESSAGES: usize = 1000;  // Maximum messages in buffer (backpressure limit)
+const LOG_EVENT_NAME: &str = "log";    // Custom message name for log streaming
+
 // Context keys for identifying web request responses
 const CTX_REQUEST_TYPE: &str = "request_type";
 const CTX_BEADS_LIST: &str = "beads_list";
@@ -121,6 +125,9 @@ struct State {
     graph_nodes: Vector<GraphNode>,
     graph_edges: Vector<GraphEdge>,
     critical_path: Vector<String>,
+
+    // Command pane tracking
+    command_panes: HashMap<String, command_pane::CommandPane>,
 }
 
 #[allow(clippy::derivable_impls)]
@@ -146,6 +153,7 @@ impl Default for State {
             graph_nodes: Vector::new(),
             graph_edges: Vector::new(),
             critical_path: Vector::new(),
+            command_panes: HashMap::new(),
         }
     }
 }
@@ -586,6 +594,18 @@ impl ZellijPlugin for State {
             }
             Event::WebRequestResult(status, _headers, body, context) => {
                 self.handle_web_response(status, body, context);
+                true
+            }
+            Event::CommandPaneOpened(pane_id, context) => {
+                self.handle_command_pane_opened(pane_id, context);
+                true
+            }
+            Event::CommandPaneExited(pane_id, exit_code, context) => {
+                self.handle_command_pane_exited(pane_id, exit_code, context);
+                true
+            }
+            Event::CommandPaneReRun(pane_id, context) => {
+                self.handle_command_pane_rerun(pane_id, context);
                 true
             }
             _ => false,
@@ -1141,9 +1161,14 @@ impl State {
                     (None, None) => String::new(),
                 };
 
+                // Highlight selected stage
+                let is_selected = idx == self.selected_stage_index;
+                let prefix = if is_selected { "\x1b[7m> " } else { "  " };
+                let suffix = if is_selected { "\x1b[0m" } else { "" };
+
                 println!(
-                    "  {} {}{}\x1b[0m {:<15} {}",
-                    connector, color, symbol, stage.name, details
+                    "{}{} {}{}\x1b[0m {:<15} {}{}",
+                    prefix, connector, color, symbol, stage.name, details, suffix
                 );
             });
 
@@ -1369,6 +1394,8 @@ impl State {
             ViewMode::PipelineView => "Pipeline",
             ViewMode::AgentView => "Agents",
             ViewMode::GraphView => "Graph",
+            ViewMode::SystemHealth => "Health",
+            ViewMode::LogAggregator => "Logs",
         };
 
         println!("{}", "─".repeat(cols));

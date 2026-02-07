@@ -163,7 +163,9 @@ mod tests {
         let next = state.start_loading();
 
         assert!(next.is_ok());
-        assert_eq!(next.unwrap(), ReplayState::Loading { events_loaded: 0 });
+        if let Ok(loaded) = next {
+            assert_eq!(loaded, ReplayState::Loading { events_loaded: 0 });
+        }
     }
 
     #[test]
@@ -172,13 +174,15 @@ mod tests {
         let next = state.start_replaying(100);
 
         assert!(next.is_ok());
-        assert_eq!(
-            next.unwrap(),
-            ReplayState::Replaying {
-                events_processed: 0,
-                events_total: 100
-            }
-        );
+        if let Ok(replaying) = next {
+            assert_eq!(
+                replaying,
+                ReplayState::Replaying {
+                    events_processed: 0,
+                    events_total: 100
+                }
+            );
+        }
     }
 
     #[test]
@@ -190,13 +194,15 @@ mod tests {
         let next = state.update_progress(75);
 
         assert!(next.is_ok());
-        assert_eq!(
-            next.unwrap(),
-            ReplayState::Replaying {
-                events_processed: 75,
-                events_total: 100
-            }
-        );
+        if let Ok(updated) = next {
+            assert_eq!(
+                updated,
+                ReplayState::Replaying {
+                    events_processed: 75,
+                    events_total: 100
+                }
+            );
+        }
     }
 
     #[test]
@@ -208,12 +214,14 @@ mod tests {
         let next = state.complete();
 
         assert!(next.is_ok());
-        assert_eq!(
-            next.unwrap(),
-            ReplayState::Complete {
-                events_processed: 100
-            }
-        );
+        if let Ok(complete) = next {
+            assert_eq!(
+                complete,
+                ReplayState::Complete {
+                    events_processed: 100
+                }
+            );
+        }
     }
 
     #[test]
@@ -462,37 +470,36 @@ mod tests {
     // ==========================================================================
 
     #[test]
-    fn test_successful_replay_lifecycle() {
+    fn test_successful_replay_lifecycle() -> Result<(), Box<dyn std::error::Error>> {
         // Start
         let mut state = ReplayState::Uninitialized;
 
         // Start loading
-        state = state.start_loading().unwrap();
+        state = state.start_loading()?;
         assert!(matches!(state, ReplayState::Loading { .. }));
 
         // Finish loading and start replaying
-        state = state.start_replaying(100).unwrap();
+        state = state.start_replaying(100)?;
         assert!(matches!(state, ReplayState::Replaying { .. }));
 
         // Update progress
-        state = state.update_progress(50).unwrap();
+        state = state.update_progress(50)?;
         assert!(matches!(state, ReplayState::Replaying { .. }));
 
         // Complete
-        state = state.complete().unwrap();
+        state = state.complete()?;
         assert!(matches!(state, ReplayState::Complete { .. }));
         assert!(state.is_terminal());
+        Ok(())
     }
 
     #[test]
-    fn test_failed_replay_lifecycle() {
+    fn test_failed_replay_lifecycle() -> Result<(), Box<dyn std::error::Error>> {
         // Start
         let mut state = ReplayState::Uninitialized;
 
         // Start loading
-        state = state
-            .start_loading()
-            .expect("start_loading should succeed from Uninitialized");
+        state = state.start_loading()?;
 
         // Fail during loading
         state = state.fail("load error".into());
@@ -504,19 +511,21 @@ mod tests {
                 error: "load error".into()
             }
         );
+        Ok(())
     }
 
     #[test]
-    fn test_failed_during_replaying() {
+    fn test_failed_during_replaying() -> Result<(), Box<dyn std::error::Error>> {
         let mut state = ReplayState::Uninitialized;
 
-        state = state.start_loading().unwrap();
-        state = state.start_replaying(100).unwrap();
-        state = state.update_progress(50).unwrap();
+        state = state.start_loading()?;
+        state = state.start_replaying(100)?;
+        state = state.update_progress(50)?;
 
         // Fail during replaying
         state = state.fail("projection error".into());
         assert!(matches!(state, ReplayState::Failed { .. }));
         assert!(state.is_terminal());
+        Ok(())
     }
 }
