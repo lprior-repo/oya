@@ -129,6 +129,9 @@ struct State {
 
     // Command pane tracking
     command_panes: HashMap<String, command_pane::CommandPane>,
+
+    // Log streaming with backpressure
+    log_buffer: log_stream::LogBuffer,
 }
 
 #[allow(clippy::derivable_impls)]
@@ -155,6 +158,7 @@ impl Default for State {
             graph_edges: Vector::new(),
             critical_path: Vector::new(),
             command_panes: HashMap::new(),
+            log_buffer: log_stream::LogBuffer::new(),
         }
     }
 }
@@ -723,6 +727,34 @@ impl State {
             CommandToRun::new_with_args("/bin/sh", vec!["-c", &command]),
             context,
         );
+    }
+
+    fn handle_command_pane_opened(
+        &mut self,
+        _pane_id: u64,
+        _context: BTreeMap<String, String>,
+    ) {
+        // TODO: Implement command pane opened tracking
+        // This will be implemented in a separate bead
+    }
+
+    fn handle_command_pane_exited(
+        &mut self,
+        _pane_id: u64,
+        _exit_code: i32,
+        _context: BTreeMap<String, String>,
+    ) {
+        // TODO: Implement command pane exited tracking
+        // This will be implemented in a separate bead
+    }
+
+    fn handle_command_pane_rerun(
+        &mut self,
+        _pane_id: u64,
+        _context: BTreeMap<String, String>,
+    ) {
+        // TODO: Implement command pane rerun tracking
+        // This will be implemented in a separate bead
     }
 
     fn handle_web_response(

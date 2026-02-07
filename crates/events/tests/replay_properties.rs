@@ -6,7 +6,7 @@
 //! - State reconstruction correctness
 
 use oya_events::{
-    AllBeadsProjection, AllBeadsState, BeadEvent, BeadId, BeadSpec, BeadState, Complexity,
+    AllBeadsProjection, BeadEvent, BeadId, BeadSpec, BeadState, Complexity,
     EventStore, InMemoryEventStore, Projection,
 };
 use proptest::prelude::*;

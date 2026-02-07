@@ -512,7 +512,7 @@ impl PollingTimer {
     pub fn start(
         target: ActorRef<HealthCheckMessage>,
         interval: Duration,
-        timeout: Duration,
+        _timeout: Duration,
     ) -> PollingHandle {
         let (stop_tx, mut stop_rx) = watch::channel(false);
         let mut ticker = tokio::time::interval(interval);
