@@ -398,7 +398,7 @@ mod tests {
         let result = resume_from_checkpoint(&checkpoint_id, &store, &log);
 
         assert!(result.is_ok(), "Should successfully create replay state");
-        let state = result.unwrap();
+        let state = result.expect("test should return Ok");
         assert_eq!(state.checkpoint_id.as_str(), "test");
         assert_eq!(state.checkpoint_timestamp, timestamp);
         assert_eq!(state.events_replayed, 0);
@@ -441,7 +441,7 @@ mod tests {
         let result = resume_from_checkpoint(&checkpoint_id, &store, &log);
 
         assert!(result.is_ok());
-        let state = result.unwrap();
+        let state = result.expect("test should return Ok");
         assert_eq!(
             state.events_replayed, 3,
             "Should count all events after checkpoint"
@@ -507,7 +507,7 @@ mod tests {
         let result = resume_from_checkpoint(&checkpoint_id, &store, &log);
 
         assert!(result.is_ok());
-        let state = result.unwrap();
+        let state = result.expect("test should return Ok");
         assert_eq!(
             state.last_event_timestamp,
             Some(event2_ts),
@@ -534,7 +534,7 @@ mod tests {
         let result = resume_from_checkpoint(&checkpoint_id, &store, &log);
 
         assert!(result.is_ok());
-        let state = result.unwrap();
+        let state = result.expect("test should return Ok");
         assert_eq!(state.events_replayed, 0, "Should have zero events replayed");
         assert!(
             state.last_event_timestamp.is_none(),

@@ -465,7 +465,7 @@ mod tests {
     // ==========================================================================
 
     #[test]
-    fn test_successful_replay_lifecycle() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_successful_replay_lifecycle() -> std::result::Result<(), Box<dyn std::error::Error>> {
         // Start
         let mut state = ReplayState::Uninitialized;
 
@@ -489,7 +489,7 @@ mod tests {
     }
 
     #[test]
-    fn test_failed_replay_lifecycle() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_failed_replay_lifecycle() -> std::result::Result<(), Box<dyn std::error::Error>> {
         // Start
         let mut state = ReplayState::Uninitialized;
 
@@ -510,7 +510,7 @@ mod tests {
     }
 
     #[test]
-    fn test_failed_during_replaying() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_failed_during_replaying() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let mut state = ReplayState::Uninitialized;
 
         state = state.start_loading()?;

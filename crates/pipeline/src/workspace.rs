@@ -800,7 +800,7 @@ ws3 user@example.com 2024-01-03 14:00:00
         // Age should be approximately 2 hours (7200 seconds)
         // Allow 10 second tolerance for test execution time
         assert!(
-            age >= 7190 && age <= 7210,
+            (7190..=7210).contains(&age),
             "Age should be ~7200 seconds, got {age}"
         );
         Ok(())
