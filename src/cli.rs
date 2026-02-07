@@ -19,6 +19,32 @@ use clap::{Parser, Subcommand};
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
+
+    /// Enable verbose logging
+    #[arg(short, long, global = true)]
+    pub verbose: bool,
+
+    /// Quiet mode (minimal output)
+    #[arg(short, long, global = true)]
+    pub quiet: bool,
+}
+
+impl Cli {
+    /// Parse command-line arguments from environment.
+    ///
+    /// This is a convenience method that uses std::env::args_os().
+    pub fn parse() -> Self {
+        <Cli as clap::Parser>::parse()
+    }
+
+    /// Parse from iterator.
+    pub fn parse_from<I, T>(itr: I) -> Self
+    where
+        I: IntoIterator<Item = T>,
+        T: Into<std::ffi::OsString> + Clone,
+    {
+        <Cli as clap::Parser>::parse_from(itr)
+    }
 }
 
 #[derive(Subcommand, Debug)]

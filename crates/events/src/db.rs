@@ -45,6 +45,9 @@ pub enum DbError {
 
     #[error("surrealdb error: {0}")]
     SurrealDb(String),
+
+    #[error("database is locked by another process. Only one instance of oya can run at a time. If you're sure no other instance is running, delete the LOCK file at: {path}")]
+    DatabaseLocked { path: String },
 }
 
 impl From<surrealdb::Error> for DbError {
@@ -60,6 +63,7 @@ impl SurrealDbClient {
     ///
     /// Returns an error if:
     /// - The database directory cannot be created
+    /// - The database is already locked by another process
     /// - The `RocksDB` instance cannot be initialized
     /// - The namespace/database cannot be selected
     pub async fn connect(config: SurrealDbConfig) -> Result<Self, DbError> {
@@ -67,6 +71,63 @@ impl SurrealDbClient {
         debug!(path = %path, "Ensuring database directory exists");
         fs::create_dir_all(path).await?;
 
+        // Check for existing RocksDB lock file
+        let lock_path = std::path::PathBuf::from(path).join("LOCK");
+        if lock_path.exists() {
+            // Try to detect if this is a stale lock or an active one
+            // by attempting to connect and handling the specific error
+            debug!(lock_path = %lock_path.display(), "LOCK file exists, checking if database is in use");
+
+            // Attempt connection - if it fails with lock error, provide clear message
+            let connect_result = Surreal::new::<RocksDb>(path).await;
+            let client = match connect_result {
+                Ok(c) => {
+                    // Connection succeeded despite LOCK file existing
+                    // This means the lock was stale or we can connect
+                    info!("Connected to database despite existing LOCK file (lock was stale)");
+                    c
+                }
+                Err(e) => {
+                    let error_msg = e.to_string().to_lowercase();
+                    if error_msg.contains("lock")
+                        || error_msg.contains("resource temporarily unavailable")
+                        || error_msg.contains("permission denied")
+                    {
+                        let lock_path_display = lock_path.display().to_string();
+                        return Err(DbError::DatabaseLocked { path: lock_path_display });
+                    }
+                    return Err(DbError::ConnectionFailed(format!(
+                        "Failed to create RocksDb instance: {e}"
+                    )));
+                }
+            };
+
+            // Continue with namespace/database setup
+            let namespace = "oya";
+            let database = "events";
+
+            info!(
+                namespace = %namespace,
+                database = %database,
+                "Using namespace and database"
+            );
+
+            client
+                .use_ns(namespace)
+                .use_db(database)
+                .await
+                .map_err(|e| {
+                    DbError::ConnectionFailed(format!("Failed to select namespace/database: {e}"))
+                })?;
+
+            return Ok(Self {
+                client,
+                namespace: namespace.to_string(),
+                database: database.to_string(),
+            });
+        }
+
+        // No lock file, proceed with normal connection
         info!(path = %path, "Connecting to SurrealDB with kv-rocksdb backend");
         let client = match Surreal::new::<RocksDb>(path).await {
             Ok(c) => c,
@@ -247,6 +308,43 @@ mod tests {
         let schema = "INVALID SQL SYNTAX;";
         let result = client.init_schema(schema).await;
         assert!(result.is_err(), "Invalid schema should fail");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_database_lock_contention() -> crate::Result<()> {
+        let temp_dir = tempdir()?;
+        let db_path = temp_dir
+            .path()
+            .join("test_db")
+            .to_string_lossy()
+            .to_string();
+
+        // First connection should succeed
+        let config1 = SurrealDbConfig::new(db_path.clone());
+        let _client1 = SurrealDbClient::connect(config1).await?;
+
+        // Second connection to the same path should fail with DatabaseLocked
+        let config2 = SurrealDbConfig::new(db_path);
+        let result = SurrealDbClient::connect(config2).await;
+
+        assert!(
+            result.is_err(),
+            "Second connection should fail due to lock contention"
+        );
+
+        match result {
+            Err(DbError::DatabaseLocked { .. }) => {
+                // Expected error type
+            }
+            Err(other) => {
+                panic!("Expected DatabaseLocked error, got: {}", other);
+            }
+            Ok(_) => {
+                panic!("Expected database to be locked, but second connection succeeded");
+            }
+        }
+
         Ok(())
     }
 }
