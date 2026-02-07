@@ -4,6 +4,8 @@
 //!
 //! Real-time terminal UI for pipeline status, bead execution, and stage progress.
 
+mod command_pane;
+
 use im::{HashMap, Vector};
 use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::time::{Duration, Instant};
@@ -154,8 +156,10 @@ enum ViewMode {
     BeadList,
     BeadDetail,
     PipelineView,
-    AgentList,
+    AgentView,
     GraphView,
+    SystemHealth,
+    LogAggregator,
 }
 
 #[derive(Clone, Debug)]
@@ -401,18 +405,35 @@ impl ZellijPlugin for State {
                         false
                     }
                     BareKey::Char('j') | BareKey::Down => {
-                        if self.selected_index < self.beads.len().saturating_sub(1) {
-                            self.selected_index = self.selected_index.saturating_add(1);
-                            if self.mode == ViewMode::PipelineView {
-                                self.load_pipeline_for_selected();
+                        if self.mode == ViewMode::PipelineView {
+                            // Navigate pipeline stages
+                            if self.selected_stage_index
+                                < self.pipeline_stages.len().saturating_sub(1)
+                            {
+                                self.selected_stage_index =
+                                    self.selected_stage_index.saturating_add(1);
+                            }
+                        } else {
+                            // Navigate beads
+                            if self.selected_index < self.beads.len().saturating_sub(1) {
+                                self.selected_index = self.selected_index.saturating_add(1);
+                                if self.mode == ViewMode::PipelineView {
+                                    self.load_pipeline_for_selected();
+                                }
                             }
                         }
                         true
                     }
                     BareKey::Char('k') | BareKey::Up => {
-                        self.selected_index = self.selected_index.saturating_sub(1);
                         if self.mode == ViewMode::PipelineView {
-                            self.load_pipeline_for_selected();
+                            // Navigate pipeline stages
+                            self.selected_stage_index = self.selected_stage_index.saturating_sub(1);
+                        } else {
+                            // Navigate beads
+                            self.selected_index = self.selected_index.saturating_sub(1);
+                            if self.mode == ViewMode::PipelineView {
+                                self.load_pipeline_for_selected();
+                            }
                         }
                         true
                     }
@@ -438,31 +459,61 @@ impl ZellijPlugin for State {
                         true
                     }
                     BareKey::Char('4') => {
-                        self.mode = ViewMode::AgentList;
+                        self.mode = ViewMode::AgentView;
                         self.load_agents();
                         true
                     }
                     BareKey::Char('5') => {
                         self.mode = ViewMode::GraphView;
-                        // TODO: Implement load_graph when backend API is ready
-                        // self.load_graph();
+                        self.load_graph();
+                        true
+                    }
+                    BareKey::Char('6') => {
+                        self.mode = ViewMode::SystemHealth;
+                        self.load_system_health();
+                        true
+                    }
+                    BareKey::Char('7') => {
+                        self.mode = ViewMode::LogAggregator;
+                        self.load_log_aggregator();
                         true
                     }
                     BareKey::Enter => {
-                        self.mode = match self.mode {
-                            ViewMode::PipelineView => ViewMode::PipelineView,
-                            ViewMode::AgentList => ViewMode::AgentList,
-                            ViewMode::GraphView => ViewMode::GraphView,
-                            _ => self.mode,
-                        };
+                        // Handle Enter key based on current mode
                         if self.mode == ViewMode::PipelineView {
-                            self.load_pipeline_for_selected();
-                        }
-                        if self.mode == ViewMode::AgentList {
-                            self.load_agents();
-                        }
-                        if self.mode == ViewMode::GraphView {
-                            self.load_graph();
+                            // In PipelineView: open command pane to rerun selected stage
+                            if let Some(bead) = self.beads.get(self.selected_index) {
+                                if let Some(stage) =
+                                    self.pipeline_stages.get(self.selected_stage_index)
+                                {
+                                    self.open_command_pane_for_stage(&bead.id, &stage.name);
+                                }
+                            }
+                        } else {
+                            // Other modes: stay in current mode and reload data
+                            self.mode = match self.mode {
+                                ViewMode::PipelineView => ViewMode::PipelineView,
+                                ViewMode::AgentView => ViewMode::AgentView,
+                                ViewMode::GraphView => ViewMode::GraphView,
+                                ViewMode::SystemHealth => ViewMode::SystemHealth,
+                                ViewMode::LogAggregator => ViewMode::LogAggregator,
+                                _ => self.mode,
+                            };
+                            if self.mode == ViewMode::PipelineView {
+                                self.load_pipeline_for_selected();
+                            }
+                            if self.mode == ViewMode::AgentView {
+                                self.load_agents();
+                            }
+                            if self.mode == ViewMode::GraphView {
+                                self.load_graph();
+                            }
+                            if self.mode == ViewMode::SystemHealth {
+                                self.load_system_health();
+                            }
+                            if self.mode == ViewMode::LogAggregator {
+                                self.load_log_aggregator();
+                            }
                         }
                         true
                     }
@@ -476,6 +527,12 @@ impl ZellijPlugin for State {
                         }
                         if self.mode == ViewMode::GraphView {
                             self.load_graph();
+                        }
+                        if self.mode == ViewMode::SystemHealth {
+                            self.load_system_health();
+                        }
+                        if self.mode == ViewMode::LogAggregator {
+                            self.load_log_aggregator();
                         }
                         true
                     }
@@ -496,11 +553,17 @@ impl ZellijPlugin for State {
                 }
 
                 self.load_beads();
-                if self.mode == ViewMode::AgentList {
+                if self.mode == ViewMode::AgentView {
                     self.load_agents();
                 }
                 if self.mode == ViewMode::GraphView {
                     self.load_graph();
+                }
+                if self.mode == ViewMode::SystemHealth {
+                    self.load_system_health();
+                }
+                if self.mode == ViewMode::LogAggregator {
+                    self.load_log_aggregator();
                 }
                 set_timeout(2.0);
                 true
@@ -512,6 +575,12 @@ impl ZellijPlugin for State {
                 }
                 if should_fetch_graph_on_view_load(self.mode) {
                     self.load_graph();
+                }
+                if should_fetch_system_health_on_view_load(self.mode) {
+                    self.load_system_health();
+                }
+                if should_fetch_log_aggregator_on_view_load(self.mode) {
+                    self.load_log_aggregator();
                 }
                 true
             }
@@ -531,8 +600,10 @@ impl ZellijPlugin for State {
             ViewMode::BeadList => self.render_bead_list(content_rows, cols),
             ViewMode::BeadDetail => self.render_bead_detail(content_rows, cols),
             ViewMode::PipelineView => self.render_pipeline_view(content_rows, cols),
-            ViewMode::AgentList => self.render_agent_list(content_rows, cols),
+            ViewMode::AgentView => self.render_agent_list(content_rows, cols),
             ViewMode::GraphView => self.render_graph_view(content_rows, cols),
+            ViewMode::SystemHealth => self.render_system_health(content_rows, cols),
+            ViewMode::LogAggregator => self.render_log_aggregator(content_rows, cols),
         }
         self.render_footer(rows, cols);
     }
@@ -608,6 +679,14 @@ impl State {
         self.pending_requests = self.pending_requests.saturating_add(1);
         self.last_request_sent = Some(Instant::now());
         web_request(&url, HttpVerb::Get, BTreeMap::new(), vec![], context);
+    }
+
+    fn load_system_health(&mut self) {
+        // TODO: Implement system health loading when backend API is ready
+    }
+
+    fn load_log_aggregator(&mut self) {
+        // TODO: Implement log aggregator loading when backend API is ready
     }
 
     fn open_command_pane_for_stage(&self, bead_id: &str, stage_name: &str) {
@@ -1288,7 +1367,7 @@ impl State {
             ViewMode::BeadList => "List",
             ViewMode::BeadDetail => "Detail",
             ViewMode::PipelineView => "Pipeline",
-            ViewMode::AgentList => "Agents",
+            ViewMode::AgentView => "Agents",
             ViewMode::GraphView => "Graph",
         };
 
@@ -1432,7 +1511,7 @@ impl State {
 
 // Helper functions
 fn should_fetch_agents_on_view_load(mode: ViewMode) -> bool {
-    matches!(mode, ViewMode::AgentList)
+    matches!(mode, ViewMode::AgentView)
 }
 
 fn should_fetch_graph_on_view_load(mode: ViewMode) -> bool {
@@ -1528,7 +1607,7 @@ mod tests {
 
     #[test]
     fn agent_view_fetches_agents_on_load() {
-        assert!(should_fetch_agents_on_view_load(ViewMode::AgentList));
+        assert!(should_fetch_agents_on_view_load(ViewMode::AgentView));
     }
 
     #[test]

@@ -49,6 +49,7 @@
 //! ```
 
 pub mod errors;
+pub mod health_check_worker;
 pub mod lifecycle;
 pub mod messages;
 pub mod queue;
@@ -62,6 +63,10 @@ pub mod workflow;
 
 // Re-export main types for convenience
 pub use errors::ActorError;
+pub use health_check_worker::{
+    HealthCheckConfig, HealthCheckMessage, HealthCheckResult, HealthCheckWorkerDef,
+    HealthCheckWorkerState, HealthStatus, PollingHandle, PollingTimer,
+};
 pub use messages::{BeadState, SchedulerMessage, WorkflowStatus};
 pub use queue::{QueueActorDef, QueueMessage, QueueState};
 pub use reconciler::{ReconcilerActorDef, ReconcilerMessage, ReconcilerState};

@@ -490,7 +490,9 @@ mod tests {
         let mut state = ReplayState::Uninitialized;
 
         // Start loading
-        state = state.start_loading().unwrap();
+        state = state
+            .start_loading()
+            .expect("start_loading should succeed from Uninitialized");
 
         // Fail during loading
         state = state.fail("load error".into());

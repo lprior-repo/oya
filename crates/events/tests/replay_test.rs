@@ -6,8 +6,8 @@
 //! - Progress tracking is accurate during replay
 
 use oya_events::{
-    AllBeadsProjection, BeadEvent, BeadId, BeadSpec, BeadState, Complexity,
-    EventStore, InMemoryEventStore, Projection, ReplayTracker,
+    AllBeadsProjection, BeadEvent, BeadId, BeadSpec, BeadState, Complexity, EventStore,
+    InMemoryEventStore, Projection, ReplayTracker,
 };
 use std::time::{Duration, Instant};
 

@@ -41,6 +41,7 @@ pub mod repo;
 pub mod retry;
 pub mod stages;
 pub mod types;
+pub mod worker_registry;
 pub mod workspace;
 
 // Re-export commonly used items
