@@ -6,6 +6,7 @@ main_branch = ""
 default_template = "standard"
 state_db = ".zjj/state.db"
 json_test_key = "json_test_val"
+persist_test = "persist_value"
 
 [watch]
 enabled = true
