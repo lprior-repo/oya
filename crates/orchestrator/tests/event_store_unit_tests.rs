@@ -15,7 +15,7 @@
 
 use orchestrator::actors::errors::ActorError;
 use orchestrator::actors::storage::{EventStoreActorDef, EventStoreMessage};
-use oya_events::durable_store::{ConnectionConfig, DurableEventStore};
+use oya_events::durable_store::DurableEventStore;
 use oya_events::event::BeadEvent;
 use oya_events::types::{BeadId, BeadSpec, BeadState, Complexity, PhaseId, PhaseOutput};
 use ractor::{Actor, ActorRef};
@@ -24,7 +24,6 @@ use surrealdb::Surreal;
 use surrealdb::engine::local::RocksDb;
 use tempfile::TempDir;
 use tokio::sync::oneshot;
-use tokio::test as tokio_test;
 
 // ============================================================================
 // Test Fixtures and Helpers
@@ -150,8 +149,8 @@ fn create_state_change_event(bead_id: BeadId) -> BeadEvent {
 /// Creates a test phase output event.
 fn create_phase_output_event(bead_id: BeadId) -> BeadEvent {
     let phase_id = PhaseId::new();
-    let output = PhaseOutput::success("test output".to_string());
-    BeadEvent::phase_completed(bead_id, phase_id, output)
+    let output = PhaseOutput::success(b"test output".to_vec());
+    BeadEvent::phase_completed(bead_id, phase_id, "test-phase", output)
 }
 
 // ============================================================================
