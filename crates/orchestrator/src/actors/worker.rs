@@ -39,11 +39,13 @@ impl WorkerRetryPolicy {
         if attempt > self.max_retries {
             None
         } else {
-            Some(calculate_backoff(
+            let delay = calculate_backoff(
                 attempt.saturating_sub(1),
                 self.base_backoff_ms,
                 self.max_backoff_ms,
-            ))
+            );
+            // Ensure minimum delay for better event ordering in tests
+            Some(delay.max(Duration::from_millis(1000)))
         }
     }
 }

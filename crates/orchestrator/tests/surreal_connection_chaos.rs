@@ -36,7 +36,8 @@ async fn chaos_test_basic_connection() {
 
 #[tokio::test]
 async fn chaos_test_pool_exhaustion() {
-    let manager: SurrealConnectionManager = SurrealConnectionManager::new(test_config("pool_exhaustion"))
+    let config = test_config("pool_exhaustion");
+    let manager = SurrealConnectionManager::new(config)
         .await
         .expect("Failed to create manager");
 
@@ -45,10 +46,10 @@ async fn chaos_test_pool_exhaustion() {
     let conn3 = manager.get_connection().await.expect("Failed to get conn3");
 
     let start = Instant::now();
-    let result: Result<_, tokio::time::error::Elapsed> = timeout(Duration::from_millis(200), manager.get_connection()).await;
+    let _result: Result<Result<_, SurrealError>, _> = timeout(Duration::from_millis(200), manager.get_connection()).await;
     let elapsed = start.elapsed();
 
-    assert!(result.is_err() || elapsed >= Duration::from_millis(150));
+    assert!(elapsed >= Duration::from_millis(150));
 
     drop(conn1);
     let _conn4 = manager.get_connection().await.expect("Should get connection after drop");
@@ -78,7 +79,8 @@ async fn chaos_test_retry_logic() {
 
 #[tokio::test]
 async fn chaos_test_connection_cleanup() {
-    let manager: SurrealConnectionManager = SurrealConnectionManager::new(test_config("cleanup").with_max_connections(2))
+    let config = test_config("cleanup").with_max_connections(2);
+    let manager = SurrealConnectionManager::new(config)
         .await
         .expect("Failed to create manager");
 
@@ -86,8 +88,9 @@ async fn chaos_test_connection_cleanup() {
     let conn2 = manager.get_connection().await.expect("Failed to get conn2");
 
     let start = Instant::now();
-    let result: Result<_, tokio::time::error::Elapsed> = timeout(Duration::from_millis(100), manager.get_connection()).await;
-    assert!(result.is_err());
+    let _result: Result<Result<_, SurrealError>, _> = timeout(Duration::from_millis(100), manager.get_connection()).await;
+    let elapsed = start.elapsed();
+    assert!(elapsed >= Duration::from_millis(90));
 
     drop(conn1);
     drop(conn2);
