@@ -65,6 +65,9 @@ pub mod storage;
 pub mod types;
 
 // Re-export main types
+pub use checkpoint::{
+    CheckpointId, CheckpointMetadata, CheckpointStorage, CompressionConfig, StorageStats,
+};
 pub use engine::{EngineConfig, WorkflowEngine};
 pub use error::{Error, Result};
 pub use handler::{
