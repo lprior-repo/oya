@@ -9,7 +9,8 @@
 //! - State management actors with persistent storage
 //! - Event store actors with fsync guarantees
 
-pub mod surreal_integration;
+// TODO: Re-enable surreal_integration module when needed
+// pub mod surreal_integration;
 
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort};
 use surrealdb::Surreal;

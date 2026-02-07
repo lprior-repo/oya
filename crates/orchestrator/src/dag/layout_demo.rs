@@ -128,7 +128,7 @@ fn demo_cache_behavior() -> Result<(), Box<dyn std::error::Error>> {
     let mut dag = create_sample_workflow_dag(20)?;
 
     // Create initial layout
-    let mut layout = dag.create_memoized_layout(0.1, 100.0)?;
+    let layout = dag.create_memoized_layout(0.1, 100.0)?;
 
     // First access - cold cache
     let start = std::time::Instant::now();
