@@ -5,6 +5,7 @@
 //! Real-time terminal UI for pipeline status, bead execution, and stage progress.
 
 mod command_pane;
+mod log_stream;
 
 use im::{HashMap, Vector};
 use std::collections::{BTreeMap, HashSet, VecDeque};
@@ -1385,6 +1386,16 @@ impl State {
         }
     }
 
+
+    fn render_system_health(&self, _rows: usize, _cols: usize) {
+        println!("\n  \x1b[2mSystem Health view coming soon\x1b[0m");
+        println!("  \x1b[2mPress 'r' to refresh from server\x1b[0m");
+    }
+
+    fn render_log_aggregator(&self, _rows: usize, _cols: usize) {
+        println!("\n  \x1b[2mLog Aggregator view coming soon\x1b[0m");
+        println!("  \x1b[2mPress 'r' to refresh from server\x1b[0m");
+    }
     fn render_footer(&self, rows: usize, cols: usize) {
         print!("\x1b[{};1H", rows.saturating_sub(1));
 
@@ -1400,9 +1411,15 @@ impl State {
 
         println!("{}", "─".repeat(cols));
 
+        let enter_hint = if self.mode == ViewMode::PipelineView {
+            "Enter:Rerun"
+        } else {
+            "Enter:Cycle"
+        };
+
         let help = format!(
-            "\x1b[2m[{}] 1:List 2:Detail 3:Pipeline 4:Agents 5:Graph | j/k:Navigate g/G:Top/Bottom Enter:Cycle r:Refresh q:Quit\x1b[0m",
-            view_mode
+            "\x1b[2m[{}] 1:List 2:Detail 3:Pipeline 4:Agents 5:Graph 6:Health 7:Logs | j/k:Navigate g/G:Top/Bottom {} r:Refresh q:Quit\x1b[0m",
+            view_mode, enter_hint
         );
 
         self.last_error.as_ref().map_or_else(
@@ -1633,6 +1650,39 @@ mod tests {
     }
 
     #[test]
+
+fn should_fetch_system_health_on_view_load(mode: ViewMode) -> bool {
+    matches!(mode, ViewMode::SystemHealth)
+}
+
+fn should_fetch_log_aggregator_on_view_load(mode: ViewMode) -> bool {
+    matches!(mode, ViewMode::LogAggregator)
+}
+
+fn render_workload_sparkline(beads_completed: u64, operations_executed: u64, width: usize) -> String {
+    if beads_completed == 0 && operations_executed == 0 {
+        return "\x1b[90m···\x1b[0m".to_string();
+    }
+
+    // Create a simple sparkline representation
+    // Use different characters to show relative workload
+    let ratio = if operations_executed > 0 {
+        beads_completed as f64 / operations_executed as f64
+    } else {
+        0.0
+    };
+
+    let filled = (ratio * width as f64).ceil() as usize;
+    let filled = filled.min(width);
+    let empty = width.saturating_sub(filled);
+
+    format!(
+        "\x1b[36m{}\x1b[90m{}\x1b[0m",
+        "█".repeat(filled),
+        "░".repeat(empty)
+    )
+}
+
     fn agent_view_fetches_agents_on_load() {
         assert!(should_fetch_agents_on_view_load(ViewMode::AgentView));
     }

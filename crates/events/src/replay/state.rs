@@ -6,9 +6,10 @@
 use crate::error::Result;
 
 /// States in the event replay lifecycle.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum ReplayState {
     /// Initial state before any replay operation begins.
+    #[default]
     Uninitialized,
 
     /// Loading events from the event store.
@@ -124,12 +125,6 @@ impl ReplayState {
             ReplayState::Complete { .. } => "Complete",
             ReplayState::Failed { .. } => "Failed",
         }
-    }
-}
-
-impl Default for ReplayState {
-    fn default() -> Self {
-        ReplayState::Uninitialized
     }
 }
 

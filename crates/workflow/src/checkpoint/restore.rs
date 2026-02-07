@@ -136,7 +136,7 @@ impl RestoreError {
     }
 
     /// Create a version mismatch error.
-    pub fn versionMismatch(expected: u32, found: u32, reason: impl Into<String>) -> Self {
+    pub fn version_mismatch(expected: u32, found: u32, reason: impl Into<String>) -> Self {
         Self::VersionMismatch {
             expected,
             found,
