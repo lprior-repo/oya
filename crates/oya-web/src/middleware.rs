@@ -11,10 +11,10 @@
 //! and composable middleware stacking.
 
 use axum::{
-    extract::{Request, State},
+    extract::Request,
     http::{HeaderMap, StatusCode},
     middleware::Next,
-    response::Response,
+    response::{IntoResponse, Response},
 };
 use std::time::Instant;
 use tower_http::cors::{Any, CorsLayer};
@@ -217,12 +217,7 @@ pub async fn auth_middleware(req: Request, next: Next) -> Result<Response, Respo
                 "detail": e
             });
 
-            Err((
-                status,
-                [(axum::http::header::CONTENT_TYPE, "application/json")],
-                axum::Json(body),
-            )
-                .into_response())
+            Err((status, [(axum::http::header::CONTENT_TYPE, "application/json")], axum::Json(body)).into_response())
         }
     }
 }

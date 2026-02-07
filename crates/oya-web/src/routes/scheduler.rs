@@ -186,7 +186,7 @@ fn authenticate(headers: HeaderMap) -> Result<()> {
 }
 
 /// Query scheduler state from StateManager
-fn query_scheduler_state(state: &AppState) -> Result<SchedulerState> {
+fn query_scheduler_state(_state: &AppState) -> Result<SchedulerState> {
     // For now, return mock data since StateManager doesn't have scheduler metrics yet
     // In a future bead, we'll add a QuerySchedulerMetrics message to StateManagerMessage
     let scheduler_state = SchedulerState {

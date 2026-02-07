@@ -9,11 +9,7 @@
 use crate::actors::AppState;
 use crate::error::{AppError, Result};
 use crate::metrics::AgentMetrics;
-use axum::{
-    extract::State,
-    http::{HeaderMap, StatusCode},
-    response::{IntoResponse, Json},
-};
+use axum::{extract::State, http::HeaderMap, response::Json};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -183,28 +179,30 @@ pub async fn get_agent_metrics(
     headers: HeaderMap,
     State(state): State<AppState>,
 ) -> Result<Json<AgentMetricsResponse>> {
-    // Railway track: authenticate -> query agents -> calculate metrics -> respond
-    authenticate(headers).and_then(|_| {
-        let agents = state.agent_service.list_agents().await;
+    // Authenticate first
+    authenticate(headers)?;
 
-        if agents.is_empty() {
-            return Err(AppError::NotFound("No agents found for metrics calculation".to_string()));
-        }
+    // Query agents
+    let agents = state.agent_service.list_agents().await;
 
-        match AgentMetrics::calculate(&agents) {
-            Ok(metrics) => Ok(Json(AgentMetricsResponse {
-                total_agents: metrics.total_agents,
-                active_agents: metrics.active_agents,
-                idle_agents: metrics.idle_agents,
-                unhealthy_agents: metrics.unhealthy_agents,
-                average_uptime_secs: metrics.average_uptime_secs,
-                average_health_score: metrics.average_health_score,
-                status_distribution: metrics.status_distribution,
-                capability_counts: metrics.capability_counts,
-            })),
-            Err(e) => Err(AppError::Internal(format!("Failed to calculate metrics: {e}"))),
-        }
-    })
+    if agents.is_empty() {
+        return Err(AppError::NotFound("No agents found for metrics calculation".to_string()));
+    }
+
+    // Calculate metrics
+    match AgentMetrics::calculate(&agents) {
+        Ok(metrics) => Ok(Json(AgentMetricsResponse {
+            total_agents: metrics.total_agents,
+            active_agents: metrics.active_agents,
+            idle_agents: metrics.idle_agents,
+            unhealthy_agents: metrics.unhealthy_agents,
+            average_uptime_secs: metrics.average_uptime_secs,
+            average_health_score: metrics.average_health_score,
+            status_distribution: metrics.status_distribution,
+            capability_counts: metrics.capability_counts,
+        })),
+        Err(e) => Err(AppError::Internal(format!("Failed to calculate metrics: {e}"))),
+    }
 }
 
 /// Authenticate the request using Bearer token
@@ -212,13 +210,7 @@ fn authenticate(headers: HeaderMap) -> Result<()> {
     headers
         .get("authorization")
         .and_then(|value| value.to_str().ok())
-        .and_then(|auth| {
-            if let Some(token) = auth.strip_prefix("Bearer ") {
-                Some(token.to_string())
-            } else {
-                None
-            }
-        })
+        .and_then(|auth| auth.strip_prefix("Bearer ").map(|token| token.to_string()))
         .filter(|token| !token.is_empty())
         .map(|_| ())
         .ok_or_else(|| AppError::Unauthorized("Missing or invalid Authorization header".to_string()))

@@ -953,32 +953,45 @@ mod tests {
 
     #[test]
     fn test_count_descendants() {
+        let root = GraphNode::new("root", "Root")
+            .add_child("a")
+            .add_child("b");
+        let a = GraphNode::new("a", "A")
+            .add_child("c")
+            .add_parent("root");
+        let b = GraphNode::new("b", "B")
+            .add_parent("root");
+        let c = GraphNode::new("c", "C")
+            .add_parent("a");
+
         let nodes = hashmap! {
-            "root" => GraphNode::new("root", "Root")
-                .add_child("a")
-                .add_child("b"),
-            "a" => GraphNode::new("a", "A")
-                .add_child("c"),
-            "b" => GraphNode::new("b", "B"),
-            "c" => GraphNode::new("c", "C"),
+            "root" => root,
+            "a" => a,
+            "b" => b,
+            "c" => c,
         };
 
-        let root = nodes.get(&"root").unwrap();
-        let count = root.count_descendants(|id| nodes.get(id));
+        let root_node = nodes.get(&"root").unwrap();
+        let nodes_clone = nodes.clone();
+        let count = root_node.count_descendants(|id| nodes_clone.get(id));
 
         assert_eq!(count, 3); // a, b, c
     }
 
     #[test]
     fn test_count_ancestors() {
+        let root = GraphNode::new("root", "Root")
+            .add_child("a");
+        let a = GraphNode::new("a", "A")
+            .add_child("b")
+            .add_parent("root");
+        let b = GraphNode::new("b", "B")
+            .add_parent("a");
+
         let nodes = hashmap! {
-            "root" => GraphNode::new("root", "Root")
-                .add_child("a"),
-            "a" => GraphNode::new("a", "A")
-                .add_child("b")
-                .add_parent("root"),
-            "b" => GraphNode::new("b", "B")
-                .add_parent("a"),
+            "root" => root,
+            "a" => a,
+            "b" => b,
         };
 
         let leaf = nodes.get(&"b").unwrap();
@@ -1117,44 +1130,52 @@ mod tests {
 
     #[test]
     fn test_depth() {
+        let root = GraphNode::new("root", "Root")
+            .add_child("a");
+        let a = GraphNode::new("a", "A")
+            .add_child("b")
+            .add_parent("root");
+        let b = GraphNode::new("b", "B")
+            .add_parent("a");
+
         let nodes = hashmap! {
-            "root" => GraphNode::new("root", "Root")
-                .add_child("a"),
-            "a" => GraphNode::new("a", "A")
-                .add_child("b")
-                .add_parent("root"),
-            "b" => GraphNode::new("b", "B")
-                .add_parent("a"),
+            "root" => root,
+            "a" => a,
+            "b" => b,
         };
 
-        let root = nodes.get(&"root").unwrap();
-        let a = nodes.get(&"a").unwrap();
-        let b = nodes.get(&"b").unwrap();
+        let root_node = nodes.get(&"root").unwrap();
+        let a_node = nodes.get(&"a").unwrap();
+        let b_node = nodes.get(&"b").unwrap();
 
-        assert_eq!(root.depth(|id| nodes.get(id)), 0);
-        assert_eq!(a.depth(|id| nodes.get(id)), 1);
-        assert_eq!(b.depth(|id| nodes.get(id)), 2);
+        assert_eq!(root_node.depth(|id| nodes.get(id)), 0);
+        assert_eq!(a_node.depth(|id| nodes.get(id)), 1);
+        assert_eq!(b_node.depth(|id| nodes.get(id)), 2);
     }
 
     #[test]
     fn test_height() {
+        let root = GraphNode::new("root", "Root")
+            .add_child("a");
+        let a = GraphNode::new("a", "A")
+            .add_child("b")
+            .add_parent("root");
+        let b = GraphNode::new("b", "B")
+            .add_parent("a");
+
         let nodes = hashmap! {
-            "root" => GraphNode::new("root", "Root")
-                .add_child("a"),
-            "a" => GraphNode::new("a", "A")
-                .add_child("b")
-                .add_parent("root"),
-            "b" => GraphNode::new("b", "B")
-                .add_parent("a"),
+            "root" => root,
+            "a" => a,
+            "b" => b,
         };
 
-        let root = nodes.get(&"root").unwrap();
-        let a = nodes.get(&"a").unwrap();
-        let b = nodes.get(&"b").unwrap();
+        let root_node = nodes.get(&"root").unwrap();
+        let a_node = nodes.get(&"a").unwrap();
+        let b_node = nodes.get(&"b").unwrap();
 
-        assert_eq!(b.height(|id| nodes.get(id)), 0);
-        assert_eq!(a.height(|id| nodes.get(id)), 1);
-        assert_eq!(root.height(|id| nodes.get(id)), 2);
+        assert_eq!(b_node.height(|id| nodes.get(id)), 0);
+        assert_eq!(a_node.height(|id| nodes.get(id)), 1);
+        assert_eq!(root_node.height(|id| nodes.get(id)), 2);
     }
 
     #[test]
@@ -1180,16 +1201,12 @@ mod tests {
 
     #[test]
     fn test_metadata_durations() {
-        let node = GraphNode::new("task", "Task")
-            .with_metadata("stage", "implement");
-
-        let node = node.metadata
-            .clone()
+        let metadata = NodeMetadata::new()
             .with_estimated_duration_ms(1000)
             .with_actual_duration_ms(950);
 
-        assert_eq!(node.metadata.estimated_duration_ms(), Some(1000));
-        assert_eq!(node.metadata.actual_duration_ms(), Some(950));
+        assert_eq!(metadata.estimated_duration_ms(), Some(1000));
+        assert_eq!(metadata.actual_duration_ms(), Some(950));
     }
 
     #[test]

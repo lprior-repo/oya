@@ -22,16 +22,14 @@
 
 use std::sync::Arc;
 
-use oya_workflow::{
-    checkpoint::{
-        compress, compression_ratio, decompress, serialize_state, space_savings,
-        storage::{InMemoryCheckpointStorage, StorageError},
-        CheckpointDecision, CheckpointId, CheckpointManager, CheckpointMetadata,
-        CheckpointStorage, CheckpointStrategy, RestoreError, RestoreResult,
-    },
-    error::{Error, Result},
-    PhaseOutput,
+use oya_workflow::checkpoint::{
+    compress, compression_ratio, decompress, serialize_state, space_savings,
+    CheckpointDecision, CheckpointId, CheckpointManager, CheckpointMetadata,
+    CheckpointStorage, CheckpointStrategy, RestoreError, RestoreResult,
 };
+use oya_workflow::checkpoint::storage::{InMemoryCheckpointStorage, StorageError};
+use oya_workflow::error::{Error, Result};
+use oya_workflow::PhaseOutput;
 
 use serde::{Deserialize, Serialize};
 
@@ -40,7 +38,7 @@ use serde::{Deserialize, Serialize};
 // =============================================================================
 
 /// Test workflow state for serialization.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, bincode::Encode, bincode::Decode)]
 struct TestWorkflowState {
     id: String,
     phase: String,
@@ -219,7 +217,7 @@ fn test_checkpoint_compression() {
     let compressed_result = compress(&uncompressed);
     assert!(compressed_result.is_ok(), "compression should succeed");
 
-    let compressed = compressed_result.ok().filter(|_| true).unwrap_or_default();
+    let compressed = compressed_result.ok().unwrap();
 
     assert!(
         compressed.len() < uncompressed.len(),
@@ -257,7 +255,7 @@ fn test_checkpoint_serialization() {
         serialized_result
     );
 
-    let serialized = serialized_result.ok().filter(|_| true).unwrap_or_default();
+    let serialized = serialized_result.ok().unwrap();
     assert!(!serialized.is_empty(), "serialized data should not be empty");
 }
 
@@ -284,7 +282,7 @@ fn test_checkpoint_save_to_storage() {
     let store_result = storage.store_checkpoint(data.clone(), metadata);
     assert!(store_result.is_ok(), "store should succeed");
 
-    let stored_id = store_result.ok().filter(|_| true).unwrap_or(checkpoint_id);
+    let stored_id = store_result.ok().unwrap();
     assert_eq!(stored_id, checkpoint_id, "stored ID should match");
 }
 
@@ -321,7 +319,7 @@ fn test_multiple_checkpoints_saved() {
     let list_result = storage.list_checkpoints();
     assert!(list_result.is_ok(), "list should succeed");
 
-    let ids = list_result.ok().filter(|_| true).unwrap_or_default();
+    let ids = list_result.ok().unwrap();
     assert_eq!(ids.len(), 3, "should have 3 checkpoints");
 }
 
@@ -341,7 +339,7 @@ fn test_checkpoint_decompression() {
     // Compress
     let compressed_result = compress(&original);
     assert!(compressed_result.is_ok(), "compression should succeed");
-    let compressed = compressed_result.ok().filter(|_| true).unwrap_or_default();
+    let compressed = compressed_result.ok().unwrap();
 
     // Decompress
     let decompressed_result = decompress(&compressed, original.len());
@@ -352,8 +350,7 @@ fn test_checkpoint_decompression() {
 
     let decompressed = decompressed_result
         .ok()
-        .filter(|_| true)
-        .unwrap_or_default();
+        .unwrap();
 
     assert_eq!(
         decompressed, original,
@@ -388,7 +385,7 @@ fn test_checkpoint_load_from_storage() {
     let load_result = storage.load_checkpoint(&checkpoint_id);
     assert!(load_result.is_ok(), "load should succeed");
 
-    let (loaded_data, loaded_metadata) = load_result.ok().filter(|_| true).unwrap_or_default();
+    let (loaded_data, loaded_metadata) = load_result.ok().unwrap();
     assert_eq!(loaded_data, data, "loaded data should match");
     assert_eq!(loaded_metadata.id, checkpoint_id, "loaded ID should match");
 }
@@ -439,7 +436,7 @@ fn test_checkpoint_round_trip_preserves_data() {
             original.len()
         );
 
-        let compressed = compressed_result.ok().filter(|_| true).unwrap_or_default();
+        let compressed = compressed_result.ok().unwrap();
 
         let decompressed_result = decompress(&compressed, original.len());
         assert!(
@@ -448,10 +445,7 @@ fn test_checkpoint_round_trip_preserves_data() {
             original.len()
         );
 
-        let decompressed = decompressed_result
-            .ok()
-            .filter(|_| true)
-            .unwrap_or_default();
+        let decompressed = decompressed_result.ok().unwrap();
 
         assert_eq!(
             decompressed, original,
@@ -576,7 +570,7 @@ fn test_clear_all_checkpoints() {
     // Verify we have 5 checkpoints
     let list_result = storage.list_checkpoints();
     assert!(list_result.is_ok(), "list should succeed");
-    let ids = list_result.ok().filter(|_| true).unwrap_or_default();
+    let ids = list_result.ok().unwrap();
     assert_eq!(ids.len(), 5, "should have 5 checkpoints");
 
     // Clear all
@@ -586,7 +580,7 @@ fn test_clear_all_checkpoints() {
     // Verify all are gone
     let list_result2 = storage.list_checkpoints();
     assert!(list_result2.is_ok(), "list should succeed after clear");
-    let ids2 = list_result2.ok().filter(|_| true).unwrap_or_default();
+    let ids2 = list_result2.ok().unwrap();
     assert_eq!(ids2.len(), 0, "should have 0 checkpoints after clear");
 }
 
@@ -597,7 +591,7 @@ fn test_clear_all_checkpoints() {
 /// THEN orphaned checkpoints should be identifiable
 #[test]
 fn test_orphan_checkpoint_detection() {
-    let storage = InMemoryCheckpointStorage::new();
+    let mut storage = InMemoryCheckpointStorage::new();
 
     // Store some checkpoints
     let id1 = CheckpointId::new();
@@ -619,7 +613,7 @@ fn test_orphan_checkpoint_detection() {
     let list_result = storage.list_checkpoints();
     assert!(list_result.is_ok(), "list should succeed");
 
-    let ids = list_result.ok().filter(|_| true).unwrap_or_default();
+    let ids = list_result.ok().unwrap();
     assert!(!ids.is_empty(), "should have checkpoints to check for orphans");
 }
 
@@ -632,7 +626,7 @@ fn test_storage_stats_accuracy() {
     let stats_result = storage.get_stats();
     assert!(stats_result.is_ok(), "get_stats should succeed");
 
-    let stats = stats_result.ok().filter(|_| true).unwrap_or_default();
+    let stats = stats_result.ok().unwrap();
     assert_eq!(stats.total_checkpoints, 0, "initial count should be 0");
     assert_eq!(stats.total_compressed_size, 0, "initial compressed size should be 0");
     assert_eq!(
@@ -657,7 +651,7 @@ fn test_storage_stats_accuracy() {
     let stats_result2 = storage.get_stats();
     assert!(stats_result2.is_ok(), "get_stats should succeed");
 
-    let stats2 = stats_result2.ok().filter(|_| true).unwrap_or_default();
+    let stats2 = stats_result2.ok().unwrap();
     assert_eq!(stats2.total_checkpoints, 1, "count should be 1");
     assert_eq!(stats2.total_compressed_size, 500, "compressed size should be 500");
     assert_eq!(
@@ -763,10 +757,7 @@ fn test_concurrent_checkpoint_operations() {
     for i in 0..10 {
         let storage_clone = Arc::clone(&storage);
         let handle = std::thread::spawn(move || {
-            let mut storage = storage_clone.lock().map_or_else(
-                |_| InMemoryCheckpointStorage::new(),
-                |s| s.clone(),
-            );
+            let mut storage = storage_clone.lock().unwrap();
 
             let id = CheckpointId::new();
             let metadata = CheckpointMetadata {
@@ -790,15 +781,11 @@ fn test_concurrent_checkpoint_operations() {
     }
 
     // Verify all checkpoints were stored
-    let storage = storage.lock().map_or_else(
-        |_| InMemoryCheckpointStorage::new(),
-        |s| s.clone(),
-    );
-
+    let storage = storage.lock().unwrap();
     let list_result = storage.list_checkpoints();
     assert!(list_result.is_ok(), "list should succeed");
 
-    let ids = list_result.ok().filter(|_| true).unwrap_or_default();
+    let ids = list_result.ok().unwrap();
     assert_eq!(ids.len(), 10, "should have 10 checkpoints");
 }
 
@@ -814,20 +801,12 @@ fn test_storage_stats_thread_safety() {
     for _ in 0..5 {
         let storage_clone = Arc::clone(&storage);
         let handle = std::thread::spawn(move || {
-            let storage = storage_clone.lock().map_or_else(
-                |_| InMemoryCheckpointStorage::new(),
-                |s| s.clone(),
-            );
+            let mut storage = storage_clone.lock().unwrap();
 
             // Get stats (read-only operation)
             let _ = storage.get_stats();
 
             // Add a checkpoint (write operation)
-            let mut storage_mut = storage_clone.lock().map_or_else(
-                |_| InMemoryCheckpointStorage::new(),
-                |s| s.clone(),
-            );
-
             let id = CheckpointId::new();
             let metadata = CheckpointMetadata {
                 id,
@@ -838,7 +817,7 @@ fn test_storage_stats_thread_safety() {
                 compression_ratio: 2.0,
             };
 
-            let _ = storage_mut.store_checkpoint(vec![1u8; 100], metadata);
+            let _ = storage.store_checkpoint(vec![1u8; 100], metadata);
         });
         handles.push(handle);
     }
@@ -869,12 +848,12 @@ fn test_complete_checkpoint_lifecycle() {
     // 2. Serialize
     let serialized_result = serialize_state(&state);
     assert!(serialized_result.is_ok(), "serialization should succeed");
-    let serialized = serialized_result.ok().filter(|_| true).unwrap_or_default();
+    let serialized = serialized_result.ok().unwrap();
 
     // 3. Compress
     let compressed_result = compress(&serialized);
     assert!(compressed_result.is_ok(), "compression should succeed");
-    let compressed = compressed_result.ok().filter(|_| true).unwrap_or_default();
+    let compressed = compressed_result.ok().unwrap();
 
     // 4. Store
     let mut storage = InMemoryCheckpointStorage::new();
@@ -895,7 +874,7 @@ fn test_complete_checkpoint_lifecycle() {
     // 5. Load
     let load_result = storage.load_checkpoint(&checkpoint_id);
     assert!(load_result.is_ok(), "load should succeed");
-    let (loaded_data, loaded_metadata) = load_result.ok().filter(|_| true).unwrap_or_default();
+    let (loaded_data, loaded_metadata) = load_result.ok().unwrap();
 
     assert_eq!(loaded_data, compressed, "loaded data should match");
     assert_eq!(loaded_metadata.id, checkpoint_id, "loaded ID should match");
@@ -905,8 +884,7 @@ fn test_complete_checkpoint_lifecycle() {
     assert!(decompressed_result.is_ok(), "decompression should succeed");
     let decompressed = decompressed_result
         .ok()
-        .filter(|_| true)
-        .unwrap_or_default();
+        .unwrap();
 
     // 7. Delete (cleanup)
     let delete_result = storage.delete_checkpoint(&checkpoint_id);
@@ -948,7 +926,7 @@ fn test_multiple_independent_checkpoints() {
         let load_result = storage.load_checkpoint(id);
         assert!(load_result.is_ok(), "checkpoint {} should load", i);
 
-        let (data, metadata) = load_result.ok().filter(|_| true).unwrap_or_default();
+        let (data, metadata) = load_result.ok().unwrap();
         assert_eq!(metadata.id, *id, "ID should match");
         assert_eq!(data.len(), 100 * (i + 1), "data size should match");
     }
@@ -961,6 +939,6 @@ fn test_multiple_independent_checkpoints() {
     let list_result = storage.list_checkpoints();
     assert!(list_result.is_ok(), "list should succeed");
 
-    let remaining_ids = list_result.ok().filter(|_| true).unwrap_or_default();
+    let remaining_ids = list_result.ok().unwrap();
     assert_eq!(remaining_ids.len(), 2, "should have 2 checkpoints remaining");
 }
