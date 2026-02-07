@@ -33,197 +33,93 @@
 use std::sync::Arc;
 use std::time::Instant;
 
+use anyhow::{Context, Result};
 use tokio::signal;
 use tracing::{error, info, warn};
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
 use oya_events::{EventBus, InMemoryEventStore};
 
-/// Error type for initialization failures.
-#[derive(Debug)]
-enum InitError {
-    Database(String),
-    Reconciler(String),
-    Io(std::io::Error),
-    AddrParse(std::net::AddrParseError),
-}
-
-impl std::fmt::Display for InitError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            InitError::Database(msg) => write!(f, "Database error: {}", msg),
-            InitError::Reconciler(msg) => write!(f, "Reconciler error: {}", msg),
-            InitError::Io(err) => write!(f, "IO error: {}", err),
-            InitError::AddrParse(err) => write!(f, "Addr parse error: {}", err),
-        }
-    }
-}
-
-impl std::error::Error for InitError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            InitError::Database(_) => None,
-            InitError::Reconciler(_) => None,
-            InitError::Io(err) => Some(err),
-            InitError::AddrParse(err) => Some(err),
-        }
-    }
-}
-
-impl From<std::io::Error> for InitError {
-    fn from(err: std::io::Error) -> Self {
-        InitError::Io(err)
-    }
-}
-
-impl From<std::net::AddrParseError> for InitError {
-    fn from(err: std::net::AddrParseError) -> Self {
-        InitError::AddrParse(err)
-    }
-}
-
 /// Main entry point for OYA.
 ///
 /// Initializes all subsystems in the correct order and runs until shutdown.
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()> {
     let start_time = Instant::now();
 
     // Initialize tracing
     init_tracing();
 
-    info!("🌀 OYA SDLC System starting...");
+    info!("OYA SDLC System starting...");
 
-    // Step 1: SurrealDB Connection
-    info!("📦 Step 1: Connecting to SurrealDB...");
-    if let Err(e) = init_database().await {
-        error!("❌ Database initialization failed: {}", e);
-        error!("Please check your database configuration and permissions");
-        return;
-    }
-    info!("✅ SurrealDB connected and healthy");
+    // Initialize all subsystems using functional composition
+    let _db_client = init_database().await.context(
+        "Database initialization failed. Please check your database configuration and permissions",
+    )?;
 
-    // Step 2: EventBus (required before other subsystems)
-    info!("🔌 Step 2: Initializing EventBus...");
-    let event_store = Arc::new(InMemoryEventStore::new());
-    let event_bus = Arc::new(EventBus::new(event_store));
-    info!("✅ EventBus initialized");
+    let _event_bus = init_event_bus();
 
-    // Step 3: Reconciler (required for state management)
-    info!("🔄 Step 3: Initializing Reconciler...");
+    info!("SurrealDB connected and healthy");
+    info!("EventBus initialized");
+
     // TODO: Reconciler initialization pending completion of reconciler crate
-    // let reconciler_config = ReconcilerConfig::default();
-    // let reconciler = match Reconciler::with_event_executor(event_bus.clone(), reconciler_config) {
-    //     Ok(r) => {
-    //         info!("✅ Reconciler initialized");
-    //         Arc::new(r)
-    //     }
-    //     Err(e) => {
-    //         error!("❌ Reconciler initialization failed: {}", e);
-    //         error!("Cannot continue without reconciler");
-    //         return;
-    //     }
-    // };
+    // let reconciler = init_reconciler(event_bus.clone())?;
+    // info!("Reconciler initialized");
 
-    // Step 4: Desired State Provider
-    info!("📋 Step 4: Initializing Desired State Provider...");
     // TODO: Desired state provider pending completion
-    // let desired_state = Arc::new(InMemoryDesiredStateProvider::new(
-    //     oya_reconciler::DesiredState::new(),
-    // ));
-    info!("✅ Desired State Provider initialized (stub)");
+    // let desired_state = init_desired_state_provider()?;
+    // info!("Desired State Provider initialized (stub)");
 
-    // Step 5: Start Reconciliation Loop
-    info!("🔁 Step 5: Starting Reconciliation Loop...");
     // TODO: Reconciliation loop pending completion
-    // let projection = Arc::new(oya_reconciler::ManagedProjection::new(
-    //     oya_events::AllBeadsProjection::new(),
-    // ));
-    //
-    // let mut loop_runner = ReconciliationLoop::new(
+    // let loop_handle = spawn_reconciliation_loop(
     //     reconciler.clone(),
     //     desired_state.clone(),
-    //     projection,
-    //     LoopConfig::default(),
-    // );
-    //
-    // // Spawn reconciliation loop in background
-    // let loop_handle = tokio::spawn(async move {
-    //     info!("🔄 Reconciliation loop running");
-    //     // Note: We don't actually run the loop here as it would block
-    //     // In production, this would be: loop_runner.run().await
-    //     // For now, we just note that it's ready
-    //     Ok::<(), oya_reconciler::Error>(())
-    // });
+    // )?;
+    // info!("Reconciliation Loop started (stub)");
 
-    info!("✅ Reconciliation Loop started (stub)");
-
-    // Step 6: Start Axum API
-    info!("🌐 Step 6: Starting Axum API server...");
     // TODO: API server pending completion of oya-web crate
-    // let api_addr = match "0.0.0.0:3000".parse() {
-    //     Ok(addr) => addr,
-    //     Err(e) => {
-    //         error!("❌ Failed to parse API address: {}", e);
-    //         return;
-    //     }
-    // };
-    //
-    // let api_handle = tokio::spawn(async move {
-    //     if let Err(e) = run_server(api_addr).await {
-    //         error!("❌ API server error: {}", e);
-    //         Err(())
-    //     } else {
-    //         Ok(())
-    //     }
-    // });
-    //
-    // info!("✅ API server started on http://{}", api_addr);
-    info!("✅ API server started (stub)");
+    // let api_handle = spawn_api_server()?;
+    // info!("API server started (stub)");
 
     // Report startup time
     let startup_duration = start_time.elapsed();
     info!(
-        "🚀 OYA SDLC System started successfully in {:?}",
+        "OYA SDLC System started successfully in {:?}",
         startup_duration
     );
 
     if startup_duration.as_secs() >= 10 {
         warn!(
-            "⚠️  Startup took {:?} which is longer than the 10s target",
+            "Startup took {:?} which is longer than the 10s target",
             startup_duration
         );
     }
 
     // Wait for shutdown signal
-    info!("🌀 OYA is running. Press Ctrl+C to stop.");
-    tokio::select! {
-        _ = signal::ctrl_c() => {
-            info!("🛑 Received Ctrl+C, initiating graceful shutdown...");
-        }
-        // TODO: Re-enable when reconciler and API are ready
-        // result = &mut loop_handle => {
-        //     match result {
-        //         Ok(Ok(())) => info!("Reconciliation loop completed"),
-        //         Ok(Err(e)) => error!("Reconciliation loop error: {}", e),
-        //         Err(e) => error!("Reconciliation loop panicked: {}", e),
-        //     }
-        // }
-        // result = &mut api_handle => {
-        //     match result {
-        //         Ok(Ok(())) => info!("API server stopped"),
-        //         Ok(Err(e)) => error!("API server error (should not happen)"),
-        //         Err(e) => error!("API server panicked: {}", e),
-        //     }
-        // }
-    }
+    info!("OYA is running. Press Ctrl+C to stop.");
+    wait_for_shutdown().await;
 
     // Graceful shutdown
-    info!("🧹 Cleaning up...");
+    info!("Cleaning up...");
     // Note: In production, we would coordinate with ShutdownCoordinator here
     // to ensure checkpoints are saved within 25s and actors stop within 30s
 
-    info!("👋 OYA SDLC System stopped gracefully");
+    // Example of fail-fast cleanup pattern (would replace current stub):
+    //
+    // OLD pattern (continues on error):
+    // for resource in resources {
+    //     cleanup_resource(&resource).await;  // Ignores errors
+    // }
+    //
+    // NEW pattern (fail-fast):
+    // let resources = vec![database, event_bus, reconciler, api_server];
+    // stream::iter(resources)
+    //     .map(|resource| async move { cleanup_resource(&resource).await })
+    //     .try_collect()
+    //     .await?;
+
+    info!("OYA SDLC System stopped gracefully");
+    Ok(())
 }
 
 /// Initialize tracing subscriber with environment filter.
@@ -237,24 +133,34 @@ fn init_tracing() {
 /// Initialize SurrealDB connection.
 ///
 /// This is the first initialization step. All other subsystems depend on the database.
-async fn init_database() -> Result<oya_events::db::SurrealDbClient, InitError> {
+async fn init_database() -> Result<oya_events::db::SurrealDbClient> {
     use oya_events::db::SurrealDbConfig;
 
-    // For now, use a local database path
-    // TODO: Make this configurable via environment variables or config file
     let db_path = std::path::Path::new(".oya/data/db");
-
     let config = SurrealDbConfig::new(db_path.to_string_lossy().to_string());
 
     let client = oya_events::db::SurrealDbClient::connect(config)
         .await
-        .map_err(|e| InitError::Database(format!("Failed to connect: {}", e)))?;
+        .context("Failed to connect to SurrealDB")?;
 
-    // Verify database is healthy
     client
         .health_check()
         .await
-        .map_err(|e| InitError::Database(format!("Health check failed: {}", e)))?;
+        .context("SurrealDB health check failed")?;
 
     Ok(client)
+}
+
+/// Initialize EventBus with pure functional construction.
+fn init_event_bus() -> Arc<EventBus> {
+    let event_store = Arc::new(InMemoryEventStore::new());
+    Arc::new(EventBus::new(event_store))
+}
+
+/// Wait for shutdown signal (Ctrl+C).
+async fn wait_for_shutdown() {
+    match signal::ctrl_c().await {
+        Ok(()) => info!("Received Ctrl+C, initiating graceful shutdown"),
+        Err(err) => error!("Failed to listen for shutdown signal: {}", err),
+    }
 }

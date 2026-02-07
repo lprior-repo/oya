@@ -1,32 +1,75 @@
+################################################################################
+# OYA Zellij Plugin - Critical Configuration Notes
+#
+# LESSON LEARNED: This plugin MUST be built with Rust 1.83 + wasm32-wasi target
+#
+# WHY: Zellij 0.43.1 requires WASM plugins to have a "_start" function export.
+#      - Rust 1.84+ deprecated "wasm32-wasi" → renamed to "wasm32-wasip1"
+#      - wasm32-wasip1 produces WASM WITHOUT "_start" export
+#      - Building with wasm32-wasip1 causes: "failed to find function export '_start'"
+#
+# SOLUTION: Build as standalone binary with Rust 1.83 (last version with wasm32-wasi)
+#
+# VERIFICATION: llvm-nm target/wasm32-wasi/release/oya_zellij.wasm | grep " T _start"
+#              Should show: 00000c4d T _start
+#
+# BUILD COMMAND: rustup run 1.83 cargo build --release --target wasm32-wasi
+#
+# ⚠️  NEVER CHANGE:
+#    - DO NOT upgrade Rust beyond 1.83 for this plugin
+#    - DO NOT use wasm32-wasip1 or wasm32-wasip2 targets
+#    - DO NOT upgrade zellij-tile beyond 0.41.1 without testing
+#    - DO NOT convert back to library ([lib])
+#    - DO NOT remove [workspace] section (keeps this standalone)
+################################################################################
+
 [package]
 name = "oya-zellij"
 version = "0.1.0"
-edition = "2021"
+edition = "2021"  # Keep 2021 (not 2024) - Rust 1.83 doesn't support edition 2024
 description = "Zellij plugin for OYA pipeline orchestration"
 
-[lib]
-crate-type = ["cdylib"]
+# Binary (not library) ensures _start export
+# Libraries (cdylib) don't export _start → Zellij can't load them
+[[bin]]
+name = "oya_zellij"
+path = "src/main.rs"
+
+# Apply same coding standards as main workspace
+# See: /Cargo.toml [workspace.lints.*]
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+unwrap_used = "forbid"
+expect_used = "forbid"
+panic = "forbid"
+todo = "forbid"
+unimplemented = "forbid"
+unreachable = "forbid"
 
 [dependencies]
-# Zellij plugin API
-zellij-tile = "0.43"
+# ⚠️  PINNED to 0.41.1 for Rust 1.83 + wasm32-wasi compatibility
+# Later versions (0.43+) may require newer Rust or have different WASM exports
+zellij-tile = "0.41.1"
 
 # Serialization
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 
-# Error handling
-thiserror = "2"
-anyhow = "1"
+# Error handling - pinned to 1.x (Rust 1.83 compatible)
+# 2.x requires newer Rust
+thiserror = "1.0"
+anyhow = "1.0"
 
-# Functional programming
+# Functional programming - pinned versions for Rust 1.83 compatibility
 im = "15.1"
 tap = "1.0"
-itertools = "0.14"
-strum = { version = "0.26", features = ["derive"] }
+itertools = "0.11"      # 0.14+ requires Rust 1.85+
+strum = { version = "0.25", features = ["derive"] }  # 0.26+ requires Rust 1.85+
 
-# Shared types from workspace
-oya-shared = { path = "../oya-shared" }
-
-[lints]
-workspace = true
+# Shared types from workspace - commented out for standalone build
+# Re-enable if you can make it work with Rust 1.83 + edition2024 conflicts
+# oya-shared = { path = "../oya-shared" }
+[workspace]
+members = ["."]

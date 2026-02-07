@@ -50,17 +50,32 @@ pub enum Error {
     DirectoryNotFound { path: PathBuf },
 
     // Persistence errors
-    #[error("failed to create directory '{path}': {reason}")]
-    DirectoryCreationFailed { path: PathBuf, reason: String },
+    #[error("failed to create directory '{path}'")]
+    DirectoryCreationFailed {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
 
-    #[error("failed to write file '{path}': {reason}")]
-    FileWriteFailed { path: PathBuf, reason: String },
+    #[error("failed to write file '{path}'")]
+    FileWriteFailed {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
 
-    #[error("failed to read file '{path}': {reason}")]
-    FileReadFailed { path: PathBuf, reason: String },
+    #[error("failed to read file '{path}'")]
+    FileReadFailed {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
 
-    #[error("JSON parse error: {reason}")]
-    JsonParseFailed { reason: String },
+    #[error("JSON parse error")]
+    JsonParseFailed {
+        #[source]
+        source: serde_json::Error,
+    },
 
     #[error("invalid record: {reason}")]
     InvalidRecord { reason: String },
@@ -70,6 +85,12 @@ pub enum Error {
 
     #[error("task not found: {slug}")]
     TaskNotFound { slug: String },
+
+    #[error("duplicate stage names: {stages}")]
+    DuplicateStages { stages: String },
+
+    #[error("circular dependency detected: {stage} depends on {depends_on} creating a cycle")]
+    CircularDependency { stage: String, depends_on: String },
 
     // Process execution errors
     #[error("command not found in PATH: {cmd}")]
@@ -146,34 +167,32 @@ impl Error {
     }
 
     /// Create a file read error.
-    pub fn file_read_failed(path: impl Into<PathBuf>, reason: impl Into<String>) -> Self {
+    pub fn file_read_failed(path: impl Into<PathBuf>, source: std::io::Error) -> Self {
         Self::FileReadFailed {
             path: path.into(),
-            reason: reason.into(),
+            source,
         }
     }
 
     /// Create a file write error.
-    pub fn file_write_failed(path: impl Into<PathBuf>, reason: impl Into<String>) -> Self {
+    pub fn file_write_failed(path: impl Into<PathBuf>, source: std::io::Error) -> Self {
         Self::FileWriteFailed {
             path: path.into(),
-            reason: reason.into(),
+            source,
         }
     }
 
     /// Create a directory creation error.
-    pub fn directory_creation_failed(path: impl Into<PathBuf>, reason: impl Into<String>) -> Self {
+    pub fn directory_creation_failed(path: impl Into<PathBuf>, source: std::io::Error) -> Self {
         Self::DirectoryCreationFailed {
             path: path.into(),
-            reason: reason.into(),
+            source,
         }
     }
 
     /// Create a JSON parse error.
-    pub fn json_parse_failed(reason: impl Into<String>) -> Self {
-        Self::JsonParseFailed {
-            reason: reason.into(),
-        }
+    pub fn json_parse_failed(source: serde_json::Error) -> Self {
+        Self::JsonParseFailed { source }
     }
 
     /// Create an invalid record error.

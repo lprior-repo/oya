@@ -9,6 +9,8 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
+use itertools::Itertools;
+use proptest::prelude::*;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -45,7 +47,7 @@ impl MockExecutor {
 
     async fn execution_count(&self, key: &str) -> usize {
         let counts = self.execution_count.read().await;
-        *counts.get(key).unwrap_or(&0)
+        counts.get(key).copied().unwrap_or(0)
     }
 
     async fn get_result(&self, key: &str) -> Option<String> {
@@ -140,48 +142,62 @@ async fn test_same_key_same_input_deterministic() {
     assert_eq!(count, 1, "Should only execute once due to caching");
 }
 
-#[tokio::test]
-async fn test_concurrent_execution_only_one_executes() {
-    // Given: IdempotentExecutor
-    let executor = MockExecutor::new();
-    let idem_executor = IdempotentExecutor::new(executor);
-    let key = "concurrent-key";
-    let input = "concurrent-input";
+proptest! {
+    /// Property: Concurrent execution with same key only executes once
+    #[test]
+    fn prop_concurrent_execution_only_one_executes(
+        concurrency_level in 2usize..50,
+    ) {
+        let rt = tokio::runtime::Runtime::new()
+            .map_err(|e| proptest::test_runner::TestCaseError::fail(e.to_string()))?;
 
-    // When: Execute concurrently from multiple tasks
-    let mut handles = Vec::new();
-    for _ in 0..10 {
-        let executor_clone = idem_executor.clone();
-        let key_owned = key.to_string();
-        let input_owned = input.to_string();
+        rt.block_on(async {
+            // Given: IdempotentExecutor
+            let executor = MockExecutor::new();
+            let idem_executor = IdempotentExecutor::new(executor);
+            let key = "concurrent-key";
+            let input = "concurrent-input";
 
-        let handle =
-            tokio::spawn(async move { executor_clone.execute(&key_owned, &input_owned).await });
-        handles.push(handle);
+            // When: Execute concurrently from multiple tasks
+            let mut handles = Vec::new();
+            for _ in 0..concurrency_level {
+                let executor_clone = idem_executor.clone();
+                let key_owned = key.to_string();
+                let input_owned = input.to_string();
+
+                let handle = tokio::spawn(async move {
+                    executor_clone.execute(&key_owned, &input_owned).await
+                });
+                handles.push(handle);
+            }
+
+            // Then: All results should be identical
+            let results: Vec<_> = futures::future::join_all(handles)
+                .await
+                .into_iter()
+                .map(|r| r.ok())
+                .collect();
+
+            prop_assert!(
+                results.iter().all(|r| r.is_some()),
+                "All tasks should complete"
+            );
+            prop_assert!(
+                results.windows(2).all(|w| w[0] == w[1]),
+                "All concurrent executions should return same result"
+            );
+
+            // And: Only ONE execution should have occurred
+            let count = idem_executor.executor.execution_count(key).await;
+            prop_assert_eq!(
+                count, 1,
+                "Only one execution should occur despite {} concurrent calls",
+                concurrency_level
+            );
+
+            Ok::<(), proptest::test_runner::TestCaseError>(())
+        }).map_err(|e| proptest::test_runner::TestCaseError::fail(e.to_string()))?;
     }
-
-    // Then: All results should be identical
-    let mut results = Vec::new();
-    for handle in handles {
-        let result = handle.await;
-        assert!(result.is_ok(), "Task should complete");
-        results.push(result.ok());
-    }
-
-    let first_result = &results[0];
-    for result in &results[1..] {
-        assert_eq!(
-            result, first_result,
-            "All concurrent executions should return same result"
-        );
-    }
-
-    // And: Only ONE execution should have occurred (not 10)
-    let count = idem_executor.executor.execution_count(key).await;
-    assert_eq!(
-        count, 1,
-        "Only one execution should occur despite 10 concurrent calls"
-    );
 }
 
 #[tokio::test]
@@ -216,72 +232,100 @@ async fn test_different_keys_execute_independently() {
     assert_eq!(idem_executor.executor.execution_count("key-3").await, 1);
 }
 
-#[tokio::test]
-async fn test_execute_once_under_load() {
-    // Given: IdempotentExecutor
-    let executor = MockExecutor::new();
-    let idem_executor = IdempotentExecutor::new(executor);
-    let key = "load-key";
-    let input = "load-input";
+proptest! {
+    /// Property: Execute once guarantee under variable load
+    #[test]
+    fn prop_execute_once_under_load(
+        load_factor in 10usize..100,
+    ) {
+        let rt = tokio::runtime::Runtime::new()
+            .map_err(|e| proptest::test_runner::TestCaseError::fail(e.to_string()))?;
 
-    // When: Execute 50 times concurrently
-    let mut handles = Vec::new();
-    for _ in 0..50 {
-        let executor_clone = idem_executor.clone();
-        let key_owned = key.to_string();
-        let input_owned = input.to_string();
+        rt.block_on(async {
+            // Given: IdempotentExecutor
+            let executor = MockExecutor::new();
+            let idem_executor = IdempotentExecutor::new(executor);
+            let key = "load-key";
+            let input = "load-input";
 
-        handles.push(tokio::spawn(async move {
-            executor_clone.execute(&key_owned, &input_owned).await
-        }));
+            // When: Execute load_factor times concurrently
+            let mut handles = Vec::new();
+            for _ in 0..load_factor {
+                let executor_clone = idem_executor.clone();
+                let key_owned = key.to_string();
+                let input_owned = input.to_string();
+
+                handles.push(tokio::spawn(async move {
+                    executor_clone.execute(&key_owned, &input_owned).await
+                }));
+            }
+
+            // Wait for all to complete
+            let results: Vec<_> = futures::future::join_all(handles)
+                .await
+                .into_iter()
+                .filter_map(|r| r.ok())
+                .collect();
+
+            // Then: All results should be identical
+            prop_assert!(
+                results.windows(2).all(|w| w[0] == w[1]),
+                "All results should match"
+            );
+
+            // And: Despite load_factor concurrent calls, only 1 execution
+            let count = idem_executor.executor.execution_count(key).await;
+            prop_assert_eq!(
+                count, 1,
+                "Should only execute once under load of {} concurrent calls",
+                load_factor
+            );
+
+            Ok::<(), proptest::test_runner::TestCaseError>(())
+        }).map_err(|e| proptest::test_runner::TestCaseError::fail(e.to_string()))?;
     }
-
-    // Wait for all to complete
-    let results: Vec<_> = futures::future::join_all(handles)
-        .await
-        .into_iter()
-        .filter_map(|r| r.ok())
-        .collect();
-
-    // Then: All results should be identical
-    let first = &results[0];
-    for result in &results[1..] {
-        assert_eq!(result, first, "All results should match");
-    }
-
-    // And: Despite 50 concurrent calls, only 1 execution
-    let count = idem_executor.executor.execution_count(key).await;
-    assert_eq!(count, 1, "Should only execute once under heavy load");
 }
 
-#[tokio::test]
-async fn test_cache_persists_across_calls() {
-    // Given: IdempotentExecutor
-    let executor = MockExecutor::new();
-    let idem_executor = IdempotentExecutor::new(executor);
-    let key = "persist-key";
-    let input = "persist-input";
+proptest! {
+    /// Property: Cache persists across variable number of calls
+    #[test]
+    fn prop_cache_persists_across_calls(
+        repeat_count in 2usize..20,
+    ) {
+        let rt = tokio::runtime::Runtime::new()
+            .map_err(|e| proptest::test_runner::TestCaseError::fail(e.to_string()))?;
 
-    // When: Execute first time
-    let result1 = idem_executor.execute(key, input).await;
-    assert!(result1.is_ok(), "First execution should succeed");
+        rt.block_on(async {
+            // Given: IdempotentExecutor
+            let executor = MockExecutor::new();
+            let idem_executor = IdempotentExecutor::new(executor);
+            let key = "persist-key";
+            let input = "persist-input";
 
-    // Check execution count
-    let count1 = idem_executor.executor.execution_count(key).await;
-    assert_eq!(count1, 1, "Should execute once");
+            // When: Execute first time
+            let result1 = idem_executor.execute(key, input).await;
+            prop_assert!(result1.is_ok(), "First execution should succeed");
 
-    // When: Execute 5 more times
-    for _ in 0..5 {
-        let result = idem_executor.execute(key, input).await;
-        assert!(
-            result.is_ok(),
-            "Subsequent executions should return cached result"
-        );
+            // Check execution count
+            let count1 = idem_executor.executor.execution_count(key).await;
+            prop_assert_eq!(count1, 1, "Should execute once");
+
+            // When: Execute repeat_count more times
+            for _ in 0..repeat_count {
+                let result = idem_executor.execute(key, input).await;
+                prop_assert!(
+                    result.is_ok(),
+                    "Subsequent executions should return cached result"
+                );
+            }
+
+            // Then: Execution count should still be 1 (cached)
+            let count2 = idem_executor.executor.execution_count(key).await;
+            prop_assert_eq!(count2, 1, "Should not re-execute, should use cache");
+
+            Ok::<(), proptest::test_runner::TestCaseError>(())
+        }).map_err(|e| proptest::test_runner::TestCaseError::fail(e.to_string()))?;
     }
-
-    // Then: Execution count should still be 1 (cached)
-    let count2 = idem_executor.executor.execution_count(key).await;
-    assert_eq!(count2, 1, "Should not re-execute, should use cache");
 }
 
 #[tokio::test]

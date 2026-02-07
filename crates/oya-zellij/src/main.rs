@@ -3,6 +3,70 @@
 //! Lints inherited from workspace - no local exceptions allowed.
 //!
 //! Real-time terminal UI for pipeline status, bead execution, and stage progress.
+//!
+//! # Functional State Management Architecture
+//!
+//! This plugin uses a functional state management pattern with exterior mutability
+//! to bridge between pure functional state transformations and the Zellij trait's
+//! `&mut self` requirement.
+//!
+//! ## Why Exterior Mut?
+//!
+//! The `zellij_tile::Plugin` trait requires methods with `&mut self` signatures:
+//! ```rust
+//! fn update(&mut self, event: Event) -> bool;
+//! fn render(&mut self, rows: usize, cols: usize);
+//! ```
+//!
+//! To maintain functional purity internally while satisfying this interface, we use
+//! the **exterior mut pattern**:
+//!
+//! ```rust
+//! // Pure functional handler - returns new state
+//! fn handle_event(self, event: Event) -> (Self, bool) {
+//!     match event {
+//!         Event::Timer(_) => self.handle_timer_event(),
+//!         // ...
+//!     }
+//! }
+//!
+//! // Zellij trait implementation uses exterior mut
+//! impl zellij_tile::Plugin for State {
+//!     fn update(&mut self, event: Event) -> bool {
+//!         let (new_state, should_render) = std::mem::replace(self, State::default())
+//!             .handle_event(event);
+//!         *self = new_state;
+//!         should_render
+//!     }
+//! }
+//! ```
+//!
+//! ## Benefits
+//!
+//! - **Explicit state transformations**: Every state change returns a new state
+//! - **No hidden mutations**: All transformations are visible in function signatures
+//! - **Easy to test**: Pure functions are trivial to unit test
+//! - **Structural sharing**: `im::Vector` and `im::HashMap` provide efficient cloning
+//!
+//! ## Side Effects
+//!
+//! Note that `web_request()` calls are I/O side effects. While we can't make these
+//! pure, we structure the code to separate state transformation from I/O:
+//!
+//! ```rust
+//! fn load_beads(self) -> (Self, Result<()>) {
+//!     // Check cache, return early if valid (pure)
+//!     if let Some((cached, _)) = &self.beads_cache {
+//!         // ...
+//!     }
+//!
+//!     // Perform web request (side effect)
+//!     web_request(&url, HttpVerb::Get, ...);
+//!
+//!     // Return new state (pure transformation)
+//!     (self, Ok(()))
+//! }
+//! ```
 
 mod command_pane;
 mod log_stream;
@@ -18,8 +82,10 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 const AGENT_EVENT_LIMIT: usize = 50;
 
 // Log streaming backpressure constants
-const MAX_LOG_MESSAGES: usize = 1000;  // Maximum messages in buffer (backpressure limit)
-const LOG_EVENT_NAME: &str = "log";    // Custom message name for log streaming
+#[allow(dead_code)]
+const MAX_LOG_MESSAGES: usize = 1000; // Maximum messages in buffer (backpressure limit)
+#[allow(dead_code)]
+const LOG_EVENT_NAME: &str = "log"; // Custom message name for log streaming
 
 // Context keys for identifying web request responses
 const CTX_REQUEST_TYPE: &str = "request_type";
@@ -30,6 +96,7 @@ const CTX_AGENTS_LIST: &str = "agents_list";
 const CTX_GRAPH: &str = "graph";
 
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 struct GraphNode {
     id: String,
     label: String,
@@ -86,6 +153,7 @@ impl NodeState {
 }
 
 // Plugin state
+#[derive(Clone)]
 struct State {
     // Current view mode
     mode: ViewMode,
@@ -100,6 +168,7 @@ struct State {
     beads_cache: Option<(Vector<BeadInfo>, Instant)>,
     agents_cache: Option<(Vector<AgentInfo>, Instant)>,
     pipeline_caches: HashMap<String, (Vector<StageInfo>, Instant)>,
+    #[allow(clippy::type_complexity)]
     graph_cache: Option<(
         Vector<GraphNode>,
         Vector<GraphEdge>,
@@ -131,6 +200,7 @@ struct State {
     command_panes: HashMap<String, command_pane::CommandPane>,
 
     // Log streaming with backpressure
+    #[allow(dead_code)]
     log_buffer: log_stream::LogBuffer,
 }
 
@@ -163,7 +233,7 @@ impl Default for State {
     }
 }
 
-#[derive(Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Default, Clone, Copy, PartialEq, Eq, Debug)]
 enum ViewMode {
     #[default]
     BeadList,
@@ -230,6 +300,7 @@ enum StageStatus {
 }
 
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 struct AgentInfo {
     id: String,
     state: AgentState,
@@ -241,6 +312,7 @@ struct AgentInfo {
 }
 
 #[derive(Clone, Debug, Default)]
+#[allow(dead_code)]
 struct WorkloadHistory {
     beads_completed: u64,
     operations_executed: u64,
@@ -296,6 +368,7 @@ enum AgentState {
 }
 
 impl AgentState {
+    #[allow(dead_code)]
     fn as_str(&self) -> &str {
         match self {
             Self::Idle => "idle",
@@ -306,6 +379,7 @@ impl AgentState {
         }
     }
 
+    #[allow(dead_code)]
     fn color(&self) -> &str {
         match self {
             Self::Idle => "\x1b[36m",
@@ -355,10 +429,14 @@ register_plugin!(State);
 impl ZellijPlugin for State {
     fn load(&mut self, configuration: BTreeMap<String, String>) {
         // Get server URL from config
-        self.server_url = configuration
+        let server_url = configuration
             .get("server_url")
             .map(|s| s.to_string())
             .unwrap_or_else(|| "http://localhost:3000".to_string());
+
+        // Create new state with configuration loaded
+        let new_state = self.clone().with_config(server_url);
+        *self = new_state;
 
         // Request permissions (WebAccess required for HTTP calls)
         request_permission(&[
@@ -384,240 +462,9 @@ impl ZellijPlugin for State {
     }
 
     fn update(&mut self, event: Event) -> bool {
-        match event {
-            Event::Key(key_with_mod) => {
-                // Handle Ctrl-d (page down) and Ctrl-u (page up) first
-                if key_with_mod.key_modifiers.contains(&KeyModifier::Ctrl) {
-                    const PAGE_SIZE: usize = 20;
-
-                    return match key_with_mod.bare_key {
-                        BareKey::Char('d') => {
-                            // Page down: move forward by PAGE_SIZE
-                            self.selected_index = self
-                                .selected_index
-                                .saturating_add(PAGE_SIZE)
-                                .min(self.beads.len().saturating_sub(1));
-                            if self.mode == ViewMode::PipelineView {
-                                self.load_pipeline_for_selected();
-                            }
-                            true
-                        }
-                        BareKey::Char('u') => {
-                            // Page up: move backward by PAGE_SIZE
-                            self.selected_index = self.selected_index.saturating_sub(PAGE_SIZE);
-                            if self.mode == ViewMode::PipelineView {
-                                self.load_pipeline_for_selected();
-                            }
-                            true
-                        }
-                        _ => false,
-                    };
-                }
-
-                // Regular key handling
-                match key_with_mod.bare_key {
-                    BareKey::Char('q') | BareKey::Esc => {
-                        close_focus();
-                        false
-                    }
-                    BareKey::Char('j') | BareKey::Down => {
-                        if self.mode == ViewMode::PipelineView {
-                            // Navigate pipeline stages
-                            if self.selected_stage_index
-                                < self.pipeline_stages.len().saturating_sub(1)
-                            {
-                                self.selected_stage_index =
-                                    self.selected_stage_index.saturating_add(1);
-                            }
-                        } else {
-                            // Navigate beads
-                            if self.selected_index < self.beads.len().saturating_sub(1) {
-                                self.selected_index = self.selected_index.saturating_add(1);
-                                if self.mode == ViewMode::PipelineView {
-                                    self.load_pipeline_for_selected();
-                                }
-                            }
-                        }
-                        true
-                    }
-                    BareKey::Char('k') | BareKey::Up => {
-                        if self.mode == ViewMode::PipelineView {
-                            // Navigate pipeline stages
-                            self.selected_stage_index = self.selected_stage_index.saturating_sub(1);
-                        } else {
-                            // Navigate beads
-                            self.selected_index = self.selected_index.saturating_sub(1);
-                            if self.mode == ViewMode::PipelineView {
-                                self.load_pipeline_for_selected();
-                            }
-                        }
-                        true
-                    }
-                    BareKey::Char('g') => {
-                        self.selected_index = 0;
-                        true
-                    }
-                    BareKey::Char('G') => {
-                        self.selected_index = self.beads.len().saturating_sub(1);
-                        true
-                    }
-                    BareKey::Char('1') => {
-                        self.mode = ViewMode::BeadList;
-                        true
-                    }
-                    BareKey::Char('2') => {
-                        self.mode = ViewMode::BeadDetail;
-                        true
-                    }
-                    BareKey::Char('3') => {
-                        self.mode = ViewMode::PipelineView;
-                        self.load_pipeline_for_selected();
-                        true
-                    }
-                    BareKey::Char('4') => {
-                        self.mode = ViewMode::AgentView;
-                        self.load_agents();
-                        true
-                    }
-                    BareKey::Char('5') => {
-                        self.mode = ViewMode::GraphView;
-                        self.load_graph();
-                        true
-                    }
-                    BareKey::Char('6') => {
-                        self.mode = ViewMode::SystemHealth;
-                        self.load_system_health();
-                        true
-                    }
-                    BareKey::Char('7') => {
-                        self.mode = ViewMode::LogAggregator;
-                        self.load_log_aggregator();
-                        true
-                    }
-                    BareKey::Enter => {
-                        // Handle Enter key based on current mode
-                        if self.mode == ViewMode::PipelineView {
-                            // In PipelineView: open command pane to rerun selected stage
-                            if let Some(bead) = self.beads.get(self.selected_index) {
-                                if let Some(stage) =
-                                    self.pipeline_stages.get(self.selected_stage_index)
-                                {
-                                    self.open_command_pane_for_stage(&bead.id, &stage.name);
-                                }
-                            }
-                        } else {
-                            // Other modes: stay in current mode and reload data
-                            self.mode = match self.mode {
-                                ViewMode::PipelineView => ViewMode::PipelineView,
-                                ViewMode::AgentView => ViewMode::AgentView,
-                                ViewMode::GraphView => ViewMode::GraphView,
-                                ViewMode::SystemHealth => ViewMode::SystemHealth,
-                                ViewMode::LogAggregator => ViewMode::LogAggregator,
-                                _ => self.mode,
-                            };
-                            if self.mode == ViewMode::PipelineView {
-                                self.load_pipeline_for_selected();
-                            }
-                            if self.mode == ViewMode::AgentView {
-                                self.load_agents();
-                            }
-                            if self.mode == ViewMode::GraphView {
-                                self.load_graph();
-                            }
-                            if self.mode == ViewMode::SystemHealth {
-                                self.load_system_health();
-                            }
-                            if self.mode == ViewMode::LogAggregator {
-                                self.load_log_aggregator();
-                            }
-                        }
-                        true
-                    }
-                    BareKey::Char('r') => {
-                        self.beads_cache = None;
-                        self.agents_cache = None;
-                        self.pipeline_caches = HashMap::new();
-                        self.load_beads();
-                        if self.mode == ViewMode::PipelineView {
-                            self.load_pipeline_for_selected();
-                        }
-                        if self.mode == ViewMode::GraphView {
-                            self.load_graph();
-                        }
-                        if self.mode == ViewMode::SystemHealth {
-                            self.load_system_health();
-                        }
-                        if self.mode == ViewMode::LogAggregator {
-                            self.load_log_aggregator();
-                        }
-                        true
-                    }
-                    _ => false,
-                }
-            }
-            Event::Timer(_) => {
-                // Check for network timeouts
-                if self.pending_requests > 0
-                    && self
-                        .last_request_sent
-                        .is_some_and(|last| last.elapsed() > REQUEST_TIMEOUT)
-                {
-                    self.api_connected = false;
-                    self.last_error = Some("Network timeout".to_string());
-                    self.pending_requests = 0;
-                    self.last_request_sent = None;
-                }
-
-                self.load_beads();
-                if self.mode == ViewMode::AgentView {
-                    self.load_agents();
-                }
-                if self.mode == ViewMode::GraphView {
-                    self.load_graph();
-                }
-                if self.mode == ViewMode::SystemHealth {
-                    self.load_system_health();
-                }
-                if self.mode == ViewMode::LogAggregator {
-                    self.load_log_aggregator();
-                }
-                set_timeout(2.0);
-                true
-            }
-            Event::PermissionRequestResult(_) => {
-                self.load_beads();
-                if should_fetch_agents_on_view_load(self.mode) {
-                    self.load_agents();
-                }
-                if should_fetch_graph_on_view_load(self.mode) {
-                    self.load_graph();
-                }
-                if should_fetch_system_health_on_view_load(self.mode) {
-                    self.load_system_health();
-                }
-                if should_fetch_log_aggregator_on_view_load(self.mode) {
-                    self.load_log_aggregator();
-                }
-                true
-            }
-            Event::WebRequestResult(status, _headers, body, context) => {
-                self.handle_web_response(status, body, context);
-                true
-            }
-            Event::CommandPaneOpened(pane_id, context) => {
-                self.handle_command_pane_opened(pane_id, context);
-                true
-            }
-            Event::CommandPaneExited(pane_id, exit_code, context) => {
-                self.handle_command_pane_exited(pane_id, exit_code, context);
-                true
-            }
-            Event::CommandPaneReRun(pane_id, context) => {
-                self.handle_command_pane_rerun(pane_id, context);
-                true
-            }
-            _ => false,
-        }
+        let (new_state, should_render) = std::mem::take(self).handle_event(event);
+        *self = new_state;
+        should_render
     }
 
     fn render(&mut self, rows: usize, cols: usize) {
@@ -635,14 +482,473 @@ impl ZellijPlugin for State {
         }
         self.render_footer(rows, cols);
     }
-
 }
 impl State {
-    fn load_beads(&mut self) {
+    // Functional constructor for loading config
+    fn with_config(mut self, server_url: String) -> Self {
+        self.server_url = server_url;
+        self
+    }
+
+    // Functional event handler - returns new state
+    fn handle_event(self, event: Event) -> (Self, bool) {
+        match event {
+            Event::Key(key_with_mod) => self.handle_key_event(key_with_mod),
+            Event::Timer(_) => self.handle_timer_event(),
+            Event::PermissionRequestResult(_) => self.handle_permission_result(),
+            Event::WebRequestResult(status, headers, body, context) => {
+                self.handle_web_response(status, headers, body, context)
+            }
+            Event::CommandPaneOpened(pane_id, context) => {
+                self.handle_command_pane_opened(pane_id, context)
+            }
+            Event::CommandPaneExited(pane_id, exit_code, context) => {
+                self.handle_command_pane_exited(pane_id, exit_code, context)
+            }
+            Event::CommandPaneReRun(pane_id, context) => {
+                self.handle_command_pane_rerun(pane_id, context)
+            }
+            _ => (self, false),
+        }
+    }
+
+    fn handle_key_event(self, key_with_mod: KeyWithModifier) -> (Self, bool) {
+        // Handle Ctrl-d (page down) and Ctrl-u (page up) first
+        if key_with_mod.key_modifiers.contains(&KeyModifier::Ctrl) {
+            const PAGE_SIZE: usize = 20;
+
+            return match key_with_mod.bare_key {
+                BareKey::Char('d') => {
+                    let beads_len = self.beads.len();
+                    let new_idx = self
+                        .selected_index
+                        .saturating_add(PAGE_SIZE)
+                        .min(beads_len.saturating_sub(1));
+                    let new_state = self.with_selected_index(new_idx);
+                    let new_state = if new_state.mode == ViewMode::PipelineView {
+                        new_state.trigger_pipeline_load()
+                    } else {
+                        new_state
+                    };
+                    (new_state, true)
+                }
+                BareKey::Char('u') => {
+                    let new_idx = self.selected_index.saturating_sub(PAGE_SIZE);
+                    let new_state = self.with_selected_index(new_idx);
+                    let new_state = if new_state.mode == ViewMode::PipelineView {
+                        new_state.trigger_pipeline_load()
+                    } else {
+                        new_state
+                    };
+                    (new_state, true)
+                }
+                _ => (self, false),
+            };
+        }
+
+        // Regular key handling
+        match key_with_mod.bare_key {
+            BareKey::Char('q') | BareKey::Esc => {
+                close_focus();
+                (self, false)
+            }
+            BareKey::Char('j') | BareKey::Down => self.handle_nav_down(),
+            BareKey::Char('k') | BareKey::Up => self.handle_nav_up(),
+            BareKey::Char('g') => (self.with_selected_index(0), true),
+            BareKey::Char('G') => {
+                let beads_len = self.beads.len();
+                (self.with_selected_index(beads_len.saturating_sub(1)), true)
+            }
+            BareKey::Char('1') => (self.with_mode(ViewMode::BeadList), true),
+            BareKey::Char('2') => (self.with_mode(ViewMode::BeadDetail), true),
+            BareKey::Char('3') => self.switch_to_pipeline_view(),
+            BareKey::Char('4') => self.switch_to_agent_view(),
+            BareKey::Char('5') => self.switch_to_graph_view(),
+            BareKey::Char('6') => self.switch_to_system_health_view(),
+            BareKey::Char('7') => self.switch_to_log_aggregator_view(),
+            BareKey::Enter => self.handle_enter_key(),
+            BareKey::Char('r') => self.handle_refresh(),
+            _ => (self, false),
+        }
+    }
+
+    fn handle_timer_event(mut self) -> (Self, bool) {
+        // Check for network timeouts
+        let has_timeout = self.pending_requests > 0
+            && self
+                .last_request_sent
+                .is_some_and(|last| last.elapsed() > REQUEST_TIMEOUT);
+
+        if has_timeout {
+            self.api_connected = false;
+            self.last_error = Some("Network timeout".to_string());
+            self.pending_requests = 0;
+            self.last_request_sent = None;
+        }
+
+        // Trigger data loads - each returns updated state
+        self = self.trigger_beads_load();
+
+        if self.mode == ViewMode::AgentView {
+            self = self.trigger_agents_load();
+        }
+        if self.mode == ViewMode::GraphView {
+            self = self.trigger_graph_load();
+        }
+        if self.mode == ViewMode::SystemHealth {
+            self = self.trigger_system_health_load();
+        }
+        if self.mode == ViewMode::LogAggregator {
+            self = self.trigger_log_aggregator_load();
+        }
+
+        set_timeout(2.0);
+        (self, true)
+    }
+
+    fn handle_permission_result(mut self) -> (Self, bool) {
+        self = self.trigger_beads_load();
+
+        if should_fetch_agents_on_view_load(self.mode) {
+            self = self.trigger_agents_load();
+        }
+        if should_fetch_graph_on_view_load(self.mode) {
+            self = self.trigger_graph_load();
+        }
+        if should_fetch_system_health_on_view_load(self.mode) {
+            self = self.trigger_system_health_load();
+        }
+        if should_fetch_log_aggregator_on_view_load(self.mode) {
+            self = self.trigger_log_aggregator_load();
+        }
+
+        (self, true)
+    }
+
+    fn handle_nav_down(mut self) -> (Self, bool) {
+        if self.mode == ViewMode::PipelineView {
+            // Navigate pipeline stages
+            if self.selected_stage_index < self.pipeline_stages.len().saturating_sub(1) {
+                self.selected_stage_index = self.selected_stage_index.saturating_add(1);
+            }
+        } else {
+            // Navigate beads
+            if self.selected_index < self.beads.len().saturating_sub(1) {
+                self.selected_index = self.selected_index.saturating_add(1);
+                if self.mode == ViewMode::PipelineView {
+                    self = self.trigger_pipeline_load();
+                }
+            }
+        }
+        (self, true)
+    }
+
+    fn handle_nav_up(mut self) -> (Self, bool) {
+        if self.mode == ViewMode::PipelineView {
+            // Navigate pipeline stages
+            self.selected_stage_index = self.selected_stage_index.saturating_sub(1);
+        } else {
+            // Navigate beads
+            self.selected_index = self.selected_index.saturating_sub(1);
+            if self.mode == ViewMode::PipelineView {
+                self = self.trigger_pipeline_load();
+            }
+        }
+        (self, true)
+    }
+
+    fn switch_to_pipeline_view(mut self) -> (Self, bool) {
+        self.mode = ViewMode::PipelineView;
+        self.selected_stage_index = 0;
+        self = self.trigger_pipeline_load();
+        (self, true)
+    }
+
+    fn switch_to_agent_view(mut self) -> (Self, bool) {
+        self.mode = ViewMode::AgentView;
+        self = self.trigger_agents_load();
+        (self, true)
+    }
+
+    fn switch_to_graph_view(mut self) -> (Self, bool) {
+        self.mode = ViewMode::GraphView;
+        self = self.trigger_graph_load();
+        (self, true)
+    }
+
+    fn switch_to_system_health_view(mut self) -> (Self, bool) {
+        self.mode = ViewMode::SystemHealth;
+        self = self.trigger_system_health_load();
+        (self, true)
+    }
+
+    fn switch_to_log_aggregator_view(mut self) -> (Self, bool) {
+        self.mode = ViewMode::LogAggregator;
+        self = self.trigger_log_aggregator_load();
+        (self, true)
+    }
+
+    fn handle_enter_key(mut self) -> (Self, bool) {
+        if self.mode == ViewMode::PipelineView {
+            // In PipelineView: open command pane to rerun selected stage
+            if let Some(bead) = self.beads.get(self.selected_index) {
+                if let Some(stage) = self.pipeline_stages.get(self.selected_stage_index) {
+                    self.open_command_pane_for_stage(&bead.id, &stage.name);
+                }
+            }
+            (self, true)
+        } else {
+            // Other modes: stay in current mode and reload data
+            if self.mode == ViewMode::PipelineView {
+                self = self.trigger_pipeline_load();
+            }
+            if self.mode == ViewMode::AgentView {
+                self = self.trigger_agents_load();
+            }
+            if self.mode == ViewMode::GraphView {
+                self = self.trigger_graph_load();
+            }
+            if self.mode == ViewMode::SystemHealth {
+                self = self.trigger_system_health_load();
+            }
+            if self.mode == ViewMode::LogAggregator {
+                self = self.trigger_log_aggregator_load();
+            }
+            (self, true)
+        }
+    }
+
+    fn handle_refresh(mut self) -> (Self, bool) {
+        self.beads_cache = None;
+        self.agents_cache = None;
+        self.pipeline_caches = HashMap::new();
+        self = self.trigger_beads_load();
+
+        if self.mode == ViewMode::PipelineView {
+            self = self.trigger_pipeline_load();
+        }
+        if self.mode == ViewMode::GraphView {
+            self = self.trigger_graph_load();
+        }
+        if self.mode == ViewMode::SystemHealth {
+            self = self.trigger_system_health_load();
+        }
+        if self.mode == ViewMode::LogAggregator {
+            self = self.trigger_log_aggregator_load();
+        }
+
+        (self, true)
+    }
+
+    // State update helpers
+    fn with_mode(mut self, mode: ViewMode) -> Self {
+        self.mode = mode;
+        self
+    }
+
+    fn with_selected_index(mut self, index: usize) -> Self {
+        self.selected_index = index;
+        self
+    }
+
+    #[allow(dead_code)]
+    fn with_selected_stage_index(mut self, index: usize) -> Self {
+        self.selected_stage_index = index;
+        self
+    }
+
+    #[allow(dead_code)]
+    fn with_network_timeout(mut self) -> Self {
+        self.api_connected = false;
+        self.last_error = Some("Network timeout".to_string());
+        self.pending_requests = 0;
+        self.last_request_sent = None;
+        self
+    }
+
+    #[allow(dead_code)]
+    fn with_cleared_caches(mut self) -> Self {
+        self.beads_cache = None;
+        self.agents_cache = None;
+        self.pipeline_caches = HashMap::new();
+        self
+    }
+
+    // Trigger methods that perform side effects and return new state
+    // These methods bridge between the functional state model and the Zellij trait's
+    // requirement for &mut self by using the exterior mut pattern.
+    #[must_use]
+    fn trigger_beads_load(self) -> Self {
+        self.load_beads().0
+    }
+
+    #[must_use]
+    fn trigger_pipeline_load(self) -> Self {
+        self.load_pipeline_for_selected().0
+    }
+
+    #[must_use]
+    fn trigger_agents_load(self) -> Self {
+        self.load_agents().0
+    }
+
+    #[must_use]
+    fn trigger_graph_load(self) -> Self {
+        self.load_graph().0
+    }
+
+    #[must_use]
+    fn trigger_system_health_load(self) -> Self {
+        self.load_system_health().0
+    }
+
+    #[must_use]
+    fn trigger_log_aggregator_load(self) -> Self {
+        self.load_log_aggregator().0
+    }
+
+    fn handle_web_response(
+        mut self,
+        status: u16,
+        _headers: BTreeMap<String, String>,
+        body: Vec<u8>,
+        context: BTreeMap<String, String>,
+    ) -> (Self, bool) {
+        self.pending_requests = self.pending_requests.saturating_sub(1);
+        if self.pending_requests == 0 {
+            self.last_request_sent = None;
+        }
+
+        if !(200..300).contains(&status) {
+            self.api_connected = false;
+            self.last_error = Some(if (500..600).contains(&status) {
+                format!("Server Error: HTTP {}", status)
+            } else {
+                format!("HTTP {}", status)
+            });
+            return (self, true);
+        }
+
+        self.api_connected = true;
+        self.last_error = None;
+
+        match context.get(CTX_REQUEST_TYPE).map(|s| s.as_str()) {
+            Some(CTX_BEADS_LIST) => {
+                self = self.parse_beads_response(&body);
+                self.beads_cache = Some((self.beads.clone(), Instant::now()));
+            }
+            Some(CTX_PIPELINE) => {
+                self = self.parse_pipeline_response(&body);
+                if let Some(bead_id) = context.get(CTX_BEAD_ID) {
+                    self.pipeline_caches.insert(
+                        bead_id.clone(),
+                        (self.pipeline_stages.clone(), Instant::now()),
+                    );
+                }
+            }
+            Some(CTX_AGENTS_LIST) => {
+                self = self.parse_agents_response(&body);
+                self.agents_cache = Some((self.agents.clone(), Instant::now()));
+            }
+            Some(CTX_GRAPH) => {
+                self = self.parse_graph_response(&body);
+                self.graph_cache = Some((
+                    self.graph_nodes.clone(),
+                    self.graph_edges.clone(),
+                    self.critical_path.clone(),
+                    Instant::now(),
+                ));
+            }
+            _ => (),
+        }
+
+        (self, true)
+    }
+
+    fn handle_command_pane_opened(
+        self,
+        _pane_id: u32,
+        _context: BTreeMap<String, String>,
+    ) -> (Self, bool) {
+        // Command pane opened tracking to be implemented when needed
+        (self, true)
+    }
+
+    fn handle_command_pane_exited(
+        mut self,
+        _pane_id: u32,
+        exit_code: Option<i32>,
+        _context: BTreeMap<String, String>,
+    ) -> (Self, bool) {
+        // Command pane exited - refresh pipeline to show updated stage status
+        if self.mode == ViewMode::PipelineView {
+            self.pipeline_caches = HashMap::new();
+            self = self.load_pipeline_for_selected().0;
+        }
+
+        // Track command pane completion
+        let pane_id_str = _pane_id.to_string();
+        if let Some(pane) = self.command_panes.get_mut(&pane_id_str) {
+            let code = exit_code.map_or(-1, |c| c);
+            pane.mark_completed(code);
+
+            // Update the pipeline stage status if this was a stage run
+            if pane.action == "run_stage" {
+                if let Some(stage_name) = pane.stage_name.clone() {
+                    let _bead_id = pane.bead_id.clone();
+                    // Update stage status functionally
+                    let new_status = if code == 0 {
+                        StageStatus::Passed
+                    } else {
+                        StageStatus::Failed
+                    };
+
+                    self.pipeline_stages = self
+                        .pipeline_stages
+                        .iter()
+                        .map(|stage| {
+                            if stage.name == stage_name {
+                                StageInfo {
+                                    status: new_status,
+                                    exit_code: Some(code),
+                                    ..stage.clone()
+                                }
+                            } else {
+                                stage.clone()
+                            }
+                        })
+                        .collect();
+                }
+            }
+        }
+
+        (self, true)
+    }
+
+    fn handle_command_pane_rerun(
+        self,
+        _pane_id: u32,
+        context: BTreeMap<String, String>,
+    ) -> (Self, bool) {
+        // Handle CommandPaneReRun event - rerun the stage
+        let bead_id = context.get("bead_id");
+        let stage_name = context.get("stage_name");
+
+        if let (Some(bead_id), Some(stage_name)) = (bead_id, stage_name) {
+            self.open_command_pane_for_stage(bead_id, stage_name);
+        }
+
+        (self, true)
+    }
+
+    // Load methods - functional pattern: consume self, perform side effect, return new state
+    // Note: web_request() is a side effect (I/O), but state transformation is pure.
+    // This bridges the gap between functional state management and Zellij's I/O requirements.
+    fn load_beads(mut self) -> (Self, Result<()>) {
         if let Some((cached_beads, timestamp)) = &self.beads_cache {
             if timestamp.elapsed() < CACHE_TTL {
                 self.beads = cached_beads.clone();
-                return;
+                return (self, Ok(()));
             }
         }
 
@@ -652,17 +958,18 @@ impl State {
         self.pending_requests = self.pending_requests.saturating_add(1);
         self.last_request_sent = Some(Instant::now());
         web_request(&url, HttpVerb::Get, BTreeMap::new(), vec![], context);
+        (self, Ok(()))
     }
 
-    fn load_pipeline_for_selected(&mut self) {
+    fn load_pipeline_for_selected(mut self) -> (Self, Result<()>) {
         let Some(bead) = self.beads.get(self.selected_index) else {
-            return;
+            return (self, Ok(()));
         };
 
         if let Some((cached_stages, timestamp)) = self.pipeline_caches.get(&bead.id) {
             if timestamp.elapsed() < CACHE_TTL {
                 self.pipeline_stages = cached_stages.clone();
-                return;
+                return (self, Ok(()));
             }
         }
 
@@ -673,13 +980,14 @@ impl State {
         self.pending_requests = self.pending_requests.saturating_add(1);
         self.last_request_sent = Some(Instant::now());
         web_request(&url, HttpVerb::Get, BTreeMap::new(), vec![], context);
+        (self, Ok(()))
     }
 
-    fn load_agents(&mut self) {
+    fn load_agents(mut self) -> (Self, Result<()>) {
         if let Some((cached_agents, timestamp)) = &self.agents_cache {
             if timestamp.elapsed() < CACHE_TTL {
                 self.agents = cached_agents.clone();
-                return;
+                return (self, Ok(()));
             }
         }
 
@@ -689,15 +997,16 @@ impl State {
         self.pending_requests = self.pending_requests.saturating_add(1);
         self.last_request_sent = Some(Instant::now());
         web_request(&url, HttpVerb::Get, BTreeMap::new(), vec![], context);
+        (self, Ok(()))
     }
 
-    fn load_graph(&mut self) {
+    fn load_graph(mut self) -> (Self, Result<()>) {
         if let Some((cached_nodes, cached_edges, cached_path, timestamp)) = &self.graph_cache {
             if timestamp.elapsed() < CACHE_TTL {
                 self.graph_nodes = cached_nodes.clone();
                 self.graph_edges = cached_edges.clone();
                 self.critical_path = cached_path.clone();
-                return;
+                return (self, Ok(()));
             }
         }
 
@@ -707,14 +1016,17 @@ impl State {
         self.pending_requests = self.pending_requests.saturating_add(1);
         self.last_request_sent = Some(Instant::now());
         web_request(&url, HttpVerb::Get, BTreeMap::new(), vec![], context);
+        (self, Ok(()))
     }
 
-    fn load_system_health(&mut self) {
-        // TODO: Implement system health loading when backend API is ready
+    fn load_system_health(self) -> (Self, Result<()>) {
+        // System health loading to be implemented when backend API is ready
+        (self, Ok(()))
     }
 
-    fn load_log_aggregator(&mut self) {
-        // TODO: Implement log aggregator loading when backend API is ready
+    fn load_log_aggregator(self) -> (Self, Result<()>) {
+        // Log aggregator loading to be implemented when backend API is ready
+        (self, Ok(()))
     }
 
     fn open_command_pane_for_stage(&self, bead_id: &str, stage_name: &str) {
@@ -732,138 +1044,9 @@ impl State {
         );
     }
 
-    fn handle_command_pane_opened(
-        &mut self,
-        _pane_id: u32,
-        _context: BTreeMap<String, String>,
-    ) {
-        // TODO: Implement command pane opened tracking
-        // This will be implemented in a separate bead
-    }
+    // Old imperative methods removed - replaced with functional versions above
 
-    fn handle_command_pane_exited(
-        &mut self,
-        _pane_id: u32,
-        exit_code: Option<i32>,
-        _context: BTreeMap<String, String>,
-    ) {
-        // Command pane exited - refresh pipeline to show updated stage status
-        if self.mode == ViewMode::PipelineView {
-            self.pipeline_caches = HashMap::new();
-            self.load_pipeline_for_selected();
-        }
-
-        // Track command pane completion
-        let pane_id_str = _pane_id.to_string();
-        if let Some(pane) = self.command_panes.get_mut(&pane_id_str) {
-            let code = exit_code.map_or(-1, |c| c);
-            pane.mark_completed(code);
-
-            // Update the pipeline stage status if this was a stage run
-            if pane.action == "run_stage" {
-                if let Some(stage_name) = pane.stage_name.clone() {
-                    let bead_id = pane.bead_id.clone();
-                    self.update_stage_status(&bead_id, &stage_name, code);
-                }
-            }
-        }
-    }
-
-    fn handle_command_pane_rerun(
-        &mut self,
-        _pane_id: u32,
-        context: BTreeMap<String, String>,
-    ) {
-        // Handle CommandPaneReRun event - rerun the stage
-        let bead_id = context.get("bead_id");
-        let stage_name = context.get("stage_name");
-
-        if let (Some(bead_id), Some(stage_name)) = (bead_id, stage_name) {
-            self.open_command_pane_for_stage(bead_id, stage_name);
-        }
-    }
-
-    fn update_stage_status(&mut self, _bead_id: &str, stage_name: &str, exit_code: i32) {
-        // Find the stage in the current pipeline and update its status
-        let new_status = if exit_code == 0 {
-            StageStatus::Passed
-        } else {
-            StageStatus::Failed
-        };
-
-        self.pipeline_stages = self
-            .pipeline_stages
-            .iter()
-            .map(|stage| {
-                if stage.name == stage_name {
-                    StageInfo {
-                        status: new_status,
-                        exit_code: Some(exit_code),
-                        ..stage.clone()
-                    }
-                } else {
-                    stage.clone()
-                }
-            })
-            .collect();
-    }
-
-    fn handle_web_response(
-        &mut self,
-        status: u16,
-        body: Vec<u8>,
-        context: BTreeMap<String, String>,
-    ) {
-        self.pending_requests = self.pending_requests.saturating_sub(1);
-        if self.pending_requests == 0 {
-            self.last_request_sent = None;
-        }
-
-        if !(200..300).contains(&status) {
-            self.api_connected = false;
-            self.last_error = Some(if (500..600).contains(&status) {
-                format!("Server Error: HTTP {}", status)
-            } else {
-                format!("HTTP {}", status)
-            });
-            return;
-        }
-
-        self.api_connected = true;
-        self.last_error = None;
-
-        match context.get(CTX_REQUEST_TYPE).map(|s| s.as_str()) {
-            Some(CTX_BEADS_LIST) => {
-                self.parse_beads_response(&body);
-                self.beads_cache = Some((self.beads.clone(), Instant::now()));
-            }
-            Some(CTX_PIPELINE) => {
-                self.parse_pipeline_response(&body);
-                if let Some(bead_id) = context.get(CTX_BEAD_ID) {
-                    self.pipeline_caches.insert(
-                        bead_id.clone(),
-                        (self.pipeline_stages.clone(), Instant::now()),
-                    );
-                }
-            }
-            Some(CTX_AGENTS_LIST) => {
-                self.parse_agents_response(&body);
-                self.agents_cache = Some((self.agents.clone(), Instant::now()));
-            }
-            Some(CTX_GRAPH) => {
-                self.parse_graph_response(&body);
-                self.graph_cache = Some((
-                    self.graph_nodes.clone(),
-                    self.graph_edges.clone(),
-                    self.critical_path.clone(),
-                    Instant::now(),
-                ));
-            }
-            _ => (),
-        }
-    }
-
-    fn parse_beads_response(&mut self, body: &[u8]) {
+    fn parse_beads_response(mut self, body: &[u8]) -> Self {
         #[derive(serde::Deserialize)]
         struct ApiBeadInfo {
             id: String,
@@ -902,12 +1085,16 @@ impl State {
                 if self.selected_index >= self.beads.len() {
                     self.selected_index = self.beads.len().saturating_sub(1);
                 }
+                self
             }
-            Err(e) => self.last_error = Some(e),
+            Err(e) => {
+                self.last_error = Some(e);
+                self
+            }
         }
     }
 
-    fn parse_pipeline_response(&mut self, body: &[u8]) {
+    fn parse_pipeline_response(mut self, body: &[u8]) -> Self {
         #[derive(serde::Deserialize)]
         struct ApiStageInfo {
             name: String,
@@ -942,12 +1129,16 @@ impl State {
                         exit_code: s.exit_code,
                     })
                     .collect::<Vector<_>>();
+                self
             }
-            Err(e) => self.last_error = Some(e),
+            Err(e) => {
+                self.last_error = Some(e);
+                self
+            }
         }
     }
 
-    fn parse_agents_response(&mut self, body: &[u8]) {
+    fn parse_agents_response(mut self, body: &[u8]) -> Self {
         #[derive(serde::Deserialize)]
         struct ApiAgentInfo {
             id: String,
@@ -1005,14 +1196,18 @@ impl State {
                         },
                     })
                     .collect::<Vector<_>>();
-                self.update_agent_events(&next_agents);
+                self = self.update_agent_events(&next_agents);
                 self.agents = next_agents;
+                self
             }
-            Err(e) => self.last_error = Some(e),
+            Err(e) => {
+                self.last_error = Some(e);
+                self
+            }
         }
     }
 
-    fn parse_graph_response(&mut self, body: &[u8]) {
+    fn parse_graph_response(mut self, body: &[u8]) -> Self {
         #[derive(serde::Deserialize)]
         struct ApiGraphNode {
             id: String,
@@ -1077,8 +1272,12 @@ impl State {
                     .collect::<Vector<_>>();
 
                 self.critical_path = critical_path_set.into_iter().collect::<Vector<_>>();
+                self
             }
-            Err(e) => self.last_error = Some(e),
+            Err(e) => {
+                self.last_error = Some(e);
+                self
+            }
         }
     }
 
@@ -1469,7 +1668,6 @@ impl State {
         }
     }
 
-
     fn render_system_health(&self, _rows: usize, _cols: usize) {
         println!("\n  \x1b[2mSystem Health view coming soon\x1b[0m");
         println!("  \x1b[2mPress 'r' to refresh from server\x1b[0m");
@@ -1516,7 +1714,7 @@ impl State {
         );
     }
 
-    fn update_agent_events(&mut self, next_agents: &Vector<AgentInfo>) {
+    fn update_agent_events(mut self, next_agents: &Vector<AgentInfo>) -> Self {
         let mut previous_by_id: BTreeMap<String, AgentInfo> = self
             .agents
             .iter()
@@ -1532,7 +1730,7 @@ impl State {
         for (agent_id, next_agent) in next_by_id.iter() {
             match previous_by_id.remove(agent_id) {
                 None => {
-                    self.push_agent_event(
+                    self = self.push_agent_event(
                         EventLevel::Info,
                         format!("Agent {} registered", agent_id),
                     );
@@ -1544,7 +1742,7 @@ impl State {
                             AgentState::ShuttingDown => EventLevel::Warning,
                             _ => EventLevel::Info,
                         };
-                        self.push_agent_event(
+                        self = self.push_agent_event(
                             level,
                             format!(
                                 "Agent {} state {} → {}",
@@ -1558,19 +1756,19 @@ impl State {
                     if previous.current_bead != next_agent.current_bead {
                         match (&previous.current_bead, &next_agent.current_bead) {
                             (None, Some(bead)) => {
-                                self.push_agent_event(
+                                self = self.push_agent_event(
                                     EventLevel::Info,
                                     format!("Agent {} assigned bead {}", agent_id, bead),
                                 );
                             }
                             (Some(bead), None) => {
-                                self.push_agent_event(
+                                self = self.push_agent_event(
                                     EventLevel::Info,
                                     format!("Agent {} released bead {}", agent_id, bead),
                                 );
                             }
                             (Some(previous_bead), Some(next_bead)) => {
-                                self.push_agent_event(
+                                self = self.push_agent_event(
                                     EventLevel::Info,
                                     format!(
                                         "Agent {} switched bead {} → {}",
@@ -1590,7 +1788,7 @@ impl State {
                             HealthBand::Warning => EventLevel::Warning,
                             HealthBand::Critical => EventLevel::Error,
                         };
-                        self.push_agent_event(
+                        self = self.push_agent_event(
                             level,
                             format!(
                                 "Agent {} health {:.0}% → {:.0}%",
@@ -1605,11 +1803,14 @@ impl State {
         }
 
         for (agent_id, _) in previous_by_id.iter() {
-            self.push_agent_event(EventLevel::Warning, format!("Agent {} removed", agent_id));
+            self =
+                self.push_agent_event(EventLevel::Warning, format!("Agent {} removed", agent_id));
         }
+
+        self
     }
 
-    fn push_agent_event(&mut self, level: EventLevel, message: String) {
+    fn push_agent_event(mut self, level: EventLevel, message: String) -> Self {
         self.agent_events.push_back(AgentEvent {
             message,
             level,
@@ -1618,6 +1819,7 @@ impl State {
         while self.agent_events.len() > AGENT_EVENT_LIMIT {
             self.agent_events.pop_front();
         }
+        self
     }
 
     fn render_agent_events(&self, rows: usize, cols: usize) {
@@ -1760,10 +1962,10 @@ mod tests {
 
     #[test]
     fn test_agent_event_registered() {
-        let mut state = State::default();
+        let state = State::default();
         let agents = to_vector(vec![build_agent("agent-1", AgentState::Idle, None, 0.95)]);
 
-        state.update_agent_events(&agents);
+        let state = state.update_agent_events(&agents);
 
         assert_eq!(state.agent_events.len(), 1);
         assert!(state
@@ -1774,9 +1976,12 @@ mod tests {
 
     #[test]
     fn test_agent_event_state_and_bead_change() {
-        let mut state = State::default();
-        let initial = to_vector(vec![build_agent("agent-7", AgentState::Idle, None, 0.9)]);
-        state.agents = initial;
+        let state = {
+            let mut state = State::default();
+            let initial = to_vector(vec![build_agent("agent-7", AgentState::Idle, None, 0.9)]);
+            state.agents = initial;
+            state
+        };
 
         let updated = to_vector(vec![build_agent(
             "agent-7",
@@ -1785,7 +1990,7 @@ mod tests {
             0.9,
         )]);
 
-        state.update_agent_events(&updated);
+        let state = state.update_agent_events(&updated);
 
         assert!(state
             .agent_events
@@ -1808,23 +2013,26 @@ mod tests {
 
     #[test]
     fn test_stage_selection_navigation() {
-        let mut state = State::default();
-        state.pipeline_stages = to_vector_stages(vec![
-            StageInfo {
-                name: "stage-1".to_string(),
-                status: StageStatus::Passed,
-                duration_ms: Some(100),
-                exit_code: Some(0),
-            },
-            StageInfo {
-                name: "stage-2".to_string(),
-                status: StageStatus::Failed,
-                duration_ms: Some(200),
-                exit_code: Some(1),
-            },
-        ]);
+        let state = State {
+            pipeline_stages: to_vector_stages(vec![
+                StageInfo {
+                    name: "stage-1".to_string(),
+                    status: StageStatus::Passed,
+                    duration_ms: Some(100),
+                    exit_code: Some(0),
+                },
+                StageInfo {
+                    name: "stage-2".to_string(),
+                    status: StageStatus::Failed,
+                    duration_ms: Some(200),
+                    exit_code: Some(1),
+                },
+            ]),
+            selected_stage_index: 0,
+            ..Default::default()
+        };
 
-        state.selected_stage_index = 0;
+        let mut state = state;
 
         // Simulate Down key
         if state.selected_stage_index < state.pipeline_stages.len().saturating_sub(1) {
@@ -1839,18 +2047,21 @@ mod tests {
 
     #[test]
     fn test_stage_selection_bounds() {
-        let mut state = State::default();
-        state.pipeline_stages = to_vector_stages(vec![StageInfo {
-            name: "stage-1".to_string(),
-            status: StageStatus::Pending,
-            duration_ms: None,
-            exit_code: None,
-        }]);
+        let state = State {
+            pipeline_stages: to_vector_stages(vec![StageInfo {
+                name: "stage-1".to_string(),
+                status: StageStatus::Pending,
+                duration_ms: None,
+                exit_code: None,
+            }]),
+            selected_stage_index: 0,
+            ..Default::default()
+        };
 
-        state.selected_stage_index = 0;
+        let mut state = state;
 
         // Try to go down when at the last stage
-        if state.selected_stage_index < self.pipeline_stages.len().saturating_sub(1) {
+        if state.selected_stage_index < state.pipeline_stages.len().saturating_sub(1) {
             state.selected_stage_index = state.selected_stage_index.saturating_add(1);
         }
         assert_eq!(state.selected_stage_index, 0);

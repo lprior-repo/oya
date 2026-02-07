@@ -202,12 +202,12 @@ pub fn shell_escape(s: &str) -> String {
 
 /// Read text from a file.
 pub fn read_text_file(path: &Path) -> Result<String> {
-    std::fs::read_to_string(path).map_err(|e| Error::file_read_failed(path, e.to_string()))
+    std::fs::read_to_string(path).map_err(|e| Error::file_read_failed(path, e))
 }
 
 /// Write text to a file.
 pub fn write_text_file(path: &Path, content: &str) -> Result<()> {
-    std::fs::write(path, content).map_err(|e| Error::file_write_failed(path, e.to_string()))
+    std::fs::write(path, content).map_err(|e| Error::file_write_failed(path, e))
 }
 
 /// Append text to a file.
@@ -218,15 +218,15 @@ pub fn append_text_file(path: &Path, content: &str) -> Result<()> {
         .create(true)
         .append(true)
         .open(path)
-        .map_err(|e| Error::file_write_failed(path, e.to_string()))?;
+        .map_err(|e| Error::file_write_failed(path, e))?;
 
     file.write_all(content.as_bytes())
-        .map_err(|e| Error::file_write_failed(path, e.to_string()))
+        .map_err(|e| Error::file_write_failed(path, e))
 }
 
 /// Create directory and all parent directories.
 pub fn create_dir_all(path: &Path) -> Result<()> {
-    std::fs::create_dir_all(path).map_err(|e| Error::directory_creation_failed(path, e.to_string()))
+    std::fs::create_dir_all(path).map_err(|e| Error::directory_creation_failed(path, e))
 }
 
 /// Check if a file exists.

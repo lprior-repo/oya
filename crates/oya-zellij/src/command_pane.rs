@@ -10,10 +10,12 @@ use std::time::{Duration, Instant};
 pub struct CommandPaneId(String);
 
 impl CommandPaneId {
+    #[allow(dead_code)]
     pub fn new(id: String) -> Self {
         Self(id)
     }
 
+    #[allow(dead_code)]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -21,6 +23,7 @@ impl CommandPaneId {
 
 /// Tracking state for a command pane
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum CommandPaneState {
     /// Pane has been opened but command not yet started
     Initializing,
@@ -35,6 +38,7 @@ pub enum CommandPaneState {
 }
 
 impl CommandPaneState {
+    #[allow(dead_code)]
     pub fn as_str(&self) -> &str {
         match self {
             Self::Initializing => "initializing",
@@ -45,6 +49,7 @@ impl CommandPaneState {
         }
     }
 
+    #[allow(dead_code)]
     pub fn color(&self) -> &str {
         match self {
             Self::Initializing => "\x1b[90m",
@@ -55,6 +60,7 @@ impl CommandPaneState {
         }
     }
 
+    #[allow(dead_code)]
     pub fn symbol(&self) -> &str {
         match self {
             Self::Initializing => "○",
@@ -65,6 +71,7 @@ impl CommandPaneState {
         }
     }
 
+    #[allow(dead_code)]
     pub fn is_terminal(&self) -> bool {
         matches!(self, Self::Completed | Self::Failed | Self::Closed)
     }
@@ -72,6 +79,7 @@ impl CommandPaneState {
 
 /// Tracks a command pane with its associated context
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct CommandPane {
     /// Unique pane identifier from Zellij
     pub id: CommandPaneId,
@@ -84,16 +92,19 @@ pub struct CommandPane {
     /// Action being performed (e.g., "run_stage", "spawn_workspace")
     pub action: String,
     /// When the pane was opened
+    #[allow(dead_code)]
     pub opened_at: Instant,
     /// When the pane completed (if applicable)
     pub completed_at: Option<Instant>,
     /// Exit code from command (if completed)
     pub exit_code: Option<i32>,
     /// Human-readable description
+    #[allow(dead_code)]
     pub description: String,
 }
 
 impl CommandPane {
+    #[allow(dead_code)]
     pub fn new(
         id: CommandPaneId,
         bead_id: String,
@@ -119,10 +130,12 @@ impl CommandPane {
         }
     }
 
+    #[allow(dead_code)]
     pub fn mark_running(&mut self) {
         self.state = CommandPaneState::Running;
     }
 
+    #[allow(dead_code)]
     pub fn mark_completed(&mut self, exit_code: i32) {
         self.state = if exit_code == 0 {
             CommandPaneState::Completed
@@ -133,16 +146,19 @@ impl CommandPane {
         self.exit_code = Some(exit_code);
     }
 
+    #[allow(dead_code)]
     pub fn mark_closed(&mut self) {
         self.state = CommandPaneState::Closed;
         self.completed_at = Some(Instant::now());
     }
 
+    #[allow(dead_code)]
     pub fn duration(&self) -> Option<Duration> {
         let end = self.completed_at.unwrap_or_else(Instant::now);
         Some(end.duration_since(self.opened_at))
     }
 
+    #[allow(dead_code)]
     pub fn is_active(&self) -> bool {
         matches!(
             self.state,
@@ -150,6 +166,7 @@ impl CommandPane {
         )
     }
 
+    #[allow(dead_code)]
     pub fn is_successful(&self) -> bool {
         matches!(self.state, CommandPaneState::Completed)
     }
@@ -235,8 +252,9 @@ mod tests {
         std::thread::sleep(Duration::from_millis(10));
         pane.mark_completed(0);
 
-        let duration = pane.duration().expect("duration should be available");
-        assert!(duration >= Duration::from_millis(10));
+        let duration = pane.duration();
+        assert!(duration.is_some());
+        assert!(duration.is_some_and(|d| d >= Duration::from_millis(10)));
     }
 
     #[test]
@@ -244,8 +262,9 @@ mod tests {
         let pane = create_test_pane();
         std::thread::sleep(Duration::from_millis(10));
 
-        let duration = pane.duration().expect("duration should be available");
-        assert!(duration >= Duration::from_millis(10));
+        let duration = pane.duration();
+        assert!(duration.is_some());
+        assert!(duration.is_some_and(|d| d >= Duration::from_millis(10)));
     }
 
     #[test]

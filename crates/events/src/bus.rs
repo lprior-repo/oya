@@ -1,6 +1,7 @@
 //! Event bus for pub/sub coordination.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 
 use tokio::sync::{broadcast, RwLock};
@@ -10,6 +11,56 @@ use crate::error::{Error, Result};
 use crate::event::BeadEvent;
 use crate::store::EventStore;
 use crate::types::EventId;
+
+/// Circuit breaker to prevent cascading failures.
+pub struct CircuitBreaker {
+    failure_count: AtomicU32,
+    threshold: u32,
+    last_failure: AtomicU64,
+}
+
+impl CircuitBreaker {
+    /// Create a new circuit breaker with the given failure threshold.
+    pub fn new(threshold: u32) -> Self {
+        Self {
+            failure_count: AtomicU32::new(0),
+            threshold,
+            last_failure: AtomicU64::new(0),
+        }
+    }
+
+    /// Check if a request should be allowed.
+    pub fn allow_request(&self) -> bool {
+        self.failure_count.load(Ordering::Relaxed) < self.threshold
+    }
+
+    /// Record a successful request.
+    pub fn record_success(&self) {
+        self.failure_count.store(0, Ordering::Relaxed);
+    }
+
+    /// Record a failed request.
+    pub fn record_failure(&self) {
+        self.failure_count.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Get the current failure count.
+    pub fn failure_count(&self) -> u32 {
+        self.failure_count.load(Ordering::Relaxed)
+    }
+
+    /// Reset the circuit breaker.
+    pub fn reset(&self) {
+        self.failure_count.store(0, Ordering::Relaxed);
+    }
+}
+
+/// Enhanced subscriber information with circuit breaker.
+struct Subscriber {
+    sender: broadcast::Sender<BeadEvent>,
+    pattern: EventPattern,
+    breaker: Arc<CircuitBreaker>,
+}
 
 /// Subscription handle for receiving events.
 pub struct EventSubscription {
@@ -53,12 +104,6 @@ impl EventPattern {
     }
 }
 
-/// Subscriber information.
-struct Subscriber {
-    sender: broadcast::Sender<BeadEvent>,
-    pattern: EventPattern,
-}
-
 /// Event bus for publishing and subscribing to events.
 pub struct EventBus {
     /// Underlying event store.
@@ -69,6 +114,8 @@ pub struct EventBus {
     subscribers: RwLock<HashMap<String, Subscriber>>,
     /// Next subscriber ID.
     next_id: RwLock<u64>,
+    /// Failure threshold for circuit breakers.
+    failure_threshold: u32,
 }
 
 impl EventBus {
@@ -80,6 +127,7 @@ impl EventBus {
             broadcast,
             subscribers: RwLock::new(HashMap::new()),
             next_id: RwLock::new(0),
+            failure_threshold: 5, // Default: 5 consecutive failures before opening circuit
         }
     }
 
@@ -100,14 +148,46 @@ impl EventBus {
         // Broadcast to global subscribers
         let _ = self.broadcast.send(event.clone());
 
-        // Send to pattern-based subscribers
+        // Send to pattern-based subscribers with circuit breaker protection
         let subscribers = self.subscribers.read().await;
-        subscribers
+        for (_, sub) in subscribers
             .iter()
             .filter(|(_, sub)| sub.pattern.matches(&event))
-            .for_each(|(_, sub)| {
-                let _ = sub.sender.send(event.clone());
-            });
+        {
+            // Check if subscriber is in circuit breaker state
+            if !sub.breaker.allow_request() {
+                debug!(
+                    event_type = event.event_type(),
+                    bead_id = %event.bead_id(),
+                    subscriber_failures = sub.breaker.failure_count(),
+                    "Skipping subscriber due to circuit breaker"
+                );
+                continue;
+            }
+
+            // Attempt to send event to subscriber
+            match sub.sender.send(event.clone()) {
+                Ok(_) => {
+                    // Success - reset failure count
+                    sub.breaker.record_success();
+                    debug!(
+                        event_type = event.event_type(),
+                        bead_id = %event.bead_id(),
+                        "Event delivered to subscriber successfully"
+                    );
+                }
+                Err(broadcast::error::SendError(_)) => {
+                    // Subscriber dropped - treat as failure
+                    sub.breaker.record_failure();
+                    debug!(
+                        event_type = event.event_type(),
+                        bead_id = %event.bead_id(),
+                        subscriber_failures = sub.breaker.failure_count(),
+                        "Failed to deliver event to subscriber"
+                    );
+                }
+            }
+        }
 
         Ok(event_id)
     }
@@ -131,7 +211,11 @@ impl EventBus {
         *next_id += 1;
 
         let mut subscribers = self.subscribers.write().await;
-        subscribers.insert(id.clone(), Subscriber { sender, pattern });
+        subscribers.insert(id.clone(), Subscriber {
+            sender,
+            pattern,
+            breaker: self.create_circuit_breaker(),
+        });
 
         (id, EventSubscription { receiver })
     }
@@ -157,6 +241,7 @@ impl EventBus {
 pub struct EventBusBuilder {
     store: Option<Arc<dyn EventStore>>,
     channel_capacity: usize,
+    failure_threshold: u32,
 }
 
 impl EventBusBuilder {
@@ -165,6 +250,7 @@ impl EventBusBuilder {
         Self {
             store: None,
             channel_capacity: 1000,
+            failure_threshold: 5,
         }
     }
 
@@ -177,6 +263,12 @@ impl EventBusBuilder {
     /// Set the broadcast channel capacity.
     pub fn with_channel_capacity(mut self, capacity: usize) -> Self {
         self.channel_capacity = capacity;
+        self
+    }
+
+    /// Set the circuit breaker failure threshold.
+    pub fn with_failure_threshold(mut self, threshold: u32) -> Self {
+        self.failure_threshold = threshold;
         self
     }
 
@@ -193,6 +285,7 @@ impl EventBusBuilder {
             broadcast,
             subscribers: RwLock::new(HashMap::new()),
             next_id: RwLock::new(0),
+            failure_threshold: self.failure_threshold,
         })
     }
 }
@@ -200,6 +293,18 @@ impl EventBusBuilder {
 impl Default for EventBusBuilder {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl EventBus {
+    /// Get the circuit breaker failure threshold.
+    pub fn failure_threshold(&self) -> u32 {
+        self.failure_threshold
+    }
+
+    /// Create a new circuit breaker for subscribers.
+    fn create_circuit_breaker(&self) -> Arc<CircuitBreaker> {
+        Arc::new(CircuitBreaker::new(self.failure_threshold))
     }
 }
 
@@ -547,5 +652,202 @@ mod tests {
         assert!(!EventPattern::ByType("created".to_string()).matches(&event));
         assert!(EventPattern::ByBead(bead_id).matches(&event));
         assert!(!EventPattern::ByBead(BeadId::new()).matches(&event));
+    }
+
+    // ==========================================================================
+    // Circuit Breaker Tests
+    // ==========================================================================
+
+    #[test]
+    fn test_circuit_breaker_initial_state() {
+        let breaker = CircuitBreaker::new(3);
+        assert!(breaker.allow_request(), "New breaker should allow requests");
+        assert_eq!(breaker.failure_count(), 0, "New breaker should have 0 failures");
+    }
+
+    #[test]
+    fn test_circuit_breaker_record_success() {
+        let breaker = CircuitBreaker::new(3);
+        breaker.record_failure();
+        breaker.record_failure();
+        assert_eq!(breaker.failure_count(), 2, "Should have 2 failures");
+
+        breaker.record_success();
+        assert_eq!(breaker.failure_count(), 0, "Success should reset failure count");
+        assert!(breaker.allow_request(), "Should allow requests after success");
+    }
+
+    #[test]
+    fn test_circuit_breaker_record_failure() {
+        let breaker = CircuitBreaker::new(3);
+        breaker.record_failure();
+        assert_eq!(breaker.failure_count(), 1, "Should have 1 failure");
+        assert!(breaker.allow_request(), "Should allow requests below threshold");
+
+        breaker.record_failure();
+        breaker.record_failure();
+        assert_eq!(breaker.failure_count(), 3, "Should have 3 failures");
+        assert!(!breaker.allow_request(), "Should block requests at threshold");
+    }
+
+    #[test]
+    fn test_circuit_breaker_reset() {
+        let breaker = CircuitBreaker::new(3);
+        breaker.record_failure();
+        breaker.record_failure();
+        assert_eq!(breaker.failure_count(), 2, "Should have 2 failures");
+
+        breaker.reset();
+        assert_eq!(breaker.failure_count(), 0, "Reset should clear failure count");
+        assert!(breaker.allow_request(), "Should allow requests after reset");
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_blocks_failing_subscriber() {
+        let bus = EventBusBuilder::new()
+            .with_store(Arc::new(InMemoryEventStore::new()))
+            .with_failure_threshold(2)
+            .build()
+            .unwrap();
+
+        let bead_id = BeadId::new();
+
+        // Subscribe to state_changed events
+        let pattern = EventPattern::ByType("state_changed".to_string());
+        let (sub_id, mut sub) = bus.subscribe_with_pattern(pattern).await;
+
+        // Create a dropping receiver to simulate failure
+        let (_handle, mut test_sub) = bus.subscribe_with_pattern(pattern).await;
+        std::mem::drop(test_sub); // Drop to cause send failures
+
+        // First event - should be sent but fail, incrementing failure count
+        let result1 = bus.publish(BeadEvent::state_changed(
+            bead_id,
+            BeadState::Pending,
+            BeadState::Scheduled,
+        )).await;
+        assert!(result1.is_ok(), "Publish should succeed even with failing subscriber");
+
+        // Second event - subscriber should be blocked
+        let result2 = bus.publish(BeadEvent::state_changed(
+            bead_id,
+            BeadState::Scheduled,
+            BeadState::Ready,
+        )).await;
+        assert!(result2.is_ok(), "Publish should succeed with circuit breaker");
+
+        // Give time for delivery
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+
+        // Only the first event should have been delivered (before circuit breaker opened)
+        let received1 = sub.try_recv();
+        assert!(received1.is_ok(), "Should receive first event");
+
+        let received2 = sub.try_recv();
+        assert!(received2.is_err(), "Should not receive second event due to circuit breaker");
+
+        // Unsubscribe
+        bus.unsubscribe(&sub_id).await;
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_resets_after_success() {
+        let bus = EventBusBuilder::new()
+            .with_store(Arc::new(InMemoryEventStore::new()))
+            .with_failure_threshold(2)
+            .build()
+            .unwrap();
+
+        let bead_id = BeadId::new();
+
+        // Subscribe to state_changed events
+        let pattern = EventPattern::ByType("state_changed".to_string());
+        let (sub_id, mut sub) = bus.subscribe_with_pattern(pattern).await;
+
+        // Create a dropping receiver to simulate failure
+        let (_handle, mut test_sub) = bus.subscribe_with_pattern(pattern).await;
+        std::mem::drop(test_sub); // Drop to cause send failures
+
+        // First event - failure, count = 1
+        bus.publish(BeadEvent::state_changed(
+            bead_id,
+            BeadState::Pending,
+            BeadState::Scheduled,
+        )).await.unwrap();
+
+        // Second event - failure, count = 2 (circuit opens)
+        bus.publish(BeadEvent::state_changed(
+            bead_id,
+            BeadState::Scheduled,
+            BeadState::Ready,
+        )).await.unwrap();
+
+        // Third event - should be blocked
+        bus.publish(BeadEvent::state_changed(
+            bead_id,
+            BeadState::Ready,
+            BeadState::Completed,
+        )).await.unwrap();
+
+        // Create a new subscriber that should work
+        let (sub_id2, mut sub2) = bus.subscribe_with_pattern(pattern).await;
+
+        // Publish another event - should be delivered to working subscriber
+        let result = bus.publish(BeadEvent::state_changed(
+            bead_id,
+            BeadState::Completed,
+            BeadState::Archived,
+        )).await;
+        assert!(result.is_ok());
+
+        // Give time for delivery
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+
+        // New subscriber should receive the event
+        let received = sub2.try_recv();
+        assert!(received.is_ok(), "Working subscriber should receive event");
+
+        // Unsubscribe
+        bus.unsubscribe(&sub_id).await;
+        bus.unsubscribe(&sub_id2).await;
+    }
+
+    #[tokio::test]
+    async fn test_custom_failure_threshold() {
+        let bus = EventBusBuilder::new()
+            .with_store(Arc::new(InMemoryEventStore::new()))
+            .with_failure_threshold(1)
+            .build()
+            .unwrap();
+
+        assert_eq!(bus.failure_threshold(), 1, "Should use custom threshold");
+
+        let bead_id = BeadId::new();
+
+        // Subscribe to state_changed events
+        let pattern = EventPattern::ByType("state_changed".to_string());
+        let (sub_id, mut sub) = bus.subscribe_with_pattern(pattern).await;
+
+        // Create a dropping receiver to simulate failure
+        let (_handle, mut test_sub) = bus.subscribe_with_pattern(pattern).await;
+        std::mem::drop(test_sub); // Drop to cause send failures
+
+        // First event - should fail and open circuit (threshold = 1)
+        let result = bus.publish(BeadEvent::state_changed(
+            bead_id,
+            BeadState::Pending,
+            BeadState::Scheduled,
+        )).await;
+        assert!(result.is_ok(), "Publish should succeed even with failing subscriber");
+
+        // Give time for delivery
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+
+        // Should not receive the event due to circuit breaker
+        let received = sub.try_recv();
+        assert!(received.is_err(), "Should not receive event due to circuit breaker");
+
+        // Unsubscribe
+        bus.unsubscribe(&sub_id).await;
     }
 }

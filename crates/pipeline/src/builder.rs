@@ -15,9 +15,10 @@
 //! ```
 
 use std::marker::PhantomData;
+use std::sync::OnceLock;
 
 use crate::domain::{Language, Priority, Slug, Task, TaskStatus};
-use crate::error::Result;
+use crate::error::{Error, Result};
 
 // =============================================================================
 // Type-State Markers
@@ -216,7 +217,7 @@ impl Task {
 // StageBuilder - Builder for custom stages
 // =============================================================================
 
-use crate::domain::Stage;
+use tracing::debug;
 
 /// Builder for creating custom Stage definitions.
 #[derive(Debug, Default)]
@@ -277,11 +278,192 @@ impl StageBuilder {
     }
 }
 
-impl Stage {
-    /// Start building a new Stage.
+// =============================================================================
+// PipelineBuilder - Railway-Oriented Builder for Pipeline
+// =============================================================================
+
+use crate::domain::Stage;
+use crate::pipeline::{FailureStrategy, Pipeline};
+use crate::retry::RetryConfig;
+use itertools::Itertools;
+
+/// Builder for constructing Pipeline instances with validation.
+///
+/// Uses Railway-Oriented Programming: validate() returns Result<Self>,
+/// then build() chains with and_then for pure composition.
+#[derive(Debug)]
+pub struct PipelineBuilder {
+    stages: Vec<Stage>,
+    language: Option<Language>,
+    retry_config: RetryConfig,
+    failure_strategy: FailureStrategy,
+    dry_run: bool,
+    validation_cache: OnceLock<Result<()>>,
+}
+
+impl Default for PipelineBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl PipelineBuilder {
+    /// Create a new PipelineBuilder.
     #[must_use]
-    pub fn builder() -> StageBuilder {
-        StageBuilder::new()
+    pub fn new() -> Self {
+        Self {
+            stages: Vec::new(),
+            language: None,
+            retry_config: RetryConfig::default(),
+            failure_strategy: FailureStrategy::default(),
+            dry_run: false,
+            validation_cache: OnceLock::new(),
+        }
+    }
+
+    /// Set the language for the pipeline.
+    #[must_use]
+    pub fn language(mut self, language: Language) -> Self {
+        self.language = Some(language);
+        self.invalidate_cache();
+        self
+    }
+
+    /// Add a single stage to the pipeline.
+    #[must_use]
+    pub fn with_stage(mut self, stage: Stage) -> Self {
+        self.stages.push(stage);
+        self.invalidate_cache();
+        self
+    }
+
+    /// Add multiple stages to the pipeline.
+    #[must_use]
+    pub fn with_stages(mut self, stages: impl IntoIterator<Item = Stage>) -> Self {
+        self.stages.extend(stages);
+        self.invalidate_cache();
+        self
+    }
+
+    /// Set the retry configuration.
+    #[must_use]
+    pub fn with_retry(mut self, config: RetryConfig) -> Self {
+        self.retry_config = config;
+        self
+    }
+
+    /// Set the failure strategy.
+    #[must_use]
+    pub fn with_failure_strategy(mut self, strategy: FailureStrategy) -> Self {
+        self.failure_strategy = strategy;
+        self
+    }
+
+    /// Enable dry-run mode.
+    #[must_use]
+    pub fn dry_run(mut self) -> Self {
+        self.dry_run = true;
+        self
+    }
+
+    /// Validate the pipeline configuration.
+    ///
+    /// Uses Railway-Oriented Programming: returns Result<Self> that can
+    /// be chained with and_then for pure composition.
+    ///
+    /// # Checks
+    /// - Language is set
+    /// - No duplicate stage names
+    /// - No circular dependencies (when implemented)
+    pub fn validate(self) -> Result<Self> {
+        match self.validate_cache() {
+            Ok(()) => (),
+            Err(e) => return Err(e.clone()),
+        };
+
+        debug!(
+            language = %self.language.as_ref().unwrap(),
+            stage_count = self.stages.len(),
+            "Pipeline validation successful"
+        );
+
+        Ok(self)
+    }
+
+    /// Check for circular dependencies in stage execution.
+    ///
+    /// This is a placeholder for future dependency graph implementation.
+    /// When stages have dependencies, this will validate they form a DAG.
+    fn check_circular_deps(&self) -> Result<()> {
+        // TODO: Implement circular dependency detection when stage dependencies are added
+        // For now, all stages are independent, so no cycles possible
+        Ok(())
+    }
+
+    /// Validate the pipeline configuration with caching.
+    ///
+    /// Uses lazy evaluation with OnceLock to cache validation results.
+    /// This avoids recomputing validation on every call to validate() or build().
+    fn validate_cache(&self) -> &Result<()> {
+        self.validation_cache.get_or_init(|| {
+            // Check language is set
+            let _language = self.language.ok_or_else(|| Error::InvalidRecord {
+                reason: "language must be set".to_string(),
+            })?;
+
+            // Check for duplicate stage names using itertools
+            let stage_names: Vec<&String> = self.stages.iter().map(|s| &s.name).collect();
+            let duplicates: Vec<&String> = stage_names.iter().duplicates().cloned().collect();
+
+            if !duplicates.is_empty() {
+                let duplicate_names: Vec<&str> = duplicates.iter().map(|s| s.as_str()).collect();
+                return Err(Error::DuplicateStages {
+                    stages: duplicate_names.join(", "),
+                });
+            }
+
+            // Check for circular dependencies (placeholder for future implementation)
+            self.check_circular_deps()?;
+
+            Ok(())
+        })
+    }
+
+    /// Invalidate the validation cache.
+    ///
+    /// This should be called when stages, language, or other validation-relevant fields are modified.
+    fn invalidate_cache(&mut self) {
+        let _ = self.validation_cache.take();
+    }
+
+    /// Build the Pipeline using Railway-Oriented Programming.
+    ///
+    /// Chains validate() with and_then for pure composition:
+    /// - First validate the configuration
+    /// - Then create the pipeline instance
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let pipeline = PipelineBuilder::new()
+    ///     .language(Language::Rust)
+    ///     .with_stages(stages)
+    ///     .build()?;
+    /// ```
+    pub fn build(self) -> Result<Pipeline> {
+        // Railway track: validate first, then build
+        self.validate().and_then(|builder| {
+            let language = builder.language.ok_or_else(|| Error::InvalidRecord {
+                reason: "language must be set".to_string(),
+            })?;
+
+            // Build pipeline using the builder pattern methods
+            Ok(Pipeline::new(language)
+                .with_stages(builder.stages)
+                .with_retry(builder.retry_config)
+                .with_failure_strategy(builder.failure_strategy)
+                .dry_run())
+        })
     }
 }
 
@@ -367,5 +549,107 @@ mod tests {
     fn test_stage_builder_missing_name() {
         let result = Stage::builder().gate("some gate").try_build();
         assert!(result.is_err());
+    }
+
+    // =============================================================================
+    // PipelineBuilder Tests
+    // =============================================================================
+
+    use crate::domain::Stage;
+
+    #[test]
+    fn test_pipeline_builder_validate_success() {
+        use crate::domain::standard_pipeline;
+
+        let result = PipelineBuilder::new()
+            .language(Language::Rust)
+            .with_stages(standard_pipeline())
+            .validate();
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_pipeline_builder_validate_missing_language() {
+        let result = PipelineBuilder::new()
+            .with_stage(Stage::new("test", "test passes", 0))
+            .validate();
+
+        assert!(result.is_err());
+        if let Err(Error::InvalidRecord { reason }) = result {
+            assert!(reason.contains("language"));
+        } else {
+            panic!("Expected InvalidRecord error");
+        }
+    }
+
+    #[test]
+    fn test_pipeline_builder_validate_duplicate_stages() {
+        let result = PipelineBuilder::new()
+            .language(Language::Rust)
+            .with_stage(Stage::new("duplicate", "first", 0))
+            .with_stage(Stage::new("other", "other passes", 0))
+            .with_stage(Stage::new("duplicate", "second", 0))
+            .validate();
+
+        assert!(result.is_err());
+        if let Err(Error::DuplicateStages { stages }) = result {
+            assert!(stages.contains("duplicate"));
+        } else {
+            panic!("Expected DuplicateStages error");
+        }
+    }
+
+    #[test]
+    fn test_pipeline_builder_build_success() {
+        use crate::domain::standard_pipeline;
+
+        let result = PipelineBuilder::new()
+            .language(Language::Rust)
+            .with_stages(standard_pipeline())
+            .build();
+
+        assert!(result.is_ok());
+        // Pipeline builder succeeded, we can't inspect private fields
+        // but the success of build() indicates the structure is correct
+    }
+
+    #[test]
+    fn test_pipeline_builder_railway_pattern() {
+        use crate::domain::standard_pipeline;
+
+        // Railway-Oriented Programming: chain validate and build
+        let result = PipelineBuilder::new()
+            .language(Language::Rust)
+            .with_stages(standard_pipeline())
+            .validate()
+            .and_then(|builder| builder.build());
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_pipeline_builder_with_retry() {
+        use crate::retry::RetryConfig;
+
+        let result = PipelineBuilder::new()
+            .language(Language::Rust)
+            .with_stage(Stage::new("test", "test passes", 0))
+            .with_retry(RetryConfig::quick())
+            .build();
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_pipeline_builder_dry_run() {
+        let result = PipelineBuilder::new()
+            .language(Language::Rust)
+            .with_stage(Stage::new("test", "test passes", 0))
+            .dry_run()
+            .build();
+
+        assert!(result.is_ok());
+        // Pipeline builder succeeded with dry_run enabled
     }
 }

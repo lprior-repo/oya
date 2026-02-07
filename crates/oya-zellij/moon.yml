@@ -1,53 +1,113 @@
+# OYA Zellij Plugin - Moon Pipeline Configuration
+#
+# LESSON LEARNED: All build tasks MUST use Rust 1.83 + wasm32-wasi target
+#
+# WHY: See ../Cargo.toml for full explanation
+#      - Zellij needs _start export (only wasm32-wasi provides it)
+#      - Rust 1.83 is last version with wasm32-wasi support
+#      - Scripts handle standalone workspace build to avoid edition2024 conflicts
+#
+# QUICK REFERENCE:
+#   Build:  moon run oya-zellij:build
+#   Install: moon run oya-zellij:install
+#   Update:  moon run oya-zellij:update (rebuild + install during dev)
+#   Test:   moon run oya-zellij:test (verify _start export exists)
+
 $schema: https://moonrepo.dev/schemas/project.json
 
 language: rust
 
 tasks:
   # Build WASM plugin
+  # ⚠️  Uses script wrapper to enforce Rust 1.83 + wasm32-wasi
   build:
     description: Build Zellij plugin WASM binary
-    command: cargo build --release --target wasm32-wasip1 -p oya-zellij
+    command: bash crates/oya-zellij/scripts/build.sh
     outputs:
-      - target/wasm32-wasip1/release/oya_zellij.wasm
+      - crates/oya-zellij/target/wasm32-wasi/release/oya_zellij.wasm
 
   # Quick build (debug mode)
+  # Faster iteration during development
   build-dev:
     description: Build Zellij plugin in debug mode (faster)
-    command: cargo build --target wasm32-wasip1 -p oya-zellij
+    command: bash crates/oya-zellij/scripts/build-dev.sh
     outputs:
-      - target/wasm32-wasip1/debug/oya_zellij.wasm
+      - crates/oya-zellij/target/wasm32-wasi/debug/oya_zellij.wasm
 
   # Full installation
+  # Builds (if needed) and copies WASM to ~/.local/share/zellij/plugins/
   install:
     description: Build and install Zellij plugin to ~/.local/share/zellij/plugins
-    command: bash scripts/install-zellij-plugin.sh
+    command: bash crates/oya-zellij/scripts/install-zellij-plugin.sh
     deps:
       - build
 
   # Quick update during development
+  # Rebuilds and reinstalls - use this while iterating on plugin code
   update:
     description: Quick rebuild and reinstall (for development iteration)
-    command: bash scripts/update-zellij-plugin.sh
+    command: bash crates/oya-zellij/scripts/update-zellij-plugin.sh
 
   # Clean build artifacts
+  # Removes target/ directory to force full rebuild
   clean:
     description: Clean WASM build artifacts
-    command: cargo clean -p oya-zellij
+    command: cargo clean --manifest-path crates/oya-zellij/Cargo.toml
 
   # Check WASM file size
+  # Useful for monitoring plugin size (currently ~1.4M)
   size:
-    description: Check WASM binary size
-    command: ls -lh target/wasm32-wasip1/release/oya_zellij.wasm 2>/dev/null || echo "Build first with: moon run :build"
+    description: "Check WASM binary size"
+    command: |
+      ls -lh crates/oya-zellij/target/wasm32-wasi/release/oya_zellij.wasm 2>/dev/null || echo "Build first with: moon run oya-zellij:build"
+
+  # Test the plugin
+  # Verifies WASM has required _start export and other symbols
+  # Run this after build to catch configuration errors early
+  test:
+    description: "Verify plugin loads and has correct exports"
+    command: |
+      set -e
+      echo "🔍 Checking WASM exports..."
+      if command -v llvm-nm >/dev/null 2>&1; then
+        exports=$(llvm-nm crates/oya-zellij/target/wasm32-wasi/release/oya_zellij.wasm 2>/dev/null | grep " T " | grep -v "^_" || echo "")
+        if echo "$exports" | grep -q "_start"; then
+          echo "✅ Plugin has _start export"
+        else
+          echo "❌ Plugin missing _start export!"
+          echo "This usually means the plugin was built with wrong Rust version or target."
+          echo "Fix: bash crates/oya-zellij/scripts/build.sh"
+          exit 1
+        fi
+        if echo "$exports" | grep -q "load"; then
+          echo "✅ Plugin has load export"
+        else
+          echo "❌ Plugin missing load export!"
+          exit 1
+        fi
+        echo "📊 All exports:"
+        echo "$exports"
+      else
+        echo "⚠️  llvm-nm not found, skipping export verification"
+        echo "Install llvm for full verification (optional)"
+      fi
+      echo ""
+      echo "✅ Plugin looks good!"
 
   # Release workflow
+  # Complete clean build + install + verification
+  # Use this before committing or deploying
   release:
-    description: Full release workflow: clean, build, install, verify
+    description: "Full release workflow - clean, build, install, verify"
     command: |
       set -e
       echo "🧹 Cleaning old builds..."
-      cargo clean -p oya-zellij
+      cargo clean --manifest-path crates/oya-zellij/Cargo.toml
       echo "🔨 Building release..."
-      cargo build --release --target wasm32-wasip1 -p oya-zellij
+      bash crates/oya-zellij/scripts/build.sh
       echo "📦 Installing to Zellij..."
-      bash scripts/install-zellij-plugin.sh
+      bash crates/oya-zellij/scripts/install-zellij-plugin.sh
+      echo ""
       echo "✅ Release complete!"
+      echo ""
+      echo "Test with: zellij --layout oya"

@@ -21,8 +21,16 @@ chrono = { workspace = true }
 ulid = { workspace = true }
 regex = { workspace = true }
 glob = { workspace = true }
+itertools = { workspace = true }
 surrealdb = { workspace = true }
 surrealdb-core = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.0"
+
+[[bin]]
+name = "test_memoization"
+path = "../../test_memoization.rs"
 
 [lints]
 workspace = true

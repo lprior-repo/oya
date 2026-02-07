@@ -1,0 +1,116 @@
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
+
+#[derive(Debug)]
+enum computationError {
+    DivisionByZero,
+    InvalidInput,
+}
+
+// Functional approach with Result and ?
+fn functional_divide(a: f64, b: f64) -> Result<f64, computationError> {
+    if b == 0.0 {
+        return Err(computationError::DivisionByZero);
+    }
+    Ok(a / b)
+}
+
+fn functional_computation(input: f64) -> Result<f64, computationError> {
+    let step1 = functional_divide(input, 2.0)?;
+    let step2 = functional_divide(step1, 3.0)?;
+    let step3 = functional_divide(step2, 4.0)?;
+    Ok(step3)
+}
+
+// Imperative match-based approach
+fn imperative_computation(input: f64) -> Result<f64, computationError> {
+    let step1 = match functional_divide(input, 2.0) {
+        Ok(v) => v,
+        Err(e) => return Err(e),
+    };
+
+    let step2 = match functional_divide(step1, 3.0) {
+        Ok(v) => v,
+        Err(e) => return Err(e),
+    };
+
+    let step3 = match functional_divide(step2, 4.0) {
+        Ok(v) => v,
+        Err(e) => return Err(e),
+    };
+
+    Ok(step3)
+}
+
+fn benchmark_error_propagation(c: &mut Criterion) {
+    let input = 1000.0;
+
+    c.bench_function("functional_error_handling", |b| {
+        b.iter(|| black_box(functional_computation(input)))
+    });
+
+    c.bench_function("imperative_error_handling", |b| {
+        b.iter(|| black_box(imperative_computation(input)))
+    });
+}
+
+fn benchmark_error_path(c: &mut Criterion) {
+    let input = 1000.0;
+
+    c.bench_function("functional_error_path", |b| {
+        b.iter(|| black_box(functional_divide(input, 0.0)))
+    });
+
+    c.bench_function("imperative_error_path", |b| {
+        b.iter(|| match functional_divide(input, 0.0) {
+            Ok(v) => Ok(v),
+            Err(e) => Err(e),
+        })
+    });
+}
+
+fn benchmark_chained_results(c: &mut Criterion) {
+    fn add_one(x: i32) -> Result<i32, computationError> {
+        Ok(x + 1)
+    }
+
+    fn multiply_two(x: i32) -> Result<i32, computationError> {
+        Ok(x * 2)
+    }
+
+    c.bench_function("functional_chain", |b| {
+        b.iter(|| {
+            let result = Ok(10);
+            let result = result.and_then(|x| add_one(x));
+            let result = result.and_then(|x| multiply_two(x));
+            let result = result.and_then(|x| add_one(x));
+            black_box(result)
+        })
+    });
+
+    c.bench_function("imperative_chain", |b| {
+        b.iter(|| {
+            let mut result = Ok(10);
+            result = match result {
+                Ok(x) => add_one(x),
+                Err(e) => Err(e),
+            };
+            result = match result {
+                Ok(x) => multiply_two(x),
+                Err(e) => Err(e),
+            };
+            result = match result {
+                Ok(x) => add_one(x),
+                Err(e) => Err(e),
+            };
+            black_box(result)
+        })
+    });
+}
+
+criterion_group!(
+    benches,
+    benchmark_error_propagation,
+    benchmark_error_path,
+    benchmark_chained_results
+);
+criterion_main!(benches);

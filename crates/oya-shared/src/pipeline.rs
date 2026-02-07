@@ -127,16 +127,17 @@ impl StageInfo {
 
     /// Add dependencies
     #[must_use]
-    pub fn with_depends_on(mut self, deps: Vec<String>) -> Self {
-        self.depends_on = deps;
-        self
+    pub fn with_depends_on(self, deps: Vec<String>) -> Self {
+        Self {
+            depends_on: deps,
+            ..self
+        }
     }
 
     /// Set status
     #[must_use]
-    pub const fn with_status(mut self, status: StageStatus) -> Self {
-        self.status = status;
-        self
+    pub fn with_status(self, status: StageStatus) -> Self {
+        Self { status, ..self }
     }
 
     /// Check if this stage can run (all dependencies passed)
@@ -248,11 +249,30 @@ impl PipelineState {
     }
 
     /// Find mutable stage by name
+    ///
+    /// # Deprecated
+    ///
+    /// This method is deprecated in favor of immutable update patterns.
+    /// Use `with_updated_stage` instead to create a new pipeline state.
+    #[deprecated(
+        since = "0.1.0",
+        note = "Use `with_updated_stage` for immutable updates"
+    )]
     pub fn find_stage_mut(&mut self, name: &str) -> Option<&mut StageInfo> {
         self.stages.iter_mut().find(|s| s.name == name)
     }
 
     /// Update a stage's status
+    ///
+    /// # Deprecated
+    ///
+    /// This method is deprecated in favor of immutable update patterns.
+    /// Use `with_updated_stage` instead to create a new pipeline state.
+    #[deprecated(
+        since = "0.1.0",
+        note = "Use `with_updated_stage` for immutable updates"
+    )]
+    #[allow(deprecated)]
     pub fn update_stage(
         &mut self,
         name: &str,
@@ -270,6 +290,35 @@ impl PipelineState {
         self.all_passed = self.stages.iter().all(|s| s.status.is_passed());
         self.first_failure = self.stages.iter().position(|s| s.status.is_failed());
         self.total_duration_ms = self.stages.iter().filter_map(|s| s.duration_ms).sum();
+    }
+
+    /// Returns a new pipeline state with the specified stage updated
+    #[must_use]
+    pub fn with_updated_stage(
+        self,
+        name: &str,
+        status: StageStatus,
+        duration_ms: Option<u64>,
+        error: Option<String>,
+    ) -> Self {
+        let mut stages = self.stages.clone();
+        if let Some(stage) = stages.iter_mut().find(|s| s.name == name) {
+            stage.status = status;
+            stage.duration_ms = duration_ms;
+            stage.error = error;
+        }
+
+        let all_passed = stages.iter().all(|s| s.status.is_passed());
+        let first_failure = stages.iter().position(|s| s.status.is_failed());
+        let total_duration_ms = stages.iter().filter_map(|s| s.duration_ms).sum();
+
+        Self {
+            stages,
+            all_passed,
+            first_failure,
+            total_duration_ms,
+            ..self
+        }
     }
 
     /// Get the next stage that can run
@@ -362,7 +411,7 @@ mod tests {
 
     #[test]
     fn test_stage_can_run() {
-        let mut state = PipelineState::standard();
+        let state = PipelineState::standard();
 
         // implement has no deps, should be runnable
         assert!(state.stages[0].can_run(&state.stages));
@@ -370,8 +419,8 @@ mod tests {
         // unit-test depends on implement, not runnable yet
         assert!(!state.stages[1].can_run(&state.stages));
 
-        // Mark implement as passed
-        state.update_stage("implement", StageStatus::Passed, Some(100), None);
+        // Mark implement as passed using immutable update
+        let state = state.with_updated_stage("implement", StageStatus::Passed, Some(100), None);
 
         // Now unit-test should be runnable
         assert!(state.stages[1].can_run(&state.stages));
@@ -379,14 +428,14 @@ mod tests {
 
     #[test]
     fn test_completion_percent() {
-        let mut state = PipelineState::standard();
+        let state = PipelineState::standard();
         assert_eq!(state.completion_percent(), 0);
 
-        state.update_stage("implement", StageStatus::Passed, Some(100), None);
+        let state = state.with_updated_stage("implement", StageStatus::Passed, Some(100), None);
         assert_eq!(state.completion_percent(), 11); // 1/9 = 11%
 
         // Pass all stages
-        for stage in &[
+        let state = [
             "unit-test",
             "coverage",
             "lint",
@@ -395,9 +444,12 @@ mod tests {
             "security",
             "review",
             "accept",
-        ] {
-            state.update_stage(stage, StageStatus::Passed, Some(100), None);
-        }
+        ]
+        .iter()
+        .fold(state, |acc, stage| {
+            acc.with_updated_stage(stage, StageStatus::Passed, Some(100), None)
+        });
+
         assert_eq!(state.completion_percent(), 100);
     }
 

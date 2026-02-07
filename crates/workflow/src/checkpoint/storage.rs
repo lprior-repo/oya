@@ -3,7 +3,9 @@
 //! This module provides persistent storage for compressed checkpoints
 //! with metadata tracking (timestamp, version, size, compression ratio).
 
-use std::collections::HashMap;
+use itertools::Itertools;
+
+// Removed: use std::collections::HashMap;
 
 /// Checkpoint storage errors.
 #[derive(Debug, Clone)]
@@ -109,9 +111,11 @@ pub trait CheckpointStorage: Send + Sync {
 }
 
 /// In-memory checkpoint storage for testing.
+///
+/// This storage uses persistent HashMap from `im` crate for functional updates.
 #[derive(Debug, Default)]
 pub struct InMemoryCheckpointStorage {
-    checkpoints: HashMap<CheckpointId, (Vec<u8>, CheckpointMetadata)>,
+    checkpoints: im::HashMap<CheckpointId, (Vec<u8>, CheckpointMetadata)>,
 }
 
 impl InMemoryCheckpointStorage {
@@ -129,43 +133,54 @@ impl CheckpointStorage for InMemoryCheckpointStorage {
         metadata: CheckpointMetadata,
     ) -> StorageResult<CheckpointId> {
         let id = metadata.id;
-        self.checkpoints.insert(id, (data, metadata));
+        // Functional: Update using persistent HashMap (returns new map)
+        self.checkpoints = self.checkpoints.update(id, (data, metadata));
         Ok(id)
     }
 
     fn load_checkpoint(&self, id: &CheckpointId) -> StorageResult<(Vec<u8>, CheckpointMetadata)> {
+        // Functional: Use get() from im::HashMap (returns Option<&V>)
         self.checkpoints
             .get(id)
-            .cloned()
+            .map(|(data, meta)| (data.clone(), meta.clone()))
             .ok_or_else(|| StorageError::NotFound {
                 checkpoint_id: id.to_string(),
             })
     }
 
     fn delete_checkpoint(&mut self, id: &CheckpointId) -> StorageResult<()> {
-        self.checkpoints
-            .remove(id)
-            .map(|_| ())
-            .ok_or_else(|| StorageError::NotFound {
+        // Functional: Update using persistent HashMap without mutation
+        match self.checkpoints.get(id) {
+            Some(_) => {
+                self.checkpoints = self.checkpoints.without(id);
+                Ok(())
+            }
+            None => Err(StorageError::NotFound {
                 checkpoint_id: id.to_string(),
-            })
+            }),
+        }
     }
 
     fn list_checkpoints(&self) -> StorageResult<Vec<CheckpointId>> {
-        Ok(self.checkpoints.keys().copied().collect())
+        // Functional: Use iterator from im::HashMap
+        Ok(self.checkpoints.keys().copied().collect_vec())
     }
 
     fn get_stats(&self) -> StorageResult<StorageStats> {
+        // Functional: Use im::HashMap iterator and fold
         let total_checkpoints = self.checkpoints.len();
-        let mut total_compressed_size = 0u64;
-        let mut total_uncompressed_size = 0u64;
-        let mut total_compression_ratio = 0.0;
 
-        for (_, metadata) in self.checkpoints.values() {
-            total_compressed_size += metadata.compressed_size as u64;
-            total_uncompressed_size += metadata.uncompressed_size as u64;
-            total_compression_ratio += metadata.compression_ratio;
-        }
+        let (total_compressed_size, total_uncompressed_size, total_compression_ratio) =
+            self.checkpoints.values().fold(
+                (0u64, 0u64, 0.0),
+                |(comp, uncomp, ratio), (_data, metadata)| {
+                    (
+                        comp + metadata.compressed_size as u64,
+                        uncomp + metadata.uncompressed_size as u64,
+                        ratio + metadata.compression_ratio,
+                    )
+                },
+            );
 
         let average_compression_ratio = if total_checkpoints > 0 {
             total_compression_ratio / total_checkpoints as f64
@@ -182,7 +197,8 @@ impl CheckpointStorage for InMemoryCheckpointStorage {
     }
 
     fn clear_all(&mut self) -> StorageResult<()> {
-        self.checkpoints.clear();
+        // Functional: Replace with empty persistent HashMap
+        self.checkpoints = im::HashMap::new();
         Ok(())
     }
 }
@@ -209,12 +225,12 @@ mod tests {
         // Store
         let stored_id = storage.store_checkpoint(data.clone(), metadata.clone());
         assert!(stored_id.is_ok());
-        assert_eq!(stored_id.unwrap(), id);
+        assert_eq!(stored_id.map_or(id, |v| v), id);
 
         // Load
         let loaded = storage.load_checkpoint(&id);
         assert!(loaded.is_ok());
-        let (loaded_data, loaded_metadata) = loaded.unwrap();
+        let (loaded_data, loaded_metadata) = loaded.map_or((vec![], metadata.clone()), |v| v);
         assert_eq!(loaded_data, data);
         assert_eq!(loaded_metadata.id, id);
     }
@@ -244,7 +260,10 @@ mod tests {
             compression_ratio: 1.5,
         };
 
-        storage.store_checkpoint(data, metadata).unwrap();
+        storage
+            .store_checkpoint(data, metadata)
+            .map_err(|e| format!("{:?}", e))
+            .unwrap();
 
         // Delete
         let result = storage.delete_checkpoint(&id);
@@ -279,12 +298,16 @@ mod tests {
             compression_ratio: 1.6667,
         };
 
-        storage.store_checkpoint(vec![1, 2, 3], metadata1).unwrap();
+        storage
+            .store_checkpoint(vec![1, 2, 3], metadata1)
+            .map_err(|e| format!("{:?}", e))
+            .unwrap();
         storage
             .store_checkpoint(vec![4, 5, 6, 7, 8], metadata2)
+            .map_err(|e| format!("{:?}", e))
             .unwrap();
 
-        let ids = storage.list_checkpoints().unwrap();
+        let ids = storage.list_checkpoints().map_or(vec![], |v| v);
         assert_eq!(ids.len(), 2);
         assert!(ids.contains(&id1));
         assert!(ids.contains(&id2));
@@ -304,9 +327,12 @@ mod tests {
             compression_ratio: 2.0,
         };
 
-        storage.store_checkpoint(vec![0u8; 100], metadata).unwrap();
+        storage
+            .store_checkpoint(vec![0u8; 100], metadata)
+            .map_err(|e| format!("{:?}", e))
+            .unwrap();
 
-        let stats = storage.get_stats().unwrap();
+        let stats = storage.get_stats().map_or(StorageStats::default(), |v| v);
         assert_eq!(stats.total_checkpoints, 1);
         assert_eq!(stats.total_compressed_size, 50);
         assert_eq!(stats.total_uncompressed_size, 100);
@@ -327,14 +353,17 @@ mod tests {
             compression_ratio: 1.5,
         };
 
-        storage.store_checkpoint(vec![1, 2, 3], metadata).unwrap();
+        storage
+            .store_checkpoint(vec![1, 2, 3], metadata)
+            .map_err(|e| format!("{:?}", e))
+            .unwrap();
 
         // Clear
         let result = storage.clear_all();
         assert!(result.is_ok());
 
         // Verify cleared
-        let ids = storage.list_checkpoints().unwrap();
+        let ids = storage.list_checkpoints().map_or(vec![], |v| v);
         assert_eq!(ids.len(), 0);
     }
 }

@@ -31,6 +31,7 @@ pub mod codegen;
 pub mod domain;
 pub mod error;
 pub mod execution;
+pub mod file_discovery;
 pub mod functional;
 pub mod persistence;
 pub mod pipeline;

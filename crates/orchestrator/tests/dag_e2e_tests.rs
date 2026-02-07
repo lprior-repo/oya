@@ -19,47 +19,21 @@ use std::time::Duration;
 fn given_ci_pipeline_dag_when_execute_then_correct_order() {
     // GIVEN: A realistic CI/CD pipeline
     //        checkout -> [build, lint] -> test -> [docker, deploy]
-    let mut dag = WorkflowDAG::new();
-
-    // Setup stages
-    let _ = dag.add_node("checkout".to_string());
-    let _ = dag.add_node("build".to_string());
-    let _ = dag.add_node("lint".to_string());
-    let _ = dag.add_node("test".to_string());
-    let _ = dag.add_node("docker".to_string());
-    let _ = dag.add_node("deploy".to_string());
-
-    // Dependencies
-    let _ = dag.add_edge(
-        "checkout".to_string(),
-        "build".to_string(),
-        DependencyType::BlockingDependency,
-    );
-    let _ = dag.add_edge(
-        "checkout".to_string(),
-        "lint".to_string(),
-        DependencyType::BlockingDependency,
-    );
-    let _ = dag.add_edge(
-        "build".to_string(),
-        "test".to_string(),
-        DependencyType::BlockingDependency,
-    );
-    let _ = dag.add_edge(
-        "lint".to_string(),
-        "test".to_string(),
-        DependencyType::BlockingDependency,
-    );
-    let _ = dag.add_edge(
-        "test".to_string(),
-        "docker".to_string(),
-        DependencyType::BlockingDependency,
-    );
-    let _ = dag.add_edge(
-        "test".to_string(),
-        "deploy".to_string(),
-        DependencyType::BlockingDependency,
-    );
+    let dag = WorkflowDAG::builder()
+        .with_nodes(["checkout", "build", "lint", "test", "docker", "deploy"].map(String::from))
+        .with_edges(
+            [
+                ("checkout", "build", DependencyType::BlockingDependency),
+                ("checkout", "lint", DependencyType::BlockingDependency),
+                ("build", "test", DependencyType::BlockingDependency),
+                ("lint", "test", DependencyType::BlockingDependency),
+                ("test", "docker", DependencyType::BlockingDependency),
+                ("test", "deploy", DependencyType::BlockingDependency),
+            ]
+            .map(|(a, b, t)| (a.to_string(), b.to_string(), t)),
+        )
+        .build()
+        .expect("builder should succeed");
 
     // WHEN: Simulating execution progression
     let mut completed: HashSet<BeadId> = HashSet::new();

@@ -161,7 +161,12 @@ async fn test_rewind_to_checkpoint() {
     let checkpoints_after_rewind = storage.load_checkpoints(workflow_id).await;
     assert!(checkpoints_after_rewind.is_ok());
     // Should have build checkpoint only (cleared test and deploy)
-    assert_eq!(checkpoints_after_rewind.map(|c| c.len()).map_or(0, |len| len), 1);
+    assert_eq!(
+        checkpoints_after_rewind
+            .map(|c| c.len())
+            .map_or(0, |len| len),
+        1
+    );
 }
 
 /// Test: Resume workflow from paused state.

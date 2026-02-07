@@ -1,5 +1,6 @@
 //! Tier-1 supervision helpers for the orchestrator.
 
+use futures::stream::{self, TryStreamExt};
 use ractor::ActorRef;
 
 use crate::actors::ActorError;
@@ -52,10 +53,17 @@ pub struct Tier1Supervisors {
 impl Tier1Supervisors {
     /// Return all supervisors as an ordered list.
     pub fn stop_all(&self, reason: &str) {
-        self.storage.actor.stop(Some(reason.to_string()));
-        self.workflow.actor.stop(Some(reason.to_string()));
-        self.queue.actor.stop(Some(reason.to_string()));
-        self.reconciler.actor.stop(Some(reason.to_string()));
+        let supervisors = vec![&self.storage, &self.workflow, &self.queue, &self.reconciler];
+
+        // Use fail-fast pattern for supervisor shutdown
+        let _ = stream::iter(supervisors)
+            .map(|supervisor| async move {
+                supervisor.actor.stop(Some(reason.to_string()));
+                Ok::<(), ActorError>(())
+            })
+            .buffer_unordered(4) // Stop in parallel with limit
+            .try_collect()
+            .await;
     }
 }
 

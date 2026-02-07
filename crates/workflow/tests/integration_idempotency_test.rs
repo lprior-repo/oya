@@ -12,6 +12,7 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
+use itertools::Itertools;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -242,26 +243,25 @@ async fn test_concurrent_execution_with_same_key_only_executes_once() {
         }));
     }
 
-    // Then: All executions should succeed
-    let mut results = Vec::new();
-    for handle in handles {
-        let result = handle.await;
-        assert!(result.is_ok(), "Task should complete");
-        let inner_result = result.ok();
-        assert!(inner_result.is_some(), "Task result should exist");
-        let unwrapped = inner_result.map_or(Err("No result".to_string()), |r| r);
-        assert!(unwrapped.is_ok(), "Concurrent execution should succeed");
-        results.push(unwrapped.ok());
-    }
+    // Then: All executions should succeed and results should be identical
+    let results: Vec<_> = futures::future::join_all(handles)
+        .await
+        .into_iter()
+        .map(|r| r.ok())
+        .flatten()
+        .map(|r| r.ok())
+        .collect();
+
+    assert!(
+        results.iter().all(|r| r.is_some()),
+        "All tasks should complete successfully"
+    );
 
     // And: All results should be identical
-    let first = &results[0];
-    for result in &results[1..] {
-        assert_eq!(
-            result, first,
-            "All concurrent executions should return identical result"
-        );
-    }
+    assert!(
+        results.windows(2).all(|w| w[0] == w[1]),
+        "All concurrent executions should return identical result"
+    );
 
     // And: Operation should only execute once (not 10 times)
     let key = idempotency_key_from_bytes(bead_id, input.as_bytes());

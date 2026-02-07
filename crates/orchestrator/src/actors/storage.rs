@@ -387,7 +387,7 @@ impl Actor for EventStoreActorDef {
                 error!("EventStoreActor requires a DurableEventStore instance");
                 Err(ActorProcessingErr::from(
                     "EventStoreActor requires a DurableEventStore instance. \
-                     Use EventStoreActorDef::spawn() with Some(Arc::new(store))."
+                     Use EventStoreActorDef::spawn() with Some(Arc::new(store)).",
                 ))
             }
         }

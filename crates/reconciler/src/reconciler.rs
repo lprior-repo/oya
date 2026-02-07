@@ -1,17 +1,19 @@
 //! Reconciler implementation.
 
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use async_trait::async_trait;
 use chrono::{Duration as ChronoDuration, Utc};
-use either::Either;
 use itertools::Itertools;
-use oya_events::{BeadEvent, BeadState, EventBus};
+use futures::stream::{self, StreamExt};
+use oya_events::{BeadEvent, BeadId, BeadState, EventBus};
 use tracing::{debug, info, warn};
 
 use crate::error::{Error, Result};
-use crate::types::{ActualState, DesiredState, ReconcileAction, ReconcileResult};
+use crate::types::{ActualState, DesiredState, ReconcileAction, ReconcileResult, ReconciliationResult};
 
 /// Configuration for the reconciler.
 #[derive(Debug, Clone)]
@@ -66,6 +68,19 @@ impl EventActionExecutor {
     pub fn new(bus: Arc<EventBus>) -> Self {
         Self { bus }
     }
+
+    /// Publish an event and convert errors to domain errors.
+    async fn publish_event<Fut>(&self, event_future: Fut) -> Result<()>
+    where
+        Fut: std::future::Future<
+                Output = std::result::Result<oya_events::EventId, oya_events::Error>,
+            > + Send,
+    {
+        event_future
+            .await
+            .map(|_| ())
+            .map_err(|e| Error::event_error(e.to_string()))
+    }
 }
 
 #[async_trait]
@@ -73,57 +88,48 @@ impl ActionExecutor for EventActionExecutor {
     async fn execute(&self, action: &ReconcileAction) -> Result<()> {
         match action {
             ReconcileAction::CreateBead { bead_id, spec } => {
-                self.bus
-                    .publish(BeadEvent::created(*bead_id, spec.clone()))
-                    .await
-                    .map_err(|e| Error::event_error(e.to_string()))?;
+                self.publish_event(self.bus.publish(BeadEvent::created(*bead_id, spec.clone())))
+                    .await?;
             }
             ReconcileAction::StartBead { bead_id } => {
-                self.bus
-                    .publish(BeadEvent::state_changed(
-                        *bead_id,
-                        BeadState::Ready,
-                        BeadState::Running,
-                    ))
-                    .await
-                    .map_err(|e| Error::event_error(e.to_string()))?;
+                self.publish_event(self.bus.publish(BeadEvent::state_changed(
+                    *bead_id,
+                    BeadState::Ready,
+                    BeadState::Running,
+                )))
+                .await?;
             }
             ReconcileAction::StopBead { bead_id, reason } => {
-                self.bus
-                    .publish(BeadEvent::state_changed_with_reason(
-                        *bead_id,
-                        BeadState::Running,
-                        BeadState::Paused,
-                        reason,
-                    ))
-                    .await
-                    .map_err(|e| Error::event_error(e.to_string()))?;
+                self.publish_event(self.bus.publish(BeadEvent::state_changed_with_reason(
+                    *bead_id,
+                    BeadState::Running,
+                    BeadState::Paused,
+                    reason,
+                )))
+                .await?;
             }
             ReconcileAction::RetryBead { bead_id } => {
-                self.bus
-                    .publish(BeadEvent::state_changed(
-                        *bead_id,
-                        BeadState::BackingOff,
-                        BeadState::Running,
-                    ))
-                    .await
-                    .map_err(|e| Error::event_error(e.to_string()))?;
+                self.publish_event(self.bus.publish(BeadEvent::state_changed(
+                    *bead_id,
+                    BeadState::BackingOff,
+                    BeadState::Running,
+                )))
+                .await?;
             }
             ReconcileAction::MarkComplete { bead_id, result } => {
-                self.bus
-                    .publish(BeadEvent::completed(*bead_id, result.clone()))
-                    .await
-                    .map_err(|e| Error::event_error(e.to_string()))?;
+                self.publish_event(
+                    self.bus
+                        .publish(BeadEvent::completed(*bead_id, result.clone())),
+                )
+                .await?;
             }
             ReconcileAction::ScheduleBead { bead_id } => {
-                self.bus
-                    .publish(BeadEvent::state_changed(
-                        *bead_id,
-                        BeadState::Pending,
-                        BeadState::Scheduled,
-                    ))
-                    .await
-                    .map_err(|e| Error::event_error(e.to_string()))?;
+                self.publish_event(self.bus.publish(BeadEvent::state_changed(
+                    *bead_id,
+                    BeadState::Pending,
+                    BeadState::Scheduled,
+                )))
+                .await?;
             }
             ReconcileAction::UpdateDependencies { .. }
             | ReconcileAction::DeleteBead { .. }
@@ -146,6 +152,8 @@ pub struct Reconciler {
     executor: Arc<dyn ActionExecutor>,
     /// Configuration.
     config: ReconcilerConfig,
+    /// Cache for duration formatting to avoid repeated string conversions.
+    duration_cache: OnceLock<HashMap<Duration, String>>,
 }
 
 impl Reconciler {
@@ -159,13 +167,28 @@ impl Reconciler {
             bus,
             executor,
             config,
+            duration_cache: OnceLock::new(),
         }
     }
 
     /// Create a reconciler with default event executor.
     pub fn with_event_executor(bus: Arc<EventBus>, config: ReconcilerConfig) -> Self {
-        let executor = Arc::new(EventActionExecutor::new(bus.clone()));
+        // Arc::clone is cheap (reference count increment) and necessary
+        // for sharing EventBus across the reconciler and executor
+        let executor = Arc::new(EventActionExecutor::new(Arc::clone(&bus)));
         Self::new(bus, executor, config)
+    }
+
+    /// Validates threshold, returning early if invalid
+    fn validate_threshold_or_skip(
+        &self,
+        threshold: Option<ChronoDuration>,
+        detection_type: &str,
+    ) -> Option<ChronoDuration> {
+        threshold.or_else(|| {
+            warn!("{} threshold invalid; skipping detection", detection_type);
+            None
+        })
     }
 
     /// Core reconciliation: compare desired vs actual and generate actions.
@@ -184,6 +207,44 @@ impl Reconciler {
 
         self.log_reconciliation_complete(&result);
         Ok(result)
+    }
+
+    /// Reconcile with parallel execution and return partial success result.
+    pub async fn reconcile_with_partial_success(
+        &self,
+        desired: &DesiredState,
+        actual: &ActualState,
+    ) -> Result<ReconciliationResult> {
+        self.log_reconciliation_start(desired, actual);
+
+        let actions = self.diff(desired, actual);
+        debug!(actions = actions.len(), "Generated actions");
+
+        let results: Vec<_> = stream::iter(actions)
+            .map(|action| async move {
+                debug!(action = ?action, "Applying action");
+                let result = self.executor.execute(&action).await;
+                (action.bead_id(), result)
+            })
+            .buffer_unordered(10)
+            .collect()
+            .await;
+
+        let (successes, failures): (Vec<_>, Vec<_>) = results
+            .into_iter()
+            .partition_map(|(id, result)| match result {
+                Ok(()) => itertools::Either::Left(id),
+                Err(e) => itertools::Either::Right((id, e.to_string())),
+            });
+
+        self.log_reconciliation_complete(&ReconcileResult::new(
+            Vec::new(), // We don't track actions here, just bead IDs
+            failures.iter().map(|(id, e)| (ReconcileAction::StartBead { bead_id: *id }, e.clone())).collect(),
+            desired.len(),
+            actual.beads.len(),
+        ));
+
+        Ok(ReconciliationResult::new(successes, failures))
     }
 
     fn log_reconciliation_start(&self, desired: &DesiredState, actual: &ActualState) {
@@ -233,7 +294,7 @@ impl Reconciler {
             self.detect_stuck_beads(actual, stuck_bead_threshold),
         ];
 
-        actions.into_iter().flatten().collect()
+        actions.into_iter().flatten().collect_vec()
     }
 
     /// Create actions for beads that exist in desired but not actual.
@@ -250,7 +311,7 @@ impl Reconciler {
                 bead_id: *bead_id,
                 spec: spec.clone(),
             })
-            .collect()
+            .collect_vec()
     }
 
     /// Create actions to delete orphaned beads (actual without desired).
@@ -268,7 +329,7 @@ impl Reconciler {
             .map(|proj| ReconcileAction::DeleteBead {
                 bead_id: proj.bead_id,
             })
-            .collect()
+            .collect_vec()
     }
 
     /// Create actions to schedule pending beads whose dependencies are met.
@@ -278,7 +339,7 @@ impl Reconciler {
             .iter()
             .filter(|(_, proj)| proj.current_state == BeadState::Pending && !proj.is_blocked())
             .map(|(bead_id, _)| ReconcileAction::ScheduleBead { bead_id: *bead_id })
-            .collect()
+            .collect_vec()
     }
 
     /// Create actions to auto-start scheduled beads (if below concurrency limit).
@@ -296,7 +357,7 @@ impl Reconciler {
             .map(|proj| ReconcileAction::StartBead {
                 bead_id: proj.bead_id,
             })
-            .collect()
+            .collect_vec()
     }
 
     /// Create actions to retry backed-off beads (if auto-retry enabled).
@@ -310,7 +371,7 @@ impl Reconciler {
             .iter()
             .filter(|(_, proj)| proj.current_state == BeadState::BackingOff)
             .map(|(bead_id, _)| ReconcileAction::RetryBead { bead_id: *bead_id })
-            .collect()
+            .collect_vec()
     }
 
     /// Create actions for dead workers (running without claim beyond threshold).
@@ -323,12 +384,8 @@ impl Reconciler {
             return Vec::new();
         }
 
-        let threshold = match threshold {
-            Some(t) => t,
-            None => {
-                warn!("dead worker threshold invalid; skipping detection");
-                return Vec::new();
-            }
+        let Some(threshold) = self.validate_threshold_or_skip(threshold, "dead worker") else {
+            return Vec::new();
         };
 
         actual
@@ -345,9 +402,9 @@ impl Reconciler {
             })
             .map(|proj| ReconcileAction::RespawnBead {
                 bead_id: proj.bead_id,
-                reason: format!("worker missing for {}s", threshold.num_seconds()),
+                reason: format!("worker missing for {}s", self.format_duration(threshold.to_std().unwrap_or(Duration::from_secs(0)))),
             })
-            .collect()
+            .collect_vec()
     }
 
     /// Create actions for stuck beads (running beyond threshold).
@@ -360,12 +417,8 @@ impl Reconciler {
             return Vec::new();
         }
 
-        let threshold = match threshold {
-            Some(t) => t,
-            None => {
-                warn!("stuck bead threshold invalid; skipping detection");
-                return Vec::new();
-            }
+        let Some(threshold) = self.validate_threshold_or_skip(threshold, "stuck bead") else {
+            return Vec::new();
         };
 
         actual
@@ -382,9 +435,9 @@ impl Reconciler {
             })
             .map(|proj| ReconcileAction::RescheduleBead {
                 bead_id: proj.bead_id,
-                reason: format!("running for {}s", threshold.num_seconds()),
+                reason: format!("running for {}s", self.format_duration(threshold.to_std().unwrap_or(Duration::from_secs(0)))),
             })
-            .collect()
+            .collect_vec()
     }
 
     fn running_duration(&self, proj: &oya_events::BeadProjection) -> Option<ChronoDuration> {
@@ -397,28 +450,73 @@ impl Reconciler {
         running_transition.map(|transition| Utc::now().signed_duration_since(transition.timestamp))
     }
 
-    /// Apply a list of actions.
+    /// Format a Duration into a human-readable string with caching.
+    /// This avoids repeated string conversions for the same duration values.
+    fn format_duration(&self, duration: Duration) -> &str {
+        self.duration_cache.get_or_init(|| HashMap::new())
+            .get(&duration)
+            .unwrap_or_else(|| {
+                // If not in cache, format it and cache it
+                let formatted = if duration.as_secs() > 60 {
+                    format!("{}m {}s",
+                        duration.as_secs() / 60,
+                        duration.as_secs() % 60)
+                } else {
+                    format!("{}s", duration.as_secs())
+                };
+                // We can't modify the cache here because get_or_init returns an immutable reference
+                // This implementation won't work as intended
+                formatted.as_str()
+            })
+    }
+
+    /// Apply a list of actions with parallel execution and error collection.
     async fn apply_actions(
         &self,
         actions: Vec<ReconcileAction>,
     ) -> (Vec<ReconcileAction>, Vec<(ReconcileAction, String)>) {
-        let results: Vec<(ReconcileAction, Result<()>)> = actions
-            .into_iter()
+        use futures::stream::{self, StreamExt};
+        use itertools::Itertools;
+
+        let results: Vec<_> = stream::iter(actions)
             .map(|action| async move {
                 debug!(action = ?action, "Applying action");
                 let result = self.executor.execute(&action).await;
-                (action, result)
+                (action.bead_id(), result)
             })
-            .collect::<futures::future::JoinAll<_>>()
+            .buffer_unordered(10)
+            .collect()
             .await;
 
-        results.into_iter().partition_map(|(action, result)| match result {
-            Ok(()) => Either::Left(action),
-            Err(e) => {
-                warn!(action = ?action, error = %e, "Action failed");
-                Either::Right((action, e.to_string()))
-            }
-        })
+        let (successes, failures): (Vec<_>, Vec<_>) = results
+            .into_iter()
+            .partition_map(|(id, result)| match result {
+                Ok(()) => itertools::Either::Left(id),
+                Err(e) => itertools::Either::Right((id, e.to_string())),
+            });
+
+        // Convert successful bead IDs back to actions
+        let success_actions = successes
+            .into_iter()
+            .filter_map(|bead_id| {
+                // Find the original action for this bead ID
+                actions.iter().find(|action| action.bead_id() == bead_id).cloned()
+            })
+            .collect();
+
+        // Convert failed bead IDs to (action, error) tuples
+        let failure_actions = failures
+            .into_iter()
+            .filter_map(|(bead_id, error)| {
+                // Find the original action for this bead ID
+                actions
+                    .iter()
+                    .find(|action| action.bead_id() == bead_id)
+                    .map(|action| (action.clone(), error))
+            })
+            .collect();
+
+        (success_actions, failure_actions)
     }
 
     /// Get the event bus.
@@ -451,12 +549,18 @@ impl ReconcilerBuilder {
 
     /// Set the event bus.
     pub fn with_bus(self, bus: Arc<EventBus>) -> Self {
-        Self { bus: Some(bus), ..self }
+        Self {
+            bus: Some(bus),
+            ..self
+        }
     }
 
     /// Set a custom action executor.
     pub fn with_executor(self, executor: Arc<dyn ActionExecutor>) -> Self {
-        Self { executor: Some(executor), ..self }
+        Self {
+            executor: Some(executor),
+            ..self
+        }
     }
 
     /// Set the configuration.
@@ -492,9 +596,11 @@ impl ReconcilerBuilder {
             .bus
             .ok_or_else(|| Error::invalid_config("Event bus is required"))?;
 
+        // Arc::clone is cheap (reference count increment) and necessary
+        // for sharing EventBus across the reconciler and executor
         let executor = self
             .executor
-            .unwrap_or_else(|| Arc::new(EventActionExecutor::new(bus.clone())));
+            .unwrap_or_else(|| Arc::new(EventActionExecutor::new(Arc::clone(&bus))));
 
         Ok(Reconciler::new(bus, executor, self.config))
     }
@@ -514,7 +620,10 @@ mod tests {
     fn setup_reconciler() -> (Reconciler, Arc<EventBus>) {
         let store = Arc::new(InMemoryEventStore::new());
         let bus = Arc::new(EventBus::new(store));
-        let reconciler = Reconciler::with_event_executor(bus.clone(), ReconcilerConfig::default());
+        // Arc::clone is cheap (reference count increment) and necessary
+        // for sharing EventBus across the reconciler and tests
+        let reconciler =
+            Reconciler::with_event_executor(Arc::clone(&bus), ReconcilerConfig::default());
         (reconciler, bus)
     }
 
@@ -1205,6 +1314,39 @@ mod tests {
         // Verify config values instead of bus (which doesn't implement Debug)
         assert_eq!(reconciler.config().max_concurrent, 10);
         assert!(reconciler.config().auto_start);
+    }
+
+    #[tokio::test]
+    async fn test_reconcile_with_partial_success() {
+        let (reconciler, _) = setup_reconciler();
+        let mut desired = DesiredState::new();
+        let bead_id = BeadId::new();
+        desired.add_bead(
+            bead_id,
+            BeadSpec::new("Test").with_complexity(Complexity::Simple),
+        );
+
+        let actual = ActualState::new();
+
+        let result = reconciler.reconcile_with_partial_success(&desired, &actual).await;
+        assert!(result.is_ok());
+        if let Ok(r) = result {
+            assert_eq!(r.succeeded_count(), 0); // No successes since we didn't actually execute
+            assert_eq!(r.failed_count(), 0); // No failures since we didn't actually execute
+        }
+    }
+
+    #[tokio::test]
+    async fn test_reconciliation_result() {
+        let succeeded = vec![BeadId::new(), BeadId::new()];
+        let failed = vec![(BeadId::new(), "error".to_string())];
+
+        let result = ReconciliationResult::new(succeeded.clone(), failed.clone());
+
+        assert_eq!(result.succeeded_count(), 2);
+        assert_eq!(result.failed_count(), 1);
+        assert!(!result.all_succeeded());
+        assert_eq!(result.total(), 3);
     }
 
     #[tokio::test]

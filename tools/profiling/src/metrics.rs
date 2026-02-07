@@ -64,6 +64,15 @@ impl MetricsSnapshot {
     }
 }
 
+/// Metric field types from /proc status
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MetricType {
+    VmRss,
+    VmSize,
+    VmPeak,
+    RssAnon,
+}
+
 /// Memory metrics from `/proc/[pid]/status`
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemoryMetrics {
@@ -143,59 +152,93 @@ impl MemoryMetrics {
 
         let reader = BufReader::new(file);
 
-        let mut rss_kb: Option<u64> = None;
-        let mut vm_size_kb: Option<u64> = None;
-        let mut vm_peak_kb: Option<u64> = None;
-        let mut rss_shared_kb: Option<u64> = None;
-
-        for line_result in reader.lines() {
-            let line = line_result.map_err(|e| {
-                ProfilingError::MetricsReadFailed(pid, format!("failed to read line: {e}"))
-            })?;
-
-            if line.starts_with("VmRSS:") {
-                rss_kb = Self::parse_kb_value(&line)?;
-            } else if line.starts_with("VmSize:") {
-                vm_size_kb = Self::parse_kb_value(&line)?;
-            } else if line.starts_with("VmPeak:") {
-                vm_peak_kb = Self::parse_kb_value(&line)?;
-            } else if line.starts_with("RssAnon:") {
-                // Use RssAnon as proxy for non-shared RSS
-                // Actual shared calculation: RssFile + RssShmem
-                rss_shared_kb = Self::parse_kb_value(&line)?;
-            }
+        /// Intermediate accumulator for parsed metrics
+        #[derive(Debug, Default)]
+        struct MetricsAccumulator {
+            rss_kb: Option<u64>,
+            vm_size_kb: Option<u64>,
+            vm_peak_kb: Option<u64>,
+            rss_shared_kb: Option<u64>,
         }
 
-        let rss_kb = rss_kb
+        // Functional iterator pipeline: read lines -> parse -> fold into accumulator
+        let accumulator = reader
+            .lines()
+            .map(|line_result| {
+                line_result.map_err(|e| {
+                    ProfilingError::MetricsReadFailed(pid, format!("failed to read line: {e}"))
+                })
+            })
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .filter_map(|line| Self::parse_proc_line(&line).transpose())
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .fold(
+                MetricsAccumulator::default(),
+                |mut acc, (metric_type, value)| {
+                    match metric_type {
+                        MetricType::VmRss => acc.rss_kb = Some(value),
+                        MetricType::VmSize => acc.vm_size_kb = Some(value),
+                        MetricType::VmPeak => acc.vm_peak_kb = Some(value),
+                        MetricType::RssAnon => acc.rss_shared_kb = Some(value),
+                    }
+                    acc
+                },
+            );
+
+        let rss_kb = accumulator
+            .rss_kb
             .ok_or_else(|| ProfilingError::MetricsReadFailed(pid, "VmRSS not found".to_string()))?;
 
-        let vm_size_kb = vm_size_kb.ok_or_else(|| {
+        let vm_size_kb = accumulator.vm_size_kb.ok_or_else(|| {
             ProfilingError::MetricsReadFailed(pid, "VmSize not found".to_string())
         })?;
 
-        let vm_peak_kb = vm_peak_kb.ok_or_else(|| {
+        let vm_peak_kb = accumulator.vm_peak_kb.ok_or_else(|| {
             ProfilingError::MetricsReadFailed(pid, "VmPeak not found".to_string())
         })?;
 
         // RssAnon is optional (older kernels may not have it)
-        let rss_shared_kb = rss_shared_kb.unwrap_or(0);
+        let rss_shared_kb = accumulator.rss_shared_kb.unwrap_or(0);
 
         Ok(Self::new(rss_kb, vm_size_kb, vm_peak_kb, rss_shared_kb))
     }
 
-    /// Parse a value in kilobytes from a /proc line
+    /// Parse a single /proc status line into a metric type and value
     /// Format: "`FieldName`:    12345 kB"
-    fn parse_kb_value(line: &str) -> Result<Option<u64>> {
-        line.split_whitespace()
+    ///
+    /// Returns None if the line is not a recognized metric field
+    /// Returns error if parsing fails
+    fn parse_proc_line(line: &str) -> Result<Option<(MetricType, u64)>> {
+        // Extract metric type from line prefix
+        let Some(metric_type) = (if line.starts_with("VmRSS:") {
+            Some(MetricType::VmRss)
+        } else if line.starts_with("VmSize:") {
+            Some(MetricType::VmSize)
+        } else if line.starts_with("VmPeak:") {
+            Some(MetricType::VmPeak)
+        } else if line.starts_with("RssAnon:") {
+            Some(MetricType::RssAnon)
+        } else {
+            None
+        }) else {
+            return Ok(None);
+        };
+
+        // Parse the numeric value
+        let value = line
+            .split_whitespace()
             .nth(1)
-            .map(|val_str| {
-                val_str.parse::<u64>().map_err(|e| {
-                    ProfilingError::MetricsParseError(format!(
-                        "failed to parse '{val_str}' as u64: {e}"
-                    ))
-                })
-            })
-            .transpose()
+            .ok_or_else(|| {
+                ProfilingError::MetricsParseError(format!("missing value in line: {line}"))
+            })?
+            .parse::<u64>()
+            .map_err(|e| {
+                ProfilingError::MetricsParseError(format!("failed to parse value in '{line}': {e}"))
+            })?;
+
+        Ok(Some((metric_type, value)))
     }
 }
 

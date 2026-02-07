@@ -156,8 +156,7 @@ impl ExecutionContext {
             return Ok(());
         }
 
-        let metadata = std::fs::metadata(&path)
-            .map_err(|e| Error::file_read_failed(&path, format!("metadata error: {e}")))?;
+        let metadata = std::fs::metadata(&path).map_err(|e| Error::file_read_failed(&path, e))?;
 
         let size_bytes = metadata.len();
         let content = if metadata.len() < 1_000_000 {
@@ -218,53 +217,77 @@ pub fn collect_artifacts(
 ) -> Result<()> {
     // Collect coverage reports
     if stage_name == "coverage" {
-        for pattern in coverage_patterns(language) {
-            if let Ok(matches) = glob::glob(&pattern) {
-                for entry in matches.flatten() {
-                    if entry.is_file() {
-                        ctx.capture_artifact(ArtifactType::CoverageReport, entry)?;
-                    }
-                }
-            }
+        let coverage_files = coverage_patterns(language)
+            .iter()
+            .flat_map(|pattern| {
+                glob::glob(pattern)
+                    .into_iter()
+                    .flatten()
+                    .flatten()
+                    .filter(|entry| entry.is_file())
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        for file in coverage_files {
+            ctx.capture_artifact(ArtifactType::CoverageReport, file)?;
         }
     }
 
     // Collect test results
     if stage_name == "unit-test" || stage_name == "integration" {
-        for pattern in test_result_patterns(language) {
-            if let Ok(matches) = glob::glob(&pattern) {
-                for entry in matches.flatten() {
-                    if entry.is_file() {
-                        ctx.capture_artifact(ArtifactType::TestResults, entry)?;
-                    }
-                }
-            }
+        let test_files = test_result_patterns(language)
+            .iter()
+            .flat_map(|pattern| {
+                glob::glob(pattern)
+                    .into_iter()
+                    .flatten()
+                    .flatten()
+                    .filter(|entry| entry.is_file())
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        for file in test_files {
+            ctx.capture_artifact(ArtifactType::TestResults, file)?;
         }
     }
 
     // Collect lint reports
     if stage_name == "lint" {
-        for pattern in lint_report_patterns(language) {
-            if let Ok(matches) = glob::glob(&pattern) {
-                for entry in matches.flatten() {
-                    if entry.is_file() {
-                        ctx.capture_artifact(ArtifactType::LintReport, entry)?;
-                    }
-                }
-            }
+        let lint_files = lint_report_patterns(language)
+            .iter()
+            .flat_map(|pattern| {
+                glob::glob(pattern)
+                    .into_iter()
+                    .flatten()
+                    .flatten()
+                    .filter(|entry| entry.is_file())
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        for file in lint_files {
+            ctx.capture_artifact(ArtifactType::LintReport, file)?;
         }
     }
 
     // Collect security reports
     if stage_name == "security" {
-        for pattern in security_report_patterns(language) {
-            if let Ok(matches) = glob::glob(&pattern) {
-                for entry in matches.flatten() {
-                    if entry.is_file() {
-                        ctx.capture_artifact(ArtifactType::SecurityReport, entry)?;
-                    }
-                }
-            }
+        let security_files = security_report_patterns(language)
+            .iter()
+            .flat_map(|pattern| {
+                glob::glob(pattern)
+                    .into_iter()
+                    .flatten()
+                    .flatten()
+                    .filter(|entry| entry.is_file())
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        for file in security_files {
+            ctx.capture_artifact(ArtifactType::SecurityReport, file)?;
         }
     }
 

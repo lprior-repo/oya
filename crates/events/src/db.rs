@@ -5,6 +5,7 @@
 #![warn(clippy::nursery)]
 #![forbid(unsafe_code)]
 
+use futures::stream::StreamExt;
 use surrealdb::engine::local::{Db, RocksDb};
 use surrealdb::Surreal;
 use thiserror::Error;
@@ -107,46 +108,16 @@ impl SurrealDbClient {
     /// Returns an error if any of the schema queries fail to execute.
     pub async fn init_schema(&self, schema_content: &str) -> Result<(), DbError> {
         info!("Initializing database schema");
+
         let queries: Vec<&str> = schema_content
             .split(';')
             .filter(|s| !s.trim().is_empty())
             .collect();
 
         let total = queries.len();
-        let mut succeeded = 0;
 
-        for (idx, query) in queries.iter().enumerate() {
-            let trimmed = query.trim();
-            if trimmed.starts_with("--") {
-                debug!("Skipping comment line");
-                continue;
-            }
-
-            if trimmed.len() < 10 {
-                debug!("Skipping empty/short query");
-                continue;
-            }
-
-            debug!(
-                query = %trimmed.chars().take(80).collect::<String>(),
-                idx = idx + 1,
-                total,
-                "Executing schema query"
-            );
-
-            match self.client.query(trimmed).await {
-                Ok(_) => {
-                    succeeded += 1;
-                    debug!(idx = idx + 1, total, "Schema query succeeded");
-                }
-                Err(e) => {
-                    return Err(DbError::SchemaInitFailed(format!(
-                        "Query {} failed: {e}",
-                        idx + 1
-                    )));
-                }
-            }
-        }
+        // Use functional iteration with early termination on error
+        let succeeded = execute_schema_queries(&self.client, &queries).await?;
 
         info!(succeeded, total, "Schema initialization completed");
         Ok(())
@@ -180,6 +151,46 @@ impl SurrealDbClient {
             .map_err(|e| DbError::QueryFailed(format!("Health check failed: {e}")))?;
         Ok(())
     }
+}
+
+/// Executes schema queries sequentially using functional patterns.
+///
+/// This helper function processes a list of SQL queries, skipping comments
+/// and short queries, while providing detailed logging for each executed query.
+async fn execute_schema_queries(client: &Surreal<Db>, queries: &[&str]) -> Result<usize, DbError> {
+    let total = queries.len();
+
+    // Use functional fold with async processing via futures::stream
+    use futures::stream::{iter, TryStreamExt};
+
+    iter(queries.iter().enumerate())
+        .then(|(idx, query): (usize, &&str)| async move {
+            let trimmed = query.trim();
+
+            // Skip comments and empty queries using functional guards
+            if trimmed.starts_with("--") || trimmed.len() < 10 {
+                debug!("Skipping comment or short query at index {}", idx + 1);
+                return Ok::<usize, DbError>(0);
+            }
+
+            debug!(
+                query = %trimmed.chars().take(80).collect::<String>(),
+                idx = idx + 1,
+                total,
+                "Executing schema query"
+            );
+
+            client
+                .query(trimmed)
+                .await
+                .map(|_| {
+                    debug!(idx = idx + 1, total, "Schema query succeeded");
+                    1usize // Count successful query
+                })
+                .map_err(|e| DbError::SchemaInitFailed(format!("Query {} failed: {e}", idx + 1)))
+        })
+        .try_fold(0usize, |acc, count| async move { Ok(acc + count) })
+        .await
 }
 
 #[cfg(test)]

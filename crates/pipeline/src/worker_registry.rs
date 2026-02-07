@@ -60,11 +60,9 @@ macro_rules! register_worker {
 #[macro_export]
 macro_rules! register_workers_batch {
     ($monitor:expr, $count:expr) => {{
-        let mut results = Vec::new();
-        for i in 0..$count {
-            results.push($crate::register_worker!($monitor, i));
-        }
-        results
+        (0..$count)
+            .map(|i| $crate::register_worker!($monitor, i))
+            .collect::<Vec<_>>()
     }};
 }
 
@@ -107,7 +105,6 @@ macro_rules! register_worker_full {
 #[cfg(test)]
 mod tests {
     use crate::actor::{HeartbeatMonitor, ProcessId, ProcessPoolActor, WorkerState};
-    use crate::error::Result;
 
     #[test]
     fn register_worker_macro_adds_single_worker() {
@@ -201,10 +198,10 @@ mod tests {
         let mut pool = ProcessPoolActor::new();
         let mut monitor = HeartbeatMonitor::new();
 
-        // Register 3 workers
-        for i in 0..3 {
-            register_worker_full!(pool, monitor, i, WorkerState::Idle).ok();
-        }
+        // Register 3 workers using functional iterator
+        let _results: Vec<_> = (0..3)
+            .map(|i| register_worker_full!(pool, monitor, i, WorkerState::Idle).ok())
+            .collect();
 
         assert_eq!(pool.size(), 3, "Pool should have 3 workers");
         assert_eq!(monitor.worker_count(), 3, "Monitor should track 3 workers");

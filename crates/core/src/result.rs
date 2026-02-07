@@ -4,6 +4,8 @@
 //! without unwrap/expect/panic.
 
 use crate::error::Error;
+use either::Either;
+use std::future::Future;
 
 /// The standard Result type for OYA operations.
 ///
@@ -39,7 +41,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 ///
 /// This trait provides ergonomic methods that avoid the need for unwrap/expect.
 /// Implements Railway-Oriented Programming patterns for Rust.
-pub trait ResultExt<T> {
+pub trait ResultExt<T>: Sized {
     /// Convert a Result to an Option, logging the error if present.
     fn into_option_logged(self) -> Option<T>;
 
@@ -48,6 +50,113 @@ pub trait ResultExt<T> {
 
     /// Inspect the error without consuming the Result.
     fn inspect_error<F: FnOnce(&Error)>(self, f: F) -> Self;
+
+    /// Chain with another fallible operation.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// fn get_user(id: i32) -> Result<String> { Ok("user".to_string()) }
+    /// fn validate_user(user: String) -> Result<String> { Ok(user.to_uppercase()) }
+    ///
+    /// let result = get_user(1).and_then(|user| validate_user(user));
+    /// assert!(result.is_ok());
+    /// ```
+    fn and_then<F, U>(self, f: F) -> Result<U>
+    where
+        F: FnOnce(T) -> Result<U>;
+
+    /// Async version of and_then for chaining async fallible operations.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// async fn fetch_user(id: i32) -> Result<String> { Ok("user".to_string()) }
+    /// async fn validate_user(user: String) -> Result<String> { Ok(user.to_uppercase()) }
+    ///
+    /// let result = fetch_user(1).await.and_then_async(|user| validate_user(user)).await;
+    /// assert!(result.is_ok());
+    /// ```
+    fn and_then_async<F, U, Fut>(self, f: F) -> impl Future<Output = Result<U>>
+    where
+        F: FnOnce(T) -> Fut,
+        Fut: Future<Output = Result<U>>;
+
+    /// Transform the error type.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// let result: Result<i32> = Err(Error::Unknown("fail".into()));
+    /// let mapped = result.map_err(|e| format!("Error: {}", e));
+    /// assert!(mapped.is_err());
+    /// ```
+    fn map_err<F, E2>(self, f: F) -> std::result::Result<T, E2>
+    where
+        F: FnOnce(Error) -> E2;
+
+    /// Provide a default value for error cases.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// let result: Result<i32> = Err(Error::Unknown("fail".into()));
+    /// let unwrapped = result.unwrap_or(42);
+    /// assert_eq!(unwrapped, 42);
+    /// ```
+    fn unwrap_or(self, default: T) -> T;
+
+    /// Provide a default value for error cases using a function.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// let result: Result<i32> = Err(Error::Unknown("fail".into()));
+    /// let unwrapped = result.unwrap_or_else(|| 42);
+    /// assert_eq!(unwrapped, 42);
+    /// ```
+    fn unwrap_or_else<F>(self, f: F) -> T
+    where
+        F: FnOnce(Error) -> T;
+
+    /// Try an alternative operation if this Result is Err.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// let primary: Result<i32> = Err(Error::Unknown("fail".into()));
+    /// let fallback: Result<i32> = Ok(42);
+    /// let result = primary.or(fallback);
+    /// assert!(result.is_ok());
+    /// ```
+    fn or(self, other: Result<T>) -> Result<T>;
+
+    /// Try an alternative operation using a function if this Result is Err.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// let primary: Result<i32> = Err(Error::Unknown("fail".into()));
+    /// let result = primary.or_else(|_| Ok(42));
+    /// assert!(result.is_ok());
+    /// ```
+    fn or_else<F>(self, f: F) -> Result<T>
+    where
+        F: FnOnce(Error) -> Result<T>;
+
+    /// Convert Result to Either type (useful for error type unification).
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use either::Either;
+    /// let result: Result<i32> = Ok(42);
+    /// let either = result.to_either();
+    /// assert!(either.is_right());
+    /// ```
+    fn to_either(self) -> Either<Error, T>
+    where
+        T: Sized;
 }
 
 impl<T: std::fmt::Debug> ResultExt<T> for Result<T> {
@@ -76,6 +185,83 @@ impl<T: std::fmt::Debug> ResultExt<T> for Result<T> {
             f(e);
         }
         self
+    }
+
+    fn and_then<F, U>(self, f: F) -> Result<U>
+    where
+        F: FnOnce(T) -> Result<U>,
+    {
+        match self {
+            Ok(v) => f(v),
+            Err(e) => Err(e),
+        }
+    }
+
+    fn and_then_async<F, U, Fut>(self, f: F) -> impl Future<Output = Result<U>>
+    where
+        F: FnOnce(T) -> Fut,
+        Fut: Future<Output = Result<U>>,
+    {
+        async move {
+            match self {
+                Ok(v) => f(v).await,
+                Err(e) => Err(e),
+            }
+        }
+    }
+
+    fn map_err<F, E2>(self, f: F) -> std::result::Result<T, E2>
+    where
+        F: FnOnce(Error) -> E2,
+    {
+        match self {
+            Ok(v) => Ok(v),
+            Err(e) => Err(f(e)),
+        }
+    }
+
+    fn unwrap_or(self, default: T) -> T {
+        match self {
+            Ok(v) => v,
+            Err(_) => default,
+        }
+    }
+
+    fn unwrap_or_else<F>(self, f: F) -> T
+    where
+        F: FnOnce(Error) -> T,
+    {
+        match self {
+            Ok(v) => v,
+            Err(e) => f(e),
+        }
+    }
+
+    fn or(self, other: Result<T>) -> Result<T> {
+        match self {
+            Ok(v) => Ok(v),
+            Err(_) => other,
+        }
+    }
+
+    fn or_else<F>(self, f: F) -> Result<T>
+    where
+        F: FnOnce(Error) -> Result<T>,
+    {
+        match self {
+            Ok(v) => Ok(v),
+            Err(e) => f(e),
+        }
+    }
+
+    fn to_either(self) -> Either<Error, T>
+    where
+        T: Sized,
+    {
+        match self {
+            Ok(v) => Either::Right(v),
+            Err(e) => Either::Left(e),
+        }
     }
 }
 
@@ -187,9 +373,11 @@ impl<T> OptionExt<T> for Option<T> {
 }
 
 #[cfg(test)]
+#[cfg(test)]
 mod tests {
     use super::*;
 
+    // Original tests
     #[test]
     fn test_result_into_option_ok() {
         let result: Result<i32> = Ok(42);
@@ -222,6 +410,216 @@ mod tests {
             called = true;
         });
         assert!(called);
+    }
+
+    // Tests for and_then
+    #[test]
+    fn test_and_then_ok() {
+        let result: Result<i32> = Ok(21);
+        let chained = result.and_then(|v| Ok(v * 2));
+        assert!(chained.is_ok());
+        match chained {
+            Ok(v) => assert_eq!(v, 42),
+            Err(_) => panic!("Expected Ok(42)"),
+        }
+    }
+
+    #[test]
+    fn test_and_then_err() {
+        let result: Result<i32> = Err(Error::Unknown("fail".into()));
+        let chained = result.and_then(|v| Ok(v * 2));
+        assert!(chained.is_err());
+    }
+
+    #[test]
+    fn test_and_then_propagates_error() {
+        let result: Result<i32> = Ok(21);
+        let chained: Result<i32> = result.and_then(|_| Err(Error::Unknown("chained fail".into())));
+        assert!(chained.is_err());
+        assert!(matches!(chained, Err(Error::Unknown(_))));
+    }
+
+    // Tests for map_err
+    #[test]
+    fn test_map_err_on_error() {
+        let result: Result<i32> = Err(Error::Unknown("fail".into()));
+        let mapped = result.map_err(|e| format!("Error: {}", e));
+        assert!(mapped.is_err());
+        match mapped {
+            Err(e) => assert_eq!(e, "Error: unknown error: fail"),
+            Ok(_) => panic!("Expected Err with error message"),
+        }
+    }
+
+    #[test]
+    fn test_map_err_on_ok() {
+        let result: Result<i32> = Ok(42);
+        let mapped = result.map_err(|e: Error| format!("Error: {}", e));
+        assert!(mapped.is_ok());
+        match mapped {
+            Ok(v) => assert_eq!(v, 42),
+            Err(_) => panic!("Expected Ok(42)"),
+        }
+    }
+
+    // Tests for unwrap_or
+    #[test]
+    fn test_unwrap_or_ok() {
+        let result: Result<i32> = Ok(42);
+        assert_eq!(result.unwrap_or(0), 42);
+    }
+
+    #[test]
+    fn test_unwrap_or_err() {
+        let result: Result<i32> = Err(Error::Unknown("fail".into()));
+        assert_eq!(result.unwrap_or(99), 99);
+    }
+
+    // Tests for unwrap_or_else
+    #[test]
+    fn test_unwrap_or_else_ok() {
+        let result: Result<i32> = Ok(42);
+        assert_eq!(result.unwrap_or_else(|_| 0), 42);
+    }
+
+    #[test]
+    fn test_unwrap_or_else_err() {
+        let result: Result<i32> = Err(Error::Unknown("fail".into()));
+        assert_eq!(result.unwrap_or_else(|_e| 100), 100);
+    }
+
+    // Tests for or
+    #[test]
+    fn test_or_primary_ok() {
+        let primary: Result<i32> = Ok(42);
+        let fallback: Result<i32> = Ok(99);
+        let result = primary.or(fallback);
+        assert!(result.is_ok());
+        match result {
+            Ok(v) => assert_eq!(v, 42),
+            Err(_) => panic!("Expected Ok(42)"),
+        }
+    }
+
+    #[test]
+    fn test_or_primary_err_fallback_ok() {
+        let primary: Result<i32> = Err(Error::Unknown("primary".into()));
+        let fallback: Result<i32> = Ok(99);
+        let result = primary.or(fallback);
+        assert!(result.is_ok());
+        match result {
+            Ok(v) => assert_eq!(v, 99),
+            Err(_) => panic!("Expected Ok(99)"),
+        }
+    }
+
+    #[test]
+    fn test_or_both_err() {
+        let primary: Result<i32> = Err(Error::Unknown("primary".into()));
+        let fallback: Result<i32> = Err(Error::Unknown("fallback".into()));
+        assert!(primary.or(fallback).is_err());
+    }
+
+    // Tests for or_else
+    #[test]
+    fn test_or_else_primary_ok() {
+        let primary: Result<i32> = Ok(42);
+        let fallback: Result<i32> = Ok(99);
+        let result = primary.or_else(|_| fallback);
+        assert!(result.is_ok());
+        match result {
+            Ok(v) => assert_eq!(v, 42),
+            Err(_) => panic!("Expected Ok(42)"),
+        }
+    }
+
+    #[test]
+    fn test_or_else_primary_err() {
+        let primary: Result<i32> = Err(Error::Unknown("primary".into()));
+        let fallback: Result<i32> = Ok(99);
+        let result = primary.or_else(|_| fallback);
+        assert!(result.is_ok());
+        match result {
+            Ok(v) => assert_eq!(v, 99),
+            Err(_) => panic!("Expected Ok(99)"),
+        }
+    }
+
+    // Tests for to_either
+    #[test]
+    fn test_to_either_ok() {
+        let result: Result<i32> = Ok(42);
+        let either = result.to_either();
+        assert!(either.is_right());
+        match either {
+            Either::Right(v) => assert_eq!(v, 42),
+            Either::Left(_) => panic!("Expected Right(42)"),
+        }
+    }
+
+    #[test]
+    fn test_to_either_err() {
+        let result: Result<i32> = Err(Error::Unknown("fail".into()));
+        let either = result.to_either();
+        assert!(either.is_left());
+    }
+
+    // Integration test: Railway pattern
+    #[test]
+    fn test_railway_pattern_success() {
+        fn validate_input(input: i32) -> Result<i32> {
+            if input > 0 {
+                Ok(input)
+            } else {
+                Err(Error::InvalidRecord {
+                    reason: "must be positive".into(),
+                })
+            }
+        }
+
+        fn double_value(input: i32) -> Result<i32> {
+            Ok(input * 2)
+        }
+
+        fn ensure_even(input: i32) -> Result<i32> {
+            if input % 2 == 0 {
+                Ok(input)
+            } else {
+                Err(Error::InvalidRecord {
+                    reason: "must be even".into(),
+                })
+            }
+        }
+
+        let result = validate_input(21)
+            .and_then(double_value)
+            .and_then(ensure_even);
+
+        assert!(result.is_ok());
+        match result {
+            Ok(v) => assert_eq!(v, 42),
+            Err(_) => panic!("Expected Ok(42)"),
+        }
+    }
+
+    #[test]
+    fn test_railway_pattern_failure() {
+        fn validate_input(input: i32) -> Result<i32> {
+            if input > 0 {
+                Ok(input)
+            } else {
+                Err(Error::InvalidRecord {
+                    reason: "must be positive".into(),
+                })
+            }
+        }
+
+        fn double_value(input: i32) -> Result<i32> {
+            Ok(input * 2)
+        }
+
+        let result = validate_input(-1).and_then(double_value);
+        assert!(result.is_err());
     }
 
     // Tests for GenericResultExt

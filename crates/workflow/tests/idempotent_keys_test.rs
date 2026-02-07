@@ -10,6 +10,7 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
+use itertools::Itertools;
 use oya_workflow::idempotent::keys::idempotency_key;
 use serde::Serialize;
 use uuid::Uuid;
@@ -30,12 +31,12 @@ async fn test_determinism_same_bead_same_input() {
     };
 
     // When: Generate keys twice
-    let key1 = idempotency_key(bead_id, &input);
-    let key2 = idempotency_key(bead_id, &input);
-    assert!(key1.is_ok(), "Should generate key");
-    assert!(key2.is_ok(), "Should generate key");
-    let key1 = key1.ok();
-    let key2 = key2.ok();
+    let key1 = idempotency_key(bead_id, &input)
+        .map_err(|e| format!("{:?}", e))
+        .unwrap();
+    let key2 = idempotency_key(bead_id, &input)
+        .map_err(|e| format!("{:?}", e))
+        .unwrap();
 
     // Then: Keys must be identical
     assert_eq!(key1, key2, "Same inputs should produce same UUID");
@@ -51,17 +52,19 @@ async fn test_determinism_multiple_calls() {
     };
 
     // When: Generate keys 10 times
-    let mut keys = Vec::new();
-    for _ in 0..10 {
-        let key = idempotency_key(bead_id, &input).await;
-        assert!(key.is_ok(), "Should generate key");
-        keys.push(key.ok());
-    }
+    let keys: Vec<_> = (0..10)
+        .map(|_| {
+            idempotency_key(bead_id, &input)
+                .map_err(|e| format!("{:?}", e))
+                .unwrap()
+        })
+        .collect();
 
     // Then: All keys must be identical
-    for key in &keys[1..] {
-        assert_eq!(keys[0], *key, "All calls should produce same UUID");
-    }
+    assert!(
+        keys.windows(2).all(|w| w[0] == w[1]),
+        "All calls should produce same UUID"
+    );
 }
 
 #[test]
@@ -80,12 +83,12 @@ async fn test_uniqueness_different_input() {
     };
 
     // When: Generate keys for each input
-    let key1 = idempotency_key(bead_id, &input1).await;
-    let key2 = idempotency_key(bead_id, &input2).await;
-    assert!(key1.is_ok(), "Should generate key");
-    assert!(key2.is_ok(), "Should generate key");
-    let key1 = key1.ok();
-    let key2 = key2.ok();
+    let key1 = idempotency_key(bead_id, &input1)
+        .map_err(|e| format!("{:?}", e))
+        .unwrap();
+    let key2 = idempotency_key(bead_id, &input2)
+        .map_err(|e| format!("{:?}", e))
+        .unwrap();
 
     // Then: Keys must be different
     assert_ne!(
@@ -103,12 +106,12 @@ async fn test_uniqueness_different_bead_id() {
     };
 
     // When: Generate keys with different bead_ids
-    let key1 = idempotency_key("bead-1", &input).await;
-    let key2 = idempotency_key("bead-2", &input).await;
-    assert!(key1.is_ok(), "Should generate key");
-    assert!(key2.is_ok(), "Should generate key");
-    let key1 = key1.ok();
-    let key2 = key2.ok();
+    let key1 = idempotency_key("bead-1", &input)
+        .map_err(|e| format!("{:?}", e))
+        .unwrap();
+    let key2 = idempotency_key("bead-2", &input)
+        .map_err(|e| format!("{:?}", e))
+        .unwrap();
 
     // Then: Keys must be different (namespaced by bead_id)
     assert_ne!(
@@ -127,28 +130,26 @@ async fn test_uuid_format_valid() {
     };
 
     // When: Generate key
-    let key_result = idempotency_key(bead_id, &input);
-    assert!(key_result.is_ok(), "Should generate key");
+    let key = idempotency_key(bead_id, &input)
+        .map_err(|e| format!("{:?}", e))
+        .unwrap();
 
     // Then: UUID must be valid v5
-    if let Some(key) = key_result.ok() {
-        assert_eq!(
-            key.get_version(),
-            Some(uuid::Version::Sha1),
-            "UUID should be v5"
-        );
+    assert_eq!(
+        key.get_version(),
+        Some(uuid::Version::Sha1),
+        "UUID should be v5"
+    );
 
-        // Verify it's a valid UUID (not nil)
-        assert_ne!(key, Uuid::nil(), "UUID should not be nil");
+    // Verify it's a valid UUID (not nil)
+    assert_ne!(key, Uuid::nil(), "UUID should not be nil");
 
-        // Verify it can be converted to string and back
-        let key_str = key.to_string();
-        let parsed = Uuid::parse_str(&key_str);
-        assert!(parsed.is_ok(), "Should parse UUID string");
-        if let Some(parsed_uuid) = parsed.ok() {
-            assert_eq!(key, parsed_uuid, "UUID should round-trip through string");
-        }
-    }
+    // Verify it can be converted to string and back
+    let key_str = key.to_string();
+    let parsed_uuid = Uuid::parse_str(&key_str)
+        .map_err(|e| format!("{:?}", e))
+        .unwrap();
+    assert_eq!(key, parsed_uuid, "UUID should round-trip through string");
 }
 
 #[test]
@@ -179,13 +180,17 @@ async fn test_collision_resistance_different_values() {
     ];
 
     // When: Generate keys for all inputs
-    let mut keys = Vec::new();
-    for input in &inputs {
-        let key = idempotency_key(bead_id, input)
-            .await
-            .expect("Should generate key");
-        keys.push((input, key));
-    }
+    let keys: Vec<_> = inputs
+        .iter()
+        .map(|input| {
+            (
+                input,
+                idempotency_key(bead_id, input)
+                    .map_err(|e| format!("{:?}", e))
+                    .unwrap(),
+            )
+        })
+        .collect();
 
     // Then: No two keys should be the same
     for (i, (input1, key1)) in keys.iter().enumerate() {
@@ -210,13 +215,13 @@ async fn test_special_characters_in_input() {
 
     // When: Generate key
     let key = idempotency_key(bead_id, &input)
-        .await
-        .expect("Should handle special characters");
+        .map_err(|e| format!("{:?}", e))
+        .unwrap();
 
     // Then: Should be deterministic
     let key2 = idempotency_key(bead_id, &input)
-        .await
-        .expect("Should generate same key");
+        .map_err(|e| format!("{:?}", e))
+        .unwrap();
     assert_eq!(
         key, key2,
         "Special characters should not affect determinism"
@@ -234,11 +239,11 @@ async fn test_empty_input() {
 
     // When: Generate key
     let key1 = idempotency_key(bead_id, &input)
-        .await
-        .expect("Should handle empty input");
+        .map_err(|e| format!("{:?}", e))
+        .unwrap();
     let key2 = idempotency_key(bead_id, &input)
-        .await
-        .expect("Should generate same key");
+        .map_err(|e| format!("{:?}", e))
+        .unwrap();
 
     // Then: Should be deterministic
     assert_eq!(key1, key2, "Empty input should be deterministic");
@@ -250,14 +255,14 @@ async fn test_numeric_values() {
     let bead_id = "test-numeric";
 
     let key1 = idempotency_key(bead_id, &42u32)
-        .await
-        .expect("Should handle u32");
+        .map_err(|e| format!("{:?}", e))
+        .unwrap();
     let key2 = idempotency_key(bead_id, &42i32)
-        .await
-        .expect("Should handle i32");
+        .map_err(|e| format!("{:?}", e))
+        .unwrap();
     let key3 = idempotency_key(bead_id, &42.0f64)
-        .await
-        .expect("Should handle f64");
+        .map_err(|e| format!("{:?}", e))
+        .unwrap();
 
     // Then: Different numeric types should produce different keys
     assert_ne!(key1, key2, "u32 and i32 should produce different UUIDs");

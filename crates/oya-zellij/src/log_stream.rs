@@ -7,13 +7,16 @@ use std::collections::VecDeque;
 use std::time::Instant;
 
 /// Maximum number of log messages to keep in buffer (backpressure limit)
+#[allow(dead_code)]
 pub const MAX_LOG_MESSAGES: usize = 1000;
 
 /// Custom message name for log streaming events
+#[allow(dead_code)]
 pub const LOG_EVENT_NAME: &str = "log";
 
 /// A log message from a pipeline stage or bead
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct LogMessage {
     /// The log message content
     pub content: String,
@@ -22,11 +25,13 @@ pub struct LogMessage {
     /// Source identifier (bead_id or stage name)
     pub source: String,
     /// When the log message was received
+    #[allow(dead_code)]
     pub timestamp: Instant,
 }
 
 impl LogMessage {
     /// Create a new log message
+    #[allow(dead_code)]
     pub fn new(content: String, level: LogLevel, source: String) -> Self {
         Self {
             content,
@@ -46,6 +51,7 @@ impl LogMessage {
     ///   "source": "bead-id"
     /// }
     /// ```
+    #[allow(dead_code)]
     pub fn from_json(json: &str) -> Result<Self, ParseError> {
         #[derive(serde::Deserialize)]
         struct JsonLogMessage {
@@ -78,6 +84,7 @@ impl LogMessage {
 
 /// Log level/severity
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum LogLevel {
     Trace,
     Debug,
@@ -88,17 +95,19 @@ pub enum LogLevel {
 
 impl LogLevel {
     /// Get ANSI color code for this log level
+    #[allow(dead_code)]
     pub fn color(&self) -> &str {
         match self {
-            Self::Trace => "\x1b[90m",   // gray
-            Self::Debug => "\x1b[36m",   // cyan
-            Self::Info => "\x1b[37m",    // white
-            Self::Warn => "\x1b[33m",    // yellow
-            Self::Error => "\x1b[31m",   // red
+            Self::Trace => "\x1b[90m", // gray
+            Self::Debug => "\x1b[36m", // cyan
+            Self::Info => "\x1b[37m",  // white
+            Self::Warn => "\x1b[33m",  // yellow
+            Self::Error => "\x1b[31m", // red
         }
     }
 
     /// Get string representation of log level
+    #[allow(dead_code)]
     pub fn as_str(&self) -> &str {
         match self {
             Self::Trace => "TRACE",
@@ -110,6 +119,7 @@ impl LogLevel {
     }
 
     /// Get symbol for log level
+    #[allow(dead_code)]
     pub fn symbol(&self) -> &str {
         match self {
             Self::Trace => "·",
@@ -123,6 +133,7 @@ impl LogLevel {
 
 /// Error parsing log messages
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum ParseError {
     InvalidUtf8,
     JsonError(String),
@@ -139,13 +150,17 @@ impl std::fmt::Display for ParseError {
 
 /// Bounded buffer for log messages with backpressure control
 #[derive(Clone, Debug, Default)]
+#[allow(dead_code)]
 pub struct LogBuffer {
+    #[allow(dead_code)]
     messages: VecDeque<LogMessage>,
+    #[allow(dead_code)]
     dropped_count: usize,
 }
 
 impl LogBuffer {
     /// Create a new empty log buffer
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
             messages: VecDeque::new(),
@@ -157,6 +172,7 @@ impl LogBuffer {
     ///
     /// If the buffer is full, the oldest message is dropped (FIFO eviction).
     /// This provides automatic backpressure by bounded memory usage.
+    #[allow(dead_code)]
     pub fn push(&mut self, message: LogMessage) {
         // Apply backpressure: drop oldest messages when buffer is full
         while self.messages.len() >= MAX_LOG_MESSAGES {
@@ -168,26 +184,31 @@ impl LogBuffer {
     }
 
     /// Get all messages in reverse chronological order (newest first)
+    #[allow(dead_code)]
     pub fn messages_rev(&self) -> Vec<LogMessage> {
         self.messages.iter().rev().cloned().collect()
     }
 
     /// Get the number of messages currently in the buffer
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.messages.len()
     }
 
     /// Check if the buffer is empty
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.messages.is_empty()
     }
 
     /// Get the number of dropped messages due to backpressure
+    #[allow(dead_code)]
     pub fn dropped_count(&self) -> usize {
         self.dropped_count
     }
 
     /// Clear all messages from the buffer
+    #[allow(dead_code)]
     pub fn clear(&mut self) {
         self.messages.clear();
         self.dropped_count = 0;
@@ -313,7 +334,8 @@ mod tests {
         let result = LogMessage::from_json(json);
 
         assert!(result.is_ok());
-        let msg = result.unwrap();
+        let msg = result
+            .unwrap_or_else(|_| LogMessage::new("".to_string(), LogLevel::Info, "".to_string()));
         assert_eq!(msg.content, "test");
         assert_eq!(msg.level, LogLevel::Info);
         assert_eq!(msg.source, "bead-1");
@@ -325,7 +347,8 @@ mod tests {
         let result = LogMessage::from_json(json);
 
         assert!(result.is_ok());
-        let msg = result.unwrap();
+        let msg = result
+            .unwrap_or_else(|_| LogMessage::new("".to_string(), LogLevel::Info, "".to_string()));
         assert_eq!(msg.content, "test");
         assert_eq!(msg.level, LogLevel::Info); // default
         assert_eq!(msg.source, ""); // default
@@ -337,7 +360,8 @@ mod tests {
         let result = LogMessage::from_json(json);
 
         assert!(result.is_ok());
-        let msg = result.unwrap();
+        let msg = result
+            .unwrap_or_else(|_| LogMessage::new("".to_string(), LogLevel::Info, "".to_string()));
         assert_eq!(msg.level, LogLevel::Info); // defaults to Info for unknown
     }
 
@@ -345,15 +369,18 @@ mod tests {
     fn test_log_message_from_json_invalid_utf8() {
         // Create invalid UTF-8 bytes
         let invalid_bytes: Vec<u8> = vec![0xFF, 0xFE];
-        let json = std::str::from_utf8(&invalid_bytes).unwrap_err();
+        let _json = std::str::from_utf8(&invalid_bytes).map_err(|_| ParseError::InvalidUtf8);
 
         // Test that from_json handles invalid UTF-8
         let result = std::str::from_utf8(&invalid_bytes)
             .map_err(|_| ParseError::InvalidUtf8)
-            .and_then(|s| serde_json::from_str::<serde_json::Value>(s).map_err(|e| ParseError::JsonError(e.to_string())));
+            .and_then(|s| {
+                serde_json::from_str::<serde_json::Value>(s)
+                    .map_err(|e| ParseError::JsonError(e.to_string()))
+            });
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), ParseError::InvalidUtf8);
+        assert!(matches!(result, Err(ParseError::InvalidUtf8)));
     }
 
     #[test]
@@ -362,18 +389,12 @@ mod tests {
         let result = LogMessage::from_json(json);
 
         assert!(result.is_err());
-        match result.unwrap_err() {
-            ParseError::JsonError(_) => (),
-            _ => panic!("Expected JsonError"),
-        }
+        assert!(matches!(result, Err(ParseError::JsonError(_))));
     }
 
     #[test]
     fn test_parse_error_display() {
-        assert_eq!(
-            format!("{}", ParseError::InvalidUtf8),
-            "Invalid UTF-8"
-        );
+        assert_eq!(format!("{}", ParseError::InvalidUtf8), "Invalid UTF-8");
         assert_eq!(
             format!("{}", ParseError::JsonError("test error".to_string())),
             "JSON parse error: test error"
@@ -396,7 +417,8 @@ mod tests {
             let json = format!(r#"{{"content":"test","level":"{}"}}"#, level_str);
             let result = LogMessage::from_json(&json);
             assert!(result.is_ok());
-            assert_eq!(result.unwrap().level, expected);
+            let level = result.map(|msg| msg.level);
+            assert_eq!(level.unwrap_or(LogLevel::Info), expected);
         }
     }
 }

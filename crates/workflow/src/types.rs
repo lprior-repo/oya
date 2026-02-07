@@ -1,8 +1,10 @@
 //! Core types for the workflow engine.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
@@ -270,11 +272,11 @@ pub struct Checkpoint {
     /// Timestamp when checkpoint was created.
     pub timestamp: DateTime<Utc>,
     /// Serialized state data.
-    pub state: Vec<u8>,
+    pub state: Arc<Vec<u8>>,
     /// Serialized input data.
-    pub inputs: Vec<u8>,
+    pub inputs: Arc<Vec<u8>>,
     /// Serialized output data (if phase completed).
-    pub outputs: Option<Vec<u8>>,
+    pub outputs: Option<Arc<Vec<u8>>>,
 }
 
 impl Checkpoint {
@@ -283,15 +285,15 @@ impl Checkpoint {
         Self {
             phase_id,
             timestamp: Utc::now(),
-            state,
-            inputs,
+            state: Arc::new(state),
+            inputs: Arc::new(inputs),
             outputs: None,
         }
     }
 
     /// Add output data to the checkpoint.
     pub fn with_outputs(mut self, outputs: Vec<u8>) -> Self {
-        self.outputs = Some(outputs);
+        self.outputs = Some(Arc::new(outputs));
         self
     }
 }
@@ -309,7 +311,7 @@ pub enum JournalEntry {
     PhaseCompleted {
         phase_id: PhaseId,
         phase_name: String,
-        output: Vec<u8>,
+        output: Arc<Vec<u8>>,
         timestamp: DateTime<Utc>,
     },
     /// Phase failed.
@@ -357,7 +359,7 @@ impl JournalEntry {
         Self::PhaseCompleted {
             phase_id,
             phase_name: phase_name.into(),
-            output,
+            output: Arc::new(output),
             timestamp: Utc::now(),
         }
     }
@@ -450,7 +452,7 @@ impl Journal {
                 JournalEntry::RewindInitiated { to_phase, .. } => *to_phase == phase_id,
                 JournalEntry::StateChanged { .. } => false,
             })
-            .collect()
+            .collect_vec()
     }
 
     /// Get the number of entries.
@@ -479,7 +481,7 @@ pub struct PhaseContext {
     /// Attempt number (1-based).
     pub attempt: u32,
     /// Inputs from previous phase (if any).
-    pub previous_output: Option<Vec<u8>>,
+    pub previous_output: Option<Arc<Vec<u8>>>,
     /// Global workflow metadata.
     pub metadata: Option<serde_json::Value>,
 }
@@ -504,7 +506,7 @@ impl PhaseContext {
 
     /// Set the previous output.
     pub fn with_previous_output(mut self, output: Vec<u8>) -> Self {
-        self.previous_output = Some(output);
+        self.previous_output = Some(Arc::new(output));
         self
     }
 
@@ -521,7 +523,7 @@ pub struct PhaseOutput {
     /// Whether the phase succeeded.
     pub success: bool,
     /// Output data (serialized).
-    pub data: Vec<u8>,
+    pub data: Arc<Vec<u8>>,
     /// Optional message.
     pub message: Option<String>,
     /// Artifacts produced (paths or identifiers).
@@ -535,7 +537,7 @@ impl PhaseOutput {
     pub fn success(data: Vec<u8>) -> Self {
         Self {
             success: true,
-            data,
+            data: Arc::new(data),
             message: None,
             artifacts: Vec::new(),
             duration_ms: 0,
@@ -546,7 +548,7 @@ impl PhaseOutput {
     pub fn failure(message: impl Into<String>) -> Self {
         Self {
             success: false,
-            data: Vec::new(),
+            data: Arc::new(Vec::new()),
             message: Some(message.into()),
             artifacts: Vec::new(),
             duration_ms: 0,
@@ -701,7 +703,7 @@ mod tests {
             .with_duration_ms(1500);
 
         assert!(output.success);
-        assert_eq!(output.data, vec![1, 2, 3]);
+        assert_eq!(*output.data, vec![1, 2, 3]);
         assert_eq!(output.duration_ms, 1500);
     }
 }

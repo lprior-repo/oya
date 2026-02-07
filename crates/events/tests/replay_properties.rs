@@ -6,10 +6,26 @@
 //! - State reconstruction correctness
 
 use oya_events::{
-    AllBeadsProjection, BeadEvent, BeadId, BeadSpec, BeadState, Complexity,
-    EventStore, InMemoryEventStore, Projection,
+    AllBeadsProjection, BeadEvent, BeadId, BeadSpec, BeadState, Complexity, EventStore,
+    InMemoryEventStore, Projection,
 };
 use proptest::prelude::*;
+
+/// Test helper: Unwrap a Result or panic with context
+fn unwrap_result<T, E: std::fmt::Display>(result: std::result::Result<T, E>, context: &str) -> T {
+    match result {
+        Ok(value) => value,
+        Err(e) => panic!("{}: {}", context, e),
+    }
+}
+
+/// Test helper: Unwrap an Option or panic with context
+fn unwrap_option<T>(option: Option<T>, context: &str) -> T {
+    match option {
+        Some(value) => value,
+        None => panic!("{}", context),
+    }
+}
 
 // ==========================================================================
 // PROPERTY: Checkpoint resume equivalence
@@ -34,37 +50,57 @@ proptest! {
         let store_full = InMemoryEventStore::new();
         for event in &events {
             // Use block_on for synchronous context in proptest
-            let rt = tokio::runtime::Runtime::new()
-                .expect("runtime creation should succeed");
-            rt.block_on(async {
-                store_full.append(event.clone()).await
-            }).expect("append should succeed");
+            let rt = unwrap_result(
+                tokio::runtime::Runtime::new(),
+                "runtime creation should succeed"
+            );
+            unwrap_result(
+                rt.block_on(async {
+                    store_full.append(event.clone()).await
+                }),
+                "append should succeed"
+            );
         }
 
-        let rt = tokio::runtime::Runtime::new()
-            .expect("runtime creation should succeed");
-        let full_state = rt.block_on(async {
-            let projection = AllBeadsProjection::new();
-            projection.rebuild(&store_full).await
-        }).expect("full replay should succeed");
+        let rt = unwrap_result(
+            tokio::runtime::Runtime::new(),
+            "runtime creation should succeed"
+        );
+        let full_state = unwrap_result(
+            rt.block_on(async {
+                let projection = AllBeadsProjection::new();
+                projection.rebuild(&store_full).await
+            }),
+            "full replay should succeed"
+        );
 
         // Checkpoint replay: verify we can rebuild deterministically
         // (In a real system, this would replay from checkpoint position)
         let store_checkpoint = InMemoryEventStore::new();
         for event in &events {
-            let rt = tokio::runtime::Runtime::new()
-                .expect("runtime creation should succeed");
-            rt.block_on(async {
-                store_checkpoint.append(event.clone()).await
-            }).expect("append should succeed");
+            let rt = unwrap_result(
+                tokio::runtime::Runtime::new(),
+                "runtime creation should succeed"
+            );
+            unwrap_result(
+                rt.block_on(async {
+                    store_checkpoint.append(event.clone()).await
+                }),
+                "append should succeed"
+            );
         }
 
-        let rt = tokio::runtime::Runtime::new()
-            .expect("runtime creation should succeed");
-        let checkpoint_state = rt.block_on(async {
-            let projection = AllBeadsProjection::new();
-            projection.rebuild(&store_checkpoint).await
-        }).expect("checkpoint replay should succeed");
+        let rt = unwrap_result(
+            tokio::runtime::Runtime::new(),
+            "runtime creation should succeed"
+        );
+        let checkpoint_state = unwrap_result(
+            rt.block_on(async {
+                let projection = AllBeadsProjection::new();
+                projection.rebuild(&store_checkpoint).await
+            }),
+            "checkpoint replay should succeed"
+        );
 
         // Property: Both replays produce identical final state
         prop_assert_eq!(
@@ -81,7 +117,7 @@ proptest! {
                 "Checkpoint state should contain bead {:?}",
                 id
             );
-            let bead_checkpoint = bead_checkpoint.unwrap();
+            let bead_checkpoint = unwrap_option(bead_checkpoint, "bead_checkpoint should exist");
 
             prop_assert_eq!(
                 bead_full.current_state,
@@ -113,27 +149,40 @@ proptest! {
         // Populate store
         let store = InMemoryEventStore::new();
         for event in &events {
-            let rt = tokio::runtime::Runtime::new()
-                .expect("runtime creation should succeed");
-            rt.block_on(async {
-                store.append(event.clone()).await
-            }).expect("append should succeed");
+            let rt = unwrap_result(
+                tokio::runtime::Runtime::new(),
+                "runtime creation should succeed"
+            );
+            unwrap_result(
+                rt.block_on(async {
+                    store.append(event.clone()).await
+                }),
+                "append should succeed"
+            );
         }
 
         // Replay multiple times and collect states
         let mut states = Vec::new();
         for _ in 0..replay_count {
-            let rt = tokio::runtime::Runtime::new()
-                .expect("runtime creation should succeed");
-            let state = rt.block_on(async {
-                let projection = AllBeadsProjection::new();
-                projection.rebuild(&store).await
-            }).expect("replay should succeed");
+            let rt = unwrap_result(
+                tokio::runtime::Runtime::new(),
+                "runtime creation should succeed"
+            );
+            let state = unwrap_result(
+                rt.block_on(async {
+                    let projection = AllBeadsProjection::new();
+                    projection.rebuild(&store).await
+                }),
+                "replay should succeed"
+            );
             states.push(state);
         }
 
         // Property: All replays produce identical state
-        let first = &states[0];
+        let first = match states.first() {
+            Some(s) => s,
+            None => panic!("states should not be empty"),
+        };
         for (i, state) in states.iter().enumerate().skip(1) {
             prop_assert_eq!(
                 first.beads.len(),
@@ -149,7 +198,7 @@ proptest! {
                     "Replay {} should contain bead {:?}",
                     i, id
                 );
-                let bead_other = bead_other.unwrap();
+                let bead_other = unwrap_option(bead_other, "bead_other should exist");
 
                 prop_assert_eq!(
                     bead_first.current_state,
@@ -188,37 +237,57 @@ proptest! {
         // Store 1: bead1 events first, then bead2
         let store1 = InMemoryEventStore::new();
         for event in events1.iter().chain(events2.iter()) {
-            let rt = tokio::runtime::Runtime::new()
-                .expect("runtime creation should succeed");
-            rt.block_on(async {
-                store1.append(event.clone()).await
-            }).expect("append should succeed");
+            let rt = unwrap_result(
+                tokio::runtime::Runtime::new(),
+                "runtime creation should succeed"
+            );
+            unwrap_result(
+                rt.block_on(async {
+                    store1.append(event.clone()).await
+                }),
+                "append should succeed"
+            );
         }
 
         // Store 2: bead2 events first, then bead1
         let store2 = InMemoryEventStore::new();
         for event in events2.iter().chain(events1.iter()) {
-            let rt = tokio::runtime::Runtime::new()
-                .expect("runtime creation should succeed");
-            rt.block_on(async {
-                store2.append(event.clone()).await
-            }).expect("append should succeed");
+            let rt = unwrap_result(
+                tokio::runtime::Runtime::new(),
+                "runtime creation should succeed"
+            );
+            unwrap_result(
+                rt.block_on(async {
+                    store2.append(event.clone()).await
+                }),
+                "append should succeed"
+            );
         }
 
         // Rebuild both stores
-        let rt = tokio::runtime::Runtime::new()
-            .expect("runtime creation should succeed");
-        let state1 = rt.block_on(async {
-            let projection = AllBeadsProjection::new();
-            projection.rebuild(&store1).await
-        }).expect("rebuild store1 should succeed");
+        let rt = unwrap_result(
+            tokio::runtime::Runtime::new(),
+            "runtime creation should succeed"
+        );
+        let state1 = unwrap_result(
+            rt.block_on(async {
+                let projection = AllBeadsProjection::new();
+                projection.rebuild(&store1).await
+            }),
+            "rebuild store1 should succeed"
+        );
 
-        let rt = tokio::runtime::Runtime::new()
-            .expect("runtime creation should succeed");
-        let state2 = rt.block_on(async {
-            let projection = AllBeadsProjection::new();
-            projection.rebuild(&store2).await
-        }).expect("rebuild store2 should succeed");
+        let rt = unwrap_result(
+            tokio::runtime::Runtime::new(),
+            "runtime creation should succeed"
+        );
+        let state2 = unwrap_result(
+            rt.block_on(async {
+                let projection = AllBeadsProjection::new();
+                projection.rebuild(&store2).await
+            }),
+            "rebuild store2 should succeed"
+        );
 
         // Property: Both beads should have same final state regardless of order
         prop_assert!(
@@ -238,16 +307,16 @@ proptest! {
             "State2 should contain bead2"
         );
 
-        let bead1_state1 = &state1.beads[&bead1];
-        let bead1_state2 = &state2.beads[&bead1];
+        let bead1_state1 = unwrap_option(state1.beads.get(&bead1), "bead1 should be in state1");
+        let bead1_state2 = unwrap_option(state2.beads.get(&bead1), "bead1 should be in state2");
         prop_assert_eq!(
             bead1_state1.current_state,
             bead1_state2.current_state,
             "Bead1 should have same state regardless of event order"
         );
 
-        let bead2_state1 = &state1.beads[&bead2];
-        let bead2_state2 = &state2.beads[&bead2];
+        let bead2_state1 = unwrap_option(state1.beads.get(&bead2), "bead2 should be in state1");
+        let bead2_state2 = unwrap_option(state2.beads.get(&bead2), "bead2 should be in state2");
         prop_assert_eq!(
             bead2_state1.current_state,
             bead2_state2.current_state,
@@ -274,19 +343,29 @@ proptest! {
         // Build store
         let store = InMemoryEventStore::new();
         for event in &events {
-            let rt = tokio::runtime::Runtime::new()
-                .expect("runtime creation should succeed");
-            rt.block_on(async {
-                store.append(event.clone()).await
-            }).expect("append should succeed");
+            let rt = unwrap_result(
+                tokio::runtime::Runtime::new(),
+                "runtime creation should succeed"
+            );
+            unwrap_result(
+                rt.block_on(async {
+                    store.append(event.clone()).await
+                }),
+                "append should succeed"
+            );
         }
 
         // Verify store count
-        let rt = tokio::runtime::Runtime::new()
-            .expect("runtime creation should succeed");
-        let stored_count = rt.block_on(async {
-            store.count().await
-        }).expect("count should succeed");
+        let rt = unwrap_result(
+            tokio::runtime::Runtime::new(),
+            "runtime creation should succeed"
+        );
+        let stored_count = unwrap_result(
+            rt.block_on(async {
+                store.count().await
+            }),
+            "count should succeed"
+        );
 
         prop_assert_eq!(
             stored_count,
@@ -296,12 +375,17 @@ proptest! {
         );
 
         // Rebuild state
-        let rt = tokio::runtime::Runtime::new()
-            .expect("runtime creation should succeed");
-        let state = rt.block_on(async {
-            let projection = AllBeadsProjection::new();
-            projection.rebuild(&store).await
-        }).expect("rebuild should succeed");
+        let rt = unwrap_result(
+            tokio::runtime::Runtime::new(),
+            "runtime creation should succeed"
+        );
+        let state = unwrap_result(
+            rt.block_on(async {
+                let projection = AllBeadsProjection::new();
+                projection.rebuild(&store).await
+            }),
+            "rebuild should succeed"
+        );
 
         // Property: State should contain the bead
         prop_assert!(
@@ -311,7 +395,7 @@ proptest! {
 
         // Property: History should reflect event applications
         // (Each state transition adds to history)
-        let bead = &state.beads[&bead_id];
+        let bead = unwrap_option(state.beads.get(&bead_id), "bead should be in state");
         prop_assert!(
             bead.history.len() > 0 || event_count == 1,
             "Bead should have history transitions for state changes"
@@ -338,17 +422,24 @@ proptest! {
             let events = create_event_sequence(bead_id, spec, event_count);
 
             for event in &events {
-                let rt = tokio::runtime::Runtime::new()
-                    .expect("runtime creation should succeed");
-                rt.block_on(async {
-                    store.append(event.clone()).await
-                }).expect("append should succeed");
+                let rt = unwrap_result(
+                    tokio::runtime::Runtime::new(),
+                    "runtime creation should succeed"
+                );
+                unwrap_result(
+                    rt.block_on(async {
+                        store.append(event.clone()).await
+                    }),
+                    "append should succeed"
+                );
             }
         }
 
         // Rebuild
-        let rt = tokio::runtime::Runtime::new()
-            .expect("runtime creation should succeed");
+        let rt = unwrap_result(
+            tokio::runtime::Runtime::new(),
+            "runtime creation should succeed"
+        );
         let result = rt.block_on(async {
             let projection = AllBeadsProjection::new();
             projection.rebuild(&store).await
@@ -361,7 +452,7 @@ proptest! {
             event_count
         );
 
-        let state = result.expect("state");
+        let state = unwrap_option(result.ok(), "state should be Ok");
         // State should have event_count beads (one per created event)
         // Since create_event_sequence creates one bead per call
         prop_assert!(
@@ -408,7 +499,10 @@ fn create_event_sequence(bead_id: BeadId, spec: BeadSpec, count: usize) -> Vec<B
                 BeadState::Ready,
                 BeadState::Running,
             )),
-            _ => unreachable!("modulo 5 ensures 0-4 range"),
+            _ => match i % 5 {
+                0..=4 => {} // Already covered
+                _ => panic!("modulo 5 ensures 0-4 range"),
+            },
         }
     }
 

@@ -8,6 +8,7 @@
 //! - Explicit error handling
 //! - No unwrap(), expect(), or panic!()
 
+use itertools::Itertools;
 use regex::Regex;
 
 /// Forbidden patterns in functional Rust code.
@@ -153,16 +154,14 @@ impl FunctionalAudit {
     pub fn violation_counts(&self) -> std::collections::HashMap<ViolationSeverity, usize> {
         self.violations
             .iter()
-            .fold(std::collections::HashMap::new(), |mut counts, violation| {
-                *counts.entry(violation.severity).or_insert(0) += 1;
-                counts
-            })
+            .into_grouping_map_by(|v| v.severity)
+            .fold(0, |acc, _, _| acc + 1)
     }
 }
 
 /// Audit code for functional Rust patterns.
 pub fn audit_functional_style(code: &str) -> FunctionalAudit {
-    let lines: Vec<&str> = code.lines().collect();
+    let lines = code.lines().collect_vec();
     let total_lines = lines.len();
 
     let patterns = [
@@ -183,12 +182,7 @@ pub fn audit_functional_style(code: &str) -> FunctionalAudit {
                     .into_iter()
                     .flatten()
                     .map(move |(col, _)| {
-                        Violation::new(
-                            pattern.clone(),
-                            line_idx + 1,
-                            col,
-                            line.to_string(),
-                        )
+                        Violation::new(pattern.clone(), line_idx + 1, col, line.to_string())
                     })
             })
         })
@@ -222,10 +216,7 @@ pub fn audit_functional_style(code: &str) -> FunctionalAudit {
         Vec::new()
     };
 
-    let violations: Vec<Violation> = violations
-        .into_iter()
-        .chain(mut_violations)
-        .collect();
+    let violations: Vec<Violation> = violations.into_iter().chain(mut_violations).collect();
 
     // Calculate functional score
     let violation_count = violations.len();
@@ -280,10 +271,7 @@ pub fn generate_functional_module(module_name: &str, functions: &[FunctionStub])
         module_name
     );
 
-    let function_stubs: String = functions
-        .iter()
-        .map(format_function_stub)
-        .collect();
+    let function_stubs: String = functions.iter().map(format_function_stub).collect();
 
     header + &function_stubs
 }
@@ -369,12 +357,10 @@ pub fn format_violations_report(audit: &FunctionalAudit) -> Vec<String> {
         return vec!["✓ Code passes functional style requirements".to_string()];
     }
 
-    let mut report = vec![
-        format!(
-            "Functional style audit: {:.1}% compliance",
-            audit.functional_percentage
-        )
-    ];
+    let mut report = vec![format!(
+        "Functional style audit: {:.1}% compliance",
+        audit.functional_percentage
+    )];
 
     // Group by severity
     let severity_sections: Vec<String> = [
@@ -390,9 +376,7 @@ pub fn format_violations_report(audit: &FunctionalAudit) -> Vec<String> {
             return Vec::new();
         }
 
-        let mut section = vec![
-            format!("\n{severity:?} violations ({}):", violations.len())
-        ];
+        let mut section = vec![format!("\n{severity:?} violations ({}):", violations.len())];
 
         let violation_lines: Vec<String> = violations
             .iter()

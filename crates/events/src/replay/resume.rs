@@ -370,7 +370,11 @@ mod tests {
             result.is_err(),
             "Should return error when checkpoint not found"
         );
-        let err_msg = result.as_ref().err().map(|e| e.to_string()).unwrap_or_default();
+        let err_msg = result
+            .as_ref()
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default();
         assert!(
             err_msg.contains("not found") || err_msg.contains("missing"),
             "Error should indicate checkpoint not found: {}",

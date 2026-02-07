@@ -4,6 +4,7 @@ use std::path::Path;
 
 use crate::{
     error::{Error, Result},
+    file_discovery::find_rust_files,
     process::{command_exists, run_command},
 };
 
@@ -96,11 +97,27 @@ fn rust_security(cwd: &Path) -> Result<()> {
 }
 
 fn rust_review(cwd: &Path) -> Result<()> {
-    let result = run_command(
-        "grep",
-        &["-r", r"TODO\|FIXME\|XXX\|HACK", "--include=*.rs", "."],
-        cwd,
-    )?;
+    // Use memoized file discovery to get Rust files
+    let rs_files = find_rust_files(cwd)?;
+
+    if rs_files.is_empty() {
+        return Ok(()); // No Rust files to review
+    }
+
+    // Convert paths to strings for grep and build args
+    let file_paths: Vec<String> = rs_files
+        .iter()
+        .map(|p| p.to_string_lossy().to_string())
+        .collect();
+
+    let args: Vec<String> = vec!["-r".to_string(), r"TODO\|FIXME\|XXX\|HACK".to_string()]
+        .into_iter()
+        .chain(file_paths.iter().cloned())
+        .chain(vec![".".to_string()])
+        .collect();
+
+    let args_slice: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    let result = run_command("grep", &args_slice, cwd)?;
 
     match result.exit_code {
         0 => Err(Error::stage_failed(

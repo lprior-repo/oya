@@ -7,7 +7,9 @@ use oya_shared::{GitHash, Language, Slug};
 
 #[test]
 fn test_slug_new_valid() {
-    let slug = Slug::new("valid-slug-123").expect("Valid slug");
+    let result = Slug::new("valid-slug-123");
+    assert!(result.is_ok(), "Valid slug should succeed");
+    let slug = result.unwrap();
     assert_eq!(slug.as_str(), "valid-slug-123");
 }
 
@@ -33,13 +35,17 @@ fn test_slug_new_invalid_characters() {
 
 #[test]
 fn test_slug_has_separators() {
-    let slug = Slug::new("valid-slug").expect("Valid slug");
+    let result = Slug::new("valid-slug");
+    assert!(result.is_ok(), "Valid slug should succeed");
+    let slug = result.unwrap();
     assert!(!slug.has_separators());
 }
 
 #[test]
 fn test_slug_without_separators() {
-    let slug = Slug::new("noseparator").expect("Valid slug");
+    let result = Slug::new("noseparator");
+    assert!(result.is_ok(), "Valid slug should succeed");
+    let slug = result.unwrap();
     assert!(!slug.has_separators());
 }
 
@@ -52,20 +58,26 @@ fn test_slug_from_string() {
 
 #[test]
 fn test_slug_into_string() {
-    let slug = Slug::new("test").expect("Valid slug");
+    let result = Slug::new("test");
+    assert!(result.is_ok(), "Valid slug should succeed");
+    let slug = result.unwrap();
     let s: String = slug.into();
     assert_eq!(s, "test");
 }
 
 #[test]
 fn test_slug_display() {
-    let slug = Slug::new("test-slug").expect("Valid slug");
+    let result = Slug::new("test-slug");
+    assert!(result.is_ok(), "Valid slug should succeed");
+    let slug = result.unwrap();
     assert_eq!(format!("{}", slug), "test-slug");
 }
 
 #[test]
 fn test_git_hash_new_valid() {
-    let hash = GitHash::new("abc123def456abc123def456abc123").expect("Valid hash");
+    let result = GitHash::new("abc123def456abc123def456abc123");
+    assert!(result.is_ok(), "Valid hash should succeed");
+    let hash = result.unwrap();
     assert_eq!(hash.as_str(), "abc123def456abc123def456abc123");
 }
 
@@ -99,14 +111,18 @@ fn test_git_hash_from_string() {
 
 #[test]
 fn test_git_hash_into_string() {
-    let hash = GitHash::new("abc123def456abc123def456abc123").expect("Valid hash");
+    let result = GitHash::new("abc123def456abc123def456abc123");
+    assert!(result.is_ok(), "Valid hash should succeed");
+    let hash = result.unwrap();
     let s: String = hash.into();
     assert_eq!(s, "abc123def456abc123def456abc123");
 }
 
 #[test]
 fn test_git_hash_display() {
-    let hash = GitHash::new("abc123def456").expect("Valid hash");
+    let result = GitHash::new("abc123def456");
+    assert!(result.is_ok(), "Valid hash should succeed");
+    let hash = result.unwrap();
     assert_eq!(format!("{}", hash), "abc123def456");
 }
 
@@ -133,7 +149,11 @@ fn test_language_serialization() {
 
     for lang in languages {
         let json = serde_json::to_string(&lang);
-        let deserialized: Language = serde_json::from_str(&json).expect("Should deserialize");
+        assert!(json.is_ok(), "Serialization should succeed");
+        let json = json.unwrap();
+        let deserialized: Language = serde_json::from_str(&json);
+        assert!(deserialized.is_ok(), "Deserialization should succeed");
+        let deserialized = deserialized.unwrap();
         assert_eq!(deserialized, lang);
     }
 }

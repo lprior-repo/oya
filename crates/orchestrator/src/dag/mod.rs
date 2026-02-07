@@ -12,6 +12,7 @@
 //! - Subgraph extraction
 
 use im::{HashMap, HashSet};
+use itertools::Itertools;
 use petgraph::Direction;
 use petgraph::algo::{is_cyclic_directed, tarjan_scc, toposort};
 use petgraph::graph::{DiGraph, NodeIndex};
@@ -21,7 +22,13 @@ use std::time::Duration;
 
 pub mod error;
 pub mod tarjan;
+pub mod layout;
+pub mod layout_benchmark;
+pub mod layout_demo;
 pub use error::{DagError, DagResult};
+pub use layout::{MemoizedLayout, LayoutCache};
+pub use layout_benchmark::{benchmark_layout_performance, analysis};
+pub use layout_demo::run_demo;
 
 /// Type alias for a Bead identifier
 pub type BeadId = String;
@@ -936,12 +943,12 @@ impl WorkflowDAG {
         if result.len() != self.graph.node_count() {
             // Find nodes that weren't processed (part of cycle)
             let processed: HashSet<BeadId> = result.iter().cloned().collect();
-            let cycle_nodes: Vec<BeadId> = self
+            let cycle_nodes = self
                 .graph
                 .node_weights()
                 .filter(|id| !processed.contains(*id))
                 .cloned()
-                .collect();
+                .collect_vec();
             return Err(DagError::cycle_detected(cycle_nodes));
         }
 
@@ -1013,7 +1020,10 @@ impl WorkflowDAG {
                 None => continue,
             };
 
-            let current_dist = dist.get(bead_id).map(|(d, _)| *d).map_or(Duration::ZERO, |d| d);
+            let current_dist = dist
+                .get(bead_id)
+                .map(|(d, _)| *d)
+                .map_or(Duration::ZERO, |d| d);
 
             // Update distances to all neighbors
             for edge in self.graph.edges_directed(node_idx, Direction::Outgoing) {
@@ -1023,8 +1033,10 @@ impl WorkflowDAG {
 
                 let neighbor_idx = edge.target();
                 if let Some(neighbor_id) = self.graph.node_weight(neighbor_idx) {
-                    let neighbor_weight =
-                        weights.get(neighbor_id).copied().map_or(Duration::ZERO, |w| w);
+                    let neighbor_weight = weights
+                        .get(neighbor_id)
+                        .copied()
+                        .map_or(Duration::ZERO, |w| w);
                     let new_dist = current_dist + neighbor_weight;
 
                     let should_update = dist
@@ -1452,11 +1464,208 @@ impl WorkflowDAG {
             }
         }
     }
+
+    /// Create a memoized layout calculator for this DAG
+    ///
+    /// # Arguments
+    ///
+    /// * `stiffness` - Spring stiffness coefficient
+    /// * `rest_length` - Rest length for springs
+    ///
+    /// # Errors
+    ///
+    /// Returns `SpringForceError` if parameters are invalid
+    pub fn create_memoized_layout(&self, stiffness: f64, rest_length: f64) -> Result<MemoizedLayout, layout::SpringForceError> {
+        MemoizedLayout::new(self.clone(), stiffness, rest_length)
+    }
 }
 
 impl Default for WorkflowDAG {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+// ==================== Builder Pattern ====================
+
+/// Functional builder for WorkflowDAG construction
+///
+/// Provides a fluent API for constructing DAGs with immutable builder steps.
+///
+/// # Examples
+///
+/// ```
+/// use orchestrator::dag::{WorkflowDAG, DependencyType};
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let dag = WorkflowDAG::builder()
+///     .with_nodes(["a", "b", "c"].map(String::from))
+///     .with_edges([
+///         ("a", "b", DependencyType::BlockingDependency),
+///         ("b", "c", DependencyType::BlockingDependency),
+///     ].map(|(a, b, t)| (a.to_string(), b.to_string(), t)))
+///     .build()?;
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Default, Debug, Clone)]
+pub struct DagBuilder {
+    nodes: Vec<String>,
+    edges: Vec<(String, String, DependencyType)>,
+}
+
+impl DagBuilder {
+    /// Create a new DagBuilder
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Add nodes to the builder
+    ///
+    /// # Arguments
+    ///
+    /// * `nodes` - Iterator of node IDs to add
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use orchestrator::dag::WorkflowDAG;
+    ///
+    /// let builder = WorkflowDAG::builder()
+    ///     .with_nodes(vec!["a".to_string(), "b".to_string()]);
+    /// ```
+    pub fn with_nodes(mut self, nodes: impl IntoIterator<Item = String>) -> Self {
+        self.nodes.extend(nodes);
+        self
+    }
+
+    /// Add a single node to the builder
+    ///
+    /// # Arguments
+    ///
+    /// * `node` - Node ID to add
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use orchestrator::dag::WorkflowDAG;
+    ///
+    /// let builder = WorkflowDAG::builder()
+    ///     .with_node("a".to_string())
+    ///     .with_node("b".to_string());
+    /// ```
+    pub fn with_node(mut self, node: String) -> Self {
+        self.nodes.push(node);
+        self
+    }
+
+    /// Add edges to the builder
+    ///
+    /// # Arguments
+    ///
+    /// * `edges` - Iterator of (from, to, dependency_type) tuples
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use orchestrator::dag::{WorkflowDAG, DependencyType};
+    ///
+    /// let builder = WorkflowDAG::builder()
+    ///     .with_nodes(vec!["a".to_string(), "b".to_string()])
+    ///     .with_edges(vec![("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)]);
+    /// ```
+    pub fn with_edges(
+        mut self,
+        edges: impl IntoIterator<Item = (String, String, DependencyType)>,
+    ) -> Self {
+        self.edges.extend(edges);
+        self
+    }
+
+    /// Add a single edge to the builder
+    ///
+    /// # Arguments
+    ///
+    /// * `from` - Source node ID
+    /// * `to` - Target node ID
+    /// * `dep_type` - Type of dependency
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use orchestrator::dag::{WorkflowDAG, DependencyType};
+    ///
+    /// let builder = WorkflowDAG::builder()
+    ///     .with_nodes(vec!["a".to_string(), "b".to_string(), "c".to_string()])
+    ///     .with_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)
+    ///     .with_edge("b".to_string(), "c".to_string(), DependencyType::BlockingDependency);
+    /// ```
+    pub fn with_edge(mut self, from: String, to: String, dep_type: DependencyType) -> Self {
+        self.edges.push((from, to, dep_type));
+        self
+    }
+
+    /// Build the WorkflowDAG from the configured builder
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(WorkflowDAG)` - Successfully constructed DAG
+    /// * `Err(DagError)` - If construction fails (duplicate nodes, missing nodes, cycles, etc.)
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use orchestrator::dag::{WorkflowDAG, DependencyType};
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let dag = WorkflowDAG::builder()
+    ///     .with_nodes(vec!["a".to_string(), "b".to_string()])
+    ///     .with_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)
+    ///     .build()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn build(self) -> Result<WorkflowDAG, DagError> {
+        let mut dag = WorkflowDAG::new();
+
+        // Add all nodes
+        for node in self.nodes {
+            dag.add_node(node)?;
+        }
+
+        // Add all edges
+        for (from, to, dep_type) in self.edges {
+            dag.add_edge(from, to, dep_type)?;
+        }
+
+        Ok(dag)
+    }
+}
+
+impl WorkflowDAG {
+    /// Create a new DagBuilder for fluent DAG construction
+    ///
+    /// # Returns
+    ///
+    /// A new DagBuilder instance
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use orchestrator::dag::{WorkflowDAG, DependencyType};
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let dag = WorkflowDAG::builder()
+    ///     .with_nodes(vec!["a".to_string(), "b".to_string()])
+    ///     .with_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)
+    ///     .build()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn builder() -> DagBuilder {
+        DagBuilder::new()
     }
 }
 

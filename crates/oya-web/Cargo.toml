@@ -19,6 +19,7 @@ async-trait = "0.1"
 serde = { workspace = true }
 serde_json = { workspace = true }
 ulid = { workspace = true }
+anyhow = { workspace = true }
 
 axum = { workspace = true }
 tower = { workspace = true }

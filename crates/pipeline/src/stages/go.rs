@@ -4,6 +4,7 @@ use std::path::Path;
 
 use crate::{
     error::{Error, Result},
+    file_discovery::find_go_files,
     process::{command_exists, run_command},
 };
 
@@ -109,11 +110,25 @@ fn go_security(cwd: &Path) -> Result<()> {
 }
 
 fn go_review(cwd: &Path) -> Result<()> {
-    let result = run_command(
-        "grep",
-        &["-r", r"TODO\|FIXME\|XXX\|HACK", "--include=*.go", "."],
-        cwd,
-    )?;
+    // Use memoized file discovery to get Go files
+    let go_files = find_go_files(cwd)?;
+
+    if go_files.is_empty() {
+        return Ok(()); // No Go files to review
+    }
+
+    // Convert paths to strings for grep
+    let file_paths: Vec<String> = go_files
+        .iter()
+        .map(|p| p.to_string_lossy().to_string())
+        .collect();
+
+    let mut args: Vec<String> = vec!["-r".to_string(), r"TODO\|FIXME\|XXX\|HACK".to_string()];
+    args.extend(file_paths.iter().map(|p| p.to_string()));
+    args.push(".".to_string());
+
+    let args_slice: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    let result = run_command("grep", &args_slice, cwd)?;
 
     match result.exit_code {
         0 => Err(Error::stage_failed(

@@ -21,17 +21,20 @@ mod cors_tests {
             .route("/test", get(|| async { "OK" }))
             .layer(cors_layer());
 
-        let response = app
-            .oneshot(
-                axum::http::Request::builder()
-                    .uri("/test")
-                    .method(Method::GET)
-                    .header(header::ORIGIN, "https://example.com")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+        let request = axum::http::Request::builder()
+            .uri("/test")
+            .method(Method::GET)
+            .header(header::ORIGIN, "https://example.com")
+            .body(Body::empty())
+            .map_or_else(
+                |e| panic!("Failed to build request: {e}"),
+                std::convert::identity,
+            );
+
+        let response = app.oneshot(request).await.map_or_else(
+            |e| panic!("Failed to get response: {e}"),
+            std::convert::identity,
+        );
 
         assert_eq!(response.status(), StatusCode::OK);
 
@@ -48,18 +51,21 @@ mod cors_tests {
             .layer(cors_layer());
 
         // Test OPTIONS preflight
-        let response = app
-            .oneshot(
-                axum::http::Request::builder()
-                    .uri("/test")
-                    .method(Method::OPTIONS)
-                    .header(header::ORIGIN, "https://example.com")
-                    .header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+        let request = axum::http::Request::builder()
+            .uri("/test")
+            .method(Method::OPTIONS)
+            .header(header::ORIGIN, "https://example.com")
+            .header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
+            .body(Body::empty())
+            .map_or_else(
+                |e| panic!("Failed to build request: {e}"),
+                std::convert::identity,
+            );
+
+        let response = app.oneshot(request).await.map_or_else(
+            |e| panic!("Failed to get response: {e}"),
+            std::convert::identity,
+        );
 
         assert_eq!(response.status(), StatusCode::OK);
     }
@@ -71,18 +77,21 @@ mod cors_tests {
             .route("/test", get(|| async { "OK" }))
             .layer(cors_layer());
 
-        let response = app
-            .oneshot(
-                axum::http::Request::builder()
-                    .uri("/test")
-                    .method(Method::GET)
-                    .header(header::ORIGIN, "https://example.com")
-                    .header("x-custom-header", "test-value")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+        let request = axum::http::Request::builder()
+            .uri("/test")
+            .method(Method::GET)
+            .header(header::ORIGIN, "https://example.com")
+            .header("x-custom-header", "test-value")
+            .body(Body::empty())
+            .map_or_else(
+                |e| panic!("Failed to build request: {e}"),
+                std::convert::identity,
+            );
+
+        let response = app.oneshot(request).await.map_or_else(
+            |e| panic!("Failed to get response: {e}"),
+            std::convert::identity,
+        );
 
         assert_eq!(response.status(), StatusCode::OK);
     }
@@ -99,16 +108,19 @@ mod compression_tests {
             .route("/test", get(|| async { "OK" }))
             .layer(CompressionLayer::new());
 
-        let response = app
-            .oneshot(
-                axum::http::Request::builder()
-                    .uri("/test")
-                    .header(header::ACCEPT_ENCODING, "gzip")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+        let request = axum::http::Request::builder()
+            .uri("/test")
+            .header(header::ACCEPT_ENCODING, "gzip")
+            .body(Body::empty())
+            .map_or_else(
+                |e| panic!("Failed to build request: {e}"),
+                std::convert::identity,
+            );
+
+        let response = app.oneshot(request).await.map_or_else(
+            |e| panic!("Failed to get response: {e}"),
+            std::convert::identity,
+        );
 
         assert_eq!(response.status(), StatusCode::OK);
     }
@@ -121,15 +133,18 @@ mod compression_tests {
             .layer(CompressionLayer::new());
 
         // Request without accept-encoding should get uncompressed response
-        let response = app
-            .oneshot(
-                axum::http::Request::builder()
-                    .uri("/test")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+        let request = axum::http::Request::builder()
+            .uri("/test")
+            .body(Body::empty())
+            .map_or_else(
+                |e| panic!("Failed to build request: {e}"),
+                std::convert::identity,
+            );
+
+        let response = app.oneshot(request).await.map_or_else(
+            |e| panic!("Failed to get response: {e}"),
+            std::convert::identity,
+        );
 
         assert_eq!(response.status(), StatusCode::OK);
     }
@@ -143,16 +158,19 @@ mod compression_tests {
             .route("/test", get(|| async { large_body }))
             .layer(CompressionLayer::new());
 
-        let response = app
-            .oneshot(
-                axum::http::Request::builder()
-                    .uri("/test")
-                    .header(header::ACCEPT_ENCODING, "gzip")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+        let request = axum::http::Request::builder()
+            .uri("/test")
+            .header(header::ACCEPT_ENCODING, "gzip")
+            .body(Body::empty())
+            .map_or_else(
+                |e| panic!("Failed to build request: {e}"),
+                std::convert::identity,
+            );
+
+        let response = app.oneshot(request).await.map_or_else(
+            |e| panic!("Failed to get response: {e}"),
+            std::convert::identity,
+        );
 
         assert_eq!(response.status(), StatusCode::OK);
 
@@ -174,15 +192,18 @@ mod tracing_tests {
             .route("/test", get(|| async { "OK" }))
             .layer(tower_http::trace::TraceLayer::new_for_http());
 
-        let response = app
-            .oneshot(
-                axum::http::Request::builder()
-                    .uri("/test")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+        let request = axum::http::Request::builder()
+            .uri("/test")
+            .body(Body::empty())
+            .map_or_else(
+                |e| panic!("Failed to build request: {e}"),
+                std::convert::identity,
+            );
+
+        let response = app.oneshot(request).await.map_or_else(
+            |e| panic!("Failed to get response: {e}"),
+            std::convert::identity,
+        );
 
         assert_eq!(response.status(), StatusCode::OK);
     }
@@ -190,25 +211,28 @@ mod tracing_tests {
     /// Test that trace layer works with error responses
     #[tokio::test]
     async fn test_trace_layer_with_errors() {
-        async fn error_handler() -> &'static str {
-            panic!("This handler panics");
+        async fn error_handler() -> Result<&'static str, &'static str> {
+            Err("internal error")
         }
 
         let app = Router::new()
             .route("/test", get(error_handler))
             .layer(tower_http::trace::TraceLayer::new_for_http());
 
-        let response = app
-            .oneshot(
-                axum::http::Request::builder()
-                    .uri("/test")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+        let request = axum::http::Request::builder()
+            .uri("/test")
+            .body(Body::empty())
+            .map_or_else(
+                |e| panic!("Failed to build request: {e}"),
+                std::convert::identity,
+            );
 
-        // Should return error status (500 for panic)
+        let response = app.oneshot(request).await.map_or_else(
+            |e| panic!("Failed to get response: {e}"),
+            std::convert::identity,
+        );
+
+        // Should return error status (500 for error)
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
 }
@@ -226,17 +250,20 @@ mod middleware_stack_tests {
             .layer(CompressionLayer::new())
             .layer(tower_http::trace::TraceLayer::new_for_http());
 
-        let response = app
-            .oneshot(
-                axum::http::Request::builder()
-                    .uri("/test")
-                    .header(header::ORIGIN, "https://example.com")
-                    .header(header::ACCEPT_ENCODING, "gzip")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+        let request = axum::http::Request::builder()
+            .uri("/test")
+            .header(header::ORIGIN, "https://example.com")
+            .header(header::ACCEPT_ENCODING, "gzip")
+            .body(Body::empty())
+            .map_or_else(
+                |e| panic!("Failed to build request: {e}"),
+                std::convert::identity,
+            );
+
+        let response = app.oneshot(request).await.map_or_else(
+            |e| panic!("Failed to get response: {e}"),
+            std::convert::identity,
+        );
 
         assert_eq!(response.status(), StatusCode::OK);
     }
@@ -260,15 +287,18 @@ mod middleware_stack_tests {
             .layer(CompressionLayer::new())
             .layer(tower_http::trace::TraceLayer::new_for_http());
 
-        let response = app
-            .oneshot(
-                axum::http::Request::builder()
-                    .uri("/test")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+        let request = axum::http::Request::builder()
+            .uri("/test")
+            .body(Body::empty())
+            .map_or_else(
+                |e| panic!("Failed to build request: {e}"),
+                std::convert::identity,
+            );
+
+        let response = app.oneshot(request).await.map_or_else(
+            |e| panic!("Failed to get response: {e}"),
+            std::convert::identity,
+        );
 
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
@@ -289,15 +319,18 @@ mod middleware_stack_tests {
             .layer(tower_http::trace::TraceLayer::new_for_http())
             .layer(middleware::from_fn(catch_panic_middleware));
 
-        let response = app
-            .oneshot(
-                axum::http::Request::builder()
-                    .uri("/test")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+        let request = axum::http::Request::builder()
+            .uri("/test")
+            .body(Body::empty())
+            .map_or_else(
+                |e| panic!("Failed to build request: {e}"),
+                std::convert::identity,
+            );
+
+        let response = app.oneshot(request).await.map_or_else(
+            |e| panic!("Failed to get response: {e}"),
+            std::convert::identity,
+        );
 
         assert_eq!(response.status(), StatusCode::OK);
     }

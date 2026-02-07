@@ -111,7 +111,7 @@ impl TimerPersistence {
             .create(("durable_timer", timer.id().as_str()))
             .content(record)
             .await
-            .map_err(|e| PersistenceError::query_failed(e.to_string()))?;
+            .map_err(|e| PersistenceError::query_failed(e))?;
 
         Ok(())
     }
@@ -141,7 +141,7 @@ impl TimerPersistence {
             .await
             .map_err(|e| PersistenceError::query_failed(e.to_string()))?
             .take(0)
-            .map_err(|e| PersistenceError::query_failed(e.to_string()))?;
+            .map_err(|e| PersistenceError::query_failed(e))?;
 
         Ok(())
     }
@@ -168,7 +168,7 @@ impl TimerPersistence {
             .await
             .map_err(|e| PersistenceError::query_failed(e.to_string()))?
             .take(0)
-            .map_err(|e| PersistenceError::query_failed(e.to_string()))?;
+            .map_err(|e| PersistenceError::query_failed(e))?;
 
         Ok(())
     }
@@ -184,7 +184,7 @@ impl TimerPersistence {
             .db()
             .select(("durable_timer", timer_id.as_str()))
             .await
-            .map_err(|e| PersistenceError::query_failed(e.to_string()))?;
+            .map_err(|e| PersistenceError::query_failed(e))?;
 
         record.ok_or_else(|| PersistenceError::not_found("durable_timer", timer_id.as_str()))
     }
@@ -208,7 +208,7 @@ impl TimerPersistence {
             .await
             .map_err(|e| PersistenceError::query_failed(e.to_string()))?
             .take(0)
-            .map_err(|e| PersistenceError::query_failed(e.to_string()))?;
+            .map_err(|e| PersistenceError::query_failed(e))?;
 
         Ok(records)
     }
@@ -226,7 +226,7 @@ impl TimerPersistence {
             .await
             .map_err(|e| PersistenceError::query_failed(e.to_string()))?
             .take(0)
-            .map_err(|e| PersistenceError::query_failed(e.to_string()))?;
+            .map_err(|e| PersistenceError::query_failed(e))?;
 
         Ok(records)
     }
@@ -242,7 +242,7 @@ impl TimerPersistence {
             .db()
             .delete(("durable_timer", timer_id.as_str()))
             .await
-            .map_err(|e| PersistenceError::query_failed(e.to_string()))?;
+            .map_err(|e| PersistenceError::query_failed(e))?;
 
         Ok(())
     }
@@ -263,7 +263,7 @@ impl TimerPersistence {
             .await
             .map_err(|e| PersistenceError::query_failed(e.to_string()))?
             .take(0)
-            .map_err(|e| PersistenceError::query_failed(e.to_string()))?;
+            .map_err(|e| PersistenceError::query_failed(e))?;
 
         Ok(result.len() as u64)
     }
@@ -294,7 +294,7 @@ impl TimerPersistence {
             .db()
             .query(schema)
             .await
-            .map_err(|e| PersistenceError::query_failed(e.to_string()))?;
+            .map_err(|e| PersistenceError::query_failed(e))?;
 
         Ok(())
     }

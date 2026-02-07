@@ -169,6 +169,17 @@ tasks:
     options:
       cache: true
 
+  bench:
+    command: "cargo bench --workspace"
+    description: "Run all Criterion benchmarks"
+    inputs:
+      - "crates/**/*.rs"
+      - "benches/**/*.rs"
+      - "Cargo.toml"
+      - "/Cargo.lock"
+    options:
+      cache: false
+
   # ============================================================================
   # DEVELOPMENT SERVERS
   # ============================================================================

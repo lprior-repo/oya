@@ -1,6 +1,7 @@
 //! Storage traits for workflow persistence.
 
 use async_trait::async_trait;
+use itertools::Itertools;
 
 use crate::error::Result;
 use crate::types::{Checkpoint, Journal, JournalEntry, PhaseId, Workflow, WorkflowId};
@@ -85,7 +86,7 @@ impl WorkflowStorage for InMemoryStorage {
     }
 
     async fn list_workflows(&self) -> Result<Vec<Workflow>> {
-        Ok(self.workflows.read().await.values().cloned().collect())
+        Ok(self.workflows.read().await.values().cloned().collect_vec())
     }
 
     async fn save_checkpoint(

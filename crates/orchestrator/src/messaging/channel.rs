@@ -303,10 +303,10 @@ impl DurableChannel {
         }
 
         let message_data = serde_json::to_string(&queued.message)
-            .map_err(|e| PersistenceError::serialization_error(e.to_string()))?;
+            .map_err(|e| PersistenceError::serialization_error(e))?;
 
         let metadata = serde_json::to_string(&queued.metadata)
-            .map_err(|e| PersistenceError::serialization_error(e.to_string()))?;
+            .map_err(|e| PersistenceError::serialization_error(e))?;
 
         let input = MessageInput {
             channel_id: self.id.as_str().to_string(),
@@ -322,7 +322,7 @@ impl DurableChannel {
             .create(("channel_message", queued.message.id().as_str()))
             .content(input)
             .await
-            .map_err(|e| PersistenceError::query_failed(e.to_string()))?;
+            .map_err(|e| PersistenceError::query_failed(e))?;
 
         Ok(())
     }
@@ -348,7 +348,7 @@ impl DurableChannel {
             .db()
             .query(schema)
             .await
-            .map_err(|e| PersistenceError::query_failed(e.to_string()))?;
+            .map_err(|e| PersistenceError::query_failed(e))?;
 
         Ok(())
     }

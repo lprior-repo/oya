@@ -57,20 +57,18 @@ fn given_dag_with_node_when_remove_node_then_node_gone_and_count_decremented() {
 fn given_dag_with_edges_when_remove_node_then_all_connected_edges_removed() {
     // GIVEN: A DAG with edges connected to a node
     //   a --> b --> c
-    let mut dag = WorkflowDAG::new();
-    let _ = dag.add_node("a".to_string());
-    let _ = dag.add_node("b".to_string());
-    let _ = dag.add_node("c".to_string());
-    let _ = dag.add_edge(
-        "a".to_string(),
-        "b".to_string(),
-        DependencyType::BlockingDependency,
-    );
-    let _ = dag.add_edge(
-        "b".to_string(),
-        "c".to_string(),
-        DependencyType::BlockingDependency,
-    );
+    let mut dag = WorkflowDAG::builder()
+        .with_nodes(["a", "b", "c"].map(String::from))
+        .with_edges(
+            [
+                ("a", "b", DependencyType::BlockingDependency),
+                ("b", "c", DependencyType::BlockingDependency),
+            ]
+            .map(|(a, b, t)| (a.to_string(), b.to_string(), t)),
+        )
+        .build()
+        .expect("builder should succeed");
+
     assert_eq!(dag.edge_count(), 2, "Precondition: DAG should have 2 edges");
 
     // WHEN: The middle node is removed

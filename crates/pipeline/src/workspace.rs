@@ -11,6 +11,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use itertools::Itertools;
 use serde::Deserialize;
 use tracing::{info, warn};
 
@@ -365,8 +366,8 @@ fn sanitize_workspace_name(bead_id: &str) -> String {
 }
 
 fn parse_workspace_path(status_json: &str, workspace_name: &str) -> Result<PathBuf> {
-    let parsed: ZjjStatusEnvelope = serde_json::from_str(status_json)
-        .map_err(|err| Error::json_parse_failed(format!("zjj status parse error: {err}")))?;
+    let parsed: ZjjStatusEnvelope =
+        serde_json::from_str(status_json).map_err(|err| Error::json_parse_failed(err))?;
 
     let maybe_session = parsed
         .sessions
@@ -423,7 +424,7 @@ fn parse_workspace_list(output: &str) -> Result<Vec<WorkspaceInfo>> {
         }
 
         // Parse format: "name email timestamp"
-        let parts: Vec<&str> = line.split_whitespace().collect();
+        let parts: Vec<&str> = line.split_whitespace().collect_vec();
         if parts.len() < 3 {
             return Err(Error::InvalidRecord {
                 reason: format!("invalid workspace list line: {line}"),
@@ -502,7 +503,7 @@ mod tests {
     impl WorkspaceCommandRunner for StubRunner {
         fn run(&self, cmd: &str, args: &[&str], cwd: &Path) -> Result<CommandResult> {
             if let Ok(mut calls) = self.calls.lock() {
-                let arg_vec = args.iter().map(|a| a.to_string()).collect();
+                let arg_vec = args.iter().map(|a| a.to_string()).collect_vec();
                 calls.push((cmd.to_string(), arg_vec, cwd.to_path_buf()));
             }
 

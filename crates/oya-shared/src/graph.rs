@@ -196,18 +196,42 @@ impl Node {
     }
 
     /// Sets the node's position
+    #[deprecated(since = "0.1.0", note = "Use and_position() for functional style")]
     pub fn set_position(&mut self, position: Position) {
         self.position = position;
     }
 
     /// Sets the node's state
+    #[deprecated(since = "0.1.0", note = "Use and_state() for functional style")]
     pub fn set_state(&mut self, state: NodeState) {
         self.state = state;
     }
 
     /// Sets the node's shape
+    #[deprecated(since = "0.1.0", note = "Use and_shape() for functional style")]
     pub fn set_shape(&mut self, shape: NodeShape) {
         self.shape = shape;
+    }
+
+    /// Returns a new Node with the updated position (functional style)
+    #[must_use]
+    pub fn and_position(mut self, position: Position) -> Self {
+        self.position = position;
+        self
+    }
+
+    /// Returns a new Node with the updated state (functional style)
+    #[must_use]
+    pub fn and_state(mut self, state: NodeState) -> Self {
+        self.state = state;
+        self
+    }
+
+    /// Returns a new Node with the updated shape (functional style)
+    #[must_use]
+    pub fn and_shape(mut self, shape: NodeShape) -> Self {
+        self.shape = shape;
+        self
     }
 }
 
@@ -367,11 +391,13 @@ impl Edge {
     }
 
     /// Sets the edge style
+    #[deprecated(since = "0.1.0", note = "Use and_style() for functional style")]
     pub fn set_style(&mut self, style: EdgeStyle) {
         self.style = style;
     }
 
     /// Sets the edge state
+    #[deprecated(since = "0.1.0", note = "Use and_state() for functional style")]
     pub fn set_state(&mut self, state: EdgeState) {
         self.state = state;
     }
@@ -383,8 +409,30 @@ impl Edge {
     }
 
     /// Sets the edge label
+    #[deprecated(since = "0.1.0", note = "Use and_label() for functional style")]
     pub fn set_label(&mut self, label: Option<String>) {
         self.label = label;
+    }
+
+    /// Returns a new Edge with the updated style (functional style)
+    #[must_use]
+    pub fn and_style(mut self, style: EdgeStyle) -> Self {
+        self.style = style;
+        self
+    }
+
+    /// Returns a new Edge with the updated state (functional style)
+    #[must_use]
+    pub fn and_state(mut self, state: EdgeState) -> Self {
+        self.state = state;
+        self
+    }
+
+    /// Returns a new Edge with the updated label (functional style)
+    #[must_use]
+    pub fn and_label(mut self, label: Option<String>) -> Self {
+        self.label = label;
+        self
     }
 }
 
@@ -405,13 +453,29 @@ impl Graph {
     }
 
     /// Adds a node to the graph
+    #[deprecated(since = "0.1.0", note = "Use with_node() for functional style")]
     pub fn add_node(&mut self, node: Node) {
         self.nodes.push(node);
     }
 
     /// Adds an edge to the graph
+    #[deprecated(since = "0.1.0", note = "Use with_edge() for functional style")]
     pub fn add_edge(&mut self, edge: Edge) {
         self.edges.push(edge);
+    }
+
+    /// Returns a new Graph with the node added (functional style)
+    #[must_use]
+    pub fn with_node(mut self, node: Node) -> Self {
+        self.nodes.push(node);
+        self
+    }
+
+    /// Returns a new Graph with the edge added (functional style)
+    #[must_use]
+    pub fn with_edge(mut self, edge: Edge) -> Self {
+        self.edges.push(edge);
+        self
     }
 
     /// Returns all nodes
@@ -445,9 +509,28 @@ impl Graph {
     }
 
     /// Finds a mutable node by ID
+    #[deprecated(since = "0.1.0", note = "Use and_updated_node() for functional style")]
     #[must_use]
     pub fn find_node_mut(&mut self, id: &str) -> Option<&mut Node> {
         self.nodes.iter_mut().find(|n| n.id().as_str() == id)
+    }
+
+    /// Returns a new Graph with an updated node (functional style)
+    ///
+    /// This method applies a transformation function to the node with the given ID,
+    /// returning a new Graph with the updated node. If no node with the ID exists,
+    /// the original Graph is returned unchanged.
+    #[must_use]
+    pub fn and_updated_node<F>(self, id: &str, mut f: F) -> Self
+    where
+        F: FnMut(Node) -> Node,
+    {
+        let nodes = self
+            .nodes
+            .into_iter()
+            .map(|n| if n.id().as_str() == id { f(n) } else { n })
+            .collect();
+        Graph { nodes, ..self }
     }
 }
 
@@ -496,10 +579,13 @@ mod tests {
 
         let node1 = Node::new("n1", "Node 1")?;
         let node2 = Node::new("n2", "Node 2")?;
+        #[allow(deprecated)]
         graph.add_node(node1);
+        #[allow(deprecated)]
         graph.add_node(node2);
 
         let edge = Edge::new(NodeId::new("n1")?, NodeId::new("n2")?, EdgeType::Dependency)?;
+        #[allow(deprecated)]
         graph.add_edge(edge);
 
         assert_eq!(graph.node_count(), 2);
@@ -514,10 +600,85 @@ mod tests {
     #[test]
     fn test_rkyv_graph() -> Result<(), String> {
         let mut graph = Graph::new();
+        #[allow(deprecated)]
         graph.add_node(Node::new("n1", "Test")?);
 
         let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&graph);
         assert!(bytes.is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn test_functional_node_builders() -> Result<(), String> {
+        let node = Node::new("n1", "Test")?
+            .and_state(NodeState::Running)
+            .and_shape(NodeShape::Diamond)
+            .and_position(Position::new(10.0, 20.0)?);
+
+        assert_eq!(node.state(), NodeState::Running);
+        assert_eq!(node.shape(), NodeShape::Diamond);
+        assert_eq!(node.position().x, 10.0);
+        assert_eq!(node.position().y, 20.0);
+        Ok(())
+    }
+
+    #[test]
+    fn test_functional_edge_builders() -> Result<(), String> {
+        let source = NodeId::new("n1")?;
+        let target = NodeId::new("n2")?;
+        let edge = Edge::new(source, target, EdgeType::Dependency)?
+            .and_style(EdgeStyle::Dashed)
+            .and_state(EdgeState::Highlighted)
+            .and_label(Some("test".to_string()));
+
+        assert_eq!(edge.style(), EdgeStyle::Dashed);
+        assert_eq!(edge.state(), EdgeState::Highlighted);
+        assert_eq!(edge.label(), Some("test"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_functional_graph_builders() -> Result<(), String> {
+        let node1 = Node::new("n1", "Node 1")?;
+        let node2 = Node::new("n2", "Node 2")?;
+        let edge = Edge::new(NodeId::new("n1")?, NodeId::new("n2")?, EdgeType::Dependency)?;
+
+        let graph = Graph::new()
+            .with_node(node1)
+            .with_node(node2)
+            .with_edge(edge);
+
+        assert_eq!(graph.node_count(), 2);
+        assert_eq!(graph.edge_count(), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn test_graph_and_updated_node() -> Result<(), String> {
+        let node1 = Node::new("n1", "Node 1")?;
+        let node2 = Node::new("n2", "Node 2")?;
+
+        let graph = Graph::new().with_node(node1).with_node(node2);
+
+        // Update node1's state
+        let updated_graph = graph
+            .clone()
+            .and_updated_node("n1", |n| n.and_state(NodeState::Completed));
+
+        let updated_node = updated_graph.find_node("n1");
+        assert!(updated_node.is_some(), "Expected to find updated node");
+        assert_eq!(updated_node.map(|n| n.state()), Some(NodeState::Completed));
+
+        // Original node should be unchanged
+        let original_node = graph.find_node("n1");
+        assert!(original_node.is_some(), "Expected to find original node");
+        assert_eq!(original_node.map(|n| n.state()), Some(NodeState::Idle));
+
+        // Updating non-existent node returns unchanged graph
+        let unchanged = graph
+            .clone()
+            .and_updated_node("n3", |n| n.and_state(NodeState::Failed));
+        assert_eq!(unchanged.node_count(), graph.node_count());
         Ok(())
     }
 }

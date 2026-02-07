@@ -10,6 +10,7 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
+use itertools::Itertools;
 use oya_workflow::idempotent::keys::idempotency_key;
 use proptest::prelude::*;
 use serde::Serialize;
@@ -36,9 +37,9 @@ proptest! {
         };
 
         let key1 = idempotency_key(&bead_id, &input)
-            .expect("Should generate key");
+            .map_err(|e| format!("{:?}", e)).unwrap();
         let key2 = idempotency_key(&bead_id, &input)
-            .expect("Should generate key");
+            .map_err(|e| format!("{:?}", e)).unwrap();
 
         prop_assert_eq!(key1, key2, "Determinism property violated");
     }
@@ -63,10 +64,10 @@ proptest! {
 
         let key1 = idempotency_key(&bead_id1, &input)
 
-            .expect("Should generate key");
+            .map_err(|e| format!("{:?}", e)).unwrap();
         let key2 = idempotency_key(&bead_id2, &input)
 
-            .expect("Should generate key");
+            .map_err(|e| format!("{:?}", e)).unwrap();
 
         prop_assert_ne!(key1, key2, "Different bead_ids must produce different UUIDs");
     }
@@ -98,10 +99,10 @@ proptest! {
 
         let key1 = idempotency_key(&bead_id, &input1)
 
-            .expect("Should generate key");
+            .map_err(|e| format!("{:?}", e)).unwrap();
         let key2 = idempotency_key(&bead_id, &input2)
 
-            .expect("Should generate key");
+            .map_err(|e| format!("{:?}", e)).unwrap();
 
         prop_assert_ne!(key1, key2, "Different inputs must produce different UUIDs");
     }
@@ -121,7 +122,7 @@ proptest! {
 
         let key = idempotency_key(&bead_id, &input)
 
-            .expect("Should generate key");
+            .map_err(|e| format!("{:?}", e)).unwrap();
 
         // Verify version is v5 (SHA-1 based)
         prop_assert_eq!(
@@ -133,7 +134,7 @@ proptest! {
         // Verify variant is RFC 4122
         prop_assert_eq!(
             key.get_variant(),
-            Some(uuid::Variant::RFC4122),
+            uuid::Variant::RFC4122,
             "UUID must be RFC 4122 variant"
         );
 
@@ -154,52 +155,44 @@ proptest! {
         };
 
         // Generate 5 keys
-        let mut keys = Vec::new();
-        for _ in 0..5 {
-            let key = idempotency_key(&bead_id, &input)
-
-                .expect("Should generate key");
-            keys.push(key);
-        }
+        let keys: Vec<_> = (0..5)
+            .map(|_| idempotency_key(&bead_id, &input).map_err(|e| format!("{:?}", e)).unwrap())
+            .collect();
 
         // All must be equal
-        for key in &keys[1..] {
-            prop_assert_eq!(&keys[0], key, "All calls must produce same UUID");
-        }
+        prop_assert!(
+            keys.windows(2).all(|w| w[0] == w[1]),
+            "All calls must produce same UUID"
+        );
     }
 }
 
-#[test]
-fn test_collision_resistance_random_inputs() {
-    use std::collections::HashSet;
+proptest! {
+    /// Property: No collisions across large input space
+    #[test]
+    fn prop_collision_resistance(
+        bead_count in 1usize..20,
+        value_count in 10usize..200,
+    ) {
+        use std::collections::HashSet;
 
-    // Generate many keys with random-ish inputs
-    let mut keys = HashSet::new();
-    let mut inputs = Vec::new();
+        let mut keys = HashSet::new();
 
-    for i in 0..100 {
-        let bead_id = format!("bead-{}", i % 10);
-        let input = PropTestInput {
-            a: format!("value-{}", i),
-            b: i as u32,
-            c: vec![i % 2 == 0, i % 3 == 0, i % 5 == 0],
-        };
+        for i in 0..value_count {
+            let bead_id = format!("bead-{}", i % bead_count);
+            let input = PropTestInput {
+                a: format!("value-{}", i),
+                b: i as u32,
+                c: vec![i % 2 == 0, i % 3 == 0, i % 5 == 0],
+            };
 
-        let key = idempotency_key(&bead_id, &input);
-        assert!(key.is_ok(), "Should generate key");
-        let key = key.ok();
-
-        // Check for collision
-        if let Some(k) = key {
-            if keys.contains(&k) {
-                assert!(false, "Collision detected! Key {} already generated from previous input", k);
-            }
-            keys.insert(k);
+            let key = idempotency_key(&bead_id, &input)
+                .map_err(|e| proptest::test_runner::TestCaseError::fail(e.to_string()))?;
+            prop_assert!(!keys.contains(&key), "Collision detected at index {}!", i);
+            keys.insert(key);
         }
 
-        inputs.push((bead_id, input));
+        // Should have exactly value_count unique keys
+        prop_assert_eq!(keys.len(), value_count, "All keys should be unique");
     }
-
-    // Should have 100 unique keys
-    assert_eq!(keys.len(), 100, "All 100 keys should be unique");
 }

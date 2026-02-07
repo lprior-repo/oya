@@ -35,14 +35,17 @@ pub trait Projection: Send + Sync {
         tracker: Option<&ReplayTracker>,
     ) -> Result<Self::State> {
         let events = store.read(None).await?;
-        let mut state = self.initial_state();
-        for event in events {
-            self.apply(&mut state, &event);
-            if let Some(t) = tracker {
-                t.increment()?;
-            }
-        }
-        Ok(state)
+
+        // Use functional fold for immutable state application
+        events
+            .iter()
+            .try_fold(self.initial_state(), |mut state, event| {
+                self.apply(&mut state, event);
+                if let Some(t) = tracker {
+                    t.increment()?;
+                }
+                Ok(state)
+            })
     }
 }
 

@@ -3,6 +3,7 @@
 //! Enforces strict functional Rust requirements before allowing
 //! code to proceed through the pipeline.
 
+use itertools::Itertools;
 use std::path::Path;
 use tracing::{debug, warn};
 
@@ -69,17 +70,26 @@ impl FunctionalGate {
             });
         }
 
-        let mut all_violations = Vec::new();
-        let mut total_lines = 0usize;
-
-        for file_path in &rust_files {
-            let file_content = std::fs::read_to_string(file_path)
-                .map_err(|e| Error::file_read_failed(file_path, format!("read error: {e}")))?;
-
-            let audit = audit_functional_style(&file_content);
-            total_lines += audit.total_lines;
-            all_violations.extend(audit.violations);
-        }
+        let (all_violations, total_lines): (Vec<_>, usize) = rust_files
+            .iter()
+            .map(|file_path| {
+                std::fs::read_to_string(file_path)
+                    .map_err(|e| Error::file_read_failed(file_path, e))
+                    .map(|content| {
+                        let audit = audit_functional_style(&content);
+                        (audit.violations, audit.total_lines)
+                    })
+            })
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .fold(
+                (Vec::new(), 0),
+                |(mut violations, mut total_lines), (file_violations, file_lines)| {
+                    violations.extend(file_violations);
+                    total_lines += file_lines;
+                    (violations, total_lines)
+                },
+            );
 
         let functional_percentage = if total_lines > 0 {
             let clean_lines = total_lines.saturating_sub(all_violations.len());
@@ -111,17 +121,17 @@ impl FunctionalGate {
         let audit = &self.audit;
 
         // Check for critical violations
-        let critical_violations: Vec<_> = audit
+        let critical_violations = audit
             .violations
             .iter()
             .filter(|v| matches!(v.severity, ViolationSeverity::Critical))
-            .collect();
+            .collect_vec();
 
         if !critical_violations.is_empty() {
-            let violation_msgs: Vec<String> = critical_violations
+            let violation_msgs = critical_violations
                 .iter()
                 .map(|v| format!("Line {}: {}", v.line, v.pattern.description()))
-                .collect();
+                .collect_vec();
 
             return QualityGateResult::Failed {
                 reason: format!(
@@ -134,11 +144,11 @@ impl FunctionalGate {
 
         // Check functional compliance percentage
         if audit.functional_percentage < MIN_FUNCTIONAL_COMPLIANCE {
-            let violation_msgs: Vec<String> = audit
+            let violation_msgs = audit
                 .violations
                 .iter()
                 .map(|v| format!("Line {}: {}", v.line, v.pattern.description()))
-                .collect();
+                .collect_vec();
 
             return QualityGateResult::Failed {
                 reason: format!(
@@ -216,30 +226,38 @@ impl FunctionalGate {
         if !audit.violations.is_empty() {
             report.push_str("\n=== Violations ===\n");
 
-            for severity in [
+            let violations_by_severity: Vec<(ViolationSeverity, Vec<_>)> = [
                 ViolationSeverity::Critical,
                 ViolationSeverity::High,
                 ViolationSeverity::Medium,
                 ViolationSeverity::Low,
-            ] {
-                let violations: Vec<_> = audit
+            ]
+            .into_iter()
+            .map(|severity| {
+                let violations = audit
                     .violations
                     .iter()
                     .filter(|v| v.severity == severity)
+                    .collect::<Vec<_>>();
+                (severity, violations)
+            })
+            .filter(|(_, violations)| !violations.is_empty())
+            .collect();
+
+            for (severity, violations) in violations_by_severity {
+                report.push_str(&format!("\n{:?} ({}):\n", severity, violations.len()));
+
+                let violation_details: Vec<String> = violations
+                    .iter()
+                    .flat_map(|v| {
+                        [
+                            format!("  Line {}: {}", v.line, v.pattern.description()),
+                            format!("    {}\n", v.line_content.trim()),
+                        ]
+                    })
                     .collect();
 
-                if !violations.is_empty() {
-                    report.push_str(&format!("\n{:?} ({}):\n", severity, violations.len()));
-
-                    for v in violations {
-                        report.push_str(&format!(
-                            "  Line {}: {}\n",
-                            v.line,
-                            v.pattern.description()
-                        ));
-                        report.push_str(&format!("    {}\n", v.line_content.trim()));
-                    }
-                }
+                report.push_str(&violation_details.join("\n"));
             }
         }
 
@@ -247,33 +265,15 @@ impl FunctionalGate {
     }
 }
 
-/// Find all Rust source files in a directory.
-fn find_rust_files(worktree_path: &Path) -> Result<Vec<String>> {
-    let mut rust_files = Vec::new();
-
-    if !worktree_path.exists() {
-        return Ok(rust_files);
-    }
-
-    let entries = std::fs::read_dir(worktree_path)
-        .map_err(|e| Error::file_read_failed(worktree_path, format!("read error: {e}")))?;
-
-    for entry in entries {
-        let entry = entry
-            .map_err(|e| Error::file_read_failed(worktree_path, format!("entry error: {e}")))?;
-
-        let path = entry.path();
-
-        if path.is_dir() {
-            if !is_hidden_dir(&path) {
-                rust_files.extend(find_rust_files(&path)?);
-            }
-        } else if path.extension().is_some_and(|ext| ext == "rs") {
-            rust_files.push(path.to_string_lossy().to_string());
-        }
-    }
-
-    Ok(rust_files)
+/// Find all Rust source files in a directory (memoized).
+pub fn find_rust_files(worktree_path: &Path) -> Result<Vec<String>> {
+    // Convert PathBuf to Path and collect the paths as strings
+    crate::file_discovery::find_rust_files(worktree_path).map(|paths| {
+        paths
+            .into_iter()
+            .map(|p| p.to_string_lossy().to_string())
+            .collect()
+    })
 }
 
 /// Check if a directory should be skipped (hidden or common build dirs).

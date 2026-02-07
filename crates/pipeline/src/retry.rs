@@ -120,8 +120,8 @@ impl RetryConfig {
         // Safe conversion: cap at i32::MAX to avoid overflow in powi
         let exponent = i32::try_from(attempt - 1).map_or(i32::MAX, |e| e);
 
-        let base_delay_ms = self.initial_delay.as_millis() as f64
-            * self.backoff_multiplier.powi(exponent);
+        let base_delay_ms =
+            self.initial_delay.as_millis() as f64 * self.backoff_multiplier.powi(exponent);
 
         let capped_delay_ms = base_delay_ms.min(self.max_delay.as_millis() as f64);
 

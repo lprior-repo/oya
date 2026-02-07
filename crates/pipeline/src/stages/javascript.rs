@@ -4,6 +4,7 @@ use std::path::Path;
 
 use crate::{
     error::{Error, Result},
+    file_discovery::find_javascript_files,
     process::run_command,
 };
 
@@ -87,19 +88,27 @@ fn javascript_security(cwd: &Path) -> Result<()> {
 }
 
 fn javascript_review(cwd: &Path) -> Result<()> {
-    let result = run_command(
-        "grep",
-        &[
-            "-r",
-            r"TODO\|FIXME\|XXX\|HACK",
-            "--include=*.js",
-            "--include=*.ts",
-            "--include=*.jsx",
-            "--include=*.tsx",
-            ".",
-        ],
-        cwd,
-    )?;
+    // Use memoized file discovery to get JS/TS files
+    let js_files = find_javascript_files(cwd)?;
+
+    if js_files.is_empty() {
+        return Ok(()); // No JavaScript files to review
+    }
+
+    // Convert paths to strings for grep and build args
+    let file_paths: Vec<String> = js_files
+        .iter()
+        .map(|p| p.to_string_lossy().to_string())
+        .collect();
+
+    let args: Vec<String> = vec!["-r".to_string(), r"TODO\|FIXME\|XXX\|HACK".to_string()]
+        .into_iter()
+        .chain(file_paths.iter().cloned())
+        .chain(vec![".".to_string()])
+        .collect();
+
+    let args_slice: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    let result = run_command("grep", &args_slice, cwd)?;
 
     match result.exit_code {
         0 => Err(Error::stage_failed(

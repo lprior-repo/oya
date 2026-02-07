@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use itertools::Itertools;
 use tokio::sync::RwLock;
 
 use super::error::{AgentSwarmError, AgentSwarmResult};
@@ -145,14 +146,14 @@ impl AgentPool {
             .values()
             .filter(|a| a.is_available())
             .cloned()
-            .collect()
+            .collect_vec()
     }
 
     /// Get all agents in the pool.
     pub async fn all_agents(&self) -> Vec<AgentHandle> {
         let agents = self.agents.read().await;
 
-        agents.values().cloned().collect()
+        agents.values().cloned().collect_vec()
     }
 
     /// Get agents with a specific capability.
@@ -163,7 +164,7 @@ impl AgentPool {
             .values()
             .filter(|a| a.has_capability(capability) && a.is_available())
             .cloned()
-            .collect()
+            .collect_vec()
     }
 
     /// Assign a bead to an available agent.
@@ -352,7 +353,7 @@ impl AgentPool {
             ..Default::default()
         };
 
-        for agent in agents.values() {
+        agents.values().for_each(|agent| {
             match agent.state() {
                 AgentState::Idle => stats.idle += 1,
                 AgentState::Working => stats.working += 1,
@@ -360,7 +361,7 @@ impl AgentPool {
                 AgentState::ShuttingDown => stats.shutting_down += 1,
                 AgentState::Terminated => stats.terminated += 1,
             }
-        }
+        });
 
         stats
     }
@@ -397,12 +398,12 @@ impl AgentPool {
     pub async fn shutdown_all(&self) {
         let agent_ids: Vec<String> = {
             let agents = self.agents.read().await;
-            agents.keys().cloned().collect()
+            agents.keys().cloned().collect_vec()
         };
 
-        for agent_id in agent_ids {
+        agent_ids.into_iter().for_each(|agent_id| {
             let _ = self.shutdown_agent(&agent_id).await;
-        }
+        });
     }
 
     /// Get the pool configuration.

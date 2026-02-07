@@ -33,26 +33,18 @@ fn given_empty_dag_when_toposort_then_empty_vec() {
 #[test]
 fn given_linear_chain_when_toposort_then_correct_order() {
     // GIVEN: A linear chain a -> b -> c -> d
-    let mut dag = WorkflowDAG::new();
-    let _ = dag.add_node("a".to_string());
-    let _ = dag.add_node("b".to_string());
-    let _ = dag.add_node("c".to_string());
-    let _ = dag.add_node("d".to_string());
-    let _ = dag.add_edge(
-        "a".to_string(),
-        "b".to_string(),
-        DependencyType::BlockingDependency,
-    );
-    let _ = dag.add_edge(
-        "b".to_string(),
-        "c".to_string(),
-        DependencyType::BlockingDependency,
-    );
-    let _ = dag.add_edge(
-        "c".to_string(),
-        "d".to_string(),
-        DependencyType::BlockingDependency,
-    );
+    let dag = WorkflowDAG::builder()
+        .with_nodes(["a", "b", "c", "d"].map(String::from))
+        .with_edges(
+            [
+                ("a", "b", DependencyType::BlockingDependency),
+                ("b", "c", DependencyType::BlockingDependency),
+                ("c", "d", DependencyType::BlockingDependency),
+            ]
+            .map(|(a, b, t)| (a.to_string(), b.to_string(), t)),
+        )
+        .build()
+        .expect("builder should succeed");
 
     // WHEN: Performing topological sort
     let result = dag.topological_sort();
@@ -74,31 +66,19 @@ fn given_linear_chain_when_toposort_then_correct_order() {
 #[test]
 fn given_diamond_when_toposort_then_valid_order() {
     // GIVEN: A diamond DAG: a -> b,c -> d
-    let mut dag = WorkflowDAG::new();
-    let _ = dag.add_node("a".to_string());
-    let _ = dag.add_node("b".to_string());
-    let _ = dag.add_node("c".to_string());
-    let _ = dag.add_node("d".to_string());
-    let _ = dag.add_edge(
-        "a".to_string(),
-        "b".to_string(),
-        DependencyType::BlockingDependency,
-    );
-    let _ = dag.add_edge(
-        "a".to_string(),
-        "c".to_string(),
-        DependencyType::BlockingDependency,
-    );
-    let _ = dag.add_edge(
-        "b".to_string(),
-        "d".to_string(),
-        DependencyType::BlockingDependency,
-    );
-    let _ = dag.add_edge(
-        "c".to_string(),
-        "d".to_string(),
-        DependencyType::BlockingDependency,
-    );
+    let dag = WorkflowDAG::builder()
+        .with_nodes(["a", "b", "c", "d"].map(String::from))
+        .with_edges(
+            [
+                ("a", "b", DependencyType::BlockingDependency),
+                ("a", "c", DependencyType::BlockingDependency),
+                ("b", "d", DependencyType::BlockingDependency),
+                ("c", "d", DependencyType::BlockingDependency),
+            ]
+            .map(|(a, b, t)| (a.to_string(), b.to_string(), t)),
+        )
+        .build()
+        .expect("builder should succeed");
 
     // WHEN: Performing topological sort
     let result = dag.topological_sort();
@@ -115,21 +95,17 @@ fn given_diamond_when_toposort_then_valid_order() {
 #[test]
 fn given_disconnected_components_when_toposort_then_all_included() {
     // GIVEN: Two disconnected components: (a -> b) and (c -> d)
-    let mut dag = WorkflowDAG::new();
-    let _ = dag.add_node("a".to_string());
-    let _ = dag.add_node("b".to_string());
-    let _ = dag.add_node("c".to_string());
-    let _ = dag.add_node("d".to_string());
-    let _ = dag.add_edge(
-        "a".to_string(),
-        "b".to_string(),
-        DependencyType::BlockingDependency,
-    );
-    let _ = dag.add_edge(
-        "c".to_string(),
-        "d".to_string(),
-        DependencyType::BlockingDependency,
-    );
+    let dag = WorkflowDAG::builder()
+        .with_nodes(["a", "b", "c", "d"].map(String::from))
+        .with_edges(
+            [
+                ("a", "b", DependencyType::BlockingDependency),
+                ("c", "d", DependencyType::BlockingDependency),
+            ]
+            .map(|(a, b, t)| (a.to_string(), b.to_string(), t)),
+        )
+        .build()
+        .expect("builder should succeed");
 
     // WHEN: Performing topological sort
     let result = dag.topological_sort();
@@ -182,36 +158,20 @@ fn given_cycle_when_toposort_then_error() {
 #[test]
 fn given_complex_dag_when_toposort_kahn_vs_dfs_then_both_valid() {
     // GIVEN: A complex DAG with multiple valid orderings
-    let mut dag = WorkflowDAG::new();
-    for i in 0..10 {
-        let _ = dag.add_node(format!("node-{}", i));
-    }
-    // Create complex dependency structure
-    let _ = dag.add_edge(
-        "node-0".to_string(),
-        "node-2".to_string(),
-        DependencyType::BlockingDependency,
-    );
-    let _ = dag.add_edge(
-        "node-1".to_string(),
-        "node-2".to_string(),
-        DependencyType::BlockingDependency,
-    );
-    let _ = dag.add_edge(
-        "node-2".to_string(),
-        "node-5".to_string(),
-        DependencyType::BlockingDependency,
-    );
-    let _ = dag.add_edge(
-        "node-3".to_string(),
-        "node-6".to_string(),
-        DependencyType::BlockingDependency,
-    );
-    let _ = dag.add_edge(
-        "node-4".to_string(),
-        "node-6".to_string(),
-        DependencyType::BlockingDependency,
-    );
+    let dag = WorkflowDAG::builder()
+        .with_nodes((0..10).map(|i| format!("node-{}", i)))
+        .with_edges(
+            [
+                ("node-0", "node-2", DependencyType::BlockingDependency),
+                ("node-1", "node-2", DependencyType::BlockingDependency),
+                ("node-2", "node-5", DependencyType::BlockingDependency),
+                ("node-3", "node-6", DependencyType::BlockingDependency),
+                ("node-4", "node-6", DependencyType::BlockingDependency),
+            ]
+            .map(|(a, b, t)| (a.to_string(), b.to_string(), t)),
+        )
+        .build()
+        .expect("builder should succeed");
 
     // WHEN: Using both algorithms
     let dfs_result = dag.topological_sort();

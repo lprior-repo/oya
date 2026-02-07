@@ -6,6 +6,7 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
+use itertools::Itertools;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -47,7 +48,7 @@ impl ConcurrentExecutor {
 
     async fn execution_count(&self, key: &str) -> usize {
         let execs = self.executions.read().await;
-        execs.get(key).copied().unwrap_or(0)
+        execs.get(key).map_or(0, |v| *v)
     }
 
     async fn result(&self, key: &str) -> Option<String> {
@@ -252,10 +253,10 @@ async fn test_high_concurrency_single_key() {
     assert!(!results.is_empty(), "Should have results");
 
     // All results should be identical
-    let first = &results[0];
-    for result in &results[1..] {
-        assert_eq!(result, first, "All results should match");
-    }
+    assert!(
+        results.windows(2).all(|w| w[0] == w[1]),
+        "All results should be identical"
+    );
 }
 
 #[tokio::test]
@@ -316,10 +317,10 @@ async fn test_concurrent_determinism() {
         .collect();
 
     // All results must be identical
-    let first = &results[0];
-    for result in &results[1..] {
-        assert_eq!(result, first, "Results must be deterministic");
-    }
+    assert!(
+        results.windows(2).all(|w| w[0] == w[1]),
+        "Results must be deterministic"
+    );
 }
 
 #[tokio::test]

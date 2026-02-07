@@ -3,6 +3,7 @@
 //! These types define the events that flow from the Tauri backend
 //! to the frontend for real-time updates.
 
+use bytes::Bytes;
 use rkyv::{Archive, Deserialize as RkyvDeserialize, Serialize as RkyvSerialize};
 use serde::{Deserialize, Serialize};
 
@@ -104,12 +105,12 @@ impl BeadEvent {
 }
 
 /// Stream chunk for high-throughput text streaming
-#[derive(Debug, Clone, Serialize, Deserialize, Archive, RkyvSerialize, RkyvDeserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StreamChunk {
     /// Stream identifier
     pub stream_id: String,
-    /// Raw bytes (UTF-8 text)
-    pub data: Vec<u8>,
+    /// Raw bytes (UTF-8 text) - zero-copy reference-counted bytes
+    pub data: Bytes,
     /// Absolute offset in the stream
     pub offset: u64,
 }
@@ -118,6 +119,16 @@ impl StreamChunk {
     /// Create a new stream chunk
     #[must_use]
     pub fn new(stream_id: impl Into<String>, data: Vec<u8>, offset: u64) -> Self {
+        Self {
+            stream_id: stream_id.into(),
+            data: Bytes::from(data),
+            offset,
+        }
+    }
+
+    /// Create a new stream chunk from Bytes
+    #[must_use]
+    pub fn from_bytes(stream_id: impl Into<String>, data: Bytes, offset: u64) -> Self {
         Self {
             stream_id: stream_id.into(),
             data,
@@ -129,6 +140,36 @@ impl StreamChunk {
     #[must_use]
     pub fn as_str_lossy(&self) -> std::borrow::Cow<'_, str> {
         String::from_utf8_lossy(&self.data)
+    }
+
+    /// Get the data as a string (fallible conversion)
+    #[must_use]
+    pub fn as_str(&self) -> Result<&str, std::str::Utf8Error> {
+        std::str::from_utf8(&self.data)
+    }
+
+    /// Get the length of the data
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
+
+    /// Check if the data is empty
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
+
+    /// Create a zero-copy slice of the stream chunk
+    #[must_use]
+    pub fn slice(&self, range: impl std::ops::RangeBounds<usize>) -> Bytes {
+        self.data.slice(range)
+    }
+
+    /// Get a reference to the underlying bytes
+    #[must_use]
+    pub fn as_ref(&self) -> &Bytes {
+        &self.data
     }
 }
 
@@ -206,6 +247,38 @@ mod tests {
         assert_eq!(chunk.stream_id, "stream-1");
         assert_eq!(chunk.as_str_lossy(), "Hello, world!");
         assert_eq!(chunk.offset, 0);
+        assert_eq!(chunk.len(), 13);
+        assert!(!chunk.is_empty());
+    }
+
+    #[test]
+    fn test_stream_chunk_from_bytes() {
+        let bytes = Bytes::from(b"Hello, world!".to_vec());
+        let chunk = StreamChunk::from_bytes("stream-1", bytes, 0);
+        assert_eq!(chunk.stream_id, "stream-1");
+        assert_eq!(chunk.as_str_lossy(), "Hello, world!");
+        assert_eq!(chunk.offset, 0);
+        assert_eq!(chunk.len(), 13);
+    }
+
+    #[test]
+    fn test_stream_chunk_as_str() {
+        let chunk = StreamChunk::new("stream-1", b"Hello, world!".to_vec(), 0);
+        assert_eq!(chunk.as_str().unwrap(), "Hello, world!");
+    }
+
+    #[test]
+    fn test_stream_chunk_as_str_invalid_utf8() {
+        let chunk = StreamChunk::new("stream-1", vec![0xFF, 0xFF, 0xFF], 0);
+        assert!(chunk.as_str().is_err());
+    }
+
+    #[test]
+    fn test_stream_chunk_slice() {
+        let chunk = StreamChunk::new("stream-1", b"Hello, world!".to_vec(), 0);
+        let slice = chunk.slice(0..5);
+        assert_eq!(slice, b"Hello");
+        assert_eq!(slice.len(), 5);
     }
 
     #[test]
@@ -218,5 +291,13 @@ mod tests {
 
         let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&event);
         assert!(bytes.is_ok());
+    }
+
+    #[test]
+    fn test_stream_chunk_slice() {
+        let chunk = StreamChunk::new("stream-1", b"Hello, world!".to_vec(), 0);
+        let slice = chunk.slice(0..5);
+        assert_eq!(slice, b"Hello");
+        assert_eq!(slice.len(), 5);
     }
 }

@@ -13,6 +13,9 @@ description = "Shared types for oya-ui and oya-tauri with high-performance seria
 serde = { version = "1", features = ["derive"] }
 rkyv = { version = "0.8", features = ["bytecheck"] }
 
+# Bytes for zero-copy streaming
+bytes = "1.9"
+
 # IDs
 ulid = { version = "1", features = ["serde"] }
 

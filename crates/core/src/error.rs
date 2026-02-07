@@ -10,27 +10,48 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum Error {
     // I/O errors
-    #[error("failed to read file '{path}': {reason}")]
-    FileReadFailed { path: PathBuf, reason: String },
+    #[error("failed to read file '{path}'")]
+    FileReadFailed {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
 
-    #[error("failed to write file '{path}': {reason}")]
-    FileWriteFailed { path: PathBuf, reason: String },
+    #[error("failed to write file '{path}'")]
+    FileWriteFailed {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
 
-    #[error("failed to create directory '{path}': {reason}")]
-    DirectoryCreationFailed { path: PathBuf, reason: String },
+    #[error("failed to create directory '{path}'")]
+    DirectoryCreationFailed {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
 
     #[error("directory does not exist: {path}")]
     DirectoryNotFound { path: PathBuf },
 
     // Parsing errors
-    #[error("JSON parse error: {reason}")]
-    JsonParseFailed { reason: String },
+    #[error("JSON parse error")]
+    JsonParseFailed {
+        #[source]
+        source: serde_json::Error,
+    },
 
-    #[error("YAML parse error: {reason}")]
-    YamlParseFailed { reason: String },
+    #[error("YAML parse error")]
+    YamlParseFailed {
+        #[source]
+        source: serde_yaml::Error,
+    },
 
-    #[error("TOML parse error: {reason}")]
-    TomlParseFailed { reason: String },
+    #[error("TOML parse error")]
+    TomlParseFailed {
+        #[source]
+        source: toml::de::Error,
+    },
 
     // Generic errors
     #[error("invalid record: {reason}")]
@@ -46,34 +67,42 @@ pub enum Error {
 
 impl Error {
     /// Create a file read error.
-    pub fn file_read_failed(path: impl Into<PathBuf>, reason: impl Into<String>) -> Self {
+    pub fn file_read_failed(path: impl Into<PathBuf>, source: std::io::Error) -> Self {
         Self::FileReadFailed {
             path: path.into(),
-            reason: reason.into(),
+            source,
         }
     }
 
     /// Create a file write error.
-    pub fn file_write_failed(path: impl Into<PathBuf>, reason: impl Into<String>) -> Self {
+    pub fn file_write_failed(path: impl Into<PathBuf>, source: std::io::Error) -> Self {
         Self::FileWriteFailed {
             path: path.into(),
-            reason: reason.into(),
+            source,
         }
     }
 
     /// Create a directory creation error.
-    pub fn directory_creation_failed(path: impl Into<PathBuf>, reason: impl Into<String>) -> Self {
+    pub fn directory_creation_failed(path: impl Into<PathBuf>, source: std::io::Error) -> Self {
         Self::DirectoryCreationFailed {
             path: path.into(),
-            reason: reason.into(),
+            source,
         }
     }
 
     /// Create a JSON parse error.
-    pub fn json_parse_failed(reason: impl Into<String>) -> Self {
-        Self::JsonParseFailed {
-            reason: reason.into(),
-        }
+    pub fn json_parse_failed(source: serde_json::Error) -> Self {
+        Self::JsonParseFailed { source }
+    }
+
+    /// Create a YAML parse error.
+    pub fn yaml_parse_failed(source: serde_yaml::Error) -> Self {
+        Self::YamlParseFailed { source }
+    }
+
+    /// Create a TOML parse error.
+    pub fn toml_parse_failed(source: toml::de::Error) -> Self {
+        Self::TomlParseFailed { source }
     }
 
     /// Create an invalid record error.
@@ -91,28 +120,59 @@ mod tests {
     #[test]
     fn test_file_read_failed_factory() {
         let _path = PathBuf::from("/test/path");
-        let error = Error::file_read_failed(_path.clone(), "permission denied");
+        let io_error =
+            std::io::Error::new(std::io::ErrorKind::PermissionDenied, "permission denied");
+        let error = Error::file_read_failed(_path.clone(), io_error);
         assert!(matches!(error, Error::FileReadFailed { .. }));
     }
 
     #[test]
     fn test_file_write_failed_factory() {
         let _path = PathBuf::from("/test/path");
-        let error = Error::file_write_failed(_path.clone(), "disk full");
+        let io_error = std::io::Error::new(std::io::ErrorKind::StorageFull, "disk full");
+        let error = Error::file_write_failed(_path.clone(), io_error);
         assert!(matches!(error, Error::FileWriteFailed { .. }));
     }
 
     #[test]
     fn test_directory_creation_failed_factory() {
         let _path = PathBuf::from("/test/dir");
-        let error = Error::directory_creation_failed(_path.clone(), "readonly");
+        let io_error = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "readonly");
+        let error = Error::directory_creation_failed(_path.clone(), io_error);
         assert!(matches!(error, Error::DirectoryCreationFailed { .. }));
     }
 
     #[test]
     fn test_json_parse_failed_factory() {
-        let error = Error::json_parse_failed("bad comma");
+        // Create a JSON error by parsing invalid JSON
+        let json_error = match serde_json::from_str::<serde_json::Value>("{invalid}") {
+            Err(e) => e,
+            Ok(_) => panic!("Expected JSON parse error"),
+        };
+        let error = Error::json_parse_failed(json_error);
         assert!(matches!(error, Error::JsonParseFailed { .. }));
+    }
+
+    #[test]
+    fn test_yaml_parse_failed_factory() {
+        // Create a YAML error by parsing invalid YAML
+        let yaml_error = match serde_yaml::from_str::<serde_yaml::Value>("*: invalid") {
+            Err(e) => e,
+            Ok(_) => panic!("Expected YAML parse error"),
+        };
+        let error = Error::yaml_parse_failed(yaml_error);
+        assert!(matches!(error, Error::YamlParseFailed { .. }));
+    }
+
+    #[test]
+    fn test_toml_parse_failed_factory() {
+        // Create a TOML error by parsing invalid TOML
+        let toml_error = match toml::from_str::<toml::Value>("invalid = [") {
+            Err(e) => e,
+            Ok(_) => panic!("Expected TOML parse error"),
+        };
+        let error = Error::toml_parse_failed(toml_error);
+        assert!(matches!(error, Error::TomlParseFailed { .. }));
     }
 
     #[test]
@@ -145,9 +205,14 @@ mod tests {
 
     #[test]
     fn test_error_display() {
+        let io_error = std::io::Error::new(std::io::ErrorKind::NotFound, "not found");
+        let json_error = match serde_json::from_str::<serde_json::Value>("{invalid}") {
+            Err(e) => e,
+            Ok(_) => panic!("Expected JSON parse error"),
+        };
         let errors = vec![
-            Error::file_read_failed(PathBuf::from("/path"), "reason"),
-            Error::json_parse_failed("bad json"),
+            Error::file_read_failed(PathBuf::from("/path"), io_error),
+            Error::json_parse_failed(json_error),
             Error::Unknown(String::from("generic")),
         ];
 

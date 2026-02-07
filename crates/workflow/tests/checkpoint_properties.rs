@@ -215,12 +215,17 @@ fn test_edge_cases_compress_decompress() {
     let compressed_inner = compressed.map_err(|e| format!("Compression failed: {}", e))?;
     let decompressed = decompress(&compressed_inner, 0);
     assert!(decompressed.is_ok(), "Empty data should decompress");
-    assert_eq!(decompressed.map_err(|e| format!("Decompression failed: {}", e))?, empty, "Empty round-trip should work");
+    assert_eq!(
+        decompressed.map_err(|e| format!("Decompression failed: {}", e))?,
+        empty,
+        "Empty round-trip should work"
+    );
 
     // Single byte
     let single = vec![42u8];
     let compressed = compress(&single).map_err(|e| format!("Compression failed: {}", e))?;
-    let decompressed = decompress(&compressed, 1).map_err(|e| format!("Decompression failed: {}", e))?;
+    let decompressed =
+        decompress(&compressed, 1).map_err(|e| format!("Decompression failed: {}", e))?;
     assert_eq!(decompressed, single, "Single byte round-trip should work");
 
     // Highly repetitive data (best case for compression)
@@ -232,7 +237,8 @@ fn test_edge_cases_compress_decompress() {
         "Highly repetitive data should compress >100:1, got {:.2}",
         ratio
     );
-    let decompressed = decompress(&compressed, 10000).map_err(|e| format!("Decompression failed: {}", e))?;
+    let decompressed =
+        decompress(&compressed, 10000).map_err(|e| format!("Decompression failed: {}", e))?;
     assert_eq!(
         decompressed, repetitive,
         "Repetitive round-trip should work"

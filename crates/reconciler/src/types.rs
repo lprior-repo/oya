@@ -2,6 +2,8 @@
 
 use std::collections::HashMap;
 
+use either::Either;
+use itertools::Itertools;
 use oya_events::{BeadId, BeadProjection, BeadResult, BeadSpec, BeadState};
 use serde::{Deserialize, Serialize};
 
@@ -100,7 +102,7 @@ impl ActualState {
         self.beads
             .values()
             .filter(|b| b.current_state == state)
-            .collect()
+            .collect_vec()
     }
 
     /// Get beads that are ready to run (scheduled and not blocked).
@@ -108,7 +110,7 @@ impl ActualState {
         self.beads
             .values()
             .filter(|b| b.current_state == BeadState::Scheduled && b.blocked_by.is_empty())
-            .collect()
+            .collect_vec()
     }
 
     /// Get beads that exist in actual state but not desired state.
@@ -116,7 +118,7 @@ impl ActualState {
         self.beads
             .values()
             .filter(|b| !desired.beads.contains_key(&b.bead_id))
-            .collect()
+            .collect_vec()
     }
 
     /// Increment count for a state.
@@ -232,6 +234,15 @@ impl ReconcileAction {
     }
 }
 
+/// Result of reconciliation with partial success support.
+#[derive(Debug, Clone)]
+pub struct ReconciliationResult {
+    /// Beads that succeeded.
+    pub succeeded: Vec<BeadId>,
+    /// Beads that failed with errors.
+    pub failed: Vec<(BeadId, String)>,
+}
+
 /// Result of reconciliation.
 #[derive(Debug, Clone)]
 pub struct ReconcileResult {
@@ -245,6 +256,33 @@ pub struct ReconcileResult {
     pub actual_count: usize,
     /// Whether the system is converged.
     pub converged: bool,
+}
+
+impl ReconciliationResult {
+    /// Create a new reconciliation result.
+    pub fn new(succeeded: Vec<BeadId>, failed: Vec<(BeadId, String)>) -> Self {
+        Self { succeeded, failed }
+    }
+
+    /// Check if all operations succeeded.
+    pub fn all_succeeded(&self) -> bool {
+        self.failed.is_empty()
+    }
+
+    /// Get the total number of operations.
+    pub fn total(&self) -> usize {
+        self.succeeded.len() + self.failed.len()
+    }
+
+    /// Get the number of successful operations.
+    pub fn succeeded_count(&self) -> usize {
+        self.succeeded.len()
+    }
+
+    /// Get the number of failed operations.
+    pub fn failed_count(&self) -> usize {
+        self.failed.len()
+    }
 }
 
 impl ReconcileResult {

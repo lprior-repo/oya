@@ -265,7 +265,10 @@ mod tests {
         let result = state.start_loading();
 
         assert!(result.is_err());
-        assert!(matches!(result, Err(crate::error::Error::InvalidState { .. })));
+        assert!(matches!(
+            result,
+            Err(crate::error::Error::InvalidState { .. })
+        ));
         if let Err(crate::error::Error::InvalidState { current, attempted }) = result {
             assert!(current.contains("Loading"));
             assert_eq!(attempted, "Loading");

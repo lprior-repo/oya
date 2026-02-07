@@ -11,6 +11,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use futures::stream::{self, TryStreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{RwLock, broadcast, mpsc};
 use tokio::time::timeout;
@@ -258,6 +259,8 @@ impl ShutdownCoordinator {
         info!("Stopping actors");
         // Actor shutdown logic will be implemented by components that subscribe
         // to shutdown notifications. This is a coordination point.
+        // For fail-fast behavior, we would collect and propagate errors from
+        // all actor shutdown operations
         Ok(())
     }
 

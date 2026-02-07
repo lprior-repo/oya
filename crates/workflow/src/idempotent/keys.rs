@@ -28,6 +28,7 @@
 
 use crate::idempotent::{hash::hash_serializable, namespace::namespace_from_bead};
 use serde::Serialize;
+use std::collections::HashSet;
 use uuid::Uuid;
 
 /// Generates a deterministic idempotency key from bead ID and input.
@@ -426,12 +427,12 @@ mod tests {
         // Test that keys from different beads don't collide
         let input = "shared input";
 
-        let keys: Vec<_> = (0..100)
+        let keys = (0..100)
             .map(|i| idempotency_key_from_bytes(&format!("bead-{i:03}"), input.as_bytes()))
-            .collect();
+            .collect_vec();
 
         // All keys must be unique
-        let unique_keys: std::collections::HashSet<_> = keys.into_iter().collect();
+        let unique_keys: HashSet<_> = keys.into_iter().collect();
         assert_eq!(
             unique_keys.len(),
             100,
@@ -444,12 +445,12 @@ mod tests {
         // Test that different inputs produce different keys
         let bead_id = "bead-isolation-test";
 
-        let keys: Vec<_> = (0..100)
+        let keys = (0..100)
             .map(|i| idempotency_key_from_bytes(bead_id, format!("input-{i:03}").as_bytes()))
-            .collect();
+            .collect_vec();
 
         // All keys must be unique
-        let unique_keys: std::collections::HashSet<_> = keys.into_iter().collect();
+        let unique_keys: HashSet<_> = keys.into_iter().collect();
         assert_eq!(
             unique_keys.len(),
             100,

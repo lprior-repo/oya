@@ -275,11 +275,14 @@ fn should_forward_event(event: &BroadcastEvent, subscriptions: &[String]) -> boo
 ///
 /// In a full implementation, this would notify the state manager
 /// to remove this connection from active subscribers
-async fn cleanup_subscriptions(subscriptions: &[String]) {
+async fn cleanup_subscriptions(subscriptions: &[String]) -> Result<(), String> {
     if !subscriptions.is_empty() {
         info!("Cleaning up {} subscriptions", subscriptions.len());
         // TODO: Notify state manager to remove subscriptions
+        // For fail-fast behavior, we would need to implement actual subscription removal
+        // that returns Result<(), Error>
     }
+    Ok(())
 }
 
 #[cfg(test)]

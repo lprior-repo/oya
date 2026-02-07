@@ -41,6 +41,8 @@ pub enum Error {
     DuplicateHandler { handler_name: String },
     /// Maximum retries exceeded.
     MaxRetriesExceeded { phase_name: String, attempts: u32 },
+    /// All handlers in the chain failed.
+    AllHandlersFailed { phase_name: String, fallback_names: Vec<String> },
 }
 
 impl fmt::Display for Error {
@@ -98,6 +100,14 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "phase '{phase_name}' exceeded max retries ({attempts} attempts)"
+                )
+            }
+            Self::AllHandlersFailed { phase_name, fallback_names } => {
+                write!(
+                    f,
+                    "all handlers for phase '{}' failed: {}",
+                    phase_name,
+                    fallback_names.join(", ")
                 )
             }
         }
@@ -215,6 +225,14 @@ impl Error {
         Self::MaxRetriesExceeded {
             phase_name: phase_name.into(),
             attempts,
+        }
+    }
+
+    /// Create an all handlers failed error.
+    pub fn all_handlers_failed(phase_name: impl Into<String>, fallback_names: Vec<String>) -> Self {
+        Self::AllHandlersFailed {
+            phase_name: phase_name.into(),
+            fallback_names,
         }
     }
 

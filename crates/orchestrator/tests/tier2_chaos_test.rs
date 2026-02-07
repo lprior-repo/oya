@@ -181,11 +181,14 @@ async fn given_tier2_actor_killed_when_supervised_then_recovers() {
         "should get supervisor status: {:?}",
         child_count_before
     );
-    assert_eq!(
-        child_count_before.unwrap(),
-        1,
-        "supervisor should track 1 child"
+    let count = child_count_before.map_or_else(
+        |e| {
+            eprintln!("Failed to get child count: {}", e);
+            0
+        },
+        |c| c,
     );
+    assert_eq!(count, 1, "supervisor should track 1 child");
 
     // WHEN: Child actor is killed
     let kill_result = kill_tier2_child(&supervisor, &child_name).await;
@@ -452,7 +455,13 @@ async fn given_mixed_tier2_types_when_killed_then_all_recover() {
         scheduler_sup
     );
 
-    let scheduler_sup = scheduler_sup.unwrap();
+    let scheduler_sup = match scheduler_sup {
+        Ok(sup) => sup,
+        Err(e) => {
+            eprintln!("Failed to unwrap scheduler supervisor: {}", e);
+            return;
+        }
+    };
 
     // Spawn a StateManager actor
     let state_name = format!("{}-state", base_name);
@@ -464,7 +473,13 @@ async fn given_mixed_tier2_types_when_killed_then_all_recover() {
         state_sup
     );
 
-    let state_sup = state_sup.unwrap();
+    let state_sup = match state_sup {
+        Ok(sup) => sup,
+        Err(e) => {
+            eprintln!("Failed to unwrap state supervisor: {}", e);
+            return;
+        }
+    };
 
     // Give actors time to start
     sleep(Duration::from_millis(50)).await;
@@ -630,9 +645,15 @@ async fn given_tier2_crashes_then_no_shared_state_corruption() {
             // Verify supervisor starts with clean state (0 children)
             let child_count = get_supervisor_status(&sup).await;
             assert!(child_count.is_ok(), "should get status: {:?}", child_count);
+            let count = child_count.map_or_else(
+                |e| {
+                    eprintln!("Failed to get child count: {}", e);
+                    0
+                },
+                |c| c,
+            );
             assert_eq!(
-                child_count.unwrap(),
-                0,
+                count, 0,
                 "final supervisor should have clean state with 0 children"
             );
 

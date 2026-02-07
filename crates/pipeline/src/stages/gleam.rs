@@ -4,6 +4,7 @@ use std::path::Path;
 
 use crate::{
     error::{Error, Result},
+    file_discovery::find_gleam_files,
     process::{command_exists, run_command},
 };
 
@@ -59,19 +60,30 @@ fn gleam_unit_test(cwd: &Path) -> Result<()> {
 }
 
 fn gleam_coverage(cwd: &Path) -> Result<()> {
-    let result = run_command(
-        "find",
-        &[".", "-name", "*_test.gleam", "-o", "-name", "test_*.gleam"],
-        cwd,
-    )?;
+    // Use memoized file discovery to find test files
+    let test_files = find_gleam_files(cwd)?
+        .into_iter()
+        .filter(|p| {
+            let file_name = p.file_name().unwrap().to_string_lossy();
+            file_name.ends_with("_test.gleam") || file_name.starts_with("test_")
+        })
+        .collect::<Vec<_>>();
 
-    if result.exit_code == 1 {
+    if test_files.is_empty() {
         return Err(Error::stage_failed(
             "Gleam",
             "coverage",
             "No test files found",
         ));
     }
+
+    // Convert paths to strings for find command
+    let _file_paths: Vec<String> = test_files
+        .iter()
+        .map(|p| p.to_string_lossy().to_string())
+        .collect();
+
+    let result = run_command("find", &[".", "-name", "*.gleam"], cwd)?;
 
     result.check_success().map_err(|_| {
         Error::stage_failed(
@@ -113,11 +125,25 @@ fn gleam_security(cwd: &Path) -> Result<()> {
 }
 
 fn gleam_review(cwd: &Path) -> Result<()> {
-    let result = run_command(
-        "grep",
-        &["-r", r"TODO\|FIXME\|XXX\|HACK", "--include=*.gleam", "."],
-        cwd,
-    )?;
+    // Use memoized file discovery to get Gleam files
+    let gleam_files = find_gleam_files(cwd)?;
+
+    if gleam_files.is_empty() {
+        return Ok(()); // No Gleam files to review
+    }
+
+    // Convert paths to strings for grep
+    let file_paths: Vec<String> = gleam_files
+        .iter()
+        .map(|p| p.to_string_lossy().to_string())
+        .collect();
+
+    let mut args: Vec<String> = vec!["-r".to_string(), r"TODO\|FIXME\|XXX\|HACK".to_string()];
+    args.extend(file_paths.iter().map(|p| p.to_string()));
+    args.push(".".to_string());
+
+    let args_slice: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    let result = run_command("grep", &args_slice, cwd)?;
 
     match result.exit_code {
         0 => Err(Error::stage_failed(

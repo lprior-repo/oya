@@ -7,9 +7,9 @@
 
 layout {
     tab name="oya-dashboard" {
-        pane {
+        pane size=1 borderless=true {
             name "oya"
-            plugin location="file:~/.local/share/zellij/plugins/oya_zellij.wasm" {
+            plugin location="file:/home/lewis/.local/share/zellij/plugins/oya_zellij.wasm" {
                 _server_url "http://localhost:3000"
             }
         }

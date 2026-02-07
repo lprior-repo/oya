@@ -333,12 +333,19 @@ impl Drop for AutoCheckpointTimer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicU64, Ordering};
+    use crate::InMemoryStorage;
+    use std::sync::atomic::Ordering;
 
     /// Helper to create a counter-based state provider.
-    fn create_counter_state_provider(counter: Arc<AtomicU64>) -> StateProvider {
+    ///
+    /// Note: StateProvider is a function pointer, so we need to use a static
+    /// counter or refactor to use a different approach. For now, we'll use
+    /// a simple non-capturing function.
+    fn state_provider_limited() -> StateProvider {
+        // Use a static counter for the test
+        static CALL_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         || {
-            let count = counter.fetch_add(1, Ordering::SeqCst);
+            let count = CALL_COUNT.fetch_add(1, Ordering::SeqCst);
             if count < 3 {
                 Some((PhaseId::new(), vec![count as u8]))
             } else {
@@ -347,48 +354,46 @@ mod tests {
         }
     }
 
+    fn state_provider_infinite() -> StateProvider {
+        || Some((PhaseId::new(), vec![1, 2, 3]))
+    }
+
     #[tokio::test]
     async fn test_auto_checkpoint_creates_checkpoints() {
         let storage = Arc::new(InMemoryStorage::new());
         let workflow_id = WorkflowId::new();
-        let counter = Arc::new(AtomicU64::new(0));
 
         let handle = start_auto_checkpoint(
             storage.clone(),
             workflow_id,
             Duration::from_millis(100), // Fast interval for testing
-            create_counter_state_provider(counter),
+            state_provider_limited(),
         );
 
         // Wait for completion
         let result = handle.await;
         assert!(result.is_ok(), "Task should complete successfully");
-        let result = result.ok().unwrap();
+        let result = result
+            .map_ok(|v| v)
+            .map_or(Err("task failed".to_string()), |v| v);
         assert!(result.is_ok(), "Auto-checkpoint should succeed");
 
         // Verify checkpoints were created
         let checkpoints = storage.load_checkpoints(workflow_id).await;
         assert!(checkpoints.is_ok());
-        assert_eq!(checkpoints.unwrap().len(), 3);
+        assert_eq!(checkpoints.map_or(vec![], |v| v).len(), 3);
     }
 
     #[tokio::test]
     async fn test_auto_checkpoint_with_shutdown() {
         let storage = Arc::new(InMemoryStorage::new());
         let workflow_id = WorkflowId::new();
-        let counter = Arc::new(AtomicU64::new(0));
-
-        // Create state provider that doesn't stop
-        let state_provider: StateProvider = || {
-            let _ = counter.fetch_add(1, Ordering::SeqCst);
-            Some((PhaseId::new(), vec![1, 2, 3]))
-        };
 
         let timer = AutoCheckpointTimer::start(
             storage.clone(),
             workflow_id,
             Duration::from_millis(100),
-            state_provider,
+            state_provider_infinite(),
         );
 
         // Let it run for a bit
@@ -401,7 +406,7 @@ mod tests {
         // Verify some checkpoints were created
         let checkpoints = storage.load_checkpoints(workflow_id).await;
         assert!(checkpoints.is_ok());
-        let checkpoint_count = checkpoints.unwrap().len();
+        let checkpoint_count = checkpoints.map_or(vec![], |v| v).len();
         assert!(
             checkpoint_count >= 2,
             "Should have created at least 2 checkpoints, got {}",
@@ -441,7 +446,10 @@ mod tests {
                 _workflow_id: WorkflowId,
                 _checkpoint: &Checkpoint,
             ) -> Result<()> {
-                Err(crate::error::Error::storage("Storage error"))
+                Err(crate::error::Error::storage_failed(
+                    "save_checkpoint",
+                    "Storage error",
+                ))
             }
 
             async fn load_checkpoints(&self, _workflow_id: WorkflowId) -> Result<Vec<Checkpoint>> {
@@ -482,19 +490,20 @@ mod tests {
 
         let storage = Arc::new(FailingStorage);
         let workflow_id = WorkflowId::new();
-        let counter = Arc::new(AtomicU64::new(0));
 
         let handle = start_auto_checkpoint(
             storage.clone(),
             workflow_id,
             Duration::from_millis(100),
-            create_counter_state_provider(counter),
+            state_provider_limited(),
         );
 
         // Task should still complete successfully despite errors
         let result = handle.await;
         assert!(result.is_ok(), "Task should complete");
-        let result = result.ok().unwrap();
+        let result = result
+            .map_ok(|v| v)
+            .map_or(Err("task failed".to_string()), |v| v);
         assert!(result.is_ok(), "Should handle errors gracefully");
     }
 }

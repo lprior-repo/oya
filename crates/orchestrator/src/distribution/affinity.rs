@@ -1,5 +1,7 @@
 //! Affinity-based distribution strategy.
 
+use itertools::Itertools;
+
 use super::error::{DistributionError, DistributionResult};
 use super::strategy::{DistributionContext, DistributionStrategy};
 
@@ -194,9 +196,9 @@ impl DistributionStrategy for AffinityStrategy {
             agents
                 .iter()
                 .filter(|a| self.has_all_capabilities(a, bead_id, ctx))
-                .collect()
+                .collect_vec()
         } else {
-            agents.iter().collect()
+            agents.iter().collect_vec()
         };
 
         if candidates.is_empty() {

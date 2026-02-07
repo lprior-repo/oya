@@ -160,11 +160,30 @@ impl AgentService {
         let (current, max) = self.capacity_snapshot().await?;
         ensure_capacity(count, current, max)?;
 
-        let mut agent_ids = Vec::with_capacity(count);
-        for _ in 0..count {
-            let agent_id = self.spawn_one(&capabilities).await?;
-            agent_ids.push(agent_id);
-        }
+        // Functional pattern: Use StreamExt::fold with Result accumulation
+        // Sequential spawning ensures each agent is fully initialized before the next
+        use futures::{StreamExt, stream};
+        let agent_ids = stream::iter(0..count)
+            .map(|_| {
+                let capabilities = capabilities.clone();
+                async move { self.spawn_one(&capabilities).await }
+            })
+            .fold(
+                Ok(Vec::with_capacity(count)),
+                |acc: Result<Vec<String>, AgentServiceError>, item_fut| async {
+                    match acc {
+                        Ok(mut ids) => match item_fut.await {
+                            Ok(id) => {
+                                ids.push(id);
+                                Ok(ids)
+                            }
+                            Err(e) => Err(e),
+                        },
+                        Err(e) => Err(e),
+                    }
+                },
+            )
+            .await?;
 
         let total = self.pool.len().await;
         Ok(AgentSpawnSummary { agent_ids, total })
@@ -217,14 +236,27 @@ impl AgentService {
 
     async fn shutdown_idle_agents(&self, count: usize) -> Result<Vec<String>, AgentServiceError> {
         let idle_ids = self.idle_agent_ids(count).await?;
-        let mut terminated = Vec::with_capacity(idle_ids.len());
 
-        for agent_id in idle_ids {
-            self.shutdown_agent(&agent_id).await?;
-            terminated.push(agent_id);
-        }
-
-        Ok(terminated)
+        // Functional pattern: Use StreamExt::fold with Result accumulation
+        // Sequential shutdown ensures clean teardown
+        use futures::{StreamExt, stream};
+        stream::iter(idle_ids)
+            .fold(
+                Ok(Vec::with_capacity(count)),
+                |acc: Result<Vec<String>, AgentServiceError>, agent_id| async {
+                    match acc {
+                        Ok(mut ids) => match self.shutdown_agent(&agent_id).await {
+                            Ok(()) => {
+                                ids.push(agent_id);
+                                Ok(ids)
+                            }
+                            Err(e) => Err(e),
+                        },
+                        Err(e) => Err(e),
+                    }
+                },
+            )
+            .await
     }
 
     async fn scale_up(

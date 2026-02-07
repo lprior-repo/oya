@@ -39,7 +39,7 @@ impl OpencodeClient {
         let http_client = reqwest::Client::builder()
             .timeout(config.timeout)
             .build()
-            .map_err(|e| Error::connection_failed(e.to_string()))?;
+            .map_err(Error::from)?;
 
         Ok(Self {
             config: Arc::new(config),
@@ -131,7 +131,7 @@ impl OpencodeClient {
                 result.and_then(|chunk| {
                     crate::sse::SseFormatter::new()
                         .format_chunk(chunk)
-                        .map_err(Error::stream_error)
+                        .map_err(|e| Error::stream_error(format!("{}", e)))
                 })
             },
         )))

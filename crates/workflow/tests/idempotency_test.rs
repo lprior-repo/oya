@@ -15,6 +15,7 @@
 use oya_workflow::idempotent::{
     hash_input, idempotency_key, idempotency_key_from_bytes, IdempotencyKey,
 };
+use proptest::prelude::*;
 use serde::Serialize;
 
 mod unit_tests {
@@ -55,11 +56,16 @@ mod unit_tests {
         Ok(())
     }
 
-    #[test]
-    fn test_million_iterations_no_panic() {
-        // Test that we can generate 1M keys without panicking
-        for i in 0..1_000_000 {
-            let _ = idempotency_key_from_bytes(&format!("bead-{i}"), b"test input");
+    proptest! {
+        /// Property: Key generation is robust across iteration counts
+        #[test]
+        fn prop_key_generation_robustness(
+            iteration_count in 1000usize..100_000,
+        ) {
+            // Test that we can generate many keys without panicking
+            for i in 0..iteration_count {
+                let _ = idempotency_key_from_bytes(&format!("bead-{i}"), b"test input");
+            }
         }
     }
 
@@ -175,20 +181,25 @@ mod unit_tests {
         Ok(())
     }
 
-    #[test]
-    fn test_no_collisions_small_space() {
-        let bead_id = "test-bead";
+    proptest! {
+        /// Property: No collisions across varying input spaces
+        #[test]
+        fn prop_no_collisions_varying_space(
+            input_count in 50usize..500,
+        ) {
+            let bead_id = "test-bead";
+            let mut keys = std::collections::HashSet::new();
 
-        let mut keys = std::collections::HashSet::new();
+            for i in 0..input_count {
+                let input = format!("input-{i:03}");
+                let key = idempotency_key_from_bytes(bead_id, input.as_bytes());
+                prop_assert!(!keys.contains(&key), "Collision at index {}!", i);
+                keys.insert(key);
+            }
 
-        for i in 0..100 {
-            let input = format!("input-{i:03}");
-            let key = idempotency_key_from_bytes(bead_id, input.as_bytes());
-            keys.insert(key);
+            // All keys should be unique
+            prop_assert_eq!(keys.len(), input_count);
         }
-
-        // All 100 keys should be unique
-        assert_eq!(keys.len(), 100);
     }
 
     #[test]
@@ -246,36 +257,46 @@ mod unit_tests {
         assert_eq!(key1, key2);
     }
 
-    #[test]
-    fn test_bead_id_isolation() {
-        let input = b"shared input";
+    proptest! {
+        /// Property: Bead ID isolation across varying counts
+        #[test]
+        fn prop_bead_id_isolation(
+            bead_count in 50usize..500,
+        ) {
+            let input = b"shared input";
+            let mut keys = std::collections::HashSet::new();
 
-        let mut keys = std::collections::HashSet::new();
+            for i in 0..bead_count {
+                let bead_id = format!("bead-{i:03}");
+                let key = idempotency_key_from_bytes(&bead_id, input);
+                prop_assert!(!keys.contains(&key), "Collision at bead index {}!", i);
+                keys.insert(key);
+            }
 
-        for i in 0..100 {
-            let bead_id = format!("bead-{i:03}");
-            let key = idempotency_key_from_bytes(&bead_id, input);
-            keys.insert(key);
+            // All keys should be unique
+            prop_assert_eq!(keys.len(), bead_count);
         }
-
-        // All 100 keys should be unique
-        assert_eq!(keys.len(), 100);
     }
 
-    #[test]
-    fn test_input_isolation() {
-        let bead_id = "test-bead";
+    proptest! {
+        /// Property: Input isolation across varying input counts
+        #[test]
+        fn prop_input_isolation(
+            input_count in 50usize..500,
+        ) {
+            let bead_id = "test-bead";
+            let mut keys = std::collections::HashSet::new();
 
-        let mut keys = std::collections::HashSet::new();
+            for i in 0..input_count {
+                let input = format!("input-{i:03}");
+                let key = idempotency_key_from_bytes(bead_id, input.as_bytes());
+                prop_assert!(!keys.contains(&key), "Collision at input index {}!", i);
+                keys.insert(key);
+            }
 
-        for i in 0..100 {
-            let input = format!("input-{i:03}");
-            let key = idempotency_key_from_bytes(bead_id, input.as_bytes());
-            keys.insert(key);
+            // All keys should be unique
+            prop_assert_eq!(keys.len(), input_count);
         }
-
-        // All 100 keys should be unique
-        assert_eq!(keys.len(), 100);
     }
 
     #[test]

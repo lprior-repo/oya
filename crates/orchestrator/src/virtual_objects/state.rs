@@ -429,11 +429,11 @@ impl ObjectState {
             .db()
             .select(("object_state", self.object_id.as_str()))
             .await
-            .map_err(|e| PersistenceError::query_failed(e.to_string()))?;
+            .map_err(|e| PersistenceError::query_failed(e))?;
 
         if let Some(record) = result {
             let state: HashMap<String, StateValue> = serde_json::from_str(&record.state)
-                .map_err(|e| PersistenceError::serialization_error(e.to_string()))?;
+                .map_err(|e| PersistenceError::serialization_error(e))?;
 
             self.kv_store = state;
             self.version = record.version;
@@ -476,7 +476,7 @@ impl ObjectState {
             .await
             .map_err(|e| PersistenceError::query_failed(e.to_string()))?
             .take(0)
-            .map_err(|e| PersistenceError::query_failed(e.to_string()))?;
+            .map_err(|e| PersistenceError::query_failed(e))?;
 
         Ok(())
     }
@@ -500,7 +500,7 @@ impl ObjectState {
             .db()
             .query(schema)
             .await
-            .map_err(|e| PersistenceError::query_failed(e.to_string()))?;
+            .map_err(|e| PersistenceError::query_failed(e))?;
 
         Ok(())
     }

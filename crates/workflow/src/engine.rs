@@ -632,6 +632,62 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_fallback_chain_integration() {
+        let (engine, storage) = setup_engine();
+
+        // Create handlers for fallback chain
+        let primary = Arc::new(FailingHandler::new("primary", "primary failed"));
+        let fallback1 = Arc::new(FailingHandler::new("fallback1", "fallback1 failed"));
+        let fallback2 = Arc::new(NoOpHandler::new("fallback2"));
+
+        // Register fallback chain
+        let mut registry = HandlerRegistry::new();
+        registry.register_fallback_chain("build", primary, vec![fallback1, fallback2]);
+        registry.register("test", Arc::new(NoOpHandler::new("test")));
+
+        let engine = WorkflowEngine::new(storage.clone(), Arc::new(registry), EngineConfig::default());
+
+        let workflow = Workflow::new("fallback-chain-test")
+            .add_phase(Phase::new("build"))
+            .add_phase(Phase::new("test"));
+
+        let result = engine.run(workflow).await;
+        assert!(result.is_ok());
+        assert!(result
+            .as_ref()
+            .map(|r| r.state == WorkflowState::Completed)
+            .map_or(false, |completed| completed));
+    }
+
+    #[tokio::test]
+    async fn test_fallback_chain_all_fail() {
+        let (engine, storage) = setup_engine();
+
+        // Create handlers that all fail
+        let primary = Arc::new(FailingHandler::new("primary", "primary failed"));
+        let fallback1 = Arc::new(FailingHandler::new("fallback1", "fallback1 failed"));
+        let fallback2 = Arc::new(FailingHandler::new("fallback2", "fallback2 failed"));
+
+        // Register fallback chain
+        let mut registry = HandlerRegistry::new();
+        registry.register_fallback_chain("build", primary, vec![fallback1, fallback2]);
+        registry.register("test", Arc::new(NoOpHandler::new("test")));
+
+        let engine = WorkflowEngine::new(storage.clone(), Arc::new(registry), EngineConfig::default());
+
+        let workflow = Workflow::new("fallback-chain-fail")
+            .add_phase(Phase::new("build"))
+            .add_phase(Phase::new("test"));
+
+        let result = engine.run(workflow).await;
+        assert!(result.is_err());
+        if let Ok(WorkflowResult::Failure { error, .. }) = result {
+            assert!(error.contains("all handlers"));
+        }
+    }
+}
+
+    #[tokio::test]
     async fn test_workflow_persisted() {
         let (engine, storage) = setup_engine();
         let workflow = Workflow::new("persist").add_phase(Phase::new("build"));
@@ -1140,4 +1196,3 @@ mod tests {
 
         assert!(has_checkpoint_entry);
     }
-}
