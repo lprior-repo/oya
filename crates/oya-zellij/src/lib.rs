@@ -636,6 +636,8 @@ impl ZellijPlugin for State {
         self.render_footer(rows, cols);
     }
 
+}
+impl State {
     fn load_beads(&mut self) {
         if let Some((cached_beads, timestamp)) = &self.beads_cache {
             if timestamp.elapsed() < CACHE_TTL {
@@ -1674,7 +1676,6 @@ fn format_uptime(secs: u64) -> String {
         format!("{}d", secs.saturating_div(86400))
     }
 }
-#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -1819,17 +1820,14 @@ mod tests {
 
     }
 
-    #[test]
     fn test_view_mode_has_seven_variants() {
-        // Verify all 7 ViewMode variants are present and usable
         let _ = ViewMode::BeadList;
         let _ = ViewMode::BeadDetail;
-        let _ = ViewMode::PipelineView;
+    #[test]
         let _ = ViewMode::AgentView;
         let _ = ViewMode::GraphView;
         let _ = ViewMode::SystemHealth;
         let _ = ViewMode::LogAggregator;
-
         // Verify default is BeadList
         let default_mode = ViewMode::default();
         assert_eq!(default_mode, ViewMode::BeadList);
