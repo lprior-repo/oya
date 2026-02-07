@@ -205,18 +205,28 @@ fn create_test_workflow_size(size: usize) -> crate::dag::WorkflowDAG {
 
     // Add nodes
     for i in 0..size {
-        dag.add_node(format!("node-{}", i)).unwrap();
+        let result = dag.add_node(format!("node-{}", i));
+        if let Err(e) = result {
+            eprintln!("Failed to add node-{}: {:?}", i, e);
+            return dag; // Return partial DAG
+        }
     }
 
     // Create dependencies in a realistic pattern
     for i in 0..size {
         if i % 4 == 0 && i + 1 < size {
             // Branch every 4th node
-            dag.add_dependency(format!("node-{}", i), format!("node-{}", i + 1), DependencyType::BlockingDependency).unwrap();
-            dag.add_dependency(format!("node-{}", i), format!("node-{}", i + 2), DependencyType::BlockingDependency).unwrap();
+            let result1 = dag.add_dependency(format!("node-{}", i), format!("node-{}", i + 1), DependencyType::BlockingDependency);
+            let result2 = dag.add_dependency(format!("node-{}", i), format!("node-{}", i + 2), DependencyType::BlockingDependency);
+            if result1.is_err() || result2.is_err() {
+                eprintln!("Failed to add dependencies for node-{}", i);
+            }
         } else if i + 1 < size {
             // Linear chain
-            dag.add_dependency(format!("node-{}", i), format!("node-{}", i + 1), DependencyType::BlockingDependency).unwrap();
+            let result = dag.add_dependency(format!("node-{}", i), format!("node-{}", i + 1), DependencyType::BlockingDependency);
+            if result.is_err() {
+                eprintln!("Failed to add dependency node-{} -> node-{}", i, i + 1);
+            }
         }
     }
 

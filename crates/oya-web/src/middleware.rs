@@ -219,12 +219,11 @@ mod tests {
     use axum::{
         Router,
         body::Body,
-        http::{HeaderValue, Method, StatusCode, header},
+        http::{Method, StatusCode},
         routing::get,
     };
     use std::time::Duration;
     use tower::ServiceExt;
-    use tower_http::compression::CompressionLayer;
 
     /// Test that CORS layer can be created
     #[test]

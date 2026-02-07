@@ -13,7 +13,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use orchestrator::actors::supervisor::SupervisorConfig;
-use orchestrator::supervision::{Tier1Supervisors, spawn_tier1_supervisors};
+use orchestrator::supervision::spawn_tier1_supervisors;
 use ractor::ActorStatus;
 
 fn build_prefix() -> String {

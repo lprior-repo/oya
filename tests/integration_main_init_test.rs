@@ -6,9 +6,9 @@
 //! - <10s startup time
 //! - Initialization failures halt startup with clear errors
 
-#![forbid(clippy::unwrap_used)]
-#![forbid(clippy::expect_used)]
-#![forbid(clippy::panic)]
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+#![deny(clippy::panic)]
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -120,7 +120,10 @@ async fn test_initialization_failure_halts_startup() -> Result<(), Box<dyn std::
     let result = oya_events::db::SurrealDbClient::connect(config).await;
     assert!(result.is_err(), "Should fail with invalid path");
 
-    let error_msg = result.err().unwrap().to_string();
+    let error_msg = match result.err() {
+        Some(e) => e.to_string(),
+        None => "no error".to_string(),
+    };
     assert!(
         error_msg.contains("connection failed") || error_msg.contains("io"),
         "Error message should mention connection or io failure, got: {}",
@@ -142,7 +145,8 @@ async fn test_initialization_failure_halts_startup() -> Result<(), Box<dyn std::
 
     let _event = timeout(Duration::from_secs(1), sub.recv())
         .await
-        .map_err(|_| "Timeout waiting for event")??;
+        .map_err(|_| "Timeout waiting for event")?
+        .map_err(|e| format!("Failed to receive event: {e}"))?;
 
     Ok(())
 }

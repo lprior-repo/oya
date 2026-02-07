@@ -675,9 +675,15 @@ mod tests {
         let result = engine.run(workflow).await;
         assert!(result.is_ok());
         if let Ok(workflow_result) = result {
-            assert!(workflow_result.error.is_some(), "Expected workflow to have an error");
+            assert!(
+                workflow_result.error.is_some(),
+                "Expected workflow to have an error"
+            );
             if let Some(error) = workflow_result.error {
-                assert!(error.contains("all handlers"), "Error should mention all handlers failed");
+                assert!(
+                    error.contains("all handlers"),
+                    "Error should mention all handlers failed"
+                );
             }
         }
     }
@@ -761,10 +767,10 @@ mod tests {
         let workflow_id = workflow.id;
         let _ = engine.run(workflow).await;
 
-            // Load checkpoint and verify phase ID
-            let checkpoint = storage.load_checkpoint(workflow_id, phase_id).await;
-            assert!(checkpoint.is_ok_and(|c| c.is_some_and(|cp| cp.phase_id == phase_id)));
-        }
+        // Load checkpoint and verify phase ID
+        let checkpoint = storage.load_checkpoint(workflow_id, phase_id).await;
+        assert!(checkpoint.is_ok_and(|c| c.is_some_and(|cp| cp.phase_id == phase_id)));
+    }
     #[tokio::test]
     async fn test_checkpoint_contains_output_data() {
         let (engine, storage) = setup_engine();
@@ -774,10 +780,10 @@ mod tests {
         let phases = workflow.phases.clone();
         let _ = engine.run(workflow).await;
 
-            // Load checkpoint and verify outputs field exists
-            let checkpoint = storage.load_checkpoint(workflow_id, phases[0].id).await;
-            assert!(checkpoint.is_ok_and(|c| c.is_some_and(|cp| cp.outputs.is_some())));
-        }
+        // Load checkpoint and verify outputs field exists
+        let checkpoint = storage.load_checkpoint(workflow_id, phases[0].id).await;
+        assert!(checkpoint.is_ok_and(|c| c.is_some_and(|cp| cp.outputs.is_some())));
+    }
     #[tokio::test]
     async fn test_checkpoint_timestamp_recorded() {
         let (engine, storage) = setup_engine();
@@ -858,10 +864,10 @@ mod tests {
         workflow.state = WorkflowState::Paused;
         storage.save_workflow(&workflow).await.ok();
 
-            // Resume workflow
-            let result = engine.resume(workflow_id).await;
-            assert!(result.is_ok_and(|r| r.state == WorkflowState::Completed));
-        }
+        // Resume workflow
+        let result = engine.resume(workflow_id).await;
+        assert!(result.is_ok_and(|r| r.state == WorkflowState::Completed));
+    }
     #[tokio::test]
     async fn test_resume_non_paused_workflow_fails() {
         let (engine, storage) = setup_engine();

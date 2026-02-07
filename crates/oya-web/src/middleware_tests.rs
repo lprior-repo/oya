@@ -1,6 +1,5 @@
 //! Tests for Tower middleware (CORS, tracing, compression)
 
-use super::*;
 use axum::{
     Router,
     body::Body,
@@ -9,6 +8,9 @@ use axum::{
 };
 use tower::ServiceExt;
 use tower_http::compression::CompressionLayer;
+
+// Import middleware functions from the middleware module
+use crate::middleware::{catch_panic_middleware, cors_layer};
 
 #[cfg(test)]
 mod cors_tests {
@@ -325,11 +327,7 @@ mod middleware_stack_tests {
     /// Test middleware stack with error handler
     #[tokio::test]
     async fn test_middleware_with_error_handler() {
-        use axum::{
-            http::StatusCode,
-            middleware,
-            response::{IntoResponse, Response},
-        };
+        use axum::http::StatusCode;
 
         async fn test_handler() -> Result<&'static str, StatusCode> {
             Err(StatusCode::INTERNAL_SERVER_ERROR)

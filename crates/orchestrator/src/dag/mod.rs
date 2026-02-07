@@ -1022,10 +1022,7 @@ impl WorkflowDAG {
                 None => continue,
             };
 
-            let current_dist = dist
-                .get(bead_id)
-                .map(|(d, _)| *d)
-                .unwrap_or(Duration::ZERO);
+            let current_dist = dist.get(bead_id).map(|(d, _)| *d).unwrap_or(Duration::ZERO);
 
             // Update distances to all neighbors
             for edge in self.graph.edges_directed(node_idx, Direction::Outgoing) {
@@ -1035,10 +1032,8 @@ impl WorkflowDAG {
 
                 let neighbor_idx = edge.target();
                 if let Some(neighbor_id) = self.graph.node_weight(neighbor_idx) {
-                    let neighbor_weight = weights
-                        .get(neighbor_id)
-                        .copied()
-                        .unwrap_or(Duration::ZERO);
+                    let neighbor_weight =
+                        weights.get(neighbor_id).copied().unwrap_or(Duration::ZERO);
                     let new_dist = current_dist + neighbor_weight;
 
                     let should_update = dist

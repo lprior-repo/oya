@@ -381,7 +381,7 @@ async fn given_worker_when_no_event_bus_then_health_check_fails_continues_normal
 
     // When: Health check fails (should not panic or fail)
     let result = worker.send_message(WorkerMessage::HealthCheckFailed {
-        error: "health check failed".to_string(),
+        reason: "health check failed".to_string(),
     });
 
     // Then: Message should be sent successfully

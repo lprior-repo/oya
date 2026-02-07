@@ -418,13 +418,18 @@ impl Actor for WorkerActorDef {
                 // Fail the current bead if one is active
                 if let Some(ref bead_id) = state.current_bead {
                     warn!(bead_id = %bead_id, "Marking bead as unhealthy due to health check failure");
-                    let _ = myself.send_message(WorkerMessage::FailBead {
+                    if let Err(err) = myself.send_message(WorkerMessage::FailBead {
                         error: reason.clone(),
-                    });
+                    }) {
+                        tracing::error!(
+                            error = %err,
+                            "Failed to send FailBead message"
+                        );
+                    }
                 }
             }
             WorkerMessage::Stop { reason } => {
-                let reason_text = reason.unwrap_or_else(|| String::from("shutdown"));
+                let reason_text: &str = reason.as_ref().map_or("shutdown", |r| r.as_str());
                 info!(reason = %reason_text, "BeadWorkerActor stopping");
                 if let Some(handle) = state.checkpoint_handle.take() {
                     handle.stop();
@@ -449,7 +454,10 @@ pub struct CheckpointHandle {
 
 impl CheckpointHandle {
     pub fn stop(&self) {
-        let _ = self.stop_tx.send(true);
+        if let Err(_err) = self.stop_tx.send(true) {
+            // If there are no receivers, the timer task has already stopped
+            // This is not an error condition we need to propagate
+        }
     }
 }
 
@@ -578,10 +586,17 @@ mod tests {
         assert!(!ctx.has_completed());
 
         let result = WorkspaceExecutionResult::success();
-        ctx.mark_completed(result);
+        let mark_result = ctx.mark_completed(result);
+
+        // Verify that marking as completed succeeds
+        assert!(
+            mark_result.is_ok(),
+            "mark_completed should succeed: {:?}",
+            mark_result
+        );
 
         assert!(ctx.has_completed());
-        assert!(ctx.execution_result().map_or(false, |r| r.succeeded()));
+        assert!(ctx.execution_result().is_some_and(|r| r.succeeded()));
     }
 
     #[test]
@@ -591,7 +606,7 @@ mod tests {
             PathBuf::from("/tmp/workspace/test-bead-789"),
         );
 
-        ctx.mark_completed(WorkspaceExecutionResult::success());
+        let _ = ctx.mark_completed(WorkspaceExecutionResult::success());
 
         let second_result =
             ctx.mark_completed(WorkspaceExecutionResult::failure("fail".to_string()));

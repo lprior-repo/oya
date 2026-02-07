@@ -49,6 +49,8 @@
 //! ```
 
 pub mod errors;
+#[cfg(feature = "examples")]
+pub mod examples;
 pub mod health_check_worker;
 pub mod lifecycle;
 pub mod messages;
@@ -86,3 +88,7 @@ pub use worker::{
     WorkerRetryPolicy, WorkerState,
 };
 pub use workflow::{WorkflowActorDef, WorkflowMessage, WorkflowStateActor};
+
+// Example actors for learning and testing (only when examples feature is enabled)
+#[cfg(feature = "examples")]
+pub use examples::{PingMessage, PongMessage, ping_pong::PingPongExample};

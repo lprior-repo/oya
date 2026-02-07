@@ -305,28 +305,31 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_demo_functions() {
+    fn test_demo_functions() -> Result<(), Box<dyn std::error::Error>> {
         // Test that demo functions run without errors
-        demo_basic_usage().expect("basic usage demo should succeed");
-        demo_performance_comparison().expect("performance comparison should succeed");
-        demo_cache_behavior().expect("cache behavior demo should succeed");
-        demo_realistic_workflow().expect("realistic workflow demo should succeed");
+        demo_basic_usage()?;
+        demo_performance_comparison()?;
+        demo_cache_behavior()?;
+        demo_realistic_workflow()?;
+        Ok(())
     }
 
     #[test]
-    fn test_ci_cd_workflow_creation() {
-        let workflow = create_ci_cd_workflow().expect("workflow creation should succeed");
+    fn test_ci_cd_workflow_creation() -> Result<(), Box<dyn std::error::Error>> {
+        let workflow = create_ci_cd_workflow()?;
         assert_eq!(workflow.node_count(), 7);
 
         // Check some key dependencies exist
         let test_deps = workflow
             .get_dependencies(&"test".to_string())
-            .expect("test node should exist");
+            .map_err(|_| Box::<dyn std::error::Error>::from("test node should exist"))?;
         assert!(test_deps.contains(&"lint".to_string()));
 
         let deploy_deps = workflow
             .get_dependencies(&"deploy-prod".to_string())
-            .expect("deploy-prod node should exist");
+            .map_err(|_| Box::<dyn std::error::Error>::from("deploy-prod node should exist"))?;
         assert!(deploy_deps.contains(&"deploy-staging".to_string()));
+
+        Ok(())
     }
 }

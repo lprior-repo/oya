@@ -13,7 +13,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use orchestrator::actors::GenericSupervisableActor;
 use orchestrator::actors::scheduler::{SchedulerActorDef, SchedulerArguments};
-use orchestrator::actors::storage::{StateManagerActorDef, StateManagerArguments};
+use orchestrator::actors::storage::StateManagerActorDef;
 use orchestrator::actors::supervisor::{
     SupervisorActorDef, SupervisorArguments, SupervisorConfig, SupervisorMessage,
 };
@@ -21,7 +21,6 @@ use ractor::{Actor, ActorRef, ActorStatus};
 use tokio::time::sleep;
 
 const STATUS_TIMEOUT: Duration = Duration::from_millis(200);
-const RECOVERY_TIMEOUT: Duration = Duration::from_secs(2);
 
 fn unique_name(label: &str) -> String {
     let nanos = SystemTime::now()
@@ -76,6 +75,7 @@ async fn kill_tier2_child<A>(
 ) -> Result<(), String>
 where
     A: GenericSupervisableActor,
+    A::Arguments: Clone + Send + Sync,
     A::Msg: Send,
 {
     supervisor
@@ -95,6 +95,7 @@ async fn spawn_tier2_child<A>(
 ) -> Result<(), String>
 where
     A: GenericSupervisableActor,
+    A::Arguments: Clone + Send + Sync,
     A::Msg: Send,
 {
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -106,7 +107,7 @@ where
         })
         .map_err(|e| format!("Failed to spawn child '{}': {}", name, e))?;
 
-    tokio::time::timeout(STATUS_TIMEOUT, rx)
+    let _ = tokio::time::timeout(STATUS_TIMEOUT, rx)
         .await
         .map_err(|_| format!("Timeout waiting for child '{}' spawn", name))?
         .map_err(|e| format!("Child '{}' spawn failed: {}", name, e))?;
@@ -120,6 +121,7 @@ async fn get_supervisor_status<A>(
 ) -> Result<usize, String>
 where
     A: GenericSupervisableActor,
+    A::Arguments: Clone + Send + Sync,
     A::Msg: Send,
 {
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -181,13 +183,10 @@ async fn given_tier2_actor_killed_when_supervised_then_recovers() {
         "should get supervisor status: {:?}",
         child_count_before
     );
-    let count = child_count_before.map_or_else(
-        |e| {
-            eprintln!("Failed to get child count: {}", e);
-            0
-        },
-        |c| c,
-    );
+    let count = child_count_before.unwrap_or_else(|e| {
+        eprintln!("Failed to get child count: {}", e);
+        0
+    });
     assert_eq!(count, 1, "supervisor should track 1 child");
 
     // WHEN: Child actor is killed
@@ -645,13 +644,10 @@ async fn given_tier2_crashes_then_no_shared_state_corruption() {
             // Verify supervisor starts with clean state (0 children)
             let child_count = get_supervisor_status(&sup).await;
             assert!(child_count.is_ok(), "should get status: {:?}", child_count);
-            let count = child_count.map_or_else(
-                |e| {
-                    eprintln!("Failed to get child count: {}", e);
-                    0
-                },
-                |c| c,
-            );
+            let count = child_count.unwrap_or_else(|e| {
+                eprintln!("Failed to get child count: {}", e);
+                0
+            });
             assert_eq!(
                 count, 0,
                 "final supervisor should have clean state with 0 children"

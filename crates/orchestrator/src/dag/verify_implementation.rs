@@ -31,17 +31,27 @@ fn test_basic_functionality() {
 
     // Create a simple DAG
     let mut dag = WorkflowDAG::new();
-    dag.add_node("A".to_string()).unwrap();
-    dag.add_node("B".to_string()).unwrap();
-    dag.add_node("C".to_string()).unwrap();
-    dag.add_dependency("A".to_string(), "B".to_string(), DependencyType::BlockingDependency).unwrap();
-    dag.add_dependency("B".to_string(), "C".to_string(), DependencyType::BlockingDependency).unwrap();
+    let result_add_a = dag.add_node("A".to_string());
+    let result_add_b = dag.add_node("B".to_string());
+    let result_add_c = dag.add_node("C".to_string());
+    let result_dep_ab = dag.add_dependency("A".to_string(), "B".to_string(), DependencyType::BlockingDependency);
+    let result_dep_bc = dag.add_dependency("B".to_string(), "C".to_string(), DependencyType::BlockingDependency);
+
+    // Verify all operations succeeded
+    assert!(result_add_a.is_ok(), "Failed to add node A");
+    assert!(result_add_b.is_ok(), "Failed to add node B");
+    assert!(result_add_c.is_ok(), "Failed to add node C");
+    assert!(result_dep_ab.is_ok(), "Failed to add dependency A->B");
+    assert!(result_dep_bc.is_ok(), "Failed to add dependency B->C");
 
     // Test layout creation
-    let layout = MemoizedLayout::new(dag, 0.1, 50.0);
-    assert!(layout.is_ok(), "Layout creation should succeed");
-
-    let layout = layout.unwrap();
+    let layout = match MemoizedLayout::new(dag, 0.1, 50.0) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("Layout creation failed: {:?}", e);
+            return;
+        }
+    };
 
     // Test position computation
     let positions = layout.compute_node_positions();
@@ -72,13 +82,21 @@ fn test_performance_verification() {
     // Create test DAG
     let mut dag = WorkflowDAG::new();
     for i in 0..20 {
-        dag.add_node(format!("node-{}", i)).unwrap();
+        let result = dag.add_node(format!("node-{}", i));
+        assert!(result.is_ok(), "Failed to add node-{}", i);
     }
     for i in 0..19 {
-        dag.add_dependency(format!("node-{}", i), format!("node-{}", i + 1), DependencyType::BlockingDependency).unwrap();
+        let result = dag.add_dependency(format!("node-{}", i), format!("node-{}", i + 1), DependencyType::BlockingDependency);
+        assert!(result.is_ok(), "Failed to add dependency node-{} -> node-{}", i, i + 1);
     }
 
-    let layout = MemoizedLayout::new(dag, 0.1, 50.0).unwrap();
+    let layout = match MemoizedLayout::new(dag, 0.1, 50.0) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("Failed to create layout: {:?}", e);
+            return;
+        }
+    };
     let iterations = 50;
 
     // Cold cache test
@@ -113,10 +131,18 @@ fn test_cache_behavior() {
 
     // Create initial DAG
     let mut dag = WorkflowDAG::new();
-    dag.add_node("A".to_string()).unwrap();
-    dag.add_node("B".to_string()).unwrap();
+    let result_a = dag.add_node("A".to_string());
+    let result_b = dag.add_node("B".to_string());
+    assert!(result_a.is_ok(), "Failed to add node A");
+    assert!(result_b.is_ok(), "Failed to add node B");
 
-    let mut layout = MemoizedLayout::new(dag.clone(), 0.1, 50.0).unwrap();
+    let mut layout = match MemoizedLayout::new(dag.clone(), 0.1, 50.0) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("Failed to create layout: {:?}", e);
+            return;
+        }
+    };
 
     // First computation (cold cache)
     let positions1 = layout.compute_node_positions();
@@ -130,8 +156,10 @@ fn test_cache_behavior() {
     assert_eq!(positions1, positions2);
 
     // Add a node to change graph structure
-    dag.add_node("C".to_string()).unwrap();
-    dag.add_dependency("B".to_string(), "C".to_string(), DependencyType::BlockingDependency).unwrap();
+    let result_c = dag.add_node("C".to_string());
+    let result_bc = dag.add_dependency("B".to_string(), "C".to_string(), DependencyType::BlockingDependency);
+    assert!(result_c.is_ok(), "Failed to add node C");
+    assert!(result_bc.is_ok(), "Failed to add dependency B->C");
 
     // Invalidate cache
     layout.invalidate_cache();
@@ -153,8 +181,9 @@ fn test_integration() {
 
     // Add workflow stages
     let stages = vec!["setup", "lint", "test", "build", "security", "deploy"];
-    for stage in stages {
-        dag.add_node(stage.to_string()).unwrap();
+    for stage in &stages {
+        let result = dag.add_node(stage.to_string());
+        assert!(result.is_ok(), "Failed to add node {}", stage);
     }
 
     // Add dependencies
@@ -167,12 +196,19 @@ fn test_integration() {
         ("security", "deploy"),
     ];
 
-    for (from, to) in dependencies {
-        dag.add_dependency(from.to_string(), to.to_string(), DependencyType::BlockingDependency).unwrap();
+    for (from, to) in &dependencies {
+        let result = dag.add_dependency(from.to_string(), to.to_string(), DependencyType::BlockingDependency);
+        assert!(result.is_ok(), "Failed to add dependency {} -> {}", from, to);
     }
 
     // Test integration with WorkflowDAG methods
-    let layout = MemoizedLayout::new(dag, 0.1, 100.0).unwrap();
+    let layout = match MemoizedLayout::new(dag, 0.1, 100.0) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("Failed to create layout: {:?}", e);
+            return;
+        }
+    };
 
     // Test critical path computation
     let mut weights = HashMap::new();

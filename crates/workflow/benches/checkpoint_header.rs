@@ -1,4 +1,5 @@
 //! Benchmark for checkpoint header creation optimization.
+#![allow(dead_code)]
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use oya_workflow::checkpoint::serialize::{add_version_header, CHECKPOINT_VERSION, MAGIC_BYTES};

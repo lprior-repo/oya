@@ -7,6 +7,10 @@ authors.workspace = true
 license.workspace = true
 description = "OYA Orchestrator - Agent swarm coordination and task distribution"
 
+[features]
+default = []
+examples = []
+
 [lints]
 workspace = true
 
@@ -47,6 +51,9 @@ reqwest = { version = "0.12", features = ["json"] }
 im = { workspace = true }
 tap = { workspace = true }
 itertools = { workspace = true }
+
+# Persistent data structures for functional state (only needed for examples)
+rpds = { version = "1.1", optional = true }
 
 # UUID generation for message/timer IDs
 uuid = { version = "1.0", features = ["v4"] }

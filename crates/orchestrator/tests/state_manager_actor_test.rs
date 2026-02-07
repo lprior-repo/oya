@@ -266,8 +266,10 @@ async fn test_load_state_returns_actor_unavailable() -> Result<(), Box<dyn std::
     // THEN: Should return ActorUnavailable error (not panic or crash)
     // The RPC call succeeds, but the result contains the ActorError
     let load_result = result?;
-    assert!(load_result.is_err(), "LoadState should return ActorError");
-    let actor_error = load_result.unwrap_err();
+    let actor_error = match load_result {
+        Ok(_) => return Err("LoadState should return ActorError".into()),
+        Err(e) => e,
+    };
 
     assert!(
         matches!(actor_error, ActorError::ActorUnavailable),
@@ -301,11 +303,10 @@ async fn test_state_exists_returns_actor_unavailable() -> Result<(), Box<dyn std
 
     // THEN: Should return ActorUnavailable error
     let exists_result = result?;
-    assert!(
-        exists_result.is_err(),
-        "StateExists should return ActorError"
-    );
-    let actor_error = exists_result.unwrap_err();
+    let actor_error = match exists_result {
+        Ok(_) => return Err("StateExists should return ActorError".into()),
+        Err(e) => e,
+    };
 
     assert!(
         matches!(actor_error, ActorError::ActorUnavailable),
@@ -340,11 +341,10 @@ async fn test_get_state_version_returns_actor_unavailable() -> Result<(), Box<dy
 
     // THEN: Should return ActorUnavailable error
     let version_result = result?;
-    assert!(
-        version_result.is_err(),
-        "GetStateVersion should return ActorError"
-    );
-    let actor_error = version_result.unwrap_err();
+    let actor_error = match version_result {
+        Ok(_) => return Err("GetStateVersion should return ActorError".into()),
+        Err(e) => e,
+    };
 
     assert!(
         matches!(actor_error, ActorError::ActorUnavailable),
@@ -378,8 +378,10 @@ async fn test_list_keys_returns_actor_unavailable() -> Result<(), Box<dyn std::e
 
     // THEN: Should return ActorUnavailable error
     let keys_result = result?;
-    assert!(keys_result.is_err(), "ListKeys should return ActorError");
-    let actor_error = keys_result.unwrap_err();
+    let actor_error = match keys_result {
+        Ok(_) => return Err("ListKeys should return ActorError".into()),
+        Err(e) => e,
+    };
 
     assert!(
         matches!(actor_error, ActorError::ActorUnavailable),

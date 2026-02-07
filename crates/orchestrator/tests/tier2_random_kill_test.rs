@@ -160,7 +160,7 @@ async fn given_random_tier2_kills_when_100_percent_recovery_required_then_all_re
 
     for cycle in 0..chaos_cycles {
         // Kill a random child
-        let victim_index = (cycle % child_count) as usize;
+        let victim_index = cycle % child_count;
         let victim_name = &child_names[victim_index];
 
         let stop_result = supervisor.cast(SupervisorMessage::StopChild {

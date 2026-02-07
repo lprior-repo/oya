@@ -617,10 +617,7 @@ mod tests {
 
         // Verify it's blocked
         assert!(
-            state
-                .beads
-                .get(&bead_id)
-                .is_some_and(|b| b.is_blocked()),
+            state.beads.get(&bead_id).is_some_and(|b| b.is_blocked()),
             "Bead should be blocked before dependency resolution"
         );
 
@@ -632,10 +629,7 @@ mod tests {
 
         // Then: bead is no longer blocked
         assert!(
-            state
-                .beads
-                .get(&bead_id)
-                .is_none_or(|b| !b.is_blocked()),
+            state.beads.get(&bead_id).is_none_or(|b| !b.is_blocked()),
             "Bead should not be blocked after dependency resolved"
         );
     }

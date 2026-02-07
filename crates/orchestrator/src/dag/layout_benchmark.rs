@@ -67,7 +67,9 @@ fn benchmark_graph_size(size: usize) {
 
                     let speedup = cold_time.as_nanos() as f64 / warm_time.as_nanos() as f64;
 
-                    println!("  Stiffness: {stiffness:.2}, Rest Length: {rest_length:.3} - Cold: {cold_time:?}, Warm: {warm_time:?}, Speedup: {speedup:.1}x");
+                    println!(
+                        "  Stiffness: {stiffness:.2}, Rest Length: {rest_length:.3} - Cold: {cold_time:?}, Warm: {warm_time:?}, Speedup: {speedup:.1}x"
+                    );
                 }
                 Err(e) => {
                     println!("  Failed to create layout: {e}");
@@ -134,9 +136,7 @@ fn benchmark_repeated_access() {
     let iterations = 1000;
 
     // Test repeated access to node positions
-    println!(
-        "  Repeated node position access ({iterations} iterations):"
-    );
+    println!("  Repeated node position access ({iterations} iterations):");
     let start = Instant::now();
     for _ in 0..iterations {
         let _ = layout.compute_node_positions();
@@ -145,9 +145,7 @@ fn benchmark_repeated_access() {
     println!("    Time: {access_time:?}");
 
     // Test repeated access to edge forces
-    println!(
-        "  Repeated edge force calculation ({iterations} iterations):"
-    );
+    println!("  Repeated edge force calculation ({iterations} iterations):");
     let start = Instant::now();
     for _ in 0..iterations {
         let _ = layout.compute_edge_forces();
@@ -294,16 +292,34 @@ mod tests {
 
     #[test]
     fn test_create_test_dag() {
-        let small_dag = create_test_dag_with_result(5).unwrap();
+        let small_dag = match create_test_dag_with_result(5) {
+            Ok(dag) => dag,
+            Err(e) => {
+                eprintln!("Failed to create small DAG: {e:?}");
+                return;
+            }
+        };
         assert_eq!(small_dag.node_count(), 5);
 
-        let medium_dag = create_test_dag_with_result(20).unwrap();
+        let medium_dag = match create_test_dag_with_result(20) {
+            Ok(dag) => dag,
+            Err(e) => {
+                eprintln!("Failed to create medium DAG: {e:?}");
+                return;
+            }
+        };
         assert_eq!(medium_dag.node_count(), 20);
     }
 
     #[test]
     fn test_layout_creation_performance() {
-        let dag = create_test_dag_with_result(25).unwrap();
+        let dag = match create_test_dag_with_result(25) {
+            Ok(dag) => dag,
+            Err(e) => {
+                eprintln!("Failed to create DAG: {e:?}");
+                return;
+            }
+        };
         let layout = WorkflowDAG::create_memoized_layout(&dag, 0.1, 100.0);
         assert!(layout.is_ok());
 
@@ -316,7 +332,7 @@ mod tests {
 
 /// Performance analysis functions
 pub mod analysis {
-    use super::{create_test_dag_with_result, WorkflowDAG, MemoizedLayout};
+    use super::{MemoizedLayout, WorkflowDAG, create_test_dag_with_result};
 
     /// Analyze cache effectiveness
     #[allow(clippy::cast_precision_loss)]

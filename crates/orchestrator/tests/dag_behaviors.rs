@@ -57,7 +57,7 @@ fn given_dag_with_node_when_remove_node_then_node_gone_and_count_decremented() {
 fn given_dag_with_edges_when_remove_node_then_all_connected_edges_removed() {
     // GIVEN: A DAG with edges connected to a node
     //   a --> b --> c
-    let mut dag = WorkflowDAG::builder()
+    let dag = WorkflowDAG::builder()
         .with_nodes(["a", "b", "c"].map(String::from))
         .with_edges(
             [
@@ -99,7 +99,10 @@ fn given_dag_with_node_when_add_duplicate_then_error_contains_node_id() {
 
     // THEN: Error should be returned and contain the node ID
     assert!(result.is_err(), "Duplicate add should fail");
-    let err = result.err().map(|e| e.to_string()).unwrap_or_else(|| String::from("No error message"));
+    let err = result
+        .err()
+        .map(|e| e.to_string())
+        .unwrap_or_else(|| String::from("No error message"));
     assert!(
         err.contains(&bead_id),
         "Error message '{}' should contain node ID '{}'",
@@ -135,7 +138,10 @@ fn given_empty_string_node_id_when_add_node_then_error_invalid_id() {
     // THEN: Should return error for invalid ID
     // Note: Current implementation allows empty strings - this test documents desired behavior
     assert!(result.is_err(), "Empty string ID should be rejected");
-    let err = result.err().map(|e| e.to_string()).unwrap_or_else(|| String::from("No error message"));
+    let err = result
+        .err()
+        .map(|e| e.to_string())
+        .unwrap_or_else(|| String::from("No error message"));
     assert!(
         err.to_lowercase().contains("invalid"),
         "Error should indicate invalid ID"
@@ -169,7 +175,10 @@ fn given_10000_char_node_id_when_add_node_then_error_id_too_long() {
     // THEN: Should return error for ID too long
     // Note: Current implementation allows any length - this test documents desired behavior
     assert!(result.is_err(), "Very long ID should be rejected");
-    let err = result.err().map(|e| e.to_string()).unwrap_or_else(|| String::from("No error message"));
+    let err = result
+        .err()
+        .map(|e| e.to_string())
+        .unwrap_or_else(|| String::from("No error message"));
     assert!(
         err.to_lowercase().contains("long") || err.to_lowercase().contains("length"),
         "Error should indicate ID too long"
@@ -248,7 +257,10 @@ fn given_missing_source_node_when_add_edge_then_error_source_not_found() {
         result.is_err(),
         "Adding edge with missing source should fail"
     );
-    let err = result.err().map(|e| e.to_string()).unwrap_or_else(|| String::from("No error message"));
+    let err = result
+        .err()
+        .map(|e| e.to_string())
+        .unwrap_or_else(|| String::from("No error message"));
     assert!(
         err.contains("nonexistent-source") || err.to_lowercase().contains("not found"),
         "Error '{}' should reference the missing source",
@@ -274,7 +286,10 @@ fn given_missing_target_node_when_add_edge_then_error_target_not_found() {
         result.is_err(),
         "Adding edge with missing target should fail"
     );
-    let err = result.err().map(|e| e.to_string()).unwrap_or_else(|| String::from("No error message"));
+    let err = result
+        .err()
+        .map(|e| e.to_string())
+        .unwrap_or_else(|| String::from("No error message"));
     assert!(
         err.contains("nonexistent-target") || err.to_lowercase().contains("not found"),
         "Error '{}' should reference the missing target",
@@ -299,7 +314,10 @@ fn given_same_source_and_target_when_add_edge_then_error_self_loop_forbidden() {
     // THEN: Should return error indicating self-loop forbidden
     // Note: Current implementation allows self-loops - this documents desired behavior
     assert!(result.is_err(), "Self-loop should be rejected");
-    let err = result.err().map(|e| e.to_string()).unwrap_or_else(|| String::from("No error message"));
+    let err = result
+        .err()
+        .map(|e| e.to_string())
+        .unwrap_or_else(|| String::from("No error message"));
     assert!(
         err.to_lowercase().contains("self") || err.to_lowercase().contains("loop"),
         "Error should indicate self-loop forbidden"
@@ -353,7 +371,7 @@ fn given_node_with_no_incoming_edges_when_get_dependencies_then_empty_vec() {
     // THEN: Should return empty vec
     assert!(deps.is_ok(), "get_dependencies should succeed");
     assert!(
-        deps.map_or(false, |d| d.is_empty()),
+        deps.is_ok_and(|d| d.is_empty()),
         "Root node should have no dependencies"
     );
 }
@@ -1036,7 +1054,7 @@ fn given_parallel_paths_when_critical_path_then_returns_longest() {
 
     // THEN: Should return A -> B (total 6s) not A -> C (total 3s)
     assert!(critical.is_ok(), "critical_path should succeed");
-    let critical = critical.unwrap_or_else(|_| HashSet::new());
+    let critical = critical.unwrap_or_else(|_| Vec::new());
     assert!(
         critical.contains(&"a".to_string()),
         "A should be on critical path"
@@ -1062,7 +1080,7 @@ fn given_empty_dag_when_critical_path_then_empty_vec() {
         "critical_path should succeed on empty DAG"
     );
     assert!(
-        critical.map_or(false, |p| p.is_empty()),
+        critical.is_ok_and(|p| p.is_empty()),
         "Critical path of empty DAG should be empty"
     );
 }

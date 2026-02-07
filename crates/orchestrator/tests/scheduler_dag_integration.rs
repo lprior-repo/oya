@@ -751,7 +751,10 @@ fn given_workflow_when_check_bead_ready_individually_then_respects_dependencies(
     let workflow = scheduler.get_workflow(&workflow_id);
     if let Some(state) = workflow {
         let b_ready = state.is_bead_ready(&b);
-        assert!(b_ready.is_ok_and(|v| v), "B should be ready after A completes");
+        assert!(
+            b_ready.is_ok_and(|v| v),
+            "B should be ready after A completes"
+        );
     }
 }
 

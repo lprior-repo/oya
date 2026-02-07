@@ -1,0 +1,257 @@
+# ZJJ BUG REPRODUCTION COMMANDS
+
+Quick commands to reproduce all 8 bugs found in brutal QA testing.
+
+---
+
+## BUG #1: Integrity commands CRASH (CRITICAL)
+
+**All integrity subcommands crash with clap panic**
+
+```bash
+# Setup
+TESTDIR=$(mktemp -d) && cd "$TESTDIR"
+jj git init
+echo "test" > file.txt
+jj commit -m "test"
+
+# Reproduce crash
+zjj integrity validate .
+# Panics with: arg `json`'s `ArgAction` should be one of `SetTrue`, `SetFalse`
+
+# Also crashes:
+zjj integrity repair . --force
+zjj integrity backup list
+
+# Cleanup
+cd - && rm -rf "$TESTDIR"
+```
+
+**Exit code:** 101 (panic)
+**Expected:** 0 (success)
+
+---
+
+## BUG #2: Config set creates invalid TOML (HIGH)
+
+**Setting config creates TOML without required workspace_dir field**
+
+```bash
+# Setup
+TESTDIR=$(mktemp -d) && cd "$TESTDIR"
+jj git init
+echo "test" > file.txt
+jj commit -m "test"
+
+# Reproduce bug
+zjj config test_key test_value
+# Exit code: 1
+# Error: Parse error: Failed to parse config: .../config.toml: TOML parse error at line 1, column 1
+#   |
+# 1 | test_key = "test_value"
+#   | ^^^^^^^^^^^^^^^^^^^^^^^
+# missing field `workspace_dir`
+
+# Try to read it back
+zjj config test_key
+# Fails with same parse error
+
+# Cleanup
+cd - && rm -rf "$TESTDIR"
+```
+
+**Exit code:** 1 (parse error)
+**Expected:** 0 (success)
+
+---
+
+## BUG #3: Doctor returns error exit code (HIGH)
+
+**Doctor returns exit code 1 even when checks pass**
+
+```bash
+# Setup
+TESTDIR=$(mktemp -d) && cd "$TESTDIR"
+jj git init
+echo "test" > file.txt
+jj commit -m "test"
+
+# Reproduce bug
+zjj doctor
+# Output: Health: 9 passed, 2 warning(s), 1 error(s)
+# The 1 error is: "zjj Initialized: zjj not initialized"
+
+echo "Exit code: $?"  # Exit code: 1
+
+# Cleanup
+cd - && rm -rf "$TESTDIR"
+```
+
+**Exit code:** 1 (error)
+**Expected:** 0 (success)
+
+---
+
+## BUG #4: Template accepts invalid KDL (MEDIUM)
+
+**Template create accepts completely invalid KDL files**
+
+```bash
+# Setup
+TESTDIR=$(mktemp -d) && cd "$TESTDIR"
+jj git init
+echo "test" > file.txt
+jj commit -m "test"
+
+# Create invalid KDL file
+cat > invalid.kdl <<'EOF'
+this is not valid kdl [[[ [[[
+EOF
+
+# Reproduce bug
+zjj template create test-invalid --from-file invalid.kdl
+# Output: Created template 'test-invalid'
+# Exit code: 0 (WRONG - should fail)
+
+# Cleanup
+cd - && rm -rf "$TESTDIR"
+```
+
+**Exit code:** 0 (success)
+**Expected:** 1 or 2 (parse error)
+
+---
+
+## BUG #5: Config doesn't detect corrupted TOML (MEDIUM)
+
+**Config command silently ignores corrupted TOML files**
+
+```bash
+# Setup
+TESTDIR=$(mktemp -d) && cd "$TESTDIR"
+jj git init
+echo "test" > file.txt
+jj commit -m "test"
+
+# Corrupt config file
+mkdir -p .zjj
+echo "corrupted toml [[[ [[[" > .zjj/config.toml
+
+# Reproduce bug
+zjj config
+# Output: Current configuration (merged):
+# Exit code: 0 (WRONG - should fail with error)
+
+# Cleanup
+cd - && rm -rf "$TESTDIR"
+```
+
+**Exit code:** 0 (success)
+**Expected:** 1 or 2 (parse error)
+
+---
+
+## BUG #6: Concurrent config operations fail (MEDIUM)
+
+**Concurrent config set operations lack proper locking**
+
+```bash
+# Setup
+TESTDIR=$(mktemp -d) && cd "$TESTDIR"
+jj git init
+echo "test" > file.txt
+jj commit -m "test"
+
+# Spawn 10 concurrent config operations
+for i in {1..10}; do
+    (zjj config test_key_$i test_value_$i &) &
+done
+wait
+
+# Multiple operations will fail
+echo "Check if all keys were set"
+zjj config
+
+# Cleanup
+cd - && rm -rf "$TESTDIR"
+```
+
+**Result:** Multiple operations fail
+**Expected:** All should succeed with proper locking
+
+---
+
+## BUG #7: Config stress test fails (MEDIUM)
+
+**Setting 100 config values fails at first operation**
+
+```bash
+# Setup
+TESTDIR=$(mktemp -d) && cd "$TESTDIR"
+jj git init
+echo "test" > file.txt
+jj commit -m "test"
+
+# Reproduce bug
+for i in {1..100}; do
+    echo "Setting key $i"
+    zjj config test_key_$i test_value_$i
+    if [ $? -ne 0 ]; then
+        echo "Failed at iteration $i"
+        break
+    fi
+done
+
+# Fails at i=1 with TOML parse error (same as BUG #2)
+
+# Cleanup
+cd - && rm -rf "$TESTDIR"
+```
+
+**Exit code:** 1 (at iteration 1)
+**Expected:** 0 (all 100 should succeed)
+
+---
+
+## BUG #8: Doctor --fix doesn't auto-fix (LOW)
+
+**The --fix flag doesn't fix fixable issues**
+
+```bash
+# Setup
+TESTDIR=$(mktemp -d) && cd "$TESTDIR"
+jj git init
+echo "test" > file.txt
+jj commit -m "test"
+
+# Reproduce bug
+zjj doctor --fix
+# Output: Unable to Fix:
+#         ✗ Zellij Running: Requires manual intervention
+# Exit code: 1
+
+# Expected: Should fix what can be fixed, return exit code 0
+
+# Cleanup
+cd - && rm -rf "$TESTDIR"
+```
+
+**Exit code:** 1 (total failure)
+**Expected:** 0 (partial success with warnings)
+
+---
+
+## SUMMARY
+
+- **Bugs #1, #2, #3:** Critical/High - Block production use
+- **Bugs #4, #5, #6, #7:** Medium - Should fix before release
+- **Bug #8:** Low - Nice to have
+
+**All bugs confirmed with actual command execution.**
+
+---
+
+**Generated by:** QA Agent #7
+**Date:** 2025-02-07
+**Test Suite:** config_template_doctor_integrity_brutal.rs
+**Total Bugs:** 8 (2 critical, 4 high/medium, 2 low)

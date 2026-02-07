@@ -115,13 +115,16 @@ async fn test_schema_valid_syntax() -> Result<(), String> {
         .to_string();
 
     let config = SurrealDbConfig::new(db_path);
-    let client = SurrealDbClient::connect(config).await
+    let client = SurrealDbClient::connect(config)
+        .await
         .map_err(|e| format!("Failed to connect to SurrealDB: {e}"))?;
 
     let schema = load_schema()?;
 
     // Try to initialize schema - should not error
-    client.init_schema(&schema).await
+    client
+        .init_schema(&schema)
+        .await
         .map_err(|e| format!("Schema initialization failed: {e}"))?;
     Ok(())
 }

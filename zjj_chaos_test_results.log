@@ -1,0 +1,86 @@
+[0;35m
+╔════════════════════════════════════════════════════════════╗
+║   ZJJ CHAOS TEST SUITE - QA Agent #10                      ║
+║   ABSOLUTELY DESTROY zjj with adversarial testing         ║
+╚════════════════════════════════════════════════════════════╝
+[0m
+[0;36mTest directory: /tmp/zjj_chaos_1868330[0m
+
+[0;34mzjj version: zjj 0.4.0[0m
+
+
+[0;36m=== CATEGORY 1: INVALID ARGUMENTS ===[0m
+[0;34m[TEST 1][0m Empty string session name
+[0;35m🔓 VULNERABILITY:[0m Empty string session name not rejected
+[0;31m✗ FAIL:[0m Empty string
+[0;34m[TEST 2][0m Null bytes in session name
+/home/lewis/src/oya/zjj_chaos_test_suite.sh: line 119: warning: command substitution: ignored null byte in input
+[0;35m🔓 VULNERABILITY:[0m Null bytes not sanitized - potential injection vector
+[0;31m✗ FAIL:[0m Null bytes
+[0;34m[TEST 3][0m Massive input (10MB session name)
+[0;32m✓ PASS:[0m Massive input causes graceful failure
+[0;34m[TEST 4][0m Newline injection in session name
+[0;35m🔓 VULNERABILITY:[0m Newlines not sanitized - log injection possible
+[0;31m✗ FAIL:[0m Newline injection
+[0;34m[TEST 5][0m Tab injection in session name
+[0;35m🔓 VULNERABILITY:[0m Tabs not sanitized - log injection possible
+[0;31m✗ FAIL:[0m Tab injection
+[0;34m[TEST 6][0m Unicode RTL override characters
+[0;35m🔓 VULNERABILITY:[0m Unicode spoofing characters not filtered
+[0;31m✗ FAIL:[0m Unicode RTL
+[0;34m[TEST 7][0m Zero-width characters
+[0;35m🔓 VULNERABILITY:[0m Zero-width characters not filtered - phishing risk
+[0;31m✗ FAIL:[0m Zero-width
+[0;34m[TEST 8][0m Combining character overflow (100 combining marks)
+[0;35m🔓 VULNERABILITY:[0m Combining character overflow not detected
+[0;31m✗ FAIL:[0m Combining overflow
+
+[0;36m=== CATEGORY 2: PATH TRAVERSAL ATTACKS ===[0m
+[0;34m[TEST 9][0m Path traversal: ../../etc/passwd
+[0;35m🔓 VULNERABILITY:[0m Path traversal not prevented - may read arbitrary files
+[0;31m✗ FAIL:[0m Path traversal
+[0;34m[TEST 10][0m Absolute path as session name
+[0;35m🔓 VULNERABILITY:[0m Absolute paths not blocked
+[0;31m✗ FAIL:[0m Absolute path
+[0;34m[TEST 11][0m URL-encoded path traversal
+[0;35m🔓 VULNERABILITY:[0m URL-encoded traversal not decoded and checked
+[0;31m✗ FAIL:[0m URL-encoded
+[0;34m[TEST 12][0m Double-encoded path traversal
+[0;35m🔓 VULNERABILITY:[0m Double-encoded traversal bypasses validation
+[0;31m✗ FAIL:[0m Double-encoded
+
+[0;36m=== CATEGORY 3: COMMAND INJECTION ===[0m
+[0;34m[TEST 13][0m Shell metacharacters: ; ls -la
+[0;32m✓ PASS:[0m Shell injection blocked (execution failed)
+[0;34m[TEST 14][0m Pipe injection: test | cat /etc/passwd
+[0;35m🔓 VULNERABILITY:[0m Pipe injection not prevented
+[0;31m✗ FAIL:[0m Pipe injection
+[0;34m[TEST 15][0m Command substitution: $(whoami)
+[0;35m🔓 VULNERABILITY:[0m Command substitution not prevented
+[0;31m✗ FAIL:[0m Command substitution
+[0;34m[TEST 16][0m Backtick injection: test`whoami`
+[0;35m🔓 VULNERABILITY:[0m Backtick injection not prevented
+[0;31m✗ FAIL:[0m Backtick
+[0;34m[TEST 17][0m Redirect injection: test > /tmp/pwned
+[0;32m✓ PASS:[0m Redirect injection blocked
+
+[0;36m=== CATEGORY 4: CONCURRENT OPERATIONS ===[0m
+[0;34m[TEST 18][0m 100 parallel zjj add operations
+[0;31m✗ FAIL:[0m Concurrent adds
+[0;34m[TEST 19][0m 1000 rapid zjj status queries
+[0;32m✓ PASS:[0m 1000 status queries in 9s
+[0;34m[TEST 20][0m Race condition: concurrent add/remove same session
+[0;32m✓ PASS:[0m Handled concurrent add/remove race
+
+[0;36m=== CATEGORY 5: STATE CORRUPTION ===[0m
+[0;34m[TEST 21][0m Delete .zjj directory during zjj list
+[0;31m💥 CRASH:[0m Did not detect missing .zjj directory
+[0;31m✗ FAIL:[0m Missing .zjj
+[0;34m[TEST 22][0m Corrupt SQLite database
+find: ‘.zjj’: No such file or directory
+[0;32m✓ PASS:[0m No database file found (may use different storage)
+[0;34m[TEST 23][0m Invalid JSON in config file
+find: ‘.zjj’: No such file or directory
+[0;34m[TEST 23][0m Change .zjj directory permissions to read-only
+chmod: cannot access '.zjj': No such file or directory
+[0;36mCleaning up test directory...[0m

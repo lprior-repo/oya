@@ -8,7 +8,6 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -342,7 +341,7 @@ async fn given_chaos_monkey_kills_random_tier2_when_100_cycles_then_100_percent_
 
     for cycle in 0..chaos_cycles {
         // Kill a random child
-        let victim_index = (cycle % child_count) as usize;
+        let victim_index = cycle % child_count;
         let victim_name = &child_names[victim_index];
 
         let stop_result = supervisor.cast(SupervisorMessage::StopChild {
@@ -375,7 +374,7 @@ async fn given_chaos_monkey_kills_random_tier2_when_100_cycles_then_100_percent_
     );
 
     let kills = kill_count.load(Ordering::SeqCst);
-    let recoveries = recovery_count.load(Ordering::SeqCst);
+    let _recoveries = recovery_count.load(Ordering::SeqCst);
 
     assert!(
         kills >= chaos_cycles / 2, // At least some kills succeeded
@@ -789,14 +788,14 @@ async fn given_continuous_chaos_when_5min_random_kills_then_100_percent_recovery
     // THEN: Verify 100% recovery rate after 5 minutes of chaos
     let final_count = get_supervisor_status(&supervisor).await;
 
-    let recovery_rate = if final_count.map_or(0, |v| v) >= child_count {
+    let recovery_rate = if final_count.as_ref().map_or(0, |v| *v) >= child_count {
         100.0
     } else {
-        (final_count.map_or(0, |v| v) as f64 / child_count as f64) * 100.0
+        (final_count.as_ref().map_or(0, |v| *v) as f64 / child_count as f64) * 100.0
     };
 
     assert_eq!(
-        final_count.map_or(0, |v| v),
+        final_count.as_ref().map_or(0, |v| *v),
         child_count,
         "after 5 minutes of chaos ({} kills), all tier-2 actors must be recovered \
          - achieved {:.1}% recovery rate, expected 100%",

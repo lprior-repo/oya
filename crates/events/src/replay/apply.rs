@@ -341,7 +341,9 @@ mod tests {
             "Context should contain recorded bead"
         );
 
-        let recorded_meta = context.last_events.get(&bead_id)
+        let recorded_meta = context
+            .last_events
+            .get(&bead_id)
             .ok_or("Should retrieve recorded event")?;
         assert_eq!(
             recorded_meta.event_id,
@@ -365,10 +367,8 @@ mod tests {
         context.record_applied(bead_id, &event2);
         let second_recorded = context.last_events.get(&bead_id);
 
-        let first_meta = first_recorded
-            .ok_or("Should have first recorded event")?;
-        let second_meta = second_recorded
-            .ok_or("Should have second recorded event")?;
+        let first_meta = first_recorded.ok_or("Should have first recorded event")?;
+        let second_meta = second_recorded.ok_or("Should have second recorded event")?;
         assert_ne!(
             first_meta.event_id, second_meta.event_id,
             "Event IDs should differ"
@@ -420,8 +420,7 @@ mod tests {
         context.record_applied(bead_id, &event);
         let result = context.last_event(&bead_id);
 
-        let result_meta = result
-            .ok_or("Should return Some for known bead")?;
+        let result_meta = result.ok_or("Should return Some for known bead")?;
         assert_eq!(
             result_meta.event_id,
             event.event_id().to_string(),
@@ -442,8 +441,7 @@ mod tests {
 
         let result = context.is_in_order(&event);
 
-        let is_ordered = result
-            .map_err(|e| format!("Should not error for first event: {}", e))?;
+        let is_ordered = result.map_err(|e| format!("Should not error for first event: {}", e))?;
         assert!(is_ordered, "First event should always be in order");
         Ok(())
     }

@@ -344,9 +344,9 @@ pub struct ShutdownStats {
 /// # Errors
 ///
 /// Returns an error if:
-    /// - Signal installation fails on Unix systems (SIGTERM/SIGINT handlers)
-    /// - Ctrl+C handler installation fails on Windows
-    /// - Internal system errors prevent signal handler setup
+/// - Signal installation fails on Unix systems (SIGTERM/SIGINT handlers)
+/// - Ctrl+C handler installation fails on Windows
+/// - Internal system errors prevent signal handler setup
 pub async fn install_signal_handlers(
     coordinator: Arc<ShutdownCoordinator>,
 ) -> Result<tokio::task::JoinHandle<()>> {

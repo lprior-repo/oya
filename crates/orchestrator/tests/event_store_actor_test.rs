@@ -9,10 +9,10 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
+use orchestrator::actors::storage::{EventStoreActorDef, EventStoreMessage};
 use oya_events::durable_store::DurableEventStore;
 use oya_events::event::BeadEvent;
 use oya_events::types::{BeadId, BeadSpec, BeadState, Complexity};
-use orchestrator::actors::storage::{EventStoreActorDef, EventStoreMessage};
 use ractor::{Actor, ActorRef};
 use std::sync::Arc;
 use surrealdb::Surreal;
@@ -96,10 +96,14 @@ async fn test_read_events_happy_path() -> Result<(), Box<dyn std::error::Error>>
 
     // WHEN: Reading events for the bead
     let (tx, rx) = oneshot::channel();
-    actor.send_message(EventStoreMessage::ReadEvents { bead_id, reply: tx.into() })?;
+    actor.send_message(EventStoreMessage::ReadEvents {
+        bead_id,
+        reply: tx.into(),
+    })?;
 
     // THEN: Should receive Ok with events
-    let result: Result<Vec<BeadEvent>, _> = tokio::time::timeout(tokio::time::Duration::from_secs(1), rx).await??;
+    let result: Result<Vec<BeadEvent>, _> =
+        tokio::time::timeout(tokio::time::Duration::from_secs(1), rx).await??;
 
     assert!(result.is_ok(), "ReadEvents should succeed");
     let events = result.map_err(|_| "Expected Ok value")?;
@@ -115,10 +119,14 @@ async fn test_read_events_not_found() -> Result<(), Box<dyn std::error::Error>> 
     // WHEN: Reading events for a non-existent bead
     let bead_id = BeadId::new();
     let (tx, rx) = oneshot::channel();
-    actor.send_message(EventStoreMessage::ReadEvents { bead_id, reply: tx.into() })?;
+    actor.send_message(EventStoreMessage::ReadEvents {
+        bead_id,
+        reply: tx.into(),
+    })?;
 
     // THEN: Should receive Ok with empty vec (not an error)
-    let result: Result<Vec<BeadEvent>, _> = tokio::time::timeout(tokio::time::Duration::from_secs(1), rx).await??;
+    let result: Result<Vec<BeadEvent>, _> =
+        tokio::time::timeout(tokio::time::Duration::from_secs(1), rx).await??;
 
     assert!(
         result.is_ok(),
@@ -239,7 +247,8 @@ async fn test_append_event_preserves_fsync_guarantee() -> Result<(), Box<dyn std
         reply: tx_read.into(),
     })?;
 
-    let read_result: Result<Vec<BeadEvent>, _> = tokio::time::timeout(tokio::time::Duration::from_secs(1), rx_read).await??;
+    let read_result: Result<Vec<BeadEvent>, _> =
+        tokio::time::timeout(tokio::time::Duration::from_secs(1), rx_read).await??;
 
     assert!(
         read_result.is_ok(),

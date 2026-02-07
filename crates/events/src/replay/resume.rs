@@ -383,7 +383,8 @@ mod tests {
     }
 
     #[test]
-    fn should_create_replay_state_with_correct_checkpoint_data() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    fn should_create_replay_state_with_correct_checkpoint_data(
+    ) -> std::result::Result<(), Box<dyn std::error::Error>> {
         let timestamp = Utc::now();
         let checkpoint_data = CheckpointData {
             state: vec![1, 2, 3],
@@ -400,8 +401,8 @@ mod tests {
 
         let result = resume_from_checkpoint(&checkpoint_id, &store, &log);
 
-        let state = result
-            .map_err(|e| format!("Should successfully create replay state: {}", e))?;
+        let state =
+            result.map_err(|e| format!("Should successfully create replay state: {}", e))?;
         assert_eq!(state.checkpoint_id.as_str(), "test");
         assert_eq!(state.checkpoint_timestamp, timestamp);
         assert_eq!(state.events_replayed, 0);
@@ -409,7 +410,8 @@ mod tests {
     }
 
     #[test]
-    fn should_count_events_replayed_from_event_log() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    fn should_count_events_replayed_from_event_log(
+    ) -> std::result::Result<(), Box<dyn std::error::Error>> {
         let timestamp = Utc::now();
         let checkpoint_data = CheckpointData {
             state: vec![],
@@ -444,8 +446,8 @@ mod tests {
 
         let result = resume_from_checkpoint(&checkpoint_id, &store, &log);
 
-        let state = result
-            .map_err(|e| format!("Should successfully create replay state: {}", e))?;
+        let state =
+            result.map_err(|e| format!("Should successfully create replay state: {}", e))?;
         assert_eq!(
             state.events_replayed, 3,
             "Should count all events after checkpoint"
@@ -511,8 +513,8 @@ mod tests {
 
         let result = resume_from_checkpoint(&checkpoint_id, &store, &log);
 
-        let state = result
-            .map_err(|e| format!("Should successfully create replay state: {}", e))?;
+        let state =
+            result.map_err(|e| format!("Should successfully create replay state: {}", e))?;
         assert_eq!(
             state.last_event_timestamp,
             Some(event2_ts),
@@ -522,7 +524,8 @@ mod tests {
     }
 
     #[test]
-    fn should_handle_empty_event_log_after_checkpoint() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    fn should_handle_empty_event_log_after_checkpoint(
+    ) -> std::result::Result<(), Box<dyn std::error::Error>> {
         let timestamp = Utc::now();
         let checkpoint_data = CheckpointData {
             state: vec![1, 2, 3],
@@ -539,8 +542,8 @@ mod tests {
 
         let result = resume_from_checkpoint(&checkpoint_id, &store, &log);
 
-        let state = result
-            .map_err(|e| format!("Should successfully create replay state: {}", e))?;
+        let state =
+            result.map_err(|e| format!("Should successfully create replay state: {}", e))?;
         assert_eq!(state.events_replayed, 0, "Should have zero events replayed");
         assert!(
             state.last_event_timestamp.is_none(),

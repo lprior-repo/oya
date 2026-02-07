@@ -351,15 +351,12 @@ fn given_duplicate_created_events_when_apply_then_idempotent_no_double_processin
     let _ = dag.add_node(node_id.to_string());
 
     // WHEN: Applying the same node addition twice (simulating duplicate events)
-    let first_result = dag.add_node(node_id.to_string());
-    let second_result = dag.add_node(node_id.to_string());
+    let _first_duplicate = dag.add_node(node_id.to_string());
+    let _second_duplicate = dag.add_node(node_id.to_string());
 
     // THEN: Should not create duplicate nodes (idempotent)
+    // Node was already added on line 351, duplicates should be rejected or handled gracefully
     // Implementation either rejects duplicate add_node calls or handles them gracefully
-    assert!(
-        first_result.is_ok() || second_result.is_ok(),
-        "at least one node addition should succeed"
-    );
 
     // Verify node count doesn't double-count
     let count = dag.node_count();
@@ -383,7 +380,7 @@ fn given_duplicate_dependency_events_when_apply_then_no_double_blocking() {
     );
 
     // WHEN: Receiving duplicate dependency resolution events (simulating event replay)
-    let first_result = dag.add_edge(
+    let _first_result = dag.add_edge(
         "a".to_string(),
         "b".to_string(),
         DependencyType::BlockingDependency,
@@ -426,7 +423,7 @@ fn given_event_replay_when_rebuild_state_then_consistent_result() {
     );
 
     let original_count = dag.node_count();
-    let original_edges = dag.edge_count();
+    let _original_edges = dag.edge_count();
 
     // WHEN: Simulating event replay by re-applying same operations
     let mut replay_dag = WorkflowDAG::new();

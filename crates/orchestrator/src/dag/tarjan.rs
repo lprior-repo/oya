@@ -490,13 +490,19 @@ mod tests {
         // Should have 2 SCCs: {a,b,c} and {d}
         assert_eq!(sccs.len(), 2);
 
-        // Find the 3-node SCC
-        let large_scc = sccs.iter().find(|scc| scc.len() == 3).unwrap();
+        // Find the 3-node SCC and verify it exists
+        let large_sccs: Vec<&Vec<String>> = sccs.iter().filter(|scc| scc.len() == 3).collect();
 
-        // Verify it's maximal: all nodes can reach each other
-        // a <-> b <-> c <-> a
-        assert!(large_scc.contains(&"a".to_string()));
-        assert!(large_scc.contains(&"b".to_string()));
-        assert!(large_scc.contains(&"c".to_string()));
+        // Verify we found exactly one 3-node SCC and test its contents
+        assert_eq!(large_sccs.len(), 1, "Should have exactly one 3-node SCC");
+
+        // Test the SCC contents directly without unwrap
+        for large_scc in large_sccs {
+            // Verify it's maximal: all nodes can reach each other
+            // a <-> b <-> c <-> a
+            assert!(large_scc.contains(&"a".to_string()));
+            assert!(large_scc.contains(&"b".to_string()));
+            assert!(large_scc.contains(&"c".to_string()));
+        }
     }
 }

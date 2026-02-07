@@ -532,8 +532,8 @@ mod tests {
         let temp_dir = tempfile::tempdir().ok();
         let storage_path = temp_dir
             .as_ref()
-            .map(|d| d.path().to_str().unwrap())
-            .unwrap_or("/tmp/test_state_manager");
+            .and_then(|d| d.path().to_str().map(String::from))
+            .unwrap_or_else(|| "/tmp/test_state_manager".to_string());
 
         let config = DatabaseConfig {
             storage_path: storage_path.to_string(),
@@ -562,15 +562,18 @@ mod tests {
         // Test LoadState (query)
         let loaded = ractor::call_t!(
             actor,
-            |reply| StateManagerMessage::LoadState { key: key.clone(), reply },
+            |reply| StateManagerMessage::LoadState {
+                key: key.clone(),
+                reply
+            },
             5000
         );
 
         assert!(loaded.is_ok(), "LoadState should succeed");
-        let loaded_data = loaded.unwrap();
+        let loaded_data = loaded.expect("LoadState outer result should be Ok");
         assert!(loaded_data.is_ok(), "LoadState result should be Ok");
         assert_eq!(
-            loaded_data.unwrap(),
+            loaded_data.expect("LoadState inner result should be Ok"),
             data,
             "Loaded data should match saved data"
         );
@@ -584,8 +587,8 @@ mod tests {
         let temp_dir = tempfile::tempdir().ok();
         let storage_path = temp_dir
             .as_ref()
-            .map(|d| d.path().to_str().unwrap())
-            .unwrap_or("/tmp/test_state_manager_delete");
+            .and_then(|d| d.path().to_str().map(String::from))
+            .unwrap_or_else(|| "/tmp/test_state_manager_delete".to_string());
 
         let config = DatabaseConfig {
             storage_path: storage_path.to_string(),
@@ -620,12 +623,15 @@ mod tests {
         // Verify deleted
         let loaded = ractor::call_t!(
             actor,
-            |reply| StateManagerMessage::LoadState { key: key.clone(), reply },
+            |reply| StateManagerMessage::LoadState {
+                key: key.clone(),
+                reply
+            },
             5000
         );
 
         assert!(loaded.is_ok());
-        let result = loaded.unwrap();
+        let result = loaded.expect("LoadState result should be Ok");
         assert!(result.is_err(), "Deleted key should return error");
 
         actor.stop(None);
@@ -637,8 +643,8 @@ mod tests {
         let temp_dir = tempfile::tempdir().ok();
         let storage_path = temp_dir
             .as_ref()
-            .map(|d| d.path().to_str().unwrap())
-            .unwrap_or("/tmp/test_state_manager_exists");
+            .and_then(|d| d.path().to_str().map(String::from))
+            .unwrap_or_else(|| "/tmp/test_state_manager_exists".to_string());
 
         let config = DatabaseConfig {
             storage_path: storage_path.to_string(),
@@ -655,12 +661,23 @@ mod tests {
         // Check non-existent key
         let exists = ractor::call_t!(
             actor,
-            |reply| StateManagerMessage::StateExists { key: key.clone(), reply },
+            |reply| StateManagerMessage::StateExists {
+                key: key.clone(),
+                reply
+            },
             5000
         );
 
         assert!(exists.is_ok());
-        assert_eq!(exists.unwrap().ok().unwrap(), false);
+        let inner_exists = exists.unwrap_or_else(|e| {
+            eprintln!("StateExists outer call failed: {e:?}");
+            Ok(false)
+        });
+        let result = inner_exists.unwrap_or_else(|e| {
+            eprintln!("StateExists inner result failed: {e:?}");
+            false
+        });
+        assert!(!result, "key should not exist initially");
 
         // Save key
         actor
@@ -676,12 +693,23 @@ mod tests {
         // Check exists
         let exists = ractor::call_t!(
             actor,
-            |reply| StateManagerMessage::StateExists { key: key.clone(), reply },
+            |reply| StateManagerMessage::StateExists {
+                key: key.clone(),
+                reply
+            },
             5000
         );
 
         assert!(exists.is_ok());
-        assert_eq!(exists.unwrap().ok().unwrap(), true);
+        let inner_exists = exists.unwrap_or_else(|e| {
+            eprintln!("StateExists outer call failed: {e:?}");
+            Ok(false)
+        });
+        let result = inner_exists.unwrap_or_else(|e| {
+            eprintln!("StateExists inner result failed: {e:?}");
+            false
+        });
+        assert!(result, "key should exist after save");
 
         actor.stop(None);
         handle.await.expect("Actor shutdown failed");
@@ -692,8 +720,8 @@ mod tests {
         let temp_dir = tempfile::tempdir().ok();
         let storage_path = temp_dir
             .as_ref()
-            .map(|d| d.path().to_str().unwrap())
-            .unwrap_or("/tmp/test_state_manager_list");
+            .and_then(|d| d.path().to_str().map(String::from))
+            .unwrap_or_else(|| "/tmp/test_state_manager_list".to_string());
 
         let config = DatabaseConfig {
             storage_path: storage_path.to_string(),
@@ -731,12 +759,17 @@ mod tests {
         // List all keys
         let all_keys = ractor::call_t!(
             actor,
-            |reply| StateManagerMessage::ListKeys { prefix: None, reply },
+            |reply| StateManagerMessage::ListKeys {
+                prefix: None,
+                reply
+            },
             5000
         );
 
         assert!(all_keys.is_ok());
-        let keys = all_keys.unwrap().ok().unwrap();
+        let keys = all_keys
+            .expect("ListKeys outer result should be Ok")
+            .expect("ListKeys inner result should be Ok");
         assert_eq!(keys.len(), 5);
 
         // List with prefix
@@ -750,7 +783,9 @@ mod tests {
         );
 
         assert!(workflow_keys.is_ok());
-        let keys = workflow_keys.unwrap().ok().unwrap();
+        let keys = workflow_keys
+            .expect("ListKeys outer result should be Ok")
+            .expect("ListKeys inner result should be Ok");
         assert_eq!(keys.len(), 3);
 
         actor.stop(None);
@@ -762,8 +797,8 @@ mod tests {
         let temp_dir = tempfile::tempdir().ok();
         let storage_path = temp_dir
             .as_ref()
-            .map(|d| d.path().to_str().unwrap())
-            .unwrap_or("/tmp/test_state_manager_version");
+            .and_then(|d| d.path().to_str().map(String::from))
+            .unwrap_or_else(|| "/tmp/test_state_manager_version".to_string());
 
         let config = DatabaseConfig {
             storage_path: storage_path.to_string(),
@@ -791,12 +826,20 @@ mod tests {
         // Get version
         let version = ractor::call_t!(
             actor,
-            |reply| StateManagerMessage::GetStateVersion { key: key.clone(), reply },
+            |reply| StateManagerMessage::GetStateVersion {
+                key: key.clone(),
+                reply
+            },
             5000
         );
 
         assert!(version.is_ok());
-        assert_eq!(version.unwrap().ok().unwrap(), Some(5));
+        assert_eq!(
+            version
+                .expect("GetStateVersion outer result should be Ok")
+                .expect("GetStateVersion inner result should be Ok"),
+            Some(5)
+        );
 
         actor.stop(None);
         handle.await.expect("Actor shutdown failed");
@@ -813,12 +856,12 @@ mod tests {
         let temp_dir = tempfile::tempdir().ok();
         let storage_path = temp_dir
             .as_ref()
-            .map(|d| d.path().to_str().unwrap())
-            .unwrap_or("/tmp/test_event_store");
+            .and_then(|d| d.path().to_str().map(String::from))
+            .unwrap_or_else(|| "/tmp/test_event_store".to_string());
 
         // Connect to test database
         let db = durable_store::connect(ConnectionConfig {
-            storage_path: storage_path.into(),
+            storage_path: storage_path.clone().into(),
             namespace: "test_ns".to_string(),
             database: "test_events".to_string(),
             ..Default::default()
@@ -831,9 +874,10 @@ mod tests {
             .expect("Failed to create DurableEventStore")
             .with_wal_dir(format!("{}/.wal", storage_path));
 
-        let (actor, handle) = Actor::spawn(None, EventStoreActorDef, Some(std::sync::Arc::new(store)))
-            .await
-            .expect("Failed to spawn EventStoreActor");
+        let (actor, handle) =
+            Actor::spawn(None, EventStoreActorDef, Some(std::sync::Arc::new(store)))
+                .await
+                .expect("Failed to spawn EventStoreActor");
 
         let bead_id = BeadId::new();
         let spec = BeadSpec::new("Test Event").with_complexity(Complexity::Simple);
@@ -850,8 +894,10 @@ mod tests {
 
         assert!(append_result.is_ok(), "AppendEvent should succeed");
         assert!(
-            append_result.unwrap().is_ok(),
-            "AppendEvent result should be Ok"
+            append_result
+                .expect("AppendEvent outer result should be Ok")
+                .is_ok(),
+            "AppendEvent inner result should be Ok"
         );
 
         // Read events
@@ -862,9 +908,15 @@ mod tests {
         );
 
         assert!(events.is_ok(), "ReadEvents should succeed");
-        let event_list = events.unwrap();
-        assert!(event_list.is_ok(), "ReadEvents result should be Ok");
-        assert_eq!(event_list.unwrap().len(), 1, "Should have one event");
+        let event_list = events.expect("ReadEvents outer result should be Ok");
+        assert!(event_list.is_ok(), "ReadEvents inner result should be Ok");
+        assert_eq!(
+            event_list
+                .expect("ReadEvents innermost result should be Ok")
+                .len(),
+            1,
+            "Should have one event"
+        );
 
         actor.stop(None);
         handle.await.expect("Actor shutdown failed");
@@ -877,12 +929,12 @@ mod tests {
         let temp_dir = tempfile::tempdir().ok();
         let storage_path = temp_dir
             .as_ref()
-            .map(|d| d.path().to_str().unwrap())
-            .unwrap_or("/tmp/test_event_store_replay");
+            .and_then(|d| d.path().to_str().map(String::from))
+            .unwrap_or_else(|| "/tmp/test_event_store_replay".to_string());
 
         // Connect to test database
         let db = durable_store::connect(ConnectionConfig {
-            storage_path: storage_path.into(),
+            storage_path: storage_path.clone().into(),
             namespace: "test_ns".to_string(),
             database: "test_events_replay".to_string(),
             ..Default::default()
@@ -895,9 +947,10 @@ mod tests {
             .expect("Failed to create DurableEventStore")
             .with_wal_dir(format!("{}/.wal", storage_path));
 
-        let (actor, handle) = Actor::spawn(None, EventStoreActorDef, Some(std::sync::Arc::new(store)))
-            .await
-            .expect("Failed to spawn EventStoreActor");
+        let (actor, handle) =
+            Actor::spawn(None, EventStoreActorDef, Some(std::sync::Arc::new(store)))
+                .await
+                .expect("Failed to spawn EventStoreActor");
 
         let bead_id = BeadId::new();
 
@@ -933,7 +986,9 @@ mod tests {
         );
 
         assert!(all_events.is_ok());
-        let event_list = all_events.unwrap().ok().unwrap();
+        let event_list = all_events
+            .expect("ReadEvents outer result should be Ok")
+            .expect("ReadEvents inner result should be Ok");
         assert_eq!(event_list.len(), 2);
 
         let checkpoint_id = event_list[0].event_id().to_string();
@@ -941,15 +996,23 @@ mod tests {
         // Replay from checkpoint
         let replayed = ractor::call_t!(
             actor,
-            |reply| EventStoreMessage::ReplayEvents { checkpoint_id: checkpoint_id.clone(), reply },
+            |reply| EventStoreMessage::ReplayEvents {
+                checkpoint_id: checkpoint_id.clone(),
+                reply
+            },
             5000
         );
 
         assert!(replayed.is_ok(), "ReplayEvents should succeed");
-        let replayed_events = replayed.unwrap();
-        assert!(replayed_events.is_ok(), "ReplayEvents result should be Ok");
+        let replayed_events = replayed.expect("ReplayEvents outer result should be Ok");
+        assert!(
+            replayed_events.is_ok(),
+            "ReplayEvents inner result should be Ok"
+        );
         // Should have events after checkpoint (could be 1 or 2 depending on timestamp)
-        let replayed_count = replayed_events.ok().unwrap().len();
+        let replayed_count = replayed_events
+            .expect("ReplayEvents innermost result should be Ok")
+            .len();
         assert!(
             replayed_count >= 1,
             "Should have at least one replayed event"

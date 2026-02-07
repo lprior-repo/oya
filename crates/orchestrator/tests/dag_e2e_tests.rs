@@ -16,7 +16,8 @@ use std::time::Duration;
 // ============================================================================
 
 #[test]
-fn given_ci_pipeline_dag_when_execute_then_correct_order() -> Result<(), Box<dyn std::error::Error>> {
+fn given_ci_pipeline_dag_when_execute_then_correct_order() -> Result<(), Box<dyn std::error::Error>>
+{
     // GIVEN: A realistic CI/CD pipeline
     //        checkout -> [build, lint] -> test -> [docker, deploy]
     let dag = WorkflowDAG::builder()

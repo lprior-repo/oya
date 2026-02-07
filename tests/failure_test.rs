@@ -5,9 +5,9 @@
 //! - Exhausted retries mark workflows as Failed
 //! - Error messages are clear and actionable
 
-#![forbid(clippy::unwrap_used)]
-#![forbid(clippy::expect_used)]
-#![forbid(clippy::panic)]
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+#![deny(clippy::panic)]
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -50,7 +50,8 @@ async fn test_bead_failure_with_retry_exhaustion() -> Result<(), Box<dyn std::er
     // Verify creation event
     let event = timeout(Duration::from_secs(1), sub.recv())
         .await
-        .map_err(|_| "Timeout waiting for creation event")??;
+        .map_err(|e| format!("Timeout waiting for creation event: {e:?}"))
+        .and_then(|r| r.map_err(|e| format!("Failed to receive event: {e:?}")))?;
     assert_eq!(
         event.bead_id(),
         bead_id,
@@ -73,7 +74,8 @@ async fn test_bead_failure_with_retry_exhaustion() -> Result<(), Box<dyn std::er
         // Verify we receive the failure event
         let event = timeout(Duration::from_secs(1), sub.recv())
             .await
-            .map_err(|_| "Timeout waiting for failure event")??;
+            .map_err(|e| format!("Timeout waiting for failure event: {e:?}"))
+            .and_then(|r| r.map_err(|e| format!("Failed to receive event: {e:?}")))?;
 
         match event {
             oya_events::BeadEvent::Failed {

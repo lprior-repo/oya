@@ -323,9 +323,12 @@ mod tests {
         stopper.stop();
 
         // Should complete without error
-        let result = tokio::time::timeout(Duration::from_secs(1), handle).await
-            .map_err(|e| Error::reconcile_failed(format!("Loop should stop within timeout: {}", e)))?;
-        
+        let result = tokio::time::timeout(Duration::from_secs(1), handle)
+            .await
+            .map_err(|e| {
+                Error::reconcile_failed(format!("Loop should stop within timeout: {}", e))
+            })?;
+
         let inner = result.map_err(|e| Error::reconcile_failed(format!("Join failed: {}", e)))?;
         assert!(inner.is_ok());
         Ok(())
