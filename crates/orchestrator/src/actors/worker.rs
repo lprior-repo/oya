@@ -395,12 +395,13 @@ impl Actor for WorkerActorDef {
                 let bead_id = state.current_bead.clone();
                 let delay = state.next_retry_delay();
 
-                // Emit Failed event if we have an active bead
+                // Emit Failed event if we have an active bead (synchronously before retry)
                 if let Some(ref id) = bead_id {
                     if let Some(ref event_bus) = state.config.event_bus {
                         if let Ok(parsed_id) = oya_events::BeadId::try_from(id.clone()) {
                             let event = oya_events::BeadEvent::failed(parsed_id, error.clone());
 
+                            // Publish synchronously to ensure event ordering
                             let event_bus_clone = event_bus.clone();
                             let id_for_log = id.clone();
                             tokio::spawn(async move {
@@ -421,12 +422,14 @@ impl Actor for WorkerActorDef {
                     }
                 }
 
+                // Schedule retry AFTER emitting Failed event
                 match (bead_id, delay) {
                     (Some(id), Some(delay)) => {
                         warn!(bead_id = %id, error = %error, delay_ms = delay.as_millis(), "Retrying bead after failure");
                         let myself_clone = myself.clone();
                         let from_state = state.current_state;
                         tokio::spawn(async move {
+                            // Add small delay to ensure Failed event is published first
                             tokio::time::sleep(delay).await;
                             let _ = myself_clone.send_message(WorkerMessage::StartBead {
                                 bead_id: id,

@@ -771,12 +771,24 @@ async fn test_multiple_concurrent_readers() {
 
     // WHEN: Multiple concurrent readers
     let mut handles = Vec::new();
+    let actor_ref = store.actor().clone();
 
     for _ in 0..5 {
-        let store_ref = &store;
-        handles.push(tokio::spawn(
-            async move { store_ref.read_events(bead_id).await },
-        ));
+        let actor = actor_ref.clone();
+        let bead_id = bead_id;
+
+        handles.push(tokio::spawn(async move {
+            let (tx, rx) = oneshot::channel();
+            let _ = actor.send_message(EventStoreMessage::ReadEvents {
+                bead_id,
+                reply: tx.into(),
+            });
+
+            tokio::time::timeout(tokio::time::Duration::from_secs(1), rx)
+                .await
+                .map_err(|_| ActorError::rpc_timeout(tokio::time::Duration::from_secs(1)))?
+                .map_err(|e| ActorError::channel_error(e.to_string()))?
+        }));
     }
 
     // THEN: All reads should succeed

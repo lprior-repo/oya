@@ -216,7 +216,7 @@ impl SurrealConnectionManager {
     }
 
     async fn connect_with_retry(config: &ConnectionManagerConfig) -> Result<Arc<Surreal<Db>>, SurrealError> {
-        let mut attempt = 0;
+        let mut attempt: u32 = 0;
 
         loop {
             attempt = attempt.saturating_add(1);
@@ -268,6 +268,43 @@ impl SurrealConnectionManager {
             client: self.client.clone(),
             semaphore: self.semaphore.clone(),
         })
+    }
+
+    pub async fn execute_with_retry<F, T, Fut>(&self, operation: F) -> Result<T, SurrealError>
+    where
+        F: Fn(PooledConnection) -> Fut,
+        Fut: std::future::Future<Output = Result<T, SurrealError>>,
+    {
+        let mut attempt: u32 = 0;
+
+        loop {
+            attempt = attempt.saturating_add(1);
+            let conn = self.get_connection().await?;
+
+            let timeout_result = tokio::time::timeout(self.config.query_timeout, operation(conn)).await;
+
+            match timeout_result {
+                Ok(Ok(result)) => return Ok(result),
+                Ok(Err(e)) => {
+                    if self.config.retry_policy.is_retryable(attempt) {
+                        let backoff = self.config.retry_policy.calculate_backoff(attempt);
+                        warn!("Operation attempt {} failed, retrying in {:?}: {}", attempt, backoff, e);
+                        tokio::time::sleep(backoff).await;
+                    } else {
+                        return Err(SurrealError::RetryLimitExceeded(format!("Operation failed: {}", e)));
+                    }
+                }
+                Err(_) => {
+                    if self.config.retry_policy.is_retryable(attempt) {
+                        let backoff = self.config.retry_policy.calculate_backoff(attempt);
+                        warn!("Operation attempt {} timed out, retrying in {:?}", attempt, backoff);
+                        tokio::time::sleep(backoff).await;
+                    } else {
+                        return Err(SurrealError::QueryTimeout(self.config.query_timeout));
+                    }
+                }
+            }
+        }
     }
 
     pub async fn health_check(&self) -> Result<(), SurrealError> {
