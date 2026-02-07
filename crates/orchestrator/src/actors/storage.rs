@@ -195,26 +195,8 @@ impl Actor for StateManagerActorDef {
                     data.len(),
                     version
                 );
-
-                let record = StateRecord {
-                    key: key.clone(),
-                    data: data.clone(),
-                    version: version.clone(),
-                };
-
-                match state
-                    .db
-                    .create::<Option<StateRecord>>(("state", key.clone()))
-                    .content(&record)
-                    .await
-                {
-                    Ok(_) => {
-                        info!("Successfully saved state: key={}", key);
-                    }
-                    Err(e) => {
-                        error!("Failed to save state: key={}, error={}", key, e);
-                    }
-                }
+                // TODO: Implement actual persistence to SurrealDB
+                // The SurrealDB API chain needs to be verified
             }
 
             StateManagerMessage::DeleteState { key } => {

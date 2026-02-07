@@ -319,7 +319,7 @@ impl Actor for WorkerActorDef {
                 let new_state = BeadState::Running;
 
                 // Create workspace for bead execution
-                let exec_result = if let Some(ref workspace_manager) =
+                let _exec_result = if let Some(ref workspace_manager) =
                     state.config.workspace_manager
                 {
                     match workspace_manager.execute_with_workspace(&bead_id, |_workspace_path| {
