@@ -20,12 +20,12 @@ proptest! {
         let compressed = compress(&data);
         prop_assert!(compressed.is_ok(), "Compression should succeed for any input");
 
-        let compressed = compressed.unwrap();
+        let compressed = compressed.map_err(|e| prop_assert_err::Error::Mismatch(e))?;
         let decompressed = decompress(&compressed, data.len());
         prop_assert!(decompressed.is_ok(), "Decompression should succeed");
 
         // THEN: Original data is preserved exactly
-        let decompressed = decompressed.unwrap();
+        let decompressed = decompressed.map_err(|e| prop_assert_err::Error::Mismatch(e))?;
         prop_assert_eq!(decompressed, data, "Round-trip should preserve data exactly");
     }
 }
@@ -150,7 +150,7 @@ fn test_workflow_compression_achieves_target() {
         data
     };
 
-    let compressed = compress(&test_data).expect("Compression should succeed");
+    let compressed = compress(&test_data).map_err(|e| format!("Compression failed: {}", e))?;
     let ratio = compression_ratio(test_data.len() as u64, compressed.len() as u64);
 
     assert!(
@@ -213,20 +213,20 @@ fn test_edge_cases_compress_decompress() {
 
     // Single byte
     let single = vec![42u8];
-    let compressed = compress(&single).expect("Single byte should compress");
-    let decompressed = decompress(&compressed, 1).expect("Single byte should decompress");
+    let compressed = compress(&single).map_err(|e| format!("Compression failed: {}", e))?;
+    let decompressed = decompress(&compressed, 1).map_err(|e| format!("Decompression failed: {}", e))?;
     assert_eq!(decompressed, single, "Single byte round-trip should work");
 
     // Highly repetitive data (best case for compression)
     let repetitive = vec![0xFFu8; 10000];
-    let compressed = compress(&repetitive).expect("Repetitive data should compress");
+    let compressed = compress(&repetitive).map_err(|e| format!("Compression failed: {}", e))?;
     let ratio = compression_ratio(10000, compressed.len() as u64);
     assert!(
         ratio > 100.0,
         "Highly repetitive data should compress >100:1, got {:.2}",
         ratio
     );
-    let decompressed = decompress(&compressed, 10000).expect("Should decompress");
+    let decompressed = decompress(&compressed, 10000).map_err(|e| format!("Decompression failed: {}", e))?;
     assert_eq!(
         decompressed, repetitive,
         "Repetitive round-trip should work"

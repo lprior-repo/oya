@@ -536,7 +536,11 @@ mod tests {
         if let Err(PersistenceError::NotFound { .. }) = result {
             // Expected error type
         } else {
-            panic!("expected NotFound error, got {:?}", result);
+            assert!(
+                matches!(result, Err(PersistenceError::NotFound { .. })),
+                "expected NotFound error, got {:?}",
+                result
+            );
         }
     }
 

@@ -146,14 +146,16 @@ impl ReplayEngine {
             Err(e) => return Err(e),
         };
 
-        // Replay events since checkpoint
+        // Replay events since checkpoint using functional fold
         let events = self.get_events_since(from_sequence).await?;
         let events_replayed = events.len();
 
-        for event_record in events {
-            projection.apply(&event_record.event);
-            self.current_sequence = event_record.sequence;
-        }
+        self.current_sequence = events
+            .iter()
+            .fold(self.current_sequence, |seq, event_record| {
+                projection.apply(&event_record.event);
+                event_record.sequence
+            });
 
         Ok(RecoveryResult {
             checkpoint_id,

@@ -78,7 +78,11 @@ async fn given_worker_when_start_bead_then_emits_state_changed_event()
             assert_eq!(from, BeadState::Ready);
             assert_eq!(to, BeadState::Running);
         }
-        _ => panic!("Expected StateChanged event, got {:?}", event.event_type()),
+        _ => assert!(
+            matches!(event, BeadEvent::StateChanged { .. }),
+            "Expected StateChanged event, got {:?}",
+            event.event_type()
+        ),
     }
 
     // Cleanup
@@ -119,7 +123,11 @@ async fn given_worker_when_fail_bead_then_emits_failed_event()
         BeadEvent::Failed { error, .. } => {
             assert_eq!(error, error_msg);
         }
-        _ => panic!("Expected Failed event, got {:?}", event.event_type()),
+        _ => assert!(
+            matches!(event, BeadEvent::Failed { .. }),
+            "Expected Failed event, got {:?}",
+            event.event_type()
+        ),
     }
 
     // Cleanup
@@ -249,7 +257,10 @@ async fn given_worker_when_state_changes_with_custom_from_state_then_emits_corre
             assert_eq!(from, BeadState::BackingOff);
             assert_eq!(to, BeadState::Running);
         }
-        _ => panic!("Expected StateChanged event"),
+        _ => assert!(
+            matches!(event, BeadEvent::StateChanged { .. }),
+            "Expected StateChanged event"
+        ),
     }
 
     // Cleanup
@@ -305,7 +316,8 @@ async fn given_worker_when_health_check_fails_then_emits_worker_unhealthy_event(
             assert!(!worker_id.is_empty(), "worker_id should not be empty");
             assert_eq!(event_reason, reason);
         }
-        _ => panic!(
+        _ => assert!(
+            matches!(event, oya_events::BeadEvent::WorkerUnhealthy { .. }),
             "Expected WorkerUnhealthy event, got {:?}",
             event.event_type()
         ),

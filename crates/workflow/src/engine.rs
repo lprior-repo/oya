@@ -860,7 +860,7 @@ mod tests {
         assert!(rewound
             .as_ref()
             .map(|w| w.state == WorkflowState::Paused)
-            .unwrap_or(false));
+            .map_or(false, |is_paused| is_paused));
     }
 
     #[tokio::test]
@@ -882,7 +882,7 @@ mod tests {
         assert!(rewound.is_ok());
 
         // Current phase should be set to index 2 (next phase after test)
-        assert_eq!(rewound.map(|w| w.current_phase).unwrap_or(999), 2);
+        assert_eq!(rewound.map(|w| w.current_phase).map_or(999, |idx| idx), 2);
     }
 
     #[tokio::test]

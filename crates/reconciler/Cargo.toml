@@ -15,6 +15,9 @@ tokio = { workspace = true, features = ["sync", "time"] }
 async-trait = { workspace = true }
 futures = { workspace = true }
 
+# Functional programming
+either = "1.12"
+
 # Serialization
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
