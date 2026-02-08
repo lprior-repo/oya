@@ -1,0 +1,12 @@
+# Moon Workspace Configuration
+# This file defines the workspace settings for moon
+
+$schema: https://moonrepo.dev/schemas/workspace.json
+
+# Workspace version constraint
+versionConstraint: ">=1.40.0"
+
+# Project globs - automatically discovers projects
+projects:
+  - "crates/*"
+  - "."  # Root project

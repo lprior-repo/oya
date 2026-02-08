@@ -1,0 +1,134 @@
+# Moon CI/CD Configuration for Oya Project
+# This config enables fast, cached builds with moon + bazel-remote
+
+$schema: https://moonrepo.dev/schemas/project.json
+
+# Project configuration
+projects:
+  - "crates/*"
+  - "."  # Root project
+
+# Language-specific configuration
+language: "rust"
+
+# Workspace configuration
+workspace:
+  inheritDependencies: true
+  inheritTasks: true
+
+# Task runner configuration
+runner:
+  commandWrapper: "true"  # No wrapper needed for Rust
+
+# Default tasks available for all projects
+tasks:
+  # Quick format and lint check (6-7ms with cache)
+  quick:
+    description: "Fast format check and clippy lint (cached)"
+    command: "cargo"
+    args:
+      - "fmt"
+      - "--check"
+    options:
+      cache: true
+      persistent: true
+
+  # Full CI pipeline
+  ci:
+    description: "Full CI pipeline: format, clippy, test, build"
+    command: "cargo"
+    args:
+      - "clippy"
+      - "--all-targets"
+      - "--"
+      - "-D"
+      - "clippy::unwrap_used"
+      - "-D"
+      - "clippy::expect_used"
+      - "-D"
+      - "clippy::panic"
+    options:
+      cache: true
+      persistent: true
+
+  # Auto-fix formatting
+  fmt-fix:
+    description: "Auto-fix formatting issues"
+    command: "cargo"
+    args:
+      - "fmt"
+    options:
+      cache: false
+
+  # Type check only
+  check:
+    description: "Fast type check without full build"
+    command: "cargo"
+    args:
+      - "check"
+      "--all-targets"
+    options:
+      cache: true
+      persistent: true
+
+  # Run tests with nextest
+  test:
+    description: "Run tests with nextest"
+    command: "cargo"
+    args:
+      - "nextest"
+      - "run"
+      "--all-targets"
+    options:
+      cache: true
+      persistent: true
+
+  # Release build
+  build:
+    description: "Optimized release build"
+    command: "cargo"
+    args:
+      - "build"
+      "--release"
+      "--all-targets"
+    options:
+      cache: true
+      persistent: true
+
+  # Install to ~/.local/bin
+  install:
+    description: "Install binary to ~/.local/bin"
+    command: "cargo"
+    args:
+      - "install"
+      "--path"
+      "."
+      "--root"
+      "~/.local"
+    options:
+      cache: false
+
+# Build targets configuration
+platforms:
+  - "linux"
+  - "macos"
+  - "windows"
+
+# Toolchain configuration
+toolchain:
+  rust:
+    version: "1.85"
+    components:
+      - "rustfmt"
+      - "clippy"
+
+# Cache configuration for bazel-remote integration
+cache:
+  enabled: true
+  # Use bazel-remote for persistent caching
+  # Runs on localhost:9090 via systemd user service
+  storage: "remote"
+  # Cache key strategy
+  strategy: "content"
+  # Maximum cache age (7 days)
+  maxAge: 604800

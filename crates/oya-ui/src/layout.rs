@@ -115,7 +115,7 @@ impl Pane {
     /// This bypasses validation since the hardcoded defaults are known to be valid.
     /// Only use with hardcoded constants that have been verified.
     #[must_use]
-    const fn with_defaults(
+    fn with_defaults(
         pane_type: PaneType,
         row: usize,
         col: usize,

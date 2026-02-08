@@ -383,9 +383,20 @@ mod tests {
         let size = Size { rows: 24, cols: 80 };
         let json = serde_json::to_string(&size);
         assert!(json.is_ok());
-        let decoded: Size = serde_json::from_str(&json.unwrap_or_default());
+
+        let json_string = match json {
+            Ok(j) => j,
+            Err(e) => panic!("Failed to serialize: {e}"),
+        };
+
+        let decoded: Result<Size, _> = serde_json::from_str(&json_string);
         assert!(decoded.is_ok());
-        let decoded = decoded.unwrap_or(Size { rows: 0, cols: 0 });
+
+        let decoded = match decoded {
+            Ok(d) => d,
+            Err(e) => panic!("Failed to deserialize: {e}"),
+        };
+
         assert_eq!(decoded.rows, 24);
         assert_eq!(decoded.cols, 80);
     }
@@ -411,7 +422,7 @@ mod tests {
     fn test_sample_beads() {
         let plugin = match OyaPlugin::new() {
             Ok(p) => p,
-            Err(_) => return,
+            Err(e) => panic!("Failed to create plugin: {e}"),
         };
         assert!(!plugin.sample_beads.is_empty());
         assert_eq!(plugin.sample_beads.first().map(|b| b.id.as_str()), Some("src-3ax5"));

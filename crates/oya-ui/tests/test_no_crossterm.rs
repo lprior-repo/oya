@@ -14,5 +14,6 @@ fn test_oya_ui_compiles_without_crossterm() {
     // so this test should pass.
 
     // If this test compiles, the issue is fixed
-    assert!(true);
+    // Verify we can use oya-ui types without crossterm
+    let _size = oya_ui::Size { rows: 24, cols: 80 };
 }
