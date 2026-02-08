@@ -455,11 +455,7 @@ fn textwrap(text: &str, width: usize) -> Vec<String> {
 }
 
 #[cfg(test)]
-#[allow(clippy::indexing_slicing)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
-    #![allow(clippy::expect_used)]
-
     use super::*;
 
     #[test]
@@ -486,7 +482,11 @@ mod tests {
     fn test_textwrap() {
         let lines = textwrap("hello world this is a test", 15);
         assert!(!lines.is_empty());
-        assert!(lines[0].len() <= 15);
+        let first_line = lines.first();
+        assert!(first_line.is_some());
+        if let Some(line) = first_line {
+            assert!(line.len() <= 15);
+        }
     }
 
     #[test]
