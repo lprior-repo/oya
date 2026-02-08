@@ -1,14 +1,20 @@
 # Rust Contract: 
 Untitled
 
-**Bead ID:** `src-cfa3`
+**Bead ID:** `src-1lg7`
 **Priority:** P1
-**Generated:** 2026-02-07 23:39:26
+**Generated:** 2026-02-07 23:40:14
 
 ## Overview
 
 ```
 
+## Test Scenario
+Given: An agent that has missed heartbeats
+When: New beads become ready
+Then: Unhealthy agent is skipped
+
+## Files
 ```
 
 ## Functional Requirements
@@ -66,7 +72,7 @@ pub enum ContractError {
 
 ## Testing Requirements
 
-See `martin-fowler-tests-src-cfa3.md` for comprehensive test strategy.
+See `martin-fowler-tests-src-1lg7.md` for comprehensive test strategy.
 
 ## Integration Points
 

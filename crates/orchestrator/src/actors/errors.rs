@@ -68,6 +68,11 @@ impl ActorError {
         Self::BeadNotFound(id.into())
     }
 
+    /// Create a generic not found error (uses BeadNotFound variant).
+    pub fn not_found(resource: impl Into<String>, reason: impl Into<String>) -> Self {
+        Self::BeadNotFound(format!("{}: {}", resource.into(), reason.into()))
+    }
+
     /// Create a workflow already exists error.
     pub fn workflow_already_exists(id: impl Into<String>) -> Self {
         Self::WorkflowAlreadyExists(id.into())

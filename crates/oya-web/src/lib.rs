@@ -17,6 +17,7 @@ use tower_http::{
 };
 use tracing::info;
 
+mod agent_repository;
 mod circuit_breaker;
 mod error_handler;
 mod health;
@@ -26,9 +27,14 @@ pub mod workflow_graph;
 
 use health::HealthResponse;
 
+pub use agent_repository::{
+    AgentRepository, AgentRepositoryError, AgentRepositoryStats, InMemoryAgentRepository,
+    RepositoryAgent, RepositoryAgentState,
+};
 pub use circuit_breaker::{CircuitBreaker, CircuitBreakerConfig, CircuitState, RequestResult};
 pub use error_handler::{ErrorCategory, ErrorResponse, HttpError};
 pub use retry::{RetryDecision, RetryPolicy, RetryState};
+pub use validation::{ValidationError, ValidationResult, ValidatorConfig};
 
 /// Agent metrics response.
 ///
