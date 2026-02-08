@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["AgentMode"],"fn":["default_agent_mode","default_cli_path","default_max_retries","default_timeout"],"mod":["duration_secs"],"struct":["OpencodeConfig"]};

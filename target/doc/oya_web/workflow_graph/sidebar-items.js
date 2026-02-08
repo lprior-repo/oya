@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["GraphEdgeType"],"struct":["GraphEdge","GraphNode","WorkflowGraphResponse"],"type":["DependencyType"]};

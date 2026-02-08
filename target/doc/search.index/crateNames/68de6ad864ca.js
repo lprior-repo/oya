@@ -1,1 +1,0 @@
-rd_("hoya_coreloya_opencodefoya_uigoya_web")

@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["COLOR_GREEN","COLOR_RED","COLOR_RESET"],"fn":["colorize"]};

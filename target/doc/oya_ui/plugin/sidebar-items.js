@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["MouseButton","PluginError","PluginEvent","PluginState"],"struct":["KeyModifiers","MouseEvent","OyaPlugin","PluginInfo","SampleBead","Size"],"type":["PluginResult"]};

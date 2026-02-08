@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["LayoutError","PaneType"],"struct":["Layout","Pane"],"type":["LayoutResult"]};

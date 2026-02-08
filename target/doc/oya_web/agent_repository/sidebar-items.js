@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["AgentRepositoryError","RepositoryAgentState"],"struct":["AgentRepositoryStats","InMemoryAgentRepository","RepositoryAgent"],"trait":["AgentRepository"]};

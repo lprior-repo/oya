@@ -1,1 +1,0 @@
-[{"command":"cargo","args":["--check","fmt"],"deps":{},"env":{},"inputs":{".moon/workspace.yml":"58befd75978d2412660d08253a2ee4fef804e394"},"inputEnv":{},"outputs":[],"projectDeps":[],"target":"oya:quick","toolchains":["system"],"version":"3"},{"arch":"x86_64","os":"linux"}]

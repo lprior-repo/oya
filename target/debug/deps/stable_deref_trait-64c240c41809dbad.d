@@ -1,7 +1,0 @@
-/home/lewis/src/oya/target/debug/deps/stable_deref_trait-64c240c41809dbad.d: /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/stable_deref_trait-1.2.1/src/lib.rs
-
-/home/lewis/src/oya/target/debug/deps/libstable_deref_trait-64c240c41809dbad.rlib: /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/stable_deref_trait-1.2.1/src/lib.rs
-
-/home/lewis/src/oya/target/debug/deps/libstable_deref_trait-64c240c41809dbad.rmeta: /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/stable_deref_trait-1.2.1/src/lib.rs
-
-/cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/stable_deref_trait-1.2.1/src/lib.rs:
