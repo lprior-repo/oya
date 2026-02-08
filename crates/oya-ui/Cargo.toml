@@ -25,6 +25,9 @@ tracing = { workspace = true }
 # Functional utilities
 itertools = { workspace = true }
 
+# IPC
+oya-ipc = { workspace = true }
+
 [dev-dependencies]
 # Testing
 tokio = { workspace = true }
