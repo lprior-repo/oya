@@ -10,6 +10,8 @@
 
 // Re-export all crates
 pub use oya_core;
+pub use oya_pipeline;
+pub use orchestrator;
 
 // Swarm module for 13-agent continuous assembly line
 pub mod swarm;
