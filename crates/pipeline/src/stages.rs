@@ -51,17 +51,31 @@ impl Stage {
     /// # Errors
     /// Returns an error when the stage label is unknown.
     pub fn parse(label: impl AsRef<str>) -> Result<Self> {
-        match label.as_ref().trim().to_lowercase().as_str() {
-            "implement" => Ok(Self::Implement),
-            "unit-test" | "unit_test" | "unit test" => Ok(Self::UnitTest),
-            "coverage" => Ok(Self::Coverage),
-            "lint" => Ok(Self::Lint),
-            "static" => Ok(Self::Static),
-            "integration" => Ok(Self::Integration),
-            "security" => Ok(Self::Security),
-            "review" => Ok(Self::Review),
-            "accept" => Ok(Self::Accept),
-            other => Err(Error::InvalidStage(format!("unknown stage '{other}'"))),
+        let trimmed = label.as_ref().trim();
+
+        if trimmed.eq_ignore_ascii_case("implement") {
+            Ok(Self::Implement)
+        } else if trimmed.eq_ignore_ascii_case("unit-test")
+            || trimmed.eq_ignore_ascii_case("unit_test")
+            || trimmed.eq_ignore_ascii_case("unit test")
+        {
+            Ok(Self::UnitTest)
+        } else if trimmed.eq_ignore_ascii_case("coverage") {
+            Ok(Self::Coverage)
+        } else if trimmed.eq_ignore_ascii_case("lint") {
+            Ok(Self::Lint)
+        } else if trimmed.eq_ignore_ascii_case("static") {
+            Ok(Self::Static)
+        } else if trimmed.eq_ignore_ascii_case("integration") {
+            Ok(Self::Integration)
+        } else if trimmed.eq_ignore_ascii_case("security") {
+            Ok(Self::Security)
+        } else if trimmed.eq_ignore_ascii_case("review") {
+            Ok(Self::Review)
+        } else if trimmed.eq_ignore_ascii_case("accept") {
+            Ok(Self::Accept)
+        } else {
+            Err(Error::InvalidStage(format!("unknown stage '{trimmed}'")))
         }
     }
 
