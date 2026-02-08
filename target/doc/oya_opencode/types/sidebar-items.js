@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ChunkType","ModificationType"],"mod":["duration_millis"],"struct":["CommandExecution","ExecutionResult","ModifiedFile","StreamChunk","TokenUsage"]};

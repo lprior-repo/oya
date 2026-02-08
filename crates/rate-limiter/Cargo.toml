@@ -1,0 +1,29 @@
+[package]
+name = "rate-limiter"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Token bucket rate limiter for OYA"
+
+[dependencies]
+oya-core = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true }
+
+# Functional primitives
+itertools = { workspace = true }
+tap = { workspace = true }
+rpds = { workspace = true }
+
+# Time
+chrono = { workspace = true }
+
+[dev-dependencies]
+tokio-test = "0.4"
+proptest = "1.0"

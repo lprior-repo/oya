@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["AcpMessage","FilePartSource","MessagePart","ToolState"],"struct":["AcpError","AgentPart","CacheStats","ExecutionResult","FilePart","LspPosition","LspRange","PartBase","PatchPart","ReasoningPart","SnapshotPart","StepFinishPart","StepStartPart","TextPart","TextPosition","TimeRange","TokenUsage","ToolPart","ToolTimeRange"]};

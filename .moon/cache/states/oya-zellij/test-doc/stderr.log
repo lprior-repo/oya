@@ -1,0 +1,7 @@
+[1m[92m    Blocking[0m waiting for file lock on package cache
+[1m[92m    Blocking[0m waiting for file lock on package cache
+[1m[92m    Blocking[0m waiting for file lock on package cache
+[1m[92m    Blocking[0m waiting for file lock on package cache
+[1m[92m    Blocking[0m waiting for file lock on build directory
+[1m[92m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`test` profile [unoptimized + debuginfo]]8;;\ target(s) in 3.52s
+[1m[92m   Doc-tests[0m oya_zellij

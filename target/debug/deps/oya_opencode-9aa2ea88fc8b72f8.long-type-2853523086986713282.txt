@@ -1,0 +1,1 @@
+std::result::Result<Pin<Box<dyn Stream<Item = std::result::Result<StreamChunk, error::Error>> + std::marker::Send>>, error::Error>

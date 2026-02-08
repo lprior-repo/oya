@@ -1,0 +1,7 @@
+[1m[92m    Blocking[0m waiting for file lock on package cache
+[1m[92m    Blocking[0m waiting for file lock on package cache
+[1m[92m    Blocking[0m waiting for file lock on package cache
+[1m[92m    Blocking[0m waiting for file lock on package cache
+[1m[92m Documenting[0m oya-zellij v0.1.0 (/home/lewis/src/oya/crates/oya-zellij)
+[1m[92m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`dev` profile [unoptimized + debuginfo]]8;;\ target(s) in 3.29s
+[1m[92m   Generated[0m ]8;;file://omarchy/home/lewis/src/oya/crates/oya-zellij/target/doc/oya_zellij/index.html\/home/lewis/src/oya/crates/oya-zellij/target/doc/oya_zellij/index.html]8;;\

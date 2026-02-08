@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"trait":["GenericResultExt","OptionExt","ResultExt"],"type":["Result"]};

@@ -1,0 +1,1 @@
+std::io::IntoInnerError<std::io::BufWriter<test_flush_is_called_after_each_send::FlushCounter>>
