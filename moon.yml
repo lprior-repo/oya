@@ -3,24 +3,7 @@
 
 $schema: https://moonrepo.dev/schemas/project.json
 
-# Project configuration
-projects:
-  - "crates/*"
-  - "."  # Root project
-
-# Language-specific configuration
-language: "rust"
-
-# Workspace configuration
-workspace:
-  inheritDependencies: true
-  inheritTasks: true
-
-# Task runner configuration
-runner:
-  commandWrapper: "true"  # No wrapper needed for Rust
-
-# Default tasks available for all projects
+# Task configuration
 tasks:
   # Quick format and lint check (6-7ms with cache)
   quick:
@@ -66,7 +49,7 @@ tasks:
     command: "cargo"
     args:
       - "check"
-      "--all-targets"
+      - "--all-targets"
     options:
       cache: true
       persistent: true
@@ -78,7 +61,7 @@ tasks:
     args:
       - "nextest"
       - "run"
-      "--all-targets"
+      - "--all-targets"
     options:
       cache: true
       persistent: true
@@ -89,8 +72,8 @@ tasks:
     command: "cargo"
     args:
       - "build"
-      "--release"
-      "--all-targets"
+      - "--release"
+      - "--all-targets"
     options:
       cache: true
       persistent: true
@@ -101,34 +84,9 @@ tasks:
     command: "cargo"
     args:
       - "install"
-      "--path"
-      "."
-      "--root"
-      "~/.local"
+      - "--path"
+      - "."
+      - "--root"
+      - "~/.local"
     options:
       cache: false
-
-# Build targets configuration
-platforms:
-  - "linux"
-  - "macos"
-  - "windows"
-
-# Toolchain configuration
-toolchain:
-  rust:
-    version: "1.85"
-    components:
-      - "rustfmt"
-      - "clippy"
-
-# Cache configuration for bazel-remote integration
-cache:
-  enabled: true
-  # Use bazel-remote for persistent caching
-  # Runs on localhost:9090 via systemd user service
-  storage: "remote"
-  # Cache key strategy
-  strategy: "content"
-  # Maximum cache age (7 days)
-  maxAge: 604800
