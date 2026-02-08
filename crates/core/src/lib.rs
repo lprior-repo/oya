@@ -1,18 +1,23 @@
-#![deny(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-#![deny(clippy::panic)]
+#![forbid(unsafe_code)]
 
-//! # oya-core
+//! OYA Core - Shared domain types and utilities.
 //!
-//! Core types, errors, and utilities shared across all OYA crates.
-//!
-//! This crate provides:
-//! - Unified error types and Result aliases
-//! - Result extension traits for Railway-Oriented Programming
+//! This crate provides foundational types for the entire OYA system,
+//! including error handling, functional utilities, and common domain models.
 
 pub mod error;
-pub mod result;
+pub mod execution;
+pub mod slug;
+pub mod stage;
+pub mod task;
+pub mod visualization;
+pub mod workflow;
 
-// Re-export commonly used items
-pub use error::Error;
-pub use result::{GenericResultExt, OptionExt, Result, ResultExt};
+// Re-export commonly used types
+pub use error::{OyaError, OyaResult};
+pub use execution::{ExecutionEngine, WorkflowResult, WorkflowState};
+pub use slug::Slug;
+pub use stage::Stage;
+pub use task::Task;
+pub use visualization::WorkflowVisualization;
+pub use workflow::Workflow;
