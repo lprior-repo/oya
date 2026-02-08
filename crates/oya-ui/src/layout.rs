@@ -110,17 +110,33 @@ impl Pane {
 
     /// Create a new pane with hardcoded default values (internal use only)
     ///
-    /// # Errors
+    /// # Note
     ///
-    /// Returns an error if the provided hardcoded dimensions are invalid (should never happen)
-    fn with_defaults(
+    /// This bypasses validation since the hardcoded defaults are known to be valid.
+    /// Only use with hardcoded constants that have been verified.
+    #[must_use]
+    const fn with_defaults(
         pane_type: PaneType,
         row: usize,
         col: usize,
         height: usize,
         width: usize,
-    ) -> LayoutResult<Self> {
-        Self::new(pane_type, row, col, height, width)
+    ) -> Self {
+        let title = match pane_type {
+            PaneType::BeadList => "Beads",
+            PaneType::BeadDetail => "Details",
+            PaneType::PipelineView => "Pipeline",
+            PaneType::WorkflowGraph => "Workflow",
+        };
+
+        Self {
+            pane_type,
+            row,
+            col,
+            height,
+            width,
+            title: title.to_string(),
+        }
     }
 
     /// Get the right boundary column
@@ -157,20 +173,17 @@ impl Layout {
     ///
     /// # Returns
     ///
-    /// A new layout with default 3-pane configuration
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if default dimensions are invalid
-    pub fn new_3_pane() -> LayoutResult<Self> {
-        let bead_list = Pane::new(PaneType::BeadList, 1, 1, 15, 32)?;
-        let bead_detail = Pane::new(PaneType::BeadDetail, 1, 34, 8, 45)?;
-        let pipeline_view = Pane::new(PaneType::PipelineView, 10, 34, 6, 45)?;
-        let workflow_graph = Pane::new(PaneType::WorkflowGraph, 17, 1, 6, 78)?;
+    /// A new layout with default 3-pane configuration (80x24 terminal)
+    #[must_use]
+    pub fn new_3_pane() -> Self {
+        let bead_list = Pane::with_defaults(PaneType::BeadList, 1, 1, 15, 32);
+        let bead_detail = Pane::with_defaults(PaneType::BeadDetail, 1, 34, 8, 45);
+        let pipeline_view = Pane::with_defaults(PaneType::PipelineView, 10, 34, 6, 45);
+        let workflow_graph = Pane::with_defaults(PaneType::WorkflowGraph, 17, 1, 6, 78);
 
-        Ok(Self {
+        Self {
             panes: vec![bead_list, bead_detail, pipeline_view, workflow_graph],
-        })
+        }
     }
 
     /// Get all panes in the layout
@@ -318,15 +331,12 @@ impl Default for Layout {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
-    #![allow(clippy::expect_used)]
-
     use super::*;
 
     #[test]
     fn test_layout_creation() {
         let layout = Layout::new_3_pane();
-        assert_eq!(layout.panes.len(), 4);
+        assert_eq!(layout.panes().len(), 4);
     }
 
     #[test]
@@ -334,22 +344,28 @@ mod tests {
         let layout = Layout::new_3_pane();
         let bead_list = layout.get_pane(PaneType::BeadList);
         assert!(bead_list.is_some());
-        assert_eq!(bead_list.unwrap().pane_type, PaneType::BeadList);
+        let bead_list = bead_list.unwrap();
+        assert_eq!(bead_list.pane_type, PaneType::BeadList);
     }
 
     #[test]
     fn test_calculate_for_terminal() {
-        let layout = Layout::calculate_for_terminal(24, 80).expect("Failed to calculate layout");
-        assert_eq!(layout.panes.len(), 4);
+        let layout = match Layout::calculate_for_terminal(24, 80) {
+            Ok(l) => l,
+            Err(e) => panic!("Failed to calculate layout: {e}"),
+        };
+        assert_eq!(layout.panes().len(), 4);
 
-        let bead_list = layout
-            .get_pane(PaneType::BeadList)
-            .expect("BeadList not found");
+        let bead_list = match layout.get_pane(PaneType::BeadList) {
+            Some(p) => p,
+            None => panic!("BeadList not found"),
+        };
         assert_eq!(bead_list.width, 32); // 40% of 80
 
-        let workflow_graph = layout
-            .get_pane(PaneType::WorkflowGraph)
-            .expect("WorkflowGraph not found");
+        let workflow_graph = match layout.get_pane(PaneType::WorkflowGraph) {
+            Some(p) => p,
+            None => panic!("WorkflowGraph not found"),
+        };
         assert!(workflow_graph.height > 0);
     }
 
@@ -361,7 +377,10 @@ mod tests {
 
     #[test]
     fn test_pane_boundaries() {
-        let pane = Pane::new(PaneType::BeadList, 5, 10, 15, 30).expect("Failed to create pane");
+        let pane = match Pane::new(PaneType::BeadList, 5, 10, 15, 30) {
+            Ok(p) => p,
+            Err(e) => panic!("Failed to create pane: {e}"),
+        };
         assert_eq!(pane.right(), 40);
         assert_eq!(pane.bottom(), 20);
     }
