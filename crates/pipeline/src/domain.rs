@@ -289,32 +289,8 @@ impl Task {
     /// # Errors
     /// Returns an error when the transition is not allowed.
     pub fn transition_to(&self, next: TaskStatus) -> Result<Self> {
-        if self.status == next {
-            return Ok(self.clone());
-        }
-
-        let allowed = match (&self.status, &next) {
-            (TaskStatus::Created, TaskStatus::InProgress { .. })
-            | (TaskStatus::Created, TaskStatus::FailedPipeline { .. }) => true,
-            (
-                TaskStatus::InProgress { stage: from_stage },
-                TaskStatus::InProgress { stage: to_stage },
-            ) => stage_progresses(from_stage, to_stage).is_ok(),
-            (TaskStatus::InProgress { .. }, TaskStatus::PassedPipeline)
-            | (TaskStatus::InProgress { .. }, TaskStatus::FailedPipeline { .. }) => true,
-            (TaskStatus::FailedPipeline { .. }, TaskStatus::InProgress { .. }) => true,
-            (TaskStatus::PassedPipeline, TaskStatus::Integrated) => true,
-            _ => false,
-        };
-
-        if allowed {
-            Ok(self.clone().with_status(next))
-        } else {
-            Err(Error::InvalidTransition {
-                from: self.status.to_string(),
-                to: next.to_string(),
-            })
-        }
+        validate_transition(&self.status, &next)?;
+        Ok(self.clone().with_status(next))
     }
 
     /// Begin a pipeline stage with canonical stage validation.
@@ -356,6 +332,33 @@ fn stage_progresses(from_stage: &str, to_stage: &str) -> Result<()> {
     let from = Stage::parse(from_stage)?;
     let to = Stage::parse(to_stage)?;
     validate_stage_sequence(&[from, to])
+}
+
+fn invalid_transition(from: &TaskStatus, to: &TaskStatus) -> Error {
+    Error::InvalidTransition {
+        from: from.to_string(),
+        to: to.to_string(),
+    }
+}
+
+fn validate_transition(from: &TaskStatus, to: &TaskStatus) -> Result<()> {
+    if from == to {
+        return Ok(());
+    }
+
+    match (from, to) {
+        (TaskStatus::Created, TaskStatus::InProgress { .. })
+        | (TaskStatus::Created, TaskStatus::FailedPipeline { .. }) => Ok(()),
+        (
+            TaskStatus::InProgress { stage: from_stage },
+            TaskStatus::InProgress { stage: to_stage },
+        ) => stage_progresses(from_stage, to_stage).map_err(|_| invalid_transition(from, to)),
+        (TaskStatus::InProgress { .. }, TaskStatus::PassedPipeline)
+        | (TaskStatus::InProgress { .. }, TaskStatus::FailedPipeline { .. })
+        | (TaskStatus::FailedPipeline { .. }, TaskStatus::InProgress { .. })
+        | (TaskStatus::PassedPipeline, TaskStatus::Integrated) => Ok(()),
+        _ => Err(invalid_transition(from, to)),
+    }
 }
 
 #[cfg(test)]
