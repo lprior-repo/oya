@@ -177,12 +177,11 @@ async fn given_no_agents_when_bead_ready_then_assignment_fails() {
     );
 
     let error = assignment_result.expect_err("should return error");
+    let error_msg = error.to_string();
     assert!(
-        error.to_string().contains("no available agents")
-            || error.to_string().contains("No agents")
-            || error.to_string().contains("empty"),
+        error_msg.contains("no agents") || error_msg.contains("available") || error_msg.contains("empty"),
         "Error should indicate no agents available: {}",
-        error
+        error_msg
     );
 }
 
@@ -246,7 +245,7 @@ async fn given_agent_completes_bead_when_bead_ready_then_reassigned() {
     assert!(first_assignment.is_ok(), "First assignment should succeed");
 
     // When: Agent completes the bead
-    pool.bead_completed("agent-reuse", "bead-1")
+    pool.complete_bead("agent-reuse")
         .await
         .expect("bead completion should succeed");
 

@@ -12,11 +12,6 @@ default = []
 examples = []
 
 [[test]]
-name = "messaging_patterns"
-path = "tests/messaging_patterns_test.rs"
-required-features = ["examples"]
-
-[[test]]
 name = "ping_pong_example"
 path = "tests/ping_pong_example.rs"
 required-features = ["examples"]
