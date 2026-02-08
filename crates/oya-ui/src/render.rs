@@ -88,7 +88,6 @@ impl Renderer {
     }
 
     /// Render a single pane with border and content
-    #[allow(clippy::indexing_slicing)]
     fn render_pane(&self, pane: &Pane, content: &str, focused_pane: PaneType) -> String {
         let is_focused = pane.pane_type == focused_pane;
         let mut output = String::new();
@@ -117,15 +116,15 @@ impl Renderer {
             )
             .ok();
 
-            if i < content_lines.len() {
-                let line = content_lines[i];
+            let line = content_lines.get(i);
+            if let Some(line_text) = line {
                 output.push_str("│ ");
-                output.push_str(line);
+                output.push_str(line_text);
                 output.push_str(
                     &" ".repeat(
                         pane.width
                             .saturating_sub(2)
-                            .saturating_sub(line.chars().count()),
+                            .saturating_sub(line_text.chars().count()),
                     ),
                 );
                 output.push('│');
@@ -232,7 +231,7 @@ impl Renderer {
             let line = format!(
                 "{} {:8} {:8} {:9} {}",
                 marker,
-                &bead.id[..bead.id.len().min(8)],
+                truncate_bead_id(&bead.id, 8),
                 priority,
                 bead.state,
                 truncate(&bead.title, 20)
@@ -412,6 +411,16 @@ fn truncate(text: &str, width: usize) -> String {
         format!("{}...", truncated)
     } else {
         "...".to_string()
+    }
+}
+
+/// Truncate bead ID to fit width (no ellipsis for IDs)
+fn truncate_bead_id(text: &str, width: usize) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() <= width {
+        text.to_string()
+    } else {
+        chars.iter().take(width).collect()
     }
 }
 

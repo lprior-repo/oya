@@ -344,29 +344,29 @@ mod tests {
         let layout = Layout::new_3_pane();
         let bead_list = layout.get_pane(PaneType::BeadList);
         assert!(bead_list.is_some());
-        let bead_list = bead_list.unwrap();
-        assert_eq!(bead_list.pane_type, PaneType::BeadList);
+        if let Some(pane) = bead_list {
+            assert_eq!(pane.pane_type, PaneType::BeadList);
+        }
     }
 
     #[test]
     fn test_calculate_for_terminal() {
-        let layout = match Layout::calculate_for_terminal(24, 80) {
-            Ok(l) => l,
-            Err(e) => panic!("Failed to calculate layout: {e}"),
-        };
+        let layout_result = Layout::calculate_for_terminal(24, 80);
+        assert!(layout_result.is_ok());
+        let layout = layout_result.unwrap_or_else(|_| Layout::new_3_pane());
         assert_eq!(layout.panes().len(), 4);
 
-        let bead_list = match layout.get_pane(PaneType::BeadList) {
-            Some(p) => p,
-            None => panic!("BeadList not found"),
-        };
-        assert_eq!(bead_list.width, 32); // 40% of 80
+        let bead_list = layout.get_pane(PaneType::BeadList);
+        assert!(bead_list.is_some());
+        if let Some(pane) = bead_list {
+            assert_eq!(pane.width, 32); // 40% of 80
+        }
 
-        let workflow_graph = match layout.get_pane(PaneType::WorkflowGraph) {
-            Some(p) => p,
-            None => panic!("WorkflowGraph not found"),
-        };
-        assert!(workflow_graph.height > 0);
+        let workflow_graph = layout.get_pane(PaneType::WorkflowGraph);
+        assert!(workflow_graph.is_some());
+        if let Some(pane) = workflow_graph {
+            assert!(pane.height > 0);
+        }
     }
 
     #[test]
@@ -377,10 +377,11 @@ mod tests {
 
     #[test]
     fn test_pane_boundaries() {
-        let pane = match Pane::new(PaneType::BeadList, 5, 10, 15, 30) {
-            Ok(p) => p,
-            Err(e) => panic!("Failed to create pane: {e}"),
-        };
+        let pane_result = Pane::new(PaneType::BeadList, 5, 10, 15, 30);
+        assert!(pane_result.is_ok());
+        let pane = pane_result.unwrap_or_else(|_| {
+            Pane::with_defaults(PaneType::BeadList, 5, 10, 15, 30)
+        });
         assert_eq!(pane.right(), 40);
         assert_eq!(pane.bottom(), 20);
     }
