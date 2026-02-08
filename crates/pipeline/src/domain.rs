@@ -3,7 +3,7 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
-use crate::stages::Stage;
+use crate::stages::{validate_stage_sequence, Stage};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Slug(String);
@@ -158,9 +158,7 @@ impl TaskStatus {
     pub fn in_progress(stage: impl AsRef<str>) -> Result<Self> {
         let trimmed = stage.as_ref().trim();
         if trimmed.is_empty() {
-            return Err(Error::InvalidStage(
-                "stage cannot be empty".to_string(),
-            ));
+            return Err(Error::InvalidStage("stage cannot be empty".to_string()));
         }
 
         Ok(Self::InProgress {
@@ -175,9 +173,7 @@ impl TaskStatus {
     pub fn failed(stage: impl AsRef<str>, reason: impl AsRef<str>) -> Result<Self> {
         let stage_trimmed = stage.as_ref().trim();
         if stage_trimmed.is_empty() {
-            return Err(Error::InvalidStage(
-                "stage cannot be empty".to_string(),
-            ));
+            return Err(Error::InvalidStage("stage cannot be empty".to_string()));
         }
 
         let reason_trimmed = reason.as_ref().trim();
@@ -300,6 +296,10 @@ impl Task {
         let allowed = match (&self.status, &next) {
             (TaskStatus::Created, TaskStatus::InProgress { .. })
             | (TaskStatus::Created, TaskStatus::FailedPipeline { .. }) => true,
+            (
+                TaskStatus::InProgress { stage: from_stage },
+                TaskStatus::InProgress { stage: to_stage },
+            ) => stage_progresses(from_stage, to_stage).is_ok(),
             (TaskStatus::InProgress { .. }, TaskStatus::PassedPipeline)
             | (TaskStatus::InProgress { .. }, TaskStatus::FailedPipeline { .. }) => true,
             (TaskStatus::FailedPipeline { .. }, TaskStatus::InProgress { .. }) => true,
@@ -352,6 +352,12 @@ impl Task {
     }
 }
 
+fn stage_progresses(from_stage: &str, to_stage: &str) -> Result<()> {
+    let from = Stage::parse(from_stage)?;
+    let to = Stage::parse(to_stage)?;
+    validate_stage_sequence(&[from, to])
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
@@ -381,7 +387,7 @@ mod tests {
     #[test]
     fn language_detection_prefers_single_marker() {
         let result = Language::detect_from_files(false, false, true, false, false);
-        assert_eq!(result, Ok(Language::Rust));
+        assert!(matches!(result, Ok(Language::Rust)));
     }
 
     #[test]
@@ -413,8 +419,8 @@ mod tests {
 
     #[test]
     fn failed_accepts_valid_inputs() {
-        let status = TaskStatus::failed("lint", "error")
-            .expect("failure status should be constructed");
+        let status =
+            TaskStatus::failed("lint", "error").expect("failure status should be constructed");
         assert!(status.is_failed());
         assert_eq!(status.to_filter_status(), "failed");
     }
@@ -453,6 +459,36 @@ mod tests {
             .expect("retry should be allowed");
 
         assert!(matches!(retried.status, TaskStatus::InProgress { .. }));
+    }
+
+    #[test]
+    fn task_transition_allows_stage_to_stage_progression() {
+        let slug = Slug::new("task-5").expect("slug should parse");
+        let task = Task::new(slug, Language::Rust)
+            .start_stage(Stage::Implement)
+            .expect("stage should start");
+
+        let advanced = task
+            .start_stage(Stage::UnitTest)
+            .expect("transition to next stage should be allowed");
+
+        assert_eq!(
+            advanced.status,
+            TaskStatus::InProgress {
+                stage: Stage::UnitTest.as_str().to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn task_transition_rejects_regressing_stage() {
+        let slug = Slug::new("task-6").expect("slug should parse");
+        let task = Task::new(slug, Language::Rust)
+            .start_stage(Stage::UnitTest)
+            .expect("stage should start");
+
+        let result = task.start_stage(Stage::Implement);
+        assert!(matches!(result, Err(Error::InvalidTransition { .. })));
     }
 
     #[test]
