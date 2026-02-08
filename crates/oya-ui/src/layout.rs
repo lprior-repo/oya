@@ -204,7 +204,7 @@ impl Layout {
     ///
     /// # Errors
     ///
-    /// Returns an error if the terminal is too small
+    /// Returns an error if the terminal is too small or pane creation fails
     pub fn calculate_for_terminal(rows: usize, cols: usize) -> LayoutResult<Self> {
         if rows < 20 || cols < 40 {
             return Err(LayoutError::InvalidDimensions(
@@ -228,14 +228,27 @@ impl Layout {
             .saturating_sub(bead_detail_height)
             .saturating_sub(2);
 
+        // Validate calculated dimensions before creating panes
+        let bead_list_height = top_height.saturating_sub(1);
+        if bead_list_height == 0 || left_width == 0 {
+            return Err(LayoutError::CalculationError(
+                "Calculated bead list dimensions are invalid".to_string(),
+            ));
+        }
+
         let bead_list = Pane::new(
             PaneType::BeadList,
             1,
             1,
-            top_height.saturating_sub(1),
+            bead_list_height,
             left_width,
-        )
-        .expect("Failed to create BeadList pane");
+        )?;
+
+        if bead_detail_height == 0 || right_width == 0 {
+            return Err(LayoutError::CalculationError(
+                "Calculated bead detail dimensions are invalid".to_string(),
+            ));
+        }
 
         let bead_detail = Pane::new(
             PaneType::BeadDetail,
@@ -243,8 +256,13 @@ impl Layout {
             left_width.saturating_add(3),
             bead_detail_height,
             right_width,
-        )
-        .expect("Failed to create BeadDetail pane");
+        )?;
+
+        if pipeline_height == 0 {
+            return Err(LayoutError::CalculationError(
+                "Calculated pipeline view dimensions are invalid".to_string(),
+            ));
+        }
 
         let pipeline_view = Pane::new(
             PaneType::PipelineView,
@@ -252,8 +270,13 @@ impl Layout {
             left_width.saturating_add(3),
             pipeline_height,
             right_width,
-        )
-        .expect("Failed to create PipelineView pane");
+        )?;
+
+        if bottom_height == 0 {
+            return Err(LayoutError::CalculationError(
+                "Calculated workflow graph dimensions are invalid".to_string(),
+            ));
+        }
 
         let workflow_graph = Pane::new(
             PaneType::WorkflowGraph,
@@ -261,8 +284,7 @@ impl Layout {
             1,
             bottom_height,
             cols,
-        )
-        .expect("Failed to create WorkflowGraph pane");
+        )?;
 
         Ok(Self {
             panes: vec![bead_list, bead_detail, pipeline_view, workflow_graph],
