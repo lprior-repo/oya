@@ -95,10 +95,18 @@ impl TimerConfig {
                 "Interval must be at least 100ms".to_string(),
             ));
         }
-        Ok(Self {
+        Ok(Self::unchecked(interval_ms))
+    }
+
+    /// Create a timer config without validation (internal use only)
+    ///
+    /// # Safety
+    /// Caller must ensure interval_ms >= 100
+    fn unchecked(interval_ms: u64) -> Self {
+        Self {
             interval_ms,
             max_ticks: None,
-        })
+        }
     }
 
     /// Set the maximum number of ticks before auto-stop
@@ -273,11 +281,9 @@ impl RefreshTimer {
 
 impl Default for RefreshTimer {
     fn default() -> Self {
-        // Fallback if 2000ms is invalid (should never happen)
-        Self::new(TimerConfig::new(2000).unwrap_or(TimerConfig {
-            interval_ms: 2000,
-            max_ticks: None,
-        }))
+        // 2000ms is always valid (minimum is 100ms)
+        // Using unchecked constructor is safe for this hardcoded value
+        Self::new(TimerConfig::unchecked(2000))
     }
 }
 

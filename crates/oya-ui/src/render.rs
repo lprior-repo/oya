@@ -425,6 +425,7 @@ fn truncate_bead_id(text: &str, width: usize) -> String {
 }
 
 /// Wrap text to fit width
+#[allow(dead_code)]
 fn textwrap(text: &str, width: usize) -> Vec<String> {
     let mut lines = Vec::new();
     let mut current_line = String::new();
