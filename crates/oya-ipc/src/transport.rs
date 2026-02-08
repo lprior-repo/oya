@@ -267,6 +267,7 @@ pub struct DuplexPipe {
     writer_closed: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
+#[cfg(test)]
 impl DuplexPipe {
     fn new() -> Self {
         Self {
