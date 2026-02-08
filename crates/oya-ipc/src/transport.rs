@@ -453,12 +453,10 @@ mod tests {
 
     #[test]
     fn test_recv_with_zero_length_returns_error() {
-        let (mut _client, mut server) = transport_pair();
-
         // Write invalid length prefix = 0
-        let (mut writer, mut reader) = duplex_pair();
-        writer.write_all(&0u32.to_be_bytes()).unwrap();
-        writer.flush().unwrap();
+        let (mut writer, reader) = duplex_pair();
+        writer.write_all(&0u32.to_be_bytes()).expect("write should succeed");
+        writer.flush().expect("flush should succeed");
 
         let mut transport = IpcTransport::new(reader, writer);
 
