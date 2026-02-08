@@ -24,6 +24,6 @@ pub mod plugin;
 pub mod render;
 
 // Re-exports for convenience
-pub use plugin::{OyaPlugin, PluginInfo, PluginEvent, Size};
 pub use layout::{Layout, Pane, PaneType};
+pub use plugin::{OyaPlugin, PluginEvent, PluginInfo, Size};
 pub use render::Renderer;

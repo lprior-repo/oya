@@ -57,9 +57,14 @@
 #![deny(clippy::panic)]
 
 mod error;
+mod messages;
 mod transport;
 
 pub use error::{TransportError, TransportResult};
+pub use messages::{
+    AlertLevel, BeadDetail, BeadSummary, ComponentHealth, GraphEdge, GraphNode, GuestMessage,
+    HealthStatus, HostMessage,
+};
 pub use transport::IpcTransport;
 
 /// Maximum allowed payload size in bytes (1MB)

@@ -100,19 +100,34 @@ impl WebClientError {
                 format!("Network error: Unable to reach server. {}", message)
             }
             Self::Timeout { seconds } => {
-                format!("Request timed out after {} seconds. Please try again.", seconds)
+                format!(
+                    "Request timed out after {} seconds. Please try again.",
+                    seconds
+                )
             }
             Self::Http { status, message } => {
                 if *status >= 500 {
-                    format!("Server error ({}): The server is having problems. {}", status, message)
+                    format!(
+                        "Server error ({}): The server is having problems. {}",
+                        status, message
+                    )
                 } else if *status == 404 {
-                    format!("Not found: The requested resource was not found. {}", message)
+                    format!(
+                        "Not found: The requested resource was not found. {}",
+                        message
+                    )
                 } else if *status == 401 {
                     format!("Unauthorized: Authentication required. {}", message)
                 } else if *status == 403 {
-                    format!("Forbidden: You don't have permission to access this resource. {}", message)
+                    format!(
+                        "Forbidden: You don't have permission to access this resource. {}",
+                        message
+                    )
                 } else if *status == 429 {
-                    format!("Too many requests: Please wait and try again later. {}", message)
+                    format!(
+                        "Too many requests: Please wait and try again later. {}",
+                        message
+                    )
                 } else {
                     format!("HTTP error ({}): {}", status, message)
                 }
@@ -121,7 +136,10 @@ impl WebClientError {
                 format!("Invalid response from server: {}", message)
             }
             Self::RateLimited { seconds } => {
-                format!("Rate limited. Please wait {} seconds and try again.", seconds)
+                format!(
+                    "Rate limited. Please wait {} seconds and try again.",
+                    seconds
+                )
             }
             Self::ServiceUnavailable => {
                 "Service temporarily unavailable. Please try again later.".to_string()
@@ -130,10 +148,16 @@ impl WebClientError {
                 format!("Connection refused. Is the server running at {}?", address)
             }
             Self::DnsFailed { host } => {
-                format!("Cannot resolve server address: {}. Check your network connection.", host)
+                format!(
+                    "Cannot resolve server address: {}. Check your network connection.",
+                    host
+                )
             }
             Self::Tls { message } => {
-                format!("Secure connection failed: {}. Check your system clock.", message)
+                format!(
+                    "Secure connection failed: {}. Check your system clock.",
+                    message
+                )
             }
         }
     }
@@ -338,10 +362,7 @@ impl WebClient {
                         .headers()
                         .iter()
                         .map(|(k, v)| {
-                            (
-                                k.as_str().to_string(),
-                                v.to_str().unwrap_or("").to_string(),
-                            )
+                            (k.as_str().to_string(), v.to_str().unwrap_or("").to_string())
                         })
                         .collect();
 
@@ -646,9 +667,10 @@ mod tests {
 
     #[test]
     fn test_http_response_creation() {
-        let headers = BTreeMap::from_iter(vec![
-            ("content-type".to_string(), "application/json".to_string()),
-        ]);
+        let headers = BTreeMap::from_iter(vec![(
+            "content-type".to_string(),
+            "application/json".to_string(),
+        )]);
 
         let response = HttpResponse::new(
             "test body",
@@ -684,40 +706,19 @@ mod tests {
 
     #[test]
     fn test_http_response_is_success() {
-        let success_2xx = HttpResponse::new(
-            "ok",
-            200,
-            BTreeMap::new(),
-            RequestId::new(),
-            100,
-        );
+        let success_2xx = HttpResponse::new("ok", 200, BTreeMap::new(), RequestId::new(), 100);
         assert!(success_2xx.is_success());
 
-        let redirect_3xx = HttpResponse::new(
-            "redirect",
-            301,
-            BTreeMap::new(),
-            RequestId::new(),
-            100,
-        );
+        let redirect_3xx =
+            HttpResponse::new("redirect", 301, BTreeMap::new(), RequestId::new(), 100);
         assert!(!redirect_3xx.is_success());
 
-        let client_error_4xx = HttpResponse::new(
-            "not found",
-            404,
-            BTreeMap::new(),
-            RequestId::new(),
-            100,
-        );
+        let client_error_4xx =
+            HttpResponse::new("not found", 404, BTreeMap::new(), RequestId::new(), 100);
         assert!(!client_error_4xx.is_success());
 
-        let server_error_5xx = HttpResponse::new(
-            "server error",
-            500,
-            BTreeMap::new(),
-            RequestId::new(),
-            100,
-        );
+        let server_error_5xx =
+            HttpResponse::new("server error", 500, BTreeMap::new(), RequestId::new(), 100);
         assert!(!server_error_5xx.is_success());
     }
 
@@ -740,8 +741,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_web_client_health_check_network_error()
-        -> Result<(), Box<dyn std::error::Error>>
+    async fn test_web_client_health_check_network_error() -> Result<(), Box<dyn std::error::Error>>
     {
         let client = WebClient::with_base_url("http://invalid.example.test:99999".to_string())?;
         let result = client.health_check().await;
@@ -753,7 +753,10 @@ mod tests {
         } else if let Err(WebClientError::DnsFailed { .. }) = result {
             // Also possible
         } else {
-            panic!("Expected ConnectionRefused or DnsFailed error, got {:?}", result);
+            panic!(
+                "Expected ConnectionRefused or DnsFailed error, got {:?}",
+                result
+            );
         }
 
         Ok(())

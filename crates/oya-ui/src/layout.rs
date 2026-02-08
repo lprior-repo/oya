@@ -145,8 +145,8 @@ impl Layout {
     /// A new layout with default 3-pane configuration
     #[must_use]
     pub fn new_3_pane() -> Self {
-        let bead_list = Pane::new(PaneType::BeadList, 1, 1, 15, 32)
-            .expect("Failed to create BeadList pane");
+        let bead_list =
+            Pane::new(PaneType::BeadList, 1, 1, 15, 32).expect("Failed to create BeadList pane");
 
         let bead_detail = Pane::new(PaneType::BeadDetail, 1, 34, 8, 45)
             .expect("Failed to create BeadDetail pane");
@@ -214,10 +214,18 @@ impl Layout {
 
         // Split right top into bead detail (60%) and pipeline view (40%)
         let bead_detail_height = top_height.saturating_mul(60).saturating_div(100);
-        let pipeline_height = top_height.saturating_sub(bead_detail_height).saturating_sub(2);
+        let pipeline_height = top_height
+            .saturating_sub(bead_detail_height)
+            .saturating_sub(2);
 
-        let bead_list = Pane::new(PaneType::BeadList, 1, 1, top_height.saturating_sub(1), left_width)
-            .expect("Failed to create BeadList pane");
+        let bead_list = Pane::new(
+            PaneType::BeadList,
+            1,
+            1,
+            top_height.saturating_sub(1),
+            left_width,
+        )
+        .expect("Failed to create BeadList pane");
 
         let bead_detail = Pane::new(
             PaneType::BeadDetail,
@@ -301,10 +309,14 @@ mod tests {
         let layout = Layout::calculate_for_terminal(24, 80).expect("Failed to calculate layout");
         assert_eq!(layout.panes.len(), 4);
 
-        let bead_list = layout.get_pane(PaneType::BeadList).expect("BeadList not found");
+        let bead_list = layout
+            .get_pane(PaneType::BeadList)
+            .expect("BeadList not found");
         assert_eq!(bead_list.width, 32); // 40% of 80
 
-        let workflow_graph = layout.get_pane(PaneType::WorkflowGraph).expect("WorkflowGraph not found");
+        let workflow_graph = layout
+            .get_pane(PaneType::WorkflowGraph)
+            .expect("WorkflowGraph not found");
         assert!(workflow_graph.height > 0);
     }
 

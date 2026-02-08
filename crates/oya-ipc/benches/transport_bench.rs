@@ -9,7 +9,7 @@
 #![allow(clippy::unwrap_used)]
 #![allow(clippy::expect_used)]
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use oya_ipc::IpcTransport;
 use serde::{Deserialize, Serialize};
 
@@ -28,9 +28,7 @@ fn bench_send_1kb_message(c: &mut Criterion) {
     let (mut client, _server) = IpcTransport::transport_pair();
     let msg = create_message_of_size(1024);
 
-    c.bench_function("send_1kb", |b| {
-        b.iter(|| client.send(black_box(&msg)))
-    });
+    c.bench_function("send_1kb", |b| b.iter(|| client.send(black_box(&msg))));
 }
 
 fn bench_recv_1kb_message(c: &mut Criterion) {
@@ -68,9 +66,7 @@ fn bench_send_100kb_message(c: &mut Criterion) {
     let (mut client, _server) = IpcTransport::transport_pair();
     let msg = create_message_of_size(100_000);
 
-    c.bench_function("send_100kb", |b| {
-        b.iter(|| client.send(black_box(&msg)))
-    });
+    c.bench_function("send_100kb", |b| b.iter(|| client.send(black_box(&msg))));
 }
 
 fn bench_send_various_sizes(c: &mut Criterion) {

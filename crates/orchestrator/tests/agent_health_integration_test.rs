@@ -17,7 +17,9 @@
 #![allow(clippy::expect_used)]
 #![allow(clippy::panic)]
 
-use orchestrator::agent_swarm::{AgentHandle, AgentPool, PoolConfig, AgentStateLegacy as AgentState};
+use orchestrator::agent_swarm::{
+    AgentHandle, AgentPool, AgentStateLegacy as AgentState, PoolConfig,
+};
 use std::time::Duration;
 
 /// BDD Test: Unhealthy agent is not assigned beads
@@ -35,9 +37,15 @@ async fn given_unhealthy_agent_when_beads_ready_then_not_assigned() {
     let agent_2 = AgentHandle::new("agent-2").with_max_health_failures(2);
     let agent_3 = AgentHandle::new("agent-3").with_max_health_failures(2);
 
-    pool.register_agent(agent_1).await.expect("agent-1 registration");
-    pool.register_agent(agent_2).await.expect("agent-2 registration");
-    pool.register_agent(agent_3).await.expect("agent-3 registration");
+    pool.register_agent(agent_1)
+        .await
+        .expect("agent-1 registration");
+    pool.register_agent(agent_2)
+        .await
+        .expect("agent-2 registration");
+    pool.register_agent(agent_3)
+        .await
+        .expect("agent-3 registration");
 
     // Given: agent-2 becomes unhealthy due to missed heartbeats
     {
@@ -136,8 +144,12 @@ async fn given_all_unhealthy_when_bead_ready_then_no_assignment() {
     let agent_1 = AgentHandle::new("agent-1").with_max_health_failures(1);
     let agent_2 = AgentHandle::new("agent-2").with_max_health_failures(1);
 
-    pool.register_agent(agent_1).await.expect("agent-1 registration");
-    pool.register_agent(agent_2).await.expect("agent-2 registration");
+    pool.register_agent(agent_1)
+        .await
+        .expect("agent-1 registration");
+    pool.register_agent(agent_2)
+        .await
+        .expect("agent-2 registration");
 
     // Given: Both agents become unhealthy
     for agent_id in &["agent-1", "agent-2"] {
@@ -165,7 +177,10 @@ async fn given_all_unhealthy_when_bead_ready_then_no_assignment() {
     let result = pool.assign_bead("bead-1").await;
 
     // Then: No agent is assigned
-    assert!(result.is_err(), "Assignment should fail when all agents are unhealthy");
+    assert!(
+        result.is_err(),
+        "Assignment should fail when all agents are unhealthy"
+    );
 }
 
 /// BDD Test: Unhealthy agent recovers and can receive assignments
@@ -181,8 +196,12 @@ async fn given_recovered_agent_when_beads_ready_then_assigned() {
     let agent_1 = AgentHandle::new("agent-1").with_max_health_failures(2);
     let agent_2 = AgentHandle::new("agent-2").with_max_health_failures(2);
 
-    pool.register_agent(agent_1).await.expect("agent-1 registration");
-    pool.register_agent(agent_2).await.expect("agent-2 registration");
+    pool.register_agent(agent_1)
+        .await
+        .expect("agent-1 registration");
+    pool.register_agent(agent_2)
+        .await
+        .expect("agent-2 registration");
 
     // Make agent-1 unhealthy
     {
@@ -243,8 +262,12 @@ async fn given_working_becomes_unhealthy_when_new_bead_then_not_assigned() {
     let agent_1 = AgentHandle::new("agent-1").with_max_health_failures(2);
     let agent_2 = AgentHandle::new("agent-2").with_max_health_failures(2);
 
-    pool.register_agent(agent_1).await.expect("agent-1 registration");
-    pool.register_agent(agent_2).await.expect("agent-2 registration");
+    pool.register_agent(agent_1)
+        .await
+        .expect("agent-1 registration");
+    pool.register_agent(agent_2)
+        .await
+        .expect("agent-2 registration");
 
     // Assign bead-1 to agent-1 (making it Working)
     pool.assign_bead_to_agent("bead-1", "agent-1")
@@ -306,11 +329,7 @@ async fn test_heartbeat_timeout_detection() {
     let agent_state = pool.get_agent("agent-timeout-test").await;
     let agent = agent_state.expect("agent exists");
 
-    assert_eq!(
-        agent.state(),
-        AgentState::Idle,
-        "New agent should be Idle"
-    );
+    assert_eq!(agent.state(), AgentState::Idle, "New agent should be Idle");
 
     // Simulate heartbeat timeout
     tokio::time::sleep(Duration::from_millis(600)).await;

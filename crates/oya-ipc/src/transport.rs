@@ -8,9 +8,11 @@
 //! - `!Send + !Sync` (must be externally synchronized)
 //! - Use within actor context for safe concurrent access
 
-use crate::{LENGTH_PREFIX_SIZE, MAX_FRAME_SIZE, MAX_PAYLOAD_SIZE, TransportError, TransportResult};
-use serde::{Deserialize, Serialize};
-use std::io::{BufReader, BufWriter, Read, Write};
+use crate::{
+    LENGTH_PREFIX_SIZE, MAX_FRAME_SIZE, MAX_PAYLOAD_SIZE, TransportError, TransportResult,
+};
+use serde::{de::DeserializeOwned, Serialize};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 
 /// Transport layer for length-prefixed bincode messages.
 ///
@@ -70,17 +72,17 @@ impl<R: Read, W: Write> IpcTransport<R, W> {
     /// # Performance
     /// - Must complete <2µs for 1KB message
     /// - Must complete <20µs for 100KB message
-    pub fn send<T: Serialize + ?Sized>(
-        &mut self,
-        msg: &T,
-    ) -> TransportResult<()> {
+    pub fn send<T: Serialize + ?Sized>(&mut self, msg: &T) -> TransportResult<()> {
         // Step 1: Serialize message to buffer
-        let payload = bincode::encode_to_vec(msg, bincode::config::standard())
+        let payload = bincode::serde::encode_to_vec(msg, bincode::config::standard())
             .map_err(|e| TransportError::serialization_failed(e.to_string()))?;
 
         // Step 2: Check size ≤ 1MB
         if payload.len() > MAX_PAYLOAD_SIZE {
-            return Err(TransportError::message_too_large(payload.len(), MAX_PAYLOAD_SIZE));
+            return Err(TransportError::message_too_large(
+                payload.len(),
+                MAX_PAYLOAD_SIZE,
+            ));
         }
 
         // Step 3: Write length prefix (4 bytes, big-endian)
@@ -150,24 +152,20 @@ impl<R: Read, W: Write> IpcTransport<R, W> {
 
         // Step 3: Read N bytes (where N = length prefix)
         let mut payload_buffer = vec![0u8; payload_length];
-        self.reader
-            .read_exact(&mut payload_buffer)
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::UnexpectedEof {
-                    TransportError::unexpected_eof(
-                        LENGTH_PREFIX_SIZE,
-                        LENGTH_PREFIX_SIZE + payload_length,
-                    )
-                } else {
-                    TransportError::read_failed(&e)
-                }
-            })?;
+        self.reader.read_exact(&mut payload_buffer).map_err(|e| {
+            if e.kind() == std::io::ErrorKind::UnexpectedEof {
+                TransportError::unexpected_eof(
+                    LENGTH_PREFIX_SIZE,
+                    LENGTH_PREFIX_SIZE + payload_length,
+                )
+            } else {
+                TransportError::read_failed(&e)
+            }
+        })?;
 
         // Step 4: Deserialize payload
-        let result = bincode::decode_from_slice(&payload_buffer, bincode::config::standard())
-            .map_err(|e| {
-                TransportError::deserialization_failed(e.to_string(), payload_length)
-            })?;
+        let result = bincode::serde::decode_from_slice(&payload_buffer, bincode::config::standard())
+            .map_err(|e| TransportError::deserialization_failed(e.to_string(), payload_length))?;
 
         Ok(result.0)
     }
@@ -243,12 +241,15 @@ impl<R: Read, W: Write> IpcTransport<R, W> {
 /// # Ok(())
 /// # }
 /// ```
-pub fn transport_pair() -> (IpcTransport<DuplexReader, DuplexWriter>, IpcTransport<DuplexReader, DuplexWriter>) {
+pub fn transport_pair() -> (
+    IpcTransport<DuplexReader, DuplexWriter>,
+    IpcTransport<DuplexReader, DuplexWriter>,
+) {
     let (client_to_server, server_to_client) = duplex_pair();
     let (server_reader, client_writer) = duplex_pair();
 
     let client = IpcTransport::new(server_reader, client_to_server);
-    let server = IpcTransport::new(client_reader, server_to_client);
+    let server = IpcTransport::new(server_to_client, client_writer);
 
     (client, server)
 }
@@ -304,13 +305,19 @@ pub fn duplex_pair() -> (DuplexWriter, DuplexReader) {
 
 impl Read for DuplexReader {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        if self.pipe.reader_closed.load(std::sync::atomic::Ordering::Acquire) {
+        if self
+            .pipe
+            .reader_closed
+            .load(std::sync::atomic::Ordering::Acquire)
+        {
             return Ok(0);
         }
 
-        let mut buffer = self.pipe.buffer.lock().map_err(|_| {
-            std::io::Error::new(std::io::ErrorKind::Other, "lock poisoned")
-        })?;
+        let mut buffer = self
+            .pipe
+            .buffer
+            .lock()
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "lock poisoned"))?;
 
         if self.position >= buffer.len() {
             return Ok(0); // EOF
@@ -328,16 +335,22 @@ impl Read for DuplexReader {
 
 impl Write for DuplexWriter {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        if self.pipe.writer_closed.load(std::sync::atomic::Ordering::Acquire) {
+        if self
+            .pipe
+            .writer_closed
+            .load(std::sync::atomic::Ordering::Acquire)
+        {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::BrokenPipe,
                 "writer closed",
             ));
         }
 
-        let mut buffer = self.pipe.buffer.lock().map_err(|_| {
-            std::io::Error::new(std::io::ErrorKind::Other, "lock poisoned")
-        })?;
+        let mut buffer = self
+            .pipe
+            .buffer
+            .lock()
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "lock poisoned"))?;
 
         buffer.extend_from_slice(buf);
         Ok(buf.len())
@@ -397,9 +410,16 @@ mod tests {
         let large_msg: String = "x".repeat(1_048_577);
 
         let result = client.send(&large_msg);
-        assert!(matches!(result, Err(TransportError::MessageTooLarge { .. })));
+        assert!(matches!(
+            result,
+            Err(TransportError::MessageTooLarge { .. })
+        ));
 
-        if let Err(TransportError::MessageTooLarge { actual_size, max_size }) = result {
+        if let Err(TransportError::MessageTooLarge {
+            actual_size,
+            max_size,
+        }) = result
+        {
             assert!(actual_size > 1_048_576);
             assert_eq!(max_size, 1_048_576);
         }
