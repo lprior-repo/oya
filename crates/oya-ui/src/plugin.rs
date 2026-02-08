@@ -326,11 +326,7 @@ impl OyaPlugin {
         };
 
         // Wrap around
-        self.selected_index = if new_index >= len {
-            0
-        } else {
-            new_index
-        };
+        self.selected_index = if new_index >= len { 0 } else { new_index };
 
         Ok(())
     }

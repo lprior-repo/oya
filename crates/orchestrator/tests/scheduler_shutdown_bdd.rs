@@ -25,19 +25,13 @@ fn unique_scheduler_name() -> String {
 }
 
 /// Helper to spawn a scheduler with shutdown coordinator for testing.
-async fn setup_scheduler_with_shutdown() -> Result<
-    (
-        ActorRef<SchedulerMessage>,
-        tokio::task::JoinHandle<()>,
-    ),
-    Box<dyn std::error::Error>,
-> {
+async fn setup_scheduler_with_shutdown()
+-> Result<(ActorRef<SchedulerMessage>, tokio::task::JoinHandle<()>), Box<dyn std::error::Error>> {
     let coordinator = std::sync::Arc::new(ShutdownCoordinator::new());
     let args = SchedulerArguments::new().with_shutdown_coordinator(coordinator.clone());
     let name = unique_scheduler_name();
 
-    let (scheduler, handle) =
-        ractor::Actor::spawn(Some(name), SchedulerActorDef, args).await?;
+    let (scheduler, handle) = ractor::Actor::spawn(Some(name), SchedulerActorDef, args).await?;
 
     // Wait for actor to be fully initialized
     tokio::time::sleep(Duration::from_millis(50)).await;
@@ -46,8 +40,8 @@ async fn setup_scheduler_with_shutdown() -> Result<
 }
 
 #[tokio::test]
-async fn given_scheduler_when_shutdown_signal_then_graceful_stop(
-) -> Result<(), Box<dyn std::error::Error>> {
+async fn given_scheduler_when_shutdown_signal_then_graceful_stop()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A running scheduler actor with shutdown coordinator
     let (scheduler, actor_handle) = setup_scheduler_with_shutdown().await?;
 
@@ -105,8 +99,8 @@ async fn given_scheduler_when_shutdown_signal_then_graceful_stop(
 }
 
 #[tokio::test]
-async fn given_scheduler_with_coordinator_when_sigterm_then_checkpoint_saved(
-) -> Result<(), Box<dyn std::error::Error>> {
+async fn given_scheduler_with_coordinator_when_sigterm_then_checkpoint_saved()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A scheduler with shutdown coordinator
     let coordinator = std::sync::Arc::new(ShutdownCoordinator::new());
     let args = SchedulerArguments::new().with_shutdown_coordinator(coordinator.clone());
@@ -159,8 +153,8 @@ async fn given_scheduler_with_coordinator_when_sigterm_then_checkpoint_saved(
 }
 
 #[tokio::test]
-async fn given_scheduler_when_multiple_shutdown_signals_then_first_wins(
-) -> Result<(), Box<dyn std::error::Error>> {
+async fn given_scheduler_when_multiple_shutdown_signals_then_first_wins()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A scheduler with shutdown coordinator
     let coordinator = std::sync::Arc::new(ShutdownCoordinator::new());
     let args = SchedulerArguments::new().with_shutdown_coordinator(coordinator.clone());
@@ -172,12 +166,8 @@ async fn given_scheduler_when_multiple_shutdown_signals_then_first_wins(
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     // When: Multiple shutdown signals are sent rapidly
-    let _ = coordinator
-        .initiate_shutdown(ShutdownSignal::Sigterm)
-        .await;
-    let _ = coordinator
-        .initiate_shutdown(ShutdownSignal::Sigint)
-        .await;
+    let _ = coordinator.initiate_shutdown(ShutdownSignal::Sigterm).await;
+    let _ = coordinator.initiate_shutdown(ShutdownSignal::Sigint).await;
 
     let _ = scheduler.send_message(SchedulerMessage::Shutdown);
     let _ = scheduler.send_message(SchedulerMessage::Shutdown);
@@ -194,8 +184,8 @@ async fn given_scheduler_when_multiple_shutdown_signals_then_first_wins(
 }
 
 #[tokio::test]
-async fn given_scheduler_when_shutdown_then_post_stop_called(
-) -> Result<(), Box<dyn std::error::Error>> {
+async fn given_scheduler_when_shutdown_then_post_stop_called()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: A scheduler with shutdown coordinator
     let coordinator = std::sync::Arc::new(ShutdownCoordinator::new());
     let args = SchedulerArguments::new().with_shutdown_coordinator(coordinator.clone());

@@ -9,8 +9,7 @@
 
 use crate::components::style;
 use crate::layout::{Layout, Pane, PaneType};
-use oya_ipc::BeadDetail;
-use oya_ipc::BeadSummary;
+use crate::plugin::SampleBead;
 use std::fmt::Write;
 
 /// Terminal renderer for OYA UI
@@ -42,7 +41,7 @@ impl Renderer {
     ///
     /// * `layout` - Layout configuration
     /// * `beads` - List of beads to display
-    /// * `selected_bead` - Details of selected bead (if any)
+    /// * `selected_index` - Index of selected bead
     /// * `focused_pane` - Currently focused pane type
     ///
     /// # Returns
@@ -52,8 +51,8 @@ impl Renderer {
     pub fn render_layout(
         &self,
         layout: &Layout,
-        beads: &[BeadSummary],
-        selected_bead: Option<&BeadDetail>,
+        beads: &[SampleBead],
+        selected_index: usize,
         focused_pane: PaneType,
     ) -> String {
         let mut output = String::new();
@@ -64,10 +63,12 @@ impl Renderer {
         // Render each pane
         for pane in layout.panes() {
             let content = match pane.pane_type {
-                PaneType::BeadList => self.render_bead_list(pane, beads, focused_pane),
-                PaneType::BeadDetail => self.render_bead_detail(pane, selected_bead, focused_pane),
+                PaneType::BeadList => self.render_bead_list(pane, beads, selected_index, focused_pane),
+                PaneType::BeadDetail => {
+                    self.render_bead_detail(pane, beads, selected_index, focused_pane)
+                }
                 PaneType::PipelineView => {
-                    self.render_pipeline_view(pane, selected_bead, focused_pane)
+                    self.render_pipeline_view(pane, beads, selected_index, focused_pane)
                 }
                 PaneType::WorkflowGraph => self.render_workflow_graph(pane, focused_pane),
             };
@@ -105,25 +106,18 @@ impl Renderer {
         let content_height = pane.height.saturating_sub(2); // Account for top and bottom borders
 
         for i in 0..content_height {
-            write!(
-                output,
-                "\x1b[{};{}H",
-                pane.row.saturating_add(1).saturating_add(i),
-                pane.col
-            )
-            .ok();
+            write!(output, "\x1b[{};{}H", pane.row.saturating_add(1).saturating_add(i), pane.col)
+                .ok();
 
             if i < content_lines.len() {
                 let line = content_lines[i];
                 output.push_str("│ ");
                 output.push_str(line);
-                output.push_str(
-                    &" ".repeat(
-                        pane.width
-                            .saturating_sub(2)
-                            .saturating_sub(line.chars().count()),
-                    ),
-                );
+                output.push_str(&" ".repeat(
+                    pane.width
+                        .saturating_sub(2)
+                        .saturating_sub(line.chars().count()),
+                ));
                 output.push('│');
             } else {
                 output.push('│');
@@ -155,11 +149,15 @@ impl Renderer {
 
         if title_len <= available_width {
             output.push_str(title);
-            output.push_str(&"─".repeat(width.saturating_sub(2).saturating_sub(title_len)));
+            output.push_str(&"─".repeat(
+                width.saturating_sub(2).saturating_sub(title_len),
+            ));
         } else {
             let truncated: String = title.chars().take(available_width).collect();
             output.push_str(&truncated);
-            output.push_str(&"─".repeat(width.saturating_sub(2).saturating_sub(available_width)));
+            output.push_str(&"─".repeat(
+                width.saturating_sub(2).saturating_sub(available_width),
+            ));
         }
 
         output.push('┐');
@@ -179,7 +177,8 @@ impl Renderer {
     fn render_bead_list(
         &self,
         pane: &Pane,
-        beads: &[BeadSummary],
+        beads: &[SampleBead],
+        selected_index: usize,
         focused_pane: PaneType,
     ) -> String {
         let is_focused = pane.pane_type == focused_pane;
@@ -222,9 +221,11 @@ impl Renderer {
                 _ => "P?",
             };
 
+            let marker = if i == selected_index { "→" } else { " " };
+
             let line = format!(
-                "{:2} {:8} {:8} {:9} {}",
-                i + 1,
+                "{} {:8} {:8} {:9} {}",
+                marker,
                 &bead.id[..bead.id.len().min(8)],
                 priority,
                 bead.state,
@@ -246,13 +247,14 @@ impl Renderer {
     fn render_bead_detail(
         &self,
         pane: &Pane,
-        selected_bead: Option<&BeadDetail>,
+        beads: &[SampleBead],
+        selected_index: usize,
         focused_pane: PaneType,
     ) -> String {
         let is_focused = pane.pane_type == focused_pane;
         let mut content = String::new();
 
-        let bead = match selected_bead {
+        let bead = match beads.get(selected_index) {
             Some(b) => b,
             None => {
                 content.push_str("No bead selected.");
@@ -271,27 +273,13 @@ impl Renderer {
 
         // Details
         content.push_str(&format!("ID:          {}\n", bead.id));
-        content.push_str(&format!("Type:        {}\n", bead.issue_type));
         content.push_str(&format!("Priority:    P{}\n", bead.priority));
         content.push_str(&format!("State:       {}\n", bead.state));
-        content.push_str(&format!("Workflow:    {}\n", bead.workflow_id));
         content.push('\n');
 
-        // Description
-        content.push_str("Description:\n");
-        for line in textwrap(&bead.description, pane.width.saturating_sub(4)) {
-            content.push_str(&line);
-            content.push('\n');
-        }
-        content.push('\n');
-
-        // Labels
-        if !bead.labels.is_empty() {
-            content.push_str("Labels:\n");
-            for label in &bead.labels {
-                content.push_str(&format!("  • {}\n", label));
-            }
-        }
+        // Description placeholder
+        content.push_str("Full bead details will be available\n");
+        content.push_str("after IPC integration is implemented.\n");
 
         content
     }
@@ -300,13 +288,14 @@ impl Renderer {
     fn render_pipeline_view(
         &self,
         pane: &Pane,
-        selected_bead: Option<&BeadDetail>,
+        beads: &[SampleBead],
+        selected_index: usize,
         focused_pane: PaneType,
     ) -> String {
         let is_focused = pane.pane_type == focused_pane;
         let mut content = String::new();
 
-        if selected_bead.is_none() {
+        if beads.is_empty() || selected_index >= beads.len() {
             content.push_str("Select a bead to view pipeline.");
             return content;
         }
