@@ -36,12 +36,10 @@ use tracing::info;
 
 use oya_events::{BeadEvent, EventBus, EventPattern, EventSubscription};
 
-use crate::ipc_messages::{
-    AlertLevel, ComponentHealth, GuestMessage, HealthStatus, HostMessage,
-};
+use crate::ipc_messages::{AlertLevel, ComponentHealth, GuestMessage, HealthStatus, HostMessage};
 
-use crate::actors::errors::ActorError;
 use crate::actors::SchedulerState;
+use crate::actors::errors::ActorError;
 use crate::agent_swarm::{AgentPool, PoolStats};
 
 /// IPC worker actor definition.
@@ -153,7 +151,7 @@ impl Actor for IpcWorkerActorDef {
 
     async fn pre_start(
         &self,
-        myself: ActorRef<Self::Msg>,
+        _myself: ActorRef<Self::Msg>,
         args: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
         info!("IpcWorker starting");
@@ -297,7 +295,7 @@ mod core {
                     total_agents: stats.total,
                     active_agents: stats.working,
                     idle_agents: stats.idle,
-                    beads_assigned: 0, // TODO: Track assigned beads
+                    beads_assigned: 0,  // TODO: Track assigned beads
                     beads_completed: 0, // TODO: Track completed beads
                 })
             }

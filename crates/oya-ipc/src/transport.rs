@@ -289,6 +289,7 @@ impl Clone for DuplexPipe {
 }
 
 /// Reader end of duplex pipe
+#[cfg(test)]
 #[derive(Debug, Clone)]
 pub struct DuplexReader {
     pipe: DuplexPipe,
@@ -296,6 +297,7 @@ pub struct DuplexReader {
 }
 
 /// Writer end of duplex pipe
+#[cfg(test)]
 #[derive(Debug)]
 pub struct DuplexWriter {
     pipe: DuplexPipe,

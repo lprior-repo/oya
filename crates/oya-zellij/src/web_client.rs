@@ -748,15 +748,19 @@ mod tests {
 
         assert!(result.is_err());
 
-        if let Err(WebClientError::ConnectionRefused { .. }) = result {
-            // Expected error type
-        } else if let Err(WebClientError::DnsFailed { .. }) = result {
-            // Also possible
-        } else {
-            panic!(
-                "Expected ConnectionRefused or DnsFailed error, got {:?}",
-                result
-            );
+        match result {
+            Err(WebClientError::ConnectionRefused { .. }) => {
+                // Expected error type
+            }
+            Err(WebClientError::DnsFailed { .. }) => {
+                // Also possible
+            }
+            other => {
+                panic!(
+                    "Expected ConnectionRefused or DnsFailed error, got {:?}",
+                    other
+                );
+            }
         }
 
         Ok(())
