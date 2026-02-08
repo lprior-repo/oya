@@ -110,19 +110,17 @@ impl Pane {
 
     /// Create a new pane with hardcoded default values (internal use only)
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if the provided hardcoded dimensions are invalid (should never happen)
-    #[expect(clippy::expect_used)]
+    /// Returns an error if the provided hardcoded dimensions are invalid (should never happen)
     fn with_defaults(
         pane_type: PaneType,
         row: usize,
         col: usize,
         height: usize,
         width: usize,
-    ) -> Self {
+    ) -> LayoutResult<Self> {
         Self::new(pane_type, row, col, height, width)
-            .expect("Hardcoded default pane dimensions should be valid")
     }
 
     /// Get the right boundary column
@@ -155,21 +153,24 @@ pub struct Layout {
 }
 
 impl Layout {
-    /// Create a new 3-pane layout
+    /// Create a new 3-pane layout with default dimensions
     ///
     /// # Returns
     ///
     /// A new layout with default 3-pane configuration
-    #[must_use]
-    pub fn new_3_pane() -> Self {
-        let bead_list = Pane::with_defaults(PaneType::BeadList, 1, 1, 15, 32);
-        let bead_detail = Pane::with_defaults(PaneType::BeadDetail, 1, 34, 8, 45);
-        let pipeline_view = Pane::with_defaults(PaneType::PipelineView, 10, 34, 6, 45);
-        let workflow_graph = Pane::with_defaults(PaneType::WorkflowGraph, 17, 1, 6, 78);
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if default dimensions are invalid
+    pub fn new_3_pane() -> LayoutResult<Self> {
+        let bead_list = Pane::new(PaneType::BeadList, 1, 1, 15, 32)?;
+        let bead_detail = Pane::new(PaneType::BeadDetail, 1, 34, 8, 45)?;
+        let pipeline_view = Pane::new(PaneType::PipelineView, 10, 34, 6, 45)?;
+        let workflow_graph = Pane::new(PaneType::WorkflowGraph, 17, 1, 6, 78)?;
 
-        Self {
+        Ok(Self {
             panes: vec![bead_list, bead_detail, pipeline_view, workflow_graph],
-        }
+        })
     }
 
     /// Get all panes in the layout

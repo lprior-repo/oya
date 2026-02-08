@@ -1,19 +1,19 @@
 [workspace]
 members = [
-    "crates/core",
+    # "crates/core",  # TODO: Not yet created
     # "crates/pipeline",  # TODO: Not yet created
-    "crates/orchestrator",
-    "crates/merge-queue",
+    # "crates/orchestrator",  # TODO: Not yet created
+    # "crates/merge-queue",  # TODO: Not yet created
     "crates/rate-limiter",
-    "crates/opencode",
-    "crates/workflow",
-    "crates/events",
-    "crates/oya-ipc",
-    "crates/oya-web",
+    # "crates/opencode",  # TODO: Not yet created
+    # "crates/workflow",  # TODO: Not yet created
+    # "crates/events",  # TODO: Not yet created
+    # "crates/oya-ipc",  # TODO: Not yet created
+    # "crates/oya-web",  # TODO: Not yet created
     "crates/oya-ui",
     # "crates/reconciler",  # TODO: Not yet created
     # "crates/oya-shared",  # TODO: Not yet created
-    "tools/profiling",
+    # "tools/profiling",  # TODO: Not yet created
     # "crates/zjj-integration-tests",  # TODO: Not yet created
 ]
 exclude = [
@@ -23,7 +23,7 @@ resolver = "2"
 
 [workspace.package]
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 rust-version = "1.85"
 authors = ["Lewis Prior <lewis@lewisandquark.com>"]
 license = "MIT"
@@ -98,18 +98,18 @@ vec_box_then_clone = "warn"     # Avoid unnecessary clones
 
 [workspace.dependencies]
 # Internal crates (must match actual package names in Cargo.toml)
-oya-core = { path = "crates/core" }
+# oya-core = { path = "crates/core" }  # TODO: Not yet created
 # oya-pipeline = { path = "crates/pipeline" }  # TODO: Not yet created
-oya-opencode = { path = "crates/opencode" }
-oya-workflow = { path = "crates/workflow" }
-oya-events = { path = "crates/events" }
-oya-ipc = { path = "crates/oya-ipc" }
-oya-web = { path = "crates/oya-web" }
+# oya-opencode = { path = "crates/opencode" }  # TODO: Not yet created
+# oya-workflow = { path = "crates/workflow" }  # TODO: Not yet created
+# oya-events = { path = "crates/events" }  # TODO: Not yet created
+# oya-ipc = { path = "crates/oya-ipc" }  # TODO: Not yet created
+# oya-web = { path = "crates/oya-web" }  # TODO: Not yet created
 oya-ui = { path = "crates/oya-ui" }
 # oya-reconciler = { path = "crates/reconciler" }  # TODO: Not yet created
 # oya-shared = { path = "crates/oya-shared" }  # TODO: Not yet created
 orchestrator = { path = "crates/orchestrator" }
-merge-queue = { path = "crates/merge-queue" }
+# merge-queue = { path = "crates/merge-queue" }  # TODO: Not yet created
 rate-limiter = { path = "crates/rate-limiter" }
 
 # Async runtime (battle-tested)
@@ -202,16 +202,16 @@ keywords = ["sdlc", "tdd", "ai", "agents", "automation"]
 categories = ["development-tools", "command-line-utilities"]
 
 [dependencies]
-oya-core = { workspace = true }
+# oya-core = { workspace = true }  # TODO: Not yet created
 # oya-pipeline = { workspace = true }  # TODO: Not yet created
-oya-opencode = { workspace = true }
-oya-workflow = { workspace = true }
-oya-events = { workspace = true }
+# oya-opencode = { workspace = true }  # TODO: Not yet created
+# oya-workflow = { workspace = true }  # TODO: Not yet created
+# oya-events = { workspace = true }  # TODO: Not yet created
 # oya-reconciler = { workspace = true }  # TODO: Not yet created
 # TODO: Re-enable oya-web once compilation errors are fixed
-# oya-web = { workspace = true }
+# oya-web = { workspace = true }  # TODO: Not yet created
 # TODO: Re-enable oya-shared when needed
-# oya-shared = { workspace = true }
+# oya-shared = { workspace = true }  # TODO: Not yet created
 orchestrator = { workspace = true }
 
 tokio = { workspace = true }

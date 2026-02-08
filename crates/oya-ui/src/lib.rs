@@ -9,14 +9,8 @@
 // - IPC: Communication with oya-orchestrator for real-time data
 // - Components: UI widgets for rendering different views
 
-#![warn(clippy::unwrap_used)]
-#![warn(clippy::expect_used)]
-#![warn(clippy::panic)]
-#![warn(clippy::unimplemented)]
-#![warn(clippy::unreachable)]
-#![warn(clippy::indexing_slicing)]
-#![warn(clippy::arithmetic_side_effects)]
-#![warn(clippy::unwrap_in_result)]
+// Zero-panic policy - enforced by workspace
+// These lints are inherited from workspace.lints.clippy in Cargo.toml
 
 pub mod components;
 pub mod layout;
