@@ -145,11 +145,11 @@ pub struct OyaPlugin {
 
 /// Sample bead data for placeholder rendering
 #[derive(Debug, Clone)]
-struct SampleBead {
-    id: String,
-    title: String,
-    state: String,
-    priority: u8,
+pub struct SampleBead {
+    pub id: String,
+    pub title: String,
+    pub state: String,
+    pub priority: u8,
 }
 
 /// Plugin state machine
