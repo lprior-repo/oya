@@ -1,0 +1,40 @@
+[package]
+name = "oya-ui"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+bincode = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Tracing
+tracing = { workspace = true }
+
+# Functional utilities
+itertools = { workspace = true }
+
+[dev-dependencies]
+# Testing
+tokio = { workspace = true }
+
+[profile.release]
+opt-level = "z"             # Optimize for size
+lto = true
+codegen-units = 1
+strip = true
+
+[features]
+default = []
+wasm = []
