@@ -21,12 +21,10 @@ use axum::{
     extract::Request,
     http::{header::HeaderMap, StatusCode},
     middleware::Next,
-    response::Response,
+    response::{IntoResponse, Response},
 };
-use serde::Deserialize;
-use std::collections::HashMap;
 
-use crate::error_handler::{ErrorCategory, HttpError};
+use crate::error_handler::HttpError;
 
 /// Maximum request payload size (1MB default).
 const MAX_PAYLOAD_SIZE: usize = 1_048_576;
@@ -86,23 +84,30 @@ impl Default for ValidatorConfig {
 ///
 /// Validates incoming requests before they reach handlers.
 /// Checks payload size, content type, and JSON validity.
-pub async fn validation_middleware(
-    request: Request,
-    next: Next,
-) -> Result<Response, HttpError> {
+///
+/// # Errors
+///
+/// Returns `HttpError` if validation fails.
+pub async fn validation_middleware(request: Request, next: Next) -> Response {
     // Validate Content-Type header
-    validate_content_type(request.headers())?;
+    if let Err(err) = validate_content_type(request.headers()) {
+        return HttpError::from(err).into_response();
+    }
 
     // Validate payload size
-    validate_payload_size(request.body())?;
+    if let Err(err) = validate_payload_size(request.body()) {
+        return HttpError::from(err).into_response();
+    }
 
     // For JSON requests, validate JSON structure
     if is_json_request(request.headers()) {
-        validate_json_body(request).await?;
+        if let Err(err) = validate_json_body(request).await {
+            return HttpError::from(err).into_response();
+        }
     }
 
     // Request is valid, proceed to handler
-    Ok(next.run(request).await)
+    next.run(request).await
 }
 
 /// Validate Content-Type header.
@@ -195,11 +200,11 @@ async fn validate_json_body(request: Request) -> ValidationResult {
     }
 
     // Reconstruct request with validated body
-    let new_request = Request::from_parts(parts, Body::from(body_bytes));
+    let _new_request = Request::from_parts(parts, Body::from(body_bytes));
 
-    // Note: We can't return the reconstructed request easily in middleware pattern
-    // In axum, the middleware doesn't modify the request before next.run()
+    // Note: In axum middleware, we can't easily modify the request before next.run()
     // So we rely on axum's built-in JSON extraction for actual validation
+    // The middleware here does basic validation to fail fast on obviously invalid requests
 
     Ok(())
 }

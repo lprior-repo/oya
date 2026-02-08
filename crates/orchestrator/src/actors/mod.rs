@@ -52,6 +52,7 @@ pub mod errors;
 #[cfg(feature = "examples")]
 pub mod examples;
 pub mod health_check_worker;
+pub mod ipc_worker;
 pub mod lifecycle;
 pub mod messages;
 pub mod queue;
@@ -69,6 +70,7 @@ pub use health_check_worker::{
     HealthCheckConfig, HealthCheckMessage, HealthCheckResult, HealthCheckWorkerDef,
     HealthCheckWorkerState, HealthStatus, PollingHandle, PollingTimer,
 };
+pub use ipc_worker::{IpcWorkerActorDef, IpcWorkerArguments, IpcWorkerMessage, IpcWorkerState};
 pub use messages::{BeadState, SchedulerMessage, WorkflowStatus};
 pub use queue::{QueueActorDef, QueueMessage, QueueState};
 pub use reconciler::{ReconcilerActorDef, ReconcilerMessage, ReconcilerState};

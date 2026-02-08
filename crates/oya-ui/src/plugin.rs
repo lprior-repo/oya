@@ -8,8 +8,9 @@
 
 use crate::layout::Layout;
 use crate::render::Renderer;
-use oya_ipc::{GuestMessage, HostMessage, IpcTransport, TransportResult};
+use oya_ipc::{GuestMessage, HostMessage, IpcTransport};
 use serde::{Deserialize, Serialize};
+use std::io::{stdin, stdout};
 use thiserror::Error;
 
 /// Plugin errors
@@ -51,7 +52,7 @@ pub struct PluginInfo {
 
 /// Plugin events from Zellij
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "event", rename_all = "snake_case")]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum PluginEvent {
     /// Plugin started
     Start {
@@ -135,7 +136,7 @@ pub enum MouseButton {
 /// - Event processing and state management
 pub struct OyaPlugin {
     /// IPC transport for communicating with host
-    transport: IpcTransport,
+    transport: IpcTransport<std::io::Stdin, std::io::Stdout>,
     /// Terminal layout
     layout: Layout,
     /// Terminal size
@@ -172,8 +173,7 @@ impl OyaPlugin {
     ///
     /// Returns an error if IPC transport creation fails
     pub fn new() -> PluginResult<Self> {
-        let transport = IpcTransport::new()
-            .map_err(|e| PluginError::IpcError(e.to_string()))?;
+        let transport = IpcTransport::new(stdin(), stdout());
 
         // Default terminal size (will be updated on first event)
         let size = Size { rows: 24, cols: 80 };
@@ -215,7 +215,10 @@ impl OyaPlugin {
         self.state = PluginState::Running;
 
         // Render initial UI
-        self.render()
+        match self.render()? {
+            Some(rendered) => Ok(rendered),
+            None => Ok(String::from("OYA UI Plugin started")),
+        }
     }
 
     /// Handle a plugin event
@@ -259,7 +262,7 @@ impl OyaPlugin {
     /// # Errors
     ///
     /// Returns an error if key handling fails
-    fn handle_key(&mut self, key: char, modifiers: KeyModifiers) -> PluginResult<()> {
+    fn handle_key(&mut self, key: char, _modifiers: KeyModifiers) -> PluginResult<()> {
         match key {
             // Quit
             'q' | 'Q' => {
@@ -347,7 +350,7 @@ impl OyaPlugin {
     /// # Errors
     ///
     /// Returns an error if sending fails
-    fn send_message(&mut self, message: GuestMessage) -> TransportResult<()> {
+    fn send_message(&mut self, message: GuestMessage) -> Result<(), Box<dyn std::error::Error>> {
         self.transport.send(&message)
     }
 

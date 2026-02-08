@@ -277,7 +277,7 @@ impl Renderer {
         // Description
         content.push_str("Description:\n");
         for line in textwrap(&bead.description, pane.width.saturating_sub(4)) {
-            content.push_str(line);
+            content.push_str(&line);
             content.push('\n');
         }
         content.push('\n');

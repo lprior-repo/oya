@@ -399,33 +399,46 @@ impl IpcWorkerActorDef {
                 from,
                 to,
                 timestamp,
+                ..
             } => Some(HostMessage::BeadStateChanged {
                 bead_id: bead_id.to_string(),
                 from_state: from.to_string(),
                 to_state: to.to_string(),
                 timestamp: timestamp.timestamp() as u64,
             }),
-            BeadEvent::PhaseProgress {
+            BeadEvent::PhaseCompleted {
                 bead_id,
                 phase_id,
-                progress,
+                phase_name,
+                timestamp,
                 ..
             } => Some(HostMessage::PhaseProgress {
                 bead_id: bead_id.to_string(),
                 phase_id: phase_id.to_string(),
-                progress: progress.percentage,
-                current_step: progress.current_step,
+                progress: 100, // Phase completed means 100%
+                current_step: format!("Completed: {}", phase_name),
             }),
-            BeadEvent::SystemAlert { level, message, .. } => Some(HostMessage::SystemAlert {
-                level: match level {
-                    oya_events::AlertLevel::Info => AlertLevel::Info,
-                    oya_events::AlertLevel::Warning => AlertLevel::Warning,
-                    oya_events::AlertLevel::Error => AlertLevel::Error,
-                    oya_events::AlertLevel::Critical => AlertLevel::Critical,
-                },
-                message,
-                component: None,
-                timestamp: chrono::Utc::now().timestamp() as u64,
+            BeadEvent::Failed {
+                bead_id,
+                error,
+                timestamp,
+                ..
+            } => Some(HostMessage::SystemAlert {
+                level: AlertLevel::Error,
+                message: format!("Bead failed: {}", error),
+                component: Some(bead_id.to_string()),
+                timestamp: timestamp.timestamp() as u64,
+            }),
+            BeadEvent::WorkerUnhealthy {
+                worker_id,
+                reason,
+                timestamp,
+                ..
+            } => Some(HostMessage::SystemAlert {
+                level: AlertLevel::Warning,
+                message: format!("Worker unhealthy: {}", reason),
+                component: Some(worker_id),
+                timestamp: timestamp.timestamp() as u64,
             }),
             _ => None,
         }

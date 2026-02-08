@@ -16,6 +16,10 @@ oya-core = { workspace = true }
 
 # Async runtime
 tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# Time
+chrono = { workspace = true }
 
 # Web framework
 axum = { workspace = true }

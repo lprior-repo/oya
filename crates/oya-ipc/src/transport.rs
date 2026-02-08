@@ -370,7 +370,7 @@ mod tests {
 
     #[test]
     fn test_transport_construction() {
-        let (reader, writer) = duplex_pair();
+        let (writer, reader) = duplex_pair();
         let transport = IpcTransport::new(reader, writer);
 
         // Verify buffer capacity is sufficient
