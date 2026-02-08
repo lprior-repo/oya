@@ -259,6 +259,7 @@ pub fn transport_pair() -> (
 }
 
 /// Duplex pipe for testing
+#[cfg(test)]
 #[derive(Debug)]
 pub struct DuplexPipe {
     buffer: std::sync::Arc<std::sync::Mutex<Vec<u8>>>,
@@ -276,6 +277,7 @@ impl DuplexPipe {
     }
 }
 
+#[cfg(test)]
 impl Clone for DuplexPipe {
     fn clone(&self) -> Self {
         Self {

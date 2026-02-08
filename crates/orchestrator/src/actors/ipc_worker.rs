@@ -353,22 +353,25 @@ mod core {
     }
 
     fn get_agent_pool_stats(state: &IpcWorkerState) -> Result<PoolStats, ActorError> {
-        if let Some(pool) = &state.agent_pool {
+        if let Some(_pool) = &state.agent_pool {
             // TODO: Call pool.get_stats() via async
+            // For now, return default stats
             Ok(PoolStats {
-                total_agents: 0,
-                active_agents: 0,
-                idle_agents: 0,
-                beads_assigned: 0,
-                beads_completed: 0,
+                total: 0,
+                idle: 0,
+                working: 0,
+                unhealthy: 0,
+                shutting_down: 0,
+                terminated: 0,
             })
         } else {
             Ok(PoolStats {
-                total_agents: 0,
-                active_agents: 0,
-                idle_agents: 0,
-                beads_assigned: 0,
-                beads_completed: 0,
+                total: 0,
+                idle: 0,
+                working: 0,
+                unhealthy: 0,
+                shutting_down: 0,
+                terminated: 0,
             })
         }
     }
