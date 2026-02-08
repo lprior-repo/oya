@@ -1,0 +1,176 @@
+{
+  "related_implementations": [
+    {
+      "file": "crates/orchestrator/tests/supervisor_chaos_tests.rs",
+      "purpose": "Tier-1 supervisor chaos tests",
+      "key_types": [
+        "SupervisorActorDef",
+        "SupervisorArguments",
+        "SupervisorConfig",
+        "ActorRef<SupervisorMessage<SchedulerActorDef>>",
+        "ActorStatus"
+      ],
+      "key_functions": [
+        "spawn_supervisor_with_name()",
+        "spawn_child()",
+        "is_supervisor_alive()",
+        "is_supervisor_stopped()",
+        "unique_name()"
+      ],
+      "test_pattern": "GIVEN-WHEN-THEN with hostile assertions"
+    },
+    {
+      "file": "crates/orchestrator/tests/tier2_chaos_tests.rs",
+      "purpose": "Tier-2 actor chaos tests",
+      "key_types": [
+        "AtomicUsize",
+        "SystemTime",
+        "Duration"
+      ],
+      "metrics_pattern": "Uses AtomicUsize for kill_count and recovery_count tracking"
+    },
+    {
+      "file": "crates/orchestrator/tests/tier1_supervisors_test.rs",
+      "purpose": "Tier-1 supervisor spawn tests",
+      "key_types": [
+        "Tier1Supervisors",
+        "Tier1SupervisorKind",
+        "spawn_tier1_supervisors()"
+      ],
+      "pattern": "Uses build_prefix() for unique names, shutdown_all() helper"
+    },
+    {
+      "file": "crates/orchestrator/src/supervision.rs",
+      "purpose": "Supervision module with tier-1 spawn logic",
+      "key_types": [
+        "Tier1Supervisors struct",
+        "Tier1SupervisorRef<A>",
+        "spawn_tier1_supervisors() function"
+      ],
+      "pattern": "Returns Result<Tier1Supervisors, ActorError>, has stop_all() method"
+    }
+  ],
+
+  "test_patterns": [
+    {
+      "convention": "Test naming",
+      "example": "given_<condition>_when_<action>_then_<outcome>"
+    },
+    {
+      "convention": "Comments",
+      "example": "/// **Attack X.Y**: [description] - marks chaos test scenarios"
+    },
+    {
+      "convention": "Zero unwrap policy",
+      "example": "#![deny(clippy::unwrap_used)] at top of file"
+    },
+    {
+      "convention": "Error handling",
+      "example": "All spawns return Result, use match/unwrap_or_else for early returns"
+    },
+    {
+      "convention": "Unique names",
+      "example": "unique_name() helper with timestamp + process ID"
+    },
+    {
+      "convention": "Status checks",
+      "example": "is_supervisor_alive() and is_supervisor_stopped() helper functions"
+    }
+  ],
+
+  "metrics_patterns": [
+    {
+      "pattern": "AtomicUsize counters",
+      "example": "let kill_count = Arc::new(AtomicUsize::new(0))",
+      "usage": "Track kills and recoveries with fetch_add()"
+    },
+    {
+      "pattern": "Recovery rate calculation",
+      "example": "let recovery_rate = (alive_count as f64 / total_count as f64) * 100.0"
+    },
+    {
+      "pattern": "Timing",
+      "example": "Duration-based measurements with sleep() between operations"
+    },
+    {
+      "pattern": "Assertion messages",
+      "example": "Include metrics in assert! messages for debugging"
+    }
+  ],
+
+  "cli_consistency_usage": {
+    "note": "Not applicable - this is test code, not CLI"
+  },
+
+  "module_dependencies": [
+    {
+      "module": "orchestrator::supervision",
+      "exports": [
+        "Tier1Supervisors",
+        "Tier1SupervisorKind",
+        "spawn_tier1_supervisors()"
+      ],
+      "used_by": [
+        "tier1_supervisors_test.rs",
+        "actors/universe.rs"
+      ]
+    },
+    {
+      "module": "orchestrator::actors::supervisor",
+      "exports": [
+        "SupervisorActorDef",
+        "SupervisorArguments",
+        "SupervisorConfig",
+        "SupervisorMessage"
+      ],
+      "used_by": "All chaos test files"
+    },
+    {
+      "module": "ractor",
+      "exports": [
+        "Actor",
+        "ActorRef",
+        "ActorStatus",
+        "ActorError"
+      ],
+      "pattern": "Core actor system primitives"
+    }
+  ],
+
+  "success_criteria_from_bead": {
+    "title": "chaos: Kill tier-1 supervisors sequentially test",
+    "ears_requirements": [
+      "THE SYSTEM SHALL recover from all chaos scenarios",
+      "WHEN actor killed, THE SYSTEM SHALL restart via supervision",
+      "IF recovery fails, THE SYSTEM SHALL NOT lose data because supervision guarantees recovery"
+    ],
+    "acceptance_criteria": [
+      "100% recovery rate achieved",
+      "Performance targets met",
+      "System remains operational during chaos",
+      "No data loss during failures"
+    ],
+    "invariants": [
+      "System remains operational during chaos",
+      "No data loss during failures"
+    ]
+  },
+
+  "implementation_strategy": {
+    "test_file": "tier1_sequential_kill_chaos_test.rs",
+    "structure": [
+      "1. Spawn tier-1 supervisors using spawn_tier1_supervisors()",
+      "2. Optionally spawn tier-2 children under each tier-1",
+      "3. Sequentially stop each tier-1 supervisor",
+      "4. Track metrics: kill count, timing, recovery status",
+      "5. Verify system stability: no panics, clean shutdown",
+      "6. If testing recovery: spawn new tier-1s and verify functionality"
+    ],
+    "metrics_to_collect": [
+      "Number of supervisors killed",
+      "Time to stop each supervisor",
+      "Total test duration",
+      "Recovery verification (if applicable)"
+    ]
+  }
+}

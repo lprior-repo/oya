@@ -1,0 +1,26 @@
+[0;34m[13:52:26][0m === ZJJ BRUTAL QA TEST STARTING ===
+[0;34m[13:52:26][0m Test directory: /tmp/zjj_brutal_test_3910977
+[0;34m[13:52:26][0m Setting up test environment in /tmp/zjj_brutal_test_3910977
+[0;34m[13:52:26][0m Running: zjj init
+No JJ repository found. Initializing one...
+Initialized JJ repository.
+Initialized zjj in /tmp/zjj_brutal_test_3910977
+  Data directory: .zjj/
+  Configuration: .zjj/config.toml
+  State database: .zjj/state.db
+  Layouts: .zjj/layouts/
+[0;32m✓ PASS[0m Command succeeded: zjj init
+[0;34m[13:52:26][0m 
+=== TEST 1: List with 0 sessions ===
+[0;34m[13:52:26][0m Output: [0;34m[13:52:26][0m Running: zjj list
+No sessions found.
+Use 'zjj add <name>' to create a session.
+[0;32m✓ PASS[0m Command succeeded: zjj list
+[0;34m[13:52:26][0m 
+=== TEST 2: List with 1 session ===
+[0;34m[13:52:26][0m Running: zjj add test-session-1
+Created session 'test-session-1'
+Launching Zellij with new tab...
+Error: Cannot launch Zellij in non-interactive environment.
+Use --no-zellij flag to skip Zellij integration.
+[0;31m✗ FAIL[0m Command failed unexpectedly: zjj add test-session-1 (exit 1)

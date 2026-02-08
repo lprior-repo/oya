@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Direct Test</title>
+</head>
+<body>
+    <h1>Direct WASM Test</h1>
+    <div id="app">Loading...</div>
+    <div id="status"></div>
+
+    <script type="module">
+        const status = document.getElementById('status');
+        status.innerHTML = 'Script tag loaded<br>';
+
+        try {
+            status.innerHTML += 'Importing init...<br>';
+            const { default: init } = await import('/oya-ui-a04819900ff2f238.js');
+            status.innerHTML += 'Init imported successfully!<br>';
+
+            status.innerHTML += 'Initializing WASM...<br>';
+            await init({ module_or_path: '/oya-ui-a04819900ff2f238_bg.wasm' });
+            status.innerHTML += 'WASM initialized!<br>';
+
+        } catch (error) {
+            status.innerHTML += `ERROR: ${error.message}<br>`;
+            status.innerHTML += `Stack: ${error.stack}<br>`;
+            console.error('Error:', error);
+        }
+    </script>
+</body>
+</html>

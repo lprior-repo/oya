@@ -1,0 +1,81 @@
+# Build artifacts
+target/
+Cargo.lock
+
+# Moon cache (can be large)
+.moon/cache/
+.moon/cache-state/
+.moon/cache-*
+
+# Beads - daemon runtime files (should not be committed)
+.beads/daemon.pid
+.beads/daemon.lock
+.beads/daemon.log
+.beads/daemon-error
+.beads/beads.db-shm
+.beads/beads.db-wal
+.beads/.local_version
+.beads/export-state/
+.beads/.br_history/
+
+# Gitleaks config (ignore file, not config)
+.gitleaksignore
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node/NPM
+node_modules/
+package-lock.json
+
+# Frontend build artifacts
+crates/oya-ui/dist/
+
+# Screenshots
+*.png
+quick.png
+
+# Testing
+*.profraw
+*.profdata
+vendor/opencode-sme/
+
+# bv (beads viewer) local config and caches
+.bv/
+
+# zjj local workspaces
+.zjj/workspaces/
+
+# zjj backup directories
+.zjj_backup_*/
+
+# Mutation testing output
+mutants.out/
+.zjj/state.db
+
+# OYA database runtime files
+.OYA/db/
+
+# Test coverage reports
+tarpaulin-report.json
+
+# Beads SQLite database (use JSONL for git tracking)
+.beads/beads.db
+.beads/beads.db-*
+
+# Large test artifacts (temporary debugging files)
+simple_streamchunk_test
+test_cache
+# Test duration cache files (too large for git)
+test_duration_cache_complete
+test_duration_format
+# Comprehensive report logs (too large for git)
+zjj_final_comprehensive_report.log

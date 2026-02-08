@@ -490,7 +490,7 @@ mod tests {
     #[test]
     fn test_scheduler_arguments_with_replay_engine() {
         // Test that SchedulerArguments can accept a replay engine
-        let _args = SchedulerArguments::new();
+        let args = SchedulerArguments::new();
         // Verify the field exists and is None by default
         assert!(args.replay_engine.is_none());
     }

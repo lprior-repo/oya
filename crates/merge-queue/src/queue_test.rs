@@ -1,0 +1,57 @@
+//! Tests for queue management.
+//!
+//! Validates queue operations, task scheduling, and capacity limits.
+
+use crate::queue::{Queue, MergeTask};
+
+#[test]
+fn test_queue_operations() {
+    let queue = Queue::new();
+    assert_eq!(queue.len(), 0);
+    assert!(queue.is_empty());
+}
+
+#[test]
+fn test_capacity_limits() {
+    let queue = Queue::with_capacity(10);
+    assert_eq!(queue.capacity(), 10);
+}
+
+#[test]
+fn test_enqueue_task() {
+    let mut queue = Queue::new();
+
+    let task = MergeTask {
+        id: "task-1".to_string(),
+        branch: "feature-1".to_string(),
+        target: "main".to_string(),
+    };
+
+    let result = queue.enqueue(task);
+    assert!(result.is_ok());
+    assert_eq!(queue.len(), 1);
+}
+
+#[test]
+fn test_dequeue_task() {
+    let mut queue = Queue::new();
+
+    let task = MergeTask {
+        id: "task-1".to_string(),
+        branch: "feature-1".to_string(),
+        target: "main".to_string(),
+    };
+
+    let enqueue_result = queue.enqueue(task);
+    assert!(enqueue_result.is_ok(), "Enqueue should succeed");
+
+    let dequeued = queue.dequeue();
+
+    assert!(dequeued.is_some());
+
+    let task = match dequeued {
+        Some(t) => t,
+        None => return, // Test can't continue if no task
+    };
+    assert_eq!(task.id, "task-1");
+}

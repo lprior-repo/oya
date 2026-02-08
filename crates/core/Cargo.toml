@@ -1,0 +1,23 @@
+[package]
+name = "oya-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Core types, errors, and utilities for OYA"
+
+[dependencies]
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+toml = { workspace = true }
+itertools = { workspace = true }
+tracing = { workspace = true }
+either = "1.13"
+
+[lints]
+workspace = true

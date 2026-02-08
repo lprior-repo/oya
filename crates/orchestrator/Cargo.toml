@@ -1,0 +1,94 @@
+[package]
+name = "orchestrator"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "OYA Orchestrator - Agent swarm coordination and task distribution"
+
+[features]
+default = []
+examples = []
+
+[[test]]
+name = "messaging_patterns"
+path = "tests/messaging_patterns_test.rs"
+required-features = ["examples"]
+
+[[test]]
+name = "ping_pong_example"
+path = "tests/ping_pong_example.rs"
+required-features = ["examples"]
+
+[[test]]
+name = "surreal_connection_chaos"
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+tracing-subscriber = "0.3"
+tempfile = "3"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[lib]
+bench = false
+
+[[bin]]
+name = "api-server"
+path = "src/bin/api-server.rs"
+
+[[bench]]
+name = "restart_latency"
+harness = false
+
+[dependencies]
+oya-core = { workspace = true }
+oya-events = { workspace = true }
+oya-opencode = { workspace = true }
+tracing-subscriber = { workspace = true }
+# oya-pipeline = { workspace = true }  # TODO: Not yet created
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+petgraph = { workspace = true }
+
+# Actor framework (Erlang-inspired, 100% Rust)
+# Using native ractor supervision instead of ractor-supervisor due to version compatibility
+ractor = "0.15"
+
+# Persistence layer (SurrealDB)
+surrealdb = { workspace = true }
+chrono = { workspace = true }
+
+# Serialization for state persistence
+bincode = { workspace = true }
+
+# Async utilities
+async-trait = { workspace = true }
+futures = "0.3"
+
+# HTTP client for health checks
+reqwest = { version = "0.12", features = ["json"] }
+
+# HTTP server for API
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+
+# Functional Rust (Holy Trinity)
+im = { workspace = true }
+tap = { workspace = true }
+itertools = { workspace = true }
+
+# Persistent data structures for functional state (only needed for examples)
+rpds = { version = "1.1", optional = true }
+
+# UUID generation for message/timer IDs
+uuid = { version = "1.0", features = ["v4"] }
+
+# Random number generation for jitter in backoff
+rand = "0.8"
