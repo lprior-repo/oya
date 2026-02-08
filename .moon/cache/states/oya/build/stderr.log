@@ -1,0 +1,12 @@
+[1m[33mwarning[0m: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   /home/lewis/src/oya/crates/oya-ui/Cargo.toml
+workspace: /home/lewis/src/oya/Cargo.toml
+[1m[92m    Blocking[0m waiting for file lock on package cache
+[1m[92m    Blocking[0m waiting for file lock on package cache
+[1m[92m    Blocking[0m waiting for file lock on package cache
+[1m[92m    Blocking[0m waiting for file lock on package cache
+[1m[92m   Compiling[0m getrandom v0.3.4
+[1m[92m   Compiling[0m rustix v1.1.3
+[1m[92m   Compiling[0m linux-raw-sys v0.11.0
+[1m[92m   Compiling[0m openssl v0.10.75
+[1m[92m   Compiling[0m tower-http v0.6.8

@@ -1,0 +1,12 @@
+[1m[33mwarning[0m: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   /home/lewis/src/oya/crates/oya-ui/Cargo.toml
+workspace: /home/lewis/src/oya/Cargo.toml
+[1m[92m    Checking[0m getrandom v0.3.4
+[1m[92m    Checking[0m native-tls v0.2.14
+[1m[92m    Checking[0m tower-http v0.6.8
+[1m[92m    Checking[0m tempfile v3.24.0
+[1m[92m    Checking[0m tokio-native-tls v0.3.1
+[1m[92m    Checking[0m hyper-tls v0.6.0
+[1m[92m    Checking[0m reqwest v0.12.28
+[1m[92m    Checking[0m oya v0.1.0 (/home/lewis/src/oya)
+[1m[92m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`dev` profile [unoptimized + debuginfo]]8;;\ target(s) in 1.34s

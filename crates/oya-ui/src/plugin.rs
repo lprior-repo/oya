@@ -425,6 +425,9 @@ mod tests {
             Err(e) => panic!("Failed to create plugin: {e}"),
         };
         assert!(!plugin.sample_beads.is_empty());
-        assert_eq!(plugin.sample_beads.first().map(|b| b.id.as_str()), Some("src-3ax5"));
+        assert_eq!(
+            plugin.sample_beads.first().map(|b| b.id.as_str()),
+            Some("src-3ax5")
+        );
     }
 }

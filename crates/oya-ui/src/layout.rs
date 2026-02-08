@@ -231,7 +231,7 @@ impl Layout {
         let left_width = cols.saturating_mul(40).saturating_div(100);
         // Right panes: 60% width
         let right_width = cols.saturating_sub(left_width).saturating_sub(3); // -3 for borders
-        // Top panes: 60% height
+                                                                             // Top panes: 60% height
         let top_height = rows.saturating_mul(60).saturating_div(100);
         // Bottom pane: 40% height
         let bottom_height = rows.saturating_sub(top_height).saturating_sub(3); // -3 for borders
@@ -250,13 +250,7 @@ impl Layout {
             ));
         }
 
-        let bead_list = Pane::new(
-            PaneType::BeadList,
-            1,
-            1,
-            bead_list_height,
-            left_width,
-        )?;
+        let bead_list = Pane::new(PaneType::BeadList, 1, 1, bead_list_height, left_width)?;
 
         if bead_detail_height == 0 || right_width == 0 {
             return Err(LayoutError::CalculationError(
@@ -379,9 +373,8 @@ mod tests {
     fn test_pane_boundaries() {
         let pane_result = Pane::new(PaneType::BeadList, 5, 10, 15, 30);
         assert!(pane_result.is_ok());
-        let pane = pane_result.unwrap_or_else(|_| {
-            Pane::with_defaults(PaneType::BeadList, 5, 10, 15, 30)
-        });
+        let pane =
+            pane_result.unwrap_or_else(|_| Pane::with_defaults(PaneType::BeadList, 5, 10, 15, 30));
         assert_eq!(pane.right(), 40);
         assert_eq!(pane.bottom(), 20);
     }
