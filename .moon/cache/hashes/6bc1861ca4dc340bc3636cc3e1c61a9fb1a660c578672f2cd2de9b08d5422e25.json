@@ -1,0 +1,1 @@
+[{"command":"cargo","args":["--","--all-targets","-D","-D","-D","clippy","clippy::expect_used","clippy::panic","clippy::unwrap_used"],"deps":{},"env":{},"inputs":{".moon/workspace.yml":"58befd75978d2412660d08253a2ee4fef804e394"},"inputEnv":{},"outputs":[],"projectDeps":[],"target":"oya:ci","toolchains":["system"],"version":"3"},{"arch":"x86_64","os":"linux"}]
