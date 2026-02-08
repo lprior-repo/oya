@@ -21,7 +21,10 @@ struct BeadSummary {
     title: String,
 }
 
-fn create_transport_pair() -> (IpcTransport<DuplexReader, DuplexWriter>, IpcTransport<DuplexReader, DuplexWriter>) {
+fn create_transport_pair() -> (
+    IpcTransport<DuplexReader, DuplexWriter>,
+    IpcTransport<DuplexReader, DuplexWriter>,
+) {
     IpcTransport::transport_pair()
 }
 
@@ -34,9 +37,16 @@ fn test_send_message_exceeding_1mb_returns_error() {
 
     let result = client.send(&oversized_msg);
 
-    assert!(matches!(result, Err(TransportError::MessageTooLarge { .. })));
+    assert!(matches!(
+        result,
+        Err(TransportError::MessageTooLarge { .. })
+    ));
 
-    if let Err(TransportError::MessageTooLarge { actual_size, max_size }) = result {
+    if let Err(TransportError::MessageTooLarge {
+        actual_size,
+        max_size,
+    }) = result
+    {
         assert!(*actual_size > 1_048_576);
         assert_eq!(*max_size, 1_048_576);
     }
@@ -63,9 +73,7 @@ fn test_recv_with_invalid_length_prefix_returns_error() {
         }
     }
 
-    let reader = InvalidPrefixReader {
-        sent_prefix: false,
-    };
+    let reader = InvalidPrefixReader { sent_prefix: false };
     let writer = std::io::sink();
 
     let mut transport = IpcTransport::new(reader, writer);
@@ -100,9 +108,7 @@ fn test_recv_with_zero_length_prefix_returns_error() {
         }
     }
 
-    let reader = ZeroPrefixReader {
-        sent_prefix: false,
-    };
+    let reader = ZeroPrefixReader { sent_prefix: false };
     let writer = std::io::sink();
 
     let mut transport = IpcTransport::new(reader, writer);

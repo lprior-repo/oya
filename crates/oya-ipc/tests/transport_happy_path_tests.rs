@@ -44,7 +44,10 @@ struct BeadDetail {
     description: String,
 }
 
-fn create_transport_pair() -> (IpcTransport<DuplexReader, DuplexWriter>, IpcTransport<DuplexReader, DuplexWriter>) {
+fn create_transport_pair() -> (
+    IpcTransport<DuplexReader, DuplexWriter>,
+    IpcTransport<DuplexReader, DuplexWriter>,
+) {
     IpcTransport::transport_pair()
 }
 
@@ -139,15 +142,11 @@ fn test_flush_is_called_after_each_send() {
 fn test_multiple_messages_are_independently_framed() {
     let (mut client, mut server) = create_transport_pair();
 
-    client
-        .send(&HostMessage::BeadList(vec![]))
-        .unwrap();
+    client.send(&HostMessage::BeadList(vec![])).unwrap();
     client
         .send(&HostMessage::Error("test".to_string()))
         .unwrap();
-    client
-        .send(&HostMessage::BeadDetail(None))
-        .unwrap();
+    client.send(&HostMessage::BeadDetail(None)).unwrap();
 
     let msg1 = server.recv::<HostMessage>().unwrap();
     let msg2 = server.recv::<HostMessage>().unwrap();

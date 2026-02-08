@@ -158,7 +158,10 @@ impl TransportError {
 impl std::fmt::Display for TransportError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::MessageTooLarge { actual_size, max_size } => {
+            Self::MessageTooLarge {
+                actual_size,
+                max_size,
+            } => {
                 write!(
                     f,
                     "Message too large: {} bytes (max {} bytes)",
@@ -192,18 +195,10 @@ impl std::fmt::Display for TransportError {
                 )
             }
             Self::WriteFailed { error_code, kind } => {
-                write!(
-                    f,
-                    "Write failed: {:?} (error code: {:?})",
-                    kind, error_code
-                )
+                write!(f, "Write failed: {:?} (error code: {:?})", kind, error_code)
             }
             Self::ReadFailed { error_code, kind } => {
-                write!(
-                    f,
-                    "Read failed: {:?} (error code: {:?})",
-                    kind, error_code
-                )
+                write!(f, "Read failed: {:?} (error code: {:?})", kind, error_code)
             }
         }
     }
@@ -230,9 +225,11 @@ mod tests {
             "Unexpected EOF: 100 bytes read, expected 504"
         );
 
-        assert!(TransportError::invalid_length(0, "zero length")
-            .to_string()
-            .contains("zero length"));
+        assert!(
+            TransportError::invalid_length(0, "zero length")
+                .to_string()
+                .contains("zero length")
+        );
 
         assert_eq!(
             TransportError::serialization_failed("test error").to_string(),
