@@ -444,7 +444,7 @@ mod tests {
     #[test]
     fn test_map_err_on_error() {
         let result: Result<i32> = Err(Error::Unknown("fail".into()));
-        let mapped = result.map_err(|e| format!("Error: {}", e));
+        let mapped = result.map_err(|e| format!("Error: {e}"));
         assert!(mapped.is_err());
         if let Err(e) = mapped {
             assert_eq!(e, "Error: unknown error: fail");
@@ -454,7 +454,7 @@ mod tests {
     #[test]
     fn test_map_err_on_ok() {
         let result: Result<i32> = Ok(42);
-        let mapped = result.map_err(|e: Error| format!("Error: {}", e));
+        let mapped = result.map_err(|e: Error| format!("Error: {e}"));
         assert!(mapped.is_ok());
         if let Ok(v) = mapped {
             assert_eq!(v, 42);
@@ -464,10 +464,10 @@ mod tests {
     // Tests for unwrap_or
     #[test]
     fn test_unwrap_or_ok() {
-        fn get_ok() -> Result<i32> {
-            Ok(42)
+        fn get_ok() -> i32 {
+            42
         }
-        assert_eq!(get_ok().unwrap_or(0), 42);
+        assert_eq!(Result::Ok(get_ok()).unwrap_or(0), 42);
     }
 
     #[test]
@@ -481,10 +481,10 @@ mod tests {
     // Tests for unwrap_or_else
     #[test]
     fn test_unwrap_or_else_ok() {
-        fn get_ok() -> Result<i32> {
-            Ok(42)
+        fn get_ok() -> i32 {
+            42
         }
-        assert_eq!(get_ok().unwrap_or(0), 42);
+        assert_eq!(Result::Ok(get_ok()).unwrap_or(0), 42);
     }
 
     #[test]
