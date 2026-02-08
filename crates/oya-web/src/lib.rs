@@ -22,7 +22,6 @@ mod circuit_breaker;
 mod error_handler;
 mod health;
 mod retry;
-pub mod validation;
 pub mod workflow_graph;
 
 use health::HealthResponse;
@@ -34,7 +33,6 @@ pub use agent_repository::{
 pub use circuit_breaker::{CircuitBreaker, CircuitBreakerConfig, CircuitState, RequestResult};
 pub use error_handler::{ErrorCategory, ErrorResponse, HttpError};
 pub use retry::{RetryDecision, RetryPolicy, RetryState};
-pub use validation::{ValidationError, ValidationResult, ValidatorConfig};
 
 /// Agent metrics response.
 ///

@@ -32,19 +32,17 @@ use std::sync::Arc;
 
 use ractor::{Actor, ActorProcessingErr, ActorRef};
 use tokio::sync::{broadcast, mpsc};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tracing::{error, info, warn};
+use tracing::info;
 
 use oya_events::{BeadEvent, EventBus, EventPattern, EventSubscription};
-use oya_ipc::{
-    AlertLevel, BeadDetail, BeadSummary, ComponentHealth, GraphEdge, GraphNode, GuestMessage,
-    HealthStatus, HostMessage, IpcTransport,
+
+use crate::ipc_messages::{
+    AlertLevel, ComponentHealth, GuestMessage, HealthStatus, HostMessage,
 };
 
-use crate::agent_swarm::{AgentPool, PoolStats};
 use crate::actors::errors::ActorError;
-use crate::dag::Dag;
-use crate::scheduler::SchedulerState;
+use crate::actors::SchedulerState;
+use crate::agent_swarm::{AgentPool, PoolStats};
 
 /// IPC worker actor definition.
 #[derive(Clone, Default)]
@@ -87,11 +85,10 @@ impl IpcWorkerArguments {
 }
 
 /// IPC worker state.
+#[derive(Clone)]
 pub struct IpcWorkerState {
     /// Event subscription ID (for cleanup).
     _event_subscription_id: Option<String>,
-    /// Event subscription for receiving orchestrator events.
-    _event_subscription: Option<EventSubscription>,
     /// Broadcast sender for HostMessage events.
     event_tx: broadcast::Sender<HostMessage>,
     /// EventBus for subscribing to events.
@@ -110,7 +107,6 @@ impl IpcWorkerState {
         let (event_tx, _) = broadcast::channel(100);
         Self {
             _event_subscription_id: None,
-            _event_subscription: None,
             event_tx,
             event_bus: None,
             agent_pool: None,
@@ -157,7 +153,7 @@ impl Actor for IpcWorkerActorDef {
 
     async fn pre_start(
         &self,
-        _myself: ActorRef<Self::Msg>,
+        myself: ActorRef<Self::Msg>,
         args: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
         info!("IpcWorker starting");
@@ -166,7 +162,7 @@ impl Actor for IpcWorkerActorDef {
 
         // Store EventBus
         if let Some(bus) = args.event_bus {
-            state.event_bus = Some(bus);
+            state.event_bus = Some(bus.clone());
         }
 
         // Store AgentPool
@@ -181,10 +177,13 @@ impl Actor for IpcWorkerActorDef {
 
         // Subscribe to event bus if provided
         if let Some(bus) = &state.event_bus {
-            let (subscription_id, subscription) =
+            let (subscription_id, _subscription) =
                 bus.subscribe_with_pattern(EventPattern::All).await;
             state._event_subscription_id = Some(subscription_id);
-            state._event_subscription = Some(subscription);
+
+            // Spawn event forwarder
+            let event_tx = state.event_tx.clone();
+            tokio::spawn(Self::event_forwarder(_subscription, event_tx));
         }
 
         Ok(state)
@@ -241,10 +240,7 @@ mod core {
         match msg {
             IpcWorkerMessage::HandleGuestMessage { message, reply } => {
                 let response = handle_guest_message(&state, message);
-                effects.push(IpcWorkerEffect::ReplyGuestMessage {
-                    reply,
-                    response,
-                });
+                effects.push(IpcWorkerEffect::ReplyGuestMessage { reply, response });
             }
             IpcWorkerMessage::Subscribe { sender } => {
                 // Subscribe sender to broadcast events
@@ -298,11 +294,11 @@ mod core {
             GuestMessage::GetAgentPool => {
                 let stats = get_agent_pool_stats(state)?;
                 Ok(HostMessage::AgentPoolStats {
-                    total_agents: stats.total_agents,
-                    active_agents: stats.active_agents,
-                    idle_agents: stats.idle_agents,
-                    beads_assigned: stats.beads_assigned,
-                    beads_completed: stats.beads_completed,
+                    total_agents: stats.total,
+                    active_agents: stats.working,
+                    idle_agents: stats.idle,
+                    beads_assigned: 0, // TODO: Track assigned beads
+                    beads_completed: 0, // TODO: Track completed beads
                 })
             }
 

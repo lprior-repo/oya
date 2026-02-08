@@ -105,18 +105,25 @@ impl Renderer {
         let content_height = pane.height.saturating_sub(2); // Account for top and bottom borders
 
         for i in 0..content_height {
-            write!(output, "\x1b[{};{}H", pane.row.saturating_add(1).saturating_add(i), pane.col)
-                .ok();
+            write!(
+                output,
+                "\x1b[{};{}H",
+                pane.row.saturating_add(1).saturating_add(i),
+                pane.col
+            )
+            .ok();
 
             if i < content_lines.len() {
                 let line = content_lines[i];
                 output.push_str("│ ");
                 output.push_str(line);
-                output.push_str(&" ".repeat(
-                    pane.width
-                        .saturating_sub(2)
-                        .saturating_sub(line.chars().count()),
-                ));
+                output.push_str(
+                    &" ".repeat(
+                        pane.width
+                            .saturating_sub(2)
+                            .saturating_sub(line.chars().count()),
+                    ),
+                );
                 output.push('│');
             } else {
                 output.push('│');
@@ -148,15 +155,11 @@ impl Renderer {
 
         if title_len <= available_width {
             output.push_str(title);
-            output.push_str(&"─".repeat(
-                width.saturating_sub(2).saturating_sub(title_len),
-            ));
+            output.push_str(&"─".repeat(width.saturating_sub(2).saturating_sub(title_len)));
         } else {
             let truncated: String = title.chars().take(available_width).collect();
             output.push_str(&truncated);
-            output.push_str(&"─".repeat(
-                width.saturating_sub(2).saturating_sub(available_width),
-            ));
+            output.push_str(&"─".repeat(width.saturating_sub(2).saturating_sub(available_width)));
         }
 
         output.push('┐');

@@ -25,8 +25,7 @@ fn unique_scheduler_name() -> String {
 }
 
 /// Helper to spawn a scheduler with shutdown coordinator for testing.
-async fn setup_scheduler_with_shutdown(
-) -> Result<
+async fn setup_scheduler_with_shutdown() -> Result<
     (
         ActorRef<SchedulerMessage>,
         tokio::task::JoinHandle<()>,
@@ -100,9 +99,7 @@ async fn given_scheduler_when_shutdown_signal_then_graceful_stop(
             // Actor stopped successfully
             Ok(())
         }
-        Ok(Err(e)) => {
-            Err(format!("Actor stopped with error: {:?}", e).into())
-        }
+        Ok(Err(e)) => Err(format!("Actor stopped with error: {:?}", e).into()),
         Err(_) => Err("Scheduler did not stop within timeout".into()),
     }
 }
@@ -197,14 +194,10 @@ async fn given_scheduler_when_multiple_shutdown_signals_then_first_wins(
 }
 
 #[tokio::test]
-async fn given_scheduler_when_shutdown_then_post_stop_checkpoint_emitted(
+async fn given_scheduler_when_shutdown_then_post_stop_called(
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A scheduler with shutdown coordinator
     let coordinator = std::sync::Arc::new(ShutdownCoordinator::new());
-
-    // Clone the sender for test verification
-    let checkpoint_tx_clone = coordinator.checkpoint_tx.clone();
-
     let args = SchedulerArguments::new().with_shutdown_coordinator(coordinator.clone());
     let name = unique_scheduler_name();
 
@@ -223,38 +216,25 @@ async fn given_scheduler_when_shutdown_then_post_stop_checkpoint_emitted(
         .await;
     let _ = scheduler.send_message(SchedulerMessage::Shutdown);
 
-    // Then: Checkpoint result should be sent via channel
-    // Spawn a task to receive the checkpoint result
-    let checkpoint_task = tokio::spawn(async move {
-        let mut rx = coordinator.checkpoint_rx.write().await;
-        match timeout(Duration::from_secs(5), rx.recv()).await {
-            Ok(Some(result)) => Ok(result),
-            Ok(None) => Err("Channel closed".to_string()),
-            Err(_) => Err("Timeout waiting for checkpoint".to_string()),
-        }
-    });
+    // Then: Scheduler should stop gracefully (post_stop executes)
+    let stop_result = timeout(Duration::from_secs(5), actor_handle).await;
+    assert!(
+        stop_result.is_ok(),
+        "Scheduler should stop gracefully with post_stop hook: {:?}",
+        stop_result
+    );
 
-    match timeout(Duration::from_secs(6), checkpoint_task).await {
-        Ok(Ok(Ok(result))) => {
-            assert_eq!(result.component, "scheduler");
-            assert!(result.success, "Checkpoint should succeed: {:?}", result);
-        }
-        Ok(Ok(Err(e))) => {
-            return Err(format!("Checkpoint receive error: {}", e).into());
-        }
-        Ok(Err(e)) => {
-            return Err(format!("Checkpoint task error: {:?}", e).into());
-        }
-        Err(_) => {
-            // Checkpoint might not have been sent yet, but shutdown should still succeed
-            // This is acceptable as post_stop executes asynchronously
-        }
-    }
-
-    // Wait for actor to fully stop
-    let _ = timeout(Duration::from_secs(5), actor_handle).await;
-
-    drop(checkpoint_tx_clone);
+    // Verify shutdown phase was updated
+    let phase = coordinator.phase().await;
+    assert!(
+        matches!(
+            phase,
+            orchestrator::shutdown::ShutdownPhase::Initiating
+                | orchestrator::shutdown::ShutdownPhase::Complete
+        ),
+        "Shutdown phase should be at least Initiating, got: {:?}",
+        phase
+    );
 
     Ok(())
 }

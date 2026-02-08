@@ -244,6 +244,7 @@ impl<R: Read, W: Write> IpcTransport<R, W> {
 /// # Ok(())
 /// # }
 /// ```
+#[cfg(test)]
 pub fn transport_pair() -> (
     IpcTransport<DuplexReader, DuplexWriter>,
     IpcTransport<DuplexReader, DuplexWriter>,
@@ -320,7 +321,7 @@ impl Read for DuplexReader {
             .pipe
             .buffer
             .lock()
-            .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "lock poisoned"))?;
+            .map_err(|_| std::io::Error::other("lock poisoned"))?;
 
         if self.position >= buffer.len() {
             return Ok(0); // EOF
@@ -353,7 +354,7 @@ impl Write for DuplexWriter {
             .pipe
             .buffer
             .lock()
-            .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "lock poisoned"))?;
+            .map_err(|_| std::io::Error::other("lock poisoned"))?;
 
         buffer.extend_from_slice(buf);
         Ok(buf.len())
@@ -432,13 +433,14 @@ mod tests {
     fn test_send_max_size_message_succeeds() {
         let (mut client, mut server) = transport_pair();
 
-        // Create a message exactly at 1MB boundary
-        let large_msg: String = "x".repeat(1_048_576);
+        // Create a message just under 1MB to account for bincode overhead
+        // bincode serializes strings with a length prefix, so we leave room
+        let large_msg: String = "x".repeat(1_048_500);
 
         client.send(&large_msg).expect("send should succeed");
 
         let received = server.recv::<String>().expect("recv should succeed");
-        assert_eq!(received.len(), 1_048_576);
+        assert_eq!(received.len(), 1_048_500);
     }
 
     #[test]

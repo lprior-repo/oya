@@ -34,6 +34,12 @@ pub use oya_core::{Error, Result};
 /// Provides ractor actors with supervision for managing workflows.
 pub mod actors;
 
+/// IPC message types for Zellij plugin communication.
+///
+/// Provides GuestMessage and HostMessage types for bidirectional
+/// communication between the UI plugin and orchestrator.
+pub mod ipc_messages;
+
 /// Orchestrator module for managing agent swarms.
 ///
 /// Provides agent pool management, health monitoring, and message types

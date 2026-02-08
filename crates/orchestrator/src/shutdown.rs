@@ -103,10 +103,9 @@ pub struct ShutdownCoordinator {
     shutdown_initiated: Arc<AtomicBool>,
     /// Broadcast channel for shutdown signal
     shutdown_tx: broadcast::Sender<ShutdownSignal>,
-    /// Channel for checkpoint save results (public for testing)
-    pub checkpoint_tx: mpsc::Sender<CheckpointResult>,
-    /// Receiver for checkpoint results (public for testing)
-    pub checkpoint_rx: Arc<RwLock<mpsc::Receiver<CheckpointResult>>>,
+    /// Channel for checkpoint save results
+    checkpoint_tx: mpsc::Sender<CheckpointResult>,
+    checkpoint_rx: Arc<RwLock<mpsc::Receiver<CheckpointResult>>>,
 }
 
 impl ShutdownCoordinator {
