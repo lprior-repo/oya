@@ -41,7 +41,6 @@ harness = false
 [dependencies]
 oya-core = { workspace = true }
 oya-events = { workspace = true }
-oya-ipc = { workspace = true }
 oya-opencode = { workspace = true }
 tracing-subscriber = { workspace = true }
 # oya-pipeline = { workspace = true }  # TODO: Not yet created

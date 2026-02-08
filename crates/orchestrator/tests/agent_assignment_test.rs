@@ -179,7 +179,9 @@ async fn given_no_agents_when_bead_ready_then_assignment_fails() {
     let error = assignment_result.expect_err("should return error");
     let error_msg = error.to_string();
     assert!(
-        error_msg.contains("no agents") || error_msg.contains("available") || error_msg.contains("empty"),
+        error_msg.contains("no agents")
+            || error_msg.contains("available")
+            || error_msg.contains("empty"),
         "Error should indicate no agents available: {}",
         error_msg
     );

@@ -200,10 +200,7 @@ pub trait AgentRepository: Send + Sync {
     /// # Errors
     ///
     /// Returns an error if the agent is not found.
-    async fn get_agent(
-        &self,
-        agent_id: &str,
-    ) -> Result<RepositoryAgent, AgentRepositoryError>;
+    async fn get_agent(&self, agent_id: &str) -> Result<RepositoryAgent, AgentRepositoryError>;
 
     /// Gets all agents in the repository.
     ///
@@ -238,10 +235,7 @@ pub trait AgentRepository: Send + Sync {
     /// # Errors
     ///
     /// Returns an error if the agent is not found or has no active bead.
-    async fn complete_bead(
-        &self,
-        agent_id: &str,
-    ) -> Result<RepositoryAgent, AgentRepositoryError>;
+    async fn complete_bead(&self, agent_id: &str) -> Result<RepositoryAgent, AgentRepositoryError>;
 
     /// Gets repository statistics.
     ///
@@ -294,7 +288,7 @@ impl InMemoryAgentRepository {
 
     /// Creates a new in-memory repository with a custom capacity.
     #[must_use]
-    pub const fn with_capacity(max_agents: usize) -> Self {
+    pub fn with_capacity(max_agents: usize) -> Self {
         Self {
             agents: Arc::new(RwLock::new(HashMap::new())),
             max_agents,
@@ -351,10 +345,7 @@ impl AgentRepository for InMemoryAgentRepository {
         Ok(agent)
     }
 
-    async fn get_agent(
-        &self,
-        agent_id: &str,
-    ) -> Result<RepositoryAgent, AgentRepositoryError> {
+    async fn get_agent(&self, agent_id: &str) -> Result<RepositoryAgent, AgentRepositoryError> {
         let agents = self.agents.read().await;
         agents
             .get(agent_id)
@@ -375,11 +366,12 @@ impl AgentRepository for InMemoryAgentRepository {
         agent_id: &str,
     ) -> Result<RepositoryAgent, AgentRepositoryError> {
         let mut agents = self.agents.write().await;
-        let agent = agents.get_mut(agent_id).ok_or_else(|| {
-            AgentRepositoryError::AgentNotFound {
-                agent_id: agent_id.to_string(),
-            }
-        })?;
+        let agent =
+            agents
+                .get_mut(agent_id)
+                .ok_or_else(|| AgentRepositoryError::AgentNotFound {
+                    agent_id: agent_id.to_string(),
+                })?;
 
         agent.record_heartbeat()?;
         Ok(agent.clone())
@@ -391,26 +383,25 @@ impl AgentRepository for InMemoryAgentRepository {
         bead_id: String,
     ) -> Result<RepositoryAgent, AgentRepositoryError> {
         let mut agents = self.agents.write().await;
-        let agent = agents.get_mut(agent_id).ok_or_else(|| {
-            AgentRepositoryError::AgentNotFound {
-                agent_id: agent_id.to_string(),
-            }
-        })?;
+        let agent =
+            agents
+                .get_mut(agent_id)
+                .ok_or_else(|| AgentRepositoryError::AgentNotFound {
+                    agent_id: agent_id.to_string(),
+                })?;
 
         agent.assign_bead(bead_id)?;
         Ok(agent.clone())
     }
 
-    async fn complete_bead(
-        &self,
-        agent_id: &str,
-    ) -> Result<RepositoryAgent, AgentRepositoryError> {
+    async fn complete_bead(&self, agent_id: &str) -> Result<RepositoryAgent, AgentRepositoryError> {
         let mut agents = self.agents.write().await;
-        let agent = agents.get_mut(agent_id).ok_or_else(|| {
-            AgentRepositoryError::AgentNotFound {
-                agent_id: agent_id.to_string(),
-            }
-        })?;
+        let agent =
+            agents
+                .get_mut(agent_id)
+                .ok_or_else(|| AgentRepositoryError::AgentNotFound {
+                    agent_id: agent_id.to_string(),
+                })?;
 
         agent.complete_bead()?;
         Ok(agent.clone())
@@ -576,7 +567,9 @@ mod tests {
         let _ = repo.register_agent("agent-001".to_string()).await;
         let result = repo.assign_bead("agent-001", "bead-123".to_string()).await;
 
-        assert!(matches!(result, Ok(ref agent) if agent.current_bead == Some("bead-123".to_string())));
+        assert!(
+            matches!(result, Ok(ref agent) if agent.current_bead == Some("bead-123".to_string()))
+        );
         assert!(matches!(result, Ok(ref agent) if agent.state == RepositoryAgentState::Working));
     }
 

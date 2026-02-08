@@ -24,7 +24,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
-use crate::error_handler::HttpError;
+use crate::error_handler::{ErrorCategory, HttpError};
 
 /// Maximum request payload size (1MB default).
 const MAX_PAYLOAD_SIZE: usize = 1_048_576;
@@ -126,9 +126,14 @@ fn validate_content_type(headers: &HeaderMap) -> ValidationResult {
 
         // Check if it's JSON
         if !ct_str.contains("application/json") && !ct_str.contains("multipart/form-data") {
+            let content_name = match ct_str.split(';').next() {
+                Some(name) => name,
+                None => ct_str,
+            };
+
             return Err(ValidationError::new(format!(
                 "Unsupported Content-Type: {}. Supported: application/json",
-                ct_str.split(';').next().unwrap_or("")
+                content_name
             )));
         }
     }
@@ -138,11 +143,13 @@ fn validate_content_type(headers: &HeaderMap) -> ValidationResult {
 
 /// Check if request is JSON.
 fn is_json_request(headers: &HeaderMap) -> bool {
-    headers
+    match headers
         .get("content-type")
         .and_then(|ct| ct.to_str().ok())
-        .map(|ct| ct.contains("application/json"))
-        .unwrap_or(false)
+    {
+        Some(ct) => ct.contains("application/json"),
+        None => false,
+    }
 }
 
 /// Validate payload size.
@@ -189,12 +196,7 @@ async fn validate_json_body(request: Request) -> ValidationResult {
                     // JSON is valid, check for empty required fields if we had schema
                     validate_json_fields(&body_bytes)?;
                 }
-                Err(e) => {
-                    return Err(ValidationError::new(format!(
-                        "Invalid JSON: {}",
-                        e
-                    )))
-                }
+                Err(e) => return Err(ValidationError::new(format!("Invalid JSON: {}", e))),
             }
         }
     }
@@ -211,11 +213,10 @@ async fn validate_json_body(request: Request) -> ValidationResult {
 
 /// Validate JSON fields (basic validation without schema).
 fn validate_json_fields(body_bytes: &[u8]) -> ValidationResult {
-    let json: serde_json::Value =
-        serde_json::from_slice(body_bytes).map_err(|e| ValidationError {
-            field: None,
-            message: format!("Invalid JSON: {}", e),
-        })?;
+    let json: serde_json::Value = serde_json::from_slice(body_bytes).map_err(|e| ValidationError {
+        field: None,
+        message: format!("Invalid JSON: {}", e),
+    })?;
 
     // Basic validation: check for empty string values
     if let Some(obj) = json.as_object() {
@@ -241,9 +242,8 @@ pub fn validate_email(email: &str) -> ValidationResult {
     }
 
     // Basic email validation regex
-    let email_regex = regex::Regex::new(
-        r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
-    ).map_err(|_| ValidationError::new("Failed to compile email validation regex".to_string()))?;
+    let email_regex = regex::Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
+        .map_err(|_| ValidationError::new("Failed to compile email validation regex".to_string()))?;
 
     if !email_regex.is_match(email) {
         return Err(ValidationError::new(format!(
@@ -304,6 +304,10 @@ impl From<ValidationError> for HttpError {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+    #![allow(clippy::expect_used)]
+    #![allow(clippy::panic)]
+
     use super::*;
 
     #[test]
@@ -407,7 +411,10 @@ mod tests {
             "email": "test@example.com"
         });
 
-        let json_str = serde_json::to_string(&json).unwrap();
+        let json_str = match serde_json::to_string(&json) {
+            Ok(s) => s,
+            Err(e) => panic!("Failed to serialize JSON: {}", e),
+        };
         let result = validate_json_fields(json_str.as_bytes());
         assert!(result.is_ok());
     }
@@ -419,7 +426,10 @@ mod tests {
             "email": "test@example.com"
         });
 
-        let json_str = serde_json::to_string(&json).unwrap();
+        let json_str = match serde_json::to_string(&json) {
+            Ok(s) => s,
+            Err(e) => panic!("Failed to serialize JSON: {}", e),
+        };
         let result = validate_json_fields(json_str.as_bytes());
         assert!(result.is_err());
 
@@ -431,10 +441,8 @@ mod tests {
 
     #[test]
     fn test_http_error_from_validation_error() {
-        let validation_err = ValidationError::for_field(
-            "email".to_string(),
-            "Invalid email format".to_string(),
-        );
+        let validation_err =
+            ValidationError::for_field("email".to_string(), "Invalid email format".to_string());
 
         let http_err: HttpError = validation_err.into();
         assert_eq!(http_err.category(), ErrorCategory::Validation);

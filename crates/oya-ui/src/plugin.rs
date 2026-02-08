@@ -3,22 +3,18 @@
 // This module implements the Zellij plugin protocol, handling:
 // - Plugin initialization and sizing
 // - Event processing (keyboard input, resize, etc.)
-// - IPC communication with oya-orchestrator
-// - Message routing between UI and host
+// - Basic UI rendering
+//
+// NOTE: IPC integration with oya-orchestrator will be added in a future bead
 
 use crate::layout::Layout;
 use crate::render::Renderer;
-use oya_ipc::{GuestMessage, HostMessage, IpcTransport};
 use serde::{Deserialize, Serialize};
-use std::io::{stdin, stdout};
 use thiserror::Error;
 
 /// Plugin errors
 #[derive(Debug, Error)]
 pub enum PluginError {
-    #[error("IPC transport error: {0}")]
-    IpcError(String),
-
     #[error("Render error: {0}")]
     RenderError(String),
 
@@ -82,12 +78,6 @@ pub enum PluginEvent {
 
     /// Timer tick (future use for periodic refresh)
     Timer,
-
-    /// Message received from host
-    HostMessage {
-        /// Host message
-        message: HostMessage,
-    },
 }
 
 /// Keyboard modifier keys
@@ -132,25 +122,34 @@ pub enum MouseButton {
 ///
 /// Main plugin struct that handles:
 /// - Plugin lifecycle (start, update, render)
-/// - IPC communication with oya-orchestrator
 /// - Event processing and state management
+/// - Basic UI rendering with placeholder data
+///
+/// NOTE: Future bead will integrate IPC communication with oya-orchestrator
 pub struct OyaPlugin {
-    /// IPC transport for communicating with host
-    transport: IpcTransport<std::io::Stdin, std::io::Stdout>,
     /// Terminal layout
     layout: Layout,
     /// Terminal size
     size: Size,
     /// Renderer for drawing UI
     renderer: Renderer,
-    /// Current bead data (from host)
-    beads: Vec<oya_ipc::BeadSummary>,
-    /// Current bead detail (if selected)
-    selected_bead: Option<oya_ipc::BeadDetail>,
     /// Currently selected pane
     focused_pane: crate::layout::PaneType,
     /// Plugin state
     state: PluginState,
+    /// Sample bead data (placeholder)
+    sample_beads: Vec<SampleBead>,
+    /// Currently selected bead index
+    selected_index: usize,
+}
+
+/// Sample bead data for placeholder rendering
+#[derive(Debug, Clone)]
+struct SampleBead {
+    id: String,
+    title: String,
+    state: String,
+    priority: u8,
 }
 
 /// Plugin state machine
@@ -171,10 +170,8 @@ impl OyaPlugin {
     ///
     /// # Errors
     ///
-    /// Returns an error if IPC transport creation fails
+    /// Returns an error if layout calculation fails
     pub fn new() -> PluginResult<Self> {
-        let transport = IpcTransport::new(stdin(), stdout());
-
         // Default terminal size (will be updated on first event)
         let size = Size { rows: 24, cols: 80 };
 
@@ -184,15 +181,36 @@ impl OyaPlugin {
 
         let renderer = Renderer::new();
 
+        // Create sample bead data for placeholder rendering
+        let sample_beads = vec![
+            SampleBead {
+                id: "src-3ax5".to_string(),
+                title: "Create Zellij WASM plugin scaffold".to_string(),
+                state: "in_progress".to_string(),
+                priority: 1,
+            },
+            SampleBead {
+                id: "src-1xvj".to_string(),
+                title: "Implement IPC client integration".to_string(),
+                state: "open".to_string(),
+                priority: 1,
+            },
+            SampleBead {
+                id: "src-1k71".to_string(),
+                title: "Add BeadList component with real data".to_string(),
+                state: "open".to_string(),
+                priority: 2,
+            },
+        ];
+
         Ok(Self {
-            transport,
             layout,
             size,
             renderer,
-            beads: Vec::new(),
-            selected_bead: None,
             focused_pane: crate::layout::PaneType::BeadList,
             state: PluginState::Starting,
+            sample_beads,
+            selected_index: 0,
         })
     }
 
@@ -207,10 +225,6 @@ impl OyaPlugin {
         // Recalculate layout for actual terminal size
         self.layout = Layout::calculate_for_terminal(self.size.rows, self.size.cols)
             .map_err(|e| PluginError::LayoutError(e.to_string()))?;
-
-        // Request initial bead list from host
-        self.send_message(GuestMessage::GetBeadList)
-            .map_err(|e| PluginError::IpcError(e.to_string()))?;
 
         self.state = PluginState::Running;
 
@@ -242,10 +256,6 @@ impl OyaPlugin {
                 self.handle_key(key, modifiers)?;
                 self.render()
             }
-            PluginEvent::HostMessage { message } => {
-                self.handle_host_message(message)?;
-                self.render()
-            }
             PluginEvent::Mouse { event: _ } => {
                 // Mouse events not implemented yet
                 Ok(None)
@@ -272,16 +282,12 @@ impl OyaPlugin {
             '\t' => {
                 self.cycle_focus();
             }
-            // Arrow keys for navigation (simplified)
+            // Vim-style navigation
             'j' | 'J' => {
-                self.move_selection(-1)?;
-            }
-            'k' | 'K' => {
                 self.move_selection(1)?;
             }
-            // Enter to select bead
-            '\n' | '\r' => {
-                self.select_bead()?;
+            'k' | 'K' => {
+                self.move_selection(-1)?;
             }
             _ => {
                 // Other keys ignored for now
@@ -301,57 +307,32 @@ impl OyaPlugin {
         };
     }
 
-    /// Move selection in current pane
+    /// Move selection in bead list
     ///
     /// # Errors
     ///
     /// Returns an error if movement fails
-    fn move_selection(&mut self, _direction: i32) -> PluginResult<()> {
-        // TODO: Implement selection movement
-        Ok(())
-    }
+    fn move_selection(&mut self, direction: i32) -> PluginResult<()> {
+        let len = self.sample_beads.len();
 
-    /// Select current bead and show details
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if selection fails
-    fn select_bead(&mut self) -> PluginResult<()> {
-        // TODO: Implement bead selection and detail request
-        Ok(())
-    }
-
-    /// Handle message from host
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if message handling fails
-    fn handle_host_message(&mut self, message: HostMessage) -> PluginResult<()> {
-        match message {
-            HostMessage::BeadList { beads } => {
-                self.beads = beads;
-            }
-            HostMessage::BeadDetail { bead } => {
-                self.selected_bead = Some(bead);
-            }
-            HostMessage::Error { message: msg } => {
-                eprintln!("Host error: {}", msg);
-                self.state = PluginState::Error;
-            }
-            _ => {
-                // Other messages ignored for now
-            }
+        if len == 0 {
+            return Ok(());
         }
-        Ok(())
-    }
 
-    /// Send message to host
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if sending fails
-    fn send_message(&mut self, message: GuestMessage) -> Result<(), Box<dyn std::error::Error>> {
-        self.transport.send(&message)
+        let new_index = if direction > 0 {
+            self.selected_index.saturating_add(1)
+        } else {
+            self.selected_index.saturating_sub(1)
+        };
+
+        // Wrap around
+        self.selected_index = if new_index >= len {
+            0
+        } else {
+            new_index
+        };
+
+        Ok(())
     }
 
     /// Render the UI
@@ -366,8 +347,8 @@ impl OyaPlugin {
 
         let rendered = self.renderer.render_layout(
             &self.layout,
-            &self.beads,
-            self.selected_bead.as_ref(),
+            &self.sample_beads,
+            self.selected_index,
             self.focused_pane,
         );
 
@@ -434,5 +415,12 @@ mod tests {
         };
         assert!(mods.shift);
         assert!(!mods.ctrl);
+    }
+
+    #[test]
+    fn test_sample_beads() {
+        let plugin = OyaPlugin::new().unwrap();
+        assert!(!plugin.sample_beads.is_empty());
+        assert_eq!(plugin.sample_beads[0].id, "src-3ax5");
     }
 }
