@@ -21,6 +21,7 @@ mod circuit_breaker;
 mod error_handler;
 mod health;
 mod retry;
+pub mod validation;
 pub mod workflow_graph;
 
 use health::HealthResponse;
