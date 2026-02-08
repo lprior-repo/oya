@@ -108,7 +108,7 @@ vec_box_then_clone = "warn"     # Avoid unnecessary clones
 oya-ui = { path = "crates/oya-ui" }
 # oya-reconciler = { path = "crates/reconciler" }  # TODO: Not yet created
 # oya-shared = { path = "crates/oya-shared" }  # TODO: Not yet created
-orchestrator = { path = "crates/orchestrator" }
+# orchestrator = { path = "crates/orchestrator" }  # TODO: Not yet created
 # merge-queue = { path = "crates/merge-queue" }  # TODO: Not yet created
 rate-limiter = { path = "crates/rate-limiter" }
 
