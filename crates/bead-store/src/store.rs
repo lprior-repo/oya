@@ -64,7 +64,7 @@ impl BeadStoreCore {
     #[must_use]
     pub fn with_bead(mut self, bead: BeadRecord) -> Self {
         // Remove old version if exists
-        if let Some(old_bead) = self.beads.get(&bead.id) {
+        if self.beads.contains_key(&bead.id) {
             self = self.without_bead(&bead.id);
         }
 
@@ -134,11 +134,7 @@ impl BeadStoreCore {
     pub fn filter_by_status(&self, status: BeadStatus) -> Vec<&BeadRecord> {
         self.by_status
             .get(&status)
-            .map(|set| {
-                set.iter()
-                    .filter_map(|id| self.beads.get(id))
-                    .collect()
-            })
+            .map(|set: &HashSet<BeadId>| set.iter().filter_map(|id| self.beads.get(id)).collect())
             .unwrap_or_default()
     }
 
@@ -256,10 +252,11 @@ impl BeadStore {
     ///
     /// Returns `StoreError` if the file cannot be written.
     pub async fn save(&self) -> Result<(), StoreError> {
-        debug!("Saving {} beads to: {:?}", self.core.read().await.len(), self.storage_path);
-
         let core = self.core.read().await;
         let beads = core.list_beads();
+        let bead_count = beads.len();
+
+        debug!("Saving {} beads to: {:?}", bead_count, self.storage_path);
 
         // Build content in memory
         let mut content = String::new();
@@ -279,7 +276,7 @@ impl BeadStore {
         // Atomically rename temp file to actual path
         tokio::fs::rename(&temp_path, &self.storage_path).await?;
 
-        info!("Saved {} beads to disk", beads.len());
+        info!("Saved {} beads to disk", bead_count);
         Ok(())
     }
 
@@ -431,20 +428,14 @@ mod tests {
     fn test_core_list_beads() {
         let core = BeadStoreCore::new();
         let bead1 = BeadRecord::test_fixture();
-        let bead2 = BeadRecord::new(
-            "bead-2",
-            "Second",
-            "Desc",
-            BeadStatus::InProgress,
-            1,
-        );
+        let bead2 = BeadRecord::new("bead-2", "Second", "Desc", BeadStatus::InProgress, 1);
 
         let core = core.with_bead(bead1.clone()).with_bead(bead2.clone());
         let beads = core.list_beads();
 
         assert_eq!(beads.len(), 2);
-        assert!(beads.contains(&bead1));
-        assert!(beads.contains(&bead2));
+        assert!(beads.iter().any(|b| b.id == bead1.id));
+        assert!(beads.iter().any(|b| b.id == bead2.id));
     }
 
     #[test]
@@ -505,9 +496,7 @@ mod tests {
         let temp = tempdir().expect("failed to create tempdir");
         let path = temp.path().join("beads.jsonl");
 
-        let store = BeadStore::new(path)
-            .await
-            .expect("failed to create store");
+        let store = BeadStore::new(path).await.expect("failed to create store");
 
         let bead = BeadRecord::test_fixture();
         store
@@ -515,10 +504,7 @@ mod tests {
             .await
             .expect("failed to insert bead");
 
-        let retrieved = store
-            .get_bead(&bead.id)
-            .await
-            .expect("failed to get bead");
+        let retrieved = store.get_bead(&bead.id).await.expect("failed to get bead");
 
         assert_eq!(retrieved, Some(bead));
     }
@@ -528,9 +514,7 @@ mod tests {
         let temp = tempdir().expect("failed to create tempdir");
         let path = temp.path().join("beads.jsonl");
 
-        let store = BeadStore::new(path)
-            .await
-            .expect("failed to create store");
+        let store = BeadStore::new(path).await.expect("failed to create store");
 
         let bead = BeadRecord::test_fixture();
         store
@@ -553,13 +537,7 @@ mod tests {
 
         // Insert beads
         let bead1 = BeadRecord::test_fixture();
-        let bead2 = BeadRecord::new(
-            "bead-2",
-            "Second",
-            "Description",
-            BeadStatus::InProgress,
-            1,
-        );
+        let bead2 = BeadRecord::new("bead-2", "Second", "Description", BeadStatus::InProgress, 1);
 
         store
             .insert_bead(bead1.clone())
@@ -574,17 +552,21 @@ mod tests {
         store.save().await.expect("failed to save store");
 
         // Load into new store instance
-        let store2 = BeadStore::new(path)
-            .await
-            .expect("failed to create store2");
+        let store2 = BeadStore::new(path).await.expect("failed to create store2");
 
         assert_eq!(store2.len().await.expect("failed to get len"), 2);
         assert_eq!(
-            store2.get_bead(&bead1.id).await.expect("failed to get bead1"),
+            store2
+                .get_bead(&bead1.id)
+                .await
+                .expect("failed to get bead1"),
             Some(bead1)
         );
         assert_eq!(
-            store2.get_bead(&bead2.id).await.expect("failed to get bead2"),
+            store2
+                .get_bead(&bead2.id)
+                .await
+                .expect("failed to get bead2"),
             Some(bead2)
         );
     }
@@ -594,17 +576,24 @@ mod tests {
         let temp = tempdir().expect("failed to create tempdir");
         let path = temp.path().join("beads.jsonl");
 
-        let store = BeadStore::new(path)
-            .await
-            .expect("failed to create store");
+        let store = BeadStore::new(path).await.expect("failed to create store");
 
         let bead1 = BeadRecord::new("b1", "B1", "D1", BeadStatus::Open, 0);
         let bead2 = BeadRecord::new("b2", "B2", "D2", BeadStatus::InProgress, 0);
         let bead3 = BeadRecord::new("b3", "B3", "D3", BeadStatus::Open, 0);
 
-        store.insert_bead(bead1.clone()).await.expect("failed to insert b1");
-        store.insert_bead(bead2.clone()).await.expect("failed to insert b2");
-        store.insert_bead(bead3.clone()).await.expect("failed to insert b3");
+        store
+            .insert_bead(bead1.clone())
+            .await
+            .expect("failed to insert b1");
+        store
+            .insert_bead(bead2.clone())
+            .await
+            .expect("failed to insert b2");
+        store
+            .insert_bead(bead3.clone())
+            .await
+            .expect("failed to insert b3");
 
         let open_beads = store
             .filter_by_status(BeadStatus::Open)
@@ -621,22 +610,21 @@ mod tests {
         let temp = tempdir().expect("failed to create tempdir");
         let path = temp.path().join("beads.jsonl");
 
-        let store = BeadStore::new(path)
-            .await
-            .expect("failed to create store");
+        let store = BeadStore::new(path).await.expect("failed to create store");
 
         let bead = BeadRecord::new("b1", "B1", "D1", BeadStatus::Open, 0);
-        store.insert_bead(bead.clone()).await.expect("failed to insert");
+        let bead_id = bead.id.clone();
+        store
+            .insert_bead(bead.clone())
+            .await
+            .expect("failed to insert");
 
         // Update bead status
         let updated = bead.with_status(BeadStatus::InProgress);
-        store
-            .update_bead(updated.clone())
-            .await
-            .expect("failed to update");
+        store.update_bead(updated).await.expect("failed to update");
 
         let retrieved = store
-            .get_bead(&bead.id)
+            .get_bead(&bead_id)
             .await
             .expect("failed to get bead")
             .expect("bead not found");

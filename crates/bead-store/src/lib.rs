@@ -18,7 +18,7 @@
 //! # Example
 //!
 //! ```no_run
-//! use bead_store::{BeadStore, BeadRecord, BeadStatus};
+//! use bead_store::{BeadStore, BeadRecord, BeadStatus, BeadId};
 //! use std::path::PathBuf;
 //!
 //! # #[tokio::main]
@@ -29,7 +29,8 @@
 //! let beads = store.list_beads().await?;
 //!
 //! // Update bead status
-//! if let Some(mut bead) = store.get_bead("bead-123").await? {
+//! let bead_id = BeadId::new("bead-123");
+//! if let Some(mut bead) = store.get_bead(&bead_id).await? {
 //!     bead.status = BeadStatus::Closed;
 //!     store.update_bead(bead).await?;
 //! }
