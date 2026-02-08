@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_FAILURE_THRESHOLD","DEFAULT_SUCCESS_THRESHOLD","DEFAULT_TIMEOUT_SECS","DEFAULT_WINDOW_SIZE_SECS"],"enum":["CircuitBreakerError","CircuitState","RequestResult"],"struct":["CircuitBreaker","CircuitBreakerConfig","EventRecord"]};

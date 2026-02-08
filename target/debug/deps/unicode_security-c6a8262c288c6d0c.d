@@ -1,0 +1,10 @@
+/home/lewis/src/oya/target/debug/deps/unicode_security-c6a8262c288c6d0c.d: /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-security-0.1.2/src/lib.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-security-0.1.2/src/confusable_detection.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-security-0.1.2/src/general_security_profile.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-security-0.1.2/src/mixed_script.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-security-0.1.2/src/restriction_level.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-security-0.1.2/src/tables.rs
+
+/home/lewis/src/oya/target/debug/deps/libunicode_security-c6a8262c288c6d0c.rmeta: /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-security-0.1.2/src/lib.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-security-0.1.2/src/confusable_detection.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-security-0.1.2/src/general_security_profile.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-security-0.1.2/src/mixed_script.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-security-0.1.2/src/restriction_level.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-security-0.1.2/src/tables.rs
+
+/cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-security-0.1.2/src/lib.rs:
+/cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-security-0.1.2/src/confusable_detection.rs:
+/cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-security-0.1.2/src/general_security_profile.rs:
+/cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-security-0.1.2/src/mixed_script.rs:
+/cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-security-0.1.2/src/restriction_level.rs:
+/cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-security-0.1.2/src/tables.rs:

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["parse_cli_json_output","stream_cli_output"],"struct":["OpencodeClient"]};

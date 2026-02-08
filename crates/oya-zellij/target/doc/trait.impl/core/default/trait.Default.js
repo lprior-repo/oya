@@ -1,0 +1,9 @@
+(function() {
+    var implementors = Object.fromEntries([["oya_zellij",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.92.0/core/default/trait.Default.html\" title=\"trait core::default::Default\">Default</a> for <a class=\"struct\" href=\"oya_zellij/correlation/struct.CorrelationContext.html\" title=\"struct oya_zellij::correlation::CorrelationContext\">CorrelationContext</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.92.0/core/default/trait.Default.html\" title=\"trait core::default::Default\">Default</a> for <a class=\"struct\" href=\"oya_zellij/correlation/struct.RequestId.html\" title=\"struct oya_zellij::correlation::RequestId\">RequestId</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.92.0/core/default/trait.Default.html\" title=\"trait core::default::Default\">Default</a> for <a class=\"struct\" href=\"oya_zellij/log/struct.LogAggregator.html\" title=\"struct oya_zellij::log::LogAggregator\">LogAggregator</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.92.0/core/default/trait.Default.html\" title=\"trait core::default::Default\">Default</a> for <a class=\"struct\" href=\"oya_zellij/timer/struct.RefreshTimer.html\" title=\"struct oya_zellij::timer::RefreshTimer\">RefreshTimer</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.92.0/core/default/trait.Default.html\" title=\"trait core::default::Default\">Default</a> for <a class=\"struct\" href=\"oya_zellij/web_client/struct.WebClientConfig.html\" title=\"struct oya_zellij::web_client::WebClientConfig\">WebClientConfig</a>"]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":57,"fragment_lengths":[1537]}

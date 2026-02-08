@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_BASE_DELAY_MS","DEFAULT_JITTER_FACTOR","DEFAULT_MAX_DELAY_MS","DEFAULT_MAX_RETRIES"],"fn":["exponential_backoff","exponential_backoff_with_jitter"],"struct":["RetryDecision","RetryPolicy","RetryState"]};

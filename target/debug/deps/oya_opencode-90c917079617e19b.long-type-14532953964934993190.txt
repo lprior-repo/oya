@@ -1,0 +1,1 @@
+std::result::Result<std::pin::Pin<std::boxed::Box<dyn futures::Stream<Item = std::result::Result<types::StreamChunk, error::Error>> + std::marker::Send>>, error::Error>
