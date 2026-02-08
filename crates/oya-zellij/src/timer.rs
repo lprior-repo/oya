@@ -282,7 +282,8 @@ impl Default for RefreshTimer {
 }
 
 #[cfg(test)]
-#[expect(clippy::unwrap_used, clippy::panic)]
+#[allow(clippy::unwrap_used)]
+#[allow(clippy::panic)]
 mod tests {
     use super::*;
 
