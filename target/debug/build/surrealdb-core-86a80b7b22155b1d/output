@@ -1,2 +1,0 @@
-cargo:rustc-cfg=storage
-cargo::rustc-check-cfg=cfg(storage)

@@ -1,9 +1,0 @@
-[1m[33mwarning[0m: profiles for the non root package will be ignored, specify profiles at the workspace root:
-package:   /home/lewis/src/oya/crates/oya-ui/Cargo.toml
-workspace: /home/lewis/src/oya/Cargo.toml
-[1m[92m    Blocking[0m waiting for file lock on package cache
-[1m[92m    Blocking[0m waiting for file lock on package cache
-[1m[92m    Blocking[0m waiting for file lock on package cache
-[1m[92m    Blocking[0m waiting for file lock on build directory
-[1m[92m    Checking[0m oya v0.1.0 (/home/lewis/src/oya)
-[1m[92m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`dev` profile [unoptimized + debuginfo]]8;;\ target(s) in 0.62s

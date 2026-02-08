@@ -1,1 +1,0 @@
-cargo:rustc-env=MIME_TYPES_GENERATED_PATH=/home/lewis/src/oya/target/release/build/mime_guess-7c8dc3984fc3d0b9/out/mime_types_generated.rs

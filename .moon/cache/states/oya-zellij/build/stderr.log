@@ -1,7 +1,0 @@
-[1m[92m    Blocking[0m waiting for file lock on package cache
-[1m[92m    Blocking[0m waiting for file lock on package cache
-[1m[92m    Blocking[0m waiting for file lock on package cache
-[1m[92m    Blocking[0m waiting for file lock on package cache
-[1m[92m   Compiling[0m chrono v0.4.43
-[1m[92m   Compiling[0m hyper-util v0.1.20
-[1m[92m   Compiling[0m idna v1.1.0

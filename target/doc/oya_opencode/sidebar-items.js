@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["acp_schemas","client","config","error","executor","sse","types"]};

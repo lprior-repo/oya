@@ -1,8 +1,0 @@
-[1m[91merror[0m: failed to load manifest for workspace member `/home/lewis/src/oya/crates/rate-limiter`
-referenced by workspace at `/home/lewis/src/oya/Cargo.toml`
-
-Caused by:
-  failed to read `/home/lewis/src/oya/crates/rate-limiter/Cargo.toml`
-
-Caused by:
-  No such file or directory (os error 2)

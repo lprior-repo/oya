@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["ErrorCategory","HttpError","RecoveryStrategy"],"struct":["ErrorResponse"]};

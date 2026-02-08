@@ -1,1 +1,0 @@
-/home/lewis/src/oya/target/release/libbead_store.rlib: /home/lewis/src/oya/crates/bead-store/src/error.rs /home/lewis/src/oya/crates/bead-store/src/lib.rs /home/lewis/src/oya/crates/bead-store/src/store.rs /home/lewis/src/oya/crates/bead-store/src/types.rs
