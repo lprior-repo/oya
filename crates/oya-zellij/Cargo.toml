@@ -1,0 +1,18 @@
+[package]
+name = "oya-zellij"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+chrono = { version = "0.4", features = ["serde"] }
+rpds = "1.2"
+thiserror = "2"
+reqwest = { version = "0.12", features = ["json"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tracing = "0.1"
+uuid = { version = "1.10", features = ["v4", "serde"] }
+tokio = { version = "1", features = ["time", "macros"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["test-util", "macros"] }

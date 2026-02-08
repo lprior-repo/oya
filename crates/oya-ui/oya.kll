@@ -1,0 +1,18 @@
+// OYA Zellij Layout
+//
+// This layout file defines the default Zellij tab configuration
+// for loading the OYA UI WASM plugin.
+//
+// Usage:
+//   zellij --layout oya.kll
+//
+// Note: The WASM plugin must be built first:
+//   cargo build --release --target wasm32-wasip1
+
+layout {
+    default_tab {
+        pane name="oya" {
+            plugin location="file:target/wasm32-wasip1/release/oya_ui.wasm"
+        }
+    }
+}
