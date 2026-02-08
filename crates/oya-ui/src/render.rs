@@ -88,6 +88,7 @@ impl Renderer {
     }
 
     /// Render a single pane with border and content
+    #[allow(clippy::indexing_slicing)]
     fn render_pane(&self, pane: &Pane, content: &str, focused_pane: PaneType) -> String {
         let is_focused = pane.pane_type == focused_pane;
         let mut output = String::new();
@@ -445,6 +446,7 @@ fn textwrap(text: &str, width: usize) -> Vec<String> {
 }
 
 #[cfg(test)]
+#[allow(clippy::indexing_slicing)]
 mod tests {
     #![allow(clippy::unwrap_used)]
     #![allow(clippy::expect_used)]

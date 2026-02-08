@@ -67,6 +67,8 @@ pub enum Error {
 
 impl Error {
     /// Create a file read error.
+    #[must_use]
+    #[inline]
     pub fn file_read_failed(path: impl Into<PathBuf>, source: std::io::Error) -> Self {
         Self::FileReadFailed {
             path: path.into(),
@@ -75,6 +77,8 @@ impl Error {
     }
 
     /// Create a file write error.
+    #[must_use]
+    #[inline]
     pub fn file_write_failed(path: impl Into<PathBuf>, source: std::io::Error) -> Self {
         Self::FileWriteFailed {
             path: path.into(),
@@ -83,6 +87,8 @@ impl Error {
     }
 
     /// Create a directory creation error.
+    #[must_use]
+    #[inline]
     pub fn directory_creation_failed(path: impl Into<PathBuf>, source: std::io::Error) -> Self {
         Self::DirectoryCreationFailed {
             path: path.into(),
@@ -91,21 +97,29 @@ impl Error {
     }
 
     /// Create a JSON parse error.
+    #[must_use]
+    #[inline]
     pub fn json_parse_failed(source: serde_json::Error) -> Self {
         Self::JsonParseFailed { source }
     }
 
     /// Create a YAML parse error.
+    #[must_use]
+    #[inline]
     pub fn yaml_parse_failed(source: serde_yaml::Error) -> Self {
         Self::YamlParseFailed { source }
     }
 
     /// Create a TOML parse error.
+    #[must_use]
+    #[inline]
     pub fn toml_parse_failed(source: toml::de::Error) -> Self {
         Self::TomlParseFailed { source }
     }
 
     /// Create an invalid record error.
+    #[must_use]
+    #[inline]
     pub fn invalid_record(reason: impl Into<String>) -> Self {
         Self::InvalidRecord {
             reason: reason.into(),

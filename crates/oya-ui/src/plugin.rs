@@ -368,13 +368,9 @@ impl OyaPlugin {
     }
 }
 
-impl Default for OyaPlugin {
-    fn default() -> Self {
-        Self::new().expect("Failed to create plugin")
-    }
-}
-
 #[cfg(test)]
+#[allow(clippy::expect_used)]
+#[allow(clippy::indexing_slicing)]
 mod tests {
     #![allow(clippy::unwrap_used)]
     #![allow(clippy::expect_used)]

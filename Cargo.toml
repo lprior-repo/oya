@@ -68,9 +68,9 @@ too_many_arguments = "warn"    # Suggest tuples or structs for >7 args
 large_enum_variant = "warn"     # Consider Box for large enum variants
 
 # Code quality
-complexity = "warn"             # Keep functions simple
-nursery = "warn"                # Prepare for future Rust changes
-pedantic = "warn"               # Maximum pedantic checking
+complexity = { level = "warn", priority = -1 }             # Keep functions simple
+nursery = { level = "warn", priority = -1 }                # Prepare for future Rust changes
+pedantic = { level = "warn", priority = -1 }               # Maximum pedantic checking
 
 # Performance hints
 significant_drop_in_scrutinee = "warn"  # Avoid expensive drops in matches
