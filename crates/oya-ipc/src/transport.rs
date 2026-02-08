@@ -11,7 +11,7 @@
 use crate::{
     LENGTH_PREFIX_SIZE, MAX_FRAME_SIZE, MAX_PAYLOAD_SIZE, TransportError, TransportResult,
 };
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 
 /// Transport layer for length-prefixed bincode messages.
@@ -30,7 +30,7 @@ use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 /// # Ok(())
 /// # }
 /// ```
-pub struct IpcTransport<R, W> {
+pub struct IpcTransport<R, W: Write> {
     reader: BufReader<R>,
     writer: BufWriter<W>,
 }
@@ -164,8 +164,11 @@ impl<R: Read, W: Write> IpcTransport<R, W> {
         })?;
 
         // Step 4: Deserialize payload
-        let result = bincode::serde::decode_from_slice(&payload_buffer, bincode::config::standard())
-            .map_err(|e| TransportError::deserialization_failed(e.to_string(), payload_length))?;
+        let result =
+            bincode::serde::decode_from_slice(&payload_buffer, bincode::config::standard())
+                .map_err(|e| {
+                    TransportError::deserialization_failed(e.to_string(), payload_length)
+                })?;
 
         Ok(result.0)
     }
@@ -245,11 +248,11 @@ pub fn transport_pair() -> (
     IpcTransport<DuplexReader, DuplexWriter>,
     IpcTransport<DuplexReader, DuplexWriter>,
 ) {
-    let (client_to_server, server_to_client) = duplex_pair();
-    let (server_reader, client_writer) = duplex_pair();
+    let (client_writer, server_reader) = duplex_pair();
+    let (server_writer, client_reader) = duplex_pair();
 
-    let client = IpcTransport::new(server_reader, client_to_server);
-    let server = IpcTransport::new(server_to_client, client_writer);
+    let client = IpcTransport::new(client_reader, client_writer);
+    let server = IpcTransport::new(server_reader, server_writer);
 
     (client, server)
 }
@@ -313,7 +316,7 @@ impl Read for DuplexReader {
             return Ok(0);
         }
 
-        let mut buffer = self
+        let buffer = self
             .pipe
             .buffer
             .lock()
