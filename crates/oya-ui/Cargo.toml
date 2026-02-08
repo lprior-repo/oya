@@ -29,12 +29,6 @@ itertools = { workspace = true }
 # Testing
 tokio = { workspace = true }
 
-[profile.release]
-opt-level = "z"             # Optimize for size
-lto = true
-codegen-units = 1
-strip = true
-
 [features]
 default = []
 wasm = []

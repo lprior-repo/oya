@@ -219,13 +219,7 @@ mod tests {
 
     #[test]
     fn test_bead_record_new() {
-        let bead = BeadRecord::new(
-            "bead-1",
-            "Title",
-            "Description",
-            BeadStatus::Open,
-            0,
-        );
+        let bead = BeadRecord::new("bead-1", "Title", "Description", BeadStatus::Open, 0);
         assert_eq!(bead.id.as_str(), "bead-1");
         assert_eq!(bead.title, "Title");
         assert_eq!(bead.description, "Description");
@@ -237,17 +231,19 @@ mod tests {
     #[test]
     fn test_bead_record_with_status() {
         let bead = BeadRecord::test_fixture();
+        let created_at = bead.created_at;
         let updated = bead.with_status(BeadStatus::InProgress);
         assert_eq!(updated.status, BeadStatus::InProgress);
-        assert!(updated.updated_at > bead.created_at);
+        assert!(updated.updated_at > created_at);
     }
 
     #[test]
     fn test_bead_record_with_label() {
         let bead = BeadRecord::test_fixture();
+        let created_at = bead.created_at;
         let with_label = bead.with_label("new-label");
         assert!(with_label.has_label("new-label"));
-        assert!(with_label.updated_at > bead.created_at);
+        assert!(with_label.updated_at > created_at);
     }
 
     #[test]
