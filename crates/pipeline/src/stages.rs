@@ -19,6 +19,18 @@ pub enum Stage {
 }
 
 impl Stage {
+    const ORDERED: [Self; 9] = [
+        Self::Implement,
+        Self::UnitTest,
+        Self::Coverage,
+        Self::Lint,
+        Self::Static,
+        Self::Integration,
+        Self::Security,
+        Self::Review,
+        Self::Accept,
+    ];
+
     #[must_use]
     pub fn as_str(&self) -> &'static str {
         match self {
@@ -49,25 +61,13 @@ impl Stage {
             "security" => Ok(Self::Security),
             "review" => Ok(Self::Review),
             "accept" => Ok(Self::Accept),
-            other => Err(Error::InvalidStage(format!(
-                "unknown stage '{other}'"
-            ))),
+            other => Err(Error::InvalidStage(format!("unknown stage '{other}'"))),
         }
     }
 
     #[must_use]
-    pub fn all() -> Vec<Self> {
-        vec![
-            Self::Implement,
-            Self::UnitTest,
-            Self::Coverage,
-            Self::Lint,
-            Self::Static,
-            Self::Integration,
-            Self::Security,
-            Self::Review,
-            Self::Accept,
-        ]
+    pub const fn all() -> &'static [Self] {
+        &Self::ORDERED
     }
 
     #[must_use]
@@ -87,10 +87,17 @@ impl Stage {
 
     #[must_use]
     pub fn next(&self) -> Option<Self> {
-        let stages = Self::all();
-        stages
-            .into_iter()
-            .find(|stage| stage.index() == self.index() + 1)
+        match self {
+            Self::Implement => Some(Self::UnitTest),
+            Self::UnitTest => Some(Self::Coverage),
+            Self::Coverage => Some(Self::Lint),
+            Self::Lint => Some(Self::Static),
+            Self::Static => Some(Self::Integration),
+            Self::Integration => Some(Self::Security),
+            Self::Security => Some(Self::Review),
+            Self::Review => Some(Self::Accept),
+            Self::Accept => None,
+        }
     }
 }
 
