@@ -579,8 +579,8 @@ mod tests {
             }
         }
 
-        fn double_value(input: i32) -> Result<i32> {
-            Ok(input * 2)
+        fn double_value(input: i32) -> i32 {
+            input * 2
         }
 
         fn ensure_even(input: i32) -> Result<i32> {
@@ -594,7 +594,7 @@ mod tests {
         }
 
         let result = validate_input(21)
-            .and_then(double_value)
+            .map(double_value)
             .and_then(ensure_even);
 
         assert!(result.is_ok());
@@ -615,11 +615,11 @@ mod tests {
             }
         }
 
-        fn double_value(input: i32) -> Result<i32> {
-            Ok(input * 2)
+        fn double_value(input: i32) -> i32 {
+            input * 2
         }
 
-        let result = validate_input(-1).and_then(double_value);
+        let result = validate_input(-1).map(double_value);
         assert!(result.is_err());
     }
 
