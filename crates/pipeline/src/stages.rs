@@ -112,20 +112,19 @@ impl fmt::Display for Stage {
 /// # Errors
 /// Returns an error when stages are out of order or duplicated.
 pub fn validate_stage_sequence(stages: &[Stage]) -> Result<()> {
-    let mut last_index = None;
-
-    for stage in stages {
-        if let Some(prev) = last_index {
-            if stage.index() <= prev {
-                return Err(Error::InvalidStageSequence(
+    stages
+        .iter()
+        .map(Stage::index)
+        .try_fold(None, |last_index: Option<usize>, current_index| {
+            if last_index.is_some_and(|prev| current_index <= prev) {
+                Err(Error::InvalidStageSequence(
                     "stages must be in strictly increasing order".to_string(),
-                ));
+                ))
+            } else {
+                Ok(Some(current_index))
             }
-        }
-        last_index = Some(stage.index());
-    }
-
-    Ok(())
+        })
+        .map(|_| ())
 }
 
 #[cfg(test)]
