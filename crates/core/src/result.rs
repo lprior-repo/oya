@@ -643,14 +643,14 @@ mod tests {
     #[test]
     fn test_bimap_ok() {
         let result: std::result::Result<i32, &str> = Ok(21);
-        let mapped = result.bimap(|v| v * 2, |e| e.len());
+        let mapped = result.bimap(|v| v * 2, str::len);
         assert_eq!(mapped, Ok(42));
     }
 
     #[test]
     fn test_bimap_err() {
         let result: std::result::Result<i32, &str> = Err("hello");
-        let mapped: std::result::Result<i32, usize> = result.bimap(|v| v * 2, |e| e.len());
+        let mapped: std::result::Result<i32, usize> = result.bimap(|v| v * 2, str::len);
         assert_eq!(mapped, Err(5));
     }
 
