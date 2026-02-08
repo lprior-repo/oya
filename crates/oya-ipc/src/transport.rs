@@ -304,6 +304,7 @@ pub struct DuplexWriter {
 }
 
 /// Create a duplex pipe pair for testing
+#[cfg(test)]
 pub fn duplex_pair() -> (DuplexWriter, DuplexReader) {
     let pipe = DuplexPipe::new();
     let writer = DuplexWriter { pipe: pipe.clone() };
@@ -311,6 +312,7 @@ pub fn duplex_pair() -> (DuplexWriter, DuplexReader) {
     (writer, reader)
 }
 
+#[cfg(test)]
 impl Read for DuplexReader {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         if self
@@ -341,6 +343,7 @@ impl Read for DuplexReader {
     }
 }
 
+#[cfg(test)]
 impl Write for DuplexWriter {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         if self
