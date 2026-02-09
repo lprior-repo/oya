@@ -7,6 +7,7 @@ use tokio::sync::RwLock;
 
 use crate::error::Result;
 use crate::event::BeadEvent;
+use crate::replay::apply::{ApplyError, ApplyResult, EventSourcedState};
 use crate::replay::ReplayTracker;
 use crate::stage::StageKind;
 use crate::store::EventStore;
@@ -186,6 +187,179 @@ impl AllBeadsState {
         let mut beads: Vec<_> = self.beads.values().collect();
         beads.sort_by_key(|b| b.bead_id.as_ulid());
         beads
+    }
+
+    /// Decrement state count with saturation (no overflow).
+    fn decrement_count(&mut self, state: &BeadState) {
+        self.state_counts
+            .entry(*state)
+            .and_modify(|c| *c = c.saturating_sub(1));
+    }
+
+    /// Increment state count with saturation (no overflow).
+    fn increment_count(&mut self, state: BeadState) {
+        *self.state_counts.entry(state).or_insert(0) = self
+            .state_counts
+            .get(&state)
+            .copied()
+            .map_or(1, |c| c.saturating_add(1));
+    }
+}
+
+impl EventSourcedState for AllBeadsState {
+    fn validate_transition(
+        &self,
+        bead_id: BeadId,
+        from: BeadState,
+        to: BeadState,
+    ) -> ApplyResult<()> {
+        // Check if bead exists
+        let bead = self
+            .beads
+            .get(&bead_id)
+            .ok_or_else(|| ApplyError::BeadNotFound(bead_id))?;
+
+        // Validate that 'from' matches current state
+        if bead.current_state != from {
+            return Err(ApplyError::InvalidTransition {
+                bead_id,
+                from: bead.current_state,
+                to,
+            });
+        }
+
+        // Validate transition is allowed by state machine
+        if !from.can_transition_to(to) {
+            return Err(ApplyError::InvalidTransition {
+                bead_id,
+                from,
+                to,
+            });
+        }
+
+        Ok(())
+    }
+
+    fn apply_event(&mut self, event: &BeadEvent) -> ApplyResult<()> {
+        match event {
+            BeadEvent::Created { bead_id, spec, .. } => {
+                let mut projection = BeadProjection::new(*bead_id);
+                projection.spec = Some(spec.clone());
+                projection.dependencies = spec.dependencies.clone();
+
+                self.increment_count(BeadState::Pending);
+                self.beads.insert(*bead_id, projection);
+            }
+            BeadEvent::StateChanged {
+                bead_id, from, to, ..
+            } => {
+                let bead = self
+                    .beads
+                    .get_mut(bead_id)
+                    .ok_or_else(|| ApplyError::BeadNotFound(*bead_id))?;
+
+                bead.current_state = *to;
+                bead.history.push(StateTransition::new(*from, *to));
+
+                self.decrement_count(from);
+                self.increment_count(*to);
+            }
+            BeadEvent::PhaseCompleted {
+                bead_id, phase_id, ..
+            } => {
+                let bead = self
+                    .beads
+                    .get_mut(bead_id)
+                    .ok_or_else(|| ApplyError::BeadNotFound(*bead_id))?;
+                bead.current_phase = Some(*phase_id);
+            }
+            BeadEvent::DependencyResolved {
+                bead_id,
+                dependency_id,
+                ..
+            } => {
+                let bead = self
+                    .beads
+                    .get_mut(bead_id)
+                    .ok_or_else(|| ApplyError::BeadNotFound(*bead_id))?;
+                bead.blocked_by.retain(|id| id != dependency_id);
+            }
+            BeadEvent::Claimed {
+                bead_id, agent_id, ..
+            } => {
+                let bead = self
+                    .beads
+                    .get_mut(bead_id)
+                    .ok_or_else(|| ApplyError::BeadNotFound(*bead_id))?;
+                bead.claimed_by = Some(agent_id.clone());
+            }
+            BeadEvent::Unclaimed { bead_id, .. } => {
+                let bead = self
+                    .beads
+                    .get_mut(bead_id)
+                    .ok_or_else(|| ApplyError::BeadNotFound(*bead_id))?;
+                bead.claimed_by = None;
+            }
+            BeadEvent::StageStarted {
+                bead_id,
+                stage,
+                attempt: _,
+                ..
+            } => {
+                let bead = self
+                    .beads
+                    .get_mut(bead_id)
+                    .ok_or_else(|| ApplyError::BeadNotFound(*bead_id))?;
+                bead.current_stage = Some(*stage);
+                let entry = bead.stage_attempts.entry(*stage).or_insert(0);
+                *entry = entry.saturating_add(1);
+            }
+            BeadEvent::StageCompleted { bead_id, stage, .. } => {
+                let bead = self
+                    .beads
+                    .get_mut(bead_id)
+                    .ok_or_else(|| ApplyError::BeadNotFound(*bead_id))?;
+                bead.current_stage = stage.next();
+            }
+            BeadEvent::StageFailed {
+                bead_id, feedback, ..
+            } => {
+                let bead = self
+                    .beads
+                    .get_mut(bead_id)
+                    .ok_or_else(|| ApplyError::BeadNotFound(*bead_id))?;
+                bead.last_stage_feedback = Some(feedback.clone());
+            }
+            BeadEvent::StageReentry {
+                bead_id,
+                to_stage,
+                reason,
+                ..
+            } => {
+                let bead = self
+                    .beads
+                    .get_mut(bead_id)
+                    .ok_or_else(|| ApplyError::BeadNotFound(*bead_id))?;
+                bead.current_stage = Some(*to_stage);
+                bead.last_stage_feedback = Some(reason.clone());
+            }
+            BeadEvent::RecursionExhausted { bead_id, .. } => {
+                let bead = self
+                    .beads
+                    .get_mut(bead_id)
+                    .ok_or_else(|| ApplyError::BeadNotFound(*bead_id))?;
+
+                let from = bead.current_state;
+                bead.current_state = BeadState::Completed;
+                bead.history.push(StateTransition::new(from, BeadState::Completed));
+
+                self.decrement_count(&from);
+                self.increment_count(BeadState::Completed);
+            }
+            _ => {}
+        }
+
+        Ok(())
     }
 }
 
