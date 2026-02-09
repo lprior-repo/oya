@@ -6,11 +6,24 @@
 // - Text layout and wrapping
 // - Color and styling support
 // - Focused pane highlighting
+// - Help overlay rendering
 
 use crate::components::style;
 use crate::layout::{Layout, Pane, PaneType};
 use crate::plugin::TaskRow;
 use std::fmt::Write;
+use thiserror::Error;
+
+/// Errors that can occur during help overlay rendering
+#[derive(Debug, Error, Clone, PartialEq)]
+pub enum HelpOverlayError {
+    /// Terminal too small to render overlay
+    #[error("Terminal too small: {rows}x{cols}, minimum 10x40 required")]
+    TerminalTooSmall { rows: usize, cols: usize },
+}
+
+/// Result type for help overlay rendering
+pub type HelpOverlayResult<T> = Result<T, HelpOverlayError>;
 
 /// Terminal renderer for OYA UI
 pub struct Renderer {
@@ -405,6 +418,151 @@ impl Renderer {
         ));
 
         status
+    }
+
+    /// Render help overlay as a centered floating pane
+    ///
+    /// # Arguments
+    ///
+    /// * `terminal_rows` - Total terminal rows
+    /// * `terminal_cols` - Total terminal columns
+    /// * `keybindings` - Vector of (key, action) tuples to display
+    /// * `pane_type` - Current pane type for title
+    ///
+    /// # Returns
+    ///
+    /// Complete rendered output as a string with overlay positioned
+    ///
+    /// # Errors
+    ///
+    /// Returns HelpOverlayError if terminal is too small
+    #[allow(clippy::indexing_slicing)]
+    pub fn render_help_overlay(
+        &self,
+        terminal_rows: usize,
+        terminal_cols: usize,
+        keybindings: &[(char, &str)],
+        pane_type: PaneType,
+    ) -> HelpOverlayResult<String> {
+        // Check precondition: minimum terminal size
+        const MIN_ROWS: usize = 10;
+        const MIN_COLS: usize = 40;
+        if terminal_rows < MIN_ROWS || terminal_cols < MIN_COLS {
+            return Err(HelpOverlayError::TerminalTooSmall {
+                rows: terminal_rows,
+                cols: terminal_cols,
+            });
+        }
+
+        // Calculate overlay dimensions
+        const TITLE_HEIGHT: usize = 2;
+        let keybinding_height = keybindings.len().saturating_add(1);
+        const CLOSE_HINT_HEIGHT: usize = 2;
+        const BORDER_HEIGHT: usize = 2;
+
+        let overlay_height = TITLE_HEIGHT
+            .saturating_add(keybinding_height)
+            .saturating_add(CLOSE_HINT_HEIGHT)
+            .saturating_add(BORDER_HEIGHT);
+
+        const OVERLAY_WIDTH: usize = 40;
+
+        // Center overlay in terminal
+        let start_row = terminal_rows.saturating_sub(overlay_height).saturating_div(2);
+        let start_col = terminal_cols.saturating_sub(OVERLAY_WIDTH).saturating_div(2);
+
+        let mut output = String::new();
+
+        // Move cursor to overlay position
+        write!(output, "\x1b[{};{}H", start_row, start_col).ok();
+
+        // Render top border with title
+        let title = format!("Keybindings - {}", pane_type);
+        let title_with_color = style::colorize(&title, style::COLOR_GREEN);
+        output.push_str(&self.render_overlay_top_border(OVERLAY_WIDTH, &title_with_color));
+
+        // Render keybindings
+        for (key, action) in keybindings {
+            write!(output, "\x1b[{};{}H", start_row.saturating_add(output.lines().count()), start_col)
+                .ok();
+
+            let key_display = if *key == '\t' {
+                "Tab".to_string()
+            } else if *key == '\x1b' {
+                "ESC".to_string()
+            } else {
+                key.to_string()
+            };
+
+            let line = format!("│ {:<4} | {:<30} │", key_display, action);
+            output.push_str(&line);
+            output.push('\n');
+        }
+
+        // Render close hint
+        write!(
+            output,
+            "\x1b[{};{}H",
+            start_row.saturating_add(output.lines().count()),
+            start_col
+        )
+        .ok();
+        output.push_str("│                                    │\n");
+
+        write!(
+            output,
+            "\x1b[{};{}H",
+            start_row.saturating_add(output.lines().count()),
+            start_col
+        )
+        .ok();
+        output.push_str(&style::colorize(
+            "│ Press ? or ESC to close              │",
+            style::COLOR_GREEN,
+        ));
+        output.push('\n');
+
+        // Render bottom border
+        write!(
+            output,
+            "\x1b[{};{}H",
+            start_row.saturating_add(output.lines().count()),
+            start_col
+        )
+        .ok();
+        output.push_str(&self.render_overlay_bottom_border(OVERLAY_WIDTH));
+
+        Ok(output)
+    }
+
+    /// Render overlay top border with title
+    fn render_overlay_top_border(&self, width: usize, title: &str) -> String {
+        let mut output = String::from("┌");
+
+        // Add title (truncated if too long)
+        let title_len = title.chars().count();
+        let available_width = width.saturating_sub(4);
+
+        if title_len <= available_width {
+            output.push_str(title);
+            output.push_str(&"─".repeat(width.saturating_sub(2).saturating_sub(title_len)));
+        } else {
+            let truncated: String = title.chars().take(available_width).collect();
+            output.push_str(&truncated);
+            output.push_str(&"─".repeat(width.saturating_sub(2).saturating_sub(available_width)));
+        }
+
+        output.push('┐');
+        output.push('\n');
+        output
+    }
+
+    /// Render overlay bottom border
+    fn render_overlay_bottom_border(&self, width: usize) -> String {
+        let mut output = String::from("└");
+        output.push_str(&"─".repeat(width.saturating_sub(2)));
+        output.push('┘');
+        output
     }
 }
 

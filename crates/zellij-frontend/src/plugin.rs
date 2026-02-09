@@ -25,6 +25,9 @@ pub enum PluginError {
 
     #[error("Layout calculation failed: {0}")]
     LayoutError(String),
+
+    #[error("Terminal too small for help overlay: {rows}x{cols}, minimum 10x40 required")]
+    TerminalTooSmall { rows: usize, cols: usize },
 }
 
 /// Result type for plugin operations
@@ -167,6 +170,8 @@ pub enum PluginState {
     Starting,
     /// Running normally
     Running,
+    /// Help overlay is active
+    HelpOverlay,
     /// Error state
     Error,
     /// Shutting down
@@ -532,6 +537,116 @@ impl OyaPlugin {
                 self.status_message = Some(format!("IPC error: {err}"));
                 Ok(())
             }
+        }
+    }
+
+    /// Get keybindings for a specific pane type
+    ///
+    /// Returns a vector of (key, action description) tuples.
+    /// Empty vector if no keybindings defined (no error).
+    fn get_keybindings_for_pane(&self, pane_type: crate::layout::PaneType) -> Vec<(char, &'static str)> {
+        match pane_type {
+            crate::layout::PaneType::BeadList => vec![
+                ('j', "Move down"),
+                ('k', "Move up"),
+                ('\t', "Switch pane"),
+                ('g', "Refresh tasks"),
+                ('r', "Run pipeline"),
+                ('a', "Approve task"),
+                ('b', "Batch run"),
+            ],
+            crate::layout::PaneType::BeadDetail => vec![
+                ('\t', "Switch pane"),
+                ('r', "Run pipeline"),
+                ('a', "Approve task"),
+            ],
+            crate::layout::PaneType::PipelineView => vec![
+                ('\t', "Switch pane"),
+                ('g', "Refresh tasks"),
+            ],
+            crate::layout::PaneType::WorkflowGraph => vec![
+                ('\t', "Switch pane"),
+            ],
+        }
+    }
+
+    /// Open help overlay with context-sensitive keybindings
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Plugin is not in Running state
+    /// - Terminal is too small (< 10 rows x 40 cols)
+    fn open_help_overlay(&mut self) -> PluginResult<String> {
+        // Check precondition: must be in Running state
+        if self.state != PluginState::Running {
+            return Err(PluginError::InvalidState(
+                "Cannot open help overlay: plugin must be in Running state".to_string(),
+            ));
+        }
+
+        // Check precondition: terminal minimum size
+        const MIN_ROWS: usize = 10;
+        const MIN_COLS: usize = 40;
+        if self.size.rows < MIN_ROWS || self.size.cols < MIN_COLS {
+            return Err(PluginError::TerminalTooSmall {
+                rows: self.size.rows,
+                cols: self.size.cols,
+            });
+        }
+
+        // Transition to HelpOverlay state
+        self.state = PluginState::HelpOverlay;
+
+        // Get keybindings for current pane
+        let keybindings = self.get_keybindings_for_pane(self.focused_pane);
+
+        // Render overlay
+        self.renderer
+            .render_help_overlay(
+                self.size.rows,
+                self.size.cols,
+                &keybindings,
+                self.focused_pane,
+            )
+            .map_err(|e| PluginError::RenderError(e.to_string()))
+    }
+
+    /// Close help overlay and restore previous state
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if plugin is not in HelpOverlay state
+    fn close_help_overlay(&mut self) -> PluginResult<String> {
+        // Check precondition: must be in HelpOverlay state
+        if self.state != PluginState::HelpOverlay {
+            return Err(PluginError::InvalidState(
+                "Cannot close help overlay: overlay is not open".to_string(),
+            ));
+        }
+
+        // Transition back to Running state
+        self.state = PluginState::Running;
+
+        // Render full UI (without overlay)
+        match self.render()? {
+            Some(rendered) => Ok(rendered),
+            None => Ok(String::from("Help overlay closed")),
+        }
+    }
+
+    /// Toggle help overlay (open if closed, close if open)
+    ///
+    /// # Errors
+    ///
+    /// Propagates errors from open_help_overlay or close_help_overlay
+    fn toggle_help_overlay(&mut self) -> PluginResult<String> {
+        match self.state {
+            PluginState::Running => self.open_help_overlay(),
+            PluginState::HelpOverlay => self.close_help_overlay(),
+            _ => Err(PluginError::InvalidState(
+                "Cannot toggle help overlay: invalid state".to_string(),
+            )),
         }
     }
 }

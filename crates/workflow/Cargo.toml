@@ -46,7 +46,7 @@ zstd = { workspace = true }
 base64 = "0.22"
 
 # Orchestrator integration
-oya-orchestrator = { path = "../orchestrator" }
+orchestrator = { path = "../orchestrator" }
 
 # Persistent data structures
 im = "15.1"
