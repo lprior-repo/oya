@@ -22,7 +22,7 @@ Diff in /home/lewis/src/oya/crates/events/tests/worker_assignment_test.rs:267:
 (B[m }
  
  #[tokio::test]
-Diff in /home/lewis/src/oya/crates/workflow/tests/checkpoint_properties.rs:616:
+Diff in /home/lewis/src/oya/crates/workflow/tests/checkpoint_properties.rs:621:
      }
  
      // THEN: States should match
@@ -34,7 +34,7 @@ Diff in /home/lewis/src/oya/crates/workflow/tests/checkpoint_properties.rs:616:
 (B[m 
      Ok(())
  }
-Diff in /home/lewis/src/oya/crates/workflow/tests/checkpoint_properties.rs:658:
+Diff in /home/lewis/src/oya/crates/workflow/tests/checkpoint_properties.rs:663:
      // No events to apply (checkpoint at end)
  
      // THEN: Restored state should match current state
@@ -373,7 +373,7 @@ Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_tes
 (B[m         Ok(_) => (),
          Err(e) => {
              eprintln!("Failed to create bead: {}", e);
-Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:263:
+Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:272:
      };
  
      match &event {
@@ -386,7 +386,7 @@ Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_tes
 (B[m             assert_eq!(id.as_str(), bead_id);
              assert_eq!(*from, BeadState::Running);
              assert_eq!(*to, BeadState::Cancelled);
-Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:301:
+Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:310:
      };
  
      let bead_id = "test-retry-integration";
@@ -402,7 +402,7 @@ Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_tes
 (B[m         Ok(_) => (),
          Err(e) => {
              eprintln!("Failed to create bead: {}", e);
-Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:330:
+Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:348:
      };
  
      match &event {
@@ -415,7 +415,7 @@ Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_tes
 (B[m             assert_eq!(id.as_str(), bead_id);
              assert_eq!(*from, BeadState::Failed);
              assert_eq!(*to, BeadState::Ready);
-Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:409:
+Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:436:
      };
  
      let bead_id = "test-completed-error";
@@ -431,7 +431,7 @@ Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_tes
 (B[m         Ok(_) => (),
          Err(e) => {
              eprintln!("Failed to create bead: {}", e);
-Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:469:
+Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:505:
      let bead_id_1 = "test-multi-1";
      let bead_id_2 = "test-multi-2";
  
@@ -447,7 +447,7 @@ Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_tes
 (B[m         Ok(_) => (),
          Err(e) => {
              eprintln!("Failed to create bead: {}", e);
-Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:476:
+Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:512:
              return Ok(());
          }
      }
@@ -463,7 +463,7 @@ Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_tes
 (B[m         Ok(_) => (),
          Err(e) => {
              eprintln!("Failed to create bead: {}", e);
-Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:525:
+Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:567:
  
      // Verify we got StateChanged events for both beads
      let ids = vec![event1.bead_id(), event2.bead_id()];
@@ -478,7 +478,7 @@ Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_tes
 (B[m 
      let _ = setup.worker.stop(Some("test complete".to_string()));
  
-Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:549:
+Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:591:
      };
  
      let bead_id = "test-idempotent-start";
@@ -494,7 +494,7 @@ Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_tes
 (B[m         Ok(_) => (),
          Err(e) => {
              eprintln!("Failed to create bead: {}", e);
-Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:623:
+Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:685:
      };
  
      let bead_id = "test-idempotent-cancel";
@@ -510,7 +510,7 @@ Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_tes
 (B[m         Ok(_) => (),
          Err(e) => {
              eprintln!("Failed to create bead: {}", e);
-Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:705:
+Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:787:
  
      // Publish a test event
      let test_bead_id = BeadId::new();
@@ -523,7 +523,7 @@ Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_tes
 (B[m 
      match setup.event_bus.publish(event).await {
          Ok(_) => {
-Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:744:
+Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:826:
      };
  
      let bead_id = "test-persistence-integration";
@@ -612,21 +612,20 @@ Diff in /home/lewis/src/oya/crates/zellij-frontend/src/plugin.rs:588:
 (B[m             selected_index: 0,
              focused_pane: crate::layout::PaneType::BeadDetail,
              plugin_state: PluginState::Running,
-Diff in /home/lewis/src/oya/crates/zellij-frontend/src/plugin.rs:655:
-         // Restore should fail with validation error
-         let result = plugin.restore_from_snapshot(snapshot);
+Diff in /home/lewis/src/oya/crates/zellij-frontend/src/plugin.rs:657:
          assert!(result.is_err());
-[31m-        assert!(result.unwrap_err().to_string().contains("IncompatibleVersion"));
+         let error_msg = result.unwrap_err().to_string();
+         // Check for version-related error message
+[31m-        assert!(error_msg.contains("version") || error_msg.contains("999") || error_msg.contains("incompatible"));
 (B[m[32m+        assert!(
-(B[m[32m+            result
-(B[m[32m+                .unwrap_err()
-(B[m[32m+                .to_string()
-(B[m[32m+                .contains("IncompatibleVersion")
+(B[m[32m+            error_msg.contains("version")
+(B[m[32m+                || error_msg.contains("999")
+(B[m[32m+                || error_msg.contains("incompatible")
 (B[m[32m+        );
 (B[m     }
  
      #[test]
-Diff in /home/lewis/src/oya/crates/zellij-frontend/src/plugin.rs:767:
+Diff in /home/lewis/src/oya/crates/zellij-frontend/src/plugin.rs:769:
  
          assert!(result.is_ok());
          assert!(plugin.auto_save_timer.is_some());
@@ -641,26 +640,26 @@ Diff in /home/lewis/src/oya/crates/zellij-frontend/src/plugin.rs:767:
 (B[m     }
  
      #[test]
-Diff in /home/lewis/src/oya/crates/zellij-frontend/src/plugin.rs:849:
-         let _ = plugin.save_state_now();
- 
-         assert!(plugin.status_message.is_some());
-[31m-        assert!(plugin
-(B[m[31m-            .status_message
-(B[m[31m-            .as_ref()
-(B[m[31m-            .map(|msg| msg.contains("State saved at"))
-(B[m[31m-            .unwrap_or(false));
-(B[m[32m+        assert!(
-(B[m[32m+            plugin
-(B[m[32m+                .status_message
-(B[m[32m+                .as_ref()
-(B[m[32m+                .map(|msg| msg.contains("State saved at"))
-(B[m[32m+                .unwrap_or(false)
-(B[m[32m+        );
-(B[m     }
- 
-     #[test]
-Diff in /home/lewis/src/oya/crates/zellij-frontend/src/plugin.rs:1688:
+Diff in /home/lewis/src/oya/crates/zellij-frontend/src/plugin.rs:856:
+         // If save succeeds, status message should be updated
+         if result.is_ok() {
+             assert!(plugin.status_message.is_some());
+[31m-            assert!(plugin
+(B[m[31m-                .status_message
+(B[m[31m-                .as_ref()
+(B[m[31m-                .map(|msg| msg.contains("State saved at"))
+(B[m[31m-                .unwrap_or(false));
+(B[m[32m+            assert!(
+(B[m[32m+                plugin
+(B[m[32m+                    .status_message
+(B[m[32m+                    .as_ref()
+(B[m[32m+                    .map(|msg| msg.contains("State saved at"))
+(B[m[32m+                    .unwrap_or(false)
+(B[m[32m+            );
+(B[m         }
+         // If save fails, that's acceptable in test environment
+     }
+Diff in /home/lewis/src/oya/crates/zellij-frontend/src/plugin.rs:1710:
          let interval_ms = interval_secs.saturating_mul(1000);
  
          // Create timer configuration
@@ -752,16 +751,7 @@ Diff in /home/lewis/src/oya/crates/zellij-frontend/src/render.rs:952:
 (B[m         assert!(output_failed.contains("✗ ◎ validate"));
      }
  
-Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_test.rs:3:
- //! These tests verify the pipe handler correctly handles stdin/stdout communication
- //! with actual OS pipes and process I/O.
- 
-[31m-use std::io::{BufRead, Read, Write, Cursor};
-(B[m[32m+use std::io::{BufRead, Cursor, Read, Write};
-(B[m use std::process::{Command, Stdio};
- use std::thread;
- use std::time::Duration;
-Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_test.rs:27:
+Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_test.rs:26:
  
      let mut input = String::new();
      let mut stdin = io::stdin();
@@ -772,7 +762,7 @@ Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_te
 (B[m 
      // Echo the input back with a prefix
      println!("ECHO: {}", input.trim());
-Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_test.rs:74:
+Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_test.rs:73:
      // Spawn a thread to act as the other endpoint
      thread::spawn(move || {
          let mut buf = [0u8; 16];
@@ -783,7 +773,7 @@ Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_te
 (B[m         write1
              .write_all(b"Pong")
              .expect("Failed to write to pipe 1");
-Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_test.rs:81:
+Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_test.rs:80:
      });
  
      // Send a message and wait for response
@@ -800,7 +790,7 @@ Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_te
 (B[m 
      assert_eq!(b"Pong", &response);
  }
-Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_test.rs:117:
+Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_test.rs:116:
          .read_to_end(&mut buffer)
          .expect("Failed to read from pipe");
  
@@ -810,7 +800,7 @@ Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_te
 (B[m 
      assert_eq!(original, received);
  }
-Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_test.rs:213:
+Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_test.rs:214:
      assert_eq!(test_data, buffer.as_slice());
  
      // Wait for child to exit
@@ -821,7 +811,7 @@ Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_te
 (B[m 
      assert!(exit_status.success());
  }
-Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_test.rs:265:
+Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_test.rs:266:
      let mut responses = Vec::new();
      for line in stdout_reader.lines() {
          let line = line.expect("Failed to read line");
@@ -831,7 +821,7 @@ Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_te
 (B[m         responses.push(response);
      }
  
-Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_test.rs:273:
+Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_test.rs:274:
      assert_eq!(messages, responses);
  
 [31m-    child
@@ -841,7 +831,7 @@ Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_te
 (B[m }
  
  /// Test concurrent access to pipes
-Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_test.rs:285:
+Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_test.rs:286:
  /// 3. Data integrity is maintained
  #[test]
  fn test_concurrent_pipe_access() {
@@ -853,7 +843,7 @@ Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_te
 (B[m 
      let success_count = Arc::new(AtomicUsize::new(0));
      let mut handles = vec![];
-Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_test.rs:366:
+Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_test.rs:367:
          data: "second".to_string(),
      };
  

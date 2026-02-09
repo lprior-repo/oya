@@ -318,9 +318,7 @@ impl TaskRow {
             }
 
             // Stage completed - mark stage as complete
-            HostMessage::StageCompleted {
-                bead_id, stage, ..
-            } => {
+            HostMessage::StageCompleted { bead_id, stage, .. } => {
                 self.validate_bead_id(bead_id)?;
                 self.stage = Some(stage.clone());
                 self.apply_stage_event(stage, StageState::Completed, 1)
@@ -588,7 +586,13 @@ mod tests {
         // Create a snapshot with specific state
         let snapshot = crate::state::StateSnapshot {
             version: crate::state::STATE_VERSION,
-            tasks: vec![TaskRow::new("test-task", "in_progress", "P0", "Rust", "task/test")],
+            tasks: vec![TaskRow::new(
+                "test-task",
+                "in_progress",
+                "P0",
+                "Rust",
+                "task/test",
+            )],
             selected_index: 0,
             focused_pane: crate::layout::PaneType::BeadDetail,
             plugin_state: PluginState::Running,
@@ -657,7 +661,11 @@ mod tests {
         assert!(result.is_err());
         let error_msg = result.unwrap_err().to_string();
         // Check for version-related error message
-        assert!(error_msg.contains("version") || error_msg.contains("999") || error_msg.contains("incompatible"));
+        assert!(
+            error_msg.contains("version")
+                || error_msg.contains("999")
+                || error_msg.contains("incompatible")
+        );
     }
 
     #[test]
@@ -769,7 +777,13 @@ mod tests {
 
         assert!(result.is_ok());
         assert!(plugin.auto_save_timer.is_some());
-        assert!(plugin.auto_save_timer.as_ref().map(|t| t.is_running()).unwrap_or(false));
+        assert!(
+            plugin
+                .auto_save_timer
+                .as_ref()
+                .map(|t| t.is_running())
+                .unwrap_or(false)
+        );
     }
 
     #[test]
@@ -856,11 +870,13 @@ mod tests {
         // If save succeeds, status message should be updated
         if result.is_ok() {
             assert!(plugin.status_message.is_some());
-            assert!(plugin
-                .status_message
-                .as_ref()
-                .map(|msg| msg.contains("State saved at"))
-                .unwrap_or(false));
+            assert!(
+                plugin
+                    .status_message
+                    .as_ref()
+                    .map(|msg| msg.contains("State saved at"))
+                    .unwrap_or(false)
+            );
         }
         // If save fails, that's acceptable in test environment
     }
@@ -1710,7 +1726,8 @@ impl OyaPlugin {
         let interval_ms = interval_secs.saturating_mul(1000);
 
         // Create timer configuration
-        let config = TimerConfig::new(interval_ms).map_err(|e| PluginError::TimerError(e.to_string()))?;
+        let config =
+            TimerConfig::new(interval_ms).map_err(|e| PluginError::TimerError(e.to_string()))?;
 
         // Create and start timer
         let timer = RefreshTimer::new(config)

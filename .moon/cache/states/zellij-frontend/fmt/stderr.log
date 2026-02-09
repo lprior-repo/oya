@@ -1,0 +1,11 @@
+error: unexpected closing delimiter: `}`
+   --> /home/lewis/src/oya/crates/zellij-frontend/tests/command_pane_integration_test.rs:570:1
+    |
+559 | fn test_command_output_event_structure() {
+    |                                          - the nearest open delimiter
+...
+569 |     assert_eq!(event.stderr(), Some("")));
+    |                                         - missing open `(` for this delimiter
+570 | }
+    | ^ unexpected closing delimiter
+
