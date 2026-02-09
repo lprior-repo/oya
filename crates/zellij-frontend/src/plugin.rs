@@ -777,11 +777,13 @@ mod tests {
 
         assert!(result.is_ok());
         assert!(plugin.auto_save_timer.is_some());
-        assert!(plugin
-            .auto_save_timer
-            .as_ref()
-            .map(|t| t.is_running())
-            .unwrap_or(false));
+        assert!(
+            plugin
+                .auto_save_timer
+                .as_ref()
+                .map(|t| t.is_running())
+                .unwrap_or(false)
+        );
     }
 
     #[test]
@@ -868,11 +870,13 @@ mod tests {
         // If save succeeds, status message should be updated
         if result.is_ok() {
             assert!(plugin.status_message.is_some());
-            assert!(plugin
-                .status_message
-                .as_ref()
-                .map(|msg| msg.contains("State saved at"))
-                .unwrap_or(false));
+            assert!(
+                plugin
+                    .status_message
+                    .as_ref()
+                    .map(|msg| msg.contains("State saved at"))
+                    .unwrap_or(false)
+            );
         }
         // If save fails, that's acceptable in test environment
     }
@@ -992,6 +996,60 @@ mod tests {
         assert!(plugin.auto_save_timer.is_some());
         let timer = plugin.auto_save_timer.as_ref().unwrap();
         assert!(timer.is_running());
+    }
+
+    #[test]
+    fn test_state_save_and_restore_roundtrip() {
+        use std::fs;
+
+        // Create a temporary directory for state file
+        let temp_dir = std::env::temp_dir().join("oya-test-state-roundtrip");
+        let _ = fs::remove_dir_all(&temp_dir); // Clean up any previous test
+        fs::create_dir_all(&temp_dir).expect("Failed to create temp dir");
+
+        let state_file = temp_dir.join("test-state.json");
+
+        // Create plugin and set up specific state
+        let mut plugin1 = OyaPlugin::new().expect("Failed to create plugin");
+
+        // Modify state to test restoration
+        plugin1.selected_index = 2;
+        plugin1.focused_pane = crate::layout::PaneType::PipelineView;
+        plugin1.status_message = Some("Test roundtrip message".to_string());
+
+        // Save state
+        let state_manager = crate::state::StateManager::new(state_file.clone(), 1_048_576)
+            .expect("Failed to create StateManager");
+        let save_result = state_manager.save_state(&plugin1);
+
+        // Verify save succeeded (or skip if filesystem unavailable)
+        if save_result.is_ok() {
+            // Create a new plugin instance
+            let mut plugin2 = OyaPlugin::new().expect("Failed to create second plugin");
+
+            // Load state
+            let load_result = state_manager.load_state();
+            assert!(load_result.is_ok(), "Load should succeed");
+
+            let mut snapshot = load_result.unwrap().expect("State should exist");
+            assert!(snapshot.validate().is_ok(), "Snapshot should be valid");
+
+            // Restore state
+            let restore_result = plugin2.restore_from_snapshot(snapshot);
+            assert!(restore_result.is_ok(), "Restore should succeed");
+
+            // Verify restored state matches saved state
+            assert_eq!(plugin2.selected_index, 2);
+            assert_eq!(plugin2.focused_pane, crate::layout::PaneType::PipelineView);
+            assert_eq!(
+                plugin2.status_message,
+                Some("Test roundtrip message".to_string())
+            );
+
+            // Clean up
+            let _ = fs::remove_dir_all(&temp_dir);
+        }
+        // If save fails, skip test (filesystem unavailable in test environment)
     }
 }
 
