@@ -9,7 +9,7 @@ repository.workspace = true
 description = "IPC transport layer for Zellij plugin communication"
 
 [dependencies]
-serde = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 bincode = { workspace = true }
 thiserror = { workspace = true }
 

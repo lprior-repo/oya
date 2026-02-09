@@ -9,7 +9,7 @@
 
 use crate::components::style;
 use crate::layout::{Layout, Pane, PaneType};
-use crate::plugin::SampleBead;
+use crate::plugin::TaskRow;
 use std::fmt::Write;
 
 /// Terminal renderer for OYA UI
@@ -51,9 +51,10 @@ impl Renderer {
     pub fn render_layout(
         &self,
         layout: &Layout,
-        beads: &[SampleBead],
+        tasks: &[TaskRow],
         selected_index: usize,
         focused_pane: PaneType,
+        status_message: Option<&str>,
     ) -> String {
         let mut output = String::new();
 
@@ -64,13 +65,13 @@ impl Renderer {
         for pane in layout.panes() {
             let content = match pane.pane_type {
                 PaneType::BeadList => {
-                    self.render_bead_list(pane, beads, selected_index, focused_pane)
+                    self.render_bead_list(pane, tasks, selected_index, focused_pane)
                 }
                 PaneType::BeadDetail => {
-                    self.render_bead_detail(pane, beads, selected_index, focused_pane)
+                    self.render_bead_detail(pane, tasks, selected_index, focused_pane)
                 }
                 PaneType::PipelineView => {
-                    self.render_pipeline_view(pane, beads, selected_index, focused_pane)
+                    self.render_pipeline_view(pane, tasks, selected_index, focused_pane)
                 }
                 PaneType::WorkflowGraph => self.render_workflow_graph(pane, focused_pane),
             };
@@ -81,7 +82,7 @@ impl Renderer {
         }
 
         // Render status bar at bottom
-        let status = self.render_status_bar(focused_pane);
+        let status = self.render_status_bar(focused_pane, status_message);
         output.push_str(&status);
 
         output
@@ -183,59 +184,53 @@ impl Renderer {
     fn render_bead_list(
         &self,
         pane: &Pane,
-        beads: &[SampleBead],
+        tasks: &[TaskRow],
         selected_index: usize,
         focused_pane: PaneType,
     ) -> String {
         let is_focused = pane.pane_type == focused_pane;
         let mut content = String::new();
 
-        if beads.is_empty() {
-            content.push_str("No beads available.");
+        if tasks.is_empty() {
+            content.push_str("No tasks available.");
             return content;
         }
 
         // Header
         if is_focused {
             content.push_str(&style::colorize(
-                "   ID      Priority  State     Title",
+                "   Slug    Priority  Status    Stage",
                 style::COLOR_GREEN,
             ));
         } else {
-            content.push_str("   ID      Priority  State     Title");
+            content.push_str("   Slug    Priority  Status    Stage");
         }
         content.push('\n');
 
-        // Beads
-        for (i, bead) in beads.iter().enumerate() {
+        // Tasks
+        for (i, task) in tasks.iter().enumerate() {
             if i >= pane.height.saturating_sub(3) {
                 break; // Don't overflow pane
             }
 
-            let state_color = match bead.state.as_str() {
-                "open" => style::COLOR_RESET,
+            let state_color = match task.status.as_str() {
+                "created" => style::COLOR_RESET,
                 "in_progress" => style::COLOR_GREEN,
-                "blocked" => style::COLOR_RED,
-                "closed" => style::COLOR_RESET,
+                "failed" => style::COLOR_RED,
+                "passed" | "integrated" => style::COLOR_GREEN,
                 _ => style::COLOR_RESET,
             };
 
-            let priority = match bead.priority {
-                1 => "P1",
-                2 => "P2",
-                3 => "P3",
-                _ => "P?",
-            };
-
             let marker = if i == selected_index { "→" } else { " " };
+            let stage = task.stage.as_deref().unwrap_or("-");
 
             let line = format!(
                 "{} {:8} {:8} {:9} {}",
                 marker,
-                &bead.id[..bead.id.len().min(8)],
-                priority,
-                bead.state,
-                truncate(&bead.title, 20)
+                &task.slug[..task.slug.len().min(8)],
+                task.priority,
+                task.status,
+                truncate(stage, 20)
             );
 
             if is_focused {
@@ -253,39 +248,43 @@ impl Renderer {
     fn render_bead_detail(
         &self,
         pane: &Pane,
-        beads: &[SampleBead],
+        tasks: &[TaskRow],
         selected_index: usize,
         focused_pane: PaneType,
     ) -> String {
         let is_focused = pane.pane_type == focused_pane;
         let mut content = String::new();
 
-        let bead = match beads.get(selected_index) {
+        let task = match tasks.get(selected_index) {
             Some(b) => b,
             None => {
-                content.push_str("No bead selected.");
+                content.push_str("No task selected.");
                 return content;
             }
         };
 
         // Header
         if is_focused {
-            content.push_str(&style::colorize(&bead.title, style::COLOR_GREEN));
+            content.push_str(&style::colorize(&task.slug, style::COLOR_GREEN));
         } else {
-            content.push_str(&bead.title);
+            content.push_str(&task.slug);
         }
         content.push('\n');
         content.push('\n');
 
         // Details
-        content.push_str(&format!("ID:          {}\n", bead.id));
-        content.push_str(&format!("Priority:    P{}\n", bead.priority));
-        content.push_str(&format!("State:       {}\n", bead.state));
+        content.push_str(&format!("Slug:        {}\n", task.slug));
+        content.push_str(&format!("Priority:    {}\n", task.priority));
+        content.push_str(&format!("Status:      {}\n", task.status));
+        content.push_str(&format!(
+            "Stage:       {}\n",
+            task.stage.as_deref().unwrap_or("-")
+        ));
+        content.push_str(&format!("Language:    {}\n", task.language));
+        content.push_str(&format!("Branch:      {}\n", task.branch));
         content.push('\n');
 
-        // Description placeholder
-        content.push_str("Full bead details will be available\n");
-        content.push_str("after IPC integration is implemented.\n");
+        content.push_str("Use r to run pipeline, a to approve.\n");
 
         content
     }
@@ -294,15 +293,15 @@ impl Renderer {
     fn render_pipeline_view(
         &self,
         pane: &Pane,
-        beads: &[SampleBead],
+        tasks: &[TaskRow],
         selected_index: usize,
         focused_pane: PaneType,
     ) -> String {
         let is_focused = pane.pane_type == focused_pane;
         let mut content = String::new();
 
-        if beads.is_empty() || selected_index >= beads.len() {
-            content.push_str("Select a bead to view pipeline.");
+        if tasks.is_empty() || selected_index >= tasks.len() {
+            content.push_str("Select a task to view pipeline.");
             return content;
         }
 
@@ -315,19 +314,31 @@ impl Renderer {
         content.push('\n');
         content.push('\n');
 
-        // Stages (placeholder for now)
+        let task = &tasks[selected_index];
         let stages = [
-            ("implement", "pending"),
-            ("unit-test", "pending"),
-            ("coverage", "pending"),
-            ("lint", "pending"),
-            ("static", "pending"),
-            ("integration", "pending"),
-            ("security", "pending"),
-            ("review", "pending"),
+            "implement",
+            "unit-test",
+            "coverage",
+            "lint",
+            "static",
+            "integration",
+            "security",
+            "review",
+            "accept",
         ];
 
-        for (stage, status) in stages {
+        let (running_stage, failed_stage, completed) = stage_status(task);
+
+        for stage in stages {
+            let status = if completed {
+                "complete"
+            } else if failed_stage.as_deref() == Some(stage) {
+                "failed"
+            } else if running_stage.as_deref() == Some(stage) {
+                "running"
+            } else {
+                "pending"
+            };
             let status_char = match status {
                 "pending" => "○",
                 "running" => "◐",
@@ -380,14 +391,15 @@ impl Renderer {
     }
 
     /// Render status bar
-    fn render_status_bar(&self, focused_pane: PaneType) -> String {
+    fn render_status_bar(&self, focused_pane: PaneType, status_message: Option<&str>) -> String {
         let mut status = String::new();
+        let message = status_message.unwrap_or("");
 
         status.push_str("\x1b[24;1H"); // Move to bottom row
         status.push_str(&style::colorize(
             &format!(
-                " OYA UI | Focused: {} | q: quit | Tab: cycle panes | j/k: navigate | Enter: select ",
-                focused_pane
+                " OYA UI | Focused: {} | q: quit | Tab: cycle panes | j/k: navigate | g: refresh | r: run | a: approve | b: batch run | {}",
+                focused_pane, message
             ),
             style::COLOR_GREEN,
         ));
@@ -443,6 +455,20 @@ fn textwrap(text: &str, width: usize) -> Vec<String> {
     }
 
     lines
+}
+
+fn stage_status(task: &TaskRow) -> (Option<String>, Option<String>, bool) {
+    let stage = task
+        .stage
+        .as_ref()
+        .map(|stage| stage.split(':').next().unwrap_or(stage).trim().to_string());
+    match task.status.as_str() {
+        "created" => (None, None, false),
+        "in_progress" => (stage, None, false),
+        "failed" => (None, stage, false),
+        "passed" | "integrated" => (None, None, true),
+        _ => (None, None, false),
+    }
 }
 
 #[cfg(test)]

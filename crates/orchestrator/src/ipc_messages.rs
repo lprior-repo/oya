@@ -27,10 +27,19 @@ pub enum GuestMessage {
     /// Get list of all beads.
     GetBeadList,
 
+    /// Get list of all tasks.
+    GetTaskList,
+
     /// Get details for a specific bead.
     GetBeadDetail {
         /// Bead ID to query
         bead_id: String,
+    },
+
+    /// Get details for a specific task.
+    GetTaskDetail {
+        /// Task slug to query
+        slug: String,
     },
 
     /// Get workflow graph for visualization.
@@ -64,6 +73,44 @@ pub enum GuestMessage {
         /// Bead ID to retry
         bead_id: String,
     },
+
+    /// Run pipeline stages for a task.
+    RunStage {
+        /// Task slug to update
+        slug: String,
+        /// Stage name to run
+        stage: String,
+        /// Optional start stage for range
+        from: Option<String>,
+        /// Optional end stage for range
+        to: Option<String>,
+        /// Dry run (no persistence)
+        dry_run: bool,
+    },
+
+    /// Run the full pipeline for a task.
+    RunPipeline {
+        /// Task slug to update
+        slug: String,
+        /// Dry run (no persistence)
+        dry_run: bool,
+    },
+
+    /// Run the full pipeline for multiple tasks.
+    RunPipelineBatch {
+        /// Task slugs to update
+        slugs: Vec<String>,
+        /// Dry run (no persistence)
+        dry_run: bool,
+    },
+
+    /// Approve a task for integration.
+    ApproveTask {
+        /// Task slug to approve
+        slug: String,
+        /// Force approval even if pipeline not passed
+        force: bool,
+    },
 }
 
 /// Messages from host to Zellij guest plugin.
@@ -81,10 +128,22 @@ pub enum HostMessage {
         beads: Vec<BeadSummary>,
     },
 
+    /// List of all tasks.
+    TaskList {
+        /// List of task summaries
+        tasks: Vec<TaskSummary>,
+    },
+
     /// Details for a specific bead.
     BeadDetail {
         /// Bead details
         bead: BeadDetail,
+    },
+
+    /// Details for a specific task.
+    TaskDetail {
+        /// Task details
+        task: TaskDetail,
     },
 
     /// Workflow graph for visualization.
@@ -133,6 +192,24 @@ pub enum HostMessage {
     Error {
         /// Error message
         message: String,
+    },
+
+    /// Task update result.
+    TaskUpdated {
+        /// Task slug
+        slug: String,
+        /// Updated status
+        status: String,
+        /// Result message
+        message: String,
+    },
+
+    /// Batch task update result.
+    TaskBatchUpdated {
+        /// Successful task updates
+        updated: Vec<TaskUpdate>,
+        /// Failed task updates
+        failed: Vec<TaskUpdate>,
     },
 
     // BROADCAST EVENTS
@@ -226,6 +303,51 @@ pub struct BeadDetail {
     pub labels: Vec<String>,
     /// Dependencies (bead IDs that must complete first)
     pub dependencies: Vec<String>,
+}
+
+/// Summary of a task for list views.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskSummary {
+    /// Task slug
+    pub slug: String,
+    /// Pipeline status (created, in_progress, passed, failed, integrated)
+    pub status: String,
+    /// Current stage (if applicable)
+    pub stage: Option<String>,
+    /// Priority label (P0-P3)
+    pub priority: String,
+    /// Language label
+    pub language: String,
+    /// Task branch name
+    pub branch: String,
+}
+
+/// Detailed information about a task.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskDetail {
+    /// Task slug
+    pub slug: String,
+    /// Pipeline status (created, in_progress, passed, failed, integrated)
+    pub status: String,
+    /// Current stage (if applicable)
+    pub stage: Option<String>,
+    /// Priority label (P0-P3)
+    pub priority: String,
+    /// Language label
+    pub language: String,
+    /// Task branch name
+    pub branch: String,
+}
+
+/// Task update summary.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskUpdate {
+    /// Task slug
+    pub slug: String,
+    /// Updated status (if available)
+    pub status: Option<String>,
+    /// Result message
+    pub message: String,
 }
 
 /// Graph node for workflow visualization.
