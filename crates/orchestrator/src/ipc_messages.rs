@@ -578,4 +578,153 @@ mod tests {
             serde_json::from_str(&json).expect("deserialization should succeed");
         assert!(matches!(decoded, AlertLevel::Critical));
     }
+
+    #[test]
+    fn test_stage_started_serialization() {
+        let msg = HostMessage::StageStarted {
+            bead_id: "bead-123".to_string(),
+            stage: "implement".to_string(),
+            attempt: 2,
+            timestamp: 1234567890,
+        };
+
+        let json = serde_json::to_string(&msg).expect("serialization should succeed");
+        assert!(json.contains("stage_started"));
+        assert!(json.contains("implement"));
+
+        let decoded: HostMessage =
+            serde_json::from_str(&json).expect("deserialization should succeed");
+        assert!(matches!(
+            decoded,
+            HostMessage::StageStarted { stage, .. } if stage == "implement"
+        ));
+    }
+
+    #[test]
+    fn test_stage_completed_serialization() {
+        let msg = HostMessage::StageCompleted {
+            bead_id: "bead-456".to_string(),
+            stage: "validate".to_string(),
+            artifact_ref: Some("artifacts/test.txt".to_string()),
+            timestamp: 1234567890,
+        };
+
+        let json = serde_json::to_string(&msg).expect("serialization should succeed");
+        assert!(json.contains("stage_completed"));
+
+        let decoded: HostMessage =
+            serde_json::from_str(&json).expect("deserialization should succeed");
+        assert!(matches!(
+            decoded,
+            HostMessage::StageCompleted { artifact_ref, .. } if artifact_ref.as_deref() == Some("artifacts/test.txt")
+        ));
+    }
+
+    #[test]
+    fn test_stage_failed_serialization() {
+        let msg = HostMessage::StageFailed {
+            bead_id: "bead-789".to_string(),
+            stage: "review".to_string(),
+            feedback: "lint errors".to_string(),
+            severity: "major".to_string(),
+            timestamp: 1234567890,
+        };
+
+        let json = serde_json::to_string(&msg).expect("serialization should succeed");
+        assert!(json.contains("stage_failed"));
+
+        let decoded: HostMessage =
+            serde_json::from_str(&json).expect("deserialization should succeed");
+        assert!(matches!(
+            decoded,
+            HostMessage::StageFailed { severity, .. } if severity == "major"
+        ));
+    }
+
+    #[test]
+    fn test_stage_reentry_serialization() {
+        let msg = HostMessage::StageReentry {
+            bead_id: "bead-101".to_string(),
+            from_stage: "review".to_string(),
+            to_stage: "plan".to_string(),
+            reason: "major issues".to_string(),
+            attempt: 3,
+            timestamp: 1234567890,
+        };
+
+        let json = serde_json::to_string(&msg).expect("serialization should succeed");
+        assert!(json.contains("stage_reentry"));
+
+        let decoded: HostMessage =
+            serde_json::from_str(&json).expect("deserialization should succeed");
+        assert!(matches!(
+            decoded,
+            HostMessage::StageReentry { to_stage, .. } if to_stage == "plan"
+        ));
+    }
+
+    #[test]
+    fn test_validation_ran_serialization() {
+        let msg = HostMessage::ValidationRan {
+            bead_id: "bead-202".to_string(),
+            passed: false,
+            output: "3 tests failed".to_string(),
+            command: "moon run :ci".to_string(),
+            exit_code: 1,
+            timestamp: 1234567890,
+        };
+
+        let json = serde_json::to_string(&msg).expect("serialization should succeed");
+        assert!(json.contains("validation_ran"));
+
+        let decoded: HostMessage =
+            serde_json::from_str(&json).expect("deserialization should succeed");
+        assert!(matches!(
+            decoded,
+            HostMessage::ValidationRan { passed, .. } if !passed
+        ));
+    }
+
+    #[test]
+    fn test_recursion_exhausted_serialization() {
+        let msg = HostMessage::RecursionExhausted {
+            bead_id: "bead-303".to_string(),
+            total_attempts: 15,
+            last_stage: "review".to_string(),
+            timestamp: 1234567890,
+        };
+
+        let json = serde_json::to_string(&msg).expect("serialization should succeed");
+        assert!(json.contains("recursion_exhausted"));
+
+        let decoded: HostMessage =
+            serde_json::from_str(&json).expect("deserialization should succeed");
+        assert!(matches!(
+            decoded,
+            HostMessage::RecursionExhausted { total_attempts, .. } if total_attempts == 15
+        ));
+    }
+
+    #[test]
+    fn test_stage_failed_feedback_truncated_at_256_chars() {
+        let long_feedback = "x".repeat(300);
+        let msg = HostMessage::StageFailed {
+            bead_id: "bead-404".to_string(),
+            stage: "validate".to_string(),
+            feedback: long_feedback.clone(),
+            severity: "minor".to_string(),
+            timestamp: 1234567890,
+        };
+
+        let json = serde_json::to_string(&msg).expect("serialization should succeed");
+        let decoded: HostMessage =
+            serde_json::from_str(&json).expect("deserialization should succeed");
+
+        match decoded {
+            HostMessage::StageFailed { feedback, .. } => {
+                assert!(feedback.len() <= 256);
+            }
+            _ => panic!("Expected StageFailed"),
+        }
+    }
 }

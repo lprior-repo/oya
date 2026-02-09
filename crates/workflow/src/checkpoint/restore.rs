@@ -340,7 +340,10 @@ mod tests {
     use serde::Deserialize;
 
     use super::super::serialize::{serialize_state, CHECKPOINT_VERSION, MAGIC_BYTES};
-    use super::super::storage::{CheckpointMetadata, CheckpointStorage, InMemoryCheckpointStorage};
+    use super::super::storage::{
+        CheckpointMetadata, CheckpointStorage, InMemoryCheckpointStorage, StorageResult,
+        StorageStats,
+    };
 
     /// Test: CheckpointId generates unique IDs.
     #[test]

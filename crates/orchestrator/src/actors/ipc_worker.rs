@@ -35,11 +35,12 @@ use ractor::{Actor, ActorProcessingErr, ActorRef};
 use tokio::sync::{broadcast, mpsc};
 use tracing::info;
 
-use oya_events::{BeadEvent, EventBus, EventPattern, EventSubscription};
+use oya_events::{BeadEvent, EventBus, EventPattern, EventSubscription, Severity};
 use oya_pipeline::{
     apply_stage_plan, approve_task, list_all_tasks, load_task_record, resolve_stage_range,
     run_full_pipeline, save_task_record,
 };
+use oya_events::StageKind;
 
 use crate::ipc_messages::{
     AlertLevel, BeadDetail as IpcBeadDetail, BeadSummary, ComponentHealth, GuestMessage,
@@ -162,6 +163,191 @@ pub enum IpcWorkerEffect {
         reply: ractor::RpcReplyPort<Result<HostMessage, ActorError>>,
         response: Result<HostMessage, ActorError>,
     },
+}
+
+/// Errors that can occur during IPC bridge operations.
+#[derive(Debug, thiserror::Error)]
+pub enum IpcBridgeError {
+    /// Event serialization failed.
+    #[error("Event serialization failed: {event_type} - {reason}")]
+    EventSerializationFailed {
+        event_type: String,
+        reason: String,
+    },
+
+    /// Invalid event payload (missing required fields).
+    #[error("Invalid event payload for bead {bead_id}: {event_type} - missing {missing_field}")]
+    InvalidEventPayload {
+        bead_id: String,
+        event_type: String,
+        missing_field: String,
+    },
+
+    /// Stage kind not recognized.
+    #[error("Unknown stage kind: {stage_name}")]
+    UnknownStageKind {
+        stage_name: String,
+    },
+
+    /// Attempt count overflow.
+    #[error("Attempt count overflow for bead {bead_id}: {current_count}")]
+    AttemptCountOverflow {
+        bead_id: String,
+        current_count: u32,
+    },
+
+    /// EventBus not ready.
+    #[error("EventBus not ready: unavailable for {since:?}")]
+    EventBusNotReady {
+        since: std::time::Duration,
+    },
+}
+
+/// Convert StageKind to string for IPC.
+fn stage_kind_to_string(stage: StageKind) -> String {
+    match stage {
+        StageKind::Research => "research",
+        StageKind::Plan => "plan",
+        StageKind::Implement => "implement",
+        StageKind::Review => "review",
+        StageKind::Validate => "validate",
+        StageKind::Accept => "accept",
+    }
+    .to_string()
+}
+
+/// Convert Severity to string for IPC.
+fn severity_to_string(severity: Severity) -> String {
+    match severity {
+        Severity::Minor => "minor",
+        Severity::Major => "major",
+        Severity::Fundamental => "fundamental",
+    }
+    .to_string()
+}
+
+/// Truncate string to maximum length with indicator.
+fn truncate_with_indicator(s: &str, max_len: usize) -> String {
+    if s.len() <= max_len {
+        s.to_string()
+    } else {
+        format!("{}...", &s[..max_len.saturating_sub(3)])
+    }
+}
+
+/// Convert BeadEvent to HostMessage for stage updates.
+pub fn event_to_host_message(event: &BeadEvent) -> Result<HostMessage, IpcBridgeError> {
+    match event {
+        BeadEvent::StageStarted {
+            bead_id,
+            stage,
+            attempt,
+            timestamp,
+        } => {
+            let stage_str = stage_kind_to_string(*stage);
+            Ok(HostMessage::StageStarted {
+                bead_id: bead_id.to_string(),
+                stage: stage_str,
+                attempt: *attempt,
+                timestamp: timestamp.timestamp() as u64,
+            })
+        }
+
+        BeadEvent::StageCompleted {
+            bead_id,
+            stage,
+            artifact_ref,
+            timestamp,
+        } => {
+            let stage_str = stage_kind_to_string(*stage);
+            Ok(HostMessage::StageCompleted {
+                bead_id: bead_id.to_string(),
+                stage: stage_str,
+                artifact_ref: artifact_ref.clone(),
+                timestamp: timestamp.timestamp() as u64,
+            })
+        }
+
+        BeadEvent::StageFailed {
+            bead_id,
+            stage,
+            feedback,
+            severity,
+            timestamp,
+        } => {
+            let stage_str = stage_kind_to_string(*stage);
+            let severity_str = severity_to_string(*severity);
+            let truncated_feedback = truncate_with_indicator(feedback, 256);
+            Ok(HostMessage::StageFailed {
+                bead_id: bead_id.to_string(),
+                stage: stage_str,
+                feedback: truncated_feedback,
+                severity: severity_str,
+                timestamp: timestamp.timestamp() as u64,
+            })
+        }
+
+        BeadEvent::StageReentry {
+            bead_id,
+            from_stage,
+            to_stage,
+            reason,
+            attempt,
+            timestamp,
+        } => {
+            let from_str = stage_kind_to_string(*from_stage);
+            let to_str = stage_kind_to_string(*to_stage);
+            let truncated_reason = truncate_with_indicator(reason, 256);
+            Ok(HostMessage::StageReentry {
+                bead_id: bead_id.to_string(),
+                from_stage: from_str,
+                to_stage: to_str,
+                reason: truncated_reason,
+                attempt: *attempt,
+                timestamp: timestamp.timestamp() as u64,
+            })
+        }
+
+        BeadEvent::ValidationRan {
+            bead_id,
+            passed,
+            output,
+            command,
+            exit_code,
+            timestamp,
+        } => {
+            let truncated_output = truncate_with_indicator(output, 256);
+            Ok(HostMessage::ValidationRan {
+                bead_id: bead_id.to_string(),
+                passed: *passed,
+                output: truncated_output,
+                command: command.clone(),
+                exit_code: *exit_code,
+                timestamp: timestamp.timestamp() as u64,
+            })
+        }
+
+        BeadEvent::RecursionExhausted {
+            bead_id,
+            total_attempts,
+            last_stage,
+            timestamp,
+        } => {
+            let stage_str = stage_kind_to_string(*last_stage);
+            Ok(HostMessage::RecursionExhausted {
+                bead_id: bead_id.to_string(),
+                total_attempts: *total_attempts,
+                last_stage: stage_str,
+                timestamp: timestamp.timestamp() as u64,
+            })
+        }
+
+        // Non-stage events are not handled by this function
+        _ => Err(IpcBridgeError::EventSerializationFailed {
+            event_type: event.event_type().to_string(),
+            reason: "Not a stage lifecycle event".to_string(),
+        }),
+    }
 }
 
 impl Actor for IpcWorkerActorDef {

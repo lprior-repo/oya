@@ -460,7 +460,7 @@ mod tests {
         let compressed = compress(&data);
         assert!(compressed.is_ok(), "Compression should succeed");
 
-        let decompressed = compressed.as_ref().and_then(|c| decompress(c, data.len()));
+        let decompressed = compressed.and_then(|c| decompress(&c, data.len()));
         assert!(decompressed.is_ok(), "Decompression should succeed");
 
         let decompressed_data = decompressed.map_or_else(|_| Vec::new(), |d| d);
@@ -476,7 +476,7 @@ mod tests {
         let compressed = compress(&data);
         assert!(compressed.is_ok(), "Compression should succeed");
 
-        let decompressed = compressed.as_ref().and_then(|c| decompress(c, data.len()));
+        let decompressed = compressed.and_then(|c| decompress(&c, data.len()));
         assert!(decompressed.is_ok(), "Decompression should succeed");
 
         let decompressed_data = decompressed.map_or_else(|_| Vec::new(), |d| d);
@@ -737,7 +737,7 @@ mod tests {
         assert!(result.is_ok(), "Random data should not error");
 
         // Roundtrip should preserve data even if compression doesn't help
-        let decompressed = result.as_ref().and_then(|c| decompress(c, data.len()));
+        let decompressed = result.and_then(|c| decompress(&c, data.len()));
         assert!(decompressed.is_ok(), "Random data should roundtrip");
 
         let output = decompressed.map_or_else(|_| Vec::new(), |d| d);
@@ -774,7 +774,8 @@ mod tests {
         let expansion_factor = data.len() as f64 / compressed_len as f64;
 
         // decompress_auto should handle this (tries 2x, 4x, 8x, 16x)
-        let decompressed = compressed.as_ref().and_then(|c| decompress_auto(c));
+        let compressed_data = compressed.map_or_else(|_| Vec::new(), |c| c);
+        let decompressed = decompress_auto(&compressed_data);
         assert!(
             decompressed.is_ok(),
             "Auto decompression should handle {expansion_factor}x expansion"
@@ -802,7 +803,7 @@ mod tests {
         let compressed = compress(data);
         assert!(compressed.is_ok(), "Compression should succeed");
 
-        let decompressed = compressed.as_ref().and_then(|c| decompress(c, data.len()));
+        let decompressed = compressed.and_then(|c| decompress(&c, data.len()));
         assert!(decompressed.is_ok(), "Decompression should succeed");
 
         let output_len = decompressed.map_or_else(|_| 0, |d| d.len());
@@ -860,7 +861,7 @@ mod tests {
         let data = generate_structured_data(5_000);
 
         for level in [0, 1, 3, 9, 15, 21] {
-            let result = compress_with_level(data, level)
+            let result = compress_with_level(&data, level)
                 .and_then(|compressed| decompress(&compressed, data.len()));
 
             assert!(
