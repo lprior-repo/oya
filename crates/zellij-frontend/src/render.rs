@@ -898,7 +898,7 @@ mod tests {
         let renderer = Renderer::new();
         let pane = pipeline_pane();
         let detail = "x".repeat(80);
-        let stage = format!("coverage: {detail}");
+        let stage = format!("implement: {detail}");
         let task = sample_task("in_progress", Some(&stage));
 
         let output = renderer.render_pipeline_view(&pane, &[task], 0, PaneType::BeadList);
