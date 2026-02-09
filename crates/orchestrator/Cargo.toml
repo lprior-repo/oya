@@ -34,6 +34,10 @@ bench = false
 name = "api-server"
 path = "src/bin/api-server.rs"
 
+[[bin]]
+name = "ipc-server"
+path = "src/bin/ipc-server.rs"
+
 [[bench]]
 name = "restart_latency"
 harness = false
@@ -44,6 +48,7 @@ oya-events = { workspace = true }
 oya-opencode = { workspace = true }
 tracing-subscriber = { workspace = true }
 oya-pipeline = { workspace = true }
+oya-ipc = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

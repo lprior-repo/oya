@@ -121,6 +121,17 @@ pub enum Commands {
         force: bool,
     },
 
+    /// Run the full pipeline for one or more tasks
+    Pipeline {
+        /// Task slug(s)
+        #[arg(short, long, num_args = 1..)]
+        slug: Vec<String>,
+
+        /// Dry run mode (preview only)
+        #[arg(short, long, default_value_t = false)]
+        dry_run: bool,
+    },
+
     /// Show task details
     Show {
         /// Task slug
@@ -261,4 +272,45 @@ pub enum AgentCommands {
 
     /// List agents
     List,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_pipeline_single_slug() {
+        let cli = Cli::parse_from(["oya", "pipeline", "--slug", "task-1"]);
+        match cli.command {
+            Commands::Pipeline { slug, dry_run } => {
+                assert_eq!(slug, vec!["task-1".to_string()]);
+                assert!(!dry_run);
+            }
+            other => {
+                assert!(false, "unexpected command: {other:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn parse_pipeline_multiple_slugs_with_dry_run() {
+        let cli = Cli::parse_from([
+            "oya",
+            "pipeline",
+            "--slug",
+            "task-1",
+            "--slug",
+            "task-2",
+            "--dry-run",
+        ]);
+        match cli.command {
+            Commands::Pipeline { slug, dry_run } => {
+                assert_eq!(slug, vec!["task-1".to_string(), "task-2".to_string()]);
+                assert!(dry_run);
+            }
+            other => {
+                assert!(false, "unexpected command: {other:?}");
+            }
+        }
+    }
 }
