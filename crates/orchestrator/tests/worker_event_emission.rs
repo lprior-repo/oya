@@ -5,7 +5,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use oya_events::{BeadEvent, BeadId, BeadState, EventBus, InMemoryEventStore};
+use oya_events::{BeadEvent, BeadId, BeadResult, BeadState, EventBus, InMemoryEventStore};
 use ractor::ActorRef;
 
 use orchestrator::actors::worker::{
@@ -87,6 +87,46 @@ async fn given_worker_when_start_bead_then_emits_state_changed_event()
     }
 
     // Cleanup
+    worker.stop(Some("test complete".to_string()));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn given_worker_when_complete_bead_then_emits_state_changed_and_completed()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (worker, bus, _store) = setup_worker_with_event_bus().await?;
+
+    let bead_id = BeadId::new();
+    let bead_id_str = bead_id.to_string();
+    worker.send_message(WorkerMessage::StartBead {
+        bead_id: bead_id_str.clone(),
+        from_state: Some(BeadState::Ready),
+    })?;
+
+    let _start_event = wait_for_event(&bus, 500).await?;
+
+    worker.send_message(WorkerMessage::CompleteBead {
+        result: BeadResult::success(Vec::new(), 0),
+    })?;
+
+    let state_event = wait_for_event(&bus, 500).await?;
+    match state_event {
+        BeadEvent::StateChanged { from, to, .. } => {
+            assert_eq!(from, BeadState::Running);
+            assert_eq!(to, BeadState::Completed);
+        }
+        _ => assert!(
+            matches!(state_event, BeadEvent::StateChanged { .. }),
+            "Expected StateChanged event, got {:?}",
+            state_event.event_type()
+        ),
+    }
+
+    let completed_event = wait_for_event(&bus, 500).await?;
+    assert_eq!(completed_event.event_type(), "completed");
+    assert_eq!(completed_event.bead_id(), bead_id);
+
     worker.stop(Some("test complete".to_string()));
 
     Ok(())
