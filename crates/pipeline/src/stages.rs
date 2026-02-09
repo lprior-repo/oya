@@ -141,6 +141,15 @@ pub fn validate_stage_sequence(stages: &[Stage]) -> Result<()> {
         .map(|_| ())
 }
 
+/// Build linear pipeline stage dependencies for a DAG representation.
+#[must_use]
+pub fn pipeline_stage_edges() -> Vec<(Stage, Stage)> {
+    Stage::all()
+        .windows(2)
+        .map(|pair| (pair[0], pair[1]))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
@@ -172,5 +181,18 @@ mod tests {
     fn next_returns_following_stage() {
         let next = Stage::Implement.next();
         assert_eq!(next, Some(Stage::UnitTest));
+    }
+
+    #[test]
+    fn pipeline_stage_edges_returns_linear_edges() {
+        let edges = pipeline_stage_edges();
+        let stages = Stage::all();
+
+        assert_eq!(edges.len(), stages.len().saturating_sub(1));
+        assert_eq!(edges.first(), Some(&(Stage::Implement, Stage::UnitTest)));
+        assert_eq!(
+            edges.last(),
+            Some(&(Stage::Review, Stage::Accept))
+        );
     }
 }
