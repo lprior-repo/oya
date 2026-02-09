@@ -171,7 +171,10 @@ impl Oya {
                     match storm_command(args).await {
                         Ok(output) => {
                             if args.output == "json" {
-                                println!("{}", serde_json::to_string_pretty(&output).unwrap_or_else(|_| "{}".to_string()));
+                                match serde_json::to_string_pretty(&output) {
+                                    Ok(json) => println!("{json}"),
+                                    Err(_) => println!("{{}}"),
+                                }
                             } else {
                                 println!("Storm completed:");
                                 println!("  Beads completed: {}", output.beads_completed);

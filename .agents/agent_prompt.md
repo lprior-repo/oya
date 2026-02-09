@@ -93,10 +93,20 @@ bv show "$BEAD_ID"
 
 ### Step 2: Spawn Isolated Workspace
 
-Use zjj to create an isolated workspace:
-
 ```bash
 zjj add agent-{N}-$BEAD_ID
+```
+
+**IMPORTANT**: Always create a file in your workspace to track your work:
+```bash
+# Create tracking directory
+mkdir -p /tmp/agent-{N}-$BEAD_ID
+cd /tmp/agent-{N}-$BEAD_ID
+
+# Store context for resumability
+echo "Agent: {N}" > context.txt
+echo "Bead: $BEAD_ID" >> context.txt
+echo "Started: $(date)" >> context.txt
 ```
 
 This creates a fresh JJ workspace and Zellij tab for your work.
@@ -130,20 +140,31 @@ Task: Design-by-contract analysis with exhaustive break analysis
 Output: Contract document with invariants, test plan, error handling
 ```
 
-**Step 3: Record completion in database**
+**Step 3: Record completion AND STORE FULL ARTIFACT IN DATABASE**
 ```bash
-# On SUCCESS:
-psql -U postgres -d swarm_db <<SQL
-INSERT INTO stage_history (agent_id, bead_id, stage, attempt_number, status, result, completed_at)
-VALUES ({N}, '$BEAD_ID', 'rust-contract', 1, 'passed', 'Contract created with invariants and test plan', NOW());
-SQL
+# Capture the Skill tool output (the contract content)
+# After running rust-contract skill, save the output
 
-# On FAILURE (rare for contract stage):
+CONTRACT_OUTPUT="/tmp/agent-{N}-$BEAD_ID/contract.md"
+# ... Skill tool creates CONTRACT_OUTPUT ...
+
+# Read and store FULL contract content in database
+CONTRACT_CONTENT=$(cat "$CONTRACT_OUTPUT")
+
 psql -U postgres -d swarm_db <<SQL
-INSERT INTO stage_history (agent_id, bead_id, stage, attempt_number, status, feedback, completed_at)
-VALUES ({N}, '$BEAD_ID', 'rust-contract', 1, 'error', 'Error creating contract: <details>', NOW());
+INSERT INTO stage_artifacts (agent_id, bead_id, stage, attempt_number, artifact_type, file_path, content, metadata)
+VALUES ({N}, '$BEAD_ID', 'rust-contract', 1, 'contract', '$CONTRACT_OUTPUT', $$CONTRACT_CONTENT$$, '{"format": "markdown", "sections": ["preconditions", "postconditions", "invariants", "test_plan"]}'::jsonb);
+
+INSERT INTO stage_history (agent_id, bead_id, stage, attempt_number, status, result, contract_path, transcript, completed_at)
+VALUES ({N}, '$BEAD_ID', 'rust-contract', 1, 'passed', 'Contract created with invariants and test plan', '$CONTRACT_OUTPUT', $$CONTRACT_CONTENT$$, NOW());
 SQL
 ```
+
+**What gets stored in database:**
+- ✅ **Full contract content** (TEXT field)
+- ✅ File path reference
+- ✅ Metadata (format, sections)
+- ✅ Transcript for resubmission
 
 #### Stage 3b: implement
 
@@ -170,14 +191,34 @@ Task: Implement functional Rust with zero panics, zero unwraps, Railway-Oriented
 Output: Complete Rust implementation
 ```
 
-**Step 3: Record completion**
+**Step 3: Record completion AND STORE IMPLEMENTATION**
 ```bash
-# On SUCCESS:
+# Get contract from database
+CONTRACT_FILE=$(psql -U postgres -d swarm_db -t -c "
+  SELECT file_path FROM stage_artifacts
+  WHERE agent_id = {N} AND bead_id = '$BEAD_ID' AND artifact_type = 'contract'
+  ORDER BY created_at DESC LIMIT 1;
+")
+
+# Implementation file(s)
+IMPLEMENT_FILES="/tmp/agent-{N}-$BEAD_ID/implementation.rs"  # or directory
+# ... Skill tool creates implementation ...
+
+# Store implementation in database
 psql -U postgres -d swarm_db <<SQL
-INSERT INTO stage_history (agent_id, bead_id, stage, attempt_number, status, result, completed_at)
-VALUES ({N}, '$BEAD_ID', 'implement', 1, 'passed', 'Implementation complete with functional Rust patterns', NOW());
+INSERT INTO stage_artifacts (agent_id, bead_id, stage, attempt_number, artifact_type, file_path, metadata)
+VALUES ({N}, '$BEAD_ID', 'implement', 1, 'implementation', '$IMPLEMENT_FILES', '{"files": ["rs", "toml"], "changes": "Functional Rust implementation"}');
+
+INSERT INTO stage_history (agent_id, bead_id, stage, attempt_number, status, result, implementation_path, completed_at)
+VALUES ({N}, '$BEAD_ID', 'implement', 1, 'passed', 'Implementation complete with functional Rust patterns', '$IMPLEMENT_FILES', NOW());
 SQL
 ```
+
+**What gets stored:**
+- ✅ Implementation file references
+- ✅ Link to contract used
+- ✅ Metadata about changes
+- ✅ Timestamp
 
 #### Stage 3c: qa-enforcer
 
@@ -287,10 +328,38 @@ SQL
 
 ### Step 4: Implementation Retry Loop (When QA/Red Queen Fails)
 
-If `implementation_attempt >= 3`:
+**When QA or Red Queen fails, retrieve FULL context before retrying:**
+
 ```bash
-# Max retries exceeded - mark bead as blocked
+# Get all context needed to resume work
+psql -U postgres -d swarm_db -c "
+SELECT
+    agent_id, bead_id, current_stage,
+    implementation_attempt, feedback,
+    (SELECT content FROM stage_artifacts
+     WHERE agent_id = {N} AND bead_id = '$BEAD_ID' AND artifact_type = 'contract'
+     ORDER BY created_at DESC LIMIT 1) as contract_content,
+    (SELECT content FROM stage_artifacts
+     WHERE agent_id = {N} AND bead_id = '$BEAD_ID' AND artifact_type = 'implementation'
+     ORDER BY created_at DESC LIMIT 1) as implementation_content,
+    (SELECT content FROM stage_artifacts
+     WHERE agent_id = {N} AND bead_id = '$BEAD_ID' AND artifact_type = 'test_output'
+     ORDER BY created_at DESC LIMIT 1) as test_results
+FROM v_resume_context
+WHERE agent_id = {N};
+" > /tmp/agent-{N}-$BEAD_ID/resume_context.txt
+
+# Display context
+cat /tmp/agent-{N}-$BEAD_ID/resume_context.txt
+```
+
+**If `implementation_attempt >= 3`:**
+```bash
+# Max retries exceeded - mark bead as blocked with FULL context
 psql -U postgres -d swarm_db <<SQL
+INSERT INTO agent_run_logs (agent_id, bead_id, stage, log_content)
+VALUES ({N}, '$BEAD_ID', 'max_retries_exceeded', 'Max 3 implementation attempts exceeded. Full context stored in stage_artifacts.');
+
 UPDATE agent_state
 SET status = 'error',
     feedback = 'Max implementation attempts (3) exceeded',
@@ -306,12 +375,29 @@ SQL
 exit 1
 ```
 
-Otherwise:
+**Otherwise (retry with feedback):**
 ```bash
-# Go back to Stage 3b (implement) with feedback
-# The feedback is in agent_state.feedback column
-# Re-read the contract, incorporate feedback, implement fixes
+# Go back to Stage 3b (implement) with FULL context
+# You have:
+# 1. Contract (from database or resume_context.txt)
+# 2. Previous implementation (from database)
+# 3. Feedback (agent_state.feedback)
+# 4. Test results (from database)
+# 5. Transcript of what failed
+
+# Re-implement incorporating all feedback
+echo "Retrying implementation attempt $((implementation_attempt + 1))"
+echo "Feedback: $FEEDBACK"
 ```
+
+**What's available when resuming:**
+- ✅ Full contract document (in database)
+- ✅ Previous implementation code (in database)
+- ✅ Test results showing failures (in database)
+- ✅ Detailed feedback messages (in agent_state)
+- ✅ Complete transcripts (in stage_history.transcript)
+- ✅ File paths for easy editing
+- ✅ Metadata about what was tried
 
 ### Step 5: Success (All Stages Passed)
 
@@ -348,6 +434,82 @@ jj git push
 
 # 7. Clean up workspace
 zjj done
+```
+
+### Storing Complete Context for Resumability
+
+**IMPORTANT**: After EVERY stage, store comprehensive context in database:
+
+```bash
+# After completing a stage, store full context including:
+# 1. Bead information (from br)
+# 2. Stage output/transcript
+# 3. Artifacts created
+# 4. Handoff information
+
+# Get full bead details from br
+BEAD_INFO=$(br show $BEAD_ID --format json 2>/dev/null)
+
+# Store complete bead handoff in database
+psql -U postgres -d swarm_db <<SQL
+INSERT INTO stage_history (
+    agent_id, bead_id, stage, attempt_number, status,
+    transcript, artifacts, completed_at
+)
+VALUES (
+    {N},
+    '$BEAD_ID',
+    '$CURRENT_STAGE',
+    $ATTEMPT_NUM,
+    'passed',
+    $$Bead Info:
+$(echo "$BEAD_INFO" | jq '.')
+
+Stage: $CURRENT_STAGE
+Output: $(cat /tmp/agent-{N}-$BEAD_ID/output.txt 2>/dev/null || echo "See artifacts")
+
+Files Created:
+$(find /tmp/agent-{N}-$BEAD_ID -type f 2>/dev/null || echo "None")
+
+Next Stage: $NEXT_STAGE$$,
+    $${
+      "bead_id": "$BEAD_ID",
+      "title": $(echo "$BEAD_INFO" | jq -r '.title // empty'),
+      "description": $(echo "$BEAD_INFO" | jq -r '.description // empty'),
+      "acceptance_criteria": $(echo "$BEAD_INFO" | jq -r '.acceptance_criteria // empty'),
+      "stage": "$CURRENT_STAGE",
+      "output_file": "/tmp/agent-{N}-$BEAD_ID/output.txt",
+      "artifacts": [$(find /tmp/agent-{N}-$BEAD_ID -type f | jq -R '.' | sed 's/^/"/", "/g' | sed 's/$/"/"/g' | tr '\n' ',' | head -c -1)],
+      "handoff_to": "$NEXT_STAGE",
+      "timestamp": "$(date -Iseconds)"
+    }$$::jsonb,
+    NOW()
+);
+SQL
+```
+
+**What gets stored for complete resumability:**
+- ✅ **Full bead information** (title, description, acceptance criteria from br)
+- ✅ **Complete transcripts** of each stage execution
+- ✅ **All artifacts** (contracts, implementations, test results)
+- ✅ **Handoff information** (what stage, what's next)
+- ✅ **File paths** for every created file
+- ✅ **Timestamps** for audit trail
+- ✅ **JSON metadata** for structured querying
+
+**Query to get ALL context for any bead:**
+```sql
+SELECT
+    agent_id,
+    bead_id,
+    stage,
+    attempt_number,
+    status,
+    transcript,
+    artifacts
+FROM stage_history
+WHERE bead_id = '$BEAD_ID'
+ORDER BY started_at DESC;
 ```
 
 **Verify completion:**

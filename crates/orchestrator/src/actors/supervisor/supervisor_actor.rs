@@ -274,6 +274,8 @@ pub struct SupervisorArguments {
     pub config: SupervisorConfig,
     /// Optional shutdown coordinator.
     pub shutdown_coordinator: Option<Arc<ShutdownCoordinator>>,
+    /// Optional checkpoint manager.
+    pub checkpoint_manager: Option<CheckpointManager>,
 }
 
 impl SupervisorArguments {
@@ -296,11 +298,18 @@ impl SupervisorArguments {
         self.shutdown_coordinator = Some(coordinator);
         self
     }
+
+    /// Set the checkpoint manager.
+    #[must_use]
+    pub fn with_checkpoint_manager(mut self, manager: CheckpointManager) -> Self {
+        self.checkpoint_manager = Some(manager);
+        self
+    }
 }
 
 impl<A: GenericSupervisableActor> Actor for SupervisorActorDef<A>
 where
-    A::Arguments: Clone + Send + Sync,
+    A::Arguments: Clone + Send + Sync + Debug,
     A::Msg: Send,
 {
     type Msg = SupervisorMessage<A>;
@@ -324,7 +333,7 @@ where
             shutdown_coordinator: args.shutdown_coordinator.clone(),
             _shutdown_rx: None,
             restart_strategy: Box::new(OneForOne::new()),
-            checkpoint_manager: None,
+            checkpoint_manager: args.checkpoint_manager,
         };
 
         // Subscribe to shutdown signals
@@ -365,6 +374,19 @@ where
             SupervisorMessage::Shutdown => {
                 info!("Supervisor shutdown requested");
                 state.state = SupervisorState::ShuttingDown;
+
+                // Create checkpoint if checkpoint manager available
+                if let Some(coordinator) = &state.shutdown_coordinator {
+                    let checkpoint_tx = coordinator.checkpoint_sender();
+                    let checkpoint_manager = state.checkpoint_manager.as_mut();
+                    let checkpoint_result = state
+                        .create_shutdown_checkpoint(checkpoint_manager, &checkpoint_tx)
+                        .await;
+
+                    if let Err(e) = checkpoint_result {
+                        warn!(error = %e, "Checkpoint creation failed, continuing shutdown");
+                    }
+                }
 
                 // Stop all children
                 for (name, child) in &state.children {

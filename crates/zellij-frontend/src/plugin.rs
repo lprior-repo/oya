@@ -152,6 +152,63 @@ pub struct OyaPlugin {
     status_message: Option<String>,
 }
 
+/// Stage state for tracking lifecycle
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum StageState {
+    /// Stage not started
+    NotStarted,
+    /// Stage currently running
+    Running,
+    /// Stage completed successfully
+    Completed,
+    /// Stage failed
+    Failed,
+    /// Stage was reentered from later stage
+    Reentered,
+}
+
+/// Stage information for display
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct StageInfo {
+    /// Stage name (research, plan, implement, review, validate, accept)
+    pub name: String,
+    /// Current state of the stage
+    pub state: StageState,
+    /// Attempt number (1-indexed)
+    pub attempt: u32,
+}
+
+impl StageInfo {
+    /// Create new stage info
+    pub fn new(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            state: StageState::NotStarted,
+            attempt: 1,
+        }
+    }
+
+    /// Get display symbol for this stage state
+    pub fn symbol(&self) -> &str {
+        match self.state {
+            StageState::NotStarted => "○",
+            StageState::Running => "🔄",
+            StageState::Completed => "✓",
+            StageState::Failed => "✗",
+            StageState::Reentered => "↩",
+        }
+    }
+
+    /// Get display string with attempt number if > 1
+    pub fn display(&self) -> String {
+        if self.attempt > 1 {
+            format!("{} ({})", self.symbol(), self.attempt)
+        } else {
+            self.symbol().to_string()
+        }
+    }
+}
+
 /// Task data for rendering
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TaskRow {
@@ -161,6 +218,66 @@ pub struct TaskRow {
     pub priority: String,
     pub language: String,
     pub branch: String,
+    /// Stage lifecycle information (research → plan → implement → review → validate → accept)
+    pub stages: Vec<StageInfo>,
+}
+
+impl TaskRow {
+    /// Create a new task row with empty stage history
+    pub fn new(slug: &str, status: &str, priority: &str, language: &str, branch: &str) -> Self {
+        let stages = vec![
+            StageInfo::new("research"),
+            StageInfo::new("plan"),
+            StageInfo::new("implement"),
+            StageInfo::new("review"),
+            StageInfo::new("validate"),
+            StageInfo::new("accept"),
+        ];
+
+        Self {
+            slug: slug.to_string(),
+            status: status.to_string(),
+            stage: None,
+            priority: priority.to_string(),
+            language: language.to_string(),
+            branch: branch.to_string(),
+            stages,
+        }
+    }
+
+    /// Apply a stage lifecycle event to update state
+    pub fn apply_stage_event(
+        &mut self,
+        stage_name: &str,
+        event_state: StageState,
+        attempt: u32,
+    ) -> Result<(), PluginError> {
+        self.stages
+            .iter_mut()
+            .find(|s| s.name == stage_name)
+            .map_or_else(
+                || {
+                    Err(PluginError::InvalidState(format!(
+                        "Stage '{}' not found",
+                        stage_name
+                    )))
+                },
+                |stage| {
+                    stage.state = event_state;
+                    stage.attempt = attempt;
+                    Ok(())
+                },
+            )
+    }
+
+    /// Get current stage display string
+    pub fn stage_display(&self) -> String {
+        self.stages
+            .iter()
+            .map(|s| s.display())
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
 }
 
 /// Plugin state machine
@@ -195,32 +312,16 @@ impl OyaPlugin {
         let renderer = Renderer::new();
 
         // Create placeholder task data for rendering
-        let tasks = vec![
-            TaskRow {
-                slug: "task-3ax5".to_string(),
-                status: "in_progress".to_string(),
-                stage: Some("implement".to_string()),
-                priority: "P1".to_string(),
-                language: "Rust".to_string(),
-                branch: "task/task-3ax5".to_string(),
-            },
-            TaskRow {
-                slug: "task-1xvj".to_string(),
-                status: "created".to_string(),
-                stage: None,
-                priority: "P1".to_string(),
-                language: "Rust".to_string(),
-                branch: "task/task-1xvj".to_string(),
-            },
-            TaskRow {
-                slug: "task-1k71".to_string(),
-                status: "created".to_string(),
-                stage: None,
-                priority: "P2".to_string(),
-                language: "Rust".to_string(),
-                branch: "task/task-1k71".to_string(),
-            },
+        let mut tasks = vec![
+            TaskRow::new("task-3ax5", "in_progress", "P1", "Rust", "task/task-3ax5"),
+            TaskRow::new("task-1xvj", "created", "P1", "Rust", "task/task-1xvj"),
+            TaskRow::new("task-1k71", "created", "P2", "Rust", "task/task-1k71"),
         ];
+
+        // Set some stage states for demo
+        let _ = tasks[0].apply_stage_event("research", StageState::Completed, 1);
+        let _ = tasks[0].apply_stage_event("plan", StageState::Completed, 1);
+        let _ = tasks[0].apply_stage_event("implement", StageState::Running, 1);
 
         Ok(Self {
             layout,
@@ -375,6 +476,92 @@ impl OyaPlugin {
         self.selected_index = if new_index >= len { 0 } else { new_index };
 
         Ok(())
+    }
+
+    /// Handle incoming stage update from orchestrator
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the update cannot be applied
+    pub fn handle_stage_update(&mut self, message: HostMessage) -> PluginResult<()> {
+        match message {
+            HostMessage::PhaseProgress {
+                bead_id,
+                phase_id,
+                progress,
+                current_step,
+            } => {
+                let stage_state = if progress >= 100 {
+                    StageState::Completed
+                } else {
+                    StageState::Running
+                };
+                if let Err(err) = self.update_task_stage(&bead_id, &phase_id, stage_state, 1) {
+                    self.status_message = Some(format!(
+                        "{bead_id}: phase '{phase_id}' {progress}% ({current_step}) [{err}]"
+                    ));
+                    return Ok(());
+                }
+                self.status_message = Some(format!(
+                    "{bead_id}: {phase_id} {progress}% ({current_step})"
+                ));
+            }
+
+            HostMessage::BeadStateChanged {
+                bead_id,
+                from_state,
+                to_state,
+                ..
+            } => {
+                if let Some(task) = self.tasks.iter_mut().find(|task| task.slug == bead_id) {
+                    task.status = to_state.clone();
+                }
+                self.status_message = Some(format!("{bead_id}: state {from_state} -> {to_state}"));
+            }
+
+            HostMessage::SystemAlert {
+                level,
+                message,
+                component,
+                ..
+            } => {
+                let component_prefix = component
+                    .as_deref()
+                    .map_or_else(String::new, |c| format!("{c}: "));
+                self.status_message = Some(format!("{level:?}: {component_prefix}{message}"));
+            }
+
+            // Ignore other message types
+            _ => return Ok(()),
+        }
+
+        Ok(())
+    }
+
+    /// Update task stage state
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the task is not found or stage update fails
+    fn update_task_stage(
+        &mut self,
+        bead_id: &str,
+        stage_name: &str,
+        state: StageState,
+        attempt: u32,
+    ) -> PluginResult<()> {
+        self.tasks
+            .iter_mut()
+            .find(|task| task.slug == bead_id)
+            .map_or_else(
+                || {
+                    Err(PluginError::InvalidState(format!(
+                        "Task '{}' not found for stage update",
+                        bead_id
+                    )))
+                },
+                |task| task.apply_stage_event(stage_name, state, attempt),
+            )
     }
 
     /// Render the UI
@@ -784,14 +971,15 @@ impl Drop for OyaPlugin {
 }
 
 fn task_summary_to_row(summary: TaskSummary) -> TaskRow {
-    TaskRow {
-        slug: summary.slug,
-        status: summary.status,
-        stage: summary.stage,
-        priority: summary.priority,
-        language: summary.language,
-        branch: summary.branch,
-    }
+    let mut row = TaskRow::new(
+        &summary.slug,
+        &summary.status,
+        &summary.priority,
+        &summary.language,
+        &summary.branch,
+    );
+    row.stage = summary.stage;
+    row
 }
 
 #[cfg(test)]
