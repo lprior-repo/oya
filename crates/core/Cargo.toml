@@ -17,7 +17,11 @@ serde_yaml = { workspace = true }
 toml = { workspace = true }
 itertools = { workspace = true }
 tracing = { workspace = true }
+chrono = { workspace = true }
 either = "1.13"
+
+[dev-dependencies]
+tokio = { workspace = true }
 
 [lints]
 workspace = true

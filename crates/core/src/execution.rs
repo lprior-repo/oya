@@ -118,7 +118,10 @@ pub enum ExecutionError {
 /// Workflow execution engine.
 pub struct ExecutionEngine {
     /// Event bus for publishing progress events.
-    event_bus: Option<Arc<oya_events::EventBus>>,
+    /// Note: Event bus integration disabled to avoid circular dependency with oya-events.
+    /// oya-events depends on oya-core, so oya-core cannot depend on oya-events.
+    /// Instead, event publishing should happen at a higher level (e.g., in orchestrator).
+    // event_bus: Option<Arc<oya_events::EventBus>>,
     /// Checkpoint directory.
     checkpoint_dir: Option<String>,
 }
@@ -128,16 +131,17 @@ impl ExecutionEngine {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            event_bus: None,
+            // event_bus: None,
             checkpoint_dir: None,
         }
     }
 
     /// Set the event bus for progress events.
-    pub fn with_event_bus(mut self, event_bus: Arc<oya_events::EventBus>) -> Self {
-        self.event_bus = Some(event_bus);
-        self
-    }
+    /// Note: Disabled to avoid circular dependency. Event publishing moved to orchestrator level.
+    // pub fn with_event_bus(mut self, event_bus: Arc<oya_events::EventBus>) -> Self {
+    //     self.event_bus = Some(event_bus);
+    //     self
+    // }
 
     /// Set the checkpoint directory.
     pub fn with_checkpoint_dir(mut self, dir: impl Into<String>) -> Self {
@@ -487,12 +491,13 @@ impl ExecutionEngine {
                     .insert(task_id.clone(), TaskExecutionStatus::Completed);
                 succeeded.push(task_id.clone());
 
+                // Note: Event publishing moved to orchestrator level to avoid circular dependency
                 // Emit progress event if event bus is configured
-                if let Some(ref bus) = self.event_bus {
-                    let _ = bus.publish(oya_events::BeadEvent::Completed {
-                        bead_id: task_id.clone(),
-                    });
-                }
+                // if let Some(ref bus) = self.event_bus {
+                //     let _ = bus.publish(oya_events::BeadEvent::Completed {
+                //         bead_id: task_id.clone(),
+                //     });
+                // }
             }
         }
 
@@ -534,15 +539,16 @@ impl ExecutionEngine {
                     .task_status
                     .insert(task_id.to_string(), TaskExecutionStatus::RolledBack);
 
+                // Note: Event publishing moved to orchestrator level to avoid circular dependency
                 // Emit rollback event if event bus is configured
-                if let Some(ref bus) = self.event_bus {
-                    let _ = bus.publish(oya_events::BeadEvent::StateChanged {
-                        bead_id: task_id.to_string(),
-                        from: oya_events::BeadState::Completed,
-                        to: oya_events::BeadState::Failed,
-                        reason: Some("Rolled back".to_string()),
-                    });
-                }
+                // if let Some(ref bus) = self.event_bus {
+                //     let _ = bus.publish(oya_events::BeadEvent::StateChanged {
+                //         bead_id: task_id.to_string(),
+                //         from: oya_events::BeadState::Completed,
+                //         to: oya_events::BeadState::Failed,
+                //         reason: Some("Rolled back".to_string()),
+                //     });
+                // }
 
                 Ok(())
             }
@@ -636,16 +642,17 @@ mod tests {
     #[test]
     fn test_execution_engine_new() {
         let engine = ExecutionEngine::new();
-        assert!(engine.event_bus.is_none());
+        // assert!(engine.event_bus.is_none()); // Event bus removed to avoid circular dependency
         assert!(engine.checkpoint_dir.is_none());
     }
 
-    #[test]
-    fn test_execution_engine_with_event_bus() {
-        let bus = Arc::new(oya_events::EventBus::new(100));
-        let engine = ExecutionEngine::new().with_event_bus(bus);
-        assert!(engine.event_bus.is_some());
-    }
+    // Disabled test due to circular dependency (oya-events depends on oya-core)
+    // #[test]
+    // fn test_execution_engine_with_event_bus() {
+    //     let bus = Arc::new(oya_events::EventBus::new(100));
+    //     let engine = ExecutionEngine::new().with_event_bus(bus);
+    //     assert!(engine.event_bus.is_some());
+    // }
 
     #[test]
     fn test_execution_engine_with_checkpoint_dir() {
