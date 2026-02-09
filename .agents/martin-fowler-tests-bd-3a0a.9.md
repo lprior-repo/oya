@@ -3,474 +3,486 @@
 **Bead ID**: bd-3a0a.9
 **Feature**: cli: add oya storm orchestration command
 **Generated**: 2026-02-09
+**Contract Reference**: contract-bd-3a0a.9.md
+
+## Overview
+
+This test plan specifies executable tests for the `oya storm` CLI command using Martin Fowler's Given-When-Then approach. Tests verify contract preconditions, postconditions, invariants, and all error modes.
 
 ## Happy Path Tests
 
-### test_storm_command_executes_simple_linear_dag_successfully
-**Given**: A config file with 2 slots and timeout of 300s
-**And**: A beads database with 3 open beads in linear dependency (A→B→C)
-**When**: `storm_command(StormArgs { config: path, dry_run: false, .. })` is called
+### test_storm_command_completes_successfully_with_valid_config_and_beads
+**Given**: A valid config file at `.oya/orchestrator.yml` with slots=4, timeout=300s
+**And**: A beads database at `.beads/beads.db` with 5 open beads in valid DAG order
+**When**: User runs `oya storm` without --dry-run
 **Then**:
-- Returns `Ok(StormOutput)` with `beads_completed = 3`
-- Returns `beads_failed = 0`
-- Returns `duration_ms > 0`
-- Results array contains all 3 beads with `ExecutionStatus::Completed`
-- Beads executed in topological order (A, then B, then C)
+- Command returns exit code 0
+- StormOutput contains beads_completed=5, beads_failed=0
+- Duration is between 0ms and timeout_ms
+- Results array contains 5 entries, all with ExecutionStatus::Completed
+- No error messages printed to stderr
+- Orchestrator actors are stopped after completion
 
-### test_storm_command_executes_parallel_branches_successfully
-**Given**: A config file with 4 slots and timeout of 600s
-**And**: A beads database with 6 open beads in diamond DAG (A→[B,C]→D→[E,F])
-**When**: `storm_command(StormArgs { config: path, dry_run: false, .. })` is called
+### test_storm_command_with_dry_run_preview_execution_plan
+**Given**: A valid config file with slots=2
+**And**: A beads database with 8 open beads
+**When**: User runs `oya storm --dry-run`
 **Then**:
-- Returns `Ok(StormOutput)` with `beads_completed = 6`
-- Returns `beads_failed = 0`
-- B and C execute in parallel (same time window)
-- E and F execute in parallel (same time window)
-- D executes after both B and C complete
+- Command returns exit code 0
+- StormOutput contains planned_order with 8 bead IDs in topological order
+- beads_completed=0, beads_failed=0
+- No beads are actually executed (no side effects in database)
+- Output displays planned execution order
 
-### test_storm_command_dry_run_validates_without_execution
-**Given**: A config file with valid settings
-**And**: A beads database with 5 open beads in complex DAG
-**When**: `storm_command(StormArgs { config: path, dry_run: true, .. })` is called
+### test_storm_command_with_custom_config_path
+**Given**: A valid config file at `/tmp/custom-orchestrator.yml`
+**And**: A beads database with open beads
+**When**: User runs `oya storm --config /tmp/custom-orchestrator.yml`
 **Then**:
-- Returns `Ok(StormOutput)` with `beads_completed = 0`
-- `results` field is `None`
-- `planned_order` is `Some(Vec)` with 5 bead IDs in topological order
-- No beads are actually executed
-- Returns immediately (minimal duration_ms)
+- Command loads config from specified path (not default)
+- Command returns exit code 0
+- Config settings (slots, timeout) are applied from custom file
 
-### test_storm_command_respects_timeout
-**Given**: A config file with timeout of 5s
-**And**: A beads database with slow-executing beads
-**When**: `storm_command(StormArgs { config: path, timeout: Some(5s), .. })` is called
+### test_storm_command_with_json_output_format
+**Given**: Valid config and beads database
+**When**: User runs `oya storm --output json`
 **Then**:
-- Returns `Err(StormError::OrchestratorExecutionFailed)`
-- Error reason contains "timeout" or "timed out"
-- Partial results contain completed beads
-- Orchestrator is terminated cleanly
+- Command outputs valid JSON to stdout
+- JSON contains StormOutput fields: beads_completed, beads_failed, duration_ms
+- Exit code is 0
+- No non-JSON text mixed in output
 
-### test_storm_command_loads_custom_config_path
-**Given**: A config file at non-default path `/tmp/custom-orchestrator.yml`
-**And**: Config contains slots: 8, timeout: 900s
-**When**: `storm_command(StormArgs { config: PathBuf("/tmp/custom-orchestrator.yml"), .. })` is called
+### test_storm_command_respects_cli_timeout_override
+**Given**: Config file specifies timeout=300s
+**When**: User runs `oya storm --timeout 60`
 **Then**:
-- Loads config from custom path successfully
-- Orchestrator uses 8 slots
-- Orchestrator respects 900s timeout
-- Returns `Ok(StormOutput)`
+- Orchestrator uses 60s timeout (not 300s)
+- If execution exceeds 60s, command returns OrchestratorExecutionFailed
+- Exit code is 10 (OrchestratorExecutionFailed)
+
+### test_storm_command_respects_cli_slots_override
+**Given**: Config file specifies slots=8
+**When**: User runs `oya storm --slots 2`
+**Then**:
+- Orchestrator uses 2 parallel slots (not 8)
+- Execution respects 2-slot limit
+- Command completes successfully
 
 ## Error Path Tests
 
-### test_returns_error_when_config_file_not_found
-**Given**: No config file exists at specified path
-**When**: `storm_command(StormArgs { config: PathBuf("/nonexistent/config.yml"), .. })` is called
+### test_config_file_not_found_returns_exit_code_3
+**Given**: No config file exists at `.oya/orchestrator.yml`
+**When**: User runs `oya storm`
 **Then**:
-- Returns `Err(StormError::ConfigFileNotFound)`
-- Error path equals `/nonexistent/config.yml`
-- `exit_code()` returns 3
-- `hint()` suggests creating config or using --config flag
+- Command returns exit code 3
+- Error message contains "Config file not found"
+- Hint message suggests creating config or using --config
+- No orchestrator is initialized
 
-### test_returns_error_when_config_file_is_malformed_yaml
-**Given**: A config file with invalid YAML syntax (unclosed bracket)
-**When**: `storm_command(StormArgs { config: path, .. })` is called
+### test_config_file_invalid_yaml_returns_exit_code_4
+**Given**: Config file exists with malformed YAML
+**When**: User runs `oya storm`
 **Then**:
-- Returns `Err(StormError::ConfigParseFailed)`
-- Error source contains YAML parse error
-- `exit_code()` returns 4
-- `hint()` suggests validating YAML syntax
+- Command returns exit code 4
+- Error message contains "Failed to parse config"
+- YAML parse details included in error context
+- Hint suggests validating YAML syntax
 
-### test_returns_error_when_config_missing_required_fields
-**Given**: A config file with valid YAML but missing `slots` field
-**When**: `storm_command(StormArgs { config: path, .. })` is called
+### test_config_file_missing_required_fields_returns_exit_code_4
+**Given**: Config file exists but missing required fields (empty file)
+**When**: User runs `oya storm`
 **Then**:
-- Returns `Err(StormError::ConfigParseFailed)`
-- Error message indicates missing required field
-- `exit_code()` returns 4
+- Command returns exit code 4
+- Error indicates which required fields are missing
+- Config parsing fails at validation stage
 
-### test_returns_error_when_beads_database_not_found
-**Given**: A valid config file
+### test_beads_database_not_found_returns_exit_code_5
+**Given**: Valid config file exists
 **And**: No `.beads/beads.db` file exists
-**When**: `storm_command(StormArgs { config: path, .. })` is called
+**When**: User runs `oya storm`
 **Then**:
-- Returns `Err(StormError::DatabaseNotFound)`
-- Error path points to `.beads/beads.db`
-- `exit_code()` returns 5
-- `hint()` suggests running `oya init`
+- Command returns exit code 5
+- Error message contains "Beads database not found"
+- Hint suggests running `oya init`
+- No orchestrator execution attempted
 
-### test_returns_error_when_database_corrupted
-**Given**: A valid config file
-**And**: A beads database file with corrupted SQLite data
-**When**: `storm_command(StormArgs { config: path, .. })` is called
+### test_beads_database_corrupted_returns_exit_code_6
+**Given**: Valid config file
+**And**: `.beads/beads.db` exists but is corrupted (invalid SQLite)
+**When**: User runs `oya storm`
 **Then**:
-- Returns `Err(StormError::DatabaseQueryFailed)`
-- Error query field indicates failed operation
-- `exit_code()` returns 6
-- `hint()` suggests checking database integrity
+- Command returns exit code 6
+- Error message contains "Database query failed"
+- SQLite error details included in context
+- Hint suggests checking database integrity
 
-### test_returns_error_when_dag_contains_cycle
-**Given**: A beads database with beads A→B→C→A (circular dependency)
-**When**: `storm_command(StormArgs { config: path, .. })` is called
+### test_workflow_dag_with_cycle_returns_exit_code_7
+**Given**: Valid config and database
+**And**: Database contains beads with circular dependency: A->B->C->A
+**When**: User runs `oya storm`
 **Then**:
-- Returns `Err(StormError::DagBuildFailed)`
-- Error reason mentions "cycle" or "circular"
-- `exit_code()` returns 7
-- `hint()` suggests reviewing dependencies
+- Command returns exit code 7
+- Error message contains "Failed to build workflow DAG"
+- Error reason indicates cycle detected
+- Hint suggests reviewing bead dependencies
+- No orchestrator execution attempted
 
-### test_returns_error_when_dag_references_missing_bead
-**Given**: A beads database with bead A depending on non-existent bead X
-**When**: `storm_command(StormArgs { config: path, .. })` is called
+### test_workflow_dag_with_missing_dependency_returns_exit_code_7
+**Given**: Valid config and database
+**And**: Bead A depends on bead X, but X does not exist in database
+**When**: User runs `oya storm`
 **Then**:
-- Returns `Err(StormError::DagBuildFailed)`
-- Error reason mentions "missing" or "not found"
-- Error reason includes bead ID "X"
-- `exit_code()` returns 7
+- Command returns exit code 7
+- Error message indicates missing dependency
+- Missing bead ID (X) mentioned in error
+- DAG construction fails before execution
 
-### test_returns_error_when_no_open_beads_found
-**Given**: A valid config file
-**And**: A beads database with all beads in status `closed` or `blocked`
-**When**: `storm_command(StormArgs { config: path, .. })` is called
+### test_no_open_beads_returns_exit_code_8
+**Given**: Valid config and database
+**And**: All beads in database have status != 'open' (all closed/completed)
+**When**: User runs `oya storm`
 **Then**:
-- Returns `Err(StormError::NoBeadsToExecute)`
-- `exit_code()` returns 8
-- `hint()` suggests creating beads or updating status
+- Command returns exit code 8
+- Error message contains "No beads to execute"
+- Hint suggests creating beads or updating status
+- DAG is not built (no nodes)
 
-### test_returns_error_when_slot_count_is_zero
-**Given**: A config file with `slots: 0`
-**When**: `storm_command(StormArgs { config: path, .. })` is called
+### test_orchestrator_initialization_failure_returns_exit_code_9
+**Given**: Valid config and database with open beads
+**And**: System cannot allocate required resources (e.g., thread spawn fails)
+**When**: User runs `oya storm`
 **Then**:
-- Returns `Err(StormError::InvalidSlotCount)`
-- Error slots field equals 0
-- `exit_code()` returns 11
-- `hint()` suggests setting slots >= 1
+- Command returns exit code 9
+- Error message contains "Orchestrator initialization failed"
+- Reason indicates resource or configuration issue
+- Hint suggests checking system resources
 
-### test_returns_error_when_slot_count_is_negative
-**Given**: Command line argument `--slots -5`
-**When**: `StormArgs::parse_from(["--slots", "-5"])` is called
+### test_orchestrator_execution_timeout_returns_exit_code_10
+**Given**: Valid config with timeout=5s
+**And**: Database with beads that take > 5s to execute
+**When**: User runs `oya storm`
 **Then**:
-- Clap validation fails or returns error
-- Error message indicates invalid value
+- Command returns exit code 10
+- Error message contains "Orchestrator execution failed"
+- Reason indicates timeout exceeded
+- Partial execution details included (completed beads before timeout)
+- Hint suggests checking logs for bead-specific failures
 
-### test_returns_error_when_timeout_is_zero
-**Given**: A config file with `timeout: 0s`
-**When**: `storm_command(StormArgs { config: path, .. })` is called
+### test_orchestrator_crash_returns_exit_code_10
+**Given**: Valid config and database
+**And**: Bead execution causes orchestrator actor to panic/crash
+**When**: User runs `oya storm`
 **Then**:
-- Returns `Err(StormError::InvalidTimeout)`
-- Error secs field equals 0
-- `exit_code()` returns 12
-- `hint()` suggests setting timeout >= 1s
+- Command returns exit code 10
+- Error indicates orchestrator execution failed
+- Crash details captured if available
+- Resources are cleaned up despite crash
 
-### test_returns_error_when_orchestrator_init_fails
-**Given**: A valid config and DAG
-**And**: System resources insufficient (e.g., out of memory)
-**When**: `storm_command(StormArgs { config: path, .. })` is called
+### test_invalid_slot_count_zero_returns_exit_code_11
+**Given**: Config file specifies slots=0
+**When**: User runs `oya storm --slots 0`
 **Then**:
-- Returns `Err(StormError::OrchestratorInitFailed)`
-- Error reason describes resource issue
-- `exit_code()` returns 9
-- No orphaned processes or actors remain
+- Command returns exit code 11
+- Error message contains "Invalid slot count: 0"
+- Hint suggests slots must be >= 1
+- No orchestrator execution attempted
 
-### test_returns_error_when_bead_execution_fails
-**Given**: A DAG with bead B that will fail during execution
-**And**: Bead C depends on B
-**When**: `storm_command(StormArgs { config: path, .. })` is called
+### test_invalid_timeout_zero_returns_exit_code_12
+**Given**: Config file or CLI specifies timeout=0s
+**When**: User runs `oya storm --timeout 0`
 **Then**:
-- Returns `Err(StormError::OrchestratorExecutionFailed)`
-- Error reason mentions bead B failure
-- Bead C is not executed (dependency failed)
-- Bead A (no dependency on B) completes successfully
-- `exit_code()` returns 10
+- Command returns exit code 12
+- Error message contains "Invalid timeout: 0s"
+- Hint suggests timeout must be >= 1s
+- No orchestrator execution attempted
 
 ## Edge Case Tests
 
-### test_handles_empty_dag_gracefully
-**Given**: A beads database with zero beads
-**When**: `storm_command(StormArgs { config: path, .. })` is called
+### test_storm_command_with_single_bead_executes_successfully
+**Given**: Database contains exactly 1 open bead with no dependencies
+**When**: User runs `oya storm`
 **Then**:
-- Returns `Err(StormError::NoBeadsToExecute)`
-- Not a different error type
+- Command completes successfully (exit code 0)
+- beads_completed=1, beads_failed=0
+- Single bead is executed
 
-### test_handles_single_bead_dag
-**Given**: A beads database with 1 open bead and no dependencies
-**When**: `storm_command(StormArgs { config: path, .. })` is called
+### test_storm_command_with_empty_database_returns_exit_code_8
+**Given**: Database exists but contains 0 beads
+**When**: User runs `oya storm`
 **Then**:
-- Returns `Ok(StormOutput)` with `beads_completed = 1`
-- Bead executes successfully
-- Duration is reasonable (< 5s for fast bead)
+- Command returns exit code 8 (NoBeadsToExecute)
+- Error message indicates no open beads found
 
-### test_handles_max_parallelism
-**Given**: A config file with `slots: 1000`
-**And**: A DAG with 500 independent beads (no dependencies)
-**When**: `storm_command(StormArgs { config: path, .. })` is called
+### test_storm_command_with_linear_dependency_chain_executes_in_order
+**Given**: Database with beads: A->B->C->D (linear chain)
+**When**: User runs `oya storm --dry-run`
 **Then**:
-- System limits are respected (doesn't crash)
-- Either: (a) executes with system-limited parallelism, or (b) returns error about resource limits
-- If successful, all 500 beads complete
+- planned_order shows [A, B, C, D] (topological order)
+- DAG validation passes
+- All beads in chain are included
 
-### test_handles_deep_linear_dag
-**Given**: A beads database with 100 beads in linear chain (A1→A2→...→A100)
-**When**: `storm_command(StormArgs { config: path, .. })` is called
+### test_storm_command_with_diamond_dependency_pattern
+**Given**: Database with diamond pattern: A -> (B, C) -> D
+**When**: User runs `oya storm --dry-run`
 **Then**:
-- Returns `Ok(StormOutput)` with `beads_completed = 100`
-- Beads execute in strict order (A1, A2, ..., A100)
-- Total execution time >= sum of individual bead times
+- planned_order shows valid topological sort (A before B/C, B/C before D)
+- DAG is acyclic
+- All 4 beads included
 
-### test_handles_wide_diamond_pattern
-**Given**: A DAG with 1 root → 50 parallel branches → 1 convergence node
-**When**: `storm_command(StormArgs { config: path, .. })` is called
+### test_storm_command_with_parallel_independent_beads
+**Given**: Database with 10 independent beads (no dependencies)
+**And**: Config specifies slots=4
+**When**: User runs `oya storm`
 **Then**:
-- Returns `Ok(StormOutput)` with `beads_completed = 52` (1 + 50 + 1)
-- All 50 parallel beads execute concurrently (limited by slots)
-- Convergence node executes after all 50 complete
+- Execution uses up to 4 parallel slots
+- All 10 beads complete successfully
+- Duration reflects parallel execution (< sequential time)
 
-### test_handles_config_with_optional_fields_missing
-**Given**: A minimal config file with only required fields
-**When**: `storm_command(StormArgs { config: path, .. })` is called
+### test_storm_command_with_mixed_success_and_failure
+**Given**: Database with 5 beads, where beads #2 and #4 will fail
+**When**: User runs `oya storm`
 **Then**:
-- Uses default values for optional fields
-- Returns `Ok(StormOutput)` if valid DAG exists
+- Command returns exit code 10 (OrchestratorExecutionFailed)
+- beads_completed=3, beads_failed=2
+- Results array shows status for each bead
+- Failed beads include error messages
+- Dependent beads of failed beads are skipped
 
-### test_handles_command_line_overriding_config_timeout
-**Given**: A config file with `timeout: 600s`
-**And**: Command line argument `--timeout 120s`
-**When**: `storm_command(StormArgs { config: path, timeout: Some(120s), .. })` is called
+### test_storm_command_preserves_database_immutability
+**Given**: Database with open beads
+**And**: Initial database checksum recorded
+**When**: User runs `oya storm` (even with failures)
 **Then**:
-- Command line timeout takes precedence (120s)
-- Orchestrator times out after 120s if running
+- Database checksum unchanged after command
+- No bead statuses modified in database
+- No new records added
+- Database is read-only
 
-### test_handles_command_line_overriding_config_slots
-**Given**: A config file with `slots: 4`
-**And**: Command line argument `--slots 8`
-**When**: `storm_command(StormArgs { config: path, slots: Some(8), .. })` is called
+### test_storm_command_with_unicode_bead_ids
+**Given**: Database contains beads with Unicode IDs (e.g., "feature-日本語-テスト")
+**When**: User runs `oya storm --dry-run`
 **Then**:
-- Command line slots takes precedence (8)
-- Orchestrator uses 8 parallel slots
+- Command handles Unicode bead IDs correctly
+- planned_order includes Unicode IDs
+- No encoding errors
 
-### test_handles_json_output_format
-**Given**: Command line argument `--output json`
-**And**: A successful execution
-**When**: `storm_command(StormArgs { output: "json".to_string(), .. })` is called
+### test_storm_command_with_very_long_bead_id
+**Given**: Database contains bead with ID = 1000 characters
+**When**: User runs `oya storm --dry-run`
 **Then**:
-- Returns `Ok(StormOutput)` with JSON-serializable data
-- All fields in `StormOutput` can be serialized to JSON
-- Output is valid JSON when printed
+- Command handles long bead IDs without truncation
+- planned_order includes full bead ID
+- No buffer overflow or string slicing issues
+
+### test_storm_command_config_path_with_spaces
+**Given**: Config file at path with spaces: "/tmp/my config/orchestrator.yml"
+**When**: User runs `oya storm --config "/tmp/my config/orchestrator.yml"`
+**Then**:
+- Config file is loaded correctly
+- Spaces in path do not cause parsing errors
+- Command executes successfully
 
 ## Contract Verification Tests
 
 ### test_precondition_config_file_must_exist
 **Given**: No config file exists
-**When**: `storm_command` is called
-**Then**: Returns `Err(StormError::ConfigFileNotFound)` immediately without attempting other operations
+**When**: storm_command() is called
+**Then**: Returns Err(ConfigFileNotFound) - precondition violated
 
-### test_precondition_dag_must_be_acyclic
-**Given**: A database with circular dependencies
-**When**: `storm_command` is called
+### test_precondition_config_must_be_valid_yaml
+**Given**: Config file with invalid YAML syntax
+**When**: storm_command() is called
+**Then**: Returns Err(ConfigParseFailed) - precondition violated
+
+### test_precondition_database_must_exist
+**Given**: Config exists, but database file missing
+**When**: storm_command() is called
+**Then**: Returns Err(DatabaseNotFound) - precondition violated
+
+### test_precondition_database_must_contain_open_beads
+**Given**: Database exists but 0 open beads
+**When**: storm_command() is called
+**Then**: Returns Err(NoBeadsToExecute) - precondition violated
+
+### test_precondition_slots_must_be_positive
+**Given**: Config with slots=0 or CLI flag --slots 0
+**When**: storm_command() is called
+**Then**: Returns Err(InvalidSlotCount) - precondition violated
+
+### test_precondition_timeout_must_be_positive
+**Given**: Config with timeout=0s or CLI flag --timeout 0
+**When**: storm_command() is called
+**Then**: Returns Err(InvalidTimeout) - precondition violated
+
+### test_postcondition_success_returns_ok_with_results
+**Given**: Valid config, database, and DAG
+**When**: storm_command() completes successfully
 **Then**:
-- Returns `Err(StormError::DagBuildFailed)`
-- No beads are executed
-- Error message indicates cycle detected
+- Returns Ok(StormOutput)
+- beads_completed > 0
+- beads_failed = 0
+- duration_ms >= 0
+- results is Some with length matching executed beads
 
-### test_precondition_slot_count_must_be_positive
-**Given**: A config with `slots: 0`
-**When**: `storm_command` is called
+### test_postcondition_dry_run_returns_ok_with_planned_order
+**Given**: Valid config and database with --dry-run flag
+**When**: storm_command() completes
 **Then**:
-- Returns `Err(StormError::InvalidSlotCount)`
-- Orchestrator is not initialized
+- Returns Ok(StormOutput)
+- beads_completed = 0, beads_failed = 0
+- planned_order is Some with bead IDs in topological order
+- results is None
 
-### test_postcondition_successful_run_returns_completed_beads
-**Given**: A valid DAG with 5 beads
-**When**: `storm_command` completes successfully
+### test_postcondition_failure_returns_err_with_exit_code
+**Given**: Invalid config (missing file)
+**When**: storm_command() is called
 **Then**:
-- `StormOutput.beads_completed = 5`
-- `StormOutput.beads_failed = 0`
-- `StormOutput.results.len() = 5`
-- All results have `ExecutionStatus::Completed`
+- Returns Err(StormError::ConfigFileNotFound)
+- error.exit_code() returns deterministic value (always 3)
+- No partial execution state
 
-### test_postcondition_dry_run_does_not_execute_beads
-**Given**: A valid DAG
-**When**: `storm_command` with `dry_run: true` completes
+### test_invariant_dag_acyclicity_always_enforced
+**Given**: Database with circular dependencies
+**When**: build_workflow_dag() is called
 **Then**:
-- `StormOutput.beads_completed = 0`
-- `StormOutput.results = None`
-- `StormOutput.planned_order.is_some()`
-
-### test_postcondition_failure_returns_non_zero_exit_code
-**Given**: Any `StormError` variant
-**When**: `error.exit_code()` is called
-**Then**: Exit code is always > 0 (never 0)
-
-### test_postcondition_failure_provides_hint
-**Given**: Any `StormError` variant
-**When**: `error.hint()` is called
-**Then**: Returns `Some(String)` with actionable remediation steps
-
-### test_invariant_dag_never_contains_cycles
-**Given**: Any successful DAG construction
-**When**: `build_workflow_dag` returns
-**Then**: Returned DAG passes `is_cyclic_directed()` check (returns false)
-
-### test_invariant_all_bead_ids_in_dag_exist_in_database
-**Given**: A successfully built DAG
-**When**: Each bead ID in DAG is queried in database
-**Then**: All bead IDs exist in beads table
+- Returns Err(DagBuildFailed) with cycle reason
+- DAG is never returned with cycles
+- Invariant holds: DAG is always acyclic
 
 ### test_invariant_exit_code_determinism
-**Given**: The same error condition occurs twice
-**When**: `error.exit_code()` is called on both errors
-**Then**: Both exit codes are identical
+**Given**: Same error condition (e.g., ConfigFileNotFound)
+**When**: Error occurs multiple times
+**Then**: exit_code() always returns same value (3)
+- Exit code mapping is deterministic
 
-## Given-When-Then Scenarios
+### test_invariant_database_immutability_preserved
+**Given**: Database with open beads
+**When**: storm_command() executes (success or failure)
+**Then**:
+- Database file modification time unchanged
+- No new records in database
+- No status updates in database
+- Database is read-only
 
-### Scenario 1: Successful execution of linear workflow
-**Given**: A developer has created 3 beads with linear dependencies
-```
-bd-001 (implement auth)
-bd-002 (implement login) depends on bd-001
-bd-003 (implement logout) depends on bd-002
-```
-**And**: All beads have status `open`
-**And**: Config file exists with `slots: 2, timeout: 300s`
+### test_invariant_resource_cleanup_on_success
+**Given**: Valid config and database
+**When**: storm_command() completes successfully
+**Then**:
+- All orchestrator actors are stopped
+- All threads spawned are terminated
+- No orphan processes remain
+- Memory freed
 
-**When**: The developer runs `oya storm`
+### test_invariant_resource_cleanup_on_failure
+**Given**: Valid config but orchestrator crashes
+**When**: storm_command() returns Err
+**Then**:
+- All orchestrator actors are stopped (best effort)
+- Resources cleanup attempted
+- No resource leaks
+
+## Integration Tests (End-to-End Scenarios)
+
+### Scenario 1: Full workflow execution with 10 beads
+**Given**:
+- Config file: `.oya/orchestrator.yml` with slots=3, timeout=120s
+- Database with 10 open beads in complex DAG with dependencies
+- All beads are designed to complete successfully
+
+**When**: User runs `oya storm`
 
 **Then**:
-- Command executes successfully
-- Output shows "3 beads completed, 0 failed"
-- bd-001 executes first
-- After bd-001 completes, bd-002 starts
-- After bd-002 completes, bd-003 starts
-- All beads complete within 300s
-- Exit code is 0
+- Command returns exit code 0
+- Output shows: "Completed 10 beads in Xms"
+- StormOutput contains:
+  - beads_completed=10, beads_failed=0
+  - results array with 10 entries
+  - All ExecutionStatus::Completed
+- DAG dependencies were respected (B executed after A if A->B)
+- Parallel execution used up to 3 slots
+- Total duration < 120s (timeout)
+- Database unchanged
 
-### Scenario 2: Dry run previews execution plan
-**Given**: A developer wants to preview execution before running
-**And**: Database contains 10 beads with complex dependencies
-**And**: Config file exists
+### Scenario 2: Dry run validation of complex DAG
+**Given**:
+- Config file exists
+- Database with 20 beads in diamond pattern dependencies
 
-**When**: The developer runs `oya storm --dry-run`
-
-**Then**:
-- Command completes quickly (< 1s)
-- Output shows "Planned execution order: 10 beads"
-- Lists bead IDs in topological order
-- No beads are actually executed
-- Exit code is 0
-
-### Scenario 3: Missing config file with helpful error
-**Given**: A new developer cloned the repo
-**And**: No config file exists
-**And**: No `.oya` directory exists
-
-**When**: The developer runs `oya storm`
+**When**: User runs `oya storm --dry-run`
 
 **Then**:
-- Command fails immediately
-- Error message: "Config file not found: .oya/orchestrator.yml"
-- Exit code is 3
-- Hint: "Create config with `oya init --template orchestrator` or specify --config"
+- Command returns exit code 0
+- No beads executed (verified by checking database timestamps)
+- planned_order contains 20 bead IDs
+- planned_order is in valid topological sort (dependencies before dependents)
+- Output displays: "Planned 20 beads for execution"
+- Execution estimated duration shown
+- Command exits quickly (< 1s)
 
-### Scenario 4: Circular dependency detected
-**Given**: A developer accidentally created circular dependencies
-```
-bd-001 depends on bd-002
-bd-002 depends on bd-001
-```
-**And**: Both beads have status `open`
+### Scenario 3: Timeout during execution
+**Given**:
+- Config with timeout=5s
+- Database with beads that simulate 10s execution each
 
-**When**: The developer runs `oya storm`
-
-**Then**:
-- Command fails during DAG construction
-- Error message: "Failed to build workflow DAG: cycle detected"
-- Exit code is 7
-- Hint: "Review bead dependencies for circular references"
-- No beads are executed
-
-### Scenario 5: Timeout prevents infinite loop
-**Given**: A bead has a bug causing it to never complete
-**And**: Config has `timeout: 10s`
-**And**: The bead is part of a DAG
-
-**When**: The developer runs `oya storm --timeout 10s`
+**When**: User runs `oya storm`
 
 **Then**:
-- Orchestrator starts execution
-- After 10s, execution is terminated
-- Error message: "Orchestrator execution failed: timeout after 10s"
-- Exit code is 10
-- Partial results show which beads completed before timeout
+- Command returns exit code 10
+- Error message: "Orchestrator execution failed: timeout exceeded"
+- Partial execution details shown:
+  - "Completed N beads before timeout"
+  - List of completed beads
+- Orphan beads not started (those dependent on incomplete beads)
+- Resources cleaned up despite timeout
+- Total duration ~5s (timeout value)
 
-### Scenario 6: Parallel execution with diamond pattern
-**Given**: A workflow with diamond dependency pattern
-```
-bd-setup
-bd-feature-a depends on bd-setup
-bd-feature-b depends on bd-setup
-bd-integration depends on bd-feature-a and bd-feature-b
-```
-**And**: Config has `slots: 4`
+### Scenario 4: Config file overrides via CLI
+**Given**:
+- Default config at `.oya/orchestrator.yml`: slots=2, timeout=60s
+- Custom config at `/tmp/fast.yml`: slots=8, timeout=10s
+- Database with 20 beads
 
-**When**: The developer runs `oya storm`
-
-**Then**:
-- bd-setup executes first
-- After bd-setup completes, both bd-feature-a and bd-feature-b start in parallel
-- bd-integration waits for both features to complete
-- bd-integration executes after both dependencies are done
-- Total time < time_a + time_b (due to parallelism)
-- Exit code is 0
-
-### Scenario 7: Override config with command line options
-**Given**: Config file has `slots: 2, timeout: 600s`
-**And**: Developer wants faster feedback with more parallelism
-
-**When**: The developer runs `oya storm --slots 8 --timeout 120s`
+**When**: User runs `oya storm --config /tmp/fast.yml --slots 4 --timeout 30`
 
 **Then**:
-- Orchestrator uses 8 slots (not 2)
-- Orchestrator times out after 120s (not 600s)
-- Execution succeeds with overridden settings
-- Config file is not modified
+- Config loaded from /tmp/fast.yml (not default)
+- slots=4 (CLI override of custom config)
+- timeout=30s (CLI override of custom config)
+- Execution uses 4 slots, 30s timeout
+- Command completes successfully
 
-### Scenario 8: No open beads to execute
-**Given**: Database has beads but all are status `closed` or `blocked`
-**And**: Config file exists
+### Scenario 5: Database query failure mid-execution
+**Given**:
+- Valid config and database
+- Bead #5 queries database and finds corruption
+- Database becomes unreadable after bead #5 completes
 
-**When**: The developer runs `oya storm`
-
-**Then**:
-- Command fails immediately
-- Error message: "No beads to execute (no beads with status 'open')"
-- Exit code is 8
-- Hint: "Create beads or update their status to 'open'"
-
-### Scenario 9: JSON output for CI/CD integration
-**Given**: A CI/CD pipeline needs machine-readable output
-**And**: Database has valid workflow
-**And**: Config file exists
-
-**When**: The pipeline runs `oya storm --output json`
+**When**: User runs `oya storm`
 
 **Then**:
-- Command outputs valid JSON
-- JSON contains: beads_completed, beads_failed, duration_ms, results array
-- Exit code is 0 on success, non-zero on failure
-- JSON can be parsed by jq or other tools
+- Command returns exit code 6 or 10 (depending on when error surfaces)
+- Error message indicates database query failure
+- beads_completed >= 5 (beads before failure)
+- beads_failed > 0
+- Results array shows success for beads 1-5, failure for rest
+- Database corruption details in error context
+- Hint suggests checking database integrity
 
-### Scenario 10: Bead failure blocks dependent beads
-**Given**: A workflow with dependencies
-```
-bd-infra (completed)
-bd-auth (will fail)
-bd-api depends on bd-auth
-```
-**And**: Config file exists
+## Test Count Summary
 
-**When**: The developer runs `oya storm`
+- Happy path tests: 6
+- Error path tests: 13 (all StormError variants covered)
+- Edge case tests: 10
+- Contract verification tests: 13
+- Integration tests: 5
 
-**Then**:
-- bd-infra completes successfully
-- bd-auth fails
-- bd-api is NOT executed (dependency failed)
-- Error message: "Orchestrator execution failed: bead bd-auth failed"
-- Exit code is 10
-- Results show: bd-infra (Completed), bd-auth (Failed), bd-api (Skipped)
+**Total: 47 tests**
+
+## Coverage Goals
+
+- Line coverage: >= 90%
+- Branch coverage: >= 85%
+- All error variants tested: 100% (13/13)
+- All preconditions verified: 100% (6/6)
+- All postconditions verified: 100% (3/3)
+- All invariants verified: 100% (5/5)

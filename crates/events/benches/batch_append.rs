@@ -129,6 +129,16 @@ fn bench_single_append_baseline(c: &mut Criterion) {
     let event_size = 1024; // 1KB per event
 
     group.bench_function("append_single_event", |b| {
+        // Create fresh environment per iteration
+        let fixture = match BenchmarkFixture::setup() {
+            Ok(f) => f,
+            Err(e) => {
+                eprintln!("Failed to create fixture: {}", e);
+                return;
+            }
+        };
+
+        // Create tokio runtime for async operations
         let rt = match Runtime::new() {
             Ok(rt) => rt,
             Err(e) => {
@@ -137,9 +147,37 @@ fn bench_single_append_baseline(c: &mut Criterion) {
             }
         };
 
+        // Initialize fresh SurrealDB instance
+        let store = match rt.block_on(async {
+            let config = ConnectionConfig::new(fixture.test_path());
+            connect(config)
+                .await
+                .map_err(|e| format!("Connection failed: {}", e))
+        }) {
+            Ok(store) => store,
+            Err(e) => {
+                eprintln!("Failed to connect: {}", e);
+                return;
+            }
+        };
+
+        let store = match rt.block_on(DurableEventStore::new(store)) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("Failed to create store: {}", e);
+                return;
+            }
+        };
+
+        // Create test event with specified size
+        let event = create_test_event(event_size);
+
+        // Run benchmark iteration
         b.iter(|| {
-            let future = simulate_single_append(black_box(event_size));
-            match rt.block_on(future) {
+            match rt.block_on(benchmark_single_append(
+                black_box(&store),
+                black_box(&event),
+            )) {
                 Ok(_) => {}
                 Err(e) => eprintln!("Benchmark error: {}", e),
             }
@@ -160,23 +198,68 @@ fn bench_batch_append_throughput(c: &mut Criterion) {
     let batch_sizes = vec![1, 10, 50, 100, 500, 1000];
 
     for size in batch_sizes {
-        group.bench_with_input(BenchmarkId::new("batch_append", size), &size, |b, &size| {
-            let rt = match Runtime::new() {
-                Ok(rt) => rt,
-                Err(e) => {
-                    eprintln!("Failed to create runtime: {}", e);
-                    return;
-                }
-            };
+        let size_label = format!("{}_events", size);
 
-            b.iter(|| {
-                let future = simulate_batch_append(black_box(size), black_box(event_size));
-                match rt.block_on(future) {
-                    Ok(_) => {}
-                    Err(e) => eprintln!("Benchmark error: {}", e),
-                }
-            });
-        });
+        group.bench_with_input(
+            BenchmarkId::new("batch_append", &size_label),
+            &size,
+            |b, &size| {
+                // Create fresh environment per iteration
+                let fixture = match BenchmarkFixture::setup() {
+                    Ok(f) => f,
+                    Err(e) => {
+                        eprintln!("Failed to create fixture: {}", e);
+                        return;
+                    }
+                };
+
+                // Create tokio runtime for async operations
+                let rt = match Runtime::new() {
+                    Ok(rt) => rt,
+                    Err(e) => {
+                        eprintln!("Failed to create runtime: {}", e);
+                        return;
+                    }
+                };
+
+                // Initialize fresh SurrealDB instance
+                let store = match rt.block_on(async {
+                    let config = ConnectionConfig::new(fixture.test_path());
+                    connect(config)
+                        .await
+                        .map_err(|e| format!("Connection failed: {}", e))
+                }) {
+                    Ok(store) => store,
+                    Err(e) => {
+                        eprintln!("Failed to connect: {}", e);
+                        return;
+                    }
+                };
+
+                let store = match rt.block_on(DurableEventStore::new(store)) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("Failed to create store: {}", e);
+                        return;
+                    }
+                };
+
+                // Create test events with specified size
+                let events: Vec<BeadEvent> =
+                    (0..size).map(|_| create_test_event(event_size)).collect();
+
+                // Run benchmark iteration
+                b.iter(|| {
+                    match rt.block_on(benchmark_batch_append(
+                        black_box(&store),
+                        black_box(&events),
+                    )) {
+                        Ok(_) => {}
+                        Err(e) => eprintln!("Benchmark error: {}", e),
+                    }
+                });
+            },
+        );
     }
 
     group.finish();
@@ -197,6 +280,16 @@ fn bench_single_vs_batch_comparison(c: &mut Criterion) {
     group.bench_function(
         BenchmarkId::new("single_append_100_events", total_events),
         |b| {
+            // Create fresh environment per iteration
+            let fixture = match BenchmarkFixture::setup() {
+                Ok(f) => f,
+                Err(e) => {
+                    eprintln!("Failed to create fixture: {}", e);
+                    return;
+                }
+            };
+
+            // Create tokio runtime for async operations
             let rt = match Runtime::new() {
                 Ok(rt) => rt,
                 Err(e) => {
@@ -205,10 +298,37 @@ fn bench_single_vs_batch_comparison(c: &mut Criterion) {
                 }
             };
 
+            // Initialize fresh SurrealDB instance
+            let store = match rt.block_on(async {
+                let config = ConnectionConfig::new(fixture.test_path());
+                connect(config)
+                    .await
+                    .map_err(|e| format!("Connection failed: {}", e))
+            }) {
+                Ok(store) => store,
+                Err(e) => {
+                    eprintln!("Failed to connect: {}", e);
+                    return;
+                }
+            };
+
+            let store = match rt.block_on(DurableEventStore::new(store)) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("Failed to create store: {}", e);
+                    return;
+                }
+            };
+
+            // Create test event with specified size
+            let event = create_test_event(event_size);
+
             b.iter(|| {
                 for _ in 0..total_events {
-                    let future = simulate_single_append(black_box(event_size));
-                    match rt.block_on(future) {
+                    match rt.block_on(benchmark_single_append(
+                        black_box(&store),
+                        black_box(&event),
+                    )) {
                         Ok(_) => {}
                         Err(e) => eprintln!("Benchmark error: {}", e),
                     }
@@ -221,6 +341,16 @@ fn bench_single_vs_batch_comparison(c: &mut Criterion) {
     group.bench_function(
         BenchmarkId::new("batch_append_100_events", total_events),
         |b| {
+            // Create fresh environment per iteration
+            let fixture = match BenchmarkFixture::setup() {
+                Ok(f) => f,
+                Err(e) => {
+                    eprintln!("Failed to create fixture: {}", e);
+                    return;
+                }
+            };
+
+            // Create tokio runtime for async operations
             let rt = match Runtime::new() {
                 Ok(rt) => rt,
                 Err(e) => {
@@ -229,9 +359,37 @@ fn bench_single_vs_batch_comparison(c: &mut Criterion) {
                 }
             };
 
+            // Initialize fresh SurrealDB instance
+            let store = match rt.block_on(async {
+                let config = ConnectionConfig::new(fixture.test_path());
+                connect(config)
+                    .await
+                    .map_err(|e| format!("Connection failed: {}", e))
+            }) {
+                Ok(store) => store,
+                Err(e) => {
+                    eprintln!("Failed to connect: {}", e);
+                    return;
+                }
+            };
+
+            let store = match rt.block_on(DurableEventStore::new(store)) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("Failed to create store: {}", e);
+                    return;
+                }
+            };
+
+            // Create test events with specified size
+            let events: Vec<BeadEvent> =
+                (0..total_events).map(|_| create_test_event(event_size)).collect();
+
             b.iter(|| {
-                let future = simulate_batch_append(black_box(total_events), black_box(event_size));
-                match rt.block_on(future) {
+                match rt.block_on(benchmark_batch_append(
+                    black_box(&store),
+                    black_box(&events),
+                )) {
                     Ok(_) => {}
                     Err(e) => eprintln!("Benchmark error: {}", e),
                 }

@@ -16,8 +16,10 @@
 pub mod doctor;
 pub mod init;
 pub mod logs;
+pub mod storm;
 
 // Re-export command types for convenience
 pub use doctor::{DoctorArgs, DoctorError, DoctorOutput, doctor_command};
 pub use init::{InitArgs, InitError, InitOutput, init_command};
 pub use logs::{LogsArgs, LogsError, LogsOutput, logs_command};
+pub use storm::{StormArgs, StormError, StormOutput, storm_command};
