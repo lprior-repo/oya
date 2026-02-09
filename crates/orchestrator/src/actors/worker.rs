@@ -11,10 +11,9 @@ use tokio::sync::watch;
 use tracing::{debug, info, warn};
 
 use oya_events::{BeadState, EventBus};
-// TODO: Re-enable when oya-pipeline crate is created
-// use oya_pipeline::workspace::WorkspaceManager;
-// TODO: Re-enable when opencode is integrated
-// use oya_opencode::{OpencodeClient, OpencodeConfig};
+// Note: oya-pipeline provides task management, but workspace execution
+// is handled at a higher level (e.g., via zjj CLI or workspace manager)
+// use oya_opencode::{OpencodeClient, OpencodeConfig}; // TODO: Integrate when opencode is ready
 
 use crate::actors::supervisor::{GenericSupervisableActor, calculate_backoff};
 
@@ -59,8 +58,7 @@ pub struct WorkerConfig {
     pub checkpoint_interval: Duration,
     pub retry_policy: WorkerRetryPolicy,
     pub event_bus: Option<Arc<EventBus>>,
-    // TODO: Re-enable when oya-pipeline crate is created
-    // pub workspace_manager: Option<Arc<WorkspaceManager>>,
+    // Note: workspace execution happens at orchestrator level via zjj/workspace tools
 }
 
 impl std::fmt::Debug for WorkerConfig {
@@ -69,14 +67,6 @@ impl std::fmt::Debug for WorkerConfig {
             .field("checkpoint_interval", &self.checkpoint_interval)
             .field("retry_policy", &self.retry_policy)
             .field("event_bus", &self.event_bus.as_ref().map(|_| "<EventBus>"))
-            // TODO: Re-enable when oya-pipeline crate is created
-            // .field(
-            //     "workspace_manager",
-            //     &self
-            //         .workspace_manager
-            //         .as_ref()
-            //         .map(|_| "<WorkspaceManager>"),
-            // )
             .finish()
     }
 }
@@ -87,8 +77,6 @@ impl Default for WorkerConfig {
             checkpoint_interval: Duration::from_secs(60),
             retry_policy: WorkerRetryPolicy::default(),
             event_bus: None,
-            // TODO: Re-enable when oya-pipeline crate is created
-            // workspace_manager: None,
         }
     }
 }
@@ -99,13 +87,6 @@ impl WorkerConfig {
         self.event_bus = Some(bus);
         self
     }
-
-    // TODO: Re-enable when oya-pipeline crate is created
-    // #[must_use]
-    // pub fn with_workspace_manager(mut self, manager: Arc<WorkspaceManager>) -> Self {
-    //     self.workspace_manager = Some(manager);
-    //     self
-    // }
 }
 
 /// Result of executing a bead in an isolated workspace.
@@ -355,7 +336,12 @@ impl Actor for WorkerActorDef {
                     }
                 }
 
-                // TODO: Implement workspace execution when oya-pipeline crate exists
+                // Note: Actual workspace execution (zjj spawn, etc.) happens at orchestrator level.
+                // This worker tracks state transitions and emits events.
+                // For now, we simulate successful execution. Real integration would:
+                // 1. Use zjj CLI to spawn workspace
+                // 2. Execute pipeline stages via oya-pipeline functions
+                // 3. Track execution result
                 let _exec_result = WorkspaceExecutionResult::success();
 
                 // Note: We don't emit Completed/Failed events here - only StateChanged
