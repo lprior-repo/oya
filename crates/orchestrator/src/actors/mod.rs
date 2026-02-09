@@ -56,6 +56,7 @@ pub mod ipc_worker;
 pub mod lifecycle;
 pub mod messages;
 pub mod queue;
+pub mod rate_limiter;
 pub mod reconciler;
 pub mod scheduler;
 pub mod storage;
@@ -73,6 +74,7 @@ pub use health_check_worker::{
 pub use ipc_worker::{IpcWorkerActorDef, IpcWorkerArguments, IpcWorkerMessage, IpcWorkerState};
 pub use messages::{BeadState, SchedulerMessage, WorkflowStatus};
 pub use queue::{QueueActorDef, QueueMessage, QueueState};
+pub use rate_limiter::{TokenBucket, spawn_refill_timer};
 pub use reconciler::{ReconcilerActorDef, ReconcilerMessage, ReconcilerState};
 pub use scheduler::{SchedulerActorDef, SchedulerArguments, SchedulerState};
 pub use storage::{
