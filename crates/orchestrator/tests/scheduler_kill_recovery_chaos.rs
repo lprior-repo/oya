@@ -10,20 +10,18 @@
 #![forbid(unsafe_code)]
 
 use std::collections::HashSet;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use im::{HashMap, HashSet as ImHashSet};
 use itertools::Itertools;
 use ractor::{Actor, ActorRef, ActorStatus};
 use thiserror::Error;
-use tokio::time::timeout;
-use tracing::{debug, error, info, warn};
+use tracing::{info, warn};
 
-use orchestrator::actors::messages::{BeadState, SchedulerMessage};
+use orchestrator::actors::messages::{SchedulerMessage, WorkflowStatus};
 use orchestrator::actors::scheduler::{SchedulerActorDef, SchedulerArguments};
 use orchestrator::actors::supervisor::{
-    SupervisorActorDef, SupervisorArguments, SupervisorConfig, SupervisorMessage, SupervisorState,
+    SupervisorArguments, SupervisorConfig, SupervisorMessage, SupervisorState,
     spawn_supervisor_with_name,
 };
 
@@ -152,24 +150,16 @@ async fn capture_scheduler_state(
     let mut workflows = HashMap::new();
 
     for workflow_id in workflow_ids {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        scheduler
-            .send_message(SchedulerMessage::GetWorkflowStatus {
-                workflow_id: workflow_id.clone(),
-                reply: tx,
-            })
-            .map_err(|e| ChaosTestError::RpcFailed {
-                reason: e.to_string(),
-            })?;
-
-        let status = rx
-            .await
-            .map_err(|e| ChaosTestError::RpcFailed {
-                reason: format!("RPC reply failed: {e}"),
-            })?
-            .ok_or_else(|| ChaosTestError::StateMismatch {
-                details: format!("Workflow {workflow_id} not found"),
-            })?;
+        let status = ractor::call!(scheduler, SchedulerMessage::GetWorkflowStatus {
+            workflow_id: workflow_id.clone(),
+        })
+        .await
+        .map_err(|e| ChaosTestError::RpcFailed {
+            reason: format!("RPC call failed: {e}"),
+        })?
+        .ok_or_else(|| ChaosTestError::StateMismatch {
+            details: format!("Workflow {workflow_id} not found"),
+        })?;
 
         let snapshot = WorkflowSnapshot {
             workflow_id: workflow_id.clone(),
@@ -182,16 +172,11 @@ async fn capture_scheduler_state(
     }
 
     // Get all ready beads
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    scheduler
-        .send_message(SchedulerMessage::GetAllReadyBeads { reply: tx })
+    let ready_pairs = ractor::call!(scheduler, SchedulerMessage::GetAllReadyBeads)
+        .await
         .map_err(|e| ChaosTestError::RpcFailed {
-            reason: e.to_string(),
+            reason: format!("RPC call failed: {e}"),
         })?;
-
-    let ready_pairs = rx.await.map_err(|e| ChaosTestError::RpcFailed {
-        reason: format!("RPC reply failed: {e}"),
-    })?;
 
     let ready_beads = ready_pairs.into_iter().map(|(_wid, bid)| bid).collect();
 
@@ -655,12 +640,12 @@ async fn test_postcondition_scheduler_running_after_recovery() {
         "Supervisor should be running initially"
     );
 
-    kill_scheduler(&ctx)
+    kill_scheduler(&ctx, test_name)
         .await
         .expect("Failed to kill scheduler");
 
     // Wait for recovery
-    await_scheduler_recovery(&ctx, 5000)
+    await_scheduler_recovery(&mut ctx, test_name, 5000)
         .await
         .expect("Scheduler did not recover");
 
