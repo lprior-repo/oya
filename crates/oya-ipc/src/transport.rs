@@ -9,9 +9,9 @@
 //! - Use within actor context for safe concurrent access
 
 use crate::{
-    TransportError, TransportResult, LENGTH_PREFIX_SIZE, MAX_FRAME_SIZE, MAX_PAYLOAD_SIZE,
+    LENGTH_PREFIX_SIZE, MAX_FRAME_SIZE, MAX_PAYLOAD_SIZE, TransportError, TransportResult,
 };
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 
 /// Transport layer for length-prefixed bincode messages.

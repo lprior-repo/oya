@@ -326,7 +326,10 @@ mod tests {
     fn test_compress_with_level_succeeds_for_structured_data() {
         let data = generate_structured_data(10_000);
         let result = compress_with_level(&data, 3);
-        assert!(result.is_ok(), "Compression should succeed for structured data");
+        assert!(
+            result.is_ok(),
+            "Compression should succeed for structured data"
+        );
     }
 
     #[test]
@@ -349,14 +352,21 @@ mod tests {
         assert!(result.is_ok(), "Compression should succeed for empty data");
 
         let compressed = result.map_or_else(|_| Vec::new(), |c| c);
-        assert_eq!(compressed.len(), 0, "Empty input should produce empty output");
+        assert_eq!(
+            compressed.len(),
+            0,
+            "Empty input should produce empty output"
+        );
     }
 
     #[test]
     fn test_compress_with_default_level_3() {
         let data = b"test data";
         let result = compress(data);
-        assert!(result.is_ok(), "Compression with default level should succeed");
+        assert!(
+            result.is_ok(),
+            "Compression with default level should succeed"
+        );
     }
 
     #[test]
@@ -430,7 +440,11 @@ mod tests {
             let result = compress_with_level(data, level)
                 .and_then(|compressed| decompress(&compressed, data.len()));
 
-            assert!(result.is_ok(), "Roundtrip should succeed for level {}", level);
+            assert!(
+                result.is_ok(),
+                "Roundtrip should succeed for level {}",
+                level
+            );
             let decompressed = result.map_or_else(|_| Vec::new(), |d| d);
             assert_eq!(
                 decompressed, data,
@@ -450,7 +464,10 @@ mod tests {
         assert!(decompressed.is_ok(), "Decompression should succeed");
 
         let decompressed_data = decompressed.map_or_else(|_| Vec::new(), |d| d);
-        assert_eq!(decompressed_data, data, "Structured checkpoint data should roundtrip");
+        assert_eq!(
+            decompressed_data, data,
+            "Structured checkpoint data should roundtrip"
+        );
     }
 
     #[test]
@@ -517,7 +534,10 @@ mod tests {
         assert!(result.is_err(), "Should return error for negative level");
 
         let err = result.map_err(|e| e.to_string()).unwrap_err();
-        assert!(err.contains("zstd compression failed"), "Error should mention zstd");
+        assert!(
+            err.contains("zstd compression failed"),
+            "Error should mention zstd"
+        );
     }
 
     #[test]
@@ -527,7 +547,10 @@ mod tests {
         assert!(result.is_err(), "Should return error for level > 21");
 
         let err = result.map_err(|e| e.to_string()).unwrap_err();
-        assert!(err.contains("zstd compression failed"), "Error should mention zstd");
+        assert!(
+            err.contains("zstd compression failed"),
+            "Error should mention zstd"
+        );
     }
 
     #[test]
@@ -537,7 +560,10 @@ mod tests {
         assert!(result.is_err(), "Should return error for invalid data");
 
         let err = result.map_err(|e| e.to_string()).unwrap_err();
-        assert!(err.contains("zstd decompression failed"), "Error should mention zstd");
+        assert!(
+            err.contains("zstd decompression failed"),
+            "Error should mention zstd"
+        );
     }
 
     #[test]
@@ -573,10 +599,16 @@ mod tests {
     fn test_decompress_auto_returns_error_when_all_strategies_fail() {
         let invalid_data = b"invalid zstd data that will fail all strategies";
         let result = decompress_auto(invalid_data);
-        assert!(result.is_err(), "Should return error when all strategies fail");
+        assert!(
+            result.is_err(),
+            "Should return error when all strategies fail"
+        );
 
         let err = result.map_err(|e| e.to_string()).unwrap_err();
-        assert!(err.contains("all buffer strategies failed"), "Error should mention strategy failure");
+        assert!(
+            err.contains("all buffer strategies failed"),
+            "Error should mention strategy failure"
+        );
     }
 
     #[test]
@@ -663,7 +695,11 @@ mod tests {
         assert!(result.is_ok(), "Empty slice should succeed");
 
         let compressed = result.map_or_else(|_| Vec::new(), |c| c);
-        assert_eq!(compressed.len(), 0, "Empty input should produce empty output");
+        assert_eq!(
+            compressed.len(),
+            0,
+            "Empty input should produce empty output"
+        );
     }
 
     #[test]
@@ -682,7 +718,10 @@ mod tests {
     #[test]
     fn test_compression_ratio_with_zero_uncompressed_size() {
         let ratio = compression_ratio(0, 100);
-        assert_eq!(ratio, 0.0, "Ratio should be 0.0 when uncompressed size is 0");
+        assert_eq!(
+            ratio, 0.0,
+            "Ratio should be 0.0 when uncompressed size is 0"
+        );
     }
 
     #[test]
@@ -718,7 +757,10 @@ mod tests {
         );
 
         let ratio = compression_ratio(data.len() as u64, compressed.len() as u64);
-        assert!(ratio > 100.0, "Uniform data should have high compression ratio");
+        assert!(
+            ratio > 100.0,
+            "Uniform data should have high compression ratio"
+        );
     }
 
     #[test]
@@ -764,7 +806,11 @@ mod tests {
         assert!(decompressed.is_ok(), "Decompression should succeed");
 
         let output_len = decompressed.map_or_else(|_| 0, |d| d.len());
-        assert_eq!(output_len, data.len(), "Postcondition: output size matches expected");
+        assert_eq!(
+            output_len,
+            data.len(),
+            "Postcondition: output size matches expected"
+        );
     }
 
     #[test]
@@ -803,7 +849,10 @@ mod tests {
         assert_eq!(saved, 500, "Postcondition: savings ≥ 0");
 
         let saved_zero = space_savings(500, 1000);
-        assert_eq!(saved_zero, 0, "Postcondition: savings should be 0 when compressed > input");
+        assert_eq!(
+            saved_zero, 0,
+            "Postcondition: savings should be 0 when compressed > input"
+        );
     }
 
     #[test]

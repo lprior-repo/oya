@@ -34,6 +34,7 @@ pub mod render;
 pub mod correlation;
 pub mod log;
 pub mod metrics;
+pub mod state;
 pub mod timer;
 pub mod web_client;
 
@@ -46,5 +47,6 @@ pub use render::Renderer;
 pub use correlation::{CorrelationContext, RequestId, keys};
 pub use log::{LogAggregator, LogEntry, LogLevel, LogSource};
 pub use metrics::{AgentMetrics, MetricsSnapshot, PoolMetrics};
+pub use state::{STATE_VERSION, StateError, StateManager, StateSnapshot};
 pub use timer::{RefreshTimer, TimerConfig, TimerError, TimerEvent, TimerState};
 pub use web_client::{HttpResponse, WebClient, WebClientConfig, WebClientError};

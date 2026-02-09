@@ -593,9 +593,7 @@ mod tests {
             }
         }
 
-        let result = validate_input(21)
-            .map(double_value)
-            .and_then(ensure_even);
+        let result = validate_input(21).map(double_value).and_then(ensure_even);
 
         assert!(result.is_ok());
         if let Ok(v) = result {

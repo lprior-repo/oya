@@ -16,9 +16,13 @@
 use bincode::Decode;
 use serde::de::DeserializeOwned;
 
+use super::storage::{CheckpointStorage, StorageError};
+
 /// Version header for checkpoint compatibility.
 const CHECKPOINT_VERSION: u32 = 1;
-const VERSION_HEADER_SIZE: usize = 4;
+
+/// Size of version header: magic bytes (8) + version number (4).
+const VERSION_HEADER_SIZE: usize = 12;
 
 /// Unique identifier for a checkpoint.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -174,19 +178,32 @@ pub type RestoreResult<T> = Result<T, RestoreError>;
 
 /// Load checkpoint data from storage.
 ///
-/// This is a placeholder implementation that would integrate with the
-/// actual storage layer (e.g., SurrealDB in production).
+/// This function integrates with the `CheckpointStorage` trait to load
+/// compressed checkpoint data.
 ///
 /// # Errors
 ///
 /// Returns `RestoreError::CheckpointNotFound` if the checkpoint doesn't exist.
 /// Returns `RestoreError::StorageFailed` if the storage operation fails.
-fn load_checkpoint_data(checkpoint_id: &CheckpointId) -> RestoreResult<Vec<u8>> {
-    // TODO: Integrate with actual storage layer (OrchestratorStore)
-    // For now, this is a placeholder that returns not found
-    Err(RestoreError::checkpoint_not_found(
-        checkpoint_id.to_string(),
-    ))
+fn load_checkpoint_data(
+    checkpoint_id: &CheckpointId,
+    storage: &dyn CheckpointStorage,
+) -> RestoreResult<Vec<u8>> {
+    storage
+        .load_checkpoint(checkpoint_id)
+        .map(|(data, _metadata)| data)
+        .map_err(|storage_error| match storage_error {
+            StorageError::NotFound { checkpoint_id } => {
+                RestoreError::CheckpointNotFound { checkpoint_id }
+            }
+            StorageError::StorageFailed { reason } => RestoreError::StorageFailed {
+                operation: "load".to_string(),
+                reason,
+            },
+            StorageError::CodecFailed { reason } => RestoreError::InvalidData {
+                reason: format!("checkpoint data codec error: {reason}"),
+            },
+        })
 }
 
 /// Decompress checkpoint data using zstd.
@@ -216,18 +233,35 @@ where
 
 /// Validate version header in checkpoint data.
 ///
+/// The header consists of:
+/// - Magic bytes (8 bytes): "OYACPT01"
+/// - Version number (4 bytes): u32 little-endian
+///
 /// # Errors
 ///
-/// Returns `RestoreError::InvalidData` if data is too small.
+/// Returns `RestoreError::InvalidData` if data is too small or magic bytes don't match.
 /// Returns `RestoreError::VersionMismatch` if version doesn't match.
 fn validate_version(data: &[u8]) -> RestoreResult<()> {
+    // Check minimum size for magic bytes + version
     if data.len() < VERSION_HEADER_SIZE {
-        return Err(RestoreError::invalid_data(
-            "data too small for version header",
-        ));
+        return Err(RestoreError::invalid_data(format!(
+            "data too small for version header: expected {VERSION_HEADER_SIZE} bytes, got {}",
+            data.len()
+        )));
     }
 
-    let found = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
+    // Validate magic bytes
+    let magic_bytes = &data[0..8];
+    const EXPECTED_MAGIC: &[u8; 8] = b"OYACPT01";
+    if magic_bytes != EXPECTED_MAGIC {
+        return Err(RestoreError::invalid_data(format!(
+            "invalid magic bytes: expected {EXPECTED_MAGIC:?}, got {magic_bytes:?}"
+        )));
+    }
+
+    // Extract and validate version number
+    let version_bytes = [data[8], data[9], data[10], data[11]];
+    let found = u32::from_le_bytes(version_bytes);
 
     if found != CHECKPOINT_VERSION {
         return Err(RestoreError::VersionMismatch {
@@ -245,7 +279,7 @@ fn validate_version(data: &[u8]) -> RestoreResult<()> {
 /// This implements the full restoration pipeline:
 /// 1. Load compressed checkpoint data from storage
 /// 2. Decompress using zstd
-/// 3. Validate version header
+/// 3. Validate version header (magic bytes + version number)
 /// 4. Deserialize using bincode
 ///
 /// # Type Parameters
@@ -255,6 +289,7 @@ fn validate_version(data: &[u8]) -> RestoreResult<()> {
 /// # Arguments
 ///
 /// * `checkpoint_id` - Unique identifier for the checkpoint to restore.
+/// * `storage` - Reference to checkpoint storage implementation.
 ///
 /// # Returns
 ///
@@ -269,16 +304,27 @@ fn validate_version(data: &[u8]) -> RestoreResult<()> {
 /// * `DeserializationFailed` - bincode deserialization failed
 /// * `InvalidData` - Checkpoint data is corrupted
 /// * `StorageFailed` - Storage layer operation failed
+///
+/// # Example
+///
+/// ```ignore
+/// use oya_workflow::checkpoint::{restore_checkpoint, CheckpointStorage, InMemoryCheckpointStorage};
+///
+/// let mut storage = InMemoryCheckpointStorage::new();
+/// // ... store checkpoint ...
+/// let state: MyState = restore_checkpoint(&checkpoint_id, &storage)?;
+/// ```
 pub fn restore_checkpoint<T: DeserializeOwned + Decode<()>>(
     checkpoint_id: &CheckpointId,
+    storage: &dyn CheckpointStorage,
 ) -> RestoreResult<T> {
     // Step 1: Load compressed data from storage
-    let compressed = load_checkpoint_data(checkpoint_id)?;
+    let compressed = load_checkpoint_data(checkpoint_id, storage)?;
 
     // Step 2: Decompress using zstd
     let decompressed = decompress_checkpoint(&compressed)?;
 
-    // Step 3: Validate version header
+    // Step 3: Validate version header (magic bytes + version)
     validate_version(&decompressed)?;
 
     // Step 4: Deserialize (skip version header)
@@ -292,6 +338,9 @@ pub fn restore_checkpoint<T: DeserializeOwned + Decode<()>>(
 mod tests {
     use super::*;
     use serde::Deserialize;
+
+    use super::super::serialize::{serialize_state, CHECKPOINT_VERSION, MAGIC_BYTES};
+    use super::super::storage::{CheckpointMetadata, CheckpointStorage, InMemoryCheckpointStorage};
 
     /// Test: CheckpointId generates unique IDs.
     #[test]
@@ -322,11 +371,30 @@ mod tests {
         );
     }
 
+    /// Test: Version validation rejects wrong magic bytes.
+    #[test]
+    fn test_validate_version_invalid_magic() {
+        let mut header = vec![0u8; VERSION_HEADER_SIZE];
+        header[0..8].copy_from_slice(b"BADMAGIC");
+        header[8..12].copy_from_slice(&CHECKPOINT_VERSION.to_le_bytes());
+
+        let result = validate_version(&header);
+        assert!(result.is_err(), "should reject invalid magic bytes");
+        assert!(
+            matches!(result, Err(RestoreError::InvalidData { .. })),
+            "should return InvalidData error, got: {:?}",
+            result
+        );
+    }
+
     /// Test: Version validation rejects wrong version.
     #[test]
     fn test_validate_version_mismatch() {
-        let wrong_version = 99u32.to_le_bytes();
-        let result = validate_version(&wrong_version);
+        let mut header = vec![0u8; VERSION_HEADER_SIZE];
+        header[0..8].copy_from_slice(MAGIC_BYTES);
+        header[8..12].copy_from_slice(&99u32.to_le_bytes());
+
+        let result = validate_version(&header);
         assert!(result.is_err(), "should reject wrong version");
         if let Err(RestoreError::VersionMismatch {
             expected,
@@ -337,16 +405,23 @@ mod tests {
             assert_eq!(expected, CHECKPOINT_VERSION);
             assert_eq!(found, 99);
         } else {
-            assert!(result.is_err(), "wrong error type: {:?}", result);
+            assert!(
+                matches!(result, Err(RestoreError::VersionMismatch { .. })),
+                "wrong error type: {:?}",
+                result
+            );
         }
     }
 
-    /// Test: Version validation accepts correct version.
+    /// Test: Version validation accepts correct header.
     #[test]
     fn test_validate_version_success() {
-        let correct_version = CHECKPOINT_VERSION.to_le_bytes();
-        let result = validate_version(&correct_version);
-        assert!(result.is_ok(), "should accept correct version");
+        let mut header = vec![0u8; VERSION_HEADER_SIZE];
+        header[0..8].copy_from_slice(MAGIC_BYTES);
+        header[8..12].copy_from_slice(&CHECKPOINT_VERSION.to_le_bytes());
+
+        let result = validate_version(&header);
+        assert!(result.is_ok(), "should accept correct header");
     }
 
     /// Test: Decompression fails on invalid data.
@@ -409,28 +484,151 @@ mod tests {
     /// THEN the original state is recovered exactly
     #[test]
     fn test_restore_checkpoint_full_pipeline() {
-        // Note: This test demonstrates the pipeline architecture
-        // In production, load_checkpoint_data would connect to actual storage
+        #[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, bincode::Decode)]
+        struct TestState {
+            counter: u64,
+            name: String,
+            items: Vec<String>,
+        }
+
+        let original = TestState {
+            counter: 42,
+            name: "test-checkpoint".to_string(),
+            items: vec!["item1".to_string(), "item2".to_string()],
+        };
+
+        // Create checkpoint
+        let checkpoint_id = CheckpointId::new();
+        let compressed = serialize_state(&original);
+        assert!(compressed.is_ok(), "serialization should succeed");
+        let compressed = compressed.map_or(Vec::new(), |v| v);
+
+        // Store in in-memory storage
+        let mut storage = InMemoryCheckpointStorage::new();
+        let metadata = CheckpointMetadata {
+            id: checkpoint_id,
+            created_at: chrono::Utc::now(),
+            version: CHECKPOINT_VERSION,
+            uncompressed_size: 100, // Approximate
+            compressed_size: compressed.len(),
+            compression_ratio: 1.5,
+        };
+
+        let store_result = storage.store_checkpoint(compressed, metadata);
+        assert!(store_result.is_ok(), "store should succeed");
+
+        // Restore checkpoint
+        let restored: RestoreResult<TestState> = restore_checkpoint(&checkpoint_id, &storage);
+        assert!(restored.is_ok(), "restoration should succeed");
+
+        let restored = restored.map_or(
+            TestState {
+                counter: 0,
+                name: String::new(),
+                items: Vec::new(),
+            },
+            |v| v,
+        );
+
+        assert_eq!(restored, original, "restored state should match original");
+    }
+
+    /// Test: Restoration returns checkpoint not found when ID invalid.
+    #[test]
+    fn test_restore_checkpoint_not_found() {
+        let storage = InMemoryCheckpointStorage::new();
         let checkpoint_id = CheckpointId::new();
 
-        // For now, the pipeline will fail at load step (no storage integration)
-        let result: RestoreResult<String> = restore_checkpoint(&checkpoint_id);
+        let result: RestoreResult<String> = restore_checkpoint(&checkpoint_id, &storage);
 
-        // Expected to fail at storage layer in this test environment
-        assert!(result.is_err(), "should fail without storage integration");
+        assert!(result.is_err(), "should fail for non-existent checkpoint");
+        assert!(
+            matches!(result, Err(RestoreError::CheckpointNotFound { .. })),
+            "should return CheckpointNotFound error, got: {:?}",
+            result
+        );
+    }
 
-        match result {
-            Err(RestoreError::CheckpointNotFound { .. }) => {
-                // Expected - storage not yet integrated
+    /// Test: Restoration fails with corrupted data.
+    #[test]
+    fn test_restore_checkpoint_corrupted_data() {
+        let checkpoint_id = CheckpointId::new();
+        let mut storage = InMemoryCheckpointStorage::new();
+
+        // Store corrupted data (not valid zstd)
+        let corrupted = vec![0xFF, 0xFF, 0xFF, 0xFF];
+        let metadata = CheckpointMetadata {
+            id: checkpoint_id,
+            created_at: chrono::Utc::now(),
+            version: CHECKPOINT_VERSION,
+            uncompressed_size: 4,
+            compressed_size: 4,
+            compression_ratio: 1.0,
+        };
+
+        let _ = storage.store_checkpoint(corrupted, metadata);
+
+        let result: RestoreResult<String> = restore_checkpoint(&checkpoint_id, &storage);
+
+        assert!(result.is_err(), "should fail with corrupted data");
+        assert!(
+            matches!(result, Err(RestoreError::DecompressionFailed { .. })),
+            "should return DecompressionFailed error, got: {:?}",
+            result
+        );
+    }
+
+    /// Test: Storage CodecFailed error maps to InvalidData.
+    #[test]
+    fn test_load_checkpoint_codec_failed_maps_to_invalid_data() {
+        // Mock storage that returns CodecFailed
+        struct MockStorage;
+
+        impl CheckpointStorage for MockStorage {
+            fn store_checkpoint(
+                &mut self,
+                _data: Vec<u8>,
+                _metadata: CheckpointMetadata,
+            ) -> StorageResult<CheckpointId> {
+                Ok(CheckpointId::new())
             }
-            _ => {
-                assert!(
-                    matches!(result, Err(RestoreError::CheckpointNotFound { .. })),
-                    "should return CheckpointNotFound error, got: {:?}",
-                    result
-                );
+
+            fn load_checkpoint(
+                &self,
+                _id: &CheckpointId,
+            ) -> StorageResult<(Vec<u8>, CheckpointMetadata)> {
+                Err(StorageError::CodecFailed {
+                    reason: "corrupted header".to_string(),
+                })
+            }
+
+            fn delete_checkpoint(&mut self, _id: &CheckpointId) -> StorageResult<()> {
+                Ok(())
+            }
+
+            fn list_checkpoints(&self) -> StorageResult<Vec<CheckpointId>> {
+                Ok(Vec::new())
+            }
+
+            fn get_stats(&self) -> StorageResult<StorageStats> {
+                Ok(StorageStats::default())
+            }
+
+            fn clear_all(&mut self) -> StorageResult<()> {
+                Ok(())
             }
         }
+
+        let storage = MockStorage;
+        let checkpoint_id = CheckpointId::new();
+        let result: RestoreResult<String> = restore_checkpoint(&checkpoint_id, &storage);
+
+        assert!(result.is_err(), "should fail with codec error");
+        assert!(
+            matches!(result, Err(RestoreError::InvalidData { .. })),
+            "CodecFailed should map to InvalidData, got: {:?}",
+            result
+        );
     }
 
     /// Test: Error display formatting.

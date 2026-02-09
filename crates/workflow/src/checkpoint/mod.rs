@@ -20,5 +20,5 @@ pub use restore::{restore_checkpoint, CheckpointId, RestoreError, RestoreResult}
 pub use serialize::{serialize_state, SerializeError, SerializeResult, CHECKPOINT_VERSION};
 pub use storage::{
     CheckpointMetadata, CheckpointStorage, CompressionConfig as StorageCompressionConfig,
-    StorageStats,
+    InMemoryCheckpointStorage, StorageStats,
 };

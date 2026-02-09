@@ -341,8 +341,15 @@ impl Renderer {
         ];
 
         let (running_stage, failed_stage, completed) = stage_status(task);
+        let detail = stage_detail(task);
+        let running_stage_index = running_stage
+            .as_deref()
+            .and_then(|active| stages.iter().position(|stage| stage == &active));
+        let failed_stage_index = failed_stage
+            .as_deref()
+            .and_then(|failed| stages.iter().position(|stage| stage == &failed));
 
-        for stage in stages {
+        for (index, stage) in stages.into_iter().enumerate() {
             let status = if completed {
                 "complete"
             } else if failed_stage.as_deref() == Some(stage) {
@@ -359,16 +366,33 @@ impl Renderer {
                 "failed" => "✗",
                 _ => "?",
             };
+            let progress =
+                stage_progress(index, running_stage_index, failed_stage_index, completed);
+            let stage_line = format!(
+                "  {} {} {:11} {}",
+                status_char,
+                stage_symbol(stage),
+                stage,
+                render_progress_bar(progress, 8)
+            );
 
             if is_focused && status == "running" {
-                content.push_str(&style::colorize(
-                    &format!("  {} {}", status_char, stage),
-                    style::COLOR_GREEN,
-                ));
+                content.push_str(&style::colorize(&stage_line, style::COLOR_GREEN));
             } else {
-                content.push_str(&format!("  {} {}", status_char, stage));
+                content.push_str(&stage_line);
             }
             content.push('\n');
+
+            if (status == "running" || status == "failed")
+                && (running_stage.as_deref() == Some(stage)
+                    || failed_stage.as_deref() == Some(stage))
+            {
+                if let Some(stage_detail) = detail.as_deref() {
+                    let available_width = pane.width.saturating_sub(12);
+                    let detail_line = truncate(stage_detail, available_width);
+                    content.push_str(&format!("      ↳ {}\n", detail_line));
+                }
+            }
         }
 
         content
@@ -468,8 +492,12 @@ impl Renderer {
         const OVERLAY_WIDTH: usize = 40;
 
         // Center overlay in terminal
-        let start_row = terminal_rows.saturating_sub(overlay_height).saturating_div(2);
-        let start_col = terminal_cols.saturating_sub(OVERLAY_WIDTH).saturating_div(2);
+        let start_row = terminal_rows
+            .saturating_sub(overlay_height)
+            .saturating_div(2);
+        let start_col = terminal_cols
+            .saturating_sub(OVERLAY_WIDTH)
+            .saturating_div(2);
 
         let mut output = String::new();
 
@@ -483,8 +511,13 @@ impl Renderer {
 
         // Render keybindings
         for (key, action) in keybindings {
-            write!(output, "\x1b[{};{}H", start_row.saturating_add(output.lines().count()), start_col)
-                .ok();
+            write!(
+                output,
+                "\x1b[{};{}H",
+                start_row.saturating_add(output.lines().count()),
+                start_col
+            )
+            .ok();
 
             let key_display = if *key == '\t' {
                 "Tab".to_string()
@@ -616,10 +649,13 @@ fn textwrap(text: &str, width: usize) -> Vec<String> {
 }
 
 fn stage_status(task: &TaskRow) -> (Option<String>, Option<String>, bool) {
-    let stage = task
-        .stage
-        .as_ref()
-        .map(|stage| stage.split(':').next().unwrap_or(stage).trim().to_string());
+    let stage = task.stage.as_ref().map(|stage| {
+        stage
+            .split_once(':')
+            .map_or(stage.as_str(), |(prefix, _)| prefix)
+            .trim()
+            .to_string()
+    });
     match task.status.as_str() {
         "created" => (None, None, false),
         "in_progress" => (stage, None, false),
@@ -627,6 +663,66 @@ fn stage_status(task: &TaskRow) -> (Option<String>, Option<String>, bool) {
         "passed" | "integrated" => (None, None, true),
         _ => (None, None, false),
     }
+}
+
+fn stage_detail(task: &TaskRow) -> Option<String> {
+    task.stage.as_ref().and_then(|stage| {
+        stage.split_once(':').and_then(|(_, detail)| {
+            let trimmed = detail.trim();
+            (!trimmed.is_empty()).then(|| trimmed.to_string())
+        })
+    })
+}
+
+fn stage_symbol(stage: &str) -> &'static str {
+    match stage {
+        "implement" => "◇",
+        "unit-test" => "∆",
+        "coverage" => "▤",
+        "lint" => "≋",
+        "static" => "◈",
+        "integration" => "↔",
+        "security" => "◍",
+        "review" => "◌",
+        "accept" => "✓",
+        _ => "•",
+    }
+}
+
+fn stage_progress(
+    stage_index: usize,
+    running_stage: Option<usize>,
+    failed_stage: Option<usize>,
+    completed: bool,
+) -> f32 {
+    if completed {
+        1.0
+    } else if let Some(index) = failed_stage {
+        if stage_index <= index { 1.0 } else { 0.0 }
+    } else if let Some(index) = running_stage {
+        if stage_index < index {
+            1.0
+        } else if stage_index == index {
+            0.5
+        } else {
+            0.0
+        }
+    } else {
+        0.0
+    }
+}
+
+fn render_progress_bar(progress: f32, width: usize) -> String {
+    let clamped = progress.clamp(0.0, 1.0);
+    let filled = ((clamped * width as f32).round() as usize).min(width);
+    let empty = width.saturating_sub(filled);
+    let percentage = (clamped * 100.0).round() as usize;
+    format!(
+        "[{}{}] {:>3}%",
+        "█".repeat(filled),
+        "░".repeat(empty),
+        percentage
+    )
 }
 
 #[cfg(test)]
@@ -684,5 +780,131 @@ mod tests {
     fn test_renderer_default() {
         let renderer = Renderer::default();
         assert!(renderer.use_colors);
+    }
+
+    fn sample_task(status: &str, stage: Option<&str>) -> TaskRow {
+        TaskRow {
+            slug: "src-1234".to_string(),
+            status: status.to_string(),
+            stage: stage.map(ToString::to_string),
+            priority: "P1".to_string(),
+            language: "Rust".to_string(),
+            branch: "task/src-1234".to_string(),
+        }
+    }
+
+    fn pipeline_pane() -> Pane {
+        Pane::new(PaneType::PipelineView, 10, 34, 6, 45).expect("valid pipeline pane")
+    }
+
+    #[test]
+    fn test_render_pipeline_view_shows_stage_symbols() {
+        let renderer = Renderer::new();
+        let pane = pipeline_pane();
+        let task = sample_task("created", None);
+
+        let output = renderer.render_pipeline_view(&pane, &[task], 0, PaneType::BeadList);
+
+        assert!(output.contains("○ ◇ implement"));
+        assert!(output.contains("○ ∆ unit-test"));
+        assert!(output.contains("○ ↔ integration"));
+        assert!(output.contains("○ ✓ accept"));
+    }
+
+    #[test]
+    fn test_render_pipeline_view_shows_progress_bars() {
+        let renderer = Renderer::new();
+        let pane = pipeline_pane();
+        let task = sample_task("in_progress", Some("lint"));
+
+        let output = renderer.render_pipeline_view(&pane, &[task], 0, PaneType::BeadList);
+
+        assert!(output.contains("● ◇ implement [████████] 100%"));
+        assert!(output.contains("● ∆ unit-test [████████] 100%"));
+        assert!(output.contains("◐ ≋ lint        [████░░░░]  50%"));
+        assert!(output.contains("○ ◈ static      [░░░░░░░░]   0%"));
+    }
+
+    #[test]
+    fn test_render_pipeline_view_shows_substeps() {
+        let renderer = Renderer::new();
+        let pane = pipeline_pane();
+        let task = sample_task("in_progress", Some("coverage: collecting lcov"));
+
+        let output = renderer.render_pipeline_view(&pane, &[task], 0, PaneType::BeadList);
+
+        assert!(output.contains("◐ ▤ coverage"));
+        assert!(output.contains("↳ collecting lcov"));
+    }
+
+    #[test]
+    fn test_render_pipeline_view_shows_failure_substep() {
+        let renderer = Renderer::new();
+        let pane = pipeline_pane();
+        let task = sample_task("failed", Some("security: trivy timeout"));
+
+        let output = renderer.render_pipeline_view(&pane, &[task], 0, PaneType::BeadList);
+
+        assert!(output.contains("✗ ◍ security"));
+        assert!(output.contains("↳ trivy timeout"));
+    }
+
+    #[test]
+    fn test_render_pipeline_view_handles_unknown_stage_name() {
+        let renderer = Renderer::new();
+        let pane = pipeline_pane();
+        let task = sample_task("in_progress", Some("unknown-stage: running"));
+
+        let output = renderer.render_pipeline_view(&pane, &[task], 0, PaneType::BeadList);
+
+        assert!(output.contains("○ ◇ implement"));
+        assert!(!output.contains("◐"));
+    }
+
+    #[test]
+    fn test_render_pipeline_view_ignores_empty_stage_detail() {
+        let renderer = Renderer::new();
+        let pane = pipeline_pane();
+        let task = sample_task("in_progress", Some("coverage:   "));
+
+        let output = renderer.render_pipeline_view(&pane, &[task], 0, PaneType::BeadList);
+
+        assert!(output.contains("◐ ▤ coverage"));
+        assert!(!output.contains("↳"));
+    }
+
+    #[test]
+    fn test_render_pipeline_view_truncates_long_stage_detail() {
+        let renderer = Renderer::new();
+        let pane = pipeline_pane();
+        let detail = "x".repeat(80);
+        let stage = format!("coverage: {detail}");
+        let task = sample_task("in_progress", Some(&stage));
+
+        let output = renderer.render_pipeline_view(&pane, &[task], 0, PaneType::BeadList);
+
+        assert!(output.contains("↳"));
+        assert!(output.contains("..."));
+    }
+
+    #[test]
+    fn test_render_pipeline_view_out_of_range_selection() {
+        let renderer = Renderer::new();
+        let pane = pipeline_pane();
+        let task = sample_task("created", None);
+
+        let output = renderer.render_pipeline_view(&pane, &[task], 1, PaneType::BeadList);
+
+        assert_eq!(output, "Select a task to view pipeline.");
+    }
+
+    #[test]
+    fn test_render_pipeline_view_empty_tasks() {
+        let renderer = Renderer::new();
+        let pane = pipeline_pane();
+
+        let output = renderer.render_pipeline_view(&pane, &[], 0, PaneType::BeadList);
+
+        assert_eq!(output, "Select a task to view pipeline.");
     }
 }
