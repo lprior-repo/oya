@@ -378,10 +378,11 @@ where
                 // Create checkpoint if checkpoint manager available
                 if let Some(coordinator) = &state.shutdown_coordinator {
                     let checkpoint_tx = coordinator.checkpoint_sender();
-                    let checkpoint_manager = state.checkpoint_manager.as_mut();
+                    let mut checkpoint_manager = state.checkpoint_manager.take();
                     let checkpoint_result = state
-                        .create_shutdown_checkpoint(checkpoint_manager, &checkpoint_tx)
+                        .create_shutdown_checkpoint(checkpoint_manager.as_mut(), &checkpoint_tx)
                         .await;
+                    state.checkpoint_manager = checkpoint_manager;
 
                     if let Err(e) = checkpoint_result {
                         warn!(error = %e, "Checkpoint creation failed, continuing shutdown");
@@ -679,7 +680,7 @@ pub async fn spawn_supervisor<A>(
 ) -> Result<ActorRef<SupervisorMessage<A>>, ActorError>
 where
     A: GenericSupervisableActor + Default,
-    A::Arguments: Clone + Send + Sync,
+    A::Arguments: Clone + Send + Sync + Debug,
     A::Msg: Send,
 {
     spawn_supervisor_with_name::<A>(args, "supervisor").await
@@ -692,7 +693,7 @@ pub async fn spawn_supervisor_with_name<A>(
 ) -> Result<ActorRef<SupervisorMessage<A>>, ActorError>
 where
     A: GenericSupervisableActor + Default,
-    A::Arguments: Clone + Send + Sync,
+    A::Arguments: Clone + Send + Sync + Debug,
     A::Msg: Send,
 {
     let (actor, _handle) = Actor::spawn(

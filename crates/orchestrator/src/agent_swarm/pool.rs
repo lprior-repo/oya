@@ -185,13 +185,19 @@ impl AgentPool {
     pub async fn assign_bead(&self, bead_id: &str) -> AgentSwarmResult<String> {
         let mut agents = self.agents.write().await;
 
-        // Find first available agent
-        let agent = agents
-            .values_mut()
-            .find(|a| a.is_available())
-            .ok_or(AgentSwarmError::NoAgentsAvailable)?;
+        // Find first available agent using deterministic ordering (sorted by ID)
+        let agent_id = agents
+            .values()
+            .filter(|a| a.is_available())
+            .map(|a| a.id())
+            .sorted()
+            .next()
+            .ok_or(AgentSwarmError::NoAgentsAvailable)?
+            .to_string();
 
-        let agent_id = agent.id().to_string();
+        let agent = agents
+            .get_mut(&agent_id)
+            .ok_or_else(|| AgentSwarmError::agent_not_found(&agent_id))?;
 
         if !agent.assign_bead(bead_id) {
             return Err(AgentSwarmError::assignment_failed(

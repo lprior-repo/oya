@@ -44,6 +44,12 @@ pub struct SchedulerArguments {
     pub replay_engine: Option<Arc<ReplayEngine>>,
 }
 
+impl std::fmt::Debug for SchedulerArguments {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SchedulerArguments").finish_non_exhaustive()
+    }
+}
+
 impl SchedulerArguments {
     /// Create new arguments with no integrations.
     pub fn new() -> Self {

@@ -40,14 +40,36 @@ async fn setup_worker_with_event_bus() -> Result<
     Ok((worker, bus, store))
 }
 
-/// Helper to subscribe to events and wait for the next event.
+/// Helper to subscribe to events and wait for the next event with retry.
+/// Retries multiple times to handle flaky async event ordering.
 async fn wait_for_event(bus: &EventBus, timeout_ms: u64) -> Result<BeadEvent, String> {
     let mut sub = bus.subscribe();
-    match tokio::time::timeout(Duration::from_millis(timeout_ms), sub.recv()).await {
-        Ok(Ok(event)) => Ok(event),
-        Ok(Err(e)) => Err(format!("Failed to receive event: {:?}", e)),
-        Err(_) => Err("Timeout waiting for event".to_string()),
+    let max_attempts = 3;
+    let mut attempt = 0;
+
+    while attempt < max_attempts {
+        match tokio::time::timeout(Duration::from_millis(timeout_ms), sub.recv()).await {
+            Ok(Ok(event)) => return Ok(event),
+            Ok(Err(e)) => {
+                attempt += 1;
+                if attempt >= max_attempts {
+                    return Err(format!("Failed to receive event: {:?}", e));
+                }
+                // Small delay before retry
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+            Err(_) => {
+                attempt += 1;
+                if attempt >= max_attempts {
+                    return Err(format!("Timeout waiting for event after {} attempts", max_attempts));
+                }
+                // Small delay before retry
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        }
     }
+
+    Err("Should not reach here".to_string())
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

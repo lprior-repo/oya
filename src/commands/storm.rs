@@ -9,7 +9,7 @@
 //!
 //! Orchestrates bead execution using the BeadOrchestrator and WorkflowDAG.
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::Parser;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -296,10 +296,9 @@ async fn load_config(path: &Path) -> Result<OrchestratorConfig, StormError> {
 
     let content = fs::read_to_string(path)
         .await
-        .map_err(|e| StormError::ConfigFileNotFound {
+        .map_err(|_| StormError::ConfigFileNotFound {
             path: path.to_path_buf(),
-        })
-        .context("Failed to read config file")?;
+        })?;
 
     serde_yaml::from_str(&content).map_err(|e| StormError::ConfigParseFailed {
         path: path.to_path_buf(),
@@ -376,7 +375,11 @@ async fn build_workflow_dag(db_path: &Path) -> Result<WorkflowDAG, StormError> {
         .collect();
 
     for (issue_id, depends_on_id) in deps {
-        dag.add_edge(depends_on_id, issue_id, DependencyType::BlockingDependency)
+        dag.add_edge(
+            depends_on_id.clone(),
+            issue_id.clone(),
+            DependencyType::BlockingDependency,
+        )
             .map_err(|e| {
                 StormError::DagBuildFailed {
                     reason: format!(

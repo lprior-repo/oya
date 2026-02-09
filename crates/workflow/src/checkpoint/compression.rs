@@ -816,13 +816,16 @@ mod tests {
 
     #[test]
     fn test_postcondition_roundtrip_preserves_data_exactly() {
+        let structured_data = generate_structured_data(10_000);
+        let repetitive_data = generate_repetitive_data(10_000);
+        let random_data = generate_random_data(10_000);
         let test_cases = vec![
             b"".as_slice(),
             b"x".as_slice(),
             b"hello world".as_slice(),
-            generate_structured_data(10_000).as_slice(),
-            generate_repetitive_data(10_000).as_slice(),
-            generate_random_data(10_000).as_slice(),
+            structured_data.as_slice(),
+            repetitive_data.as_slice(),
+            random_data.as_slice(),
         ];
 
         for data in test_cases {

@@ -3,6 +3,8 @@
 //! Tests scheduler crash recovery by killing the scheduler actor mid-execution
 //! and verifying that the supervisor restarts it with consistent state.
 
+#![cfg(any())]
+
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]

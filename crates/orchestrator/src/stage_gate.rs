@@ -152,6 +152,16 @@ mod tests {
         machine
     }
 
+    fn machine_at_with_policy(stage: StageKind, policy: RecursionPolicy) -> BeadStateMachine {
+        let mut machine = BeadStateMachine::with_policy(BeadId::new(), policy);
+        while machine.current_stage() != stage {
+            if machine.advance().is_err() {
+                break;
+            }
+        }
+        machine
+    }
+
     fn output(stage: StageKind, success: bool, text: &str, exit_code: Option<i32>) -> StageOutput {
         StageOutput {
             stage,
@@ -304,7 +314,7 @@ mod tests {
             max_research_retries: 1,
             on_exhaustion: ExhaustionPolicy::Fail,
         };
-        let mut machine = machine_at(StageKind::Review);
+        let mut machine = machine_at_with_policy(StageKind::Review, policy);
         let _ = machine.enter_stage();
         let gate = StageGate::new(policy);
         let decision = gate.evaluate(&machine, output(StageKind::Review, false, "minor", Some(1)));
@@ -319,7 +329,7 @@ mod tests {
             max_research_retries: 1,
             on_exhaustion: ExhaustionPolicy::ParkForHuman,
         };
-        let mut machine = machine_at(StageKind::Review);
+        let mut machine = machine_at_with_policy(StageKind::Review, policy);
         let _ = machine.enter_stage();
         let gate = StageGate::new(policy);
         let decision = gate.evaluate(&machine, output(StageKind::Review, false, "minor", Some(1)));

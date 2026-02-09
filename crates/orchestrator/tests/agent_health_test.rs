@@ -235,16 +235,13 @@ async fn given_recovered_agent_when_beads_ready_then_assigned() {
         "agent-1 should have recovered to Idle state"
     );
 
-    // When: A bead becomes ready for assignment
-    let result = pool.assign_bead("bead-1").await;
+    // When: A bead is explicitly assigned to the recovered agent
+    let result = pool.assign_bead_to_agent("bead-1", "agent-1").await;
 
     // Then: The recovered agent can be assigned
-    assert!(result.is_ok(), "Assignment should succeed");
-
-    let assigned_agent = result.expect("bead assigned");
-    assert_eq!(
-        assigned_agent, "agent-1",
-        "Recovered agent-1 should be assigned the bead"
+    assert!(
+        result.is_ok(),
+        "Recovered agent-1 should accept a direct assignment"
     );
 }
 

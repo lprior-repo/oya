@@ -167,10 +167,11 @@ impl Oya {
             Some(Commands::Storm(args)) => {
                 info!("Running storm command");
                 let rt = tokio::runtime::Runtime::new()?;
+                let output_format = args.output.clone();
                 rt.block_on(async {
                     match storm_command(args).await {
                         Ok(output) => {
-                            if args.output == "json" {
+                            if output_format == "json" {
                                 match serde_json::to_string_pretty(&output) {
                                     Ok(json) => println!("{json}"),
                                     Err(_) => println!("{{}}"),

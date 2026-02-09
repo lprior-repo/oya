@@ -53,8 +53,6 @@ workspace: /home/lewis/src/oya/Cargo.toml
 
 [1m[33mwarning[0m: `oya-core` (lib) generated 6 warnings (run `cargo fix --lib -p oya-core` to apply 6 suggestions)
 [1m[92m    Checking[0m oya-web v0.1.0 (/home/lewis/src/oya/crates/oya-web)
-[1m[92m    Checking[0m zellij-frontend v0.1.0 (/home/lewis/src/oya/crates/zellij-frontend)
-[1m[92m    Checking[0m orchestrator v0.1.0 (/home/lewis/src/oya/crates/orchestrator)
 [1m[33mwarning[0m[1m: unused variable: `e`[0m
    [1m[94m--> [0mcrates/zellij-frontend/src/state.rs:194:56
     [1m[94m|[0m
@@ -80,6 +78,8 @@ workspace: /home/lewis/src/oya/Cargo.toml
 [1m[94m174[0m [1m[94m|[0m     version: u32,
     [1m[94m|[0m     [1m[33m^^^^^^^[0m
 
+[1m[33mwarning[0m: `zellij-frontend` (lib) generated 3 warnings (run `cargo fix --lib -p zellij-frontend` to apply 1 suggestion)
+[1m[92m    Checking[0m orchestrator v0.1.0 (/home/lewis/src/oya/crates/orchestrator)
 [1m[33mwarning[0m[1m: unused imports: `BeadDetail as IpcBeadDetail` and `BeadSummary`[0m
   [1m[94m--> [0mcrates/orchestrator/src/actors/ipc_worker.rs:46:17
    [1m[94m|[0m
@@ -100,133 +100,6 @@ workspace: /home/lewis/src/oya/Cargo.toml
 [1m[94m15[0m [1m[94m|[0m use crate::dag::{DagError, DagResult, DependencyType, WorkflowDAG};
    [1m[94m|[0m                  [1m[33m^^^^^^^^[0m  [1m[33m^^^^^^^^^[0m  [1m[33m^^^^^^^^^^^^^^[0m  [1m[33m^^^^^^^^^^^[0m
 
-[1m[33mwarning[0m: `zellij-frontend` (lib) generated 3 warnings (run `cargo fix --lib -p zellij-frontend` to apply 1 suggestion)
-[1m[91merror[E0502][0m[1m: cannot borrow `*state` as immutable because it is also borrowed as mutable[0m
-   [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/supervisor_actor.rs:382:45
-    [1m[94m|[0m
-[1m[94m381[0m [1m[94m|[0m                     let checkpoint_manager = state.checkpoint_manager.as_mut();
-    [1m[94m|[0m                                              [1m[94m------------------------[0m [1m[94mmutable borrow occurs here[0m
-[1m[94m382[0m [1m[94m|[0m                     let checkpoint_result = state
-    [1m[94m|[0m                                             [1m[91m^^^^^[0m [1m[91mimmutable borrow occurs here[0m
-[1m[94m383[0m [1m[94m|[0m                         .create_shutdown_checkpoint(checkpoint_manager, &checkpoint_tx)
-    [1m[94m|[0m                                                     [1m[94m------------------[0m [1m[94mmutable borrow later used here[0m
-
-[1m[91merror[E0277][0m[1m: the trait bound `supervisor_actor::SupervisorActorDef<A>: ractor::Actor` is not satisfied[0m
-   [1m[94m--> [0mcrates/orchestrator/src/supervision.rs:154:9
-    [1m[94m|[0m
-[1m[94m152[0m [1m[94m|[0m     let (actor, _handle) = ractor::Actor::spawn(
-    [1m[94m|[0m                            [1m[94m--------------------[0m [1m[94mrequired by a bound introduced by this call[0m
-[1m[94m153[0m [1m[94m|[0m         Some(name.clone()),
-[1m[94m154[0m [1m[94m|[0m         SupervisorActorDef::new(A::default()),
-    [1m[94m|[0m         [1m[91m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m [1m[91munsatisfied trait bound[0m
-    [1m[94m|[0m
-[1m[96mhelp[0m: the trait `ractor::Actor` is not implemented for `supervisor_actor::SupervisorActorDef<A>`
-   [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/supervisor_actor.rs:201:1
-    [1m[94m|[0m
-[1m[94m201[0m [1m[94m|[0m pub struct SupervisorActorDef<A: GenericSupervisableActor>
-    [1m[94m|[0m [1m[96m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
-[1m[96mhelp[0m: consider extending the `where` clause, but there might be an alternative better way to express this requirement
-    [1m[94m|[0m
-[1m[94m147[0m [1m[94m| [0m    A::Msg: Send,[92m supervisor_actor::SupervisorActorDef<A>: ractor::Actor[0m
-    [1m[94m|[0m                   [92m++++++++++++++++++++++++++++++++++++++++++++++++++++++[0m
-
-[1m[91merror[E0282][0m[1m: type annotations needed[0m
-   [1m[94m--> [0mcrates/orchestrator/src/supervision.rs:152:28
-    [1m[94m|[0m
-[1m[94m152[0m [1m[94m|[0m       let (actor, _handle) = ractor::Actor::spawn(
-    [1m[94m|[0m [1m[91m ____________________________^[0m
-[1m[94m153[0m [1m[94m|[0m [1m[91m|[0m         Some(name.clone()),
-[1m[94m154[0m [1m[94m|[0m [1m[91m|[0m         SupervisorActorDef::new(A::default()),
-[1m[94m155[0m [1m[94m|[0m [1m[91m|[0m         args,
-[1m[94m156[0m [1m[94m|[0m [1m[91m|[0m     )
-[1m[94m157[0m [1m[94m|[0m [1m[91m|[0m     .await
-    [1m[94m|[0m [1m[91m|__________^[0m [1m[91mcannot infer type[0m
-
-[1m[91merror[E0282][0m[1m: type annotations needed[0m
-   [1m[94m--> [0mcrates/orchestrator/src/supervision.rs:158:15
-    [1m[94m|[0m
-[1m[94m158[0m [1m[94m|[0m     .map_err(|e| ActorError::SpawnFailed(e.to_string()))?;
-    [1m[94m|[0m               [1m[91m^[0m                          [1m[94m-[0m [1m[94mtype must be known at this point[0m
-    [1m[94m|[0m
-[1m[96mhelp[0m: consider giving this closure parameter an explicit type
-    [1m[94m|[0m
-[1m[94m158[0m [1m[94m| [0m    .map_err(|e[92m: /* Type */[0m| ActorError::SpawnFailed(e.to_string()))?;
-    [1m[94m|[0m                [92m++++++++++++[0m
-
-[1m[91merror[E0277][0m[1m: the trait bound `supervisor_actor::SupervisorActorDef<A>: ractor::Actor` is not satisfied[0m
-   [1m[94m--> [0mcrates/orchestrator/src/supervision.rs:155:9
-    [1m[94m|[0m
-[1m[94m155[0m [1m[94m|[0m         args,
-    [1m[94m|[0m         [1m[91m^^^^[0m [1m[91munsatisfied trait bound[0m
-    [1m[94m|[0m
-[1m[96mhelp[0m: the trait `ractor::Actor` is not implemented for `supervisor_actor::SupervisorActorDef<A>`
-   [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/supervisor_actor.rs:201:1
-    [1m[94m|[0m
-[1m[94m201[0m [1m[94m|[0m pub struct SupervisorActorDef<A: GenericSupervisableActor>
-    [1m[94m|[0m [1m[96m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
-[1m[96mhelp[0m: consider extending the `where` clause, but there might be an alternative better way to express this requirement
-    [1m[94m|[0m
-[1m[94m147[0m [1m[94m| [0m    A::Msg: Send,[92m supervisor_actor::SupervisorActorDef<A>: ractor::Actor[0m
-    [1m[94m|[0m                   [92m++++++++++++++++++++++++++++++++++++++++++++++++++++++[0m
-
-[1m[91merror[E0277][0m[1m: the trait bound `supervisor_actor::SupervisorActorDef<A>: ractor::Actor` is not satisfied[0m
-   [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/supervisor_actor.rs:700:9
-    [1m[94m|[0m
-[1m[94m698[0m [1m[94m|[0m     let (actor, _handle) = Actor::spawn(
-    [1m[94m|[0m                            [1m[94m------------[0m [1m[94mrequired by a bound introduced by this call[0m
-[1m[94m699[0m [1m[94m|[0m         Some(name.to_string()),
-[1m[94m700[0m [1m[94m|[0m         SupervisorActorDef::new(A::default()),
-    [1m[94m|[0m         [1m[91m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m [1m[91munsatisfied trait bound[0m
-    [1m[94m|[0m
-[1m[96mhelp[0m: the trait `ractor::Actor` is not implemented for `supervisor_actor::SupervisorActorDef<A>`
-   [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/supervisor_actor.rs:201:1
-    [1m[94m|[0m
-[1m[94m201[0m [1m[94m|[0m pub struct SupervisorActorDef<A: GenericSupervisableActor>
-    [1m[94m|[0m [1m[96m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
-[1m[96mhelp[0m: consider extending the `where` clause, but there might be an alternative better way to express this requirement
-    [1m[94m|[0m
-[1m[94m696[0m [1m[94m| [0m    A::Msg: Send,[92m supervisor_actor::SupervisorActorDef<A>: ractor::Actor[0m
-    [1m[94m|[0m                   [92m++++++++++++++++++++++++++++++++++++++++++++++++++++++[0m
-
-[1m[91merror[E0282][0m[1m: type annotations needed[0m
-   [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/supervisor_actor.rs:698:28
-    [1m[94m|[0m
-[1m[94m698[0m [1m[94m|[0m       let (actor, _handle) = Actor::spawn(
-    [1m[94m|[0m [1m[91m ____________________________^[0m
-[1m[94m699[0m [1m[94m|[0m [1m[91m|[0m         Some(name.to_string()),
-[1m[94m700[0m [1m[94m|[0m [1m[91m|[0m         SupervisorActorDef::new(A::default()),
-[1m[94m701[0m [1m[94m|[0m [1m[91m|[0m         args,
-[1m[94m702[0m [1m[94m|[0m [1m[91m|[0m     )
-[1m[94m703[0m [1m[94m|[0m [1m[91m|[0m     .await
-    [1m[94m|[0m [1m[91m|__________^[0m [1m[91mcannot infer type[0m
-
-[1m[91merror[E0282][0m[1m: type annotations needed[0m
-   [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/supervisor_actor.rs:704:15
-    [1m[94m|[0m
-[1m[94m704[0m [1m[94m|[0m     .map_err(|e| ActorError::SpawnFailed(e.to_string()))?;
-    [1m[94m|[0m               [1m[91m^[0m                          [1m[94m-[0m [1m[94mtype must be known at this point[0m
-    [1m[94m|[0m
-[1m[96mhelp[0m: consider giving this closure parameter an explicit type
-    [1m[94m|[0m
-[1m[94m704[0m [1m[94m| [0m    .map_err(|e[92m: /* Type */[0m| ActorError::SpawnFailed(e.to_string()))?;
-    [1m[94m|[0m                [92m++++++++++++[0m
-
-[1m[91merror[E0277][0m[1m: the trait bound `supervisor_actor::SupervisorActorDef<A>: ractor::Actor` is not satisfied[0m
-   [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/supervisor_actor.rs:701:9
-    [1m[94m|[0m
-[1m[94m701[0m [1m[94m|[0m         args,
-    [1m[94m|[0m         [1m[91m^^^^[0m [1m[91munsatisfied trait bound[0m
-    [1m[94m|[0m
-[1m[96mhelp[0m: the trait `ractor::Actor` is not implemented for `supervisor_actor::SupervisorActorDef<A>`
-   [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/supervisor_actor.rs:201:1
-    [1m[94m|[0m
-[1m[94m201[0m [1m[94m|[0m pub struct SupervisorActorDef<A: GenericSupervisableActor>
-    [1m[94m|[0m [1m[96m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
-[1m[96mhelp[0m: consider extending the `where` clause, but there might be an alternative better way to express this requirement
-    [1m[94m|[0m
-[1m[94m696[0m [1m[94m| [0m    A::Msg: Send,[92m supervisor_actor::SupervisorActorDef<A>: ractor::Actor[0m
-    [1m[94m|[0m                   [92m++++++++++++++++++++++++++++++++++++++++++++++++++++++[0m
-
 [1m[33mwarning[0m[1m: unused variable: `timestamp`[0m
     [1m[94m--> [0mcrates/orchestrator/src/actors/ipc_worker.rs:1225:17
      [1m[94m|[0m
@@ -235,7 +108,227 @@ workspace: /home/lewis/src/oya/Cargo.toml
      [1m[94m|[0m
      [1m[94m= [0m[1mnote[0m: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
 
-[1mSome errors have detailed explanations: E0277, E0282, E0502.[0m
-[1mFor more information about an error, try `rustc --explain E0277`.[0m
-[1m[33mwarning[0m: `orchestrator` (lib) generated 4 warnings
-[1m[91merror[0m: could not compile `orchestrator` (lib) due to 9 previous errors; 4 warnings emitted
+[1m[33mwarning[0m[1m: methods `idle_score` and `combined_score` are never used[0m
+   [1m[94m--> [0mcrates/orchestrator/src/distribution/sticky.rs:157:8
+    [1m[94m|[0m
+ [1m[94m71[0m [1m[94m|[0m impl StickyStrategy {
+    [1m[94m|[0m [1m[94m-------------------[0m [1m[94mmethods in this implementation[0m
+[1m[94m...[0m
+[1m[94m157[0m [1m[94m|[0m     fn idle_score(&self, worker_id: &str, ctx: &DistributionContext) -> f64 {
+    [1m[94m|[0m        [1m[33m^^^^^^^^^^[0m
+[1m[94m...[0m
+[1m[94m204[0m [1m[94m|[0m     fn combined_score(&self, worker_id: &str, is_previous: bool, ctx: &DistributionContext) -> f64 {
+    [1m[94m|[0m        [1m[33m^^^^^^^^^^^^^^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+[1m[33mwarning[0m[1m: unused `SemaphorePermit` that must be used[0m
+   [1m[94m--> [0mcrates/orchestrator/src/actors/storage/surreal_integration.rs:280:9
+    [1m[94m|[0m
+[1m[94m280[0m [1m[94m|[0m [1m[33m/[0m         self.semaphore
+[1m[94m281[0m [1m[94m|[0m [1m[33m|[0m             .acquire()
+[1m[94m282[0m [1m[94m|[0m [1m[33m|[0m             .await
+[1m[94m283[0m [1m[94m|[0m [1m[33m|[0m             .map_err(|_| SurrealError::PoolExhausted(self.config.max_connections))?;
+    [1m[94m|[0m [1m[33m|___________________________________________________________________________________^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: `#[warn(unused_must_use)]` (part of `#[warn(unused)]`) on by default
+[1m[96mhelp[0m: use `let _ = ...` to ignore the resulting value
+    [1m[94m|[0m
+[1m[94m280[0m [1m[94m| [0m        [92mlet _ = [0mself.semaphore
+    [1m[94m|[0m         [92m+++++++[0m
+
+[1m[33mwarning[0m: `orchestrator` (lib) generated 6 warnings (run `cargo fix --lib -p orchestrator` to apply 4 suggestions)
+[1m[92m    Checking[0m oya-workflow v0.1.0 (/home/lewis/src/oya/crates/workflow)
+[1m[92m    Checking[0m oya v0.1.0 (/home/lewis/src/oya)
+[1m[33mwarning[0m[1m: unused imports: `debug` and `warn`[0m
+  [1m[94m--> [0msrc/swarm/contract_processor.rs:19:15
+   [1m[94m|[0m
+[1m[94m19[0m [1m[94m|[0m use tracing::{debug, info, warn};
+   [1m[94m|[0m               [1m[33m^^^^^[0m        [1m[33m^^^^[0m
+   [1m[94m|[0m
+   [1m[94m= [0m[1mnote[0m: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+[1m[33mwarning[0m[1m: unused import: `warn`[0m
+  [1m[94m--> [0msrc/swarm/work_queue.rs:11:28
+   [1m[94m|[0m
+[1m[94m11[0m [1m[94m|[0m use tracing::{debug, info, warn};
+   [1m[94m|[0m                            [1m[33m^^^^[0m
+
+[1m[33mwarning[0m[1m: variable does not need to be mutable[0m
+   [1m[94m--> [0msrc/swarm/work_queue.rs:223:13
+    [1m[94m|[0m
+[1m[94m223[0m [1m[94m|[0m         let mut inner = self.inner.write().await;
+    [1m[94m|[0m             [1m[94m----[0m[1m[33m^^^^^[0m
+    [1m[94m|[0m             [1m[94m|[0m
+    [1m[94m|[0m             [1m[94mhelp: remove this `mut`[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+[1m[33mwarning[0m[1m: struct `HandoffValidationError` is never constructed[0m
+  [1m[94m--> [0msrc/swarm/contract_processor.rs:54:12
+   [1m[94m|[0m
+[1m[94m54[0m [1m[94m|[0m pub struct HandoffValidationError {
+   [1m[94m|[0m            [1m[33m^^^^^^^^^^^^^^^^^^^^^^[0m
+   [1m[94m|[0m
+   [1m[94m= [0m[1mnote[0m: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+[1m[33mwarning[0m[1m: function `find_handoffs` is never used[0m
+   [1m[94m--> [0msrc/swarm/handoff.rs:262:8
+    [1m[94m|[0m
+[1m[94m262[0m [1m[94m|[0m pub fn find_handoffs(handoff_dir: &str, pattern: &str) -> SwarmResult<Vec<HandoffFile>> {
+    [1m[94m|[0m        [1m[33m^^^^^^^^^^^^^[0m
+
+[1m[33mwarning[0m[1m: function `find_ready_to_implement` is never used[0m
+   [1m[94m--> [0msrc/swarm/handoff.rs:299:8
+    [1m[94m|[0m
+[1m[94m299[0m [1m[94m|[0m pub fn find_ready_to_implement(handoff_dir: &str) -> SwarmResult<Vec<HandoffFile>> {
+    [1m[94m|[0m        [1m[33m^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[33mwarning[0m[1m: function `find_ready_review` is never used[0m
+   [1m[94m--> [0msrc/swarm/handoff.rs:308:8
+    [1m[94m|[0m
+[1m[94m308[0m [1m[94m|[0m pub fn find_ready_review(handoff_dir: &str) -> SwarmResult<Vec<HandoffFile>> {
+    [1m[94m|[0m        [1m[33m^^^^^^^^^^^^^^^^^[0m
+
+[1m[33mwarning[0m[1m: function `transition_handoff` is never used[0m
+   [1m[94m--> [0msrc/swarm/handoff.rs:317:8
+    [1m[94m|[0m
+[1m[94m317[0m [1m[94m|[0m pub fn transition_handoff(
+    [1m[94m|[0m        [1m[33m^^^^^^^^^^^^^^^^^^[0m
+
+[1m[33mwarning[0m[1m: function `cleanup_bead_handoffs` is never used[0m
+   [1m[94m--> [0msrc/swarm/handoff.rs:358:8
+    [1m[94m|[0m
+[1m[94m358[0m [1m[94m|[0m pub fn cleanup_bead_handoffs(bead_id: &str, handoff_dir: &str) -> SwarmResult<()> {
+    [1m[94m|[0m        [1m[33m^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[33mwarning[0m: `oya` (lib) generated 9 warnings (run `cargo fix --lib -p oya` to apply 3 suggestions)
+[1m[33mwarning[0m[1m: unused import: `Context`[0m
+  [1m[94m--> [0msrc/commands/init.rs:12:14
+   [1m[94m|[0m
+[1m[94m12[0m [1m[94m|[0m use anyhow::{Context, Result};
+   [1m[94m|[0m              [1m[33m^^^^^^^[0m
+   [1m[94m|[0m
+   [1m[94m= [0m[1mnote[0m: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+[1m[33mwarning[0m[1m: unused import: `Context`[0m
+  [1m[94m--> [0msrc/commands/logs.rs:12:14
+   [1m[94m|[0m
+[1m[94m12[0m [1m[94m|[0m use anyhow::{Context, Result};
+   [1m[94m|[0m              [1m[33m^^^^^^^[0m
+
+[1m[33mwarning[0m[1m: unused import: `Duration`[0m
+  [1m[94m--> [0msrc/commands/storm.rs:18:17
+   [1m[94m|[0m
+[1m[94m18[0m [1m[94m|[0m use std::time::{Duration, Instant};
+   [1m[94m|[0m                 [1m[33m^^^^^^^^[0m
+
+[1m[33mwarning[0m[1m: unused import: `orchestrator::dag::WorkflowDAG`[0m
+   [1m[94m--> [0msrc/commands/storm.rs:397:9
+    [1m[94m|[0m
+[1m[94m397[0m [1m[94m|[0m     use orchestrator::dag::WorkflowDAG;
+    [1m[94m|[0m         [1m[33m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[33mwarning[0m[1m: unused imports: `DoctorError` and `DoctorOutput`[0m
+  [1m[94m--> [0msrc/commands/mod.rs:22:30
+   [1m[94m|[0m
+[1m[94m22[0m [1m[94m|[0m pub use doctor::{DoctorArgs, DoctorError, DoctorOutput, doctor_command};
+   [1m[94m|[0m                              [1m[33m^^^^^^^^^^^[0m  [1m[33m^^^^^^^^^^^^[0m
+
+[1m[33mwarning[0m[1m: unused imports: `InitError` and `InitOutput`[0m
+  [1m[94m--> [0msrc/commands/mod.rs:23:26
+   [1m[94m|[0m
+[1m[94m23[0m [1m[94m|[0m pub use init::{InitArgs, InitError, InitOutput, init_command};
+   [1m[94m|[0m                          [1m[33m^^^^^^^^^[0m  [1m[33m^^^^^^^^^^[0m
+
+[1m[33mwarning[0m[1m: unused imports: `LogsError` and `LogsOutput`[0m
+  [1m[94m--> [0msrc/commands/mod.rs:24:26
+   [1m[94m|[0m
+[1m[94m24[0m [1m[94m|[0m pub use logs::{LogsArgs, LogsError, LogsOutput, logs_command};
+   [1m[94m|[0m                          [1m[33m^^^^^^^^^[0m  [1m[33m^^^^^^^^^^[0m
+
+[1m[33mwarning[0m[1m: unused imports: `StormError` and `StormOutput`[0m
+  [1m[94m--> [0msrc/commands/mod.rs:25:28
+   [1m[94m|[0m
+[1m[94m25[0m [1m[94m|[0m pub use storm::{StormArgs, StormError, StormOutput, storm_command};
+   [1m[94m|[0m                            [1m[33m^^^^^^^^^^[0m  [1m[33m^^^^^^^^^^^[0m
+
+[1m[33mwarning[0m[1m: unused import: `itertools::Itertools`[0m
+  [1m[94m--> [0msrc/commands/doctor.rs:14:5
+   [1m[94m|[0m
+[1m[94m14[0m [1m[94m|[0m use itertools::Itertools;
+   [1m[94m|[0m     [1m[33m^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[33mwarning[0m[1m: unused import: `itertools::Itertools`[0m
+  [1m[94m--> [0msrc/commands/storm.rs:14:5
+   [1m[94m|[0m
+[1m[94m14[0m [1m[94m|[0m use itertools::Itertools;
+   [1m[94m|[0m     [1m[33m^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[33mwarning[0m[1m: unused variable: `e`[0m
+   [1m[94m--> [0msrc/commands/storm.rs:323:61
+    [1m[94m|[0m
+[1m[94m323[0m [1m[94m|[0m     let conn = rusqlite::Connection::open(db_path).map_err(|e| StormError::DatabaseNotFound {
+    [1m[94m|[0m                                                             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_e`[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+[1m[33mwarning[0m[1m: unused variable: `dag`[0m
+   [1m[94m--> [0msrc/commands/storm.rs:396:22
+    [1m[94m|[0m
+[1m[94m396[0m [1m[94m|[0m fn topological_order(dag: &WorkflowDAG) -> Result<Vec<String>, StormError> {
+    [1m[94m|[0m                      [1m[33m^^^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_dag`[0m
+
+[1m[33mwarning[0m[1m: variants `CheckTimeout` and `CargoFailed` are never constructed[0m
+  [1m[94m--> [0msrc/commands/doctor.rs:86:5
+   [1m[94m|[0m
+[1m[94m81[0m [1m[94m|[0m pub enum DoctorError {
+   [1m[94m|[0m          [1m[94m-----------[0m [1m[94mvariants in this enum[0m
+[1m[94m...[0m
+[1m[94m86[0m [1m[94m|[0m     CheckTimeout { check_name: String },
+   [1m[94m|[0m     [1m[33m^^^^^^^^^^^^[0m
+[1m[94m...[0m
+[1m[94m89[0m [1m[94m|[0m     CargoFailed { command: String },
+   [1m[94m|[0m     [1m[33m^^^^^^^^^^^[0m
+   [1m[94m|[0m
+   [1m[94m= [0m[1mnote[0m: `DoctorError` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+   [1m[94m= [0m[1mnote[0m: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+[1m[33mwarning[0m[1m: variant `TemplateRender` is never constructed[0m
+  [1m[94m--> [0msrc/commands/init.rs:80:5
+   [1m[94m|[0m
+[1m[94m63[0m [1m[94m|[0m pub enum InitError {
+   [1m[94m|[0m          [1m[94m---------[0m [1m[94mvariant in this enum[0m
+[1m[94m...[0m
+[1m[94m80[0m [1m[94m|[0m     TemplateRender { error: String },
+   [1m[94m|[0m     [1m[33m^^^^^^^^^^^^^^[0m
+   [1m[94m|[0m
+   [1m[94m= [0m[1mnote[0m: `InitError` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+[1m[33mwarning[0m[1m: variant `CorruptedLog` is never constructed[0m
+   [1m[94m--> [0msrc/commands/logs.rs:121:5
+    [1m[94m|[0m
+[1m[94m107[0m [1m[94m|[0m pub enum LogsError {
+    [1m[94m|[0m          [1m[94m---------[0m [1m[94mvariant in this enum[0m
+[1m[94m...[0m
+[1m[94m121[0m [1m[94m|[0m     CorruptedLog { file: String, line: usize },
+    [1m[94m|[0m     [1m[33m^^^^^^^^^^^^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: `LogsError` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+[1m[33mwarning[0m[1m: variants `OrchestratorInitFailed` and `OrchestratorExecutionFailed` are never constructed[0m
+   [1m[94m--> [0msrc/commands/storm.rs:124:5
+    [1m[94m|[0m
+ [1m[94m96[0m [1m[94m|[0m pub enum StormError {
+    [1m[94m|[0m          [1m[94m----------[0m [1m[94mvariants in this enum[0m
+[1m[94m...[0m
+[1m[94m124[0m [1m[94m|[0m     OrchestratorInitFailed { reason: String },
+    [1m[94m|[0m     [1m[33m^^^^^^^^^^^^^^^^^^^^^^[0m
+[1m[94m...[0m
+[1m[94m127[0m [1m[94m|[0m     OrchestratorExecutionFailed { reason: String },
+    [1m[94m|[0m     [1m[33m^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: `StormError` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+[1m[33mwarning[0m: `oya` (bin "oya") generated 16 warnings (run `cargo fix --bin "oya" -p oya` to apply 10 suggestions)
+[1m[92m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`dev` profile [unoptimized + debuginfo]]8;;\ target(s) in 3.86s

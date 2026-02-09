@@ -487,7 +487,9 @@ mod tests {
     /// THEN the original state is recovered exactly
     #[test]
     fn test_restore_checkpoint_full_pipeline() {
-        #[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, bincode::Decode)]
+        #[derive(
+            Debug, serde::Serialize, serde::Deserialize, PartialEq, bincode::Encode, bincode::Decode,
+        )]
         struct TestState {
             counter: u64,
             name: String,
