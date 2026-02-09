@@ -777,13 +777,11 @@ mod tests {
 
         assert!(result.is_ok());
         assert!(plugin.auto_save_timer.is_some());
-        assert!(
-            plugin
-                .auto_save_timer
-                .as_ref()
-                .map(|t| t.is_running())
-                .unwrap_or(false)
-        );
+        assert!(plugin
+            .auto_save_timer
+            .as_ref()
+            .map(|t| t.is_running())
+            .unwrap_or(false));
     }
 
     #[test]
@@ -870,13 +868,11 @@ mod tests {
         // If save succeeds, status message should be updated
         if result.is_ok() {
             assert!(plugin.status_message.is_some());
-            assert!(
-                plugin
-                    .status_message
-                    .as_ref()
-                    .map(|msg| msg.contains("State saved at"))
-                    .unwrap_or(false)
-            );
+            assert!(plugin
+                .status_message
+                .as_ref()
+                .map(|msg| msg.contains("State saved at"))
+                .unwrap_or(false));
         }
         // If save fails, that's acceptable in test environment
     }
