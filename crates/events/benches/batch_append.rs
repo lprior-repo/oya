@@ -412,10 +412,22 @@ fn bench_fsync_amortization(c: &mut Criterion) {
     let batch_sizes = vec![10, 50, 100, 500, 1000];
 
     for size in batch_sizes {
+        let size_label = format!("{}_events", size);
+
         group.bench_with_input(
-            BenchmarkId::new("single_fsync_per_batch", size),
+            BenchmarkId::new("single_fsync_per_batch", &size_label),
             &size,
             |b, &size| {
+                // Create fresh environment per iteration
+                let fixture = match BenchmarkFixture::setup() {
+                    Ok(f) => f,
+                    Err(e) => {
+                        eprintln!("Failed to create fixture: {}", e);
+                        return;
+                    }
+                };
+
+                // Create tokio runtime for async operations
                 let rt = match Runtime::new() {
                     Ok(rt) => rt,
                     Err(e) => {
@@ -424,9 +436,38 @@ fn bench_fsync_amortization(c: &mut Criterion) {
                     }
                 };
 
+                // Initialize fresh SurrealDB instance
+                let store = match rt.block_on(async {
+                    let config = ConnectionConfig::new(fixture.test_path());
+                    connect(config)
+                        .await
+                        .map_err(|e| format!("Connection failed: {}", e))
+                }) {
+                    Ok(store) => store,
+                    Err(e) => {
+                        eprintln!("Failed to connect: {}", e);
+                        return;
+                    }
+                };
+
+                let store = match rt.block_on(DurableEventStore::new(store)) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("Failed to create store: {}", e);
+                        return;
+                    }
+                };
+
+                // Create test events with specified size
+                let events: Vec<BeadEvent> =
+                    (0..size).map(|_| create_test_event(event_size)).collect();
+
+                // Run benchmark iteration
                 b.iter(|| {
-                    let future = simulate_batch_append(black_box(size), black_box(event_size));
-                    match rt.block_on(future) {
+                    match rt.block_on(benchmark_batch_append(
+                        black_box(&store),
+                        black_box(&events),
+                    )) {
                         Ok(_) => {}
                         Err(e) => eprintln!("Benchmark error: {}", e),
                     }
