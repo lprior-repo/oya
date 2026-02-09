@@ -83,18 +83,16 @@ ON CONFLICT (key) DO NOTHING;
 -- Functions: Common Operations
 -- ============================================================
 
--- Get next unclaimed P0 bead
-CREATE OR REPLACE FUNCTION get_next_unclaimed_bead()
-RETURNS TABLE (id TEXT) AS $$
+-- NOTE: Beads are stored in SQLite at .beads/beads.db
+-- Agents query SQLite directly to find beads, then claim them here
+-- This function returns beads that have been claimed in PostgreSQL
+CREATE OR REPLACE FUNCTION get_claimed_beads()
+RETURNS TABLE (bead_id TEXT, agent_id SMALLINT) AS $$
 BEGIN
     RETURN QUERY
-    SELECT b.id
-    FROM beads b
-    WHERE b.status = 'pending'
-      AND b.priority = 'p0'
-      AND b.id NOT IN (SELECT bead_id FROM bead_claims WHERE status = 'in_progress')
-    ORDER BY b.created_at ASC
-    LIMIT 1;
+    SELECT bead_id, claimed_by
+    FROM bead_claims
+    WHERE status = 'in_progress';
 END;
 $$ LANGUAGE plpgsql;
 
@@ -166,18 +164,9 @@ FROM stage_history
 WHERE status = 'failed'
 ORDER BY agent_id, bead_id, completed_at DESC;
 
--- Beads available for claiming
-CREATE OR REPLACE VIEW v_available_beads AS
-SELECT
-    b.id,
-    b.title,
-    b.priority,
-    b.created_at
-FROM beads b
-WHERE b.status = 'pending'
-  AND b.priority = 'p0'
-  AND b.id NOT IN (SELECT bead_id FROM bead_claims WHERE status = 'in_progress')
-ORDER BY b.created_at ASC;
+-- NOTE: Beads are in SQLite at .beads/beads.db
+-- Query available beads there:
+-- sqlite3 .beads/beads.db "SELECT id, title FROM issues WHERE status = 'open' AND priority = 0 AND id NOT IN (SELECT bead_id FROM bead_claims WHERE status = 'in_progress') ORDER BY created_at ASC LIMIT 1;"
 
 -- ============================================================
 -- Triggers: Auto-update timestamps

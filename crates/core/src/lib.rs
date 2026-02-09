@@ -9,6 +9,7 @@ pub mod error;
 pub mod execution;
 pub mod result;
 pub mod slug;
+pub mod task;
 pub mod visualization;
 pub mod workflow;
 
@@ -17,6 +18,7 @@ pub use error::Error;
 pub use execution::{ExecutionEngine, WorkflowResult, WorkflowState};
 pub use result::Result;
 pub use slug::Slug;
+pub use task::{Stage, Task};
 pub use visualization::WorkflowVisualization;
 pub use workflow::Workflow;
 

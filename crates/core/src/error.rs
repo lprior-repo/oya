@@ -57,6 +57,12 @@ pub enum Error {
     #[error("invalid record: {reason}")]
     InvalidRecord { reason: String },
 
+    #[error("validation error in {context}: {message}")]
+    Validation { context: String, message: String },
+
+    #[error("{resource} not found: {id}")]
+    NotFound { resource: String, id: String },
+
     #[error("unknown error: {0}")]
     Unknown(String),
 
@@ -123,6 +129,26 @@ impl Error {
     pub fn invalid_record(reason: impl Into<String>) -> Self {
         Self::InvalidRecord {
             reason: reason.into(),
+        }
+    }
+
+    /// Create a validation error.
+    #[must_use]
+    #[inline]
+    pub fn validation(context: impl Into<String>, message: impl Into<String>) -> Self {
+        Self::Validation {
+            context: context.into(),
+            message: message.into(),
+        }
+    }
+
+    /// Create a not found error.
+    #[must_use]
+    #[inline]
+    pub fn not_found(resource: impl Into<String>, id: impl Into<String>) -> Self {
+        Self::NotFound {
+            resource: resource.into(),
+            id: id.into(),
         }
     }
 }
