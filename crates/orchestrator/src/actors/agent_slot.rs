@@ -42,14 +42,10 @@ pub enum AgentSlotMessage {
     },
 
     /// Internal timeout handler for stage execution.
-    StageTimeout {
-        stage: StageKind,
-    },
+    StageTimeout { stage: StageKind },
 
     /// Query current slot state.
-    GetState {
-        reply: oneshot::Sender<SlotState>,
-    },
+    GetState { reply: oneshot::Sender<SlotState> },
 }
 
 /// Result of completing a bead execution.
@@ -58,13 +54,9 @@ pub enum BeadCompletion {
     /// Bead completed successfully.
     Accepted,
     /// Bead failed with reason.
-    Failed {
-        reason: String,
-    },
+    Failed { reason: String },
     /// Bead exhausted retry limits and needs human intervention.
-    Parked {
-        reason: String,
-    },
+    Parked { reason: String },
 }
 
 /// Current state of an agent slot.
@@ -284,10 +276,8 @@ impl AgentSlotActorDef {
         let state_machine = BeadStateMachine::new(bead_id.clone());
         let policy = state_machine.policy();
         let stage_gate = StageGate::new(policy);
-        let context_builder =
-            StageContextBuilder::new(state.project_root.clone()).with_claude_md(
-                state.project_root.join("CLAUDE.md"),
-            );
+        let context_builder = StageContextBuilder::new(state.project_root.clone())
+            .with_claude_md(state.project_root.join("CLAUDE.md"));
 
         state.bead_id = Some(bead_id.clone());
         state.state_machine = Some(state_machine);
@@ -310,10 +300,7 @@ impl AgentSlotActorDef {
         Ok(BeadCompletion::Accepted) // Will be updated through execution
     }
 
-    fn handle_execute_next_stage(
-        &self,
-        state: &mut AgentSlotState,
-    ) -> Result<(), SlotError> {
+    fn handle_execute_next_stage(&self, state: &mut AgentSlotState) -> Result<(), SlotError> {
         let state_machine = state
             .state_machine
             .as_ref()
@@ -330,7 +317,10 @@ impl AgentSlotActorDef {
         let current_stage = state_machine.current_stage();
         state.current_stage = Some(current_stage);
 
-        info!("Executing stage: {:?} for bead: {:?}", current_stage, state.bead_id);
+        info!(
+            "Executing stage: {:?} for bead: {:?}",
+            current_stage, state.bead_id
+        );
 
         // Enter stage (increments counters)
         let mut machine_clone = state_machine.clone();
@@ -383,7 +373,9 @@ impl AgentSlotActorDef {
                 );
 
                 // Store artifact for this stage
-                state.artifacts.insert(current_stage, "artifact-placeholder".to_string());
+                state
+                    .artifacts
+                    .insert(current_stage, "artifact-placeholder".to_string());
 
                 // Advance state machine
                 let mut machine_clone = state_machine.clone();
@@ -507,10 +499,7 @@ impl AgentSlotActorDef {
     fn complete_bead(&self, state: &mut AgentSlotState, result: BeadCompletion) {
         let bead_id = state.bead_id.clone().unwrap();
 
-        info!(
-            "Bead {:?} completed with result: {:?}",
-            bead_id, result
-        );
+        info!("Bead {:?} completed with result: {:?}", bead_id, result);
 
         // Emit completion event
         match result {
@@ -555,7 +544,11 @@ impl AgentSlotActorDef {
         state.current_stage = None;
     }
 
-    fn emit_transition_event(&self, state: &AgentSlotState, transition: &oya_events::StageTransition) {
+    fn emit_transition_event(
+        &self,
+        state: &AgentSlotState,
+        transition: &oya_events::StageTransition,
+    ) {
         if let Some(ref bead_id) = state.bead_id {
             let event = BeadEvent::StageTransition {
                 bead_id: bead_id.clone(),

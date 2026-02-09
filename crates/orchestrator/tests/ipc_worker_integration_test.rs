@@ -20,12 +20,12 @@ use std::time::Duration;
 use oya_events::{BeadEvent, BeadId, BeadState, EventBus, InMemoryEventStore};
 use ractor::{Actor, ActorProcessingErr, ActorRef};
 
-use orchestrator::actors::ipc_worker::{
-    IpcWorkerActorDef, IpcWorkerArguments, IpcWorkerMessage,
-};
-use orchestrator::ipc_messages::{GuestMessage, HostMessage};
-use orchestrator::persistence::{BeadRecord, BeadState as PersistenceBeadState, OrchestratorStore, StoreConfig};
 use orchestrator::actors::errors::ActorError;
+use orchestrator::actors::ipc_worker::{IpcWorkerActorDef, IpcWorkerArguments, IpcWorkerMessage};
+use orchestrator::ipc_messages::{GuestMessage, HostMessage};
+use orchestrator::persistence::{
+    BeadRecord, BeadState as PersistenceBeadState, OrchestratorStore, StoreConfig,
+};
 
 // =========================================================================
 // Test Helpers
@@ -108,7 +108,10 @@ async fn wait_for_event(bus: &EventBus, timeout_ms: u64) -> Result<BeadEvent, St
             Err(_) => {
                 attempt += 1;
                 if attempt >= max_attempts {
-                    return Err(format!("Timeout waiting for event after {} attempts", max_attempts));
+                    return Err(format!(
+                        "Timeout waiting for event after {} attempts",
+                        max_attempts
+                    ));
                 }
                 tokio::time::sleep(Duration::from_millis(100)).await;
             }
@@ -149,7 +152,14 @@ async fn given_ipc_worker_when_start_bead_then_emits_state_changed_event()
     };
 
     let bead_id = "test-start-integration";
-    match create_test_bead(&setup.store, bead_id, "test-workflow", PersistenceBeadState::Ready).await {
+    match create_test_bead(
+        &setup.store,
+        bead_id,
+        "test-workflow",
+        PersistenceBeadState::Ready,
+    )
+    .await
+    {
         Ok(_) => (),
         Err(e) => {
             eprintln!("Failed to create bead: {}", e);
@@ -194,7 +204,11 @@ async fn given_ipc_worker_when_start_bead_then_emits_state_changed_event()
     };
 
     match &event {
-        BeadEvent::StateChanged { bead_id: id, from, to } => {
+        BeadEvent::StateChanged {
+            bead_id: id,
+            from,
+            to,
+        } => {
             assert_eq!(id.as_str(), bead_id);
             assert_eq!(*from, BeadState::Ready);
             assert_eq!(*to, BeadState::Running);
@@ -234,7 +248,14 @@ async fn given_ipc_worker_when_cancel_bead_then_emits_state_changed_event()
     };
 
     let bead_id = "test-cancel-integration";
-    match create_test_bead(&setup.store, bead_id, "test-workflow", PersistenceBeadState::Running).await {
+    match create_test_bead(
+        &setup.store,
+        bead_id,
+        "test-workflow",
+        PersistenceBeadState::Running,
+    )
+    .await
+    {
         Ok(_) => (),
         Err(e) => {
             eprintln!("Failed to create bead: {}", e);
@@ -272,7 +293,11 @@ async fn given_ipc_worker_when_cancel_bead_then_emits_state_changed_event()
     };
 
     match &event {
-        BeadEvent::StateChanged { bead_id: id, from, to } => {
+        BeadEvent::StateChanged {
+            bead_id: id,
+            from,
+            to,
+        } => {
             assert_eq!(id.as_str(), bead_id);
             assert_eq!(*from, BeadState::Running);
             assert_eq!(*to, BeadState::Cancelled);
@@ -310,7 +335,14 @@ async fn given_ipc_worker_when_retry_bead_then_transitions_to_ready()
     };
 
     let bead_id = "test-retry-integration";
-    match create_test_bead(&setup.store, bead_id, "test-workflow", PersistenceBeadState::Failed).await {
+    match create_test_bead(
+        &setup.store,
+        bead_id,
+        "test-workflow",
+        PersistenceBeadState::Failed,
+    )
+    .await
+    {
         Ok(_) => (),
         Err(e) => {
             eprintln!("Failed to create bead: {}", e);
@@ -348,7 +380,11 @@ async fn given_ipc_worker_when_retry_bead_then_transitions_to_ready()
     };
 
     match &event {
-        BeadEvent::StateChanged { bead_id: id, from, to } => {
+        BeadEvent::StateChanged {
+            bead_id: id,
+            from,
+            to,
+        } => {
             assert_eq!(id.as_str(), bead_id);
             assert_eq!(*from, BeadState::Failed);
             assert_eq!(*to, BeadState::Ready);
@@ -436,7 +472,14 @@ async fn given_ipc_worker_when_start_completed_bead_then_returns_invalid_state_e
     };
 
     let bead_id = "test-completed-error";
-    match create_test_bead(&setup.store, bead_id, "test-workflow", PersistenceBeadState::Completed).await {
+    match create_test_bead(
+        &setup.store,
+        bead_id,
+        "test-workflow",
+        PersistenceBeadState::Completed,
+    )
+    .await
+    {
         Ok(_) => (),
         Err(e) => {
             eprintln!("Failed to create bead: {}", e);
@@ -505,14 +548,28 @@ async fn given_ipc_worker_when_multiple_bead_operations_then_all_events_emitted(
     let bead_id_1 = "test-multi-1";
     let bead_id_2 = "test-multi-2";
 
-    match create_test_bead(&setup.store, bead_id_1, "test-workflow", PersistenceBeadState::Ready).await {
+    match create_test_bead(
+        &setup.store,
+        bead_id_1,
+        "test-workflow",
+        PersistenceBeadState::Ready,
+    )
+    .await
+    {
         Ok(_) => (),
         Err(e) => {
             eprintln!("Failed to create bead: {}", e);
             return Ok(());
         }
     }
-    match create_test_bead(&setup.store, bead_id_2, "test-workflow", PersistenceBeadState::Running).await {
+    match create_test_bead(
+        &setup.store,
+        bead_id_2,
+        "test-workflow",
+        PersistenceBeadState::Running,
+    )
+    .await
+    {
         Ok(_) => (),
         Err(e) => {
             eprintln!("Failed to create bead: {}", e);
@@ -567,8 +624,12 @@ async fn given_ipc_worker_when_multiple_bead_operations_then_all_events_emitted(
 
     // Verify we got StateChanged events for both beads
     let ids = vec![event1.bead_id(), event2.bead_id()];
-    assert!(ids.contains(&BeadId::try_from(bead_id_1.to_string()).unwrap_or_else(|_| BeadId::new())));
-    assert!(ids.contains(&BeadId::try_from(bead_id_2.to_string()).unwrap_or_else(|_| BeadId::new())));
+    assert!(
+        ids.contains(&BeadId::try_from(bead_id_1.to_string()).unwrap_or_else(|_| BeadId::new()))
+    );
+    assert!(
+        ids.contains(&BeadId::try_from(bead_id_2.to_string()).unwrap_or_else(|_| BeadId::new()))
+    );
 
     let _ = setup.worker.stop(Some("test complete".to_string()));
 
@@ -591,7 +652,14 @@ async fn given_ipc_worker_when_start_running_bead_twice_then_succeeds_idempotent
     };
 
     let bead_id = "test-idempotent-start";
-    match create_test_bead(&setup.store, bead_id, "test-workflow", PersistenceBeadState::Running).await {
+    match create_test_bead(
+        &setup.store,
+        bead_id,
+        "test-workflow",
+        PersistenceBeadState::Running,
+    )
+    .await
+    {
         Ok(_) => (),
         Err(e) => {
             eprintln!("Failed to create bead: {}", e);
@@ -685,7 +753,14 @@ async fn given_ipc_worker_when_cancel_cancelled_bead_then_succeeds_idempotently(
     };
 
     let bead_id = "test-idempotent-cancel";
-    match create_test_bead(&setup.store, bead_id, "test-workflow", PersistenceBeadState::Cancelled).await {
+    match create_test_bead(
+        &setup.store,
+        bead_id,
+        "test-workflow",
+        PersistenceBeadState::Cancelled,
+    )
+    .await
+    {
         Ok(_) => (),
         Err(e) => {
             eprintln!("Failed to create bead: {}", e);
@@ -787,11 +862,7 @@ async fn given_ipc_worker_when_event_bus_available_then_subscribes_on_startup()
 
     // Publish a test event
     let test_bead_id = BeadId::new();
-    let event = BeadEvent::state_changed(
-        test_bead_id,
-        BeadState::Ready,
-        BeadState::Running,
-    );
+    let event = BeadEvent::state_changed(test_bead_id, BeadState::Ready, BeadState::Running);
 
     match setup.event_bus.publish(event).await {
         Ok(_) => {
@@ -826,7 +897,14 @@ async fn given_ipc_worker_when_bead_operation_then_persists_state_change()
     };
 
     let bead_id = "test-persistence-integration";
-    match create_test_bead(&setup.store, bead_id, "test-workflow", PersistenceBeadState::Ready).await {
+    match create_test_bead(
+        &setup.store,
+        bead_id,
+        "test-workflow",
+        PersistenceBeadState::Ready,
+    )
+    .await
+    {
         Ok(_) => (),
         Err(e) => {
             eprintln!("Failed to create bead: {}", e);

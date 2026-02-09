@@ -153,9 +153,10 @@ impl StormError {
     /// Get a hint for remediation
     pub fn hint(&self) -> Option<String> {
         match self {
-            Self::ConfigFileNotFound { .. } => {
-                Some("Create config with `oya init --template orchestrator` or specify --config".to_string())
-            }
+            Self::ConfigFileNotFound { .. } => Some(
+                "Create config with `oya init --template orchestrator` or specify --config"
+                    .to_string(),
+            ),
             Self::ConfigParseFailed { .. } => {
                 Some("Validate YAML syntax and required fields in config file".to_string())
             }
@@ -165,9 +166,9 @@ impl StormError {
             Self::DatabaseQueryFailed { .. } => {
                 Some("Check database integrity and file permissions".to_string())
             }
-            Self::DagBuildFailed { .. } => {
-                Some("Review bead dependencies for circular references or missing beads".to_string())
-            }
+            Self::DagBuildFailed { .. } => Some(
+                "Review bead dependencies for circular references or missing beads".to_string(),
+            ),
             Self::NoBeadsToExecute => {
                 Some("Create beads or update their status to 'open'".to_string())
             }
@@ -177,12 +178,8 @@ impl StormError {
             Self::OrchestratorExecutionFailed { .. } => {
                 Some("Check logs for specific bead failure details".to_string())
             }
-            Self::InvalidSlotCount { .. } => {
-                Some("Set slots to >= 1 in config file".to_string())
-            }
-            Self::InvalidTimeout { .. } => {
-                Some("Set timeout to >= 1s in config file".to_string())
-            }
+            Self::InvalidSlotCount { .. } => Some("Set slots to >= 1 in config file".to_string()),
+            Self::InvalidTimeout { .. } => Some("Set timeout to >= 1s in config file".to_string()),
         }
     }
 }
@@ -348,9 +345,10 @@ async fn build_workflow_dag(db_path: &Path) -> Result<WorkflowDAG, StormError> {
     // Create DAG and add nodes
     let mut dag = WorkflowDAG::new();
     for bead_id in &bead_ids {
-        dag.add_node(bead_id.clone()).map_err(|e| StormError::DagBuildFailed {
-            reason: format!("Failed to add bead {bead_id}: {e}"),
-        })?;
+        dag.add_node(bead_id.clone())
+            .map_err(|e| StormError::DagBuildFailed {
+                reason: format!("Failed to add bead {bead_id}: {e}"),
+            })?;
     }
 
     // Query dependencies and add edges
@@ -380,13 +378,9 @@ async fn build_workflow_dag(db_path: &Path) -> Result<WorkflowDAG, StormError> {
             issue_id.clone(),
             DependencyType::BlockingDependency,
         )
-            .map_err(|e| {
-                StormError::DagBuildFailed {
-                    reason: format!(
-                        "Failed to add dependency {depends_on_id} -> {issue_id}: {e}"
-                    ),
-                }
-            })?;
+        .map_err(|e| StormError::DagBuildFailed {
+            reason: format!("Failed to add dependency {depends_on_id} -> {issue_id}: {e}"),
+        })?;
     }
 
     Ok(dag)
