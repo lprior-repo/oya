@@ -34,6 +34,9 @@ itertools = { workspace = true }
 reqwest = { workspace = true }
 tokio = { workspace = true }
 
+# UUID generation
+uuid = { version = "1.11", features = ["v4", "serde"] }
+
 # IPC
 oya-ipc = { workspace = true }
 

@@ -486,32 +486,34 @@ mod tests {
     fn test_state_manager_state_exists() {
         let temp_dir = std::env::temp_dir();
         let state_file = temp_dir.join("test-state-exists.json");
-        let manager = StateManager::new(state_file.clone(), DEFAULT_MAX_FILE_SIZE).unwrap();
+        let manager = StateManager::new(state_file.clone(), DEFAULT_MAX_FILE_SIZE)
+            .expect("Failed to create StateManager");
 
         // File doesn't exist yet
         assert!(!manager.state_exists());
 
         // Create file
-        fs::write(&state_file, "{}").unwrap();
+        fs::write(&state_file, "{}").expect("Failed to write test state file");
 
         // File exists now
         assert!(manager.state_exists());
 
         // Cleanup
-        fs::remove_file(&state_file).unwrap();
+        fs::remove_file(&state_file).expect("Failed to remove test state file");
     }
 
     #[test]
     fn test_state_manager_clear_state() {
         let temp_dir = std::env::temp_dir();
         let state_file = temp_dir.join("test-state-clear.json");
-        let manager = StateManager::new(state_file.clone(), DEFAULT_MAX_FILE_SIZE).unwrap();
+        let manager = StateManager::new(state_file.clone(), DEFAULT_MAX_FILE_SIZE)
+            .expect("Failed to create StateManager");
 
         // Clear when file doesn't exist should succeed
         assert!(manager.clear_state().is_ok());
 
         // Create file
-        fs::write(&state_file, "{}").unwrap();
+        fs::write(&state_file, "{}").expect("Failed to write test state file");
 
         // File exists
         assert!(manager.state_exists());
