@@ -5,9 +5,11 @@
 //! - Compress → decompress preserves data for any input
 //! - Compression achieves 50%+ size reduction for typical workflow state
 //! - Full checkpoint → restore cycle preserves exact state
+//! - **Checkpoint + events_since_checkpoint = current_state** (event sourcing property)
 
 use oya_workflow::{compress, compression_ratio, decompress, space_savings};
 use proptest::prelude::*;
+use std::collections::HashMap;
 
 // Test: Compress → decompress round-trip preserves data for any input.
 // This property test verifies that for any byte vector, compressing and
@@ -277,4 +279,391 @@ proptest! {
             );
         }
     }
+}
+
+// ==========================================================================
+// PROPERTY: Checkpoint + Events Since = Current State
+// ==========================================================================
+
+/// Test state for event sourcing property tests.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+struct TestEventSourcedState {
+    /// Map of bead ID to current state.
+    bead_states: HashMap<String, BeadStateEntry>,
+    /// Total number of events applied.
+    events_applied: u64,
+    /// Timestamp of last event.
+    last_event_timestamp: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// Entry in the bead state map.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+struct BeadStateEntry {
+    /// Current bead state.
+    state: String,
+    /// Event count for this bead.
+    event_count: u64,
+    /// Last update timestamp.
+    updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl TestEventSourcedState {
+    /// Create a new empty state.
+    fn new() -> Self {
+        Self {
+            bead_states: HashMap::new(),
+            events_applied: 0,
+            last_event_timestamp: None,
+        }
+    }
+
+    /// Apply an event to the state.
+    fn apply(&mut self, bead_id: &str, event_type: &str, timestamp: chrono::DateTime<chrono::Utc>) {
+        let entry = self
+            .bead_states
+            .entry(bead_id.to_string())
+            .or_insert_with(|| BeadStateEntry {
+                state: "pending".to_string(),
+                event_count: 0,
+                updated_at: timestamp,
+            });
+
+        entry.state = event_type.to_string();
+        entry.event_count += 1;
+        entry.updated_at = timestamp;
+        self.events_applied += 1;
+        self.last_event_timestamp = Some(timestamp);
+    }
+}
+
+impl Default for TestEventSourcedState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Test event for property testing.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct TestEvent {
+    bead_id: String,
+    event_type: String,
+    timestamp: chrono::DateTime<chrono::Utc>,
+}
+
+/// Property: Checkpoint + events since checkpoint = current state.
+///
+/// This is the fundamental property of event sourcing systems:
+/// - Take a checkpoint at some point in the event stream
+/// - Restore the checkpoint
+/// - Apply all events that occurred after the checkpoint
+/// - Result should exactly match the current state
+///
+/// Property test:
+/// - Generate arbitrary event sequences (1-100 events)
+/// - Pick random checkpoint position (25%, 50%, 75%)
+/// - Verify: restore(checkpoint) + apply(events_since) == current_state
+proptest! {
+    #[test]
+    fn prop_checkpoint_plus_events_yields_current(
+        event_count in 1usize..100,
+        checkpoint_pct in 25usize..75
+    ) {
+        // GIVEN: A sequence of events and a checkpoint position
+        let mut current_state = TestEventSourcedState::new();
+        let mut events = Vec::with_capacity(event_count);
+
+        // Generate events
+        for i in 0..event_count {
+            let bead_id = format!("bead-{}", i % 5); // 5 different beads
+            let event_type = format!("event-{}", i);
+            let timestamp = chrono::Utc::now() + chrono::Duration::milliseconds(i as i64);
+
+            let event = TestEvent {
+                bead_id: bead_id.clone(),
+                event_type: event_type.clone(),
+                timestamp,
+            };
+
+            current_state.apply(&bead_id, &event_type, timestamp);
+            events.push(event);
+        }
+
+        // Calculate checkpoint position
+        let checkpoint_idx = (event_count * checkpoint_pct / 100).min(event_count - 1);
+
+        // WHEN: Create checkpoint at checkpoint_idx
+        let checkpoint_state = {
+            let mut state = TestEventSourcedState::new();
+            for event in events.iter().take(checkpoint_idx + 1) {
+                state.apply(&event.bead_id, &event.event_type, event.timestamp);
+            }
+            state
+        };
+
+        // Serialize and compress checkpoint
+        let serialized = serde_json::to_vec(&checkpoint_state);
+        prop_assert!(serialized.is_ok(), "Serialization should succeed");
+        let serialized = serialized.unwrap_or_default();
+
+        let compressed = compress(&serialized);
+        prop_assert!(compressed.is_ok(), "Compression should succeed");
+        let compressed = compressed.unwrap_or_default();
+
+        // Decompress and restore checkpoint
+        let decompressed = decompress(&compressed, serialized.len());
+        prop_assert!(decompressed.is_ok(), "Decompression should succeed");
+        let decompressed = decompressed.unwrap_or_default();
+
+        let restored_state_result: Result<TestEventSourcedState, _> = serde_json::from_slice(&decompressed);
+        prop_assert!(restored_state_result.is_ok(), "Deserialization should succeed");
+        let restored_state = restored_state_result.unwrap_or_default();
+
+        // THEN: Apply events since checkpoint
+        let mut final_state = restored_state;
+        for event in events.iter().skip(checkpoint_idx + 1) {
+            final_state.apply(&event.bead_id, &event.event_type, event.timestamp);
+        }
+
+        // THEN: Final state should match current state
+        prop_assert_eq!(
+            final_state.events_applied,
+            current_state.events_applied,
+            "Event count should match"
+        );
+
+        prop_assert_eq!(
+            final_state.bead_states.len(),
+            current_state.bead_states.len(),
+            "Bead count should match"
+        );
+
+        // Verify each bead state matches
+        for (bead_id, current_entry) in &current_state.bead_states {
+            let final_entry = final_state.bead_states.get(bead_id);
+            prop_assert!(
+                final_entry.is_some(),
+                "Missing bead: {}",
+                bead_id
+            );
+            let final_entry = final_entry.unwrap();
+
+            prop_assert_eq!(
+                &final_entry.state,
+                &current_entry.state,
+                "State for bead {} should match",
+                bead_id
+            );
+
+            prop_assert_eq!(
+                final_entry.event_count,
+                current_entry.event_count,
+                "Event count for bead {} should match",
+                bead_id
+            );
+        }
+
+        // Verify last timestamp matches
+        match (final_state.last_event_timestamp, current_state.last_event_timestamp) {
+            (Some(final_ts), Some(current_ts)) => {
+                let diff = if final_ts > current_ts {
+                    final_ts - current_ts
+                } else {
+                    current_ts - final_ts
+                };
+                prop_assert!(
+                    diff < chrono::Duration::seconds(1),
+                    "Last timestamp should match: got {}, expected {}",
+                    final_ts,
+                    current_ts
+                );
+            }
+            (None, None) => {}, // Both None - OK
+            _ => {
+                prop_assert!(false, "Last timestamp mismatch: one is None, one is Some");
+            }
+        }
+    }
+}
+
+/// Property: Multiple checkpoint positions all yield correct current state.
+///
+/// Verify that for any checkpoint position, the property holds.
+proptest! {
+    #[test]
+    fn prop_multiple_checkpoint_positions_yield_correct_state(
+        event_count in 10usize..100
+    ) {
+        // GIVEN: A sequence of events
+        let mut current_state = TestEventSourcedState::new();
+        let mut events = Vec::with_capacity(event_count);
+
+        for i in 0..event_count {
+            let bead_id = format!("bead-{}", i % 3); // 3 different beads
+            let event_type = format!("event-{}", i);
+            let timestamp = chrono::Utc::now() + chrono::Duration::milliseconds(i as i64);
+
+            let event = TestEvent {
+                bead_id: bead_id.clone(),
+                event_type: event_type.clone(),
+                timestamp,
+            };
+
+            current_state.apply(&bead_id, &event_type, timestamp);
+            events.push(event);
+        }
+
+        // WHEN: Test multiple checkpoint positions
+        let checkpoint_positions = vec![0, event_count / 4, event_count / 2, event_count - 1];
+
+        for checkpoint_idx in checkpoint_positions {
+            // Create checkpoint
+            let checkpoint_state = {
+                let mut state = TestEventSourcedState::new();
+                for event in events.iter().take(checkpoint_idx + 1) {
+                    state.apply(&event.bead_id, &event.event_type, event.timestamp);
+                }
+                state
+            };
+
+            // Serialize/deserialize round-trip
+            let serialized = serde_json::to_vec(&checkpoint_state);
+            prop_assert!(
+                serialized.is_ok(),
+                "Serialization should succeed at checkpoint {}",
+                checkpoint_idx
+            );
+            let serialized = serialized.unwrap_or_default();
+
+            let compressed = compress(&serialized);
+            prop_assert!(
+                compressed.is_ok(),
+                "Compression should succeed at checkpoint {}",
+                checkpoint_idx
+            );
+            let compressed = compressed.unwrap_or_default();
+
+            let decompressed = decompress(&compressed, serialized.len());
+            prop_assert!(
+                decompressed.is_ok(),
+                "Decompression should succeed at checkpoint {}",
+                checkpoint_idx
+            );
+            let decompressed = decompressed.unwrap_or_default();
+
+            let restored_state_result: Result<TestEventSourcedState, _> = serde_json::from_slice(&decompressed);
+            prop_assert!(
+                restored_state_result.is_ok(),
+                "Deserialization should succeed at checkpoint {}",
+                checkpoint_idx
+            );
+            let restored_state = restored_state_result.unwrap_or_default();
+
+            // Apply events since checkpoint
+            let mut final_state = restored_state;
+            for event in events.iter().skip(checkpoint_idx + 1) {
+                final_state.apply(&event.bead_id, &event.event_type, event.timestamp);
+            }
+
+            // THEN: Verify final state matches current state
+            prop_assert_eq!(
+                final_state.events_applied,
+                current_state.events_applied,
+                "Event count should match for checkpoint at {}",
+                checkpoint_idx
+            );
+
+            prop_assert_eq!(
+                final_state.bead_states.len(),
+                current_state.bead_states.len(),
+                "Bead count should match for checkpoint at {}",
+                checkpoint_idx
+            );
+        }
+    }
+}
+
+/// Property: Empty event stream with checkpoint at start.
+///
+/// Edge case: Checkpoint at position 0, then apply all events.
+/// Should yield same state as applying all events from scratch.
+#[test]
+fn test_checkpoint_at_start_plus_all_events() -> Result<(), Box<dyn std::error::Error>> {
+    // GIVEN: Empty checkpoint + event sequence
+    let checkpoint_state = TestEventSourcedState::new();
+
+    let mut events = Vec::new();
+    for i in 0..10 {
+        let bead_id = format!("bead-{}", i);
+        let event_type = format!("event-{}", i);
+        let timestamp = chrono::Utc::now() + chrono::Duration::milliseconds(i as i64);
+
+        events.push(TestEvent {
+            bead_id,
+            event_type,
+            timestamp,
+        });
+    }
+
+    // WHEN: Build current state by applying all events
+    let mut current_state = TestEventSourcedState::new();
+    for event in &events {
+        current_state.apply(&event.bead_id, &event.event_type, event.timestamp);
+    }
+
+    // WHEN: Restore empty checkpoint and apply all events
+    let serialized = serde_json::to_vec(&checkpoint_state)?;
+    let compressed = compress(&serialized)?;
+    let decompressed = decompress(&compressed, serialized.len())?;
+    let mut final_state: TestEventSourcedState = serde_json::from_slice(&decompressed)?;
+
+    for event in &events {
+        final_state.apply(&event.bead_id, &event.event_type, event.timestamp);
+    }
+
+    // THEN: States should match
+    assert_eq!(final_state, current_state, "Empty checkpoint + all events should match current state");
+
+    Ok(())
+}
+
+/// Property: Checkpoint at end + zero events = current state.
+///
+/// Edge case: Checkpoint at final event, no events to apply.
+/// Should yield same state as checkpoint state.
+#[test]
+fn test_checkpoint_at_end_plus_zero_events() -> Result<(), Box<dyn std::error::Error>> {
+    // GIVEN: Event sequence
+    let mut current_state = TestEventSourcedState::new();
+    let mut events = Vec::new();
+
+    for i in 0..10 {
+        let bead_id = format!("bead-{}", i);
+        let event_type = format!("event-{}", i);
+        let timestamp = chrono::Utc::now() + chrono::Duration::milliseconds(i as i64);
+
+        let event = TestEvent {
+            bead_id: bead_id.clone(),
+            event_type: event_type.clone(),
+            timestamp,
+        };
+
+        current_state.apply(&bead_id, &event_type, timestamp);
+        events.push(event);
+    }
+
+    // WHEN: Checkpoint at end (after last event)
+    let checkpoint_state = current_state.clone();
+
+    // Serialize/deserialize round-trip
+    let serialized = serde_json::to_vec(&checkpoint_state)?;
+    let compressed = compress(&serialized)?;
+    let decompressed = decompress(&compressed, serialized.len())?;
+    let restored_state: TestEventSourcedState = serde_json::from_slice(&decompressed)?;
+
+    // No events to apply (checkpoint at end)
+
+    // THEN: Restored state should match current state
+    assert_eq!(restored_state, current_state, "Checkpoint at end should match current state");
+
+    Ok(())
 }

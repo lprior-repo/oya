@@ -40,6 +40,11 @@ oya-ipc = { workspace = true }
 [dev-dependencies]
 # Testing
 tokio = { workspace = true }
+os_pipe = "1.2"
+
+# Test utilities
+tempfile = "3.13"
+uuid = { version = "1.11", features = ["v4", "serde"] }
 
 [profile.release]
 opt-level = "z"             # Optimize for size
