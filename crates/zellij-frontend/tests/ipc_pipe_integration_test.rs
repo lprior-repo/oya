@@ -26,7 +26,9 @@ fn echo_server_main() {
 
     let mut input = String::new();
     let mut stdin = io::stdin();
-    stdin.read_to_string(&mut input).expect("Failed to read from stdin");
+    stdin
+        .read_to_string(&mut input)
+        .expect("Failed to read from stdin");
 
     // Echo the input back with a prefix
     println!("ECHO: {}", input.trim());
@@ -73,17 +75,23 @@ fn test_bidirectional_pipe_communication() {
     // Spawn a thread to act as the other endpoint
     thread::spawn(move || {
         let mut buf = [0u8; 16];
-        read2.read_exact(&mut buf).expect("Failed to read from pipe 2");
+        read2
+            .read_exact(&mut buf)
+            .expect("Failed to read from pipe 2");
         write1
             .write_all(b"Pong")
             .expect("Failed to write to pipe 1");
     });
 
     // Send a message and wait for response
-    write2.write_all(b"Ping").expect("Failed to write to pipe 2");
+    write2
+        .write_all(b"Ping")
+        .expect("Failed to write to pipe 2");
 
     let mut response = [0u8; 4];
-    read1.read_exact(&mut response).expect("Failed to read response");
+    read1
+        .read_exact(&mut response)
+        .expect("Failed to read response");
 
     assert_eq!(b"Pong", &response);
 }
@@ -116,8 +124,7 @@ fn test_json_serialization_through_pipe() {
         .read_to_end(&mut buffer)
         .expect("Failed to read from pipe");
 
-    let received: TestMessage =
-        serde_json::from_slice(&buffer).expect("Failed to deserialize");
+    let received: TestMessage = serde_json::from_slice(&buffer).expect("Failed to deserialize");
 
     assert_eq!(original, received);
 }
@@ -214,9 +221,7 @@ fn test_process_pipe_communication() {
     assert_eq!(test_data, buffer.as_slice());
 
     // Wait for child to exit
-    let exit_status = child
-        .wait()
-        .expect("Failed to wait for child process");
+    let exit_status = child.wait().expect("Failed to wait for child process");
 
     assert!(exit_status.success());
 }
@@ -266,16 +271,13 @@ fn test_json_process_communication() {
     let mut responses = Vec::new();
     for line in stdout_reader.lines() {
         let line = line.expect("Failed to read line");
-        let response: TestMessage =
-            serde_json::from_str(&line).expect("Failed to deserialize");
+        let response: TestMessage = serde_json::from_str(&line).expect("Failed to deserialize");
         responses.push(response);
     }
 
     assert_eq!(messages, responses);
 
-    child
-        .wait()
-        .expect("Failed to wait for child process");
+    child.wait().expect("Failed to wait for child process");
 }
 
 /// Test concurrent access to pipes
@@ -286,7 +288,10 @@ fn test_json_process_communication() {
 /// 3. Data integrity is maintained
 #[test]
 fn test_concurrent_pipe_access() {
-    use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
 
     let success_count = Arc::new(AtomicUsize::new(0));
     let mut handles = vec![];
@@ -367,16 +372,13 @@ fn test_newline_delimited_json_framing() {
         data: "second".to_string(),
     };
 
-    writeln!(writer, "{}", serde_json::to_string(&msg1).unwrap())
-        .expect("Failed to write msg1");
-    writeln!(writer, "{}", serde_json::to_string(&msg2).unwrap())
-        .expect("Failed to write msg2");
+    writeln!(writer, "{}", serde_json::to_string(&msg1).unwrap()).expect("Failed to write msg1");
+    writeln!(writer, "{}", serde_json::to_string(&msg2).unwrap()).expect("Failed to write msg2");
     writer.flush().expect("Failed to flush");
 
     // Read with line-based framing
     let mut reader = std::io::BufReader::new(reader);
     let mut line = String::new();
-    let mut reader_ref = &mut reader;
 
     reader.read_line(&mut line).expect("Failed to read line 1");
     let received1: TestMessage = serde_json::from_str(&line.trim()).expect("Failed to parse msg1");

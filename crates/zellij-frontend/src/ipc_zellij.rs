@@ -73,20 +73,20 @@ impl ZellijIpcClient {
     /// Returns Ok(()) on success, Err on failure
     pub fn send_command(&mut self, cmd: &GuestMessage) -> Result<(), String> {
         let request_id = self._correlation_context.generate_request_id();
-        
+
         // Serialize message
-        let json = serde_json::to_string(cmd)
-            .map_err(|e| format!("Serialization failed: {}", e))?;
+        let json =
+            serde_json::to_string(cmd).map_err(|e| format!("Serialization failed: {}", e))?;
 
         // Add correlation ID
         let payload = format!("{{\"request_id\": \"{}\", \"data\": {}}}", request_id, json);
-        
+
         // Write to Zellij stdout
         let mut stdout = ZellijStdout::new();
-        stdout.write_all(payload.as_bytes())
+        stdout
+            .write_all(payload.as_bytes())
             .map_err(|e| format!("Write failed: {}", e))?;
-        stdout.flush()
-            .map_err(|e| format!("Flush failed: {}", e))?;
+        stdout.flush().map_err(|e| format!("Flush failed: {}", e))?;
 
         Ok(())
     }
@@ -97,13 +97,14 @@ impl ZellijIpcClient {
     pub fn recv(&mut self) -> Result<HostMessage, String> {
         let mut stdin = ZellijStdin::new();
         let mut buffer = [0u8; 8192]; // 8KB buffer
-        
+
         // Read line (JSON terminated by newline)
         let mut json_string = String::new();
         loop {
-            let bytes_read = stdin.read(&mut buffer)
+            let bytes_read = stdin
+                .read(&mut buffer)
                 .map_err(|e| format!("Read failed: {}", e))?;
-            
+
             if bytes_read == 0 {
                 // End of stream - treat as disconnect
                 return Err("Connection closed".to_string());

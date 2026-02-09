@@ -10,7 +10,7 @@
 
 use crate::components::style;
 use crate::layout::{Layout, Pane, PaneType};
-use crate::plugin::{stage_symbol_from_status, TaskRow};
+use crate::plugin::{TaskRow, stage_symbol_from_status};
 use std::fmt::Write;
 use thiserror::Error;
 
@@ -348,8 +348,8 @@ impl Renderer {
 
         for (index, stage) in stages.into_iter().enumerate() {
             // Determine stage status using stage_symbol_from_status
-            let is_current_stage = running_stage.as_deref() == Some(stage)
-                || failed_stage.as_deref() == Some(stage);
+            let is_current_stage =
+                running_stage.as_deref() == Some(stage) || failed_stage.as_deref() == Some(stage);
 
             let (effective_status, effective_stage) = if completed {
                 ("passed", None)
@@ -721,11 +721,7 @@ fn stage_progress(
     if completed {
         1.0
     } else if let Some(index) = failed_stage {
-        if stage_index <= index {
-            1.0
-        } else {
-            0.0
-        }
+        if stage_index <= index { 1.0 } else { 0.0 }
     } else if let Some(index) = running_stage {
         if stage_index < index {
             1.0
@@ -841,10 +837,10 @@ mod tests {
         let output = renderer.render_pipeline_view(&pane, &[task], 0, PaneType::BeadList);
 
         // With the new implementation, only the current stage is marked as running
-        assert!(output.contains("◐ ◇ implement"));  // Current stage is running
+        assert!(output.contains("◐ ◇ implement")); // Current stage is running
         // Other stages are pending (not automatically marked as complete)
-        assert!(output.contains("plan"));  // Plan stage exists in output
-        assert!(output.contains("research"));  // Research stage exists in output
+        assert!(output.contains("plan")); // Plan stage exists in output
+        assert!(output.contains("research")); // Research stage exists in output
     }
 
     #[test]
@@ -894,7 +890,7 @@ mod tests {
         assert!(output.contains("◐ ◇ implement"));
         // Empty detail after colon should not show ↳ (or shows with just spaces)
         let has_empty_detail = output.contains("↳   ") || output.contains("↳\n");
-        assert!(!has_empty_detail || output.contains("◐ ◇ implement"));  // At minimum, stage is shown
+        assert!(!has_empty_detail || output.contains("◐ ◇ implement")); // At minimum, stage is shown
     }
 
     #[test]
@@ -940,17 +936,20 @@ mod tests {
 
         // Test running stage
         let task_running = sample_task("in_progress", Some("implement"));
-        let output_running = renderer.render_pipeline_view(&pane, &[task_running], 0, PaneType::BeadList);
+        let output_running =
+            renderer.render_pipeline_view(&pane, &[task_running], 0, PaneType::BeadList);
         assert!(output_running.contains("◐ ◇ implement"));
 
         // Test completed stage (all stages show complete)
         let task_completed = sample_task("passed", None);
-        let output_completed = renderer.render_pipeline_view(&pane, &[task_completed], 0, PaneType::BeadList);
+        let output_completed =
+            renderer.render_pipeline_view(&pane, &[task_completed], 0, PaneType::BeadList);
         assert!(output_completed.contains("● ◇ implement"));
 
         // Test failed stage (using validate which exists in TaskRow stages)
         let task_failed = sample_task("failed", Some("validate: 3 tests failed"));
-        let output_failed = renderer.render_pipeline_view(&pane, &[task_failed], 0, PaneType::BeadList);
+        let output_failed =
+            renderer.render_pipeline_view(&pane, &[task_failed], 0, PaneType::BeadList);
         assert!(output_failed.contains("✗ ◎ validate"));
     }
 

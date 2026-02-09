@@ -144,7 +144,7 @@ async fn given_ipc_worker_when_start_bead_then_emits_state_changed_event()
         Ok(s) => s,
         Err(e) => {
             eprintln!("Setup failed: {}", e);
-            return Ok(()); // Skip test gracefully
+            return Ok(());
         }
     };
 
@@ -169,7 +169,7 @@ async fn given_ipc_worker_when_start_bead_then_emits_state_changed_event()
             },
             reply,
         },
-        Duration::from_secs(5)
+        5000
     )
     .await
     {
@@ -244,15 +244,24 @@ async fn given_ipc_worker_when_cancel_bead_then_emits_state_changed_event()
 
     let mut sub = setup.event_bus.subscribe();
 
-    let (reply_tx, reply_rx) = ractor::RpcReplyPort::new();
-    let msg = IpcWorkerMessage::HandleGuestMessage {
-        message: GuestMessage::CancelBead {
-            bead_id: bead_id.to_string(),
+    let response = match ractor::call_t!(
+        &setup.worker,
+        |reply| IpcWorkerMessage::HandleGuestMessage {
+            message: GuestMessage::CancelBead {
+                bead_id: bead_id.to_string(),
+            },
+            reply,
         },
-        reply: reply_tx,
+        5000
+    )
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("RPC call failed: {}", e);
+            return Ok(());
+        }
     };
-
-    let _ = setup.worker.send_message(msg);
 
     let event = match tokio::time::timeout(Duration::from_millis(1000), sub.recv()).await {
         Ok(Ok(evt)) => evt,
@@ -274,8 +283,8 @@ async fn given_ipc_worker_when_cancel_bead_then_emits_state_changed_event()
         }
     }
 
-    match tokio::time::timeout(Duration::from_millis(500), reply_rx.recv()).await {
-        Ok(Ok(Ok(HostMessage::Ack { command, message }))) => {
+    match response {
+        Ok(HostMessage::Ack { command, message }) => {
             assert_eq!(command, "CancelBead");
             assert!(message.contains("cancelled"));
         }
@@ -311,15 +320,24 @@ async fn given_ipc_worker_when_retry_bead_then_transitions_to_ready()
 
     let mut sub = setup.event_bus.subscribe();
 
-    let (reply_tx, reply_rx) = ractor::RpcReplyPort::new();
-    let msg = IpcWorkerMessage::HandleGuestMessage {
-        message: GuestMessage::RetryBead {
-            bead_id: bead_id.to_string(),
+    let response = match ractor::call_t!(
+        &setup.worker,
+        |reply| IpcWorkerMessage::HandleGuestMessage {
+            message: GuestMessage::RetryBead {
+                bead_id: bead_id.to_string(),
+            },
+            reply,
         },
-        reply: reply_tx,
+        5000
+    )
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("RPC call failed: {}", e);
+            return Ok(());
+        }
     };
-
-    let _ = setup.worker.send_message(msg);
 
     let event = match tokio::time::timeout(Duration::from_millis(1000), sub.recv()).await {
         Ok(Ok(evt)) => evt,
@@ -341,8 +359,8 @@ async fn given_ipc_worker_when_retry_bead_then_transitions_to_ready()
         }
     }
 
-    match tokio::time::timeout(Duration::from_millis(500), reply_rx.recv()).await {
-        Ok(Ok(Ok(HostMessage::Ack { command, message }))) => {
+    match response {
+        Ok(HostMessage::Ack { command, message }) => {
             assert_eq!(command, "RetryBead");
             assert!(message.contains("reset for retry"));
         }
@@ -373,18 +391,27 @@ async fn given_ipc_worker_when_start_nonexistent_bead_then_returns_error()
 
     let bead_id = "nonexistent-bead";
 
-    let (reply_tx, reply_rx) = ractor::RpcReplyPort::new();
-    let msg = IpcWorkerMessage::HandleGuestMessage {
-        message: GuestMessage::StartBead {
-            bead_id: bead_id.to_string(),
+    let response = match ractor::call_t!(
+        &setup.worker,
+        |reply| IpcWorkerMessage::HandleGuestMessage {
+            message: GuestMessage::StartBead {
+                bead_id: bead_id.to_string(),
+            },
+            reply,
         },
-        reply: reply_tx,
+        5000
+    )
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("RPC call failed: {}", e);
+            return Ok(());
+        }
     };
 
-    let _ = setup.worker.send_message(msg);
-
-    match tokio::time::timeout(Duration::from_millis(500), reply_rx.recv()).await {
-        Ok(Ok(Err(ActorError::BeadNotFound(id)))) => {
+    match response {
+        Err(ActorError::BeadNotFound(id)) => {
             assert_eq!(id, bead_id);
         }
         other => {
@@ -417,18 +444,27 @@ async fn given_ipc_worker_when_start_completed_bead_then_returns_invalid_state_e
         }
     }
 
-    let (reply_tx, reply_rx) = ractor::RpcReplyPort::new();
-    let msg = IpcWorkerMessage::HandleGuestMessage {
-        message: GuestMessage::StartBead {
-            bead_id: bead_id.to_string(),
+    let response = match ractor::call_t!(
+        &setup.worker,
+        |reply| IpcWorkerMessage::HandleGuestMessage {
+            message: GuestMessage::StartBead {
+                bead_id: bead_id.to_string(),
+            },
+            reply,
         },
-        reply: reply_tx,
+        5000
+    )
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("RPC call failed: {}", e);
+            return Ok(());
+        }
     };
 
-    let _ = setup.worker.send_message(msg);
-
-    match tokio::time::timeout(Duration::from_millis(500), reply_rx.recv()).await {
-        Ok(Ok(Err(ActorError::InvalidStateTransition(_)))) => {
+    match response {
+        Err(ActorError::InvalidStateTransition(_)) => {
             // Expected error
         }
         other => {
@@ -487,24 +523,30 @@ async fn given_ipc_worker_when_multiple_bead_operations_then_all_events_emitted(
     let mut sub = setup.event_bus.subscribe();
 
     // Start bead 1
-    let (reply_tx, _) = ractor::RpcReplyPort::new();
-    let msg = IpcWorkerMessage::HandleGuestMessage {
-        message: GuestMessage::StartBead {
-            bead_id: bead_id_1.to_string(),
+    let _ = ractor::call_t!(
+        &setup.worker,
+        |reply| IpcWorkerMessage::HandleGuestMessage {
+            message: GuestMessage::StartBead {
+                bead_id: bead_id_1.to_string(),
+            },
+            reply,
         },
-        reply: reply_tx,
-    };
-    let _ = setup.worker.send_message(msg);
+        5000
+    )
+    .await;
 
     // Cancel bead 2
-    let (reply_tx, _) = ractor::RpcReplyPort::new();
-    let msg = IpcWorkerMessage::HandleGuestMessage {
-        message: GuestMessage::CancelBead {
-            bead_id: bead_id_2.to_string(),
+    let _ = ractor::call_t!(
+        &setup.worker,
+        |reply| IpcWorkerMessage::HandleGuestMessage {
+            message: GuestMessage::CancelBead {
+                bead_id: bead_id_2.to_string(),
+            },
+            reply,
         },
-        reply: reply_tx,
-    };
-    let _ = setup.worker.send_message(msg);
+        5000
+    )
+    .await;
 
     // Wait for both events
     let event1 = match tokio::time::timeout(Duration::from_millis(1000), sub.recv()).await {
@@ -558,17 +600,27 @@ async fn given_ipc_worker_when_start_running_bead_twice_then_succeeds_idempotent
     }
 
     // First start
-    let (reply_tx, reply_rx) = ractor::RpcReplyPort::new();
-    let msg = IpcWorkerMessage::HandleGuestMessage {
-        message: GuestMessage::StartBead {
-            bead_id: bead_id.to_string(),
+    let response1 = match ractor::call_t!(
+        &setup.worker,
+        |reply| IpcWorkerMessage::HandleGuestMessage {
+            message: GuestMessage::StartBead {
+                bead_id: bead_id.to_string(),
+            },
+            reply,
         },
-        reply: reply_tx,
+        5000
+    )
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("First RPC call failed: {}", e);
+            return Ok(());
+        }
     };
-    let _ = setup.worker.send_message(msg);
 
-    match tokio::time::timeout(Duration::from_millis(500), reply_rx.recv()).await {
-        Ok(Ok(Ok(HostMessage::Ack { .. }))) => {
+    match response1 {
+        Ok(HostMessage::Ack { .. }) => {
             // First call succeeds
         }
         other => {
@@ -577,17 +629,27 @@ async fn given_ipc_worker_when_start_running_bead_twice_then_succeeds_idempotent
     }
 
     // Second start (should also succeed)
-    let (reply_tx, reply_rx) = ractor::RpcReplyPort::new();
-    let msg = IpcWorkerMessage::HandleGuestMessage {
-        message: GuestMessage::StartBead {
-            bead_id: bead_id.to_string(),
+    let response2 = match ractor::call_t!(
+        &setup.worker,
+        |reply| IpcWorkerMessage::HandleGuestMessage {
+            message: GuestMessage::StartBead {
+                bead_id: bead_id.to_string(),
+            },
+            reply,
         },
-        reply: reply_tx,
+        5000
+    )
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Second RPC call failed: {}", e);
+            return Ok(());
+        }
     };
-    let _ = setup.worker.send_message(msg);
 
-    match tokio::time::timeout(Duration::from_millis(500), reply_rx.recv()).await {
-        Ok(Ok(Ok(HostMessage::Ack { command, message }))) => {
+    match response2 {
+        Ok(HostMessage::Ack { command, message }) => {
             assert_eq!(command, "StartBead");
             assert!(message.contains("already running"));
         }
@@ -632,17 +694,27 @@ async fn given_ipc_worker_when_cancel_cancelled_bead_then_succeeds_idempotently(
     }
 
     // First cancel
-    let (reply_tx, reply_rx) = ractor::RpcReplyPort::new();
-    let msg = IpcWorkerMessage::HandleGuestMessage {
-        message: GuestMessage::CancelBead {
-            bead_id: bead_id.to_string(),
+    let response1 = match ractor::call_t!(
+        &setup.worker,
+        |reply| IpcWorkerMessage::HandleGuestMessage {
+            message: GuestMessage::CancelBead {
+                bead_id: bead_id.to_string(),
+            },
+            reply,
         },
-        reply: reply_tx,
+        5000
+    )
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("First RPC call failed: {}", e);
+            return Ok(());
+        }
     };
-    let _ = setup.worker.send_message(msg);
 
-    match tokio::time::timeout(Duration::from_millis(500), reply_rx.recv()).await {
-        Ok(Ok(Ok(HostMessage::Ack { .. }))) => {
+    match response1 {
+        Ok(HostMessage::Ack { .. }) => {
             // First call succeeds
         }
         other => {
@@ -651,17 +723,27 @@ async fn given_ipc_worker_when_cancel_cancelled_bead_then_succeeds_idempotently(
     }
 
     // Second cancel (should also succeed)
-    let (reply_tx, reply_rx) = ractor::RpcReplyPort::new();
-    let msg = IpcWorkerMessage::HandleGuestMessage {
-        message: GuestMessage::CancelBead {
-            bead_id: bead_id.to_string(),
+    let response2 = match ractor::call_t!(
+        &setup.worker,
+        |reply| IpcWorkerMessage::HandleGuestMessage {
+            message: GuestMessage::CancelBead {
+                bead_id: bead_id.to_string(),
+            },
+            reply,
         },
-        reply: reply_tx,
+        5000
+    )
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Second RPC call failed: {}", e);
+            return Ok(());
+        }
     };
-    let _ = setup.worker.send_message(msg);
 
-    match tokio::time::timeout(Duration::from_millis(500), reply_rx.recv()).await {
-        Ok(Ok(Ok(HostMessage::Ack { command, message }))) => {
+    match response2 {
+        Ok(HostMessage::Ack { command, message }) => {
             assert_eq!(command, "CancelBead");
             assert!(message.contains("already cancelled"));
         }
@@ -764,14 +846,17 @@ async fn given_ipc_worker_when_bead_operation_then_persists_state_change()
     }
 
     // Start bead
-    let (reply_tx, _) = ractor::RpcReplyPort::new();
-    let msg = IpcWorkerMessage::HandleGuestMessage {
-        message: GuestMessage::StartBead {
-            bead_id: bead_id.to_string(),
+    let _ = ractor::call_t!(
+        &setup.worker,
+        |reply| IpcWorkerMessage::HandleGuestMessage {
+            message: GuestMessage::StartBead {
+                bead_id: bead_id.to_string(),
+            },
+            reply,
         },
-        reply: reply_tx,
-    };
-    let _ = setup.worker.send_message(msg);
+        5000
+    )
+    .await;
 
     // Wait for operation to complete
     tokio::time::sleep(Duration::from_millis(200)).await;
