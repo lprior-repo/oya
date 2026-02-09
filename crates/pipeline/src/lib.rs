@@ -21,4 +21,4 @@ pub use plan::{
     run_full_pipeline, run_task_pipeline, stage_range, PipelineStageStatus, StageReport,
 };
 pub use persistence::{list_all_tasks, load_task_record, save_task_record, update_task_status};
-pub use stages::{validate_stage_sequence, Stage};
+pub use stages::{pipeline_stage_edges, validate_stage_sequence, Stage};
