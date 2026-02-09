@@ -19,6 +19,7 @@
 #![warn(clippy::unwrap_in_result)]
 
 pub mod components;
+pub mod ipc;
 pub mod layout;
 pub mod plugin;
 pub mod render;

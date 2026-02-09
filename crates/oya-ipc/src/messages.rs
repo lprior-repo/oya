@@ -27,10 +27,19 @@ pub enum GuestMessage {
     /// Get list of all beads.
     GetBeadList,
 
+    /// Get list of all tasks.
+    GetTaskList,
+
     /// Get details for a specific bead.
     GetBeadDetail {
         /// Bead ID to query
         bead_id: String,
+    },
+
+    /// Get details for a specific task.
+    GetTaskDetail {
+        /// Task slug to query
+        slug: String,
     },
 
     /// Get workflow graph for visualization.
@@ -64,6 +73,44 @@ pub enum GuestMessage {
         /// Bead ID to retry
         bead_id: String,
     },
+
+    /// Run pipeline stages for a task.
+    RunStage {
+        /// Task slug to update
+        slug: String,
+        /// Stage name to run
+        stage: String,
+        /// Optional start stage for range
+        from: Option<String>,
+        /// Optional end stage for range
+        to: Option<String>,
+        /// Dry run (no persistence)
+        dry_run: bool,
+    },
+
+    /// Run the full pipeline for a task.
+    RunPipeline {
+        /// Task slug to update
+        slug: String,
+        /// Dry run (no persistence)
+        dry_run: bool,
+    },
+
+    /// Run the full pipeline for multiple tasks.
+    RunPipelineBatch {
+        /// Task slugs to update
+        slugs: Vec<String>,
+        /// Dry run (no persistence)
+        dry_run: bool,
+    },
+
+    /// Approve a task for integration.
+    ApproveTask {
+        /// Task slug to approve
+        slug: String,
+        /// Force approval even if pipeline not passed
+        force: bool,
+    },
 }
 
 /// Messages from host to Zellij guest plugin.
@@ -81,10 +128,22 @@ pub enum HostMessage {
         beads: Vec<BeadSummary>,
     },
 
+    /// List of all tasks.
+    TaskList {
+        /// List of task summaries
+        tasks: Vec<TaskSummary>,
+    },
+
     /// Details for a specific bead.
     BeadDetail {
         /// Bead details
         bead: BeadDetail,
+    },
+
+    /// Details for a specific task.
+    TaskDetail {
+        /// Task details
+        task: TaskDetail,
     },
 
     /// Workflow graph for visualization.
@@ -133,6 +192,24 @@ pub enum HostMessage {
     Error {
         /// Error message
         message: String,
+    },
+
+    /// Task update result.
+    TaskUpdated {
+        /// Task slug
+        slug: String,
+        /// Updated status
+        status: String,
+        /// Result message
+        message: String,
+    },
+
+    /// Batch task update result.
+    TaskBatchUpdated {
+        /// Successful task updates
+        updated: Vec<TaskUpdate>,
+        /// Failed task updates
+        failed: Vec<TaskUpdate>,
     },
 
     // BROADCAST EVENTS
@@ -228,6 +305,51 @@ pub struct BeadDetail {
     pub dependencies: Vec<String>,
 }
 
+/// Summary of a task for list views.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskSummary {
+    /// Task slug
+    pub slug: String,
+    /// Pipeline status (created, in_progress, passed, failed, integrated)
+    pub status: String,
+    /// Current stage (if applicable)
+    pub stage: Option<String>,
+    /// Priority label (P0-P3)
+    pub priority: String,
+    /// Language label
+    pub language: String,
+    /// Task branch name
+    pub branch: String,
+}
+
+/// Detailed information about a task.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskDetail {
+    /// Task slug
+    pub slug: String,
+    /// Pipeline status (created, in_progress, passed, failed, integrated)
+    pub status: String,
+    /// Current stage (if applicable)
+    pub stage: Option<String>,
+    /// Priority label (P0-P3)
+    pub priority: String,
+    /// Language label
+    pub language: String,
+    /// Task branch name
+    pub branch: String,
+}
+
+/// Task update summary.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskUpdate {
+    /// Task slug
+    pub slug: String,
+    /// Updated status (if available)
+    pub status: Option<String>,
+    /// Result message
+    pub message: String,
+}
+
 /// Graph node for workflow visualization.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GraphNode {
@@ -311,6 +433,79 @@ mod tests {
             decoded,
             GuestMessage::GetBeadDetail { bead_id } if bead_id == "bead-123"
         ));
+    }
+
+    #[test]
+    fn test_task_summary_serialization() {
+        let summary = TaskSummary {
+            slug: "task-123".to_string(),
+            status: "in_progress".to_string(),
+            stage: Some("lint".to_string()),
+            priority: "P1".to_string(),
+            language: "Rust".to_string(),
+            branch: "task/task-123".to_string(),
+        };
+
+        let json = serde_json::to_string(&summary).expect("serialization should succeed");
+        let decoded: TaskSummary =
+            serde_json::from_str(&json).expect("deserialization should succeed");
+
+        assert_eq!(decoded.slug, "task-123");
+        assert_eq!(decoded.stage.as_deref(), Some("lint"));
+    }
+
+    #[test]
+    fn test_task_batch_update_serialization() {
+        let msg = HostMessage::TaskBatchUpdated {
+            updated: vec![TaskUpdate {
+                slug: "task-1".to_string(),
+                status: Some("passed".to_string()),
+                message: "ok".to_string(),
+            }],
+            failed: vec![TaskUpdate {
+                slug: "task-2".to_string(),
+                status: None,
+                message: "failed".to_string(),
+            }],
+        };
+
+        let json = serde_json::to_string(&msg).expect("serialization should succeed");
+        assert!(json.contains("task_batch_updated"));
+
+        let decoded: HostMessage =
+            serde_json::from_str(&json).expect("deserialization should succeed");
+        assert!(matches!(decoded, HostMessage::TaskBatchUpdated { .. }));
+    }
+
+    #[test]
+    fn test_run_pipeline_batch_serialization() {
+        let msg = GuestMessage::RunPipelineBatch {
+            slugs: vec!["task-1".to_string(), "task-2".to_string()],
+            dry_run: true,
+        };
+
+        let json = serde_json::to_string(&msg).expect("serialization should succeed");
+        assert!(json.contains("run_pipeline_batch"));
+
+        let decoded: GuestMessage =
+            serde_json::from_str(&json).expect("deserialization should succeed");
+        assert!(matches!(decoded, GuestMessage::RunPipelineBatch { .. }));
+    }
+
+    #[test]
+    fn test_task_update_serialization() {
+        let update = TaskUpdate {
+            slug: "task-99".to_string(),
+            status: Some("failed".to_string()),
+            message: "pipeline failed".to_string(),
+        };
+
+        let json = serde_json::to_string(&update).expect("serialization should succeed");
+        let decoded: TaskUpdate =
+            serde_json::from_str(&json).expect("deserialization should succeed");
+
+        assert_eq!(decoded.slug, "task-99");
+        assert_eq!(decoded.status.as_deref(), Some("failed"));
     }
 
     #[test]

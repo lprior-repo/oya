@@ -7,8 +7,10 @@
 //
 // NOTE: IPC integration with oya-orchestrator will be added in a future bead
 
+use crate::ipc::IpcClient;
 use crate::layout::Layout;
 use crate::render::Renderer;
+use oya_ipc::{GuestMessage, HostMessage, TaskSummary};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -137,19 +139,25 @@ pub struct OyaPlugin {
     focused_pane: crate::layout::PaneType,
     /// Plugin state
     state: PluginState,
-    /// Sample bead data (placeholder)
-    sample_beads: Vec<SampleBead>,
+    /// Task data (placeholder until IPC loads real data)
+    tasks: Vec<TaskRow>,
     /// Currently selected bead index
     selected_index: usize,
+    /// IPC client for orchestrator communication
+    ipc: Option<IpcClient>,
+    /// Status message shown in the UI
+    status_message: Option<String>,
 }
 
-/// Sample bead data for placeholder rendering
+/// Task data for rendering
 #[derive(Debug, Clone)]
-pub struct SampleBead {
-    pub id: String,
-    pub title: String,
-    pub state: String,
-    pub priority: u8,
+pub struct TaskRow {
+    pub slug: String,
+    pub status: String,
+    pub stage: Option<String>,
+    pub priority: String,
+    pub language: String,
+    pub branch: String,
 }
 
 /// Plugin state machine
@@ -181,25 +189,31 @@ impl OyaPlugin {
 
         let renderer = Renderer::new();
 
-        // Create sample bead data for placeholder rendering
-        let sample_beads = vec![
-            SampleBead {
-                id: "src-3ax5".to_string(),
-                title: "Create Zellij WASM plugin scaffold".to_string(),
-                state: "in_progress".to_string(),
-                priority: 1,
+        // Create placeholder task data for rendering
+        let tasks = vec![
+            TaskRow {
+                slug: "task-3ax5".to_string(),
+                status: "in_progress".to_string(),
+                stage: Some("implement".to_string()),
+                priority: "P1".to_string(),
+                language: "Rust".to_string(),
+                branch: "task/task-3ax5".to_string(),
             },
-            SampleBead {
-                id: "src-1xvj".to_string(),
-                title: "Implement IPC client integration".to_string(),
-                state: "open".to_string(),
-                priority: 1,
+            TaskRow {
+                slug: "task-1xvj".to_string(),
+                status: "created".to_string(),
+                stage: None,
+                priority: "P1".to_string(),
+                language: "Rust".to_string(),
+                branch: "task/task-1xvj".to_string(),
             },
-            SampleBead {
-                id: "src-1k71".to_string(),
-                title: "Add BeadList component with real data".to_string(),
-                state: "open".to_string(),
-                priority: 2,
+            TaskRow {
+                slug: "task-1k71".to_string(),
+                status: "created".to_string(),
+                stage: None,
+                priority: "P2".to_string(),
+                language: "Rust".to_string(),
+                branch: "task/task-1k71".to_string(),
             },
         ];
 
@@ -209,8 +223,10 @@ impl OyaPlugin {
             renderer,
             focused_pane: crate::layout::PaneType::BeadList,
             state: PluginState::Starting,
-            sample_beads,
+            tasks,
             selected_index: 0,
+            ipc: None,
+            status_message: None,
         })
     }
 
@@ -227,6 +243,8 @@ impl OyaPlugin {
             .map_err(|e| PluginError::LayoutError(e.to_string()))?;
 
         self.state = PluginState::Running;
+        self.connect_ipc(&info.config)?;
+        let _ = self.refresh_tasks();
 
         // Render initial UI
         match self.render()? {
@@ -289,6 +307,18 @@ impl OyaPlugin {
             'k' | 'K' => {
                 self.move_selection(-1)?;
             }
+            'g' | 'G' => {
+                let _ = self.refresh_tasks();
+            }
+            'r' | 'R' => {
+                let _ = self.run_pipeline_for_selected(false);
+            }
+            'a' | 'A' => {
+                let _ = self.approve_selected(false);
+            }
+            'b' | 'B' => {
+                let _ = self.run_pipeline_for_all(false);
+            }
             _ => {
                 // Other keys ignored for now
             }
@@ -313,7 +343,7 @@ impl OyaPlugin {
     ///
     /// Returns an error if movement fails
     fn move_selection(&mut self, direction: i32) -> PluginResult<()> {
-        let len = self.sample_beads.len();
+        let len = self.tasks.len();
 
         if len == 0 {
             return Ok(());
@@ -343,9 +373,10 @@ impl OyaPlugin {
 
         let rendered = self.renderer.render_layout(
             &self.layout,
-            &self.sample_beads,
+            &self.tasks,
             self.selected_index,
             self.focused_pane,
+            self.status_message.as_deref(),
         );
 
         Ok(Some(rendered))
@@ -365,6 +396,147 @@ impl OyaPlugin {
 
         // For now, this is a simplified version
         Ok(())
+    }
+
+    fn connect_ipc(&mut self, config: &serde_json::Value) -> PluginResult<()> {
+        let address = config
+            .get("ipc_address")
+            .and_then(|value| value.as_str())
+            .unwrap_or("127.0.0.1:5555");
+
+        match IpcClient::connect(address) {
+            Ok(client) => {
+                self.ipc = Some(client);
+                self.status_message = Some(format!("IPC connected to {address}"));
+                Ok(())
+            }
+            Err(err) => {
+                self.ipc = None;
+                self.status_message = Some(format!("IPC unavailable: {err}"));
+                Ok(())
+            }
+        }
+    }
+
+    fn refresh_tasks(&mut self) -> PluginResult<()> {
+        let ipc = match self.ipc.as_mut() {
+            Some(ipc) => ipc,
+            None => {
+                self.status_message = Some("IPC not connected".to_string());
+                return Ok(());
+            }
+        };
+
+        match ipc.request(GuestMessage::GetTaskList) {
+            Ok(HostMessage::TaskList { tasks }) => {
+                self.tasks = tasks.into_iter().map(task_summary_to_row).collect();
+                self.selected_index = self.selected_index.min(self.tasks.len().saturating_sub(1));
+                self.status_message = Some("Tasks refreshed".to_string());
+                Ok(())
+            }
+            Ok(message) => {
+                self.status_message = Some(format!("Unexpected response: {message:?}"));
+                Ok(())
+            }
+            Err(err) => {
+                self.status_message = Some(format!("IPC error: {err}"));
+                Ok(())
+            }
+        }
+    }
+
+    fn run_pipeline_for_selected(&mut self, dry_run: bool) -> PluginResult<()> {
+        let slug = match self.tasks.get(self.selected_index) {
+            Some(task) => task.slug.clone(),
+            None => {
+                self.status_message = Some("No task selected".to_string());
+                return Ok(());
+            }
+        };
+
+        self.send_task_command(GuestMessage::RunPipeline { slug, dry_run })
+    }
+
+    fn run_pipeline_for_all(&mut self, dry_run: bool) -> PluginResult<()> {
+        if self.tasks.is_empty() {
+            self.status_message = Some("No tasks to run".to_string());
+            return Ok(());
+        }
+
+        let slugs = self
+            .tasks
+            .iter()
+            .map(|task| task.slug.clone())
+            .collect();
+
+        self.send_task_command(GuestMessage::RunPipelineBatch { slugs, dry_run })
+    }
+
+    fn approve_selected(&mut self, force: bool) -> PluginResult<()> {
+        let slug = match self.tasks.get(self.selected_index) {
+            Some(task) => task.slug.clone(),
+            None => {
+                self.status_message = Some("No task selected".to_string());
+                return Ok(());
+            }
+        };
+
+        self.send_task_command(GuestMessage::ApproveTask { slug, force })
+    }
+
+    fn send_task_command(&mut self, message: GuestMessage) -> PluginResult<()> {
+        let ipc = match self.ipc.as_mut() {
+            Some(ipc) => ipc,
+            None => {
+                self.status_message = Some("IPC not connected".to_string());
+                return Ok(());
+            }
+        };
+
+        match ipc.request(message) {
+            Ok(HostMessage::TaskUpdated {
+                slug,
+                status,
+                message,
+            }) => {
+                self.status_message = Some(format!("{slug}: {status} ({message})"));
+                let _ = self.refresh_tasks();
+                Ok(())
+            }
+            Ok(HostMessage::Error { message }) => {
+                self.status_message = Some(format!("Task error: {message}"));
+                Ok(())
+            }
+            Ok(HostMessage::TaskBatchUpdated { updated, failed }) => {
+                let total = updated.len().saturating_add(failed.len());
+                self.status_message = Some(format!(
+                    "Batch complete: {}/{} updated",
+                    updated.len(),
+                    total
+                ));
+                let _ = self.refresh_tasks();
+                Ok(())
+            }
+            Ok(other) => {
+                self.status_message = Some(format!("Unexpected response: {other:?}"));
+                Ok(())
+            }
+            Err(err) => {
+                self.status_message = Some(format!("IPC error: {err}"));
+                Ok(())
+            }
+        }
+    }
+}
+
+fn task_summary_to_row(summary: TaskSummary) -> TaskRow {
+    TaskRow {
+        slug: summary.slug,
+        status: summary.status,
+        stage: summary.stage,
+        priority: summary.priority,
+        language: summary.language,
+        branch: summary.branch,
     }
 }
 
@@ -412,7 +584,7 @@ mod tests {
     #[test]
     fn test_sample_beads() {
         let plugin = OyaPlugin::new().unwrap();
-        assert!(!plugin.sample_beads.is_empty());
-        assert_eq!(plugin.sample_beads[0].id, "src-3ax5");
+        assert!(!plugin.tasks.is_empty());
+        assert_eq!(plugin.tasks[0].slug, "task-3ax5");
     }
 }
