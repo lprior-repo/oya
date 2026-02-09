@@ -150,16 +150,28 @@ async fn capture_scheduler_state(
     let mut workflows = HashMap::new();
 
     for workflow_id in workflow_ids {
-        let status = ractor::call!(scheduler, SchedulerMessage::GetWorkflowStatus {
-            workflow_id: workflow_id.clone(),
-        })
+        let status = match ractor::call_t!(
+            scheduler,
+            |reply| SchedulerMessage::GetWorkflowStatus {
+                workflow_id: workflow_id.clone(),
+                reply,
+            },
+            5000_u64
+        )
         .await
-        .map_err(|e| ChaosTestError::RpcFailed {
-            reason: format!("RPC call failed: {e}"),
-        })?
-        .ok_or_else(|| ChaosTestError::StateMismatch {
-            details: format!("Workflow {workflow_id} not found"),
-        })?;
+        {
+            Ok(Some(status)) => status,
+            Ok(None) => {
+                return Err(ChaosTestError::StateMismatch {
+                    details: format!("Workflow {workflow_id} not found"),
+                })
+            }
+            Err(e) => {
+                return Err(ChaosTestError::RpcFailed {
+                    reason: format!("RPC call failed: {e}"),
+                })
+            }
+        };
 
         let snapshot = WorkflowSnapshot {
             workflow_id: workflow_id.clone(),
@@ -172,11 +184,20 @@ async fn capture_scheduler_state(
     }
 
     // Get all ready beads
-    let ready_pairs = ractor::call!(scheduler, SchedulerMessage::GetAllReadyBeads)
-        .await
-        .map_err(|e| ChaosTestError::RpcFailed {
-            reason: format!("RPC call failed: {e}"),
-        })?;
+    let ready_pairs = match ractor::call_t!(
+        scheduler,
+        |reply| SchedulerMessage::GetAllReadyBeads { reply },
+        5000_u64
+    )
+    .await
+    {
+        Ok(pairs) => pairs,
+        Err(e) => {
+            return Err(ChaosTestError::RpcFailed {
+                reason: format!("RPC call failed: {e}"),
+            })
+        }
+    };
 
     let ready_beads = ready_pairs.into_iter().map(|(_wid, bid)| bid).collect();
 
