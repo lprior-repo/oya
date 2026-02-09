@@ -267,10 +267,7 @@ async fn test_worker_assignment_delete() {
         .expect("Query should execute");
 
     let assignments: Vec<serde_json::Value> = result.take(0).expect("Should get result");
-    assert!(
-        assignments.is_empty(),
-        "Assignment should be deleted"
-    );
+    assert!(assignments.is_empty(), "Assignment should be deleted");
 }
 
 #[tokio::test]

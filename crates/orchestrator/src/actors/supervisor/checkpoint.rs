@@ -19,11 +19,11 @@ use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
 use crate::persistence::PersistenceError;
-use crate::shutdown::CheckpointResult;
 use crate::replay::CheckpointManager;
+use crate::shutdown::CheckpointResult;
 
-use super::supervisor_actor::{SupervisorActorState, SupervisorConfig};
 use super::GenericSupervisableActor;
+use super::supervisor_actor::{SupervisorActorState, SupervisorConfig};
 
 /// Errors that can occur during supervisor checkpoint creation.
 #[derive(Debug, Error)]
@@ -124,8 +124,8 @@ where
         info!("Creating supervisor shutdown checkpoint");
 
         // Validate preconditions
-        let checkpoint_manager = checkpoint_manager
-            .ok_or(SupervisorCheckpointError::CheckpointManagerUnavailable)?;
+        let checkpoint_manager =
+            checkpoint_manager.ok_or(SupervisorCheckpointError::CheckpointManagerUnavailable)?;
 
         // Serialize state
         let serialized = serialize_supervisor_state(self).await?;
@@ -142,10 +142,7 @@ where
 
         let result = match checkpoint_result {
             Ok(Ok(_checkpoint)) => {
-                info!(
-                    duration_ms,
-                    "Supervisor checkpoint created successfully"
-                );
+                info!(duration_ms, "Supervisor checkpoint created successfully");
                 CheckpointResult::success("supervisor", duration_ms)
             }
             Ok(Err(e)) => {
@@ -192,9 +189,7 @@ where
 }
 
 /// Build a snapshot from supervisor state.
-async fn build_snapshot<A>(
-    state: &SupervisorActorState<A>,
-) -> SupervisorSnapshot
+async fn build_snapshot<A>(state: &SupervisorActorState<A>) -> SupervisorSnapshot
 where
     A: GenericSupervisableActor,
     A::Arguments: Clone + Send + Sync + std::fmt::Debug,
@@ -215,9 +210,7 @@ where
 }
 
 /// Build child snapshots from supervisor state.
-async fn build_child_snapshots<A>(
-    state: &SupervisorActorState<A>,
-) -> Vec<ChildSnapshot>
+async fn build_child_snapshots<A>(state: &SupervisorActorState<A>) -> Vec<ChildSnapshot>
 where
     A: GenericSupervisableActor,
     A::Arguments: Clone + Send + Sync + std::fmt::Debug,
@@ -229,10 +222,9 @@ where
         .map(|child| ChildSnapshot {
             name: child.name.clone(),
             restart_count: child.restart_count,
-            last_restart: child.last_restart.map(|i| {
-                DateTime::<Utc>::from(std::time::SystemTime::now() - i.elapsed())
-                    .into()
-            }),
+            last_restart: child
+                .last_restart
+                .map(|i| DateTime::<Utc>::from(std::time::SystemTime::now() - i.elapsed()).into()),
             args: format!("{:?}", child.args), // Debug format for args
         })
         .collect()
@@ -248,13 +240,10 @@ async fn report_checkpoint_result(
     checkpoint_tx: &mpsc::Sender<CheckpointResult>,
     result: CheckpointResult,
 ) -> Result<(), SupervisorCheckpointError> {
-    checkpoint_tx
-        .send(result)
-        .await
-        .map_err(|_| {
-            error!("Checkpoint result channel closed");
-            SupervisorCheckpointError::ResultChannelClosed
-        })
+    checkpoint_tx.send(result).await.map_err(|_| {
+        error!("Checkpoint result channel closed");
+        SupervisorCheckpointError::ResultChannelClosed
+    })
 }
 
 #[cfg(test)]

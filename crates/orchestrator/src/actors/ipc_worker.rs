@@ -35,12 +35,12 @@ use ractor::{Actor, ActorProcessingErr, ActorRef};
 use tokio::sync::{broadcast, mpsc};
 use tracing::info;
 
+use oya_events::StageKind;
 use oya_events::{BeadEvent, EventBus, EventPattern, EventSubscription, Severity};
 use oya_pipeline::{
     apply_stage_plan, approve_task, list_all_tasks, load_task_record, resolve_stage_range,
     run_full_pipeline, save_task_record,
 };
-use oya_events::StageKind;
 
 use crate::ipc_messages::{
     AlertLevel, BeadDetail as IpcBeadDetail, BeadSummary, ComponentHealth, GuestMessage,
@@ -185,10 +185,7 @@ pub enum IpcWorkerEffect {
 pub enum IpcBridgeError {
     /// Event serialization failed.
     #[error("Event serialization failed: {event_type} - {reason}")]
-    EventSerializationFailed {
-        event_type: String,
-        reason: String,
-    },
+    EventSerializationFailed { event_type: String, reason: String },
 
     /// Invalid event payload (missing required fields).
     #[error("Invalid event payload for bead {bead_id}: {event_type} - missing {missing_field}")]
@@ -200,22 +197,15 @@ pub enum IpcBridgeError {
 
     /// Stage kind not recognized.
     #[error("Unknown stage kind: {stage_name}")]
-    UnknownStageKind {
-        stage_name: String,
-    },
+    UnknownStageKind { stage_name: String },
 
     /// Attempt count overflow.
     #[error("Attempt count overflow for bead {bead_id}: {current_count}")]
-    AttemptCountOverflow {
-        bead_id: String,
-        current_count: u32,
-    },
+    AttemptCountOverflow { bead_id: String, current_count: u32 },
 
     /// EventBus not ready.
     #[error("EventBus not ready: unavailable for {since:?}")]
-    EventBusNotReady {
-        since: std::time::Duration,
-    },
+    EventBusNotReady { since: std::time::Duration },
 }
 
 /// Convert StageKind to string for IPC.

@@ -382,8 +382,9 @@ fn bench_single_vs_batch_comparison(c: &mut Criterion) {
             };
 
             // Create test events with specified size
-            let events: Vec<BeadEvent> =
-                (0..total_events).map(|_| create_test_event(event_size)).collect();
+            let events: Vec<BeadEvent> = (0..total_events)
+                .map(|_| create_test_event(event_size))
+                .collect();
 
             b.iter(|| {
                 match rt.block_on(benchmark_batch_append(

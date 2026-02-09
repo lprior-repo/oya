@@ -4,7 +4,6 @@
 //! and verifying that the supervisor restarts it with consistent state.
 
 #![cfg(any())]
-
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]

@@ -61,7 +61,10 @@ async fn wait_for_event(bus: &EventBus, timeout_ms: u64) -> Result<BeadEvent, St
             Err(_) => {
                 attempt += 1;
                 if attempt >= max_attempts {
-                    return Err(format!("Timeout waiting for event after {} attempts", max_attempts));
+                    return Err(format!(
+                        "Timeout waiting for event after {} attempts",
+                        max_attempts
+                    ));
                 }
                 // Small delay before retry
                 tokio::time::sleep(Duration::from_millis(100)).await;
@@ -455,8 +458,12 @@ async fn given_worker_with_active_bead_when_health_check_fails_then_emits_unheal
         }
         fail_event_attempt += 1;
         if fail_event_attempt >= 5 {
-            return Err(format!("Expected 'failed' event but got '{}' after {} attempts",
-                event.event_type(), fail_event_attempt).into());
+            return Err(format!(
+                "Expected 'failed' event but got '{}' after {} attempts",
+                event.event_type(),
+                fail_event_attempt
+            )
+            .into());
         }
     };
     assert_eq!(fail_event.event_type(), "failed");
