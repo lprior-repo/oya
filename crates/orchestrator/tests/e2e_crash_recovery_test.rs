@@ -369,11 +369,6 @@ async fn given_worker_crash_when_restarted_then_health_checks_pass() {
         .await
         .expect("Failed to receive event");
 
-    // Send health check passed message
-    worker
-        .send_message(WorkerMessage::HealthCheckPassed)
-        .expect("Failed to send HealthCheckPassed");
-
     // When: Worker crashes
     worker.stop(Some("simulated crash".to_string()));
 
@@ -385,10 +380,12 @@ async fn given_worker_crash_when_restarted_then_health_checks_pass() {
         .await
         .expect("Failed to restart worker");
 
-    // Send health check to restarted worker
-    worker2
-        .send_message(WorkerMessage::HealthCheckPassed)
-        .expect("Failed to send HealthCheckPassed to restarted worker");
+    // Verify restarted worker is running
+    assert_eq!(
+        worker2.get_status(),
+        ractor::ActorStatus::Running,
+        "Restarted worker should be running after crash"
+    );
 
     // Allow time for message processing
     tokio::time::sleep(Duration::from_millis(50)).await;
