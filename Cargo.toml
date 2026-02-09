@@ -10,10 +10,10 @@ members = [
     "crates/oya-ipc",
     "crates/oya-web",
     "crates/zellij-frontend",
-    "crates/oya-zellij-plugin",
-    "crates/oya-ui-components",
+    # "crates/oya-ui-components",  # TODO: Not yet created
     # "crates/reconciler",  # TODO: Not yet created
     # "crates/oya-shared",  # TODO: Not yet created
+    # "crates/oya-zellij-plugin",  # TODO: Not yet created
     "tools/profiling",
     # "crates/zjj-integration-tests",  # TODO: Not yet created
 ]

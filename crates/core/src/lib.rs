@@ -7,15 +7,19 @@
 
 pub mod error;
 pub mod execution;
+pub mod result;
 pub mod slug;
 pub mod visualization;
 pub mod workflow;
 
 // Re-export commonly used types
-pub use error::{OyaError, OyaResult};
+pub use error::Error;
 pub use execution::{ExecutionEngine, WorkflowResult, WorkflowState};
+pub use result::Result;
 pub use slug::Slug;
-pub use stage::Stage;
-pub use task::Task;
 pub use visualization::WorkflowVisualization;
 pub use workflow::Workflow;
+
+// Type aliases for convenience
+pub type OyaError = Error;
+pub type OyaResult<T> = Result<T>;

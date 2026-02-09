@@ -18,6 +18,10 @@ toml = { workspace = true }
 itertools = { workspace = true }
 tracing = { workspace = true }
 either = "1.13"
+chrono = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+tempfile = "3"
 
 [lints]
 workspace = true

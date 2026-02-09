@@ -112,6 +112,13 @@ impl CorrelationContext {
         &self.metadata
     }
 
+    /// Generate a new request ID
+    ///
+    /// Returns a new unique request ID as a string.
+    pub fn generate_request_id(&self) -> String {
+        RequestId::new().into_string()
+    }
+
     /// Create a child context with inherited metadata
     ///
     /// Useful for creating sub-requests that should inherit

@@ -48,6 +48,7 @@ pub mod error;
 pub mod event;
 pub mod projection;
 pub mod replay;
+pub mod stage;
 pub mod store;
 pub mod types;
 
@@ -58,6 +59,10 @@ pub use error::{ConnectionError, Error, Result};
 pub use event::BeadEvent;
 pub use projection::{
     AllBeadsProjection, AllBeadsState, BeadProjection, ManagedProjection, Projection,
+};
+pub use stage::{
+    BeadStateMachine, ExhaustionPolicy, RecursionPolicy, Severity, StageKind, StageTransition,
+    StateMachineError, TransitionReason,
 };
 pub use replay::{
     create_tracker, EventFilter, EventLoader, LoadError, ReplayProgress, ReplayTracker,

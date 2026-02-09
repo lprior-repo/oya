@@ -12,7 +12,7 @@ mod commands;
 
 use anyhow::Result;
 use clap::{CommandFactory, Parser, Subcommand};
-use commands::{doctor_command, init_command, logs_command, DoctorArgs, InitArgs, LogsArgs};
+use commands::{DoctorArgs, InitArgs, LogsArgs, doctor_command, init_command, logs_command};
 use tracing::info;
 
 /// OYA SDLC System - Storm goddess of transformation
@@ -99,10 +99,7 @@ impl Oya {
                 rt.block_on(async {
                     match logs_command(args).await {
                         Ok(output) => {
-                            info!(
-                                "Logs command completed: {} entries",
-                                output.entries.len()
-                            );
+                            info!("Logs command completed: {} entries", output.entries.len());
                             Ok(())
                         }
                         Err(e) => {

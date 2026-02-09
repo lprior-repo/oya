@@ -9,9 +9,9 @@
 //! - Use within actor context for safe concurrent access
 
 use crate::{
-    LENGTH_PREFIX_SIZE, MAX_FRAME_SIZE, MAX_PAYLOAD_SIZE, TransportError, TransportResult,
+    TransportError, TransportResult, LENGTH_PREFIX_SIZE, MAX_FRAME_SIZE, MAX_PAYLOAD_SIZE,
 };
-use serde::{Serialize, de::DeserializeOwned};
+use serde::{de::DeserializeOwned, Serialize};
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 
 /// Transport layer for length-prefixed bincode messages.
@@ -375,6 +375,7 @@ impl Write for DuplexWriter {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used)] // Test assertions need expect()
     use super::*;
 
     #[test]

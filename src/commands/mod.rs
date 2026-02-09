@@ -18,6 +18,6 @@ pub mod init;
 pub mod logs;
 
 // Re-export command types for convenience
-pub use doctor::{doctor_command, DoctorArgs, DoctorError, DoctorOutput};
-pub use init::{init_command, InitArgs, InitError, InitOutput};
-pub use logs::{logs_command, LogsArgs, LogsError, LogsOutput};
+pub use doctor::{DoctorArgs, DoctorError, DoctorOutput, doctor_command};
+pub use init::{InitArgs, InitError, InitOutput, init_command};
+pub use logs::{LogsArgs, LogsError, LogsOutput, logs_command};

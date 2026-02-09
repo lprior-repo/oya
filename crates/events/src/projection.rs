@@ -8,6 +8,7 @@ use tokio::sync::RwLock;
 use crate::error::Result;
 use crate::event::BeadEvent;
 use crate::replay::ReplayTracker;
+use crate::stage::StageKind;
 use crate::store::EventStore;
 use crate::types::{BeadId, BeadSpec, BeadState, PhaseId, StateTransition};
 
@@ -68,6 +69,12 @@ pub struct BeadProjection {
     pub history: Vec<StateTransition>,
     /// Claiming agent.
     pub claimed_by: Option<String>,
+    /// Current recursive stage (if stage-machine events are emitted).
+    pub current_stage: Option<StageKind>,
+    /// Attempt counters by recursive stage.
+    pub stage_attempts: HashMap<StageKind, u32>,
+    /// Latest stage feedback captured from failures/reentry.
+    pub last_stage_feedback: Option<String>,
 }
 
 impl BeadProjection {
@@ -82,6 +89,9 @@ impl BeadProjection {
             blocked_by: Vec::new(),
             history: Vec::new(),
             claimed_by: None,
+            current_stage: None,
+            stage_attempts: HashMap::new(),
+            last_stage_feedback: None,
         }
     }
 
@@ -246,6 +256,53 @@ impl Projection for AllBeadsProjection {
             BeadEvent::Unclaimed { bead_id, .. } => {
                 if let Some(bead) = state.beads.get_mut(bead_id) {
                     bead.claimed_by = None;
+                }
+            }
+            BeadEvent::StageStarted {
+                bead_id,
+                stage,
+                attempt: _,
+                ..
+            } => {
+                if let Some(bead) = state.beads.get_mut(bead_id) {
+                    bead.current_stage = Some(*stage);
+                    let entry = bead.stage_attempts.entry(*stage).or_insert(0);
+                    *entry += 1;
+                }
+            }
+            BeadEvent::StageCompleted { bead_id, stage, .. } => {
+                if let Some(bead) = state.beads.get_mut(bead_id) {
+                    bead.current_stage = stage.next();
+                }
+            }
+            BeadEvent::StageFailed {
+                bead_id, feedback, ..
+            } => {
+                if let Some(bead) = state.beads.get_mut(bead_id) {
+                    bead.last_stage_feedback = Some(feedback.clone());
+                }
+            }
+            BeadEvent::StageReentry {
+                bead_id,
+                to_stage,
+                reason,
+                ..
+            } => {
+                if let Some(bead) = state.beads.get_mut(bead_id) {
+                    bead.current_stage = Some(*to_stage);
+                    bead.last_stage_feedback = Some(reason.clone());
+                }
+            }
+            BeadEvent::RecursionExhausted { bead_id, .. } => {
+                if let Some(bead) = state.beads.get_mut(bead_id) {
+                    let from = bead.current_state;
+                    bead.current_state = BeadState::Completed;
+                    bead.history.push(StateTransition::new(from, BeadState::Completed));
+
+                    if let Some(count) = state.state_counts.get_mut(&from) {
+                        *count = count.saturating_sub(1);
+                    }
+                    *state.state_counts.entry(BeadState::Completed).or_insert(0) += 1;
                 }
             }
             _ => {}
@@ -1289,5 +1346,185 @@ mod tests {
         assert_eq!(sorted[0].bead_id, bead1);
         assert_eq!(sorted[1].bead_id, bead2);
         assert_eq!(sorted[2].bead_id, bead3);
+    }
+
+    #[test]
+    fn test_projection_tracks_current_stage() {
+        let proj = AllBeadsProjection::new();
+        let mut state = proj.initial_state();
+        let bead_id = BeadId::new();
+        proj.apply(
+            &mut state,
+            &BeadEvent::created(bead_id, BeadSpec::new("Test").with_complexity(Complexity::Simple)),
+        );
+
+        proj.apply(
+            &mut state,
+            &BeadEvent::stage_started(bead_id, StageKind::Implement, 1),
+        );
+
+        assert_eq!(state.beads.get(&bead_id).and_then(|b| b.current_stage), Some(StageKind::Implement));
+    }
+
+    #[test]
+    fn test_projection_increments_stage_attempts() {
+        let proj = AllBeadsProjection::new();
+        let mut state = proj.initial_state();
+        let bead_id = BeadId::new();
+        proj.apply(
+            &mut state,
+            &BeadEvent::created(bead_id, BeadSpec::new("Test").with_complexity(Complexity::Simple)),
+        );
+
+        proj.apply(&mut state, &BeadEvent::stage_started(bead_id, StageKind::Implement, 1));
+        proj.apply(&mut state, &BeadEvent::stage_started(bead_id, StageKind::Implement, 2));
+        proj.apply(&mut state, &BeadEvent::stage_started(bead_id, StageKind::Implement, 3));
+
+        assert_eq!(
+            state
+                .beads
+                .get(&bead_id)
+                .and_then(|b| b.stage_attempts.get(&StageKind::Implement).copied()),
+            Some(3)
+        );
+    }
+
+    #[test]
+    fn test_projection_records_feedback() {
+        let proj = AllBeadsProjection::new();
+        let mut state = proj.initial_state();
+        let bead_id = BeadId::new();
+        proj.apply(
+            &mut state,
+            &BeadEvent::created(bead_id, BeadSpec::new("Test").with_complexity(Complexity::Simple)),
+        );
+
+        proj.apply(
+            &mut state,
+            &BeadEvent::stage_failed(
+                bead_id,
+                StageKind::Review,
+                "needs redesign",
+                crate::stage::Severity::Major,
+            ),
+        );
+
+        assert_eq!(
+            state
+                .beads
+                .get(&bead_id)
+                .and_then(|b| b.last_stage_feedback.clone()),
+            Some("needs redesign".to_string())
+        );
+    }
+
+    #[test]
+    fn test_projection_updates_on_reentry() {
+        let proj = AllBeadsProjection::new();
+        let mut state = proj.initial_state();
+        let bead_id = BeadId::new();
+        proj.apply(
+            &mut state,
+            &BeadEvent::created(bead_id, BeadSpec::new("Test").with_complexity(Complexity::Simple)),
+        );
+
+        proj.apply(
+            &mut state,
+            &BeadEvent::stage_reentry(
+                bead_id,
+                StageKind::Review,
+                StageKind::Plan,
+                "major issues",
+                2,
+            ),
+        );
+
+        assert_eq!(state.beads.get(&bead_id).and_then(|b| b.current_stage), Some(StageKind::Plan));
+    }
+
+    #[test]
+    fn test_projection_handles_recursion_exhausted() {
+        let proj = AllBeadsProjection::new();
+        let mut state = proj.initial_state();
+        let bead_id = BeadId::new();
+        proj.apply(
+            &mut state,
+            &BeadEvent::created(bead_id, BeadSpec::new("Test").with_complexity(Complexity::Simple)),
+        );
+
+        proj.apply(
+            &mut state,
+            &BeadEvent::recursion_exhausted(bead_id, 15, StageKind::Review),
+        );
+
+        assert_eq!(
+            state.beads.get(&bead_id).map(|b| b.current_state),
+            Some(BeadState::Completed)
+        );
+    }
+
+    #[tokio::test]
+    async fn test_projection_rebuild_from_events() {
+        let store = Arc::new(InMemoryEventStore::new());
+        let proj = AllBeadsProjection::new();
+        let mut incremental = proj.initial_state();
+
+        let bead_id = BeadId::new();
+        let events = vec![
+            BeadEvent::created(bead_id, BeadSpec::new("Test").with_complexity(Complexity::Simple)),
+            BeadEvent::stage_started(bead_id, StageKind::Research, 1),
+            BeadEvent::stage_completed(bead_id, StageKind::Research, None),
+            BeadEvent::stage_failed(
+                bead_id,
+                StageKind::Review,
+                "major issue",
+                crate::stage::Severity::Major,
+            ),
+            BeadEvent::stage_reentry(
+                bead_id,
+                StageKind::Review,
+                StageKind::Plan,
+                "major issue",
+                2,
+            ),
+        ];
+
+        for event in &events {
+            proj.apply(&mut incremental, event);
+            let append_result = store.append(event.clone()).await;
+            assert!(append_result.is_ok());
+        }
+
+        let rebuilt = proj.rebuild(store.as_ref()).await;
+        assert!(rebuilt.is_ok());
+        let rebuilt_state = match rebuilt {
+            Ok(state) => state,
+            Err(_) => return,
+        };
+
+        assert_eq!(
+            incremental.beads.get(&bead_id).and_then(|b| b.current_stage),
+            rebuilt_state.beads.get(&bead_id).and_then(|b| b.current_stage)
+        );
+        assert_eq!(
+            incremental
+                .beads
+                .get(&bead_id)
+                .and_then(|b| b.stage_attempts.get(&StageKind::Research).copied()),
+            rebuilt_state
+                .beads
+                .get(&bead_id)
+                .and_then(|b| b.stage_attempts.get(&StageKind::Research).copied())
+        );
+        assert_eq!(
+            incremental
+                .beads
+                .get(&bead_id)
+                .and_then(|b| b.last_stage_feedback.clone()),
+            rebuilt_state
+                .beads
+                .get(&bead_id)
+                .and_then(|b| b.last_stage_feedback.clone())
+        );
     }
 }

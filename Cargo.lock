@@ -3096,13 +3096,17 @@ dependencies = [
 name = "oya-core"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "async-trait",
+ "chrono",
  "either",
  "itertools 0.14.0",
  "serde",
  "serde_json",
  "serde_yaml",
+ "tempfile",
  "thiserror 2.0.18",
+ "tokio",
  "toml",
  "tracing",
 ]
@@ -3135,6 +3139,7 @@ dependencies = [
  "bincode 2.0.1",
  "criterion",
  "serde",
+ "serde_json",
  "thiserror 2.0.18",
 ]
 
@@ -3180,21 +3185,6 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",
-]
-
-[[package]]
-name = "oya-ui-components"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "reqwest",
- "rpds",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "uuid",
 ]
 
 [[package]]
@@ -3249,20 +3239,6 @@ dependencies = [
  "ulid",
  "uuid",
  "zstd",
-]
-
-[[package]]
-name = "oya-zellij-plugin"
-version = "0.1.0"
-dependencies = [
- "bincode 2.0.1",
- "itertools 0.14.0",
- "oya-ipc",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
 ]
 
 [[package]]

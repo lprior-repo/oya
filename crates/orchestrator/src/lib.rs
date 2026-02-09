@@ -75,6 +75,9 @@ pub mod replay;
 /// Scheduler actor for managing workflow DAGs and bead scheduling
 pub mod scheduler;
 
+/// Stage gate decision engine for recursive stage transitions.
+pub mod stage_gate;
+
 /// Supervision tree helpers for tier-1 supervisors.
 pub mod supervision;
 

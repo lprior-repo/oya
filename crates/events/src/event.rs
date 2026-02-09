@@ -3,6 +3,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::stage::{Severity, StageKind};
 use crate::types::{BeadId, BeadResult, BeadSpec, BeadState, EventId, PhaseId, PhaseOutput};
 
 /// Serialization error type.
@@ -100,6 +101,59 @@ pub enum BeadEvent {
         event_id: EventId,
         bead_id: BeadId,
         metadata: serde_json::Value,
+        timestamp: DateTime<Utc>,
+    },
+    /// A stage started for this bead.
+    StageStarted {
+        event_id: EventId,
+        bead_id: BeadId,
+        stage: StageKind,
+        attempt: u32,
+        timestamp: DateTime<Utc>,
+    },
+    /// A stage completed for this bead.
+    StageCompleted {
+        event_id: EventId,
+        bead_id: BeadId,
+        stage: StageKind,
+        artifact_ref: Option<String>,
+        timestamp: DateTime<Utc>,
+    },
+    /// A stage failed for this bead.
+    StageFailed {
+        event_id: EventId,
+        bead_id: BeadId,
+        stage: StageKind,
+        feedback: String,
+        severity: Severity,
+        timestamp: DateTime<Utc>,
+    },
+    /// A bead reentered an earlier stage.
+    StageReentry {
+        event_id: EventId,
+        bead_id: BeadId,
+        from_stage: StageKind,
+        to_stage: StageKind,
+        reason: String,
+        attempt: u32,
+        timestamp: DateTime<Utc>,
+    },
+    /// Validation command execution result.
+    ValidationRan {
+        event_id: EventId,
+        bead_id: BeadId,
+        passed: bool,
+        output: String,
+        command: String,
+        exit_code: i32,
+        timestamp: DateTime<Utc>,
+    },
+    /// Recursion limits were exhausted.
+    RecursionExhausted {
+        event_id: EventId,
+        bead_id: BeadId,
+        total_attempts: u32,
+        last_stage: StageKind,
         timestamp: DateTime<Utc>,
     },
     /// Worker health check failed.
@@ -249,6 +303,102 @@ impl BeadEvent {
         }
     }
 
+    /// Create a new StageStarted event.
+    pub fn stage_started(bead_id: BeadId, stage: StageKind, attempt: u32) -> Self {
+        Self::StageStarted {
+            event_id: EventId::new(),
+            bead_id,
+            stage,
+            attempt,
+            timestamp: Utc::now(),
+        }
+    }
+
+    /// Create a new StageCompleted event.
+    pub fn stage_completed(
+        bead_id: BeadId,
+        stage: StageKind,
+        artifact_ref: Option<String>,
+    ) -> Self {
+        Self::StageCompleted {
+            event_id: EventId::new(),
+            bead_id,
+            stage,
+            artifact_ref,
+            timestamp: Utc::now(),
+        }
+    }
+
+    /// Create a new StageFailed event.
+    pub fn stage_failed(
+        bead_id: BeadId,
+        stage: StageKind,
+        feedback: impl Into<String>,
+        severity: Severity,
+    ) -> Self {
+        Self::StageFailed {
+            event_id: EventId::new(),
+            bead_id,
+            stage,
+            feedback: feedback.into(),
+            severity,
+            timestamp: Utc::now(),
+        }
+    }
+
+    /// Create a new StageReentry event.
+    pub fn stage_reentry(
+        bead_id: BeadId,
+        from_stage: StageKind,
+        to_stage: StageKind,
+        reason: impl Into<String>,
+        attempt: u32,
+    ) -> Self {
+        Self::StageReentry {
+            event_id: EventId::new(),
+            bead_id,
+            from_stage,
+            to_stage,
+            reason: reason.into(),
+            attempt,
+            timestamp: Utc::now(),
+        }
+    }
+
+    /// Create a new ValidationRan event.
+    pub fn validation_ran(
+        bead_id: BeadId,
+        passed: bool,
+        output: impl Into<String>,
+        command: impl Into<String>,
+        exit_code: i32,
+    ) -> Self {
+        Self::ValidationRan {
+            event_id: EventId::new(),
+            bead_id,
+            passed,
+            output: output.into(),
+            command: command.into(),
+            exit_code,
+            timestamp: Utc::now(),
+        }
+    }
+
+    /// Create a new RecursionExhausted event.
+    pub fn recursion_exhausted(
+        bead_id: BeadId,
+        total_attempts: u32,
+        last_stage: StageKind,
+    ) -> Self {
+        Self::RecursionExhausted {
+            event_id: EventId::new(),
+            bead_id,
+            total_attempts,
+            last_stage,
+            timestamp: Utc::now(),
+        }
+    }
+
     /// Get the event ID.
     pub fn event_id(&self) -> EventId {
         match self {
@@ -262,6 +412,12 @@ impl BeadEvent {
             | Self::Unclaimed { event_id, .. }
             | Self::PriorityChanged { event_id, .. }
             | Self::MetadataUpdated { event_id, .. }
+            | Self::StageStarted { event_id, .. }
+            | Self::StageCompleted { event_id, .. }
+            | Self::StageFailed { event_id, .. }
+            | Self::StageReentry { event_id, .. }
+            | Self::ValidationRan { event_id, .. }
+            | Self::RecursionExhausted { event_id, .. }
             | Self::WorkerUnhealthy { event_id, .. } => *event_id,
         }
     }
@@ -280,7 +436,13 @@ impl BeadEvent {
             | Self::Claimed { bead_id, .. }
             | Self::Unclaimed { bead_id, .. }
             | Self::PriorityChanged { bead_id, .. }
-            | Self::MetadataUpdated { bead_id, .. } => *bead_id,
+            | Self::MetadataUpdated { bead_id, .. }
+            | Self::StageStarted { bead_id, .. }
+            | Self::StageCompleted { bead_id, .. }
+            | Self::StageFailed { bead_id, .. }
+            | Self::StageReentry { bead_id, .. }
+            | Self::ValidationRan { bead_id, .. }
+            | Self::RecursionExhausted { bead_id, .. } => *bead_id,
             Self::WorkerUnhealthy { .. } => BeadId::default(),
         }
     }
@@ -298,6 +460,12 @@ impl BeadEvent {
             | Self::Unclaimed { timestamp, .. }
             | Self::PriorityChanged { timestamp, .. }
             | Self::MetadataUpdated { timestamp, .. }
+            | Self::StageStarted { timestamp, .. }
+            | Self::StageCompleted { timestamp, .. }
+            | Self::StageFailed { timestamp, .. }
+            | Self::StageReentry { timestamp, .. }
+            | Self::ValidationRan { timestamp, .. }
+            | Self::RecursionExhausted { timestamp, .. }
             | Self::WorkerUnhealthy { timestamp, .. } => *timestamp,
         }
     }
@@ -315,6 +483,12 @@ impl BeadEvent {
             Self::Unclaimed { .. } => "unclaimed",
             Self::PriorityChanged { .. } => "priority_changed",
             Self::MetadataUpdated { .. } => "metadata_updated",
+            Self::StageStarted { .. } => "stage_started",
+            Self::StageCompleted { .. } => "stage_completed",
+            Self::StageFailed { .. } => "stage_failed",
+            Self::StageReentry { .. } => "stage_reentry",
+            Self::ValidationRan { .. } => "validation_ran",
+            Self::RecursionExhausted { .. } => "recursion_exhausted",
             Self::WorkerUnhealthy { .. } => "worker_unhealthy",
         }
     }
@@ -371,6 +545,8 @@ impl BeadEvent {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::bus::EventPattern;
+    use crate::stage::{Severity, StageKind};
     use crate::types::Complexity;
 
     #[test]
@@ -416,5 +592,241 @@ mod tests {
             }
             _ => unreachable!("worker_unhealthy should produce WorkerUnhealthy event"),
         }
+    }
+
+    #[test]
+    fn test_stage_started_constructor() {
+        let bead_id = BeadId::new();
+        let event = BeadEvent::stage_started(bead_id, StageKind::Implement, 2);
+
+        assert_eq!(event.event_type(), "stage_started");
+        match event {
+            BeadEvent::StageStarted {
+                bead_id: id,
+                stage,
+                attempt,
+                ..
+            } => {
+                assert_eq!(id, bead_id);
+                assert_eq!(stage, StageKind::Implement);
+                assert_eq!(attempt, 2);
+            }
+            _ => unreachable!("stage_started should produce StageStarted event"),
+        }
+    }
+
+    #[test]
+    fn test_stage_completed_constructor() {
+        let bead_id = BeadId::new();
+        let event = BeadEvent::stage_completed(
+            bead_id,
+            StageKind::Review,
+            Some("artifacts/review.txt".to_string()),
+        );
+
+        match event {
+            BeadEvent::StageCompleted {
+                bead_id: id,
+                stage,
+                artifact_ref,
+                ..
+            } => {
+                assert_eq!(id, bead_id);
+                assert_eq!(stage, StageKind::Review);
+                assert_eq!(artifact_ref, Some("artifacts/review.txt".to_string()));
+            }
+            _ => unreachable!("stage_completed should produce StageCompleted event"),
+        }
+    }
+
+    #[test]
+    fn test_stage_failed_constructor() {
+        let bead_id = BeadId::new();
+        let event = BeadEvent::stage_failed(
+            bead_id,
+            StageKind::Review,
+            "needs redesign",
+            Severity::Major,
+        );
+
+        match event {
+            BeadEvent::StageFailed {
+                bead_id: id,
+                stage,
+                feedback,
+                severity,
+                ..
+            } => {
+                assert_eq!(id, bead_id);
+                assert_eq!(stage, StageKind::Review);
+                assert_eq!(feedback, "needs redesign");
+                assert_eq!(severity, Severity::Major);
+            }
+            _ => unreachable!("stage_failed should produce StageFailed event"),
+        }
+    }
+
+    #[test]
+    fn test_stage_reentry_constructor() {
+        let bead_id = BeadId::new();
+        let event = BeadEvent::stage_reentry(
+            bead_id,
+            StageKind::Review,
+            StageKind::Plan,
+            "major issues",
+            3,
+        );
+
+        match event {
+            BeadEvent::StageReentry {
+                bead_id: id,
+                from_stage,
+                to_stage,
+                reason,
+                attempt,
+                ..
+            } => {
+                assert_eq!(id, bead_id);
+                assert_eq!(from_stage, StageKind::Review);
+                assert_eq!(to_stage, StageKind::Plan);
+                assert_eq!(reason, "major issues");
+                assert_eq!(attempt, 3);
+            }
+            _ => unreachable!("stage_reentry should produce StageReentry event"),
+        }
+    }
+
+    #[test]
+    fn test_validation_ran_constructor_pass() {
+        let bead_id = BeadId::new();
+        let event = BeadEvent::validation_ran(bead_id, true, "ok", "moon run :ci", 0);
+
+        match event {
+            BeadEvent::ValidationRan {
+                bead_id: id,
+                passed,
+                output,
+                command,
+                exit_code,
+                ..
+            } => {
+                assert_eq!(id, bead_id);
+                assert!(passed);
+                assert_eq!(output, "ok");
+                assert_eq!(command, "moon run :ci");
+                assert_eq!(exit_code, 0);
+            }
+            _ => unreachable!("validation_ran should produce ValidationRan event"),
+        }
+    }
+
+    #[test]
+    fn test_validation_ran_constructor_fail() {
+        let bead_id = BeadId::new();
+        let event = BeadEvent::validation_ran(bead_id, false, "lint failure", "moon run :ci", 1);
+
+        match event {
+            BeadEvent::ValidationRan { passed, output, .. } => {
+                assert!(!passed);
+                assert_eq!(output, "lint failure");
+            }
+            _ => unreachable!("validation_ran should produce ValidationRan event"),
+        }
+    }
+
+    #[test]
+    fn test_recursion_exhausted_constructor() {
+        let bead_id = BeadId::new();
+        let event = BeadEvent::recursion_exhausted(bead_id, 15, StageKind::Review);
+
+        match event {
+            BeadEvent::RecursionExhausted {
+                bead_id: id,
+                total_attempts,
+                last_stage,
+                ..
+            } => {
+                assert_eq!(id, bead_id);
+                assert_eq!(total_attempts, 15);
+                assert_eq!(last_stage, StageKind::Review);
+            }
+            _ => unreachable!("recursion_exhausted should produce RecursionExhausted event"),
+        }
+    }
+
+    #[test]
+    fn test_stage_started_bincode_roundtrip() -> SerializationResult<()> {
+        let event = BeadEvent::stage_started(BeadId::new(), StageKind::Plan, 1);
+        let bytes = event.to_bincode()?;
+        let decoded = BeadEvent::from_bincode(&bytes)?;
+        assert_eq!(decoded.event_type(), "stage_started");
+        Ok(())
+    }
+
+    #[test]
+    fn test_stage_failed_bincode_roundtrip() -> SerializationResult<()> {
+        let event = BeadEvent::stage_failed(
+            BeadId::new(),
+            StageKind::Review,
+            "fundamental issue",
+            Severity::Fundamental,
+        );
+        let bytes = event.to_bincode()?;
+        let decoded = BeadEvent::from_bincode(&bytes)?;
+        match decoded {
+            BeadEvent::StageFailed { severity, .. } => {
+                assert_eq!(severity, Severity::Fundamental);
+            }
+            _ => unreachable!("decoded event should be StageFailed"),
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_stage_reentry_bincode_roundtrip() -> SerializationResult<()> {
+        let event = BeadEvent::stage_reentry(
+            BeadId::new(),
+            StageKind::Validate,
+            StageKind::Implement,
+            "ci regression",
+            4,
+        );
+        let bytes = event.to_bincode()?;
+        let decoded = BeadEvent::from_bincode(&bytes)?;
+        match decoded {
+            BeadEvent::StageReentry {
+                from_stage,
+                to_stage,
+                ..
+            } => {
+                assert_eq!(from_stage, StageKind::Validate);
+                assert_eq!(to_stage, StageKind::Implement);
+            }
+            _ => unreachable!("decoded event should be StageReentry"),
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_validation_ran_bincode_roundtrip() -> SerializationResult<()> {
+        let event =
+            BeadEvent::validation_ran(BeadId::new(), false, "tests failed", "moon run :ci", 1);
+        let bytes = event.to_bincode()?;
+        let decoded = BeadEvent::from_bincode(&bytes)?;
+        match decoded {
+            BeadEvent::ValidationRan { output, .. } => {
+                assert_eq!(output, "tests failed");
+            }
+            _ => unreachable!("decoded event should be ValidationRan"),
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_stage_events_match_by_bead_pattern() {
+        let bead_id = BeadId::new();
+        let pattern = EventPattern::ByBead(bead_id);
+        let event = BeadEvent::stage_started(bead_id, StageKind::Research, 1);
+        assert!(pattern.matches(&event));
     }
 }
