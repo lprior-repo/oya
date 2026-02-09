@@ -13,22 +13,18 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use orchestrator::actors::messages::SchedulerMessage;
 use orchestrator::actors::scheduler::SchedulerActorDef;
-use orchestrator::actors::scheduler::SchedulerArguments;
 use orchestrator::actors::supervisor::{
-    spawn_supervisor_with_name, SupervisorActorDef, SupervisorArguments, SupervisorConfig,
-    SupervisorMessage,
+    spawn_supervisor_with_name, SupervisorArguments, SupervisorConfig, SupervisorMessage,
 };
 use orchestrator::actors::worker::{
     WorkerActorDef, WorkerConfig, WorkerMessage, WorkerRetryPolicy,
 };
 use orchestrator::dag::{DependencyType, WorkflowDAG};
-use oya_events::{BeadEvent, BeadId, BeadState, BeadResult, EventBus, InMemoryEventStore};
+use oya_events::{BeadId, BeadState, BeadResult, EventBus, InMemoryEventStore};
 use ractor::{Actor, ActorRef};
 use serde::{Deserialize, Serialize};
-use tokio::time::timeout;
-use tracing::{debug, info, warn};
+use tracing::info;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TEST DATA STRUCTURES
@@ -49,7 +45,6 @@ struct TestContext {
     workflow_id: String,
     event_bus: Arc<EventBus>,
     event_store: Arc<InMemoryEventStore>,
-    scheduler: ActorRef<SchedulerMessage>,
     supervisor: ActorRef<SupervisorMessage<SchedulerActorDef>>,
     worker: ActorRef<WorkerMessage>,
 }
@@ -118,9 +113,6 @@ async fn setup_test_environment() -> Result<TestContext, Box<dyn std::error::Err
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    // For this e2e test, we'll use a global scheduler ref
-    let scheduler = ActorRef::global("scheduler-e2e-checkpoint");
-
     // Create worker with checkpoint config (every 5 beads via interval)
     let worker_config = WorkerConfig {
         checkpoint_interval: Duration::from_secs(60), // Checkpoint every 60s
@@ -134,7 +126,6 @@ async fn setup_test_environment() -> Result<TestContext, Box<dyn std::error::Err
         workflow_id,
         event_bus,
         event_store,
-        scheduler,
         supervisor,
         worker,
     })
@@ -445,7 +436,7 @@ async fn given_multiple_checkpoints_when_tracking_then_events_emitted_correctly(
     let mut sub = ctx.event_bus.subscribe();
 
     // Execute first 10 beads (2 checkpoints)
-    for i in 1..=10 {
+    for _i in 1..=10 {
         let bead_id_obj = BeadId::new();
         let bead_id_str = bead_id_obj.to_string();
         ctx.worker.send_message(WorkerMessage::StartBead {
