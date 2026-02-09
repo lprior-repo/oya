@@ -454,6 +454,8 @@ mod core {
                 unhealthy: 0,
                 shutting_down: 0,
                 terminated: 0,
+                beads_assigned: 0,
+                beads_completed: 0,
             })
         } else {
             Ok(PoolStats {
@@ -463,6 +465,8 @@ mod core {
                 unhealthy: 0,
                 shutting_down: 0,
                 terminated: 0,
+                beads_assigned: 0,
+                beads_completed: 0,
             })
         }
     }

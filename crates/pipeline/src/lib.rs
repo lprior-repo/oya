@@ -8,7 +8,7 @@
 //! This crate defines task lifecycle types and persistence helpers for the
 //! CLI and orchestrator layers.
 
-mod domain;
+pub mod domain;
 mod error;
 mod persistence;
 mod plan;
