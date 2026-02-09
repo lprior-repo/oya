@@ -116,6 +116,13 @@ pub enum SupervisorMessage<A: Actor> {
         /// Name of the child to stop
         name: String,
     },
+    /// Get a child's actor reference.
+    GetChild {
+        /// Name of the child to get
+        name: String,
+        /// Reply channel for the actor reference (None if not found)
+        reply: tokio::sync::oneshot::Sender<Option<ActorRef<A::Msg>>>,
+    },
 }
 
 impl<A: Actor> Debug for SupervisorMessage<A> {
@@ -133,6 +140,10 @@ impl<A: Actor> Debug for SupervisorMessage<A> {
                 .field("name", name)
                 .finish_non_exhaustive(),
             Self::StopChild { name } => f.debug_struct("StopChild").field("name", name).finish(),
+            Self::GetChild { name, .. } => f
+                .debug_struct("GetChild")
+                .field("name", name)
+                .finish_non_exhaustive(),
         }
     }
 }
@@ -407,6 +418,14 @@ where
 
             SupervisorMessage::StopChild { name } => {
                 self.stop_child(state, &name);
+            }
+
+            SupervisorMessage::GetChild { name, reply } => {
+                let child_ref = state
+                    .children
+                    .get(&name)
+                    .map(|child| child.actor_ref.clone());
+                let _ = reply.send(child_ref);
             }
         }
 
