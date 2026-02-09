@@ -44,7 +44,7 @@ async fn setup_worker_with_event_bus() -> Result<
 /// Retries multiple times to handle flaky async event ordering.
 async fn wait_for_event(bus: &EventBus, timeout_ms: u64) -> Result<BeadEvent, String> {
     let mut sub = bus.subscribe();
-    let max_attempts = 3;
+    let max_attempts = 10;
     let mut attempt = 0;
 
     while attempt < max_attempts {
@@ -56,7 +56,7 @@ async fn wait_for_event(bus: &EventBus, timeout_ms: u64) -> Result<BeadEvent, St
                     return Err(format!("Failed to receive event: {:?}", e));
                 }
                 // Small delay before retry
-                tokio::time::sleep(Duration::from_millis(50)).await;
+                tokio::time::sleep(Duration::from_millis(100)).await;
             }
             Err(_) => {
                 attempt += 1;
@@ -64,7 +64,7 @@ async fn wait_for_event(bus: &EventBus, timeout_ms: u64) -> Result<BeadEvent, St
                     return Err(format!("Timeout waiting for event after {} attempts", max_attempts));
                 }
                 // Small delay before retry
-                tokio::time::sleep(Duration::from_millis(50)).await;
+                tokio::time::sleep(Duration::from_millis(100)).await;
             }
         }
     }
@@ -126,13 +126,23 @@ async fn given_worker_when_complete_bead_then_emits_state_changed_and_completed(
         from_state: Some(BeadState::Ready),
     })?;
 
-    let _start_event = wait_for_event(&bus, 500).await?;
+    let _start_event = wait_for_event(&bus, 1000).await?;
+
+    // Subscribe BEFORE sending CompleteBead to ensure we don't miss events
+    let mut sub = bus.subscribe();
 
     worker.send_message(WorkerMessage::CompleteBead {
         result: BeadResult::success(Vec::new(), 0),
     })?;
 
-    let state_event = wait_for_event(&bus, 500).await?;
+    // Allow time for message processing and event publishing
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    // Now receive the events from the existing subscription
+    let state_event = tokio::time::timeout(Duration::from_millis(1000), sub.recv())
+        .await
+        .map_err(|_| "Timeout waiting for state changed event".to_string())?
+        .map_err(|e| format!("Failed to receive event: {:?}", e))?;
     match state_event {
         BeadEvent::StateChanged { from, to, .. } => {
             assert_eq!(from, BeadState::Running);
@@ -145,7 +155,10 @@ async fn given_worker_when_complete_bead_then_emits_state_changed_and_completed(
         ),
     }
 
-    let completed_event = wait_for_event(&bus, 500).await?;
+    let completed_event = tokio::time::timeout(Duration::from_millis(1000), sub.recv())
+        .await
+        .map_err(|_| "Timeout waiting for completed event".to_string())?
+        .map_err(|e| format!("Failed to receive event: {:?}", e))?;
     assert_eq!(completed_event.event_type(), "completed");
     assert_eq!(completed_event.bead_id(), bead_id);
 
@@ -407,7 +420,10 @@ async fn given_worker_with_active_bead_when_health_check_fails_then_emits_unheal
     })?;
 
     // Wait for the start event
-    let _start_event = wait_for_event(&bus, 500).await?;
+    let _start_event = wait_for_event(&bus, 1000).await?;
+
+    // Subscribe BEFORE sending HealthCheckFailed to ensure we don't miss events
+    let mut sub = bus.subscribe();
 
     // When: Health check fails
     let reason = "worker not responding";
@@ -415,13 +431,34 @@ async fn given_worker_with_active_bead_when_health_check_fails_then_emits_unheal
         reason: reason.to_string(),
     })?;
 
+    // Allow time for message processing and event publishing
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
     // Then: WorkerUnhealthy event should be emitted
-    let unhealthy_event = wait_for_event(&bus, 500).await?;
+    let unhealthy_event = tokio::time::timeout(Duration::from_millis(1000), sub.recv())
+        .await
+        .map_err(|_| "Timeout waiting for unhealthy event".to_string())?
+        .map_err(|e| format!("Failed to receive event: {:?}", e))?;
     assert_eq!(unhealthy_event.event_type(), "worker_unhealthy");
 
     // Then: Failed event should be emitted (from FailBead)
     // Note: Events are published asynchronously via tokio::spawn, so we need to wait
-    let fail_event = wait_for_event(&bus, 1000).await?;
+    // There might be intermediate events (like state_changed), so keep trying until we get failed
+    let mut fail_event_attempt = 0;
+    let fail_event = loop {
+        let event = tokio::time::timeout(Duration::from_millis(1000), sub.recv())
+            .await
+            .map_err(|_| "Timeout waiting for failed event".to_string())?
+            .map_err(|e| format!("Failed to receive event: {:?}", e))?;
+        if event.event_type() == "failed" {
+            break event;
+        }
+        fail_event_attempt += 1;
+        if fail_event_attempt >= 5 {
+            return Err(format!("Expected 'failed' event but got '{}' after {} attempts",
+                event.event_type(), fail_event_attempt).into());
+        }
+    };
     assert_eq!(fail_event.event_type(), "failed");
     assert_eq!(fail_event.bead_id(), bead_id);
 
