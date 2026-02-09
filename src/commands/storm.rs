@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use thiserror::Error;
 use tokio::fs;
-use tracing::{debug, info};
+use tracing::{info, warn};
 
 /// Arguments for the storm command
 #[derive(Parser, Debug, Clone)]
@@ -257,7 +257,7 @@ pub async fn storm_command(args: StormArgs) -> Result<StormOutput, StormError> {
         return Ok(StormOutput {
             beads_completed: 0,
             beads_failed: 0,
-            duration_ms: start.elapsed().as_millis().map_or(0, |v| v as u64),
+            duration_ms: start.elapsed().as_millis() as u64,
             results: None,
             planned_order: Some(planned_order),
         });
@@ -280,7 +280,7 @@ pub async fn storm_command(args: StormArgs) -> Result<StormOutput, StormError> {
     Ok(StormOutput {
         beads_completed,
         beads_failed,
-        duration_ms: start.elapsed().as_millis().map_or(0, |v| v as u64),
+        duration_ms: start.elapsed().as_millis() as u64,
         results: Some(results),
         planned_order: None,
     })
@@ -392,11 +392,13 @@ async fn build_workflow_dag(db_path: &Path) -> Result<WorkflowDAG, StormError> {
 /// Get topological order of beads in DAG
 fn topological_order(dag: &WorkflowDAG) -> Result<Vec<String>, StormError> {
     use orchestrator::dag::WorkflowDAG;
-    use petgraph::algo::toposort;
 
-    // Convert to petgraph for topological sort
-    // This is a placeholder - actual implementation depends on WorkflowDAG internals
-    // For now, return empty vec as dry-run is primarily for validation
+    // For now, return empty vec as topological sort will be implemented
+    // when WorkflowDAG exposes its internal petgraph structure
+    // The dry-run is primarily for validation that DAG can be built
+    warn!("Topological sort not yet implemented - returning empty order");
+    warn!("This will be completed when WorkflowDAG exposes petgraph accessors");
+
     Ok(Vec::new())
 }
 

@@ -53,6 +53,8 @@ workspace: /home/lewis/src/oya/Cargo.toml
 
 [1m[33mwarning[0m: `oya-core` (lib) generated 6 warnings (run `cargo fix --lib -p oya-core` to apply 6 suggestions)
 [1m[92m    Checking[0m oya-web v0.1.0 (/home/lewis/src/oya/crates/oya-web)
+[1m[92m    Checking[0m zellij-frontend v0.1.0 (/home/lewis/src/oya/crates/zellij-frontend)
+[1m[92m    Checking[0m orchestrator v0.1.0 (/home/lewis/src/oya/crates/orchestrator)
 [1m[33mwarning[0m[1m: unused variable: `e`[0m
    [1m[94m--> [0mcrates/zellij-frontend/src/state.rs:194:56
     [1m[94m|[0m
@@ -78,8 +80,6 @@ workspace: /home/lewis/src/oya/Cargo.toml
 [1m[94m174[0m [1m[94m|[0m     version: u32,
     [1m[94m|[0m     [1m[33m^^^^^^^[0m
 
-[1m[33mwarning[0m: `zellij-frontend` (lib) generated 3 warnings (run `cargo fix --lib -p zellij-frontend` to apply 1 suggestion)
-[1m[92m    Checking[0m orchestrator v0.1.0 (/home/lewis/src/oya/crates/orchestrator)
 [1m[33mwarning[0m[1m: unused imports: `BeadDetail as IpcBeadDetail` and `BeadSummary`[0m
   [1m[94m--> [0mcrates/orchestrator/src/actors/ipc_worker.rs:46:17
    [1m[94m|[0m
@@ -94,411 +94,148 @@ workspace: /home/lewis/src/oya/Cargo.toml
 [1m[94m53[0m [1m[94m|[0m use crate::persistence::{BeadRecord, BeadState, OrchestratorStore};
    [1m[94m|[0m                          [1m[33m^^^^^^^^^^[0m
 
-[1m[33mwarning[0m[1m: unused import: `ChildInfo`[0m
-  [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/checkpoint.rs:25:31
-   [1m[94m|[0m
-[1m[94m25[0m [1m[94m|[0m use super::supervisor_actor::{ChildInfo, SupervisorActorState, SupervisorConfig};
-   [1m[94m|[0m                               [1m[33m^^^^^^^^^[0m
-
-[1m[33mwarning[0m[1m: unused import: `crate::replay::CheckpointManager`[0m
-  [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/supervisor_actor.rs:16:5
-   [1m[94m|[0m
-[1m[94m16[0m [1m[94m|[0m use crate::replay::CheckpointManager;
-   [1m[94m|[0m     [1m[33m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
-
 [1m[33mwarning[0m[1m: unused imports: `DagError`, `DagResult`, `DependencyType`, and `WorkflowDAG`[0m
   [1m[94m--> [0mcrates/orchestrator/src/dag/dependencies.rs:15:18
    [1m[94m|[0m
 [1m[94m15[0m [1m[94m|[0m use crate::dag::{DagError, DagResult, DependencyType, WorkflowDAG};
    [1m[94m|[0m                  [1m[33m^^^^^^^^[0m  [1m[33m^^^^^^^^^[0m  [1m[33m^^^^^^^^^^^^^^[0m  [1m[33m^^^^^^^^^^^[0m
 
-[1m[91merror[E0107][0m[1m: method takes 0 generic arguments but 1 generic argument was supplied[0m
-   [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/checkpoint.rs:136:32
+[1m[33mwarning[0m: `zellij-frontend` (lib) generated 3 warnings (run `cargo fix --lib -p zellij-frontend` to apply 1 suggestion)
+[1m[91merror[E0502][0m[1m: cannot borrow `*state` as immutable because it is also borrowed as mutable[0m
+   [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/supervisor_actor.rs:382:45
     [1m[94m|[0m
-[1m[94m136[0m [1m[94m|[0m             checkpoint_manager.create_checkpoint::<&str>(&serialized, None),
-    [1m[94m|[0m                                [1m[91m^^^^^^^^^^^^^^^^^[0m[1m[94m--------[0m [1m[94mhelp: remove the unnecessary generics[0m
-    [1m[94m|[0m                                [1m[91m|[0m
-    [1m[94m|[0m                                [1m[91mexpected 0 generic arguments[0m
-    [1m[94m|[0m
-[1m[92mnote[0m: method defined here, with 0 generic parameters
-   [1m[94m--> [0mcrates/orchestrator/src/replay/checkpoint.rs:60:18
-    [1m[94m|[0m
- [1m[94m60[0m [1m[94m|[0m     pub async fn create_checkpoint(
-    [1m[94m|[0m                  [1m[92m^^^^^^^^^^^^^^^^^[0m
+[1m[94m381[0m [1m[94m|[0m                     let checkpoint_manager = state.checkpoint_manager.as_mut();
+    [1m[94m|[0m                                              [1m[94m------------------------[0m [1m[94mmutable borrow occurs here[0m
+[1m[94m382[0m [1m[94m|[0m                     let checkpoint_result = state
+    [1m[94m|[0m                                             [1m[91m^^^^^[0m [1m[91mimmutable borrow occurs here[0m
+[1m[94m383[0m [1m[94m|[0m                         .create_shutdown_checkpoint(checkpoint_manager, &checkpoint_tx)
+    [1m[94m|[0m                                                     [1m[94m------------------[0m [1m[94mmutable borrow later used here[0m
 
-[1m[91merror[E0599][0m[1m: no method named `map_or` found for type `u128` in the current scope[0m
-   [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/checkpoint.rs:140:55
+[1m[91merror[E0277][0m[1m: the trait bound `supervisor_actor::SupervisorActorDef<A>: ractor::Actor` is not satisfied[0m
+   [1m[94m--> [0mcrates/orchestrator/src/supervision.rs:154:9
     [1m[94m|[0m
-[1m[94m140[0m [1m[94m|[0m         let duration_ms = start.elapsed().as_millis().map_or(0u64, |v| v as u64);
-    [1m[94m|[0m                                                       [1m[91m^^^^^^[0m [1m[91mmethod not found in `u128`[0m
+[1m[94m152[0m [1m[94m|[0m     let (actor, _handle) = ractor::Actor::spawn(
+    [1m[94m|[0m                            [1m[94m--------------------[0m [1m[94mrequired by a bound introduced by this call[0m
+[1m[94m153[0m [1m[94m|[0m         Some(name.clone()),
+[1m[94m154[0m [1m[94m|[0m         SupervisorActorDef::new(A::default()),
+    [1m[94m|[0m         [1m[91m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m [1m[91munsatisfied trait bound[0m
+    [1m[94m|[0m
+[1m[96mhelp[0m: the trait `ractor::Actor` is not implemented for `supervisor_actor::SupervisorActorDef<A>`
+   [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/supervisor_actor.rs:201:1
+    [1m[94m|[0m
+[1m[94m201[0m [1m[94m|[0m pub struct SupervisorActorDef<A: GenericSupervisableActor>
+    [1m[94m|[0m [1m[96m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+[1m[96mhelp[0m: consider extending the `where` clause, but there might be an alternative better way to express this requirement
+    [1m[94m|[0m
+[1m[94m147[0m [1m[94m| [0m    A::Msg: Send,[92m supervisor_actor::SupervisorActorDef<A>: ractor::Actor[0m
+    [1m[94m|[0m                   [92m++++++++++++++++++++++++++++++++++++++++++++++++++++++[0m
 
-[1m[91merror[E0277][0m[1m: `<A as ractor::Actor>::Arguments` doesn't implement `std::fmt::Debug`[0m
-   [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/checkpoint.rs:235:35
+[1m[91merror[E0282][0m[1m: type annotations needed[0m
+   [1m[94m--> [0mcrates/orchestrator/src/supervision.rs:152:28
     [1m[94m|[0m
-[1m[94m235[0m [1m[94m|[0m             args: format!("{:?}", child.args), // Debug format for args
-    [1m[94m|[0m                            [1m[94m----[0m   [1m[91m^^^^^^^^^^[0m [1m[91m`<A as ractor::Actor>::Arguments` cannot be formatted using `{:?}` because it doesn't implement `std::fmt::Debug`[0m
-    [1m[94m|[0m                            [1m[94m|[0m
-    [1m[94m|[0m                            [1m[94mrequired by this formatting parameter[0m
-    [1m[94m|[0m
-    [1m[94m= [0m[1mhelp[0m: the trait `std::fmt::Debug` is not implemented for `<A as ractor::Actor>::Arguments`
-    [1m[94m= [0m[1mnote[0m: this error originates in the macro `$crate::__export::format_args` which comes from the expansion of the macro `format` (in Nightly builds, run with -Z macro-backtrace for more info)
-[1m[96mhelp[0m: consider further restricting the associated type
-    [1m[94m|[0m
-[1m[94m223[0m [1m[94m| [0m    A::Msg: Send,[92m <A as ractor::Actor>::Arguments: std::fmt::Debug[0m
-    [1m[94m|[0m                   [92m++++++++++++++++++++++++++++++++++++++++++++++++[0m
+[1m[94m152[0m [1m[94m|[0m       let (actor, _handle) = ractor::Actor::spawn(
+    [1m[94m|[0m [1m[91m ____________________________^[0m
+[1m[94m153[0m [1m[94m|[0m [1m[91m|[0m         Some(name.clone()),
+[1m[94m154[0m [1m[94m|[0m [1m[91m|[0m         SupervisorActorDef::new(A::default()),
+[1m[94m155[0m [1m[94m|[0m [1m[91m|[0m         args,
+[1m[94m156[0m [1m[94m|[0m [1m[91m|[0m     )
+[1m[94m157[0m [1m[94m|[0m [1m[91m|[0m     .await
+    [1m[94m|[0m [1m[91m|__________^[0m [1m[91mcannot infer type[0m
 
-[1m[91merror[E0027][0m[1m: pattern does not mention field `event_id`[0m
-   [1m[94m--> [0mcrates/orchestrator/src/actors/ipc_worker.rs:241:9
+[1m[91merror[E0282][0m[1m: type annotations needed[0m
+   [1m[94m--> [0mcrates/orchestrator/src/supervision.rs:158:15
     [1m[94m|[0m
-[1m[94m241[0m [1m[94m|[0m [1m[91m/[0m         BeadEvent::StageStarted {
-[1m[94m242[0m [1m[94m|[0m [1m[91m|[0m             bead_id,
-[1m[94m243[0m [1m[94m|[0m [1m[91m|[0m             stage,
-[1m[94m244[0m [1m[94m|[0m [1m[91m|[0m             attempt,
-[1m[94m245[0m [1m[94m|[0m [1m[91m|[0m             timestamp,
-[1m[94m246[0m [1m[94m|[0m [1m[91m|[0m         } => {
-    [1m[94m|[0m [1m[91m|_________^[0m [1m[91mmissing field `event_id`[0m
+[1m[94m158[0m [1m[94m|[0m     .map_err(|e| ActorError::SpawnFailed(e.to_string()))?;
+    [1m[94m|[0m               [1m[91m^[0m                          [1m[94m-[0m [1m[94mtype must be known at this point[0m
     [1m[94m|[0m
-[1m[96mhelp[0m: include the missing field in the pattern
+[1m[96mhelp[0m: consider giving this closure parameter an explicit type
     [1m[94m|[0m
-[1m[94m245[0m [91m- [0m            timestamp[91m,[0m
-[1m[94m246[0m [91m-         }[0m => {
-[1m[94m245[0m [92m+ [0m            timestamp[92m, event_id }[0m => {
-    [1m[94m|[0m
-[1m[96mhelp[0m: if you don't care about this missing field, you can explicitly ignore it
-    [1m[94m|[0m
-[1m[94m245[0m [91m- [0m            timestamp[91m,[0m
-[1m[94m246[0m [91m-         }[0m => {
-[1m[94m245[0m [92m+ [0m            timestamp[92m, event_id: _ }[0m => {
-    [1m[94m|[0m
-[1m[96mhelp[0m: or always ignore missing fields here
-    [1m[94m|[0m
-[1m[94m245[0m [91m- [0m            timestamp[91m,[0m
-[1m[94m246[0m [91m-         }[0m => {
-[1m[94m245[0m [92m+ [0m            timestamp[92m, .. }[0m => {
-    [1m[94m|[0m
+[1m[94m158[0m [1m[94m| [0m    .map_err(|e[92m: /* Type */[0m| ActorError::SpawnFailed(e.to_string()))?;
+    [1m[94m|[0m                [92m++++++++++++[0m
 
-[1m[91merror[E0027][0m[1m: pattern does not mention field `event_id`[0m
-   [1m[94m--> [0mcrates/orchestrator/src/actors/ipc_worker.rs:256:9
+[1m[91merror[E0277][0m[1m: the trait bound `supervisor_actor::SupervisorActorDef<A>: ractor::Actor` is not satisfied[0m
+   [1m[94m--> [0mcrates/orchestrator/src/supervision.rs:155:9
     [1m[94m|[0m
-[1m[94m256[0m [1m[94m|[0m [1m[91m/[0m         BeadEvent::StageCompleted {
-[1m[94m257[0m [1m[94m|[0m [1m[91m|[0m             bead_id,
-[1m[94m258[0m [1m[94m|[0m [1m[91m|[0m             stage,
-[1m[94m259[0m [1m[94m|[0m [1m[91m|[0m             artifact_ref,
-[1m[94m260[0m [1m[94m|[0m [1m[91m|[0m             timestamp,
-[1m[94m261[0m [1m[94m|[0m [1m[91m|[0m         } => {
-    [1m[94m|[0m [1m[91m|_________^[0m [1m[91mmissing field `event_id`[0m
+[1m[94m155[0m [1m[94m|[0m         args,
+    [1m[94m|[0m         [1m[91m^^^^[0m [1m[91munsatisfied trait bound[0m
     [1m[94m|[0m
-[1m[96mhelp[0m: include the missing field in the pattern
+[1m[96mhelp[0m: the trait `ractor::Actor` is not implemented for `supervisor_actor::SupervisorActorDef<A>`
+   [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/supervisor_actor.rs:201:1
     [1m[94m|[0m
-[1m[94m260[0m [91m- [0m            timestamp[91m,[0m
-[1m[94m261[0m [91m-         }[0m => {
-[1m[94m260[0m [92m+ [0m            timestamp[92m, event_id }[0m => {
+[1m[94m201[0m [1m[94m|[0m pub struct SupervisorActorDef<A: GenericSupervisableActor>
+    [1m[94m|[0m [1m[96m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+[1m[96mhelp[0m: consider extending the `where` clause, but there might be an alternative better way to express this requirement
     [1m[94m|[0m
-[1m[96mhelp[0m: if you don't care about this missing field, you can explicitly ignore it
-    [1m[94m|[0m
-[1m[94m260[0m [91m- [0m            timestamp[91m,[0m
-[1m[94m261[0m [91m-         }[0m => {
-[1m[94m260[0m [92m+ [0m            timestamp[92m, event_id: _ }[0m => {
-    [1m[94m|[0m
-[1m[96mhelp[0m: or always ignore missing fields here
-    [1m[94m|[0m
-[1m[94m260[0m [91m- [0m            timestamp[91m,[0m
-[1m[94m261[0m [91m-         }[0m => {
-[1m[94m260[0m [92m+ [0m            timestamp[92m, .. }[0m => {
-    [1m[94m|[0m
+[1m[94m147[0m [1m[94m| [0m    A::Msg: Send,[92m supervisor_actor::SupervisorActorDef<A>: ractor::Actor[0m
+    [1m[94m|[0m                   [92m++++++++++++++++++++++++++++++++++++++++++++++++++++++[0m
 
-[1m[91merror[E0027][0m[1m: pattern does not mention field `event_id`[0m
-   [1m[94m--> [0mcrates/orchestrator/src/actors/ipc_worker.rs:271:9
+[1m[91merror[E0277][0m[1m: the trait bound `supervisor_actor::SupervisorActorDef<A>: ractor::Actor` is not satisfied[0m
+   [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/supervisor_actor.rs:700:9
     [1m[94m|[0m
-[1m[94m271[0m [1m[94m|[0m [1m[91m/[0m         BeadEvent::StageFailed {
-[1m[94m272[0m [1m[94m|[0m [1m[91m|[0m             bead_id,
-[1m[94m273[0m [1m[94m|[0m [1m[91m|[0m             stage,
-[1m[94m274[0m [1m[94m|[0m [1m[91m|[0m             feedback,
-[1m[94m275[0m [1m[94m|[0m [1m[91m|[0m             severity,
-[1m[94m276[0m [1m[94m|[0m [1m[91m|[0m             timestamp,
-[1m[94m277[0m [1m[94m|[0m [1m[91m|[0m         } => {
-    [1m[94m|[0m [1m[91m|_________^[0m [1m[91mmissing field `event_id`[0m
+[1m[94m698[0m [1m[94m|[0m     let (actor, _handle) = Actor::spawn(
+    [1m[94m|[0m                            [1m[94m------------[0m [1m[94mrequired by a bound introduced by this call[0m
+[1m[94m699[0m [1m[94m|[0m         Some(name.to_string()),
+[1m[94m700[0m [1m[94m|[0m         SupervisorActorDef::new(A::default()),
+    [1m[94m|[0m         [1m[91m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m [1m[91munsatisfied trait bound[0m
     [1m[94m|[0m
-[1m[96mhelp[0m: include the missing field in the pattern
+[1m[96mhelp[0m: the trait `ractor::Actor` is not implemented for `supervisor_actor::SupervisorActorDef<A>`
+   [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/supervisor_actor.rs:201:1
     [1m[94m|[0m
-[1m[94m276[0m [91m- [0m            timestamp[91m,[0m
-[1m[94m277[0m [91m-         }[0m => {
-[1m[94m276[0m [92m+ [0m            timestamp[92m, event_id }[0m => {
+[1m[94m201[0m [1m[94m|[0m pub struct SupervisorActorDef<A: GenericSupervisableActor>
+    [1m[94m|[0m [1m[96m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+[1m[96mhelp[0m: consider extending the `where` clause, but there might be an alternative better way to express this requirement
     [1m[94m|[0m
-[1m[96mhelp[0m: if you don't care about this missing field, you can explicitly ignore it
-    [1m[94m|[0m
-[1m[94m276[0m [91m- [0m            timestamp[91m,[0m
-[1m[94m277[0m [91m-         }[0m => {
-[1m[94m276[0m [92m+ [0m            timestamp[92m, event_id: _ }[0m => {
-    [1m[94m|[0m
-[1m[96mhelp[0m: or always ignore missing fields here
-    [1m[94m|[0m
-[1m[94m276[0m [91m- [0m            timestamp[91m,[0m
-[1m[94m277[0m [91m-         }[0m => {
-[1m[94m276[0m [92m+ [0m            timestamp[92m, .. }[0m => {
-    [1m[94m|[0m
+[1m[94m696[0m [1m[94m| [0m    A::Msg: Send,[92m supervisor_actor::SupervisorActorDef<A>: ractor::Actor[0m
+    [1m[94m|[0m                   [92m++++++++++++++++++++++++++++++++++++++++++++++++++++++[0m
 
-[1m[91merror[E0027][0m[1m: pattern does not mention field `event_id`[0m
-   [1m[94m--> [0mcrates/orchestrator/src/actors/ipc_worker.rs:290:9
+[1m[91merror[E0282][0m[1m: type annotations needed[0m
+   [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/supervisor_actor.rs:698:28
     [1m[94m|[0m
-[1m[94m290[0m [1m[94m|[0m [1m[91m/[0m         BeadEvent::StageReentry {
-[1m[94m291[0m [1m[94m|[0m [1m[91m|[0m             bead_id,
-[1m[94m292[0m [1m[94m|[0m [1m[91m|[0m             from_stage,
-[1m[94m293[0m [1m[94m|[0m [1m[91m|[0m             to_stage,
-[1m[94m...[0m   [1m[91m|[0m
-[1m[94m296[0m [1m[94m|[0m [1m[91m|[0m             timestamp,
-[1m[94m297[0m [1m[94m|[0m [1m[91m|[0m         } => {
-    [1m[94m|[0m [1m[91m|_________^[0m [1m[91mmissing field `event_id`[0m
-    [1m[94m|[0m
-[1m[96mhelp[0m: include the missing field in the pattern
-    [1m[94m|[0m
-[1m[94m296[0m [91m- [0m            timestamp[91m,[0m
-[1m[94m297[0m [91m-         }[0m => {
-[1m[94m296[0m [92m+ [0m            timestamp[92m, event_id }[0m => {
-    [1m[94m|[0m
-[1m[96mhelp[0m: if you don't care about this missing field, you can explicitly ignore it
-    [1m[94m|[0m
-[1m[94m296[0m [91m- [0m            timestamp[91m,[0m
-[1m[94m297[0m [91m-         }[0m => {
-[1m[94m296[0m [92m+ [0m            timestamp[92m, event_id: _ }[0m => {
-    [1m[94m|[0m
-[1m[96mhelp[0m: or always ignore missing fields here
-    [1m[94m|[0m
-[1m[94m296[0m [91m- [0m            timestamp[91m,[0m
-[1m[94m297[0m [91m-         }[0m => {
-[1m[94m296[0m [92m+ [0m            timestamp[92m, .. }[0m => {
-    [1m[94m|[0m
+[1m[94m698[0m [1m[94m|[0m       let (actor, _handle) = Actor::spawn(
+    [1m[94m|[0m [1m[91m ____________________________^[0m
+[1m[94m699[0m [1m[94m|[0m [1m[91m|[0m         Some(name.to_string()),
+[1m[94m700[0m [1m[94m|[0m [1m[91m|[0m         SupervisorActorDef::new(A::default()),
+[1m[94m701[0m [1m[94m|[0m [1m[91m|[0m         args,
+[1m[94m702[0m [1m[94m|[0m [1m[91m|[0m     )
+[1m[94m703[0m [1m[94m|[0m [1m[91m|[0m     .await
+    [1m[94m|[0m [1m[91m|__________^[0m [1m[91mcannot infer type[0m
 
-[1m[91merror[E0027][0m[1m: pattern does not mention field `event_id`[0m
-   [1m[94m--> [0mcrates/orchestrator/src/actors/ipc_worker.rs:311:9
+[1m[91merror[E0282][0m[1m: type annotations needed[0m
+   [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/supervisor_actor.rs:704:15
     [1m[94m|[0m
-[1m[94m311[0m [1m[94m|[0m [1m[91m/[0m         BeadEvent::ValidationRan {
-[1m[94m312[0m [1m[94m|[0m [1m[91m|[0m             bead_id,
-[1m[94m313[0m [1m[94m|[0m [1m[91m|[0m             passed,
-[1m[94m314[0m [1m[94m|[0m [1m[91m|[0m             output,
-[1m[94m...[0m   [1m[91m|[0m
-[1m[94m317[0m [1m[94m|[0m [1m[91m|[0m             timestamp,
-[1m[94m318[0m [1m[94m|[0m [1m[91m|[0m         } => {
-    [1m[94m|[0m [1m[91m|_________^[0m [1m[91mmissing field `event_id`[0m
+[1m[94m704[0m [1m[94m|[0m     .map_err(|e| ActorError::SpawnFailed(e.to_string()))?;
+    [1m[94m|[0m               [1m[91m^[0m                          [1m[94m-[0m [1m[94mtype must be known at this point[0m
     [1m[94m|[0m
-[1m[96mhelp[0m: include the missing field in the pattern
+[1m[96mhelp[0m: consider giving this closure parameter an explicit type
     [1m[94m|[0m
-[1m[94m317[0m [91m- [0m            timestamp[91m,[0m
-[1m[94m318[0m [91m-         }[0m => {
-[1m[94m317[0m [92m+ [0m            timestamp[92m, event_id }[0m => {
-    [1m[94m|[0m
-[1m[96mhelp[0m: if you don't care about this missing field, you can explicitly ignore it
-    [1m[94m|[0m
-[1m[94m317[0m [91m- [0m            timestamp[91m,[0m
-[1m[94m318[0m [91m-         }[0m => {
-[1m[94m317[0m [92m+ [0m            timestamp[92m, event_id: _ }[0m => {
-    [1m[94m|[0m
-[1m[96mhelp[0m: or always ignore missing fields here
-    [1m[94m|[0m
-[1m[94m317[0m [91m- [0m            timestamp[91m,[0m
-[1m[94m318[0m [91m-         }[0m => {
-[1m[94m317[0m [92m+ [0m            timestamp[92m, .. }[0m => {
-    [1m[94m|[0m
+[1m[94m704[0m [1m[94m| [0m    .map_err(|e[92m: /* Type */[0m| ActorError::SpawnFailed(e.to_string()))?;
+    [1m[94m|[0m                [92m++++++++++++[0m
 
-[1m[91merror[E0027][0m[1m: pattern does not mention field `event_id`[0m
-   [1m[94m--> [0mcrates/orchestrator/src/actors/ipc_worker.rs:330:9
+[1m[91merror[E0277][0m[1m: the trait bound `supervisor_actor::SupervisorActorDef<A>: ractor::Actor` is not satisfied[0m
+   [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/supervisor_actor.rs:701:9
     [1m[94m|[0m
-[1m[94m330[0m [1m[94m|[0m [1m[91m/[0m         BeadEvent::RecursionExhausted {
-[1m[94m331[0m [1m[94m|[0m [1m[91m|[0m             bead_id,
-[1m[94m332[0m [1m[94m|[0m [1m[91m|[0m             total_attempts,
-[1m[94m333[0m [1m[94m|[0m [1m[91m|[0m             last_stage,
-[1m[94m334[0m [1m[94m|[0m [1m[91m|[0m             timestamp,
-[1m[94m335[0m [1m[94m|[0m [1m[91m|[0m         } => {
-    [1m[94m|[0m [1m[91m|_________^[0m [1m[91mmissing field `event_id`[0m
+[1m[94m701[0m [1m[94m|[0m         args,
+    [1m[94m|[0m         [1m[91m^^^^[0m [1m[91munsatisfied trait bound[0m
     [1m[94m|[0m
-[1m[96mhelp[0m: include the missing field in the pattern
+[1m[96mhelp[0m: the trait `ractor::Actor` is not implemented for `supervisor_actor::SupervisorActorDef<A>`
+   [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/supervisor_actor.rs:201:1
     [1m[94m|[0m
-[1m[94m334[0m [91m- [0m            timestamp[91m,[0m
-[1m[94m335[0m [91m-         }[0m => {
-[1m[94m334[0m [92m+ [0m            timestamp[92m, event_id }[0m => {
+[1m[94m201[0m [1m[94m|[0m pub struct SupervisorActorDef<A: GenericSupervisableActor>
+    [1m[94m|[0m [1m[96m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+[1m[96mhelp[0m: consider extending the `where` clause, but there might be an alternative better way to express this requirement
     [1m[94m|[0m
-[1m[96mhelp[0m: if you don't care about this missing field, you can explicitly ignore it
-    [1m[94m|[0m
-[1m[94m334[0m [91m- [0m            timestamp[91m,[0m
-[1m[94m335[0m [91m-         }[0m => {
-[1m[94m334[0m [92m+ [0m            timestamp[92m, event_id: _ }[0m => {
-    [1m[94m|[0m
-[1m[96mhelp[0m: or always ignore missing fields here
-    [1m[94m|[0m
-[1m[94m334[0m [91m- [0m            timestamp[91m,[0m
-[1m[94m335[0m [91m-         }[0m => {
-[1m[94m334[0m [92m+ [0m            timestamp[92m, .. }[0m => {
-    [1m[94m|[0m
-
-[1m[91merror[E0599][0m[1m: the method `as_dyn_error` exists for reference `&std::string::String`, but its trait bounds were not satisfied[0m
-   [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/checkpoint.rs:37:27
-    [1m[94m|[0m
- [1m[94m37[0m [1m[94m|[0m     SerializationFailed { source: String },
-    [1m[94m|[0m                           [1m[91m^^^^^^[0m [1m[91mmethod cannot be called on `&std::string::String` due to unsatisfied trait bounds[0m
-    [1m[94m|[0m
-   [1m[94m::: [0m/home/lewis/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/string.rs:360:1
-    [1m[94m|[0m
-[1m[94m360[0m [1m[94m|[0m pub struct String {
-    [1m[94m|[0m [1m[94m-----------------[0m [1m[94mdoesn't satisfy `std::string::String: AsDynError<'_>` or `std::string::String: StdError`[0m
-    [1m[94m|[0m
-    [1m[94m= [0m[1mnote[0m: the following trait bounds were not satisfied:
-            `std::string::String: StdError`
-            which is required by `std::string::String: AsDynError<'_>`
-            `&std::string::String: StdError`
-            which is required by `&std::string::String: AsDynError<'_>`
-            `str: Sized`
-            which is required by `str: AsDynError<'_>`
-            `str: StdError`
-            which is required by `str: AsDynError<'_>`
-
-[1m[91merror[E0277][0m[1m: the trait bound `supervisor_actor::SupervisorConfig: serde::Serialize` is not satisfied[0m
-    [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/checkpoint.rs:63:24
-     [1m[94m|[0m
-  [1m[94m63[0m [1m[94m|[0m #[derive(Debug, Clone, Serialize, Deserialize)]
-     [1m[94m|[0m                        [1m[91m^^^^^^^^^[0m [1m[91munsatisfied trait bound[0m
-  [1m[94m64[0m [1m[94m|[0m pub struct SupervisorSnapshot {
-  [1m[94m65[0m [1m[94m|[0m     /// Supervisor configuration.
-     [1m[94m|[0m     [1m[94m-----------------------------[0m [1m[94mrequired by a bound introduced by this call[0m
-     [1m[94m|[0m
-[1m[96mhelp[0m: the trait `Serialize` is not implemented for `supervisor_actor::SupervisorConfig`
-    [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/supervisor_actor.rs:45:1
-     [1m[94m|[0m
-  [1m[94m45[0m [1m[94m|[0m pub struct SupervisorConfig {
-     [1m[94m|[0m [1m[96m^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
-     [1m[94m= [0m[1mnote[0m: for local types consider adding `#[derive(serde::Serialize)]` to your `supervisor_actor::SupervisorConfig` type
-     [1m[94m= [0m[1mnote[0m: for types from other crates check whether the crate offers a `serde` feature flag
-     [1m[94m= [0m[1mhelp[0m: the following other types implement trait `Serialize`:
-               &'a T
-               &'a mut T
-               ()
-               (T,)
-               (T0, T1)
-               (T0, T1, T2)
-               (T0, T1, T2, T3)
-               (T0, T1, T2, T3, T4)
-             and 769 others
-[1m[92mnote[0m: required by a bound in `ipc_messages::_::_serde::ser::SerializeStruct::serialize_field`
-    [1m[94m--> [0m/cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/serde_core-1.0.228/src/ser/mod.rs:1917:21
-     [1m[94m|[0m
-[1m[94m1915[0m [1m[94m|[0m     fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
-     [1m[94m|[0m        [1m[94m---------------[0m [1m[94mrequired by a bound in this associated function[0m
-[1m[94m1916[0m [1m[94m|[0m     where
-[1m[94m1917[0m [1m[94m|[0m         T: ?Sized + Serialize;
-     [1m[94m|[0m                     [1m[92m^^^^^^^^^[0m [1m[92mrequired by this bound in `SerializeStruct::serialize_field`[0m
-     [1m[94m= [0m[1mnote[0m: this error originates in the derive macro `Serialize` (in Nightly builds, run with -Z macro-backtrace for more info)
-
-[1m[91merror[E0277][0m[1m: the trait bound `supervisor_actor::SupervisorConfig: serde::Deserialize<'de>` is not satisfied[0m
-    [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/checkpoint.rs:66:17
-     [1m[94m|[0m
-  [1m[94m66[0m [1m[94m|[0m     pub config: SupervisorConfig,
-     [1m[94m|[0m                 [1m[91m^^^^^^^^^^^^^^^^[0m [1m[91munsatisfied trait bound[0m
-     [1m[94m|[0m
-[1m[96mhelp[0m: the trait `Deserialize<'_>` is not implemented for `supervisor_actor::SupervisorConfig`
-    [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/supervisor_actor.rs:45:1
-     [1m[94m|[0m
-  [1m[94m45[0m [1m[94m|[0m pub struct SupervisorConfig {
-     [1m[94m|[0m [1m[96m^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
-     [1m[94m= [0m[1mnote[0m: for local types consider adding `#[derive(serde::Deserialize)]` to your `supervisor_actor::SupervisorConfig` type
-     [1m[94m= [0m[1mnote[0m: for types from other crates check whether the crate offers a `serde` feature flag
-     [1m[94m= [0m[1mhelp[0m: the following other types implement trait `Deserialize<'de>`:
-               `&'a [u8]` implements `Deserialize<'de>`
-               `&'a serde_json::value::RawValue` implements `Deserialize<'de>`
-               `&'a std::path::Path` implements `Deserialize<'de>`
-               `&'a str` implements `Deserialize<'de>`
-               `()` implements `Deserialize<'de>`
-               `(T,)` implements `Deserialize<'de>`
-               `(T0, T1)` implements `Deserialize<'de>`
-               `(T0, T1, T2)` implements `Deserialize<'de>`
-             and 754 others
-[1m[92mnote[0m: required by a bound in `next_element`
-    [1m[94m--> [0m/cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/serde_core-1.0.228/src/de/mod.rs:1771:12
-     [1m[94m|[0m
-[1m[94m1769[0m [1m[94m|[0m     fn next_element<T>(&mut self) -> Result<Option<T>, Self::Error>
-     [1m[94m|[0m        [1m[94m------------[0m [1m[94mrequired by a bound in this associated function[0m
-[1m[94m1770[0m [1m[94m|[0m     where
-[1m[94m1771[0m [1m[94m|[0m         T: Deserialize<'de>,
-     [1m[94m|[0m            [1m[92m^^^^^^^^^^^^^^^^[0m [1m[92mrequired by this bound in `SeqAccess::next_element`[0m
-     [1m[94m= [0m[1mnote[0m: the full name for the type has been written to '/home/lewis/src/oya/target/debug/deps/orchestrator-50c222562829342a.long-type-15306564257086630758.txt'
-     [1m[94m= [0m[1mnote[0m: consider using `--verbose` to print the full type name to the console
-
-[1m[91merror[E0277][0m[1m: the trait bound `supervisor_actor::SupervisorConfig: serde::Deserialize<'de>` is not satisfied[0m
-    [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/checkpoint.rs:66:17
-     [1m[94m|[0m
-  [1m[94m66[0m [1m[94m|[0m     pub config: SupervisorConfig,
-     [1m[94m|[0m                 [1m[91m^^^^^^^^^^^^^^^^[0m [1m[91munsatisfied trait bound[0m
-     [1m[94m|[0m
-[1m[96mhelp[0m: the trait `Deserialize<'_>` is not implemented for `supervisor_actor::SupervisorConfig`
-    [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/supervisor_actor.rs:45:1
-     [1m[94m|[0m
-  [1m[94m45[0m [1m[94m|[0m pub struct SupervisorConfig {
-     [1m[94m|[0m [1m[96m^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
-     [1m[94m= [0m[1mnote[0m: for local types consider adding `#[derive(serde::Deserialize)]` to your `supervisor_actor::SupervisorConfig` type
-     [1m[94m= [0m[1mnote[0m: for types from other crates check whether the crate offers a `serde` feature flag
-     [1m[94m= [0m[1mhelp[0m: the following other types implement trait `Deserialize<'de>`:
-               `&'a [u8]` implements `Deserialize<'de>`
-               `&'a serde_json::value::RawValue` implements `Deserialize<'de>`
-               `&'a std::path::Path` implements `Deserialize<'de>`
-               `&'a str` implements `Deserialize<'de>`
-               `()` implements `Deserialize<'de>`
-               `(T,)` implements `Deserialize<'de>`
-               `(T0, T1)` implements `Deserialize<'de>`
-               `(T0, T1, T2)` implements `Deserialize<'de>`
-             and 754 others
-[1m[92mnote[0m: required by a bound in `next_value`
-    [1m[94m--> [0m/cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/serde_core-1.0.228/src/de/mod.rs:1916:12
-     [1m[94m|[0m
-[1m[94m1914[0m [1m[94m|[0m     fn next_value<V>(&mut self) -> Result<V, Self::Error>
-     [1m[94m|[0m        [1m[94m----------[0m [1m[94mrequired by a bound in this associated function[0m
-[1m[94m1915[0m [1m[94m|[0m     where
-[1m[94m1916[0m [1m[94m|[0m         V: Deserialize<'de>,
-     [1m[94m|[0m            [1m[92m^^^^^^^^^^^^^^^^[0m [1m[92mrequired by this bound in `MapAccess::next_value`[0m
-     [1m[94m= [0m[1mnote[0m: the full name for the type has been written to '/home/lewis/src/oya/target/debug/deps/orchestrator-50c222562829342a.long-type-15306564257086630758.txt'
-     [1m[94m= [0m[1mnote[0m: consider using `--verbose` to print the full type name to the console
-
-[1m[91merror[E0277][0m[1m: the trait bound `supervisor_actor::SupervisorConfig: serde::Deserialize<'de>` is not satisfied[0m
-  [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/checkpoint.rs:63:35
-   [1m[94m|[0m
-[1m[94m63[0m [1m[94m|[0m #[derive(Debug, Clone, Serialize, Deserialize)]
-   [1m[94m|[0m                                   [1m[91m^^^^^^^^^^^[0m [1m[91munsatisfied trait bound[0m
-   [1m[94m|[0m
-[1m[96mhelp[0m: the trait `Deserialize<'_>` is not implemented for `supervisor_actor::SupervisorConfig`
-  [1m[94m--> [0mcrates/orchestrator/src/actors/supervisor/supervisor_actor.rs:45:1
-   [1m[94m|[0m
-[1m[94m45[0m [1m[94m|[0m pub struct SupervisorConfig {
-   [1m[94m|[0m [1m[96m^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
-   [1m[94m= [0m[1mnote[0m: for local types consider adding `#[derive(serde::Deserialize)]` to your `supervisor_actor::SupervisorConfig` type
-   [1m[94m= [0m[1mnote[0m: for types from other crates check whether the crate offers a `serde` feature flag
-   [1m[94m= [0m[1mhelp[0m: the following other types implement trait `Deserialize<'de>`:
-             `&'a [u8]` implements `Deserialize<'de>`
-             `&'a serde_json::value::RawValue` implements `Deserialize<'de>`
-             `&'a std::path::Path` implements `Deserialize<'de>`
-             `&'a str` implements `Deserialize<'de>`
-             `()` implements `Deserialize<'de>`
-             `(T,)` implements `Deserialize<'de>`
-             `(T0, T1)` implements `Deserialize<'de>`
-             `(T0, T1, T2)` implements `Deserialize<'de>`
-           and 754 others
-[1m[92mnote[0m: required by a bound in `ipc_messages::_::_serde::__private228::de::missing_field`
-  [1m[94m--> [0m/cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs:26:8
-   [1m[94m|[0m
-[1m[94m24[0m [1m[94m|[0m pub fn missing_field<'de, V, E>(field: &'static str) -> Result<V, E>
-   [1m[94m|[0m        [1m[94m-------------[0m [1m[94mrequired by a bound in this function[0m
-[1m[94m25[0m [1m[94m|[0m where
-[1m[94m26[0m [1m[94m|[0m     V: Deserialize<'de>,
-   [1m[94m|[0m        [1m[92m^^^^^^^^^^^^^^^^[0m [1m[92mrequired by this bound in `missing_field`[0m
-   [1m[94m= [0m[1mnote[0m: the full name for the type has been written to '/home/lewis/src/oya/target/debug/deps/orchestrator-50c222562829342a.long-type-15306564257086630758.txt'
-   [1m[94m= [0m[1mnote[0m: consider using `--verbose` to print the full type name to the console
-   [1m[94m= [0m[1mnote[0m: this error originates in the derive macro `Deserialize` (in Nightly builds, run with -Z macro-backtrace for more info)
+[1m[94m696[0m [1m[94m| [0m    A::Msg: Send,[92m supervisor_actor::SupervisorActorDef<A>: ractor::Actor[0m
+    [1m[94m|[0m                   [92m++++++++++++++++++++++++++++++++++++++++++++++++++++++[0m
 
 [1m[33mwarning[0m[1m: unused variable: `timestamp`[0m
-    [1m[94m--> [0mcrates/orchestrator/src/actors/ipc_worker.rs:1219:17
+    [1m[94m--> [0mcrates/orchestrator/src/actors/ipc_worker.rs:1225:17
      [1m[94m|[0m
-[1m[94m1219[0m [1m[94m|[0m                 timestamp,
+[1m[94m1225[0m [1m[94m|[0m                 timestamp,
      [1m[94m|[0m                 [1m[33m^^^^^^^^^[0m [1m[33mhelp: try ignoring the field: `timestamp: _`[0m
      [1m[94m|[0m
      [1m[94m= [0m[1mnote[0m: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
 
-[1mSome errors have detailed explanations: E0027, E0107, E0277, E0599.[0m
-[1mFor more information about an error, try `rustc --explain E0027`.[0m
-[1m[33mwarning[0m: `orchestrator` (lib) generated 6 warnings
-[1m[91merror[0m: could not compile `orchestrator` (lib) due to 14 previous errors; 6 warnings emitted
+[1mSome errors have detailed explanations: E0277, E0282, E0502.[0m
+[1mFor more information about an error, try `rustc --explain E0277`.[0m
+[1m[33mwarning[0m: `orchestrator` (lib) generated 4 warnings
+[1m[91merror[0m: could not compile `orchestrator` (lib) due to 9 previous errors; 4 warnings emitted

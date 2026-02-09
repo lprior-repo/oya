@@ -98,6 +98,7 @@ vec_box_then_clone = "warn"     # Avoid unnecessary clones
 # Internal crates (must match actual package names in Cargo.toml)
 oya-core = { path = "crates/core" }
 oya-pipeline = { path = "crates/pipeline" }
+oya-cli = { path = "crates/oya" }
 oya-opencode = { path = "crates/opencode" }
 oya-workflow = { path = "crates/workflow" }
 oya-events = { path = "crates/events" }
@@ -185,6 +186,9 @@ http-body-util = "0.1"
 
 # Functional utilities
 tap = "1"
+
+# Property testing
+proptest = "1"
 
 [package]
 name = "oya"

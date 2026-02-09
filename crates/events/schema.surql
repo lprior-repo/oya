@@ -51,7 +51,7 @@ DEFINE FIELD key ON TABLE idempotency_key TYPE string
 DEFINE FIELD bead_id ON TABLE idempotency_key TYPE string
     ASSERT string::len($value) > 0;
 
-DEFINE FIELD result ON TABLE idempotency_key TYPE option<any>;
+DEFINE FIELD result ON TABLE idempotency_key TYPE option<record<thing>>;
 
 DEFINE FIELD executed_at ON TABLE idempotency_key TYPE datetime
     DEFAULT time::now();
@@ -78,7 +78,7 @@ DEFINE FIELD bead_id ON TABLE checkpoint TYPE string
 DEFINE FIELD sequence_number ON TABLE checkpoint TYPE number
     ASSERT $value >= 0;
 
-DEFINE FIELD data ON TABLE checkpoint TYPE any
+DEFINE FIELD data ON TABLE checkpoint TYPE record<thing>
     ASSERT $value != NONE;
 
 DEFINE FIELD compressed ON TABLE checkpoint TYPE bool
@@ -110,7 +110,7 @@ DEFINE FIELD title ON TABLE bead TYPE string
 
 DEFINE FIELD description ON TABLE bead TYPE option<string>;
 
-DEFINE FIELD spec ON TABLE bead TYPE any;
+DEFINE FIELD spec ON TABLE bead TYPE record<thing>;
 
 DEFINE FIELD status ON TABLE bead TYPE string
     ASSERT $value IN ["pending", "in_progress", "completed", "failed", "cancelled"]

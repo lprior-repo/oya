@@ -698,7 +698,11 @@ fn stage_progress(
     if completed {
         1.0
     } else if let Some(index) = failed_stage {
-        if stage_index <= index { 1.0 } else { 0.0 }
+        if stage_index <= index {
+            1.0
+        } else {
+            0.0
+        }
     } else if let Some(index) = running_stage {
         if stage_index < index {
             1.0
@@ -783,14 +787,9 @@ mod tests {
     }
 
     fn sample_task(status: &str, stage: Option<&str>) -> TaskRow {
-        TaskRow {
-            slug: "src-1234".to_string(),
-            status: status.to_string(),
-            stage: stage.map(ToString::to_string),
-            priority: "P1".to_string(),
-            language: "Rust".to_string(),
-            branch: "task/src-1234".to_string(),
-        }
+        let mut row = TaskRow::new("src-1234", status, "P1", "Rust", "task/src-1234");
+        row.stage = stage.map(ToString::to_string);
+        row
     }
 
     fn pipeline_pane() -> Pane {
