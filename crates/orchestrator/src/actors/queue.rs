@@ -1,7 +1,7 @@
 //! QueueActor - Manages a single queue of ready beads.
 
 use std::cmp::Ordering;
-use std::collections::{BinaryHeap, VecDeque};
+use std::collections::{BinaryHeap, HashMap, VecDeque};
 
 use ractor::{Actor, ActorProcessingErr, ActorRef};
 use tracing::info;
@@ -17,6 +17,8 @@ pub struct QueueState {
     pub queue_type: QueueType,
     fifo: VecDeque<String>,
     priority: BinaryHeap<PriorityItem>,
+    tenant_queues: HashMap<String, VecDeque<String>>,
+    tenant_rotation: VecDeque<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -24,6 +26,7 @@ pub enum QueueMessage {
     Enqueue {
         bead_id: String,
         priority: Option<u32>,
+        tenant_id: Option<String>,
     },
     Dequeue,
     Peek,
@@ -58,7 +61,7 @@ impl PartialOrd for PriorityItem {
 }
 
 impl QueueState {
-    fn enqueue(&mut self, bead_id: String, priority: Option<u32>) {
+    fn enqueue(&mut self, bead_id: String, priority: Option<u32>, tenant_id: Option<String>) {
         match self.queue_type {
             QueueType::Priority => {
                 let item = PriorityItem {
@@ -66,6 +69,17 @@ impl QueueState {
                     bead_id,
                 };
                 self.priority.push(item);
+            }
+            QueueType::RoundRobin => {
+                let tenant = tenant_id.unwrap_or_else(|| String::from("default"));
+                let is_new_tenant = !self.tenant_queues.contains_key(&tenant);
+                if is_new_tenant {
+                    self.tenant_rotation.push_back(tenant.clone());
+                }
+                self.tenant_queues
+                    .entry(tenant)
+                    .or_default()
+                    .push_back(bead_id);
             }
             _ => {
                 self.fifo.push_back(bead_id);
@@ -77,6 +91,7 @@ impl QueueState {
         match self.queue_type {
             QueueType::Priority => self.priority.pop().map(|item| item.bead_id),
             QueueType::LIFO => self.fifo.pop_back(),
+            QueueType::RoundRobin => self.dequeue_round_robin(),
             _ => self.fifo.pop_front(),
         }
     }
@@ -85,6 +100,11 @@ impl QueueState {
         match self.queue_type {
             QueueType::Priority => self.priority.peek().map(|item| item.bead_id.clone()),
             QueueType::LIFO => self.fifo.back().cloned(),
+            QueueType::RoundRobin => self.tenant_rotation.iter().find_map(|tenant| {
+                self.tenant_queues
+                    .get(tenant)
+                    .and_then(|queue| queue.front().cloned())
+            }),
             _ => self.fifo.front().cloned(),
         }
     }
@@ -92,8 +112,40 @@ impl QueueState {
     fn len(&self) -> usize {
         match self.queue_type {
             QueueType::Priority => self.priority.len(),
+            QueueType::RoundRobin => self.tenant_queues.values().map(VecDeque::len).sum(),
             _ => self.fifo.len(),
         }
+    }
+
+    fn dequeue_round_robin(&mut self) -> Option<String> {
+        let tenant_count = self.tenant_rotation.len();
+        for _ in 0..tenant_count {
+            let tenant = self.tenant_rotation.pop_front()?;
+            let maybe_bead = self
+                .tenant_queues
+                .get_mut(&tenant)
+                .and_then(VecDeque::pop_front);
+
+            match maybe_bead {
+                Some(bead) => {
+                    let tenant_has_more = self
+                        .tenant_queues
+                        .get(&tenant)
+                        .map(|queue| !queue.is_empty())
+                        .unwrap_or(false);
+                    if tenant_has_more {
+                        self.tenant_rotation.push_back(tenant);
+                    } else {
+                        let _ = self.tenant_queues.remove(&tenant);
+                    }
+                    return Some(bead);
+                }
+                None => {
+                    let _ = self.tenant_queues.remove(&tenant);
+                }
+            }
+        }
+        None
     }
 }
 
@@ -113,6 +165,8 @@ impl Actor for QueueActorDef {
             queue_type: args.1,
             fifo: VecDeque::new(),
             priority: BinaryHeap::new(),
+            tenant_queues: HashMap::new(),
+            tenant_rotation: VecDeque::new(),
         })
     }
 
@@ -123,8 +177,12 @@ impl Actor for QueueActorDef {
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         match message {
-            QueueMessage::Enqueue { bead_id, priority } => {
-                state.enqueue(bead_id, priority);
+            QueueMessage::Enqueue {
+                bead_id,
+                priority,
+                tenant_id,
+            } => {
+                state.enqueue(bead_id, priority, tenant_id);
             }
             QueueMessage::Dequeue => {
                 let _ = state.dequeue();
@@ -156,6 +214,8 @@ mod tests {
             queue_type: QueueType::FIFO,
             fifo: VecDeque::new(),
             priority: BinaryHeap::new(),
+            tenant_queues: HashMap::new(),
+            tenant_rotation: VecDeque::new(),
         }
     }
 
@@ -165,15 +225,28 @@ mod tests {
             queue_type: QueueType::Priority,
             fifo: VecDeque::new(),
             priority: BinaryHeap::new(),
+            tenant_queues: HashMap::new(),
+            tenant_rotation: VecDeque::new(),
+        }
+    }
+
+    fn round_robin_state() -> QueueState {
+        QueueState {
+            queue_id: String::from("round-robin"),
+            queue_type: QueueType::RoundRobin,
+            fifo: VecDeque::new(),
+            priority: BinaryHeap::new(),
+            tenant_queues: HashMap::new(),
+            tenant_rotation: VecDeque::new(),
         }
     }
 
     #[test]
     fn test_fifo_enqueue_dequeue_order() {
         let mut state = fifo_state();
-        state.enqueue(String::from("a"), None);
-        state.enqueue(String::from("b"), None);
-        state.enqueue(String::from("c"), None);
+        state.enqueue(String::from("a"), None, None);
+        state.enqueue(String::from("b"), None, None);
+        state.enqueue(String::from("c"), None, None);
 
         assert_eq!(state.dequeue(), Some(String::from("a")));
         assert_eq!(state.dequeue(), Some(String::from("b")));
@@ -187,8 +260,8 @@ mod tests {
         assert_eq!(state.peek(), None);
         assert_eq!(state.len(), 0);
 
-        state.enqueue(String::from("alpha"), None);
-        state.enqueue(String::from("beta"), None);
+        state.enqueue(String::from("alpha"), None, None);
+        state.enqueue(String::from("beta"), None, None);
 
         assert_eq!(state.peek(), Some(String::from("alpha")));
         assert_eq!(state.len(), 2);
@@ -197,9 +270,9 @@ mod tests {
     #[test]
     fn test_priority_dequeue_order() {
         let mut state = priority_state();
-        state.enqueue(String::from("low"), Some(1));
-        state.enqueue(String::from("high"), Some(100));
-        state.enqueue(String::from("mid"), Some(10));
+        state.enqueue(String::from("low"), Some(1), None);
+        state.enqueue(String::from("high"), Some(100), None);
+        state.enqueue(String::from("mid"), Some(10), None);
 
         assert_eq!(state.dequeue(), Some(String::from("high")));
         assert_eq!(state.dequeue(), Some(String::from("mid")));
@@ -209,8 +282,8 @@ mod tests {
     #[test]
     fn test_priority_peek_and_len() {
         let mut state = priority_state();
-        state.enqueue(String::from("x"), Some(2));
-        state.enqueue(String::from("y"), Some(4));
+        state.enqueue(String::from("x"), Some(2), None);
+        state.enqueue(String::from("y"), Some(4), None);
 
         assert_eq!(state.peek(), Some(String::from("y")));
         assert_eq!(state.len(), 2);
@@ -220,12 +293,66 @@ mod tests {
     fn test_lifo_mode_works() {
         let mut state = fifo_state();
         state.queue_type = QueueType::LIFO;
-        state.enqueue(String::from("one"), None);
-        state.enqueue(String::from("two"), None);
-        state.enqueue(String::from("three"), None);
+        state.enqueue(String::from("one"), None, None);
+        state.enqueue(String::from("two"), None, None);
+        state.enqueue(String::from("three"), None, None);
 
         assert_eq!(state.dequeue(), Some(String::from("three")));
         assert_eq!(state.dequeue(), Some(String::from("two")));
+    }
+
+    #[test]
+    fn test_round_robin_enqueue_auto_creates_tenant_queue() {
+        let mut state = round_robin_state();
+        state.enqueue(String::from("bead-a"), None, Some(String::from("tenant-a")));
+        state.enqueue(String::from("bead-b"), None, Some(String::from("tenant-b")));
+
+        assert_eq!(state.len(), 2);
+        assert_eq!(state.peek(), Some(String::from("bead-a")));
+    }
+
+    #[test]
+    fn test_round_robin_dequeue_fair_rotation() {
+        let mut state = round_robin_state();
+
+        state.enqueue(
+            String::from("tenant-1-a"),
+            None,
+            Some(String::from("tenant-1")),
+        );
+        state.enqueue(
+            String::from("tenant-2-a"),
+            None,
+            Some(String::from("tenant-2")),
+        );
+        state.enqueue(
+            String::from("tenant-3-a"),
+            None,
+            Some(String::from("tenant-3")),
+        );
+        state.enqueue(
+            String::from("tenant-1-b"),
+            None,
+            Some(String::from("tenant-1")),
+        );
+        state.enqueue(
+            String::from("tenant-2-b"),
+            None,
+            Some(String::from("tenant-2")),
+        );
+        state.enqueue(
+            String::from("tenant-3-b"),
+            None,
+            Some(String::from("tenant-3")),
+        );
+
+        assert_eq!(state.dequeue(), Some(String::from("tenant-1-a")));
+        assert_eq!(state.dequeue(), Some(String::from("tenant-2-a")));
+        assert_eq!(state.dequeue(), Some(String::from("tenant-3-a")));
+        assert_eq!(state.dequeue(), Some(String::from("tenant-1-b")));
+        assert_eq!(state.dequeue(), Some(String::from("tenant-2-b")));
+        assert_eq!(state.dequeue(), Some(String::from("tenant-3-b")));
+        assert_eq!(state.dequeue(), None);
     }
 
     #[tokio::test]
@@ -240,7 +367,7 @@ mod tests {
             let state_clone = Arc::clone(&state);
             handles.push(tokio::spawn(async move {
                 let mut guard = state_clone.lock().await;
-                guard.enqueue(format!("bead-{index}"), None);
+                guard.enqueue(format!("bead-{index}"), None, None);
             }));
         }
 
@@ -260,7 +387,7 @@ mod tests {
 
         let mut initial = fifo_state();
         for index in 0..16 {
-            initial.enqueue(format!("bead-{index}"), None);
+            initial.enqueue(format!("bead-{index}"), None, None);
         }
 
         let state = Arc::new(Mutex::new(initial));

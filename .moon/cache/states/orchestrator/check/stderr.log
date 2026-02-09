@@ -1,10 +1,256 @@
 [1m[33mwarning[0m: profiles for the non root package will be ignored, specify profiles at the workspace root:
 package:   /home/lewis/src/oya/crates/zellij-frontend/Cargo.toml
 workspace: /home/lewis/src/oya/Cargo.toml
-[1m[33mwarning[0m: profiles for the non root package will be ignored, specify profiles at the workspace root:
-package:   /home/lewis/src/oya/crates/oya-zellij-plugin/Cargo.toml
-workspace: /home/lewis/src/oya/Cargo.toml
-[1m[92m    Blocking[0m waiting for file lock on package cache
-[1m[92m    Blocking[0m waiting for file lock on package cache
-[1m[92m    Blocking[0m waiting for file lock on package cache
 [1m[92m    Blocking[0m waiting for file lock on build directory
+[1m[92m    Checking[0m oya-core v0.1.0 (/home/lewis/src/oya/crates/core)
+[1m[92m    Checking[0m oya-pipeline v0.1.0 (/home/lewis/src/oya/crates/pipeline)
+[1m[92m    Checking[0m zellij-frontend v0.1.0 (/home/lewis/src/oya/crates/zellij-frontend)
+[1m[33mwarning[0m[1m: unused import: `std::sync::Arc`[0m
+  [1m[94m--> [0mcrates/core/src/execution.rs:30:5
+   [1m[94m|[0m
+[1m[94m30[0m [1m[94m|[0m use std::sync::Arc;
+   [1m[94m|[0m     [1m[33m^^^^^^^^^^^^^^[0m
+   [1m[94m|[0m
+   [1m[94m= [0m[1mnote[0m: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+[1m[33mwarning[0m[1m: variable does not need to be mutable[0m
+   [1m[94m--> [0mcrates/core/src/execution.rs:427:13
+    [1m[94m|[0m
+[1m[94m427[0m [1m[94m|[0m         let mut failed = Vec::new();
+    [1m[94m|[0m             [1m[94m----[0m[1m[33m^^^^^^[0m
+    [1m[94m|[0m             [1m[94m|[0m
+    [1m[94m|[0m             [1m[94mhelp: remove this `mut`[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+[1m[33mwarning[0m[1m: variable does not need to be mutable[0m
+   [1m[94m--> [0mcrates/core/src/execution.rs:428:13
+    [1m[94m|[0m
+[1m[94m428[0m [1m[94m|[0m         let mut rolled_back = Vec::new();
+    [1m[94m|[0m             [1m[94m----[0m[1m[33m^^^^^^^^^^^[0m
+    [1m[94m|[0m             [1m[94m|[0m
+    [1m[94m|[0m             [1m[94mhelp: remove this `mut`[0m
+
+[1m[33mwarning[0m[1m: variable does not need to be mutable[0m
+   [1m[94m--> [0mcrates/core/src/execution.rs:429:13
+    [1m[94m|[0m
+[1m[94m429[0m [1m[94m|[0m         let mut timed_out = Vec::new();
+    [1m[94m|[0m             [1m[94m----[0m[1m[33m^^^^^^^^^[0m
+    [1m[94m|[0m             [1m[94m|[0m
+    [1m[94m|[0m             [1m[94mhelp: remove this `mut`[0m
+
+[1m[33mwarning[0m[1m: variable does not need to be mutable[0m
+   [1m[94m--> [0mcrates/core/src/execution.rs:430:13
+    [1m[94m|[0m
+[1m[94m430[0m [1m[94m|[0m         let mut rollback_failed = Vec::new();
+    [1m[94m|[0m             [1m[94m----[0m[1m[33m^^^^^^^^^^^^^^^[0m
+    [1m[94m|[0m             [1m[94m|[0m
+    [1m[94m|[0m             [1m[94mhelp: remove this `mut`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `task`[0m
+   [1m[94m--> [0mcrates/core/src/execution.rs:467:21
+    [1m[94m|[0m
+[1m[94m467[0m [1m[94m|[0m                 let task =
+    [1m[94m|[0m                     [1m[33m^^^^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_task`[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+[1m[33mwarning[0m: `oya-core` (lib) generated 6 warnings (run `cargo fix --lib -p oya-core` to apply 6 suggestions)
+[1m[92m    Checking[0m oya-events v0.1.0 (/home/lewis/src/oya/crates/events)
+[1m[92m    Checking[0m oya-opencode v0.1.0 (/home/lewis/src/oya/crates/opencode)
+[1m[92m    Checking[0m oya-web v0.1.0 (/home/lewis/src/oya/crates/oya-web)
+[1m[92m    Checking[0m merge-queue v0.1.0 (/home/lewis/src/oya/crates/merge-queue)
+[1m[33mwarning[0m[1m: function `textwrap` is never used[0m
+   [1m[94m--> [0mcrates/zellij-frontend/src/render.rs:589:4
+    [1m[94m|[0m
+[1m[94m589[0m [1m[94m|[0m fn textwrap(text: &str, width: usize) -> Vec<String> {
+    [1m[94m|[0m    [1m[33m^^^^^^^^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+[1m[33mwarning[0m: `zellij-frontend` (lib) generated 1 warning
+[1m[92m    Checking[0m orchestrator v0.1.0 (/home/lewis/src/oya/crates/orchestrator)
+[1m[91merror[E0432][0m[1m: unresolved import `rpds::ArcK`[0m
+  [1m[94m--> [0mcrates/orchestrator/src/actors/examples/messaging/logger.rs:13:12
+   [1m[94m|[0m
+[1m[94m13[0m [1m[94m|[0m use rpds::{ArcK, Vector};
+   [1m[94m|[0m            [1m[91m^^^^[0m [1m[91mno `ArcK` in the root[0m
+
+[1m[91merror[E0432][0m[1m: unresolved import `rpds::ArcK`[0m
+  [1m[94m--> [0mcrates/orchestrator/src/actors/examples/ping_pong/mod.rs:30:12
+   [1m[94m|[0m
+[1m[94m30[0m [1m[94m|[0m use rpds::{ArcK, Vector};
+   [1m[94m|[0m            [1m[91m^^^^[0m [1m[91mno `ArcK` in the root[0m
+
+[1m[33mwarning[0m[1m: unused imports: `BeadDetail as IpcBeadDetail` and `BeadSummary`[0m
+  [1m[94m--> [0mcrates/orchestrator/src/actors/ipc_worker.rs:45:17
+   [1m[94m|[0m
+[1m[94m45[0m [1m[94m|[0m     AlertLevel, BeadDetail as IpcBeadDetail, BeadSummary, ComponentHealth, GuestMessage,
+   [1m[94m|[0m                 [1m[33m^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m  [1m[33m^^^^^^^^^^^[0m
+   [1m[94m|[0m
+   [1m[94m= [0m[1mnote[0m: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+[1m[33mwarning[0m[1m: unused imports: `BeadRecord` and `BeadState`[0m
+  [1m[94m--> [0mcrates/orchestrator/src/actors/ipc_worker.rs:52:26
+   [1m[94m|[0m
+[1m[94m52[0m [1m[94m|[0m use crate::persistence::{BeadRecord, BeadState, OrchestratorStore};
+   [1m[94m|[0m                          [1m[33m^^^^^^^^^^[0m  [1m[33m^^^^^^^^^[0m
+
+[1m[33mwarning[0m[1m: unused imports: `DagError`, `DagResult`, `DependencyType`, and `WorkflowDAG`[0m
+  [1m[94m--> [0mcrates/orchestrator/src/dag/dependencies.rs:15:18
+   [1m[94m|[0m
+[1m[94m15[0m [1m[94m|[0m use crate::dag::{DagError, DagResult, DependencyType, WorkflowDAG};
+   [1m[94m|[0m                  [1m[33m^^^^^^^^[0m  [1m[33m^^^^^^^^^[0m  [1m[33m^^^^^^^^^^^^^^[0m  [1m[33m^^^^^^^^^^^[0m
+
+[1m[91merror[E0195][0m[1m: lifetime parameters or bounds on method `pre_start` do not match the trait declaration[0m
+   [1m[94m--> [0mcrates/orchestrator/src/actors/examples/messaging/calculator.rs:197:14
+    [1m[94m|[0m
+[1m[94m197[0m [1m[94m|[0m       async fn pre_start(
+    [1m[94m|[0m [1m[91m ______________^[0m
+[1m[94m198[0m [1m[94m|[0m [1m[91m|[0m         &self,
+[1m[94m199[0m [1m[94m|[0m [1m[91m|[0m         _myself: ActorRef<Self::Msg>,
+[1m[94m200[0m [1m[94m|[0m [1m[91m|[0m         _args: Self::Arguments,
+[1m[94m201[0m [1m[94m|[0m [1m[91m|[0m     ) -> Result<Self::State, ActorProcessingErr> {
+    [1m[94m|[0m [1m[91m|_____^[0m [1m[91mlifetimes do not match method in trait[0m
+
+[1m[91merror[E0195][0m[1m: lifetime parameters or bounds on method `handle` do not match the trait declaration[0m
+   [1m[94m--> [0mcrates/orchestrator/src/actors/examples/messaging/calculator.rs:205:14
+    [1m[94m|[0m
+[1m[94m205[0m [1m[94m|[0m       async fn handle(
+    [1m[94m|[0m [1m[91m ______________^[0m
+[1m[94m206[0m [1m[94m|[0m [1m[91m|[0m         &self,
+[1m[94m207[0m [1m[94m|[0m [1m[91m|[0m         _myself: ActorRef<Self::Msg>,
+[1m[94m208[0m [1m[94m|[0m [1m[91m|[0m         message: Self::Msg,
+[1m[94m209[0m [1m[94m|[0m [1m[91m|[0m         state: &mut Self::State,
+[1m[94m210[0m [1m[94m|[0m [1m[91m|[0m     ) -> Result<(), ActorProcessingErr> {
+    [1m[94m|[0m [1m[91m|_____^[0m [1m[91mlifetimes do not match method in trait[0m
+
+[1m[91merror[E0195][0m[1m: lifetime parameters or bounds on method `pre_start` do not match the trait declaration[0m
+   [1m[94m--> [0mcrates/orchestrator/src/actors/examples/messaging/logger.rs:217:14
+    [1m[94m|[0m
+[1m[94m217[0m [1m[94m|[0m       async fn pre_start(
+    [1m[94m|[0m [1m[91m ______________^[0m
+[1m[94m218[0m [1m[94m|[0m [1m[91m|[0m         &self,
+[1m[94m219[0m [1m[94m|[0m [1m[91m|[0m         _myself: ActorRef<Self::Msg>,
+[1m[94m220[0m [1m[94m|[0m [1m[91m|[0m         _args: Self::Arguments,
+[1m[94m221[0m [1m[94m|[0m [1m[91m|[0m     ) -> Result<Self::State, ActorProcessingErr> {
+    [1m[94m|[0m [1m[91m|_____^[0m [1m[91mlifetimes do not match method in trait[0m
+
+[1m[91merror[E0195][0m[1m: lifetime parameters or bounds on method `handle` do not match the trait declaration[0m
+   [1m[94m--> [0mcrates/orchestrator/src/actors/examples/messaging/logger.rs:225:14
+    [1m[94m|[0m
+[1m[94m225[0m [1m[94m|[0m       async fn handle(
+    [1m[94m|[0m [1m[91m ______________^[0m
+[1m[94m226[0m [1m[94m|[0m [1m[91m|[0m         &self,
+[1m[94m227[0m [1m[94m|[0m [1m[91m|[0m         _myself: ActorRef<Self::Msg>,
+[1m[94m228[0m [1m[94m|[0m [1m[91m|[0m         message: Self::Msg,
+[1m[94m229[0m [1m[94m|[0m [1m[91m|[0m         state: &mut Self::State,
+[1m[94m230[0m [1m[94m|[0m [1m[91m|[0m     ) -> Result<(), ActorProcessingErr> {
+    [1m[94m|[0m [1m[91m|_____^[0m [1m[91mlifetimes do not match method in trait[0m
+
+[1m[91merror[E0195][0m[1m: lifetime parameters or bounds on method `pre_start` do not match the trait declaration[0m
+   [1m[94m--> [0mcrates/orchestrator/src/actors/examples/ping_pong/mod.rs:201:14
+    [1m[94m|[0m
+[1m[94m201[0m [1m[94m|[0m       async fn pre_start(
+    [1m[94m|[0m [1m[91m ______________^[0m
+[1m[94m202[0m [1m[94m|[0m [1m[91m|[0m         &self,
+[1m[94m203[0m [1m[94m|[0m [1m[91m|[0m         _myself: ActorRef<Self::Msg>,
+[1m[94m204[0m [1m[94m|[0m [1m[91m|[0m         _args: Self::Arguments,
+[1m[94m205[0m [1m[94m|[0m [1m[91m|[0m     ) -> Result<Self::State, ActorProcessingErr> {
+    [1m[94m|[0m [1m[91m|_____^[0m [1m[91mlifetimes do not match method in trait[0m
+
+[1m[91merror[E0195][0m[1m: lifetime parameters or bounds on method `handle` do not match the trait declaration[0m
+   [1m[94m--> [0mcrates/orchestrator/src/actors/examples/ping_pong/mod.rs:209:14
+    [1m[94m|[0m
+[1m[94m209[0m [1m[94m|[0m       async fn handle(
+    [1m[94m|[0m [1m[91m ______________^[0m
+[1m[94m210[0m [1m[94m|[0m [1m[91m|[0m         &self,
+[1m[94m211[0m [1m[94m|[0m [1m[91m|[0m         _myself: ActorRef<Self::Msg>,
+[1m[94m212[0m [1m[94m|[0m [1m[91m|[0m         message: Self::Msg,
+[1m[94m213[0m [1m[94m|[0m [1m[91m|[0m         state: &mut Self::State,
+[1m[94m214[0m [1m[94m|[0m [1m[91m|[0m     ) -> Result<(), ActorProcessingErr> {
+    [1m[94m|[0m [1m[91m|_____^[0m [1m[91mlifetimes do not match method in trait[0m
+
+[1m[91merror[E0195][0m[1m: lifetime parameters or bounds on method `pre_start` do not match the trait declaration[0m
+   [1m[94m--> [0mcrates/orchestrator/src/actors/examples/ping_pong/mod.rs:252:14
+    [1m[94m|[0m
+[1m[94m252[0m [1m[94m|[0m       async fn pre_start(
+    [1m[94m|[0m [1m[91m ______________^[0m
+[1m[94m253[0m [1m[94m|[0m [1m[91m|[0m         &self,
+[1m[94m254[0m [1m[94m|[0m [1m[91m|[0m         _myself: ActorRef<Self::Msg>,
+[1m[94m255[0m [1m[94m|[0m [1m[91m|[0m         _args: Self::Arguments,
+[1m[94m256[0m [1m[94m|[0m [1m[91m|[0m     ) -> Result<Self::State, ActorProcessingErr> {
+    [1m[94m|[0m [1m[91m|_____^[0m [1m[91mlifetimes do not match method in trait[0m
+
+[1m[91merror[E0195][0m[1m: lifetime parameters or bounds on method `handle` do not match the trait declaration[0m
+   [1m[94m--> [0mcrates/orchestrator/src/actors/examples/ping_pong/mod.rs:260:14
+    [1m[94m|[0m
+[1m[94m260[0m [1m[94m|[0m       async fn handle(
+    [1m[94m|[0m [1m[91m ______________^[0m
+[1m[94m261[0m [1m[94m|[0m [1m[91m|[0m         &self,
+[1m[94m262[0m [1m[94m|[0m [1m[91m|[0m         myself: ActorRef<Self::Msg>,
+[1m[94m263[0m [1m[94m|[0m [1m[91m|[0m         message: Self::Msg,
+[1m[94m264[0m [1m[94m|[0m [1m[91m|[0m         state: &mut Self::State,
+[1m[94m265[0m [1m[94m|[0m [1m[91m|[0m     ) -> Result<(), ActorProcessingErr> {
+    [1m[94m|[0m [1m[91m|_____^[0m [1m[91mlifetimes do not match method in trait[0m
+
+[1m[91merror[E0599][0m[1m: no function or associated item named `handle_get_bead_list` found for struct `IpcWorkerActorDef` in the current scope[0m
+   [1m[94m--> [0mcrates/orchestrator/src/actors/ipc_worker.rs:295:34
+    [1m[94m|[0m
+ [1m[94m56[0m [1m[94m|[0m pub struct IpcWorkerActorDef;
+    [1m[94m|[0m [1m[94m----------------------------[0m [1m[94mfunction or associated item `handle_get_bead_list` not found for this struct[0m
+[1m[94m...[0m
+[1m[94m295[0m [1m[94m|[0m             let response = Self::handle_get_bead_list().await;
+    [1m[94m|[0m                                  [1m[91m^^^^^^^^^^^^^^^^^^^^[0m [1m[91mfunction or associated item not found in `IpcWorkerActorDef`[0m
+    [1m[94m|[0m
+[1m[96mhelp[0m: there is an associated function `handle_get_task_list` with a similar name
+    [1m[94m|[0m
+[1m[94m295[0m [91m- [0m            let response = Self::[91mhandle_get_bead_list[0m().await;
+[1m[94m295[0m [92m+ [0m            let response = Self::[92mhandle_get_task_list[0m().await;
+    [1m[94m|[0m
+
+[1m[91merror[E0599][0m[1m: no function or associated item named `handle_get_bead_detail` found for struct `IpcWorkerActorDef` in the current scope[0m
+   [1m[94m--> [0mcrates/orchestrator/src/actors/ipc_worker.rs:305:34
+    [1m[94m|[0m
+ [1m[94m56[0m [1m[94m|[0m pub struct IpcWorkerActorDef;
+    [1m[94m|[0m [1m[94m----------------------------[0m [1m[94mfunction or associated item `handle_get_bead_detail` not found for this struct[0m
+[1m[94m...[0m
+[1m[94m305[0m [1m[94m|[0m             let response = Self::handle_get_bead_detail(&bead_id).await;
+    [1m[94m|[0m                                  [1m[91m^^^^^^^^^^^^^^^^^^^^^^[0m [1m[91mfunction or associated item not found in `IpcWorkerActorDef`[0m
+    [1m[94m|[0m
+[1m[96mhelp[0m: there is an associated function `handle_get_task_detail` with a similar name
+    [1m[94m|[0m
+[1m[94m305[0m [91m- [0m            let response = Self::[91mhandle_get_bead_detail[0m(&bead_id).await;
+[1m[94m305[0m [92m+ [0m            let response = Self::[92mhandle_get_task_detail[0m(&bead_id).await;
+    [1m[94m|[0m
+
+[1m[91merror[E0425][0m[1m: cannot find function `execute_start_bead` in this scope[0m
+   [1m[94m--> [0mcrates/orchestrator/src/actors/ipc_worker.rs:431:52
+    [1m[94m|[0m
+[1m[94m431[0m [1m[94m|[0m             GuestMessage::StartBead { bead_id } => execute_start_bead(state, &bead_id),
+    [1m[94m|[0m                                                    [1m[91m^^^^^^^^^^^^^^^^^^[0m [1m[91mnot found in this scope[0m
+
+[1m[91merror[E0425][0m[1m: cannot find function `execute_cancel_bead` in this scope[0m
+   [1m[94m--> [0mcrates/orchestrator/src/actors/ipc_worker.rs:433:53
+    [1m[94m|[0m
+[1m[94m433[0m [1m[94m|[0m             GuestMessage::CancelBead { bead_id } => execute_cancel_bead(state, &bead_id),
+    [1m[94m|[0m                                                     [1m[91m^^^^^^^^^^^^^^^^^^^[0m [1m[91mnot found in this scope[0m
+
+[1m[91merror[E0425][0m[1m: cannot find function `execute_retry_bead` in this scope[0m
+   [1m[94m--> [0mcrates/orchestrator/src/actors/ipc_worker.rs:435:52
+    [1m[94m|[0m
+[1m[94m435[0m [1m[94m|[0m             GuestMessage::RetryBead { bead_id } => execute_retry_bead(state, &bead_id),
+    [1m[94m|[0m                                                    [1m[91m^^^^^^^^^^^^^^^^^^[0m [1m[91mnot found in this scope[0m
+
+[1m[33mwarning[0m[1m: unused variable: `timestamp`[0m
+   [1m[94m--> [0mcrates/orchestrator/src/actors/ipc_worker.rs:815:17
+    [1m[94m|[0m
+[1m[94m815[0m [1m[94m|[0m                 timestamp,
+    [1m[94m|[0m                 [1m[33m^^^^^^^^^[0m [1m[33mhelp: try ignoring the field: `timestamp: _`[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+[1mSome errors have detailed explanations: E0195, E0425, E0432, E0599.[0m
+[1mFor more information about an error, try `rustc --explain E0195`.[0m
+[1m[33mwarning[0m: `orchestrator` (lib) generated 4 warnings
+[1m[91merror[0m: could not compile `orchestrator` (lib) due to 15 previous errors; 4 warnings emitted

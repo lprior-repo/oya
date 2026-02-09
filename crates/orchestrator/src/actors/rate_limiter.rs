@@ -30,14 +30,19 @@ impl TokenBucket {
         self.tokens
     }
 
-    /// Attempt to consume one token.
-    pub fn allow(&mut self) -> bool {
+    /// Attempt to consume one token without blocking.
+    pub fn try_acquire(&mut self) -> Option<()> {
         self.refill_from_elapsed();
         if self.tokens == 0 {
-            return false;
+            return None;
         }
         self.tokens = self.tokens.saturating_sub(1);
-        true
+        Some(())
+    }
+
+    /// Attempt to consume one token.
+    pub fn allow(&mut self) -> bool {
+        self.try_acquire().is_some()
     }
 
     /// Manually trigger one refill step.
@@ -82,6 +87,7 @@ pub fn spawn_refill_timer(bucket: Arc<Mutex<TokenBucket>>) -> tokio::task::JoinH
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio_test::block_on;
 
     #[test]
     fn test_token_bucket_allows_until_empty() {
@@ -91,6 +97,14 @@ mod tests {
         assert!(bucket.allow());
         assert!(bucket.allow());
         assert!(!bucket.allow());
+    }
+
+    #[test]
+    fn test_try_acquire_returns_none_when_empty() {
+        let mut bucket = TokenBucket::new(1, 0);
+
+        assert_eq!(bucket.try_acquire(), Some(()));
+        assert_eq!(bucket.try_acquire(), None);
     }
 
     #[test]
@@ -104,23 +118,25 @@ mod tests {
         assert_eq!(bucket.tokens(), 5);
     }
 
-    #[tokio::test]
-    async fn test_refill_timer_runs_every_second() {
-        let bucket = Arc::new(Mutex::new(TokenBucket::new(10, 1)));
+    #[test]
+    fn test_refill_timer_runs_every_second() {
+        block_on(async {
+            let bucket = Arc::new(Mutex::new(TokenBucket::new(10, 1)));
 
-        {
-            let mut guard = bucket.lock().await;
-            for _ in 0..5 {
-                let _ = guard.allow();
+            {
+                let mut guard = bucket.lock().await;
+                for _ in 0..5 {
+                    let _ = guard.allow();
+                }
+                assert_eq!(guard.tokens(), 5);
             }
-            assert_eq!(guard.tokens(), 5);
-        }
 
-        let handle = spawn_refill_timer(Arc::clone(&bucket));
-        tokio::time::sleep(Duration::from_millis(1200)).await;
-        handle.abort();
+            let handle = spawn_refill_timer(Arc::clone(&bucket));
+            tokio::time::sleep(Duration::from_millis(1200)).await;
+            handle.abort();
 
-        let guard = bucket.lock().await;
-        assert!(guard.tokens() >= 6);
+            let guard = bucket.lock().await;
+            assert!(guard.tokens() >= 6);
+        });
     }
 }
