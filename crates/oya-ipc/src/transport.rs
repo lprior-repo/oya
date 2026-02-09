@@ -9,9 +9,9 @@
 //! - Use within actor context for safe concurrent access
 
 use crate::{
-    LENGTH_PREFIX_SIZE, MAX_FRAME_SIZE, MAX_PAYLOAD_SIZE, TransportError, TransportResult,
+    TransportError, TransportResult, LENGTH_PREFIX_SIZE, MAX_FRAME_SIZE, MAX_PAYLOAD_SIZE,
 };
-use serde::{Serialize, de::DeserializeOwned};
+use serde::{de::DeserializeOwned, Serialize};
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 
 /// Transport layer for length-prefixed bincode messages.
@@ -244,7 +244,6 @@ impl<R: Read, W: Write> IpcTransport<R, W> {
 /// # Ok(())
 /// # }
 /// ```
-#[cfg(test)]
 pub fn transport_pair() -> (
     IpcTransport<DuplexReader, DuplexWriter>,
     IpcTransport<DuplexReader, DuplexWriter>,
@@ -259,7 +258,6 @@ pub fn transport_pair() -> (
 }
 
 /// Duplex pipe for testing
-#[cfg(test)]
 #[derive(Debug)]
 pub struct DuplexPipe {
     buffer: std::sync::Arc<std::sync::Mutex<Vec<u8>>>,
@@ -267,7 +265,6 @@ pub struct DuplexPipe {
     writer_closed: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
-#[cfg(test)]
 impl DuplexPipe {
     fn new() -> Self {
         Self {
@@ -278,7 +275,6 @@ impl DuplexPipe {
     }
 }
 
-#[cfg(test)]
 impl Clone for DuplexPipe {
     fn clone(&self) -> Self {
         Self {
@@ -290,7 +286,6 @@ impl Clone for DuplexPipe {
 }
 
 /// Reader end of duplex pipe
-#[cfg(test)]
 #[derive(Debug, Clone)]
 pub struct DuplexReader {
     pipe: DuplexPipe,
@@ -298,14 +293,12 @@ pub struct DuplexReader {
 }
 
 /// Writer end of duplex pipe
-#[cfg(test)]
 #[derive(Debug)]
 pub struct DuplexWriter {
     pipe: DuplexPipe,
 }
 
 /// Create a duplex pipe pair for testing
-#[cfg(test)]
 pub fn duplex_pair() -> (DuplexWriter, DuplexReader) {
     let pipe = DuplexPipe::new();
     let writer = DuplexWriter { pipe: pipe.clone() };
@@ -313,7 +306,6 @@ pub fn duplex_pair() -> (DuplexWriter, DuplexReader) {
     (writer, reader)
 }
 
-#[cfg(test)]
 impl Read for DuplexReader {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         if self
@@ -344,7 +336,6 @@ impl Read for DuplexReader {
     }
 }
 
-#[cfg(test)]
 impl Write for DuplexWriter {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         if self
@@ -370,6 +361,18 @@ impl Write for DuplexWriter {
 
     fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
+    }
+}
+
+impl IpcTransport<DuplexReader, DuplexWriter> {
+    /// Create a pair of connected transports.
+    pub fn pair() -> (Self, Self) {
+        transport_pair()
+    }
+
+    /// Backwards-compatible alias for `pair`.
+    pub fn transport_pair() -> (Self, Self) {
+        transport_pair()
     }
 }
 

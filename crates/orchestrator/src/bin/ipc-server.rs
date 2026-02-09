@@ -8,7 +8,7 @@ use std::time::Duration;
 use orchestrator::actors::{IpcWorkerActorDef, IpcWorkerArguments, IpcWorkerMessage};
 use orchestrator::ipc_messages::{GuestMessage, HostMessage};
 use oya_ipc::{IpcTransport, TransportError};
-use ractor::{Actor, ActorRef, RpcReplyPort};
+use ractor::{Actor, ActorRef};
 use tokio::net::TcpListener;
 use tracing::{info, warn};
 
@@ -74,11 +74,10 @@ fn run_client(
         };
 
         let response = handle.block_on(async {
-            let reply = RpcReplyPort::new();
             ractor::call_t!(
                 ipc_worker,
-                IpcWorkerMessage::HandleGuestMessage { message, reply },
-                Duration::from_secs(10)
+                |reply| IpcWorkerMessage::HandleGuestMessage { message, reply },
+                10_000
             )
         });
 

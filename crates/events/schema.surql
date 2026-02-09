@@ -362,6 +362,35 @@ DEFINE INDEX bead_id_idx ON TABLE webhook COLUMNS bead_id;
 DEFINE INDEX active_idx ON TABLE webhook COLUMNS active;
 
 -- ============================================================================
+-- 12. WORKER_ASSIGNMENT - Sticky worker assignments for distribution
+-- ============================================================================
+DEFINE TABLE worker_assignment SCHEMAFULL;
+
+DEFINE FIELD assignment_id ON TABLE worker_assignment TYPE string
+    ASSERT string::len($value) > 0;
+
+DEFINE FIELD bead_id ON TABLE worker_assignment TYPE string
+    ASSERT string::len($value) > 0;
+
+DEFINE FIELD worker_id ON TABLE worker_assignment TYPE string
+    ASSERT string::len($value) > 0;
+
+DEFINE FIELD assigned_at ON TABLE worker_assignment TYPE datetime
+    DEFAULT time::now();
+
+DEFINE FIELD updated_at ON TABLE worker_assignment TYPE datetime
+    DEFAULT time::now();
+
+-- Primary key
+DEFINE INDEX assignment_id_unique_idx ON TABLE worker_assignment COLUMNS assignment_id UNIQUE;
+
+-- One assignment per bead (enforces uniqueness)
+DEFINE INDEX bead_id_unique_idx ON TABLE worker_assignment COLUMNS bead_id UNIQUE;
+
+-- Worker-based queries (find all beads for a worker)
+DEFINE INDEX worker_id_idx ON TABLE worker_assignment COLUMNS worker_id;
+
+-- ============================================================================
 -- GRAPH RELATIONS - Dependency tracking
 -- ============================================================================
 

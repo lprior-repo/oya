@@ -11,68 +11,112 @@
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
+#![forbid(unsafe_code)]
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use std::time::Duration;
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
 
-// NOTE: This is a placeholder benchmark structure
-// Full implementation requires the DurableEventStore with append_batch() to be integrated
+use oya_events::durable_store::{connect, ConnectionConfig, DurableEventStore};
+use oya_events::event::BeadEvent;
+use oya_events::types::{BeadId, BeadSpec, Complexity};
 
-/// Benchmark fixture for temp directory management
+/// Benchmark fixture for isolated test environment
+///
+/// Ensures fresh SurrealDB instance per benchmark iteration with automatic
+/// cleanup via RAII.
 pub struct BenchmarkFixture {
     temp_dir: TempDir,
 }
 
 impl BenchmarkFixture {
-    /// Create isolated temporary directory for benchmark
+    /// Create isolated temporary directory for benchmark run
+    ///
+    /// Returns error if tempfile creation fails (e.g., disk full, permission denied)
     pub fn setup() -> Result<Self, String> {
         TempDir::new()
             .map(|temp_dir| Self { temp_dir })
             .map_err(|e| format!("Failed to create temp dir: {}", e))
     }
 
-    /// Get path to test data directory
-    pub fn data_dir(&self) -> std::path::PathBuf {
-        self.temp_dir.path().join("data")
-    }
-
-    /// Get path to WAL directory
-    pub fn wal_dir(&self) -> std::path::PathBuf {
-        self.temp_dir.path().join(".wal")
+    /// Get path to test database/storage
+    pub fn test_path(&self) -> std::path::PathBuf {
+        self.temp_dir.path().join("benchmark_db")
     }
 }
 
-/// Simulate single append baseline
-/// This will be replaced with actual DurableEventStore::append_event() call
-async fn simulate_single_append(event_size: usize) -> Result<(), String> {
-    // Simulate event serialization
-    let _data = vec![0u8; event_size];
+/// Create realistic test event with specified payload size
+///
+/// Generates BeadEvent::Created with description field sized to match target.
+/// Uses repeatable text pattern to avoid compression artifacts.
+pub fn create_test_event(size_bytes: usize) -> BeadEvent {
+    let bead_id = BeadId::new();
+    let title = "Benchmark Test Event".to_string();
 
-    // Simulate WAL write
-    let _wal_data = vec![0u8; event_size + 4]; // +4 for length prefix
+    // Calculate description size to hit target payload
+    let base_size = title.len() + 50; // Approximate overhead of event structure
+    let desc_size = size_bytes.saturating_sub(base_size);
 
-    // Simulate fsync (most expensive operation)
-    tokio::task::yield_now().await;
+    let description = if desc_size > 0 {
+        // Create repeatable pattern to avoid compression
+        let chunk = "A"; // Single character, predictable
+        chunk.repeat(desc_size)
+    } else {
+        String::new()
+    };
 
-    Ok(())
+    let spec = BeadSpec::new(title)
+        .with_description(description)
+        .with_complexity(Complexity::Medium);
+
+    BeadEvent::created(bead_id, spec)
 }
 
-/// Simulate batch append
-/// This will be replaced with actual DurableEventStore::append_batch() call
-async fn simulate_batch_append(batch_size: usize, event_size: usize) -> Result<(), String> {
-    // Simulate batch serialization
-    let _events: Vec<Vec<u8>> = (0..batch_size).map(|_| vec![0u8; event_size]).collect();
+/// Core benchmark function: measure single event append latency
+///
+/// Measures complete append operation including:
+/// - Serialization (bincode)
+/// - WAL write with length-prefix encoding
+/// - fsync for durability
+/// - SurrealDB create operation
+///
+/// Target: p50 < 3ms, p99 < 5ms for 1KB payload
+async fn benchmark_single_append(
+    store: &DurableEventStore,
+    event: &BeadEvent,
+) -> Result<Duration, String> {
+    let start = std::time::Instant::now();
 
-    // Simulate single contiguous WAL write for all events
-    let total_size = batch_size * (event_size + 4);
-    let _wal_data = vec![0u8; total_size];
+    store
+        .append_event(event)
+        .await
+        .map_err(|e| format!("Append failed: {}", e))?;
 
-    // Simulate SINGLE fsync for entire batch (amortization!)
-    tokio::task::yield_now().await;
+    Ok(start.elapsed())
+}
 
-    Ok(())
+/// Core benchmark function: measure batch append throughput
+///
+/// Measures complete batch append operation including:
+/// - Batch serialization (bincode)
+/// - Single contiguous WAL write for all events
+/// - Single fsync for durability (amortization!)
+/// - SurrealDB batch create operation
+///
+/// Target: 10x+ throughput vs single append
+async fn benchmark_batch_append(
+    store: &DurableEventStore,
+    events: &[BeadEvent],
+) -> Result<Duration, String> {
+    let start = std::time::Instant::now();
+
+    store
+        .append_batch(events)
+        .await
+        .map_err(|e| format!("Batch append failed: {}", e))?;
+
+    Ok(start.elapsed())
 }
 
 /// Criterion benchmark for single append baseline

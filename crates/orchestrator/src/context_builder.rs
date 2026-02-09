@@ -37,7 +37,7 @@ pub struct StagePrompt {
 #[derive(Debug, thiserror::Error)]
 pub enum ContextError {
     /// Required artifact for a stage was missing.
-    #[error("missing required artifact for stage: {0}")]
+    #[error("missing required artifact for stage: {0:?}")]
     MissingArtifact(StageKind),
 }
 

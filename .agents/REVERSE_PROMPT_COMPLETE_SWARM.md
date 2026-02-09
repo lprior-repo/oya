@@ -247,39 +247,41 @@ If **qa-enforcer** or **red-queen** fails:
 
 ### Step 1: Claim Your Bead
 
+**How a brand new agent knows what to grab:**
+
+The agent doesn't need prior knowledge - it asks `bv` (graph-aware triage engine) which uses:
+- **Graph analysis**: PageRank, betweenness centrality, critical path
+- **Dependency awareness**: What unblocks the most downstream work
+- **Metrics**: Completion status, priority, relationships
+- **Smart ranking**: Returns actionable recommendations with claim commands
+
 ```bash
 export AGENT_ID={N}
 
-while true; do
-  BEAD_ID=$(sqlite3 /home/lewis/src/oya/.beads/beads.db "
-    SELECT id FROM issues
-    WHERE status = 'open' AND priority = 0
-    ORDER BY created_at ASC
-    LIMIT 1 OFFSET $((RANDOM % 10));
-  ")
+# Get intelligent recommendation from bv
+BV_OUTPUT=$(bv --robot-triage)
 
-  if [ -z "$BEAD_ID" ]; then
-    echo "No beads available. Exiting."
-    exit 0
-  fi
+# Extract top recommendation
+BEAD_ID=$(echo "$BV_OUTPUT" | jq -r '.recommendations[0].bead_id')
+REASON=$(echo "$BV_OUTPUT" | jq -r '.recommendations[0].reason')
+CLAIM_CMD=$(echo "$BV_OUTPUT" | jq -r '.commands[0] // empty')
 
-  CLAIM_RESULT=$(psql -U postgres -d swarm_db -t -c "
-    INSERT INTO bead_claims (bead_id, claimed_by, status)
-    VALUES ('$BEAD_ID', {N}, 'in_progress')
-    ON CONFLICT (bead_id) DO NOTHING
-    RETURNING bead_id;
-  " | xargs)
+if [ -z "$BEAD_ID" ] || [ "$BEAD_ID" = "null" ]; then
+  echo "No beads available from bv triage. Exiting."
+  exit 0
+fi
 
-  if [ -n "$CLAIM_RESULT" ]; then
-    echo "✓ Claimed bead: $BEAD_ID"
-    break
-  else
-    echo "  Already claimed, trying another..."
-    sleep 0.1
-  fi
-done
+echo "✓ Bv recommended bead: $BEAD_ID"
+echo "   Reason: $REASON"
 
-# Update agent state
+# Claim using bv's command or fallback to br
+if [ -n "$CLAIM_CMD" ] && [ "$CLAIM_CMD" != "null" ]; then
+  eval "$CLAIM_CMD"
+else
+  br update "$BEAD_ID" --status in_progress
+fi
+
+# Update coordinator database
 psql -U postgres -d swarm_db -c "
 UPDATE agent_state
 SET bead_id = '$BEAD_ID',
@@ -290,6 +292,12 @@ SET bead_id = '$BEAD_ID',
 WHERE agent_id = {N};
 "
 ```
+
+**Key insight**: `bv` provides context awareness - new agents automatically get the most impactful beads based on:
+- What's blocking others
+- Critical path items
+- Dependency relationships
+- PageRank scores
 
 ### Step 2: Spawn Workspace
 

@@ -78,6 +78,9 @@ pub mod scheduler;
 /// Stage gate decision engine for recursive stage transitions.
 pub mod stage_gate;
 
+/// Stage prompt/context construction for recursive bead execution.
+pub mod context_builder;
+
 /// Supervision tree helpers for tier-1 supervisors.
 pub mod supervision;
 
