@@ -190,9 +190,6 @@ mod tests {
 
         assert_eq!(edges.len(), stages.len().saturating_sub(1));
         assert_eq!(edges.first(), Some(&(Stage::Implement, Stage::UnitTest)));
-        assert_eq!(
-            edges.last(),
-            Some(&(Stage::Review, Stage::Accept))
-        );
+        assert_eq!(edges.last(), Some(&(Stage::Review, Stage::Accept)));
     }
 }

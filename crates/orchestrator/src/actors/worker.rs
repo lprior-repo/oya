@@ -401,12 +401,9 @@ impl Actor for WorkerActorDef {
                     if let Some(ref event_bus) = state.config.event_bus {
                         match oya_events::BeadId::try_from(id.clone()) {
                             Ok(parsed_id) => {
-                                let state_event =
-                                    oya_events::BeadEvent::state_changed(
-                                        parsed_id,
-                                        from_state,
-                                        new_state,
-                                    );
+                                let state_event = oya_events::BeadEvent::state_changed(
+                                    parsed_id, from_state, new_state,
+                                );
                                 if let Err(err) = event_bus.publish(state_event).await {
                                     tracing::error!(
                                         error = %err,
