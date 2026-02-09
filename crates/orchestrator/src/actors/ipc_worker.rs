@@ -35,8 +35,10 @@ use tokio::sync::{broadcast, mpsc};
 use tracing::info;
 
 use oya_events::{BeadEvent, EventBus, EventPattern, EventSubscription};
-use oya_pipeline::plan::{apply_stage_plan, approve_task, resolve_stage_range, run_full_pipeline};
-use oya_pipeline::persistence::{list_all_tasks, load_task_record, save_task_record};
+use oya_pipeline::{
+    apply_stage_plan, approve_task, list_all_tasks, load_task_record, resolve_stage_range,
+    run_full_pipeline, save_task_record,
+};
 
 use crate::ipc_messages::{
     AlertLevel, ComponentHealth, GuestMessage, HealthStatus, HostMessage, TaskDetail, TaskSummary,
@@ -529,23 +531,15 @@ impl IpcWorkerActorDef {
         dry_run: bool,
     ) -> Result<HostMessage, ActorError> {
         let repo_root = locate_repo_root()?;
-        let results = futures::future::join_all(
-            slugs
-                .iter()
-                .map(|slug| run_pipeline_for_slug(slug, dry_run, &repo_root)),
-        )
-        .await;
+        let mut updated = Vec::new();
+        let mut failed = Vec::new();
 
-        let (updated, failed) =
-            results
-                .into_iter()
-                .fold((Vec::new(), Vec::new()), |(mut updated, mut failed), result| {
-                    match result {
-                        Ok(update) => updated.push(update),
-                        Err(update) => failed.push(update),
-                    }
-                    (updated, failed)
-                });
+        for slug in slugs {
+            match run_pipeline_for_slug(slug, dry_run, &repo_root).await {
+                Ok(update) => updated.push(update),
+                Err(update) => failed.push(update),
+            }
+        }
 
         Ok(HostMessage::TaskBatchUpdated { updated, failed })
     }
