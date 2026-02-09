@@ -23,11 +23,23 @@ pub enum Error {
     #[error("task not found: {0}")]
     TaskNotFound(String),
     #[error("failed to read tasks from {path}: {source}")]
-    ReadFailure { path: PathBuf, source: std::io::Error },
+    ReadFailure {
+        path: PathBuf,
+        source: std::io::Error,
+    },
     #[error("failed to write tasks to {path}: {source}")]
-    WriteFailure { path: PathBuf, source: std::io::Error },
+    WriteFailure {
+        path: PathBuf,
+        source: std::io::Error,
+    },
     #[error("failed to parse tasks in {path}: {source}")]
-    ParseFailure { path: PathBuf, source: serde_json::Error },
+    ParseFailure {
+        path: PathBuf,
+        source: serde_json::Error,
+    },
     #[error("failed to serialize tasks for {path}: {source}")]
-    SerializeFailure { path: PathBuf, source: serde_json::Error },
+    SerializeFailure {
+        path: PathBuf,
+        source: serde_json::Error,
+    },
 }

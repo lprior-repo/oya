@@ -20,13 +20,13 @@ ZELLIJ_PLUGIN_DIR="${HOME}/.local/share/zellij/plugins"
 ZELLIJ_LAYOUT_DIR="${HOME}/.config/zellij/layouts"
 
 # Files
-WASM_SOURCE="${WASM_TARGET_DIR}/oya_zellij.wasm"
-WASM_DEST="${ZELLIJ_PLUGIN_DIR}/oya_zellij.wasm"
-LAYOUT_SOURCE="${PROJECT_ROOT}/crates/oya-zellij/assets/layout.kdl"
+WASM_SOURCE="${WASM_TARGET_DIR}/zellij_frontend.wasm"
+WASM_DEST="${ZELLIJ_PLUGIN_DIR}/zellij_frontend.wasm"
+LAYOUT_SOURCE="${PROJECT_ROOT}/crates/zellij-frontend/assets/layout.kdl"
 LAYOUT_DEST="${ZELLIJ_LAYOUT_DIR}/oya.kdl"
 
 # Version info
-PLUGIN_NAME="oya-zellij"
+PLUGIN_NAME="zellij-frontend"
 VERSION="${CARGO_PKG_VERSION:-dev}"
 
 log_info() {
@@ -73,7 +73,7 @@ build_wasm() {
 
     cd "$PROJECT_ROOT"
 
-    if cargo build --release --target wasm32-wasip1 -p oya-zellij; then
+    if cargo build --release --target wasm32-wasip1 -p zellij-frontend; then
         log_success "WASM build completed"
     else
         log_error "WASM build failed"

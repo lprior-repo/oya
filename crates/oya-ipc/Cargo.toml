@@ -1,24 +1,17 @@
 [package]
 name = "oya-ipc"
-version.workspace = true
-edition.workspace = true
-rust-version.workspace = true
-authors.workspace = true
-license.workspace = true
-repository.workspace = true
-description = "IPC transport layer for Zellij plugin communication"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
 
 [dependencies]
-serde = { workspace = true, features = ["derive"] }
-bincode = { workspace = true }
+serde = { workspace = true }
+bincode = { version = "2", features = ["serde"] }
 thiserror = { workspace = true }
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["rt-multi-thread", "macros", "io-util"] }
-criterion = { version = "0.5", features = ["html_reports"] }
-proptest = { version = "1" }
-serde = { workspace = true, features = ["derive"] }
+criterion = "0.5"
 
-[[bench]]
-name = "transport_bench"
-harness = false
+[lib]
+name = "oya_ipc"
+path = "src/lib.rs"

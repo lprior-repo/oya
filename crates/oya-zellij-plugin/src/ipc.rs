@@ -22,8 +22,7 @@ impl IpcClient {
     /// # Errors
     /// Returns an error when the connection fails.
     pub fn connect(address: &str) -> Result<Self, IpcError> {
-        let stream =
-            TcpStream::connect(address).map_err(|err| IpcError::Io(err.to_string()))?;
+        let stream = TcpStream::connect(address).map_err(|err| IpcError::Io(err.to_string()))?;
         stream
             .set_read_timeout(Some(Duration::from_secs(5)))
             .map_err(|err| IpcError::Io(err.to_string()))?;
@@ -43,10 +42,10 @@ impl IpcClient {
     /// # Errors
     /// Returns an error when sending or receiving fails.
     pub fn request(&mut self, message: GuestMessage) -> Result<HostMessage, IpcError> {
+        self.transport.send(&message).map_err(map_transport_error)?;
         self.transport
-            .send(&message)
-            .map_err(map_transport_error)?;
-        self.transport.recv::<HostMessage>().map_err(map_transport_error)
+            .recv::<HostMessage>()
+            .map_err(map_transport_error)
     }
 }
 
