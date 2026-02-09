@@ -48,7 +48,6 @@
 //! }
 //! ```
 
-#[cfg(any())]
 pub mod agent_slot;
 pub mod errors;
 #[cfg(feature = "examples")]
@@ -68,7 +67,6 @@ pub mod worker;
 pub mod workflow;
 
 // Re-export main types for convenience
-#[cfg(any())]
 pub use agent_slot::{
     AgentSlotActorDef, AgentSlotMessage, AgentSlotState, BeadCompletion, SlotError, SlotState,
 };
