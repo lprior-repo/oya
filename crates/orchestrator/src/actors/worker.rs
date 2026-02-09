@@ -10,7 +10,7 @@ use ractor::{Actor, ActorProcessingErr, ActorRef};
 use tokio::sync::watch;
 use tracing::{debug, info, warn};
 
-use oya_events::{BeadState, EventBus};
+use oya_events::{BeadResult, BeadState, EventBus};
 // TODO: Re-enable when oya-pipeline crate is created
 // use oya_pipeline::workspace::WorkspaceManager;
 // TODO: Re-enable when opencode is integrated
@@ -236,6 +236,9 @@ pub enum WorkerMessage {
         bead_id: String,
         from_state: Option<BeadState>,
     },
+    CompleteBead {
+        result: BeadResult,
+    },
     FailBead {
         error: String,
     },
@@ -366,6 +369,75 @@ impl Actor for WorkerActorDef {
                 state.reset_retries();
 
                 // Clear any previous execution context
+                state.clear_execution_context();
+            }
+            WorkerMessage::CompleteBead { result } => {
+                if !result.success {
+                    let error = result
+                        .error
+                        .clone()
+                        .unwrap_or_else(|| "bead failed".to_string());
+                    if let Err(err) = myself.send_message(WorkerMessage::FailBead { error }) {
+                        tracing::error!(
+                            error = %err,
+                            "Failed to send FailBead message"
+                        );
+                    }
+                    return Ok(());
+                }
+
+                let bead_id = state.current_bead.clone();
+                let from_state = state.current_state.unwrap_or(BeadState::Running);
+                let new_state = BeadState::Completed;
+
+                if let Some(ref mut ctx) = state.execution_context {
+                    let exec_result = WorkspaceExecutionResult::success();
+                    if let Err(err) = ctx.mark_completed(exec_result) {
+                        warn!(error = %err, "Failed to mark execution context completed");
+                    }
+                }
+
+                if let Some(ref id) = bead_id {
+                    if let Some(ref event_bus) = state.config.event_bus {
+                        match oya_events::BeadId::try_from(id.clone()) {
+                            Ok(parsed_id) => {
+                                let state_event =
+                                    oya_events::BeadEvent::state_changed(
+                                        parsed_id,
+                                        from_state,
+                                        new_state,
+                                    );
+                                if let Err(err) = event_bus.publish(state_event).await {
+                                    tracing::error!(
+                                        error = %err,
+                                        bead_id = %id,
+                                        "Failed to publish StateChanged completion event"
+                                    );
+                                }
+
+                                let completed_event =
+                                    oya_events::BeadEvent::completed(parsed_id, result);
+                                if let Err(err) = event_bus.publish(completed_event).await {
+                                    tracing::error!(
+                                        error = %err,
+                                        bead_id = %id,
+                                        "Failed to publish Completed event"
+                                    );
+                                }
+                            }
+                            Err(err) => {
+                                tracing::error!(
+                                    error = %err,
+                                    bead_id = %id,
+                                    "Failed to parse BeadId for completion events"
+                                );
+                            }
+                        }
+                    }
+                }
+
+                state.current_bead = None;
+                state.current_state = None;
                 state.clear_execution_context();
             }
             WorkerMessage::FailBead { error } => {
