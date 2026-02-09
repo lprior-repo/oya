@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::dag::{DagError, DependencyType, WorkflowDAG};
 use crate::{Error, Result};
+use oya_pipeline::{Stage, pipeline_stage_edges};
 
 // Re-export types from DAG module
 pub use crate::dag::BeadId;
@@ -154,6 +155,29 @@ impl WorkflowState {
     #[must_use]
     pub fn contains_bead(&self, bead_id: &BeadId) -> bool {
         self.dag.contains_node(bead_id)
+    }
+
+    /// Build a workflow state from the canonical pipeline stages.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the DAG cannot be constructed.
+    pub fn from_pipeline(workflow_id: WorkflowId) -> Result<Self> {
+        let mut state = Self::new(workflow_id);
+
+        for stage in Stage::all() {
+            state.add_bead(stage.as_str().to_string())?;
+        }
+
+        for (from, to) in pipeline_stage_edges() {
+            state.add_dependency(
+                from.as_str().to_string(),
+                to.as_str().to_string(),
+                DependencyType::BlockingDependency,
+            )?;
+        }
+
+        Ok(state)
     }
 }
 
@@ -1351,6 +1375,19 @@ mod tests {
             !ready.contains(&bead_b),
             "bead_b (depends on bead_a) should not be ready"
         );
+    }
+
+    #[test]
+    fn test_workflow_state_from_pipeline_builds_linear_dag() {
+        let state = WorkflowState::from_pipeline("pipeline-1".to_string())
+            .expect("pipeline state should build");
+
+        assert_eq!(state.len(), Stage::all().len());
+        assert!(state.contains_bead(&Stage::Implement.as_str().to_string()));
+        assert!(state.contains_bead(&Stage::Accept.as_str().to_string()));
+
+        let ready = state.get_ready_beads();
+        assert_eq!(ready, vec![Stage::Implement.as_str().to_string()]);
     }
 
     #[test]
