@@ -19,10 +19,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt().with_env_filter("info").init();
 
     let address = std::env::var("OYA_IPC_ADDR").unwrap_or_else(|_| DEFAULT_ADDR.to_string());
-    let (ipc_worker, _handle) =
-        Actor::spawn(None, IpcWorkerActorDef, IpcWorkerArguments::new())
-            .await
-            .map_err(|err| format!("Failed to spawn IPC worker: {err:?}"))?;
+    let (ipc_worker, _handle) = Actor::spawn(None, IpcWorkerActorDef, IpcWorkerArguments::new())
+        .await
+        .map_err(|err| format!("Failed to spawn IPC worker: {err:?}"))?;
 
     let listener = TcpListener::bind(&address).await?;
     info!("IPC server listening on {}", address);

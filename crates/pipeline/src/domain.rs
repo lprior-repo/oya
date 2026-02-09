@@ -3,7 +3,7 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
-use crate::stages::{validate_stage_sequence, Stage};
+use crate::stages::{Stage, validate_stage_sequence};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Slug(String);

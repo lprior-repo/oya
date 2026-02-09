@@ -11,11 +11,10 @@ fn tasks_path(repo_root: &Path) -> PathBuf {
 
 async fn read_tasks(path: &Path) -> Result<Vec<Task>> {
     match fs::read(path).await {
-        Ok(bytes) => serde_json::from_slice(&bytes)
-            .map_err(|source| Error::ParseFailure {
-                path: path.to_path_buf(),
-                source,
-            }),
+        Ok(bytes) => serde_json::from_slice(&bytes).map_err(|source| Error::ParseFailure {
+            path: path.to_path_buf(),
+            source,
+        }),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
         Err(source) => Err(Error::ReadFailure {
             path: path.to_path_buf(),
@@ -39,10 +38,12 @@ async fn write_tasks(path: &Path, tasks: &[Task]) -> Result<()> {
             })?;
     }
 
-    fs::write(path, payload).await.map_err(|source| Error::WriteFailure {
-        path: path.to_path_buf(),
-        source,
-    })
+    fs::write(path, payload)
+        .await
+        .map_err(|source| Error::WriteFailure {
+            path: path.to_path_buf(),
+            source,
+        })
 }
 
 /// Save (create or update) a task record.
@@ -84,7 +85,13 @@ pub async fn update_task_status(
 
     tasks = tasks
         .into_iter()
-        .map(|task| if task.slug == lookup { updated.clone() } else { task })
+        .map(|task| {
+            if task.slug == lookup {
+                updated.clone()
+            } else {
+                task
+            }
+        })
         .collect();
 
     write_tasks(&path, &tasks).await?;

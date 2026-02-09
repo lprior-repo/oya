@@ -63,6 +63,10 @@ pub struct PoolStats {
     pub shutting_down: usize,
     /// Number of terminated agents.
     pub terminated: usize,
+    /// Number of beads currently assigned to agents.
+    pub beads_assigned: usize,
+    /// Number of beads completed.
+    pub beads_completed: usize,
 }
 
 /// Agent pool for managing multiple agents.
@@ -74,6 +78,8 @@ pub struct AgentPool {
     health_monitor: HealthMonitor,
     /// Pool configuration.
     config: PoolConfig,
+    /// Number of beads completed.
+    beads_completed: Arc<RwLock<usize>>,
 }
 
 impl AgentPool {
@@ -82,11 +88,13 @@ impl AgentPool {
     pub fn new(config: PoolConfig) -> Self {
         let agents = Arc::new(RwLock::new(HashMap::new()));
         let health_monitor = HealthMonitor::new(config.health_config.clone(), Arc::clone(&agents));
+        let beads_completed = Arc::new(RwLock::new(0));
 
         Self {
             agents,
             health_monitor,
             config,
+            beads_completed,
         }
     }
 
@@ -261,6 +269,9 @@ impl AgentPool {
                 bead_id = %bead_id,
                 "Bead completed"
             );
+
+            let mut count = self.beads_completed.write().await;
+            *count = count.saturating_add(1);
         }
 
         Ok(())
@@ -347,9 +358,11 @@ impl AgentPool {
     /// Get pool statistics.
     pub async fn stats(&self) -> PoolStats {
         let agents = self.agents.read().await;
+        let completed_count = self.beads_completed.read().await;
 
         let mut stats = PoolStats {
             total: agents.len(),
+            beads_completed: *completed_count,
             ..Default::default()
         };
 
@@ -360,6 +373,10 @@ impl AgentPool {
                 AgentState::Unhealthy => stats.unhealthy += 1,
                 AgentState::ShuttingDown => stats.shutting_down += 1,
                 AgentState::Terminated => stats.terminated += 1,
+            }
+
+            if agent.current_bead().is_some() {
+                stats.beads_assigned += 1;
             }
         }
 

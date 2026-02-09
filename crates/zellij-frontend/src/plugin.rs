@@ -499,7 +499,7 @@ impl OyaPlugin {
                 let _ = self.refresh_tasks();
                 Ok(())
             }
-            Ok(HostMessage::Error { message }) => {
+            Ok(HostMessage::Error { message, .. }) => {
                 self.status_message = Some(format!("Task error: {message}"));
                 Ok(())
             }

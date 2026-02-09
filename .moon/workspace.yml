@@ -13,8 +13,7 @@ projects:
     - "crates/reconciler"
     - "crates/oya-web"
     - "crates/oya-shared"
-    - "crates/oya-zellij"
-    # Note: oya-ui excluded until implemented (placeholder crate)
+    - "crates/zellij-frontend"
 
 # VCS configuration
 vcs:

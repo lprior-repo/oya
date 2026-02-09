@@ -6,7 +6,11 @@ use crate::stages::Stage;
 ///
 /// # Errors
 /// Returns an error when the stage labels are invalid or out of order.
-pub fn resolve_stage_range(stage: &str, from: Option<&str>, to: Option<&str>) -> Result<Vec<Stage>> {
+pub fn resolve_stage_range(
+    stage: &str,
+    from: Option<&str>,
+    to: Option<&str>,
+) -> Result<Vec<Stage>> {
     let start = match from {
         Some(label) => Stage::parse(label)?,
         None => Stage::parse(stage)?,
@@ -141,11 +145,7 @@ pub fn pipeline_report(task: &Task) -> Vec<StageReport> {
     }
 }
 
-fn report_with_marker(
-    stages: &[Stage],
-    marker: &str,
-    failed: bool,
-) -> Vec<StageReport> {
+fn report_with_marker(stages: &[Stage], marker: &str, failed: bool) -> Vec<StageReport> {
     let marker_stage = Stage::parse(marker).ok();
     stages
         .iter()
@@ -156,11 +156,7 @@ fn report_with_marker(
         .collect()
 }
 
-fn stage_status_for(
-    stage: Stage,
-    marker: Option<Stage>,
-    failed: bool,
-) -> PipelineStageStatus {
+fn stage_status_for(stage: Stage, marker: Option<Stage>, failed: bool) -> PipelineStageStatus {
     match marker {
         Some(marker) if stage.index() < marker.index() => PipelineStageStatus::Complete,
         Some(marker) if stage.index() == marker.index() => {
