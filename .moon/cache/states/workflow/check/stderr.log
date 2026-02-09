@@ -1,9 +1,6 @@
 [1m[33mwarning[0m: profiles for the non root package will be ignored, specify profiles at the workspace root:
 package:   /home/lewis/src/oya/crates/zellij-frontend/Cargo.toml
 workspace: /home/lewis/src/oya/Cargo.toml
-[1m[33mwarning[0m: profiles for the non root package will be ignored, specify profiles at the workspace root:
-package:   /home/lewis/src/oya/crates/oya-zellij-plugin/Cargo.toml
-workspace: /home/lewis/src/oya/Cargo.toml
 [1m[92m    Blocking[0m waiting for file lock on package cache
 [1m[92m    Blocking[0m waiting for file lock on package cache
 [1m[92m    Blocking[0m waiting for file lock on package cache

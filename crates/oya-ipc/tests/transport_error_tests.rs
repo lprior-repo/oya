@@ -21,16 +21,9 @@ struct BeadSummary {
     title: String,
 }
 
-fn create_transport_pair() -> (
-    IpcTransport<DuplexReader, DuplexWriter>,
-    IpcTransport<DuplexReader, DuplexWriter>,
-) {
-    IpcTransport::transport_pair()
-}
-
 #[test]
 fn test_send_message_exceeding_1mb_returns_error() {
-    let (mut client, _server) = create_transport_pair();
+    let (mut client, _server) = IpcTransport::pair();
 
     // Create a message larger than 1MB
     let oversized_msg = HostMessage::Error("x".repeat(1_048_577));
@@ -47,15 +40,13 @@ fn test_send_message_exceeding_1mb_returns_error() {
         max_size,
     }) = result
     {
-        assert!(*actual_size > 1_048_576);
-        assert_eq!(*max_size, 1_048_576);
+        assert!(actual_size > 1_048_576);
+        assert_eq!(max_size, 1_048_576);
     }
 }
 
 #[test]
 fn test_recv_with_invalid_length_prefix_returns_error() {
-    use std::io::Write;
-
     struct InvalidPrefixReader {
         sent_prefix: bool,
     }
@@ -90,8 +81,6 @@ fn test_recv_with_invalid_length_prefix_returns_error() {
 
 #[test]
 fn test_recv_with_zero_length_prefix_returns_error() {
-    use std::io::Write;
-
     struct ZeroPrefixReader {
         sent_prefix: bool,
     }
@@ -157,8 +146,8 @@ fn test_recv_eof_during_length_prefix_returns_error() {
         expected_bytes,
     }) = result
     {
-        assert_eq!(*bytes_read, 0); // No complete prefix read
-        assert_eq!(*expected_bytes, 4);
+        assert_eq!(bytes_read, 0); // No complete prefix read
+        assert_eq!(expected_bytes, 4);
     }
 }
 
@@ -209,8 +198,8 @@ fn test_recv_eof_during_payload_returns_error() {
         expected_bytes,
     }) = result
     {
-        assert_eq!(*bytes_read, 504); // 4 bytes prefix + 500 bytes payload
-        assert_eq!(*expected_bytes, 1004); // 4 bytes prefix + 1000 bytes payload
+        assert_eq!(bytes_read, 504); // 4 bytes prefix + 500 bytes payload
+        assert_eq!(expected_bytes, 1004); // 4 bytes prefix + 1000 bytes payload
     }
 }
 
@@ -264,7 +253,7 @@ fn test_recv_with_corrupted_payload_returns_error() {
     }) = result
     {
         assert!(!cause.is_empty());
-        assert_eq!(*payload_bytes, 100);
+        assert_eq!(payload_bytes, 100);
     }
 }
 

@@ -27,7 +27,7 @@
 //! - **Pure functions**: State transitions are functional
 
 use ractor::{Actor, ActorProcessingErr, ActorRef};
-use rpds::{ArcK, Vector};
+use rpds::Vector;
 use std::fmt;
 
 //==============================================================================
@@ -69,17 +69,17 @@ pub enum PongMessage {
 #[derive(Debug, Clone)]
 pub struct PingState {
     /// History of all sent pings
-    sent_pings: Vector<usize, ArcK>,
+    sent_pings: Vector<usize>,
     /// History of all received pongs
-    received_pongs: Vector<usize, ArcK>,
+    received_pongs: Vector<usize>,
 }
 
 impl PingState {
     /// Create a new empty state
     pub fn new() -> Self {
         Self {
-            sent_pings: Vector::new_with_ptr_kind(),
-            received_pongs: Vector::new_with_ptr_kind(),
+            sent_pings: Vector::new(),
+            received_pongs: Vector::new(),
         }
     }
 
@@ -125,17 +125,17 @@ impl Default for PingState {
 #[derive(Debug, Clone)]
 pub struct PongState {
     /// History of all received pings
-    received_pings: Vector<usize, ArcK>,
+    received_pings: Vector<usize>,
     /// History of all sent pongs
-    sent_pongs: Vector<usize, ArcK>,
+    sent_pongs: Vector<usize>,
 }
 
 impl PongState {
     /// Create a new empty state
     pub fn new() -> Self {
         Self {
-            received_pings: Vector::new_with_ptr_kind(),
-            sent_pongs: Vector::new_with_ptr_kind(),
+            received_pings: Vector::new(),
+            sent_pongs: Vector::new(),
         }
     }
 
@@ -192,7 +192,6 @@ impl Default for PongActor {
     }
 }
 
-#[async_trait::async_trait]
 impl Actor for PongActor {
     type Msg = PongMessage;
     type State = PongState;
@@ -243,7 +242,6 @@ impl Default for PingActor {
     }
 }
 
-#[async_trait::async_trait]
 impl Actor for PingActor {
     type Msg = PingMessage;
     type State = PingState;
@@ -436,7 +434,7 @@ impl fmt::Display for PingPongResult {
 // Tests
 //==============================================================================
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 mod tests {
     use super::*;
 

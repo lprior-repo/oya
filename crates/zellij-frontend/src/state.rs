@@ -121,7 +121,7 @@ impl StateSnapshot {
 
         Ok(Self {
             version: STATE_VERSION,
-            tasks: tasks.clone(),
+            tasks: tasks.to_vec(),
             selected_index: plugin.selected_index(),
             focused_pane: plugin.focused_pane(),
             plugin_state: plugin.plugin_state(),

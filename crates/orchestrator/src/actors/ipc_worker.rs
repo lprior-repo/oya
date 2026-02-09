@@ -307,6 +307,37 @@ impl Actor for IpcWorkerActorDef {
             return Ok(());
         }
 
+        // Bead operation commands (async, require persistence)
+        if let IpcWorkerMessage::HandleGuestMessage {
+            message: GuestMessage::StartBead { bead_id },
+            reply,
+        } = message
+        {
+            let response = Self::handle_start_bead(state, &bead_id).await;
+            let _ = reply.send(response);
+            return Ok(());
+        }
+
+        if let IpcWorkerMessage::HandleGuestMessage {
+            message: GuestMessage::CancelBead { bead_id },
+            reply,
+        } = message
+        {
+            let response = Self::handle_cancel_bead(state, &bead_id).await;
+            let _ = reply.send(response);
+            return Ok(());
+        }
+
+        if let IpcWorkerMessage::HandleGuestMessage {
+            message: GuestMessage::RetryBead { bead_id },
+            reply,
+        } = message
+        {
+            let response = Self::handle_retry_bead(state, &bead_id).await;
+            let _ = reply.send(response);
+            return Ok(());
+        }
+
         // Special case for Shutdown
         if matches!(message, IpcWorkerMessage::Shutdown) {
             info!("IpcWorker shutdown requested");
@@ -428,11 +459,11 @@ mod core {
 
             // COMMANDS
             // ════════
-            GuestMessage::StartBead { bead_id } => IpcWorkerActorDef::execute_start_bead(state, &bead_id),
-
-            GuestMessage::CancelBead { bead_id } => IpcWorkerActorDef::execute_cancel_bead(state, &bead_id),
-
-            GuestMessage::RetryBead { bead_id } => IpcWorkerActorDef::execute_retry_bead(state, &bead_id),
+            GuestMessage::StartBead { .. }
+            | GuestMessage::CancelBead { .. }
+            | GuestMessage::RetryBead { .. } => Err(ActorError::internal(
+                "Bead commands are handled asynchronously".to_string(),
+            )),
 
             GuestMessage::RunStage { .. } | GuestMessage::ApproveTask { .. } => Err(
                 ActorError::internal("Task commands are handled asynchronously".to_string()),
@@ -781,40 +812,31 @@ impl IpcWorkerActorDef {
         })
     }
 
-    /// Execute start bead command.
+    /// Handle start bead command.
     ///
     /// Transitions a bead from a non-terminal state to Running.
     /// This operation is idempotent: calling start on an already-running bead
     /// succeeds without modification.
-    ///
-    /// # State Transitions
-    /// - Pending/Ready/Dispatched/Assigned → Running (updates state)
-    /// - Running → Running (idempotent no-op)
-    /// - Completed/Failed/Cancelled → Running (error: terminal state)
-    fn execute_start_bead(
+    async fn handle_start_bead(
         state: &IpcWorkerState,
         bead_id: &str,
     ) -> Result<HostMessage, ActorError> {
-        // Validate store is available
         let store = state
             .store
             .as_ref()
             .ok_or_else(|| ActorError::internal("Store not initialized"))?;
 
-        // Validate bead_id is non-empty
         if bead_id.is_empty() {
             return Err(ActorError::internal("Bead ID cannot be empty"));
         }
 
-        // Load current bead state
         let current = match store.get_bead(bead_id).await {
             Ok(record) => record,
-            Err(e) => {
+            Err(_) => {
                 return Err(ActorError::BeadNotFound(bead_id.to_string()));
             }
         };
 
-        // Validate state transition
         match current.state {
             BeadState::Completed | BeadState::Failed | BeadState::Cancelled => {
                 return Err(ActorError::invalid_state_transition(format!(
@@ -823,7 +845,6 @@ impl IpcWorkerActorDef {
                 )));
             }
             BeadState::Running => {
-                // Idempotent: already running, return success
                 return Ok(HostMessage::Ack {
                     command: "StartBead".to_string(),
                     message: format!("Bead {} is already running", bead_id),
@@ -834,8 +855,7 @@ impl IpcWorkerActorDef {
             }
         }
 
-        // Perform state transition
-        match store.update_bead_state(bead_id, BeadState::Running) {
+        match store.update_bead_state(bead_id, BeadState::Running).await {
             Ok(_) => (),
             Err(e) => {
                 return Err(ActorError::internal(format!(
@@ -845,51 +865,37 @@ impl IpcWorkerActorDef {
             }
         };
 
-        // Note: EventBus publishing would require converting:
-        // - String bead_id -> oya_events::BeadId (ULID)
-        // - persistence::BeadState -> oya_events::BeadState
-        // This conversion is deferred to a future integration pass
-
         Ok(HostMessage::Ack {
             command: "StartBead".to_string(),
             message: format!("Bead {} started successfully", bead_id),
         })
     }
 
-    /// Execute cancel bead command.
+    /// Handle cancel bead command.
     ///
     /// Transitions a bead from any non-terminal state to Cancelled.
     /// This operation is idempotent: calling cancel on an already-cancelled bead
     /// succeeds without modification.
-    ///
-    /// # State Transitions
-    /// - Pending/Ready/Dispatched/Assigned/Running → Cancelled (updates state)
-    /// - Cancelled → Cancelled (idempotent no-op)
-    /// - Completed/Failed → Cancelled (error: already terminal)
-    fn execute_cancel_bead(
+    async fn handle_cancel_bead(
         state: &IpcWorkerState,
         bead_id: &str,
     ) -> Result<HostMessage, ActorError> {
-        // Validate store is available
         let store = state
             .store
             .as_ref()
             .ok_or_else(|| ActorError::internal("Store not initialized"))?;
 
-        // Validate bead_id is non-empty
         if bead_id.is_empty() {
             return Err(ActorError::internal("Bead ID cannot be empty"));
         }
 
-        // Load current bead state
-        let current = match store.get_bead(bead_id) {
+        let current = match store.get_bead(bead_id).await {
             Ok(record) => record,
             Err(_) => {
                 return Err(ActorError::BeadNotFound(bead_id.to_string()));
             }
         };
 
-        // Validate state transition
         match current.state {
             BeadState::Completed | BeadState::Failed => {
                 return Err(ActorError::invalid_state_transition(format!(
@@ -898,7 +904,6 @@ impl IpcWorkerActorDef {
                 )));
             }
             BeadState::Cancelled => {
-                // Idempotent: already cancelled, return success
                 return Ok(HostMessage::Ack {
                     command: "CancelBead".to_string(),
                     message: format!("Bead {} is already cancelled", bead_id),
@@ -913,8 +918,7 @@ impl IpcWorkerActorDef {
             }
         }
 
-        // Perform state transition
-        match store.update_bead_state(bead_id, BeadState::Cancelled) {
+        match store.update_bead_state(bead_id, BeadState::Cancelled).await {
             Ok(_) => (),
             Err(e) => {
                 return Err(ActorError::internal(format!(
@@ -923,11 +927,6 @@ impl IpcWorkerActorDef {
                 )));
             }
         };
-
-        // Note: EventBus publishing would require converting:
-        // - String bead_id -> oya_events::BeadId (ULID)
-        // - persistence::BeadState -> oya_events::BeadState
-        // This conversion is deferred to a future integration pass
 
         Ok(HostMessage::Ack {
             command: "CancelBead".to_string(),
@@ -935,38 +934,30 @@ impl IpcWorkerActorDef {
         })
     }
 
-    /// Execute retry bead command.
+    /// Handle retry bead command.
     ///
     /// Resets a Failed bead to Ready state for re-execution.
     /// Increments retry_count and clears error information.
-    ///
-    /// # State Transitions
-    /// - Failed → Ready (with retry_count increment)
-    /// - All other states → Error (only failed beads can be retried)
-    fn execute_retry_bead(
+    async fn handle_retry_bead(
         state: &IpcWorkerState,
         bead_id: &str,
     ) -> Result<HostMessage, ActorError> {
-        // Validate store is available
         let store = state
             .store
             .as_ref()
             .ok_or_else(|| ActorError::internal("Store not initialized"))?;
 
-        // Validate bead_id is non-empty
         if bead_id.is_empty() {
             return Err(ActorError::internal("Bead ID cannot be empty"));
         }
 
-        // Load current bead state
-        let current = match store.get_bead(bead_id) {
+        let current = match store.get_bead(bead_id).await {
             Ok(record) => record,
             Err(_) => {
                 return Err(ActorError::BeadNotFound(bead_id.to_string()));
             }
         };
 
-        // Validate state transition (only Failed can be retried)
         if current.state != BeadState::Failed {
             return Err(ActorError::invalid_state_transition(format!(
                 "Cannot retry bead in state: {} (only Failed beads can be retried)",
@@ -974,12 +965,9 @@ impl IpcWorkerActorDef {
             )));
         }
 
-        // Perform retry: increment retry_count and reset to Ready
         let new_retry_count = current.retry_count + 1;
 
-        // Use store methods to update state and retry count
-        // First update the state to Ready
-        match store.update_bead_state(bead_id, BeadState::Ready) {
+        match store.update_bead_state(bead_id, BeadState::Ready).await {
             Ok(_) => (),
             Err(e) => {
                 return Err(ActorError::internal(format!(
@@ -988,14 +976,6 @@ impl IpcWorkerActorDef {
                 )));
             }
         };
-
-        // Note: retry_count increment would require additional store method
-        // For now, the state transition is complete; retry tracking is TODO
-
-        // Note: EventBus publishing would require converting:
-        // - String bead_id -> oya_events::BeadId (ULID)
-        // - persistence::BeadState -> oya_events::BeadState
-        // This conversion is deferred to a future integration pass
 
         Ok(HostMessage::Ack {
             command: "RetryBead".to_string(),

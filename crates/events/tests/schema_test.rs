@@ -33,7 +33,7 @@ async fn test_schema_file_exists() -> Result<(), String> {
 async fn test_all_tables_defined() -> Result<(), String> {
     let schema = load_schema()?;
 
-    // Check that all 12 tables are defined
+    // Check that all 13 tables are defined
     let required_tables = [
         "state_transition",
         "idempotency_key",
@@ -46,6 +46,7 @@ async fn test_all_tables_defined() -> Result<(), String> {
         "token_bucket",
         "concurrency_limit",
         "webhook",
+        "worker_assignment",
     ];
 
     for table in required_tables {

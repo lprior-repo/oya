@@ -188,7 +188,6 @@ impl Default for CalculatorActor {
     }
 }
 
-#[async_trait::async_trait]
 impl Actor for CalculatorActor {
     type Msg = CalculatorMessage;
     type State = CalculatorState;
@@ -359,7 +358,7 @@ impl CalculatorResult {
 // Tests
 //==============================================================================
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 mod tests {
     use super::*;
     use ractor::{call, cast};

@@ -39,82 +39,79 @@ If **qa-enforcer** or **red-queen** fails:
 
 ### Step 1: Claim Your Bead
 
-**Step 1a: Find and claim a bead (lock-free, retry loop)**
+**Use `bv` (graph-aware triage) to intelligently select and claim a bead:**
 
 ```bash
 # Set your agent number
 export AGENT_ID={N}
 
-# Try to find and claim a bead using a retry loop
-# This handles the race condition where multiple agents might try the same bead
-while true; do
-  # Get a candidate bead from SQLite (open P0 issues)
-  BEAD_ID=$(sqlite3 /home/lewis/src/oya/.beads/beads.db "
-    SELECT id FROM issues
-    WHERE status = 'open' AND priority = 0
-    ORDER BY created_at ASC
-    LIMIT 1 OFFSET $((RANDOM % 10));
-  ")
+# Use bv robot-triage to get the top recommended bead with claim command
+BV_OUTPUT=$(bv --robot-triage 2>/dev/null)
 
-  if [ -z "$BEAD_ID" ]; then
-    echo "No beads available. Exiting."
-    exit 0
-  fi
+# Extract bead ID and claim command from bv output
+BEAD_ID=$(echo "$BV_OUTPUT" | jq -r '.recommendations[0].bead_id' 2>/dev/null)
+CLAIM_CMD=$(echo "$BV_OUTPUT" | jq -r '.commands[0] // empty' 2>/dev/null)
 
-  echo "Attempting to claim bead: $BEAD_ID"
+if [ -z "$BEAD_ID" ] || [ "$BEAD_ID" = "null" ]; then
+  echo "No beads available from bv triage. Exiting."
+  exit 0
+fi
 
-  # Try to claim the bead in PostgreSQL (ON CONFLICT prevents double-claim)
-  CLAIM_RESULT=$(psql -U postgres -d swarm_db -t -c "
-    INSERT INTO bead_claims (bead_id, claimed_by, status)
-    VALUES ('$BEAD_ID', {N}, 'in_progress')
-    ON CONFLICT (bead_id) DO NOTHING
-    RETURNING bead_id;
-  ")
+echo "✓ Bv recommended bead: $BEAD_ID"
+echo "   Reason: $(echo "$BV_OUTPUT" | jq -r '.recommendations[0].reason // No reason provided')"
 
-  # Trim whitespace
-  CLAIM_RESULT=$(echo "$CLAIM_RESULT" | xargs)
+# Claim the bead using br (or use the claim command from bv if available)
+if [ -n "$CLAIM_CMD" ] && [ "$CLAIM_CMD" != "null" ]; then
+  echo "   Claiming with: $CLAIM_CMD"
+  eval "$CLAIM_CMD"
+else
+  # Fallback: use br to claim
+  br update "$BEAD_ID" --status in_progress
+fi
 
-  if [ -n "$CLAIM_RESULT" ]; then
-    echo "✓ Successfully claimed bead: $BEAD_ID"
-    break
-  else
-    echo "  Bead $BEAD_ID already claimed, trying another..."
-    sleep 0.1  # Small delay before retry
-  fi
-done
-
-# Update agent state
+# Update agent state in PostgreSQL coordinator
 psql -U postgres -d swarm_db -c "
-  UPDATE agent_state
-  SET bead_id = '$BEAD_ID',
-      current_stage = 'rust-contract',
-      stage_started_at = NOW(),
-      status = 'working',
-      last_update = NOW()
-  WHERE agent_id = {N};
+  INSERT INTO agent_state (agent_id, bead_id, current_stage, stage_started_at, status, last_update, implementation_attempt)
+  VALUES ({N}, '$BEAD_ID', 'rust-contract', NOW(), 'working', NOW(), 0)
+  ON CONFLICT (agent_id) DO UPDATE SET
+    bead_id = EXCLUDED.bead_id,
+    current_stage = EXCLUDED.current_stage,
+    stage_started_at = EXCLUDED.stage_started_at,
+    status = EXCLUDED.status,
+    last_update = EXCLUDED.last_update;
 "
 ```
 
-Your bead ID is now stored in `$BEAD_ID`. Use this variable in all subsequent queries.
+Your bead ID is now stored in `$BEAD_ID`. Use this variable in all subsequent commands.
+
+**Get bead details:**
+```bash
+br show $BEAD_ID
+# or
+bv show "$BEAD_ID"
+```
 
 ### Step 2: Spawn Isolated Workspace
 
 Use zjj to create an isolated workspace:
 
 ```bash
-zjj add agent-{N}-<bead_id>
+zjj add agent-{N}-$BEAD_ID
 ```
 
 This creates a fresh JJ workspace and Zellij tab for your work.
 
-### Step 3: Execute Pipeline
+### Step 3: Execute Pipeline Stages (With Detailed Database Tracking)
 
-For each stage, update the database:
+**IMPORTANT**: For EVERY stage execution, you MUST update the PostgreSQL coordinator database. This provides transparency and allows monitoring.
 
-```sql
--- Start a stage
+#### Stage 3a: rust-contract
+
+**Step 1: Start the stage in database**
+```bash
+psql -U postgres -d swarm_db <<SQL
 INSERT INTO stage_history (agent_id, bead_id, stage, attempt_number, status, started_at)
-VALUES ({N}, '<bead_id>', 'rust-contract', 1, 'started', NOW());
+VALUES ({N}, '$BEAD_ID', 'rust-contract', 1, 'started', NOW());
 
 UPDATE agent_state
 SET current_stage = 'rust-contract',
@@ -122,79 +119,210 @@ SET current_stage = 'rust-contract',
     status = 'working',
     last_update = NOW()
 WHERE agent_id = {N};
+SQL
 ```
 
-Run the stage:
+**Step 2: Execute the stage using Skill tool**
 ```
 Skill: rust-contract
-Input: Bead ID from .beads/beads.db
-Output: Contract document
+Input: Bead ID $BEAD_ID
+Task: Design-by-contract analysis with exhaustive break analysis
+Output: Contract document with invariants, test plan, error handling
 ```
 
-On completion:
-```sql
--- Record success
+**Step 3: Record completion in database**
+```bash
+# On SUCCESS:
+psql -U postgres -d swarm_db <<SQL
 INSERT INTO stage_history (agent_id, bead_id, stage, attempt_number, status, result, completed_at)
-VALUES ({N}, '<bead_id>', 'rust-contract', 1, 'passed', 'Contract created', NOW());
+VALUES ({N}, '$BEAD_ID', 'rust-contract', 1, 'passed', 'Contract created with invariants and test plan', NOW());
+SQL
+
+# On FAILURE (rare for contract stage):
+psql -U postgres -d swarm_db <<SQL
+INSERT INTO stage_history (agent_id, bead_id, stage, attempt_number, status, feedback, completed_at)
+VALUES ({N}, '$BEAD_ID', 'rust-contract', 1, 'error', 'Error creating contract: <details>', NOW());
+SQL
 ```
 
-### Step 4: Implement
+#### Stage 3b: implement
 
+**Step 1: Start implement stage**
+```bash
+psql -U postgres -d swarm_db <<SQL
+INSERT INTO stage_history (agent_id, bead_id, stage, attempt_number, status, started_at)
+VALUES ({N}, '$BEAD_ID', 'implement', 1, 'started', NOW());
+
+UPDATE agent_state
+SET current_stage = 'implement',
+    stage_started_at = NOW(),
+    status = 'working',
+    last_update = NOW()
+WHERE agent_id = {N};
+SQL
+```
+
+**Step 2: Execute using Skill tool**
 ```
 Skill: functional-rust-generator
 Input: Contract document from previous stage
-Output: Rust implementation (zero panics, zero unwraps)
+Task: Implement functional Rust with zero panics, zero unwraps, Railway-Oriented Programming
+Output: Complete Rust implementation
 ```
 
-### Step 5: QA Enforcer
-
+**Step 3: Record completion**
+```bash
+# On SUCCESS:
+psql -U postgres -d swarm_db <<SQL
+INSERT INTO stage_history (agent_id, bead_id, stage, attempt_number, status, result, completed_at)
+VALUES ({N}, '$BEAD_ID', 'implement', 1, 'passed', 'Implementation complete with functional Rust patterns', NOW());
+SQL
 ```
-Skill: qa-enforcer
-Input: Implementation
-Action: Execute tests, verify behavior
-Output: Test results
-```
 
-If QA passes → proceed to red-queen
+#### Stage 3c: qa-enforcer
 
-If QA fails:
-```sql
--- Record failure with feedback
-INSERT INTO stage_history (agent_id, bead_id, stage, attempt_number, status, feedback, completed_at)
-VALUES ({N}, '<bead_id>', 'qa-enforcer', 1, 'failed', '<detailed error message>', NOW());
+**Step 1: Start QA stage**
+```bash
+psql -U postgres -d swarm_db <<SQL
+INSERT INTO stage_history (agent_id, bead_id, stage, attempt_number, status, started_at)
+VALUES ({N}, '$BEAD_ID', 'qa-enforcer', 1, 'started', NOW());
 
 UPDATE agent_state
-SET feedback = '<detailed error message>',
+SET current_stage = 'qa-enforcer',
+    stage_started_at = NOW(),
+    status = 'working',
+    last_update = NOW()
+WHERE agent_id = {N};
+SQL
+```
+
+**Step 2: Execute QA tests**
+```
+Skill: qa-enforcer
+Input: Implementation from previous stage
+Task: Execute actual tests, verify behavior, auto-fix issues
+Action: RUN THE TESTS - don't just review code
+Output: Test results with pass/fail status
+```
+
+**Step 3: Record result**
+```bash
+# On QA PASS:
+psql -U postgres -d swarm_db <<SQL
+INSERT INTO stage_history (agent_id, bead_id, stage, attempt_number, status, result, completed_at)
+VALUES ({N}, '$BEAD_ID', 'qa-enforcer', 1, 'passed', 'All tests passed', NOW());
+SQL
+
+# Proceed to red-queen stage
+
+# On QA FAIL:
+FEEDBACK="<detailed error message from QA>"
+psql -U postgres -d swarm_db <<SQL
+INSERT INTO stage_history (agent_id, bead_id, stage, attempt_number, status, feedback, completed_at)
+VALUES ({N}, '$BEAD_ID', 'qa-enforcer', 1, 'failed', '$FEEDBACK', NOW());
+
+UPDATE agent_state
+SET feedback = '$FEEDBACK',
     implementation_attempt = implementation_attempt + 1,
     status = 'waiting',
     last_update = NOW()
 WHERE agent_id = {N};
+SQL
+
+# Then LOOP BACK to Stage 3b (implement) with feedback
 ```
 
-Then **LOOP BACK to Step 4** with the feedback.
+#### Stage 3d: red-queen
 
-### Step 6: Red Queen
+**Step 1: Start red-queen stage**
+```bash
+psql -U postgres -d swarm_db <<SQL
+INSERT INTO stage_history (agent_id, bead_id, stage, attempt_number, status, started_at)
+VALUES ({N}, '$BEAD_ID', 'red-queen', 1, 'started', NOW());
 
+UPDATE agent_state
+SET current_stage = 'red-queen',
+    stage_started_at = NOW(),
+    status = 'working',
+    last_update = NOW()
+WHERE agent_id = {N};
+SQL
+```
+
+**Step 2: Execute adversarial QA**
 ```
 Skill: red-queen
 Input: Tested implementation
-Action: Adversarial QA, regression hunting
-Output: Passed or failure feedback
+Task: Adversarial evolutionary QA, regression hunting, stress testing
+Action: EXECUTE ADVERSARIAL TESTS - push the implementation
+Output: Passed or detailed failure feedback
 ```
 
-If Red Queen passes → SUCCESS
-If Red Queen fails → **LOOP BACK to Step 4** with feedback
+**Step 3: Record result**
+```bash
+# On RED QUEEN PASS:
+psql -U postgres -d swarm_db <<SQL
+INSERT INTO stage_history (agent_id, bead_id, stage, attempt_number, status, result, completed_at)
+VALUES ({N}, '$BEAD_ID', 'red-queen', 1, 'passed', 'Red Queen defeated - all adversarial tests passed', NOW());
+SQL
 
-### Step 7: Success (Completion)
+# Proceed to completion (Step 7)
 
-When all stages pass:
+# On RED QUEEN FAIL:
+FEEDBACK="<detailed feedback from red queen>"
+psql -U postgres -d swarm_db <<SQL
+INSERT INTO stage_history (agent_id, bead_id, stage, attempt_number, status, feedback, completed_at)
+VALUES ({N}, '$BEAD_ID', 'red-queen', 1, 'failed', '$FEEDBACK', NOW());
+
+UPDATE agent_state
+SET feedback = '$FEEDBACK',
+    implementation_attempt = implementation_attempt + 1,
+    status = 'waiting',
+    last_update = NOW()
+WHERE agent_id = {N};
+SQL
+
+# Then LOOP BACK to Stage 3b (implement) with feedback
+```
+
+### Step 4: Implementation Retry Loop (When QA/Red Queen Fails)
+
+If `implementation_attempt >= 3`:
+```bash
+# Max retries exceeded - mark bead as blocked
+psql -U postgres -d swarm_db <<SQL
+UPDATE agent_state
+SET status = 'error',
+    feedback = 'Max implementation attempts (3) exceeded',
+    last_update = NOW()
+WHERE agent_id = {N};
+
+UPDATE bead_claims
+SET status = 'blocked'
+WHERE bead_id = '$BEAD_ID' AND claimed_by = {N};
+SQL
+
+# Exit with error
+exit 1
+```
+
+Otherwise:
+```bash
+# Go back to Stage 3b (implement) with feedback
+# The feedback is in agent_state.feedback column
+# Re-read the contract, incorporate feedback, implement fixes
+```
+
+### Step 5: Success (All Stages Passed)
+
+When all 4 stages pass successfully:
 
 ```bash
-# Update bead status
+# 1. Mark bead as completed
 br update $BEAD_ID --status completed
 
-# Mark agent as done in PostgreSQL
-psql -U postgres -d swarm_db -c "
+# 2. Mark agent as done in PostgreSQL
+psql -U postgres -d swarm_db <<SQL
 UPDATE agent_state
 SET current_stage = 'done',
     status = 'done',
@@ -203,33 +331,105 @@ WHERE agent_id = {N};
 
 UPDATE bead_claims
 SET status = 'completed'
-WHERE bead_id = '$BEAD_ID';
-"
+WHERE bead_id = '$BEAD_ID' AND claimed_by = {N};
+SQL
 
-# Commit and push
-jj commit -m "Completed bead $BEAD_ID"
+# 3. Sync beads to filesystem
 br sync --flush-only
-git add .beads/
-git commit -m "sync beads"
+
+# 4. Commit your work
+jj commit -m "Completed bead $BEAD_ID"
+
+# 5. Stage changes
 jj git fetch
+
+# 6. Push to remote (REQUIRED - work not done until pushed)
 jj git push
 
-# Clean up workspace
+# 7. Clean up workspace
 zjj done
 ```
 
-## Database Connection
+**Verify completion:**
+```bash
+# Check bead status
+br show $BEAD_ID  # Should show status: completed
+
+# Check database state
+psql -U postgres -d swarm_db -c "SELECT * FROM v_swarm_progress;"
+```
+
+### Database Schema Reference
+
+**Table: agent_state** (your working state)
+```sql
+agent_id          -- Your agent number ({N})
+bead_id           -- Bead you're working on
+current_stage     -- Where you are in the pipeline
+stage_started_at  -- When current stage began
+status            -- idle, working, waiting, error, done
+last_update       -- Last state change timestamp
+implementation_attempt -- How many times you've re-implemented
+feedback          -- Error messages from QA/Red Queen
+```
+
+**Table: stage_history** (audit log)
+```sql
+agent_id          -- Your agent number
+bead_id           -- Bead you worked on
+stage             -- Which stage (rust-contract, implement, qa-enforcer, red-queen)
+attempt_number    -- Which attempt (1, 2, 3)
+status            -- started, passed, failed, error
+result            -- Success/failure message
+feedback          -- Detailed feedback for retries
+started_at        -- When stage began
+completed_at      -- When stage ended
+duration_ms       -- How long it took
+```
+
+**Views for monitoring:**
+```sql
+-- Overall progress
+SELECT * FROM v_swarm_progress;
+
+-- Active agents
+SELECT * FROM v_active_agents;
+
+-- Failures needing attention
+SELECT * FROM v_feedback_required;
+```
+
+## Tools and Databases
+
+**br CLI (beads management):**
+```bash
+# List available P0 beads
+br list --status open --priority p0
+
+# Show bead details
+br show <bead_id>
+
+# Update bead status
+br update <bead_id> --status completed|blocked|in_progress
+
+# Sync beads to filesystem
+br sync --flush-only
+```
 
 **PostgreSQL (swarm coordinator):**
 ```bash
 psql -U postgres -d swarm_db
 # No password required (peer authentication)
+# Tracks: agent_state, bead_claims, stage_history
 ```
 
-**SQLite (beads database):**
+**zjj (workspace isolation):**
 ```bash
-sqlite3 /home/lewis/src/oya/.beads/beads.db
-# Query: SELECT id, title FROM issues WHERE status = 'open' AND priority = 0;
+# Create isolated workspace
+zjj add agent-{N}-<bead_id>
+
+# Cleanup when done
+zjj done
 ```
 
 ## Rules

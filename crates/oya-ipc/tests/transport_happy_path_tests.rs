@@ -6,7 +6,7 @@
 #![allow(clippy::expect_used)]
 #![allow(clippy::panic)]
 
-use oya_ipc::{IpcTransport, TransportError};
+use oya_ipc::IpcTransport;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -44,16 +44,9 @@ struct BeadDetail {
     description: String,
 }
 
-fn create_transport_pair() -> (
-    IpcTransport<DuplexReader, DuplexWriter>,
-    IpcTransport<DuplexReader, DuplexWriter>,
-) {
-    IpcTransport::transport_pair()
-}
-
 #[test]
 fn test_send_recv_1kb_message_roundtrip_succeeds() {
-    let (mut client, mut server) = create_transport_pair();
+    let (mut client, mut server) = IpcTransport::pair();
     let original = HostMessage::BeadList(vec![BeadSummary {
         id: "src-123".to_string(),
         title: "Test bead".to_string(),
@@ -69,8 +62,7 @@ fn test_send_recv_1kb_message_roundtrip_succeeds() {
 
 #[test]
 fn test_length_prefix_encoded_as_big_endian() {
-    use std::io::{BufReader, BufWriter, Cursor};
-
+    #[derive(Debug)]
     struct CaptureWriter {
         buffer: Vec<u8>,
     }
@@ -104,11 +96,12 @@ fn test_length_prefix_encoded_as_big_endian() {
 
 #[test]
 fn test_flush_is_called_after_each_send() {
-    use std::io::{BufWriter, Cursor};
+    use std::cell::RefCell;
+    use std::rc::Rc;
 
     struct FlushCounter {
         buffer: Vec<u8>,
-        flush_count: std::cell::RefCell<usize>,
+        flush_count: Rc<RefCell<usize>>,
     }
 
     impl std::io::Write for FlushCounter {
@@ -124,9 +117,10 @@ fn test_flush_is_called_after_each_send() {
     }
 
     let reader = std::io::empty();
+    let flush_count = Rc::new(RefCell::new(0));
     let writer = FlushCounter {
         buffer: Vec::new(),
-        flush_count: std::cell::RefCell::new(0),
+        flush_count: Rc::clone(&flush_count),
     };
 
     let mut transport = IpcTransport::new(reader, writer);
@@ -134,13 +128,12 @@ fn test_flush_is_called_after_each_send() {
 
     transport.send(&msg).unwrap();
 
-    let flush_count = *transport.split().1.flush_count.borrow();
-    assert!(flush_count > 0);
+    assert!(*flush_count.borrow() > 0);
 }
 
 #[test]
 fn test_multiple_messages_are_independently_framed() {
-    let (mut client, mut server) = create_transport_pair();
+    let (mut client, mut server) = IpcTransport::pair();
 
     client.send(&HostMessage::BeadList(vec![])).unwrap();
     client
@@ -159,7 +152,7 @@ fn test_multiple_messages_are_independently_framed() {
 
 #[test]
 fn test_message_at_exactly_1mb_limit_succeeds() {
-    let (mut client, mut server) = create_transport_pair();
+    let (mut client, mut server) = IpcTransport::pair();
 
     // Create a message that serializes to ~1MB
     let large_string = "x".repeat(1_000_000);
@@ -173,7 +166,7 @@ fn test_message_at_exactly_1mb_limit_succeeds() {
 
 #[test]
 fn test_bidirectional_send_recv_in_both_directions() {
-    let (mut client, mut server) = create_transport_pair();
+    let (mut client, mut server) = IpcTransport::pair();
 
     let client_msg = HostMessage::BeadList(vec![]);
     let server_msg = HostMessage::Error("ack".to_string());

@@ -153,7 +153,7 @@ pub struct OyaPlugin {
 }
 
 /// Task data for rendering
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TaskRow {
     pub slug: String,
     pub status: String,
@@ -778,9 +778,8 @@ impl Drop for OyaPlugin {
     fn drop(&mut self) {
         // Attempt to save state on shutdown
         // Ignore errors since we're in a destructor
-        if let Ok(state_manager) = crate::state::StateManager::default() {
-            let _ = state_manager.save_state(self);
-        }
+        let state_manager = crate::state::StateManager::default();
+        let _ = state_manager.save_state(self);
     }
 }
 

@@ -48,6 +48,8 @@
 //! }
 //! ```
 
+#[cfg(any())]
+pub mod agent_slot;
 pub mod errors;
 #[cfg(feature = "examples")]
 pub mod examples;
@@ -66,6 +68,10 @@ pub mod worker;
 pub mod workflow;
 
 // Re-export main types for convenience
+#[cfg(any())]
+pub use agent_slot::{
+    AgentSlotActorDef, AgentSlotMessage, AgentSlotState, BeadCompletion, SlotError, SlotState,
+};
 pub use errors::ActorError;
 pub use health_check_worker::{
     HealthCheckConfig, HealthCheckMessage, HealthCheckResult, HealthCheckWorkerDef,
@@ -95,4 +101,4 @@ pub use workflow::{WorkflowActorDef, WorkflowMessage, WorkflowStateActor};
 
 // Example actors for learning and testing (only when examples feature is enabled)
 #[cfg(feature = "examples")]
-pub use examples::{PingMessage, PongMessage, ping_pong::PingPongExample};
+pub use examples::{PingMessage, PingPongExample, PongMessage};

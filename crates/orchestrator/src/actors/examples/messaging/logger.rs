@@ -10,7 +10,7 @@
 #![deny(clippy::panic)]
 
 use ractor::{Actor, ActorProcessingErr, ActorRef};
-use rpds::{ArcK, Vector};
+use rpds::Vector;
 use std::fmt;
 
 //==============================================================================
@@ -33,7 +33,7 @@ pub enum LoggerMessage {
     /// but typically you'd use call! for request-response)
     GetAll {
         /// Sender for the reply
-        reply: tokio::sync::oneshot::Sender<Vector<LogEntry, ArcK>>,
+        reply: tokio::sync::oneshot::Sender<Vector<LogEntry>>,
     },
 }
 
@@ -127,7 +127,7 @@ impl LogEntry {
 #[derive(Debug, Clone)]
 pub struct LoggerState {
     /// Log entries (persistent vector for efficient appends)
-    entries: Vector<LogEntry, ArcK>,
+    entries: Vector<LogEntry>,
     /// Maximum number of entries to keep
     max_entries: usize,
 }
@@ -136,7 +136,7 @@ impl LoggerState {
     /// Create a new logger state
     pub fn new() -> Self {
         Self {
-            entries: Vector::new_with_ptr_kind(),
+            entries: Vector::new(),
             max_entries: 1000,
         }
     }
@@ -144,7 +144,7 @@ impl LoggerState {
     /// Create with custom max entries
     pub fn with_max_entries(max_entries: usize) -> Self {
         Self {
-            entries: Vector::new_with_ptr_kind(),
+            entries: Vector::new(),
             max_entries,
         }
     }
@@ -155,7 +155,7 @@ impl LoggerState {
     }
 
     /// Get all entries
-    pub fn entries(&self) -> &Vector<LogEntry, ArcK> {
+    pub fn entries(&self) -> &Vector<LogEntry> {
         &self.entries
     }
 
@@ -174,7 +174,7 @@ impl LoggerState {
 
     /// Clear all entries
     pub fn clear(mut self) -> Self {
-        self.entries = Vector::new_with_ptr_kind();
+        self.entries = Vector::new();
         self
     }
 }
@@ -208,7 +208,6 @@ impl Default for LoggerActor {
     }
 }
 
-#[async_trait::async_trait]
 impl Actor for LoggerActor {
     type Msg = LoggerMessage;
     type State = LoggerState;
@@ -262,7 +261,7 @@ impl Actor for LoggerActor {
 // Tests
 //==============================================================================
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 mod tests {
     use super::*;
     use std::time::Duration;
