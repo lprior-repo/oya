@@ -22,7 +22,7 @@ Previously provided:
 
 ## Status
 
-🚧 **ABANDONED** - Use `oya-ui` (Zellij plugin) instead.
+🚧 **ABANDONED** - Use `oya-zellij-plugin` (Zellij plugin) instead.
 
 ## Usage
 

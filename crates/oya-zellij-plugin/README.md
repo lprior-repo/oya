@@ -1,4 +1,4 @@
-# oya-ui - Zellij WASM Plugin for OYA SDLC
+# oya-zellij-plugin - Zellij WASM Plugin for OYA SDLC
 
 Terminal-based UI for visualizing OYA workflows, including bead status, pipeline progress, and workflow graphs.
 
@@ -29,7 +29,7 @@ rustup target add wasm32-wasi
 cargo build --release --target wasm32-wasip1
 ```
 
-Output: `target/wasm32-wasip1/release/oya_ui.wasm`
+Output: `target/wasm32-wasip1/release/oya_zellij_plugin.wasm`
 
 ### Run in Zellij
 
@@ -39,7 +39,7 @@ zellij --layout oya.kll
 
 # Or manually
 zellij action new-tab
-zellij action run-plugin "file:$(pwd)/target/wasm32-wasi/release/oya_ui.wasm"
+zellij action run-plugin "file:$(pwd)/target/wasm32-wasi/release/oya_zellij_plugin.wasm"
 ```
 
 ## Project Structure
