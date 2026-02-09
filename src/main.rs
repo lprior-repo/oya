@@ -12,7 +12,7 @@ mod commands;
 
 use anyhow::Result;
 use clap::{CommandFactory, Parser, Subcommand};
-use commands::{DoctorArgs, InitArgs, LogsArgs, doctor_command, init_command, logs_command};
+use commands::{DoctorArgs, InitArgs, LogsArgs, StormArgs, doctor_command, init_command, logs_command, storm_command};
 use tracing::info;
 
 /// OYA SDLC System - Storm goddess of transformation
