@@ -1,0 +1,953 @@
+Diff in /home/lewis/src/oya/crates/events/benches/batch_append.rs:382:
+             };
+ 
+             // Create test events with specified size
+[31m-            let events: Vec<BeadEvent> =
+(B[m[31m-                (0..total_events).map(|_| create_test_event(event_size)).collect();
+(B[m[32m+            let events: Vec<BeadEvent> = (0..total_events)
+(B[m[32m+                .map(|_| create_test_event(event_size))
+(B[m[32m+                .collect();
+(B[m 
+             b.iter(|| {
+                 match rt.block_on(benchmark_batch_append(
+Diff in /home/lewis/src/oya/crates/events/tests/worker_assignment_test.rs:267:
+         .expect("Query should execute");
+ 
+     let assignments: Vec<serde_json::Value> = result.take(0).expect("Should get result");
+[31m-    assert!(
+(B[m[31m-        assignments.is_empty(),
+(B[m[31m-        "Assignment should be deleted"
+(B[m[31m-    );
+(B[m[32m+    assert!(assignments.is_empty(), "Assignment should be deleted");
+(B[m }
+ 
+ #[tokio::test]
+Diff in /home/lewis/src/oya/crates/workflow/tests/checkpoint_properties.rs:616:
+     }
+ 
+     // THEN: States should match
+[31m-    assert_eq!(final_state, current_state, "Empty checkpoint + all events should match current state");
+(B[m[32m+    assert_eq!(
+(B[m[32m+        final_state, current_state,
+(B[m[32m+        "Empty checkpoint + all events should match current state"
+(B[m[32m+    );
+(B[m 
+     Ok(())
+ }
+Diff in /home/lewis/src/oya/crates/workflow/tests/checkpoint_properties.rs:658:
+     // No events to apply (checkpoint at end)
+ 
+     // THEN: Restored state should match current state
+[31m-    assert_eq!(restored_state, current_state, "Checkpoint at end should match current state");
+(B[m[32m+    assert_eq!(
+(B[m[32m+        restored_state, current_state,
+(B[m[32m+        "Checkpoint at end should match current state"
+(B[m[32m+    );
+(B[m 
+     Ok(())
+ }
+Diff in /home/lewis/src/oya/crates/orchestrator/src/actors/agent_slot.rs:42:
+     },
+ 
+     /// Internal timeout handler for stage execution.
+[31m-    StageTimeout {
+(B[m[31m-        stage: StageKind,
+(B[m[31m-    },
+(B[m[32m+    StageTimeout { stage: StageKind },
+(B[m 
+     /// Query current slot state.
+[31m-    GetState {
+(B[m[31m-        reply: oneshot::Sender<SlotState>,
+(B[m[31m-    },
+(B[m[32m+    GetState { reply: oneshot::Sender<SlotState> },
+(B[m }
+ 
+ /// Result of completing a bead execution.
+Diff in /home/lewis/src/oya/crates/orchestrator/src/actors/agent_slot.rs:58:
+     /// Bead completed successfully.
+     Accepted,
+     /// Bead failed with reason.
+[31m-    Failed {
+(B[m[31m-        reason: String,
+(B[m[31m-    },
+(B[m[32m+    Failed { reason: String },
+(B[m     /// Bead exhausted retry limits and needs human intervention.
+[31m-    Parked {
+(B[m[31m-        reason: String,
+(B[m[31m-    },
+(B[m[32m+    Parked { reason: String },
+(B[m }
+ 
+ /// Current state of an agent slot.
+Diff in /home/lewis/src/oya/crates/orchestrator/src/actors/agent_slot.rs:284:
+         let state_machine = BeadStateMachine::new(bead_id.clone());
+         let policy = state_machine.policy();
+         let stage_gate = StageGate::new(policy);
+[31m-        let context_builder =
+(B[m[31m-            StageContextBuilder::new(state.project_root.clone()).with_claude_md(
+(B[m[31m-                state.project_root.join("CLAUDE.md"),
+(B[m[31m-            );
+(B[m[32m+        let context_builder = StageContextBuilder::new(state.project_root.clone())
+(B[m[32m+            .with_claude_md(state.project_root.join("CLAUDE.md"));
+(B[m 
+         state.bead_id = Some(bead_id.clone());
+         state.state_machine = Some(state_machine);
+Diff in /home/lewis/src/oya/crates/orchestrator/src/actors/agent_slot.rs:310:
+         Ok(BeadCompletion::Accepted) // Will be updated through execution
+     }
+ 
+[31m-    fn handle_execute_next_stage(
+(B[m[31m-        &self,
+(B[m[31m-        state: &mut AgentSlotState,
+(B[m[31m-    ) -> Result<(), SlotError> {
+(B[m[32m+    fn handle_execute_next_stage(&self, state: &mut AgentSlotState) -> Result<(), SlotError> {
+(B[m         let state_machine = state
+             .state_machine
+             .as_ref()
+Diff in /home/lewis/src/oya/crates/orchestrator/src/actors/agent_slot.rs:330:
+         let current_stage = state_machine.current_stage();
+         state.current_stage = Some(current_stage);
+ 
+[31m-        info!("Executing stage: {:?} for bead: {:?}", current_stage, state.bead_id);
+(B[m[32m+        info!(
+(B[m[32m+            "Executing stage: {:?} for bead: {:?}",
+(B[m[32m+            current_stage, state.bead_id
+(B[m[32m+        );
+(B[m 
+         // Enter stage (increments counters)
+         let mut machine_clone = state_machine.clone();
+Diff in /home/lewis/src/oya/crates/orchestrator/src/actors/agent_slot.rs:383:
+                 );
+ 
+                 // Store artifact for this stage
+[31m-                state.artifacts.insert(current_stage, "artifact-placeholder".to_string());
+(B[m[32m+                state
+(B[m[32m+                    .artifacts
+(B[m[32m+                    .insert(current_stage, "artifact-placeholder".to_string());
+(B[m 
+                 // Advance state machine
+                 let mut machine_clone = state_machine.clone();
+Diff in /home/lewis/src/oya/crates/orchestrator/src/actors/agent_slot.rs:507:
+     fn complete_bead(&self, state: &mut AgentSlotState, result: BeadCompletion) {
+         let bead_id = state.bead_id.clone().unwrap();
+ 
+[31m-        info!(
+(B[m[31m-            "Bead {:?} completed with result: {:?}",
+(B[m[31m-            bead_id, result
+(B[m[31m-        );
+(B[m[32m+        info!("Bead {:?} completed with result: {:?}", bead_id, result);
+(B[m 
+         // Emit completion event
+         match result {
+Diff in /home/lewis/src/oya/crates/orchestrator/src/actors/agent_slot.rs:555:
+         state.current_stage = None;
+     }
+ 
+[31m-    fn emit_transition_event(&self, state: &AgentSlotState, transition: &oya_events::StageTransition) {
+(B[m[32m+    fn emit_transition_event(
+(B[m[32m+        &self,
+(B[m[32m+        state: &AgentSlotState,
+(B[m[32m+        transition: &oya_events::StageTransition,
+(B[m[32m+    ) {
+(B[m         if let Some(ref bead_id) = state.bead_id {
+             let event = BeadEvent::StageTransition {
+                 bead_id: bead_id.clone(),
+Diff in /home/lewis/src/oya/crates/orchestrator/src/actors/ipc_worker.rs:35:
+ use tokio::sync::{broadcast, mpsc};
+ use tracing::info;
+ 
+[32m+use oya_events::StageKind;
+(B[m use oya_events::{BeadEvent, EventBus, EventPattern, EventSubscription, Severity};
+ use oya_pipeline::{
+     apply_stage_plan, approve_task, list_all_tasks, load_task_record, resolve_stage_range,
+Diff in /home/lewis/src/oya/crates/orchestrator/src/actors/ipc_worker.rs:41:
+     run_full_pipeline, save_task_record,
+ };
+[31m-use oya_events::StageKind;
+(B[m 
+ use crate::ipc_messages::{
+     AlertLevel, BeadDetail as IpcBeadDetail, BeadSummary, ComponentHealth, GuestMessage,
+Diff in /home/lewis/src/oya/crates/orchestrator/src/actors/ipc_worker.rs:185:
+ pub enum IpcBridgeError {
+     /// Event serialization failed.
+     #[error("Event serialization failed: {event_type} - {reason}")]
+[31m-    EventSerializationFailed {
+(B[m[31m-        event_type: String,
+(B[m[31m-        reason: String,
+(B[m[31m-    },
+(B[m[32m+    EventSerializationFailed { event_type: String, reason: String },
+(B[m 
+     /// Invalid event payload (missing required fields).
+     #[error("Invalid event payload for bead {bead_id}: {event_type} - missing {missing_field}")]
+Diff in /home/lewis/src/oya/crates/orchestrator/src/actors/ipc_worker.rs:200:
+ 
+     /// Stage kind not recognized.
+     #[error("Unknown stage kind: {stage_name}")]
+[31m-    UnknownStageKind {
+(B[m[31m-        stage_name: String,
+(B[m[31m-    },
+(B[m[32m+    UnknownStageKind { stage_name: String },
+(B[m 
+     /// Attempt count overflow.
+     #[error("Attempt count overflow for bead {bead_id}: {current_count}")]
+Diff in /home/lewis/src/oya/crates/orchestrator/src/actors/ipc_worker.rs:209:
+[31m-    AttemptCountOverflow {
+(B[m[31m-        bead_id: String,
+(B[m[31m-        current_count: u32,
+(B[m[31m-    },
+(B[m[32m+    AttemptCountOverflow { bead_id: String, current_count: u32 },
+(B[m 
+     /// EventBus not ready.
+     #[error("EventBus not ready: unavailable for {since:?}")]
+Diff in /home/lewis/src/oya/crates/orchestrator/src/actors/ipc_worker.rs:216:
+[31m-    EventBusNotReady {
+(B[m[31m-        since: std::time::Duration,
+(B[m[31m-    },
+(B[m[32m+    EventBusNotReady { since: std::time::Duration },
+(B[m }
+ 
+ /// Convert StageKind to string for IPC.
+Diff in /home/lewis/src/oya/crates/orchestrator/src/actors/supervisor/checkpoint.rs:19:
+ use tracing::{error, info, warn};
+ 
+ use crate::persistence::PersistenceError;
+[31m-use crate::shutdown::CheckpointResult;
+(B[m use crate::replay::CheckpointManager;
+[32m+use crate::shutdown::CheckpointResult;
+(B[m 
+[31m-use super::supervisor_actor::{SupervisorActorState, SupervisorConfig};
+(B[m use super::GenericSupervisableActor;
+[32m+use super::supervisor_actor::{SupervisorActorState, SupervisorConfig};
+(B[m 
+ /// Errors that can occur during supervisor checkpoint creation.
+ #[derive(Debug, Error)]
+Diff in /home/lewis/src/oya/crates/orchestrator/src/actors/supervisor/checkpoint.rs:124:
+         info!("Creating supervisor shutdown checkpoint");
+ 
+         // Validate preconditions
+[31m-        let checkpoint_manager = checkpoint_manager
+(B[m[31m-            .ok_or(SupervisorCheckpointError::CheckpointManagerUnavailable)?;
+(B[m[32m+        let checkpoint_manager =
+(B[m[32m+            checkpoint_manager.ok_or(SupervisorCheckpointError::CheckpointManagerUnavailable)?;
+(B[m 
+         // Serialize state
+         let serialized = serialize_supervisor_state(self).await?;
+Diff in /home/lewis/src/oya/crates/orchestrator/src/actors/supervisor/checkpoint.rs:142:
+ 
+         let result = match checkpoint_result {
+             Ok(Ok(_checkpoint)) => {
+[31m-                info!(
+(B[m[31m-                    duration_ms,
+(B[m[31m-                    "Supervisor checkpoint created successfully"
+(B[m[31m-                );
+(B[m[32m+                info!(duration_ms, "Supervisor checkpoint created successfully");
+(B[m                 CheckpointResult::success("supervisor", duration_ms)
+             }
+             Ok(Err(e)) => {
+Diff in /home/lewis/src/oya/crates/orchestrator/src/actors/supervisor/checkpoint.rs:192:
+ }
+ 
+ /// Build a snapshot from supervisor state.
+[31m-async fn build_snapshot<A>(
+(B[m[31m-    state: &SupervisorActorState<A>,
+(B[m[31m-) -> SupervisorSnapshot
+(B[m[32m+async fn build_snapshot<A>(state: &SupervisorActorState<A>) -> SupervisorSnapshot
+(B[m where
+     A: GenericSupervisableActor,
+     A::Arguments: Clone + Send + Sync + std::fmt::Debug,
+Diff in /home/lewis/src/oya/crates/orchestrator/src/actors/supervisor/checkpoint.rs:215:
+ }
+ 
+ /// Build child snapshots from supervisor state.
+[31m-async fn build_child_snapshots<A>(
+(B[m[31m-    state: &SupervisorActorState<A>,
+(B[m[31m-) -> Vec<ChildSnapshot>
+(B[m[32m+async fn build_child_snapshots<A>(state: &SupervisorActorState<A>) -> Vec<ChildSnapshot>
+(B[m where
+     A: GenericSupervisableActor,
+     A::Arguments: Clone + Send + Sync + std::fmt::Debug,
+Diff in /home/lewis/src/oya/crates/orchestrator/src/actors/supervisor/checkpoint.rs:229:
+         .map(|child| ChildSnapshot {
+             name: child.name.clone(),
+             restart_count: child.restart_count,
+[31m-            last_restart: child.last_restart.map(|i| {
+(B[m[31m-                DateTime::<Utc>::from(std::time::SystemTime::now() - i.elapsed())
+(B[m[31m-                    .into()
+(B[m[31m-            }),
+(B[m[32m+            last_restart: child
+(B[m[32m+                .last_restart
+(B[m[32m+                .map(|i| DateTime::<Utc>::from(std::time::SystemTime::now() - i.elapsed()).into()),
+(B[m             args: format!("{:?}", child.args), // Debug format for args
+         })
+         .collect()
+Diff in /home/lewis/src/oya/crates/orchestrator/src/actors/supervisor/checkpoint.rs:248:
+     checkpoint_tx: &mpsc::Sender<CheckpointResult>,
+     result: CheckpointResult,
+ ) -> Result<(), SupervisorCheckpointError> {
+[31m-    checkpoint_tx
+(B[m[31m-        .send(result)
+(B[m[31m-        .await
+(B[m[31m-        .map_err(|_| {
+(B[m[31m-            error!("Checkpoint result channel closed");
+(B[m[31m-            SupervisorCheckpointError::ResultChannelClosed
+(B[m[31m-        })
+(B[m[32m+    checkpoint_tx.send(result).await.map_err(|_| {
+(B[m[32m+        error!("Checkpoint result channel closed");
+(B[m[32m+        SupervisorCheckpointError::ResultChannelClosed
+(B[m[32m+    })
+(B[m }
+ 
+ #[cfg(test)]
+Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:20:
+ use oya_events::{BeadEvent, BeadId, BeadState, EventBus, InMemoryEventStore};
+ use ractor::{Actor, ActorProcessingErr, ActorRef};
+ 
+[31m-use orchestrator::actors::ipc_worker::{
+(B[m[31m-    IpcWorkerActorDef, IpcWorkerArguments, IpcWorkerMessage,
+(B[m[31m-};
+(B[m[31m-use orchestrator::ipc_messages::{GuestMessage, HostMessage};
+(B[m[31m-use orchestrator::persistence::{BeadRecord, BeadState as PersistenceBeadState, OrchestratorStore, StoreConfig};
+(B[m use orchestrator::actors::errors::ActorError;
+[32m+use orchestrator::actors::ipc_worker::{IpcWorkerActorDef, IpcWorkerArguments, IpcWorkerMessage};
+(B[m[32m+use orchestrator::ipc_messages::{GuestMessage, HostMessage};
+(B[m[32m+use orchestrator::persistence::{
+(B[m[32m+    BeadRecord, BeadState as PersistenceBeadState, OrchestratorStore, StoreConfig,
+(B[m[32m+};
+(B[m 
+ // =========================================================================
+ // Test Helpers
+Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:108:
+             Err(_) => {
+                 attempt += 1;
+                 if attempt >= max_attempts {
+[31m-                    return Err(format!("Timeout waiting for event after {} attempts", max_attempts));
+(B[m[32m+                    return Err(format!(
+(B[m[32m+                        "Timeout waiting for event after {} attempts",
+(B[m[32m+                        max_attempts
+(B[m[32m+                    ));
+(B[m                 }
+                 tokio::time::sleep(Duration::from_millis(100)).await;
+             }
+Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:149:
+     };
+ 
+     let bead_id = "test-start-integration";
+[31m-    match create_test_bead(&setup.store, bead_id, "test-workflow", PersistenceBeadState::Ready).await {
+(B[m[32m+    match create_test_bead(
+(B[m[32m+        &setup.store,
+(B[m[32m+        bead_id,
+(B[m[32m+        "test-workflow",
+(B[m[32m+        PersistenceBeadState::Ready,
+(B[m[32m+    )
+(B[m[32m+    .await
+(B[m[32m+    {
+(B[m         Ok(_) => (),
+         Err(e) => {
+             eprintln!("Failed to create bead: {}", e);
+Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:194:
+     };
+ 
+     match &event {
+[31m-        BeadEvent::StateChanged { bead_id: id, from, to } => {
+(B[m[32m+        BeadEvent::StateChanged {
+(B[m[32m+            bead_id: id,
+(B[m[32m+            from,
+(B[m[32m+            to,
+(B[m[32m+        } => {
+(B[m             assert_eq!(id.as_str(), bead_id);
+             assert_eq!(*from, BeadState::Ready);
+             assert_eq!(*to, BeadState::Running);
+Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:234:
+     };
+ 
+     let bead_id = "test-cancel-integration";
+[31m-    match create_test_bead(&setup.store, bead_id, "test-workflow", PersistenceBeadState::Running).await {
+(B[m[32m+    match create_test_bead(
+(B[m[32m+        &setup.store,
+(B[m[32m+        bead_id,
+(B[m[32m+        "test-workflow",
+(B[m[32m+        PersistenceBeadState::Running,
+(B[m[32m+    )
+(B[m[32m+    .await
+(B[m[32m+    {
+(B[m         Ok(_) => (),
+         Err(e) => {
+             eprintln!("Failed to create bead: {}", e);
+Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:263:
+     };
+ 
+     match &event {
+[31m-        BeadEvent::StateChanged { bead_id: id, from, to } => {
+(B[m[32m+        BeadEvent::StateChanged {
+(B[m[32m+            bead_id: id,
+(B[m[32m+            from,
+(B[m[32m+            to,
+(B[m[32m+        } => {
+(B[m             assert_eq!(id.as_str(), bead_id);
+             assert_eq!(*from, BeadState::Running);
+             assert_eq!(*to, BeadState::Cancelled);
+Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:301:
+     };
+ 
+     let bead_id = "test-retry-integration";
+[31m-    match create_test_bead(&setup.store, bead_id, "test-workflow", PersistenceBeadState::Failed).await {
+(B[m[32m+    match create_test_bead(
+(B[m[32m+        &setup.store,
+(B[m[32m+        bead_id,
+(B[m[32m+        "test-workflow",
+(B[m[32m+        PersistenceBeadState::Failed,
+(B[m[32m+    )
+(B[m[32m+    .await
+(B[m[32m+    {
+(B[m         Ok(_) => (),
+         Err(e) => {
+             eprintln!("Failed to create bead: {}", e);
+Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:330:
+     };
+ 
+     match &event {
+[31m-        BeadEvent::StateChanged { bead_id: id, from, to } => {
+(B[m[32m+        BeadEvent::StateChanged {
+(B[m[32m+            bead_id: id,
+(B[m[32m+            from,
+(B[m[32m+            to,
+(B[m[32m+        } => {
+(B[m             assert_eq!(id.as_str(), bead_id);
+             assert_eq!(*from, BeadState::Failed);
+             assert_eq!(*to, BeadState::Ready);
+Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:409:
+     };
+ 
+     let bead_id = "test-completed-error";
+[31m-    match create_test_bead(&setup.store, bead_id, "test-workflow", PersistenceBeadState::Completed).await {
+(B[m[32m+    match create_test_bead(
+(B[m[32m+        &setup.store,
+(B[m[32m+        bead_id,
+(B[m[32m+        "test-workflow",
+(B[m[32m+        PersistenceBeadState::Completed,
+(B[m[32m+    )
+(B[m[32m+    .await
+(B[m[32m+    {
+(B[m         Ok(_) => (),
+         Err(e) => {
+             eprintln!("Failed to create bead: {}", e);
+Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:469:
+     let bead_id_1 = "test-multi-1";
+     let bead_id_2 = "test-multi-2";
+ 
+[31m-    match create_test_bead(&setup.store, bead_id_1, "test-workflow", PersistenceBeadState::Ready).await {
+(B[m[32m+    match create_test_bead(
+(B[m[32m+        &setup.store,
+(B[m[32m+        bead_id_1,
+(B[m[32m+        "test-workflow",
+(B[m[32m+        PersistenceBeadState::Ready,
+(B[m[32m+    )
+(B[m[32m+    .await
+(B[m[32m+    {
+(B[m         Ok(_) => (),
+         Err(e) => {
+             eprintln!("Failed to create bead: {}", e);
+Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:476:
+             return Ok(());
+         }
+     }
+[31m-    match create_test_bead(&setup.store, bead_id_2, "test-workflow", PersistenceBeadState::Running).await {
+(B[m[32m+    match create_test_bead(
+(B[m[32m+        &setup.store,
+(B[m[32m+        bead_id_2,
+(B[m[32m+        "test-workflow",
+(B[m[32m+        PersistenceBeadState::Running,
+(B[m[32m+    )
+(B[m[32m+    .await
+(B[m[32m+    {
+(B[m         Ok(_) => (),
+         Err(e) => {
+             eprintln!("Failed to create bead: {}", e);
+Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:525:
+ 
+     // Verify we got StateChanged events for both beads
+     let ids = vec![event1.bead_id(), event2.bead_id()];
+[31m-    assert!(ids.contains(&BeadId::try_from(bead_id_1.to_string()).unwrap_or_else(|_| BeadId::new())));
+(B[m[31m-    assert!(ids.contains(&BeadId::try_from(bead_id_2.to_string()).unwrap_or_else(|_| BeadId::new())));
+(B[m[32m+    assert!(
+(B[m[32m+        ids.contains(&BeadId::try_from(bead_id_1.to_string()).unwrap_or_else(|_| BeadId::new()))
+(B[m[32m+    );
+(B[m[32m+    assert!(
+(B[m[32m+        ids.contains(&BeadId::try_from(bead_id_2.to_string()).unwrap_or_else(|_| BeadId::new()))
+(B[m[32m+    );
+(B[m 
+     let _ = setup.worker.stop(Some("test complete".to_string()));
+ 
+Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:549:
+     };
+ 
+     let bead_id = "test-idempotent-start";
+[31m-    match create_test_bead(&setup.store, bead_id, "test-workflow", PersistenceBeadState::Running).await {
+(B[m[32m+    match create_test_bead(
+(B[m[32m+        &setup.store,
+(B[m[32m+        bead_id,
+(B[m[32m+        "test-workflow",
+(B[m[32m+        PersistenceBeadState::Running,
+(B[m[32m+    )
+(B[m[32m+    .await
+(B[m[32m+    {
+(B[m         Ok(_) => (),
+         Err(e) => {
+             eprintln!("Failed to create bead: {}", e);
+Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:623:
+     };
+ 
+     let bead_id = "test-idempotent-cancel";
+[31m-    match create_test_bead(&setup.store, bead_id, "test-workflow", PersistenceBeadState::Cancelled).await {
+(B[m[32m+    match create_test_bead(
+(B[m[32m+        &setup.store,
+(B[m[32m+        bead_id,
+(B[m[32m+        "test-workflow",
+(B[m[32m+        PersistenceBeadState::Cancelled,
+(B[m[32m+    )
+(B[m[32m+    .await
+(B[m[32m+    {
+(B[m         Ok(_) => (),
+         Err(e) => {
+             eprintln!("Failed to create bead: {}", e);
+Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:705:
+ 
+     // Publish a test event
+     let test_bead_id = BeadId::new();
+[31m-    let event = BeadEvent::state_changed(
+(B[m[31m-        test_bead_id,
+(B[m[31m-        BeadState::Ready,
+(B[m[31m-        BeadState::Running,
+(B[m[31m-    );
+(B[m[32m+    let event = BeadEvent::state_changed(test_bead_id, BeadState::Ready, BeadState::Running);
+(B[m 
+     match setup.event_bus.publish(event).await {
+         Ok(_) => {
+Diff in /home/lewis/src/oya/crates/orchestrator/tests/ipc_worker_integration_test.rs:744:
+     };
+ 
+     let bead_id = "test-persistence-integration";
+[31m-    match create_test_bead(&setup.store, bead_id, "test-workflow", PersistenceBeadState::Ready).await {
+(B[m[32m+    match create_test_bead(
+(B[m[32m+        &setup.store,
+(B[m[32m+        bead_id,
+(B[m[32m+        "test-workflow",
+(B[m[32m+        PersistenceBeadState::Ready,
+(B[m[32m+    )
+(B[m[32m+    .await
+(B[m[32m+    {
+(B[m         Ok(_) => (),
+         Err(e) => {
+             eprintln!("Failed to create bead: {}", e);
+Diff in /home/lewis/src/oya/crates/orchestrator/tests/scheduler_kill_recovery_chaos.rs:4:
+ //! and verifying that the supervisor restarts it with consistent state.
+ 
+ #![cfg(any())]
+[31m-
+(B[m #![deny(clippy::unwrap_used)]
+ #![deny(clippy::expect_used)]
+ #![deny(clippy::panic)]
+Diff in /home/lewis/src/oya/crates/orchestrator/tests/worker_event_emission.rs:61:
+             Err(_) => {
+                 attempt += 1;
+                 if attempt >= max_attempts {
+[31m-                    return Err(format!("Timeout waiting for event after {} attempts", max_attempts));
+(B[m[32m+                    return Err(format!(
+(B[m[32m+                        "Timeout waiting for event after {} attempts",
+(B[m[32m+                        max_attempts
+(B[m[32m+                    ));
+(B[m                 }
+                 // Small delay before retry
+                 tokio::time::sleep(Duration::from_millis(100)).await;
+Diff in /home/lewis/src/oya/crates/orchestrator/tests/worker_event_emission.rs:455:
+         }
+         fail_event_attempt += 1;
+         if fail_event_attempt >= 5 {
+[31m-            return Err(format!("Expected 'failed' event but got '{}' after {} attempts",
+(B[m[31m-                event.event_type(), fail_event_attempt).into());
+(B[m[32m+            return Err(format!(
+(B[m[32m+                "Expected 'failed' event but got '{}' after {} attempts",
+(B[m[32m+                event.event_type(),
+(B[m[32m+                fail_event_attempt
+(B[m[32m+            )
+(B[m[32m+            .into());
+(B[m         }
+     };
+     assert_eq!(fail_event.event_type(), "failed");
+Diff in /home/lewis/src/oya/crates/oya-ipc/src/transport.rs:9:
+ //! - Use within actor context for safe concurrent access
+ 
+ use crate::{
+[31m-    TransportError, TransportResult, LENGTH_PREFIX_SIZE, MAX_FRAME_SIZE, MAX_PAYLOAD_SIZE,
+(B[m[32m+    LENGTH_PREFIX_SIZE, MAX_FRAME_SIZE, MAX_PAYLOAD_SIZE, TransportError, TransportResult,
+(B[m };
+[31m-use serde::{de::DeserializeOwned, Serialize};
+(B[m[32m+use serde::{Serialize, de::DeserializeOwned};
+(B[m use std::io::{BufRead, BufReader, BufWriter, Read, Write};
+ 
+ /// Transport layer for length-prefixed bincode messages.
+Diff in /home/lewis/src/oya/crates/zellij-frontend/src/plugin.rs:318:
+             }
+ 
+             // Stage completed - mark stage as complete
+[31m-            HostMessage::StageCompleted {
+(B[m[31m-                bead_id, stage, ..
+(B[m[31m-            } => {
+(B[m[32m+            HostMessage::StageCompleted { bead_id, stage, .. } => {
+(B[m                 self.validate_bead_id(bead_id)?;
+                 self.stage = Some(stage.clone());
+                 self.apply_stage_event(stage, StageState::Completed, 1)
+Diff in /home/lewis/src/oya/crates/zellij-frontend/src/plugin.rs:588:
+         // Create a snapshot with specific state
+         let snapshot = crate::state::StateSnapshot {
+             version: crate::state::STATE_VERSION,
+[31m-            tasks: vec![TaskRow::new("test-task", "in_progress", "P0", "Rust", "task/test")],
+(B[m[32m+            tasks: vec![TaskRow::new(
+(B[m[32m+                "test-task",
+(B[m[32m+                "in_progress",
+(B[m[32m+                "P0",
+(B[m[32m+                "Rust",
+(B[m[32m+                "task/test",
+(B[m[32m+            )],
+(B[m             selected_index: 0,
+             focused_pane: crate::layout::PaneType::BeadDetail,
+             plugin_state: PluginState::Running,
+Diff in /home/lewis/src/oya/crates/zellij-frontend/src/plugin.rs:655:
+         // Restore should fail with validation error
+         let result = plugin.restore_from_snapshot(snapshot);
+         assert!(result.is_err());
+[31m-        assert!(result.unwrap_err().to_string().contains("IncompatibleVersion"));
+(B[m[32m+        assert!(
+(B[m[32m+            result
+(B[m[32m+                .unwrap_err()
+(B[m[32m+                .to_string()
+(B[m[32m+                .contains("IncompatibleVersion")
+(B[m[32m+        );
+(B[m     }
+ 
+     #[test]
+Diff in /home/lewis/src/oya/crates/zellij-frontend/src/plugin.rs:767:
+ 
+         assert!(result.is_ok());
+         assert!(plugin.auto_save_timer.is_some());
+[31m-        assert!(plugin.auto_save_timer.as_ref().map(|t| t.is_running()).unwrap_or(false));
+(B[m[32m+        assert!(
+(B[m[32m+            plugin
+(B[m[32m+                .auto_save_timer
+(B[m[32m+                .as_ref()
+(B[m[32m+                .map(|t| t.is_running())
+(B[m[32m+                .unwrap_or(false)
+(B[m[32m+        );
+(B[m     }
+ 
+     #[test]
+Diff in /home/lewis/src/oya/crates/zellij-frontend/src/plugin.rs:849:
+         let _ = plugin.save_state_now();
+ 
+         assert!(plugin.status_message.is_some());
+[31m-        assert!(plugin
+(B[m[31m-            .status_message
+(B[m[31m-            .as_ref()
+(B[m[31m-            .map(|msg| msg.contains("State saved at"))
+(B[m[31m-            .unwrap_or(false));
+(B[m[32m+        assert!(
+(B[m[32m+            plugin
+(B[m[32m+                .status_message
+(B[m[32m+                .as_ref()
+(B[m[32m+                .map(|msg| msg.contains("State saved at"))
+(B[m[32m+                .unwrap_or(false)
+(B[m[32m+        );
+(B[m     }
+ 
+     #[test]
+Diff in /home/lewis/src/oya/crates/zellij-frontend/src/plugin.rs:1688:
+         let interval_ms = interval_secs.saturating_mul(1000);
+ 
+         // Create timer configuration
+[31m-        let config = TimerConfig::new(interval_ms).map_err(|e| PluginError::TimerError(e.to_string()))?;
+(B[m[32m+        let config =
+(B[m[32m+            TimerConfig::new(interval_ms).map_err(|e| PluginError::TimerError(e.to_string()))?;
+(B[m 
+         // Create and start timer
+         let timer = RefreshTimer::new(config)
+Diff in /home/lewis/src/oya/crates/zellij-frontend/src/render.rs:10:
+ 
+ use crate::components::style;
+ use crate::layout::{Layout, Pane, PaneType};
+[31m-use crate::plugin::{stage_symbol_from_status, TaskRow};
+(B[m[32m+use crate::plugin::{TaskRow, stage_symbol_from_status};
+(B[m use std::fmt::Write;
+ use thiserror::Error;
+ 
+Diff in /home/lewis/src/oya/crates/zellij-frontend/src/render.rs:348:
+ 
+         for (index, stage) in stages.into_iter().enumerate() {
+             // Determine stage status using stage_symbol_from_status
+[31m-            let is_current_stage = running_stage.as_deref() == Some(stage)
+(B[m[31m-                || failed_stage.as_deref() == Some(stage);
+(B[m[32m+            let is_current_stage =
+(B[m[32m+                running_stage.as_deref() == Some(stage) || failed_stage.as_deref() == Some(stage);
+(B[m 
+             let (effective_status, effective_stage) = if completed {
+                 ("passed", None)
+Diff in /home/lewis/src/oya/crates/zellij-frontend/src/render.rs:721:
+     if completed {
+         1.0
+     } else if let Some(index) = failed_stage {
+[31m-        if stage_index <= index {
+(B[m[31m-            1.0
+(B[m[31m-        } else {
+(B[m[31m-            0.0
+(B[m[31m-        }
+(B[m[32m+        if stage_index <= index { 1.0 } else { 0.0 }
+(B[m     } else if let Some(index) = running_stage {
+         if stage_index < index {
+             1.0
+Diff in /home/lewis/src/oya/crates/zellij-frontend/src/render.rs:841:
+         let output = renderer.render_pipeline_view(&pane, &[task], 0, PaneType::BeadList);
+ 
+         // With the new implementation, only the current stage is marked as running
+[31m-        assert!(output.contains("◐ ◇ implement"));  // Current stage is running
+(B[m[32m+        assert!(output.contains("◐ ◇ implement")); // Current stage is running
+(B[m         // Other stages are pending (not automatically marked as complete)
+[31m-        assert!(output.contains("plan"));  // Plan stage exists in output
+(B[m[31m-        assert!(output.contains("research"));  // Research stage exists in output
+(B[m[32m+        assert!(output.contains("plan")); // Plan stage exists in output
+(B[m[32m+        assert!(output.contains("research")); // Research stage exists in output
+(B[m     }
+ 
+     #[test]
+Diff in /home/lewis/src/oya/crates/zellij-frontend/src/render.rs:894:
+         assert!(output.contains("◐ ◇ implement"));
+         // Empty detail after colon should not show ↳ (or shows with just spaces)
+         let has_empty_detail = output.contains("↳   ") || output.contains("↳\n");
+[31m-        assert!(!has_empty_detail || output.contains("◐ ◇ implement"));  // At minimum, stage is shown
+(B[m[32m+        assert!(!has_empty_detail || output.contains("◐ ◇ implement")); // At minimum, stage is shown
+(B[m     }
+ 
+     #[test]
+Diff in /home/lewis/src/oya/crates/zellij-frontend/src/render.rs:940:
+ 
+         // Test running stage
+         let task_running = sample_task("in_progress", Some("implement"));
+[31m-        let output_running = renderer.render_pipeline_view(&pane, &[task_running], 0, PaneType::BeadList);
+(B[m[32m+        let output_running =
+(B[m[32m+            renderer.render_pipeline_view(&pane, &[task_running], 0, PaneType::BeadList);
+(B[m         assert!(output_running.contains("◐ ◇ implement"));
+ 
+         // Test completed stage (all stages show complete)
+Diff in /home/lewis/src/oya/crates/zellij-frontend/src/render.rs:947:
+         let task_completed = sample_task("passed", None);
+[31m-        let output_completed = renderer.render_pipeline_view(&pane, &[task_completed], 0, PaneType::BeadList);
+(B[m[32m+        let output_completed =
+(B[m[32m+            renderer.render_pipeline_view(&pane, &[task_completed], 0, PaneType::BeadList);
+(B[m         assert!(output_completed.contains("● ◇ implement"));
+ 
+         // Test failed stage (using validate which exists in TaskRow stages)
+Diff in /home/lewis/src/oya/crates/zellij-frontend/src/render.rs:952:
+         let task_failed = sample_task("failed", Some("validate: 3 tests failed"));
+[31m-        let output_failed = renderer.render_pipeline_view(&pane, &[task_failed], 0, PaneType::BeadList);
+(B[m[32m+        let output_failed =
+(B[m[32m+            renderer.render_pipeline_view(&pane, &[task_failed], 0, PaneType::BeadList);
+(B[m         assert!(output_failed.contains("✗ ◎ validate"));
+     }
+ 
+Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_test.rs:3:
+ //! These tests verify the pipe handler correctly handles stdin/stdout communication
+ //! with actual OS pipes and process I/O.
+ 
+[31m-use std::io::{BufRead, Read, Write, Cursor};
+(B[m[32m+use std::io::{BufRead, Cursor, Read, Write};
+(B[m use std::process::{Command, Stdio};
+ use std::thread;
+ use std::time::Duration;
+Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_test.rs:27:
+ 
+     let mut input = String::new();
+     let mut stdin = io::stdin();
+[31m-    stdin.read_to_string(&mut input).expect("Failed to read from stdin");
+(B[m[32m+    stdin
+(B[m[32m+        .read_to_string(&mut input)
+(B[m[32m+        .expect("Failed to read from stdin");
+(B[m 
+     // Echo the input back with a prefix
+     println!("ECHO: {}", input.trim());
+Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_test.rs:74:
+     // Spawn a thread to act as the other endpoint
+     thread::spawn(move || {
+         let mut buf = [0u8; 16];
+[31m-        read2.read_exact(&mut buf).expect("Failed to read from pipe 2");
+(B[m[32m+        read2
+(B[m[32m+            .read_exact(&mut buf)
+(B[m[32m+            .expect("Failed to read from pipe 2");
+(B[m         write1
+             .write_all(b"Pong")
+             .expect("Failed to write to pipe 1");
+Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_test.rs:81:
+     });
+ 
+     // Send a message and wait for response
+[31m-    write2.write_all(b"Ping").expect("Failed to write to pipe 2");
+(B[m[32m+    write2
+(B[m[32m+        .write_all(b"Ping")
+(B[m[32m+        .expect("Failed to write to pipe 2");
+(B[m 
+     let mut response = [0u8; 4];
+[31m-    read1.read_exact(&mut response).expect("Failed to read response");
+(B[m[32m+    read1
+(B[m[32m+        .read_exact(&mut response)
+(B[m[32m+        .expect("Failed to read response");
+(B[m 
+     assert_eq!(b"Pong", &response);
+ }
+Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_test.rs:117:
+         .read_to_end(&mut buffer)
+         .expect("Failed to read from pipe");
+ 
+[31m-    let received: TestMessage =
+(B[m[31m-        serde_json::from_slice(&buffer).expect("Failed to deserialize");
+(B[m[32m+    let received: TestMessage = serde_json::from_slice(&buffer).expect("Failed to deserialize");
+(B[m 
+     assert_eq!(original, received);
+ }
+Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_test.rs:213:
+     assert_eq!(test_data, buffer.as_slice());
+ 
+     // Wait for child to exit
+[31m-    let exit_status = child
+(B[m[31m-        .wait()
+(B[m[31m-        .expect("Failed to wait for child process");
+(B[m[32m+    let exit_status = child.wait().expect("Failed to wait for child process");
+(B[m 
+     assert!(exit_status.success());
+ }
+Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_test.rs:265:
+     let mut responses = Vec::new();
+     for line in stdout_reader.lines() {
+         let line = line.expect("Failed to read line");
+[31m-        let response: TestMessage =
+(B[m[31m-            serde_json::from_str(&line).expect("Failed to deserialize");
+(B[m[32m+        let response: TestMessage = serde_json::from_str(&line).expect("Failed to deserialize");
+(B[m         responses.push(response);
+     }
+ 
+Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_test.rs:273:
+     assert_eq!(messages, responses);
+ 
+[31m-    child
+(B[m[31m-        .wait()
+(B[m[31m-        .expect("Failed to wait for child process");
+(B[m[32m+    child.wait().expect("Failed to wait for child process");
+(B[m }
+ 
+ /// Test concurrent access to pipes
+Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_test.rs:285:
+ /// 3. Data integrity is maintained
+ #[test]
+ fn test_concurrent_pipe_access() {
+[31m-    use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+(B[m[32m+    use std::sync::{
+(B[m[32m+        Arc,
+(B[m[32m+        atomic::{AtomicUsize, Ordering},
+(B[m[32m+    };
+(B[m 
+     let success_count = Arc::new(AtomicUsize::new(0));
+     let mut handles = vec![];
+Diff in /home/lewis/src/oya/crates/zellij-frontend/tests/ipc_pipe_integration_test.rs:366:
+         data: "second".to_string(),
+     };
+ 
+[31m-    writeln!(writer, "{}", serde_json::to_string(&msg1).unwrap())
+(B[m[31m-        .expect("Failed to write msg1");
+(B[m[31m-    writeln!(writer, "{}", serde_json::to_string(&msg2).unwrap())
+(B[m[31m-        .expect("Failed to write msg2");
+(B[m[32m+    writeln!(writer, "{}", serde_json::to_string(&msg1).unwrap()).expect("Failed to write msg1");
+(B[m[32m+    writeln!(writer, "{}", serde_json::to_string(&msg2).unwrap()).expect("Failed to write msg2");
+(B[m     writer.flush().expect("Failed to flush");
+ 
+     // Read with line-based framing
+Diff in /home/lewis/src/oya/src/commands/storm.rs:153:
+     /// Get a hint for remediation
+     pub fn hint(&self) -> Option<String> {
+         match self {
+[31m-            Self::ConfigFileNotFound { .. } => {
+(B[m[31m-                Some("Create config with `oya init --template orchestrator` or specify --config".to_string())
+(B[m[31m-            }
+(B[m[32m+            Self::ConfigFileNotFound { .. } => Some(
+(B[m[32m+                "Create config with `oya init --template orchestrator` or specify --config"
+(B[m[32m+                    .to_string(),
+(B[m[32m+            ),
+(B[m             Self::ConfigParseFailed { .. } => {
+                 Some("Validate YAML syntax and required fields in config file".to_string())
+             }
+Diff in /home/lewis/src/oya/src/commands/storm.rs:165:
+             Self::DatabaseQueryFailed { .. } => {
+                 Some("Check database integrity and file permissions".to_string())
+             }
+[31m-            Self::DagBuildFailed { .. } => {
+(B[m[31m-                Some("Review bead dependencies for circular references or missing beads".to_string())
+(B[m[31m-            }
+(B[m[32m+            Self::DagBuildFailed { .. } => Some(
+(B[m[32m+                "Review bead dependencies for circular references or missing beads".to_string(),
+(B[m[32m+            ),
+(B[m             Self::NoBeadsToExecute => {
+                 Some("Create beads or update their status to 'open'".to_string())
+             }
+Diff in /home/lewis/src/oya/src/commands/storm.rs:177:
+             Self::OrchestratorExecutionFailed { .. } => {
+                 Some("Check logs for specific bead failure details".to_string())
+             }
+[31m-            Self::InvalidSlotCount { .. } => {
+(B[m[31m-                Some("Set slots to >= 1 in config file".to_string())
+(B[m[31m-            }
+(B[m[31m-            Self::InvalidTimeout { .. } => {
+(B[m[31m-                Some("Set timeout to >= 1s in config file".to_string())
+(B[m[31m-            }
+(B[m[32m+            Self::InvalidSlotCount { .. } => Some("Set slots to >= 1 in config file".to_string()),
+(B[m[32m+            Self::InvalidTimeout { .. } => Some("Set timeout to >= 1s in config file".to_string()),
+(B[m         }
+     }
+ }
+Diff in /home/lewis/src/oya/src/commands/storm.rs:348:
+     // Create DAG and add nodes
+     let mut dag = WorkflowDAG::new();
+     for bead_id in &bead_ids {
+[31m-        dag.add_node(bead_id.clone()).map_err(|e| StormError::DagBuildFailed {
+(B[m[31m-            reason: format!("Failed to add bead {bead_id}: {e}"),
+(B[m[31m-        })?;
+(B[m[32m+        dag.add_node(bead_id.clone())
+(B[m[32m+            .map_err(|e| StormError::DagBuildFailed {
+(B[m[32m+                reason: format!("Failed to add bead {bead_id}: {e}"),
+(B[m[32m+            })?;
+(B[m     }
+ 
+     // Query dependencies and add edges
+Diff in /home/lewis/src/oya/src/commands/storm.rs:380:
+             issue_id.clone(),
+             DependencyType::BlockingDependency,
+         )
+[31m-            .map_err(|e| {
+(B[m[31m-                StormError::DagBuildFailed {
+(B[m[31m-                    reason: format!(
+(B[m[31m-                        "Failed to add dependency {depends_on_id} -> {issue_id}: {e}"
+(B[m[31m-                    ),
+(B[m[31m-                }
+(B[m[31m-            })?;
+(B[m[32m+        .map_err(|e| StormError::DagBuildFailed {
+(B[m[32m+            reason: format!("Failed to add dependency {depends_on_id} -> {issue_id}: {e}"),
+(B[m[32m+        })?;
+(B[m     }
+ 
+     Ok(dag)
+Diff in /home/lewis/src/oya/src/main.rs:12:
+ 
+ use anyhow::Result;
+ use clap::{CommandFactory, Parser, Subcommand};
+[31m-use commands::{DoctorArgs, InitArgs, LogsArgs, StormArgs, doctor_command, init_command, logs_command, storm_command};
+(B[m[32m+use commands::{
+(B[m[32m+    DoctorArgs, InitArgs, LogsArgs, StormArgs, doctor_command, init_command, logs_command,
+(B[m[32m+    storm_command,
+(B[m[32m+};
+(B[m use tracing::info;
+ 
+ /// OYA SDLC System - Storm goddess of transformation
