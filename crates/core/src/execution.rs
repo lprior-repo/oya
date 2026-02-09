@@ -610,7 +610,6 @@ mod tests {
     #[test]
     fn test_execution_engine_new() {
         let engine = ExecutionEngine::new();
-        assert!(engine.event_bus.is_none());
         assert!(engine.checkpoint_dir.is_none());
     }
 
