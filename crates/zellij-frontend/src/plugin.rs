@@ -146,14 +146,14 @@ pub struct OyaPlugin {
     tasks: Vec<TaskRow>,
     /// Currently selected bead index
     selected_index: usize,
-    /// IPC client for orchestrator communication
+    /// IPC client for orchestrator communication (not persisted)
     ipc: Option<IpcClient>,
     /// Status message shown in the UI
     status_message: Option<String>,
 }
 
 /// Task data for rendering
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskRow {
     pub slug: String,
     pub status: String,
@@ -164,7 +164,7 @@ pub struct TaskRow {
 }
 
 /// Plugin state machine
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PluginState {
     /// Plugin starting
     Starting,
@@ -544,7 +544,10 @@ impl OyaPlugin {
     ///
     /// Returns a vector of (key, action description) tuples.
     /// Empty vector if no keybindings defined (no error).
-    fn get_keybindings_for_pane(&self, pane_type: crate::layout::PaneType) -> Vec<(char, &'static str)> {
+    fn get_keybindings_for_pane(
+        &self,
+        pane_type: crate::layout::PaneType,
+    ) -> Vec<(char, &'static str)> {
         match pane_type {
             crate::layout::PaneType::BeadList => vec![
                 ('j', "Move down"),
@@ -560,13 +563,10 @@ impl OyaPlugin {
                 ('r', "Run pipeline"),
                 ('a', "Approve task"),
             ],
-            crate::layout::PaneType::PipelineView => vec![
-                ('\t', "Switch pane"),
-                ('g', "Refresh tasks"),
-            ],
-            crate::layout::PaneType::WorkflowGraph => vec![
-                ('\t', "Switch pane"),
-            ],
+            crate::layout::PaneType::PipelineView => {
+                vec![('\t', "Switch pane"), ('g', "Refresh tasks")]
+            }
+            crate::layout::PaneType::WorkflowGraph => vec![('\t', "Switch pane")],
         }
     }
 
@@ -647,6 +647,139 @@ impl OyaPlugin {
             _ => Err(PluginError::InvalidState(
                 "Cannot toggle help overlay: invalid state".to_string(),
             )),
+        }
+    }
+
+    // ========================================================================
+    // STATE PERSISTENCE METHODS
+    // ========================================================================
+
+    /// Get a reference to the tasks list (for state snapshot creation)
+    pub fn tasks_ref(&self) -> &[TaskRow] {
+        &self.tasks
+    }
+
+    /// Get the current selected index (for state snapshot creation)
+    pub fn selected_index(&self) -> usize {
+        self.selected_index
+    }
+
+    /// Get the current focused pane (for state snapshot creation)
+    pub fn focused_pane(&self) -> crate::layout::PaneType {
+        self.focused_pane
+    }
+
+    /// Get the current plugin state (for state snapshot creation)
+    pub fn plugin_state(&self) -> PluginState {
+        self.state
+    }
+
+    /// Get the current status message (for state snapshot creation)
+    pub fn status_message(&self) -> Option<&str> {
+        self.status_message.as_deref()
+    }
+
+    /// Restore plugin state from a snapshot
+    ///
+    /// # Arguments
+    ///
+    /// * `snapshot` - State snapshot to restore
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(PluginError)` if restoration fails
+    pub fn restore_from_snapshot(
+        &mut self,
+        snapshot: crate::state::StateSnapshot,
+    ) -> PluginResult<()> {
+        // Validate snapshot
+        let mut snapshot = snapshot;
+        snapshot
+            .validate()
+            .map_err(|e| PluginError::InvalidState(e.to_string()))?;
+
+        // Restore tasks
+        self.tasks = snapshot.tasks;
+
+        // Restore selected index (already validated and clamped)
+        self.selected_index = snapshot.selected_index;
+
+        // Restore focused pane
+        self.focused_pane = snapshot.focused_pane;
+
+        // Restore plugin state
+        self.state = snapshot.plugin_state;
+
+        // Restore status message
+        self.status_message = snapshot.status_message;
+
+        // IPC client is not restored (must be re-established)
+        // Reset to None to force reconnection
+        self.ipc = None;
+
+        Ok(())
+    }
+
+    /// Create a snapshot of current plugin state
+    ///
+    /// # Returns
+    ///
+    /// State snapshot
+    pub fn create_snapshot(&self) -> crate::state::StateSnapshot {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or_else(|_| 0, |d| d.as_secs());
+
+        crate::state::StateSnapshot {
+            version: crate::state::STATE_VERSION,
+            tasks: self.tasks.clone(),
+            selected_index: self.selected_index,
+            focused_pane: self.focused_pane,
+            plugin_state: self.state,
+            status_message: self.status_message.clone(),
+            timestamp,
+        }
+    }
+
+    /// Get the default state file path
+    ///
+    /// Uses `$XDG_DATA_HOME/oya/zellij-plugin-state.json` or `$HOME/.local/share/oya/...`
+    pub fn default_state_file_path() -> std::path::PathBuf {
+        // Try XDG_DATA_HOME first
+        if let Ok(xdg_data_home) = std::env::var("XDG_DATA_HOME") {
+            let path = std::path::PathBuf::from(xdg_data_home)
+                .join("oya")
+                .join("zellij-plugin-state.json");
+            return path;
+        }
+
+        // Fallback to $HOME/.local/share
+        if let Ok(home) = std::env::var("HOME") {
+            let path = std::path::PathBuf::from(home)
+                .join(".local")
+                .join("share")
+                .join("oya")
+                .join("zellij-plugin-state.json");
+            return path;
+        }
+
+        // Final fallback to /tmp
+        std::path::PathBuf::from("/tmp/oya-zellij-state.json")
+    }
+}
+
+// ========================================================================
+// DROP TRAIT FOR AUTO-SAVE ON SHUTDOWN
+// ========================================================================
+
+impl Drop for OyaPlugin {
+    fn drop(&mut self) {
+        // Attempt to save state on shutdown
+        // Ignore errors since we're in a destructor
+        if let Ok(state_manager) = crate::state::StateManager::default() {
+            let _ = state_manager.save_state(self);
         }
     }
 }

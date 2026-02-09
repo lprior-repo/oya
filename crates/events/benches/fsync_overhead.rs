@@ -112,7 +112,7 @@ fn bench_fsync_overhead(c: &mut Criterion) {
                 b.iter(|| {
                     let future = benchmark_fsync_overhead(black_box(size));
                     match rt.block_on(future) {
-                        Ok(_) => {},
+                        Ok(_) => {}
                         Err(e) => eprintln!("Benchmark error: {}", e),
                     }
                 });
@@ -135,7 +135,7 @@ fn bench_fsync_overhead(c: &mut Criterion) {
                 b.iter(|| {
                     let future = benchmark_write_no_fsync(black_box(size));
                     match rt.block_on(future) {
-                        Ok(_) => {},
+                        Ok(_) => {}
                         Err(e) => eprintln!("Benchmark error: {}", e),
                     }
                 });

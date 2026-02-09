@@ -26,19 +26,15 @@ fn bench_sequential_reads(c: &mut Criterion) {
     for size in file_sizes {
         let size_label = format!("{}_bytes", size);
 
-        group.bench_with_input(
-            BenchmarkId::new("read", &size_label),
-            &size,
-            |b, &size| {
-                // Create test data
-                let data = vec![0u8; size];
+        group.bench_with_input(BenchmarkId::new("read", &size_label), &size, |b, &size| {
+            // Create test data
+            let data = vec![0u8; size];
 
-                b.iter(|| {
-                    // Simulate read operation
-                    let _ = black_box(&data).len();
-                });
-            },
-        );
+            b.iter(|| {
+                // Simulate read operation
+                let _ = black_box(&data).len();
+            });
+        });
     }
 
     group.finish();
@@ -53,17 +49,13 @@ fn bench_batch_throughput(c: &mut Criterion) {
     let batch_sizes = vec![10, 100, 1000];
 
     for size in batch_sizes {
-        group.bench_with_input(
-            BenchmarkId::new("process", &size),
-            &size,
-            |b, &size| {
-                b.iter(|| {
-                    // Simulate processing a batch of events
-                    let events: Vec<u64> = (0..size).collect();
-                    let _sum: u64 = events.iter().map(|&x| black_box(x)).sum();
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("process", &size), &size, |b, &size| {
+            b.iter(|| {
+                // Simulate processing a batch of events
+                let events: Vec<u64> = (0..size).collect();
+                let _sum: u64 = events.iter().map(|&x| black_box(x)).sum();
+            });
+        });
     }
 
     group.finish();

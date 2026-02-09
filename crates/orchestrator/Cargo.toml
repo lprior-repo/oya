@@ -19,6 +19,9 @@ required-features = ["examples"]
 [[test]]
 name = "surreal_connection_chaos"
 
+[[test]]
+name = "scheduler_kill_recovery_chaos"
+
 [lints]
 workspace = true
 

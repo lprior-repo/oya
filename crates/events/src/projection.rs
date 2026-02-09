@@ -230,11 +230,7 @@ impl EventSourcedState for AllBeadsState {
 
         // Validate transition is allowed by state machine
         if !from.can_transition_to(to) {
-            return Err(ApplyError::InvalidTransition {
-                bead_id,
-                from,
-                to,
-            });
+            return Err(ApplyError::InvalidTransition { bead_id, from, to });
         }
 
         Ok(())
@@ -351,7 +347,8 @@ impl EventSourcedState for AllBeadsState {
 
                 let from = bead.current_state;
                 bead.current_state = BeadState::Completed;
-                bead.history.push(StateTransition::new(from, BeadState::Completed));
+                bead.history
+                    .push(StateTransition::new(from, BeadState::Completed));
 
                 self.decrement_count(&from);
                 self.increment_count(BeadState::Completed);
@@ -471,7 +468,8 @@ impl Projection for AllBeadsProjection {
                 if let Some(bead) = state.beads.get_mut(bead_id) {
                     let from = bead.current_state;
                     bead.current_state = BeadState::Completed;
-                    bead.history.push(StateTransition::new(from, BeadState::Completed));
+                    bead.history
+                        .push(StateTransition::new(from, BeadState::Completed));
 
                     if let Some(count) = state.state_counts.get_mut(&from) {
                         *count = count.saturating_sub(1);
@@ -1529,7 +1527,10 @@ mod tests {
         let bead_id = BeadId::new();
         proj.apply(
             &mut state,
-            &BeadEvent::created(bead_id, BeadSpec::new("Test").with_complexity(Complexity::Simple)),
+            &BeadEvent::created(
+                bead_id,
+                BeadSpec::new("Test").with_complexity(Complexity::Simple),
+            ),
         );
 
         proj.apply(
@@ -1537,7 +1538,10 @@ mod tests {
             &BeadEvent::stage_started(bead_id, StageKind::Implement, 1),
         );
 
-        assert_eq!(state.beads.get(&bead_id).and_then(|b| b.current_stage), Some(StageKind::Implement));
+        assert_eq!(
+            state.beads.get(&bead_id).and_then(|b| b.current_stage),
+            Some(StageKind::Implement)
+        );
     }
 
     #[test]
@@ -1547,12 +1551,24 @@ mod tests {
         let bead_id = BeadId::new();
         proj.apply(
             &mut state,
-            &BeadEvent::created(bead_id, BeadSpec::new("Test").with_complexity(Complexity::Simple)),
+            &BeadEvent::created(
+                bead_id,
+                BeadSpec::new("Test").with_complexity(Complexity::Simple),
+            ),
         );
 
-        proj.apply(&mut state, &BeadEvent::stage_started(bead_id, StageKind::Implement, 1));
-        proj.apply(&mut state, &BeadEvent::stage_started(bead_id, StageKind::Implement, 2));
-        proj.apply(&mut state, &BeadEvent::stage_started(bead_id, StageKind::Implement, 3));
+        proj.apply(
+            &mut state,
+            &BeadEvent::stage_started(bead_id, StageKind::Implement, 1),
+        );
+        proj.apply(
+            &mut state,
+            &BeadEvent::stage_started(bead_id, StageKind::Implement, 2),
+        );
+        proj.apply(
+            &mut state,
+            &BeadEvent::stage_started(bead_id, StageKind::Implement, 3),
+        );
 
         assert_eq!(
             state
@@ -1570,7 +1586,10 @@ mod tests {
         let bead_id = BeadId::new();
         proj.apply(
             &mut state,
-            &BeadEvent::created(bead_id, BeadSpec::new("Test").with_complexity(Complexity::Simple)),
+            &BeadEvent::created(
+                bead_id,
+                BeadSpec::new("Test").with_complexity(Complexity::Simple),
+            ),
         );
 
         proj.apply(
@@ -1599,7 +1618,10 @@ mod tests {
         let bead_id = BeadId::new();
         proj.apply(
             &mut state,
-            &BeadEvent::created(bead_id, BeadSpec::new("Test").with_complexity(Complexity::Simple)),
+            &BeadEvent::created(
+                bead_id,
+                BeadSpec::new("Test").with_complexity(Complexity::Simple),
+            ),
         );
 
         proj.apply(
@@ -1613,7 +1635,10 @@ mod tests {
             ),
         );
 
-        assert_eq!(state.beads.get(&bead_id).and_then(|b| b.current_stage), Some(StageKind::Plan));
+        assert_eq!(
+            state.beads.get(&bead_id).and_then(|b| b.current_stage),
+            Some(StageKind::Plan)
+        );
     }
 
     #[test]
@@ -1623,7 +1648,10 @@ mod tests {
         let bead_id = BeadId::new();
         proj.apply(
             &mut state,
-            &BeadEvent::created(bead_id, BeadSpec::new("Test").with_complexity(Complexity::Simple)),
+            &BeadEvent::created(
+                bead_id,
+                BeadSpec::new("Test").with_complexity(Complexity::Simple),
+            ),
         );
 
         proj.apply(
@@ -1645,7 +1673,10 @@ mod tests {
 
         let bead_id = BeadId::new();
         let events = vec![
-            BeadEvent::created(bead_id, BeadSpec::new("Test").with_complexity(Complexity::Simple)),
+            BeadEvent::created(
+                bead_id,
+                BeadSpec::new("Test").with_complexity(Complexity::Simple),
+            ),
             BeadEvent::stage_started(bead_id, StageKind::Research, 1),
             BeadEvent::stage_completed(bead_id, StageKind::Research, None),
             BeadEvent::stage_failed(
@@ -1677,8 +1708,14 @@ mod tests {
         };
 
         assert_eq!(
-            incremental.beads.get(&bead_id).and_then(|b| b.current_stage),
-            rebuilt_state.beads.get(&bead_id).and_then(|b| b.current_stage)
+            incremental
+                .beads
+                .get(&bead_id)
+                .and_then(|b| b.current_stage),
+            rebuilt_state
+                .beads
+                .get(&bead_id)
+                .and_then(|b| b.current_stage)
         );
         assert_eq!(
             incremental

@@ -460,52 +460,64 @@ impl DurableEventStore {
             .await
             .map_err(|e| AppendBatchError::WalOpenFailed(format!("create wal dir: {}", e)))?;
 
-        // For simplicity, write all events to the first bead's WAL
-        // In production, you'd want to handle multiple bead_ids properly
-        match events.first() {
-            Some((first_event, _)) => {
-                let bead_id = first_event.bead_id().to_string();
-                let wal_path = self.wal_dir.join(format!("{}.wal", bead_id));
+        // Group events by bead_id for WAL files
+        let mut wal_writers: std::collections::HashMap<
+            String,
+            Vec<(BeadEvent, SerializedEvent)>,
+        > = std::collections::HashMap::new();
 
-                let mut file = tokio::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(&wal_path)
-                    .await
-                    .map_err(|e| {
-                        AppendBatchError::WalOpenFailed(format!("open wal file: {}", e))
-                    })?;
-
-                // Write all events to WAL in single contiguous write
-                for (_event, serialized) in events {
-                    let serialized_data = bincode::serialize(&serialized).map_err(|e| {
-                        AppendBatchError::SerializationFailed {
-                            index: 0,
-                            event_id: serialized.event_id.clone(),
-                            reason: format!("{}", e),
-                        }
-                    })?;
-
-                    let length_prefix = (serialized_data.len() as u32).to_be_bytes();
-
-                    file.write_all(&length_prefix)
-                        .await
-                        .map_err(|e| AppendBatchError::WalWriteFailed(format!("{}", e)))?;
-
-                    file.write_all(&serialized_data)
-                        .await
-                        .map_err(|e| AppendBatchError::WalWriteFailed(format!("{}", e)))?;
-                }
-
-                // Single fsync for entire batch (amortization!)
-                file.sync_all()
-                    .await
-                    .map_err(|e| AppendBatchError::WalSyncFailed(format!("fsync failed: {}", e)))?;
-
-                Ok(())
-            }
-            None => Err(AppendBatchError::EmptyBatch),
+        // Group events by bead_id
+        for (event, serialized) in events {
+            let bead_id = event.bead_id().to_string();
+            wal_writers
+                .entry(bead_id.clone())
+                .or_insert_with(|| {
+                    // Placeholder vector - will be replaced with actual file handles
+                    Vec::new()
+                })
+                .push(((*event).clone(), (**serialized).clone()));
         }
+
+        // For simplicity in this implementation, write to first bead's WAL
+        // In production, you'd want to handle multiple bead_ids properly
+        if let Some(bead_id) = wal_writers.keys().next() {
+            let wal_path = self.wal_dir.join(format!("{}.wal", bead_id));
+
+            let mut file = tokio::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&wal_path)
+                .await
+                .map_err(|e| AppendBatchError::WalOpenFailed(format!("open wal file: {}", e)))?;
+
+            // Write all events to WAL in single contiguous write
+            for (_event, serialized) in events {
+                let serialized_data = bincode::serialize(&serialized).map_err(|e| {
+                    AppendBatchError::SerializationFailed {
+                        index: 0,
+                        event_id: serialized.event_id.clone(),
+                        reason: format!("{}", e),
+                    }
+                })?;
+
+                let length_prefix = (serialized_data.len() as u32).to_be_bytes();
+
+                file.write_all(&length_prefix)
+                    .await
+                    .map_err(|e| AppendBatchError::WalWriteFailed(format!("{}", e)))?;
+
+                file.write_all(&serialized_data)
+                    .await
+                    .map_err(|e| AppendBatchError::WalWriteFailed(format!("{}", e)))?;
+            }
+
+            // Single fsync for entire batch
+            file.sync_all()
+                .await
+                .map_err(|e| AppendBatchError::WalSyncFailed(format!("fsync failed: {}", e)))?;
+        }
+
+        Ok(())
     }
 
     /// Insert multiple events into SurrealDB in batch.

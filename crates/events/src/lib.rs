@@ -60,12 +60,12 @@ pub use event::BeadEvent;
 pub use projection::{
     AllBeadsProjection, AllBeadsState, BeadProjection, ManagedProjection, Projection,
 };
+pub use replay::{
+    create_tracker, EventFilter, EventLoader, LoadError, ReplayProgress, ReplayTracker,
+};
 pub use stage::{
     BeadStateMachine, ExhaustionPolicy, RecursionPolicy, Severity, StageKind, StageTransition,
     StateMachineError, TransitionReason,
-};
-pub use replay::{
-    create_tracker, EventFilter, EventLoader, LoadError, ReplayProgress, ReplayTracker,
 };
 pub use store::{EventStore, InMemoryEventStore, TracingEventStore};
 pub use types::{

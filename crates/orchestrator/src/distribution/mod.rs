@@ -6,6 +6,7 @@
 //! - `PriorityStrategy`: Priority-based selection with load balancing
 //! - `RoundRobinStrategy`: Fair rotation between agents
 //! - `AffinityStrategy`: Capability and preference-based matching
+//! - `StickyStrategy`: Soft sticky mode with fallback logic
 //!
 //! # Example
 //!
@@ -39,6 +40,7 @@ mod error;
 mod fifo;
 mod priority;
 mod round_robin;
+mod sticky;
 mod strategy;
 
 pub use affinity::{AffinityMode, AffinityStrategy};
@@ -46,6 +48,7 @@ pub use error::{DistributionError, DistributionResult};
 pub use fifo::FifoStrategy;
 pub use priority::PriorityStrategy;
 pub use round_robin::RoundRobinStrategy;
+pub use sticky::StickyStrategy;
 pub use strategy::{AgentMetadata, BeadMetadata, DistributionContext, DistributionStrategy};
 
 /// Create a boxed distribution strategy by name.
@@ -57,6 +60,7 @@ pub use strategy::{AgentMetadata, BeadMetadata, DistributionContext, Distributio
 /// - `"round_robin"` - Round-robin
 /// - `"affinity"` - Affinity-based (soft mode)
 /// - `"affinity_hard"` - Affinity-based (hard mode)
+/// - `"sticky"` - Soft sticky mode with fallback
 ///
 /// # Returns
 ///
@@ -69,6 +73,7 @@ pub fn create_strategy(name: &str) -> Option<Box<dyn DistributionStrategy>> {
         "round_robin" => Some(Box::new(RoundRobinStrategy::new())),
         "affinity" => Some(Box::new(AffinityStrategy::soft())),
         "affinity_hard" => Some(Box::new(AffinityStrategy::hard())),
+        "sticky" => Some(Box::new(StickyStrategy::new())),
         _ => None,
     }
 }
@@ -82,6 +87,7 @@ pub fn available_strategies() -> &'static [&'static str] {
         "round_robin",
         "affinity",
         "affinity_hard",
+        "sticky",
     ]
 }
 
@@ -125,6 +131,13 @@ mod tests {
     }
 
     #[test]
+    fn test_create_strategy_sticky() {
+        let strategy = create_strategy("sticky");
+        assert!(strategy.is_some());
+        assert_eq!(strategy.map(|s| s.name()), Some("sticky"));
+    }
+
+    #[test]
     fn test_create_strategy_unknown() {
         let strategy = create_strategy("unknown");
         assert!(strategy.is_none());
@@ -138,6 +151,7 @@ mod tests {
         assert!(strategies.contains(&"round_robin"));
         assert!(strategies.contains(&"affinity"));
         assert!(strategies.contains(&"affinity_hard"));
+        assert!(strategies.contains(&"sticky"));
     }
 
     #[test]
@@ -147,6 +161,7 @@ mod tests {
             Box::new(PriorityStrategy::new()),
             Box::new(RoundRobinStrategy::new()),
             Box::new(AffinityStrategy::new()),
+            Box::new(StickyStrategy::new()),
         ];
 
         let ctx = DistributionContext::new();
