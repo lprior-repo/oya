@@ -228,7 +228,7 @@ impl ExecutionEngine {
         // Kahn's algorithm
         let mut queue: Vec<String> = in_degree
             .iter()
-            .filter(|(_, &degree)| degree == 0)
+            .filter(|(_, degree)| **degree == 0)
             .map(|(id, _)| id.clone())
             .collect();
 
@@ -477,13 +477,6 @@ impl ExecutionEngine {
                     .task_status
                     .insert(task_id.clone(), TaskExecutionStatus::Completed);
                 succeeded.push(task_id.clone());
-
-                // Emit progress event if event bus is configured
-                if let Some(ref bus) = self.event_bus {
-                    let _ = bus.publish(oya_events::BeadEvent::Completed {
-                        bead_id: task_id.clone(),
-                    });
-                }
             }
         }
 
@@ -524,16 +517,6 @@ impl ExecutionEngine {
                 state
                     .task_status
                     .insert(task_id.to_string(), TaskExecutionStatus::RolledBack);
-
-                // Emit rollback event if event bus is configured
-                if let Some(ref bus) = self.event_bus {
-                    let _ = bus.publish(oya_events::BeadEvent::StateChanged {
-                        bead_id: task_id.to_string(),
-                        from: oya_events::BeadState::Completed,
-                        to: oya_events::BeadState::Failed,
-                        reason: Some("Rolled back".to_string()),
-                    });
-                }
 
                 Ok(())
             }
@@ -629,13 +612,6 @@ mod tests {
         let engine = ExecutionEngine::new();
         assert!(engine.event_bus.is_none());
         assert!(engine.checkpoint_dir.is_none());
-    }
-
-    #[test]
-    fn test_execution_engine_with_event_bus() {
-        let bus = Arc::new(oya_events::EventBus::new(100));
-        let engine = ExecutionEngine::new().with_event_bus(bus);
-        assert!(engine.event_bus.is_some());
     }
 
     #[test]

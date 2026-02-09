@@ -1,6 +1,6 @@
-# Agent #{N} - Parallel Bead Processing Swarm
+# Agent #4 - Parallel Bead Processing Swarm
 
-You are Agent #{N} of 12 in a parallel bead processing swarm.
+You are Agent #4 of 12 in a parallel bead processing swarm.
 
 ## Your Mission
 
@@ -43,7 +43,7 @@ If **qa-enforcer** or **red-queen** fails:
 
 ```bash
 # Set your agent number
-export AGENT_ID={N}
+export AGENT_ID=4
 
 # Try to find and claim a bead using a retry loop
 # This handles the race condition where multiple agents might try the same bead
@@ -66,7 +66,7 @@ while true; do
   # Try to claim the bead in PostgreSQL (ON CONFLICT prevents double-claim)
   CLAIM_RESULT=$(psql -U postgres -d swarm_db -t -c "
     INSERT INTO bead_claims (bead_id, claimed_by, status)
-    VALUES ('$BEAD_ID', {N}, 'in_progress')
+    VALUES ('$BEAD_ID', 4, 'in_progress')
     ON CONFLICT (bead_id) DO NOTHING
     RETURNING bead_id;
   ")
@@ -91,7 +91,7 @@ psql -U postgres -d swarm_db -c "
       stage_started_at = NOW(),
       status = 'working',
       last_update = NOW()
-  WHERE agent_id = {N};
+  WHERE agent_id = 4;
 "
 ```
 
@@ -102,7 +102,7 @@ Your bead ID is now stored in `$BEAD_ID`. Use this variable in all subsequent qu
 Use zjj to create an isolated workspace:
 
 ```bash
-zjj add agent-{N}-<bead_id>
+zjj add agent-4-<bead_id>
 ```
 
 This creates a fresh JJ workspace and Zellij tab for your work.
@@ -114,14 +114,14 @@ For each stage, update the database:
 ```sql
 -- Start a stage
 INSERT INTO stage_history (agent_id, bead_id, stage, attempt_number, status, started_at)
-VALUES ({N}, '<bead_id>', 'rust-contract', 1, 'started', NOW());
+VALUES (4, '<bead_id>', 'rust-contract', 1, 'started', NOW());
 
 UPDATE agent_state
 SET current_stage = 'rust-contract',
     stage_started_at = NOW(),
     status = 'working',
     last_update = NOW()
-WHERE agent_id = {N};
+WHERE agent_id = 4;
 ```
 
 Run the stage:
@@ -135,7 +135,7 @@ On completion:
 ```sql
 -- Record success
 INSERT INTO stage_history (agent_id, bead_id, stage, attempt_number, status, result, completed_at)
-VALUES ({N}, '<bead_id>', 'rust-contract', 1, 'passed', 'Contract created', NOW());
+VALUES (4, '<bead_id>', 'rust-contract', 1, 'passed', 'Contract created', NOW());
 ```
 
 ### Step 4: Implement
@@ -161,14 +161,14 @@ If QA fails:
 ```sql
 -- Record failure with feedback
 INSERT INTO stage_history (agent_id, bead_id, stage, attempt_number, status, feedback, completed_at)
-VALUES ({N}, '<bead_id>', 'qa-enforcer', 1, 'failed', '<detailed error message>', NOW());
+VALUES (4, '<bead_id>', 'qa-enforcer', 1, 'failed', '<detailed error message>', NOW());
 
 UPDATE agent_state
 SET feedback = '<detailed error message>',
     implementation_attempt = implementation_attempt + 1,
     status = 'waiting',
     last_update = NOW()
-WHERE agent_id = {N};
+WHERE agent_id = 4;
 ```
 
 Then **LOOP BACK to Step 4** with the feedback.
@@ -199,7 +199,7 @@ UPDATE agent_state
 SET current_stage = 'done',
     status = 'done',
     last_update = NOW()
-WHERE agent_id = {N};
+WHERE agent_id = 4;
 
 UPDATE bead_claims
 SET status = 'completed'
@@ -248,5 +248,5 @@ sqlite3 /home/lewis/src/oya/.beads/beads.db
 3. Spawn zjj workspace (Step 2)
 4. Begin at rust-contract stage (Step 3)
 
-Your agent ID: **{N}**
+Your agent ID: **4**
 Good luck! 🐝

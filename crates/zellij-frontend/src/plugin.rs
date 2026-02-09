@@ -291,6 +291,17 @@ impl OyaPlugin {
     ///
     /// Returns an error if key handling fails
     fn handle_key(&mut self, key: char, _modifiers: KeyModifiers) -> PluginResult<()> {
+        // Handle help overlay toggle/close
+        if key == '?' || key == '\x1b' {
+            // ESC key
+            return self.toggle_help_overlay().map(|_| ());
+        }
+
+        // Ignore other keys when help overlay is active
+        if self.state == PluginState::HelpOverlay {
+            return Ok(());
+        }
+
         match key {
             // Quit
             'q' | 'Q' => {
@@ -320,7 +331,7 @@ impl OyaPlugin {
                 let _ = self.run_pipeline_for_all(false);
             }
             _ => {
-                // Other keys ignored for now
+                // Other keys ignored
             }
         }
 
