@@ -82,8 +82,8 @@ fn create_25_bead_workflow() -> Result<WorkflowDAG, Box<dyn std::error::Error>> 
 }
 
 /// Setup test environment with supervisor, scheduler, and worker.
-async fn setup_test_environment() -> Result<TestContext, Box<dyn std::error::Error>> {
-    let workflow_id = "test-workflow-25-beads".to_string();
+async fn setup_test_environment(unique_id: &str) -> Result<TestContext, Box<dyn std::error::Error>> {
+    let workflow_id = format!("test-workflow-25-beads-{unique_id}");
 
     // Create event bus
     let event_store = Arc::new(InMemoryEventStore::new());
@@ -92,9 +92,10 @@ async fn setup_test_environment() -> Result<TestContext, Box<dyn std::error::Err
     // Create supervisor with test config
     let config = SupervisorConfig::for_testing();
     let args = SupervisorArguments::new().with_config(config);
+    let supervisor_name = format!("supervisor-e2e-checkpoint-{unique_id}");
     let supervisor = spawn_supervisor_with_name::<SchedulerActorDef>(
         args,
-        "supervisor-e2e-checkpoint",
+        &supervisor_name,
     )
     .await?;
 
@@ -103,8 +104,9 @@ async fn setup_test_environment() -> Result<TestContext, Box<dyn std::error::Err
 
     // Spawn scheduler
     let (spawn_tx, spawn_rx) = tokio::sync::oneshot::channel();
+    let scheduler_name = format!("scheduler-e2e-checkpoint-{unique_id}");
     let _ = supervisor.send_message(SupervisorMessage::<SchedulerActorDef>::SpawnChild {
-        name: "scheduler-e2e-checkpoint".to_string(),
+        name: scheduler_name,
         args: orchestrator::actors::scheduler::SchedulerArguments::new(),
         reply: spawn_tx,
     });
@@ -229,7 +231,7 @@ async fn given_25_bead_workflow_when_executing_then_tracks_checkpoint_every_5_be
     let start = Instant::now();
 
     // Setup test environment
-    let ctx = setup_test_environment().await?;
+    let ctx = setup_test_environment("test1").await?;
     info!("Test environment setup complete");
 
     // Execute workflow with checkpoint tracking
@@ -283,7 +285,8 @@ async fn given_workflow_execution_when_completing_5_beads_then_tracks_first_chec
     info!("Starting E2E test: first checkpoint after 5 beads");
 
     // Setup
-    let ctx = setup_test_environment().await?;
+    let unique_id = format!("test{}", line!());
+    let ctx = setup_test_environment(&unique_id).await?;
 
     // Execute first 5 beads
     let mut state = WorkflowCheckpointState {
@@ -341,7 +344,8 @@ async fn given_long_running_workflow_when_checkpoints_every_5_beads_then_complet
     let start = Instant::now();
 
     // Setup
-    let ctx = setup_test_environment().await?;
+    let unique_id = format!("test{}", line!());
+    let ctx = setup_test_environment(&unique_id).await?;
 
     // Execute full workflow
     let final_state = execute_workflow_with_checkpointing(&ctx).await?;
@@ -382,7 +386,8 @@ async fn given_workflow_state_when_tracking_checkpoints_then_preserves_accurate_
     info!("Starting E2E test: checkpoint count accuracy");
 
     // Setup
-    let ctx = setup_test_environment().await?;
+    let unique_id = format!("test{}", line!());
+    let ctx = setup_test_environment(&unique_id).await?;
 
     // Execute workflow and track state
     let final_state = execute_workflow_with_checkpointing(&ctx).await?;
@@ -430,7 +435,8 @@ async fn given_multiple_checkpoints_when_tracking_then_events_emitted_correctly(
     info!("Starting E2E test: event emissions at checkpoints");
 
     // Setup
-    let ctx = setup_test_environment().await?;
+    let unique_id = format!("test{}", line!());
+    let ctx = setup_test_environment(&unique_id).await?;
 
     // Subscribe to events before starting
     let mut sub = ctx.event_bus.subscribe();
