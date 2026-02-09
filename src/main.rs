@@ -62,6 +62,8 @@ enum Commands {
     Init(InitArgs),
     /// Run workspace diagnostics
     Doctor(DoctorArgs),
+    /// Orchestrate bead execution with workflow DAG
+    Storm(StormArgs),
 }
 
 impl Oya {
@@ -149,6 +151,35 @@ impl Oya {
                                     "  {}: {:?} - {}",
                                     check.name, check.status, check.message
                                 );
+                            }
+                            Ok(())
+                        }
+                        Err(e) => {
+                            eprintln!("Error: {e}");
+                            if let Some(hint) = e.hint() {
+                                eprintln!("Hint: {hint}");
+                            }
+                            std::process::exit(e.exit_code());
+                        }
+                    }
+                })
+            }
+            Some(Commands::Storm(args)) => {
+                info!("Running storm command");
+                let rt = tokio::runtime::Runtime::new()?;
+                rt.block_on(async {
+                    match storm_command(args).await {
+                        Ok(output) => {
+                            if args.output == "json" {
+                                println!("{}", serde_json::to_string_pretty(&output).unwrap_or_else(|_| "{}".to_string()));
+                            } else {
+                                println!("Storm completed:");
+                                println!("  Beads completed: {}", output.beads_completed);
+                                println!("  Beads failed: {}", output.beads_failed);
+                                println!("  Duration: {}ms", output.duration_ms);
+                                if let Some(order) = output.planned_order {
+                                    println!("  Planned order: {} beads", order.len());
+                                }
                             }
                             Ok(())
                         }

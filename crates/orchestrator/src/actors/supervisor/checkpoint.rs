@@ -22,7 +22,7 @@ use crate::persistence::PersistenceError;
 use crate::shutdown::CheckpointResult;
 use crate::replay::CheckpointManager;
 
-use super::supervisor_actor::{ChildInfo, SupervisorActorState, SupervisorConfig};
+use super::supervisor_actor::{SupervisorActorState, SupervisorConfig};
 use super::GenericSupervisableActor;
 
 /// Errors that can occur during supervisor checkpoint creation.
@@ -33,8 +33,8 @@ pub enum SupervisorCheckpointError {
     CheckpointManagerUnavailable,
 
     /// Failed to serialize supervisor state to JSON.
-    #[error("Serialization failed: {source}")]
-    SerializationFailed { source: String },
+    #[error("Serialization failed: {reason}")]
+    SerializationFailed { reason: String },
 
     /// Checkpoint creation timed out (25 second limit).
     #[error("Checkpoint timeout after {duration_ms}ms")]
@@ -95,7 +95,7 @@ pub struct ChildSnapshot {
 
 impl<A: GenericSupervisableActor> SupervisorActorState<A>
 where
-    A::Arguments: Clone + Send + Sync,
+    A::Arguments: Clone + Send + Sync + std::fmt::Debug,
     A::Msg: Send,
 {
     /// Create supervisor checkpoint during graceful shutdown.
@@ -133,11 +133,12 @@ where
         // Create checkpoint with timeout
         let checkpoint_result = tokio::time::timeout(
             Duration::from_secs(25),
-            checkpoint_manager.create_checkpoint::<&str>(&serialized, None),
+            checkpoint_manager.create_checkpoint(&serialized, None),
         )
         .await;
 
-        let duration_ms = start.elapsed().as_millis().map_or(0u64, |v| v as u64);
+        #[allow(clippy::cast_possible_truncation)]
+        let duration_ms = start.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
 
         let result = match checkpoint_result {
             Ok(Ok(_checkpoint)) => {
@@ -177,7 +178,7 @@ async fn serialize_supervisor_state<A>(
 ) -> Result<String, SupervisorCheckpointError>
 where
     A: GenericSupervisableActor,
-    A::Arguments: Clone + Send + Sync,
+    A::Arguments: Clone + Send + Sync + std::fmt::Debug,
     A::Msg: Send,
 {
     let snapshot = build_snapshot(state).await;
@@ -185,7 +186,7 @@ where
     serde_json::to_string_pretty(&snapshot).map_err(|e| {
         error!(error = %e, "Failed to serialize supervisor state");
         SupervisorCheckpointError::SerializationFailed {
-            source: e.to_string(),
+            reason: e.to_string(),
         }
     })
 }
@@ -196,7 +197,7 @@ async fn build_snapshot<A>(
 ) -> SupervisorSnapshot
 where
     A: GenericSupervisableActor,
-    A::Arguments: Clone + Send + Sync,
+    A::Arguments: Clone + Send + Sync + std::fmt::Debug,
     A::Msg: Send,
 {
     let children = build_child_snapshots(state).await;
@@ -219,7 +220,7 @@ async fn build_child_snapshots<A>(
 ) -> Vec<ChildSnapshot>
 where
     A: GenericSupervisableActor,
-    A::Arguments: Clone + Send + Sync,
+    A::Arguments: Clone + Send + Sync + std::fmt::Debug,
     A::Msg: Send,
 {
     state
@@ -325,7 +326,7 @@ mod tests {
         assert!(error.to_string().contains("not available"));
 
         let error = SupervisorCheckpointError::SerializationFailed {
-            source: "test error".to_string(),
+            reason: "test error".to_string(),
         };
         assert!(error.to_string().contains("Serialization failed"));
 
