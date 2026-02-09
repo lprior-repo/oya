@@ -2,5 +2,23 @@ vendor/
 node_modules/
 test-results/
 
+# Build artifacts
+target/
+Cargo.lock
+
+# Beads database (SQLite files)
+.beads/beads.db
+.beads/beads.db-shm
+.beads/beads.db-wal
+
 # bv (beads viewer) local config and caches
 .bv/
+
+# Moon cache
+.moon/cache/
+
+# TDD cache
+.tdd15-cache/
+
+# Profiling cache
+profiling/

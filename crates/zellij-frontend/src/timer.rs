@@ -273,221 +273,217 @@ impl RefreshTimer {
 
 impl Default for RefreshTimer {
     fn default() -> Self {
-        // Fallback if 2000ms is invalid (should never happen)
-        Self::new(TimerConfig::new(2000).unwrap_or(TimerConfig {
+        Self::new(TimerConfig {
             interval_ms: 2000,
             max_ticks: None,
-        }))
+        })
     }
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
-#[allow(clippy::panic)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_timer_config_valid_interval() {
-        let config = TimerConfig::new(2000);
-        assert!(config.is_ok());
-        assert_eq!(config.unwrap().interval_ms(), 2000);
+    fn test_timer_config_valid_interval() -> Result<(), TimerError> {
+        let config = TimerConfig::new(2000)?;
+        assert_eq!(config.interval_ms(), 2000);
+        Ok(())
     }
 
     #[test]
     fn test_timer_config_invalid_interval() {
         let config = TimerConfig::new(50);
-        assert!(config.is_err());
-        match config {
-            Err(TimerError::InvalidInterval(_)) => (),
-            _ => panic!("Expected InvalidInterval error"),
-        }
+        assert!(matches!(config, Err(TimerError::InvalidInterval(_))));
     }
 
     #[test]
-    fn test_timer_config_minimum_interval() {
-        let config = TimerConfig::new(100);
-        assert!(config.is_ok());
-        assert_eq!(config.unwrap().interval_ms(), 100);
+    fn test_timer_config_minimum_interval() -> Result<(), TimerError> {
+        let config = TimerConfig::new(100)?;
+        assert_eq!(config.interval_ms(), 100);
+        Ok(())
     }
 
     #[test]
-    fn test_timer_config_with_max_ticks() {
-        let config = TimerConfig::new(1000).unwrap();
+    fn test_timer_config_with_max_ticks() -> Result<(), TimerError> {
+        let config = TimerConfig::new(1000)?;
         let config = config.with_max_ticks(10);
         assert_eq!(config.max_ticks(), Some(10));
+        Ok(())
     }
 
     #[test]
-    fn test_timer_config_interval_duration() {
-        let config = TimerConfig::new(2500).unwrap();
+    fn test_timer_config_interval_duration() -> Result<(), TimerError> {
+        let config = TimerConfig::new(2500)?;
         assert_eq!(config.interval_duration(), Duration::from_millis(2500));
+        Ok(())
     }
 
     #[test]
-    fn test_refresh_timer_creation() {
-        let config = TimerConfig::new(2000).unwrap();
+    fn test_refresh_timer_creation() -> Result<(), TimerError> {
+        let config = TimerConfig::new(2000)?;
         let timer = RefreshTimer::new(config);
         assert_eq!(timer.state(), &TimerState::Idle);
         assert_eq!(timer.current_tick(), 0);
+        Ok(())
     }
 
     #[test]
-    fn test_refresh_timer_default_interval() {
-        let timer = RefreshTimer::default_interval();
-        assert!(timer.is_ok());
-        assert_eq!(timer.unwrap().config().interval_ms(), 2000);
+    fn test_refresh_timer_default_interval() -> Result<(), TimerError> {
+        let timer = RefreshTimer::default_interval()?;
+        assert_eq!(timer.config().interval_ms(), 2000);
+        Ok(())
     }
 
     #[test]
-    fn test_refresh_timer_fast_interval() {
-        let timer = RefreshTimer::fast_interval();
-        assert!(timer.is_ok());
-        assert_eq!(timer.unwrap().config().interval_ms(), 1000);
+    fn test_refresh_timer_fast_interval() -> Result<(), TimerError> {
+        let timer = RefreshTimer::fast_interval()?;
+        assert_eq!(timer.config().interval_ms(), 1000);
+        Ok(())
     }
 
     #[test]
-    fn test_refresh_timer_slow_interval() {
-        let timer = RefreshTimer::slow_interval();
-        assert!(timer.is_ok());
-        assert_eq!(timer.unwrap().config().interval_ms(), 5000);
+    fn test_refresh_timer_slow_interval() -> Result<(), TimerError> {
+        let timer = RefreshTimer::slow_interval()?;
+        assert_eq!(timer.config().interval_ms(), 5000);
+        Ok(())
     }
 
     #[test]
-    fn test_refresh_timer_start() {
-        let timer = RefreshTimer::default_interval().unwrap();
+    fn test_refresh_timer_start() -> Result<(), TimerError> {
+        let timer = RefreshTimer::default_interval()?;
         assert!(!timer.is_running());
 
-        let timer = timer.start().unwrap();
+        let timer = timer.start()?;
         assert!(timer.is_running());
         assert_eq!(timer.state(), &TimerState::Running);
+        Ok(())
     }
 
     #[test]
-    fn test_refresh_timer_start_already_running() {
-        let timer = RefreshTimer::default_interval().unwrap().start().unwrap();
+    fn test_refresh_timer_start_already_running() -> Result<(), TimerError> {
+        let timer = RefreshTimer::default_interval()?.start()?;
         let result = timer.start();
-        assert!(result.is_err());
-        match result {
-            Err(TimerError::AlreadyStarted) => (),
-            _ => panic!("Expected AlreadyStarted error"),
-        }
+        assert!(matches!(result, Err(TimerError::AlreadyStarted)));
+        Ok(())
     }
 
     #[test]
-    fn test_refresh_timer_pause() {
-        let timer = RefreshTimer::default_interval().unwrap().start().unwrap();
+    fn test_refresh_timer_pause() -> Result<(), TimerError> {
+        let timer = RefreshTimer::default_interval()?.start()?;
 
-        let timer = timer.pause().unwrap();
+        let timer = timer.pause()?;
         assert_eq!(timer.state(), &TimerState::Paused);
+        Ok(())
     }
 
     #[test]
-    fn test_refresh_timer_pause_not_running() {
-        let timer = RefreshTimer::default_interval().unwrap();
+    fn test_refresh_timer_pause_not_running() -> Result<(), TimerError> {
+        let timer = RefreshTimer::default_interval()?;
         let result = timer.pause();
         assert!(result.is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_refresh_timer_resume() {
-        let timer = RefreshTimer::default_interval()
-            .unwrap()
-            .start()
-            .unwrap()
-            .pause()
-            .unwrap();
+    fn test_refresh_timer_resume() -> Result<(), TimerError> {
+        let timer = RefreshTimer::default_interval()?.start()?.pause()?;
 
-        let timer = timer.resume().unwrap();
+        let timer = timer.resume()?;
         assert_eq!(timer.state(), &TimerState::Running);
+        Ok(())
     }
 
     #[test]
-    fn test_refresh_timer_resume_not_paused() {
-        let timer = RefreshTimer::default_interval().unwrap();
+    fn test_refresh_timer_resume_not_paused() -> Result<(), TimerError> {
+        let timer = RefreshTimer::default_interval()?;
         let result = timer.resume();
         assert!(result.is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_refresh_timer_stop() {
-        let timer = RefreshTimer::default_interval()
-            .unwrap()
-            .start()
-            .unwrap()
-            .stop();
+    fn test_refresh_timer_stop() -> Result<(), TimerError> {
+        let timer = RefreshTimer::default_interval()?.start()?.stop();
 
         assert_eq!(timer.state(), &TimerState::Stopped);
         assert_eq!(timer.current_tick(), 0);
+        Ok(())
     }
 
     #[test]
-    fn test_refresh_timer_reset() {
-        let timer = RefreshTimer::default_interval().unwrap().start().unwrap();
+    fn test_refresh_timer_reset() -> Result<(), TimerError> {
+        let timer = RefreshTimer::default_interval()?.start()?;
 
         let timer = timer.reset();
         assert_eq!(timer.state(), &TimerState::Idle);
         assert_eq!(timer.current_tick(), 0);
+        Ok(())
     }
 
     #[test]
-    fn test_refresh_timer_tick() {
-        let timer = RefreshTimer::default_interval().unwrap().start().unwrap();
+    fn test_refresh_timer_tick() -> Result<(), TimerError> {
+        let timer = RefreshTimer::default_interval()?.start()?;
 
-        let (timer, event) = timer.tick().unwrap();
+        let (timer, event) = timer.tick()?;
         assert_eq!(timer.current_tick(), 1);
         assert_eq!(event.tick_number(), 1);
         assert_eq!(event.event_id(), 1);
+        Ok(())
     }
 
     #[test]
-    fn test_refresh_timer_tick_multiple() {
-        let mut timer = RefreshTimer::default_interval().unwrap().start().unwrap();
+    fn test_refresh_timer_tick_multiple() -> Result<(), TimerError> {
+        let mut timer = RefreshTimer::default_interval()?.start()?;
 
         for i in 1..=5 {
-            let (new_timer, event) = timer.tick().unwrap();
+            let (new_timer, event) = timer.tick()?;
             timer = new_timer;
             assert_eq!(event.tick_number(), i);
             assert_eq!(timer.current_tick(), i);
         }
+        Ok(())
     }
 
     #[test]
-    fn test_refresh_timer_tick_not_running() {
-        let timer = RefreshTimer::default_interval().unwrap();
+    fn test_refresh_timer_tick_not_running() -> Result<(), TimerError> {
+        let timer = RefreshTimer::default_interval()?;
         let result = timer.tick();
         assert!(result.is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_refresh_timer_should_stop() {
-        let config = TimerConfig::new(1000).unwrap().with_max_ticks(3);
-        let timer = RefreshTimer::new(config).start().unwrap();
+    fn test_refresh_timer_should_stop() -> Result<(), TimerError> {
+        let config = TimerConfig::new(1000)?.with_max_ticks(3);
+        let timer = RefreshTimer::new(config).start()?;
 
         assert!(!timer.should_stop());
 
-        let (timer, _) = timer.tick().unwrap();
+        let (timer, _) = timer.tick()?;
         assert!(!timer.should_stop());
 
-        let (timer, _) = timer.tick().unwrap();
+        let (timer, _) = timer.tick()?;
         assert!(!timer.should_stop());
 
-        let (timer, _) = timer.tick().unwrap();
+        let (timer, _) = timer.tick()?;
         assert!(timer.should_stop());
         assert_eq!(timer.state(), &TimerState::Stopped);
+        Ok(())
     }
 
     #[test]
-    fn test_refresh_timer_no_max_ticks() {
-        let mut timer = RefreshTimer::default_interval().unwrap().start().unwrap();
+    fn test_refresh_timer_no_max_ticks() -> Result<(), TimerError> {
+        let mut timer = RefreshTimer::default_interval()?.start()?;
 
         for _ in 0..100 {
-            let (new_timer, _) = timer.tick().unwrap();
+            let (new_timer, _) = timer.tick()?;
             timer = new_timer;
         }
 
         assert!(!timer.should_stop());
         assert!(timer.is_running());
+        Ok(())
     }
 
     #[test]
@@ -499,16 +495,17 @@ mod tests {
     }
 
     #[test]
-    fn test_timer_event_id_increment() {
-        let timer = RefreshTimer::default_interval().unwrap().start().unwrap();
+    fn test_timer_event_id_increment() -> Result<(), TimerError> {
+        let timer = RefreshTimer::default_interval()?.start()?;
 
-        let (timer, event1) = timer.tick().unwrap();
-        let (timer, event2) = timer.tick().unwrap();
-        let (_, event3) = timer.tick().unwrap();
+        let (timer, event1) = timer.tick()?;
+        let (timer, event2) = timer.tick()?;
+        let (_, event3) = timer.tick()?;
 
         assert_eq!(event1.event_id(), 1);
         assert_eq!(event2.event_id(), 2);
         assert_eq!(event3.event_id(), 3);
+        Ok(())
     }
 
     #[test]
@@ -533,8 +530,8 @@ mod tests {
     }
 
     #[test]
-    fn test_is_tick_due() {
-        let timer = RefreshTimer::default_interval().unwrap();
+    fn test_is_tick_due() -> Result<(), TimerError> {
+        let timer = RefreshTimer::default_interval()?;
 
         // Should be due if more than interval has passed
         assert!(timer.is_tick_due(0));
@@ -544,6 +541,7 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .map_or_else(|_| 0, |d| d.as_millis() as u64);
         assert!(!timer.is_tick_due(now));
+        Ok(())
     }
 
     #[test]

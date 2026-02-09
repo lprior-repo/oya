@@ -20,8 +20,8 @@
 #![warn(clippy::nursery)]
 #![forbid(unsafe_code)]
 
-use crate::execution::{TaskExecutionStatus, WorkflowState};
 use crate::Workflow;
+use crate::execution::{TaskExecutionStatus, WorkflowState};
 use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 
@@ -29,7 +29,9 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum VisualizationError {
     /// Terminal dimensions are too small.
-    #[error("Terminal too small: minimum {min_width}x{min_height}, actual {actual_width}x{actual_height}")]
+    #[error(
+        "Terminal too small: minimum {min_width}x{min_height}, actual {actual_width}x{actual_height}"
+    )]
     TerminalTooSmall {
         min_width: usize,
         min_height: usize,

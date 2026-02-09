@@ -103,8 +103,6 @@ oya-workflow = { path = "crates/workflow" }
 oya-events = { path = "crates/events" }
 oya-ipc = { path = "crates/oya-ipc" }
 oya-web = { path = "crates/oya-web" }
-oya-zellij-plugin = { path = "crates/oya-zellij-plugin" }
-oya-ui-components = { path = "crates/oya-ui-components" }
 zellij-frontend = { path = "crates/zellij-frontend" }
 # oya-reconciler = { path = "crates/reconciler" }  # TODO: Not yet created
 # oya-shared = { path = "crates/oya-shared" }  # TODO: Not yet created

@@ -49,7 +49,7 @@ use crate::ipc_messages::{
 use crate::actors::SchedulerState;
 use crate::actors::errors::ActorError;
 use crate::agent_swarm::{AgentPool, PoolStats};
-use crate::persistence::{OrchestratorStore, BeadRecord, BeadState};
+use crate::persistence::{BeadRecord, BeadState, OrchestratorStore};
 
 /// IPC worker actor definition.
 #[derive(Clone, Default)]
@@ -428,17 +428,11 @@ mod core {
 
             // COMMANDS
             // ════════
-            GuestMessage::StartBead { bead_id } => {
-                execute_start_bead(state, &bead_id)
-            }
+            GuestMessage::StartBead { bead_id } => execute_start_bead(state, &bead_id),
 
-            GuestMessage::CancelBead { bead_id } => {
-                execute_cancel_bead(state, &bead_id)
-            }
+            GuestMessage::CancelBead { bead_id } => execute_cancel_bead(state, &bead_id),
 
-            GuestMessage::RetryBead { bead_id } => {
-                execute_retry_bead(state, &bead_id)
-            }
+            GuestMessage::RetryBead { bead_id } => execute_retry_bead(state, &bead_id),
 
             GuestMessage::RunStage { .. } | GuestMessage::ApproveTask { .. } => Err(
                 ActorError::internal("Task commands are handled asynchronously".to_string()),

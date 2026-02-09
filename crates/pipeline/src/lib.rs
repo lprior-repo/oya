@@ -18,7 +18,7 @@ pub use domain::{Language, Priority, Slug, Task, TaskStatus};
 pub use error::{Error, Result};
 pub use persistence::{list_all_tasks, load_task_record, save_task_record, update_task_status};
 pub use plan::{
-    apply_stage_plan, approve_task, plan_task_stages, pipeline_report, resolve_stage_range,
-    run_full_pipeline, run_task_pipeline, stage_range, PipelineStageStatus, StageReport,
+    PipelineStageStatus, StageReport, apply_stage_plan, approve_task, pipeline_report,
+    plan_task_stages, resolve_stage_range, run_full_pipeline, run_task_pipeline, stage_range,
 };
-pub use stages::{pipeline_stage_edges, Stage, validate_stage_sequence};
+pub use stages::{Stage, pipeline_stage_edges, validate_stage_sequence};

@@ -631,7 +631,7 @@ mod tests {
 
     use super::*;
     use crate::Task;
-    use anyhow::{anyhow, Result};
+    use anyhow::{Result, anyhow};
 
     #[test]
     fn test_execution_engine_new() {
