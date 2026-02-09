@@ -102,6 +102,10 @@ pub enum SlotError {
     /// Invalid state transition.
     #[error("invalid state transition")]
     InvalidTransition,
+
+    /// Bead ID not available.
+    #[error("bead ID not available")]
+    BeadIdNotAvailable,
 }
 
 /// State for AgentSlotActor.
@@ -145,6 +149,11 @@ impl AgentSlotState {
     #[must_use]
     pub fn current_bead(&self) -> Option<&BeadId> {
         self.bead_id.as_ref()
+    }
+
+    /// Get bead ID or return error.
+    fn require_bead_id(&self) -> Result<&BeadId, SlotError> {
+        self.bead_id.as_ref().ok_or(SlotError::BeadIdNotAvailable)
     }
 }
 
@@ -323,16 +332,17 @@ impl AgentSlotActorDef {
         );
 
         // Enter stage (increments counters)
-        let mut machine_clone = state_machine.clone();
+    // TODO: FIX THIS LINE - /* TODO: FIX THIS */ machine_clone = state_machine.clone();
         machine_clone
             .enter_stage()
             .map_err(|e| SlotError::StateMachineError(format!("enter_stage: {e}")))?;
         state.state_machine = Some(machine_clone.clone());
 
         // Build context for this stage
+        let bead_id = state.require_bead_id()?;
         let bead_context = BeadContext {
-            bead_id: state.bead_id.as_ref().unwrap().clone(),
-            spec: format!("Bead {}", state.bead_id.as_ref().unwrap()), // Simplified
+            bead_id: bead_id.clone(),
+            spec: format!("Bead {}", bead_id), // Simplified
             relevant_files: vec![],
             upstream_artifacts: vec![],
         };
@@ -342,9 +352,6 @@ impl AgentSlotActorDef {
         let stage_prompt = context_builder
             .build_prompt(current_stage, &bead_context, &state.artifacts, feedback)
             .map_err(|e| SlotError::ContextError(format!("{e}")))?;
-
-        // Emit stage started event
-        let bead_id = state.bead_id.as_ref().unwrap().clone();
         self.emit_event(
             state,
             BeadEvent::StageStarted {
@@ -378,7 +385,7 @@ impl AgentSlotActorDef {
                     .insert(current_stage, "artifact-placeholder".to_string());
 
                 // Advance state machine
-                let mut machine_clone = state_machine.clone();
+    // TODO: FIX THIS LINE - /* TODO: FIX THIS */ machine_clone = state_machine.clone();
                 let transition = machine_clone
                     .advance()
                     .map_err(|e| SlotError::StateMachineError(format!("advance: {e}")))?;
@@ -403,7 +410,7 @@ impl AgentSlotActorDef {
                 );
 
                 // Reenter target stage
-                let mut machine_clone = state_machine.clone();
+    // TODO: FIX THIS LINE - /* TODO: FIX THIS */ machine_clone = state_machine.clone();
                 let transition = machine_clone
                     .reenter(target, feedback.clone(), severity)
                     .map_err(|e| SlotError::StateMachineError(format!("reenter: {e}")))?;
@@ -497,7 +504,13 @@ impl AgentSlotActorDef {
     }
 
     fn complete_bead(&self, state: &mut AgentSlotState, result: BeadCompletion) {
-        let bead_id = state.bead_id.clone().unwrap();
+        let bead_id = match state.require_bead_id() {
+            Ok(id) => id.clone(),
+            Err(e) => {
+                error!("Cannot complete bead: {}", e);
+                return;
+            }
+        };
 
         info!("Bead {:?} completed with result: {:?}", bead_id, result);
 
@@ -636,5 +649,19 @@ mod tests {
         let output = actor.execute_non_agent_stage(StageKind::Accept);
         assert!(output.success);
         assert_eq!(output.stage, StageKind::Accept);
+    }
+
+    #[test]
+    fn test_require_bead_id_when_present() {
+    // TODO: FIX THIS LINE - /* TODO: FIX THIS */ state = AgentSlotState::new(PathBuf::from("/tmp"));
+        state.bead_id = Some(BeadId::new());
+        assert!(state.require_bead_id().is_ok());
+    }
+
+    #[test]
+    fn test_require_bead_id_when_missing() {
+        let state = AgentSlotState::new(PathBuf::from("/tmp"));
+        let result = state.require_bead_id();
+        assert!(matches!(result, Err(SlotError::BeadIdNotAvailable)));
     }
 }
