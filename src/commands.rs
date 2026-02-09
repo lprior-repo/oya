@@ -115,7 +115,7 @@ pub async fn execute_command(command: Commands) -> Result<()> {
 /// Create a new task with isolated worktree.
 async fn cmd_new(slug: String, contract: Option<String>, interactive: bool) -> Result<()> {
     use oya_pipeline::domain::{Slug, Task};
-    use oya_pipeline::persistence::save_task_record;
+    use oya_pipeline::save_task_record;
 
     info!("Creating new task: {}", slug);
 
@@ -184,8 +184,7 @@ async fn cmd_stage(
     from: Option<String>,
     to: Option<String>,
 ) -> Result<()> {
-    use oya_pipeline::persistence::{load_task_record, save_task_record};
-    use oya_pipeline::plan::{apply_stage_plan, resolve_stage_range};
+    use oya_pipeline::{apply_stage_plan, load_task_record, resolve_stage_range, save_task_record};
 
     info!("Running stage '{}' for task '{}'", stage, slug);
 
@@ -267,8 +266,7 @@ async fn cmd_approve(slug: String, strategy: Option<String>, force: bool) -> Res
         info!("Force approval enabled - skipping safety checks");
     }
 
-    use oya_pipeline::persistence::{load_task_record, save_task_record};
-    use oya_pipeline::plan::approve_task;
+    use oya_pipeline::{approve_task, load_task_record, save_task_record};
 
     let repo_root = get_repo_root()?;
     let task = load_task_record(&slug, &repo_root)
@@ -287,8 +285,7 @@ async fn cmd_approve(slug: String, strategy: Option<String>, force: bool) -> Res
 
 /// Run the full pipeline for one or more tasks.
 async fn cmd_pipeline(slugs: Vec<String>, dry_run: bool) -> Result<()> {
-    use oya_pipeline::persistence::{load_task_record, save_task_record};
-    use oya_pipeline::plan::run_full_pipeline;
+    use oya_pipeline::{load_task_record, run_full_pipeline, save_task_record};
 
     if slugs.is_empty() {
         return Err(anyhow::anyhow!("At least one slug must be provided"));
@@ -299,23 +296,22 @@ async fn cmd_pipeline(slugs: Vec<String>, dry_run: bool) -> Result<()> {
     let mut failed = Vec::new();
 
     for slug in slugs {
-        let result = load_task_record(&slug, &repo_root)
-            .await
-            .map_err(|err| anyhow::anyhow!("Failed to load task '{slug}': {err}"))
-            .and_then(|task| {
-                run_full_pipeline(task)
-                    .map_err(|err| anyhow::anyhow!("Pipeline failed for '{slug}': {err}"))
-            })
-            .and_then(|task| {
-                if dry_run {
-                    Ok(task)
-                } else {
-                    save_task_record(&task, &repo_root)
-                        .await
-                        .map_err(|err| anyhow::anyhow!("Failed to save task '{slug}': {err}"))
-                        .map(|_| task)
-                }
-            });
+        let result = async {
+            let task = load_task_record(&slug, &repo_root)
+                .await
+                .map_err(|err| anyhow::anyhow!("Failed to load task '{slug}': {err}"))?;
+            let task = run_full_pipeline(task)
+                .map_err(|err| anyhow::anyhow!("Pipeline failed for '{slug}': {err}"))?;
+
+            if !dry_run {
+                save_task_record(&task, &repo_root)
+                    .await
+                    .map_err(|err| anyhow::anyhow!("Failed to save task '{slug}': {err}"))?;
+            }
+
+            Ok(task)
+        }
+        .await;
 
         match result {
             Ok(task) => {
@@ -351,7 +347,7 @@ async fn cmd_pipeline(slugs: Vec<String>, dry_run: bool) -> Result<()> {
 
 /// Show task details.
 async fn cmd_show(slug: String, detailed: bool) -> Result<()> {
-    use oya_pipeline::persistence::load_task_record;
+    use oya_pipeline::load_task_record;
 
     let repo_root = get_repo_root()?;
     info!("Showing details for task '{}'", slug);
@@ -375,7 +371,7 @@ async fn cmd_show(slug: String, detailed: bool) -> Result<()> {
 /// Display task information to the user.
 fn display_task(task: &oya_pipeline::domain::Task, detailed: bool) {
     use oya_pipeline::domain::TaskStatus;
-    use oya_pipeline::plan::{pipeline_report, PipelineStageStatus};
+    use oya_pipeline::{pipeline_report, PipelineStageStatus};
 
     println!("\nTask: {}", task.slug);
     println!("Language: {}", task.language);
@@ -447,7 +443,7 @@ fn display_task(task: &oya_pipeline::domain::Task, detailed: bool) {
 
 /// List all tasks.
 async fn cmd_list(priority: Option<String>, status: Option<String>) -> Result<()> {
-    use oya_pipeline::persistence::list_all_tasks;
+    use oya_pipeline::list_all_tasks;
 
     let repo_root = get_repo_root()?;
     info!("Listing all tasks");
