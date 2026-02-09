@@ -9,14 +9,13 @@ members = [
     "crates/events",
     "crates/oya-ipc",
     "crates/oya-web",
-    "crates/oya-ui",
+    "crates/zellij-frontend",
+    "crates/oya-zellij-plugin",
+    "crates/oya-ui-components",
     # "crates/reconciler",  # TODO: Not yet created
     # "crates/oya-shared",  # TODO: Not yet created
     "tools/profiling",
     # "crates/zjj-integration-tests",  # TODO: Not yet created
-]
-exclude = [
-    "crates/oya-zellij",  # Standalone WASM plugin (requires Rust 1.83 + wasm32-wasi)
 ]
 resolver = "2"
 
@@ -104,7 +103,9 @@ oya-workflow = { path = "crates/workflow" }
 oya-events = { path = "crates/events" }
 oya-ipc = { path = "crates/oya-ipc" }
 oya-web = { path = "crates/oya-web" }
-oya-ui = { path = "crates/oya-ui" }
+oya-zellij-plugin = { path = "crates/oya-zellij-plugin" }
+oya-ui-components = { path = "crates/oya-ui-components" }
+zellij-frontend = { path = "crates/zellij-frontend" }
 # oya-reconciler = { path = "crates/reconciler" }  # TODO: Not yet created
 # oya-shared = { path = "crates/oya-shared" }  # TODO: Not yet created
 orchestrator = { path = "crates/orchestrator" }

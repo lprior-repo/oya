@@ -1,5 +1,5 @@
 [package]
-name = "oya-ui"
+name = "oya-zellij-plugin"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -12,7 +12,7 @@
 layout {
     default_tab {
         pane name="oya" {
-            plugin location="file:target/wasm32-wasip1/release/oya_ui.wasm"
+            plugin location="file:target/wasm32-wasip1/release/oya_zellij_plugin.wasm"
         }
     }
 }

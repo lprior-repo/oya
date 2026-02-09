@@ -1,5 +1,5 @@
 [package]
-name = "oya-zellij"
+name = "oya-ui-components"
 version = "0.1.0"
 edition = "2021"
 
