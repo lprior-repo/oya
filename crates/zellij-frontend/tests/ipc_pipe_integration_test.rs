@@ -328,7 +328,7 @@ fn test_concurrent_pipe_access() {
 /// 3. Performance is acceptable
 #[test]
 fn test_large_message_through_pipe() {
-    let (reader, mut writer) = os_pipe::pipe().expect("Failed to create pipe");
+    let (mut reader, mut writer) = os_pipe::pipe().expect("Failed to create pipe");
 
     // Create a large message (~1MB)
     let large_data = "x".repeat(1_000_000);
@@ -355,7 +355,7 @@ fn test_large_message_through_pipe() {
 /// 3. No cross-message contamination occurs
 #[test]
 fn test_newline_delimited_json_framing() {
-    let (mut reader, mut writer) = os_pipe::pipe().expect("Failed to create pipe");
+    let (reader, mut writer) = os_pipe::pipe().expect("Failed to create pipe");
 
     // Send multiple JSON messages, each on its own line
     let msg1 = TestMessage {
@@ -376,6 +376,7 @@ fn test_newline_delimited_json_framing() {
     // Read with line-based framing
     let mut reader = std::io::BufReader::new(reader);
     let mut line = String::new();
+    let mut reader_ref = &mut reader;
 
     reader.read_line(&mut line).expect("Failed to read line 1");
     let received1: TestMessage = serde_json::from_str(&line.trim()).expect("Failed to parse msg1");

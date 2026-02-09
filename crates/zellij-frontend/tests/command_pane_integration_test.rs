@@ -569,32 +569,6 @@ fn test_command_output_event_structure() {
     assert_eq!(event.stderr(), Some("")));
 }
 
-// Helper methods for event inspection
-impl CommandPaneEvent {
-    fn pane_id(&self) -> &str {
-        match self {
-            CommandPaneEvent::Opened { pane_id, .. } => pane_id,
-            CommandPaneEvent::Output { pane_id, .. } => pane_id,
-            CommandPaneEvent::Exited { pane_id, .. } => pane_id,
-            CommandPaneEvent::Failed { pane_id, .. } => pane_id,
-        }
-    }
-
-    fn stdout(&self) -> Option<&str> {
-        match self {
-            CommandPaneEvent::Output { stdout, .. } => Some(stdout),
-            _ => None,
-        }
-    }
-
-    fn stderr(&self) -> Option<&str> {
-        match self {
-            CommandPaneEvent::Output { stderr, .. } => Some(stderr),
-            _ => None,
-        }
-    }
-}
-
 // ============================================================================
 // Edge Case Tests
 // ============================================================================
