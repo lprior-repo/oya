@@ -1,0 +1,2 @@
+Error writing files: failed to resolve mod `stage`: /home/lewis/src/oya/crates/core/src/stage.rs does not exist
+Error writing files: failed to resolve mod `commands`: file for module found at both "/home/lewis/src/oya/src/commands.rs" and "/home/lewis/src/oya/src/commands/mod.rs"

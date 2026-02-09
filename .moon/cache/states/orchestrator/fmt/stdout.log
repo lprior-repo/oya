@@ -1,0 +1,522 @@
+Diff in /home/lewis/src/oya/crates/orchestrator/src/bin/ipc-server.rs:19:
+     tracing_subscriber::fmt().with_env_filter("info").init();
+ 
+     let address = std::env::var("OYA_IPC_ADDR").unwrap_or_else(|_| DEFAULT_ADDR.to_string());
+[31m-    let (ipc_worker, _handle) =
+(B[m[31m-        Actor::spawn(None, IpcWorkerActorDef, IpcWorkerArguments::new())
+(B[m[31m-            .await
+(B[m[31m-            .map_err(|err| format!("Failed to spawn IPC worker: {err:?}"))?;
+(B[m[32m+    let (ipc_worker, _handle) = Actor::spawn(None, IpcWorkerActorDef, IpcWorkerArguments::new())
+(B[m[32m+        .await
+(B[m[32m+        .map_err(|err| format!("Failed to spawn IPC worker: {err:?}"))?;
+(B[m 
+     let listener = TcpListener::bind(&address).await?;
+     info!("IPC server listening on {}", address);
+Diff in /home/lewis/src/oya/crates/orchestrator/src/actors/ipc_worker.rs:202:
+         state: &mut Self::State,
+     ) -> Result<(), ActorProcessingErr> {
+         if let IpcWorkerMessage::HandleGuestMessage {
+[31m-            message: GuestMessage::RunStage {
+(B[m[31m-                slug,
+(B[m[31m-                stage,
+(B[m[31m-                from,
+(B[m[31m-                to,
+(B[m[31m-                dry_run,
+(B[m[31m-            },
+(B[m[32m+            message:
+(B[m[32m+                GuestMessage::RunStage {
+(B[m[32m+                    slug,
+(B[m[32m+                    stage,
+(B[m[32m+                    from,
+(B[m[32m+                    to,
+(B[m[32m+                    dry_run,
+(B[m[32m+                },
+(B[m             reply,
+         } = message
+         {
+Diff in /home/lewis/src/oya/crates/orchestrator/src/actors/ipc_worker.rs:414:
+                 })
+             }
+ 
+[31m-            GuestMessage::RunStage { .. } | GuestMessage::ApproveTask { .. } => {
+(B[m[31m-                Err(ActorError::internal(
+(B[m[31m-                    "Task commands are handled asynchronously".to_string(),
+(B[m[31m-                ))
+(B[m[31m-            }
+(B[m[31m-            GuestMessage::RunPipeline { .. } | GuestMessage::RunPipelineBatch { .. } => {
+(B[m[31m-                Err(ActorError::internal(
+(B[m[31m-                    "Task commands are handled asynchronously".to_string(),
+(B[m[31m-                ))
+(B[m[31m-            }
+(B[m[32m+            GuestMessage::RunStage { .. } | GuestMessage::ApproveTask { .. } => Err(
+(B[m[32m+                ActorError::internal("Task commands are handled asynchronously".to_string()),
+(B[m[32m+            ),
+(B[m[32m+            GuestMessage::RunPipeline { .. } | GuestMessage::RunPipelineBatch { .. } => Err(
+(B[m[32m+                ActorError::internal("Task commands are handled asynchronously".to_string()),
+(B[m[32m+            ),
+(B[m         }
+     }
+ 
+Diff in /home/lewis/src/oya/crates/orchestrator/src/actors/ipc_worker.rs:554:
+     fn check_agent_pool(state: &IpcWorkerState, timestamp: u64) -> ComponentHealth {
+         match &state.agent_pool {
+             Some(_) => {
+[31m-                let pool_stats = get_agent_pool_stats(state).unwrap_or_else(|_| PoolStats::default());
+(B[m[32m+                let pool_stats =
+(B[m[32m+                    get_agent_pool_stats(state).unwrap_or_else(|_| PoolStats::default());
+(B[m                 let total = pool_stats.total;
+                 let working = pool_stats.working;
+                 let unhealthy = pool_stats.unhealthy;
+Diff in /home/lewis/src/oya/crates/orchestrator/src/actors/ipc_worker.rs:827:
+ }
+ 
+ fn locate_repo_root() -> Result<std::path::PathBuf, ActorError> {
+[31m-    let current =
+(B[m[31m-        std::env::current_dir().map_err(|err| ActorError::internal(err.to_string()))?;
+(B[m[32m+    let current = std::env::current_dir().map_err(|err| ActorError::internal(err.to_string()))?;
+(B[m     let mut path = current.as_path();
+ 
+     loop {
+Diff in /home/lewis/src/oya/crates/orchestrator/src/actors/ipc_worker.rs:854:
+         | oya_pipeline::Error::InvalidStageSequence(_) => {
+             ActorError::invalid_state_transition(error.to_string())
+         }
+[31m-        oya_pipeline::Error::TaskNotFound(task) => {
+(B[m[31m-            ActorError::not_found("task", task)
+(B[m[31m-        }
+(B[m[32m+        oya_pipeline::Error::TaskNotFound(task) => ActorError::not_found("task", task),
+(B[m         _ => ActorError::internal(error.to_string()),
+     }
+ }
+Diff in /home/lewis/src/oya/crates/orchestrator/src/actors/ipc_worker.rs:892:
+             ("in_progress".to_string(), Some(stage.clone()))
+         }
+         oya_pipeline::domain::TaskStatus::PassedPipeline => ("passed".to_string(), None),
+[31m-        oya_pipeline::domain::TaskStatus::FailedPipeline { stage, reason } => (
+(B[m[31m-            "failed".to_string(),
+(B[m[31m-            Some(format!("{stage}: {reason}")),
+(B[m[31m-        ),
+(B[m[32m+        oya_pipeline::domain::TaskStatus::FailedPipeline { stage, reason } => {
+(B[m[32m+            ("failed".to_string(), Some(format!("{stage}: {reason}")))
+(B[m[32m+        }
+(B[m         oya_pipeline::domain::TaskStatus::Integrated => ("integrated".to_string(), None),
+     }
+ }
+Diff in /home/lewis/src/oya/crates/oya-ipc/src/lib.rs:94:
+ #[serde(tag = "type", content = "data", rename_all = "snake_case")]
+ pub enum HostMessage {
+     /// Bead list query response
+[31m-    BeadList {
+(B[m[31m-        beads: Vec<Bead>,
+(B[m[31m-    },
+(B[m[32m+    BeadList { beads: Vec<Bead> },
+(B[m     /// Individual bead detail response
+[31m-    BeadDetail {
+(B[m[31m-        bead: Bead,
+(B[m[31m-    },
+(B[m[32m+    BeadDetail { bead: Bead },
+(B[m     /// Workflow DAG visualization response
+[31m-    WorkflowGraph {
+(B[m[31m-        graph: WorkflowDAG,
+(B[m[31m-    },
+(B[m[32m+    WorkflowGraph { graph: WorkflowDAG },
+(B[m     /// Agent pool statistics response
+[31m-    AgentPool {
+(B[m[31m-        stats: PoolMetrics,
+(B[m[31m-    },
+(B[m[32m+    AgentPool { stats: PoolMetrics },
+(B[m     /// System health status response
+[31m-    SystemHealth {
+(B[m[31m-        health: HealthStatus,
+(B[m[31m-    },
+(B[m[32m+    SystemHealth { health: HealthStatus },
+(B[m     /// Bead state change event
+     BeadStateChanged {
+         bead_id: String,
+Diff in /home/lewis/src/oya/crates/oya-ipc/src/lib.rs:140:
+         timestamp: i64,
+     },
+     /// Task list response
+[31m-    TaskList {
+(B[m[31m-        tasks: Vec<TaskSummary>,
+(B[m[31m-    },
+(B[m[32m+    TaskList { tasks: Vec<TaskSummary> },
+(B[m     /// Task updated response
+     TaskUpdated {
+         slug: String,
+Diff in /home/lewis/src/oya/crates/oya-ipc/src/lib.rs:166:
+ #[serde(tag = "type", content = "data", rename_all = "snake_case")]
+ pub enum GuestMessage {
+     /// Query bead list
+[31m-    GetBeadList {
+(B[m[31m-        filter: Option<BeadFilter>,
+(B[m[31m-    },
+(B[m[32m+    GetBeadList { filter: Option<BeadFilter> },
+(B[m     /// Query individual bead detail
+[31m-    GetBeadDetail {
+(B[m[31m-        id: String,
+(B[m[31m-    },
+(B[m[32m+    GetBeadDetail { id: String },
+(B[m     /// Query workflow graph
+[31m-    GetWorkflowGraph {
+(B[m[31m-        id: String,
+(B[m[31m-    },
+(B[m[32m+    GetWorkflowGraph { id: String },
+(B[m     /// Query agent pool statistics
+     GetAgentPool,
+     /// Query system health
+Diff in /home/lewis/src/oya/crates/oya-ipc/src/lib.rs:183:
+     GetSystemHealth,
+     /// Start bead execution
+[31m-    StartBead {
+(B[m[31m-        id: String,
+(B[m[31m-    },
+(B[m[32m+    StartBead { id: String },
+(B[m     /// Cancel bead execution
+[31m-    CancelBead {
+(B[m[31m-        id: String,
+(B[m[31m-    },
+(B[m[32m+    CancelBead { id: String },
+(B[m     /// Retry bead execution
+[31m-    RetryBead {
+(B[m[31m-        id: String,
+(B[m[31m-    },
+(B[m[32m+    RetryBead { id: String },
+(B[m     /// Subscribe to events
+[31m-    SubscribeEvents {
+(B[m[31m-        events: Vec<EventType>,
+(B[m[31m-    },
+(B[m[32m+    SubscribeEvents { events: Vec<EventType> },
+(B[m     /// Unsubscribe from events
+     UnsubscribeEvents,
+     /// Get task list
+Diff in /home/lewis/src/oya/crates/oya-ipc/src/lib.rs:203:
+     GetTaskList,
+     /// Run pipeline for a task
+[31m-    RunPipeline {
+(B[m[31m-        slug: String,
+(B[m[31m-        dry_run: bool,
+(B[m[31m-    },
+(B[m[32m+    RunPipeline { slug: String, dry_run: bool },
+(B[m     /// Run pipeline for multiple tasks
+[31m-    RunPipelineBatch {
+(B[m[31m-        slugs: Vec<String>,
+(B[m[31m-        dry_run: bool,
+(B[m[31m-    },
+(B[m[32m+    RunPipelineBatch { slugs: Vec<String>, dry_run: bool },
+(B[m     /// Approve a task
+[31m-    ApproveTask {
+(B[m[31m-        slug: String,
+(B[m[31m-        force: bool,
+(B[m[31m-    },
+(B[m[32m+    ApproveTask { slug: String, force: bool },
+(B[m }
+ 
+ /// Task summary for UI display
+Diff in /home/lewis/src/oya/crates/oya-ipc/src/lib.rs:373:
+             workflow_id: "test-workflow".to_string(),
+         };
+ 
+[31m-        let msg = HostMessage::BeadList { beads: vec![bead.clone()] };
+(B[m[32m+        let msg = HostMessage::BeadList {
+(B[m[32m+            beads: vec![bead.clone()],
+(B[m[32m+        };
+(B[m         let serialized = bincode::encode_to_vec(&msg).expect("serialize");
+ 
+         assert!(serialized.len() < MAX_MESSAGE_SIZE);
+Diff in /home/lewis/src/oya/crates/pipeline/src/domain.rs:3:
+ use serde::{Deserialize, Serialize};
+ 
+ use crate::error::{Error, Result};
+[31m-use crate::stages::{validate_stage_sequence, Stage};
+(B[m[32m+use crate::stages::{Stage, validate_stage_sequence};
+(B[m 
+ #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+ pub struct Slug(String);
+Diff in /home/lewis/src/oya/crates/pipeline/src/error.rs:23:
+     #[error("task not found: {0}")]
+     TaskNotFound(String),
+     #[error("failed to read tasks from {path}: {source}")]
+[31m-    ReadFailure { path: PathBuf, source: std::io::Error },
+(B[m[32m+    ReadFailure {
+(B[m[32m+        path: PathBuf,
+(B[m[32m+        source: std::io::Error,
+(B[m[32m+    },
+(B[m     #[error("failed to write tasks to {path}: {source}")]
+[31m-    WriteFailure { path: PathBuf, source: std::io::Error },
+(B[m[32m+    WriteFailure {
+(B[m[32m+        path: PathBuf,
+(B[m[32m+        source: std::io::Error,
+(B[m[32m+    },
+(B[m     #[error("failed to parse tasks in {path}: {source}")]
+[31m-    ParseFailure { path: PathBuf, source: serde_json::Error },
+(B[m[32m+    ParseFailure {
+(B[m[32m+        path: PathBuf,
+(B[m[32m+        source: serde_json::Error,
+(B[m[32m+    },
+(B[m     #[error("failed to serialize tasks for {path}: {source}")]
+[31m-    SerializeFailure { path: PathBuf, source: serde_json::Error },
+(B[m[32m+    SerializeFailure {
+(B[m[32m+        path: PathBuf,
+(B[m[32m+        source: serde_json::Error,
+(B[m[32m+    },
+(B[m }
+ 
+Diff in /home/lewis/src/oya/crates/pipeline/src/lib.rs:10:
+ 
+ mod domain;
+ mod error;
+[31m-mod plan;
+(B[m mod persistence;
+[32m+mod plan;
+(B[m mod stages;
+ 
+ pub use domain::{Language, Priority, Slug, Task, TaskStatus};
+Diff in /home/lewis/src/oya/crates/pipeline/src/lib.rs:18:
+ pub use error::{Error, Result};
+[32m+pub use persistence::{list_all_tasks, load_task_record, save_task_record, update_task_status};
+(B[m pub use plan::{
+[31m-    approve_task, apply_stage_plan, pipeline_report, plan_task_stages, resolve_stage_range,
+(B[m[31m-    run_full_pipeline, run_task_pipeline, stage_range, PipelineStageStatus, StageReport,
+(B[m[32m+    PipelineStageStatus, StageReport, apply_stage_plan, approve_task, pipeline_report,
+(B[m[32m+    plan_task_stages, resolve_stage_range, run_full_pipeline, run_task_pipeline, stage_range,
+(B[m };
+[31m-pub use persistence::{list_all_tasks, load_task_record, save_task_record, update_task_status};
+(B[m[31m-pub use stages::{validate_stage_sequence, Stage};
+(B[m[32m+pub use stages::{Stage, validate_stage_sequence};
+(B[m 
+Diff in /home/lewis/src/oya/crates/pipeline/src/persistence.rs:11:
+ 
+ async fn read_tasks(path: &Path) -> Result<Vec<Task>> {
+     match fs::read(path).await {
+[31m-        Ok(bytes) => serde_json::from_slice(&bytes)
+(B[m[31m-            .map_err(|source| Error::ParseFailure {
+(B[m[31m-                path: path.to_path_buf(),
+(B[m[31m-                source,
+(B[m[31m-            }),
+(B[m[32m+        Ok(bytes) => serde_json::from_slice(&bytes).map_err(|source| Error::ParseFailure {
+(B[m[32m+            path: path.to_path_buf(),
+(B[m[32m+            source,
+(B[m[32m+        }),
+(B[m         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+         Err(source) => Err(Error::ReadFailure {
+             path: path.to_path_buf(),
+Diff in /home/lewis/src/oya/crates/pipeline/src/persistence.rs:39:
+             })?;
+     }
+ 
+[31m-    fs::write(path, payload).await.map_err(|source| Error::WriteFailure {
+(B[m[31m-        path: path.to_path_buf(),
+(B[m[31m-        source,
+(B[m[31m-    })
+(B[m[32m+    fs::write(path, payload)
+(B[m[32m+        .await
+(B[m[32m+        .map_err(|source| Error::WriteFailure {
+(B[m[32m+            path: path.to_path_buf(),
+(B[m[32m+            source,
+(B[m[32m+        })
+(B[m }
+ 
+ /// Save (create or update) a task record.
+Diff in /home/lewis/src/oya/crates/pipeline/src/persistence.rs:84:
+ 
+     tasks = tasks
+         .into_iter()
+[31m-        .map(|task| if task.slug == lookup { updated.clone() } else { task })
+(B[m[32m+        .map(|task| {
+(B[m[32m+            if task.slug == lookup {
+(B[m[32m+                updated.clone()
+(B[m[32m+            } else {
+(B[m[32m+                task
+(B[m[32m+            }
+(B[m[32m+        })
+(B[m         .collect();
+ 
+     write_tasks(&path, &tasks).await?;
+Diff in /home/lewis/src/oya/crates/pipeline/src/plan.rs:6:
+ ///
+ /// # Errors
+ /// Returns an error when the stage labels are invalid or out of order.
+[31m-pub fn resolve_stage_range(stage: &str, from: Option<&str>, to: Option<&str>) -> Result<Vec<Stage>> {
+(B[m[32m+pub fn resolve_stage_range(
+(B[m[32m+    stage: &str,
+(B[m[32m+    from: Option<&str>,
+(B[m[32m+    to: Option<&str>,
+(B[m[32m+) -> Result<Vec<Stage>> {
+(B[m     let start = match from {
+         Some(label) => Stage::parse(label)?,
+         None => Stage::parse(stage)?,
+Diff in /home/lewis/src/oya/crates/pipeline/src/plan.rs:141:
+     }
+ }
+ 
+[31m-fn report_with_marker(
+(B[m[31m-    stages: &[Stage],
+(B[m[31m-    marker: &str,
+(B[m[31m-    failed: bool,
+(B[m[31m-) -> Vec<StageReport> {
+(B[m[32m+fn report_with_marker(stages: &[Stage], marker: &str, failed: bool) -> Vec<StageReport> {
+(B[m     let marker_stage = Stage::parse(marker).ok();
+     stages
+         .iter()
+Diff in /home/lewis/src/oya/crates/pipeline/src/plan.rs:156:
+         .collect()
+ }
+ 
+[31m-fn stage_status_for(
+(B[m[31m-    stage: Stage,
+(B[m[31m-    marker: Option<Stage>,
+(B[m[31m-    failed: bool,
+(B[m[31m-) -> PipelineStageStatus {
+(B[m[32m+fn stage_status_for(stage: Stage, marker: Option<Stage>, failed: bool) -> PipelineStageStatus {
+(B[m     match marker {
+         Some(marker) if stage.index() < marker.index() => PipelineStageStatus::Complete,
+         Some(marker) if stage.index() == marker.index() => {
+Diff in /home/lewis/src/oya/crates/zellij-frontend/src/ipc.rs:53:
+ 
+         // Write length prefix (u32)
+         let len = buffer.len() as u32;
+[31m-        self.writer.write_all(&len.to_be_bytes())
+(B[m[32m+        self.writer
+(B[m[32m+            .write_all(&len.to_be_bytes())
+(B[m             .map_err(|e| TransportError::Io(e.to_string()))?;
+ 
+         // Write message
+Diff in /home/lewis/src/oya/crates/zellij-frontend/src/ipc.rs:60:
+[31m-        self.writer.write_all(&buffer)
+(B[m[32m+        self.writer
+(B[m[32m+            .write_all(&buffer)
+(B[m             .map_err(|e| TransportError::Io(e.to_string()))?;
+ 
+[31m-        self.writer.flush()
+(B[m[32m+        self.writer
+(B[m[32m+            .flush()
+(B[m             .map_err(|e| TransportError::Io(e.to_string()))?;
+ 
+         Ok(())
+Diff in /home/lewis/src/oya/crates/zellij-frontend/src/ipc.rs:70:
+     pub fn recv<T: for<'de> serde::Deserialize<'de>>(&mut self) -> Result<T, TransportError> {
+         // Read length prefix
+         let mut len_bytes = [0u8; 4];
+[31m-        self.reader.read_exact(&mut len_bytes)
+(B[m[32m+        self.reader
+(B[m[32m+            .read_exact(&mut len_bytes)
+(B[m             .map_err(|e| TransportError::Io(e.to_string()))?;
+ 
+         let len = u32::from_be_bytes(len_bytes) as usize;
+Diff in /home/lewis/src/oya/crates/zellij-frontend/src/ipc.rs:82:
+ 
+         // Read message
+         let mut buffer = vec![0u8; len];
+[31m-        self.reader.read_exact(&mut buffer)
+(B[m[32m+        self.reader
+(B[m[32m+            .read_exact(&mut buffer)
+(B[m             .map_err(|e| TransportError::Io(e.to_string()))?;
+ 
+         // Deserialize
+Diff in /home/lewis/src/oya/crates/zellij-frontend/src/ipc.rs:89:
+[31m-        deserialize_from(&buffer[..])
+(B[m[31m-            .map_err(|e| TransportError::Deserialization(e.to_string()))
+(B[m[32m+        deserialize_from(&buffer[..]).map_err(|e| TransportError::Deserialization(e.to_string()))
+(B[m     }
+ }
+ 
+Diff in /home/lewis/src/oya/crates/zellij-frontend/src/ipc.rs:102:
+         let stream = TcpStream::connect(address)
+             .map_err(|e| IpcError::SerializationFailed(format!("Connection failed: {e}")))?;
+ 
+[31m-        stream.set_read_timeout(Some(Duration::from_secs(5)))
+(B[m[31m-            .map_err(|e| IpcError::SerializationFailed(format!("Failed to set read timeout: {e}")))?;
+(B[m[32m+        stream
+(B[m[32m+            .set_read_timeout(Some(Duration::from_secs(5)))
+(B[m[32m+            .map_err(|e| {
+(B[m[32m+                IpcError::SerializationFailed(format!("Failed to set read timeout: {e}"))
+(B[m[32m+            })?;
+(B[m 
+[31m-        stream.set_write_timeout(Some(Duration::from_secs(5)))
+(B[m[31m-            .map_err(|e| IpcError::SerializationFailed(format!("Failed to set write timeout: {e}")))?;
+(B[m[32m+        stream
+(B[m[32m+            .set_write_timeout(Some(Duration::from_secs(5)))
+(B[m[32m+            .map_err(|e| {
+(B[m[32m+                IpcError::SerializationFailed(format!("Failed to set write timeout: {e}"))
+(B[m[32m+            })?;
+(B[m 
+[31m-        let reader = stream.try_clone()
+(B[m[32m+        let reader = stream
+(B[m[32m+            .try_clone()
+(B[m             .map_err(|e| IpcError::SerializationFailed(format!("Failed to clone stream: {e}")))?;
+ 
+         let transport = IpcTransport::new(Box::new(reader), Box::new(stream));
+Diff in /home/lewis/src/oya/crates/zellij-frontend/src/ipc.rs:117:
+ 
+     /// Send a request and wait for a response
+     pub fn request(&mut self, message: GuestMessage) -> Result<HostMessage, IpcError> {
+[31m-        self.transport.send(&message)
+(B[m[32m+        self.transport
+(B[m[32m+            .send(&message)
+(B[m             .map_err(|e| IpcError::SerializationFailed(e.to_string()))?;
+ 
+[31m-        self.transport.recv()
+(B[m[32m+        self.transport
+(B[m[32m+            .recv()
+(B[m             .map_err(|e| IpcError::DeserializationFailed(e.to_string()))
+     }
+ }
+Diff in /home/lewis/src/oya/crates/zellij-frontend/src/layout.rs:236:
+             ));
+         }
+ 
+[31m-        let bead_list = Pane::new(
+(B[m[31m-            PaneType::BeadList,
+(B[m[31m-            1,
+(B[m[31m-            1,
+(B[m[31m-            bead_list_height,
+(B[m[31m-            left_width,
+(B[m[31m-        )?;
+(B[m[32m+        let bead_list = Pane::new(PaneType::BeadList, 1, 1, bead_list_height, left_width)?;
+(B[m 
+         if bead_detail_height == 0 || right_width == 0 {
+             return Err(LayoutError::CalculationError(
+Diff in /home/lewis/src/oya/crates/zellij-frontend/src/lib.rs:43:
+ pub use render::Renderer;
+ 
+ // Re-exports for convenience - UI components
+[31m-pub use correlation::{keys, CorrelationContext, RequestId};
+(B[m[32m+pub use correlation::{CorrelationContext, RequestId, keys};
+(B[m pub use log::{LogAggregator, LogEntry, LogLevel, LogSource};
+ pub use metrics::{AgentMetrics, MetricsSnapshot, PoolMetrics};
+ pub use timer::{RefreshTimer, TimerConfig, TimerError, TimerEvent, TimerState};
+Diff in /home/lewis/src/oya/src/lib.rs:9:
+ //! This library re-exports all OYA workspace crates for convenience.
+ 
+ // Re-export all crates
+[32m+pub use orchestrator;
+(B[m pub use oya_core;
+ pub use oya_pipeline;
+[31m-pub use orchestrator;
+(B[m 
+ // Swarm module for 13-agent continuous assembly line
+ pub mod swarm;
+Diff in /home/lewis/src/oya/tests/rename_crates_test.rs:88:
+         assert!(deps_section.contains("oya-ui-components"));
+ 
+         // Invariant: No old names
+[31m-        assert!(!deps_section
+(B[m[31m-            .lines()
+(B[m[31m-            .any(|line| line.starts_with("oya-ui = ")));
+(B[m[31m-        assert!(!deps_section
+(B[m[31m-            .lines()
+(B[m[31m-            .any(|line| line.starts_with("oya-zellij = ")));
+(B[m[32m+        assert!(
+(B[m[32m+            !deps_section
+(B[m[32m+                .lines()
+(B[m[32m+                .any(|line| line.starts_with("oya-ui = "))
+(B[m[32m+        );
+(B[m[32m+        assert!(
+(B[m[32m+            !deps_section
+(B[m[32m+                .lines()
+(B[m[32m+                .any(|line| line.starts_with("oya-zellij = "))
+(B[m[32m+        );
+(B[m     }
+ 
+     #[test]
