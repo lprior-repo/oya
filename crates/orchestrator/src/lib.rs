@@ -40,6 +40,12 @@ pub mod actors;
 /// communication between the UI plugin and orchestrator.
 pub mod ipc_messages;
 
+/// IPC bridge for converting EventBus events to IPC messages.
+///
+/// Provides IpcBridge for converting BeadEvent to HostMessage
+/// for transmission to the Zellij UI plugin.
+pub mod ipc_bridge;
+
 /// Orchestrator module for managing agent swarms.
 ///
 /// Provides agent pool management, health monitoring, and message types
@@ -74,6 +80,9 @@ pub mod replay;
 
 /// Scheduler actor for managing workflow DAGs and bead scheduling
 pub mod scheduler;
+
+/// BeadOrchestrator for slot-based bead execution
+pub mod bead_orchestrator;
 
 /// Stage gate decision engine for recursive stage transitions.
 pub mod stage_gate;
