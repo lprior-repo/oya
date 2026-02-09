@@ -32,7 +32,7 @@ DEFINE FIELD timestamp ON TABLE state_transition TYPE datetime
 
 DEFINE FIELD phase_id ON TABLE state_transition TYPE option<string>;
 
-DEFINE FIELD data ON TABLE state_transition TYPE option<any>;
+DEFINE FIELD data ON TABLE state_transition TYPE option<record<thing>>;
 
 -- Index for efficient querying by bead_id
 DEFINE INDEX bead_id_idx ON TABLE state_transition COLUMNS bead_id;

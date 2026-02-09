@@ -243,6 +243,7 @@ pub fn event_to_host_message(event: &BeadEvent) -> Result<HostMessage, IpcBridge
             stage,
             attempt,
             timestamp,
+            ..
         } => {
             let stage_str = stage_kind_to_string(*stage);
             Ok(HostMessage::StageStarted {
@@ -258,6 +259,7 @@ pub fn event_to_host_message(event: &BeadEvent) -> Result<HostMessage, IpcBridge
             stage,
             artifact_ref,
             timestamp,
+            ..
         } => {
             let stage_str = stage_kind_to_string(*stage);
             Ok(HostMessage::StageCompleted {
@@ -274,6 +276,7 @@ pub fn event_to_host_message(event: &BeadEvent) -> Result<HostMessage, IpcBridge
             feedback,
             severity,
             timestamp,
+            ..
         } => {
             let stage_str = stage_kind_to_string(*stage);
             let severity_str = severity_to_string(*severity);
@@ -294,6 +297,7 @@ pub fn event_to_host_message(event: &BeadEvent) -> Result<HostMessage, IpcBridge
             reason,
             attempt,
             timestamp,
+            ..
         } => {
             let from_str = stage_kind_to_string(*from_stage);
             let to_str = stage_kind_to_string(*to_stage);
@@ -315,6 +319,7 @@ pub fn event_to_host_message(event: &BeadEvent) -> Result<HostMessage, IpcBridge
             command,
             exit_code,
             timestamp,
+            ..
         } => {
             let truncated_output = truncate_with_indicator(output, 256);
             Ok(HostMessage::ValidationRan {
@@ -332,6 +337,7 @@ pub fn event_to_host_message(event: &BeadEvent) -> Result<HostMessage, IpcBridge
             total_attempts,
             last_stage,
             timestamp,
+            ..
         } => {
             let stage_str = stage_kind_to_string(*last_stage);
             Ok(HostMessage::RecursionExhausted {
@@ -1186,6 +1192,19 @@ impl IpcWorkerActorDef {
     }
 
     fn convert_event_to_host_message(event: BeadEvent) -> Option<HostMessage> {
+        // Try to convert stage lifecycle events first
+        match event_to_host_message(&event) {
+            Ok(msg) => return Some(msg),
+            Err(IpcBridgeError::EventSerializationFailed { .. }) => {
+                // Not a stage event, continue to other conversions
+            }
+            Err(e) => {
+                tracing::warn!("Failed to convert event to HostMessage: {}", e);
+                return None;
+            }
+        }
+
+        // Handle non-stage events
         match event {
             BeadEvent::StateChanged {
                 bead_id,

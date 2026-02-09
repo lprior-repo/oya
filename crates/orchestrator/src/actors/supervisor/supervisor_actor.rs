@@ -10,9 +10,11 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use ractor::{Actor, ActorProcessingErr, ActorRef};
+use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 use tracing::{debug, error, info, warn};
 
+use crate::replay::CheckpointManager;
 use crate::shutdown::{ShutdownCoordinator, ShutdownSignal};
 
 use super::super::errors::ActorError;
@@ -40,7 +42,7 @@ pub enum MeltdownStatus {
 }
 
 /// Configuration for supervision.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SupervisorConfig {
     /// Maximum restart attempts before giving up.
     pub max_restarts: u32,
@@ -243,6 +245,8 @@ where
     pub _shutdown_rx: Option<broadcast::Receiver<ShutdownSignal>>,
     /// Restart strategy.
     pub restart_strategy: Box<dyn RestartStrategy<A>>,
+    /// Checkpoint manager for shutdown state persistence.
+    pub checkpoint_manager: Option<CheckpointManager>,
 }
 
 impl<A: GenericSupervisableActor> Debug for SupervisorActorState<A>
@@ -320,6 +324,7 @@ where
             shutdown_coordinator: args.shutdown_coordinator.clone(),
             _shutdown_rx: None,
             restart_strategy: Box::new(OneForOne::new()),
+            checkpoint_manager: None,
         };
 
         // Subscribe to shutdown signals
@@ -696,6 +701,7 @@ mod tests {
             shutdown_coordinator: None,
             _shutdown_rx: None,
             restart_strategy: Box::new(OneForOne::new()),
+            checkpoint_manager: None,
         };
 
         assert_eq!(state.restart_strategy.name(), "one_for_one");
@@ -732,6 +738,7 @@ mod tests {
             shutdown_coordinator: None,
             _shutdown_rx: None,
             restart_strategy: Box::new(OneForOne::new()),
+            checkpoint_manager: None,
         };
 
         let def = SupervisorActorDef::new(SchedulerActorDef);
