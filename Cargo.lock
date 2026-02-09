@@ -3081,6 +3081,7 @@ dependencies = [
  "oya-ipc",
  "oya-opencode",
  "oya-pipeline",
+ "oya-workflow",
  "petgraph 0.8.3",
  "ractor",
  "rand 0.8.5",

@@ -26,6 +26,7 @@
 // Zellij plugin modules (from oya-ui)
 pub mod components;
 pub mod ipc;
+pub mod ipc_zellij;
 pub mod layout;
 pub mod plugin;
 pub mod render;
@@ -50,6 +51,7 @@ pub use integration_test_worker::{
     IntegrationTestConfig, IntegrationTestError, IntegrationTestWorker, TestMode, TestResult,
     TestSummary,
 };
+pub use ipc_zellij::{ZellijIpcClient, ZellijStdin, ZellijStdout};
 pub use log::{LogAggregator, LogEntry, LogLevel, LogSource};
 pub use metrics::{AgentMetrics, MetricsSnapshot, PoolMetrics};
 pub use state::{STATE_VERSION, StateError, StateManager, StateSnapshot};

@@ -2,8 +2,6 @@
 //!
 //! Tests scheduler crash recovery by killing the scheduler actor mid-execution
 //! and verifying that the supervisor restarts it with consistent state.
-
-#![cfg(any())]
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
@@ -294,9 +292,10 @@ async fn setup_chaos_test(test_name: &str) -> ChaosTestResult<ChaosTestContext> 
     await_actor_status(&supervisor, ActorStatus::Running, 1000).await?;
 
     // Spawn scheduler child
+    let scheduler_name = format!("scheduler-{test_name}");
     let (spawn_tx, spawn_rx) = tokio::sync::oneshot::channel();
     let _ = supervisor.send_message(SupervisorMessage::<SchedulerActorDef>::SpawnChild {
-        name: format!("scheduler-{test_name}"),
+        name: scheduler_name.clone(),
         args: SchedulerArguments::new(),
         reply: spawn_tx,
     });
@@ -310,14 +309,27 @@ async fn setup_chaos_test(test_name: &str) -> ChaosTestResult<ChaosTestContext> 
             reason: format!("Scheduler spawn error: {e}"),
         })?;
 
-    // Get scheduler reference from supervisor status
-    tokio::time::sleep(Duration::from_millis(100)).await; // Let scheduler start
+    // Wait for scheduler to start
+    tokio::time::sleep(Duration::from_millis(100)).await;
 
-    // For this test, we'll create a simple workflow after getting the scheduler ref
-    // In a full implementation, we'd query the supervisor for the child actor ref
+    // Get scheduler reference from supervisor
+    let (get_tx, get_rx) = tokio::sync::oneshot::channel();
+    let _ = supervisor.send_message(SupervisorMessage::<SchedulerActorDef>::GetChild {
+        name: scheduler_name.clone(),
+        reply: get_tx,
+    });
+
+    let scheduler = get_rx
+        .await
+        .map_err(|e| ChaosTestError::SetupFailed {
+            reason: format!("Failed to get scheduler ref: {e}"),
+        })?
+        .ok_or_else(|| ChaosTestError::SetupFailed {
+            reason: format!("Scheduler '{scheduler_name}' not found in supervisor"),
+        })?;
 
     Ok(ChaosTestContext {
-        scheduler: ActorRef::global("scheduler"), // Placeholder - in real test we'd get actual ref
+        scheduler,
         supervisor,
         workflow_ids: Vec::new(),
         pre_kill_state: None,
@@ -341,6 +353,30 @@ async fn register_test_workflows(ctx: &mut ChaosTestContext) -> ChaosTestResult<
     }
 
     Ok(())
+}
+
+/// Get the current scheduler reference from supervisor (after restart).
+async fn get_scheduler_ref(
+    supervisor: &ActorRef<SupervisorMessage<SchedulerActorDef>>,
+    test_name: &str,
+) -> ChaosTestResult<ActorRef<SchedulerMessage>> {
+    let scheduler_name = format!("scheduler-{test_name}");
+    let (get_tx, get_rx) = tokio::sync::oneshot::channel();
+    supervisor
+        .send_message(SupervisorMessage::<SchedulerActorDef>::GetChild {
+            name: scheduler_name,
+            reply: get_tx,
+        })
+        .map_err(|e| ChaosTestError::RpcFailed {
+            reason: e.to_string(),
+        })?;
+
+    get_rx
+        .await
+        .map_err(|e| ChaosTestError::RpcFailed {
+            reason: format!("GetChild reply failed: {e}"),
+        })?
+        .ok_or_else(|| ChaosTestError::RestartFailed)
 }
 
 // =============================================================================

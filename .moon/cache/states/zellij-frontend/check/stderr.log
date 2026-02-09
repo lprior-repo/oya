@@ -4,10 +4,7 @@ workspace: /home/lewis/src/oya/Cargo.toml
 [1m[92m    Blocking[0m waiting for file lock on package cache
 [1m[92m    Blocking[0m waiting for file lock on package cache
 [1m[92m    Blocking[0m waiting for file lock on package cache
-[1m[92m    Blocking[0m waiting for file lock on package cache
-[1m[92m    Checking[0m oya-core v0.1.0 (/home/lewis/src/oya/crates/core)
-[1m[92m    Checking[0m oya-pipeline v0.1.0 (/home/lewis/src/oya/crates/pipeline)
-[1m[92m    Checking[0m oya-ipc v0.1.0 (/home/lewis/src/oya/crates/oya-ipc)
+[1m[92m    Blocking[0m waiting for file lock on build directory
 [1m[33mwarning[0m[1m: unused import: `std::sync::Arc`[0m
   [1m[94m--> [0mcrates/core/src/execution.rs:30:5
    [1m[94m|[0m
@@ -59,11 +56,15 @@ workspace: /home/lewis/src/oya/Cargo.toml
     [1m[94m= [0m[1mnote[0m: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
 
 [1m[33mwarning[0m: `oya-core` (lib) generated 6 warnings (run `cargo fix --lib -p oya-core` to apply 6 suggestions)
-[1m[92m    Checking[0m oya-events v0.1.0 (/home/lewis/src/oya/crates/events)
-[1m[92m    Checking[0m oya-opencode v0.1.0 (/home/lewis/src/oya/crates/opencode)
 [1m[92m    Checking[0m oya-web v0.1.0 (/home/lewis/src/oya/crates/oya-web)
-[1m[92m    Checking[0m merge-queue v0.1.0 (/home/lewis/src/oya/crates/merge-queue)
-[1m[92m    Checking[0m zellij-frontend v0.1.0 (/home/lewis/src/oya/crates/zellij-frontend)
+[1m[33mwarning[0m[1m: unused import: `correlation::RequestId`[0m
+ [1m[94m--> [0mcrates/zellij-frontend/src/ipc_zellij.rs:7:46
+  [1m[94m|[0m
+[1m[94m7[0m [1m[94m|[0m use crate::{correlation::CorrelationContext, correlation::RequestId};
+  [1m[94m|[0m                                              [1m[33m^^^^^^^^^^^^^^^^^^^^^^[0m
+  [1m[94m|[0m
+  [1m[94m= [0m[1mnote[0m: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
 [1m[33mwarning[0m[1m: unused variable: `e`[0m
    [1m[94m--> [0mcrates/zellij-frontend/src/state.rs:194:56
     [1m[94m|[0m
@@ -89,8 +90,7 @@ workspace: /home/lewis/src/oya/Cargo.toml
 [1m[94m174[0m [1m[94m|[0m     version: u32,
     [1m[94m|[0m     [1m[33m^^^^^^^[0m
 
-[1m[33mwarning[0m: `zellij-frontend` (lib) generated 3 warnings (run `cargo fix --lib -p zellij-frontend` to apply 1 suggestion)
-[1m[92m    Checking[0m orchestrator v0.1.0 (/home/lewis/src/oya/crates/orchestrator)
+[1m[33mwarning[0m: `zellij-frontend` (lib) generated 4 warnings (run `cargo fix --lib -p zellij-frontend` to apply 2 suggestions)
 [1m[33mwarning[0m[1m: unused imports: `BeadDetail as IpcBeadDetail` and `BeadSummary`[0m
   [1m[94m--> [0mcrates/orchestrator/src/actors/ipc_worker.rs:46:17
    [1m[94m|[0m
@@ -112,9 +112,9 @@ workspace: /home/lewis/src/oya/Cargo.toml
    [1m[94m|[0m                  [1m[33m^^^^^^^^[0m  [1m[33m^^^^^^^^^[0m  [1m[33m^^^^^^^^^^^^^^[0m  [1m[33m^^^^^^^^^^^[0m
 
 [1m[33mwarning[0m[1m: unused variable: `timestamp`[0m
-    [1m[94m--> [0mcrates/orchestrator/src/actors/ipc_worker.rs:1240:17
+    [1m[94m--> [0mcrates/orchestrator/src/actors/ipc_worker.rs:1230:17
      [1m[94m|[0m
-[1m[94m1240[0m [1m[94m|[0m                 timestamp,
+[1m[94m1230[0m [1m[94m|[0m                 timestamp,
      [1m[94m|[0m                 [1m[33m^^^^^^^^^[0m [1m[33mhelp: try ignoring the field: `timestamp: _`[0m
      [1m[94m|[0m
      [1m[94m= [0m[1mnote[0m: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
@@ -220,9 +220,9 @@ workspace: /home/lewis/src/oya/Cargo.toml
    [1m[94m|[0m                 [1m[33m^^^^^^^^[0m
 
 [1m[33mwarning[0m[1m: unused import: `orchestrator::dag::WorkflowDAG`[0m
-   [1m[94m--> [0msrc/commands/storm.rs:397:9
+   [1m[94m--> [0msrc/commands/storm.rs:391:9
     [1m[94m|[0m
-[1m[94m397[0m [1m[94m|[0m     use orchestrator::dag::WorkflowDAG;
+[1m[94m391[0m [1m[94m|[0m     use orchestrator::dag::WorkflowDAG;
     [1m[94m|[0m         [1m[33m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
 
 [1m[33mwarning[0m[1m: unused imports: `DoctorError` and `DoctorOutput`[0m
@@ -262,17 +262,17 @@ workspace: /home/lewis/src/oya/Cargo.toml
    [1m[94m|[0m     [1m[33m^^^^^^^^^^^^^^^^^^^^[0m
 
 [1m[33mwarning[0m[1m: unused variable: `e`[0m
-   [1m[94m--> [0msrc/commands/storm.rs:323:61
+   [1m[94m--> [0msrc/commands/storm.rs:320:61
     [1m[94m|[0m
-[1m[94m323[0m [1m[94m|[0m     let conn = rusqlite::Connection::open(db_path).map_err(|e| StormError::DatabaseNotFound {
+[1m[94m320[0m [1m[94m|[0m     let conn = rusqlite::Connection::open(db_path).map_err(|e| StormError::DatabaseNotFound {
     [1m[94m|[0m                                                             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_e`[0m
     [1m[94m|[0m
     [1m[94m= [0m[1mnote[0m: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
 
 [1m[33mwarning[0m[1m: unused variable: `dag`[0m
-   [1m[94m--> [0msrc/commands/storm.rs:396:22
+   [1m[94m--> [0msrc/commands/storm.rs:390:22
     [1m[94m|[0m
-[1m[94m396[0m [1m[94m|[0m fn topological_order(dag: &WorkflowDAG) -> Result<Vec<String>, StormError> {
+[1m[94m390[0m [1m[94m|[0m fn topological_order(dag: &WorkflowDAG) -> Result<Vec<String>, StormError> {
     [1m[94m|[0m                      [1m[33m^^^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_dag`[0m
 
 [1m[33mwarning[0m[1m: variants `CheckTimeout` and `CargoFailed` are never constructed[0m
@@ -327,4 +327,4 @@ workspace: /home/lewis/src/oya/Cargo.toml
     [1m[94m= [0m[1mnote[0m: `StormError` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
 
 [1m[33mwarning[0m: `oya` (bin "oya") generated 16 warnings (run `cargo fix --bin "oya" -p oya` to apply 10 suggestions)
-[1m[92m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`dev` profile [unoptimized + debuginfo]]8;;\ target(s) in 8.00s
+[1m[92m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`dev` profile [unoptimized + debuginfo]]8;;\ target(s) in 2.52s
