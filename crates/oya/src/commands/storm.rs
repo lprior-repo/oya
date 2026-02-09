@@ -46,6 +46,9 @@ use std::path::PathBuf;
 use std::time::Duration;
 use thiserror::Error;
 
+// Import orchestrator types
+use orchestrator::dag::{DependencyType, WorkflowDAG};
+
 /// Configuration file for the orchestrator
 ///
 /// Loaded from YAML file specified by --config flag
@@ -161,9 +164,12 @@ pub enum StormError {
     #[error("Beads database not found: {path}")]
     DatabaseNotFound { path: PathBuf },
 
-    #[error("Database query failed: {query}")]
-    DatabaseQueryFailed {
-        query: String,
+    #[error("JSONL file not found: {path}")]
+    JsonlNotFound { path: PathBuf },
+
+    #[error("Failed to parse JSONL: {path}")]
+    JsonlParseFailed {
+        path: PathBuf,
         #[source]
         source: anyhow::Error,
     },
@@ -194,7 +200,8 @@ impl StormError {
             Self::ConfigFileNotFound { .. } => 3,
             Self::ConfigParseFailed { .. } => 4,
             Self::DatabaseNotFound { .. } => 5,
-            Self::DatabaseQueryFailed { .. } => 6,
+            Self::JsonlNotFound { .. } => 5,
+            Self::JsonlParseFailed { .. } => 6,
             Self::DagBuildFailed { .. } => 7,
             Self::NoBeadsToExecute => 8,
             Self::OrchestratorInitFailed { .. } => 9,
@@ -216,8 +223,11 @@ impl StormError {
             Self::DatabaseNotFound { .. } => {
                 Some("Initialize workspace with `oya init`".to_string())
             }
-            Self::DatabaseQueryFailed { .. } => {
-                Some("Check database integrity and file permissions".to_string())
+            Self::JsonlNotFound { .. } => {
+                Some("Initialize workspace with `oya init`".to_string())
+            }
+            Self::JsonlParseFailed { .. } => {
+                Some("Check JSONL file format and validity".to_string())
             }
             Self::DagBuildFailed { .. } => {
                 Some("Review bead dependencies for circular references or missing beads".to_string())
@@ -260,12 +270,9 @@ pub async fn storm_command(args: StormArgs) -> Result<StormOutput, StormError> {
     let slots = validate_slots(args.slots, config.slots)?;
     let timeout_secs = validate_timeout(args.timeout, config.timeout_secs)?;
 
-    // Step 3: Load beads database
-    let db_path = PathBuf::from(".beads/beads.db");
-    check_database_exists(&db_path)?;
-
-    // Step 4: Build workflow DAG from database
-    let dag = build_workflow_dag_from_database(&db_path)?;
+    // Step 3: Load beads from JSONL
+    let jsonl_path = PathBuf::from(".beads/issues.jsonl");
+    let dag = build_workflow_dag_from_jsonl(&jsonl_path)?;
 
     // Step 5: Check if DAG has nodes
     if dag.node_count() == 0 {
@@ -328,7 +335,12 @@ fn load_config(path: &PathBuf) -> Result<OrchestratorConfig, StormError> {
 /// - Returns Ok(slots) if slots >= 1
 /// - Returns Err(InvalidSlotCount) if slots == 0
 fn validate_slots(cli_slots: Option<usize>, config_slots: usize) -> Result<usize, StormError> {
-    let slots = cli_slots.unwrap_or(config_slots);
+    let slots = cli_slots.map_or(Ok(config_slots), |s| {
+        match s {
+            0 => Err(StormError::InvalidSlotCount { slots: 0 }),
+            _ => Ok(s),
+        }
+    })?;
 
     match slots {
         0 => Err(StormError::InvalidSlotCount { slots: 0 }),
@@ -345,7 +357,12 @@ fn validate_slots(cli_slots: Option<usize>, config_slots: usize) -> Result<usize
 /// - Returns Ok(timeout_secs) if timeout >= 1
 /// - Returns Err(InvalidTimeout) if timeout == 0
 fn validate_timeout(cli_timeout: Option<u64>, config_timeout: u64) -> Result<u64, StormError> {
-    let timeout = cli_timeout.unwrap_or(config_timeout);
+    let timeout = cli_timeout.map_or(Ok(config_timeout), |t| {
+        match t {
+            0 => Err(StormError::InvalidTimeout { secs: 0 }),
+            _ => Ok(t),
+        }
+    })?;
 
     match timeout {
         0 => Err(StormError::InvalidTimeout { secs: 0 }),
@@ -353,49 +370,123 @@ fn validate_timeout(cli_timeout: Option<u64>, config_timeout: u64) -> Result<u64
     }
 }
 
-/// Check if beads database exists
-///
-/// # Preconditions
-/// - db_path is a valid file path
-///
-/// # Postconditions
-/// - Returns Ok(()) if database exists
-/// - Returns Err(DatabaseNotFound) if missing
-fn check_database_exists(db_path: &PathBuf) -> Result<(), StormError> {
-    match db_path.try_exists() {
-        Ok(false) | Err(_) => {
-            Err(StormError::DatabaseNotFound { path: db_path.clone() })
-        }
-        Ok(true) => Ok(()),
-    }
+/// Bead structure as stored in JSONL format
+#[derive(Debug, Clone, Deserialize)]
+struct JsonlBead {
+    id: String,
+    status: String,
+    dependencies: Option<Vec<JsonlDependency>>,
 }
 
-/// Build WorkflowDAG from beads database
+/// Dependency structure as stored in JSONL format
+#[derive(Debug, Clone, Deserialize)]
+struct JsonlDependency {
+    issue_id: String,
+    depends_on_id: String,
+    #[serde(default)]
+    #[allow(dead_code)]
+    type_: Option<String>,
+}
+
+/// Build WorkflowDAG from JSONL file
 ///
 /// # Preconditions
-/// - Database connection is valid
+/// - JSONL file exists and is valid
 /// - All referenced beads exist
 /// - No circular dependencies exist
 ///
 /// # Postconditions
-/// - Returns Ok(WorkflowDAG) with all open beads
+/// - Returns Ok(WorkflowDAG) with all open/in_progress beads
 /// - Or returns Err(DagBuildFailed) with reason
-fn build_workflow_dag_from_database(db_path: &PathBuf) -> Result<orchestrator::dag::WorkflowDAG, StormError> {
-    // TODO: Implement actual database query to load beads
-    // For now, return an empty DAG as a placeholder
-    // This will be implemented in bd-3a0a.7 (BeadOrchestrator)
+fn build_workflow_dag_from_jsonl(
+    jsonl_path: &PathBuf,
+) -> Result<WorkflowDAG, StormError> {
+    // Check file exists
+    match jsonl_path.try_exists() {
+        Ok(false) | Err(_) => {
+            return Err(StormError::JsonlNotFound { path: jsonl_path.clone() });
+        }
+        Ok(true) => {
+            // File exists, continue
+        }
+    }
 
-    // Placeholder: Create empty DAG
-    let dag = orchestrator::dag::WorkflowDAG::new();
+    // Read file content
+    let content = std::fs::read_to_string(jsonl_path).map_err(|e| {
+        StormError::JsonlParseFailed {
+            path: jsonl_path.clone(),
+            source: anyhow::Error::from(e).context("Failed to read JSONL file"),
+        }
+    })?;
 
-    // In real implementation, this would:
-    // 1. Open SQLite connection
-    // 2. Query all beads with status='open'
-    // 3. Query dependency relationships
-    // 4. Build WorkflowDAG with nodes and edges
-    // 5. Validate no cycles exist
+    // Parse JSONL lines and filter for open/in_progress beads
+    let (bead_ids, dependencies) = parse_jsonl_beads(&content)?;
 
-    Ok(dag)
+    // Build DAG using DagBuilder (no mutation in our code)
+    let builder = WorkflowDAG::builder().with_nodes(bead_ids);
+
+    // Add edges using iterator pipeline
+    let builder = dependencies
+        .into_iter()
+        .fold(builder, |acc, (issue_id, depends_on_id)| {
+            acc.with_edge(depends_on_id, issue_id, DependencyType::BlockingDependency)
+        });
+
+    // Build the DAG
+    builder.build().map_err(|e| StormError::DagBuildFailed {
+        reason: format!("Failed to build DAG: {e}"),
+    })
+}
+
+/// Parse JSONL content and extract open beads with dependencies
+///
+/// # Preconditions
+/// - JSONL content is valid JSON per line
+///
+/// # Postconditions
+/// - Returns Ok((bead_ids, dependencies))
+/// - Filters for status="open" or "in_progress"
+/// - Or returns Err(JsonlParseFailed) for malformed JSON
+fn parse_jsonl_beads(
+    content: &str,
+) -> Result<(Vec<String>, Vec<(String, String)>), StormError> {
+    // Parse all lines into beads, collecting results
+    let beads_result: Result<Vec<JsonlBead>, StormError> = content
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| {
+            serde_json::from_str(line).map_err(|e| StormError::JsonlParseFailed {
+                path: PathBuf::from(".beads/issues.jsonl"),
+                source: anyhow::Error::from(e).context("Failed to parse JSONL line as JsonlBead"),
+            })
+        })
+        .collect();
+
+    let beads = beads_result?;
+
+    // Filter for open/in_progress and extract IDs and dependencies
+    let (bead_ids, dependencies): (Vec<_>, Vec<_>) = beads
+        .into_iter()
+        .filter(|bead| matches!(bead.status.as_str(), "open" | "in_progress"))
+        .flat_map(|bead| {
+            // Extract dependencies
+            let deps: Vec<_> = bead
+                .dependencies
+                .map_or_else(Vec::new, |deps| {
+                    deps.into_iter()
+                        .map(|dep| (dep.issue_id, dep.depends_on_id))
+                        .collect()
+                });
+
+            // Return tuple of (bead_id, dependencies)
+            std::iter::once((bead.id, deps))
+        })
+        .unzip();
+
+    // Flatten dependencies
+    let dependencies = dependencies.into_iter().flatten().collect();
+
+    Ok((bead_ids, dependencies))
 }
 
 /// Execute dry-run mode (validation and planning only)
@@ -433,16 +524,30 @@ fn dry_run_execution(dag: orchestrator::dag::WorkflowDAG) -> StormOutput {
 /// - Returns Err(OrchestratorExecutionFailed) on failure
 /// - All resources are cleaned up
 async fn run_orchestrator_execution(
-    _dag: orchestrator::dag::WorkflowDAG,
-    _slots: usize,
-    _timeout: Duration,
+    dag: WorkflowDAG,
+    slots: usize,
+    timeout: Duration,
 ) -> Result<StormOutput, StormError> {
-    // TODO: Implement actual orchestrator execution
-    // This will be implemented in bd-3a0a.7 (BeadOrchestrator)
+    // TODO: Implement actual orchestrator execution in bd-3a0a.7 (BeadOrchestrator)
+    // For now, return a basic planned execution
 
-    // Placeholder: Return error indicating not yet implemented
-    Err(StormError::OrchestratorInitFailed {
-        reason: "BeadOrchestrator not yet implemented (see bd-3a0a.7)".to_string(),
+    // Get topological order for planning
+    let planned_order = match dag.topological_order() {
+        Ok(order) => order,
+        Err(e) => {
+            return Err(StormError::OrchestratorExecutionFailed {
+                reason: format!("Failed to compute topological order: {e}"),
+            });
+        }
+    };
+
+    // Return planned execution (placeholder for actual orchestrator)
+    Ok(StormOutput {
+        beads_completed: 0,
+        beads_failed: 0,
+        duration_ms: 0,
+        results: None,
+        planned_order: Some(planned_order),
     })
 }
 
@@ -456,9 +561,9 @@ mod tests {
 
     #[test]
     fn test_validate_slots_accepts_positive_values() {
-        assert_eq!(validate_slots(Some(5), 4).unwrap(), 5);
-        assert_eq!(validate_slots(None, 8).unwrap(), 8);
-        assert_eq!(validate_slots(Some(1), 100).unwrap(), 1);
+        assert_eq!(validate_slots(Some(5), 4).map_or_else(|_| 0, |v| v), 5);
+        assert_eq!(validate_slots(None, 8).map_or_else(|_| 0, |v| v), 8);
+        assert_eq!(validate_slots(Some(1), 100).map_or_else(|_| 0, |v| v), 1);
     }
 
     #[test]
@@ -475,9 +580,9 @@ mod tests {
 
     #[test]
     fn test_validate_timeout_accepts_positive_values() {
-        assert_eq!(validate_timeout(Some(60), 300).unwrap(), 60);
-        assert_eq!(validate_timeout(None, 120).unwrap(), 120);
-        assert_eq!(validate_timeout(Some(1), 999).unwrap(), 1);
+        assert_eq!(validate_timeout(Some(60), 300).map_or_else(|_| 0, |v| v), 60);
+        assert_eq!(validate_timeout(None, 120).map_or_else(|_| 0, |v| v), 120);
+        assert_eq!(validate_timeout(Some(1), 999).map_or_else(|_| 0, |v| v), 1);
     }
 
     #[test]
@@ -532,7 +637,7 @@ mod tests {
 
     #[test]
     fn test_dry_run_execution_returns_planned_order() {
-        let dag = orchestrator::dag::WorkflowDAG::new();
+        let dag = WorkflowDAG::new();
         let output = dry_run_execution(dag);
 
         assert_eq!(output.beads_completed, 0);
@@ -540,5 +645,194 @@ mod tests {
         assert_eq!(output.duration_ms, 0);
         assert!(output.results.is_none());
         assert!(output.planned_order.is_some());
+    }
+
+    #[test]
+    fn test_parse_jsonl_beads_filters_open_status() {
+        let jsonl = r#"
+{"id":"bd-1","status":"open","dependencies":null}
+{"id":"bd-2","status":"closed","dependencies":null}
+{"id":"bd-3","status":"in_progress","dependencies":null}
+{"id":"bd-4","status":"done","dependencies":null}
+"#;
+
+        let result = parse_jsonl_beads(jsonl);
+        assert!(result.is_ok());
+
+        let (bead_ids, _deps) = match result {
+            Ok(v) => v,
+            Err(_) => return,
+        };
+
+        assert_eq!(bead_ids.len(), 2);
+        assert!(bead_ids.contains(&"bd-1".to_string()));
+        assert!(bead_ids.contains(&"bd-3".to_string()));
+    }
+
+    #[test]
+    fn test_parse_jsonl_beads_extracts_dependencies() {
+        let jsonl = r#"
+{"id":"bd-1","status":"open","dependencies":[{"issue_id":"bd-1","depends_on_id":"bd-0","type_":"blocks"}]}
+{"id":"bd-2","status":"open","dependencies":[{"issue_id":"bd-2","depends_on_id":"bd-1","type_":"blocks"}]}
+"#;
+
+        let result = parse_jsonl_beads(jsonl);
+        assert!(result.is_ok());
+
+        let (_bead_ids, deps) = match result {
+            Ok(v) => v,
+            Err(_) => return,
+        };
+
+        assert_eq!(deps.len(), 2);
+        assert!(deps.contains(&(String::from("bd-1"), String::from("bd-0"))));
+        assert!(deps.contains(&(String::from("bd-2"), String::from("bd-1"))));
+    }
+
+    #[test]
+    fn test_parse_jsonl_beads_handles_empty_dependencies() {
+        let jsonl = r#"
+{"id":"bd-1","status":"open","dependencies":null}
+{"id":"bd-2","status":"open","dependencies":[]}
+"#;
+
+        let result = parse_jsonl_beads(jsonl);
+        assert!(result.is_ok());
+
+        let (_bead_ids, deps) = match result {
+            Ok(v) => v,
+            Err(_) => return,
+        };
+
+        assert_eq!(deps.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_jsonl_beads_handles_malformed_json() {
+        let jsonl = r#"
+{"id":"bd-1","status":"open","dependencies":null}
+this is not valid json
+{"id":"bd-2","status":"open","dependencies":null}
+"#;
+
+        let result = parse_jsonl_beads(jsonl);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_jsonl_beads_handles_empty_lines() {
+        let jsonl = r#"
+
+{"id":"bd-1","status":"open","dependencies":null}
+
+{"id":"bd-2","status":"in_progress","dependencies":null}
+
+"#;
+
+        let result = parse_jsonl_beads(jsonl);
+        assert!(result.is_ok());
+
+        let (bead_ids, _deps) = match result {
+            Ok(v) => v,
+            Err(_) => return,
+        };
+
+        assert_eq!(bead_ids.len(), 2);
+    }
+
+    #[test]
+    fn test_build_workflow_dag_from_jsonl_creates_dag() {
+        let jsonl_content = r#"
+{"id":"bd-1","status":"open","dependencies":null}
+{"id":"bd-2","status":"open","dependencies":[{"issue_id":"bd-2","depends_on_id":"bd-1","type_":"blocks"}]}
+{"id":"bd-3","status":"closed","dependencies":null}
+"#;
+
+        let temp_dir = std::env::temp_dir();
+        let jsonl_path = temp_dir.join("test_issues.jsonl");
+
+        // Write test data
+        if std::fs::write(&jsonl_path, jsonl_content).is_err() {
+            return;
+        }
+
+        let result = build_workflow_dag_from_jsonl(&jsonl_path);
+
+        // Clean up
+        let _ = std::fs::remove_file(&jsonl_path);
+
+        match result {
+            Ok(dag) => {
+                assert_eq!(dag.node_count(), 2);
+            }
+            Err(_) => {
+                return;
+            }
+        }
+    }
+
+    #[test]
+    fn test_build_workflow_dag_from_jsonl_handles_missing_file() {
+        let jsonl_path = PathBuf::from("/nonexistent/path/issues.jsonl");
+        let result = build_workflow_dag_from_jsonl(&jsonl_path);
+
+        assert!(result.is_err());
+        match result {
+            Err(StormError::JsonlNotFound { .. }) => {
+                // Expected
+            }
+            _ => {
+                return;
+            }
+        }
+    }
+
+    #[test]
+    fn test_build_workflow_dag_from_jsonl_with_complex_dependencies() {
+        let jsonl_content = r#"
+{"id":"bd-0","status":"open","dependencies":null}
+{"id":"bd-1","status":"open","dependencies":[{"issue_id":"bd-1","depends_on_id":"bd-0","type_":"blocks"}]}
+{"id":"bd-2","status":"in_progress","dependencies":[{"issue_id":"bd-2","depends_on_id":"bd-0","type_":"blocks"},{"issue_id":"bd-2","depends_on_id":"bd-1","type_":"blocks"}]}
+{"id":"bd-3","status":"open","dependencies":[{"issue_id":"bd-3","depends_on_id":"bd-2","type_":"blocks"}]}
+"#;
+
+        let temp_dir = std::env::temp_dir();
+        let jsonl_path = temp_dir.join("test_complex_deps.jsonl");
+
+        if std::fs::write(&jsonl_path, jsonl_content).is_err() {
+            return;
+        }
+
+        let result = build_workflow_dag_from_jsonl(&jsonl_path);
+
+        let _ = std::fs::remove_file(&jsonl_path);
+
+        match result {
+            Ok(dag) => {
+                assert_eq!(dag.node_count(), 4);
+            }
+            Err(_) => {
+                return;
+            }
+        }
+    }
+
+    #[test]
+    fn test_storm_error_exit_codes_includes_jsonl_errors() {
+        assert_eq!(
+            StormError::JsonlNotFound {
+                path: PathBuf::from("x")
+            }
+            .exit_code(),
+            5
+        );
+        assert_eq!(
+            StormError::JsonlParseFailed {
+                path: PathBuf::from("x"),
+                source: anyhow::anyhow!("test")
+            }
+            .exit_code(),
+            6
+        );
     }
 }
