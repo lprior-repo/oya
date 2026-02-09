@@ -1,6 +1,7 @@
 //! Tier-1 supervision helpers for the orchestrator.
 
 use ractor::ActorRef;
+use std::fmt::Debug;
 
 use crate::actors::ActorError;
 use crate::actors::queue::QueueActorDef;
@@ -143,7 +144,7 @@ async fn spawn_tier1_supervisor<A>(
 ) -> Result<Tier1SupervisorRef<A>, ActorError>
 where
     A: crate::actors::GenericSupervisableActor + Clone + Default,
-    A::Arguments: Clone + Send + Sync,
+    A::Arguments: Clone + Send + Sync + Debug,
     A::Msg: Send,
 {
     let name = format!("{}-{}-supervisor", name_prefix, kind.as_str());

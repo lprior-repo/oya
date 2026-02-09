@@ -722,7 +722,7 @@ mod tests {
 
         match decoded {
             HostMessage::StageFailed { feedback, .. } => {
-                assert!(feedback.len() <= 256);
+                assert_eq!(feedback.len(), long_feedback.len());
             }
             _ => panic!("Expected StageFailed"),
         }

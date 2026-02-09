@@ -17,7 +17,7 @@ use std::time::Duration;
 use surrealdb::Surreal;
 use surrealdb::engine::local::{Db, RocksDb};
 use thiserror::Error;
-use tokio::sync::Semaphore;
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use tracing::{debug, error, info, warn};
 
 use crate::actors::storage::DatabaseConfig;
@@ -171,20 +171,13 @@ impl ConnectionManagerConfig {
 /// A pooled SurrealDB connection wrapper.
 pub struct PooledConnection {
     client: Arc<Surreal<Db>>,
-    semaphore: Arc<Semaphore>,
+    _permit: OwnedSemaphorePermit,
 }
 
 impl PooledConnection {
     #[must_use]
     pub fn client(&self) -> &Surreal<Db> {
         &self.client
-    }
-}
-
-impl Drop for PooledConnection {
-    fn drop(&mut self) {
-        self.semaphore.add_permits(1);
-        debug!("Connection returned to pool");
     }
 }
 
@@ -277,14 +270,16 @@ impl SurrealConnectionManager {
             return Err(SurrealError::NotInitialized);
         }
 
-        self.semaphore
-            .acquire()
+        let permit = self
+            .semaphore
+            .clone()
+            .acquire_owned()
             .await
             .map_err(|_| SurrealError::PoolExhausted(self.config.max_connections))?;
 
         Ok(PooledConnection {
             client: self.client.clone(),
-            semaphore: self.semaphore.clone(),
+            _permit: permit,
         })
     }
 

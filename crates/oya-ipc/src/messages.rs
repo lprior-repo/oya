@@ -261,6 +261,90 @@ pub enum HostMessage {
         /// Timestamp
         timestamp: u64,
     },
+
+    // STAGE LIFECYCLE EVENTS
+    // ══════════════════════
+    /// Stage started for a bead.
+    StageStarted {
+        /// Bead ID
+        bead_id: String,
+        /// Stage name (research, plan, implement, review, validate, accept)
+        stage: String,
+        /// Attempt number (1-indexed)
+        attempt: u32,
+        /// Timestamp
+        timestamp: u64,
+    },
+
+    /// Stage completed successfully.
+    StageCompleted {
+        /// Bead ID
+        bead_id: String,
+        /// Stage name
+        stage: String,
+        /// Artifact reference (if any)
+        artifact_ref: Option<String>,
+        /// Timestamp
+        timestamp: u64,
+    },
+
+    /// Stage failed with feedback.
+    StageFailed {
+        /// Bead ID
+        bead_id: String,
+        /// Stage name
+        stage: String,
+        /// Feedback message
+        feedback: String,
+        /// Severity level (minor, major, fundamental)
+        severity: String,
+        /// Timestamp
+        timestamp: u64,
+    },
+
+    /// Bead reentered earlier stage.
+    StageReentry {
+        /// Bead ID
+        bead_id: String,
+        /// Source stage
+        from_stage: String,
+        /// Target stage
+        to_stage: String,
+        /// Reason for reentry
+        reason: String,
+        /// Attempt number after reentry
+        attempt: u32,
+        /// Timestamp
+        timestamp: u64,
+    },
+
+    /// Validation command executed.
+    ValidationRan {
+        /// Bead ID
+        bead_id: String,
+        /// Whether validation passed
+        passed: bool,
+        /// Command output
+        output: String,
+        /// Command that was run
+        command: String,
+        /// Exit code
+        exit_code: i32,
+        /// Timestamp
+        timestamp: u64,
+    },
+
+    /// Recursion limits exhausted.
+    RecursionExhausted {
+        /// Bead ID
+        bead_id: String,
+        /// Total attempts made
+        total_attempts: u32,
+        /// Last stage that failed
+        last_stage: String,
+        /// Timestamp
+        timestamp: u64,
+    },
 }
 
 /// Summary of a bead for list views.

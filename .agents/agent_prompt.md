@@ -60,9 +60,27 @@ fi
 echo "✓ Bv recommended bead: $BEAD_ID"
 echo "   Reason: $(echo "$BV_OUTPUT" | jq -r '.recommendations[0].reason // No reason provided')"
 
-# Claim the bead using br (or use the claim command from bv if available)
+# Claim the bead in PostgreSQL FIRST (prevents race conditions)
+CLAIM_RESULT=$(psql -U postgres -d swarm_db -t -c "
+  INSERT INTO bead_claims (bead_id, claimed_by, status)
+  VALUES ('$BEAD_ID', {N}, 'in_progress')
+  ON CONFLICT (bead_id) DO NOTHING
+  RETURNING bead_id;
+" 2>/dev/null)
+
+# Trim whitespace
+CLAIM_RESULT=$(echo "$CLAIM_RESULT" | xargs)
+
+if [ -z "$CLAIM_RESULT" ]; then
+  echo "❌ Bead $BEAD_ID already claimed by another agent. Exiting."
+  exit 0
+fi
+
+echo "✓ Successfully claimed bead: $BEAD_ID"
+
+# Now update br (beads database)
 if [ -n "$CLAIM_CMD" ] && [ "$CLAIM_CMD" != "null" ]; then
-  echo "   Claiming with: $CLAIM_CMD"
+  echo "   Updating br: $CLAIM_CMD"
   eval "$CLAIM_CMD"
 else
   # Fallback: use br to claim

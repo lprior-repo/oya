@@ -260,6 +260,7 @@ mod tests {
             shutdown_coordinator: None,
             _shutdown_rx: None,
             restart_strategy: Box::new(OneForOne::new()),
+            checkpoint_manager: None,
         }
     }
 

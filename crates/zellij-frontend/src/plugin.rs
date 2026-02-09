@@ -278,6 +278,329 @@ impl TaskRow {
             .collect::<Vec<_>>()
             .join(" ")
     }
+
+    /// Update task stage field from HostMessage (IPC event)
+    ///
+    /// This method processes stage lifecycle events from the orchestrator
+    /// and updates the task's stage field and stages vector accordingly.
+    ///
+    /// # Arguments
+    ///
+    /// * `msg` - HostMessage containing stage update
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` if update successful
+    /// * `Err(PluginError)` if bead_id mismatch or invalid stage format
+    pub fn update_from_ipc(&mut self, msg: &HostMessage) -> Result<(), PluginError> {
+        match msg {
+            // Stage started - set stage field to running stage
+            HostMessage::StageStarted { bead_id, stage, .. } => {
+                self.validate_bead_id(bead_id)?;
+                self.stage = Some(stage.clone());
+                self.apply_stage_event(stage, StageState::Running, 1)
+            }
+
+            // Stage completed - mark stage as complete
+            HostMessage::StageCompleted {
+                bead_id, stage, ..
+            } => {
+                self.validate_bead_id(bead_id)?;
+                self.stage = Some(stage.clone());
+                self.apply_stage_event(stage, StageState::Completed, 1)
+            }
+
+            // Stage failed - mark stage as failed with detail
+            HostMessage::StageFailed {
+                bead_id,
+                stage,
+                feedback,
+                ..
+            } => {
+                self.validate_bead_id(bead_id)?;
+                let stage_with_detail = format!("{}: {}", stage, feedback);
+                self.stage = Some(stage_with_detail.clone());
+                self.apply_stage_event(stage, StageState::Failed, 1)?;
+                // Store detailed failure in stage field
+                self.stage = Some(stage_with_detail);
+                Ok(())
+            }
+
+            // Stage reentry - reset to earlier stage
+            HostMessage::StageReentry {
+                bead_id,
+                to_stage,
+                attempt,
+                ..
+            } => {
+                self.validate_bead_id(bead_id)?;
+                self.stage = Some(to_stage.clone());
+                self.apply_stage_event(to_stage, StageState::Reentered, *attempt)
+            }
+
+            // Validation ran - update validate stage with result
+            HostMessage::ValidationRan {
+                bead_id, passed, ..
+            } => {
+                self.validate_bead_id(bead_id)?;
+                let stage_name = "validate";
+                let state = if *passed {
+                    StageState::Completed
+                } else {
+                    StageState::Failed
+                };
+                self.apply_stage_event(stage_name, state, 1)
+            }
+
+            // Recursion exhausted - mark last stage as failed
+            HostMessage::RecursionExhausted {
+                bead_id,
+                last_stage,
+                ..
+            } => {
+                self.validate_bead_id(bead_id)?;
+                let stage_str = stage_kind_to_string(last_stage);
+                self.stage = Some(format!(
+                    "{}: Recursion exhausted after 15 attempts",
+                    stage_str
+                ));
+                self.apply_stage_event(&stage_str, StageState::Failed, 15)
+            }
+
+            // Non-stage events are ignored
+            _ => Ok(()),
+        }
+    }
+
+    /// Validate that bead_id matches this task's slug
+    fn validate_bead_id(&self, bead_id: &str) -> Result<(), PluginError> {
+        match bead_id == self.slug {
+            true => Ok(()),
+            false => Err(PluginError::InvalidState(format!(
+                "Bead ID mismatch: expected {}, got {}",
+                self.slug, bead_id
+            ))),
+        }
+    }
+}
+
+/// Convert stage kind string to display format
+///
+/// This helper function maps stage names from IPC messages
+/// to the format used in TaskRow stages vector.
+fn stage_kind_to_string(stage: &str) -> String {
+    stage.to_string()
+}
+
+/// Map (status, stage) tuple to stage progression symbol
+///
+/// This function determines the appropriate symbol to display
+/// for a stage based on the task's overall status and current stage.
+///
+/// # Arguments
+///
+/// * `status` - Task status (created/in_progress/failed/passed/integrated)
+/// * `stage` - Optional current stage name with optional detail
+///
+/// # Returns
+///
+/// Stage progression symbol: ◐ (running), ● (complete), ✗ (failed), ○ (pending)
+pub fn stage_symbol_from_status(status: &str, stage: Option<&str>) -> char {
+    // Extract stage name without detail (before colon if present)
+    let stage_name = stage.and_then(|s| s.split(':').next());
+
+    match (status, stage_name) {
+        // Passed/Integrated = all complete
+        ("passed" | "integrated", _) => '●',
+
+        // Failed stage
+        ("failed", Some(_)) => '✗',
+
+        // Currently running stage
+        ("in_progress", Some(stage_name)) => {
+            // Map stage name to running symbol
+            match stage_name {
+                "research" | "plan" | "implement" | "review" | "validate" | "accept" => '◐',
+                _ => '?', // Unknown stage
+            }
+        }
+
+        // Created = not started
+        ("created", _) => '○',
+
+        // Default: unknown state
+        _ => '?',
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_stage_symbol_returns_running_for_in_progress_stage() {
+        let result = stage_symbol_from_status("in_progress", Some("implement"));
+        assert_eq!(result, '◐');
+    }
+
+    #[test]
+    fn test_stage_symbol_returns_complete_for_passed_status() {
+        let result = stage_symbol_from_status("passed", None);
+        assert_eq!(result, '●');
+    }
+
+    #[test]
+    fn test_stage_symbol_returns_failed_for_failed_status_with_stage() {
+        let result = stage_symbol_from_status("failed", Some("validate: 3 tests failed"));
+        assert_eq!(result, '✗');
+    }
+
+    #[test]
+    fn test_stage_symbol_returns_pending_for_created_status() {
+        let result = stage_symbol_from_status("created", None);
+        assert_eq!(result, '○');
+    }
+
+    #[test]
+    fn test_stage_symbol_returns_question_mark_for_unknown_stage_name() {
+        let result = stage_symbol_from_status("in_progress", Some("unknown-stage"));
+        assert_eq!(result, '?');
+    }
+
+    #[test]
+    fn test_stage_symbol_extracts_stage_name_before_colon() {
+        let result = stage_symbol_from_status("in_progress", Some("implement: writing code"));
+        assert_eq!(result, '◐');
+    }
+
+    #[test]
+    fn test_task_row_update_from_ipc_stage_started() {
+        let mut task = TaskRow::new("bd-3a0a.8", "created", "P0", "Rust", "task/bd-3a0a.8");
+        let msg = HostMessage::StageStarted {
+            bead_id: "bd-3a0a.8".to_string(),
+            stage: "implement".to_string(),
+            attempt: 1,
+            timestamp: 1739097600,
+        };
+
+        let result = task.update_from_ipc(&msg);
+        assert!(result.is_ok());
+        assert_eq!(task.stage, Some("implement".to_string()));
+    }
+
+    #[test]
+    fn test_task_row_update_from_ipc_stage_completed() {
+        let mut task = TaskRow::new("bd-3a0a.8", "in_progress", "P0", "Rust", "task/bd-3a0a.8");
+        task.stage = Some("implement".to_string());
+
+        let msg = HostMessage::StageCompleted {
+            bead_id: "bd-3a0a.8".to_string(),
+            stage: "implement".to_string(),
+            artifact_ref: Some("artifacts/code.rs".to_string()),
+            timestamp: 1739097660,
+        };
+
+        let result = task.update_from_ipc(&msg);
+        assert!(result.is_ok());
+        assert_eq!(task.stage, Some("implement".to_string()));
+        assert_eq!(task.stages[2].state, StageState::Completed); // implement is index 2
+    }
+
+    #[test]
+    fn test_task_row_update_from_ipc_stage_failed() {
+        let mut task = TaskRow::new("bd-3a0a.8", "in_progress", "P0", "Rust", "task/bd-3a0a.8");
+        task.stage = Some("validate".to_string());
+
+        let msg = HostMessage::StageFailed {
+            bead_id: "bd-3a0a.8".to_string(),
+            stage: "validate".to_string(),
+            feedback: "3 tests failed".to_string(),
+            severity: "minor".to_string(),
+            timestamp: 1739097720,
+        };
+
+        let result = task.update_from_ipc(&msg);
+        assert!(result.is_ok());
+        assert_eq!(task.stage, Some("validate: 3 tests failed".to_string()));
+        assert_eq!(task.stages[4].state, StageState::Failed); // validate is index 4
+    }
+
+    #[test]
+    fn test_task_row_update_from_ipc_bead_id_mismatch() {
+        let mut task = TaskRow::new("bd-3a0a.8", "created", "P0", "Rust", "task/bd-3a0a.8");
+        let msg = HostMessage::StageStarted {
+            bead_id: "bd-3a0a.9".to_string(), // Different bead ID
+            stage: "implement".to_string(),
+            attempt: 1,
+            timestamp: 1739097600,
+        };
+
+        let result = task.update_from_ipc(&msg);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Bead ID mismatch"));
+    }
+
+    #[test]
+    fn test_task_row_update_from_ipc_is_idempotent() {
+        let mut task = TaskRow::new("bd-3a0a.8", "in_progress", "P0", "Rust", "task/bd-3a0a.8");
+        task.stage = Some("implement".to_string());
+
+        let msg = HostMessage::StageStarted {
+            bead_id: "bd-3a0a.8".to_string(),
+            stage: "implement".to_string(),
+            attempt: 1,
+            timestamp: 1739097600,
+        };
+
+        // Update twice with same event
+        let result1 = task.update_from_ipc(&msg);
+        let result2 = task.update_from_ipc(&msg);
+
+        assert!(result1.is_ok());
+        assert!(result2.is_ok());
+        assert_eq!(task.stage, Some("implement".to_string()));
+    }
+
+    // Additional tests from original second test module
+
+    #[test]
+    fn test_plugin_creation() {
+        let plugin = OyaPlugin::new();
+        assert!(plugin.is_ok());
+    }
+
+    #[test]
+    fn test_size_serialization() {
+        let size = Size { rows: 24, cols: 80 };
+        let json = serde_json::to_string(&size).expect("serialization should succeed");
+        let decoded: Size = serde_json::from_str(&json).expect("deserialization should succeed");
+        assert_eq!(decoded.rows, 24);
+        assert_eq!(decoded.cols, 80);
+    }
+
+    #[test]
+    fn test_plugin_state() {
+        assert_ne!(PluginState::Running, PluginState::Starting);
+        assert_ne!(PluginState::Running, PluginState::Error);
+    }
+
+    #[test]
+    fn test_key_modifiers() {
+        let mods = KeyModifiers {
+            shift: true,
+            ctrl: false,
+            alt: false,
+        };
+        assert!(mods.shift);
+        assert!(!mods.ctrl);
+    }
+
+    #[test]
+    fn test_sample_beads() {
+        let plugin = OyaPlugin::new().expect("plugin creation should succeed");
+        assert!(!plugin.tasks.is_empty());
+        assert_eq!(plugin.tasks[0].slug, "task-3ax5");
+    }
 }
 
 /// Plugin state machine
@@ -980,53 +1303,4 @@ fn task_summary_to_row(summary: TaskSummary) -> TaskRow {
     );
     row.stage = summary.stage;
     row
-}
-
-#[cfg(test)]
-#[allow(clippy::expect_used)]
-#[allow(clippy::indexing_slicing)]
-mod tests {
-    #![allow(clippy::unwrap_used)]
-    #![allow(clippy::expect_used)]
-
-    use super::*;
-
-    #[test]
-    fn test_plugin_creation() {
-        let plugin = OyaPlugin::new();
-        assert!(plugin.is_ok());
-    }
-
-    #[test]
-    fn test_size_serialization() {
-        let size = Size { rows: 24, cols: 80 };
-        let json = serde_json::to_string(&size).expect("serialization should succeed");
-        let decoded: Size = serde_json::from_str(&json).expect("deserialization should succeed");
-        assert_eq!(decoded.rows, 24);
-        assert_eq!(decoded.cols, 80);
-    }
-
-    #[test]
-    fn test_plugin_state() {
-        assert_ne!(PluginState::Running, PluginState::Starting);
-        assert_ne!(PluginState::Running, PluginState::Error);
-    }
-
-    #[test]
-    fn test_key_modifiers() {
-        let mods = KeyModifiers {
-            shift: true,
-            ctrl: false,
-            alt: false,
-        };
-        assert!(mods.shift);
-        assert!(!mods.ctrl);
-    }
-
-    #[test]
-    fn test_sample_beads() {
-        let plugin = OyaPlugin::new().unwrap();
-        assert!(!plugin.tasks.is_empty());
-        assert_eq!(plugin.tasks[0].slug, "task-3ax5");
-    }
 }

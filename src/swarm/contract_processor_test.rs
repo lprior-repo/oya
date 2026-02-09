@@ -48,7 +48,7 @@ fn test_creates_contract_file_when_handoff_is_valid() {
             assert!(contract_path.exists(), "Contract file should exist");
             assert_eq!(
                 contract_path.file_name(),
-                std::ffi::OsStr::new("bead-contracts-test-123.json")
+                Some(std::ffi::OsStr::new("bead-contracts-test-123.json"))
             );
 
             let contract_content = fs::read_to_string(&contract_path)
