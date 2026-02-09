@@ -35,8 +35,13 @@ use tokio::sync::{broadcast, mpsc};
 use tracing::info;
 
 use oya_events::{BeadEvent, EventBus, EventPattern, EventSubscription};
+use oya_pipeline::plan::{apply_stage_plan, approve_task, resolve_stage_range, run_full_pipeline};
+use oya_pipeline::persistence::{list_all_tasks, load_task_record, save_task_record};
 
-use crate::ipc_messages::{AlertLevel, ComponentHealth, GuestMessage, HealthStatus, HostMessage};
+use crate::ipc_messages::{
+    AlertLevel, ComponentHealth, GuestMessage, HealthStatus, HostMessage, TaskDetail, TaskSummary,
+    TaskUpdate,
+};
 
 use crate::actors::SchedulerState;
 use crate::actors::errors::ActorError;
@@ -193,6 +198,74 @@ impl Actor for IpcWorkerActorDef {
         message: Self::Msg,
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
+        if let IpcWorkerMessage::HandleGuestMessage {
+            message: GuestMessage::RunStage {
+                slug,
+                stage,
+                from,
+                to,
+                dry_run,
+            },
+            reply,
+        } = message
+        {
+            let response =
+                Self::handle_run_stage(&slug, &stage, from.as_deref(), to.as_deref(), dry_run)
+                    .await;
+            let _ = reply.send(response);
+            return Ok(());
+        }
+
+        if let IpcWorkerMessage::HandleGuestMessage {
+            message: GuestMessage::RunPipeline { slug, dry_run },
+            reply,
+        } = message
+        {
+            let response = Self::handle_run_pipeline(&slug, dry_run).await;
+            let _ = reply.send(response);
+            return Ok(());
+        }
+
+        if let IpcWorkerMessage::HandleGuestMessage {
+            message: GuestMessage::RunPipelineBatch { slugs, dry_run },
+            reply,
+        } = message
+        {
+            let response = Self::handle_run_pipeline_batch(&slugs, dry_run).await;
+            let _ = reply.send(response);
+            return Ok(());
+        }
+
+        if let IpcWorkerMessage::HandleGuestMessage {
+            message: GuestMessage::ApproveTask { slug, force },
+            reply,
+        } = message
+        {
+            let response = Self::handle_approve_task(&slug, force).await;
+            let _ = reply.send(response);
+            return Ok(());
+        }
+
+        if let IpcWorkerMessage::HandleGuestMessage {
+            message: GuestMessage::GetTaskList,
+            reply,
+        } = message
+        {
+            let response = Self::handle_get_task_list().await;
+            let _ = reply.send(response);
+            return Ok(());
+        }
+
+        if let IpcWorkerMessage::HandleGuestMessage {
+            message: GuestMessage::GetTaskDetail { slug },
+            reply,
+        } = message
+        {
+            let response = Self::handle_get_task_detail(&slug).await;
+            let _ = reply.send(response);
+            return Ok(());
+        }
+
         // Special case for Shutdown
         if matches!(message, IpcWorkerMessage::Shutdown) {
             info!("IpcWorker shutdown requested");
@@ -269,6 +342,10 @@ mod core {
                 let beads = vec![];
                 Ok(HostMessage::BeadList { beads })
             }
+
+            GuestMessage::GetTaskList | GuestMessage::GetTaskDetail { .. } => Err(
+                ActorError::internal("Task queries are handled asynchronously".to_string()),
+            ),
 
             GuestMessage::GetBeadDetail { bead_id } => {
                 // TODO: Query actual bead details from BeadStore
@@ -347,6 +424,17 @@ mod core {
                     message: "Bead retry queued".to_string(),
                 })
             }
+
+            GuestMessage::RunStage { .. } | GuestMessage::ApproveTask { .. } => {
+                Err(ActorError::internal(
+                    "Task commands are handled asynchronously".to_string(),
+                ))
+            }
+            GuestMessage::RunPipeline { .. } | GuestMessage::RunPipelineBatch { .. } => {
+                Err(ActorError::internal(
+                    "Task commands are handled asynchronously".to_string(),
+                ))
+            }
         }
     }
 
@@ -376,6 +464,129 @@ mod core {
 }
 
 impl IpcWorkerActorDef {
+    async fn handle_run_stage(
+        slug: &str,
+        stage: &str,
+        from: Option<&str>,
+        to: Option<&str>,
+        dry_run: bool,
+    ) -> Result<HostMessage, ActorError> {
+        let repo_root = locate_repo_root()?;
+        let stages = resolve_stage_range(stage, from, to).map_err(map_pipeline_error)?;
+
+        let task = load_task_record(slug, &repo_root)
+            .await
+            .map_err(map_pipeline_error)?;
+        let updated = apply_stage_plan(task, &stages).map_err(map_pipeline_error)?;
+
+        if dry_run {
+            return Ok(HostMessage::TaskUpdated {
+                slug: slug.to_string(),
+                status: updated.status.to_string(),
+                message: "Dry run: task status not persisted".to_string(),
+            });
+        }
+
+        save_task_record(&updated, &repo_root)
+            .await
+            .map_err(map_pipeline_error)?;
+
+        Ok(HostMessage::TaskUpdated {
+            slug: slug.to_string(),
+            status: updated.status.to_string(),
+            message: "Task updated successfully".to_string(),
+        })
+    }
+
+    async fn handle_run_pipeline(slug: &str, dry_run: bool) -> Result<HostMessage, ActorError> {
+        let repo_root = locate_repo_root()?;
+        let task = load_task_record(slug, &repo_root)
+            .await
+            .map_err(map_pipeline_error)?;
+        let updated = run_full_pipeline(task).map_err(map_pipeline_error)?;
+
+        if dry_run {
+            return Ok(HostMessage::TaskUpdated {
+                slug: slug.to_string(),
+                status: updated.status.to_string(),
+                message: "Dry run: task status not persisted".to_string(),
+            });
+        }
+
+        save_task_record(&updated, &repo_root)
+            .await
+            .map_err(map_pipeline_error)?;
+
+        Ok(HostMessage::TaskUpdated {
+            slug: slug.to_string(),
+            status: updated.status.to_string(),
+            message: "Task updated successfully".to_string(),
+        })
+    }
+
+    async fn handle_run_pipeline_batch(
+        slugs: &[String],
+        dry_run: bool,
+    ) -> Result<HostMessage, ActorError> {
+        let repo_root = locate_repo_root()?;
+        let results = futures::future::join_all(
+            slugs
+                .iter()
+                .map(|slug| run_pipeline_for_slug(slug, dry_run, &repo_root)),
+        )
+        .await;
+
+        let (updated, failed) =
+            results
+                .into_iter()
+                .fold((Vec::new(), Vec::new()), |(mut updated, mut failed), result| {
+                    match result {
+                        Ok(update) => updated.push(update),
+                        Err(update) => failed.push(update),
+                    }
+                    (updated, failed)
+                });
+
+        Ok(HostMessage::TaskBatchUpdated { updated, failed })
+    }
+
+    async fn handle_approve_task(slug: &str, force: bool) -> Result<HostMessage, ActorError> {
+        let repo_root = locate_repo_root()?;
+        let task = load_task_record(slug, &repo_root)
+            .await
+            .map_err(map_pipeline_error)?;
+        let updated = approve_task(task, force).map_err(map_pipeline_error)?;
+
+        save_task_record(&updated, &repo_root)
+            .await
+            .map_err(map_pipeline_error)?;
+
+        Ok(HostMessage::TaskUpdated {
+            slug: slug.to_string(),
+            status: updated.status.to_string(),
+            message: "Task approved successfully".to_string(),
+        })
+    }
+
+    async fn handle_get_task_list() -> Result<HostMessage, ActorError> {
+        let repo_root = locate_repo_root()?;
+        let tasks = list_all_tasks(&repo_root)
+            .await
+            .map_err(map_pipeline_error)?;
+        let summaries = tasks.into_iter().map(task_to_summary).collect();
+        Ok(HostMessage::TaskList { tasks: summaries })
+    }
+
+    async fn handle_get_task_detail(slug: &str) -> Result<HostMessage, ActorError> {
+        let repo_root = locate_repo_root()?;
+        let task = load_task_record(slug, &repo_root)
+            .await
+            .map_err(map_pipeline_error)?;
+        Ok(HostMessage::TaskDetail {
+            task: task_to_detail(task),
+        })
+    }
+
     /// Forward events from EventBus to broadcast subscribers.
     pub async fn event_forwarder(
         mut subscription: EventSubscription,
@@ -440,6 +651,121 @@ impl IpcWorkerActorDef {
             _ => None,
         }
     }
+}
+
+fn locate_repo_root() -> Result<std::path::PathBuf, ActorError> {
+    let current =
+        std::env::current_dir().map_err(|err| ActorError::internal(err.to_string()))?;
+    let mut path = current.as_path();
+
+    loop {
+        let oya_dir = path.join(".oya");
+        let git_dir = path.join(".git");
+
+        if oya_dir.exists() || git_dir.exists() {
+            return Ok(path.to_path_buf());
+        }
+
+        match path.parent() {
+            Some(parent) if parent != path => path = parent,
+            _ => {
+                return Ok(current);
+            }
+        }
+    }
+}
+
+fn map_pipeline_error(error: oya_pipeline::Error) -> ActorError {
+    match error {
+        oya_pipeline::Error::InvalidTransition { .. }
+        | oya_pipeline::Error::InvalidStageSequence(_) => {
+            ActorError::invalid_state_transition(error.to_string())
+        }
+        oya_pipeline::Error::TaskNotFound(task) => {
+            ActorError::not_found("task", task)
+        }
+        _ => ActorError::internal(error.to_string()),
+    }
+}
+
+fn task_to_summary(task: oya_pipeline::domain::Task) -> TaskSummary {
+    let (status, stage) = task_status_fields(&task.status);
+    TaskSummary {
+        slug: task.slug.as_str().to_string(),
+        status,
+        stage,
+        priority: task.priority.to_string(),
+        language: task.language.to_string(),
+        branch: task.branch,
+    }
+}
+
+fn task_to_detail(task: oya_pipeline::domain::Task) -> TaskDetail {
+    let (status, stage) = task_status_fields(&task.status);
+    TaskDetail {
+        slug: task.slug.as_str().to_string(),
+        status,
+        stage,
+        priority: task.priority.to_string(),
+        language: task.language.to_string(),
+        branch: task.branch,
+    }
+}
+
+fn task_status_fields(status: &oya_pipeline::domain::TaskStatus) -> (String, Option<String>) {
+    match status {
+        oya_pipeline::domain::TaskStatus::Created => ("created".to_string(), None),
+        oya_pipeline::domain::TaskStatus::InProgress { stage } => {
+            ("in_progress".to_string(), Some(stage.clone()))
+        }
+        oya_pipeline::domain::TaskStatus::PassedPipeline => ("passed".to_string(), None),
+        oya_pipeline::domain::TaskStatus::FailedPipeline { stage, reason } => (
+            "failed".to_string(),
+            Some(format!("{stage}: {reason}")),
+        ),
+        oya_pipeline::domain::TaskStatus::Integrated => ("integrated".to_string(), None),
+    }
+}
+
+async fn run_pipeline_for_slug(
+    slug: &str,
+    dry_run: bool,
+    repo_root: &std::path::Path,
+) -> Result<TaskUpdate, TaskUpdate> {
+    let task = load_task_record(slug, repo_root).await;
+    let update = match task {
+        Ok(task) => match run_full_pipeline(task) {
+            Ok(updated) if dry_run => Ok(TaskUpdate {
+                slug: slug.to_string(),
+                status: Some(updated.status.to_string()),
+                message: "Dry run: task status not persisted".to_string(),
+            }),
+            Ok(updated) => save_task_record(&updated, repo_root)
+                .await
+                .map(|_| TaskUpdate {
+                    slug: slug.to_string(),
+                    status: Some(updated.status.to_string()),
+                    message: "Task updated successfully".to_string(),
+                })
+                .map_err(|err| TaskUpdate {
+                    slug: slug.to_string(),
+                    status: None,
+                    message: err.to_string(),
+                }),
+            Err(err) => Err(TaskUpdate {
+                slug: slug.to_string(),
+                status: None,
+                message: err.to_string(),
+            }),
+        },
+        Err(err) => Err(TaskUpdate {
+            slug: slug.to_string(),
+            status: None,
+            message: err.to_string(),
+        }),
+    };
+
+    update
 }
 
 #[cfg(test)]

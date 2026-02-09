@@ -54,6 +54,8 @@ pub async fn execute_command(command: Commands) -> Result<()> {
             force,
         } => cmd_approve(slug, strategy, force).await,
 
+        Commands::Pipeline { slug, dry_run } => cmd_pipeline(slug, dry_run).await,
+
         Commands::Show { slug, detailed } => cmd_show(slug, detailed).await,
 
         Commands::List { priority, status } => cmd_list(priority, status).await,
@@ -182,24 +184,47 @@ async fn cmd_stage(
     from: Option<String>,
     to: Option<String>,
 ) -> Result<()> {
+    use oya_pipeline::persistence::{load_task_record, save_task_record};
+    use oya_pipeline::plan::{apply_stage_plan, resolve_stage_range};
+
     info!("Running stage '{}' for task '{}'", stage, slug);
 
     if dry_run {
         info!("Dry run mode - no changes will be made");
     }
 
-    if let Some(start) = from {
-        let end = to.unwrap_or_else(|| stage.clone());
-        info!("Running stage range: {} to {}", start, end);
+    let repo_root = get_repo_root()?;
+    let stages = resolve_stage_range(&stage, from.as_deref(), to.as_deref())
+        .map_err(|err| anyhow::anyhow!("Invalid stage range: {err}"))?;
+
+    if let Some(start) = stages.first() {
+        if let Some(end) = stages.last() {
+            info!("Running stage range: {} to {}", start, end);
+        }
     }
 
-    // TODO: Implement actual stage execution
-    // - Load task from database
-    // - Run stage with proper error handling
-    // - Update task status
-    // - Handle retries
+    let task = load_task_record(&slug, &repo_root)
+        .await
+        .map_err(|err| anyhow::anyhow!("Failed to load task '{slug}': {err}"))?;
+    let updated = apply_stage_plan(task, &stages)
+        .map_err(|err| anyhow::anyhow!("Stage execution failed: {err}"))?;
 
-    println!("Stage '{}' completed for task '{}'", stage, slug);
+    if dry_run {
+        println!(
+            "Dry run: task '{}' would be updated to status '{}'",
+            slug, updated.status
+        );
+        return Ok(());
+    }
+
+    save_task_record(&updated, &repo_root)
+        .await
+        .map_err(|err| anyhow::anyhow!("Failed to save task '{slug}': {err}"))?;
+
+    println!(
+        "Stage '{}' completed for task '{}' (status: {})",
+        stage, slug, updated.status
+    );
     Ok(())
 }
 
@@ -242,13 +267,85 @@ async fn cmd_approve(slug: String, strategy: Option<String>, force: bool) -> Res
         info!("Force approval enabled - skipping safety checks");
     }
 
-    // TODO: Implement actual approval logic
-    // - Load task from database
-    // - Verify task passed pipeline
-    // - Mark for integration
-    // - Trigger deployment if needed
+    use oya_pipeline::persistence::{load_task_record, save_task_record};
+    use oya_pipeline::plan::approve_task;
 
-    println!("Task '{}' approved", slug);
+    let repo_root = get_repo_root()?;
+    let task = load_task_record(&slug, &repo_root)
+        .await
+        .map_err(|err| anyhow::anyhow!("Failed to load task '{slug}': {err}"))?;
+    let updated = approve_task(task, force)
+        .map_err(|err| anyhow::anyhow!("Failed to approve task '{slug}': {err}"))?;
+
+    save_task_record(&updated, &repo_root)
+        .await
+        .map_err(|err| anyhow::anyhow!("Failed to save task '{slug}': {err}"))?;
+
+    println!("Task '{}' approved (status: {})", slug, updated.status);
+    Ok(())
+}
+
+/// Run the full pipeline for one or more tasks.
+async fn cmd_pipeline(slugs: Vec<String>, dry_run: bool) -> Result<()> {
+    use oya_pipeline::persistence::{load_task_record, save_task_record};
+    use oya_pipeline::plan::run_full_pipeline;
+
+    if slugs.is_empty() {
+        return Err(anyhow::anyhow!("At least one slug must be provided"));
+    }
+
+    let repo_root = get_repo_root()?;
+    let mut updated = Vec::new();
+    let mut failed = Vec::new();
+
+    for slug in slugs {
+        let result = load_task_record(&slug, &repo_root)
+            .await
+            .map_err(|err| anyhow::anyhow!("Failed to load task '{slug}': {err}"))
+            .and_then(|task| {
+                run_full_pipeline(task)
+                    .map_err(|err| anyhow::anyhow!("Pipeline failed for '{slug}': {err}"))
+            })
+            .and_then(|task| {
+                if dry_run {
+                    Ok(task)
+                } else {
+                    save_task_record(&task, &repo_root)
+                        .await
+                        .map_err(|err| anyhow::anyhow!("Failed to save task '{slug}': {err}"))
+                        .map(|_| task)
+                }
+            });
+
+        match result {
+            Ok(task) => {
+                updated.push((task.slug.to_string(), task.status.to_string()));
+            }
+            Err(err) => {
+                failed.push((slug, err.to_string()));
+            }
+        }
+    }
+
+    if dry_run {
+        println!("Dry run: pipeline updates were not persisted");
+    }
+
+    if !updated.is_empty() {
+        println!("Pipeline updates:");
+        for (slug, status) in updated {
+            println!("  ✓ {} -> {}", slug, status);
+        }
+    }
+
+    if !failed.is_empty() {
+        println!("Pipeline failures:");
+        for (slug, message) in failed {
+            println!("  ✗ {} -> {}", slug, message);
+        }
+        return Err(anyhow::anyhow!("One or more pipeline runs failed"));
+    }
+
     Ok(())
 }
 
@@ -278,6 +375,7 @@ async fn cmd_show(slug: String, detailed: bool) -> Result<()> {
 /// Display task information to the user.
 fn display_task(task: &oya_pipeline::domain::Task, detailed: bool) {
     use oya_pipeline::domain::TaskStatus;
+    use oya_pipeline::plan::{pipeline_report, PipelineStageStatus};
 
     println!("\nTask: {}", task.slug);
     println!("Language: {}", task.language);
@@ -306,6 +404,17 @@ fn display_task(task: &oya_pipeline::domain::Task, detailed: bool) {
             TaskStatus::Integrated => {
                 println!("  State: Task has been integrated");
             }
+        }
+
+        println!("\nPipeline Report:");
+        for entry in pipeline_report(task) {
+            let status_label = match entry.status {
+                PipelineStageStatus::Pending => "pending",
+                PipelineStageStatus::Running => "running",
+                PipelineStageStatus::Failed => "failed",
+                PipelineStageStatus::Complete => "complete",
+            };
+            println!("  {:<12} {}", entry.stage, status_label);
         }
 
         // Show next steps
