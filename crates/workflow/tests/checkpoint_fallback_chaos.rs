@@ -181,7 +181,8 @@ fn create_checkpoint_sequence(
 /// This implements the fallback strategy:
 /// 1. Try to restore the requested checkpoint
 /// 2. If corrupted, search storage for the next most recent checkpoint
-/// 3. Restore the previous valid checkpoint
+/// 3. Continue searching backwards until a valid checkpoint is found
+/// 4. Restore the first valid checkpoint found
 fn restore_with_fallback(
     checkpoint_id: &CheckpointId,
     storage: &dyn CheckpointStorage,
@@ -207,9 +208,9 @@ fn restore_with_fallback(
                     | RestoreError::DeserializationFailed { .. }
                     | RestoreError::InvalidData { .. }
             ) {
-                info!("Checkpoint appears corrupted, attempting fallback to previous checkpoint");
+                info!("Checkpoint appears corrupted, attempting fallback to previous checkpoint(s)");
 
-                // Find the previous checkpoint in our sequence
+                // Find the position of this checkpoint in our sequence
                 let checkpoint_ids: Vec<_> =
                     previous_checkpoints.iter().map(|(id, _)| *id).collect();
 
@@ -220,25 +221,44 @@ fn restore_with_fallback(
                         reason: format!("checkpoint {} not found in sequence", checkpoint_id),
                     })?;
 
-                if current_index == 0 {
-                    return Err(ChaosTestError::PreviousCheckpointNotFound);
-                }
+                // Iterate backwards through previous checkpoints
+                for i in (0..current_index).rev() {
+                    let previous_id = checkpoint_ids[i];
+                    info!(
+                        "Attempting to restore previous checkpoint {}/{}: {}",
+                        current_index - i,
+                        current_index,
+                        previous_id
+                    );
 
-                let previous_id = checkpoint_ids[current_index - 1];
-                info!("Attempting to restore previous checkpoint: {}", previous_id);
+                    // Try to restore this previous checkpoint
+                    let previous_state = restore_checkpoint::<TestState>(&previous_id, storage);
 
-                // Try to restore the previous checkpoint
-                let previous_state = restore_checkpoint::<TestState>(&previous_id, storage);
-
-                match previous_state {
-                    Ok(state) => {
-                        info!("Successfully restored previous checkpoint: {}", previous_id);
-                        Ok((previous_id, state))
+                    match previous_state {
+                        Ok(state) => {
+                            info!(
+                                "Successfully restored previous checkpoint: {} (version {})",
+                                previous_id, state.version
+                            );
+                            return Ok((previous_id, state));
+                        }
+                        Err(prev_err) => {
+                            warn!(
+                                "Previous checkpoint {} also failed: {}, trying earlier...",
+                                previous_id, prev_err
+                            );
+                            // Continue to the next previous checkpoint
+                        }
                     }
-                    Err(e) => Err(ChaosTestError::FallbackFailed {
-                        reason: format!("previous checkpoint {} also failed: {}", previous_id, e),
-                    }),
                 }
+
+                // If we get here, we've exhausted all previous checkpoints
+                Err(ChaosTestError::FallbackFailed {
+                    reason: format!(
+                        "all previous checkpoints failed for {}",
+                        checkpoint_id
+                    ),
+                })
             } else {
                 Err(ChaosTestError::FallbackFailed {
                     reason: format!("restore failed with non-corruption error: {}", e),
@@ -367,8 +387,8 @@ async fn given_corrupted_first_checkpoint_when_restoring_then_fails_no_fallback(
     );
 
     match result {
-        Err(ChaosTestError::PreviousCheckpointNotFound) => {
-            info!("Correctly returned PreviousCheckpointNotFound error");
+        Err(ChaosTestError::FallbackFailed { .. }) => {
+            info!("Correctly returned FallbackFailed error when no previous checkpoints exist");
         }
         Err(e) => {
             panic!("Unexpected error type: {}", e);

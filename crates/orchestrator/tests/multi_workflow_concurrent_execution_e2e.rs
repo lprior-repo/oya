@@ -22,17 +22,14 @@
 //! - Fresh scheduler actor per test run
 //! - Test completes in <5s
 
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use im::HashSet;
 use ractor::ActorRef;
-use tokio::time::timeout;
 
 use orchestrator::actors::messages::SchedulerMessage;
 use orchestrator::actors::scheduler::{SchedulerActorDef, SchedulerArguments};
 use orchestrator::dag::{DependencyType, WorkflowDAG};
-use orchestrator::scheduler::{ScheduledBead, WorkflowId};
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TEST CONTEXT STRUCTURES
@@ -493,30 +490,36 @@ async fn simulate_concurrent_execution(
             // Also complete initial beads (no incoming edges) on first iteration
             if iterations == 1 {
                 let dag = &ctx.dags[workflow_idx];
+
+                // Find nodes with no incoming edges (roots)
+                let mut has_incoming = HashSet::new();
+
+                for (_from, to, _dep_type) in dag.edges() {
+                    has_incoming.insert(to.clone());
+                }
+
+                let mut nodes_to_complete = Vec::new();
                 let tracker_opt = tracker.tracker_for_workflow(workflow_id);
 
                 if let Some(workflow_tracker) = tracker_opt {
-                    // Find nodes with no incoming edges (roots)
-                    let mut has_incoming = HashSet::new();
-
-                    for (_from, to, _dep_type) in dag.edges() {
-                        has_incoming.insert(to.clone());
-                    }
-
                     for node in dag.nodes() {
                         if !has_incoming.contains(node) && !workflow_tracker.has_completed(node) {
-                            // Complete this root node
-                            tracker.complete_bead(workflow_id, node);
-
-                            // Notify scheduler
-                            ctx.scheduler
-                                .send_message(SchedulerMessage::OnBeadCompleted {
-                                    workflow_id: workflow_id.clone(),
-                                    bead_id: node.clone(),
-                                })
-                                .map_err(|e| format!("Failed to send OnBeadCompleted: {:?}", e))?;
+                            nodes_to_complete.push(node.clone());
                         }
                     }
+                }
+
+                // Complete the root nodes
+                for node in nodes_to_complete {
+                    tracker.complete_bead(workflow_id, &node);
+
+                    // Notify scheduler
+                    ctx.scheduler
+                        .send_message(SchedulerMessage::OnBeadCompleted {
+                            workflow_id: workflow_id.clone(),
+                            bead_id: node.clone(),
+                        })
+                        .map_err(|e| format!("Failed to send OnBeadCompleted: {:?}", e))?;
                 }
             }
         }
@@ -678,7 +681,6 @@ async fn test_multi_workflow_concurrent_independent_execution() -> Result<(), St
 
     let start = Instant::now();
     simulate_concurrent_execution(&ctx, &mut tracker).await?;
-    let total_time = start.elapsed();
 
     // Check that workflows made progress concurrently
     // (not strictly sequential execution of one workflow after another)

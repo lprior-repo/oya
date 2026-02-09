@@ -384,13 +384,13 @@ async fn get_scheduler_ref(
 // =============================================================================
 
 /// Kill the scheduler by stopping it via supervisor.
-async fn kill_scheduler(ctx: &ChaosTestContext) -> ChaosTestResult<()> {
+async fn kill_scheduler(ctx: &ChaosTestContext, test_name: &str) -> ChaosTestResult<()> {
     info!("Killing scheduler...");
 
     // Send stop message to supervisor for the scheduler child
     ctx.supervisor
         .send_message(SupervisorMessage::<SchedulerActorDef>::StopChild {
-            name: format!("scheduler-{}", "test"), // Placeholder
+            name: format!("scheduler-{test_name}"),
         });
 
     // The supervisor will handle the exit and trigger restart
@@ -400,7 +400,11 @@ async fn kill_scheduler(ctx: &ChaosTestContext) -> ChaosTestResult<()> {
 }
 
 /// Wait for scheduler recovery after kill.
-async fn await_scheduler_recovery(ctx: &ChaosTestContext, timeout_ms: u64) -> ChaosTestResult<()> {
+async fn await_scheduler_recovery(
+    ctx: &mut ChaosTestContext,
+    test_name: &str,
+    timeout_ms: u64,
+) -> ChaosTestResult<()> {
     info!(
         "Waiting for scheduler recovery (timeout: {}ms)...",
         timeout_ms
@@ -418,8 +422,20 @@ async fn await_scheduler_recovery(ctx: &ChaosTestContext, timeout_ms: u64) -> Ch
 
         if let Ok(status) = status_rx.await {
             if status.state == SupervisorState::Running && status.active_children > 0 {
-                info!("Scheduler recovered in {}ms", start.elapsed().as_millis());
-                return Ok(());
+                // Get the new scheduler reference
+                match get_scheduler_ref(&ctx.supervisor, test_name).await {
+                    Ok(new_ref) => {
+                        ctx.scheduler = new_ref;
+                        info!(
+                            "Scheduler recovered in {}ms",
+                            start.elapsed().as_millis()
+                        );
+                        return Ok(());
+                    }
+                    Err(_) => {
+                        // Scheduler not ready yet, retry
+                    }
+                }
             }
         }
 
@@ -456,12 +472,12 @@ async fn given_scheduler_with_active_workflows_when_killed_gracefully_then_recov
     ctx.pre_kill_state = Some(pre_kill_state.clone());
 
     // Kill scheduler
-    kill_scheduler(&ctx)
+    kill_scheduler(&ctx, test_name)
         .await
         .expect("Failed to kill scheduler");
 
     // Wait for recovery
-    await_scheduler_recovery(&ctx, 5000)
+    await_scheduler_recovery(&mut ctx, test_name, 5000)
         .await
         .expect("Scheduler did not recover in time");
 
@@ -508,12 +524,12 @@ async fn given_scheduler_with_zero_workflows_when_killed_then_recovers_with_empt
         .expect("Failed to capture pre-kill state");
 
     // Kill scheduler
-    kill_scheduler(&ctx)
+    kill_scheduler(&ctx, test_name)
         .await
         .expect("Failed to kill scheduler");
 
     // Wait for recovery
-    await_scheduler_recovery(&ctx, 5000)
+    await_scheduler_recovery(&mut ctx, test_name, 5000)
         .await
         .expect("Scheduler did not recover in time");
 
@@ -599,11 +615,11 @@ async fn test_invariant_workflow_count_non_decreasing() {
 
     let pre_count = ctx.workflow_ids.len();
 
-    kill_scheduler(&ctx)
+    kill_scheduler(&ctx, test_name)
         .await
         .expect("Failed to kill scheduler");
 
-    await_scheduler_recovery(&ctx, 5000)
+    await_scheduler_recovery(&mut ctx, test_name, 5000)
         .await
         .expect("Scheduler did not recover");
 
