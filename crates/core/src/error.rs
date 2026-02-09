@@ -125,6 +125,24 @@ impl Error {
             reason: reason.into(),
         }
     }
+
+    /// Create a validation error (alias for invalid_record for compatibility).
+    #[must_use]
+    #[inline]
+    pub fn validation(context: impl std::fmt::Display, reason: impl Into<String>) -> Self {
+        Self::InvalidRecord {
+            reason: format!("{}: {}", context, reason.into()),
+        }
+    }
+
+    /// Create a not found error (uses InvalidRecord for now).
+    #[must_use]
+    #[inline]
+    pub fn not_found(entity_type: impl std::fmt::Display, id: impl std::fmt::Display) -> Self {
+        Self::InvalidRecord {
+            reason: format!("{} not found: {}", entity_type, id),
+        }
+    }
 }
 
 #[cfg(test)]
