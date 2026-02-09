@@ -50,7 +50,7 @@ use crate::ipc_messages::{
 use crate::actors::SchedulerState;
 use crate::actors::errors::ActorError;
 use crate::agent_swarm::{AgentPool, PoolStats};
-use crate::persistence::{BeadRecord, BeadState, OrchestratorStore};
+use crate::persistence::{BeadRecord, BeadState, OrchestratorStore, StoreConfig};
 
 /// IPC worker actor definition.
 #[derive(Clone, Default)]
@@ -121,7 +121,7 @@ pub struct IpcWorkerState {
 
 impl IpcWorkerState {
     /// Create new empty state.
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let (event_tx, _) = broadcast::channel(100);
         Self {
             _event_subscription_id: None,
@@ -130,6 +130,21 @@ impl IpcWorkerState {
             agent_pool: None,
             scheduler_state: None,
             store: None,
+            shutdown_requested: false,
+        }
+    }
+
+    /// Create state with store for testing.
+    #[cfg(test)]
+    fn with_store(store: Arc<OrchestratorStore>) -> Self {
+        let (event_tx, _) = broadcast::channel(100);
+        Self {
+            _event_subscription_id: None,
+            event_tx,
+            event_bus: None,
+            agent_pool: None,
+            scheduler_state: None,
+            store: Some(store),
             shutdown_requested: false,
         }
     }
@@ -1009,7 +1024,7 @@ impl IpcWorkerActorDef {
     /// Transitions a bead from a non-terminal state to Running.
     /// This operation is idempotent: calling start on an already-running bead
     /// succeeds without modification.
-    async fn handle_start_bead(
+    pub(crate) async fn handle_start_bead(
         state: &IpcWorkerState,
         bead_id: &str,
     ) -> Result<HostMessage, ActorError> {
@@ -1068,7 +1083,7 @@ impl IpcWorkerActorDef {
     /// Transitions a bead from any non-terminal state to Cancelled.
     /// This operation is idempotent: calling cancel on an already-cancelled bead
     /// succeeds without modification.
-    async fn handle_cancel_bead(
+    pub(crate) async fn handle_cancel_bead(
         state: &IpcWorkerState,
         bead_id: &str,
     ) -> Result<HostMessage, ActorError> {
@@ -1130,7 +1145,7 @@ impl IpcWorkerActorDef {
     ///
     /// Resets a Failed bead to Ready state for re-execution.
     /// Increments retry_count and clears error information.
-    async fn handle_retry_bead(
+    pub(crate) async fn handle_retry_bead(
         state: &IpcWorkerState,
         bead_id: &str,
     ) -> Result<HostMessage, ActorError> {
@@ -1387,3 +1402,7 @@ mod tests {
         assert_eq!(receiver_count, 0);
     }
 }
+
+// Include bead operations tests from separate file
+#[cfg(test)]
+include!("ipc_worker_bead_ops_tests.rs");
