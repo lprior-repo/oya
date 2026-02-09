@@ -117,8 +117,6 @@ pub enum ExecutionError {
 
 /// Workflow execution engine.
 pub struct ExecutionEngine {
-    /// Event bus for publishing progress events.
-    event_bus: Option<Arc<oya_events::EventBus>>,
     /// Checkpoint directory.
     checkpoint_dir: Option<String>,
 }
@@ -128,15 +126,8 @@ impl ExecutionEngine {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            event_bus: None,
             checkpoint_dir: None,
         }
-    }
-
-    /// Set the event bus for progress events.
-    pub fn with_event_bus(mut self, event_bus: Arc<oya_events::EventBus>) -> Self {
-        self.event_bus = Some(event_bus);
-        self
     }
 
     /// Set the checkpoint directory.

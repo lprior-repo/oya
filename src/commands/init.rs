@@ -103,13 +103,9 @@ impl InitError {
                 "Project names must be alphanumeric with hyphens, cannot be Rust keywords"
                     .to_string(),
             ),
-            Self::TemplateNotFound { .. } => {
-                Some("Available templates: minimal, full".to_string())
-            }
+            Self::TemplateNotFound { .. } => Some("Available templates: minimal, full".to_string()),
             Self::PermissionDenied { .. } => Some("Check parent directory permissions".to_string()),
-            Self::GitFailed { .. } => {
-                Some("Check git installation or use --no-git".to_string())
-            }
+            Self::GitFailed { .. } => Some("Check git installation or use --no-git".to_string()),
             Self::TemplateRender { .. } => {
                 Some("Template file may have invalid syntax".to_string())
             }
@@ -317,8 +313,8 @@ fn validate_project_name(name: &str) -> Result<(), InitError> {
 
     // Check for reserved Rust keywords
     let keywords = [
-        "fn", "struct", "enum", "impl", "trait", "type", "const", "static", "let", "mut",
-        "ref", "move", "async", "await", "loop", "while", "for", "match", "if", "else",
+        "fn", "struct", "enum", "impl", "trait", "type", "const", "static", "let", "mut", "ref",
+        "move", "async", "await", "loop", "while", "for", "match", "if", "else",
     ];
 
     if keywords.contains(&name) {
@@ -368,9 +364,7 @@ fn sanitize_project_name(name: &str) -> String {
 async fn create_directory(path: &PathBuf) -> Result<(), InitError> {
     fs::create_dir_all(path)
         .await
-        .map_err(|_| InitError::PermissionDenied {
-            path: path.clone(),
-        })?;
+        .map_err(|_| InitError::PermissionDenied { path: path.clone() })?;
 
     Ok(())
 }
@@ -390,9 +384,7 @@ async fn write_file(path: &PathBuf, content: &str) -> Result<(), InitError> {
 
     fs::write(path, content)
         .await
-        .map_err(|_| InitError::PermissionDenied {
-            path: path.clone(),
-        })?;
+        .map_err(|_| InitError::PermissionDenied { path: path.clone() })?;
 
     Ok(())
 }
@@ -436,9 +428,7 @@ pub async fn init_command(args: InitArgs) -> Result<InitOutput, InitError> {
 
     // Check if directory exists
     if project_path.exists() && !args.force {
-        return Err(InitError::DirectoryExists {
-            path: project_path,
-        });
+        return Err(InitError::DirectoryExists { path: project_path });
     }
 
     // Remove existing directory if force is enabled
@@ -461,14 +451,10 @@ pub async fn init_command(args: InitArgs) -> Result<InitOutput, InitError> {
 
     // Prepare template variables
     let mut vars = HashMap::new();
-    vars.insert(
-        "project_name".to_string(),
-        sanitized_name.clone(),
-    );
+    vars.insert("project_name".to_string(), sanitized_name.clone());
     vars.insert(
         "description".to_string(),
-        args
-            .description
+        args.description
             .clone()
             .unwrap_or_else(|| "A new Oya project".to_string()),
     );

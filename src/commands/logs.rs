@@ -139,14 +139,14 @@ impl LogsError {
             Self::DirectoryNotFound { .. } => {
                 Some("Check OYA_LOG_DIR environment variable or default location".to_string())
             }
-            Self::PermissionDenied { .. } => Some("Check file permissions with 'ls -la'".to_string()),
+            Self::PermissionDenied { .. } => {
+                Some("Check file permissions with 'ls -la'".to_string())
+            }
             Self::InvalidFilter { .. } => Some(
                 "Filters must match pattern: --bead ID, --stage NAME, --agent ID, --level LEVEL"
                     .to_string(),
             ),
-            Self::ExportFailed { .. } => {
-                Some("Check directory exists and is writable".to_string())
-            }
+            Self::ExportFailed { .. } => Some("Check directory exists and is writable".to_string()),
             Self::CorruptedLog { .. } => {
                 Some("Log file may be partially written or truncated".to_string())
             }
@@ -167,7 +167,10 @@ fn validate_filters(args: &LogsArgs) -> Result<(), LogsError> {
 
     // Validate log level
     if let Some(ref level) = args.level {
-        if !matches!(level.to_lowercase().as_str(), "error" | "warn" | "info" | "debug") {
+        if !matches!(
+            level.to_lowercase().as_str(),
+            "error" | "warn" | "info" | "debug"
+        ) {
             return Err(LogsError::InvalidFilter {
                 filter: format!("--level {level}"),
             });
@@ -180,7 +183,8 @@ fn validate_filters(args: &LogsArgs) -> Result<(), LogsError> {
 /// Check if a bead ID is valid
 fn is_valid_bead_id(id: &str) -> bool {
     !id.is_empty()
-        && id.chars()
+        && id
+            .chars()
             .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
 }
 
@@ -219,10 +223,7 @@ fn parse_log_line(line: &str, _file: &str, _line_num: usize) -> Option<LogEntry>
     let source = parse_log_source(rest);
 
     // Extract message
-    let message = rest
-        .split(' ')
-        .skip_while(|s| s.contains('='))
-        .join(" ");
+    let message = rest.split(' ').skip_while(|s| s.contains('=')).join(" ");
 
     Some(LogEntry {
         timestamp,
@@ -307,7 +308,10 @@ fn filter_entries(entries: Vec<LogEntry>, args: &LogsArgs) -> Vec<LogEntry> {
 
 /// Core function to sort log entries chronologically
 fn sort_entries(entries: Vec<LogEntry>) -> Vec<LogEntry> {
-    entries.into_iter().sorted_by(|a, b| a.timestamp.cmp(&b.timestamp)).collect()
+    entries
+        .into_iter()
+        .sorted_by(|a, b| a.timestamp.cmp(&b.timestamp))
+        .collect()
 }
 
 /// Shell function: Read log directory and parse all entries
@@ -329,11 +333,13 @@ async fn read_log_directory(log_dir: &PathBuf) -> Result<Vec<LogEntry>, LogsErro
         Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
             return Err(LogsError::PermissionDenied {
                 path: log_dir.clone(),
-            })
+            });
         }
-        Err(_) => return Err(LogsError::DirectoryNotFound {
-            path: log_dir.clone(),
-        }),
+        Err(_) => {
+            return Err(LogsError::DirectoryNotFound {
+                path: log_dir.clone(),
+            });
+        }
     };
 
     loop {
@@ -389,26 +395,19 @@ async fn read_log_directory(log_dir: &PathBuf) -> Result<Vec<LogEntry>, LogsErro
 
 /// Shell function: Export logs to file
 async fn export_logs(entries: &[LogEntry], path: &PathBuf) -> Result<(), LogsError> {
-    let content = entries
-        .iter()
-        .map(|entry| format!("{entry}"))
-        .join("\n");
+    let content = entries.iter().map(|entry| format!("{entry}")).join("\n");
 
     // Write to temp file first
     let temp_path = path.with_extension("tmp");
 
     fs::write(&temp_path, content)
         .await
-        .map_err(|_| LogsError::ExportFailed {
-            path: path.clone(),
-        })?;
+        .map_err(|_| LogsError::ExportFailed { path: path.clone() })?;
 
     // Atomic rename
     fs::rename(&temp_path, path)
         .await
-        .map_err(|_| LogsError::ExportFailed {
-            path: path.clone(),
-        })?;
+        .map_err(|_| LogsError::ExportFailed { path: path.clone() })?;
 
     Ok(())
 }

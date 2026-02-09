@@ -166,7 +166,10 @@ async fn check_moon() -> CheckResult {
     let (available, message) = match run_command_with_timeout("moon", &["--version"], 5).await {
         Ok((true, output)) => (
             true,
-            format!("Moon installed: {}", output.lines().next().unwrap_or("unknown")),
+            format!(
+                "Moon installed: {}",
+                output.lines().next().unwrap_or("unknown")
+            ),
         ),
         Ok((false, msg)) => (false, format!("Moon not available: {msg}")),
         Err(_) => (false, "Failed to check moon".to_string()),
@@ -196,7 +199,10 @@ async fn check_zjj() -> CheckResult {
     let (available, message) = match run_command_with_timeout("zjj", &["--version"], 5).await {
         Ok((true, output)) => (
             true,
-            format!("Zjj installed: {}", output.lines().next().unwrap_or("unknown")),
+            format!(
+                "Zjj installed: {}",
+                output.lines().next().unwrap_or("unknown")
+            ),
         ),
         Ok((false, msg)) => (false, format!("Zjj not available: {msg}")),
         Err(_) => (false, "Failed to check zjj".to_string()),
@@ -223,18 +229,17 @@ async fn check_zjj() -> CheckResult {
 async fn check_bead_store() -> CheckResult {
     let start = std::time::Instant::now();
 
-    let (available, message) =
-        match run_command_with_timeout("br", &["--version"], 5).await {
-            Ok((true, output)) => (
-                true,
-                format!(
-                    "Bead-store accessible: {}",
-                    output.lines().next().unwrap_or("unknown")
-                ),
+    let (available, message) = match run_command_with_timeout("br", &["--version"], 5).await {
+        Ok((true, output)) => (
+            true,
+            format!(
+                "Bead-store accessible: {}",
+                output.lines().next().unwrap_or("unknown")
             ),
-            Ok((false, msg)) => (false, format!("Bead-store not accessible: {msg}")),
-            Err(_) => (false, "Failed to check bead-store".to_string()),
-        };
+        ),
+        Ok((false, msg)) => (false, format!("Bead-store not accessible: {msg}")),
+        Err(_) => (false, "Failed to check bead-store".to_string()),
+    };
 
     CheckResult {
         name: "bead-store".to_string(),
@@ -372,7 +377,13 @@ async fn check_dependencies() -> CheckResult {
 /// Get all available checks
 fn get_all_checks() -> Vec<&'static str> {
     vec![
-        "moon", "zjj", "bead-store", "cargo-workspace", "clippy", "test-coverage", "dependencies",
+        "moon",
+        "zjj",
+        "bead-store",
+        "cargo-workspace",
+        "clippy",
+        "test-coverage",
+        "dependencies",
     ]
 }
 
@@ -439,10 +450,22 @@ pub async fn doctor_command(args: DoctorArgs) -> Result<DoctorOutput, DoctorErro
     let summary = match overall_status {
         CheckStatus::Passed => "All systems operational".to_string(),
         CheckStatus::Warning => {
-            format!("{} warning(s) found", checks.iter().filter(|c| c.status == CheckStatus::Warning).count())
+            format!(
+                "{} warning(s) found",
+                checks
+                    .iter()
+                    .filter(|c| c.status == CheckStatus::Warning)
+                    .count()
+            )
         }
         CheckStatus::Failed => {
-            format!("{} check(s) failed", checks.iter().filter(|c| c.status == CheckStatus::Failed).count())
+            format!(
+                "{} check(s) failed",
+                checks
+                    .iter()
+                    .filter(|c| c.status == CheckStatus::Failed)
+                    .count()
+            )
         }
         CheckStatus::Skipped => "All checks skipped".to_string(),
     };
