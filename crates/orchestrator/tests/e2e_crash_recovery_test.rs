@@ -92,26 +92,6 @@ fn test_supervisor_config() -> SupervisorConfig {
     SupervisorConfig::for_testing()
 }
 
-/// Wait for actor to reach specific status with timeout.
-async fn await_actor_status(
-    actor_ref: &ActorRef<impl std::fmt::Debug + Clone + Send + Sync + 'static>,
-    target: ractor::ActorStatus,
-    timeout_ms: u64,
-) -> CrashRecoveryResult<()> {
-    let start = Instant::now();
-    let timeout_duration = Duration::from_millis(timeout_ms);
-
-    while start.elapsed() < timeout_duration {
-        let status = actor_ref.get_status();
-        if status == target {
-            return Ok(());
-        }
-        tokio::time::sleep(Duration::from_millis(50)).await;
-    }
-
-    Err(CrashRecoveryError::RecoveryTimeout { timeout_ms })
-}
-
 /// Create a worker actor with event bus for testing.
 async fn setup_worker_with_event_bus(
 ) -> Result<
@@ -135,6 +115,9 @@ async fn setup_worker_with_event_bus(
 
     // Spawn worker actor
     let (worker, _handle) = Actor::spawn(None, WorkerActorDef, config).await?;
+
+    // Wait for worker to reach Running state
+    tokio::time::sleep(Duration::from_millis(50)).await;
 
     Ok((worker, bus, store))
 }
@@ -284,9 +267,12 @@ async fn given_supervised_worker_when_crashes_then_supervisor_restarts() {
     .expect("Failed to spawn supervisor");
 
     // Wait for supervisor to be running
-    await_actor_status(&supervisor, ractor::ActorStatus::Running, 1000)
-        .await
-        .expect("Supervisor should start");
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(
+        supervisor.get_status(),
+        ractor::ActorStatus::Running,
+        "Supervisor should be running"
+    );
 
     // Spawn worker child
     let (spawn_tx, spawn_rx) = tokio::sync::oneshot::channel();
@@ -443,7 +429,7 @@ async fn given_multiple_worker_crashes_when_restarted_then_worker_recovers_succe
         tokio::time::sleep(Duration::from_millis(50)).await;
 
         // When: Worker crashes
-        worker.stop(Some(&format!("crash cycle {}", cycle)));
+        worker.stop(Some(format!("crash cycle {}", cycle)));
 
         // Wait for stop to complete
         tokio::time::sleep(Duration::from_millis(100)).await;

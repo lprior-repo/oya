@@ -121,7 +121,7 @@ pub struct RecoveryReport {
 
 /// Final chaos test result.
 #[derive(Debug, Clone)]
-pub struct ChaosTestResult {
+pub struct ChaosTestReport {
     pub test_name: String,
     pub recovery_time_ms: u64,
     pub state_consistency: bool,
@@ -206,7 +206,7 @@ async fn capture_scheduler_state(
 
 /// Wait for actor to reach specific status with timeout.
 async fn await_actor_status(
-    actor_ref: &ActorRef<impl std::fmt::Debug + Clone + Send + Sync + 'static>,
+    actor_ref: &ActorRef<impl std::fmt::Debug + Send + Sync + 'static>,
     target: ActorStatus,
     timeout_ms: u64,
 ) -> ChaosTestResult<()> {
@@ -514,7 +514,7 @@ async fn given_scheduler_with_zero_workflows_when_killed_then_recovers_with_empt
     info!("Starting test: {}", test_name);
 
     // Setup with no workflows
-    let ctx = setup_chaos_test(test_name)
+    let mut ctx = setup_chaos_test(test_name)
         .await
         .expect("Failed to setup test context");
 
@@ -644,7 +644,7 @@ async fn test_postcondition_scheduler_running_after_recovery() {
     let test_name = "running_after_recovery";
     info!("Starting test: {}", test_name);
 
-    let ctx = setup_chaos_test(test_name)
+    let mut ctx = setup_chaos_test(test_name)
         .await
         .expect("Failed to setup test context");
 
@@ -683,7 +683,7 @@ async fn test_given_100_bead_workflow_when_killed_then_recovers_within_10_second
     let test_name = "large_workflow_recovery";
     info!("Starting test: {}", test_name);
 
-    let ctx = setup_chaos_test(test_name)
+    let mut ctx = setup_chaos_test(test_name)
         .await
         .expect("Failed to setup test context");
 
@@ -692,11 +692,11 @@ async fn test_given_100_bead_workflow_when_killed_then_recovers_within_10_second
 
     let start = Instant::now();
 
-    kill_scheduler(&ctx)
+    kill_scheduler(&ctx, test_name)
         .await
         .expect("Failed to kill scheduler");
 
-    await_scheduler_recovery(&ctx, 10000)
+    await_scheduler_recovery(&mut ctx, test_name, 10000)
         .await
         .expect("Scheduler did not recover within 10s");
 
