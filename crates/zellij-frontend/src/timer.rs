@@ -240,8 +240,8 @@ impl RefreshTimer {
             return Err(TimerError::NotStarted);
         }
 
-        self.current_tick += 1;
-        self.event_counter += 1;
+        self.current_tick = self.current_tick.wrapping_add(1);
+        self.event_counter = self.event_counter.wrapping_add(1);
 
         use std::time::{SystemTime, UNIX_EPOCH};
         let timestamp_ms = SystemTime::now()

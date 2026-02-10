@@ -51,6 +51,7 @@ pub trait ResultExt<T>: Sized {
     fn or_default_logged(self, default: T) -> T;
 
     /// Inspect the error without consuming the Result.
+    #[must_use]
     fn inspect_error<F: FnOnce(&Error)>(self, f: F) -> Self;
 
     /// Chain with another fallible operation.
@@ -164,6 +165,7 @@ pub trait ResultExt<T>: Sized {
 
 #[async_trait]
 impl<T: std::fmt::Debug + Send> ResultExt<T> for Result<T> {
+    #[inline]
     fn into_option_logged(self) -> Option<T> {
         match self {
             Ok(value) => Some(value),
@@ -174,6 +176,7 @@ impl<T: std::fmt::Debug + Send> ResultExt<T> for Result<T> {
         }
     }
 
+    #[inline]
     fn or_default_logged(self, default: T) -> T {
         match self {
             Ok(value) => value,
@@ -184,6 +187,7 @@ impl<T: std::fmt::Debug + Send> ResultExt<T> for Result<T> {
         }
     }
 
+    #[inline]
     fn inspect_error<F: FnOnce(&Error)>(self, f: F) -> Self {
         if let Err(ref e) = self {
             f(e);
@@ -191,6 +195,7 @@ impl<T: std::fmt::Debug + Send> ResultExt<T> for Result<T> {
         self
     }
 
+    #[inline]
     fn and_then<F, U>(self, f: F) -> Result<U>
     where
         F: FnOnce(T) -> Result<U>,
@@ -201,6 +206,7 @@ impl<T: std::fmt::Debug + Send> ResultExt<T> for Result<T> {
         }
     }
 
+    #[inline]
     async fn and_then_async<F, U, Fut>(self, f: F) -> Result<U>
     where
         F: FnOnce(T) -> Fut + Send,
@@ -213,6 +219,7 @@ impl<T: std::fmt::Debug + Send> ResultExt<T> for Result<T> {
         }
     }
 
+    #[inline]
     fn map_err<F, E2>(self, f: F) -> std::result::Result<T, E2>
     where
         F: FnOnce(Error) -> E2,
@@ -223,6 +230,7 @@ impl<T: std::fmt::Debug + Send> ResultExt<T> for Result<T> {
         }
     }
 
+    #[inline]
     fn unwrap_or(self, default: T) -> T {
         match self {
             Ok(v) => v,
@@ -230,6 +238,7 @@ impl<T: std::fmt::Debug + Send> ResultExt<T> for Result<T> {
         }
     }
 
+    #[inline]
     fn unwrap_or_else<F>(self, f: F) -> T
     where
         F: FnOnce(Error) -> T,
@@ -240,6 +249,7 @@ impl<T: std::fmt::Debug + Send> ResultExt<T> for Result<T> {
         }
     }
 
+    #[inline]
     fn or(self, other: Self) -> Self {
         match self {
             Ok(v) => Ok(v),
@@ -247,6 +257,7 @@ impl<T: std::fmt::Debug + Send> ResultExt<T> for Result<T> {
         }
     }
 
+    #[inline]
     fn or_else<F>(self, f: F) -> Self
     where
         F: FnOnce(Error) -> Self,
@@ -257,6 +268,7 @@ impl<T: std::fmt::Debug + Send> ResultExt<T> for Result<T> {
         }
     }
 
+    #[inline]
     fn to_either(self) -> Either<Error, T>
     where
         T: Sized,
@@ -273,24 +285,29 @@ impl<T: std::fmt::Debug + Send> ResultExt<T> for Result<T> {
 /// Provides tap-style combinators for side effects and transformations.
 pub trait GenericResultExt<T, E> {
     /// Perform a side effect on Ok value without consuming the Result.
+    #[must_use]
     fn tap_ok<F: FnOnce(&T)>(self, f: F) -> Self;
 
     /// Perform a side effect on Err value without consuming the Result.
+    #[must_use]
     fn tap_err<F: FnOnce(&E)>(self, f: F) -> Self;
 
     /// Execute a fallible side effect on Ok, returning the original Result if effect succeeds.
+    #[must_use]
     fn and_then_do<F: FnOnce(&T) -> std::result::Result<(), E>>(
         self,
         f: F,
     ) -> std::result::Result<T, E>;
 
     /// Map both Ok and Err in a single operation.
+    #[must_use]
     fn bimap<U, F, EF, E2>(self, ok_fn: F, err_fn: EF) -> std::result::Result<U, E2>
     where
         F: FnOnce(T) -> U,
         EF: FnOnce(E) -> E2;
 
     /// Unwrap with a context message (still returns Result, no panic).
+    #[must_use]
     fn with_context<C: std::fmt::Display, F: FnOnce() -> C>(
         self,
         context: F,
@@ -300,6 +317,7 @@ pub trait GenericResultExt<T, E> {
 }
 
 impl<T, E> GenericResultExt<T, E> for std::result::Result<T, E> {
+    #[inline]
     fn tap_ok<F: FnOnce(&T)>(self, f: F) -> Self {
         if let Ok(ref v) = self {
             f(v);
@@ -307,6 +325,7 @@ impl<T, E> GenericResultExt<T, E> for std::result::Result<T, E> {
         self
     }
 
+    #[inline]
     fn tap_err<F: FnOnce(&E)>(self, f: F) -> Self {
         if let Err(ref e) = self {
             f(e);
@@ -314,6 +333,7 @@ impl<T, E> GenericResultExt<T, E> for std::result::Result<T, E> {
         self
     }
 
+    #[inline]
     fn and_then_do<F: FnOnce(&T) -> std::result::Result<(), E>>(
         self,
         f: F,
@@ -321,6 +341,7 @@ impl<T, E> GenericResultExt<T, E> for std::result::Result<T, E> {
         self.and_then(|v| f(&v).map(|()| v))
     }
 
+    #[inline]
     fn bimap<U, F, EF, E2>(self, ok_fn: F, err_fn: EF) -> std::result::Result<U, E2>
     where
         F: FnOnce(T) -> U,
@@ -332,6 +353,7 @@ impl<T, E> GenericResultExt<T, E> for std::result::Result<T, E> {
         }
     }
 
+    #[inline]
     fn with_context<C: std::fmt::Display, F: FnOnce() -> C>(
         self,
         context: F,

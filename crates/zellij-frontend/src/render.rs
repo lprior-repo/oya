@@ -457,8 +457,8 @@ impl Renderer {
             .collect();
 
         let content_height = all_lines.len();
-        let padding_top = height.saturating_sub(content_height + 4) / 2;
-        let padding_bottom = height.saturating_sub(content_height + 4 + padding_top);
+        let padding_top = height.saturating_sub(content_height.saturating_add(4)) / 2;
+        let padding_bottom = height.saturating_sub(content_height.saturating_add(4).saturating_add(padding_top));
         let inner_width = width.saturating_sub(2);
         let overlay_style = style_helpers::overlay();
 
@@ -468,8 +468,8 @@ impl Renderer {
 
         // Render content lines using functional fold pattern
         let content_lines = all_lines.iter().fold(String::new(), |mut acc, line| {
-            let padding = " ".repeat(width.saturating_sub(2 + line.chars().count()));
-            acc.push_str(&overlay_style);
+            let padding = " ".repeat(width.saturating_sub(2_usize.saturating_add(line.chars().count())));
+            acc.push_str(overlay_style);
             acc.push_str("│ ");
             acc.push_str(line);
             acc.push_str(&padding);
@@ -603,7 +603,7 @@ fn calculate_stage_progress(
         1.0
     } else if let Some(failed_idx) = failed_stage {
         // All stages up to and including failed are "done" (even if failed)
-        (failed_idx + 1) as f32 / total_stages.max(1) as f32
+        failed_idx.saturating_add(1) as f32 / total_stages.max(1) as f32
     } else if running_stage.is_some() {
         // Completed stages + 0.5 for the running stage
         (completed_count as f32 + 0.5) / total_stages.max(1) as f32

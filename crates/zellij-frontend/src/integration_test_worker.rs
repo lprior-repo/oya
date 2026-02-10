@@ -430,8 +430,9 @@ impl IntegrationTestWorker {
                 let parts = line.split_whitespace().collect::<Vec<_>>();
 
                 if parts.len() >= 4 {
-                    let test_name = parts[1].to_string();
-                    let status = parts[3];
+                    // Use get for functional safety - we know parts.len() >= 4
+                    let test_name = parts.get(1).map_or_else(String::new, |s| s.to_string());
+                    let status = parts.get(3).map_or("", |s| *s);
 
                     let passed = status == "ok" || status == "ignored";
 
