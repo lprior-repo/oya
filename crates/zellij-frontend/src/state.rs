@@ -192,7 +192,7 @@ impl StateManager {
             if parent.exists() {
                 // Check if directory is writable by attempting to create a test file
                 let test_result =
-                    std::fs::metadata(parent).map_err(|e| StateError::DirectoryNotAvailable {
+                    std::fs::metadata(parent).map_err(|_e| StateError::DirectoryNotAvailable {
                         path: parent.display().to_string(),
                     });
 
