@@ -25,6 +25,7 @@
 
 // Zellij plugin modules (from oya-ui)
 pub mod components;
+pub mod exports;
 pub mod ipc;
 pub mod ipc_zellij;
 pub mod layout;
@@ -38,6 +39,9 @@ pub mod log;
 pub mod metrics;
 pub mod state;
 pub mod timer;
+
+// Web client is not available in WASM builds (Zellij plugin communicates via IPC)
+#[cfg(not(target_arch = "wasm32"))]
 pub mod web_client;
 
 // Re-exports for convenience - Zellij plugin
@@ -56,4 +60,7 @@ pub use log::{LogAggregator, LogEntry, LogLevel, LogSource};
 pub use metrics::{AgentMetrics, MetricsSnapshot, PoolMetrics};
 pub use state::{STATE_VERSION, StateError, StateManager, StateSnapshot};
 pub use timer::{RefreshTimer, TimerConfig, TimerError, TimerEvent, TimerState};
+
+// Web client is not available in WASM builds
+#[cfg(not(target_arch = "wasm32"))]
 pub use web_client::{HttpResponse, WebClient, WebClientConfig, WebClientError};

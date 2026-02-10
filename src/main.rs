@@ -13,17 +13,45 @@ mod commands;
 use anyhow::Result;
 use clap::{CommandFactory, Parser, Subcommand};
 use commands::{
-    DoctorArgs, InitArgs, LogsArgs, StormArgs, doctor_command, init_command, logs_command,
-    storm_command,
+    doctor_command, init_command, install_command, logs_command, serve_command, storm_command,
+    DoctorArgs, InitArgs, LogsArgs, StormArgs,
 };
 use tracing::info;
 
 /// OYA SDLC System - Storm goddess of transformation
+///
+/// 100x developer throughput with AI agent swarms
+///
+/// # Examples
+///
+/// Create a new task:
+///   oya new --slug my-feature
+///
+/// Run a pipeline stage:
+///   oya stage --slug my-feature --stage implement
+///
+/// Approve a task for integration:
+///   oya approve --slug my-feature
+///
+/// View workspace diagnostics:
+///   oya doctor
+///
+/// Start the IPC server:
+///   oya serve
+///   oya serve --address 127.0.0.1:5555
 #[derive(Parser, Debug)]
 #[command(name = "oya")]
 #[command(author = "Lewis Prior <lewis@lewisandquark.com>")]
 #[command(version = "0.1.0")]
-#[command(about = "100x developer throughput with AI agent swarms", long_about = None)]
+#[command(about = "100x developer throughput with AI agent swarms")]
+#[command(long_about = "100x developer throughput with AI agent swarms
+
+Examples:
+  oya new --slug my-feature
+  oya stage --slug my-feature --stage implement
+  oya approve --slug my-feature
+  oya doctor
+  oya serve --address 127.0.0.1:5555")]
 struct Oya {
     #[command(subcommand)]
     command: Option<Commands>,
@@ -67,6 +95,18 @@ enum Commands {
     Doctor(DoctorArgs),
     /// Orchestrate bead execution with workflow DAG
     Storm(StormArgs),
+    /// Start the IPC server (background daemon)
+    Serve {
+        /// IPC server address (default: 127.0.0.1:5555)
+        #[arg(short, long)]
+        address: Option<String>,
+    },
+    /// Install Zellij WASM plugin
+    Install {
+        /// Force reinstall even if already installed
+        #[arg(long)]
+        force: bool,
+    },
 }
 
 impl Oya {
@@ -76,27 +116,62 @@ impl Oya {
             Some(Commands::List) => {
                 info!("Listing all beads");
                 println!("List command not yet implemented");
-                Ok(())
+                eprintln!("Error: This command is not yet implemented");
+                std::process::exit(1);
             }
             Some(Commands::Show { slug }) => {
+                // Validate slug doesn't contain path traversal characters
+                if slug.contains('/') || slug.contains("..") {
+                    eprintln!("Error: Slug cannot contain path separators or traversal sequences");
+                    eprintln!("Hint: Use a simple identifier like 'my-feature' or 'task-123'");
+                    std::process::exit(2);
+                }
                 info!("Showing bead: {slug}");
                 println!("Show command not yet implemented for bead: {slug}");
-                Ok(())
+                eprintln!("Error: Show command is not yet implemented");
+                std::process::exit(1);
             }
             Some(Commands::New { slug }) => {
+                // Validate slug is not empty
+                if slug.trim().is_empty() {
+                    eprintln!("Error: Slug cannot be empty");
+                    eprintln!("Hint: Provide a valid task slug, e.g., oya new --slug my-task");
+                    std::process::exit(2);
+                }
+                // Validate slug doesn't contain path traversal characters
+                if slug.contains('/') || slug.contains("..") {
+                    eprintln!("Error: Slug cannot contain path separators or traversal sequences");
+                    eprintln!("Hint: Use a simple identifier like 'my-feature' or 'fix-bug-123'");
+                    std::process::exit(2);
+                }
                 info!("Creating new task: {slug}");
                 println!("New command not yet implemented for task: {slug}");
-                Ok(())
+                eprintln!("Error: New command is not yet implemented");
+                std::process::exit(1);
             }
             Some(Commands::Stage { slug, stage }) => {
+                // Validate slug doesn't contain path traversal characters
+                if slug.contains('/') || slug.contains("..") {
+                    eprintln!("Error: Slug cannot contain path separators or traversal sequences");
+                    eprintln!("Hint: Use a simple identifier like 'my-feature' or 'task-123'");
+                    std::process::exit(2);
+                }
                 info!("Running stage {stage} for task: {slug}");
                 println!("Stage command not yet implemented for task: {slug}, stage: {stage}");
-                Ok(())
+                eprintln!("Error: Stage command is not yet implemented");
+                std::process::exit(1);
             }
             Some(Commands::Approve { slug }) => {
+                // Validate slug doesn't contain path traversal characters
+                if slug.contains('/') || slug.contains("..") {
+                    eprintln!("Error: Slug cannot contain path separators or traversal sequences");
+                    eprintln!("Hint: Use a simple identifier like 'my-feature' or 'task-123'");
+                    std::process::exit(2);
+                }
                 info!("Approving task: {slug}");
                 println!("Approve command not yet implemented for task: {slug}");
-                Ok(())
+                eprintln!("Error: Approve command is not yet implemented");
+                std::process::exit(1);
             }
             Some(Commands::Logs(args)) => {
                 info!("Running logs command");
@@ -155,6 +230,11 @@ impl Oya {
                                     check.name, check.status, check.message
                                 );
                             }
+                            // Exit with code 1 if status is not Passed
+                            if output.status != crate::commands::CheckStatus::Passed {
+                                eprintln!("Error: Workspace diagnostics failed");
+                                std::process::exit(1);
+                            }
                             Ok(())
                         }
                         Err(e) => {
@@ -199,6 +279,26 @@ impl Oya {
                         }
                     }
                 })
+            }
+            Some(Commands::Serve { address }) => {
+                info!("Starting IPC server");
+                match serve_command(address) {
+                    Ok(_) => Ok(()),
+                    Err(e) => {
+                        eprintln!("Error: {e}");
+                        std::process::exit(1);
+                    }
+                }
+            }
+            Some(Commands::Install { force }) => {
+                info!("Installing Zellij plugin");
+                match install_command(force) {
+                    Ok(_) => Ok(()),
+                    Err(e) => {
+                        eprintln!("Error: {e}");
+                        std::process::exit(1);
+                    }
+                }
             }
             None => {
                 // No subcommand provided, show help

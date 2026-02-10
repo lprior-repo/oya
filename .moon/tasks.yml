@@ -334,10 +334,9 @@ tasks:
     inputs:
       - "crates/zellij-frontend/**/*.rs"
       - "crates/zellij-frontend/Cargo.toml"
-    outputs:
-      - "/target/wasm32-wasip1/release/zellij_frontend.wasm"
     options:
       cache: true
+      runFromWorkspaceRoot: true
 
   install-zellij:
     command: "mkdir -p ~/.config/zellij/plugins && cp target/wasm32-wasip1/release/zellij_frontend.wasm ~/.config/zellij/plugins/ && cp crates/zellij-frontend/plugin.yaml ~/.config/zellij/plugins/oya.yaml && echo '✅ Installed zellij-frontend plugin to ~/.config/zellij/plugins/'"
@@ -346,6 +345,7 @@ tasks:
       - "build-zellij"
     options:
       cache: false
+      runFromWorkspaceRoot: true
 
   # ============================================================================
   # OYA CLI (workspace-level tasks)
@@ -365,3 +365,60 @@ tasks:
     options:
       runFromWorkspaceRoot: true
       cache: false
+
+  # ============================================================================
+  # RELEASE TARGETS (Single oya binary + WASM plugin)
+  # ============================================================================
+
+  release:
+    command: "true"
+    description: "Build all release targets (oya binary + WASM plugin)"
+    deps:
+      - "~:build-oya"
+      - "~:build-zellij"
+    options:
+      cache: false
+
+  build-oya:
+    command: "cargo build --release --bin oya"
+    description: "Build oya binary (contains everything)"
+    inputs:
+      - "crates/**/*.rs"
+      - "src/**/*.rs"
+      - "Cargo.toml"
+      - "/Cargo.lock"
+    outputs:
+      - "/target/release/oya"
+    options:
+      cache: true
+      runFromWorkspaceRoot: true
+    env:
+      CARGO_BUILD_JOBS: "24"
+
+  install-all:
+    command: "true"
+    description: "Install everything (oya binary + WASM plugin)"
+    deps:
+      - "~:install"
+      - "~:install-zellij"
+    options:
+      cache: false
+
+  # Run oya directly from moon (without installing)
+  run:
+    command: "cargo run --release --bin oya --"
+    description: "Run oya directly (via moon)"
+    options:
+      cache: false
+      runInCI: false
+      runFromWorkspaceRoot: true
+      mergeArgs: "append"
+
+  # Convenience: start IPC server
+  run-serve:
+    command: "cargo run --release --bin oya -- serve"
+    description: "Start OYA IPC server"
+    options:
+      cache: false
+      runInCI: false
+      runFromWorkspaceRoot: true

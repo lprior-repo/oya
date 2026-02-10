@@ -35,14 +35,6 @@ oya-workflow = { path = "../workflow" }
 [lib]
 bench = false
 
-[[bin]]
-name = "api-server"
-path = "src/bin/api-server.rs"
-
-[[bin]]
-name = "ipc-server"
-path = "src/bin/ipc-server.rs"
-
 [[bench]]
 name = "restart_latency"
 harness = false
@@ -78,11 +70,6 @@ futures = "0.3"
 
 # HTTP client for health checks
 reqwest = { version = "0.12", features = ["json"] }
-
-# HTTP server for API
-axum = { workspace = true }
-tower = { workspace = true }
-tower-http = { workspace = true }
 
 # Functional Rust (Holy Trinity)
 im = { workspace = true }

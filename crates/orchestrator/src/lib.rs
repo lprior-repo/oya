@@ -67,11 +67,6 @@ pub mod distribution;
 /// delivery semantics for reliable inter-workflow communication.
 pub mod messaging;
 
-/// HTTP API server for orchestrator control.
-///
-/// Provides REST endpoints for managing beads, agents, and workflows.
-pub mod api;
-
 /// Persistence layer for workflows, beads, and checkpoints.
 pub mod persistence;
 
