@@ -7,7 +7,6 @@ use std::io::{BufRead, Read, Write};
 use std::process::{Command, Stdio};
 use std::thread;
 use zellij_frontend::{ZellijIpcClient, ZellijStdin, ZellijStdout};
-use oya_ipc::{GuestMessage, HostMessage};
 
 /// Helper to create a test message
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -380,12 +379,12 @@ fn test_newline_delimited_json_framing() {
     let mut line = String::new();
 
     reader.read_line(&mut line).expect("Failed to read line 1");
-    let received1: TestMessage = serde_json::from_str(&line.trim()).expect("Failed to parse msg1");
+    let received1: TestMessage = serde_json::from_str(line.trim()).expect("Failed to parse msg1");
     assert_eq!(msg1, received1);
 
     line.clear();
     reader.read_line(&mut line).expect("Failed to read line 2");
-    let received2: TestMessage = serde_json::from_str(&line.trim()).expect("Failed to parse msg2");
+    let received2: TestMessage = serde_json::from_str(line.trim()).expect("Failed to parse msg2");
     assert_eq!(msg2, received2);
 }
 
@@ -432,7 +431,7 @@ fn test_zellij_stdin_creation() {
 /// 3. Internal state is properly initialized
 #[test]
 fn test_zellij_ipc_client_creation() {
-    let client = ZellijIpcClient::new();
+    let _client = ZellijIpcClient::new();
     // Client is created successfully - no panic
     // Internal correlation context and pending requests are initialized
 }
@@ -446,7 +445,7 @@ fn test_zellij_ipc_client_creation() {
 /// 4. Errors are returned as Result (not panic)
 #[test]
 fn test_zellij_ipc_client_send_command_serialization() {
-    let mut client = ZellijIpcClient::new();
+    let _client = ZellijIpcClient::new();
 
     // Create a simple GuestMessage for testing
     // Note: We're testing serialization, not actual stdout writing

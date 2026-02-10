@@ -446,43 +446,49 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_stage_symbol_returns_running_for_in_progress_stage() {
+    fn test_stage_symbol_returns_running_for_in_progress_stage() -> Result<(), Box<dyn std::error::Error>> {
         let result = stage_symbol_from_status("in_progress", Some("implement"));
         assert_eq!(result, '◐');
+    Ok(())
     }
 
     #[test]
-    fn test_stage_symbol_returns_complete_for_passed_status() {
+    fn test_stage_symbol_returns_complete_for_passed_status() -> Result<(), Box<dyn std::error::Error>> {
         let result = stage_symbol_from_status("passed", None);
         assert_eq!(result, '●');
+    Ok(())
     }
 
     #[test]
-    fn test_stage_symbol_returns_failed_for_failed_status_with_stage() {
+    fn test_stage_symbol_returns_failed_for_failed_status_with_stage() -> Result<(), Box<dyn std::error::Error>> {
         let result = stage_symbol_from_status("failed", Some("validate: 3 tests failed"));
         assert_eq!(result, '✗');
+    Ok(())
     }
 
     #[test]
-    fn test_stage_symbol_returns_pending_for_created_status() {
+    fn test_stage_symbol_returns_pending_for_created_status() -> Result<(), Box<dyn std::error::Error>> {
         let result = stage_symbol_from_status("created", None);
         assert_eq!(result, '○');
+    Ok(())
     }
 
     #[test]
-    fn test_stage_symbol_returns_question_mark_for_unknown_stage_name() {
+    fn test_stage_symbol_returns_question_mark_for_unknown_stage_name() -> Result<(), Box<dyn std::error::Error>> {
         let result = stage_symbol_from_status("in_progress", Some("unknown-stage"));
         assert_eq!(result, '?');
+    Ok(())
     }
 
     #[test]
-    fn test_stage_symbol_extracts_stage_name_before_colon() {
+    fn test_stage_symbol_extracts_stage_name_before_colon() -> Result<(), Box<dyn std::error::Error>> {
         let result = stage_symbol_from_status("in_progress", Some("implement: writing code"));
         assert_eq!(result, '◐');
+    Ok(())
     }
 
     #[test]
-    fn test_task_row_update_from_ipc_stage_started() {
+    fn test_task_row_update_from_ipc_stage_started() -> Result<(), Box<dyn std::error::Error>> {
         let mut task = TaskRow::new("bd-3a0a.8", "created", "P0", "Rust", "task/bd-3a0a.8");
         let msg = HostMessage::StageStarted {
             bead_id: "bd-3a0a.8".to_string(),
@@ -497,7 +503,7 @@ mod tests {
     }
 
     #[test]
-    fn test_task_row_update_from_ipc_stage_completed() {
+    fn test_task_row_update_from_ipc_stage_completed() -> Result<(), Box<dyn std::error::Error>> {
         let mut task = TaskRow::new("bd-3a0a.8", "in_progress", "P0", "Rust", "task/bd-3a0a.8");
         task.stage = Some("implement".to_string());
 
@@ -515,7 +521,7 @@ mod tests {
     }
 
     #[test]
-    fn test_task_row_update_from_ipc_stage_failed() {
+    fn test_task_row_update_from_ipc_stage_failed() -> Result<(), Box<dyn std::error::Error>> {
         let mut task = TaskRow::new("bd-3a0a.8", "in_progress", "P0", "Rust", "task/bd-3a0a.8");
         task.stage = Some("validate".to_string());
 
@@ -534,7 +540,7 @@ mod tests {
     }
 
     #[test]
-    fn test_task_row_update_from_ipc_bead_id_mismatch() {
+    fn test_task_row_update_from_ipc_bead_id_mismatch() -> Result<(), Box<dyn std::error::Error>> {
         let mut task = TaskRow::new("bd-3a0a.8", "created", "P0", "Rust", "task/bd-3a0a.8");
         let msg = HostMessage::StageStarted {
             bead_id: "bd-3a0a.9".to_string(), // Different bead ID
@@ -549,7 +555,7 @@ mod tests {
     }
 
     #[test]
-    fn test_task_row_update_from_ipc_is_idempotent() {
+    fn test_task_row_update_from_ipc_is_idempotent() -> Result<(), Box<dyn std::error::Error>> {
         let mut task = TaskRow::new("bd-3a0a.8", "in_progress", "P0", "Rust", "task/bd-3a0a.8");
         task.stage = Some("implement".to_string());
 
@@ -574,8 +580,8 @@ mod tests {
     // ========================================================================
 
     #[test]
-    fn test_plugin_restores_state_from_snapshot() {
-        let mut plugin = OyaPlugin::new().expect("plugin creation should succeed");
+    fn test_plugin_restores_state_from_snapshot() -> Result<(), Box<dyn std::error::Error>> {
+        let mut plugin = OyaPlugin::new()?;
 
         // Create a snapshot with specific state
         let snapshot = crate::state::StateSnapshot {
@@ -610,8 +616,8 @@ mod tests {
     }
 
     #[test]
-    fn test_plugin_restore_clamps_invalid_selected_index() {
-        let mut plugin = OyaPlugin::new().expect("plugin creation should succeed");
+    fn test_plugin_restore_clamps_invalid_selected_index() -> Result<(), Box<dyn std::error::Error>> {
+        let mut plugin = OyaPlugin::new()?;
 
         // Create snapshot with invalid selected_index (out of bounds)
         let mut snapshot = crate::state::StateSnapshot {
@@ -636,8 +642,8 @@ mod tests {
     }
 
     #[test]
-    fn test_plugin_restore_rejects_incompatible_version() {
-        let mut plugin = OyaPlugin::new().expect("plugin creation should succeed");
+    fn test_plugin_restore_rejects_incompatible_version() -> Result<(), Box<dyn std::error::Error>> {
+        let mut plugin = OyaPlugin::new()?;
 
         // Create snapshot with incompatible version
         let snapshot = crate::state::StateSnapshot {
@@ -663,8 +669,8 @@ mod tests {
     }
 
     #[test]
-    fn test_plugin_create_snapshot() {
-        let plugin = OyaPlugin::new().expect("plugin creation should succeed");
+    fn test_plugin_create_snapshot() -> Result<(), Box<dyn std::error::Error>> {
+        let plugin = OyaPlugin::new()?;
 
         // Create snapshot
         let snapshot = plugin.create_snapshot();
@@ -680,8 +686,8 @@ mod tests {
     }
 
     #[test]
-    fn test_plugin_restore_preserves_task_stage_history() {
-        let mut plugin = OyaPlugin::new().expect("plugin creation should succeed");
+    fn test_plugin_restore_preserves_task_stage_history() -> Result<(), Box<dyn std::error::Error>> {
+        let mut plugin = OyaPlugin::new()?;
 
         // Set up task with stage history
         let mut task = TaskRow::new("test-task", "in_progress", "P0", "Rust", "task/test");
@@ -711,7 +717,7 @@ mod tests {
     }
 
     #[test]
-    fn test_plugin_default_state_file_path() {
+    fn test_plugin_default_state_file_path() -> Result<(), Box<dyn std::error::Error>> {
         let path = OyaPlugin::default_state_file_path();
 
         // Path should end with zellij-plugin-state.json
@@ -721,22 +727,22 @@ mod tests {
     // Additional tests from original second test module
 
     #[test]
-    fn test_plugin_creation() {
+    fn test_plugin_creation() -> Result<(), Box<dyn std::error::Error>> {
         let plugin = OyaPlugin::new();
         assert!(plugin.is_ok());
     }
 
     #[test]
-    fn test_size_serialization() {
+    fn test_size_serialization() -> Result<(), Box<dyn std::error::Error>> {
         let size = Size { rows: 24, cols: 80 };
-        let json = serde_json::to_string(&size).expect("serialization should succeed");
-        let decoded: Size = serde_json::from_str(&json).expect("deserialization should succeed");
+        let json = serde_json::to_string(&size)?;
+        let decoded: Size = serde_json::from_str(&json)?;
         assert_eq!(decoded.rows, 24);
         assert_eq!(decoded.cols, 80);
     }
 
     #[test]
-    fn test_plugin_state() {
+    fn test_plugin_state() -> Result<(), Box<dyn std::error::Error>> {
         assert_ne!(PluginState::Running, PluginState::Starting);
         assert_ne!(PluginState::Running, PluginState::Error);
     }
@@ -754,7 +760,7 @@ mod tests {
 
     #[test]
     fn test_sample_beads() {
-        let plugin = OyaPlugin::new().expect("plugin creation should succeed");
+        let plugin = OyaPlugin::new()?;
         assert!(!plugin.tasks.is_empty());
         assert_eq!(plugin.tasks[0].slug, "task-3ax5");
     }
@@ -765,7 +771,7 @@ mod tests {
 
     #[test]
     fn test_init_auto_save_with_valid_interval() {
-        let mut plugin = OyaPlugin::new().expect("plugin creation should succeed");
+        let mut plugin = OyaPlugin::new()?;
 
         let result = plugin.init_auto_save(30);
 
@@ -782,7 +788,7 @@ mod tests {
 
     #[test]
     fn test_init_auto_save_clamps_too_short_interval() {
-        let mut plugin = OyaPlugin::new().expect("plugin creation should succeed");
+        let mut plugin = OyaPlugin::new()?;
 
         // Interval too short (5 seconds) should be clamped to 10
         let result = plugin.init_auto_save(5);
@@ -797,7 +803,7 @@ mod tests {
 
     #[test]
     fn test_init_auto_save_clamps_too_long_interval() {
-        let mut plugin = OyaPlugin::new().expect("plugin creation should succeed");
+        let mut plugin = OyaPlugin::new()?;
 
         // Interval too long (700 seconds) should be clamped to 600
         let result = plugin.init_auto_save(700);
@@ -812,7 +818,7 @@ mod tests {
 
     #[test]
     fn test_init_auto_save_with_minimum_interval() {
-        let mut plugin = OyaPlugin::new().expect("plugin creation succeed");
+        let mut plugin = OyaPlugin::new()?;
 
         let result = plugin.init_auto_save(10);
 
@@ -822,7 +828,7 @@ mod tests {
 
     #[test]
     fn test_init_auto_save_with_maximum_interval() {
-        let mut plugin = OyaPlugin::new().expect("plugin creation should succeed");
+        let mut plugin = OyaPlugin::new()?;
 
         let result = plugin.init_auto_save(600);
 
@@ -832,7 +838,7 @@ mod tests {
 
     #[test]
     fn test_save_state_now_updates_timestamp() {
-        let mut plugin = OyaPlugin::new().expect("plugin creation should succeed");
+        let mut plugin = OyaPlugin::new()?;
 
         // Initially no timestamp
         assert!(plugin.last_save_timestamp().is_none());
@@ -857,7 +863,7 @@ mod tests {
 
     #[test]
     fn test_save_state_now_updates_status_message() {
-        let mut plugin = OyaPlugin::new().expect("plugin creation should succeed");
+        let mut plugin = OyaPlugin::new()?;
 
         let result = plugin.save_state_now();
 
@@ -877,14 +883,14 @@ mod tests {
 
     #[test]
     fn test_last_save_timestamp_returns_none_initially() {
-        let plugin = OyaPlugin::new().expect("plugin creation should succeed");
+        let plugin = OyaPlugin::new()?;
 
         assert!(plugin.last_save_timestamp().is_none());
     }
 
     #[test]
     fn test_last_save_timestamp_returns_value_after_save() {
-        let mut plugin = OyaPlugin::new().expect("plugin creation should succeed");
+        let mut plugin = OyaPlugin::new()?;
 
         // Attempt to save state (may fail in test environment)
         let save_result = plugin.save_state_now();
@@ -900,7 +906,7 @@ mod tests {
 
     #[test]
     fn test_handle_timer_event_saves_state_when_due() {
-        let mut plugin = OyaPlugin::new().expect("plugin creation should succeed");
+        let mut plugin = OyaPlugin::new()?;
         let _ = plugin.init_auto_save(1); // 1 second interval for testing
 
         // Set last tick to 2 seconds ago to make tick due
@@ -924,7 +930,7 @@ mod tests {
 
     #[test]
     fn test_handle_timer_event_skips_save_when_not_due() {
-        let mut plugin = OyaPlugin::new().expect("plugin creation should succeed");
+        let mut plugin = OyaPlugin::new()?;
         let _ = plugin.init_auto_save(30); // 30 second interval
 
         // Set last tick to just now (not due yet)
@@ -944,7 +950,7 @@ mod tests {
 
     #[test]
     fn test_handle_timer_event_with_no_timer_configured() {
-        let mut plugin = OyaPlugin::new().expect("plugin creation should succeed");
+        let mut plugin = OyaPlugin::new()?;
 
         // No timer initialized
         assert!(plugin.auto_save_timer.is_none());
@@ -958,7 +964,7 @@ mod tests {
 
     #[test]
     fn test_multiple_saves_update_timestamp() {
-        let mut plugin = OyaPlugin::new().expect("plugin creation should succeed");
+        let mut plugin = OyaPlugin::new()?;
 
         // First save
         let result1 = plugin.save_state_now();
@@ -983,7 +989,7 @@ mod tests {
 
     #[test]
     fn test_auto_save_timer_is_running_after_init() {
-        let mut plugin = OyaPlugin::new().expect("plugin creation should succeed");
+        let mut plugin = OyaPlugin::new()?;
 
         let _ = plugin.init_auto_save(30);
 
@@ -993,18 +999,18 @@ mod tests {
     }
 
     #[test]
-    fn test_state_save_and_restore_roundtrip() {
+    fn test_state_save_and_restore_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         use std::fs;
 
         // Create a temporary directory for state file
         let temp_dir = std::env::temp_dir().join("oya-test-state-roundtrip");
         let _ = fs::remove_dir_all(&temp_dir); // Clean up any previous test
-        fs::create_dir_all(&temp_dir).expect("Failed to create temp dir");
+        fs::create_dir_all(&temp_dir)?;
 
         let state_file = temp_dir.join("test-state.json");
 
         // Create plugin and set up specific state
-        let mut plugin1 = OyaPlugin::new().expect("Failed to create plugin");
+        let mut plugin1 = OyaPlugin::new()?;
 
         // Modify state to test restoration
         plugin1.selected_index = 2;
@@ -1013,19 +1019,19 @@ mod tests {
 
         // Save state
         let state_manager = crate::state::StateManager::new(state_file.clone(), 1_048_576)
-            .expect("Failed to create StateManager");
+            ?;
         let save_result = state_manager.save_state(&plugin1);
 
         // Verify save succeeded (or skip if filesystem unavailable)
         if save_result.is_ok() {
             // Create a new plugin instance
-            let mut plugin2 = OyaPlugin::new().expect("Failed to create second plugin");
+            let mut plugin2 = OyaPlugin::new()?;
 
             // Load state
             let load_result = state_manager.load_state();
             assert!(load_result.is_ok(), "Load should succeed");
 
-            let mut snapshot = load_result.unwrap().expect("State should exist");
+            let mut snapshot = load_result.unwrap()?;
             assert!(snapshot.validate().is_ok(), "Snapshot should be valid");
 
             // Restore state
