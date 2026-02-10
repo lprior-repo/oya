@@ -2,6 +2,11 @@
 //!
 //! Provides ANSI color codes and styling for terminal UI.
 
+pub mod style;
+
+// Re-export style functions for convenience
+pub use style::*;
+
 /// Normal border color (dim)
 #[must_use]
 pub const fn border_normal() -> &'static str {
@@ -19,3 +24,4 @@ pub const fn border_focused() -> &'static str {
 pub const fn reset() -> &'static str {
     "\x1b[0m"
 }
+

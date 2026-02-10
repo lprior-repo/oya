@@ -8,13 +8,49 @@
 // - Focused pane highlighting
 // - Help overlay rendering
 
-use crate::components::style;
 use crate::layout::{Layout, Pane, PaneType};
-use crate::plugin::{TaskRow, stage_symbol_from_status};
-use crate::spinner::SpinnerFrame;
-use std::fmt::Write;
-use std::time::SystemTime;
+use crate::plugin::{TaskRow, StageState};
 use thiserror::Error;
+
+// Style helper functions using functional patterns
+mod style_helpers {
+    use crate::components;
+
+    #[must_use]
+    pub const fn selected() -> &'static str {
+        components::selected()
+    }
+
+    #[must_use]
+    pub const fn header() -> &'static str {
+        components::header()
+    }
+
+    #[must_use]
+    pub const fn label() -> &'static str {
+        components::label()
+    }
+
+    #[must_use]
+    pub const fn text() -> &'static str {
+        components::text()
+    }
+
+    #[must_use]
+    pub const fn overlay() -> &'static str {
+        components::overlay()
+    }
+
+    #[must_use]
+    pub const fn border_normal() -> &'static str {
+        components::border_normal()
+    }
+
+    #[must_use]
+    pub const fn border_focused() -> &'static str {
+        components::border_focused()
+    }
+}
 
 /// Errors that can occur during help overlay rendering
 #[derive(Debug, Error, Clone, PartialEq)]
@@ -26,31 +62,6 @@ pub enum HelpOverlayError {
 
 /// Result type for help overlay rendering
 pub type HelpOverlayResult<T> = Result<T, HelpOverlayError>;
-
-/// Calculate the current spinner frame based on system time.
-///
-/// # Preconditions
-/// - SystemTime::now() returns a valid time (always true in practice)
-///
-/// # Postconditions
-/// - Returns a valid SpinnerFrame (Frame0, Frame1, Frame2, or Frame3)
-/// - Frame advances every 250ms for smooth animation
-///
-/// # Returns
-/// The current spinner frame based on elapsed time since UNIX_EPOCH
-#[must_use]
-fn current_spinner_frame() -> SpinnerFrame {
-    // Get current time since UNIX_EPOCH
-    let duration_since_epoch = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap_or_else(|_| std::time::Duration::from_secs(0));
-
-    // Convert to milliseconds and divide by 250ms per frame
-    // This gives us 4 frames per second for smooth animation
-    let frame_number = duration_since_epoch.as_millis() as usize / 250;
-
-    SpinnerFrame::from_frame_number(frame_number)
-}
 
 /// Terminal renderer for OYA UI
 pub struct Renderer {
@@ -96,77 +107,61 @@ impl Renderer {
         focused_pane: PaneType,
         status_message: Option<&str>,
     ) -> String {
-        let mut output = String::new();
-
-        // Render each pane
-        for pane in &layout.panes {
-            let pane_content = match pane.pane_type {
-                PaneType::TaskList => self.render_bead_list(layout, tasks, selected_index),
-                PaneType::TaskDetail => {
-                    if let Some(task) = tasks.get(selected_index) {
-                        self.render_bead_detail(layout, task)
-                    } else {
-                        String::new()
+        // Render panes using functional fold pattern
+        let panes_rendered = layout
+            .panes()
+            .iter()
+            .fold(String::new(), |mut acc: String, pane| {
+                let pane_content = match pane.pane_type {
+                    PaneType::BeadList => self.render_bead_list(layout, tasks, selected_index),
+                    PaneType::BeadDetail => {
+                        tasks
+                            .get(selected_index)
+                            .map_or_else(String::new, |task| self.render_bead_detail(layout, task))
                     }
-                }
-                PaneType::WorkflowGraph => self.render_workflow_graph(pane, focused_pane),
-                PaneType::PipelineView => {
-                    if let Some(task) = tasks.get(selected_index) {
-                        self.render_pipeline_view(layout, task)
-                    } else {
-                        String::new()
+                    PaneType::WorkflowGraph => self.render_workflow_graph(pane, focused_pane),
+                    PaneType::PipelineView => {
+                        tasks
+                            .get(selected_index)
+                            .map_or_else(String::new, |task| self.render_pipeline_view(pane, task))
                     }
-                }
-            };
+                };
 
-            let rendered = self.render_pane(pane, &pane_content, focused_pane);
-            output.push_str(&rendered);
-        }
+                let rendered = self.render_pane(pane, &pane_content, focused_pane);
+                acc.push_str(&rendered);
+                acc
+            });
 
-        // Render status bar
+        // Add status bar
         let status = self.render_status_bar(focused_pane, status_message);
-        output.push_str(&status);
-
-        output
+        format!("{panes_rendered}{status}")
     }
 
     /// Render a single pane with border
     fn render_pane(&self, pane: &Pane, content: &str, focused_pane: PaneType) -> String {
         let is_focused = pane.pane_type == focused_pane;
-        let border_color = if is_focused { style::border_focused() } else { style::border_normal() };
+        let border_color = if is_focused { style_helpers::border_focused() } else { style_helpers::border_normal() };
         let width = pane.width;
+        let title = format!(" {} ", pane.title);
 
-        let mut output = String::new();
+        // Render top border
+        let top_border = self.render_top_border(width, &title);
 
-        // Top border with title
-        let title = if is_focused {
-            format!(" {} ", pane.title)
-        } else {
-            format!(" {} ", pane.title)
-        };
-        output.push_str(&border_color);
-        output.push_str(&self.render_top_border(width, &title));
-
-        // Content lines
-        for line in content.lines() {
-            output.push_str(&border_color);
-            output.push_str("│");
-            output.push_str(line);
-            // Pad to width
+        // Render content lines using functional fold pattern
+        let content_lines = content.lines().fold(String::new(), |mut acc, line| {
             let line_len = line.chars().count();
-            if line_len < width.saturating_sub(2) {
-                for _ in 0..(width.saturating_sub(2).saturating_sub(line_len)) {
-                    output.push(' ');
-                }
-            }
-            output.push_str("│\n");
-        }
+            let padding = " ".repeat(width.saturating_sub(2).saturating_sub(line_len));
+            acc.push_str(&border_color);
+            acc.push_str("│");
+            acc.push_str(line);
+            acc.push_str(&padding);
+            acc.push_str("│\n");
+            acc
+        });
 
-        // Bottom border
-        output.push_str(&self.render_bottom_border(width));
-        output.push_str("\x1b[0m"); // Reset colors
-
-        output
+        // Assemble complete pane
+        let bottom_border = self.render_bottom_border(width);
+        format!("{border_color}{top_border}{content_lines}{bottom_border}\x1b[0m")
     }
 
     /// Render top border with title
@@ -174,27 +169,16 @@ impl Renderer {
         let title_len = title.chars().count();
         let remaining = width.saturating_sub(2).saturating_sub(title_len);
 
-        let mut border = String::from("┌");
-        border.push_str(title);
+        // Functional pattern: use repeat instead of loop
+        let border_line = "─".repeat(remaining);
 
-        for _ in 0..remaining {
-            border.push('─');
-        }
-
-        border.push_str("┐\n");
-        border
+        format!("┌{}┐\n", format!("{title}{border_line}"))
     }
 
     /// Render bottom border
     fn render_bottom_border(&self, width: usize) -> String {
-        let mut border = String::from("└");
-
-        for _ in 0..width.saturating_sub(2) {
-            border.push('─');
-        }
-
-        border.push_str("┘");
-        border
+        let border_line = "─".repeat(width.saturating_sub(2));
+        format!("└{border_line}┘")
     }
 
     /// Render task list pane
@@ -204,254 +188,202 @@ impl Renderer {
         tasks: &[TaskRow],
         selected_index: usize,
     ) -> String {
-        let mut output = String::new();
+        // Get the bead list pane for width calculation
+        let pane_width = layout
+            .get_pane(PaneType::BeadList)
+            .map_or(40, |p| p.width);
 
-        for (i, task) in tasks.iter().enumerate() {
-            let is_selected = i == selected_index;
+        // Render each task line using functional fold pattern
+        tasks
+            .iter()
+            .enumerate()
+            .fold(String::new(), |mut acc, (i, task)| {
+                let is_selected = i == selected_index;
 
-            // Selection indicator
-            if is_selected {
-                output.push_str(&style::selected());
-                output.push_str("►");
-            } else {
-                output.push_str(" ");
-            }
+                // Selection indicator
+                let indicator = if is_selected {
+                    format!("{}►", style_helpers::selected())
+                } else {
+                    " ".to_string()
+                };
+                acc.push_str(&indicator);
 
-            // ID (truncated if needed)
-            let id = truncate(&task.id, 12);
-            output.push_str(&id);
+                // Slug (truncated if needed)
+                let slug = truncate(&task.slug, 12);
+                let slug_padding = " ".repeat(14_usize.saturating_sub(slug.chars().count()));
+                acc.push_str(&slug);
+                acc.push_str(&slug_padding);
 
-            // Padding
-            for _ in 0..(14_usize.saturating_sub(id.chars().count())) {
-                output.push(' ');
-            }
+                // Stage symbol - use map_or for default
+                let symbol = task
+                    .stage
+                    .as_ref()
+                    .and_then(|s| s.split(':').next())
+                    .map_or("○", stage_symbol);
+                let symbol_padding = " ".repeat(16_usize.saturating_sub(symbol.chars().count()));
+                acc.push_str(symbol);
+                acc.push_str(&symbol_padding);
 
-            // Stage symbol and status
-            let (stage, status_info, completed) = stage_status(task);
+                // Slug as title
+                let title = truncate(&task.slug, pane_width.saturating_sub(40));
+                acc.push_str(&title);
 
-            if let Some(s) = stage {
-                output.push_str(&s);
-                for _ in 0..(16_usize.saturating_sub(s.chars().count())) {
-                    output.push(' ');
+                // Reset colors
+                acc.push_str("\x1b[0m");
+
+                // Progress bar if in progress
+                if task.status == "in_progress" {
+                    let (running_stage, failed_stage, completed) = get_stage_info(task);
+                    let progress = calculate_stage_progress(&task.stages, running_stage, failed_stage, completed);
+                    let bar = render_progress_bar(progress, 10);
+                    acc.push_str(&bar);
                 }
-            } else if let Some(info) = status_info {
-                output.push_str(&info);
-                for _ in 0..(16_usize.saturating_sub(info.chars().count())) {
-                    output.push(' ');
-                }
-            } else {
-                for _ in 0..16 {
-                    output.push(' ');
-                }
-            }
 
-            // Title
-            let title = truncate(&task.title, layout.width.saturating_sub(40));
-            output.push_str(&title);
-
-            // Reset colors
-            output.push_str("\x1b[0m");
-
-            // Progress bar if in progress
-            if task.status == "in_progress" && !completed {
-                let progress = stage_progress(
-                    task.stage_index,
-                    task.running_stage,
-                    task.failed_stage,
-                    completed,
-                );
-                let bar = render_progress_bar(progress, 10);
-                output.push_str(&bar);
-            }
-
-            output.push('\n');
-        }
-
-        output
+                acc.push('\n');
+                acc
+            })
     }
 
     /// Render task detail pane
     fn render_bead_detail(&self, _layout: &Layout, task: &TaskRow) -> String {
-        let mut output = String::new();
+        // Header with slug
+        let header = format!("{}{}\n\n", style_helpers::header(), task.slug);
 
-        output.push_str(&style::header());
-        output.push_str(&task.title);
-        output.push_str("\n\n");
+        // Build field lines using functional pattern
+        let fields = [
+            ("Status", &task.status),
+            ("Priority", &task.priority),
+            ("Language", &task.language),
+            ("Branch", &task.branch),
+        ];
 
-        output.push_str(&style::label());
-        output.push_str("ID:       ");
-        output.push_str(&style::text());
-        output.push_str(&task.id);
-        output.push('\n');
+        let field_lines = fields.iter().fold(String::new(), |mut acc, (label, value)| {
+            acc.push_str(&style_helpers::label());
+            acc.push_str(&format!("{label:<9} "));
+            acc.push_str(&style_helpers::text());
+            acc.push_str(value);
+            acc.push('\n');
+            acc
+        });
 
-        output.push_str(&style::label());
-        output.push_str("Status:   ");
-        output.push_str(&style::text());
-        output.push_str(&task.status);
-        output.push('\n');
+        // Stage line if present
+        let stage_line = task
+            .stage
+            .as_ref()
+            .map_or_else(String::new, |stage| {
+                format!("{}Stage:    {}{}\n", style_helpers::label(), style_helpers::text(), stage)
+            });
 
-        if let Some(ref stage) = task.stage {
-            output.push_str(&style::label());
-            output.push_str("Stage:    ");
-            output.push_str(&style::text());
-            output.push_str(stage);
-            output.push('\n');
-        }
+        // Pipeline header
+        let pipeline_header = format!("\n{}Pipeline:\n", style_helpers::header());
 
-        if let Some(ref detail) = task.stage_detail {
-            output.push_str(&style::label());
-            output.push_str("Detail:   ");
-            output.push_str(&style::text());
-            output.push_str(detail);
-            output.push('\n');
-        }
+        // Calculate stage info once
+        let (running_stage, failed_stage, completed) = get_stage_info(task);
 
-        // Stage pipeline
-        output.push_str("\n");
-        output.push_str(&style::header());
-        output.push_str("Pipeline:\n");
-
-        for (i, stage_name) in task
-            .pipeline_stages
+        // Render pipeline stages using functional fold
+        let pipeline_stages = task
+            .stages
             .iter()
-            .enumerate()
-        {
-            let symbol = stage_symbol(stage_name);
-            let progress = stage_progress(
-                i,
-                task.running_stage,
-                task.failed_stage,
-                task.status == "passed" || task.status == "integrated",
-            );
+            .fold(String::new(), |mut acc, stage_info| {
+                let progress = calculate_stage_progress(&task.stages, running_stage, failed_stage, completed);
+                let bar = render_progress_bar(progress, 15);
+                acc.push_str(&style_helpers::text());
+                acc.push_str("  ");
+                acc.push_str(stage_info.symbol());
+                acc.push(' ');
+                acc.push_str(&stage_info.name);
+                acc.push_str(&bar);
+                acc.push('\n');
+                acc
+            });
 
-            output.push_str(&style::text());
-            output.push_str("  ");
-            output.push_str(symbol);
-            output.push(' ');
-            output.push_str(stage_name);
-
-            // Progress bar
-            let bar = render_progress_bar(progress, 15);
-            output.push_str(&bar);
-            output.push('\n');
-        }
-
-        output
+        // Assemble complete detail view
+        format!("{header}{field_lines}{stage_line}{pipeline_header}{pipeline_stages}")
     }
 
     /// Render pipeline view pane
-    fn render_pipeline_view(&self, layout: &Layout, task: &TaskRow) -> String {
-        let mut output = String::new();
+    fn render_pipeline_view(&self, pane: &Pane, task: &TaskRow) -> String {
+        let header = format!("{}Pipeline: {}\n\n", style_helpers::header(), task.slug);
 
-        output.push_str(&style::header());
-        output.push_str("Pipeline: ");
-        output.push_str(&task.title);
-        output.push_str("\n\n");
+        // Calculate stage info once
+        let (running_stage, failed_stage, completed) = get_stage_info(task);
 
-        for (i, stage_name) in task.pipeline_stages.iter().enumerate() {
-            let symbol = stage_symbol(stage_name);
-            let progress = stage_progress(
-                i,
-                task.running_stage,
-                task.failed_stage,
-                task.status == "passed" || task.status == "integrated",
-            );
+        // Render pipeline stages using functional fold
+        let stages = task
+            .stages
+            .iter()
+            .fold(String::new(), |mut acc, stage_info| {
+                let progress = calculate_stage_progress(&task.stages, running_stage, failed_stage, completed);
+                let bar = render_progress_bar(progress, pane.width.saturating_sub(20));
+                acc.push_str(&style_helpers::text());
+                acc.push_str(stage_info.symbol());
+                acc.push(' ');
+                acc.push_str(&stage_info.name);
+                acc.push_str(&bar);
+                acc.push('\n');
+                acc
+            });
 
-            // Stage name
-            output.push_str(&style::text());
-            output.push_str(symbol);
-            output.push(' ');
-            output.push_str(stage_name);
-
-            // Progress bar
-            let bar = render_progress_bar(progress, layout.width.saturating_sub(20));
-            output.push_str(&bar);
-            output.push('\n');
-        }
-
-        output
+        format!("{header}{stages}")
     }
 
     /// Render workflow graph pane (DAG visualization)
     fn render_workflow_graph(&self, pane: &Pane, focused_pane: PaneType) -> String {
         let is_focused = pane.pane_type == focused_pane;
-        let mut output = String::new();
 
         if is_focused {
-            output.push_str(&style::header());
-            output.push_str("Workflow Dependency Graph\n");
-            output.push_str(&style::text());
-            output.push_str("(Horizontal DAG visualization)\n\n");
-            output.push_str(&self.render_horizontal_dag());
+            let dag = self.render_horizontal_dag();
+            format!(
+                "{}Workflow Dependency Graph\n{}(Horizontal DAG visualization)\n\n{dag}",
+                style_helpers::header(),
+                style_helpers::text()
+            )
         } else {
-            output.push_str("Press Enter to view graph");
+            "Press Enter to view graph".to_string()
         }
-
-        output
     }
 
     /// Render a horizontal DAG (left-to-right flow)
     fn render_horizontal_dag(&self) -> String {
-        let mut output = String::new();
-
-        output.push_str("┌─────────┐     ┌─────────┐     ┌─────────┐\n");
-        output.push_str("│ src-abc │ ──▶ │ src-def │ ──▶ │ src-ghi │\n");
-        output.push_str("└─────────┘     └─────────┘     └─────────┘\n");
-        output.push_str("                   │\n");
-        output.push_str("                   ▼\n");
-        output.push_str("                ┌─────────┐\n");
-        output.push_str("                │ src-jkl │\n");
-        output.push_str("                └─────────┘\n");
-
-        output
+        // Static DAG visualization using multiline string
+        concat!(
+            "┌─────────┐     ┌─────────┐     ┌─────────┐\n",
+            "│ src-abc │ ──▶ │ src-def │ ──▶ │ src-ghi │\n",
+            "└─────────┘     └─────────┘     └─────────┘\n",
+            "                   │\n",
+            "                   ▼\n",
+            "                ┌─────────┐\n",
+            "                │ src-jkl │\n",
+            "                └─────────┘\n",
+        )
+        .to_string()
     }
 
     /// Render status bar at bottom of screen
     fn render_status_bar(&self, focused_pane: PaneType, status_message: Option<&str>) -> String {
-        let mut output = String::new();
-
-        output.push_str(&style::border_normal());
-        output.push_str("┌");
-
-        for _ in 0..78 {
-            output.push('─');
-        }
-
-        output.push_str("┐\n");
-        output.push_str("│");
+        let border_line = "─".repeat(78);
 
         // Focus indicator
         let focus_text = match focused_pane {
-            PaneType::TaskList => "Tasks",
-            PaneType::TaskDetail => "Detail",
+            PaneType::BeadList => "Beads",
+            PaneType::BeadDetail => "Details",
             PaneType::WorkflowGraph => "Graph",
             PaneType::PipelineView => "Pipeline",
         };
-        output.push_str(&format!(" Focus: {:<8} ", focus_text));
 
-        // Status message
-        if let Some(msg) = status_message {
-            output.push_str(msg);
-        } else {
-            output.push_str("↑↓: navigate | Enter: focus | ?: help");
-        }
+        // Status message using map_or for default
+        let msg = status_message.map_or("↑↓: navigate | Enter: focus | ?: help", |s| s);
 
-        // Pad to width
-        let current_len = output.chars().count();
-        for _ in 0..(80_usize.saturating_sub(current_len).saturating_sub(1)) {
-            output.push(' ');
-        }
+        // Build content line
+        let content = format!(" Focus: {:<8} {msg}", focus_text);
+        let content_len = content.chars().count();
+        let padding = " ".repeat(80_usize.saturating_sub(content_len).saturating_sub(1));
 
-        output.push_str("│\n");
-        output.push_str("└");
-
-        for _ in 0..78 {
-            output.push('─');
-        }
-
-        output.push_str("┘\x1b[0m\n");
-
-        output
+        // Assemble complete status bar
+        format!(
+            "{}┌{border_line}┐\n│{content}{padding}│\n└{border_line}┘\x1b[0m\n",
+            style_helpers::border_normal()
+        )
     }
 
     /// Render help overlay
@@ -460,6 +392,8 @@ impl Renderer {
     ///
     /// * `rows` - Terminal rows
     /// * `cols` - Terminal columns
+    /// * `keybindings` - Keybindings for current pane
+    /// * `focused_pane` - Currently focused pane type
     ///
     /// # Returns
     ///
@@ -472,6 +406,8 @@ impl Renderer {
         &self,
         rows: usize,
         cols: usize,
+        keybindings: &[(char, &str)],
+        focused_pane: PaneType,
     ) -> HelpOverlayResult<String> {
         const MIN_ROWS: usize = 10;
         const MIN_COLS: usize = 40;
@@ -480,100 +416,89 @@ impl Renderer {
             return Err(HelpOverlayError::TerminalTooSmall { rows, cols });
         }
 
-        let mut output = String::new();
-
-        // Overlay border
         let width = cols.min(80);
         let height = rows.min(25);
 
-        output.push_str(&style::overlay());
-        output.push_str(&self.render_overlay_top_border(width, " Help "));
+        // Render top border
+        let top_border = self.render_overlay_top_border(width, " Help ");
 
-        // Help content
-        let content = [
-            "Navigation:",
-            "  ↑/k    Move up",
-            "  ↓/j    Move down",
-            "  Enter  Focus pane",
-            "",
-            "Actions:",
-            "  ?      Show/hide help",
+        // Focus indicator
+        let focus_text = match focused_pane {
+            PaneType::BeadList => "Bead List",
+            PaneType::BeadDetail => "Bead Details",
+            PaneType::WorkflowGraph => "Workflow Graph",
+            PaneType::PipelineView => "Pipeline View",
+        };
+
+        // Build all content lines using functional patterns
+        // Create iterator of static content lines
+        let static_lines = [
+            "Global Keys:",
+            "  ?      Show/hide this help",
             "  q      Quit",
+            "  Tab    Switch focus between panes",
             "",
-            "Pane Types:",
-            "  Tasks    - Task list",
-            "  Detail   - Task details",
-            "  Graph    - Workflow DAG",
-            "  Pipeline - Stage pipeline",
-        ];
+        ]
+        .iter()
+        .map(|s| (*s).to_string());
 
-        let content_height = content.len();
+        // Create iterator of focus section
+        let focus_lines = [
+            format!("Current Focus: {focus_text}"),
+            "".to_string(),
+            "Keybindings for current pane:".to_string(),
+        ]
+        .into_iter();
+
+        // Combine all lines: static + focus + keybindings
+        let all_lines: Vec<String> = static_lines
+            .chain(focus_lines)
+            .chain(keybindings.iter().map(|(key, desc)| format!("  {key}      {desc}")))
+            .collect();
+
+        let content_height = all_lines.len();
         let padding_top = height.saturating_sub(content_height + 4) / 2;
         let padding_bottom = height.saturating_sub(content_height + 4 + padding_top);
+        let inner_width = width.saturating_sub(2);
+        let overlay_style = style_helpers::overlay();
 
-        // Top padding
-        for _ in 0..padding_top {
-            output.push_str(&style::overlay());
-            output.push_str("│");
-            for _ in 0..width.saturating_sub(2) {
-                output.push(' ');
-            }
-            output.push_str("│\n");
-        }
+        // Helper to render padding lines using repeat
+        let padding_line = format!("{overlay_style}│{}│\n", " ".repeat(inner_width));
+        let top_padding = padding_line.repeat(padding_top);
 
-        // Content
-        for line in content {
-            output.push_str(&style::overlay());
-            output.push_str("│ ");
-            output.push_str(line);
-            for _ in 0..width.saturating_sub(2 + line.chars().count()) {
-                output.push(' ');
-            }
-            output.push_str("│\n");
-        }
+        // Render content lines using functional fold pattern
+        let content_lines = all_lines.iter().fold(String::new(), |mut acc, line| {
+            let padding = " ".repeat(width.saturating_sub(2 + line.chars().count()));
+            acc.push_str(&overlay_style);
+            acc.push_str("│ ");
+            acc.push_str(line);
+            acc.push_str(&padding);
+            acc.push_str("│\n");
+            acc
+        });
 
-        // Bottom padding
-        for _ in 0..padding_bottom {
-            output.push_str(&style::overlay());
-            output.push_str("│");
-            for _ in 0..width.saturating_sub(2) {
-                output.push(' ');
-            }
-            output.push_str("│\n");
-        }
+        let bottom_padding = padding_line.repeat(padding_bottom);
 
-        output.push_str(&self.render_overlay_bottom_border(width));
-        output.push_str("\x1b[0m");
-
-        Ok(output)
+        // Assemble complete overlay
+        let bottom_border = self.render_overlay_bottom_border(width);
+        Ok(format!(
+            "{overlay_style}{top_border}{top_padding}{content_lines}{bottom_padding}{bottom_border}\x1b[0m"
+        ))
     }
 
     /// Render overlay top border
     fn render_overlay_top_border(&self, width: usize, title: &str) -> String {
         let title_len = title.chars().count();
         let remaining = width.saturating_sub(2).saturating_sub(title_len);
+        let border_line = "═".repeat(remaining);
 
-        let mut border = String::from("╔");
-        border.push_str(title);
-
-        for _ in 0..remaining {
-            border.push('═');
-        }
-
-        border.push_str("╗\n");
-        border
+        format!("╔{title}{border_line}╗\n")
     }
 
     /// Render overlay bottom border
     fn render_overlay_bottom_border(&self, width: usize) -> String {
-        let mut border = String::from("╚");
-
-        for _ in 0..width.saturating_sub(2) {
-            border.push('═');
-        }
-
-        border.push_str("╝");
-        border
+        let border_line = "═".repeat(width.saturating_sub(2));
+        format!("╚{border_line}╝")
     }
 }
 
@@ -583,16 +508,24 @@ impl Default for Renderer {
     }
 }
 
-/// Truncate text to fit width
+/// Truncate text to fit width using functional patterns.
+///
+/// Uses char_indices for byte-efficient truncation without collecting into Vec.
+#[must_use]
 fn truncate(text: &str, width: usize) -> String {
-    let chars: Vec<char> = text.chars().collect();
-    if chars.len() <= width {
-        text.to_string()
-    } else if width > 3 {
-        let truncated: String = chars.iter().take(width.saturating_sub(3)).collect();
-        format!("{}...", truncated)
-    } else {
-        "...".to_string()
+    // Find the byte position at which to truncate
+    let byte_pos = text
+        .char_indices()
+        .map(|(pos, _)| pos)
+        .nth(width);
+
+    match byte_pos {
+        None => text.to_string(), // Text fits within width
+        Some(pos) if width > 3 && pos < text.len() => {
+            // Truncate and add ellipsis
+            format!("{}...", &text[..pos])
+        }
+        Some(_) => "...".to_string(), // Width too small for meaningful truncation
     }
 }
 
@@ -751,23 +684,72 @@ fn render_progress_bar(progress: f32, width: usize) -> String {
     let empty = width.saturating_sub(filled);
     let percentage = (clamped * 100.0).round() as usize;
 
-    let mut bar = String::new();
-    bar.push('[');
+    // Build bar using functional patterns: repeat chars and collect
+    let filled_part = "█".repeat(filled);
+    let empty_part = "░".repeat(empty);
 
-    // Filled portion
-    for _ in 0..filled {
-        bar.push('█');
-    }
+    format!("[{}{}] {}%", filled_part, empty_part, percentage)
+}
 
-    // Empty portion
-    for _ in 0..empty {
-        bar.push('░');
-    }
+/// Extract stage lifecycle information from a task.
+///
+/// Returns (running_stage_index, failed_stage_index, is_completed) tuple.
+/// All indices are Option<usize> representing positions in the stages vector.
+/// Uses functional patterns: find_position with iterator combinators.
+#[must_use]
+fn get_stage_info(task: &TaskRow) -> (Option<usize>, Option<usize>, bool) {
+    let is_completed = matches!(task.status.as_str(), "passed" | "integrated");
 
-    bar.push(']');
-    bar.push_str(&format!(" {}%", percentage));
+    // Use iterator find_position for running stage
+    let running_stage = task
+        .stages
+        .iter()
+        .position(|s| matches!(s.state, StageState::Running));
 
-    bar
+    // Use iterator find_position for failed stage
+    let failed_stage = task
+        .stages
+        .iter()
+        .position(|s| matches!(s.state, StageState::Failed));
+
+    (running_stage, failed_stage, is_completed)
+}
+
+/// Calculate progress for a specific stage in the pipeline.
+///
+/// Uses functional patterns with match expressions instead of imperative logic.
+/// Returns f32 between 0.0 and 1.0 representing completion percentage.
+#[must_use]
+fn calculate_stage_progress(
+    stages: &[crate::plugin::StageInfo],
+    running_stage: Option<usize>,
+    failed_stage: Option<usize>,
+    is_completed: bool,
+) -> f32 {
+    // Total number of stages for percentage calculation
+    let total_stages = stages.len();
+
+    // Calculate completed count using iterator combinators
+    let completed_count = stages
+        .iter()
+        .filter(|s| matches!(s.state, StageState::Completed))
+        .count();
+
+    // Functional pattern: nested map_or_else for clean composition
+    let base_progress = if is_completed {
+        1.0
+    } else if let Some(failed_idx) = failed_stage {
+        // All stages up to and including failed are "done" (even if failed)
+        (failed_idx + 1) as f32 / total_stages.max(1) as f32
+    } else if running_stage.is_some() {
+        // Completed stages + 0.5 for the running stage
+        (completed_count as f32 + 0.5) / total_stages.max(1) as f32
+    } else {
+        // Only completed stages contribute
+        completed_count as f32 / total_stages.max(1) as f32
+    };
+
+    base_progress.clamp(0.0, 1.0)
 }
 
 #[cfg(test)]
