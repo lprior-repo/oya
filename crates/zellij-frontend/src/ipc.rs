@@ -78,6 +78,12 @@ pub struct ZellijIpcClient {
     _pending_requests: std::collections::HashMap<String, serde_json::Value>,
 }
 
+impl Default for ZellijIpcClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ZellijIpcClient {
     /// Create new Zellij IPC client
     pub fn new() -> Self {
@@ -95,7 +101,7 @@ impl ZellijIpcClient {
 
         // Serialize message
         let json =
-            serde_json::to_string(cmd).map_err(|e| format!("Serialization failed: {}", e))?;
+            serde_json::to_string(cmd).map_err(|e| format!("Serialization failed: {e}"))?;
 
         // Add correlation ID
         let payload = format!(r#"{{"request_id": "{}", "data": {}}}"#, request_id, json);

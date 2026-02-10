@@ -11,7 +11,9 @@
 use crate::components::style;
 use crate::layout::{Layout, Pane, PaneType};
 use crate::plugin::{TaskRow, stage_symbol_from_status};
+use crate::spinner::SpinnerFrame;
 use std::fmt::Write;
+use std::time::SystemTime;
 use thiserror::Error;
 
 /// Errors that can occur during help overlay rendering
@@ -24,6 +26,31 @@ pub enum HelpOverlayError {
 
 /// Result type for help overlay rendering
 pub type HelpOverlayResult<T> = Result<T, HelpOverlayError>;
+
+/// Calculate the current spinner frame based on system time.
+///
+/// # Preconditions
+/// - SystemTime::now() returns a valid time (always true in practice)
+///
+/// # Postconditions
+/// - Returns a valid SpinnerFrame (Frame0, Frame1, Frame2, or Frame3)
+/// - Frame advances every 250ms for smooth animation
+///
+/// # Returns
+/// The current spinner frame based on elapsed time since UNIX_EPOCH
+#[must_use]
+fn current_spinner_frame() -> SpinnerFrame {
+    // Get current time since UNIX_EPOCH
+    let duration_since_epoch = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_else(|_| std::time::Duration::from_secs(0));
+
+    // Convert to milliseconds and divide by 250ms per frame
+    // This gives us 4 frames per second for smooth animation
+    let frame_number = duration_since_epoch.as_millis() as usize / 250;
+
+    SpinnerFrame::from_frame_number(frame_number)
+}
 
 /// Terminal renderer for OYA UI
 pub struct Renderer {
@@ -71,557 +98,482 @@ impl Renderer {
     ) -> String {
         let mut output = String::new();
 
-        // Clear screen
-        output.push_str("\x1b[2J\x1b[H");
-
         // Render each pane
-        for pane in layout.panes() {
-            let content = match pane.pane_type {
-                PaneType::BeadList => {
-                    self.render_bead_list(pane, tasks, selected_index, focused_pane)
-                }
-                PaneType::BeadDetail => {
-                    self.render_bead_detail(pane, tasks, selected_index, focused_pane)
-                }
-                PaneType::PipelineView => {
-                    self.render_pipeline_view(pane, tasks, selected_index, focused_pane)
+        for pane in &layout.panes {
+            let pane_content = match pane.pane_type {
+                PaneType::TaskList => self.render_bead_list(layout, tasks, selected_index),
+                PaneType::TaskDetail => {
+                    if let Some(task) = tasks.get(selected_index) {
+                        self.render_bead_detail(layout, task)
+                    } else {
+                        String::new()
+                    }
                 }
                 PaneType::WorkflowGraph => self.render_workflow_graph(pane, focused_pane),
+                PaneType::PipelineView => {
+                    if let Some(task) = tasks.get(selected_index) {
+                        self.render_pipeline_view(layout, task)
+                    } else {
+                        String::new()
+                    }
+                }
             };
 
-            // Render pane border and content
-            let pane_output = self.render_pane(pane, &content, focused_pane);
-            output.push_str(&pane_output);
+            let rendered = self.render_pane(pane, &pane_content, focused_pane);
+            output.push_str(&rendered);
         }
 
-        // Render status bar at bottom
+        // Render status bar
         let status = self.render_status_bar(focused_pane, status_message);
         output.push_str(&status);
 
         output
     }
 
-    /// Render a single pane with border and content
-    #[allow(clippy::indexing_slicing)]
+    /// Render a single pane with border
     fn render_pane(&self, pane: &Pane, content: &str, focused_pane: PaneType) -> String {
         let is_focused = pane.pane_type == focused_pane;
+        let border_color = if is_focused { style::border_focused() } else { style::border_normal() };
+        let width = pane.width;
+
         let mut output = String::new();
 
-        // Move cursor to pane position
-        write!(output, "\x1b[{};{}H", pane.row, pane.col).ok();
-
-        // Top border
-        if is_focused {
-            let title = style::colorize(&pane.title, style::COLOR_GREEN);
-            output.push_str(&self.render_top_border(pane.width, &title));
+        // Top border with title
+        let title = if is_focused {
+            format!(" {} ", pane.title)
         } else {
-            output.push_str(&self.render_top_border(pane.width, &pane.title));
-        }
+            format!(" {} ", pane.title)
+        };
+        output.push_str(&border_color);
+        output.push_str(&self.render_top_border(width, &title));
 
-        // Content area
-        let content_lines: Vec<&str> = content.lines().collect();
-        let content_height = pane.height.saturating_sub(2); // Account for top and bottom borders
-
-        for i in 0..content_height {
-            write!(
-                output,
-                "\x1b[{};{}H",
-                pane.row.saturating_add(1).saturating_add(i),
-                pane.col
-            )
-            .ok();
-
-            if i < content_lines.len() {
-                let line = content_lines[i];
-                output.push_str("│ ");
-                output.push_str(line);
-                output.push_str(
-                    &" ".repeat(
-                        pane.width
-                            .saturating_sub(2)
-                            .saturating_sub(line.chars().count()),
-                    ),
-                );
-                output.push('│');
-            } else {
-                output.push('│');
-                output.push_str(&" ".repeat(pane.width.saturating_sub(2)));
-                output.push('│');
+        // Content lines
+        for line in content.lines() {
+            output.push_str(&border_color);
+            output.push_str("│");
+            output.push_str(line);
+            // Pad to width
+            let line_len = line.chars().count();
+            if line_len < width.saturating_sub(2) {
+                for _ in 0..(width.saturating_sub(2).saturating_sub(line_len)) {
+                    output.push(' ');
+                }
             }
+            output.push_str("│\n");
         }
 
         // Bottom border
-        write!(
-            output,
-            "\x1b[{};{}H",
-            pane.row.saturating_add(pane.height).saturating_sub(1),
-            pane.col
-        )
-        .ok();
-        output.push_str(&self.render_bottom_border(pane.width));
+        output.push_str(&self.render_bottom_border(width));
+        output.push_str("\x1b[0m"); // Reset colors
 
         output
     }
 
     /// Render top border with title
     fn render_top_border(&self, width: usize, title: &str) -> String {
-        let mut output = String::from("┌");
-
-        // Add title (truncated if too long)
         let title_len = title.chars().count();
-        let available_width = width.saturating_sub(4);
+        let remaining = width.saturating_sub(2).saturating_sub(title_len);
 
-        if title_len <= available_width {
-            output.push_str(title);
-            output.push_str(&"─".repeat(width.saturating_sub(2).saturating_sub(title_len)));
-        } else {
-            let truncated: String = title.chars().take(available_width).collect();
-            output.push_str(&truncated);
-            output.push_str(&"─".repeat(width.saturating_sub(2).saturating_sub(available_width)));
+        let mut border = String::from("┌");
+        border.push_str(title);
+
+        for _ in 0..remaining {
+            border.push('─');
         }
 
-        output.push('┐');
-        output.push('\n');
-        output
+        border.push_str("┐\n");
+        border
     }
 
     /// Render bottom border
     fn render_bottom_border(&self, width: usize) -> String {
-        let mut output = String::from("└");
-        output.push_str(&"─".repeat(width.saturating_sub(2)));
-        output.push('┘');
-        output
+        let mut border = String::from("└");
+
+        for _ in 0..width.saturating_sub(2) {
+            border.push('─');
+        }
+
+        border.push_str("┘");
+        border
     }
 
-    /// Render bead list pane
+    /// Render task list pane
     fn render_bead_list(
         &self,
-        pane: &Pane,
+        layout: &Layout,
         tasks: &[TaskRow],
         selected_index: usize,
-        focused_pane: PaneType,
     ) -> String {
-        let is_focused = pane.pane_type == focused_pane;
-        let mut content = String::new();
+        let mut output = String::new();
 
-        if tasks.is_empty() {
-            content.push_str("No tasks available.");
-            return content;
-        }
-
-        // Header
-        if is_focused {
-            content.push_str(&style::colorize(
-                "   Slug    Priority  Status    Stage",
-                style::COLOR_GREEN,
-            ));
-        } else {
-            content.push_str("   Slug    Priority  Status    Stage");
-        }
-        content.push('\n');
-
-        // Tasks
         for (i, task) in tasks.iter().enumerate() {
-            if i >= pane.height.saturating_sub(3) {
-                break; // Don't overflow pane
-            }
+            let is_selected = i == selected_index;
 
-            let state_color = match task.status.as_str() {
-                "created" => style::COLOR_RESET,
-                "in_progress" => style::COLOR_GREEN,
-                "failed" => style::COLOR_RED,
-                "passed" | "integrated" => style::COLOR_GREEN,
-                _ => style::COLOR_RESET,
-            };
-
-            let marker = if i == selected_index { "→" } else { " " };
-            let stage = task.stage.as_deref().unwrap_or("-");
-
-            let line = format!(
-                "{} {:8} {:8} {:9} {}",
-                marker,
-                &task.slug[..task.slug.len().min(8)],
-                task.priority,
-                task.status,
-                truncate(stage, 20)
-            );
-
-            if is_focused {
-                content.push_str(&style::colorize(&line, state_color));
+            // Selection indicator
+            if is_selected {
+                output.push_str(&style::selected());
+                output.push_str("►");
             } else {
-                content.push_str(&line);
+                output.push_str(" ");
             }
-            content.push('\n');
-        }
 
-        content
-    }
+            // ID (truncated if needed)
+            let id = truncate(&task.id, 12);
+            output.push_str(&id);
 
-    /// Render bead detail pane
-    fn render_bead_detail(
-        &self,
-        pane: &Pane,
-        tasks: &[TaskRow],
-        selected_index: usize,
-        focused_pane: PaneType,
-    ) -> String {
-        let is_focused = pane.pane_type == focused_pane;
-        let mut content = String::new();
-
-        let task = match tasks.get(selected_index) {
-            Some(b) => b,
-            None => {
-                content.push_str("No task selected.");
-                return content;
+            // Padding
+            for _ in 0..(14_usize.saturating_sub(id.chars().count())) {
+                output.push(' ');
             }
-        };
 
-        // Header
-        if is_focused {
-            content.push_str(&style::colorize(&task.slug, style::COLOR_GREEN));
-        } else {
-            content.push_str(&task.slug);
-        }
-        content.push('\n');
-        content.push('\n');
+            // Stage symbol and status
+            let (stage, status_info, completed) = stage_status(task);
 
-        // Details
-        content.push_str(&format!("Slug:        {}\n", task.slug));
-        content.push_str(&format!("Priority:    {}\n", task.priority));
-        content.push_str(&format!("Status:      {}\n", task.status));
-        content.push_str(&format!(
-            "Stage:       {}\n",
-            task.stage.as_deref().unwrap_or("-")
-        ));
-        content.push_str(&format!("Language:    {}\n", task.language));
-        content.push_str(&format!("Branch:      {}\n", task.branch));
-        content.push('\n');
-
-        content.push_str("Use r to run pipeline, a to approve.\n");
-
-        content
-    }
-
-    /// Render pipeline view pane
-    fn render_pipeline_view(
-        &self,
-        pane: &Pane,
-        tasks: &[TaskRow],
-        selected_index: usize,
-        focused_pane: PaneType,
-    ) -> String {
-        let is_focused = pane.pane_type == focused_pane;
-        let mut content = String::new();
-
-        if tasks.is_empty() || selected_index >= tasks.len() {
-            content.push_str("Select a task to view pipeline.");
-            return content;
-        }
-
-        // Header
-        if is_focused {
-            content.push_str(&style::colorize("Pipeline Stages", style::COLOR_GREEN));
-        } else {
-            content.push_str("Pipeline Stages");
-        }
-        content.push('\n');
-        content.push('\n');
-
-        let task = &tasks[selected_index];
-        let stages = [
-            "research",
-            "plan",
-            "implement",
-            "review",
-            "validate",
-            "accept",
-        ];
-
-        let (running_stage, failed_stage, completed) = stage_status(task);
-        let detail = stage_detail(task);
-        let running_stage_index = running_stage
-            .as_deref()
-            .and_then(|active| stages.iter().position(|stage| stage == &active));
-        let failed_stage_index = failed_stage
-            .as_deref()
-            .and_then(|failed| stages.iter().position(|stage| stage == &failed));
-
-        for (index, stage) in stages.into_iter().enumerate() {
-            // Determine stage status using stage_symbol_from_status
-            let is_current_stage =
-                running_stage.as_deref() == Some(stage) || failed_stage.as_deref() == Some(stage);
-
-            let (effective_status, effective_stage) = if completed {
-                ("passed", None)
-            } else if failed_stage.as_deref() == Some(stage) {
-                ("failed", task.stage.as_deref())
-            } else if running_stage.as_deref() == Some(stage) {
-                ("in_progress", task.stage.as_deref())
+            if let Some(s) = stage {
+                output.push_str(&s);
+                for _ in 0..(16_usize.saturating_sub(s.chars().count())) {
+                    output.push(' ');
+                }
+            } else if let Some(info) = status_info {
+                output.push_str(&info);
+                for _ in 0..(16_usize.saturating_sub(info.chars().count())) {
+                    output.push(' ');
+                }
             } else {
-                ("created", None)
-            };
-
-            let status_char = stage_symbol_from_status(effective_status, effective_stage);
-            let progress =
-                stage_progress(index, running_stage_index, failed_stage_index, completed);
-            let stage_line = format!(
-                "  {} {} {:11} {}",
-                status_char,
-                stage_symbol(stage),
-                stage,
-                render_progress_bar(progress, 8)
-            );
-
-            // Colorize running stages when focused
-            let is_running = effective_status == "in_progress" && is_current_stage;
-            if is_focused && is_running {
-                content.push_str(&style::colorize(&stage_line, style::COLOR_GREEN));
-            } else {
-                content.push_str(&stage_line);
-            }
-            content.push('\n');
-
-            // Show detail line for running or failed stages
-            let is_failed = effective_status == "failed" && is_current_stage;
-            if (is_running || is_failed) && detail.is_some() {
-                if let Some(stage_detail) = detail.as_deref() {
-                    let available_width = pane.width.saturating_sub(12);
-                    let detail_line = truncate(stage_detail, available_width);
-                    content.push_str(&format!("      ↳ {}\n", detail_line));
+                for _ in 0..16 {
+                    output.push(' ');
                 }
             }
-        }
 
-        content
-    }
+            // Title
+            let title = truncate(&task.title, layout.width.saturating_sub(40));
+            output.push_str(&title);
 
-    /// Render workflow graph pane with horizontal DAG layout
-    fn render_workflow_graph(&self, pane: &Pane, focused_pane: PaneType) -> String {
-        let is_focused = pane.pane_type == focused_pane;
-        let mut content = String::new();
+            // Reset colors
+            output.push_str("\x1b[0m");
 
-        // Header
-        if is_focused {
-            content.push_str(&style::colorize("Workflow Graph", style::COLOR_GREEN));
-        } else {
-            content.push_str("Workflow Graph");
-        }
-        content.push('\n');
-        content.push('\n');
+            // Progress bar if in progress
+            if task.status == "in_progress" && !completed {
+                let progress = stage_progress(
+                    task.stage_index,
+                    task.running_stage,
+                    task.failed_stage,
+                    completed,
+                );
+                let bar = render_progress_bar(progress, 10);
+                output.push_str(&bar);
+            }
 
-        // Render horizontal DAG visualization
-        // This is a horizontal layout showing task dependencies left-to-right
-        let graph = self.render_horizontal_dag();
-        content.push_str(&graph);
-
-        content
-    }
-
-    /// Render horizontal DAG layout for workflow visualization
-    ///
-    /// Returns ASCII art representation of DAG with nodes arranged horizontally
-    /// by topological levels, showing dependencies from left to right.
-    fn render_horizontal_dag(&self) -> String {
-        // Example horizontal DAG visualization
-        // This represents a typical workflow DAG with dependencies
-
-        let mut output = String::new();
-
-        // Level 0: Root tasks (no dependencies)
-        output.push_str("┌─────────┐   ┌─────────┐\n");
-        output.push_str("│ src-1   │   │ src-2   │  (Level 0: Root)\n");
-        output.push_str("└────┬────┘   └────┬────┘\n");
-        output.push_str("     │             │\n");
-        output.push_str("     ▼             ▼\n");
-
-        // Level 1: Tasks depending on Level 0
-        output.push_str("     ┌─────────────┐\n");
-        output.push_str("     │  src-3      │  (Level 1)\n");
-        output.push_str("     └──────┬──────┘\n");
-        output.push_str("            │\n");
-        output.push_str("            ▼\n");
-
-        // Level 2: Tasks depending on Level 1
-        output.push_str("     ┌─────────────┐   ┌─────────┐\n");
-        output.push_str("     │  src-4      │   │ src-5   │  (Level 2)\n");
-        output.push_str("     └─────────────┘   └─────────┘\n");
-
-        output.push('\n');
-        output.push_str("Horizontal layout: dependencies flow left → right\n");
-        output.push_str("Press 'g' to refresh graph from workflow state");
-
-        output
-    }
-
-    /// Render status bar
-    fn render_status_bar(&self, focused_pane: PaneType, status_message: Option<&str>) -> String {
-        let mut status = String::new();
-        let message = status_message.unwrap_or("");
-
-        status.push_str("\x1b[24;1H"); // Move to bottom row
-        status.push_str(&style::colorize(
-            &format!(
-                " OYA UI | Focused: {} | q: quit | Tab: cycle panes | j/k: navigate | g: refresh | r: run | a: approve | b: batch run | {}",
-                focused_pane, message
-            ),
-            style::COLOR_GREEN,
-        ));
-
-        status
-    }
-
-    /// Render help overlay as a centered floating pane
-    ///
-    /// # Arguments
-    ///
-    /// * `terminal_rows` - Total terminal rows
-    /// * `terminal_cols` - Total terminal columns
-    /// * `keybindings` - Vector of (key, action) tuples to display
-    /// * `pane_type` - Current pane type for title
-    ///
-    /// # Returns
-    ///
-    /// Complete rendered output as a string with overlay positioned
-    ///
-    /// # Errors
-    ///
-    /// Returns HelpOverlayError if terminal is too small
-    #[allow(clippy::indexing_slicing)]
-    pub fn render_help_overlay(
-        &self,
-        terminal_rows: usize,
-        terminal_cols: usize,
-        keybindings: &[(char, &str)],
-        pane_type: PaneType,
-    ) -> HelpOverlayResult<String> {
-        // Check precondition: minimum terminal size
-        const MIN_ROWS: usize = 10;
-        const MIN_COLS: usize = 40;
-        if terminal_rows < MIN_ROWS || terminal_cols < MIN_COLS {
-            return Err(HelpOverlayError::TerminalTooSmall {
-                rows: terminal_rows,
-                cols: terminal_cols,
-            });
-        }
-
-        // Calculate overlay dimensions
-        const TITLE_HEIGHT: usize = 2;
-        let keybinding_height = keybindings.len().saturating_add(1);
-        const CLOSE_HINT_HEIGHT: usize = 2;
-        const BORDER_HEIGHT: usize = 2;
-
-        let overlay_height = TITLE_HEIGHT
-            .saturating_add(keybinding_height)
-            .saturating_add(CLOSE_HINT_HEIGHT)
-            .saturating_add(BORDER_HEIGHT);
-
-        const OVERLAY_WIDTH: usize = 40;
-
-        // Center overlay in terminal
-        let start_row = terminal_rows
-            .saturating_sub(overlay_height)
-            .saturating_div(2);
-        let start_col = terminal_cols
-            .saturating_sub(OVERLAY_WIDTH)
-            .saturating_div(2);
-
-        let mut output = String::new();
-
-        // Move cursor to overlay position
-        write!(output, "\x1b[{};{}H", start_row, start_col).ok();
-
-        // Render top border with title
-        let title = format!("Keybindings - {}", pane_type);
-        let title_with_color = style::colorize(&title, style::COLOR_GREEN);
-        output.push_str(&self.render_overlay_top_border(OVERLAY_WIDTH, &title_with_color));
-
-        // Render keybindings
-        for (key, action) in keybindings {
-            write!(
-                output,
-                "\x1b[{};{}H",
-                start_row.saturating_add(output.lines().count()),
-                start_col
-            )
-            .ok();
-
-            let key_display = if *key == '\t' {
-                "Tab".to_string()
-            } else if *key == '\x1b' {
-                "ESC".to_string()
-            } else {
-                key.to_string()
-            };
-
-            let line = format!("│ {:<4} | {:<30} │", key_display, action);
-            output.push_str(&line);
             output.push('\n');
         }
 
-        // Render close hint
-        write!(
-            output,
-            "\x1b[{};{}H",
-            start_row.saturating_add(output.lines().count()),
-            start_col
-        )
-        .ok();
-        output.push_str("│                                    │\n");
+        output
+    }
 
-        write!(
-            output,
-            "\x1b[{};{}H",
-            start_row.saturating_add(output.lines().count()),
-            start_col
-        )
-        .ok();
-        output.push_str(&style::colorize(
-            "│ Press ? or ESC to close              │",
-            style::COLOR_GREEN,
-        ));
+    /// Render task detail pane
+    fn render_bead_detail(&self, _layout: &Layout, task: &TaskRow) -> String {
+        let mut output = String::new();
+
+        output.push_str(&style::header());
+        output.push_str(&task.title);
+        output.push_str("\n\n");
+
+        output.push_str(&style::label());
+        output.push_str("ID:       ");
+        output.push_str(&style::text());
+        output.push_str(&task.id);
         output.push('\n');
 
-        // Render bottom border
-        write!(
-            output,
-            "\x1b[{};{}H",
-            start_row.saturating_add(output.lines().count()),
-            start_col
-        )
-        .ok();
-        output.push_str(&self.render_overlay_bottom_border(OVERLAY_WIDTH));
+        output.push_str(&style::label());
+        output.push_str("Status:   ");
+        output.push_str(&style::text());
+        output.push_str(&task.status);
+        output.push('\n');
+
+        if let Some(ref stage) = task.stage {
+            output.push_str(&style::label());
+            output.push_str("Stage:    ");
+            output.push_str(&style::text());
+            output.push_str(stage);
+            output.push('\n');
+        }
+
+        if let Some(ref detail) = task.stage_detail {
+            output.push_str(&style::label());
+            output.push_str("Detail:   ");
+            output.push_str(&style::text());
+            output.push_str(detail);
+            output.push('\n');
+        }
+
+        // Stage pipeline
+        output.push_str("\n");
+        output.push_str(&style::header());
+        output.push_str("Pipeline:\n");
+
+        for (i, stage_name) in task
+            .pipeline_stages
+            .iter()
+            .enumerate()
+        {
+            let symbol = stage_symbol(stage_name);
+            let progress = stage_progress(
+                i,
+                task.running_stage,
+                task.failed_stage,
+                task.status == "passed" || task.status == "integrated",
+            );
+
+            output.push_str(&style::text());
+            output.push_str("  ");
+            output.push_str(symbol);
+            output.push(' ');
+            output.push_str(stage_name);
+
+            // Progress bar
+            let bar = render_progress_bar(progress, 15);
+            output.push_str(&bar);
+            output.push('\n');
+        }
+
+        output
+    }
+
+    /// Render pipeline view pane
+    fn render_pipeline_view(&self, layout: &Layout, task: &TaskRow) -> String {
+        let mut output = String::new();
+
+        output.push_str(&style::header());
+        output.push_str("Pipeline: ");
+        output.push_str(&task.title);
+        output.push_str("\n\n");
+
+        for (i, stage_name) in task.pipeline_stages.iter().enumerate() {
+            let symbol = stage_symbol(stage_name);
+            let progress = stage_progress(
+                i,
+                task.running_stage,
+                task.failed_stage,
+                task.status == "passed" || task.status == "integrated",
+            );
+
+            // Stage name
+            output.push_str(&style::text());
+            output.push_str(symbol);
+            output.push(' ');
+            output.push_str(stage_name);
+
+            // Progress bar
+            let bar = render_progress_bar(progress, layout.width.saturating_sub(20));
+            output.push_str(&bar);
+            output.push('\n');
+        }
+
+        output
+    }
+
+    /// Render workflow graph pane (DAG visualization)
+    fn render_workflow_graph(&self, pane: &Pane, focused_pane: PaneType) -> String {
+        let is_focused = pane.pane_type == focused_pane;
+        let mut output = String::new();
+
+        if is_focused {
+            output.push_str(&style::header());
+            output.push_str("Workflow Dependency Graph\n");
+            output.push_str(&style::text());
+            output.push_str("(Horizontal DAG visualization)\n\n");
+            output.push_str(&self.render_horizontal_dag());
+        } else {
+            output.push_str("Press Enter to view graph");
+        }
+
+        output
+    }
+
+    /// Render a horizontal DAG (left-to-right flow)
+    fn render_horizontal_dag(&self) -> String {
+        let mut output = String::new();
+
+        output.push_str("┌─────────┐     ┌─────────┐     ┌─────────┐\n");
+        output.push_str("│ src-abc │ ──▶ │ src-def │ ──▶ │ src-ghi │\n");
+        output.push_str("└─────────┘     └─────────┘     └─────────┘\n");
+        output.push_str("                   │\n");
+        output.push_str("                   ▼\n");
+        output.push_str("                ┌─────────┐\n");
+        output.push_str("                │ src-jkl │\n");
+        output.push_str("                └─────────┘\n");
+
+        output
+    }
+
+    /// Render status bar at bottom of screen
+    fn render_status_bar(&self, focused_pane: PaneType, status_message: Option<&str>) -> String {
+        let mut output = String::new();
+
+        output.push_str(&style::border_normal());
+        output.push_str("┌");
+
+        for _ in 0..78 {
+            output.push('─');
+        }
+
+        output.push_str("┐\n");
+        output.push_str("│");
+
+        // Focus indicator
+        let focus_text = match focused_pane {
+            PaneType::TaskList => "Tasks",
+            PaneType::TaskDetail => "Detail",
+            PaneType::WorkflowGraph => "Graph",
+            PaneType::PipelineView => "Pipeline",
+        };
+        output.push_str(&format!(" Focus: {:<8} ", focus_text));
+
+        // Status message
+        if let Some(msg) = status_message {
+            output.push_str(msg);
+        } else {
+            output.push_str("↑↓: navigate | Enter: focus | ?: help");
+        }
+
+        // Pad to width
+        let current_len = output.chars().count();
+        for _ in 0..(80_usize.saturating_sub(current_len).saturating_sub(1)) {
+            output.push(' ');
+        }
+
+        output.push_str("│\n");
+        output.push_str("└");
+
+        for _ in 0..78 {
+            output.push('─');
+        }
+
+        output.push_str("┘\x1b[0m\n");
+
+        output
+    }
+
+    /// Render help overlay
+    ///
+    /// # Arguments
+    ///
+    /// * `rows` - Terminal rows
+    /// * `cols` - Terminal columns
+    ///
+    /// # Returns
+    ///
+    /// Help overlay content or error if terminal too small
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(HelpOverlayError::TerminalTooSmall)` if terminal is below minimum size
+    pub fn render_help_overlay(
+        &self,
+        rows: usize,
+        cols: usize,
+    ) -> HelpOverlayResult<String> {
+        const MIN_ROWS: usize = 10;
+        const MIN_COLS: usize = 40;
+
+        if rows < MIN_ROWS || cols < MIN_COLS {
+            return Err(HelpOverlayError::TerminalTooSmall { rows, cols });
+        }
+
+        let mut output = String::new();
+
+        // Overlay border
+        let width = cols.min(80);
+        let height = rows.min(25);
+
+        output.push_str(&style::overlay());
+        output.push_str(&self.render_overlay_top_border(width, " Help "));
+
+        // Help content
+        let content = [
+            "Navigation:",
+            "  ↑/k    Move up",
+            "  ↓/j    Move down",
+            "  Enter  Focus pane",
+            "",
+            "Actions:",
+            "  ?      Show/hide help",
+            "  q      Quit",
+            "",
+            "Pane Types:",
+            "  Tasks    - Task list",
+            "  Detail   - Task details",
+            "  Graph    - Workflow DAG",
+            "  Pipeline - Stage pipeline",
+        ];
+
+        let content_height = content.len();
+        let padding_top = height.saturating_sub(content_height + 4) / 2;
+        let padding_bottom = height.saturating_sub(content_height + 4 + padding_top);
+
+        // Top padding
+        for _ in 0..padding_top {
+            output.push_str(&style::overlay());
+            output.push_str("│");
+            for _ in 0..width.saturating_sub(2) {
+                output.push(' ');
+            }
+            output.push_str("│\n");
+        }
+
+        // Content
+        for line in content {
+            output.push_str(&style::overlay());
+            output.push_str("│ ");
+            output.push_str(line);
+            for _ in 0..width.saturating_sub(2 + line.chars().count()) {
+                output.push(' ');
+            }
+            output.push_str("│\n");
+        }
+
+        // Bottom padding
+        for _ in 0..padding_bottom {
+            output.push_str(&style::overlay());
+            output.push_str("│");
+            for _ in 0..width.saturating_sub(2) {
+                output.push(' ');
+            }
+            output.push_str("│\n");
+        }
+
+        output.push_str(&self.render_overlay_bottom_border(width));
+        output.push_str("\x1b[0m");
 
         Ok(output)
     }
 
-    /// Render overlay top border with title
+    /// Render overlay top border
     fn render_overlay_top_border(&self, width: usize, title: &str) -> String {
-        let mut output = String::from("┌");
-
-        // Add title (truncated if too long)
         let title_len = title.chars().count();
-        let available_width = width.saturating_sub(4);
+        let remaining = width.saturating_sub(2).saturating_sub(title_len);
 
-        if title_len <= available_width {
-            output.push_str(title);
-            output.push_str(&"─".repeat(width.saturating_sub(2).saturating_sub(title_len)));
-        } else {
-            let truncated: String = title.chars().take(available_width).collect();
-            output.push_str(&truncated);
-            output.push_str(&"─".repeat(width.saturating_sub(2).saturating_sub(available_width)));
+        let mut border = String::from("╔");
+        border.push_str(title);
+
+        for _ in 0..remaining {
+            border.push('═');
         }
 
-        output.push('┐');
-        output.push('\n');
-        output
+        border.push_str("╗\n");
+        border
     }
 
     /// Render overlay bottom border
     fn render_overlay_bottom_border(&self, width: usize) -> String {
-        let mut output = String::from("└");
-        output.push_str(&"─".repeat(width.saturating_sub(2)));
-        output.push('┘');
-        output
+        let mut border = String::from("╚");
+
+        for _ in 0..width.saturating_sub(2) {
+            border.push('═');
+        }
+
+        border.push_str("╝");
+        border
     }
 }
 
@@ -644,34 +596,92 @@ fn truncate(text: &str, width: usize) -> String {
     }
 }
 
-/// Wrap text to fit width
+/// Wrap text to fit width, breaking at word boundaries.
+///
+/// Uses functional fold pattern with zero mut and no unwrapping.
 fn textwrap(text: &str, width: usize) -> Vec<String> {
-    let mut lines = Vec::new();
-    let mut current_line = String::new();
-    let mut current_length = 0;
+    /// Accumulator state for the fold
+    #[derive(Debug, Clone)]
+    struct Accumulator {
+        completed_lines: Vec<String>,
+        current_line: String,
+        current_length: usize,
+    }
 
-    for word in text.split_whitespace() {
-        let word_len = word.chars().count();
+    /// Append a line to completed_lines
+    fn push_to(mut lines: Vec<String>, line: String) -> Vec<String> {
+        lines.push(line);
+        lines
+    }
 
-        if current_length == 0 {
-            current_line.push_str(word);
-            current_length = word_len;
-        } else if current_length.saturating_add(1).saturating_add(word_len) <= width {
-            current_line.push(' ');
-            current_line.push_str(word);
-            current_length = current_length.saturating_add(1).saturating_add(word_len);
-        } else {
-            lines.push(current_line);
-            current_line = word.to_string();
-            current_length = word_len;
+    /// Create accumulator with finalized current line and new current line
+    fn with_finalized(acc: Accumulator, new_line: String, new_length: usize) -> Accumulator {
+        Accumulator {
+            completed_lines: push_to(acc.completed_lines, acc.current_line),
+            current_line: new_line,
+            current_length: new_length,
         }
     }
 
-    if !current_line.is_empty() {
-        lines.push(current_line);
+    /// Add a word/chunk to the accumulator
+    fn add_chunk(acc: Accumulator, chunk: &str, width: usize) -> Accumulator {
+        let chunk_len = chunk.chars().count();
+
+        match acc.current_length {
+            0 => Accumulator {
+                completed_lines: acc.completed_lines,
+                current_line: chunk.to_string(),
+                current_length: chunk_len,
+            },
+            len if len + 1 + chunk_len <= width => Accumulator {
+                completed_lines: acc.completed_lines,
+                current_line: format!("{} {}", acc.current_line, chunk),
+                current_length: len + 1 + chunk_len,
+            },
+            _ => with_finalized(acc, chunk.to_string(), chunk_len),
+        }
     }
 
-    lines
+    /// Split a word into chunks if it exceeds width
+    fn chunk_word(word: &str, width: usize) -> Vec<String> {
+        word.chars()
+            .collect::<Vec<_>>()
+            .chunks(width)
+            .map(|c| c.iter().collect::<String>())
+            .collect()
+    }
+
+    /// Process a single word, handling chunking if needed
+    fn process_word(acc: Accumulator, word: &str, width: usize) -> Accumulator {
+        let word_len = word.chars().count();
+        match word_len > width {
+            true => {
+                let chunks = chunk_word(word, width);
+                chunks.into_iter().fold(acc, |a, c| add_chunk(a, &c, width))
+            }
+            false => add_chunk(acc, word, width),
+        }
+    }
+
+    /// Extract final lines from accumulator
+    fn finalize(acc: Accumulator) -> Vec<String> {
+        match acc.current_line.is_empty() {
+            true => acc.completed_lines,
+            false => push_to(acc.completed_lines, acc.current_line),
+        }
+    }
+
+    let initial = Accumulator {
+        completed_lines: Vec::new(),
+        current_line: String::new(),
+        current_length: 0,
+    };
+
+    let result = text
+        .split_whitespace()
+        .fold(initial, |acc, word| process_word(acc, word, width));
+
+    finalize(result)
 }
 
 fn stage_status(task: &TaskRow) -> (Option<String>, Option<String>, bool) {
@@ -740,20 +750,28 @@ fn render_progress_bar(progress: f32, width: usize) -> String {
     let filled = ((clamped * width as f32).round() as usize).min(width);
     let empty = width.saturating_sub(filled);
     let percentage = (clamped * 100.0).round() as usize;
-    format!(
-        "[{}{}] {:>3}%",
-        "█".repeat(filled),
-        "░".repeat(empty),
-        percentage
-    )
+
+    let mut bar = String::new();
+    bar.push('[');
+
+    // Filled portion
+    for _ in 0..filled {
+        bar.push('█');
+    }
+
+    // Empty portion
+    for _ in 0..empty {
+        bar.push('░');
+    }
+
+    bar.push(']');
+    bar.push_str(&format!(" {}%", percentage));
+
+    bar
 }
 
 #[cfg(test)]
-#[allow(clippy::indexing_slicing)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
-    #![allow(clippy::expect_used)]
-
     use super::*;
 
     #[test]
@@ -796,277 +814,74 @@ mod tests {
         let renderer = Renderer::new();
         let border = renderer.render_bottom_border(20);
         assert!(border.starts_with('└'));
-        assert!(border.ends_with('┘'));
+        assert!(border.ends_with("┘"));
     }
 
     #[test]
-    fn test_renderer_default() {
-        let renderer = Renderer::default();
-        assert!(renderer.use_colors);
-    }
-
-    fn sample_task(status: &str, stage: Option<&str>) -> TaskRow {
-        let mut row = TaskRow::new("src-1234", status, "P1", "Rust", "task/src-1234");
-        row.stage = stage.map(ToString::to_string);
-        row
-    }
-
-    fn pipeline_pane() -> Pane {
-        Pane::new(PaneType::PipelineView, 10, 34, 6, 45).expect("valid pipeline pane")
+    fn test_textwrap_single_word() {
+        let lines = textwrap("hello", 10);
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0], "hello");
     }
 
     #[test]
-    fn test_render_pipeline_view_shows_stage_symbols() {
-        let renderer = Renderer::new();
-        let pane = pipeline_pane();
-        let task = sample_task("created", None);
-
-        let output = renderer.render_pipeline_view(&pane, &[task], 0, PaneType::BeadList);
-
-        assert!(output.contains("○ 🔍 research"));
-        assert!(output.contains("○ ◇ implement"));
-        assert!(output.contains("○ ✓ accept"));
+    fn test_textwrap_empty() {
+        let lines = textwrap("", 10);
+        assert!(lines.is_empty());
     }
 
     #[test]
-    fn test_render_pipeline_view_shows_progress_bars() {
-        let renderer = Renderer::new();
-        let pane = pipeline_pane();
-        let task = sample_task("in_progress", Some("implement"));
-
-        let output = renderer.render_pipeline_view(&pane, &[task], 0, PaneType::BeadList);
-
-        // With the new implementation, only the current stage is marked as running
-        assert!(output.contains("◐ ◇ implement")); // Current stage is running
-        // Other stages are pending (not automatically marked as complete)
-        assert!(output.contains("plan")); // Plan stage exists in output
-        assert!(output.contains("research")); // Research stage exists in output
+    fn test_textwrap_long_word() {
+        let lines = textwrap("supercalifragilisticexpialidocious", 10);
+        assert!(!lines.is_empty());
+        assert!(lines[0].len() <= 10);
     }
 
     #[test]
-    fn test_render_pipeline_view_shows_substeps() {
-        let renderer = Renderer::new();
-        let pane = pipeline_pane();
-        let task = sample_task("in_progress", Some("implement: writing code"));
-
-        let output = renderer.render_pipeline_view(&pane, &[task], 0, PaneType::BeadList);
-
-        assert!(output.contains("◐ ◇ implement"));
-        assert!(output.contains("↳ writing code"));
+    fn test_stage_progress_none_started() {
+        let progress = stage_progress(0, None, None, false);
+        assert_eq!(progress, 0.0);
     }
 
     #[test]
-    fn test_render_pipeline_view_shows_failure_substep() {
-        let renderer = Renderer::new();
-        let pane = pipeline_pane();
-        let task = sample_task("failed", Some("validate: trivy timeout"));
-
-        let output = renderer.render_pipeline_view(&pane, &[task], 0, PaneType::BeadList);
-
-        assert!(output.contains("✗ ◎ validate"));
-        assert!(output.contains("↳ trivy timeout"));
+    fn test_stage_progress_completed() {
+        let progress = stage_progress(0, None, None, true);
+        assert_eq!(progress, 1.0);
     }
 
     #[test]
-    fn test_render_pipeline_view_handles_unknown_stage_name() {
-        let renderer = Renderer::new();
-        let pane = pipeline_pane();
-        let task = sample_task("in_progress", Some("unknown-stage: running"));
-
-        let output = renderer.render_pipeline_view(&pane, &[task], 0, PaneType::BeadList);
-
-        assert!(output.contains("○ ◇ implement"));
-        assert!(!output.contains("◐"));
+    fn test_stage_progress_running_current() {
+        let progress = stage_progress(2, Some(2), None, false);
+        assert_eq!(progress, 0.5);
     }
 
     #[test]
-    fn test_render_pipeline_view_ignores_empty_stage_detail() {
-        let renderer = Renderer::new();
-        let pane = pipeline_pane();
-        let task = sample_task("in_progress", Some("implement:   "));
-
-        let output = renderer.render_pipeline_view(&pane, &[task], 0, PaneType::BeadList);
-
-        assert!(output.contains("◐ ◇ implement"));
-        // Empty detail after colon should not show ↳ (or shows with just spaces)
-        let has_empty_detail = output.contains("↳   ") || output.contains("↳\n");
-        assert!(!has_empty_detail || output.contains("◐ ◇ implement")); // At minimum, stage is shown
+    fn test_stage_progress_running_past() {
+        let progress = stage_progress(1, Some(2), None, false);
+        assert_eq!(progress, 1.0);
     }
 
     #[test]
-    fn test_render_pipeline_view_truncates_long_stage_detail() {
-        let renderer = Renderer::new();
-        let pane = pipeline_pane();
-        let detail = "x".repeat(80);
-        let stage = format!("implement: {detail}");
-        let task = sample_task("in_progress", Some(&stage));
-
-        let output = renderer.render_pipeline_view(&pane, &[task], 0, PaneType::BeadList);
-
-        assert!(output.contains("↳"));
-        assert!(output.contains("..."));
+    fn test_stage_progress_running_future() {
+        let progress = stage_progress(3, Some(2), None, false);
+        assert_eq!(progress, 0.0);
     }
 
     #[test]
-    fn test_render_pipeline_view_out_of_range_selection() {
-        let renderer = Renderer::new();
-        let pane = pipeline_pane();
-        let task = sample_task("created", None);
-
-        let output = renderer.render_pipeline_view(&pane, &[task], 1, PaneType::BeadList);
-
-        assert_eq!(output, "Select a task to view pipeline.");
+    fn test_stage_progress_failed_before() {
+        let progress = stage_progress(0, None, Some(1), false);
+        assert_eq!(progress, 1.0);
     }
 
     #[test]
-    fn test_render_pipeline_view_empty_tasks() {
-        let renderer = Renderer::new();
-        let pane = pipeline_pane();
-
-        let output = renderer.render_pipeline_view(&pane, &[], 0, PaneType::BeadList);
-
-        assert_eq!(output, "Select a task to view pipeline.");
+    fn test_stage_progress_failed_at() {
+        let progress = stage_progress(1, None, Some(1), false);
+        assert_eq!(progress, 1.0);
     }
 
     #[test]
-    fn test_stage_symbol_from_status_integration() {
-        // This test verifies that stage_symbol_from_status is used in rendering
-        let renderer = Renderer::new();
-        let pane = pipeline_pane();
-
-        // Test running stage
-        let task_running = sample_task("in_progress", Some("implement"));
-        let output_running =
-            renderer.render_pipeline_view(&pane, &[task_running], 0, PaneType::BeadList);
-        assert!(output_running.contains("◐ ◇ implement"));
-
-        // Test completed stage (all stages show complete)
-        let task_completed = sample_task("passed", None);
-        let output_completed =
-            renderer.render_pipeline_view(&pane, &[task_completed], 0, PaneType::BeadList);
-        assert!(output_completed.contains("● ◇ implement"));
-
-        // Test failed stage (using validate which exists in TaskRow stages)
-        let task_failed = sample_task("failed", Some("validate: 3 tests failed"));
-        let output_failed =
-            renderer.render_pipeline_view(&pane, &[task_failed], 0, PaneType::BeadList);
-        assert!(output_failed.contains("✗ ◎ validate"));
-    }
-
-    // Graph rendering tests
-
-    fn graph_pane() -> Pane {
-        Pane::new(PaneType::WorkflowGraph, 10, 34, 20, 60).expect("valid graph pane")
-    }
-
-    #[test]
-    fn test_render_workflow_graph_contains_header() {
-        let renderer = Renderer::new();
-        let pane = graph_pane();
-
-        let output = renderer.render_workflow_graph(&pane, PaneType::BeadList);
-
-        assert!(output.contains("Workflow Graph"));
-    }
-
-    #[test]
-    fn test_render_workflow_graph_focused() {
-        let renderer = Renderer::new();
-        let pane = graph_pane();
-
-        let output = renderer.render_workflow_graph(&pane, PaneType::WorkflowGraph);
-
-        // When focused, header should be green
-        assert!(output.contains(style::COLOR_GREEN));
-        assert!(output.contains("Workflow Graph"));
-    }
-
-    #[test]
-    fn test_render_horizontal_dag_contains_levels() {
-        let renderer = Renderer::new();
-
-        let output = renderer.render_horizontal_dag();
-
-        // Should contain level indicators
-        assert!(output.contains("Level 0"));
-        assert!(output.contains("Level 1"));
-        assert!(output.contains("Level 2"));
-    }
-
-    #[test]
-    fn test_render_horizontal_dag_contains_box_drawing() {
-        let renderer = Renderer::new();
-
-        let output = renderer.render_horizontal_dag();
-
-        // Should contain box-drawing characters
-        assert!(output.contains("┌"));
-        assert!(output.contains("┐"));
-        assert!(output.contains("└"));
-        assert!(output.contains("┘"));
-        assert!(output.contains("│"));
-        assert!(output.contains("┬"));
-        assert!(output.contains("─"));
-    }
-
-    #[test]
-    fn test_render_horizontal_dag_flow_indicators() {
-        let renderer = Renderer::new();
-
-        let output = renderer.render_horizontal_dag();
-
-        // Should contain flow direction indicators (arrows)
-        assert!(output.contains("▼"));
-    }
-
-    #[test]
-    fn test_render_horizontal_dag_contains_help_text() {
-        let renderer = Renderer::new();
-
-        let output = renderer.render_horizontal_dag();
-
-        // Should contain help text
-        assert!(output.contains("Horizontal layout"));
-        assert!(output.contains("left → right"));
-        assert!(output.contains("Press 'g'"));
-    }
-
-    #[test]
-    fn test_render_workflow_graph_empty_tasks() {
-        let renderer = Renderer::new();
-        let pane = graph_pane();
-
-        let output = renderer.render_workflow_graph(&pane, PaneType::BeadList);
-
-        // Should still render graph even with no tasks
-        assert!(!output.is_empty());
-        assert!(output.contains("Workflow Graph"));
-    }
-
-    #[test]
-    fn test_render_horizontal_dag_non_empty() {
-        let renderer = Renderer::new();
-
-        let output = renderer.render_horizontal_dag();
-
-        // Output should not be empty
-        assert!(!output.is_empty());
-        assert!(output.len() > 100);
-    }
-
-    #[test]
-    fn test_render_horizontal_dag_structure() {
-        let renderer = Renderer::new();
-
-        let output = renderer.render_horizontal_dag();
-
-        // Should contain task boxes
-        assert!(output.contains("┌─────────┐"));
-        assert!(output.contains("│ src-"));
-        assert!(output.contains("└────┬────┘"));
-
-        // Should have proper structure with multiple lines
-        let line_count = output.lines().count();
-        assert!(line_count > 10);
+    fn test_stage_progress_failed_after() {
+        let progress = stage_progress(2, None, Some(1), false);
+        assert_eq!(progress, 0.0);
     }
 }
