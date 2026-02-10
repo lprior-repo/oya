@@ -6,7 +6,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::time::Duration;
 use tempfile::TempDir;
 
 // ============================================================================
@@ -103,8 +102,7 @@ impl CommandPaneTestFixture {
     /// Create a new test fixture with temporary directory
     pub fn new() -> CommandPaneResult<Self> {
         let temp_dir = TempDir::new().map_err(|e| {
-            CommandPaneError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            CommandPaneError::Io(std::io::Error::other(
                 format!("Failed to create temp dir: {e}"),
             ))
         })?;
@@ -628,7 +626,7 @@ fn test_environment_variables_can_be_stored() {
 
 #[test]
 fn test_multiple_stages_can_be_tracked() {
-    let fixture = CommandPaneTestFixture::new().expect("Failed to create test fixture");
+    let _fixture = CommandPaneTestFixture::new().expect("Failed to create test fixture");
 
     let stages = vec!["implement", "unit-test", "lint", "coverage"];
 
