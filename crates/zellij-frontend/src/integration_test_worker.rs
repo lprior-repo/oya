@@ -8,7 +8,7 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
@@ -275,10 +275,10 @@ impl IntegrationTestWorker {
 
         let mut test_files = Vec::new();
 
-        let entries = std::fs::read_dir(&tests_dir).map_err(|e| IntegrationTestError::Io(e))?;
+        let entries = std::fs::read_dir(&tests_dir).map_err(IntegrationTestError::Io)?;
 
         for entry in entries {
-            let entry = entry.map_err(|e| IntegrationTestError::Io(e))?;
+            let entry = entry.map_err(IntegrationTestError::Io)?;
             let path = entry.path();
 
             // Only include .rs files
@@ -340,7 +340,7 @@ impl IntegrationTestWorker {
         // Calculate summary statistics
         let total = test_results.len() as u32;
         let passed = test_results.iter().filter(|r| r.passed).count() as u32;
-        let failed = total - passed;
+        let failed = total.saturating_sub(passed);
         let ignored = 0; // TODO: Parse ignored count from output
 
         let summary = TestSummary::new(total, passed, failed, ignored, duration_ms, test_results);
@@ -361,7 +361,7 @@ impl IntegrationTestWorker {
     /// Run a specific integration test file.
     ///
     /// Executes a single test file and returns the result.
-    pub fn run_test_file(&self, test_file: &PathBuf) -> Result<TestResult, IntegrationTestError> {
+    pub fn run_test_file(&self, test_file: &Path) -> Result<TestResult, IntegrationTestError> {
         let test_name = test_file
             .file_stem()
             .and_then(|s| s.to_str())
@@ -497,6 +497,12 @@ impl IntegrationTestWorker {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+    #![allow(clippy::expect_used)]
+    #![allow(clippy::panic)]
+    #![allow(clippy::indexing_slicing)]
+    #![allow(clippy::arithmetic_side_effects)]
+
     use super::*;
 
     #[test]

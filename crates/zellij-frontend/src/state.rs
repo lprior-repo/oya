@@ -3,7 +3,7 @@
 //! Provides state save/load functionality with:
 //! - Zero panics, zero unwraps
 //! - Railway-Oriented Programming (Result types throughout)
-//! - Functional patterns (map, and_then, ? operator)
+//! - Functional patterns (map, `and_then`, ? operator)
 //! - Secure file permissions (0600)
 //! - Version checking and validation
 
@@ -30,7 +30,7 @@ const DEFAULT_MAX_FILE_SIZE: usize = 1_048_576;
 const MAX_TASKS: usize = 1000;
 
 /// Errors that can occur during state persistence operations
-#[derive(Debug, Error, Clone, PartialEq)]
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum StateError {
     /// State file not found
     #[error("State file not found: {path}")]
@@ -60,7 +60,7 @@ pub enum StateError {
     #[error("Failed to deserialize state: {message}")]
     Deserialization { message: String },
 
-    /// Invalid state data (e.g., invalid selected_index)
+    /// Invalid state data (e.g., invalid `selected_index`)
     #[error("Invalid state data: {message}")]
     InvalidData { message: String },
 
@@ -105,6 +105,8 @@ impl StateSnapshot {
     ///
     /// Returns `Err(StateError)` if plugin state is invalid or task count exceeds maximum
     pub fn from_plugin(plugin: &OyaPlugin) -> Result<Self, StateError> {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
         let tasks = plugin.tasks_ref();
 
         if tasks.len() > MAX_TASKS {
@@ -114,7 +116,6 @@ impl StateSnapshot {
             });
         }
 
-        use std::time::{SystemTime, UNIX_EPOCH};
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or_else(|_| 0, |d| d.as_secs());
@@ -130,7 +131,7 @@ impl StateSnapshot {
         })
     }
 
-    /// Validate snapshot data (clamps selected_index, etc.)
+    /// Validate snapshot data (clamps `selected_index`, etc.)
     ///
     /// # Errors
     ///
@@ -219,6 +220,18 @@ impl StateManager {
             max_file_size,
             version: STATE_VERSION,
         })
+    }
+
+    /// Get the state format version
+    #[must_use]
+    pub const fn version(&self) -> u32 {
+        self.version
+    }
+
+    /// Get the maximum file size in bytes
+    #[must_use]
+    pub const fn max_file_size(&self) -> usize {
+        self.max_file_size
     }
 
     /// Save plugin state to disk
@@ -319,16 +332,16 @@ impl StateManager {
         // Write to temporary file first (atomic write)
         let temp_path = self.state_file.with_extension("tmp");
         let mut file = File::create(&temp_path).map_err(|e| StateError::Io {
-            message: format!("Failed to create temp file: {}", e),
+            message: format!("Failed to create temp file: {e}"),
         })?;
 
         file.write_all(json.as_bytes())
             .map_err(|e| StateError::Io {
-                message: format!("Failed to write state: {}", e),
+                message: format!("Failed to write state: {e}"),
             })?;
 
         file.flush().map_err(|e| StateError::Io {
-            message: format!("Failed to flush state: {}", e),
+            message: format!("Failed to flush state: {e}"),
         })?;
 
         // Set secure permissions (0600)
@@ -336,7 +349,7 @@ impl StateManager {
 
         // Atomic rename to final path
         std::fs::rename(&temp_path, &self.state_file).map_err(|e| StateError::Io {
-            message: format!("Failed to rename state file: {}", e),
+            message: format!("Failed to rename state file: {e}"),
         })?;
 
         Ok(())
@@ -346,7 +359,7 @@ impl StateManager {
     fn read_state_file(&self) -> Result<String, StateError> {
         // Check file size
         let metadata = std::fs::metadata(&self.state_file).map_err(|e| StateError::Io {
-            message: format!("Failed to read file metadata: {}", e),
+            message: format!("Failed to read file metadata: {e}"),
         })?;
 
         let file_size = metadata.len() as usize;
@@ -359,7 +372,7 @@ impl StateManager {
 
         // Read file
         std::fs::read_to_string(&self.state_file).map_err(|e| StateError::Io {
-            message: format!("Failed to read state file: {}", e),
+            message: format!("Failed to read state file: {e}"),
         })
     }
 }
@@ -375,13 +388,13 @@ fn set_secure_permissions(path: &Path) -> Result<(), StateError> {
         use std::os::unix::fs::PermissionsExt;
         let mut perms = std::fs::metadata(path)
             .map_err(|e| StateError::Io {
-                message: format!("Failed to get file metadata: {}", e),
+                message: format!("Failed to get file metadata: {e}"),
             })?
             .permissions();
 
         perms.set_mode(0o600);
         std::fs::set_permissions(path, perms).map_err(|e| StateError::Io {
-            message: format!("Failed to set file permissions: {}", e),
+            message: format!("Failed to set file permissions: {e}"),
         })?;
     }
 
@@ -478,8 +491,8 @@ mod tests {
     #[test]
     fn test_state_manager_default() {
         let manager = StateManager::default();
-        assert_eq!(manager.version, STATE_VERSION);
-        assert_eq!(manager.max_file_size, DEFAULT_MAX_FILE_SIZE);
+        assert_eq!(manager.version(), STATE_VERSION);
+        assert_eq!(manager.max_file_size(), DEFAULT_MAX_FILE_SIZE);
     }
 
     #[test]
