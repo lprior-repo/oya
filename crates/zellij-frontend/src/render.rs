@@ -151,8 +151,8 @@ impl Renderer {
         let content_lines = content.lines().fold(String::new(), |mut acc, line| {
             let line_len = line.chars().count();
             let padding = " ".repeat(width.saturating_sub(2).saturating_sub(line_len));
-            acc.push_str(&border_color);
-            acc.push_str("│");
+            acc.push_str(border_color);
+            acc.push('│');
             acc.push_str(line);
             acc.push_str(&padding);
             acc.push_str("│\n");
@@ -172,7 +172,7 @@ impl Renderer {
         // Functional pattern: use repeat instead of loop
         let border_line = "─".repeat(remaining);
 
-        format!("┌{}┐\n", format!("{title}{border_line}"))
+        format!("┌{title}{border_line}┐\n")
     }
 
     /// Render bottom border
@@ -258,9 +258,9 @@ impl Renderer {
         ];
 
         let field_lines = fields.iter().fold(String::new(), |mut acc, (label, value)| {
-            acc.push_str(&style_helpers::label());
+            acc.push_str(style_helpers::label());
             acc.push_str(&format!("{label:<9} "));
-            acc.push_str(&style_helpers::text());
+            acc.push_str(style_helpers::text());
             acc.push_str(value);
             acc.push('\n');
             acc
@@ -287,7 +287,7 @@ impl Renderer {
             .fold(String::new(), |mut acc, stage_info| {
                 let progress = calculate_stage_progress(&task.stages, running_stage, failed_stage, completed);
                 let bar = render_progress_bar(progress, 15);
-                acc.push_str(&style_helpers::text());
+                acc.push_str(style_helpers::text());
                 acc.push_str("  ");
                 acc.push_str(stage_info.symbol());
                 acc.push(' ');
@@ -315,7 +315,7 @@ impl Renderer {
             .fold(String::new(), |mut acc, stage_info| {
                 let progress = calculate_stage_progress(&task.stages, running_stage, failed_stage, completed);
                 let bar = render_progress_bar(progress, pane.width.saturating_sub(20));
-                acc.push_str(&style_helpers::text());
+                acc.push_str(style_helpers::text());
                 acc.push_str(stage_info.symbol());
                 acc.push(' ');
                 acc.push_str(&stage_info.name);
@@ -529,120 +529,6 @@ fn truncate(text: &str, width: usize) -> String {
     }
 }
 
-/// Wrap text to fit width, breaking at word boundaries.
-///
-/// Uses functional fold pattern with zero mut and no unwrapping.
-fn textwrap(text: &str, width: usize) -> Vec<String> {
-    /// Accumulator state for the fold
-    #[derive(Debug, Clone)]
-    struct Accumulator {
-        completed_lines: Vec<String>,
-        current_line: String,
-        current_length: usize,
-    }
-
-    /// Append a line to completed_lines
-    fn push_to(mut lines: Vec<String>, line: String) -> Vec<String> {
-        lines.push(line);
-        lines
-    }
-
-    /// Create accumulator with finalized current line and new current line
-    fn with_finalized(acc: Accumulator, new_line: String, new_length: usize) -> Accumulator {
-        Accumulator {
-            completed_lines: push_to(acc.completed_lines, acc.current_line),
-            current_line: new_line,
-            current_length: new_length,
-        }
-    }
-
-    /// Add a word/chunk to the accumulator
-    fn add_chunk(acc: Accumulator, chunk: &str, width: usize) -> Accumulator {
-        let chunk_len = chunk.chars().count();
-
-        match acc.current_length {
-            0 => Accumulator {
-                completed_lines: acc.completed_lines,
-                current_line: chunk.to_string(),
-                current_length: chunk_len,
-            },
-            len if len + 1 + chunk_len <= width => Accumulator {
-                completed_lines: acc.completed_lines,
-                current_line: format!("{} {}", acc.current_line, chunk),
-                current_length: len + 1 + chunk_len,
-            },
-            _ => with_finalized(acc, chunk.to_string(), chunk_len),
-        }
-    }
-
-    /// Split a word into chunks if it exceeds width
-    fn chunk_word(word: &str, width: usize) -> Vec<String> {
-        word.chars()
-            .collect::<Vec<_>>()
-            .chunks(width)
-            .map(|c| c.iter().collect::<String>())
-            .collect()
-    }
-
-    /// Process a single word, handling chunking if needed
-    fn process_word(acc: Accumulator, word: &str, width: usize) -> Accumulator {
-        let word_len = word.chars().count();
-        match word_len > width {
-            true => {
-                let chunks = chunk_word(word, width);
-                chunks.into_iter().fold(acc, |a, c| add_chunk(a, &c, width))
-            }
-            false => add_chunk(acc, word, width),
-        }
-    }
-
-    /// Extract final lines from accumulator
-    fn finalize(acc: Accumulator) -> Vec<String> {
-        match acc.current_line.is_empty() {
-            true => acc.completed_lines,
-            false => push_to(acc.completed_lines, acc.current_line),
-        }
-    }
-
-    let initial = Accumulator {
-        completed_lines: Vec::new(),
-        current_line: String::new(),
-        current_length: 0,
-    };
-
-    let result = text
-        .split_whitespace()
-        .fold(initial, |acc, word| process_word(acc, word, width));
-
-    finalize(result)
-}
-
-fn stage_status(task: &TaskRow) -> (Option<String>, Option<String>, bool) {
-    let stage = task.stage.as_ref().map(|stage| {
-        stage
-            .split_once(':')
-            .map_or(stage.as_str(), |(prefix, _)| prefix)
-            .trim()
-            .to_string()
-    });
-    match task.status.as_str() {
-        "created" => (None, None, false),
-        "in_progress" => (stage.clone(), None, false),
-        "failed" => (None, stage, false),
-        "passed" | "integrated" => (None, None, true),
-        _ => (None, None, false),
-    }
-}
-
-fn stage_detail(task: &TaskRow) -> Option<String> {
-    task.stage.as_ref().and_then(|stage| {
-        stage.split_once(':').and_then(|(_, detail)| {
-            let trimmed = detail.trim();
-            (!trimmed.is_empty()).then(|| trimmed.to_string())
-        })
-    })
-}
-
 fn stage_symbol(stage: &str) -> &'static str {
     match stage {
         "research" => "🔍",
@@ -652,29 +538,6 @@ fn stage_symbol(stage: &str) -> &'static str {
         "validate" => "◎",
         "accept" => "✓",
         _ => "•",
-    }
-}
-
-fn stage_progress(
-    stage_index: usize,
-    running_stage: Option<usize>,
-    failed_stage: Option<usize>,
-    completed: bool,
-) -> f32 {
-    if completed {
-        1.0
-    } else if let Some(index) = failed_stage {
-        if stage_index <= index { 1.0 } else { 0.0 }
-    } else if let Some(index) = running_stage {
-        if stage_index < index {
-            1.0
-        } else if stage_index == index {
-            0.5
-        } else {
-            0.0
-        }
-    } else {
-        0.0
     }
 }
 
@@ -777,13 +640,6 @@ mod tests {
     }
 
     #[test]
-    fn test_textwrap() {
-        let lines = textwrap("hello world this is a test", 15);
-        assert!(!lines.is_empty());
-        assert!(lines[0].len() <= 15);
-    }
-
-    #[test]
     fn test_render_top_border() {
         let renderer = Renderer::new();
         let border = renderer.render_top_border(20, "Test");
@@ -797,73 +653,5 @@ mod tests {
         let border = renderer.render_bottom_border(20);
         assert!(border.starts_with('└'));
         assert!(border.ends_with("┘"));
-    }
-
-    #[test]
-    fn test_textwrap_single_word() {
-        let lines = textwrap("hello", 10);
-        assert_eq!(lines.len(), 1);
-        assert_eq!(lines[0], "hello");
-    }
-
-    #[test]
-    fn test_textwrap_empty() {
-        let lines = textwrap("", 10);
-        assert!(lines.is_empty());
-    }
-
-    #[test]
-    fn test_textwrap_long_word() {
-        let lines = textwrap("supercalifragilisticexpialidocious", 10);
-        assert!(!lines.is_empty());
-        assert!(lines[0].len() <= 10);
-    }
-
-    #[test]
-    fn test_stage_progress_none_started() {
-        let progress = stage_progress(0, None, None, false);
-        assert_eq!(progress, 0.0);
-    }
-
-    #[test]
-    fn test_stage_progress_completed() {
-        let progress = stage_progress(0, None, None, true);
-        assert_eq!(progress, 1.0);
-    }
-
-    #[test]
-    fn test_stage_progress_running_current() {
-        let progress = stage_progress(2, Some(2), None, false);
-        assert_eq!(progress, 0.5);
-    }
-
-    #[test]
-    fn test_stage_progress_running_past() {
-        let progress = stage_progress(1, Some(2), None, false);
-        assert_eq!(progress, 1.0);
-    }
-
-    #[test]
-    fn test_stage_progress_running_future() {
-        let progress = stage_progress(3, Some(2), None, false);
-        assert_eq!(progress, 0.0);
-    }
-
-    #[test]
-    fn test_stage_progress_failed_before() {
-        let progress = stage_progress(0, None, Some(1), false);
-        assert_eq!(progress, 1.0);
-    }
-
-    #[test]
-    fn test_stage_progress_failed_at() {
-        let progress = stage_progress(1, None, Some(1), false);
-        assert_eq!(progress, 1.0);
-    }
-
-    #[test]
-    fn test_stage_progress_failed_after() {
-        let progress = stage_progress(2, None, Some(1), false);
-        assert_eq!(progress, 0.0);
     }
 }

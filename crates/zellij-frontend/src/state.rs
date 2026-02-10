@@ -516,17 +516,16 @@ mod tests {
     }
 
     #[test]
-    fn test_state_manager_clear_state() {
+    fn test_state_manager_clear_state() -> Result<(), Box<dyn std::error::Error>> {
         let temp_dir = std::env::temp_dir();
         let state_file = temp_dir.join("test-state-clear.json");
-        let manager = StateManager::new(state_file.clone(), DEFAULT_MAX_FILE_SIZE)
-            .expect("Failed to create StateManager");
+        let manager = StateManager::new(state_file.clone(), DEFAULT_MAX_FILE_SIZE)?;
 
         // Clear when file doesn't exist should succeed
         assert!(manager.clear_state().is_ok());
 
         // Create file
-        fs::write(&state_file, "{}").expect("Failed to write test state file");
+        fs::write(&state_file, "{}")?;
 
         // File exists
         assert!(manager.state_exists());
@@ -536,6 +535,8 @@ mod tests {
 
         // File should be gone
         assert!(!manager.state_exists());
+
+        Ok(())
     }
 
     #[test]

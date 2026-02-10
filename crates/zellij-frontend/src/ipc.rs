@@ -138,7 +138,7 @@ impl ZellijIpcClient {
             // Use get to avoid indexing_slicing lint - safe because bytes_read <= buffer.len()
             let chunk = buffer
                 .get(..bytes_read)
-                .map_or_else(String::new, |slice| String::from_utf8_lossy(slice));
+                .map_or_else(String::new, |slice| String::from_utf8_lossy(slice).to_string());
             json_string.push_str(&chunk);
 
             // Check if we have a complete JSON object
