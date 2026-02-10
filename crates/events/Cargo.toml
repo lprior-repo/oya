@@ -31,6 +31,9 @@ thiserror = { workspace = true }
 # Tracing
 tracing = { workspace = true }
 
+# Telemetry
+oya-telemetry = { workspace = true }
+
 # Database
 surrealdb = { workspace = true }
 surrealdb-core = { workspace = true }

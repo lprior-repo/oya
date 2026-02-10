@@ -18,15 +18,18 @@
 //!
 //! # Example
 //!
-//! ```ignore
-//! use oya_workflow::{
-//!     WorkflowEngine, EngineConfig, Workflow, Phase,
-//!     HandlerRegistry, NoOpHandler, InMemoryStorage,
-//! };
-//! use std::sync::Arc;
+//! ## Telemetry Initialization
 //!
+//! Initialize distributed tracing using oya-telemetry crate.
+//! Call `init_telemetry_json()` at application startup to enable
+//! structured JSON logging for distributed tracing.
+//!
+//! ```ignore
 //! #[tokio::main]
-//! async fn main() {
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     // Initialize telemetry first
+//!     init_telemetry_json()?;
+//!
 //!     // Create storage and handlers
 //!     let storage = Arc::new(InMemoryStorage::new());
 //!     let mut registry = HandlerRegistry::new();
@@ -47,7 +50,8 @@
 //!
 //!     // Execute
 //!     let result = engine.run(workflow).await;
-//!     println!("Workflow completed: {:?}", result);
+//!     tracing::info!("Workflow completed: {:?}", result);
+//!     Ok(())
 //! }
 //! ```
 
@@ -56,6 +60,24 @@
 #![forbid(clippy::panic)]
 
 pub mod checkpoint;
+
+/// Initialize telemetry with JSON logging.
+///
+/// # Errors
+///
+/// Returns `Error` if initialization fails.
+pub fn init_telemetry_json() -> Result<(), Box<dyn std::error::Error>> {
+    use oya_telemetry::{TelemetryConfig, TracingGuard};
+
+    let config = TelemetryConfig::new("oya-workflow")
+        .with_json_logging(true)
+        .with_log_level(tracing::Level::INFO);
+
+    let _guard = oya_telemetry::init_telemetry(config)
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+
+    Ok(())
+}
 pub mod cleanup;
 pub mod engine;
 pub mod error;

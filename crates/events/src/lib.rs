@@ -7,39 +7,15 @@
 //! - **Event bus**: Pub/sub for real-time coordination
 //! - **Projections**: Materialized views rebuilt from events
 //!
-//! # Example
+//! # Telemetry Initialization
 //!
-//! ```ignore
-//! use oya_events::{
-//!     EventBus, InMemoryEventStore, BeadEvent, BeadId, BeadSpec, Complexity,
-//!     AllBeadsProjection, ManagedProjection,
-//! };
-//! use std::sync::Arc;
-//!
-//! #[tokio::main]
-//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     // Create event store and bus
-//!     let store = Arc::new(InMemoryEventStore::new());
-//!     let bus = EventBus::new(store.clone());
-//!
-//!     // Subscribe to events
-//!     let mut sub = bus.subscribe();
-//!
-//!     // Publish a bead creation event
-//!     let bead_id = BeadId::new();
-//!     let spec = BeadSpec::new("My task").with_complexity(Complexity::Medium);
-//!     bus.publish(BeadEvent::created(bead_id, spec)).await?;
-//!
-//!     // Receive the event
-//!     let event = sub.recv().await?;
-//!     println!("Received: {:?}", event.event_type());
-//!     Ok(())
-//! }
-//! ```
+//! Initialize distributed tracing using oya-telemetry crate.
+//! Call `init_telemetry_json()` at application startup to enable
+//! structured JSON logging for distributed tracing.
 
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
-#![forbid(clippy::panic)]
+#![deny(clippy::panic)]
 
 pub mod bus;
 pub mod db;
@@ -48,27 +24,44 @@ pub mod error;
 pub mod event;
 pub mod projection;
 pub mod replay;
-pub mod stage;
-pub mod store;
-pub mod types;
 
-// Re-export main types
-pub use bus::{EventBus, EventBusBuilder, EventPattern, EventSubscription};
-pub use durable_store::{connect, AppendError, ConnectionConfig, DurableEventStore};
-pub use error::{ConnectionError, Error, Result};
-pub use event::BeadEvent;
-pub use projection::{
-    AllBeadsProjection, AllBeadsState, BeadProjection, ManagedProjection, Projection,
-};
-pub use replay::{
-    create_tracker, EventFilter, EventLoader, LoadError, ReplayProgress, ReplayTracker,
-};
-pub use stage::{
-    BeadStateMachine, ExhaustionPolicy, RecursionPolicy, Severity, StageKind, StageTransition,
-    StateMachineError, TransitionReason,
-};
-pub use store::{EventStore, InMemoryEventStore, TracingEventStore};
-pub use types::{
-    BeadId, BeadResult, BeadSpec, BeadState, Complexity, EventId, PhaseId, PhaseOutput,
-    StateTransition,
-};
+/// Initialize telemetry with JSON logging.
+///
+/// # Errors
+///
+/// Returns `Error` if initialization fails.
+pub fn init_telemetry_json() -> Result<(), Box<dyn std::error::Error>> {
+    use oya_telemetry::{TelemetryConfig, TracingGuard};
+
+    let config = TelemetryConfig::new("oya-events")
+        .with_json_logging(true)
+        .with_log_level(tracing::Level::INFO);
+
+    let _guard = oya_telemetry::init_telemetry(config)
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+
+    Ok(())
+}
+
+/// Example with telemetry initialization
+///
+/// ```ignore
+/// #[tokio::main]
+/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     // Initialize telemetry first
+///     init_telemetry_json()?;
+///     
+///     let store = Arc::new(InMemoryEventStore::new());
+///     let bus = EventBus::new(store.clone());
+///     
+///     let mut sub = bus.subscribe();
+///     
+///     let bead_id = BeadId::new();
+///     let spec = BeadSpec::new("My task").with_complexity(Complexity::Medium);
+///     bus.publish(BeadEvent::created(bead_id, spec)).await?;
+///     
+///     let event = sub.recv().await?;
+///     tracing::info!("Received: {:?}", event.event_type());
+///     Ok(())
+/// }
+/// ```

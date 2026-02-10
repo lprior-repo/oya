@@ -43,6 +43,7 @@ harness = false
 oya-core = { workspace = true }
 oya-events = { workspace = true }
 oya-opencode = { workspace = true }
+oya-telemetry = { workspace = true }
 tracing-subscriber = { workspace = true }
 oya-pipeline = { workspace = true }
 oya-ipc = { workspace = true }
