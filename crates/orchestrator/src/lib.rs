@@ -52,6 +52,26 @@ pub mod ipc_bridge;
 /// for coordinating distributed agents.
 pub mod agent_swarm;
 
+/// Initialize telemetry with JSON logging.
+///
+/// # Errors
+///
+/// Returns `Error` if initialization fails.
+pub fn init_telemetry_json() -> oya_core::Result<()> {
+    use oya_telemetry::{TelemetryConfig, TracingGuard};
+
+    let config = TelemetryConfig::new("orchestrator")
+        .with_json_logging(true)
+        .with_log_level(tracing::Level::INFO);
+
+    let _guard = oya_telemetry::init_telemetry(config).map_err(|e| {
+        oya_core::Error::TelemetryInitFailed {
+            reason: e.to_string(),
+        }
+    })?;
+
+    Ok(())
+}
 /// Workflow DAG module for managing bead dependencies
 pub mod dag;
 
