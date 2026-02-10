@@ -24,4 +24,3 @@ pub const fn border_focused() -> &'static str {
 pub const fn reset() -> &'static str {
     "\x1b[0m"
 }
-

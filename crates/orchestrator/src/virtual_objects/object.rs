@@ -450,13 +450,19 @@ impl ObjectHandler for CounterHandler {
         match operation {
             Some("increment") => {
                 let current = context.state.get_i64("count").unwrap_or(0);
-                let amount = payload.get("amount").and_then(serde_json::Value::as_i64).unwrap_or(1);
+                let amount = payload
+                    .get("amount")
+                    .and_then(serde_json::Value::as_i64)
+                    .unwrap_or(1);
                 context.state.set("count", current.saturating_add(amount));
                 HandlerResponse::success(serde_json::json!({ "count": current + amount }))
             }
             Some("decrement") => {
                 let current = context.state.get_i64("count").unwrap_or(0);
-                let amount = payload.get("amount").and_then(serde_json::Value::as_i64).unwrap_or(1);
+                let amount = payload
+                    .get("amount")
+                    .and_then(serde_json::Value::as_i64)
+                    .unwrap_or(1);
                 context.state.set("count", current.saturating_sub(amount));
                 HandlerResponse::success(serde_json::json!({ "count": current - amount }))
             }

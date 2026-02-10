@@ -1,155 +1,78 @@
-// IPC module - Communication with oya-orchestrator for real-time data
-//
-// This module provides a TCP-based IPC client using bincode serialization
-// for efficient communication with the oya-orchestrator.
+//! IPC client abstraction for oya-orchestrator communication.
+//!
+//! This module provides a unified interface for communicating with the OYA
+//! orchestrator, supporting both direct socket connections and Zellij stdin/stdout.
 
-use std::io::{Read, Write};
-use std::net::TcpStream;
-use std::time::Duration;
+#![forbid(unsafe_code)]
+#![forbid(clippy::unwrap_used)]
+#![forbid(clippy::expect_used)]
+#![forbid(clippy::panic)]
 
-use oya_ipc::{GuestMessage, HostMessage, IpcTransport, TransportError};
-use thiserror::Error;
+use crate::ipc_zellij::ZellijIpcClient;
+use oya_ipc::{GuestMessage, HostMessage};
+use std::sync::{Arc, Mutex};
 
-/// IPC client errors
-#[derive(Debug, Error)]
+/// IPC client error types.
+#[derive(Debug, thiserror::Error)]
 pub enum IpcError {
-    #[error("I/O error: {0}")]
-    Io(String),
+    #[error("send failed: {0}")]
+    SendFailed(String),
 
-    #[error("Connection failed: {0}")]
-    ConnectionFailed(String),
+    #[error("receive failed: {0}")]
+    ReceiveFailed(String),
 
-    #[error("Transport error: {0}")]
-    Transport(String),
+    #[error("unexpected response: {0:?}")]
+    UnexpectedResponse(HostMessage),
+
+    #[error("serialization failed: {0}")]
+    SerializationFailed(String),
+
+    #[error("deserialization failed: {0}")]
+    DeserializationFailed(String),
 }
 
-impl From<TransportError> for IpcError {
-    fn from(err: TransportError) -> Self {
-        IpcError::Transport(err.to_string())
-    }
-}
+/// Result type for IPC operations.
+pub type IpcResult<T> = Result<T, IpcError>;
 
-/// IPC client for orchestrator communication
+/// IPC client for communicating with oya-orchestrator.
+///
+/// Wraps the Zellij IPC client and provides a higher-level request/response API.
 pub struct IpcClient {
-    transport: IpcTransport<Box<dyn Read + Send>, Box<dyn Write + Send>>,
+    inner: Arc<Mutex<ZellijIpcClient>>,
 }
 
 impl IpcClient {
-    /// Connect to the IPC server
-    pub fn connect(address: &str) -> Result<Self, IpcError> {
-        let stream = TcpStream::connect(address)
-            .map_err(|e| IpcError::ConnectionFailed(format!("Connection failed: {e}")))?;
-
-        stream
-            .set_read_timeout(Some(Duration::from_secs(5)))
-            .map_err(|e| IpcError::ConnectionFailed(format!("Failed to set read timeout: {e}")))?;
-
-        stream
-            .set_write_timeout(Some(Duration::from_secs(5)))
-            .map_err(|e| IpcError::ConnectionFailed(format!("Failed to set write timeout: {e}")))?;
-
-        let reader = stream
-            .try_clone()
-            .map_err(|e| IpcError::ConnectionFailed(format!("Failed to clone stream: {e}")))?;
-
-        let transport = IpcTransport::new(
-            Box::new(reader) as Box<dyn Read + Send>,
-            Box::new(stream) as Box<dyn Write + Send>,
-        );
-        Ok(Self { transport })
+    /// Connect to the orchestrator via address.
+    ///
+    /// For Zellij stdin/stdout, the address is ignored and we use stdin/stdout.
+    pub fn connect(_address: &str) -> IpcResult<Self> {
+        Ok(Self {
+            inner: Arc::new(Mutex::new(ZellijIpcClient::new())),
+        })
     }
 
-    /// Send a request and wait for a response
-    pub fn request(&mut self, message: GuestMessage) -> Result<HostMessage, IpcError> {
-        self.transport.send(&message)?;
-        self.transport.recv().map_err(IpcError::from)
+    /// Send a request and wait for a response.
+    pub fn request(&mut self, message: GuestMessage) -> IpcResult<HostMessage> {
+        let mut client = self
+            .inner
+            .lock()
+            .map_err(|e| IpcError::SendFailed(format!("lock failed: {}", e)))?;
+
+        // Send the request
+        client
+            .send_command(&message)
+            .map_err(IpcError::SendFailed)?;
+
+        // Receive the response
+        client.recv().map_err(IpcError::ReceiveFailed)
     }
 }
 
-// ============================================================================
-// ZELLIJ PLUGIN IPC (stdin/stdout)
-// ============================================================================
-
-/// Zellij stdin/stdout IPC client for WASM plugin
-///
-/// Synchronous client for communicating with backend via Zellij stdin/stdout.
-pub struct ZellijIpcClient {
-    _correlation_context: crate::correlation::CorrelationContext,
-    _pending_requests: std::collections::HashMap<String, serde_json::Value>,
-}
-
-impl Default for ZellijIpcClient {
+impl Default for IpcClient {
     fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl ZellijIpcClient {
-    /// Create new Zellij IPC client
-    pub fn new() -> Self {
-        Self {
-            _correlation_context: crate::correlation::CorrelationContext::new(),
-            _pending_requests: std::collections::HashMap::new(),
-        }
-    }
-
-    /// Send a GuestMessage to backend
-    ///
-    /// Returns Ok(()) on success, Err on failure
-    pub fn send_command(&mut self, cmd: &GuestMessage) -> Result<(), String> {
-        let request_id = self._correlation_context.generate_request_id();
-
-        // Serialize message
-        let json =
-            serde_json::to_string(cmd).map_err(|e| format!("Serialization failed: {e}"))?;
-
-        // Add correlation ID
-        let payload = format!(r#"{{"request_id": "{}", "data": {}}}"#, request_id, json);
-
-        // Write to Zellij stdout
-        let mut stdout = std::io::stdout();
-        stdout
-            .write_all(payload.as_bytes())
-            .map_err(|e| format!("Write failed: {}", e))?;
-        stdout.flush().map_err(|e| format!("Flush failed: {}", e))?;
-
-        Ok(())
-    }
-
-    /// Read a HostMessage from backend
-    ///
-    /// Blocks until message is available
-    pub fn recv(&mut self) -> Result<HostMessage, String> {
-        let mut stdin = std::io::stdin();
-        let mut buffer = [0u8; 8192]; // 8KB buffer
-
-        // Read line (JSON terminated by newline)
-        let mut json_string = String::new();
-        loop {
-            let bytes_read = stdin
-                .read(&mut buffer)
-                .map_err(|e| format!("Read failed: {}", e))?;
-
-            if bytes_read == 0 {
-                // End of stream - treat as disconnect
-                return Err("Connection closed".to_string());
-            }
-
-            // Use get to avoid indexing_slicing lint - safe because bytes_read <= buffer.len()
-            let chunk = buffer
-                .get(..bytes_read)
-                .map_or_else(String::new, |slice| String::from_utf8_lossy(slice).to_string());
-            json_string.push_str(&chunk);
-
-            // Check if we have a complete JSON object
-            if json_string.trim().ends_with('}') {
-                break;
-            }
-        }
-
-        // Parse JSON
-        serde_json::from_str::<HostMessage>(&json_string)
-            .map_err(|e| format!("Deserialization failed: {}", e))
+        Self::connect("127.0.0.1:5555").unwrap_or_else(|_| Self {
+            inner: Arc::new(Mutex::new(ZellijIpcClient::new())),
+        })
     }
 }
 
@@ -158,8 +81,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_zellij_ipc_client() {
-        let _client = ZellijIpcClient::new();
-        assert!(true);
+    fn test_ipc_client_connect() {
+        let _client = IpcClient::connect("127.0.0.1:5555");
+    }
+
+    #[test]
+    fn test_ipc_client_default() {
+        let _client = IpcClient::default();
     }
 }

@@ -1602,7 +1602,7 @@ impl DagBuilder {
     ///     .with_node("a".to_string())
     ///     .with_node("b".to_string());
     /// ```
-    #[must_use] 
+    #[must_use]
     pub fn with_node(mut self, node: String) -> Self {
         self.nodes.push(node);
         self
@@ -1649,7 +1649,7 @@ impl DagBuilder {
     ///     .with_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)
     ///     .with_edge("b".to_string(), "c".to_string(), DependencyType::BlockingDependency);
     /// ```
-    #[must_use] 
+    #[must_use]
     pub fn with_edge(mut self, from: String, to: String, dep_type: DependencyType) -> Self {
         self.edges.push((from, to, dep_type));
         self

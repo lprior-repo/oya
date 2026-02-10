@@ -19,8 +19,8 @@ static mut RENDER_OUTPUT: Option<String> = None;
 /// The config is a JSON string with plugin configuration including size.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn load(config: *const u8, config_len: usize) {
-    // Parse the configuration JSON
-    let config_slice = std::slice::from_raw_parts(config, config_len);
+    // Parse configuration JSON
+    let config_slice = unsafe { std::slice::from_raw_parts(config, config_len) };
     let config_str = String::from_utf8_lossy(config_slice);
 
     // Parse plugin info (size, etc.)
@@ -52,9 +52,11 @@ pub unsafe extern "C" fn load(config: *const u8, config_len: usize) {
     // Create plugin instance
     match OyaPlugin::new() {
         Ok(mut plugin) => {
-            // Initialize the plugin with the info
+            // Initialize plugin with info
             let _ = plugin.start(info);
-            PLUGIN = Some(plugin);
+            unsafe {
+                PLUGIN = Some(plugin);
+            }
         }
         Err(e) => {
             // Log error but continue with minimal state
@@ -68,22 +70,27 @@ pub unsafe extern "C" fn load(config: *const u8, config_len: usize) {
 /// Zellij calls this when there's user input (keyboard, mouse, etc.).
 /// Returns: number of bytes written to the buffer
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn update(input: *const u8, input_len: usize, buffer: *mut u8, buffer_len: usize) -> usize {
+pub unsafe extern "C" fn update(
+    input: *const u8,
+    input_len: usize,
+    buffer: *mut u8,
+    buffer_len: usize,
+) -> usize {
     let plugin = &raw mut PLUGIN;
 
     // Check if plugin exists using raw pointer
-    if (*plugin).is_none() {
+    if unsafe { (*plugin).is_none() } {
         return 0;
     }
 
     // Parse input as JSON event
-    let input_slice = std::slice::from_raw_parts(input, input_len);
+    let input_slice = unsafe { std::slice::from_raw_parts(input, input_len) };
     let input_str = String::from_utf8_lossy(input_slice);
 
     // Try to parse as plugin event
     if let Ok(event_value) = serde_json::from_str::<serde_json::Value>(&input_str) {
         // Convert JSON to PluginEvent
-        if let Some(ref mut p) = *plugin {
+        if let Some(p) = unsafe { &mut *plugin } {
             if let Ok(event) = json_to_plugin_event(event_value) {
                 let _ = p.handle_event(event);
             }
@@ -91,13 +98,15 @@ pub unsafe extern "C" fn update(input: *const u8, input_len: usize, buffer: *mut
     }
 
     // Get rendered output
-    let output = get_render_output();
+    let output = unsafe { get_render_output() };
 
     // Copy to buffer if space allows
     let output_bytes = output.as_bytes();
     if !buffer.is_null() && buffer_len > 0 {
         let copy_len = output_bytes.len().min(buffer_len);
-        std::ptr::copy_nonoverlapping(output_bytes.as_ptr(), buffer, copy_len);
+        unsafe {
+            std::ptr::copy_nonoverlapping(output_bytes.as_ptr(), buffer, copy_len);
+        }
         copy_len
     } else {
         output_bytes.len()
@@ -111,13 +120,15 @@ pub unsafe extern "C" fn update(input: *const u8, input_len: usize, buffer: *mut
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn render(buffer: *mut u8, buffer_len: usize) -> usize {
     // Get rendered output
-    let output = get_render_output();
+    let output = unsafe { get_render_output() };
 
     // Copy to buffer if space allows
     let output_bytes = output.as_bytes();
     if !buffer.is_null() && buffer_len > 0 {
         let copy_len = output_bytes.len().min(buffer_len);
-        std::ptr::copy_nonoverlapping(output_bytes.as_ptr(), buffer, copy_len);
+        unsafe {
+            std::ptr::copy_nonoverlapping(output_bytes.as_ptr(), buffer, copy_len);
+        }
         copy_len
     } else {
         output_bytes.len()
@@ -129,8 +140,10 @@ pub unsafe extern "C" fn render(buffer: *mut u8, buffer_len: usize) -> usize {
 /// Zellij calls this when unloading the plugin.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn unload() {
-    PLUGIN = None;
-    RENDER_OUTPUT = None;
+    unsafe {
+        PLUGIN = None;
+        RENDER_OUTPUT = None;
+    }
 }
 
 /// Get the current rendered output from the plugin
@@ -138,7 +151,7 @@ unsafe fn get_render_output() -> String {
     // Check cached render output using raw pointer
     let output_ptr = &raw mut RENDER_OUTPUT;
 
-    if let Some(ref output) = *output_ptr {
+    if let Some(output) = unsafe { &*output_ptr } {
         return output.clone();
     }
 
@@ -151,8 +164,10 @@ unsafe fn get_render_output() -> String {
 }
 
 /// Convert JSON value to PluginEvent
-fn json_to_plugin_event(value: serde_json::Value) -> Result<PluginEvent, Box<dyn std::error::Error>> {
-    use crate::plugin::{KeyModifiers, MouseEvent, MouseButton};
+fn json_to_plugin_event(
+    value: serde_json::Value,
+) -> Result<PluginEvent, Box<dyn std::error::Error>> {
+    use crate::plugin::{KeyModifiers, MouseButton, MouseEvent};
 
     let kind = value
         .get("kind")
@@ -167,8 +182,14 @@ fn json_to_plugin_event(value: serde_json::Value) -> Result<PluginEvent, Box<dyn
         }
         "resize" => {
             let size_value = value.get("size").ok_or("Missing 'size'")?;
-            let rows = size_value.get("rows").and_then(|r| r.as_u64()).unwrap_or(24) as usize;
-            let cols = size_value.get("cols").and_then(|c| c.as_u64()).unwrap_or(80) as usize;
+            let rows = size_value
+                .get("rows")
+                .and_then(|r| r.as_u64())
+                .unwrap_or(24) as usize;
+            let cols = size_value
+                .get("cols")
+                .and_then(|c| c.as_u64())
+                .unwrap_or(80) as usize;
             Ok(PluginEvent::Resize {
                 size: Size { rows, cols },
             })
@@ -183,9 +204,18 @@ fn json_to_plugin_event(value: serde_json::Value) -> Result<PluginEvent, Box<dyn
                 .ok_or("Empty key")?;
 
             let mods_value = value.get("modifiers").ok_or("Missing 'modifiers'")?;
-            let shift = mods_value.get("shift").and_then(|s| s.as_bool()).unwrap_or(false);
-            let ctrl = mods_value.get("ctrl").and_then(|c| c.as_bool()).unwrap_or(false);
-            let alt = mods_value.get("alt").and_then(|a| a.as_bool()).unwrap_or(false);
+            let shift = mods_value
+                .get("shift")
+                .and_then(|s| s.as_bool())
+                .unwrap_or(false);
+            let ctrl = mods_value
+                .get("ctrl")
+                .and_then(|c| c.as_bool())
+                .unwrap_or(false);
+            let alt = mods_value
+                .get("alt")
+                .and_then(|a| a.as_bool())
+                .unwrap_or(false);
 
             Ok(PluginEvent::Key {
                 key,

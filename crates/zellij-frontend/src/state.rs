@@ -314,13 +314,13 @@ impl StateManager {
     }
 
     /// Check if a state file exists
-    #[must_use] 
+    #[must_use]
     pub fn state_exists(&self) -> bool {
         self.state_file.exists()
     }
 
     /// Get the state file path
-    #[must_use] 
+    #[must_use]
     pub fn state_file_path(&self) -> &Path {
         &self.state_file
     }

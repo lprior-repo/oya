@@ -8,7 +8,7 @@ use chrono::Utc;
 use itertools::Itertools;
 use std::env;
 
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, instrument, warn};
 
 use crate::error::{Error, Result};
 use crate::handler::HandlerRegistry;
@@ -109,6 +109,7 @@ impl WorkflowEngine {
     }
 
     /// Run a workflow to completion.
+    #[tracing::instrument(skip(self, workflow))]
     pub async fn run(&self, mut workflow: Workflow) -> Result<WorkflowResult> {
         info!(workflow_id = %workflow.id, name = %workflow.name, "Starting workflow");
 
@@ -243,6 +244,7 @@ impl WorkflowEngine {
     }
 
     /// Execute a phase with retry logic.
+    #[tracing::instrument(skip(self, workflow, phase, previous_output))]
     async fn execute_phase_with_retries(
         &self,
         workflow: &Workflow,
@@ -325,6 +327,7 @@ impl WorkflowEngine {
     }
 
     /// Create a checkpoint after a successful phase.
+    #[tracing::instrument(skip(self, workflow, phase, output))]
     async fn create_checkpoint(
         &self,
         workflow: &Workflow,

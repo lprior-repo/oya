@@ -15,13 +15,13 @@ use std::time::{Duration, Instant};
 
 use orchestrator::actors::scheduler::SchedulerActorDef;
 use orchestrator::actors::supervisor::{
-    spawn_supervisor_with_name, SupervisorArguments, SupervisorConfig, SupervisorMessage,
+    SupervisorArguments, SupervisorConfig, SupervisorMessage, spawn_supervisor_with_name,
 };
 use orchestrator::actors::worker::{
     WorkerActorDef, WorkerConfig, WorkerMessage, WorkerRetryPolicy,
 };
 use orchestrator::dag::{DependencyType, WorkflowDAG};
-use oya_events::{BeadId, BeadState, BeadResult, EventBus, InMemoryEventStore};
+use oya_events::{BeadId, BeadResult, BeadState, EventBus, InMemoryEventStore};
 use ractor::{Actor, ActorRef};
 use serde::{Deserialize, Serialize};
 use tracing::info;
@@ -82,7 +82,9 @@ fn create_25_bead_workflow() -> Result<WorkflowDAG, Box<dyn std::error::Error>> 
 }
 
 /// Setup test environment with supervisor, scheduler, and worker.
-async fn setup_test_environment(unique_id: &str) -> Result<TestContext, Box<dyn std::error::Error>> {
+async fn setup_test_environment(
+    unique_id: &str,
+) -> Result<TestContext, Box<dyn std::error::Error>> {
     let workflow_id = format!("test-workflow-25-beads-{unique_id}");
 
     // Create event bus
@@ -93,11 +95,8 @@ async fn setup_test_environment(unique_id: &str) -> Result<TestContext, Box<dyn 
     let config = SupervisorConfig::for_testing();
     let args = SupervisorArguments::new().with_config(config);
     let supervisor_name = format!("supervisor-e2e-checkpoint-{unique_id}");
-    let supervisor = spawn_supervisor_with_name::<SchedulerActorDef>(
-        args,
-        &supervisor_name,
-    )
-    .await?;
+    let supervisor =
+        spawn_supervisor_with_name::<SchedulerActorDef>(args, &supervisor_name).await?;
 
     // Wait for supervisor to be running
     tokio::time::sleep(Duration::from_millis(100)).await;
@@ -194,7 +193,10 @@ async fn execute_workflow_with_checkpointing(
         }
     }
 
-    info!("Workflow execution complete: 25 beads executed, {} checkpoints", state.checkpoint_count);
+    info!(
+        "Workflow execution complete: 25 beads executed, {} checkpoints",
+        state.checkpoint_count
+    );
 
     Ok(state)
 }
@@ -223,8 +225,7 @@ async fn verify_checkpoint_tracking(
 
 #[tokio::test]
 async fn given_25_bead_workflow_when_executing_then_tracks_checkpoint_every_5_beads()
-    -> Result<(), Box<dyn std::error::Error>>
-{
+-> Result<(), Box<dyn std::error::Error>> {
     let test_name = "e2e_checkpoint_every_5_beads";
     info!("Starting E2E test: {}", test_name);
 
@@ -244,11 +245,9 @@ async fn given_25_bead_workflow_when_executing_then_tracks_checkpoint_every_5_be
 
     // Assertions
     assert_eq!(
-        verification.checkpoint_count,
-        verification.expected_count,
+        verification.checkpoint_count, verification.expected_count,
         "Expected {} checkpoints, got {}",
-        verification.expected_count,
-        verification.checkpoint_count
+        verification.expected_count, verification.checkpoint_count
     );
 
     assert!(
@@ -267,10 +266,7 @@ async fn given_25_bead_workflow_when_executing_then_tracks_checkpoint_every_5_be
     assert_eq!(final_state.last_checkpoint_bead_index, 25);
 
     let elapsed = start.elapsed();
-    info!(
-        "Test completed successfully in {:?}",
-        elapsed
-    );
+    info!("Test completed successfully in {:?}", elapsed);
 
     // Cleanup
     ctx.worker.stop(Some("test complete".to_string()));
@@ -280,8 +276,7 @@ async fn given_25_bead_workflow_when_executing_then_tracks_checkpoint_every_5_be
 
 #[tokio::test]
 async fn given_workflow_execution_when_completing_5_beads_then_tracks_first_checkpoint()
-    -> Result<(), Box<dyn std::error::Error>>
-{
+-> Result<(), Box<dyn std::error::Error>> {
     info!("Starting E2E test: first checkpoint after 5 beads");
 
     // Setup
@@ -337,8 +332,7 @@ async fn given_workflow_execution_when_completing_5_beads_then_tracks_first_chec
 
 #[tokio::test]
 async fn given_long_running_workflow_when_checkpoints_every_5_beads_then_completes_successfully()
-    -> Result<(), Box<dyn std::error::Error>>
-{
+-> Result<(), Box<dyn std::error::Error>> {
     info!("Starting E2E test: long-running workflow completion");
 
     let start = Instant::now();
@@ -381,8 +375,7 @@ async fn given_long_running_workflow_when_checkpoints_every_5_beads_then_complet
 
 #[tokio::test]
 async fn given_workflow_state_when_tracking_checkpoints_then_preserves_accurate_counts()
-    -> Result<(), Box<dyn std::error::Error>>
-{
+-> Result<(), Box<dyn std::error::Error>> {
     info!("Starting E2E test: checkpoint count accuracy");
 
     // Setup
@@ -399,7 +392,10 @@ async fn given_workflow_state_when_tracking_checkpoints_then_preserves_accurate_
     // Bead 20: checkpoint 4
     // Bead 25: checkpoint 5
 
-    assert_eq!(final_state.checkpoint_count, 5, "Total checkpoints should be 5");
+    assert_eq!(
+        final_state.checkpoint_count, 5,
+        "Total checkpoints should be 5"
+    );
 
     // Verify completed beads match expected checkpoints
     assert_eq!(
@@ -430,8 +426,7 @@ async fn given_workflow_state_when_tracking_checkpoints_then_preserves_accurate_
 
 #[tokio::test]
 async fn given_multiple_checkpoints_when_tracking_then_events_emitted_correctly()
-    -> Result<(), Box<dyn std::error::Error>>
-{
+-> Result<(), Box<dyn std::error::Error>> {
     info!("Starting E2E test: event emissions at checkpoints");
 
     // Setup
@@ -497,16 +492,13 @@ async fn given_multiple_checkpoints_when_tracking_then_events_emitted_correctly(
 
 #[tokio::test]
 async fn given_25_bead_workflow_when_serializing_state_then_preserves_all_data()
-    -> Result<(), Box<dyn std::error::Error>>
-{
+-> Result<(), Box<dyn std::error::Error>> {
     info!("Starting E2E test: state serialization");
 
     // Create a complete workflow state
     let state = WorkflowCheckpointState {
         workflow_id: "test-workflow-serialization".to_string(),
-        completed_beads: (1..=25)
-            .map(|i| format!("bead-{i:02}"))
-            .collect(),
+        completed_beads: (1..=25).map(|i| format!("bead-{i:02}")).collect(),
         current_phase: "completed".to_string(),
         checkpoint_count: 5,
         last_checkpoint_bead_index: 25,
@@ -526,7 +518,10 @@ async fn given_25_bead_workflow_when_serializing_state_then_preserves_all_data()
     let deserialized: WorkflowCheckpointState = serde_json::from_slice(&serialized)?;
 
     // Verify equality
-    assert_eq!(deserialized, state, "Deserialized state should match original");
+    assert_eq!(
+        deserialized, state,
+        "Deserialized state should match original"
+    );
     assert_eq!(deserialized.completed_beads.len(), 25);
     assert_eq!(deserialized.checkpoint_count, 5);
     assert_eq!(deserialized.last_checkpoint_bead_index, 25);
@@ -538,8 +533,7 @@ async fn given_25_bead_workflow_when_serializing_state_then_preserves_all_data()
 
 #[tokio::test]
 async fn given_worker_config_when_checkpoint_interval_set_then_interval_correct()
-    -> Result<(), Box<dyn std::error::Error>>
-{
+-> Result<(), Box<dyn std::error::Error>> {
     info!("Starting E2E test: worker checkpoint interval configuration");
 
     // Create worker with specific checkpoint interval
@@ -550,10 +544,7 @@ async fn given_worker_config_when_checkpoint_interval_set_then_interval_correct(
     };
 
     // Verify interval is set correctly
-    assert_eq!(
-        worker_config.checkpoint_interval,
-        Duration::from_secs(120)
-    );
+    assert_eq!(worker_config.checkpoint_interval, Duration::from_secs(120));
 
     // Create worker and verify it starts
     let (worker, _handle) = Actor::spawn(None, WorkerActorDef, worker_config).await?;

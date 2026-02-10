@@ -137,9 +137,7 @@ pub enum OrchestratorMessage {
     },
 
     /// Shutdown signal
-    Shutdown {
-        reply: std::sync::mpsc::Sender<()>,
-    },
+    Shutdown { reply: std::sync::mpsc::Sender<()> },
 }
 
 /// State of the `BeadOrchestrator`
@@ -327,50 +325,46 @@ impl BeadOrchestratorState {
     /// Update slot state
     #[must_use]
     pub fn update_slot_state(&self, slot_id: SlotId, state: SlotState) -> Self {
-        self.slots
-            .get(&slot_id)
-            .map_or_else(
-                || self.clone(),
-                |slot| Self {
-                    slots: self.slots.update(
-                        slot_id,
-                        SlotInfo {
-                            state: state.clone(),
-                            ..slot.clone()
-                        },
-                    ),
-                    ..self.clone()
-                },
-            )
+        self.slots.get(&slot_id).map_or_else(
+            || self.clone(),
+            |slot| Self {
+                slots: self.slots.update(
+                    slot_id,
+                    SlotInfo {
+                        state: state.clone(),
+                        ..slot.clone()
+                    },
+                ),
+                ..self.clone()
+            },
+        )
     }
 
     /// Clear slot assignment
     #[must_use]
     pub fn clear_slot_assignment(&self, slot_id: SlotId) -> Self {
-        self.slots
-            .get(&slot_id)
-            .map_or_else(
-                || self.clone(),
-                |slot| {
-                    let bead_id = slot.assigned_bead.clone();
-                    let new_active_beads = bead_id.map_or_else(
-                        || self.active_beads.clone(),
-                        |id| self.active_beads.without(&id),
-                    );
-                    Self {
-                        slots: self.slots.update(
-                            slot_id,
-                            SlotInfo {
-                                state: SlotState::Idle,
-                                assigned_bead: None,
-                                ..slot.clone()
-                            },
-                        ),
-                        active_beads: new_active_beads,
-                        ..self.clone()
-                    }
-                },
-            )
+        self.slots.get(&slot_id).map_or_else(
+            || self.clone(),
+            |slot| {
+                let bead_id = slot.assigned_bead.clone();
+                let new_active_beads = bead_id.map_or_else(
+                    || self.active_beads.clone(),
+                    |id| self.active_beads.without(&id),
+                );
+                Self {
+                    slots: self.slots.update(
+                        slot_id,
+                        SlotInfo {
+                            state: SlotState::Idle,
+                            assigned_bead: None,
+                            ..slot.clone()
+                        },
+                    ),
+                    active_beads: new_active_beads,
+                    ..self.clone()
+                }
+            },
+        )
     }
 
     /// Mark workflow as complete
@@ -432,10 +426,7 @@ impl BeadOrchestratorActorDef {
             .pipe(|s| self.assign_beads_to_slots(s, ready_beads, idle_slots))
     }
 
-    fn poll_scheduler_for_ready_beads(
-        &self,
-        _state: &BeadOrchestratorState,
-    ) -> Vec<BeadId> {
+    fn poll_scheduler_for_ready_beads(&self, _state: &BeadOrchestratorState) -> Vec<BeadId> {
         // In production, this would call scheduler.get_ready_beads()
         // For now, return empty as this is simulated
         debug!("Polling scheduler for ready beads");
@@ -547,7 +538,9 @@ impl BeadOrchestratorActorDef {
             _ => None,
         };
 
-        let bead_id = if let Some(id) = bead_id { id } else {
+        let bead_id = if let Some(id) = bead_id {
+            id
+        } else {
             debug!("Event does not contain bead_id, skipping routing");
             return state.clone();
         };
@@ -555,10 +548,14 @@ impl BeadOrchestratorActorDef {
         // Route to specific slot or find the slot executing this bead
         let slot_id = match target_slot_id {
             Some(id) => id,
-            None => if let Some(id) = state.get_slot_for_bead(&bead_id) { id } else {
-                debug!("No slot found for bead {}", bead_id);
-                return state.clone();
-            },
+            None => {
+                if let Some(id) = state.get_slot_for_bead(&bead_id) {
+                    id
+                } else {
+                    debug!("No slot found for bead {}", bead_id);
+                    return state.clone();
+                }
+            }
         };
 
         // Forward event to slot
@@ -620,11 +617,7 @@ mod tests {
         );
         assert_eq!(state.failed_beads.len(), 0, "should have no failed beads");
         assert_eq!(state.active_beads.len(), 0, "should have no active beads");
-        assert_eq!(
-            state.idle_slot_count(),
-            0,
-            "should have 0 idle slots"
-        );
+        assert_eq!(state.idle_slot_count(), 0, "should have 0 idle slots");
     }
 
     #[test]
@@ -659,8 +652,7 @@ mod tests {
     fn test_mark_bead_completed_transitions_state() {
         // GIVEN: A state with an active bead
         let config = OrchestratorConfig::default();
-        let state = BeadOrchestratorState::new(config)
-            .mark_bead_active("bead-123".to_string(), 0);
+        let state = BeadOrchestratorState::new(config).mark_bead_active("bead-123".to_string(), 0);
         let bead_id = "bead-123".to_string();
 
         assert!(state.is_bead_active(&bead_id), "bead should be active");
@@ -693,8 +685,7 @@ mod tests {
     fn test_mark_bead_failed_transitions_state() {
         // GIVEN: A state with an active bead
         let config = OrchestratorConfig::default();
-        let state = BeadOrchestratorState::new(config)
-            .mark_bead_active("bead-123".to_string(), 0);
+        let state = BeadOrchestratorState::new(config).mark_bead_active("bead-123".to_string(), 0);
         let bead_id = "bead-123".to_string();
         let reason = "test failure".to_string();
 
@@ -770,8 +761,7 @@ mod tests {
     fn test_is_bead_active_returns_true_for_active_beads() {
         // GIVEN: A state with an active bead
         let config = OrchestratorConfig::default();
-        let state = BeadOrchestratorState::new(config)
-            .mark_bead_active("bead-123".to_string(), 0);
+        let state = BeadOrchestratorState::new(config).mark_bead_active("bead-123".to_string(), 0);
 
         // WHEN: Checking if bead is active
         let is_active = state.is_bead_active(&"bead-123".to_string());
@@ -827,8 +817,7 @@ mod tests {
     fn test_get_slot_for_bead_returns_correct_slot() {
         // GIVEN: A state with a bead assigned to a slot
         let config = OrchestratorConfig::default();
-        let state = BeadOrchestratorState::new(config)
-            .mark_bead_active("bead-123".to_string(), 5);
+        let state = BeadOrchestratorState::new(config).mark_bead_active("bead-123".to_string(), 5);
 
         // WHEN: Getting slot for bead
         let slot_id = state.get_slot_for_bead(&"bead-123".to_string());
@@ -922,15 +911,11 @@ mod tests {
             "should have 2 completed workflows"
         );
         assert!(
-            stats
-                .workflows_complete
-                .contains(&"workflow-1".to_string()),
+            stats.workflows_complete.contains(&"workflow-1".to_string()),
             "should include workflow-1"
         );
         assert!(
-            stats
-                .workflows_complete
-                .contains(&"workflow-2".to_string()),
+            stats.workflows_complete.contains(&"workflow-2".to_string()),
             "should include workflow-2"
         );
     }
@@ -1021,8 +1006,7 @@ mod tests {
     fn test_orchestrator_state_clone_is_independent() {
         // GIVEN: A state with data
         let config = OrchestratorConfig::default();
-        let state = BeadOrchestratorState::new(config)
-            .mark_bead_active("bead-1".to_string(), 0);
+        let state = BeadOrchestratorState::new(config).mark_bead_active("bead-1".to_string(), 0);
 
         // WHEN: Cloning and modifying the clone
         let clone = state.clone().mark_bead_completed("bead-1".to_string());

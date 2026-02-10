@@ -140,12 +140,13 @@ impl Workflow {
 
         for task_id in self.tasks.keys() {
             if !visited.contains(task_id)
-                && self.dfs_check_cycle(task_id, &mut visited, &mut rec_stack)? {
-                    return Err(crate::OyaError::validation(
-                        "workflow",
-                        "cycle detected in task dependencies",
-                    ));
-                }
+                && self.dfs_check_cycle(task_id, &mut visited, &mut rec_stack)?
+            {
+                return Err(crate::OyaError::validation(
+                    "workflow",
+                    "cycle detected in task dependencies",
+                ));
+            }
         }
 
         Ok(())

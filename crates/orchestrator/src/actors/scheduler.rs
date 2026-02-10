@@ -52,7 +52,7 @@ impl std::fmt::Debug for SchedulerArguments {
 
 impl SchedulerArguments {
     /// Create new arguments with no integrations.
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -64,14 +64,14 @@ impl SchedulerArguments {
     }
 
     /// Set the `ShutdownCoordinator`.
-    #[must_use] 
+    #[must_use]
     pub fn with_shutdown_coordinator(mut self, coordinator: Arc<ShutdownCoordinator>) -> Self {
         self.shutdown_coordinator = Some(coordinator);
         self
     }
 
     /// Set the `ReplayEngine`.
-    #[must_use] 
+    #[must_use]
     pub fn with_replay_engine(mut self, engine: Arc<ReplayEngine>) -> Self {
         self.replay_engine = Some(engine);
         self
@@ -307,7 +307,10 @@ impl SchedulerActorDef {
 
 /// Functional core for `SchedulerActor`.
 mod core {
-    use super::{CoreSchedulerState, SchedulerMessage, SchedulerEffect, WorkflowState, ScheduledBead, MsgBeadState, ActorError, WorkflowStatus, WorkflowId, BeadId, SchedulerStats};
+    use super::{
+        ActorError, BeadId, CoreSchedulerState, MsgBeadState, ScheduledBead, SchedulerEffect,
+        SchedulerMessage, SchedulerStats, WorkflowId, WorkflowState, WorkflowStatus,
+    };
 
     pub fn handle(
         state: CoreSchedulerState,

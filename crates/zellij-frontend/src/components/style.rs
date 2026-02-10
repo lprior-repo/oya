@@ -49,4 +49,3 @@ pub const fn text() -> &'static str {
 pub const fn overlay() -> &'static str {
     "\x1b[48;5;236m" // Dark gray background
 }
-

@@ -36,7 +36,7 @@ pub mod queue {
 
     impl Queue {
         /// Create a new empty queue with default capacity.
-        #[must_use] 
+        #[must_use]
         pub const fn new() -> Self {
             Self {
                 tasks: VecDeque::new(),
@@ -45,7 +45,7 @@ pub mod queue {
         }
 
         /// Create a new queue with specified capacity.
-        #[must_use] 
+        #[must_use]
         pub fn with_capacity(capacity: usize) -> Self {
             Self {
                 tasks: VecDeque::with_capacity(capacity),
@@ -54,19 +54,19 @@ pub mod queue {
         }
 
         /// Get the current number of tasks in the queue.
-        #[must_use] 
+        #[must_use]
         pub fn len(&self) -> usize {
             self.tasks.len()
         }
 
         /// Check if the queue is empty.
-        #[must_use] 
+        #[must_use]
         pub fn is_empty(&self) -> bool {
             self.tasks.is_empty()
         }
 
         /// Get the maximum capacity of the queue.
-        #[must_use] 
+        #[must_use]
         pub const fn capacity(&self) -> usize {
             self.capacity
         }
@@ -86,7 +86,7 @@ pub mod queue {
         }
 
         /// Peek at the next task without removing it.
-        #[must_use] 
+        #[must_use]
         pub fn peek(&self) -> Option<&MergeTask> {
             self.tasks.front()
         }

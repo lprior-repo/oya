@@ -167,14 +167,8 @@ impl IpcBridge {
                 exit_code,
                 timestamp,
                 event_id: _,
-            } => self.convert_validation_ran(
-                bead_id,
-                *passed,
-                output,
-                command,
-                *exit_code,
-                timestamp,
-            ),
+            } => self
+                .convert_validation_ran(bead_id, *passed, output, command, *exit_code, timestamp),
 
             BeadEvent::RecursionExhausted {
                 bead_id,
@@ -182,12 +176,7 @@ impl IpcBridge {
                 last_stage,
                 timestamp,
                 event_id: _,
-            } => self.convert_recursion_exhausted(
-                bead_id,
-                *total_attempts,
-                *last_stage,
-                timestamp,
-            ),
+            } => self.convert_recursion_exhausted(bead_id, *total_attempts, *last_stage, timestamp),
 
             // Non-stage events are not supported
             _ => Err(IpcBridgeError::UnsupportedEventType {
@@ -352,10 +341,7 @@ impl IpcBridge {
     }
 
     /// Convert chrono `DateTime` to Unix timestamp (seconds).
-    fn datetime_to_timestamp(
-        &self,
-        dt: &chrono::DateTime<chrono::Utc>,
-    ) -> IpcBridgeResult<u64> {
+    fn datetime_to_timestamp(&self, dt: &chrono::DateTime<chrono::Utc>) -> IpcBridgeResult<u64> {
         dt.timestamp()
             .try_into()
             .map_err(|_| IpcBridgeError::InvalidTimestamp {
@@ -395,11 +381,7 @@ mod tests {
     fn test_convert_stage_started_returns_ipc_message() {
         // GIVEN: A StageStarted event
         let bridge = IpcBridge::new();
-        let event = BeadEvent::stage_started(
-            test_bead_id(),
-            StageKind::Implement,
-            2,
-        );
+        let event = BeadEvent::stage_started(test_bead_id(), StageKind::Implement, 2);
 
         // WHEN: Converting to IPC message
         let result = bridge.convert_event(&event);
@@ -407,9 +389,12 @@ mod tests {
         // THEN: Should return StageStarted HostMessage
         assert!(result.is_ok(), "conversion should succeed");
         let is_correct = match result {
-            Ok(HostMessage::StageStarted { bead_id, stage, attempt, .. }) => {
-                bead_id == test_bead_id().to_string() && stage == "implement" && attempt == 2
-            }
+            Ok(HostMessage::StageStarted {
+                bead_id,
+                stage,
+                attempt,
+                ..
+            }) => bead_id == test_bead_id().to_string() && stage == "implement" && attempt == 2,
             _ => false,
         };
         assert!(is_correct, "Expected StageStarted with correct fields");
@@ -419,11 +404,7 @@ mod tests {
     fn test_convert_stage_started_research_stage() {
         // GIVEN: A StageStarted event for Research stage
         let bridge = IpcBridge::new();
-        let event = BeadEvent::stage_started(
-            test_bead_id(),
-            StageKind::Research,
-            1,
-        );
+        let event = BeadEvent::stage_started(test_bead_id(), StageKind::Research, 1);
 
         // WHEN: Converting to IPC message
         let result = bridge.convert_event(&event);
@@ -457,7 +438,11 @@ mod tests {
                 Ok(HostMessage::StageStarted { stage, .. }) => stage,
                 _ => String::from("error"),
             };
-            assert_eq!(stage, expected_name, "stage name mismatch for {:?}", stage_kind);
+            assert_eq!(
+                stage, expected_name,
+                "stage name mismatch for {:?}",
+                stage_kind
+            );
         }
     }
 
@@ -470,11 +455,7 @@ mod tests {
         // GIVEN: A StageCompleted event with artifact
         let bridge = IpcBridge::new();
         let artifact = Some("artifacts/review.txt".to_string());
-        let event = BeadEvent::stage_completed(
-            test_bead_id(),
-            StageKind::Review,
-            artifact.clone(),
-        );
+        let event = BeadEvent::stage_completed(test_bead_id(), StageKind::Review, artifact.clone());
 
         // WHEN: Converting to IPC message
         let result = bridge.convert_event(&event);
@@ -491,11 +472,7 @@ mod tests {
     fn test_convert_stage_completed_without_artifact() {
         // GIVEN: A StageCompleted event without artifact
         let bridge = IpcBridge::new();
-        let event = BeadEvent::stage_completed(
-            test_bead_id(),
-            StageKind::Validate,
-            None,
-        );
+        let event = BeadEvent::stage_completed(test_bead_id(), StageKind::Validate, None);
 
         // WHEN: Converting to IPC message
         let result = bridge.convert_event(&event);
@@ -528,7 +505,9 @@ mod tests {
 
         // THEN: Should include feedback and severity
         let (feedback, severity) = match result {
-            Ok(HostMessage::StageFailed { feedback, severity, .. }) => (feedback, severity),
+            Ok(HostMessage::StageFailed {
+                feedback, severity, ..
+            }) => (feedback, severity),
             _ => (String::new(), String::new()),
         };
         assert_eq!(feedback, "nitpick issues");
@@ -626,13 +605,8 @@ mod tests {
     fn test_convert_validation_ran_passed() {
         // GIVEN: A ValidationRan event that passed
         let bridge = IpcBridge::new();
-        let event = BeadEvent::validation_ran(
-            test_bead_id(),
-            true,
-            "all checks passed",
-            "moon run :ci",
-            0,
-        );
+        let event =
+            BeadEvent::validation_ran(test_bead_id(), true, "all checks passed", "moon run :ci", 0);
 
         // WHEN: Converting to IPC message
         let result = bridge.convert_event(&event);
@@ -661,13 +635,8 @@ mod tests {
     fn test_convert_validation_ran_failed() {
         // GIVEN: A ValidationRan event that failed
         let bridge = IpcBridge::new();
-        let event = BeadEvent::validation_ran(
-            test_bead_id(),
-            false,
-            "3 tests failed",
-            "moon run :ci",
-            1,
-        );
+        let event =
+            BeadEvent::validation_ran(test_bead_id(), false, "3 tests failed", "moon run :ci", 1);
 
         // WHEN: Converting to IPC message
         let result = bridge.convert_event(&event);
@@ -691,11 +660,7 @@ mod tests {
     fn test_convert_recursion_exhausted() {
         // GIVEN: A RecursionExhausted event
         let bridge = IpcBridge::new();
-        let event = BeadEvent::recursion_exhausted(
-            test_bead_id(),
-            15,
-            StageKind::Review,
-        );
+        let event = BeadEvent::recursion_exhausted(test_bead_id(), 15, StageKind::Review);
 
         // WHEN: Converting to IPC message
         let result = bridge.convert_event(&event);
@@ -721,10 +686,7 @@ mod tests {
     fn test_convert_unsupported_event_returns_error() {
         // GIVEN: An unsupported event type
         let bridge = IpcBridge::new();
-        let event = BeadEvent::created(
-            test_bead_id(),
-            oya_events::BeadSpec::new("test bead"),
-        );
+        let event = BeadEvent::created(test_bead_id(), oya_events::BeadSpec::new("test bead"));
 
         // WHEN: Converting to IPC message
         let result = bridge.convert_event(&event);
@@ -780,11 +742,15 @@ mod tests {
         // THEN: Should only include supported events
         assert_eq!(results.len(), 2, "should filter out unsupported event");
         assert!(
-            results.iter().any(|m| matches!(m, HostMessage::StageStarted { .. })),
+            results
+                .iter()
+                .any(|m| matches!(m, HostMessage::StageStarted { .. })),
             "should include StageStarted"
         );
         assert!(
-            results.iter().any(|m| matches!(m, HostMessage::StageCompleted { .. })),
+            results
+                .iter()
+                .any(|m| matches!(m, HostMessage::StageCompleted { .. })),
             "should include StageCompleted"
         );
     }

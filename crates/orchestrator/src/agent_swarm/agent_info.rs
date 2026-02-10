@@ -32,13 +32,13 @@ impl AgentState {
     }
 
     /// Checks if the agent state is terminal.
-    #[must_use] 
+    #[must_use]
     pub const fn is_terminal(self) -> bool {
         matches!(self, Self::ShuttingDown | Self::Terminated)
     }
 
     /// Checks if the agent can accept new work.
-    #[must_use] 
+    #[must_use]
     pub const fn can_accept_work(self) -> bool {
         matches!(self, Self::Idle)
     }
@@ -215,7 +215,7 @@ impl HealthMetrics {
     }
 
     /// Checks if the agent is healthy.
-    #[must_use] 
+    #[must_use]
     pub fn is_healthy(&self) -> bool {
         self.health_failures < self.max_health_failures && self.health_score > 0.0
     }
@@ -458,11 +458,16 @@ impl AgentInfo {
     const fn is_valid_state_transition(&self, from: AgentState, to: AgentState) -> bool {
         matches!(
             (from, to),
-            (AgentState::Idle,
-AgentState::Working | AgentState::ShuttingDown | AgentState::Unhealthy) |
-(AgentState::Working | AgentState::Unhealthy, AgentState::Idle) |
-(AgentState::Working, AgentState::ShuttingDown | AgentState::Unhealthy) |
-(AgentState::ShuttingDown, AgentState::Terminated)
+            (
+                AgentState::Idle,
+                AgentState::Working | AgentState::ShuttingDown | AgentState::Unhealthy
+            ) | (
+                AgentState::Working | AgentState::Unhealthy,
+                AgentState::Idle
+            ) | (
+                AgentState::Working,
+                AgentState::ShuttingDown | AgentState::Unhealthy
+            ) | (AgentState::ShuttingDown, AgentState::Terminated)
         )
     }
 
@@ -492,13 +497,13 @@ AgentState::Working | AgentState::ShuttingDown | AgentState::Unhealthy) |
     /// Gets a custom metadata value.
     ///
     /// Returns `None` if the key doesn't exist.
-    #[must_use] 
+    #[must_use]
     pub fn get_metadata(&self, key: &str) -> Option<&String> {
         self.custom_metadata.get(key)
     }
 
     /// Gets agent statistics.
-    #[must_use] 
+    #[must_use]
     pub fn stats(&self) -> AgentStats {
         AgentStats {
             id: self.id.clone(),
@@ -513,7 +518,7 @@ AgentState::Working | AgentState::ShuttingDown | AgentState::Unhealthy) |
     }
 
     /// Converts agent info to a simplified view for API responses.
-    #[must_use] 
+    #[must_use]
     pub fn to_api_response(&self) -> AgentApiResponse {
         AgentApiResponse {
             id: self.id.clone(),

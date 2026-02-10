@@ -96,7 +96,7 @@ impl PersistenceError {
     }
 
     /// Create a timeout error.
-    #[must_use] 
+    #[must_use]
     pub const fn timeout(duration_ms: u64) -> Self {
         Self::Timeout { duration_ms }
     }

@@ -164,9 +164,7 @@ impl Actor for StateManagerActorDef {
         // Connect to SurrealDB
         let db = Surreal::new::<RocksDb>(&args.storage_path)
             .await
-            .map_err(|e| {
-                ActorProcessingErr::from(format!("Failed to connect to database: {e}"))
-            })?;
+            .map_err(|e| ActorProcessingErr::from(format!("Failed to connect to database: {e}")))?;
 
         let db = std::sync::Arc::new(db);
 
@@ -208,9 +206,7 @@ impl Actor for StateManagerActorDef {
                         .create(("state", key.clone()))
                         .content(record)
                         .await
-                        .map_err(|e| {
-                            ActorError::internal(format!("Failed to save state: {e}"))
-                        })?;
+                        .map_err(|e| ActorError::internal(format!("Failed to save state: {e}")))?;
 
                     info!(
                         "Successfully saved state: key={}, size={} bytes, version={:?}",
@@ -451,10 +447,11 @@ impl Actor for EventStoreActorDef {
 
                 // Append with fsync guarantee - DurableEventStore ensures
                 // file.sync_all() is called before returning Ok(())
-                let result =
-                    state.store.append_event(&event).await.map_err(|e| {
-                        ActorError::internal(format!("Failed to append event: {e}"))
-                    });
+                let result = state
+                    .store
+                    .append_event(&event)
+                    .await
+                    .map_err(|e| ActorError::internal(format!("Failed to append event: {e}")));
 
                 match &result {
                     Ok(()) => {

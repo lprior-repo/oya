@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
 use tokio::sync::{broadcast, RwLock};
-use tracing::debug;
+use tracing::{debug, instrument};
 
 use crate::error::{Error, Result};
 use crate::event::BeadEvent;
@@ -20,7 +20,7 @@ pub struct CircuitBreaker {
 
 impl CircuitBreaker {
     /// Create a new circuit breaker with the given failure threshold.
-    #[must_use] 
+    #[must_use]
     pub const fn new(threshold: u32) -> Self {
         Self {
             failure_count: AtomicU32::new(0),
@@ -93,7 +93,7 @@ pub enum EventPattern {
 
 impl EventPattern {
     /// Check if an event matches this pattern.
-    #[must_use] 
+    #[must_use]
     pub fn matches(&self, event: &BeadEvent) -> bool {
         match self {
             Self::All => true,
@@ -134,6 +134,7 @@ impl EventBus {
     /// Publish an event.
     ///
     /// The event is stored and broadcast to all subscribers.
+    #[instrument(skip(self, event), fields(event_type = event.event_type(), bead_id = %event.bead_id()))]
     pub async fn publish(&self, event: BeadEvent) -> Result<EventId> {
         // Store the event
         let event_id = self.store.append(event.clone()).await?;
@@ -246,7 +247,7 @@ pub struct EventBusBuilder {
 
 impl EventBusBuilder {
     /// Create a new builder.
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             store: None,
@@ -262,14 +263,14 @@ impl EventBusBuilder {
     }
 
     /// Set the broadcast channel capacity.
-    #[must_use] 
+    #[must_use]
     pub const fn with_channel_capacity(mut self, capacity: usize) -> Self {
         self.channel_capacity = capacity;
         self
     }
 
     /// Set the circuit breaker failure threshold.
-    #[must_use] 
+    #[must_use]
     pub const fn with_failure_threshold(mut self, threshold: u32) -> Self {
         self.failure_threshold = threshold;
         self

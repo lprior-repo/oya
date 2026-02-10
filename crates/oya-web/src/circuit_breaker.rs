@@ -58,7 +58,7 @@ impl Default for CircuitBreakerConfig {
 
 impl CircuitBreakerConfig {
     /// Create a new circuit breaker config.
-    #[must_use] 
+    #[must_use]
     pub const fn new(failure_threshold: u32, timeout_secs: u64) -> Self {
         Self {
             failure_threshold,
@@ -69,14 +69,14 @@ impl CircuitBreakerConfig {
     }
 
     /// Set success threshold.
-    #[must_use] 
+    #[must_use]
     pub const fn with_success_threshold(mut self, threshold: u32) -> Self {
         self.success_threshold = threshold;
         self
     }
 
     /// Set window size.
-    #[must_use] 
+    #[must_use]
     pub const fn with_window_size(mut self, window_size_secs: u64) -> Self {
         self.window_size_secs = window_size_secs;
         self
@@ -111,13 +111,13 @@ pub struct CircuitBreaker {
 
 impl CircuitBreaker {
     /// Create a new circuit breaker with default config.
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::with_config(CircuitBreakerConfig::default())
     }
 
     /// Create a new circuit breaker with custom config.
-    #[must_use] 
+    #[must_use]
     pub fn with_config(config: CircuitBreakerConfig) -> Self {
         Self {
             config,
@@ -129,7 +129,7 @@ impl CircuitBreaker {
     }
 
     /// Get current circuit state.
-    #[must_use] 
+    #[must_use]
     pub const fn state(&self) -> CircuitState {
         self.state
     }
@@ -137,7 +137,7 @@ impl CircuitBreaker {
     /// Check if a request is allowed.
     ///
     /// Returns true if request should proceed, false if rejected.
-    #[must_use] 
+    #[must_use]
     pub fn allow_request(&self) -> bool {
         match self.state {
             CircuitState::Closed => true,
@@ -251,13 +251,13 @@ impl CircuitBreaker {
     }
 
     /// Get failure count in current window.
-    #[must_use] 
+    #[must_use]
     pub fn failure_count(&self) -> u32 {
         self.count_failures_in_window()
     }
 
     /// Get success count in current window.
-    #[must_use] 
+    #[must_use]
     pub fn success_count(&self) -> u32 {
         self.events
             .iter()
@@ -269,7 +269,7 @@ impl CircuitBreaker {
     }
 
     /// Get time since state changed.
-    #[must_use] 
+    #[must_use]
     pub fn time_since_state_change(&self) -> Duration {
         self.state_changed_at.elapsed()
     }

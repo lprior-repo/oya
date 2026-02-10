@@ -100,7 +100,7 @@ pub enum TransportError {
 
 impl TransportError {
     /// Create a `MessageTooLarge` error
-    #[must_use] 
+    #[must_use]
     pub const fn message_too_large(actual_size: usize, max_size: usize) -> Self {
         Self::MessageTooLarge {
             actual_size,
@@ -109,7 +109,7 @@ impl TransportError {
     }
 
     /// Create an `UnexpectedEof` error
-    #[must_use] 
+    #[must_use]
     pub const fn unexpected_eof(bytes_read: usize, expected_bytes: usize) -> Self {
         Self::UnexpectedEof {
             bytes_read,
@@ -141,7 +141,7 @@ impl TransportError {
     }
 
     /// Create a `WriteFailed` error from `std::io::Error`
-    #[must_use] 
+    #[must_use]
     pub fn write_failed(err: &std::io::Error) -> Self {
         Self::WriteFailed {
             error_code: err.raw_os_error(),
@@ -150,7 +150,7 @@ impl TransportError {
     }
 
     /// Create a `ReadFailed` error from `std::io::Error`
-    #[must_use] 
+    #[must_use]
     pub fn read_failed(err: &std::io::Error) -> Self {
         Self::ReadFailed {
             error_code: err.raw_os_error(),

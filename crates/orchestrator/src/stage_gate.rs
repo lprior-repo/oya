@@ -46,13 +46,13 @@ pub struct StageGate {
 
 impl StageGate {
     /// Create a new stage gate.
-    #[must_use] 
+    #[must_use]
     pub const fn new(policy: RecursionPolicy) -> Self {
         Self { policy }
     }
 
     /// Evaluate a stage output and produce a gate decision.
-    #[must_use] 
+    #[must_use]
     pub fn evaluate(&self, machine: &BeadStateMachine, output: StageOutput) -> GateDecision {
         if output.success {
             let next = machine

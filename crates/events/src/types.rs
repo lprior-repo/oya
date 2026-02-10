@@ -10,19 +10,19 @@ pub struct BeadId(Ulid);
 
 impl BeadId {
     /// Create a new random bead ID.
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self(Ulid::new())
     }
 
     /// Create from a ULID.
-    #[must_use] 
+    #[must_use]
     pub const fn from_ulid(ulid: Ulid) -> Self {
         Self(ulid)
     }
 
     /// Get the inner ULID.
-    #[must_use] 
+    #[must_use]
     pub const fn as_ulid(&self) -> Ulid {
         self.0
     }
@@ -72,19 +72,19 @@ pub struct EventId(Ulid);
 
 impl EventId {
     /// Create a new random event ID.
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self(Ulid::new())
     }
 
     /// Create from a ULID.
-    #[must_use] 
+    #[must_use]
     pub const fn from_ulid(ulid: Ulid) -> Self {
         Self(ulid)
     }
 
     /// Get the inner ULID.
-    #[must_use] 
+    #[must_use]
     pub const fn as_ulid(&self) -> Ulid {
         self.0
     }
@@ -108,19 +108,19 @@ pub struct PhaseId(Ulid);
 
 impl PhaseId {
     /// Create a new random phase ID.
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self(Ulid::new())
     }
 
     /// Create from a ULID.
-    #[must_use] 
+    #[must_use]
     pub const fn from_ulid(ulid: Ulid) -> Self {
         Self(ulid)
     }
 
     /// Get the inner ULID.
-    #[must_use] 
+    #[must_use]
     pub const fn as_ulid(&self) -> Ulid {
         self.0
     }
@@ -161,30 +161,37 @@ pub enum BeadState {
 
 impl BeadState {
     /// Check if this is a terminal state.
-    #[must_use] 
+    #[must_use]
     pub const fn is_terminal(&self) -> bool {
         matches!(self, Self::Completed)
     }
 
     /// Check if transition to target state is valid.
-    #[must_use] 
+    #[must_use]
     pub const fn can_transition_to(&self, target: Self) -> bool {
-        use BeadState::{Pending, Scheduled, Completed, Ready, Running, Suspended, BackingOff, Paused};
+        use BeadState::{
+            BackingOff, Completed, Paused, Pending, Ready, Running, Scheduled, Suspended,
+        };
         matches!(
             (self, target),
             // From Pending
-            (Pending | Ready, Scheduled) |
-(Pending | Scheduled | Ready | Running | Suspended | BackingOff | Paused,
-Completed) | (Scheduled, Ready | Pending) |
-(Ready | Suspended | BackingOff | Paused, Running) |
-(Running, Suspended | BackingOff | Paused) // Cancelled
+            (Pending | Ready, Scheduled)
+                | (
+                    Pending | Scheduled | Ready | Running | Suspended | BackingOff | Paused,
+                    Completed
+                )
+                | (Scheduled, Ready | Pending)
+                | (Ready | Suspended | BackingOff | Paused, Running)
+                | (Running, Suspended | BackingOff | Paused) // Cancelled
         )
     }
 
     /// Get valid transitions from this state.
-    #[must_use] 
+    #[must_use]
     pub fn valid_transitions(&self) -> Vec<Self> {
-        use BeadState::{Pending, Scheduled, Completed, Ready, Running, Suspended, BackingOff, Paused};
+        use BeadState::{
+            BackingOff, Completed, Paused, Pending, Ready, Running, Scheduled, Suspended,
+        };
         match self {
             Pending => vec![Scheduled, Completed],
             Scheduled => vec![Ready, Pending, Completed],
@@ -254,28 +261,28 @@ impl BeadSpec {
     }
 
     /// Add a dependency.
-    #[must_use] 
+    #[must_use]
     pub fn with_dependency(mut self, dep: BeadId) -> Self {
         self.dependencies.push(dep);
         self
     }
 
     /// Set dependencies.
-    #[must_use] 
+    #[must_use]
     pub fn with_dependencies(mut self, deps: Vec<BeadId>) -> Self {
         self.dependencies = deps;
         self
     }
 
     /// Set priority.
-    #[must_use] 
+    #[must_use]
     pub const fn with_priority(mut self, priority: u32) -> Self {
         self.priority = priority;
         self
     }
 
     /// Set complexity.
-    #[must_use] 
+    #[must_use]
     pub const fn with_complexity(mut self, complexity: Complexity) -> Self {
         self.complexity = complexity;
         self
@@ -323,7 +330,7 @@ pub struct PhaseOutput {
 
 impl PhaseOutput {
     /// Create a successful output.
-    #[must_use] 
+    #[must_use]
     pub const fn success(data: Vec<u8>) -> Self {
         Self {
             success: true,
@@ -357,7 +364,7 @@ pub struct BeadResult {
 
 impl BeadResult {
     /// Create a successful result.
-    #[must_use] 
+    #[must_use]
     pub const fn success(output: Vec<u8>, duration_ms: u64) -> Self {
         Self {
             success: true,
@@ -393,7 +400,7 @@ pub struct StateTransition {
 
 impl StateTransition {
     /// Create a new state transition.
-    #[must_use] 
+    #[must_use]
     pub fn new(from: BeadState, to: BeadState) -> Self {
         Self {
             from,

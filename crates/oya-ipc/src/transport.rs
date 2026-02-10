@@ -366,13 +366,13 @@ impl Write for DuplexWriter {
 
 impl IpcTransport<DuplexReader, DuplexWriter> {
     /// Create a pair of connected transports.
-    #[must_use] 
+    #[must_use]
     pub fn pair() -> (Self, Self) {
         transport_pair()
     }
 
     /// Backwards-compatible alias for `pair`.
-    #[must_use] 
+    #[must_use]
     pub fn transport_pair() -> (Self, Self) {
         transport_pair()
     }

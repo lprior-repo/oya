@@ -183,7 +183,7 @@ impl WorkflowVisualization {
     }
 
     /// Set minimum terminal dimensions.
-    #[must_use] 
+    #[must_use]
     pub const fn with_min_dimensions(mut self, width: usize, height: usize) -> Self {
         self.min_width = width;
         self.min_height = height;
@@ -191,14 +191,14 @@ impl WorkflowVisualization {
     }
 
     /// Disable color output.
-    #[must_use] 
+    #[must_use]
     pub const fn without_color(mut self) -> Self {
         self.enable_color = false;
         self
     }
 
     /// Set the focused task for navigation.
-    #[must_use] 
+    #[must_use]
     pub fn with_focus(mut self, task_id: Option<String>) -> Self {
         self.focused_task = task_id;
         self
@@ -295,7 +295,11 @@ impl WorkflowVisualization {
         lines.push(self.format_line("* Critical path task".to_string(), Color::Bold));
 
         let height = lines.len();
-        let width = lines.iter().map(std::string::String::len).max().unwrap_or(0);
+        let width = lines
+            .iter()
+            .map(std::string::String::len)
+            .max()
+            .unwrap_or(0);
 
         Ok(RenderedGraph {
             lines,
@@ -313,9 +317,9 @@ impl WorkflowVisualization {
         for task_id in workflow.tasks.keys() {
             if !visited.contains(task_id)
                 && self.dfs_cycle_detect(workflow, task_id, &mut visited, &mut rec_stack, &mut path)
-                {
-                    return path;
-                }
+            {
+                return path;
+            }
         }
 
         vec![]

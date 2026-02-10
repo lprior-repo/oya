@@ -371,7 +371,7 @@ impl ExecutionResult {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn with_duration(mut self, duration: std::time::Duration) -> Self {
         self.duration = Some(duration);
         self

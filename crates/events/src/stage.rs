@@ -24,7 +24,7 @@ pub enum StageKind {
 
 impl StageKind {
     /// Return the next forward stage, if any.
-    #[must_use] 
+    #[must_use]
     pub const fn next(self) -> Option<Self> {
         match self {
             Self::Research => Some(Self::Plan),
@@ -37,7 +37,7 @@ impl StageKind {
     }
 
     /// Return true when this stage requires an agent process.
-    #[must_use] 
+    #[must_use]
     pub const fn requires_agent(self) -> bool {
         matches!(
             self,
@@ -46,7 +46,7 @@ impl StageKind {
     }
 
     /// Return true if this stage is terminal.
-    #[must_use] 
+    #[must_use]
     pub const fn is_terminal(self) -> bool {
         matches!(self, Self::Accept)
     }
@@ -172,7 +172,7 @@ pub struct BeadStateMachine {
 
 impl BeadStateMachine {
     /// Create a new machine at Research with default policy.
-    #[must_use] 
+    #[must_use]
     pub fn new(bead_id: BeadId) -> Self {
         Self {
             bead_id,
@@ -185,7 +185,7 @@ impl BeadStateMachine {
     }
 
     /// Create a new machine at Research with a custom policy.
-    #[must_use] 
+    #[must_use]
     pub const fn with_policy(bead_id: BeadId, policy: RecursionPolicy) -> Self {
         Self {
             bead_id,
@@ -198,13 +198,13 @@ impl BeadStateMachine {
     }
 
     /// Return current stage.
-    #[must_use] 
+    #[must_use]
     pub const fn current_stage(&self) -> StageKind {
         self.current_stage
     }
 
     /// Return configured recursion policy.
-    #[must_use] 
+    #[must_use]
     pub const fn policy(&self) -> RecursionPolicy {
         self.policy
     }
@@ -280,7 +280,7 @@ impl BeadStateMachine {
     }
 
     /// Resolve standard reentry target for a given severity.
-    #[must_use] 
+    #[must_use]
     pub const fn reentry_target_for_severity(severity: Severity) -> StageKind {
         match severity {
             Severity::Minor => StageKind::Implement,
@@ -290,25 +290,25 @@ impl BeadStateMachine {
     }
 
     /// Return true if machine is complete.
-    #[must_use] 
+    #[must_use]
     pub fn is_complete(&self) -> bool {
         self.current_stage.is_terminal()
     }
 
     /// Return transition history.
-    #[must_use] 
+    #[must_use]
     pub fn history(&self) -> &[StageTransition] {
         &self.history
     }
 
     /// Return attempt count for a stage.
-    #[must_use] 
+    #[must_use]
     pub fn stage_attempts(&self, stage: StageKind) -> u32 {
         self.stage_attempts[stage.as_index()]
     }
 
     /// Return total attempts across all stages.
-    #[must_use] 
+    #[must_use]
     pub const fn total_attempts(&self) -> u32 {
         self.total_attempts
     }

@@ -42,26 +42,3 @@ pub fn init_telemetry_json() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
-
-/// Example with telemetry initialization
-///
-/// ```ignore
-/// #[tokio::main]
-/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-///     // Initialize telemetry first
-///     init_telemetry_json()?;
-///     
-///     let store = Arc::new(InMemoryEventStore::new());
-///     let bus = EventBus::new(store.clone());
-///     
-///     let mut sub = bus.subscribe();
-///     
-///     let bead_id = BeadId::new();
-///     let spec = BeadSpec::new("My task").with_complexity(Complexity::Medium);
-///     bus.publish(BeadEvent::created(bead_id, spec)).await?;
-///     
-///     let event = sub.recv().await?;
-///     tracing::info!("Received: {:?}", event.event_type());
-///     Ok(())
-/// }
-/// ```

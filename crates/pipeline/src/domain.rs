@@ -347,8 +347,10 @@ fn validate_transition(from: &TaskStatus, to: &TaskStatus) -> Result<()> {
     }
 
     match (from, to) {
-        (TaskStatus::Created,
-TaskStatus::InProgress { .. } | TaskStatus::FailedPipeline { .. }) => Ok(()),
+        (
+            TaskStatus::Created,
+            TaskStatus::InProgress { .. } | TaskStatus::FailedPipeline { .. },
+        ) => Ok(()),
         (
             TaskStatus::InProgress { stage: from_stage },
             TaskStatus::InProgress { stage: to_stage },

@@ -39,7 +39,9 @@ use orchestrator::actors::supervisor::{
     SupervisorArguments, SupervisorConfig, SupervisorMessage, SupervisorState,
     spawn_supervisor_with_name,
 };
-use orchestrator::actors::worker::{WorkerActorDef, WorkerConfig, WorkerRetryPolicy, WorkerMessage};
+use orchestrator::actors::worker::{
+    WorkerActorDef, WorkerConfig, WorkerMessage, WorkerRetryPolicy,
+};
 
 // =============================================================================
 // Test Context & Error Types
@@ -93,8 +95,7 @@ fn test_supervisor_config() -> SupervisorConfig {
 }
 
 /// Create a worker actor with event bus for testing.
-async fn setup_worker_with_event_bus(
-) -> Result<
+async fn setup_worker_with_event_bus() -> Result<
     (
         ActorRef<WorkerMessage>,
         Arc<EventBus>,
@@ -123,10 +124,7 @@ async fn setup_worker_with_event_bus(
 }
 
 /// Subscribe to events and wait for the next event with retry.
-async fn wait_for_event(
-    bus: &EventBus,
-    timeout_ms: u64,
-) -> Result<oya_events::BeadEvent, String> {
+async fn wait_for_event(bus: &EventBus, timeout_ms: u64) -> Result<oya_events::BeadEvent, String> {
     let mut sub = bus.subscribe();
     let max_attempts = 10;
     let mut attempt = 0;
@@ -259,12 +257,10 @@ async fn given_supervised_worker_when_crashes_then_supervisor_restarts() {
 
     // Given: A supervised worker actor
     let args = SupervisorArguments::new().with_config(test_supervisor_config());
-    let supervisor = spawn_supervisor_with_name::<WorkerActorDef>(
-        args,
-        "supervisor-worker-restart-test",
-    )
-    .await
-    .expect("Failed to spawn supervisor");
+    let supervisor =
+        spawn_supervisor_with_name::<WorkerActorDef>(args, "supervisor-worker-restart-test")
+            .await
+            .expect("Failed to spawn supervisor");
 
     // Wait for supervisor to be running
     tokio::time::sleep(Duration::from_millis(100)).await;
@@ -521,12 +517,9 @@ async fn given_repeated_crashes_when_exceeds_max_restarts_then_supervisor_limits
     };
 
     let args = SupervisorArguments::new().with_config(config);
-    let supervisor = spawn_supervisor_with_name::<WorkerActorDef>(
-        args,
-        "supervisor-meltdown-test",
-    )
-    .await
-    .expect("Failed to spawn supervisor");
+    let supervisor = spawn_supervisor_with_name::<WorkerActorDef>(args, "supervisor-meltdown-test")
+        .await
+        .expect("Failed to spawn supervisor");
 
     // Spawn initial child
     let (spawn_tx, spawn_rx) = tokio::sync::oneshot::channel();
@@ -566,9 +559,7 @@ async fn given_repeated_crashes_when_exceeds_max_restarts_then_supervisor_limits
     tokio::time::sleep(Duration::from_millis(200)).await;
 
     let (status_tx2, status_rx2) = tokio::sync::oneshot::channel();
-    let _ = supervisor.send_message(SupervisorMessage::GetStatus {
-        reply: status_tx2,
-    });
+    let _ = supervisor.send_message(SupervisorMessage::GetStatus { reply: status_tx2 });
 
     let status2 = status_rx2.await.expect("Failed to get status");
     // Supervisor may have 0 or 1 children depending on timing
@@ -631,8 +622,5 @@ async fn given_worker_crash_when_restarted_then_recovery_time_within_sla() {
     // Cleanup
     worker2.stop(Some("test complete".to_string()));
 
-    info!(
-        "Test passed: recovery time SLA ({}ms)",
-        recovery_time_ms
-    );
+    info!("Test passed: recovery time SLA ({}ms)", recovery_time_ms);
 }

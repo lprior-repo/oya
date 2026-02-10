@@ -69,9 +69,7 @@ pub enum LoadError {
 impl From<LoadError> for crate::error::Error {
     fn from(err: LoadError) -> Self {
         match err {
-            LoadError::QueryFailed(reason) => {
-                Self::store_failed("load_events", reason)
-            }
+            LoadError::QueryFailed(reason) => Self::store_failed("load_events", reason),
             LoadError::DeserializationFailed(reason) => Self::serialization(reason),
             LoadError::InvalidFilter(reason) => Self::invalid_event(reason),
             LoadError::CheckpointNotFound(id) => Self::event_not_found(id),
@@ -123,7 +121,7 @@ pub enum EventFilter {
 
 impl EventFilter {
     /// Create a filter for a specific bead.
-    #[must_use] 
+    #[must_use]
     pub const fn bead(bead_id: BeadId) -> Self {
         Self::Bead { bead_id }
     }
@@ -136,7 +134,7 @@ impl EventFilter {
     }
 
     /// Create a filter for a time range.
-    #[must_use] 
+    #[must_use]
     pub const fn time_range(start: DateTime<Utc>, end: Option<DateTime<Utc>>) -> Self {
         Self::TimeRange { start, end }
     }
@@ -149,7 +147,7 @@ impl EventFilter {
     }
 
     /// Create a combined filter.
-    #[must_use] 
+    #[must_use]
     pub const fn combined(
         bead_id: Option<BeadId>,
         after_timestamp: Option<DateTime<Utc>>,

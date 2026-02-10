@@ -41,34 +41,34 @@ impl Default for RecoveryConfig {
 
 impl RecoveryConfig {
     /// Create a new recovery configuration.
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Set the maximum number of retries.
-    #[must_use] 
+    #[must_use]
     pub const fn with_max_retries(mut self, max_retries: u32) -> Self {
         self.max_retries = max_retries;
         self
     }
 
     /// Set the base backoff delay in milliseconds.
-    #[must_use] 
+    #[must_use]
     pub const fn with_base_backoff(mut self, base_backoff_ms: u64) -> Self {
         self.base_backoff_ms = base_backoff_ms;
         self
     }
 
     /// Set the maximum backoff delay in milliseconds.
-    #[must_use] 
+    #[must_use]
     pub const fn with_max_backoff(mut self, max_backoff_ms: u64) -> Self {
         self.max_backoff_ms = max_backoff_ms;
         self
     }
 
     /// Enable or disable the dead letter queue.
-    #[must_use] 
+    #[must_use]
     pub const fn with_dlq(mut self, enable_dlq: bool) -> Self {
         self.enable_dlq = enable_dlq;
         self
@@ -78,7 +78,7 @@ impl RecoveryConfig {
     ///
     /// Uses exponential backoff with jitter: delay = base * 2^attempt
     /// Capped at `max_backoff_ms`.
-    #[must_use] 
+    #[must_use]
     pub fn calculate_backoff(&self, attempt: u32) -> Duration {
         let exponential_delay = self.base_backoff_ms * 2_u64.pow(attempt);
         let delay_ms = exponential_delay.min(self.max_backoff_ms);
@@ -104,7 +104,7 @@ pub struct RetryPolicy {
 
 impl RetryPolicy {
     /// Create a new retry policy with default configuration.
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             config: RecoveryConfig::default(),
@@ -112,13 +112,13 @@ impl RetryPolicy {
     }
 
     /// Create a new retry policy with custom configuration.
-    #[must_use] 
+    #[must_use]
     pub const fn with_config(config: RecoveryConfig) -> Self {
         Self { config }
     }
 
     /// Determine the recovery strategy for a given error and attempt number.
-    #[must_use] 
+    #[must_use]
     pub fn should_retry(&self, error: &Error, attempt: u32) -> RecoveryStrategy {
         // Check if we've exceeded max retries
         if attempt >= self.config.max_retries {
@@ -146,7 +146,7 @@ impl RetryPolicy {
     }
 
     /// Get a reference to the configuration.
-    #[must_use] 
+    #[must_use]
     pub const fn config(&self) -> &RecoveryConfig {
         &self.config
     }
@@ -169,7 +169,7 @@ impl Default for RetryPolicy {
 /// - Invalid event data (data corruption)
 /// - Event not found (missing data)
 /// - Invalid state transitions (logic errors)
-#[must_use] 
+#[must_use]
 pub fn is_transient_error(error: &Error) -> bool {
     match error {
         // Network and connection issues are transient

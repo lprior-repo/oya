@@ -96,31 +96,25 @@ impl ReplayState {
     }
 
     /// Transition from any state to Failed state.
-    #[must_use] 
+    #[must_use]
     pub const fn fail(&self, error: String) -> Self {
         Self::Failed { error }
     }
 
     /// Check if the replay is in a terminal state (Complete or Failed).
-    #[must_use] 
+    #[must_use]
     pub const fn is_terminal(&self) -> bool {
-        matches!(
-            self,
-            Self::Complete { .. } | Self::Failed { .. }
-        )
+        matches!(self, Self::Complete { .. } | Self::Failed { .. })
     }
 
     /// Check if the replay is in an active state (Loading or Replaying).
-    #[must_use] 
+    #[must_use]
     pub const fn is_active(&self) -> bool {
-        matches!(
-            self,
-            Self::Loading { .. } | Self::Replaying { .. }
-        )
+        matches!(self, Self::Loading { .. } | Self::Replaying { .. })
     }
 
     /// Get a human-readable description of the current state.
-    #[must_use] 
+    #[must_use]
     pub const fn description(&self) -> &str {
         match self {
             Self::Uninitialized => "Not started",

@@ -284,7 +284,7 @@ pub struct AIExecutor {
 
 impl AIExecutor {
     /// Create a new AI executor with the given opencode client.
-    #[must_use] 
+    #[must_use]
     pub fn new(opencode: Arc<OpencodeClient>) -> Self {
         Self {
             opencode,
@@ -363,7 +363,7 @@ pub struct PhaseRegistry {
 
 impl PhaseRegistry {
     /// Create a new empty registry.
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             handlers: Vec::new(),
@@ -376,7 +376,7 @@ impl PhaseRegistry {
     }
 
     /// Find a handler for the given phase.
-    #[must_use] 
+    #[must_use]
     pub fn find_handler(&self, phase_name: &str) -> Option<&Arc<dyn PhaseHandler>> {
         self.handlers.iter().find(|h| h.can_handle(phase_name))
     }

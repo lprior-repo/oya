@@ -84,13 +84,13 @@ impl ActorError {
     }
 
     /// Create an RPC timeout error.
-    #[must_use] 
+    #[must_use]
     pub const fn rpc_timeout(duration: Duration) -> Self {
         Self::RpcTimeout(duration)
     }
 
     /// Create an actor unavailable error.
-    #[must_use] 
+    #[must_use]
     pub const fn actor_unavailable() -> Self {
         Self::ActorUnavailable
     }
