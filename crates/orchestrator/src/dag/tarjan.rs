@@ -185,7 +185,7 @@ impl Default for TarjanState {
 /// # Ok(())
 /// # }
 /// ```
-#[must_use] 
+#[must_use]
 pub fn tarjan_scc(dag: &WorkflowDAG) -> Vec<Vec<BeadId>> {
     // Build a local graph representation from the DAG
     let node_list: Vec<BeadId> = dag.nodes().cloned().collect();
@@ -278,7 +278,7 @@ pub fn tarjan_scc(dag: &WorkflowDAG) -> Vec<Vec<BeadId>> {
 /// # Ok(())
 /// # }
 /// ```
-#[must_use] 
+#[must_use]
 pub fn find_cycles_tarjan(dag: &WorkflowDAG) -> Vec<Vec<BeadId>> {
     let sccs = tarjan_scc(dag);
 

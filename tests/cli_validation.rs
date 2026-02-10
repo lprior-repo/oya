@@ -54,10 +54,7 @@ mod slug_validation {
             );
 
             // And: Helpful hint should be provided
-            assert!(
-                result.stderr.contains("Hint:"),
-                "Should provide usage hint"
-            );
+            assert!(result.stderr.contains("Hint:"), "Should provide usage hint");
         }
 
         #[test]
@@ -91,11 +88,16 @@ mod slug_validation {
             let result = run_oya_command(&["new", "--slug", slug]);
 
             // Then: Command should fail with exit code 2 (validation error)
-            assert_eq!(result.exit_code, 2, "Path traversal should exit with code 2");
+            assert_eq!(
+                result.exit_code, 2,
+                "Path traversal should exit with code 2"
+            );
 
             // And: Error message should mention path separators
             assert!(
-                result.stderr.contains("Error: Slug cannot contain path separators or traversal sequences"),
+                result
+                    .stderr
+                    .contains("Error: Slug cannot contain path separators or traversal sequences"),
                 "Error should mention path traversal rejection"
             );
 
@@ -159,7 +161,10 @@ mod exit_codes {
             let result = run_oya_command(&["list"]);
 
             // Then: Should exit with code 1 (error), not 0 (success)
-            assert_eq!(result.exit_code, 1, "Unimplemented command should exit with code 1");
+            assert_eq!(
+                result.exit_code, 1,
+                "Unimplemented command should exit with code 1"
+            );
 
             // And: Error message should be present
             assert!(

@@ -18,9 +18,7 @@ use tokio::sync::oneshot;
 use tokio::task;
 use tracing::{error, info, warn};
 
-use oya_events::{
-    BeadEvent, BeadId, BeadStateMachine, EventBus, Severity, StageKind,
-};
+use oya_events::{BeadEvent, BeadId, BeadStateMachine, EventBus, Severity, StageKind};
 
 use crate::context_builder::{BeadContext, StageContextBuilder, StagePrompt};
 use crate::stage_gate::{GateDecision, StageGate, StageOutput};
@@ -587,7 +585,10 @@ impl AgentSlotActorDef {
                         timestamp: chrono::Utc::now(),
                     }
                 }
-                oya_events::TransitionReason::GateFailed { ref feedback, severity: _ } => {
+                oya_events::TransitionReason::GateFailed {
+                    ref feedback,
+                    severity: _,
+                } => {
                     BeadEvent::StageReentry {
                         event_id: oya_events::EventId::new(),
                         bead_id: *bead_id,
@@ -598,7 +599,8 @@ impl AgentSlotActorDef {
                         timestamp: chrono::Utc::now(),
                     }
                 }
-                oya_events::TransitionReason::Timeout | oya_events::TransitionReason::ManualOverride { .. } => {
+                oya_events::TransitionReason::Timeout
+                | oya_events::TransitionReason::ManualOverride { .. } => {
                     // For other transition types, emit a stage failed event
                     BeadEvent::StageFailed {
                         event_id: oya_events::EventId::new(),
@@ -699,7 +701,7 @@ mod tests {
 
     #[test]
     fn test_require_bead_id_when_present() {
-    // TODO: FIX THIS LINE - /* TODO: FIX THIS */ state = AgentSlotState::new(PathBuf::from("/tmp"));
+        let mut state = AgentSlotState::new(PathBuf::from("/tmp"));
         state.bead_id = Some(BeadId::new());
         assert!(state.require_bead_id().is_ok());
     }

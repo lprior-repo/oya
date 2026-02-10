@@ -19,7 +19,7 @@ impl CheckpointId {
     }
 
     /// Get the inner ID value.
-    #[must_use] 
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -40,7 +40,7 @@ pub struct ReplayState {
 
 impl ReplayState {
     /// Create a new replay state.
-    #[must_use] 
+    #[must_use]
     pub const fn new(checkpoint_id: CheckpointId, checkpoint_timestamp: DateTime<Utc>) -> Self {
         Self {
             checkpoint_id,

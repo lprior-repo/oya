@@ -348,10 +348,7 @@ impl<T, E> GenericResultExt<T, E> for std::result::Result<T, E> {
     }
 
     #[inline]
-    fn and_then_do<F: FnOnce(&T) -> std::result::Result<(), E>>(
-        self,
-        f: F,
-    ) -> Self {
+    fn and_then_do<F: FnOnce(&T) -> std::result::Result<(), E>>(self, f: F) -> Self {
         self.and_then(|v| f(&v).map(|()| v))
     }
 

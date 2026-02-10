@@ -67,7 +67,7 @@ impl OpencodeConfig {
     }
 
     /// Create a new config for API mode.
-    #[must_use] 
+    #[must_use]
     pub fn with_api(base_url: Url) -> Self {
         Self {
             base_url: Some(base_url),
@@ -111,7 +111,7 @@ impl OpencodeConfig {
     }
 
     /// Load configuration from environment variables.
-    #[must_use] 
+    #[must_use]
     pub fn from_env() -> Self {
         let mut config = Self::default();
 

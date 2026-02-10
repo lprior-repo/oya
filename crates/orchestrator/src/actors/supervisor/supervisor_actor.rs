@@ -614,10 +614,7 @@ where
             });
         });
 
-        let restart_count = state
-            .children
-            .get(&name)
-            .map_or(0, |c| c.restart_count);
+        let restart_count = state.children.get(&name).map_or(0, |c| c.restart_count);
 
         state.children.insert(
             name.clone(),

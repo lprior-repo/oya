@@ -181,7 +181,7 @@ impl HealthMonitor {
     /// Start background health checking.
     ///
     /// Returns a handle that can be used to stop monitoring.
-    #[must_use] 
+    #[must_use]
     pub fn start_background_check(&self) -> tokio::task::JoinHandle<()> {
         let agents = Arc::clone(&self.agents);
         let active = Arc::clone(&self.active);

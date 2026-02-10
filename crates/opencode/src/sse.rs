@@ -29,7 +29,7 @@ pub struct SseFormatter;
 
 impl SseFormatter {
     /// Create a new SSE formatter.
-    #[must_use] 
+    #[must_use]
     pub const fn new() -> Self {
         Self
     }
@@ -44,7 +44,7 @@ impl SseFormatter {
     /// id: <sequence_number>
     ///
     /// ```
-    #[must_use] 
+    #[must_use]
     pub fn format_message(&self, output: Output) -> String {
         let event_type = match &output {
             Output::Text(_) => "text",

@@ -6,20 +6,26 @@ use std::path::PathBuf;
 
 /// Install Zellij WASM plugin
 pub fn install_command(force: bool) -> Result<()> {
-    let home = std::env::var("HOME")
-        .map_err(|e| anyhow::anyhow!("No HOME directory: {e}"))?;
+    let home = std::env::var("HOME").map_err(|e| anyhow::anyhow!("No HOME directory: {e}"))?;
 
     let zellij_dir = PathBuf::from(home).join(".config/zellij/plugins");
 
-    fs::create_dir_all(&zellij_dir)
-        .with_context(|| format!("Failed to create plugins directory: {}", zellij_dir.display()))?;
+    fs::create_dir_all(&zellij_dir).with_context(|| {
+        format!(
+            "Failed to create plugins directory: {}",
+            zellij_dir.display()
+        )
+    })?;
 
     let wasm_path = zellij_dir.join("zellij_frontend.wasm");
     let yaml_path = zellij_dir.join("oya.yaml");
 
     // Check if already installed
     if wasm_path.exists() && !force {
-        println!("✅ Zellij plugin already installed at {}", wasm_path.display());
+        println!(
+            "✅ Zellij plugin already installed at {}",
+            wasm_path.display()
+        );
         println!("   Use --force to reinstall");
         return Ok(());
     }

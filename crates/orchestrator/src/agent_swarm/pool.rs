@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use itertools::Itertools;
 use tokio::sync::RwLock;
+use tracing::instrument;
 
 use super::error::{AgentSwarmError, AgentSwarmResult};
 use super::handle::{AgentHandle, AgentState};
@@ -103,6 +104,7 @@ impl AgentPool {
     /// # Errors
     ///
     /// Returns an error if the agent is already registered or pool is at capacity.
+    #[tracing::instrument(skip(self, agent))]
     pub async fn register_agent(&self, agent: AgentHandle) -> AgentSwarmResult<()> {
         let mut agents = self.agents.write().await;
 
@@ -130,6 +132,7 @@ impl AgentPool {
     /// # Errors
     ///
     /// Returns an error if the agent is not found.
+    #[tracing::instrument(skip(self))]
     pub async fn unregister_agent(&self, agent_id: &str) -> AgentSwarmResult<AgentHandle> {
         let mut agents = self.agents.write().await;
 
@@ -182,6 +185,7 @@ impl AgentPool {
     /// # Errors
     ///
     /// Returns an error if no agents are available.
+    #[tracing::instrument(skip(self), fields(bead_id))]
     pub async fn assign_bead(&self, bead_id: &str) -> AgentSwarmResult<String> {
         let mut agents = self.agents.write().await;
 
@@ -220,6 +224,7 @@ impl AgentPool {
     /// # Errors
     ///
     /// Returns an error if the agent is not found or unavailable.
+    #[tracing::instrument(skip(self), fields(bead_id, agent_id))]
     pub async fn assign_bead_to_agent(
         &self,
         bead_id: &str,
@@ -259,7 +264,8 @@ impl AgentPool {
     /// # Errors
     ///
     /// Returns an error if the agent is not found.
-    pub async fn complete_bead(&self, agent_id: &str) -> AgentSwarmResult<()> {
+    #[tracing::instrument(skip(self))]
+    pub async fn complete_bead(&self, actor_id: &str) -> AgentSwarmResult<()> {
         let mut agents = self.agents.write().await;
 
         let agent = agents
@@ -408,7 +414,7 @@ impl AgentPool {
     }
 
     /// Start background health monitoring.
-    #[must_use] 
+    #[must_use]
     pub fn start_health_monitoring(&self) -> tokio::task::JoinHandle<()> {
         self.health_monitor.start_background_check()
     }

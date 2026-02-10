@@ -38,7 +38,7 @@ pub struct InMemoryEventStore {
 
 impl InMemoryEventStore {
     /// Create a new in-memory event store.
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             events: RwLock::new(Arc::new([])),
@@ -47,7 +47,7 @@ impl InMemoryEventStore {
     }
 
     /// Create a new in-memory event store wrapped in an Arc.
-    #[must_use] 
+    #[must_use]
     pub fn new_arc() -> Arc<Self> {
         Arc::new(Self::new())
     }

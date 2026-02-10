@@ -208,7 +208,9 @@ fn restore_with_fallback(
                     | RestoreError::DeserializationFailed { .. }
                     | RestoreError::InvalidData { .. }
             ) {
-                info!("Checkpoint appears corrupted, attempting fallback to previous checkpoint(s)");
+                info!(
+                    "Checkpoint appears corrupted, attempting fallback to previous checkpoint(s)"
+                );
 
                 // Find the position of this checkpoint in our sequence
                 let checkpoint_ids: Vec<_> =
@@ -254,10 +256,7 @@ fn restore_with_fallback(
 
                 // If we get here, we've exhausted all previous checkpoints
                 Err(ChaosTestError::FallbackFailed {
-                    reason: format!(
-                        "all previous checkpoints failed for {}",
-                        checkpoint_id
-                    ),
+                    reason: format!("all previous checkpoints failed for {}", checkpoint_id),
                 })
             } else {
                 Err(ChaosTestError::FallbackFailed {

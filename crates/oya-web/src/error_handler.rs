@@ -87,7 +87,7 @@ pub struct ErrorResponse {
 
 impl ErrorResponse {
     /// Create a new error response.
-    #[must_use] 
+    #[must_use]
     pub fn new(
         status: u16,
         category: ErrorCategory,
@@ -108,7 +108,7 @@ impl ErrorResponse {
     }
 
     /// Add request ID for tracing.
-    #[must_use] 
+    #[must_use]
     pub fn with_request_id(mut self, request_id: String) -> Self {
         self.request_id = Some(request_id);
         self
@@ -127,7 +127,7 @@ impl ErrorResponse {
     }
 
     /// Categorize HTTP status code into error category.
-    #[must_use] 
+    #[must_use]
     pub fn categorize_status_code(status: StatusCode) -> ErrorCategory {
         match status {
             s if s.is_client_error() => match s {
@@ -143,7 +143,7 @@ impl ErrorResponse {
     }
 
     /// Determine recovery strategy for error category.
-    #[must_use] 
+    #[must_use]
     pub const fn recovery_strategy(category: ErrorCategory) -> RecoveryStrategy {
         match category {
             ErrorCategory::Network | ErrorCategory::Timeout | ErrorCategory::Server => {
@@ -157,7 +157,7 @@ impl ErrorResponse {
     }
 
     /// Check if error is retryable based on category.
-    #[must_use] 
+    #[must_use]
     pub const fn is_retryable(category: ErrorCategory) -> bool {
         matches!(
             category,
@@ -193,7 +193,7 @@ pub enum HttpError {
 
 impl HttpError {
     /// Get error category.
-    #[must_use] 
+    #[must_use]
     pub const fn category(&self) -> ErrorCategory {
         match self {
             Self::Network { .. } => ErrorCategory::Network,
@@ -207,7 +207,7 @@ impl HttpError {
     }
 
     /// Get HTTP status code.
-    #[must_use] 
+    #[must_use]
     pub const fn status_code(&self) -> StatusCode {
         match self {
             Self::Network { .. } => StatusCode::SERVICE_UNAVAILABLE,
@@ -221,7 +221,7 @@ impl HttpError {
     }
 
     /// Get error message.
-    #[must_use] 
+    #[must_use]
     pub fn message(&self) -> String {
         match self {
             Self::Network { message, .. } => message.clone(),
@@ -238,7 +238,7 @@ impl HttpError {
     }
 
     /// Get error code for machine readability.
-    #[must_use] 
+    #[must_use]
     pub fn error_code(&self) -> String {
         match self {
             Self::Network { .. } => "NETWORK_ERROR".to_string(),
@@ -252,7 +252,7 @@ impl HttpError {
     }
 
     /// Convert to structured error response.
-    #[must_use] 
+    #[must_use]
     pub fn to_response(&self) -> ErrorResponse {
         let category = self.category();
         let status = self.status_code();

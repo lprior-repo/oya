@@ -336,11 +336,7 @@ impl Actor for HealthCheckWorkerDef {
         let mut state = HealthCheckWorkerState::new(config, event_bus);
 
         // Start the polling timer
-        let handle = PollingTimer::start(
-            myself,
-            state.config.check_interval,
-            state.config.timeout,
-        );
+        let handle = PollingTimer::start(myself, state.config.check_interval, state.config.timeout);
         state.timer_handle = Some(handle);
 
         Ok(state)
@@ -509,7 +505,7 @@ impl PollingTimer {
     ///
     /// Spawns a background task that sends `PerformCheck` messages
     /// at the configured interval.
-    #[must_use] 
+    #[must_use]
     pub fn start(
         target: ActorRef<HealthCheckMessage>,
         interval: Duration,

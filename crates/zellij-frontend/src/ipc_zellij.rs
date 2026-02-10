@@ -93,8 +93,7 @@ impl ZellijIpcClient {
         let request_id = self._correlation_context.generate_request_id();
 
         // Serialize message
-        let json =
-            serde_json::to_string(cmd).map_err(|e| format!("Serialization failed: {e}"))?;
+        let json = serde_json::to_string(cmd).map_err(|e| format!("Serialization failed: {e}"))?;
 
         // Add correlation ID
         let payload = format!("{{\"request_id\": \"{}\", \"data\": {}}}", request_id, json);
@@ -129,9 +128,9 @@ impl ZellijIpcClient {
             }
 
             // Use get to avoid indexing_slicing lint - safe because bytes_read <= buffer.len()
-            let chunk = buffer
-                .get(..bytes_read)
-                .map_or_else(String::new, |slice| String::from_utf8_lossy(slice).to_string());
+            let chunk = buffer.get(..bytes_read).map_or_else(String::new, |slice| {
+                String::from_utf8_lossy(slice).to_string()
+            });
             json_string.push_str(&chunk);
 
             // Check if we have a complete JSON object

@@ -148,7 +148,10 @@ impl AffinityStrategy {
         let pref_score = self.preference_score(agent_id, bead_id, ctx);
         let load_score = self.load_score(agent_id, ctx);
 
-        load_score.mul_add(self.load_weight, cap_score.mul_add(self.capability_weight, pref_score * self.preference_weight))
+        load_score.mul_add(
+            self.load_weight,
+            cap_score.mul_add(self.capability_weight, pref_score * self.preference_weight),
+        )
     }
 
     /// Check if an agent fully matches capability requirements.

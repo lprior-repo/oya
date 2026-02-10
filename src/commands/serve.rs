@@ -18,9 +18,8 @@ pub fn serve_command(address: Option<String>) -> Result<()> {
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|e| anyhow::anyhow!("Failed to create runtime: {e}"))?;
 
-    runtime.block_on(async {
-        run_server(address.unwrap_or_else(|| DEFAULT_ADDR.to_string())).await
-    })
+    runtime
+        .block_on(async { run_server(address.unwrap_or_else(|| DEFAULT_ADDR.to_string())).await })
 }
 
 async fn run_server(address: String) -> Result<()> {
@@ -28,13 +27,16 @@ async fn run_server(address: String) -> Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("Failed to spawn IPC worker: {e:?}"))?;
 
-    let listener = TcpListener::bind(&address).await
+    let listener = TcpListener::bind(&address)
+        .await
         .map_err(|e| anyhow::anyhow!("Failed to bind to {address}: {e}"))?;
 
     info!("🔌 OYA IPC server listening on {}", address);
 
     loop {
-        let (stream, addr) = listener.accept().await
+        let (stream, addr) = listener
+            .accept()
+            .await
             .map_err(|e| anyhow::anyhow!("Accept failed: {e}"))?;
 
         let ipc_worker = ipc_worker.clone();
@@ -52,7 +54,8 @@ async fn handle_client(
     stream: tokio::net::TcpStream,
     ipc_worker: ActorRef<IpcWorkerMessage>,
 ) -> Result<()> {
-    let std_stream = stream.into_std()
+    let std_stream = stream
+        .into_std()
         .map_err(|e| anyhow::anyhow!("Failed to convert stream: {e}"))?;
 
     let handle = tokio::runtime::Handle::current();
@@ -67,12 +70,15 @@ fn run_client(
     ipc_worker: ActorRef<IpcWorkerMessage>,
     handle: tokio::runtime::Handle,
 ) -> Result<()> {
-    stream.set_read_timeout(Some(Duration::from_secs(15)))
+    stream
+        .set_read_timeout(Some(Duration::from_secs(15)))
         .map_err(|e| anyhow::anyhow!("Failed to set read timeout: {e}"))?;
-    stream.set_write_timeout(Some(Duration::from_secs(15)))
+    stream
+        .set_write_timeout(Some(Duration::from_secs(15)))
         .map_err(|e| anyhow::anyhow!("Failed to set write timeout: {e}"))?;
 
-    let reader = stream.try_clone()
+    let reader = stream
+        .try_clone()
         .map_err(|e| anyhow::anyhow!("Failed to clone stream: {e}"))?;
     let writer = stream;
     let mut transport = IpcTransport::new(reader, writer);
@@ -104,7 +110,8 @@ fn run_client(
             },
         };
 
-        transport.send(&host_message)
+        transport
+            .send(&host_message)
             .map_err(|e| anyhow::anyhow!("IPC send failed: {e}"))?;
     }
 }

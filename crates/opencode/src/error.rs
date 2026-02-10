@@ -70,7 +70,7 @@ impl Error {
     }
 
     /// Create a timeout error.
-    #[must_use] 
+    #[must_use]
     pub const fn timeout(timeout_ms: u64) -> Self {
         Self::Timeout { timeout_ms }
     }
@@ -119,7 +119,7 @@ impl Error {
     }
 
     /// Check if this error is retryable.
-    #[must_use] 
+    #[must_use]
     pub const fn is_retryable(&self) -> bool {
         matches!(
             self,

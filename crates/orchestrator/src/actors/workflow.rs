@@ -81,7 +81,7 @@ impl GenericSupervisableActor for WorkflowActorDef {
 
 /// Functional core for `WorkflowActor`.
 mod core {
-    use super::{WorkflowState, WorkflowMessage, WorkflowEffect};
+    use super::{WorkflowEffect, WorkflowMessage, WorkflowState};
 
     /// Pure function to handle messages and return next state + effects.
     pub fn handle(

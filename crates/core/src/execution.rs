@@ -276,9 +276,10 @@ impl ExecutionEngine {
                     &mut visited,
                     &mut rec_stack,
                     &mut path,
-                )? {
-                    return Ok(path);
-                }
+                )?
+            {
+                return Ok(path);
+            }
         }
 
         // Should not reach here if cycle exists
@@ -384,7 +385,7 @@ impl ExecutionEngine {
     }
 
     /// Get tasks ready to execute based on current state.
-    #[must_use] 
+    #[must_use]
     pub fn get_ready_tasks(&self, workflow: &Workflow, state: &WorkflowState) -> Vec<String> {
         if state.workflow_id != workflow.id.as_str() {
             return Vec::new();
@@ -1211,7 +1212,7 @@ async fn test_recover_from_checkpoint_workflow_id_mismatch() {
 
     let engine = ExecutionEngine::new().with_checkpoint_dir(checkpoint_dir);
 
-    let workflow1 =
+    let _workflow1 =
         Workflow::new("workflow-1", "Test", "Description").expect("Failed to create workflow");
 
     let state = WorkflowState {

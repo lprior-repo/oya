@@ -191,7 +191,7 @@ impl Error {
     }
 
     /// Create a connection error.
-    #[must_use] 
+    #[must_use]
     pub const fn connection(err: ConnectionError) -> Self {
         Self::Connection(err)
     }

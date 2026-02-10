@@ -43,13 +43,14 @@ use oya_pipeline::{
 };
 
 use crate::ipc_messages::{
-    AlertLevel, ComponentHealth, GuestMessage,
-    HealthStatus, HostMessage, TaskDetail, TaskSummary, TaskUpdate,
+    AlertLevel, ComponentHealth, GuestMessage, HealthStatus, HostMessage, TaskDetail, TaskSummary,
+    TaskUpdate,
 };
 
 use crate::actors::SchedulerState;
 use crate::actors::errors::ActorError;
 use crate::agent_swarm::{AgentPool, PoolStats};
+use crate::persistence::{BeadRecord, StoreConfig};
 use crate::persistence::{BeadState, OrchestratorStore};
 
 /// IPC worker actor definition.
@@ -71,7 +72,7 @@ pub struct IpcWorkerArguments {
 
 impl IpcWorkerArguments {
     /// Create new arguments with no integrations.
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -83,21 +84,21 @@ impl IpcWorkerArguments {
     }
 
     /// Set the `AgentPool`.
-    #[must_use] 
+    #[must_use]
     pub fn with_agent_pool(mut self, pool: Arc<AgentPool>) -> Self {
         self.agent_pool = Some(pool);
         self
     }
 
     /// Set the `SchedulerState`.
-    #[must_use] 
+    #[must_use]
     pub fn with_scheduler_state(mut self, state: Arc<SchedulerState>) -> Self {
         self.scheduler_state = Some(state);
         self
     }
 
     /// Set the `OrchestratorStore`.
-    #[must_use] 
+    #[must_use]
     pub fn with_store(mut self, store: Arc<OrchestratorStore>) -> Self {
         self.store = Some(store);
         self
@@ -573,7 +574,10 @@ impl Actor for IpcWorkerActorDef {
 
 /// Functional core for `IpcWorker`.
 mod core {
-    use super::{IpcWorkerState, IpcWorkerMessage, IpcWorkerEffect, GuestMessage, HostMessage, ActorError, PoolStats, HealthStatus, ComponentHealth, Utc};
+    use super::{
+        ActorError, ComponentHealth, GuestMessage, HealthStatus, HostMessage, IpcWorkerEffect,
+        IpcWorkerMessage, IpcWorkerState, PoolStats, Utc,
+    };
 
     pub fn handle(
         state: IpcWorkerState,
@@ -1142,9 +1146,7 @@ impl IpcWorkerActorDef {
 
         Ok(HostMessage::Ack {
             command: "RetryBead".to_string(),
-            message: format!(
-                "Bead {bead_id} reset for retry (attempt {new_retry_count})"
-            ),
+            message: format!("Bead {bead_id} reset for retry (attempt {new_retry_count})"),
         })
     }
 
@@ -1303,7 +1305,6 @@ async fn run_pipeline_for_slug(
     repo_root: &std::path::Path,
 ) -> Result<TaskUpdate, TaskUpdate> {
     let task = load_task_record(slug, repo_root).await;
-    
 
     match task {
         Ok(task) => match run_full_pipeline(task) {

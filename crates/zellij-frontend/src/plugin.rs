@@ -431,7 +431,10 @@ pub fn stage_symbol_from_status(status: &str, stage: Option<&str>) -> char {
         ("failed", Some(_)) => '✗',
 
         // Currently running stage - collapse into outer match
-        ("in_progress", Some("research" | "plan" | "implement" | "review" | "validate" | "accept")) => '◐',
+        (
+            "in_progress",
+            Some("research" | "plan" | "implement" | "review" | "validate" | "accept"),
+        ) => '◐',
 
         // Created = not started
         ("created", _) => '○',
@@ -446,45 +449,51 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_stage_symbol_returns_running_for_in_progress_stage() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_stage_symbol_returns_running_for_in_progress_stage(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let result = stage_symbol_from_status("in_progress", Some("implement"));
         assert_eq!(result, '◐');
-    Ok(())
+        Ok(())
     }
 
     #[test]
-    fn test_stage_symbol_returns_complete_for_passed_status() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_stage_symbol_returns_complete_for_passed_status(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let result = stage_symbol_from_status("passed", None);
         assert_eq!(result, '●');
-    Ok(())
+        Ok(())
     }
 
     #[test]
-    fn test_stage_symbol_returns_failed_for_failed_status_with_stage() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_stage_symbol_returns_failed_for_failed_status_with_stage(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let result = stage_symbol_from_status("failed", Some("validate: 3 tests failed"));
         assert_eq!(result, '✗');
-    Ok(())
+        Ok(())
     }
 
     #[test]
-    fn test_stage_symbol_returns_pending_for_created_status() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_stage_symbol_returns_pending_for_created_status(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let result = stage_symbol_from_status("created", None);
         assert_eq!(result, '○');
-    Ok(())
+        Ok(())
     }
 
     #[test]
-    fn test_stage_symbol_returns_question_mark_for_unknown_stage_name() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_stage_symbol_returns_question_mark_for_unknown_stage_name(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let result = stage_symbol_from_status("in_progress", Some("unknown-stage"));
         assert_eq!(result, '?');
-    Ok(())
+        Ok(())
     }
 
     #[test]
-    fn test_stage_symbol_extracts_stage_name_before_colon() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_stage_symbol_extracts_stage_name_before_colon() -> Result<(), Box<dyn std::error::Error>>
+    {
         let result = stage_symbol_from_status("in_progress", Some("implement: writing code"));
         assert_eq!(result, '◐');
-    Ok(())
+        Ok(())
     }
 
     #[test]
@@ -500,6 +509,7 @@ mod tests {
         let result = task.update_from_ipc(&msg);
         assert!(result.is_ok());
         assert_eq!(task.stage, Some("implement".to_string()));
+        Ok(())
     }
 
     #[test]
@@ -518,6 +528,7 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(task.stage, Some("implement".to_string()));
         assert_eq!(task.stages[2].state, StageState::Completed); // implement is index 2
+        Ok(())
     }
 
     #[test]
@@ -537,6 +548,7 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(task.stage, Some("validate: 3 tests failed".to_string()));
         assert_eq!(task.stages[4].state, StageState::Failed); // validate is index 4
+        Ok(())
     }
 
     #[test]
@@ -552,6 +564,7 @@ mod tests {
         let result = task.update_from_ipc(&msg);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Bead ID mismatch"));
+        Ok(())
     }
 
     #[test]
@@ -573,6 +586,7 @@ mod tests {
         assert!(result1.is_ok());
         assert!(result2.is_ok());
         assert_eq!(task.stage, Some("implement".to_string()));
+        Ok(())
     }
 
     // ========================================================================
@@ -613,10 +627,12 @@ mod tests {
         assert_eq!(plugin.status_message, Some("Test message".to_string()));
         // IPC client should be reset to None after restoration
         assert!(plugin.ipc.is_none());
+        Ok(())
     }
 
     #[test]
-    fn test_plugin_restore_clamps_invalid_selected_index() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_plugin_restore_clamps_invalid_selected_index() -> Result<(), Box<dyn std::error::Error>>
+    {
         let mut plugin = OyaPlugin::new()?;
 
         // Create snapshot with invalid selected_index (out of bounds)
@@ -639,10 +655,12 @@ mod tests {
         let result = plugin.restore_from_snapshot(snapshot);
         assert!(result.is_ok());
         assert_eq!(plugin.selected_index, 0);
+        Ok(())
     }
 
     #[test]
-    fn test_plugin_restore_rejects_incompatible_version() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_plugin_restore_rejects_incompatible_version() -> Result<(), Box<dyn std::error::Error>>
+    {
         let mut plugin = OyaPlugin::new()?;
 
         // Create snapshot with incompatible version
@@ -666,6 +684,7 @@ mod tests {
                 || error_msg.contains("999")
                 || error_msg.contains("incompatible")
         );
+        Ok(())
     }
 
     #[test]
@@ -683,10 +702,12 @@ mod tests {
         assert_eq!(snapshot.plugin_state, PluginState::Starting);
         assert!(snapshot.status_message.is_none());
         assert!(snapshot.timestamp > 0);
+        Ok(())
     }
 
     #[test]
-    fn test_plugin_restore_preserves_task_stage_history() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_plugin_restore_preserves_task_stage_history() -> Result<(), Box<dyn std::error::Error>>
+    {
         let mut plugin = OyaPlugin::new()?;
 
         // Set up task with stage history
@@ -714,6 +735,7 @@ mod tests {
         assert_eq!(plugin.tasks[0].stages[0].state, StageState::Completed); // research
         assert_eq!(plugin.tasks[0].stages[1].state, StageState::Completed); // plan
         assert_eq!(plugin.tasks[0].stages[2].state, StageState::Running); // implement
+        Ok(())
     }
 
     #[test]
@@ -722,6 +744,7 @@ mod tests {
 
         // Path should end with zellij-plugin-state.json
         assert!(path.to_string_lossy().ends_with("zellij-plugin-state.json"));
+        Ok(())
     }
 
     // Additional tests from original second test module
@@ -730,6 +753,7 @@ mod tests {
     fn test_plugin_creation() -> Result<(), Box<dyn std::error::Error>> {
         let plugin = OyaPlugin::new();
         assert!(plugin.is_ok());
+        Ok(())
     }
 
     #[test]
@@ -739,12 +763,14 @@ mod tests {
         let decoded: Size = serde_json::from_str(&json)?;
         assert_eq!(decoded.rows, 24);
         assert_eq!(decoded.cols, 80);
+        Ok(())
     }
 
     #[test]
     fn test_plugin_state() -> Result<(), Box<dyn std::error::Error>> {
         assert_ne!(PluginState::Running, PluginState::Starting);
         assert_ne!(PluginState::Running, PluginState::Error);
+        Ok(())
     }
 
     #[test]
@@ -759,10 +785,11 @@ mod tests {
     }
 
     #[test]
-    fn test_sample_beads() {
+    fn test_sample_beads() -> Result<(), Box<dyn std::error::Error>> {
         let plugin = OyaPlugin::new()?;
         assert!(!plugin.tasks.is_empty());
         assert_eq!(plugin.tasks[0].slug, "task-3ax5");
+        Ok(())
     }
 
     // ========================================================================
@@ -770,24 +797,18 @@ mod tests {
     // ========================================================================
 
     #[test]
-    fn test_init_auto_save_with_valid_interval() {
+    fn test_init_auto_save_with_maximum_interval() -> Result<(), Box<dyn std::error::Error>> {
         let mut plugin = OyaPlugin::new()?;
 
-        let result = plugin.init_auto_save(30);
+        let result = plugin.init_auto_save(600);
 
         assert!(result.is_ok());
         assert!(plugin.auto_save_timer.is_some());
-        assert!(
-            plugin
-                .auto_save_timer
-                .as_ref()
-                .map(|t| t.is_running())
-                .unwrap_or(false)
-        );
+        Ok(())
     }
 
     #[test]
-    fn test_init_auto_save_clamps_too_short_interval() {
+    fn test_init_auto_save_clamps_too_short_interval() -> Result<(), Box<dyn std::error::Error>> {
         let mut plugin = OyaPlugin::new()?;
 
         // Interval too short (5 seconds) should be clamped to 10
@@ -799,10 +820,11 @@ mod tests {
         // Verify the timer interval is at least 10 seconds (10000 ms)
         let timer = plugin.auto_save_timer.as_ref().unwrap();
         assert!(timer.config().interval_ms() >= 10000);
+        Ok(())
     }
 
     #[test]
-    fn test_init_auto_save_clamps_too_long_interval() {
+    fn test_init_auto_save_clamps_too_long_interval() -> Result<(), Box<dyn std::error::Error>> {
         let mut plugin = OyaPlugin::new()?;
 
         // Interval too long (700 seconds) should be clamped to 600
@@ -814,30 +836,38 @@ mod tests {
         // Verify the timer interval is at most 600 seconds (600000 ms)
         let timer = plugin.auto_save_timer.as_ref().unwrap();
         assert!(timer.config().interval_ms() <= 600000);
+        Ok(())
     }
 
     #[test]
-    fn test_init_auto_save_with_minimum_interval() {
+    fn test_init_auto_save_with_valid_interval() -> Result<(), Box<dyn std::error::Error>> {
+        let mut plugin = OyaPlugin::new()?;
+
+        let result = plugin.init_auto_save(30);
+
+        assert!(result.is_ok());
+        assert!(plugin.auto_save_timer.is_some());
+        assert!(plugin
+            .auto_save_timer
+            .as_ref()
+            .map(|t| t.is_running())
+            .unwrap_or(false));
+        Ok(())
+    }
+
+    #[test]
+    fn test_init_auto_save_with_minimum_interval() -> Result<(), Box<dyn std::error::Error>> {
         let mut plugin = OyaPlugin::new()?;
 
         let result = plugin.init_auto_save(10);
 
         assert!(result.is_ok());
         assert!(plugin.auto_save_timer.is_some());
+        Ok(())
     }
 
     #[test]
-    fn test_init_auto_save_with_maximum_interval() {
-        let mut plugin = OyaPlugin::new()?;
-
-        let result = plugin.init_auto_save(600);
-
-        assert!(result.is_ok());
-        assert!(plugin.auto_save_timer.is_some());
-    }
-
-    #[test]
-    fn test_save_state_now_updates_timestamp() {
+    fn test_save_state_now_updates_timestamp() -> Result<(), Box<dyn std::error::Error>> {
         let mut plugin = OyaPlugin::new()?;
 
         // Initially no timestamp
@@ -859,10 +889,11 @@ mod tests {
             assert!(now.saturating_sub(timestamp) < 5);
         }
         // If save fails, that's acceptable in test environment (no XDG dirs, etc.)
+        Ok(())
     }
 
     #[test]
-    fn test_save_state_now_updates_status_message() {
+    fn test_save_state_now_updates_status_message() -> Result<(), Box<dyn std::error::Error>> {
         let mut plugin = OyaPlugin::new()?;
 
         let result = plugin.save_state_now();
@@ -870,26 +901,27 @@ mod tests {
         // If save succeeds, status message should be updated
         if result.is_ok() {
             assert!(plugin.status_message.is_some());
-            assert!(
-                plugin
-                    .status_message
-                    .as_ref()
-                    .map(|msg| msg.contains("State saved at"))
-                    .unwrap_or(false)
-            );
+            assert!(plugin
+                .status_message
+                .as_ref()
+                .map(|msg| msg.contains("State saved at"))
+                .unwrap_or(false));
         }
         // If save fails, that's acceptable in test environment
+        Ok(())
     }
 
     #[test]
-    fn test_last_save_timestamp_returns_none_initially() {
+    fn test_last_save_timestamp_returns_none_initially() -> Result<(), Box<dyn std::error::Error>> {
         let plugin = OyaPlugin::new()?;
 
         assert!(plugin.last_save_timestamp().is_none());
+        Ok(())
     }
 
     #[test]
-    fn test_last_save_timestamp_returns_value_after_save() {
+    fn test_last_save_timestamp_returns_value_after_save() -> Result<(), Box<dyn std::error::Error>>
+    {
         let mut plugin = OyaPlugin::new()?;
 
         // Attempt to save state (may fail in test environment)
@@ -902,10 +934,11 @@ mod tests {
             assert!(timestamp.unwrap() > 0);
         }
         // If save failed, that's acceptable in test environment
+        Ok(())
     }
 
     #[test]
-    fn test_handle_timer_event_saves_state_when_due() {
+    fn test_handle_timer_event_saves_state_when_due() -> Result<(), Box<dyn std::error::Error>> {
         let mut plugin = OyaPlugin::new()?;
         let _ = plugin.init_auto_save(1); // 1 second interval for testing
 
@@ -926,10 +959,11 @@ mod tests {
         // State should have been saved if filesystem available
         // In test environment with limited filesystem access, save may fail
         // but the timer event should still be processed without panic
+        Ok(())
     }
 
     #[test]
-    fn test_handle_timer_event_skips_save_when_not_due() {
+    fn test_handle_timer_event_skips_save_when_not_due() -> Result<(), Box<dyn std::error::Error>> {
         let mut plugin = OyaPlugin::new()?;
         let _ = plugin.init_auto_save(30); // 30 second interval
 
@@ -946,10 +980,12 @@ mod tests {
         // State should NOT have been saved (returns None from handle_timer_event)
         assert!(plugin.last_save_timestamp().is_none());
         assert!(result.unwrap().is_none());
+        Ok(())
     }
 
     #[test]
-    fn test_handle_timer_event_with_no_timer_configured() {
+    fn test_handle_timer_event_with_no_timer_configured() -> Result<(), Box<dyn std::error::Error>>
+    {
         let mut plugin = OyaPlugin::new()?;
 
         // No timer initialized
@@ -960,10 +996,11 @@ mod tests {
 
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
+        Ok(())
     }
 
     #[test]
-    fn test_multiple_saves_update_timestamp() {
+    fn test_multiple_saves_update_timestamp() -> Result<(), Box<dyn std::error::Error>> {
         let mut plugin = OyaPlugin::new()?;
 
         // First save
@@ -985,10 +1022,11 @@ mod tests {
             }
         }
         // If saves fail, that's acceptable in test environment
+        Ok(())
     }
 
     #[test]
-    fn test_auto_save_timer_is_running_after_init() {
+    fn test_auto_save_timer_is_running_after_init() -> Result<(), Box<dyn std::error::Error>> {
         let mut plugin = OyaPlugin::new()?;
 
         let _ = plugin.init_auto_save(30);
@@ -996,6 +1034,7 @@ mod tests {
         assert!(plugin.auto_save_timer.is_some());
         let timer = plugin.auto_save_timer.as_ref().unwrap();
         assert!(timer.is_running());
+        Ok(())
     }
 
     #[test]
@@ -1018,8 +1057,7 @@ mod tests {
         plugin1.status_message = Some("Test roundtrip message".to_string());
 
         // Save state
-        let state_manager = crate::state::StateManager::new(state_file.clone(), 1_048_576)
-            ?;
+        let state_manager = crate::state::StateManager::new(state_file.clone(), 1_048_576)?;
         let save_result = state_manager.save_state(&plugin1);
 
         // Verify save succeeded (or skip if filesystem unavailable)
@@ -1028,10 +1066,10 @@ mod tests {
             let mut plugin2 = OyaPlugin::new()?;
 
             // Load state
-            let load_result = state_manager.load_state();
-            assert!(load_result.is_ok(), "Load should succeed");
+            let load_result = state_manager.load_state()?;
+            assert!(load_result.is_some(), "Load should succeed");
 
-            let mut snapshot = load_result.unwrap()?;
+            let mut snapshot = load_result.ok_or("No snapshot found")?;
             assert!(snapshot.validate().is_ok(), "Snapshot should be valid");
 
             // Restore state
@@ -1050,6 +1088,7 @@ mod tests {
             let _ = fs::remove_dir_all(&temp_dir);
         }
         // If save fails, skip test (filesystem unavailable in test environment)
+        Ok(())
     }
 }
 

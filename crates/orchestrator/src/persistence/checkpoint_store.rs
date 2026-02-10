@@ -160,9 +160,7 @@ impl OrchestratorStore {
         limit: Option<usize>,
     ) -> PersistenceResult<Vec<CheckpointRecord>> {
         let query = match limit {
-            Some(n) => format!(
-                "SELECT * FROM checkpoint ORDER BY event_sequence DESC LIMIT {n}"
-            ),
+            Some(n) => format!("SELECT * FROM checkpoint ORDER BY event_sequence DESC LIMIT {n}"),
             None => "SELECT * FROM checkpoint ORDER BY event_sequence DESC".to_string(),
         };
 

@@ -9,7 +9,7 @@
 // - Help overlay rendering
 
 use crate::layout::{Layout, Pane, PaneType};
-use crate::plugin::{TaskRow, StageState};
+use crate::plugin::{StageState, TaskRow};
 use thiserror::Error;
 
 // Style helper functions using functional patterns
@@ -114,17 +114,13 @@ impl Renderer {
             .fold(String::new(), |mut acc: String, pane| {
                 let pane_content = match pane.pane_type {
                     PaneType::BeadList => self.render_bead_list(layout, tasks, selected_index),
-                    PaneType::BeadDetail => {
-                        tasks
-                            .get(selected_index)
-                            .map_or_else(String::new, |task| self.render_bead_detail(layout, task))
-                    }
+                    PaneType::BeadDetail => tasks
+                        .get(selected_index)
+                        .map_or_else(String::new, |task| self.render_bead_detail(layout, task)),
                     PaneType::WorkflowGraph => self.render_workflow_graph(pane, focused_pane),
-                    PaneType::PipelineView => {
-                        tasks
-                            .get(selected_index)
-                            .map_or_else(String::new, |task| self.render_pipeline_view(pane, task))
-                    }
+                    PaneType::PipelineView => tasks
+                        .get(selected_index)
+                        .map_or_else(String::new, |task| self.render_pipeline_view(pane, task)),
                 };
 
                 let rendered = self.render_pane(pane, &pane_content, focused_pane);
@@ -140,7 +136,11 @@ impl Renderer {
     /// Render a single pane with border
     fn render_pane(&self, pane: &Pane, content: &str, focused_pane: PaneType) -> String {
         let is_focused = pane.pane_type == focused_pane;
-        let border_color = if is_focused { style_helpers::border_focused() } else { style_helpers::border_normal() };
+        let border_color = if is_focused {
+            style_helpers::border_focused()
+        } else {
+            style_helpers::border_normal()
+        };
         let width = pane.width;
         let title = format!(" {} ", pane.title);
 
@@ -189,9 +189,7 @@ impl Renderer {
         selected_index: usize,
     ) -> String {
         // Get the bead list pane for width calculation
-        let pane_width = layout
-            .get_pane(PaneType::BeadList)
-            .map_or(40, |p| p.width);
+        let pane_width = layout.get_pane(PaneType::BeadList).map_or(40, |p| p.width);
 
         // Render each task line using functional fold pattern
         tasks
@@ -234,7 +232,12 @@ impl Renderer {
                 // Progress bar if in progress
                 if task.status == "in_progress" {
                     let (running_stage, failed_stage, completed) = get_stage_info(task);
-                    let progress = calculate_stage_progress(&task.stages, running_stage, failed_stage, completed);
+                    let progress = calculate_stage_progress(
+                        &task.stages,
+                        running_stage,
+                        failed_stage,
+                        completed,
+                    );
                     let bar = render_progress_bar(progress, 10);
                     acc.push_str(&bar);
                 }
@@ -257,22 +260,26 @@ impl Renderer {
             ("Branch", &task.branch),
         ];
 
-        let field_lines = fields.iter().fold(String::new(), |mut acc, (label, value)| {
-            acc.push_str(style_helpers::label());
-            acc.push_str(&format!("{label:<9} "));
-            acc.push_str(style_helpers::text());
-            acc.push_str(value);
-            acc.push('\n');
-            acc
-        });
+        let field_lines = fields
+            .iter()
+            .fold(String::new(), |mut acc, (label, value)| {
+                acc.push_str(style_helpers::label());
+                acc.push_str(&format!("{label:<9} "));
+                acc.push_str(style_helpers::text());
+                acc.push_str(value);
+                acc.push('\n');
+                acc
+            });
 
         // Stage line if present
-        let stage_line = task
-            .stage
-            .as_ref()
-            .map_or_else(String::new, |stage| {
-                format!("{}Stage:    {}{}\n", style_helpers::label(), style_helpers::text(), stage)
-            });
+        let stage_line = task.stage.as_ref().map_or_else(String::new, |stage| {
+            format!(
+                "{}Stage:    {}{}\n",
+                style_helpers::label(),
+                style_helpers::text(),
+                stage
+            )
+        });
 
         // Pipeline header
         let pipeline_header = format!("\n{}Pipeline:\n", style_helpers::header());
@@ -285,7 +292,8 @@ impl Renderer {
             .stages
             .iter()
             .fold(String::new(), |mut acc, stage_info| {
-                let progress = calculate_stage_progress(&task.stages, running_stage, failed_stage, completed);
+                let progress =
+                    calculate_stage_progress(&task.stages, running_stage, failed_stage, completed);
                 let bar = render_progress_bar(progress, 15);
                 acc.push_str(style_helpers::text());
                 acc.push_str("  ");
@@ -313,7 +321,8 @@ impl Renderer {
             .stages
             .iter()
             .fold(String::new(), |mut acc, stage_info| {
-                let progress = calculate_stage_progress(&task.stages, running_stage, failed_stage, completed);
+                let progress =
+                    calculate_stage_progress(&task.stages, running_stage, failed_stage, completed);
                 let bar = render_progress_bar(progress, pane.width.saturating_sub(20));
                 acc.push_str(style_helpers::text());
                 acc.push_str(stage_info.symbol());
@@ -453,12 +462,17 @@ impl Renderer {
         // Combine all lines: static + focus + keybindings
         let all_lines: Vec<String> = static_lines
             .chain(focus_lines)
-            .chain(keybindings.iter().map(|(key, desc)| format!("  {key}      {desc}")))
+            .chain(
+                keybindings
+                    .iter()
+                    .map(|(key, desc)| format!("  {key}      {desc}")),
+            )
             .collect();
 
         let content_height = all_lines.len();
         let padding_top = height.saturating_sub(content_height.saturating_add(4)) / 2;
-        let padding_bottom = height.saturating_sub(content_height.saturating_add(4).saturating_add(padding_top));
+        let padding_bottom =
+            height.saturating_sub(content_height.saturating_add(4).saturating_add(padding_top));
         let inner_width = width.saturating_sub(2);
         let overlay_style = style_helpers::overlay();
 
@@ -468,7 +482,8 @@ impl Renderer {
 
         // Render content lines using functional fold pattern
         let content_lines = all_lines.iter().fold(String::new(), |mut acc, line| {
-            let padding = " ".repeat(width.saturating_sub(2_usize.saturating_add(line.chars().count())));
+            let padding =
+                " ".repeat(width.saturating_sub(2_usize.saturating_add(line.chars().count())));
             acc.push_str(overlay_style);
             acc.push_str("│ ");
             acc.push_str(line);
@@ -514,10 +529,7 @@ impl Default for Renderer {
 #[must_use]
 fn truncate(text: &str, width: usize) -> String {
     // Find the byte position at which to truncate
-    let byte_pos = text
-        .char_indices()
-        .map(|(pos, _)| pos)
-        .nth(width);
+    let byte_pos = text.char_indices().map(|(pos, _)| pos).nth(width);
 
     match byte_pos {
         None => text.to_string(), // Text fits within width

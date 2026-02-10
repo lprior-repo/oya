@@ -521,9 +521,8 @@ impl Actor for WorkerActorDef {
                 // Fail the current bead if one is active
                 if let Some(ref bead_id) = state.current_bead {
                     warn!(bead_id = %bead_id, "Marking bead as unhealthy due to health check failure");
-                    if let Err(err) = myself.send_message(WorkerMessage::FailBead {
-                        error: reason,
-                    }) {
+                    if let Err(err) = myself.send_message(WorkerMessage::FailBead { error: reason })
+                    {
                         tracing::error!(
                             error = %err,
                             "Failed to send FailBead message"
@@ -581,7 +580,7 @@ impl CheckpointTimer {
         self.interval
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn start(target: ActorRef<WorkerMessage>, interval: Duration) -> CheckpointHandle {
         let (stop_tx, mut stop_rx) = watch::channel(false);
         let mut ticker = tokio::time::interval(interval);

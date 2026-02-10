@@ -47,7 +47,7 @@ impl Default for RetryPolicy {
 
 impl RetryPolicy {
     /// Create a new retry policy with custom settings.
-    #[must_use] 
+    #[must_use]
     pub const fn new(max_retries: u32, base_delay_ms: u64, max_delay_ms: u64) -> Self {
         Self {
             max_retries,
@@ -58,7 +58,7 @@ impl RetryPolicy {
     }
 
     /// Set jitter factor.
-    #[must_use] 
+    #[must_use]
     pub const fn with_jitter(mut self, jitter_factor: f64) -> Self {
         self.jitter_factor = jitter_factor;
         self
@@ -67,7 +67,7 @@ impl RetryPolicy {
     /// Calculate delay for the given attempt number using exponential backoff with jitter.
     ///
     /// Delay formula: `min(base_delay` * 2^attempt + jitter, `max_delay`)
-    #[must_use] 
+    #[must_use]
     pub fn calculate_delay(&self, attempt: u32) -> Duration {
         let exponential_delay = self.base_delay_ms.saturating_mul(2_u64.pow(attempt));
         let capped_delay = exponential_delay.min(self.max_delay_ms);
@@ -84,7 +84,7 @@ impl RetryPolicy {
     }
 
     /// Determine if an error should be retried.
-    #[must_use] 
+    #[must_use]
     pub const fn should_retry(&self, error: &HttpError) -> bool {
         match error.category() {
             ErrorCategory::Network | ErrorCategory::Timeout | ErrorCategory::Server => true,
@@ -94,7 +94,7 @@ impl RetryPolicy {
     }
 
     /// Determine if an error category should be retried.
-    #[must_use] 
+    #[must_use]
     pub const fn should_retry_category(&self, category: ErrorCategory) -> bool {
         matches!(
             category,
@@ -103,7 +103,7 @@ impl RetryPolicy {
     }
 
     /// Create a retry state for tracking attempts.
-    #[must_use] 
+    #[must_use]
     pub fn state(&self) -> RetryState {
         RetryState::new(self.clone())
     }
@@ -118,19 +118,19 @@ pub struct RetryState {
 
 impl RetryState {
     /// Create a new retry state.
-    #[must_use] 
+    #[must_use]
     pub const fn new(policy: RetryPolicy) -> Self {
         Self { policy, attempt: 0 }
     }
 
     /// Get current attempt number (0-indexed).
-    #[must_use] 
+    #[must_use]
     pub const fn current_attempt(&self) -> u32 {
         self.attempt
     }
 
     /// Check if more retries are available.
-    #[must_use] 
+    #[must_use]
     pub const fn can_retry(&self) -> bool {
         self.attempt < self.policy.max_retries
     }
@@ -178,7 +178,7 @@ pub struct RetryDecision {
 
 impl RetryDecision {
     /// Create a decision to not retry.
-    #[must_use] 
+    #[must_use]
     pub const fn no_retry(attempt: u32, max_retries: u32) -> Self {
         Self {
             should_retry: false,
@@ -189,7 +189,7 @@ impl RetryDecision {
     }
 
     /// Create a decision to retry with delay.
-    #[must_use] 
+    #[must_use]
     pub const fn retry_with_delay(attempt: u32, max_retries: u32, delay: Duration) -> Self {
         Self {
             should_retry: true,
@@ -200,7 +200,7 @@ impl RetryDecision {
     }
 
     /// Get remaining retry attempts.
-    #[must_use] 
+    #[must_use]
     pub const fn remaining_attempts(&self) -> u32 {
         self.max_retries.saturating_sub(self.attempt)
     }

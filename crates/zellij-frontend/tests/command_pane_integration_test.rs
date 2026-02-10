@@ -102,9 +102,9 @@ impl CommandPaneTestFixture {
     /// Create a new test fixture with temporary directory
     pub fn new() -> CommandPaneResult<Self> {
         let temp_dir = TempDir::new().map_err(|e| {
-            CommandPaneError::Io(std::io::Error::other(
-                format!("Failed to create temp dir: {e}"),
-            ))
+            CommandPaneError::Io(std::io::Error::other(format!(
+                "Failed to create temp dir: {e}"
+            )))
         })?;
 
         Ok(Self {

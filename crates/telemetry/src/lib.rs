@@ -33,13 +33,17 @@ pub fn init_telemetry(config: TelemetryConfig) -> TelemetryResult<TracingGuard> 
     if config.json_logging {
         let subscriber = tracing_subscriber::fmt()
             .json()
+            .with_env_filter(env_filter)
             .with_current_span(false)
             .with_span_list(true)
             .finish();
 
         tracing::subscriber::set_global_default(subscriber).map_err(TelemetryError::from)?;
     } else {
-        let subscriber = tracing_subscriber::fmt().pretty().finish();
+        let subscriber = tracing_subscriber::fmt()
+            .pretty()
+            .with_env_filter(env_filter)
+            .finish();
 
         tracing::subscriber::set_global_default(subscriber).map_err(TelemetryError::from)?;
     }

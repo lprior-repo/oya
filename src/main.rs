@@ -13,9 +13,10 @@ mod commands;
 use anyhow::Result;
 use clap::{CommandFactory, Parser, Subcommand};
 use commands::{
-    doctor_command, init_command, install_command, logs_command, serve_command, storm_command,
-    DoctorArgs, InitArgs, LogsArgs, StormArgs,
+    DoctorArgs, InitArgs, LogsArgs, StormArgs, doctor_command, init_command, install_command,
+    logs_command, serve_command, storm_command,
 };
+use oya_telemetry::TelemetryConfig;
 use tracing::info;
 
 /// OYA SDLC System - Storm goddess of transformation
@@ -111,6 +112,7 @@ enum Commands {
 
 impl Oya {
     #[allow(clippy::too_many_lines)]
+    #[tracing::instrument(skip(self))]
     fn run(self) -> Result<()> {
         match self.command {
             Some(Commands::List) => {
@@ -310,14 +312,11 @@ impl Oya {
 }
 
 fn main() {
-    // Initialize tracing
-    #[allow(clippy::option_if_let_else)] // match is clearer than unwrap_or_else here
-    let env_filter = match tracing_subscriber::EnvFilter::try_from_default_env() {
-        Ok(filter) => filter,
-        Err(_) => tracing_subscriber::EnvFilter::new("info"),
-    };
+    let config = TelemetryConfig::new("oya-cli")
+        .with_json_logging(false)
+        .with_otel_enabled(false);
 
-    tracing_subscriber::fmt().with_env_filter(env_filter).init();
+    let _guard = oya_telemetry::init_telemetry(config);
 
     let oya = Oya::parse();
 

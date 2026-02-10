@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use thiserror::Error;
 use tokio::fs;
-use tracing::{info, warn};
+use tracing::{info, instrument, warn};
 
 /// Arguments for the storm command
 #[derive(Parser, Debug, Clone)]
@@ -220,6 +220,7 @@ fn default_timeout() -> u64 {
 /// - Returns Ok(StormOutput) with execution results
 /// - Or returns Err(StormError) with specific failure
 /// - All orchestrator resources are cleaned up
+#[tracing::instrument(skip(args))]
 pub async fn storm_command(args: StormArgs) -> Result<StormOutput, StormError> {
     let start = Instant::now();
 
@@ -284,6 +285,7 @@ pub async fn storm_command(args: StormArgs) -> Result<StormOutput, StormError> {
 }
 
 /// Load orchestrator configuration from YAML file
+#[tracing::instrument]
 async fn load_config(path: &Path) -> Result<OrchestratorConfig, StormError> {
     if !path.exists() {
         return Err(StormError::ConfigFileNotFound {
@@ -313,6 +315,7 @@ async fn load_config(path: &Path) -> Result<OrchestratorConfig, StormError> {
 /// Postconditions:
 /// - Returns Ok(WorkflowDAG) with all open beads
 /// - Or returns Err(DagBuildFailed) with reason
+#[tracing::instrument(skip(db_path))]
 async fn build_workflow_dag(db_path: &Path) -> Result<WorkflowDAG, StormError> {
     use orchestrator::dag::{DependencyType, WorkflowDAG};
 

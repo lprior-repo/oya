@@ -260,8 +260,7 @@ impl MessageRouter {
         // Simple equality filter: "field=value"
         if let Some((path, value)) = filter.split_once('=') {
             let actual = payload.get(path.trim());
-            return actual
-                .is_some_and(|v| v.to_string().trim_matches('"') == value.trim());
+            return actual.is_some_and(|v| v.to_string().trim_matches('"') == value.trim());
         }
 
         // Simple existence filter: "field"

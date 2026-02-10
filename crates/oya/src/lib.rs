@@ -27,4 +27,25 @@
 
 pub mod commands;
 
+/// Initialize telemetry with JSON logging.
+///
+/// # Errors
+///
+/// Returns `Error` if initialization fails.
+pub fn init_telemetry_json() -> oya_core::Result<()> {
+    use oya_telemetry::{TelemetryConfig, TracingGuard};
+
+    let config = TelemetryConfig::new("oya")
+        .with_json_logging(true)
+        .with_log_level(tracing::Level::INFO);
+
+    let _guard = oya_telemetry::init_telemetry(config).map_err(|e| {
+        oya_core::Error::TelemetryInitFailed {
+            reason: e.to_string(),
+        }
+    })?;
+
+    Ok(())
+}
+
 pub use oya_core::{Error, Result};

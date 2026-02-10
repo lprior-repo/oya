@@ -451,8 +451,8 @@ fn test_zellij_ipc_client_send_command_serialization() {
     // Note: We're testing serialization, not actual stdout writing
     // which would interfere with test output
     let test_msg = r#"{"type": "test", "data": "test data"}"#;
-    let _parsed: serde_json::Value = serde_json::from_str(test_msg)
-        .expect("Test message should be valid JSON");
+    let _parsed: serde_json::Value =
+        serde_json::from_str(test_msg).expect("Test message should be valid JSON");
 
     // Verify serialization doesn't panic
     let json = serde_json::to_string(&test_msg);
@@ -476,7 +476,10 @@ fn test_zellij_ipc_client_error_handling() {
     if let Err(e) = result {
         let error_msg = e.to_string();
         assert!(!error_msg.is_empty(), "Error message should not be empty");
-        assert!(error_msg.contains("expected"), "Error should be descriptive");
+        assert!(
+            error_msg.contains("expected"),
+            "Error should be descriptive"
+        );
     }
 }
 
@@ -512,15 +515,24 @@ fn test_correlation_id_generation() {
 fn test_json_framing_detection() {
     // Complete JSON object
     let complete = r#"{"key": "value"}"#;
-    assert!(complete.trim().ends_with('}'), "Complete JSON should end with }}");
+    assert!(
+        complete.trim().ends_with('}'),
+        "Complete JSON should end with }}"
+    );
 
     // Incomplete JSON object
     let incomplete = r#"{"key": "value""#;
-    assert!(!incomplete.trim().ends_with('}'), "Incomplete JSON should not end with }}");
+    assert!(
+        !incomplete.trim().ends_with('}'),
+        "Incomplete JSON should not end with }}"
+    );
 
     // JSON array
     let array = r#"[1, 2, 3]"#;
-    assert!(array.trim().ends_with(']'), "Complete array should end with ]");
+    assert!(
+        array.trim().ends_with(']'),
+        "Complete array should end with ]"
+    );
 }
 
 /// Test message payload formatting
@@ -536,20 +548,12 @@ fn test_message_payload_formatting() {
     let payload = format!(r#"{{"request_id": "{}", "data": {}}}"#, request_id, data);
 
     // Verify payload is valid JSON
-    let parsed: serde_json::Value = serde_json::from_str(&payload)
-        .expect("Payload should be valid JSON");
+    let parsed: serde_json::Value =
+        serde_json::from_str(&payload).expect("Payload should be valid JSON");
 
     // Verify structure
-    assert_eq!(
-        parsed["request_id"],
-        request_id,
-        "Request ID should match"
-    );
-    assert_eq!(
-        parsed["data"]["type"],
-        "test",
-        "Data should be preserved"
-    );
+    assert_eq!(parsed["request_id"], request_id, "Request ID should match");
+    assert_eq!(parsed["data"]["type"], "test", "Data should be preserved");
 }
 
 /// Test concurrent client creation

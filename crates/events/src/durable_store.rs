@@ -192,14 +192,14 @@ impl ConnectionConfig {
     }
 
     /// Sets the maximum number of connections.
-    #[must_use] 
+    #[must_use]
     pub const fn with_max_connections(mut self, max: usize) -> Self {
         self.max_connections = max;
         self
     }
 
     /// Sets the connection timeout.
-    #[must_use] 
+    #[must_use]
     pub const fn with_timeout_ms(mut self, timeout_ms: u64) -> Self {
         self.timeout_ms = timeout_ms;
         self
@@ -392,14 +392,16 @@ impl DurableEventStore {
         events: &[BeadEvent],
     ) -> std::result::Result<Vec<crate::types::EventId>, AppendBatchError> {
         // Validate preconditions
-        if events.is_empty() { return Err(AppendBatchError::EmptyBatch) }
+        if events.is_empty() {
+            return Err(AppendBatchError::EmptyBatch);
+        }
 
         const MAX_BATCH_SIZE: usize = 1000;
         if events.len() > MAX_BATCH_SIZE {
             return Err(AppendBatchError::BatchTooLarge {
                 size: events.len(),
                 max: MAX_BATCH_SIZE,
-            })
+            });
         }
 
         // Serialize all events first (fail fast before any I/O)
@@ -468,9 +470,7 @@ impl DurableEventStore {
                     .append(true)
                     .open(&wal_path)
                     .await
-                    .map_err(|e| {
-                        AppendBatchError::WalOpenFailed(format!("open wal file: {e}"))
-                    })?;
+                    .map_err(|e| AppendBatchError::WalOpenFailed(format!("open wal file: {e}")))?;
 
                 // Write all events to WAL in single contiguous write
                 for (_event, serialized) in events {

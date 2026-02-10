@@ -164,12 +164,12 @@ async fn capture_scheduler_state(
             Ok(None) => {
                 return Err(ChaosTestError::StateMismatch {
                     details: format!("Workflow {workflow_id} not found"),
-                })
+                });
             }
             Err(e) => {
                 return Err(ChaosTestError::RpcFailed {
                     reason: format!("RPC call failed: {e}"),
-                })
+                });
             }
         };
 
@@ -195,7 +195,7 @@ async fn capture_scheduler_state(
         Err(e) => {
             return Err(ChaosTestError::RpcFailed {
                 reason: format!("RPC call failed: {e}"),
-            })
+            });
         }
     };
 
@@ -432,10 +432,7 @@ async fn await_scheduler_recovery(
                 match get_scheduler_ref(&ctx.supervisor, test_name).await {
                     Ok(new_ref) => {
                         ctx.scheduler = new_ref;
-                        info!(
-                            "Scheduler recovered in {}ms",
-                            start.elapsed().as_millis()
-                        );
+                        info!("Scheduler recovered in {}ms", start.elapsed().as_millis());
                         return Ok(());
                     }
                     Err(_) => {
