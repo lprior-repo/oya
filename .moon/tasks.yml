@@ -135,14 +135,15 @@ tasks:
       cache: false  # Composite task - deps handle caching
 
   # ============================================================================
-  # CONVENIENCE
+  # CONVENIENCE (workspace-level tasks only)
   # ============================================================================
 
   install:
-    command: "mkdir -p ~/.local/bin && cargo build --release && cp target/release/oya ~/.local/bin/oya && chmod +x ~/.local/bin/oya && echo '✅ Installed oya to ~/.local/bin/oya'"
+    command: "mkdir -p ~/.local/bin && cargo build --release --bin oya && cp target/release/oya ~/.local/bin/oya && chmod +x ~/.local/bin/oya && echo '✅ Installed oya to ~/.local/bin/oya (v0.1.2)'"
     description: "Install oya binary to ~/.local/bin (system-wide)"
     options:
       cache: false
+      runFromWorkspaceRoot: true
 
   dev:
     command: "true"
@@ -344,4 +345,23 @@ tasks:
     deps:
       - "build-zellij"
     options:
+      cache: false
+
+  # ============================================================================
+  # OYA CLI (workspace-level tasks)
+  # ============================================================================
+
+  oya:
+    command: "oya"
+    description: "Run installed oya CLI (requires 'moon run install' first)"
+    options:
+      runFromWorkspaceRoot: true
+
+  oya-install-and-run:
+    command: "true"
+    description: "Ensure oya is installed and run it"
+    deps:
+      - "install"
+    options:
+      runFromWorkspaceRoot: true
       cache: false
