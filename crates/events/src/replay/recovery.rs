@@ -16,7 +16,7 @@ const BASE_BACKOFF_MS: u64 = 100;
 const MAX_BACKOFF_MS: u64 = 5000;
 
 /// Configuration for error recovery during event replay.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecoveryConfig {
     /// Maximum number of retry attempts for transient errors.
     pub max_retries: u32,
@@ -41,30 +41,35 @@ impl Default for RecoveryConfig {
 
 impl RecoveryConfig {
     /// Create a new recovery configuration.
+    #[must_use] 
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Set the maximum number of retries.
-    pub fn with_max_retries(mut self, max_retries: u32) -> Self {
+    #[must_use] 
+    pub const fn with_max_retries(mut self, max_retries: u32) -> Self {
         self.max_retries = max_retries;
         self
     }
 
     /// Set the base backoff delay in milliseconds.
-    pub fn with_base_backoff(mut self, base_backoff_ms: u64) -> Self {
+    #[must_use] 
+    pub const fn with_base_backoff(mut self, base_backoff_ms: u64) -> Self {
         self.base_backoff_ms = base_backoff_ms;
         self
     }
 
     /// Set the maximum backoff delay in milliseconds.
-    pub fn with_max_backoff(mut self, max_backoff_ms: u64) -> Self {
+    #[must_use] 
+    pub const fn with_max_backoff(mut self, max_backoff_ms: u64) -> Self {
         self.max_backoff_ms = max_backoff_ms;
         self
     }
 
     /// Enable or disable the dead letter queue.
-    pub fn with_dlq(mut self, enable_dlq: bool) -> Self {
+    #[must_use] 
+    pub const fn with_dlq(mut self, enable_dlq: bool) -> Self {
         self.enable_dlq = enable_dlq;
         self
     }
@@ -72,7 +77,8 @@ impl RecoveryConfig {
     /// Calculate the backoff delay for a given retry attempt.
     ///
     /// Uses exponential backoff with jitter: delay = base * 2^attempt
-    /// Capped at max_backoff_ms.
+    /// Capped at `max_backoff_ms`.
+    #[must_use] 
     pub fn calculate_backoff(&self, attempt: u32) -> Duration {
         let exponential_delay = self.base_backoff_ms * 2_u64.pow(attempt);
         let delay_ms = exponential_delay.min(self.max_backoff_ms);
@@ -81,7 +87,7 @@ impl RecoveryConfig {
 }
 
 /// Strategy for recovering from errors during event replay.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RecoveryStrategy {
     /// Retry the operation with exponential backoff.
     Retry { attempt: u32, delay: Duration },
@@ -98,6 +104,7 @@ pub struct RetryPolicy {
 
 impl RetryPolicy {
     /// Create a new retry policy with default configuration.
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             config: RecoveryConfig::default(),
@@ -105,19 +112,20 @@ impl RetryPolicy {
     }
 
     /// Create a new retry policy with custom configuration.
-    pub fn with_config(config: RecoveryConfig) -> Self {
+    #[must_use] 
+    pub const fn with_config(config: RecoveryConfig) -> Self {
         Self { config }
     }
 
     /// Determine the recovery strategy for a given error and attempt number.
+    #[must_use] 
     pub fn should_retry(&self, error: &Error, attempt: u32) -> RecoveryStrategy {
         // Check if we've exceeded max retries
         if attempt >= self.config.max_retries {
             if self.config.enable_dlq {
                 return RecoveryStrategy::SkipToDlq;
-            } else {
-                return RecoveryStrategy::Fail;
             }
+            return RecoveryStrategy::Fail;
         }
 
         // Check if error is transient
@@ -138,7 +146,8 @@ impl RetryPolicy {
     }
 
     /// Get a reference to the configuration.
-    pub fn config(&self) -> &RecoveryConfig {
+    #[must_use] 
+    pub const fn config(&self) -> &RecoveryConfig {
         &self.config
     }
 }
@@ -160,6 +169,7 @@ impl Default for RetryPolicy {
 /// - Invalid event data (data corruption)
 /// - Event not found (missing data)
 /// - Invalid state transitions (logic errors)
+#[must_use] 
 pub fn is_transient_error(error: &Error) -> bool {
     match error {
         // Network and connection issues are transient

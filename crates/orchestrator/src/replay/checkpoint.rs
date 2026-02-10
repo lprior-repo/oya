@@ -43,7 +43,7 @@ pub struct CheckpointManager {
 impl CheckpointManager {
     /// Create a new checkpoint manager.
     #[must_use]
-    pub fn new(store: OrchestratorStore, config: CheckpointConfig) -> Self {
+    pub const fn new(store: OrchestratorStore, config: CheckpointConfig) -> Self {
         Self {
             store,
             config,
@@ -105,18 +105,18 @@ impl CheckpointManager {
     }
 
     /// Increment the event sequence counter.
-    pub fn increment_sequence(&mut self) {
+    pub const fn increment_sequence(&mut self) {
         self.current_sequence = self.current_sequence.saturating_add(1);
     }
 
     /// Set the current event sequence.
-    pub fn set_sequence(&mut self, sequence: u64) {
+    pub const fn set_sequence(&mut self, sequence: u64) {
         self.current_sequence = sequence;
     }
 
     /// Get the current event sequence.
     #[must_use]
-    pub fn current_sequence(&self) -> u64 {
+    pub const fn current_sequence(&self) -> u64 {
         self.current_sequence
     }
 

@@ -21,7 +21,7 @@ pub struct ApiState {
 impl ApiState {
     /// Create a new API state.
     #[must_use]
-    pub fn new(router: Arc<MessageRouter>) -> Self {
+    pub const fn new(router: Arc<MessageRouter>) -> Self {
         Self { router }
     }
 }
@@ -53,7 +53,7 @@ pub struct ErrorResponse {
 
 /// POST /api/beads/{id}/cancel
 ///
-/// Cancels a bead by sending a CancelBead message through the router.
+/// Cancels a bead by sending a `CancelBead` message through the router.
 pub async fn cancel_bead(
     State(state): State<ApiState>,
     Path(bead_id): Path<String>,
@@ -70,7 +70,7 @@ pub async fn cancel_bead(
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
-                error: format!("Failed to serialize message: {}", e),
+                error: format!("Failed to serialize message: {e}"),
             }),
         )
     })?;
@@ -79,7 +79,7 @@ pub async fn cancel_bead(
 
     // Send to router - use agent command channel
     let channel_id = "agent/commands";
-    match state.router.send(&channel_id, msg).await {
+    match state.router.send(channel_id, msg).await {
         Ok(_) => Ok(Json(CancelBeadResponse {
             bead_id,
             status: "cancelled".to_string(),
@@ -90,7 +90,7 @@ pub async fn cancel_bead(
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorResponse {
-                    error: format!("Failed to send cancel message: {}", e),
+                    error: format!("Failed to send cancel message: {e}"),
                 }),
             ))
         }

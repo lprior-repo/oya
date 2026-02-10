@@ -1,4 +1,4 @@
-//! OpenCode client for executing AI prompts.
+//! `OpenCode` client for executing AI prompts.
 //!
 //! This module provides the `OpencodeClient` for interacting with the opencode CLI
 //! or compatible AI execution services.
@@ -29,12 +29,12 @@ pub struct OpencodeClient {
 }
 
 impl OpencodeClient {
-    /// Create a new OpencodeClient with default configuration.
+    /// Create a new `OpencodeClient` with default configuration.
     pub fn new() -> Result<Self> {
         Self::with_config(OpencodeConfig::default())
     }
 
-    /// Create a new OpencodeClient with custom configuration.
+    /// Create a new `OpencodeClient` with custom configuration.
     pub fn with_config(config: OpencodeConfig) -> Result<Self> {
         let http_client = reqwest::Client::builder()
             .timeout(config.timeout)
@@ -47,7 +47,7 @@ impl OpencodeClient {
         })
     }
 
-    /// Create a new OpencodeClient with a base URL for API mode.
+    /// Create a new `OpencodeClient` with a base URL for API mode.
     pub fn with_url(base_url: Url) -> Result<Self> {
         let config = OpencodeConfig {
             base_url: Some(base_url),
@@ -131,7 +131,7 @@ impl OpencodeClient {
                 result.and_then(|chunk| {
                     crate::sse::SseFormatter::new()
                         .format_chunk(chunk)
-                        .map_err(|e| Error::stream_error(e.to_string()))
+                        .map_err(Error::stream_error)
                 })
             },
         )))
@@ -265,7 +265,7 @@ impl OpencodeClient {
     }
 
     /// Check if error should be retried.
-    fn should_retry(&self, error: &Error) -> bool {
+    const fn should_retry(&self, error: &Error) -> bool {
         error.is_retryable()
     }
 

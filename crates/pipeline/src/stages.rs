@@ -32,7 +32,7 @@ impl Stage {
     ];
 
     #[must_use]
-    pub fn as_str(&self) -> &'static str {
+    pub const fn as_str(&self) -> &'static str {
         match self {
             Self::Implement => "implement",
             Self::UnitTest => "unit-test",
@@ -85,7 +85,7 @@ impl Stage {
     }
 
     #[must_use]
-    pub fn index(&self) -> usize {
+    pub const fn index(&self) -> usize {
         match self {
             Self::Implement => 0,
             Self::UnitTest => 1,
@@ -100,7 +100,7 @@ impl Stage {
     }
 
     #[must_use]
-    pub fn next(&self) -> Option<Self> {
+    pub const fn next(&self) -> Option<Self> {
         match self {
             Self::Implement => Some(Self::UnitTest),
             Self::UnitTest => Some(Self::Coverage),

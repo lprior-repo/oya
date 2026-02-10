@@ -79,25 +79,25 @@ pub struct TimerMetadata {
 impl TimerStatus {
     /// Check if the timer is pending.
     #[must_use]
-    pub fn is_pending(&self) -> bool {
+    pub const fn is_pending(&self) -> bool {
         matches!(self, Self::Pending)
     }
 
     /// Check if the timer has fired.
     #[must_use]
-    pub fn is_fired(&self) -> bool {
+    pub const fn is_fired(&self) -> bool {
         matches!(self, Self::Fired)
     }
 
     /// Check if the timer was cancelled.
     #[must_use]
-    pub fn is_cancelled(&self) -> bool {
+    pub const fn is_cancelled(&self) -> bool {
         matches!(self, Self::Cancelled)
     }
 
     /// Check if the timer is terminal (won't change).
     #[must_use]
-    pub fn is_terminal(&self) -> bool {
+    pub const fn is_terminal(&self) -> bool {
         matches!(self, Self::Fired | Self::Cancelled | Self::Failed)
     }
 }
@@ -173,7 +173,7 @@ impl DurableTimer {
 
     /// Get the timer ID.
     #[must_use]
-    pub fn id(&self) -> &TimerId {
+    pub const fn id(&self) -> &TimerId {
         &self.id
     }
 
@@ -203,31 +203,31 @@ impl DurableTimer {
 
     /// Get when the timer should execute.
     #[must_use]
-    pub fn execute_at(&self) -> DateTime<Utc> {
+    pub const fn execute_at(&self) -> DateTime<Utc> {
         self.execute_at
     }
 
     /// Get the payload.
     #[must_use]
-    pub fn payload(&self) -> &serde_json::Value {
+    pub const fn payload(&self) -> &serde_json::Value {
         &self.payload
     }
 
     /// Get the status.
     #[must_use]
-    pub fn status(&self) -> TimerStatus {
+    pub const fn status(&self) -> TimerStatus {
         self.status
     }
 
     /// Get the creation timestamp.
     #[must_use]
-    pub fn created_at(&self) -> DateTime<Utc> {
+    pub const fn created_at(&self) -> DateTime<Utc> {
         self.created_at
     }
 
     /// Get the updated timestamp.
     #[must_use]
-    pub fn updated_at(&self) -> DateTime<Utc> {
+    pub const fn updated_at(&self) -> DateTime<Utc> {
         self.updated_at
     }
 

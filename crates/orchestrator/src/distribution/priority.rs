@@ -47,13 +47,12 @@ impl PriorityStrategy {
     /// Get the priority for a bead.
     fn get_priority(&self, bead_id: &str, ctx: &DistributionContext) -> i32 {
         ctx.get_bead(bead_id)
-            .map(|b| b.priority)
-            .unwrap_or(self.default_priority)
+            .map_or(self.default_priority, |b| b.priority)
     }
 
     /// Get the load for an agent.
     fn get_load(&self, agent_id: &str, ctx: &DistributionContext) -> f64 {
-        ctx.get_agent(agent_id).map(|a| a.load).unwrap_or(0.5)
+        ctx.get_agent(agent_id).map_or(0.5, |a| a.load)
     }
 
     /// Check if agent has required capabilities for bead.
@@ -115,8 +114,7 @@ impl DistributionStrategy for PriorityStrategy {
         if matching_agents.is_empty() {
             let has_requirements = ctx
                 .get_bead(bead_id)
-                .map(|bead| !bead.required_capabilities.is_empty())
-                .unwrap_or(false);
+                .is_some_and(|bead| !bead.required_capabilities.is_empty());
             if self.capability_matching && has_requirements {
                 return None;
             }

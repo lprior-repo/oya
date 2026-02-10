@@ -1,7 +1,7 @@
 //!
-//! # ACP (Agent Client Protocol) Schemas for OpenCode Integration
+//! # ACP (Agent Client Protocol) Schemas for `OpenCode` Integration
 //!
-//! Type-safe Rust port of OpenCode's TypeScript schemas from message-v2.ts
+//! Type-safe Rust port of `OpenCode`'s TypeScript schemas from message-v2.ts
 //!
 //! See: vendor/opencode-sme/opencode-main/packages/opencode/src/session/message-v2.ts
 
@@ -371,7 +371,8 @@ impl ExecutionResult {
         }
     }
 
-    pub fn with_duration(mut self, duration: std::time::Duration) -> Self {
+    #[must_use] 
+    pub const fn with_duration(mut self, duration: std::time::Duration) -> Self {
         self.duration = Some(duration);
         self
     }

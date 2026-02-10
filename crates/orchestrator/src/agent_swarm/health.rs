@@ -48,7 +48,7 @@ impl HealthConfig {
 
     /// Create a config for testing with shorter intervals.
     #[must_use]
-    pub fn for_testing() -> Self {
+    pub const fn for_testing() -> Self {
         Self {
             check_interval: Duration::from_millis(100),
             heartbeat_timeout: Duration::from_millis(500),
@@ -181,6 +181,7 @@ impl HealthMonitor {
     /// Start background health checking.
     ///
     /// Returns a handle that can be used to stop monitoring.
+    #[must_use] 
     pub fn start_background_check(&self) -> tokio::task::JoinHandle<()> {
         let agents = Arc::clone(&self.agents);
         let active = Arc::clone(&self.active);
@@ -251,7 +252,7 @@ impl HealthMonitor {
 
     /// Get the health configuration.
     #[must_use]
-    pub fn config(&self) -> &HealthConfig {
+    pub const fn config(&self) -> &HealthConfig {
         &self.config
     }
 }

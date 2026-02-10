@@ -24,7 +24,8 @@ pub enum StageKind {
 
 impl StageKind {
     /// Return the next forward stage, if any.
-    pub fn next(self) -> Option<StageKind> {
+    #[must_use] 
+    pub const fn next(self) -> Option<Self> {
         match self {
             Self::Research => Some(Self::Plan),
             Self::Plan => Some(Self::Implement),
@@ -36,7 +37,8 @@ impl StageKind {
     }
 
     /// Return true when this stage requires an agent process.
-    pub fn requires_agent(self) -> bool {
+    #[must_use] 
+    pub const fn requires_agent(self) -> bool {
         matches!(
             self,
             Self::Research | Self::Plan | Self::Implement | Self::Review
@@ -44,11 +46,12 @@ impl StageKind {
     }
 
     /// Return true if this stage is terminal.
-    pub fn is_terminal(self) -> bool {
+    #[must_use] 
+    pub const fn is_terminal(self) -> bool {
         matches!(self, Self::Accept)
     }
 
-    fn as_index(self) -> usize {
+    const fn as_index(self) -> usize {
         match self {
             Self::Research => 0,
             Self::Plan => 1,
@@ -169,6 +172,7 @@ pub struct BeadStateMachine {
 
 impl BeadStateMachine {
     /// Create a new machine at Research with default policy.
+    #[must_use] 
     pub fn new(bead_id: BeadId) -> Self {
         Self {
             bead_id,
@@ -181,7 +185,8 @@ impl BeadStateMachine {
     }
 
     /// Create a new machine at Research with a custom policy.
-    pub fn with_policy(bead_id: BeadId, policy: RecursionPolicy) -> Self {
+    #[must_use] 
+    pub const fn with_policy(bead_id: BeadId, policy: RecursionPolicy) -> Self {
         Self {
             bead_id,
             current_stage: StageKind::Research,
@@ -193,12 +198,14 @@ impl BeadStateMachine {
     }
 
     /// Return current stage.
-    pub fn current_stage(&self) -> StageKind {
+    #[must_use] 
+    pub const fn current_stage(&self) -> StageKind {
         self.current_stage
     }
 
     /// Return configured recursion policy.
-    pub fn policy(&self) -> RecursionPolicy {
+    #[must_use] 
+    pub const fn policy(&self) -> RecursionPolicy {
         self.policy
     }
 
@@ -273,7 +280,8 @@ impl BeadStateMachine {
     }
 
     /// Resolve standard reentry target for a given severity.
-    pub fn reentry_target_for_severity(severity: Severity) -> StageKind {
+    #[must_use] 
+    pub const fn reentry_target_for_severity(severity: Severity) -> StageKind {
         match severity {
             Severity::Minor => StageKind::Implement,
             Severity::Major => StageKind::Plan,
@@ -282,22 +290,26 @@ impl BeadStateMachine {
     }
 
     /// Return true if machine is complete.
+    #[must_use] 
     pub fn is_complete(&self) -> bool {
         self.current_stage.is_terminal()
     }
 
     /// Return transition history.
+    #[must_use] 
     pub fn history(&self) -> &[StageTransition] {
         &self.history
     }
 
     /// Return attempt count for a stage.
+    #[must_use] 
     pub fn stage_attempts(&self, stage: StageKind) -> u32 {
         self.stage_attempts[stage.as_index()]
     }
 
     /// Return total attempts across all stages.
-    pub fn total_attempts(&self) -> u32 {
+    #[must_use] 
+    pub const fn total_attempts(&self) -> u32 {
         self.total_attempts
     }
 }

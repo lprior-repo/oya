@@ -44,7 +44,7 @@ struct QueuedMessage {
     delivery_mode: DeliveryMode,
 }
 
-/// Persistent channel record for SurrealDB.
+/// Persistent channel record for `SurrealDB`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ChannelRecord {
     channel_id: String,
@@ -127,7 +127,7 @@ impl DurableChannel {
 
     /// Get the channel ID.
     #[must_use]
-    pub fn id(&self) -> &ChannelId {
+    pub const fn id(&self) -> &ChannelId {
         &self.id
     }
 

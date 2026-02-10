@@ -90,13 +90,13 @@ impl From<AppendError> for AppendBatchError {
 
 impl From<AppendError> for crate::error::Error {
     fn from(err: AppendError) -> Self {
-        crate::error::Error::store_failed("append_event", err.to_string())
+        Self::store_failed("append_event", err.to_string())
     }
 }
 
 impl From<AppendBatchError> for crate::error::Error {
     fn from(err: AppendBatchError) -> Self {
-        crate::error::Error::store_failed("append_batch", err.to_string())
+        Self::store_failed("append_batch", err.to_string())
     }
 }
 
@@ -112,7 +112,7 @@ struct SerializedEvent {
 impl SerializedEvent {
     fn from_bead_event(event: &BeadEvent) -> Result<Self> {
         let data = bincode::serialize(event).map_err(|e| {
-            crate::error::Error::serialization(format!("failed to serialize event: {}", e))
+            crate::error::Error::serialization(format!("failed to serialize event: {e}"))
         })?;
 
         Ok(Self {
@@ -126,15 +126,15 @@ impl SerializedEvent {
 
     fn to_bead_event(&self) -> Result<BeadEvent> {
         bincode::deserialize(&self.data).map_err(|e| {
-            crate::error::Error::serialization(format!("failed to deserialize event: {}", e))
+            crate::error::Error::serialization(format!("failed to deserialize event: {e}"))
         })
     }
 }
 
-/// Configuration for SurrealDB connection.
+/// Configuration for `SurrealDB` connection.
 #[derive(Debug, Clone)]
 pub struct ConnectionConfig {
-    /// Path to the RocksDB storage directory.
+    /// Path to the `RocksDB` storage directory.
     pub storage_path: PathBuf,
 
     /// Namespace for the database.
@@ -192,13 +192,15 @@ impl ConnectionConfig {
     }
 
     /// Sets the maximum number of connections.
-    pub fn with_max_connections(mut self, max: usize) -> Self {
+    #[must_use] 
+    pub const fn with_max_connections(mut self, max: usize) -> Self {
         self.max_connections = max;
         self
     }
 
     /// Sets the connection timeout.
-    pub fn with_timeout_ms(mut self, timeout_ms: u64) -> Self {
+    #[must_use] 
+    pub const fn with_timeout_ms(mut self, timeout_ms: u64) -> Self {
         self.timeout_ms = timeout_ms;
         self
     }
@@ -238,9 +240,9 @@ impl ConnectionConfig {
     }
 }
 
-/// Establishes a connection to SurrealDB with kv-rocksdb backend.
+/// Establishes a connection to `SurrealDB` with kv-rocksdb backend.
 ///
-/// This function creates a new SurrealDB instance configured with RocksDB
+/// This function creates a new `SurrealDB` instance configured with `RocksDB`
 /// storage, initializes the database with the specified namespace and database
 /// name, and optionally authenticates.
 ///
@@ -257,7 +259,7 @@ pub async fn connect(config: ConnectionConfig) -> Result<Arc<Surreal<Db>>> {
     let db = Surreal::new::<RocksDb>(config.storage_path)
         .await
         .map_err(|e| ConnectionError::InitializationFailed {
-            reason: format!("failed to create RocksDB instance: {}", e),
+            reason: format!("failed to create RocksDB instance: {e}"),
         })?;
 
     let db = Arc::new(db);
@@ -269,7 +271,7 @@ pub async fn connect(config: ConnectionConfig) -> Result<Arc<Surreal<Db>>> {
         .use_db(db_name)
         .await
         .map_err(|e| ConnectionError::InitializationFailed {
-            reason: format!("failed to initialize namespace/database: {}", e),
+            reason: format!("failed to initialize namespace/database: {e}"),
         })?;
 
     if let (Some(username), Some(password)) = (config.username, config.password) {
@@ -281,7 +283,7 @@ pub async fn connect(config: ConnectionConfig) -> Result<Arc<Surreal<Db>>> {
         })
         .await
         .map_err(|e| ConnectionError::AuthenticationFailed {
-            reason: format!("authentication failed: {}", e),
+            reason: format!("authentication failed: {e}"),
         })?;
     }
 
@@ -320,7 +322,7 @@ impl DurableEventStore {
             .map_err(|e| {
                 crate::error::Error::store_failed(
                     "append_event",
-                    format!("failed to create record: {}", e),
+                    format!("failed to create record: {e}"),
                 )
             })?;
 
@@ -335,7 +337,7 @@ impl DurableEventStore {
         let _guard = self.wal_lock.lock().await;
         tokio::fs::create_dir_all(&self.wal_dir)
             .await
-            .map_err(|e| AppendError::WalOpenFailed(format!("create wal dir: {}", e)))?;
+            .map_err(|e| AppendError::WalOpenFailed(format!("create wal dir: {e}")))?;
 
         let wal_path = self.wal_dir.join(format!("{}.wal", event.bead_id()));
 
@@ -344,23 +346,23 @@ impl DurableEventStore {
             .append(true)
             .open(&wal_path)
             .await
-            .map_err(|e| AppendError::WalOpenFailed(format!("open wal file: {}", e)))?;
+            .map_err(|e| AppendError::WalOpenFailed(format!("open wal file: {e}")))?;
 
         let serialized_data = bincode::serialize(&serialized)
-            .map_err(|e| AppendError::SerializationFailed(format!("{}", e)))?;
+            .map_err(|e| AppendError::SerializationFailed(format!("{e}")))?;
         let length_prefix = (serialized_data.len() as u32).to_be_bytes();
 
         file.write_all(&length_prefix)
             .await
-            .map_err(|e| AppendError::WalWriteFailed(format!("{}", e)))?;
+            .map_err(|e| AppendError::WalWriteFailed(format!("{e}")))?;
 
         file.write_all(&serialized_data)
             .await
-            .map_err(|e| AppendError::WalWriteFailed(format!("{}", e)))?;
+            .map_err(|e| AppendError::WalWriteFailed(format!("{e}")))?;
 
         file.sync_all()
             .await
-            .map_err(|e| AppendError::WalSyncFailed(format!("fsync failed: {}", e)))?;
+            .map_err(|e| AppendError::WalSyncFailed(format!("fsync failed: {e}")))?;
 
         Ok(())
     }
@@ -370,13 +372,13 @@ impl DurableEventStore {
     /// # Preconditions
     /// - Batch is non-empty
     /// - Batch size <= 1000
-    /// - All events have valid bead_id and event_id
+    /// - All events have valid `bead_id` and `event_id`
     ///
     /// # Postconditions
     /// - All events written to WAL in single contiguous write
     /// - Exactly ONE fsync performed for entire batch
-    /// - All events persisted to SurrealDB
-    /// - Returns vector of EventIds in same order as input
+    /// - All events persisted to `SurrealDB`
+    /// - Returns vector of `EventIds` in same order as input
     ///
     /// # Errors
     /// - Returns `AppendBatchError::EmptyBatch` if batch is empty
@@ -390,20 +392,14 @@ impl DurableEventStore {
         events: &[BeadEvent],
     ) -> std::result::Result<Vec<crate::types::EventId>, AppendBatchError> {
         // Validate preconditions
-        match events.is_empty() {
-            true => return Err(AppendBatchError::EmptyBatch),
-            false => (),
-        }
+        if events.is_empty() { return Err(AppendBatchError::EmptyBatch) }
 
         const MAX_BATCH_SIZE: usize = 1000;
-        match events.len() > MAX_BATCH_SIZE {
-            true => {
-                return Err(AppendBatchError::BatchTooLarge {
-                    size: events.len(),
-                    max: MAX_BATCH_SIZE,
-                })
-            }
-            false => (),
+        if events.len() > MAX_BATCH_SIZE {
+            return Err(AppendBatchError::BatchTooLarge {
+                size: events.len(),
+                max: MAX_BATCH_SIZE,
+            })
         }
 
         // Serialize all events first (fail fast before any I/O)
@@ -458,14 +454,14 @@ impl DurableEventStore {
 
         tokio::fs::create_dir_all(&self.wal_dir)
             .await
-            .map_err(|e| AppendBatchError::WalOpenFailed(format!("create wal dir: {}", e)))?;
+            .map_err(|e| AppendBatchError::WalOpenFailed(format!("create wal dir: {e}")))?;
 
         // For simplicity, write all events to the first bead's WAL
         // In production, you'd want to handle multiple bead_ids properly
         match events.first() {
             Some((first_event, _)) => {
                 let bead_id = first_event.bead_id().to_string();
-                let wal_path = self.wal_dir.join(format!("{}.wal", bead_id));
+                let wal_path = self.wal_dir.join(format!("{bead_id}.wal"));
 
                 let mut file = tokio::fs::OpenOptions::new()
                     .create(true)
@@ -473,7 +469,7 @@ impl DurableEventStore {
                     .open(&wal_path)
                     .await
                     .map_err(|e| {
-                        AppendBatchError::WalOpenFailed(format!("open wal file: {}", e))
+                        AppendBatchError::WalOpenFailed(format!("open wal file: {e}"))
                     })?;
 
                 // Write all events to WAL in single contiguous write
@@ -482,7 +478,7 @@ impl DurableEventStore {
                         AppendBatchError::SerializationFailed {
                             index: 0,
                             event_id: serialized.event_id.clone(),
-                            reason: format!("{}", e),
+                            reason: format!("{e}"),
                         }
                     })?;
 
@@ -490,17 +486,17 @@ impl DurableEventStore {
 
                     file.write_all(&length_prefix)
                         .await
-                        .map_err(|e| AppendBatchError::WalWriteFailed(format!("{}", e)))?;
+                        .map_err(|e| AppendBatchError::WalWriteFailed(format!("{e}")))?;
 
                     file.write_all(&serialized_data)
                         .await
-                        .map_err(|e| AppendBatchError::WalWriteFailed(format!("{}", e)))?;
+                        .map_err(|e| AppendBatchError::WalWriteFailed(format!("{e}")))?;
                 }
 
                 // Single fsync for entire batch (amortization!)
                 file.sync_all()
                     .await
-                    .map_err(|e| AppendBatchError::WalSyncFailed(format!("fsync failed: {}", e)))?;
+                    .map_err(|e| AppendBatchError::WalSyncFailed(format!("fsync failed: {e}")))?;
 
                 Ok(())
             }
@@ -508,7 +504,7 @@ impl DurableEventStore {
         }
     }
 
-    /// Insert multiple events into SurrealDB in batch.
+    /// Insert multiple events into `SurrealDB` in batch.
     ///
     /// # Contract
     /// - Preconditions: All events serialized successfully
@@ -531,7 +527,7 @@ impl DurableEventStore {
                 .content(serialized.clone())
                 .await
                 .map_err(|e| {
-                    AppendBatchError::DatabaseWriteFailed(format!("failed to create record: {}", e))
+                    AppendBatchError::DatabaseWriteFailed(format!("failed to create record: {e}"))
                 })?;
         }
 
@@ -551,21 +547,21 @@ impl DurableEventStore {
             .map_err(|e| {
                 crate::error::Error::store_failed(
                     "read_events",
-                    format!("failed to query events: {}", e),
+                    format!("failed to query events: {e}"),
                 )
             })?;
 
         let serialized_events: Vec<SerializedEvent> = result.take(0).map_err(|e| {
             crate::error::Error::store_failed(
                 "read_events",
-                format!("failed to extract results: {}", e),
+                format!("failed to extract results: {e}"),
             )
         })?;
 
         Ok(Arc::from(
             serialized_events
                 .iter()
-                .map(|se| se.to_bead_event())
+                .map(SerializedEvent::to_bead_event)
                 .collect::<Result<Vec<_>>>()?,
         ))
     }
@@ -582,7 +578,7 @@ impl DurableEventStore {
             .map_err(|e| {
                 crate::error::Error::store_failed(
                     "replay_from",
-                    format!("failed to query checkpoint: {}", e),
+                    format!("failed to query checkpoint: {e}"),
                 )
             })?;
 
@@ -596,7 +592,7 @@ impl DurableEventStore {
             checkpoint_result.take(0).map_err(|e| {
                 crate::error::Error::store_failed(
                     "replay_from",
-                    format!("failed to extract checkpoint timestamp: {}", e),
+                    format!("failed to extract checkpoint timestamp: {e}"),
                 )
             })?;
 
@@ -617,21 +613,21 @@ impl DurableEventStore {
             .map_err(|e| {
                 crate::error::Error::store_failed(
                     "replay_from",
-                    format!("failed to query events from checkpoint: {}", e),
+                    format!("failed to query events from checkpoint: {e}"),
                 )
             })?;
 
         let serialized_events: Vec<SerializedEvent> = result.take(0).map_err(|e| {
             crate::error::Error::store_failed(
                 "replay_from",
-                format!("failed to extract results: {}", e),
+                format!("failed to extract results: {e}"),
             )
         })?;
 
         Ok(Arc::from(
             serialized_events
                 .iter()
-                .map(|se| se.to_bead_event())
+                .map(SerializedEvent::to_bead_event)
                 .collect::<Result<Vec<_>>>()?,
         ))
     }

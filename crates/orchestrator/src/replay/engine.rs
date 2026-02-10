@@ -13,7 +13,7 @@ use super::events::{EventRecord, OrchestratorEvent};
 use super::projection::OrchestratorProjection;
 use crate::persistence::{OrchestratorStore, PersistenceError, PersistenceResult};
 
-/// Input for storing events in SurrealDB.
+/// Input for storing events in `SurrealDB`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct EventInput {
     event_id: String,
@@ -34,7 +34,7 @@ pub struct ReplayEngine {
 impl ReplayEngine {
     /// Create a new replay engine.
     #[must_use]
-    pub fn new(store: OrchestratorStore) -> Self {
+    pub const fn new(store: OrchestratorStore) -> Self {
         Self {
             store,
             current_sequence: 0,
@@ -169,12 +169,12 @@ impl ReplayEngine {
 
     /// Get the current event sequence number.
     #[must_use]
-    pub fn current_sequence(&self) -> u64 {
+    pub const fn current_sequence(&self) -> u64 {
         self.current_sequence
     }
 
     /// Set the current sequence (used when loading from checkpoint).
-    pub fn set_sequence(&mut self, sequence: u64) {
+    pub const fn set_sequence(&mut self, sequence: u64) {
         self.current_sequence = sequence;
     }
 }

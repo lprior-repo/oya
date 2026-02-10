@@ -1,4 +1,4 @@
-//! Event loading from DurableEventStore with streaming support.
+//! Event loading from `DurableEventStore` with streaming support.
 //!
 //! This module provides streaming event loading from the durable event store,
 //! enabling efficient replay of large event logs without loading everything into memory.
@@ -47,7 +47,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 /// Error types for event loading operations.
-#[derive(Debug, thiserror::Error, Clone, PartialEq)]
+#[derive(Debug, thiserror::Error, Clone, PartialEq, Eq)]
 pub enum LoadError {
     /// Failed to query events from the store.
     #[error("failed to query events: {0}")]
@@ -70,11 +70,11 @@ impl From<LoadError> for crate::error::Error {
     fn from(err: LoadError) -> Self {
         match err {
             LoadError::QueryFailed(reason) => {
-                crate::error::Error::store_failed("load_events", reason)
+                Self::store_failed("load_events", reason)
             }
-            LoadError::DeserializationFailed(reason) => crate::error::Error::serialization(reason),
-            LoadError::InvalidFilter(reason) => crate::error::Error::invalid_event(reason),
-            LoadError::CheckpointNotFound(id) => crate::error::Error::event_not_found(id),
+            LoadError::DeserializationFailed(reason) => Self::serialization(reason),
+            LoadError::InvalidFilter(reason) => Self::invalid_event(reason),
+            LoadError::CheckpointNotFound(id) => Self::event_not_found(id),
         }
     }
 }
@@ -96,7 +96,7 @@ impl From<LoadError> for crate::error::Error {
 /// // Load events in a time range
 /// let filter = EventFilter::time_range(start, end);
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EventFilter {
     /// Load all events for a specific bead.
     Bead { bead_id: BeadId },
@@ -123,7 +123,8 @@ pub enum EventFilter {
 
 impl EventFilter {
     /// Create a filter for a specific bead.
-    pub fn bead(bead_id: BeadId) -> Self {
+    #[must_use] 
+    pub const fn bead(bead_id: BeadId) -> Self {
         Self::Bead { bead_id }
     }
 
@@ -135,7 +136,8 @@ impl EventFilter {
     }
 
     /// Create a filter for a time range.
-    pub fn time_range(start: DateTime<Utc>, end: Option<DateTime<Utc>>) -> Self {
+    #[must_use] 
+    pub const fn time_range(start: DateTime<Utc>, end: Option<DateTime<Utc>>) -> Self {
         Self::TimeRange { start, end }
     }
 
@@ -147,7 +149,8 @@ impl EventFilter {
     }
 
     /// Create a combined filter.
-    pub fn combined(
+    #[must_use] 
+    pub const fn combined(
         bead_id: Option<BeadId>,
         after_timestamp: Option<DateTime<Utc>>,
         event_type: Option<String>,
@@ -160,7 +163,7 @@ impl EventFilter {
     }
 }
 
-/// Event loader for streaming events from DurableEventStore.
+/// Event loader for streaming events from `DurableEventStore`.
 ///
 /// `EventLoader` provides async streaming of events from the durable event store,
 /// enabling efficient replay of large event logs without loading everything into memory.
@@ -181,7 +184,7 @@ impl EventLoader {
     /// # Arguments
     ///
     /// * `store` - The durable event store to load events from
-    pub fn new(store: Arc<crate::durable_store::DurableEventStore>) -> Self {
+    pub const fn new(store: Arc<crate::durable_store::DurableEventStore>) -> Self {
         Self { store }
     }
 

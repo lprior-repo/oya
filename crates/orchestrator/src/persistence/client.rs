@@ -1,4 +1,4 @@
-//! SurrealDB client for orchestrator persistence.
+//! `SurrealDB` client for orchestrator persistence.
 //!
 //! Provides connection management and basic database operations.
 
@@ -13,7 +13,7 @@ use super::error::{PersistenceResult, from_surrealdb_error};
 /// Configuration for the orchestrator store.
 #[derive(Debug, Clone)]
 pub struct StoreConfig {
-    /// Connection URL (e.g., "mem://", "ws://localhost:8000")
+    /// Connection URL (e.g., "mem://", "<ws://localhost:8000>")
     pub url: String,
     /// Namespace to use
     pub namespace: String,
@@ -48,7 +48,7 @@ impl StoreConfig {
     #[must_use]
     pub fn websocket(host: &str, port: u16) -> Self {
         Self {
-            url: format!("ws://{}:{}", host, port),
+            url: format!("ws://{host}:{port}"),
             namespace: "orchestrator".to_string(),
             database: "production".to_string(),
             credentials: None,
@@ -92,7 +92,7 @@ impl Default for StoreConfig {
 
 /// Connection to the orchestrator database.
 ///
-/// This is a thin wrapper around the SurrealDB client that provides
+/// This is a thin wrapper around the `SurrealDB` client that provides
 /// orchestrator-specific error handling.
 #[derive(Debug, Clone)]
 pub struct OrchestratorStore {
@@ -144,7 +144,7 @@ impl OrchestratorStore {
 
     /// Get the store configuration.
     #[must_use]
-    pub fn config(&self) -> &StoreConfig {
+    pub const fn config(&self) -> &StoreConfig {
         &self.config
     }
 
@@ -178,9 +178,9 @@ impl OrchestratorStore {
 
     /// Close the database connection.
     ///
-    /// Note: SurrealDB handles connection cleanup automatically when dropped,
+    /// Note: `SurrealDB` handles connection cleanup automatically when dropped,
     /// but this method can be used for explicit cleanup.
-    pub fn close(&self) {
+    pub const fn close(&self) {
         // SurrealDB handles cleanup on drop
         // This is a no-op but provides explicit interface
     }

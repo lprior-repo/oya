@@ -28,31 +28,31 @@ pub enum StateValue {
     /// JSON value.
     Json(serde_json::Value),
     /// List of values.
-    List(Vec<StateValue>),
+    List(Vec<Self>),
 }
 
 impl StateValue {
     /// Create a null value.
     #[must_use]
-    pub fn null() -> Self {
+    pub const fn null() -> Self {
         Self::Null
     }
 
     /// Create a boolean value.
     #[must_use]
-    pub fn boolean(value: bool) -> Self {
+    pub const fn boolean(value: bool) -> Self {
         Self::Boolean(value)
     }
 
     /// Create an integer value.
     #[must_use]
-    pub fn integer(value: i64) -> Self {
+    pub const fn integer(value: i64) -> Self {
         Self::Integer(value)
     }
 
     /// Create a float value.
     #[must_use]
-    pub fn float(value: f64) -> Self {
+    pub const fn float(value: f64) -> Self {
         Self::Float(value)
     }
 
@@ -64,31 +64,31 @@ impl StateValue {
 
     /// Create a bytes value.
     #[must_use]
-    pub fn bytes(value: Vec<u8>) -> Self {
+    pub const fn bytes(value: Vec<u8>) -> Self {
         Self::Bytes(value)
     }
 
     /// Create a JSON value.
     #[must_use]
-    pub fn json(value: serde_json::Value) -> Self {
+    pub const fn json(value: serde_json::Value) -> Self {
         Self::Json(value)
     }
 
     /// Create a list value.
     #[must_use]
-    pub fn list(values: Vec<StateValue>) -> Self {
+    pub const fn list(values: Vec<Self>) -> Self {
         Self::List(values)
     }
 
     /// Check if the value is null.
     #[must_use]
-    pub fn is_null(&self) -> bool {
+    pub const fn is_null(&self) -> bool {
         matches!(self, Self::Null)
     }
 
     /// Try to get as boolean.
     #[must_use]
-    pub fn as_bool(&self) -> Option<bool> {
+    pub const fn as_bool(&self) -> Option<bool> {
         match self {
             Self::Boolean(v) => Some(*v),
             _ => None,
@@ -97,7 +97,7 @@ impl StateValue {
 
     /// Try to get as integer.
     #[must_use]
-    pub fn as_i64(&self) -> Option<i64> {
+    pub const fn as_i64(&self) -> Option<i64> {
         match self {
             Self::Integer(v) => Some(*v),
             _ => None,
@@ -107,7 +107,7 @@ impl StateValue {
     /// Try to get as float.
     #[must_use]
     #[allow(clippy::cast_precision_loss)]
-    pub fn as_f64(&self) -> Option<f64> {
+    pub const fn as_f64(&self) -> Option<f64> {
         match self {
             Self::Float(v) => Some(*v),
             Self::Integer(v) => Some(*v as f64),
@@ -126,7 +126,7 @@ impl StateValue {
 
     /// Try to get as JSON.
     #[must_use]
-    pub fn as_json(&self) -> Option<&serde_json::Value> {
+    pub const fn as_json(&self) -> Option<&serde_json::Value> {
         match self {
             Self::Json(v) => Some(v),
             _ => None,
@@ -255,19 +255,19 @@ impl ObjectState {
 
     /// Get the object ID.
     #[must_use]
-    pub fn object_id(&self) -> &ObjectId {
+    pub const fn object_id(&self) -> &ObjectId {
         &self.object_id
     }
 
     /// Get the current version.
     #[must_use]
-    pub fn version(&self) -> u64 {
+    pub const fn version(&self) -> u64 {
         self.version
     }
 
     /// Check if there are uncommitted changes.
     #[must_use]
-    pub fn is_dirty(&self) -> bool {
+    pub const fn is_dirty(&self) -> bool {
         self.dirty
     }
 
@@ -348,7 +348,7 @@ impl ObjectState {
 
     /// Clear all state.
     pub fn clear(&mut self) {
-        for key in self.kv_store.keys().cloned().collect::<Vec<_>>() {
+        for key in self.kv_store.keys().cloned() {
             self.pending_writes.push(StateWrite {
                 key,
                 value: None,

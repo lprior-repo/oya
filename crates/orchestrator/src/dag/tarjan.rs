@@ -58,7 +58,7 @@ impl TarjanState {
     }
 
     /// Get the next discovery index and increment
-    fn next_index(&mut self) -> DiscoveryIndex {
+    const fn next_index(&mut self) -> DiscoveryIndex {
         let idx = self.next_index;
         self.next_index += 1;
         idx
@@ -164,7 +164,7 @@ impl Default for TarjanState {
 ///
 /// # Returns
 ///
-/// Vector of SCCs, where each SCC is a vector of BeadIds
+/// Vector of SCCs, where each SCC is a vector of `BeadIds`
 ///
 /// # Examples
 ///
@@ -185,6 +185,7 @@ impl Default for TarjanState {
 /// # Ok(())
 /// # }
 /// ```
+#[must_use] 
 pub fn tarjan_scc(dag: &WorkflowDAG) -> Vec<Vec<BeadId>> {
     // Build a local graph representation from the DAG
     let node_list: Vec<BeadId> = dag.nodes().cloned().collect();
@@ -252,7 +253,7 @@ pub fn tarjan_scc(dag: &WorkflowDAG) -> Vec<Vec<BeadId>> {
 ///
 /// # Returns
 ///
-/// Vector of cycles, where each cycle is a vector of BeadIds
+/// Vector of cycles, where each cycle is a vector of `BeadIds`
 ///
 /// # Note
 ///
@@ -277,6 +278,7 @@ pub fn tarjan_scc(dag: &WorkflowDAG) -> Vec<Vec<BeadId>> {
 /// # Ok(())
 /// # }
 /// ```
+#[must_use] 
 pub fn find_cycles_tarjan(dag: &WorkflowDAG) -> Vec<Vec<BeadId>> {
     let sccs = tarjan_scc(dag);
 

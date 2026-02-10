@@ -47,7 +47,8 @@ pub struct ReplayProgress {
 
 impl ReplayProgress {
     /// Create a new progress with zero events processed.
-    pub fn new(events_total: u64) -> Self {
+    #[must_use] 
+    pub const fn new(events_total: u64) -> Self {
         let percent_complete = if events_total == 0 { 100.0 } else { 0.0 };
         Self {
             events_total,
@@ -91,6 +92,7 @@ impl ReplayTracker {
     /// # Arguments
     /// * `events_total` - Total number of events to replay
     /// * `update_interval` - Emit progress updates every N events (default: 100)
+    #[must_use] 
     pub fn new(events_total: u64, update_interval: u64) -> (Self, watch::Receiver<ReplayProgress>) {
         let initial_progress = ReplayProgress::new(events_total);
         let (progress_tx, progress_rx) = watch::channel(initial_progress);
@@ -169,6 +171,7 @@ impl ReplayTracker {
 }
 
 /// Helper to create a shared replay tracker.
+#[must_use] 
 pub fn create_tracker(
     events_total: u64,
     update_interval: u64,

@@ -68,7 +68,7 @@ impl ActorError {
         Self::BeadNotFound(id.into())
     }
 
-    /// Create a generic not found error (uses BeadNotFound variant).
+    /// Create a generic not found error (uses `BeadNotFound` variant).
     pub fn not_found(resource: impl Into<String>, reason: impl Into<String>) -> Self {
         Self::BeadNotFound(format!("{}: {}", resource.into(), reason.into()))
     }
@@ -84,12 +84,14 @@ impl ActorError {
     }
 
     /// Create an RPC timeout error.
-    pub fn rpc_timeout(duration: Duration) -> Self {
+    #[must_use] 
+    pub const fn rpc_timeout(duration: Duration) -> Self {
         Self::RpcTimeout(duration)
     }
 
     /// Create an actor unavailable error.
-    pub fn actor_unavailable() -> Self {
+    #[must_use] 
+    pub const fn actor_unavailable() -> Self {
         Self::ActorUnavailable
     }
 

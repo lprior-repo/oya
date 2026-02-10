@@ -1,4 +1,4 @@
-//! HealthCheckWorker - Background worker for endpoint health polling.
+//! `HealthCheckWorker` - Background worker for endpoint health polling.
 //!
 //! This worker periodically polls configured health endpoints and emits
 //! events when health status changes. It integrates with the ractor
@@ -194,7 +194,7 @@ impl HealthStatus {
     }
 }
 
-/// Messages handled by the HealthCheckWorker actor.
+/// Messages handled by the `HealthCheckWorker` actor.
 #[derive(Clone, Debug)]
 pub enum HealthCheckMessage {
     /// Perform a single health check.
@@ -207,7 +207,7 @@ pub enum HealthCheckMessage {
     Stop,
 }
 
-/// State for the HealthCheckWorker actor.
+/// State for the `HealthCheckWorker` actor.
 pub struct HealthCheckWorkerState {
     /// Worker ID for identification.
     worker_id: String,
@@ -242,12 +242,12 @@ impl HealthCheckWorkerState {
     }
 
     /// Reset the failure count.
-    fn reset_failures(&mut self) {
+    const fn reset_failures(&mut self) {
         self.failure_count = 0;
     }
 
     /// Increment the failure count and return whether threshold is exceeded.
-    fn increment_failures(&mut self) -> bool {
+    const fn increment_failures(&mut self) -> bool {
         self.failure_count = self.failure_count.saturating_add(1);
         self.failure_count > self.config.max_failures
     }
@@ -312,12 +312,12 @@ impl HealthCheckWorkerState {
 
     /// Get the health check history.
     #[must_use]
-    pub fn history(&self) -> &im::Vector<HealthCheckResult> {
+    pub const fn history(&self) -> &im::Vector<HealthCheckResult> {
         &self.history
     }
 }
 
-/// Actor definition for the HealthCheckWorker.
+/// Actor definition for the `HealthCheckWorker`.
 #[derive(Clone, Default)]
 pub struct HealthCheckWorkerDef;
 
@@ -337,7 +337,7 @@ impl Actor for HealthCheckWorkerDef {
 
         // Start the polling timer
         let handle = PollingTimer::start(
-            myself.clone(),
+            myself,
             state.config.check_interval,
             state.config.timeout,
         );
@@ -501,7 +501,7 @@ pub struct PollingTimer {
 impl PollingTimer {
     /// Create a new polling timer.
     #[must_use]
-    pub fn new(interval: Duration, timeout: Duration) -> Self {
+    pub const fn new(interval: Duration, timeout: Duration) -> Self {
         Self { interval, timeout }
     }
 
@@ -509,6 +509,7 @@ impl PollingTimer {
     ///
     /// Spawns a background task that sends `PerformCheck` messages
     /// at the configured interval.
+    #[must_use] 
     pub fn start(
         target: ActorRef<HealthCheckMessage>,
         interval: Duration,
@@ -542,13 +543,13 @@ impl PollingTimer {
 
     /// Get the check interval.
     #[must_use]
-    pub fn interval(&self) -> Duration {
+    pub const fn interval(&self) -> Duration {
         self.interval
     }
 
     /// Get the request timeout.
     #[must_use]
-    pub fn timeout(&self) -> Duration {
+    pub const fn timeout(&self) -> Duration {
         self.timeout
     }
 }

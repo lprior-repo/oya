@@ -38,7 +38,7 @@ impl RouteConfig {
 
     /// Set copy mode.
     #[must_use]
-    pub fn with_copy(mut self, copy: bool) -> Self {
+    pub const fn with_copy(mut self, copy: bool) -> Self {
         self.copy = copy;
         self
     }
@@ -247,7 +247,7 @@ impl MessageRouter {
 
     /// Get the delivery tracker.
     #[must_use]
-    pub fn delivery_tracker(&self) -> &Arc<DeliveryTracker> {
+    pub const fn delivery_tracker(&self) -> &Arc<DeliveryTracker> {
         &self.delivery_tracker
     }
 
@@ -261,8 +261,7 @@ impl MessageRouter {
         if let Some((path, value)) = filter.split_once('=') {
             let actual = payload.get(path.trim());
             return actual
-                .map(|v| v.to_string().trim_matches('"') == value.trim())
-                .unwrap_or(false);
+                .is_some_and(|v| v.to_string().trim_matches('"') == value.trim());
         }
 
         // Simple existence filter: "field"

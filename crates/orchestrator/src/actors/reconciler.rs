@@ -1,4 +1,4 @@
-//! ReconcilerActor - Manages the reconciliation loop.
+//! `ReconcilerActor` - Manages the reconciliation loop.
 
 use ractor::{Actor, ActorProcessingErr, ActorRef};
 use tracing::info;
@@ -30,7 +30,7 @@ impl Actor for ReconcilerActorDef {
         info!("ReconcilerActor starting");
 
         // Spawn the tick loop
-        let myself_clone = myself.clone();
+        let myself_clone = myself;
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(5));
             loop {
@@ -56,6 +56,6 @@ impl Actor for ReconcilerActorDef {
 
 impl GenericSupervisableActor for ReconcilerActorDef {
     fn default_args() -> Self::Arguments {
-        Self::Arguments::default()
+        Self::Arguments::default();
     }
 }

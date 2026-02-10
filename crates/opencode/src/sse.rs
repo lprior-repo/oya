@@ -19,7 +19,7 @@ pub enum Output {
     Final(String),
 }
 
-/// Formatter for converting StreamChunk to SSE-formatted strings.
+/// Formatter for converting `StreamChunk` to SSE-formatted strings.
 ///
 /// Implements the Server-Sent Events protocol:
 /// - Content-Type: text/event-stream
@@ -29,7 +29,8 @@ pub struct SseFormatter;
 
 impl SseFormatter {
     /// Create a new SSE formatter.
-    pub fn new() -> Self {
+    #[must_use] 
+    pub const fn new() -> Self {
         Self
     }
 
@@ -43,6 +44,7 @@ impl SseFormatter {
     /// id: <sequence_number>
     ///
     /// ```
+    #[must_use] 
     pub fn format_message(&self, output: Output) -> String {
         let event_type = match &output {
             Output::Text(_) => "text",
@@ -65,7 +67,7 @@ impl SseFormatter {
         format!("event: {event_type}\ndata: {content}\nid: 1\n\n")
     }
 
-    /// Format a StreamChunk as an SSE message.
+    /// Format a `StreamChunk` as an SSE message.
     ///
     /// Returns a Result containing the formatted SSE message or an error.
     pub fn format_chunk(&self, chunk: StreamChunk) -> Result<String, String> {
@@ -80,7 +82,7 @@ impl SseFormatter {
         Ok(self.format_message(output))
     }
 
-    /// Format multiple StreamChunk values into a single SSE stream.
+    /// Format multiple `StreamChunk` values into a single SSE stream.
     ///
     /// Returns an iterator over formatted SSE messages.
     pub fn format_chunks<'a>(

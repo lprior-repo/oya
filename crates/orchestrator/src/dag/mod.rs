@@ -58,17 +58,17 @@ pub enum DependencyType {
     PreferredOrder,
 }
 
-/// Workflow DAG structure wrapping petgraph's DiGraph
+/// Workflow DAG structure wrapping petgraph's `DiGraph`
 #[derive(Debug, Clone)]
 pub struct WorkflowDAG {
     /// The underlying directed graph
     graph: DiGraph<BeadId, DependencyType>,
-    /// Map from BeadId to NodeIndex for O(1) lookups
+    /// Map from `BeadId` to `NodeIndex` for O(1) lookups
     node_map: HashMap<BeadId, NodeIndex>,
 }
 
 impl WorkflowDAG {
-    /// Create a new empty WorkflowDAG
+    /// Create a new empty `WorkflowDAG`
     ///
     /// # Examples
     ///
@@ -95,7 +95,7 @@ impl WorkflowDAG {
     /// # Returns
     ///
     /// * `Ok(())` if the node was added successfully
-    /// * `Err(DagError)` if the bead_id already exists in the DAG
+    /// * `Err(DagError)` if the `bead_id` already exists in the DAG
     ///
     /// # Examples
     ///
@@ -121,8 +121,8 @@ impl WorkflowDAG {
     ///
     /// # Arguments
     ///
-    /// * `from_bead` - The BeadId of the source node (dependency)
-    /// * `to_bead` - The BeadId of the target node (dependent)
+    /// * `from_bead` - The `BeadId` of the source node (dependency)
+    /// * `to_bead` - The `BeadId` of the target node (dependent)
     /// * `dep_type` - The type of dependency relationship
     ///
     /// # Returns
@@ -184,8 +184,8 @@ impl WorkflowDAG {
     ///
     /// # Arguments
     ///
-    /// * `from` - The BeadId of the dependency (what `to` depends on)
-    /// * `to` - The BeadId of the dependent (depends on `from`)
+    /// * `from` - The `BeadId` of the dependency (what `to` depends on)
+    /// * `to` - The `BeadId` of the dependent (depends on `from`)
     /// * `dep_type` - The type of dependency relationship
     ///
     /// # Returns
@@ -267,7 +267,7 @@ impl WorkflowDAG {
     ///
     /// # Returns
     ///
-    /// An iterator yielding references to BeadIds
+    /// An iterator yielding references to `BeadIds`
     ///
     /// # Examples
     ///
@@ -291,7 +291,7 @@ impl WorkflowDAG {
     ///
     /// # Returns
     ///
-    /// An iterator yielding tuples of (from_bead, to_bead, dependency_type)
+    /// An iterator yielding tuples of (`from_bead`, `to_bead`, `dependency_type`)
     ///
     /// # Examples
     ///
@@ -379,7 +379,7 @@ impl WorkflowDAG {
     ///
     /// # Arguments
     ///
-    /// * `bead_id` - The BeadId to check
+    /// * `bead_id` - The `BeadId` to check
     ///
     /// # Returns
     ///
@@ -393,11 +393,11 @@ impl WorkflowDAG {
 
     /// Get direct dependencies of a node (incoming edges).
     ///
-    /// Returns the BeadIds that this node directly depends on.
+    /// Returns the `BeadIds` that this node directly depends on.
     ///
     /// # Arguments
     ///
-    /// * `bead_id` - The BeadId to query
+    /// * `bead_id` - The `BeadId` to query
     ///
     /// # Returns
     ///
@@ -436,11 +436,11 @@ impl WorkflowDAG {
 
     /// Get direct dependents of a node (outgoing edges).
     ///
-    /// Returns the BeadIds that directly depend on this node.
+    /// Returns the `BeadIds` that directly depend on this node.
     ///
     /// # Arguments
     ///
-    /// * `bead_id` - The BeadId to query
+    /// * `bead_id` - The `BeadId` to query
     ///
     /// # Returns
     ///
@@ -479,11 +479,11 @@ impl WorkflowDAG {
 
     /// Get all ancestors of a node (transitive closure of dependencies).
     ///
-    /// Returns all BeadIds that this node transitively depends on.
+    /// Returns all `BeadIds` that this node transitively depends on.
     ///
     /// # Arguments
     ///
-    /// * `bead_id` - The BeadId to query
+    /// * `bead_id` - The `BeadId` to query
     ///
     /// # Returns
     ///
@@ -530,11 +530,11 @@ impl WorkflowDAG {
 
     /// Get all descendants of a node (transitive closure of dependents).
     ///
-    /// Returns all BeadIds that transitively depend on this node.
+    /// Returns all `BeadIds` that transitively depend on this node.
     ///
     /// # Arguments
     ///
-    /// * `bead_id` - The BeadId to query
+    /// * `bead_id` - The `BeadId` to query
     ///
     /// # Returns
     ///
@@ -584,7 +584,7 @@ impl WorkflowDAG {
     ///
     /// # Returns
     ///
-    /// Vector of BeadIds that are roots
+    /// Vector of `BeadIds` that are roots
     ///
     /// # Examples
     ///
@@ -623,7 +623,7 @@ impl WorkflowDAG {
     ///
     /// # Returns
     ///
-    /// Vector of BeadIds that are leaves
+    /// Vector of `BeadIds` that are leaves
     ///
     /// # Examples
     ///
@@ -659,16 +659,16 @@ impl WorkflowDAG {
 
     /// Get all nodes that are ready to execute.
     ///
-    /// A node is ready if all of its BlockingDependency dependencies are in the
-    /// completed set. PreferredOrder dependencies do not block execution.
+    /// A node is ready if all of its `BlockingDependency` dependencies are in the
+    /// completed set. `PreferredOrder` dependencies do not block execution.
     ///
     /// # Arguments
     ///
-    /// * `completed` - Set of BeadIds that have already completed
+    /// * `completed` - Set of `BeadIds` that have already completed
     ///
     /// # Returns
     ///
-    /// Vector of BeadIds that are ready to execute
+    /// Vector of `BeadIds` that are ready to execute
     ///
     /// # Examples
     ///
@@ -736,11 +736,11 @@ impl WorkflowDAG {
     ///
     /// # Arguments
     ///
-    /// * `completed` - Set of BeadIds that have already completed
+    /// * `completed` - Set of `BeadIds` that have already completed
     ///
     /// # Returns
     ///
-    /// Vector of BeadIds that are ready to execute (deterministically sorted)
+    /// Vector of `BeadIds` that are ready to execute (deterministically sorted)
     ///
     /// # Examples
     ///
@@ -767,16 +767,16 @@ impl WorkflowDAG {
 
     /// Get all nodes that are blocked (not ready to execute).
     ///
-    /// A node is blocked if it has at least one BlockingDependency that is not
+    /// A node is blocked if it has at least one `BlockingDependency` that is not
     /// in the completed set.
     ///
     /// # Arguments
     ///
-    /// * `completed` - Set of BeadIds that have already completed
+    /// * `completed` - Set of `BeadIds` that have already completed
     ///
     /// # Returns
     ///
-    /// Vector of BeadIds that are blocked
+    /// Vector of `BeadIds` that are blocked
     ///
     /// # Examples
     ///
@@ -832,8 +832,8 @@ impl WorkflowDAG {
     ///
     /// # Arguments
     ///
-    /// * `bead_id` - The BeadId to check
-    /// * `completed` - Set of BeadIds that have already completed
+    /// * `bead_id` - The `BeadId` to check
+    /// * `completed` - Set of `BeadIds` that have already completed
     ///
     /// # Returns
     ///
@@ -883,7 +883,7 @@ impl WorkflowDAG {
     ///
     /// # Returns
     ///
-    /// * `Ok(Vec<BeadId>)` - Topologically sorted list of BeadIds
+    /// * `Ok(Vec<BeadId>)` - Topologically sorted list of `BeadIds`
     /// * `Err(DagError)` - If the graph contains a cycle
     ///
     /// # Examples
@@ -934,7 +934,7 @@ impl WorkflowDAG {
     ///
     /// # Returns
     ///
-    /// * `Ok(Vec<BeadId>)` - Topologically sorted list of BeadIds
+    /// * `Ok(Vec<BeadId>)` - Topologically sorted list of `BeadIds`
     /// * `Err(DagError)` - If the graph contains a cycle
     ///
     /// # Examples
@@ -1011,7 +1011,7 @@ impl WorkflowDAG {
     ///
     /// # Arguments
     ///
-    /// * `weights` - Map from BeadId to estimated Duration
+    /// * `weights` - Map from `BeadId` to estimated Duration
     ///
     /// # Returns
     ///
@@ -1068,7 +1068,7 @@ impl WorkflowDAG {
                 None => continue,
             };
 
-            let current_dist = dist.get(bead_id).map(|(d, _)| *d).unwrap_or(Duration::ZERO);
+            let current_dist = dist.get(bead_id).map_or(Duration::ZERO, |(d, _)| *d);
 
             // Update distances to all neighbors
             for edge in self.graph.edges_directed(node_idx, Direction::Outgoing) {
@@ -1152,7 +1152,7 @@ impl WorkflowDAG {
     ///
     /// # Returns
     ///
-    /// Vector of cycles, where each cycle is a vector of BeadIds
+    /// Vector of cycles, where each cycle is a vector of `BeadIds`
     ///
     /// # Examples
     ///
@@ -1289,7 +1289,7 @@ impl WorkflowDAG {
     ///
     /// # Arguments
     ///
-    /// * `bead_id` - The BeadId to remove
+    /// * `bead_id` - The `BeadId` to remove
     ///
     /// # Returns
     ///
@@ -1330,8 +1330,8 @@ impl WorkflowDAG {
     ///
     /// # Arguments
     ///
-    /// * `from` - Source BeadId
-    /// * `to` - Target BeadId
+    /// * `from` - Source `BeadId`
+    /// * `to` - Target `BeadId`
     ///
     /// # Returns
     ///
@@ -1375,7 +1375,7 @@ impl WorkflowDAG {
     ///
     /// # Arguments
     ///
-    /// * `nodes` - The BeadIds to include in the subgraph
+    /// * `nodes` - The `BeadIds` to include in the subgraph
     ///
     /// # Returns
     ///
@@ -1401,7 +1401,7 @@ impl WorkflowDAG {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn subgraph(&self, nodes: &[BeadId]) -> DagResult<WorkflowDAG> {
+    pub fn subgraph(&self, nodes: &[BeadId]) -> DagResult<Self> {
         let node_set: HashSet<&BeadId> = nodes.iter().collect();
 
         // Verify all nodes exist
@@ -1411,7 +1411,7 @@ impl WorkflowDAG {
             }
         }
 
-        let mut subgraph = WorkflowDAG::new();
+        let mut subgraph = Self::new();
 
         // Add nodes
         for bead_id in nodes {
@@ -1439,7 +1439,7 @@ impl WorkflowDAG {
     ///
     /// # Arguments
     ///
-    /// * `bead_id` - The central BeadId
+    /// * `bead_id` - The central `BeadId`
     ///
     /// # Returns
     ///
@@ -1465,7 +1465,7 @@ impl WorkflowDAG {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn induced_subgraph(&self, bead_id: &BeadId) -> DagResult<WorkflowDAG> {
+    pub fn induced_subgraph(&self, bead_id: &BeadId) -> DagResult<Self> {
         // Verify node exists
         let _ = self.get_node_index(bead_id)?;
 
@@ -1488,7 +1488,7 @@ impl WorkflowDAG {
 
     // ==================== Helper Methods ====================
 
-    /// Get the NodeIndex for a BeadId, or return an error if not found.
+    /// Get the `NodeIndex` for a `BeadId`, or return an error if not found.
     fn get_node_index(&self, bead_id: &BeadId) -> DagResult<NodeIndex> {
         self.node_map
             .get(bead_id)
@@ -1496,7 +1496,7 @@ impl WorkflowDAG {
             .ok_or_else(|| DagError::node_not_found(bead_id.clone()))
     }
 
-    /// Rebuild the node_map after a node removal.
+    /// Rebuild the `node_map` after a node removal.
     ///
     /// This is necessary because petgraph reuses node indices.
     fn rebuild_node_map(&mut self) {
@@ -1535,7 +1535,7 @@ impl Default for WorkflowDAG {
 
 // ==================== Builder Pattern ====================
 
-/// Functional builder for WorkflowDAG construction
+/// Functional builder for `WorkflowDAG` construction
 ///
 /// Provides a fluent API for constructing DAGs with immutable builder steps.
 ///
@@ -1562,7 +1562,7 @@ pub struct DagBuilder {
 }
 
 impl DagBuilder {
-    /// Create a new DagBuilder
+    /// Create a new `DagBuilder`
     #[must_use]
     pub fn new() -> Self {
         Self::default()
@@ -1602,6 +1602,7 @@ impl DagBuilder {
     ///     .with_node("a".to_string())
     ///     .with_node("b".to_string());
     /// ```
+    #[must_use] 
     pub fn with_node(mut self, node: String) -> Self {
         self.nodes.push(node);
         self
@@ -1611,7 +1612,7 @@ impl DagBuilder {
     ///
     /// # Arguments
     ///
-    /// * `edges` - Iterator of (from, to, dependency_type) tuples
+    /// * `edges` - Iterator of (from, to, `dependency_type`) tuples
     ///
     /// # Examples
     ///
@@ -1648,12 +1649,13 @@ impl DagBuilder {
     ///     .with_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)
     ///     .with_edge("b".to_string(), "c".to_string(), DependencyType::BlockingDependency);
     /// ```
+    #[must_use] 
     pub fn with_edge(mut self, from: String, to: String, dep_type: DependencyType) -> Self {
         self.edges.push((from, to, dep_type));
         self
     }
 
-    /// Build the WorkflowDAG from the configured builder
+    /// Build the `WorkflowDAG` from the configured builder
     ///
     /// # Returns
     ///
@@ -1691,11 +1693,11 @@ impl DagBuilder {
 }
 
 impl WorkflowDAG {
-    /// Create a new DagBuilder for fluent DAG construction
+    /// Create a new `DagBuilder` for fluent DAG construction
     ///
     /// # Returns
     ///
-    /// A new DagBuilder instance
+    /// A new `DagBuilder` instance
     ///
     /// # Examples
     ///

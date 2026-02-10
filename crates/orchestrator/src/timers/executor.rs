@@ -31,13 +31,13 @@ pub enum ExecutionResult {
 impl ExecutionResult {
     /// Check if execution was successful.
     #[must_use]
-    pub fn is_success(&self) -> bool {
+    pub const fn is_success(&self) -> bool {
         matches!(self, Self::Success)
     }
 
     /// Check if execution should be retried.
     #[must_use]
-    pub fn should_retry(&self) -> bool {
+    pub const fn should_retry(&self) -> bool {
         matches!(self, Self::Retry { .. })
     }
 }
@@ -159,7 +159,7 @@ impl TimerExecutor {
 
     /// Start the executor loop.
     ///
-    /// This runs until stop() is called.
+    /// This runs until `stop()` is called.
     pub async fn start(&self) {
         {
             let mut running = self.running.write().await;

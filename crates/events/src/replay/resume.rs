@@ -19,6 +19,7 @@ impl CheckpointId {
     }
 
     /// Get the inner ID value.
+    #[must_use] 
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -39,7 +40,8 @@ pub struct ReplayState {
 
 impl ReplayState {
     /// Create a new replay state.
-    pub fn new(checkpoint_id: CheckpointId, checkpoint_timestamp: DateTime<Utc>) -> Self {
+    #[must_use] 
+    pub const fn new(checkpoint_id: CheckpointId, checkpoint_timestamp: DateTime<Utc>) -> Self {
         Self {
             checkpoint_id,
             checkpoint_timestamp,
@@ -49,14 +51,14 @@ impl ReplayState {
     }
 
     /// Record an event as replayed.
-    pub fn record_event(&mut self, timestamp: DateTime<Utc>) {
+    pub const fn record_event(&mut self, timestamp: DateTime<Utc>) {
         self.events_replayed += 1;
         self.last_event_timestamp = Some(timestamp);
     }
 }
 
 /// Resume error types.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResumeError {
     /// Checkpoint not found.
     CheckpointNotFound { checkpoint_id: String },
@@ -102,7 +104,7 @@ impl std::error::Error for ResumeError {}
 
 impl From<ResumeError> for Error {
     fn from(err: ResumeError) -> Self {
-        Error::Internal(err.to_string())
+        Self::Internal(err.to_string())
     }
 }
 

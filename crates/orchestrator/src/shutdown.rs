@@ -110,6 +110,7 @@ pub struct ShutdownCoordinator {
 
 impl ShutdownCoordinator {
     /// Create a new shutdown coordinator
+    #[must_use] 
     pub fn new() -> Self {
         let (shutdown_tx, _) = broadcast::channel(16);
         let (checkpoint_tx, checkpoint_rx) = mpsc::channel(32);
@@ -129,16 +130,19 @@ impl ShutdownCoordinator {
     }
 
     /// Check if shutdown has been initiated
+    #[must_use] 
     pub fn is_shutdown_initiated(&self) -> bool {
         self.shutdown_initiated.load(Ordering::Acquire)
     }
 
     /// Subscribe to shutdown notifications
+    #[must_use] 
     pub fn subscribe(&self) -> broadcast::Receiver<ShutdownSignal> {
         self.shutdown_tx.subscribe()
     }
 
     /// Get a sender for checkpoint results
+    #[must_use] 
     pub fn checkpoint_sender(&self) -> mpsc::Sender<CheckpointResult> {
         self.checkpoint_tx.clone()
     }
@@ -212,7 +216,7 @@ impl ShutdownCoordinator {
             }
             Err(e) => {
                 warn!(error = %e, "Checkpoint saving phase failed");
-                stats.checkpoint_error = Some(format!("{}", e));
+                stats.checkpoint_error = Some(format!("{e}"));
             }
         }
 
@@ -267,15 +271,12 @@ impl ShutdownCoordinator {
         })
         .await;
 
-        match results {
-            Ok(res) => Ok(res),
-            Err(_) => {
-                warn!(
-                    timeout_secs = CHECKPOINT_TIMEOUT.as_secs(),
-                    "Checkpoint timeout exceeded"
-                );
-                Ok(Vec::new())
-            }
+        if let Ok(res) = results { Ok(res) } else {
+            warn!(
+                timeout_secs = CHECKPOINT_TIMEOUT.as_secs(),
+                "Checkpoint timeout exceeded"
+            );
+            Ok(Vec::new())
         }
     }
 
@@ -304,18 +305,15 @@ impl ShutdownCoordinator {
     /// the configured timeout (30 seconds), indicating that graceful shutdown
     /// could not be completed within the acceptable timeframe.
     pub async fn wait_with_timeout(&self) -> Result<ShutdownStats> {
-        match timeout(SHUTDOWN_TIMEOUT, self.shutdown()).await {
-            Ok(stats) => stats,
-            Err(_) => {
-                error!(
-                    timeout_secs = SHUTDOWN_TIMEOUT.as_secs(),
-                    "Shutdown timeout exceeded, forcing exit"
-                );
-                Err(Error::invalid_record(format!(
-                    "Shutdown timeout exceeded: {} seconds",
-                    SHUTDOWN_TIMEOUT.as_secs()
-                )))
-            }
+        if let Ok(stats) = timeout(SHUTDOWN_TIMEOUT, self.shutdown()).await { stats } else {
+            error!(
+                timeout_secs = SHUTDOWN_TIMEOUT.as_secs(),
+                "Shutdown timeout exceeded, forcing exit"
+            );
+            Err(Error::invalid_record(format!(
+                "Shutdown timeout exceeded: {} seconds",
+                SHUTDOWN_TIMEOUT.as_secs()
+            )))
         }
     }
 }

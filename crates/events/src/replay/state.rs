@@ -35,9 +35,9 @@ impl ReplayState {
     /// Returns an error if the current state is not Uninitialized.
     pub fn start_loading(&self) -> Result<Self> {
         match self {
-            ReplayState::Uninitialized => Ok(ReplayState::Loading { events_loaded: 0 }),
+            Self::Uninitialized => Ok(Self::Loading { events_loaded: 0 }),
             current => Err(crate::error::Error::InvalidState {
-                current: format!("{:?}", current),
+                current: format!("{current:?}"),
                 attempted: "Loading".into(),
             }),
         }
@@ -49,12 +49,12 @@ impl ReplayState {
     /// Returns an error if the current state is not Loading.
     pub fn start_replaying(&self, events_total: u64) -> Result<Self> {
         match self {
-            ReplayState::Loading { .. } => Ok(ReplayState::Replaying {
+            Self::Loading { .. } => Ok(Self::Replaying {
                 events_processed: 0,
                 events_total,
             }),
             current => Err(crate::error::Error::InvalidState {
-                current: format!("{:?}", current),
+                current: format!("{current:?}"),
                 attempted: "Replaying".into(),
             }),
         }
@@ -66,12 +66,12 @@ impl ReplayState {
     /// Returns an error if the current state is not Replaying.
     pub fn update_progress(&self, events_processed: u64) -> Result<Self> {
         match self {
-            ReplayState::Replaying { events_total, .. } => Ok(ReplayState::Replaying {
+            Self::Replaying { events_total, .. } => Ok(Self::Replaying {
                 events_processed,
                 events_total: *events_total,
             }),
             current => Err(crate::error::Error::InvalidState {
-                current: format!("{:?}", current),
+                current: format!("{current:?}"),
                 attempted: "update_progress".into(),
             }),
         }
@@ -83,47 +83,51 @@ impl ReplayState {
     /// Returns an error if the current state is not Replaying.
     pub fn complete(&self) -> Result<Self> {
         match self {
-            ReplayState::Replaying {
+            Self::Replaying {
                 events_processed, ..
-            } => Ok(ReplayState::Complete {
+            } => Ok(Self::Complete {
                 events_processed: *events_processed,
             }),
             current => Err(crate::error::Error::InvalidState {
-                current: format!("{:?}", current),
+                current: format!("{current:?}"),
                 attempted: "Complete".into(),
             }),
         }
     }
 
     /// Transition from any state to Failed state.
-    pub fn fail(&self, error: String) -> ReplayState {
-        ReplayState::Failed { error }
+    #[must_use] 
+    pub const fn fail(&self, error: String) -> Self {
+        Self::Failed { error }
     }
 
     /// Check if the replay is in a terminal state (Complete or Failed).
-    pub fn is_terminal(&self) -> bool {
+    #[must_use] 
+    pub const fn is_terminal(&self) -> bool {
         matches!(
             self,
-            ReplayState::Complete { .. } | ReplayState::Failed { .. }
+            Self::Complete { .. } | Self::Failed { .. }
         )
     }
 
     /// Check if the replay is in an active state (Loading or Replaying).
-    pub fn is_active(&self) -> bool {
+    #[must_use] 
+    pub const fn is_active(&self) -> bool {
         matches!(
             self,
-            ReplayState::Loading { .. } | ReplayState::Replaying { .. }
+            Self::Loading { .. } | Self::Replaying { .. }
         )
     }
 
     /// Get a human-readable description of the current state.
-    pub fn description(&self) -> &str {
+    #[must_use] 
+    pub const fn description(&self) -> &str {
         match self {
-            ReplayState::Uninitialized => "Not started",
-            ReplayState::Loading { .. } => "Loading events",
-            ReplayState::Replaying { .. } => "Replaying events",
-            ReplayState::Complete { .. } => "Complete",
-            ReplayState::Failed { .. } => "Failed",
+            Self::Uninitialized => "Not started",
+            Self::Loading { .. } => "Loading events",
+            Self::Replaying { .. } => "Replaying events",
+            Self::Complete { .. } => "Complete",
+            Self::Failed { .. } => "Failed",
         }
     }
 }

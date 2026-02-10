@@ -57,21 +57,20 @@ impl fmt::Display for DistributionError {
         match self {
             Self::NoBeadsAvailable => write!(f, "no beads available for distribution"),
             Self::NoAgentsAvailable => write!(f, "no agents available for assignment"),
-            Self::BeadNotFound { bead_id } => write!(f, "bead not found: {}", bead_id),
-            Self::AgentNotFound { agent_id } => write!(f, "agent not found: {}", agent_id),
-            Self::ConfigurationError { message } => write!(f, "configuration error: {}", message),
+            Self::BeadNotFound { bead_id } => write!(f, "bead not found: {bead_id}"),
+            Self::AgentNotFound { agent_id } => write!(f, "agent not found: {agent_id}"),
+            Self::ConfigurationError { message } => write!(f, "configuration error: {message}"),
             Self::AffinityUnsatisfied {
                 bead_id,
                 required_capability,
             } => write!(
                 f,
-                "affinity unsatisfied for bead {}: requires {}",
-                bead_id, required_capability
+                "affinity unsatisfied for bead {bead_id}: requires {required_capability}"
             ),
             Self::PriorityError { bead_id, message } => {
-                write!(f, "priority error for bead {}: {}", bead_id, message)
+                write!(f, "priority error for bead {bead_id}: {message}")
             }
-            Self::Internal { message } => write!(f, "internal error: {}", message),
+            Self::Internal { message } => write!(f, "internal error: {message}"),
         }
     }
 }

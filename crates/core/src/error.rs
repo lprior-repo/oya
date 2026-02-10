@@ -105,21 +105,21 @@ impl Error {
     /// Create a JSON parse error.
     #[must_use]
     #[inline]
-    pub fn json_parse_failed(source: serde_json::Error) -> Self {
+    pub const fn json_parse_failed(source: serde_json::Error) -> Self {
         Self::JsonParseFailed { source }
     }
 
     /// Create a YAML parse error.
     #[must_use]
     #[inline]
-    pub fn yaml_parse_failed(source: serde_yaml::Error) -> Self {
+    pub const fn yaml_parse_failed(source: serde_yaml::Error) -> Self {
         Self::YamlParseFailed { source }
     }
 
     /// Create a TOML parse error.
     #[must_use]
     #[inline]
-    pub fn toml_parse_failed(source: toml::de::Error) -> Self {
+    pub const fn toml_parse_failed(source: toml::de::Error) -> Self {
         Self::TomlParseFailed { source }
     }
 

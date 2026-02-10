@@ -57,21 +57,21 @@ impl AffinityStrategy {
 
     /// Set the capability weight.
     #[must_use]
-    pub fn with_capability_weight(mut self, weight: f64) -> Self {
+    pub const fn with_capability_weight(mut self, weight: f64) -> Self {
         self.capability_weight = weight.clamp(0.0, 1.0);
         self
     }
 
     /// Set the preference weight.
     #[must_use]
-    pub fn with_preference_weight(mut self, weight: f64) -> Self {
+    pub const fn with_preference_weight(mut self, weight: f64) -> Self {
         self.preference_weight = weight.clamp(0.0, 1.0);
         self
     }
 
     /// Set the load weight.
     #[must_use]
-    pub fn with_load_weight(mut self, weight: f64) -> Self {
+    pub const fn with_load_weight(mut self, weight: f64) -> Self {
         self.load_weight = weight.clamp(0.0, 1.0);
         self
     }
@@ -148,9 +148,7 @@ impl AffinityStrategy {
         let pref_score = self.preference_score(agent_id, bead_id, ctx);
         let load_score = self.load_score(agent_id, ctx);
 
-        (cap_score * self.capability_weight)
-            + (pref_score * self.preference_weight)
-            + (load_score * self.load_weight)
+        load_score.mul_add(self.load_weight, cap_score.mul_add(self.capability_weight, pref_score * self.preference_weight))
     }
 
     /// Check if an agent fully matches capability requirements.
@@ -175,8 +173,8 @@ impl DistributionStrategy for AffinityStrategy {
             .iter()
             .max_by_key(|bead_id| {
                 let bead = ctx.get_bead(bead_id);
-                let priority = bead.map(|b| b.priority).unwrap_or(0);
-                let retry = bead.map(|b| b.retry_count).unwrap_or(0);
+                let priority = bead.map_or(0, |b| b.priority);
+                let retry = bead.map_or(0, |b| b.retry_count);
                 (priority, retry)
             })
             .cloned()
@@ -239,8 +237,7 @@ impl DistributionStrategy for AffinityStrategy {
         let total = self.capability_weight + self.preference_weight + self.load_weight;
         if (total - 1.0).abs() > 0.01 {
             return Err(DistributionError::configuration(format!(
-                "weights should sum to 1.0, got {}",
-                total
+                "weights should sum to 1.0, got {total}"
             )));
         }
         Ok(())

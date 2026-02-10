@@ -1,6 +1,6 @@
-//! SurrealDB integration with connection pooling and retry logic.
+//! `SurrealDB` integration with connection pooling and retry logic.
 //!
-//! This module provides a robust connection manager for SurrealDB with:
+//! This module provides a robust connection manager for `SurrealDB` with:
 //! - Connection pooling
 //! - Exponential backoff retry logic
 //! - Query timeout handling
@@ -22,7 +22,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::actors::storage::DatabaseConfig;
 
-/// Errors that can occur during SurrealDB operations.
+/// Errors that can occur during `SurrealDB` operations.
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum SurrealError {
     #[error("Connection failed: {0}")]
@@ -75,7 +75,7 @@ impl Default for RetryPolicy {
 
 impl RetryPolicy {
     #[must_use]
-    pub fn new(max_attempts: u32, base_backoff_ms: u64, max_backoff_ms: u64) -> Self {
+    pub const fn new(max_attempts: u32, base_backoff_ms: u64, max_backoff_ms: u64) -> Self {
         Self {
             max_attempts,
             base_backoff_ms,
@@ -85,7 +85,7 @@ impl RetryPolicy {
     }
 
     #[must_use]
-    pub fn without_jitter(mut self) -> Self {
+    pub const fn without_jitter(mut self) -> Self {
         self.use_jitter = false;
         self
     }
@@ -105,7 +105,7 @@ impl RetryPolicy {
     }
 
     #[must_use]
-    pub fn is_retryable(&self, attempt: u32) -> bool {
+    pub const fn is_retryable(&self, attempt: u32) -> bool {
         attempt < self.max_attempts
     }
 }
@@ -144,31 +144,31 @@ impl ConnectionManagerConfig {
     }
 
     #[must_use]
-    pub fn with_max_connections(mut self, max: usize) -> Self {
+    pub const fn with_max_connections(mut self, max: usize) -> Self {
         self.max_connections = max;
         self
     }
 
     #[must_use]
-    pub fn with_query_timeout(mut self, timeout: Duration) -> Self {
+    pub const fn with_query_timeout(mut self, timeout: Duration) -> Self {
         self.query_timeout = timeout;
         self
     }
 
     #[must_use]
-    pub fn with_retry_policy(mut self, policy: RetryPolicy) -> Self {
+    pub const fn with_retry_policy(mut self, policy: RetryPolicy) -> Self {
         self.retry_policy = policy;
         self
     }
 
     #[must_use]
-    pub fn without_health_checks(mut self) -> Self {
+    pub const fn without_health_checks(mut self) -> Self {
         self.enable_health_checks = false;
         self
     }
 }
 
-/// A pooled SurrealDB connection wrapper.
+/// A pooled `SurrealDB` connection wrapper.
 pub struct PooledConnection {
     client: Arc<Surreal<Db>>,
     _permit: OwnedSemaphorePermit,
@@ -181,7 +181,7 @@ impl PooledConnection {
     }
 }
 
-/// SurrealDB connection manager with pooling and retry logic.
+/// `SurrealDB` connection manager with pooling and retry logic.
 pub struct SurrealConnectionManager {
     config: ConnectionManagerConfig,
     client: Arc<Surreal<Db>>,
@@ -309,8 +309,7 @@ impl SurrealConnectionManager {
                         tokio::time::sleep(backoff).await;
                     } else {
                         return Err(SurrealError::RetryLimitExceeded(format!(
-                            "Operation failed: {}",
-                            e
+                            "Operation failed: {e}"
                         )));
                     }
                 }
@@ -337,12 +336,12 @@ impl SurrealConnectionManager {
     }
 
     #[must_use]
-    pub fn config(&self) -> &ConnectionManagerConfig {
+    pub const fn config(&self) -> &ConnectionManagerConfig {
         &self.config
     }
 
     #[must_use]
-    pub fn is_initialized(&self) -> bool {
+    pub const fn is_initialized(&self) -> bool {
         self.initialized
     }
 }

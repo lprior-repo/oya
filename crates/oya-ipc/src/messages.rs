@@ -5,14 +5,14 @@
 //!
 //! # Message Flow
 //!
-//! **Guest → Host (GuestMessage)**: Commands from the UI plugin
-//! - Query requests (GetBeadList, GetBeadDetail, etc.)
-//! - Command requests (StartBead, CancelBead, RetryBead)
+//! **Guest → Host (`GuestMessage`)**: Commands from the UI plugin
+//! - Query requests (`GetBeadList`, `GetBeadDetail`, etc.)
+//! - Command requests (`StartBead`, `CancelBead`, `RetryBead`)
 //!
-//! **Host → Guest (HostMessage)**: Responses and events from the orchestrator
-//! - Query responses (BeadList, BeadDetail, etc.)
+//! **Host → Guest (`HostMessage`)**: Responses and events from the orchestrator
+//! - Query responses (`BeadList`, `BeadDetail`, etc.)
 //! - Acknowledgments (Ack)
-//! - Broadcast events (BeadStateChanged, PhaseProgress, etc.)
+//! - Broadcast events (`BeadStateChanged`, `PhaseProgress`, etc.)
 
 use serde::{Deserialize, Serialize};
 
@@ -394,7 +394,7 @@ pub struct BeadDetail {
 pub struct TaskSummary {
     /// Task slug
     pub slug: String,
-    /// Pipeline status (created, in_progress, passed, failed, integrated)
+    /// Pipeline status (created, `in_progress`, passed, failed, integrated)
     pub status: String,
     /// Current stage (if applicable)
     pub stage: Option<String>,
@@ -411,7 +411,7 @@ pub struct TaskSummary {
 pub struct TaskDetail {
     /// Task slug
     pub slug: String,
-    /// Pipeline status (created, in_progress, passed, failed, integrated)
+    /// Pipeline status (created, `in_progress`, passed, failed, integrated)
     pub status: String,
     /// Current stage (if applicable)
     pub stage: Option<String>,

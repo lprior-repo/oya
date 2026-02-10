@@ -1,8 +1,8 @@
 //! Transport layer for length-prefixed bincode messages
 //!
 //! # Type Parameters
-//! - `R`: Reader type (implements std::io::Read)
-//! - `W`: Writer type (implements std::io::Write)
+//! - `R`: Reader type (implements `std::io::Read`)
+//! - `W`: Writer type (implements `std::io::Write`)
 //!
 //! # Thread Safety
 //! - `!Send + !Sync` (must be externally synchronized)
@@ -39,12 +39,12 @@ impl<R: Read, W: Write> IpcTransport<R, W> {
     /// Create a new transport from reader and writer.
     ///
     /// # Preconditions
-    /// - reader: Implements std::io::Read
-    /// - writer: Implements std::io::Write
+    /// - reader: Implements `std::io::Read`
+    /// - writer: Implements `std::io::Write`
     /// - Streams are independent (no shared state)
     ///
     /// # Postconditions
-    /// - Returns IpcTransport with initialized buffers
+    /// - Returns `IpcTransport` with initialized buffers
     /// - Buffers are empty and ready for use
     pub fn new(reader: R, writer: W) -> Self {
         Self {
@@ -56,16 +56,16 @@ impl<R: Read, W: Write> IpcTransport<R, W> {
     /// Send a message over the transport.
     ///
     /// # Preconditions
-    /// - msg: Implements serde::Serialize
+    /// - msg: Implements `serde::Serialize`
     /// - Serialized size ≤ 1MB
     /// - Writer is not in error state
-    /// - No concurrent send() calls
+    /// - No concurrent `send()` calls
     ///
     /// # Postconditions
     /// - Returns Ok(()) if message sent successfully
-    /// - Returns Err(TransportError::SerializationFailed) if bincode fails
-    /// - Returns Err(TransportError::MessageTooLarge) if size > 1MB
-    /// - Returns Err(TransportError::WriteFailed) if stream write fails
+    /// - Returns `Err(TransportError::SerializationFailed)` if bincode fails
+    /// - Returns `Err(TransportError::MessageTooLarge)` if size > 1MB
+    /// - Returns `Err(TransportError::WriteFailed)` if stream write fails
     /// - Length prefix (4 bytes BE) + payload written to stream
     /// - Data flushed to underlying stream
     ///
@@ -107,17 +107,17 @@ impl<R: Read, W: Write> IpcTransport<R, W> {
     /// Receive a message from the transport.
     ///
     /// # Preconditions
-    /// - T: Implements serde::de::DeserializeOwned
+    /// - T: Implements `serde::de::DeserializeOwned`
     /// - Reader is not in error state
-    /// - No concurrent recv() calls
+    /// - No concurrent `recv()` calls
     /// - At least 4 bytes available (for length prefix)
     ///
     /// # Postconditions
     /// - Returns Ok(T) with deserialized message
-    /// - Returns Err(TransportError::UnexpectedEof) if stream ends mid-frame
-    /// - Returns Err(TransportError::InvalidLength) if length > 1MB or = 0
-    /// - Returns Err(TransportError::DeserializationFailed) if bincode fails
-    /// - Returns Err(TransportError::ReadFailed) if stream read fails
+    /// - Returns `Err(TransportError::UnexpectedEof)` if stream ends mid-frame
+    /// - Returns `Err(TransportError::InvalidLength)` if length > 1MB or = 0
+    /// - Returns `Err(TransportError::DeserializationFailed)` if bincode fails
+    /// - Returns `Err(TransportError::ReadFailed)` if stream read fails
     /// - Exact frame consumed from reader (buffer position advanced)
     ///
     /// # Performance
@@ -146,7 +146,7 @@ impl<R: Read, W: Write> IpcTransport<R, W> {
         if payload_length > MAX_PAYLOAD_SIZE {
             return Err(TransportError::invalid_length(
                 payload_length as u32,
-                format!("exceeds maximum of {} bytes", MAX_PAYLOAD_SIZE),
+                format!("exceeds maximum of {MAX_PAYLOAD_SIZE} bytes"),
             ));
         }
 
@@ -366,11 +366,13 @@ impl Write for DuplexWriter {
 
 impl IpcTransport<DuplexReader, DuplexWriter> {
     /// Create a pair of connected transports.
+    #[must_use] 
     pub fn pair() -> (Self, Self) {
         transport_pair()
     }
 
     /// Backwards-compatible alias for `pair`.
+    #[must_use] 
     pub fn transport_pair() -> (Self, Self) {
         transport_pair()
     }

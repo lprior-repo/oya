@@ -50,7 +50,7 @@ pub enum DeliveryStatus {
 impl DeliveryStatus {
     /// Check if the delivery is terminal (won't change).
     #[must_use]
-    pub fn is_terminal(&self) -> bool {
+    pub const fn is_terminal(&self) -> bool {
         matches!(
             self,
             Self::Delivered | Self::Failed { .. } | Self::Expired | Self::Deduplicated
@@ -59,7 +59,7 @@ impl DeliveryStatus {
 
     /// Check if the delivery was successful.
     #[must_use]
-    pub fn is_success(&self) -> bool {
+    pub const fn is_success(&self) -> bool {
         matches!(self, Self::Delivered | Self::Deduplicated)
     }
 }

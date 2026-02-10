@@ -80,17 +80,17 @@ impl PhaseContext {
             prompt.push_str("## Input\n\n");
 
             if let Some(ref text) = self.input.text {
-                prompt.push_str(&format!("{}\n\n", text));
+                prompt.push_str(&format!("{text}\n\n"));
             }
 
             if let Some(ref code) = self.input.code {
-                prompt.push_str(&format!("```\n{}\n```\n\n", code));
+                prompt.push_str(&format!("```\n{code}\n```\n\n"));
             }
 
             if !self.input.files.is_empty() {
                 prompt.push_str("Files to consider:\n");
                 for file in &self.input.files {
-                    prompt.push_str(&format!("- {}\n", file));
+                    prompt.push_str(&format!("- {file}\n"));
                 }
                 prompt.push('\n');
             }
@@ -100,7 +100,7 @@ impl PhaseContext {
         if !self.constraints.is_empty() {
             prompt.push_str("## Constraints\n\n");
             for constraint in &self.constraints {
-                prompt.push_str(&format!("- {}\n", constraint));
+                prompt.push_str(&format!("- {constraint}\n"));
             }
             prompt.push('\n');
         }
@@ -284,6 +284,7 @@ pub struct AIExecutor {
 
 impl AIExecutor {
     /// Create a new AI executor with the given opencode client.
+    #[must_use] 
     pub fn new(opencode: Arc<OpencodeClient>) -> Self {
         Self {
             opencode,
@@ -335,16 +336,16 @@ impl PhaseHandler for AIExecutor {
         let mut output = PhaseOutput::from(result);
         output.phase_name = ctx.phase_name.clone();
 
-        if !output.success {
-            warn!(phase = %ctx.phase_name, "Phase execution failed");
-        } else {
+        if output.success {
             info!(phase = %ctx.phase_name, "Phase execution succeeded");
+        } else {
+            warn!(phase = %ctx.phase_name, "Phase execution failed");
         }
 
         Ok(output)
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "AIExecutor"
     }
 
@@ -362,6 +363,7 @@ pub struct PhaseRegistry {
 
 impl PhaseRegistry {
     /// Create a new empty registry.
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             handlers: Vec::new(),
@@ -374,6 +376,7 @@ impl PhaseRegistry {
     }
 
     /// Find a handler for the given phase.
+    #[must_use] 
     pub fn find_handler(&self, phase_name: &str) -> Option<&Arc<dyn PhaseHandler>> {
         self.handlers.iter().find(|h| h.can_handle(phase_name))
     }

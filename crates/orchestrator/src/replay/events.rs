@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// Each event captures the minimal information needed to reconstruct
 /// the state change during replay.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OrchestratorEvent {
     /// A new workflow was registered with the orchestrator.
@@ -121,7 +121,7 @@ pub enum OrchestratorEvent {
 impl OrchestratorEvent {
     /// Get the event type name.
     #[must_use]
-    pub fn event_type(&self) -> &'static str {
+    pub const fn event_type(&self) -> &'static str {
         match self {
             Self::WorkflowRegistered { .. } => "workflow_registered",
             Self::WorkflowUnregistered { .. } => "workflow_unregistered",

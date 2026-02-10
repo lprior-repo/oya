@@ -195,7 +195,7 @@ impl AgentHandle {
     /// Record a health check failure.
     ///
     /// Returns `true` if agent should be marked unhealthy.
-    pub fn record_health_failure(&mut self) -> bool {
+    pub const fn record_health_failure(&mut self) -> bool {
         self.health_failures = self.health_failures.saturating_add(1);
 
         if self.health_failures >= self.max_health_failures {
@@ -227,7 +227,7 @@ impl AgentHandle {
     }
 
     /// Mark agent as shutting down.
-    pub fn shutdown(&mut self) {
+    pub const fn shutdown(&mut self) {
         self.state = AgentState::ShuttingDown;
     }
 

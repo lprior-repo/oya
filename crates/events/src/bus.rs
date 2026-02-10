@@ -20,7 +20,8 @@ pub struct CircuitBreaker {
 
 impl CircuitBreaker {
     /// Create a new circuit breaker with the given failure threshold.
-    pub fn new(threshold: u32) -> Self {
+    #[must_use] 
+    pub const fn new(threshold: u32) -> Self {
         Self {
             failure_count: AtomicU32::new(0),
             threshold,
@@ -92,6 +93,7 @@ pub enum EventPattern {
 
 impl EventPattern {
     /// Check if an event matches this pattern.
+    #[must_use] 
     pub fn matches(&self, event: &BeadEvent) -> bool {
         match self {
             Self::All => true,
@@ -164,26 +166,23 @@ impl EventBus {
             }
 
             // Attempt to send event to subscriber
-            match sub.sender.send(event.clone()) {
-                Ok(_) => {
-                    // Success - reset failure count
-                    sub.breaker.record_success();
-                    debug!(
-                        event_type = event.event_type(),
-                        bead_id = %event.bead_id(),
-                        "Event delivered to subscriber successfully"
-                    );
-                }
-                Err(broadcast::error::SendError(_)) => {
-                    // Subscriber dropped - treat as failure
-                    sub.breaker.record_failure();
-                    debug!(
-                        event_type = event.event_type(),
-                        bead_id = %event.bead_id(),
-                        subscriber_failures = sub.breaker.failure_count(),
-                        "Failed to deliver event to subscriber"
-                    );
-                }
+            if let Ok(_) = sub.sender.send(event.clone()) {
+                // Success - reset failure count
+                sub.breaker.record_success();
+                debug!(
+                    event_type = event.event_type(),
+                    bead_id = %event.bead_id(),
+                    "Event delivered to subscriber successfully"
+                );
+            } else {
+                // Subscriber dropped - treat as failure
+                sub.breaker.record_failure();
+                debug!(
+                    event_type = event.event_type(),
+                    bead_id = %event.bead_id(),
+                    subscriber_failures = sub.breaker.failure_count(),
+                    "Failed to deliver event to subscriber"
+                );
             }
         }
 
@@ -238,7 +237,7 @@ impl EventBus {
     }
 }
 
-/// Builder for EventBus.
+/// Builder for `EventBus`.
 pub struct EventBusBuilder {
     store: Option<Arc<dyn EventStore>>,
     channel_capacity: usize,
@@ -247,6 +246,7 @@ pub struct EventBusBuilder {
 
 impl EventBusBuilder {
     /// Create a new builder.
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             store: None,
@@ -262,13 +262,15 @@ impl EventBusBuilder {
     }
 
     /// Set the broadcast channel capacity.
-    pub fn with_channel_capacity(mut self, capacity: usize) -> Self {
+    #[must_use] 
+    pub const fn with_channel_capacity(mut self, capacity: usize) -> Self {
         self.channel_capacity = capacity;
         self
     }
 
     /// Set the circuit breaker failure threshold.
-    pub fn with_failure_threshold(mut self, threshold: u32) -> Self {
+    #[must_use] 
+    pub const fn with_failure_threshold(mut self, threshold: u32) -> Self {
         self.failure_threshold = threshold;
         self
     }
@@ -299,7 +301,7 @@ impl Default for EventBusBuilder {
 
 impl EventBus {
     /// Get the circuit breaker failure threshold.
-    pub fn failure_threshold(&self) -> u32 {
+    pub const fn failure_threshold(&self) -> u32 {
         self.failure_threshold
     }
 

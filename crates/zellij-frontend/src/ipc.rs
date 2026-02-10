@@ -135,7 +135,10 @@ impl ZellijIpcClient {
                 return Err("Connection closed".to_string());
             }
 
-            let chunk = String::from_utf8_lossy(&buffer[..bytes_read]);
+            // Use get to avoid indexing_slicing lint - safe because bytes_read <= buffer.len()
+            let chunk = buffer
+                .get(..bytes_read)
+                .map_or_else(String::new, |slice| String::from_utf8_lossy(slice));
             json_string.push_str(&chunk);
 
             // Check if we have a complete JSON object
@@ -156,7 +159,7 @@ mod tests {
 
     #[test]
     fn test_zellij_ipc_client() {
-        let client = ZellijIpcClient::new();
+        let _client = ZellijIpcClient::new();
         assert!(true);
     }
 }

@@ -1,8 +1,8 @@
 //! IPC Worker Actor - Zellij plugin communication bridge.
 //!
 //! This actor manages communication between the Zellij guest plugin (UI)
-//! and the OYA orchestrator (host). It handles GuestMessage commands,
-//! queries the orchestrator state, and broadcasts HostMessage events.
+//! and the OYA orchestrator (host). It handles `GuestMessage` commands,
+//! queries the orchestrator state, and broadcasts `HostMessage` events.
 //!
 //! # Architecture
 //!
@@ -43,14 +43,14 @@ use oya_pipeline::{
 };
 
 use crate::ipc_messages::{
-    AlertLevel, BeadDetail as IpcBeadDetail, BeadSummary, ComponentHealth, GuestMessage,
+    AlertLevel, ComponentHealth, GuestMessage,
     HealthStatus, HostMessage, TaskDetail, TaskSummary, TaskUpdate,
 };
 
 use crate::actors::SchedulerState;
 use crate::actors::errors::ActorError;
 use crate::agent_swarm::{AgentPool, PoolStats};
-use crate::persistence::{BeadRecord, BeadState, OrchestratorStore, StoreConfig};
+use crate::persistence::{BeadState, OrchestratorStore};
 
 /// IPC worker actor definition.
 #[derive(Clone, Default)]
@@ -59,41 +59,45 @@ pub struct IpcWorkerActorDef;
 /// Arguments passed to the IPC worker on startup.
 #[derive(Default, Clone)]
 pub struct IpcWorkerArguments {
-    /// EventBus for subscribing to bead events.
+    /// `EventBus` for subscribing to bead events.
     pub event_bus: Option<Arc<EventBus>>,
-    /// AgentPool for querying agent statistics.
+    /// `AgentPool` for querying agent statistics.
     pub agent_pool: Option<Arc<AgentPool>>,
-    /// Optional SchedulerState for workflow queries.
+    /// Optional `SchedulerState` for workflow queries.
     pub scheduler_state: Option<Arc<SchedulerState>>,
-    /// Optional OrchestratorStore for bead persistence queries.
+    /// Optional `OrchestratorStore` for bead persistence queries.
     pub store: Option<Arc<OrchestratorStore>>,
 }
 
 impl IpcWorkerArguments {
     /// Create new arguments with no integrations.
+    #[must_use] 
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Set the EventBus.
+    /// Set the `EventBus`.
     pub fn with_event_bus(mut self, bus: Arc<EventBus>) -> Self {
         self.event_bus = Some(bus);
         self
     }
 
-    /// Set the AgentPool.
+    /// Set the `AgentPool`.
+    #[must_use] 
     pub fn with_agent_pool(mut self, pool: Arc<AgentPool>) -> Self {
         self.agent_pool = Some(pool);
         self
     }
 
-    /// Set the SchedulerState.
+    /// Set the `SchedulerState`.
+    #[must_use] 
     pub fn with_scheduler_state(mut self, state: Arc<SchedulerState>) -> Self {
         self.scheduler_state = Some(state);
         self
     }
 
-    /// Set the OrchestratorStore.
+    /// Set the `OrchestratorStore`.
+    #[must_use] 
     pub fn with_store(mut self, store: Arc<OrchestratorStore>) -> Self {
         self.store = Some(store);
         self
@@ -105,15 +109,15 @@ impl IpcWorkerArguments {
 pub struct IpcWorkerState {
     /// Event subscription ID (for cleanup).
     _event_subscription_id: Option<String>,
-    /// Broadcast sender for HostMessage events.
+    /// Broadcast sender for `HostMessage` events.
     event_tx: broadcast::Sender<HostMessage>,
-    /// EventBus for subscribing to events.
+    /// `EventBus` for subscribing to events.
     event_bus: Option<Arc<EventBus>>,
-    /// AgentPool for querying agent statistics.
+    /// `AgentPool` for querying agent statistics.
     agent_pool: Option<Arc<AgentPool>>,
-    /// SchedulerState for workflow queries.
+    /// `SchedulerState` for workflow queries.
     scheduler_state: Option<Arc<SchedulerState>>,
-    /// OrchestratorStore for bead persistence queries.
+    /// `OrchestratorStore` for bead persistence queries.
     store: Option<Arc<OrchestratorStore>>,
     /// Whether shutdown has been requested.
     shutdown_requested: bool,
@@ -203,12 +207,12 @@ pub enum IpcBridgeError {
     #[error("Attempt count overflow for bead {bead_id}: {current_count}")]
     AttemptCountOverflow { bead_id: String, current_count: u32 },
 
-    /// EventBus not ready.
+    /// `EventBus` not ready.
     #[error("EventBus not ready: unavailable for {since:?}")]
     EventBusNotReady { since: std::time::Duration },
 }
 
-/// Convert StageKind to string for IPC.
+/// Convert `StageKind` to string for IPC.
 fn stage_kind_to_string(stage: StageKind) -> String {
     match stage {
         StageKind::Research => "research",
@@ -240,7 +244,7 @@ fn truncate_with_indicator(s: &str, max_len: usize) -> String {
     }
 }
 
-/// Convert BeadEvent to HostMessage for stage updates.
+/// Convert `BeadEvent` to `HostMessage` for stage updates.
 pub fn event_to_host_message(event: &BeadEvent) -> Result<HostMessage, IpcBridgeError> {
     match event {
         BeadEvent::StageStarted {
@@ -377,7 +381,7 @@ impl Actor for IpcWorkerActorDef {
 
         // Store EventBus
         if let Some(bus) = args.event_bus {
-            state.event_bus = Some(bus.clone());
+            state.event_bus = Some(bus);
         }
 
         // Store AgentPool
@@ -567,9 +571,9 @@ impl Actor for IpcWorkerActorDef {
     }
 }
 
-/// Functional core for IpcWorker.
+/// Functional core for `IpcWorker`.
 mod core {
-    use super::*;
+    use super::{IpcWorkerState, IpcWorkerMessage, IpcWorkerEffect, GuestMessage, HostMessage, ActorError, PoolStats, HealthStatus, ComponentHealth, Utc};
 
     pub fn handle(
         state: IpcWorkerState,
@@ -618,10 +622,10 @@ mod core {
 
             GuestMessage::GetBeadDetail { bead_id } => {
                 // TODO: Query actual bead details from BeadStore
-                return Err(ActorError::not_found(
-                    format!("bead {}", bead_id),
+                Err(ActorError::not_found(
+                    format!("bead {bead_id}"),
                     "Bead not found",
-                ));
+                ))
             }
 
             GuestMessage::GetWorkflowGraph { workflow_id } => {
@@ -671,7 +675,7 @@ mod core {
         }
     }
 
-    fn get_agent_pool_stats(state: &IpcWorkerState) -> Result<PoolStats, ActorError> {
+    const fn get_agent_pool_stats(state: &IpcWorkerState) -> Result<PoolStats, ActorError> {
         if let Some(_pool) = &state.agent_pool {
             // TODO: Call pool.get_stats() via async
             // For now, return default stats
@@ -713,58 +717,26 @@ mod core {
 
         // Check EventBus health
         let event_bus_health = check_event_bus(state, now);
-        degraded_count += if matches!(event_bus_health.status, HealthStatus::Degraded) {
-            1
-        } else {
-            0
-        };
-        unhealthy_count += if matches!(event_bus_health.status, HealthStatus::Unhealthy) {
-            1
-        } else {
-            0
-        };
+        degraded_count += i32::from(matches!(event_bus_health.status, HealthStatus::Degraded));
+        unhealthy_count += i32::from(matches!(event_bus_health.status, HealthStatus::Unhealthy));
         components.push(event_bus_health);
 
         // Check AgentPool health
         let agent_pool_health = check_agent_pool(state, now);
-        degraded_count += if matches!(agent_pool_health.status, HealthStatus::Degraded) {
-            1
-        } else {
-            0
-        };
-        unhealthy_count += if matches!(agent_pool_health.status, HealthStatus::Unhealthy) {
-            1
-        } else {
-            0
-        };
+        degraded_count += i32::from(matches!(agent_pool_health.status, HealthStatus::Degraded));
+        unhealthy_count += i32::from(matches!(agent_pool_health.status, HealthStatus::Unhealthy));
         components.push(agent_pool_health);
 
         // Check SchedulerState health
         let scheduler_health = check_scheduler_state(state, now);
-        degraded_count += if matches!(scheduler_health.status, HealthStatus::Degraded) {
-            1
-        } else {
-            0
-        };
-        unhealthy_count += if matches!(scheduler_health.status, HealthStatus::Unhealthy) {
-            1
-        } else {
-            0
-        };
+        degraded_count += i32::from(matches!(scheduler_health.status, HealthStatus::Degraded));
+        unhealthy_count += i32::from(matches!(scheduler_health.status, HealthStatus::Unhealthy));
         components.push(scheduler_health);
 
         // Check Persistence health
         let persistence_health = check_persistence(now);
-        degraded_count += if matches!(persistence_health.status, HealthStatus::Degraded) {
-            1
-        } else {
-            0
-        };
-        unhealthy_count += if matches!(persistence_health.status, HealthStatus::Unhealthy) {
-            1
-        } else {
-            0
-        };
+        degraded_count += i32::from(matches!(persistence_health.status, HealthStatus::Degraded));
+        unhealthy_count += i32::from(matches!(persistence_health.status, HealthStatus::Unhealthy));
         components.push(persistence_health);
 
         // Determine overall health status
@@ -821,8 +793,7 @@ mod core {
                     "Empty pool: No agents registered".to_string()
                 } else {
                     format!(
-                        "Operational: {}/{} agents active, {} idle, {} unhealthy",
-                        working, total, idle, unhealthy
+                        "Operational: {working}/{total} agents active, {idle} idle, {unhealthy} unhealthy"
                     )
                 };
 
@@ -857,13 +828,11 @@ mod core {
 
                 let message = if scheduler.shutdown_requested {
                     format!(
-                        "Shutdown in progress: {} workflows, {} pending beads",
-                        workflow_count, pending_beads
+                        "Shutdown in progress: {workflow_count} workflows, {pending_beads} pending beads"
                     )
                 } else {
                     format!(
-                        "Operational: {} workflows, {} pending beads, {} ready beads",
-                        workflow_count, pending_beads, ready_beads
+                        "Operational: {workflow_count} workflows, {pending_beads} pending beads, {ready_beads} ready beads"
                     )
                 };
 
@@ -1044,7 +1013,7 @@ impl IpcWorkerActorDef {
             BeadState::Running => {
                 return Ok(HostMessage::Ack {
                     command: "StartBead".to_string(),
-                    message: format!("Bead {} is already running", bead_id),
+                    message: format!("Bead {bead_id} is already running"),
                 });
             }
             BeadState::Pending | BeadState::Ready | BeadState::Dispatched | BeadState::Assigned => {
@@ -1056,15 +1025,14 @@ impl IpcWorkerActorDef {
             Ok(_) => (),
             Err(e) => {
                 return Err(ActorError::internal(format!(
-                    "Failed to update bead state: {}",
-                    e
+                    "Failed to update bead state: {e}"
                 )));
             }
-        };
+        }
 
         Ok(HostMessage::Ack {
             command: "StartBead".to_string(),
-            message: format!("Bead {} started successfully", bead_id),
+            message: format!("Bead {bead_id} started successfully"),
         })
     }
 
@@ -1103,7 +1071,7 @@ impl IpcWorkerActorDef {
             BeadState::Cancelled => {
                 return Ok(HostMessage::Ack {
                     command: "CancelBead".to_string(),
-                    message: format!("Bead {} is already cancelled", bead_id),
+                    message: format!("Bead {bead_id} is already cancelled"),
                 });
             }
             BeadState::Pending
@@ -1119,22 +1087,21 @@ impl IpcWorkerActorDef {
             Ok(_) => (),
             Err(e) => {
                 return Err(ActorError::internal(format!(
-                    "Failed to update bead state: {}",
-                    e
+                    "Failed to update bead state: {e}"
                 )));
             }
-        };
+        }
 
         Ok(HostMessage::Ack {
             command: "CancelBead".to_string(),
-            message: format!("Bead {} cancelled successfully", bead_id),
+            message: format!("Bead {bead_id} cancelled successfully"),
         })
     }
 
     /// Handle retry bead command.
     ///
     /// Resets a Failed bead to Ready state for re-execution.
-    /// Increments retry_count and clears error information.
+    /// Increments `retry_count` and clears error information.
     pub(crate) async fn handle_retry_bead(
         state: &IpcWorkerState,
         bead_id: &str,
@@ -1168,22 +1135,20 @@ impl IpcWorkerActorDef {
             Ok(_) => (),
             Err(e) => {
                 return Err(ActorError::internal(format!(
-                    "Failed to update bead state: {}",
-                    e
+                    "Failed to update bead state: {e}"
                 )));
             }
-        };
+        }
 
         Ok(HostMessage::Ack {
             command: "RetryBead".to_string(),
             message: format!(
-                "Bead {} reset for retry (attempt {})",
-                bead_id, new_retry_count
+                "Bead {bead_id} reset for retry (attempt {new_retry_count})"
             ),
         })
     }
 
-    /// Forward events from EventBus to broadcast subscribers.
+    /// Forward events from `EventBus` to broadcast subscribers.
     pub async fn event_forwarder(
         mut subscription: EventSubscription,
         event_tx: broadcast::Sender<HostMessage>,
@@ -1227,13 +1192,13 @@ impl IpcWorkerActorDef {
                 bead_id,
                 phase_id,
                 phase_name,
-                timestamp,
+                timestamp: _,
                 ..
             } => Some(HostMessage::PhaseProgress {
                 bead_id: bead_id.to_string(),
                 phase_id: phase_id.to_string(),
                 progress: 100, // Phase completed means 100%
-                current_step: format!("Completed: {}", phase_name),
+                current_step: format!("Completed: {phase_name}"),
             }),
             BeadEvent::Failed {
                 bead_id,
@@ -1242,7 +1207,7 @@ impl IpcWorkerActorDef {
                 ..
             } => Some(HostMessage::SystemAlert {
                 level: AlertLevel::Error,
-                message: format!("Bead failed: {}", error),
+                message: format!("Bead failed: {error}"),
                 component: Some(bead_id.to_string()),
                 timestamp: timestamp.timestamp() as u64,
             }),
@@ -1253,7 +1218,7 @@ impl IpcWorkerActorDef {
                 ..
             } => Some(HostMessage::SystemAlert {
                 level: AlertLevel::Warning,
-                message: format!("Worker unhealthy: {}", reason),
+                message: format!("Worker unhealthy: {reason}"),
                 component: Some(worker_id),
                 timestamp: timestamp.timestamp() as u64,
             }),
@@ -1338,7 +1303,9 @@ async fn run_pipeline_for_slug(
     repo_root: &std::path::Path,
 ) -> Result<TaskUpdate, TaskUpdate> {
     let task = load_task_record(slug, repo_root).await;
-    let update = match task {
+    
+
+    match task {
         Ok(task) => match run_full_pipeline(task) {
             Ok(updated) if dry_run => Ok(TaskUpdate {
                 slug: slug.to_string(),
@@ -1347,7 +1314,7 @@ async fn run_pipeline_for_slug(
             }),
             Ok(updated) => save_task_record(&updated, repo_root)
                 .await
-                .map(|_| TaskUpdate {
+                .map(|()| TaskUpdate {
                     slug: slug.to_string(),
                     status: Some(updated.status.to_string()),
                     message: "Task updated successfully".to_string(),
@@ -1368,9 +1335,7 @@ async fn run_pipeline_for_slug(
             status: None,
             message: err.to_string(),
         }),
-    };
-
-    update
+    }
 }
 
 #[cfg(test)]

@@ -5,7 +5,7 @@
 //!
 //! # Submodules
 //!
-//! - [`surreal_integration`]: SurrealDB connection pooling and retry logic
+//! - [`surreal_integration`]: `SurrealDB` connection pooling and retry logic
 //! - State management actors with persistent storage
 //! - Event store actors with fsync guarantees
 
@@ -25,7 +25,7 @@ pub use oya_events::{
     durable_store::DurableEventStore,
 };
 
-/// State record stored in SurrealDB.
+/// State record stored in `SurrealDB`.
 ///
 /// This represents a single state entry with binary data and optional versioning.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -42,16 +42,16 @@ struct StateRecord {
 #[derive(Clone, Default)]
 pub struct StateManagerActorDef;
 
-/// State management for the StateManagerActor.
+/// State management for the `StateManagerActor`.
 pub struct StateManagerState {
-    /// Active SurrealDB connection.
+    /// Active `SurrealDB` connection.
     db: std::sync::Arc<Surreal<Db>>,
 }
 
 /// Database configuration for state persistence.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct DatabaseConfig {
-    /// Path to the RocksDB storage directory.
+    /// Path to the `RocksDB` storage directory.
     pub storage_path: String,
 
     /// Namespace for the database.
@@ -71,7 +71,7 @@ impl Default for DatabaseConfig {
     }
 }
 
-/// Messages for the StateManagerActor.
+/// Messages for the `StateManagerActor`.
 ///
 /// Design principles:
 /// - Commands are fire-and-forget (use `cast!`)
@@ -83,7 +83,7 @@ pub enum StateManagerMessage {
     // COMMANDS (fire-and-forget via cast!)
     /// Save state to persistent storage.
     ///
-    /// This persists the provided state data to SurrealDB with the given key.
+    /// This persists the provided state data to `SurrealDB` with the given key.
     /// If serialization fails, the error is logged but the actor continues running.
     SaveState {
         /// Unique identifier for this state.
@@ -158,14 +158,14 @@ impl Actor for StateManagerActorDef {
         tokio::fs::create_dir_all(&args.storage_path)
             .await
             .map_err(|e| {
-                ActorProcessingErr::from(format!("Failed to create storage directory: {}", e))
+                ActorProcessingErr::from(format!("Failed to create storage directory: {e}"))
             })?;
 
         // Connect to SurrealDB
         let db = Surreal::new::<RocksDb>(&args.storage_path)
             .await
             .map_err(|e| {
-                ActorProcessingErr::from(format!("Failed to connect to database: {}", e))
+                ActorProcessingErr::from(format!("Failed to connect to database: {e}"))
             })?;
 
         let db = std::sync::Arc::new(db);
@@ -175,7 +175,7 @@ impl Actor for StateManagerActorDef {
             .use_db(&args.database)
             .await
             .map_err(|e| {
-                ActorProcessingErr::from(format!("Failed to initialize namespace/database: {}", e))
+                ActorProcessingErr::from(format!("Failed to initialize namespace/database: {e}"))
             })?;
 
         info!(
@@ -209,7 +209,7 @@ impl Actor for StateManagerActorDef {
                         .content(record)
                         .await
                         .map_err(|e| {
-                            ActorError::internal(format!("Failed to save state: {}", e))
+                            ActorError::internal(format!("Failed to save state: {e}"))
                         })?;
 
                     info!(
@@ -234,7 +234,7 @@ impl Actor for StateManagerActorDef {
                     // Delete the record from the database
                     let _: Option<StateRecord> =
                         state.db.delete(("state", key.clone())).await.map_err(|e| {
-                            ActorError::internal(format!("Failed to delete state: {}", e))
+                            ActorError::internal(format!("Failed to delete state: {e}"))
                         })?;
 
                     info!("Successfully deleted state: key={}", key);
@@ -257,7 +257,7 @@ impl Actor for StateManagerActorDef {
                 let result = async {
                     let record: Option<StateRecord> =
                         state.db.select(("state", key.clone())).await.map_err(|e| {
-                            ActorError::internal(format!("Failed to load state: {}", e))
+                            ActorError::internal(format!("Failed to load state: {e}"))
                         })?;
 
                     match record {
@@ -282,7 +282,7 @@ impl Actor for StateManagerActorDef {
                     // Try to select the record - if it exists, we get Some, otherwise None
                     let record: Option<StateRecord> =
                         state.db.select(("state", key.clone())).await.map_err(|e| {
-                            ActorError::internal(format!("Failed to check state: {}", e))
+                            ActorError::internal(format!("Failed to check state: {e}"))
                         })?;
 
                     let exists = record.is_some();
@@ -299,7 +299,7 @@ impl Actor for StateManagerActorDef {
                 let result = async {
                     let record: Option<StateRecord> =
                         state.db.select(("state", key.clone())).await.map_err(|e| {
-                            ActorError::internal(format!("Failed to get state version: {}", e))
+                            ActorError::internal(format!("Failed to get state version: {e}"))
                         })?;
 
                     match record {
@@ -321,7 +321,7 @@ impl Actor for StateManagerActorDef {
                         // For prefix filtering, fetch all keys and filter in Rust
                         let all_records: Vec<StateRecord> =
                             state.db.select("state").await.map_err(|e| {
-                                ActorError::internal(format!("Failed to list keys: {}", e))
+                                ActorError::internal(format!("Failed to list keys: {e}"))
                             })?;
 
                         all_records
@@ -333,7 +333,7 @@ impl Actor for StateManagerActorDef {
                         // No prefix filter, get all keys
                         let all_records: Vec<StateRecord> =
                             state.db.select("state").await.map_err(|e| {
-                                ActorError::internal(format!("Failed to list keys: {}", e))
+                                ActorError::internal(format!("Failed to list keys: {e}"))
                             })?;
 
                         all_records.into_iter().map(|r| r.key).collect()
@@ -359,25 +359,25 @@ impl GenericSupervisableActor for StateManagerActorDef {
 
 /// Event store actor for durable event persistence.
 ///
-/// This actor manages event storage with fsync guarantees using the DurableEventStore.
+/// This actor manages event storage with fsync guarantees using the `DurableEventStore`.
 #[derive(Clone, Default)]
 pub struct EventStoreActorDef;
 
-/// Event store state for the EventStoreActor.
+/// Event store state for the `EventStoreActor`.
 pub struct EventStoreState {
     /// The durable event store backend.
     store: std::sync::Arc<DurableEventStore>,
 }
 
-/// Messages for the EventStoreActor.
+/// Messages for the `EventStoreActor`.
 ///
-/// This actor manages event persistence using the DurableEventStore.
+/// This actor manages event persistence using the `DurableEventStore`.
 /// All events are serialized using bincode before storage.
 ///
 /// # Design Principles
 /// - All operations use request-response pattern (use `call!`)
 /// - Business errors are returned in RPC replies, NOT as actor crashes
-/// - AppendEvent preserves fsync guarantees (only replies after sync)
+/// - `AppendEvent` preserves fsync guarantees (only replies after sync)
 #[derive(Debug)]
 pub enum EventStoreMessage {
     /// Append a bead event to durable storage with fsync guarantee.
@@ -386,7 +386,7 @@ pub enum EventStoreMessage {
     /// 1. Serialize the event using bincode
     /// 2. Write to WAL (write-ahead log)
     /// 3. Fsync to disk before replying
-    /// 4. Persist to SurrealDB
+    /// 4. Persist to `SurrealDB`
     ///
     /// The reply is only sent after successful fsync, guaranteeing durability.
     AppendEvent {
@@ -423,18 +423,15 @@ impl Actor for EventStoreActorDef {
         _myself: ActorRef<Self::Msg>,
         args: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
-        match args {
-            Some(store) => {
-                info!("EventStoreActor starting with provided store");
-                Ok(EventStoreState { store })
-            }
-            None => {
-                error!("EventStoreActor requires a DurableEventStore instance");
-                Err(ActorProcessingErr::from(
-                    "EventStoreActor requires a DurableEventStore instance. \
-                     Use EventStoreActorDef::spawn() with Some(Arc::new(store)).",
-                ))
-            }
+        if let Some(store) = args {
+            info!("EventStoreActor starting with provided store");
+            Ok(EventStoreState { store })
+        } else {
+            error!("EventStoreActor requires a DurableEventStore instance");
+            Err(ActorProcessingErr::from(
+                "EventStoreActor requires a DurableEventStore instance. \
+                 Use EventStoreActorDef::spawn() with Some(Arc::new(store)).",
+            ))
         }
     }
 
@@ -456,7 +453,7 @@ impl Actor for EventStoreActorDef {
                 // file.sync_all() is called before returning Ok(())
                 let result =
                     state.store.append_event(&event).await.map_err(|e| {
-                        ActorError::internal(format!("Failed to append event: {}", e))
+                        ActorError::internal(format!("Failed to append event: {e}"))
                     });
 
                 match &result {
@@ -487,7 +484,7 @@ impl Actor for EventStoreActorDef {
                     .read_events(&bead_id)
                     .await
                     .map(|events| events.to_vec())
-                    .map_err(|e| ActorError::internal(format!("Failed to read events: {}", e)));
+                    .map_err(|e| ActorError::internal(format!("Failed to read events: {e}")));
 
                 info!(
                     "Read events for bead {}: result={}",
@@ -508,7 +505,7 @@ impl Actor for EventStoreActorDef {
                     .await
                     .map(|events| events.to_vec())
                     .map_err(|e| {
-                        ActorError::internal(format!("Failed to replay from checkpoint: {}", e))
+                        ActorError::internal(format!("Failed to replay from checkpoint: {e}"))
                     });
 
                 info!(

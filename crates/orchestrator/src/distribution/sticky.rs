@@ -72,8 +72,8 @@ impl StickyStrategy {
     /// Create a new sticky strategy with default weights.
     ///
     /// Default weights:
-    /// - sticky_weight: 0.7 (prefer previous worker)
-    /// - load_weight: 0.3 (balance load as secondary factor)
+    /// - `sticky_weight`: 0.7 (prefer previous worker)
+    /// - `load_weight`: 0.3 (balance load as secondary factor)
     #[must_use]
     pub fn new() -> Self {
         Self::default()
@@ -181,8 +181,8 @@ impl StickyStrategy {
         candidates
             .iter()
             .min_by(|a, b| {
-                let load_a = ctx.get_agent(a).map(|agent| agent.load).unwrap_or(1.0);
-                let load_b = ctx.get_agent(b).map(|agent| agent.load).unwrap_or(1.0);
+                let load_a = ctx.get_agent(a).map_or(1.0, |agent| agent.load);
+                let load_b = ctx.get_agent(b).map_or(1.0, |agent| agent.load);
                 load_a
                     .partial_cmp(&load_b)
                     .unwrap_or(std::cmp::Ordering::Equal)
@@ -220,8 +220,8 @@ impl DistributionStrategy for StickyStrategy {
             .iter()
             .max_by_key(|bead_id| {
                 let bead = ctx.get_bead(bead_id);
-                let priority = bead.map(|b| b.priority).unwrap_or(0);
-                let retry = bead.map(|b| b.retry_count).unwrap_or(0);
+                let priority = bead.map_or(0, |b| b.priority);
+                let retry = bead.map_or(0, |b| b.retry_count);
                 (priority, retry)
             })
             .cloned()
@@ -281,8 +281,7 @@ impl DistributionStrategy for StickyStrategy {
         let total = self.sticky_weight + self.load_weight;
         if (total - 1.0).abs() > 0.01 {
             return Err(DistributionError::configuration(format!(
-                "weights should sum to 1.0, got {}",
-                total
+                "weights should sum to 1.0, got {total}"
             )));
         }
 

@@ -84,7 +84,7 @@ pub type MessagePayload = serde_json::Value;
 /// Messages can be:
 /// - **Request**: Expects a response
 /// - **Response**: Reply to a request
-/// - **OneWay**: Fire-and-forget
+/// - **`OneWay`**: Fire-and-forget
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Message {
@@ -194,7 +194,7 @@ impl Message {
 
     /// Get the message ID.
     #[must_use]
-    pub fn id(&self) -> &MessageId {
+    pub const fn id(&self) -> &MessageId {
         match self {
             Self::Request { id, .. } | Self::Response { id, .. } | Self::OneWay { id, .. } => id,
         }
@@ -202,7 +202,7 @@ impl Message {
 
     /// Get the payload.
     #[must_use]
-    pub fn payload(&self) -> &MessagePayload {
+    pub const fn payload(&self) -> &MessagePayload {
         match self {
             Self::Request { payload, .. }
             | Self::Response { payload, .. }
@@ -212,7 +212,7 @@ impl Message {
 
     /// Get the creation timestamp.
     #[must_use]
-    pub fn created_at(&self) -> DateTime<Utc> {
+    pub const fn created_at(&self) -> DateTime<Utc> {
         match self {
             Self::Request { created_at, .. }
             | Self::Response { created_at, .. }
@@ -233,19 +233,19 @@ impl Message {
 
     /// Check if this is a request.
     #[must_use]
-    pub fn is_request(&self) -> bool {
+    pub const fn is_request(&self) -> bool {
         matches!(self, Self::Request { .. })
     }
 
     /// Check if this is a response.
     #[must_use]
-    pub fn is_response(&self) -> bool {
+    pub const fn is_response(&self) -> bool {
         matches!(self, Self::Response { .. })
     }
 
     /// Check if this is a one-way message.
     #[must_use]
-    pub fn is_one_way(&self) -> bool {
+    pub const fn is_one_way(&self) -> bool {
         matches!(self, Self::OneWay { .. })
     }
 }

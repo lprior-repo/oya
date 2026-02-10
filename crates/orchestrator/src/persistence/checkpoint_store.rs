@@ -15,7 +15,7 @@ use super::error::{PersistenceError, PersistenceResult, from_surrealdb_error};
 /// Checkpoints capture the scheduler state at a point in time for recovery.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CheckpointRecord {
-    /// SurrealDB record ID
+    /// `SurrealDB` record ID
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "id")]
     pub record_id: Option<RecordId>,
@@ -161,8 +161,7 @@ impl OrchestratorStore {
     ) -> PersistenceResult<Vec<CheckpointRecord>> {
         let query = match limit {
             Some(n) => format!(
-                "SELECT * FROM checkpoint ORDER BY event_sequence DESC LIMIT {}",
-                n
+                "SELECT * FROM checkpoint ORDER BY event_sequence DESC LIMIT {n}"
             ),
             None => "SELECT * FROM checkpoint ORDER BY event_sequence DESC".to_string(),
         };
@@ -197,7 +196,7 @@ impl OrchestratorStore {
             .map_err(from_surrealdb_error)?;
 
         checkpoints.into_iter().next().ok_or_else(|| {
-            PersistenceError::not_found("checkpoint", format!("sequence:{}", sequence))
+            PersistenceError::not_found("checkpoint", format!("sequence:{sequence}"))
         })
     }
 
