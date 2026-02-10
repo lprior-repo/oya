@@ -10,7 +10,7 @@ use std::fmt;
 ///
 /// Workflows are Directed Acyclic Graphs (DAGs) where tasks are nodes
 /// and dependencies are edges.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Workflow {
     /// Unique identifier for the workflow.
     pub id: Slug,
@@ -20,7 +20,7 @@ pub struct Workflow {
     pub description: String,
     /// Map of task IDs to tasks.
     pub tasks: HashMap<String, Task>,
-    /// Dependencies between tasks (task_id -> set of dependent task_ids).
+    /// Dependencies between tasks (`task_id` -> set of dependent `task_ids`).
     pub dependencies: HashMap<String, HashSet<String>>,
     /// Creation timestamp.
     pub created_at: DateTime<Utc>,
@@ -60,10 +60,10 @@ impl Workflow {
         if self.tasks.contains_key(&task_id) {
             return Err(crate::OyaError::validation(
                 "workflow",
-                format!("task {} already exists", task_id),
+                format!("task {task_id} already exists"),
             ));
         }
-        self.tasks.insert(task_id.clone(), task);
+        self.tasks.insert(task_id, task);
         self.updated_at = Utc::now();
         Ok(())
     }
@@ -98,11 +98,11 @@ impl Workflow {
         if self
             .dependencies
             .get(to)
-            .map_or(false, |deps| deps.contains(from))
+            .is_some_and(|deps| deps.contains(from))
         {
             return Err(crate::OyaError::validation(
                 "workflow",
-                format!("dependency {} -> {} already exists", from, to),
+                format!("dependency {from} -> {to} already exists"),
             ));
         }
 
@@ -139,14 +139,13 @@ impl Workflow {
         let mut rec_stack = HashSet::new();
 
         for task_id in self.tasks.keys() {
-            if !visited.contains(task_id) {
-                if self.dfs_check_cycle(task_id, &mut visited, &mut rec_stack)? {
+            if !visited.contains(task_id)
+                && self.dfs_check_cycle(task_id, &mut visited, &mut rec_stack)? {
                     return Err(crate::OyaError::validation(
                         "workflow",
                         "cycle detected in task dependencies",
                     ));
                 }
-            }
         }
 
         Ok(())
@@ -200,7 +199,7 @@ impl Workflow {
         }
 
         // Check if all dependencies of this task are complete
-        self.dependencies.get(task_id).map_or(true, |deps| {
+        self.dependencies.get(task_id).is_none_or(|deps| {
             deps.iter()
                 .all(|dep_id| self.tasks.get(dep_id).is_some_and(Task::is_complete))
         })

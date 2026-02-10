@@ -12,7 +12,7 @@ pub struct FifoStrategy;
 impl FifoStrategy {
     /// Create a new FIFO strategy.
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self
     }
 }

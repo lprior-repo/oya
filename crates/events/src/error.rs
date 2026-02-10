@@ -6,8 +6,8 @@ use thiserror::Error;
 /// Result type alias for event operations.
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Connection error for SurrealDB setup.
-#[derive(Debug, Error, Clone, PartialEq)]
+/// Connection error for `SurrealDB` setup.
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ConnectionError {
     #[error("invalid connection URL: {0}")]
     InvalidUrl(String),
@@ -191,7 +191,8 @@ impl Error {
     }
 
     /// Create a connection error.
-    pub fn connection(err: ConnectionError) -> Self {
+    #[must_use] 
+    pub const fn connection(err: ConnectionError) -> Self {
         Self::Connection(err)
     }
 }

@@ -44,7 +44,7 @@ impl ObjectLock {
 
     /// Get the object ID.
     #[must_use]
-    pub fn object_id(&self) -> &ObjectId {
+    pub const fn object_id(&self) -> &ObjectId {
         &self.object_id
     }
 
@@ -108,13 +108,13 @@ pub enum ObjectLockGuard {
 impl ObjectLockGuard {
     /// Check if this is a read lock.
     #[must_use]
-    pub fn is_read(&self) -> bool {
+    pub const fn is_read(&self) -> bool {
         matches!(self, Self::Read(_))
     }
 
     /// Check if this is a write lock.
     #[must_use]
-    pub fn is_write(&self) -> bool {
+    pub const fn is_write(&self) -> bool {
         matches!(self, Self::Write(_))
     }
 }

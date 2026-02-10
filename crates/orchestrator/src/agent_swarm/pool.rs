@@ -40,7 +40,7 @@ impl PoolConfig {
 
     /// Create a config for testing.
     #[must_use]
-    pub fn for_testing() -> Self {
+    pub const fn for_testing() -> Self {
         Self {
             max_agents: 10,
             health_config: HealthConfig::for_testing(),
@@ -189,7 +189,7 @@ impl AgentPool {
         let agent_id = agents
             .values()
             .filter(|a| a.is_available())
-            .map(|a| a.id())
+            .map(super::handle::AgentHandle::id)
             .sorted()
             .next()
             .ok_or(AgentSwarmError::NoAgentsAvailable)?
@@ -403,11 +403,12 @@ impl AgentPool {
 
     /// Get the health monitor.
     #[must_use]
-    pub fn health_monitor(&self) -> &HealthMonitor {
+    pub const fn health_monitor(&self) -> &HealthMonitor {
         &self.health_monitor
     }
 
     /// Start background health monitoring.
+    #[must_use] 
     pub fn start_health_monitoring(&self) -> tokio::task::JoinHandle<()> {
         self.health_monitor.start_background_check()
     }
@@ -431,7 +432,7 @@ impl AgentPool {
 
     /// Get the pool configuration.
     #[must_use]
-    pub fn config(&self) -> &PoolConfig {
+    pub const fn config(&self) -> &PoolConfig {
         &self.config
     }
 }

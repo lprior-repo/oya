@@ -1,6 +1,6 @@
-//! Dependency validation tests for add_dependency method
+//! Dependency validation tests for `add_dependency` method
 //!
-//! Tests for comprehensive validation in add_dependency including:
+//! Tests for comprehensive validation in `add_dependency` including:
 //! - Self-loop detection
 //! - Node existence validation
 //! - Duplicate edge detection
@@ -12,7 +12,6 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
-use crate::dag::{DagError, DagResult, DependencyType, WorkflowDAG};
 
 // ============================================================================
 // ADD_DEPENDENCY VALIDATION TESTS

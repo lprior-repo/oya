@@ -1,8 +1,8 @@
-//! SchedulerActor - Actor-based scheduler for workflow DAG management.
+//! `SchedulerActor` - Actor-based scheduler for workflow DAG management.
 //!
 //! This module implements the ractor Actor trait for the scheduler,
-//! integrating with the EventBus for event-driven coordination and
-//! the ShutdownCoordinator for graceful shutdown.
+//! integrating with the `EventBus` for event-driven coordination and
+//! the `ShutdownCoordinator` for graceful shutdown.
 
 use std::sync::Arc;
 
@@ -36,11 +36,11 @@ impl GenericSupervisableActor for SchedulerActorDef {
 /// Arguments passed to the actor on startup.
 #[derive(Default, Clone)]
 pub struct SchedulerArguments {
-    /// Optional EventBus for subscribing to bead events.
+    /// Optional `EventBus` for subscribing to bead events.
     pub event_bus: Option<Arc<EventBus>>,
-    /// Optional ShutdownCoordinator for graceful shutdown.
+    /// Optional `ShutdownCoordinator` for graceful shutdown.
     pub shutdown_coordinator: Option<Arc<ShutdownCoordinator>>,
-    /// Optional ReplayEngine for event sourcing and recovery.
+    /// Optional `ReplayEngine` for event sourcing and recovery.
     pub replay_engine: Option<Arc<ReplayEngine>>,
 }
 
@@ -52,23 +52,26 @@ impl std::fmt::Debug for SchedulerArguments {
 
 impl SchedulerArguments {
     /// Create new arguments with no integrations.
+    #[must_use] 
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Set the EventBus.
+    /// Set the `EventBus`.
     pub fn with_event_bus(mut self, bus: Arc<EventBus>) -> Self {
         self.event_bus = Some(bus);
         self
     }
 
-    /// Set the ShutdownCoordinator.
+    /// Set the `ShutdownCoordinator`.
+    #[must_use] 
     pub fn with_shutdown_coordinator(mut self, coordinator: Arc<ShutdownCoordinator>) -> Self {
         self.shutdown_coordinator = Some(coordinator);
         self
     }
 
-    /// Set the ReplayEngine.
+    /// Set the `ReplayEngine`.
+    #[must_use] 
     pub fn with_replay_engine(mut self, engine: Arc<ReplayEngine>) -> Self {
         self.replay_engine = Some(engine);
         self
@@ -84,7 +87,7 @@ pub struct CoreSchedulerState {
     pub pending_beads: HashMap<BeadId, ScheduledBead>,
     /// Ready beads that can be dispatched.
     pub ready_beads: Vector<BeadId>,
-    /// Worker assignments (bead_id -> worker_id).
+    /// Worker assignments (`bead_id` -> `worker_id`).
     pub worker_assignments: HashMap<BeadId, String>,
 }
 
@@ -100,7 +103,7 @@ pub struct SchedulerState {
     pub _shutdown_rx: Option<broadcast::Receiver<ShutdownSignal>>,
     /// Checkpoint result sender.
     pub checkpoint_tx: Option<mpsc::Sender<CheckpointResult>>,
-    /// ReplayEngine for event sourcing and recovery.
+    /// `ReplayEngine` for event sourcing and recovery.
     pub replay_engine: Option<Arc<ReplayEngine>>,
     /// Whether shutdown has been requested.
     pub shutdown_requested: bool,
@@ -120,7 +123,7 @@ impl SchedulerState {
     }
 }
 
-/// Effects produced by the functional core of the SchedulerActor.
+/// Effects produced by the functional core of the `SchedulerActor`.
 pub enum SchedulerEffect {
     /// Reply to an RPC caller.
     ReplyReadyBeads {
@@ -249,7 +252,7 @@ impl Actor for SchedulerActorDef {
 }
 
 impl SchedulerActorDef {
-    /// Forward events from EventBus to the actor.
+    /// Forward events from `EventBus` to the actor.
     async fn event_forwarder(
         mut subscription: EventSubscription,
         actor_ref: ActorRef<SchedulerMessage>,
@@ -291,7 +294,7 @@ impl SchedulerActorDef {
         Ok(())
     }
 
-    fn convert_bead_state(state: &oya_events::BeadState) -> MsgBeadState {
+    const fn convert_bead_state(state: &oya_events::BeadState) -> MsgBeadState {
         match state {
             oya_events::BeadState::Pending => MsgBeadState::Pending,
             oya_events::BeadState::Ready => MsgBeadState::Ready,
@@ -302,9 +305,9 @@ impl SchedulerActorDef {
     }
 }
 
-/// Functional core for SchedulerActor.
+/// Functional core for `SchedulerActor`.
 mod core {
-    use super::*;
+    use super::{CoreSchedulerState, SchedulerMessage, SchedulerEffect, WorkflowState, ScheduledBead, MsgBeadState, ActorError, WorkflowStatus, WorkflowId, BeadId, SchedulerStats};
 
     pub fn handle(
         state: CoreSchedulerState,
@@ -461,7 +464,7 @@ mod core {
         let ready_count = state
             .workflows
             .values()
-            .flat_map(|ws| ws.get_ready_beads())
+            .flat_map(crate::scheduler::WorkflowState::get_ready_beads)
             .filter(|bead_id| !state.worker_assignments.contains_key(bead_id))
             .count();
 

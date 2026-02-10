@@ -20,7 +20,7 @@ use crate::shutdown::{ShutdownCoordinator, ShutdownSignal};
 use super::super::errors::ActorError;
 use super::strategy::{OneForOne, RestartContext, RestartDecision, RestartStrategy};
 
-/// Trait for actors that can be supervised by the GenericSupervisor.
+/// Trait for actors that can be supervised by the `GenericSupervisor`.
 pub trait GenericSupervisableActor: Actor + Clone
 where
     Self::Arguments: Clone + Send + Sync,
@@ -74,7 +74,7 @@ impl Default for SupervisorConfig {
 impl SupervisorConfig {
     /// Create a config for testing with shorter timeouts.
     #[must_use]
-    pub fn for_testing() -> Self {
+    pub const fn for_testing() -> Self {
         Self {
             max_restarts: 3,
             restart_window_secs: 5,
@@ -224,7 +224,7 @@ where
     A::Msg: Send,
 {
     /// Create a new supervisor definition for a specific actor type.
-    pub fn new(child_def: A) -> Self {
+    pub const fn new(child_def: A) -> Self {
         Self {
             _actor: std::marker::PhantomData,
             child_def,
@@ -298,7 +298,7 @@ impl SupervisorArguments {
 
     /// Set the configuration.
     #[must_use]
-    pub fn with_config(mut self, config: SupervisorConfig) -> Self {
+    pub const fn with_config(mut self, config: SupervisorConfig) -> Self {
         self.config = config;
         self
     }
@@ -353,7 +353,7 @@ where
             state._shutdown_rx = Some(shutdown_rx);
 
             // Spawn shutdown listener
-            let myself_clone = myself.clone();
+            let myself_clone = myself;
             let mut rx = coordinator.subscribe();
             tokio::spawn(async move {
                 if rx.recv().await.is_ok() {
@@ -456,7 +456,7 @@ where
     fn next_child_name(child_id_counter: &mut u64, prefix: &str) -> String {
         let id = *child_id_counter;
         *child_id_counter = child_id_counter.saturating_add(1);
-        format!("{}-{}", prefix, id)
+        format!("{prefix}-{id}")
     }
 
     /// Handle a child exit event.
@@ -539,7 +539,7 @@ where
             // Clone what we need for the async block
             let child_name = name.to_string();
             let child_args = child.args.clone();
-            let myself_clone = myself.clone();
+            let myself_clone = myself;
 
             // Schedule restart after backoff
             tokio::spawn(async move {
@@ -583,8 +583,7 @@ where
                     | ractor::ActorStatus::Upgrading
             ) {
                 return Err(ActorError::SpawnFailed(format!(
-                    "Child '{}' already exists and is running",
-                    name
+                    "Child '{name}' already exists and is running"
                 )));
             }
         }
@@ -600,8 +599,7 @@ where
         .await
         .map_err(|e| {
             ActorError::SpawnFailed(format!(
-                "Failed to spawn '{}' (actor: {}): {}",
-                name, actor_name, e
+                "Failed to spawn '{name}' (actor: {actor_name}): {e}"
             ))
         })?;
 
@@ -619,8 +617,7 @@ where
         let restart_count = state
             .children
             .get(&name)
-            .map(|c| c.restart_count)
-            .unwrap_or(0);
+            .map_or(0, |c| c.restart_count);
 
         state.children.insert(
             name.clone(),
@@ -639,7 +636,7 @@ where
     /// Stop a specific child.
     ///
     /// Note: This simulates a crash for chaos testing. The child remains in
-    /// state and will be restarted when the ChildExited message is processed.
+    /// state and will be restarted when the `ChildExited` message is processed.
     fn stop_child(&self, state: &mut SupervisorActorState<A>, name: &str) {
         if let Some(child) = state.children.get(name) {
             debug!(child = %name, "Stopping child (will be restarted by supervision)");

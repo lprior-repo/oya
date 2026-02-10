@@ -1,4 +1,4 @@
-//! UniverseSupervisor - Root of the 3-tier supervision hierarchy.
+//! `UniverseSupervisor` - Root of the 3-tier supervision hierarchy.
 
 use ractor::{Actor, ActorProcessingErr, ActorRef};
 use std::sync::Arc;
@@ -64,7 +64,7 @@ impl Actor for UniverseSupervisorDef {
             UniverseMessage::Shutdown => {
                 info!("UniverseSupervisor shutting down");
                 // Gracefully handle shutdown errors - log but don't fail
-                let _ = state.tier1.stop_all("Universe shutdown").await;
+                let () = state.tier1.stop_all("Universe shutdown").await;
                 myself.stop(None);
             }
         }

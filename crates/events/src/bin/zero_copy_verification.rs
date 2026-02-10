@@ -17,7 +17,7 @@ async fn main() {
         match store.append(event).await {
             Ok(_) => (),
             Err(e) => {
-                eprintln!("Failed to append event: {}", e);
+                eprintln!("Failed to append event: {e}");
                 std::process::exit(1);
             }
         };
@@ -27,14 +27,14 @@ async fn main() {
     let first_read = match store.read_for_bead(bead_id).await {
         Ok(events) => events,
         Err(e) => {
-            eprintln!("Failed to read events for bead: {}", e);
+            eprintln!("Failed to read events for bead: {e}");
             std::process::exit(1);
         }
     };
     let second_read = match store.read_for_bead(bead_id).await {
         Ok(events) => events,
         Err(e) => {
-            eprintln!("Failed to read events for bead: {}", e);
+            eprintln!("Failed to read events for bead: {e}");
             std::process::exit(1);
         }
     };
@@ -42,12 +42,12 @@ async fn main() {
     println!(
         "First read: {} events, ptr: {:?}",
         first_read.len(),
-        Arc::as_ptr(&first_read) as *const ()
+        Arc::as_ptr(&first_read).cast::<()>()
     );
     println!(
         "Second read: {} events, ptr: {:?}",
         second_read.len(),
-        Arc::as_ptr(&second_read) as *const ()
+        Arc::as_ptr(&second_read).cast::<()>()
     );
 
     // Clone the Arc - this should be O(1) and very fast
@@ -55,13 +55,13 @@ async fn main() {
     println!(
         "Cloned first read: {} events, ptr: {:?}",
         cloned_first.len(),
-        Arc::as_ptr(&cloned_first) as *const ()
+        Arc::as_ptr(&cloned_first).cast::<()>()
     );
 
     // Verify they point to the same data
-    let first_ptr = Arc::as_ptr(&first_read) as *const ();
-    let second_ptr = Arc::as_ptr(&second_read) as *const ();
-    let cloned_ptr = Arc::as_ptr(&cloned_first) as *const ();
+    let first_ptr = Arc::as_ptr(&first_read).cast::<()>();
+    let second_ptr = Arc::as_ptr(&second_read).cast::<()>();
+    let cloned_ptr = Arc::as_ptr(&cloned_first).cast::<()>();
 
     println!("\nPointer comparison:");
     println!("  First read == Second read: {}", first_ptr == second_ptr);
@@ -73,7 +73,7 @@ async fn main() {
         let _clone = Arc::clone(&first_read);
     }
     let clone_time = start.elapsed();
-    println!("\n10,000 Arc clones took: {:?}", clone_time);
+    println!("\n10,000 Arc clones took: {clone_time:?}");
     println!("Average clone time: {:?}", clone_time / 10000);
 
     // Test that we can modify the clone without affecting the original (Arc semantics)
@@ -85,7 +85,7 @@ async fn main() {
         "\nOriginal Arc length after modifying vector: {}",
         first_read.len()
     );
-    println!("Vector length after clearing: {}", original_count);
+    println!("Vector length after clearing: {original_count}");
     println!(
         "Arc sharing maintains reference semantics: {}",
         first_read.len() == 100

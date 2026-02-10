@@ -1,4 +1,4 @@
-//! WorkflowActor - Manages a single workflow DAG.
+//! `WorkflowActor` - Manages a single workflow DAG.
 
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort};
 use tracing::info;
@@ -26,7 +26,7 @@ pub enum WorkflowMessage {
     Rehydrate { events: Vec<oya_events::BeadEvent> },
 }
 
-/// Effects produced by the functional core of the WorkflowActor.
+/// Effects produced by the functional core of the `WorkflowActor`.
 pub enum WorkflowEffect {
     /// Send a reply to an RPC caller.
     ReplyReadyBeads {
@@ -79,9 +79,9 @@ impl GenericSupervisableActor for WorkflowActorDef {
     }
 }
 
-/// Functional core for WorkflowActor.
+/// Functional core for `WorkflowActor`.
 mod core {
-    use super::*;
+    use super::{WorkflowState, WorkflowMessage, WorkflowEffect};
 
     /// Pure function to handle messages and return next state + effects.
     pub fn handle(

@@ -3,7 +3,7 @@
 use crate::Result;
 
 /// Result of a conflict detection operation.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConflictDetection {
     /// Whether conflicts were detected
     pub has_conflicts: bool,
@@ -12,7 +12,7 @@ pub struct ConflictDetection {
 }
 
 /// Result of a rebase operation.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RebaseResult {
     /// Whether the rebase succeeded
     pub success: bool,
@@ -23,7 +23,7 @@ pub struct RebaseResult {
 }
 
 /// Detect merge conflicts between two branches.
-pub fn detect(_target_branch: &str, _source_branch: &str) -> Result<ConflictDetection> {
+pub const fn detect(_target_branch: &str, _source_branch: &str) -> Result<ConflictDetection> {
     Ok(ConflictDetection {
         has_conflicts: false,
         conflicting_files: Vec::new(),
@@ -31,7 +31,7 @@ pub fn detect(_target_branch: &str, _source_branch: &str) -> Result<ConflictDete
 }
 
 /// Attempt to rebase a branch onto a target.
-pub fn attempt_rebase(_source_branch: &str, _target_branch: &str) -> Result<RebaseResult> {
+pub const fn attempt_rebase(_source_branch: &str, _target_branch: &str) -> Result<RebaseResult> {
     Ok(RebaseResult {
         success: true,
         has_conflicts: false,

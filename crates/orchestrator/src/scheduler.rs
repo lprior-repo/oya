@@ -25,7 +25,7 @@ pub use crate::dag::BeadId;
 /// Unique identifier for a workflow
 pub type WorkflowId = String;
 
-/// Wrapper around WorkflowDAG that tracks workflow metadata
+/// Wrapper around `WorkflowDAG` that tracks workflow metadata
 #[derive(Debug, Clone)]
 pub struct WorkflowState {
     /// The workflow ID this state belongs to
@@ -49,18 +49,18 @@ impl WorkflowState {
 
     /// Get the workflow ID
     #[must_use]
-    pub fn workflow_id(&self) -> &WorkflowId {
+    pub const fn workflow_id(&self) -> &WorkflowId {
         &self.workflow_id
     }
 
     /// Get the underlying DAG
     #[must_use]
-    pub fn dag(&self) -> &WorkflowDAG {
+    pub const fn dag(&self) -> &WorkflowDAG {
         &self.dag
     }
 
     /// Get a mutable reference to the DAG
-    pub fn dag_mut(&mut self) -> &mut WorkflowDAG {
+    pub const fn dag_mut(&mut self) -> &mut WorkflowDAG {
         &mut self.dag
     }
 
@@ -181,7 +181,7 @@ impl WorkflowState {
     }
 }
 
-/// Convert DagError to the crate Error type
+/// Convert `DagError` to the crate Error type
 fn dag_error_to_error(e: DagError) -> Error {
     Error::invalid_record(e.to_string())
 }
@@ -191,14 +191,14 @@ fn dag_error_to_error(e: DagError) -> Error {
 pub struct QueueActorRef {
     /// Queue identifier
     pub queue_id: String,
-    /// Queue type (FIFO, LIFO, RoundRobin, Priority)
+    /// Queue type (FIFO, LIFO, `RoundRobin`, Priority)
     pub queue_type: QueueType,
 }
 
 impl QueueActorRef {
     /// Create a new queue actor reference
     #[must_use]
-    pub fn new(queue_id: String, queue_type: QueueType) -> Self {
+    pub const fn new(queue_id: String, queue_type: QueueType) -> Self {
         Self {
             queue_id,
             queue_type,
@@ -231,7 +231,7 @@ pub struct EventSubscription {
 impl EventSubscription {
     /// Create a new event subscription
     #[must_use]
-    pub fn new(subscription_id: String, event_types: Vec<String>) -> Self {
+    pub const fn new(subscription_id: String, event_types: Vec<String>) -> Self {
         Self {
             subscription_id,
             event_types,
@@ -309,7 +309,7 @@ pub struct ScheduledBead {
 impl ScheduledBead {
     /// Create a new scheduled bead in pending state
     #[must_use]
-    pub fn new(bead_id: BeadId, workflow_id: WorkflowId) -> Self {
+    pub const fn new(bead_id: BeadId, workflow_id: WorkflowId) -> Self {
         Self {
             bead_id,
             workflow_id,
@@ -319,7 +319,7 @@ impl ScheduledBead {
     }
 
     /// Update the state of this bead
-    pub fn set_state(&mut self, state: BeadScheduleState) {
+    pub const fn set_state(&mut self, state: BeadScheduleState) {
         self.state = state;
     }
 
@@ -335,13 +335,13 @@ use im::Vector;
 /// Scheduler actor for managing workflow DAGs and bead scheduling.
 ///
 /// Maintains the following invariants:
-/// - One WorkflowState per workflow_id
+/// - One `WorkflowState` per `workflow_id`
 /// - Each bead is tracked in exactly one workflow
 /// - Event subscriptions are active while actor is running
 #[derive(Debug, Clone)]
 pub struct SchedulerActor {
     /// Map of workflow IDs to their state (DAG + completed tracking)
-    /// Invariant: One WorkflowState per workflow_id
+    /// Invariant: One `WorkflowState` per `workflow_id`
     workflows: HashMap<WorkflowId, WorkflowState>,
 
     /// Pending beads waiting to be scheduled
@@ -350,7 +350,7 @@ pub struct SchedulerActor {
     /// Ready beads that can be dispatched to queues
     ready_beads: Vector<BeadId>,
 
-    /// Worker assignments (bead_id -> worker_id)
+    /// Worker assignments (`bead_id` -> `worker_id`)
     worker_assignments: HashMap<BeadId, String>,
 
     /// References to queue actors for dispatching
@@ -387,8 +387,7 @@ impl SchedulerActor {
     pub fn register_workflow(&mut self, workflow_id: WorkflowId) -> Result<()> {
         if self.workflows.contains_key(&workflow_id) {
             return Err(Error::invalid_record(format!(
-                "workflow {} already registered",
-                workflow_id
+                "workflow {workflow_id} already registered"
             )));
         }
 
@@ -437,7 +436,7 @@ impl SchedulerActor {
         let workflow_state = self
             .workflows
             .get_mut(&workflow_id)
-            .ok_or_else(|| Error::invalid_record(format!("workflow {} not found", workflow_id)))?;
+            .ok_or_else(|| Error::invalid_record(format!("workflow {workflow_id} not found")))?;
 
         // Add bead to workflow DAG
         workflow_state.add_bead(bead_id.clone())?;
@@ -469,7 +468,7 @@ impl SchedulerActor {
         let workflow_state = self
             .workflows
             .get_mut(workflow_id)
-            .ok_or_else(|| Error::invalid_record(format!("workflow {} not found", workflow_id)))?;
+            .ok_or_else(|| Error::invalid_record(format!("workflow {workflow_id} not found")))?;
 
         workflow_state.add_dependency(from_bead, to_bead, DependencyType::BlockingDependency)
     }
@@ -488,7 +487,7 @@ impl SchedulerActor {
         let workflow_state = self
             .workflows
             .get(workflow_id)
-            .ok_or_else(|| Error::invalid_record(format!("workflow {} not found", workflow_id)))?;
+            .ok_or_else(|| Error::invalid_record(format!("workflow {workflow_id} not found")))?;
 
         Ok(workflow_state.get_ready_beads())
     }
@@ -507,7 +506,7 @@ impl SchedulerActor {
         let bead = self
             .pending_beads
             .get_mut(bead_id)
-            .ok_or_else(|| Error::invalid_record(format!("bead {} not found", bead_id)))?;
+            .ok_or_else(|| Error::invalid_record(format!("bead {bead_id} not found")))?;
 
         bead.set_state(BeadScheduleState::Ready);
 
@@ -534,7 +533,7 @@ impl SchedulerActor {
     /// - Updating the workflow DAG's completed set fails (cycle detection, etc.)
     /// - Internal state consistency checks fail
     ///
-    /// This method is called when a BeadCompleted event is received from the event bus.
+    /// This method is called when a `BeadCompleted` event is received from the event bus.
     /// It updates both the bead's schedule state AND the workflow DAG's completed set.
     pub fn handle_bead_completed(&mut self, bead_id: &BeadId) -> Result<()> {
         // Update bead state
@@ -574,7 +573,7 @@ impl SchedulerActor {
     /// Marks the bead as assigned and records the worker assignment
     pub fn assign_to_worker(&mut self, bead_id: &BeadId, worker_id: String) -> Result<()> {
         if !self.pending_beads.contains_key(bead_id) {
-            return Err(Error::invalid_record(format!("bead {} not found", bead_id)));
+            return Err(Error::invalid_record(format!("bead {bead_id} not found")));
         }
 
         self.worker_assignments.insert(bead_id.clone(), worker_id);

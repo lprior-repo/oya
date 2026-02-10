@@ -47,7 +47,7 @@ pub enum VisualizationError {
     #[error("Render failed: {cause}")]
     RenderFailed { cause: String },
 
-    /// EventBus disconnected.
+    /// `EventBus` disconnected.
     #[error("EventBus disconnected")]
     EventBusDisconnected,
 
@@ -95,14 +95,14 @@ impl Color {
 
     /// Get color for task status.
     #[must_use]
-    pub fn for_status(status: &TaskExecutionStatus) -> Color {
+    pub const fn for_status(status: &TaskExecutionStatus) -> Self {
         match status {
-            TaskExecutionStatus::Pending => Color::Yellow,
-            TaskExecutionStatus::InProgress => Color::Blue,
-            TaskExecutionStatus::Completed => Color::Green,
-            TaskExecutionStatus::Failed { .. } => Color::Red,
-            TaskExecutionStatus::RolledBack => Color::Gray,
-            TaskExecutionStatus::Cancelled => Color::Gray,
+            TaskExecutionStatus::Pending => Self::Yellow,
+            TaskExecutionStatus::InProgress => Self::Blue,
+            TaskExecutionStatus::Completed => Self::Green,
+            TaskExecutionStatus::Failed { .. } => Self::Red,
+            TaskExecutionStatus::RolledBack => Self::Gray,
+            TaskExecutionStatus::Cancelled => Self::Gray,
         }
     }
 }
@@ -173,7 +173,7 @@ pub struct WorkflowVisualization {
 impl WorkflowVisualization {
     /// Create a new visualization renderer.
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             min_width: 80,
             min_height: 24,
@@ -183,19 +183,22 @@ impl WorkflowVisualization {
     }
 
     /// Set minimum terminal dimensions.
-    pub fn with_min_dimensions(mut self, width: usize, height: usize) -> Self {
+    #[must_use] 
+    pub const fn with_min_dimensions(mut self, width: usize, height: usize) -> Self {
         self.min_width = width;
         self.min_height = height;
         self
     }
 
     /// Disable color output.
-    pub fn without_color(mut self) -> Self {
+    #[must_use] 
+    pub const fn without_color(mut self) -> Self {
         self.enable_color = false;
         self
     }
 
     /// Set the focused task for navigation.
+    #[must_use] 
     pub fn with_focus(mut self, task_id: Option<String>) -> Self {
         self.focused_task = task_id;
         self
@@ -292,7 +295,7 @@ impl WorkflowVisualization {
         lines.push(self.format_line("* Critical path task".to_string(), Color::Bold));
 
         let height = lines.len();
-        let width = lines.iter().map(|l| l.len()).max().unwrap_or(0);
+        let width = lines.iter().map(std::string::String::len).max().unwrap_or(0);
 
         Ok(RenderedGraph {
             lines,
@@ -308,12 +311,11 @@ impl WorkflowVisualization {
         let mut path: Vec<String> = Vec::new();
 
         for task_id in workflow.tasks.keys() {
-            if !visited.contains(task_id) {
-                if self.dfs_cycle_detect(workflow, task_id, &mut visited, &mut rec_stack, &mut path)
+            if !visited.contains(task_id)
+                && self.dfs_cycle_detect(workflow, task_id, &mut visited, &mut rec_stack, &mut path)
                 {
                     return path;
                 }
-            }
         }
 
         vec![]
@@ -375,7 +377,7 @@ impl WorkflowVisualization {
                 workflow
                     .dependencies
                     .get(*id)
-                    .map_or(true, |deps| deps.is_empty())
+                    .is_none_or(std::collections::HashSet::is_empty)
             })
             .cloned()
             .collect();
@@ -442,7 +444,7 @@ impl WorkflowVisualization {
                 .keys()
                 .filter(|id| {
                     !assigned.contains(id.as_str())
-                        && workflow.dependencies.get(id.as_str()).map_or(true, |deps| {
+                        && workflow.dependencies.get(id.as_str()).is_none_or(|deps| {
                             deps.iter().all(|dep| assigned.contains(dep.as_str()))
                         })
                 })
@@ -494,12 +496,12 @@ impl WorkflowVisualization {
 
             // Build task display
             let is_critical = critical_path.contains(task_id);
-            let is_focused = self.focused_task.as_ref().map_or(false, |f| f == task_id);
+            let is_focused = self.focused_task.as_ref() == Some(task_id);
 
             let task_box = self.render_task_box(task, status, is_critical, is_focused);
 
             // Add level indicator
-            lines.push(format!("Level {}:", level_idx));
+            lines.push(format!("Level {level_idx}:"));
             lines.extend(task_box);
             lines.push(String::new());
         }
@@ -546,7 +548,7 @@ impl WorkflowVisualization {
     }
 
     /// Get symbol for task status.
-    fn symbol_for_status(&self, status: &TaskExecutionStatus) -> char {
+    const fn symbol_for_status(&self, status: &TaskExecutionStatus) -> char {
         match status {
             TaskExecutionStatus::Pending => '○',
             TaskExecutionStatus::InProgress => '◐',
@@ -571,7 +573,7 @@ impl WorkflowVisualization {
     /// # Note
     /// This function documents the stateless rendering approach.
     /// The visualization renderer is stateless and does not maintain internal state.
-    /// To update task status, modify the WorkflowState and call render_dag again.
+    /// To update task status, modify the `WorkflowState` and call `render_dag` again.
     ///
     /// # Example
     /// ```ignore
@@ -582,7 +584,7 @@ impl WorkflowVisualization {
     ///
     /// # Errors
     /// This function currently always returns Ok(()) as the renderer is stateless.
-    pub fn update_task_status(
+    pub const fn update_task_status(
         &mut self,
         _task_id: &str,
         _status: &TaskExecutionStatus,

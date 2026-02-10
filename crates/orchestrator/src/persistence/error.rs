@@ -96,7 +96,8 @@ impl PersistenceError {
     }
 
     /// Create a timeout error.
-    pub fn timeout(duration_ms: u64) -> Self {
+    #[must_use] 
+    pub const fn timeout(duration_ms: u64) -> Self {
         Self::Timeout { duration_ms }
     }
 
@@ -130,7 +131,7 @@ impl PersistenceError {
 /// Result type for persistence operations.
 pub type PersistenceResult<T> = Result<T, PersistenceError>;
 
-/// Helper to convert SurrealDB errors to PersistenceError.
+/// Helper to convert `SurrealDB` errors to `PersistenceError`.
 pub fn from_surrealdb_error(err: impl fmt::Display) -> PersistenceError {
     let msg = err.to_string();
     let msg_lower = msg.to_lowercase();
@@ -158,7 +159,7 @@ pub fn from_surrealdb_error(err: impl fmt::Display) -> PersistenceError {
 
 impl From<serde_json::Error> for PersistenceError {
     fn from(err: serde_json::Error) -> Self {
-        PersistenceError::serialization_error(err.to_string())
+        Self::serialization_error(err.to_string())
     }
 }
 

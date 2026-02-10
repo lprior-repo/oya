@@ -12,7 +12,7 @@ use crate::actors::supervisor::{
 };
 use crate::actors::workflow::WorkflowActorDef;
 
-/// Tier-1 supervisor kinds managed by the UniverseSupervisor.
+/// Tier-1 supervisor kinds managed by the `UniverseSupervisor`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tier1SupervisorKind {
     Storage,

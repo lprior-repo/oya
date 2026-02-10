@@ -68,7 +68,7 @@ pub trait ResultExt<T>: Sized {
     where
         F: FnOnce(T) -> Result<U>;
 
-    /// Async version of and_then for chaining async fallible operations.
+    /// Async version of `and_then` for chaining async fallible operations.
     ///
     /// # Examples
     ///
@@ -240,16 +240,16 @@ impl<T: std::fmt::Debug + Send> ResultExt<T> for Result<T> {
         }
     }
 
-    fn or(self, other: Result<T>) -> Result<T> {
+    fn or(self, other: Self) -> Self {
         match self {
             Ok(v) => Ok(v),
             Err(_) => other,
         }
     }
 
-    fn or_else<F>(self, f: F) -> Result<T>
+    fn or_else<F>(self, f: F) -> Self
     where
-        F: FnOnce(Error) -> Result<T>,
+        F: FnOnce(Error) -> Self,
     {
         match self {
             Ok(v) => Ok(v),
@@ -268,7 +268,7 @@ impl<T: std::fmt::Debug + Send> ResultExt<T> for Result<T> {
     }
 }
 
-/// Generic extension trait for any Result type (not just oya_core::Result).
+/// Generic extension trait for any Result type (not just `oya_core::Result`).
 ///
 /// Provides tap-style combinators for side effects and transformations.
 pub trait GenericResultExt<T, E> {
@@ -317,7 +317,7 @@ impl<T, E> GenericResultExt<T, E> for std::result::Result<T, E> {
     fn and_then_do<F: FnOnce(&T) -> std::result::Result<(), E>>(
         self,
         f: F,
-    ) -> std::result::Result<T, E> {
+    ) -> Self {
         self.and_then(|v| f(&v).map(|()| v))
     }
 

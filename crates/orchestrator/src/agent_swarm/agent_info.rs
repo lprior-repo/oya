@@ -32,12 +32,14 @@ impl AgentState {
     }
 
     /// Checks if the agent state is terminal.
-    pub fn is_terminal(self) -> bool {
+    #[must_use] 
+    pub const fn is_terminal(self) -> bool {
         matches!(self, Self::ShuttingDown | Self::Terminated)
     }
 
     /// Checks if the agent can accept new work.
-    pub fn can_accept_work(self) -> bool {
+    #[must_use] 
+    pub const fn can_accept_work(self) -> bool {
         matches!(self, Self::Idle)
     }
 }
@@ -101,7 +103,7 @@ impl Default for WorkloadHistory {
 impl WorkloadHistory {
     /// Creates an empty workload history.
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             beads_completed: 0,
             operations_executed: 0,
@@ -205,7 +207,7 @@ impl HealthMetrics {
             self.health_score = 0.0;
         } else {
             self.health_score =
-                1.0 - (self.health_failures as f64 / self.max_health_failures as f64);
+                1.0 - (f64::from(self.health_failures) / f64::from(self.max_health_failures));
         }
 
         self.last_failed_check = Some(Utc::now());
@@ -213,6 +215,7 @@ impl HealthMetrics {
     }
 
     /// Checks if the agent is healthy.
+    #[must_use] 
     pub fn is_healthy(&self) -> bool {
         self.health_failures < self.max_health_failures && self.health_score > 0.0
     }
@@ -312,7 +315,7 @@ impl AgentInfo {
     }
 
     /// Validates agent identifier.
-    fn validate_agent_id(agent_id: &str) -> Result<(), AgentInfoError> {
+    const fn validate_agent_id(agent_id: &str) -> Result<(), AgentInfoError> {
         if agent_id.is_empty() {
             return Err(AgentInfoError::EmptyIdentifier);
         }
@@ -325,7 +328,7 @@ impl AgentInfo {
     }
 
     /// Validates bead identifier.
-    fn validate_bead_id(bead_id: &str) -> Result<(), AgentInfoError> {
+    const fn validate_bead_id(bead_id: &str) -> Result<(), AgentInfoError> {
         if bead_id.is_empty() {
             return Err(AgentInfoError::EmptyBeadId);
         }
@@ -339,7 +342,7 @@ impl AgentInfo {
 
     /// Records a heartbeat from the agent.
     ///
-    /// Updates the last_heartbeat timestamp and calculates uptime.
+    /// Updates the `last_heartbeat` timestamp and calculates uptime.
     pub fn record_heartbeat(&mut self) -> Result<(), AgentInfoError> {
         let now = Utc::now();
 
@@ -368,7 +371,7 @@ impl AgentInfo {
     /// Returns `AgentInfoError` if:
     /// - The bead ID is empty
     /// - The agent is not in Idle state
-    /// - The agent is terminal (ShuttingDown or Terminated)
+    /// - The agent is terminal (`ShuttingDown` or Terminated)
     ///
     /// # Examples
     ///
@@ -439,7 +442,7 @@ impl AgentInfo {
     /// # Errors
     ///
     /// Returns `AgentInfoError` if attempting to transition to an invalid state.
-    pub fn update_state(&mut self, new_state: AgentState) -> Result<(), AgentInfoError> {
+    pub const fn update_state(&mut self, new_state: AgentState) -> Result<(), AgentInfoError> {
         if !self.is_valid_state_transition(self.state, new_state) {
             return Err(AgentInfoError::InvalidStateTransition {
                 from: self.state,
@@ -452,17 +455,14 @@ impl AgentInfo {
     }
 
     /// Validates a state transition.
-    fn is_valid_state_transition(&self, from: AgentState, to: AgentState) -> bool {
+    const fn is_valid_state_transition(&self, from: AgentState, to: AgentState) -> bool {
         matches!(
             (from, to),
-            (AgentState::Idle, AgentState::Working)
-                | (AgentState::Working, AgentState::Idle)
-                | (AgentState::Idle, AgentState::ShuttingDown)
-                | (AgentState::Working, AgentState::ShuttingDown)
-                | (AgentState::ShuttingDown, AgentState::Terminated)
-                | (AgentState::Unhealthy, AgentState::Idle)
-                | (AgentState::Idle, AgentState::Unhealthy)
-                | (AgentState::Working, AgentState::Unhealthy)
+            (AgentState::Idle,
+AgentState::Working | AgentState::ShuttingDown | AgentState::Unhealthy) |
+(AgentState::Working | AgentState::Unhealthy, AgentState::Idle) |
+(AgentState::Working, AgentState::ShuttingDown | AgentState::Unhealthy) |
+(AgentState::ShuttingDown, AgentState::Terminated)
         )
     }
 
@@ -492,11 +492,13 @@ impl AgentInfo {
     /// Gets a custom metadata value.
     ///
     /// Returns `None` if the key doesn't exist.
+    #[must_use] 
     pub fn get_metadata(&self, key: &str) -> Option<&String> {
         self.custom_metadata.get(key)
     }
 
     /// Gets agent statistics.
+    #[must_use] 
     pub fn stats(&self) -> AgentStats {
         AgentStats {
             id: self.id.clone(),
@@ -511,6 +513,7 @@ impl AgentInfo {
     }
 
     /// Converts agent info to a simplified view for API responses.
+    #[must_use] 
     pub fn to_api_response(&self) -> AgentApiResponse {
         AgentApiResponse {
             id: self.id.clone(),
@@ -562,7 +565,7 @@ pub struct AgentApiResponse {
 }
 
 /// Agent information errors.
-#[derive(Debug, Error, Clone, PartialEq)]
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum AgentInfoError {
     #[error("agent identifier is empty")]
     EmptyIdentifier,

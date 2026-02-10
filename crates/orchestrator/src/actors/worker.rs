@@ -119,7 +119,7 @@ pub struct WorkspaceExecutionResult {
 impl WorkspaceExecutionResult {
     /// Create a successful execution result.
     #[must_use]
-    pub fn success() -> Self {
+    pub const fn success() -> Self {
         Self {
             succeeded: true,
             error: None,
@@ -129,7 +129,7 @@ impl WorkspaceExecutionResult {
 
     /// Create a failed execution result.
     #[must_use]
-    pub fn failure(error: String) -> Self {
+    pub const fn failure(error: String) -> Self {
         Self {
             succeeded: false,
             error: Some(error),
@@ -153,7 +153,7 @@ impl WorkspaceExecutionResult {
 
     /// Whether the execution succeeded.
     #[must_use]
-    pub fn succeeded(&self) -> bool {
+    pub const fn succeeded(&self) -> bool {
         self.succeeded
     }
 
@@ -165,7 +165,7 @@ impl WorkspaceExecutionResult {
 
     /// Exit code from execution.
     #[must_use]
-    pub fn exit_code(&self) -> Option<i32> {
+    pub const fn exit_code(&self) -> Option<i32> {
         self.exit_code
     }
 }
@@ -197,19 +197,19 @@ impl BeadExecutionContext {
 
     /// Path to the isolated workspace.
     #[must_use]
-    pub fn workspace_path(&self) -> &PathBuf {
+    pub const fn workspace_path(&self) -> &PathBuf {
         &self.workspace_path
     }
 
     /// Whether execution has completed.
     #[must_use]
-    pub fn has_completed(&self) -> bool {
+    pub const fn has_completed(&self) -> bool {
         self.execution_result.is_some()
     }
 
     /// The execution result if available.
     #[must_use]
-    pub fn execution_result(&self) -> Option<&WorkspaceExecutionResult> {
+    pub const fn execution_result(&self) -> Option<&WorkspaceExecutionResult> {
         self.execution_result.as_ref()
     }
 
@@ -229,7 +229,7 @@ impl BeadExecutionContext {
     }
 }
 
-/// Messages handled by the BeadWorker actor.
+/// Messages handled by the `BeadWorker` actor.
 #[derive(Clone, Debug)]
 pub enum WorkerMessage {
     StartBead {
@@ -251,7 +251,7 @@ pub enum WorkerMessage {
     },
 }
 
-/// State for the BeadWorker actor.
+/// State for the `BeadWorker` actor.
 pub struct WorkerState {
     worker_id: String,
     current_bead: Option<String>,
@@ -277,7 +277,7 @@ impl WorkerState {
         }
     }
 
-    fn reset_retries(&mut self) {
+    const fn reset_retries(&mut self) {
         self.retry_attempts = 0;
     }
 
@@ -287,7 +287,7 @@ impl WorkerState {
     }
 
     #[must_use]
-    pub fn current_state(&self) -> Option<&BeadState> {
+    pub const fn current_state(&self) -> Option<&BeadState> {
         self.current_state.as_ref()
     }
 
@@ -311,7 +311,7 @@ impl Actor for WorkerActorDef {
     ) -> Result<Self::State, ActorProcessingErr> {
         info!("BeadWorkerActor starting");
         let mut state = WorkerState::new(config);
-        let handle = CheckpointTimer::start(myself.clone(), state.config.checkpoint_interval);
+        let handle = CheckpointTimer::start(myself, state.config.checkpoint_interval);
         state.checkpoint_handle = Some(handle);
         Ok(state)
     }
@@ -364,7 +364,7 @@ impl Actor for WorkerActorDef {
                 // Note: We don't emit Completed/Failed events here - only StateChanged
                 // Completion events should come from explicit completion/failure, not from state transitions
 
-                state.current_bead = Some(bead_id.clone());
+                state.current_bead = Some(bead_id);
                 state.current_state = Some(new_state);
                 state.reset_retries();
 
@@ -522,7 +522,7 @@ impl Actor for WorkerActorDef {
                 if let Some(ref bead_id) = state.current_bead {
                     warn!(bead_id = %bead_id, "Marking bead as unhealthy due to health check failure");
                     if let Err(err) = myself.send_message(WorkerMessage::FailBead {
-                        error: reason.clone(),
+                        error: reason,
                     }) {
                         tracing::error!(
                             error = %err,
@@ -572,15 +572,16 @@ pub struct CheckpointTimer {
 
 impl CheckpointTimer {
     #[must_use]
-    pub fn new(interval: Duration) -> Self {
+    pub const fn new(interval: Duration) -> Self {
         Self { interval }
     }
 
     #[must_use]
-    pub fn interval(&self) -> Duration {
+    pub const fn interval(&self) -> Duration {
         self.interval
     }
 
+    #[must_use] 
     pub fn start(target: ActorRef<WorkerMessage>, interval: Duration) -> CheckpointHandle {
         let (stop_tx, mut stop_rx) = watch::channel(false);
         let mut ticker = tokio::time::interval(interval);

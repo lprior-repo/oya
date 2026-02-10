@@ -7,9 +7,9 @@ use super::error::DistributionResult;
 /// Context provided to distribution strategies for decision-making.
 #[derive(Debug, Clone, Default)]
 pub struct DistributionContext {
-    /// Bead metadata (bead_id -> metadata).
+    /// Bead metadata (`bead_id` -> metadata).
     pub bead_metadata: HashMap<String, BeadMetadata>,
-    /// Agent metadata (agent_id -> metadata).
+    /// Agent metadata (`agent_id` -> metadata).
     pub agent_metadata: HashMap<String, AgentMetadata>,
     /// Current workflow ID being processed.
     pub workflow_id: Option<String>,
@@ -161,7 +161,7 @@ impl AgentMetadata {
 
     /// Set load.
     #[must_use]
-    pub fn with_load(mut self, load: f64) -> Self {
+    pub const fn with_load(mut self, load: f64) -> Self {
         self.load = load.clamp(0.0, 1.0);
         self
     }

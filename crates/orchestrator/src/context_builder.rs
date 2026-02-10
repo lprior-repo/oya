@@ -50,7 +50,8 @@ pub struct StageContextBuilder {
 
 impl StageContextBuilder {
     /// Create a new builder rooted at a project path.
-    pub fn new(project_root: PathBuf) -> Self {
+    #[must_use] 
+    pub const fn new(project_root: PathBuf) -> Self {
         Self {
             project_root,
             claude_md_path: None,
@@ -58,6 +59,7 @@ impl StageContextBuilder {
     }
 
     /// Configure optional CLAUDE.md instructions file.
+    #[must_use] 
     pub fn with_claude_md(mut self, path: PathBuf) -> Self {
         self.claude_md_path = Some(path);
         self
@@ -153,7 +155,7 @@ impl StageContextBuilder {
         if let Some(path) = &self.claude_md_path {
             if let Ok(content) = fs::read_to_string(path) {
                 if !content.is_empty() {
-                    return format!("\n\nCLAUDE.md instructions:\n{}", content);
+                    return format!("\n\nCLAUDE.md instructions:\n{content}");
                 }
             }
         }

@@ -28,7 +28,7 @@ use super::supervisor_actor::{SupervisorActorState, SupervisorConfig};
 /// Errors that can occur during supervisor checkpoint creation.
 #[derive(Debug, Error)]
 pub enum SupervisorCheckpointError {
-    /// CheckpointManager not available in supervisor state.
+    /// `CheckpointManager` not available in supervisor state.
     #[error("CheckpointManager not available")]
     CheckpointManagerUnavailable,
 
@@ -100,19 +100,19 @@ where
 {
     /// Create supervisor checkpoint during graceful shutdown.
     ///
-    /// This function is called during the SavingCheckpoints phase of shutdown
+    /// This function is called during the `SavingCheckpoints` phase of shutdown
     /// to create a final checkpoint of supervisor state before stopping children.
     ///
     /// # Errors
     ///
     /// Returns `SupervisorCheckpointError` if:
-    /// - CheckpointManager is not available
+    /// - `CheckpointManager` is not available
     /// - State serialization fails
     /// - Checkpoint persistence fails
     /// - Timeout is exceeded
     ///
-    /// Note: All errors are logged and a failed CheckpointResult is sent to
-    /// the ShutdownCoordinator before returning the error. Shutdown continues
+    /// Note: All errors are logged and a failed `CheckpointResult` is sent to
+    /// the `ShutdownCoordinator` before returning the error. Shutdown continues
     /// regardless of checkpoint result.
     pub async fn create_shutdown_checkpoint(
         &self,
@@ -224,7 +224,7 @@ where
             restart_count: child.restart_count,
             last_restart: child
                 .last_restart
-                .map(|i| DateTime::<Utc>::from(std::time::SystemTime::now() - i.elapsed()).into()),
+                .map(|i| DateTime::<Utc>::from(std::time::SystemTime::now() - i.elapsed())),
             args: format!("{:?}", child.args), // Debug format for args
         })
         .collect()

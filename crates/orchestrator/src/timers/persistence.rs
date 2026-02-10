@@ -61,8 +61,7 @@ impl TimerRecord {
             "failed" => TimerStatus::Failed,
             other => {
                 return Err(PersistenceError::serialization_error(format!(
-                    "invalid timer status: {}",
-                    other
+                    "invalid timer status: {other}"
                 )));
             }
         };
@@ -91,7 +90,7 @@ pub struct TimerPersistence {
 impl TimerPersistence {
     /// Create a new timer persistence layer.
     #[must_use]
-    pub fn new(store: OrchestratorStore) -> Self {
+    pub const fn new(store: OrchestratorStore) -> Self {
         Self { store }
     }
 
@@ -124,7 +123,7 @@ impl TimerPersistence {
         timer_id: &TimerId,
         status: TimerStatus,
     ) -> PersistenceResult<()> {
-        let status_str = format!("{:?}", status).to_lowercase();
+        let status_str = format!("{status:?}").to_lowercase();
         let timer_id_str = timer_id.as_str().to_string();
 
         let _: Option<TimerRecord> = self

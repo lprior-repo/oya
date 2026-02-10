@@ -1,4 +1,4 @@
-//! QueueActor - Manages a single queue of ready beads.
+//! `QueueActor` - Manages a single queue of ready beads.
 
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, VecDeque};
@@ -131,8 +131,7 @@ impl QueueState {
                     let tenant_has_more = self
                         .tenant_queues
                         .get(&tenant)
-                        .map(|queue| !queue.is_empty())
-                        .unwrap_or(false);
+                        .is_some_and(|queue| !queue.is_empty());
                     if tenant_has_more {
                         self.tenant_rotation.push_back(tenant);
                     } else {

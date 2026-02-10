@@ -6,7 +6,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-/// Configuration for the OpencodeClient.
+/// Configuration for the `OpencodeClient`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OpencodeConfig {
     /// Path to the opencode CLI executable.
@@ -67,6 +67,7 @@ impl OpencodeConfig {
     }
 
     /// Create a new config for API mode.
+    #[must_use] 
     pub fn with_api(base_url: Url) -> Self {
         Self {
             base_url: Some(base_url),
@@ -110,6 +111,7 @@ impl OpencodeConfig {
     }
 
     /// Load configuration from environment variables.
+    #[must_use] 
     pub fn from_env() -> Self {
         let mut config = Self::default();
 

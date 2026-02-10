@@ -31,13 +31,13 @@ pub enum Stage {
 impl Stage {
     /// Get all possible stages.
     #[must_use]
-    pub fn all() -> &'static [Stage] {
+    pub const fn all() -> &'static [Self] {
         &[
-            Stage::Pending,
-            Stage::InProgress,
-            Stage::Completed,
-            Stage::Failed,
-            Stage::RolledBack,
+            Self::Pending,
+            Self::InProgress,
+            Self::Completed,
+            Self::Failed,
+            Self::RolledBack,
         ]
     }
 }
@@ -45,7 +45,7 @@ impl Stage {
 /// A task in a workflow.
 ///
 /// Tasks are nodes in the workflow DAG with dependencies between them.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Task {
     /// Unique identifier for the task.
     pub id: Slug,
@@ -83,7 +83,7 @@ impl Task {
     }
 
     /// Mark the current stage as complete and advance to the next stage.
-    pub fn complete_current_stage(&mut self) {
+    pub const fn complete_current_stage(&mut self) {
         self.current_stage = match self.current_stage {
             Stage::Pending => Stage::InProgress,
             Stage::InProgress => Stage::Completed,

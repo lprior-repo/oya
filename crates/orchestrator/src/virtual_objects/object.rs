@@ -68,7 +68,7 @@ pub enum HandlerResponse {
 impl HandlerResponse {
     /// Create a success response.
     #[must_use]
-    pub fn success(payload: MessagePayload) -> Self {
+    pub const fn success(payload: MessagePayload) -> Self {
         Self::Success(payload)
     }
 
@@ -83,19 +83,19 @@ impl HandlerResponse {
 
     /// Create a no-response.
     #[must_use]
-    pub fn no_response() -> Self {
+    pub const fn no_response() -> Self {
         Self::NoResponse
     }
 
     /// Check if this is a success.
     #[must_use]
-    pub fn is_success(&self) -> bool {
+    pub const fn is_success(&self) -> bool {
         matches!(self, Self::Success(_))
     }
 
     /// Check if this is an error.
     #[must_use]
-    pub fn is_error(&self) -> bool {
+    pub const fn is_error(&self) -> bool {
         matches!(self, Self::Error { .. })
     }
 }
@@ -215,36 +215,36 @@ impl VirtualObject {
 
     /// Get the object ID.
     #[must_use]
-    pub fn id(&self) -> &ObjectId {
+    pub const fn id(&self) -> &ObjectId {
         &self.id
     }
 
     /// Get the state.
     #[must_use]
-    pub fn state(&self) -> &ObjectState {
+    pub const fn state(&self) -> &ObjectState {
         &self.state
     }
 
     /// Get mutable state.
-    pub fn state_mut(&mut self) -> &mut ObjectState {
+    pub const fn state_mut(&mut self) -> &mut ObjectState {
         &mut self.state
     }
 
     /// Get the operation count.
     #[must_use]
-    pub fn operation_count(&self) -> u64 {
+    pub const fn operation_count(&self) -> u64 {
         self.operation_count
     }
 
     /// Get when the object was created.
     #[must_use]
-    pub fn created_at(&self) -> DateTime<Utc> {
+    pub const fn created_at(&self) -> DateTime<Utc> {
         self.created_at
     }
 
     /// Get when the object was last accessed.
     #[must_use]
-    pub fn last_accessed(&self) -> DateTime<Utc> {
+    pub const fn last_accessed(&self) -> DateTime<Utc> {
         self.last_accessed
     }
 
@@ -450,13 +450,13 @@ impl ObjectHandler for CounterHandler {
         match operation {
             Some("increment") => {
                 let current = context.state.get_i64("count").unwrap_or(0);
-                let amount = payload.get("amount").and_then(|v| v.as_i64()).unwrap_or(1);
+                let amount = payload.get("amount").and_then(serde_json::Value::as_i64).unwrap_or(1);
                 context.state.set("count", current.saturating_add(amount));
                 HandlerResponse::success(serde_json::json!({ "count": current + amount }))
             }
             Some("decrement") => {
                 let current = context.state.get_i64("count").unwrap_or(0);
-                let amount = payload.get("amount").and_then(|v| v.as_i64()).unwrap_or(1);
+                let amount = payload.get("amount").and_then(serde_json::Value::as_i64).unwrap_or(1);
                 context.state.set("count", current.saturating_sub(amount));
                 HandlerResponse::success(serde_json::json!({ "count": current - amount }))
             }
@@ -469,7 +469,7 @@ impl ObjectHandler for CounterHandler {
                 HandlerResponse::success(serde_json::json!({ "count": 0 }))
             }
             Some(op) => {
-                HandlerResponse::error("UNKNOWN_OPERATION", format!("Unknown operation: {}", op))
+                HandlerResponse::error("UNKNOWN_OPERATION", format!("Unknown operation: {op}"))
             }
         }
     }

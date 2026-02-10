@@ -38,6 +38,7 @@ pub struct InMemoryEventStore {
 
 impl InMemoryEventStore {
     /// Create a new in-memory event store.
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             events: RwLock::new(Arc::new([])),
@@ -46,6 +47,7 @@ impl InMemoryEventStore {
     }
 
     /// Create a new in-memory event store wrapped in an Arc.
+    #[must_use] 
     pub fn new_arc() -> Arc<Self> {
         Arc::new(Self::new())
     }
@@ -105,7 +107,7 @@ impl EventStore for InMemoryEventStore {
 
     async fn last_event_id(&self) -> Result<Option<EventId>> {
         let events = self.events.read().await;
-        Ok(events.last().map(|e| e.event_id()))
+        Ok(events.last().map(super::event::BeadEvent::event_id))
     }
 
     async fn count(&self) -> Result<usize> {
@@ -121,7 +123,7 @@ pub struct TracingEventStore<S: EventStore> {
 
 impl<S: EventStore> TracingEventStore<S> {
     /// Create a new tracing event store.
-    pub fn new(inner: S) -> Self {
+    pub const fn new(inner: S) -> Self {
         Self { inner }
     }
 }

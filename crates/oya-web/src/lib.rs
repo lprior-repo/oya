@@ -61,7 +61,7 @@ pub struct AgentMetricsResponse {
 pub struct ServerConfig {
     /// Address to bind to (e.g., "127.0.0.1:3000")
     pub bind_address: String,
-    /// Allowed CORS origin (e.g., "tauri://localhost")
+    /// Allowed CORS origin (e.g., "<tauri://localhost>")
     pub cors_origin: String,
 }
 

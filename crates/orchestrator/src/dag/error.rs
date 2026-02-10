@@ -48,7 +48,8 @@ impl DagError {
         Self::SelfLoopDetected(id.into())
     }
 
-    pub fn cycle_detected(nodes: Vec<BeadId>) -> Self {
+    #[must_use] 
+    pub const fn cycle_detected(nodes: Vec<BeadId>) -> Self {
         Self::CycleDetected(nodes)
     }
 

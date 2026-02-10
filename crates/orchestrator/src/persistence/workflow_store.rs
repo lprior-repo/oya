@@ -1,6 +1,6 @@
 //! Workflow persistence operations.
 //!
-//! CRUD operations for workflow records in SurrealDB.
+//! CRUD operations for workflow records in `SurrealDB`.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -42,11 +42,11 @@ impl std::fmt::Display for WorkflowStatus {
 /// Workflow record stored in the database.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkflowRecord {
-    /// SurrealDB record ID (optional, set by DB)
+    /// `SurrealDB` record ID (optional, set by DB)
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "id")]
     pub record_id: Option<RecordId>,
-    /// Workflow identifier (custom field stored as workflow_id)
+    /// Workflow identifier (custom field stored as `workflow_id`)
     pub workflow_id: String,
     /// Workflow name
     pub name: String,

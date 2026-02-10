@@ -80,6 +80,7 @@ pub struct BeadProjection {
 
 impl BeadProjection {
     /// Create a new bead projection.
+    #[must_use] 
     pub fn new(bead_id: BeadId) -> Self {
         Self {
             bead_id,
@@ -97,11 +98,13 @@ impl BeadProjection {
     }
 
     /// Check if the bead is blocked.
-    pub fn is_blocked(&self) -> bool {
+    #[must_use] 
+    pub const fn is_blocked(&self) -> bool {
         !self.blocked_by.is_empty()
     }
 
     /// Check if the bead is ready to run.
+    #[must_use] 
     pub fn is_ready(&self) -> bool {
         self.current_state == BeadState::Ready && !self.is_blocked()
     }
@@ -118,16 +121,19 @@ pub struct AllBeadsState {
 
 impl AllBeadsState {
     /// Create a new empty state.
+    #[must_use] 
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Get a bead projection.
+    #[must_use] 
     pub fn get(&self, bead_id: &BeadId) -> Option<&BeadProjection> {
         self.beads.get(bead_id)
     }
 
     /// Get beads in a given state.
+    #[must_use] 
     pub fn in_state(&self, state: BeadState) -> Vec<&BeadProjection> {
         self.beads
             .values()
@@ -136,16 +142,19 @@ impl AllBeadsState {
     }
 
     /// Get ready beads (not blocked).
+    #[must_use] 
     pub fn ready(&self) -> Vec<&BeadProjection> {
         self.beads.values().filter(|b| b.is_ready()).collect()
     }
 
     /// Get blocked beads.
+    #[must_use] 
     pub fn blocked(&self) -> Vec<&BeadProjection> {
         self.beads.values().filter(|b| b.is_blocked()).collect()
     }
 
     /// Get beads claimed by a specific agent.
+    #[must_use] 
     pub fn claimed_by(&self, agent_id: &str) -> Vec<&BeadProjection> {
         self.beads
             .values()
@@ -154,6 +163,7 @@ impl AllBeadsState {
     }
 
     /// Get unclaimed beads (not currently claimed by any agent).
+    #[must_use] 
     pub fn unclaimed(&self) -> Vec<&BeadProjection> {
         self.beads
             .values()
@@ -162,6 +172,7 @@ impl AllBeadsState {
     }
 
     /// Get beads in a specific phase.
+    #[must_use] 
     pub fn in_phase(&self, phase_id: PhaseId) -> Vec<&BeadProjection> {
         self.beads
             .values()
@@ -170,6 +181,7 @@ impl AllBeadsState {
     }
 
     /// Get beads that depend on a specific bead.
+    #[must_use] 
     pub fn dependents_of(&self, bead_id: BeadId) -> Vec<&BeadProjection> {
         self.beads
             .values()
@@ -178,11 +190,13 @@ impl AllBeadsState {
     }
 
     /// Get count of beads in a specific state.
+    #[must_use] 
     pub fn count_in_state(&self, state: BeadState) -> usize {
         self.state_counts.get(&state).copied().map_or(0, |c| c)
     }
 
     /// Get all beads sorted by creation order (based on ULID timestamp).
+    #[must_use] 
     pub fn all_sorted(&self) -> Vec<&BeadProjection> {
         let mut beads: Vec<_> = self.beads.values().collect();
         beads.sort_by_key(|b| b.bead_id.as_ulid());
@@ -217,7 +231,7 @@ impl EventSourcedState for AllBeadsState {
         let bead = self
             .beads
             .get(&bead_id)
-            .ok_or_else(|| ApplyError::BeadNotFound(bead_id))?;
+            .ok_or(ApplyError::BeadNotFound(bead_id))?;
 
         // Validate that 'from' matches current state
         if bead.current_state != from {
@@ -252,7 +266,7 @@ impl EventSourcedState for AllBeadsState {
                 let bead = self
                     .beads
                     .get_mut(bead_id)
-                    .ok_or_else(|| ApplyError::BeadNotFound(*bead_id))?;
+                    .ok_or(ApplyError::BeadNotFound(*bead_id))?;
 
                 bead.current_state = *to;
                 bead.history.push(StateTransition::new(*from, *to));
@@ -266,7 +280,7 @@ impl EventSourcedState for AllBeadsState {
                 let bead = self
                     .beads
                     .get_mut(bead_id)
-                    .ok_or_else(|| ApplyError::BeadNotFound(*bead_id))?;
+                    .ok_or(ApplyError::BeadNotFound(*bead_id))?;
                 bead.current_phase = Some(*phase_id);
             }
             BeadEvent::DependencyResolved {
@@ -277,7 +291,7 @@ impl EventSourcedState for AllBeadsState {
                 let bead = self
                     .beads
                     .get_mut(bead_id)
-                    .ok_or_else(|| ApplyError::BeadNotFound(*bead_id))?;
+                    .ok_or(ApplyError::BeadNotFound(*bead_id))?;
                 bead.blocked_by.retain(|id| id != dependency_id);
             }
             BeadEvent::Claimed {
@@ -286,14 +300,14 @@ impl EventSourcedState for AllBeadsState {
                 let bead = self
                     .beads
                     .get_mut(bead_id)
-                    .ok_or_else(|| ApplyError::BeadNotFound(*bead_id))?;
+                    .ok_or(ApplyError::BeadNotFound(*bead_id))?;
                 bead.claimed_by = Some(agent_id.clone());
             }
             BeadEvent::Unclaimed { bead_id, .. } => {
                 let bead = self
                     .beads
                     .get_mut(bead_id)
-                    .ok_or_else(|| ApplyError::BeadNotFound(*bead_id))?;
+                    .ok_or(ApplyError::BeadNotFound(*bead_id))?;
                 bead.claimed_by = None;
             }
             BeadEvent::StageStarted {
@@ -305,7 +319,7 @@ impl EventSourcedState for AllBeadsState {
                 let bead = self
                     .beads
                     .get_mut(bead_id)
-                    .ok_or_else(|| ApplyError::BeadNotFound(*bead_id))?;
+                    .ok_or(ApplyError::BeadNotFound(*bead_id))?;
                 bead.current_stage = Some(*stage);
                 let entry = bead.stage_attempts.entry(*stage).or_insert(0);
                 *entry = entry.saturating_add(1);
@@ -314,7 +328,7 @@ impl EventSourcedState for AllBeadsState {
                 let bead = self
                     .beads
                     .get_mut(bead_id)
-                    .ok_or_else(|| ApplyError::BeadNotFound(*bead_id))?;
+                    .ok_or(ApplyError::BeadNotFound(*bead_id))?;
                 bead.current_stage = stage.next();
             }
             BeadEvent::StageFailed {
@@ -323,7 +337,7 @@ impl EventSourcedState for AllBeadsState {
                 let bead = self
                     .beads
                     .get_mut(bead_id)
-                    .ok_or_else(|| ApplyError::BeadNotFound(*bead_id))?;
+                    .ok_or(ApplyError::BeadNotFound(*bead_id))?;
                 bead.last_stage_feedback = Some(feedback.clone());
             }
             BeadEvent::StageReentry {
@@ -335,7 +349,7 @@ impl EventSourcedState for AllBeadsState {
                 let bead = self
                     .beads
                     .get_mut(bead_id)
-                    .ok_or_else(|| ApplyError::BeadNotFound(*bead_id))?;
+                    .ok_or(ApplyError::BeadNotFound(*bead_id))?;
                 bead.current_stage = Some(*to_stage);
                 bead.last_stage_feedback = Some(reason.clone());
             }
@@ -343,7 +357,7 @@ impl EventSourcedState for AllBeadsState {
                 let bead = self
                     .beads
                     .get_mut(bead_id)
-                    .ok_or_else(|| ApplyError::BeadNotFound(*bead_id))?;
+                    .ok_or(ApplyError::BeadNotFound(*bead_id))?;
 
                 let from = bead.current_state;
                 bead.current_state = BeadState::Completed;
@@ -366,7 +380,8 @@ pub struct AllBeadsProjection;
 
 impl AllBeadsProjection {
     /// Create a new projection.
-    pub fn new() -> Self {
+    #[must_use] 
+    pub const fn new() -> Self {
         Self
     }
 }

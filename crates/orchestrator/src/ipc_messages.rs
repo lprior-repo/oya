@@ -394,7 +394,7 @@ pub struct BeadDetail {
 pub struct TaskSummary {
     /// Task slug
     pub slug: String,
-    /// Pipeline status (created, in_progress, passed, failed, integrated)
+    /// Pipeline status (created, `in_progress`, passed, failed, integrated)
     pub status: String,
     /// Current stage (if applicable)
     pub stage: Option<String>,
@@ -411,7 +411,7 @@ pub struct TaskSummary {
 pub struct TaskDetail {
     /// Task slug
     pub slug: String,
-    /// Pipeline status (created, in_progress, passed, failed, integrated)
+    /// Pipeline status (created, `in_progress`, passed, failed, integrated)
     pub status: String,
     /// Current stage (if applicable)
     pub stage: Option<String>,

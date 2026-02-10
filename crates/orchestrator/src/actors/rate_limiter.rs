@@ -16,6 +16,7 @@ pub struct TokenBucket {
 
 impl TokenBucket {
     /// Create a token bucket with initial full capacity.
+    #[must_use] 
     pub fn new(capacity: u32, refill_per_second: u32) -> Self {
         Self {
             capacity,
@@ -26,7 +27,8 @@ impl TokenBucket {
     }
 
     /// Return currently available tokens.
-    pub fn tokens(&self) -> u32 {
+    #[must_use] 
+    pub const fn tokens(&self) -> u32 {
         self.tokens
     }
 

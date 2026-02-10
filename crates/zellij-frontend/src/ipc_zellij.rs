@@ -4,7 +4,7 @@
 //! via Zellij's stdin/stdout. Since WASM doesn't have async runtime,
 //! all I/O operations are synchronous blocking calls.
 
-use crate::{correlation::CorrelationContext, correlation::RequestId};
+use crate::correlation::CorrelationContext;
 use oya_ipc::{GuestMessage, HostMessage};
 use serde_json;
 use std::io::{self, Read, Write};
@@ -128,7 +128,10 @@ impl ZellijIpcClient {
                 return Err("Connection closed".to_string());
             }
 
-            let chunk = String::from_utf8_lossy(&buffer[..bytes_read]);
+            // Use get to avoid indexing_slicing lint - safe because bytes_read <= buffer.len()
+            let chunk = buffer
+                .get(..bytes_read)
+                .map_or_else(String::new, |slice| String::from_utf8_lossy(slice));
             json_string.push_str(&chunk);
 
             // Check if we have a complete JSON object

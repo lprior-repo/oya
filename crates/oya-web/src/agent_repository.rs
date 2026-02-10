@@ -66,7 +66,7 @@ impl From<RepositoryAgentState> for String {
 impl std::fmt::Display for RepositoryAgentState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s: String = (*self).into();
-        write!(f, "{}", s)
+        write!(f, "{s}")
     }
 }
 
@@ -149,7 +149,7 @@ impl RepositoryAgent {
 }
 
 /// Repository errors.
-#[derive(Debug, Error, Clone, PartialEq)]
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum AgentRepositoryError {
     /// Agent not found.
     #[error("Agent not found: {agent_id}")]

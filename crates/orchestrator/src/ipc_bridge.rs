@@ -56,7 +56,7 @@ use oya_events::{BeadEvent, Severity, StageKind};
 use thiserror::Error;
 
 /// Errors that can occur during IPC bridging.
-#[derive(Debug, Error, Clone, PartialEq)]
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum IpcBridgeError {
     /// Event type not supported for IPC conversion.
     #[error("event type not supported: {event_type}")]
@@ -78,7 +78,7 @@ pub enum IpcBridgeError {
 /// Result type for IPC bridge operations.
 pub type IpcBridgeResult<T> = Result<T, IpcBridgeError>;
 
-/// IPC Bridge for converting EventBus events to IPC messages.
+/// IPC Bridge for converting `EventBus` events to IPC messages.
 ///
 /// This struct provides pure functional conversion methods with no internal
 /// state. All conversions are deterministic and side-effect free.
@@ -92,14 +92,14 @@ impl IpcBridge {
         Self
     }
 
-    /// Convert a BeadEvent to a HostMessage for IPC transmission.
+    /// Convert a `BeadEvent` to a `HostMessage` for IPC transmission.
     ///
     /// This method handles all stage lifecycle events and returns the
     /// corresponding IPC message variant. Non-stage events return an error.
     ///
     /// # Arguments
     ///
-    /// * `event` - The BeadEvent from EventBus to convert
+    /// * `event` - The `BeadEvent` from `EventBus` to convert
     ///
     /// # Returns
     ///
@@ -203,11 +203,11 @@ impl IpcBridge {
     ///
     /// # Arguments
     ///
-    /// * `events` - Slice of BeadEvents to convert
+    /// * `events` - Slice of `BeadEvents` to convert
     ///
     /// # Returns
     ///
-    /// Vector of successfully converted HostMessages
+    /// Vector of successfully converted `HostMessages`
     #[must_use]
     pub fn convert_events_batch(&self, events: &[BeadEvent]) -> Vec<HostMessage> {
         events
@@ -216,7 +216,7 @@ impl IpcBridge {
             .collect()
     }
 
-    /// Convert StageStarted event to IPC message.
+    /// Convert `StageStarted` event to IPC message.
     fn convert_stage_started(
         &self,
         bead_id: &oya_events::BeadId,
@@ -233,7 +233,7 @@ impl IpcBridge {
         })
     }
 
-    /// Convert StageCompleted event to IPC message.
+    /// Convert `StageCompleted` event to IPC message.
     fn convert_stage_completed(
         &self,
         bead_id: &oya_events::BeadId,
@@ -250,7 +250,7 @@ impl IpcBridge {
         })
     }
 
-    /// Convert StageFailed event to IPC message.
+    /// Convert `StageFailed` event to IPC message.
     fn convert_stage_failed(
         &self,
         bead_id: &oya_events::BeadId,
@@ -269,7 +269,7 @@ impl IpcBridge {
         })
     }
 
-    /// Convert StageReentry event to IPC message.
+    /// Convert `StageReentry` event to IPC message.
     fn convert_stage_reentry(
         &self,
         bead_id: &oya_events::BeadId,
@@ -290,7 +290,7 @@ impl IpcBridge {
         })
     }
 
-    /// Convert ValidationRan event to IPC message.
+    /// Convert `ValidationRan` event to IPC message.
     fn convert_validation_ran(
         &self,
         bead_id: &oya_events::BeadId,
@@ -311,7 +311,7 @@ impl IpcBridge {
         })
     }
 
-    /// Convert RecursionExhausted event to IPC message.
+    /// Convert `RecursionExhausted` event to IPC message.
     fn convert_recursion_exhausted(
         &self,
         bead_id: &oya_events::BeadId,
@@ -328,7 +328,7 @@ impl IpcBridge {
         })
     }
 
-    /// Convert StageKind to IPC string representation.
+    /// Convert `StageKind` to IPC string representation.
     fn stage_kind_to_string(&self, stage: StageKind) -> String {
         match stage {
             StageKind::Research => "research",
@@ -351,7 +351,7 @@ impl IpcBridge {
         .to_string()
     }
 
-    /// Convert chrono DateTime to Unix timestamp (seconds).
+    /// Convert chrono `DateTime` to Unix timestamp (seconds).
     fn datetime_to_timestamp(
         &self,
         dt: &chrono::DateTime<chrono::Utc>,

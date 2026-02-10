@@ -71,19 +71,19 @@ impl fmt::Display for AgentSwarmError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::AgentNotFound { agent_id } => {
-                write!(f, "agent not found: {}", agent_id)
+                write!(f, "agent not found: {agent_id}")
             }
             Self::AgentAlreadyRegistered { agent_id } => {
-                write!(f, "agent already registered: {}", agent_id)
+                write!(f, "agent already registered: {agent_id}")
             }
             Self::AgentUnavailable { agent_id, reason } => {
-                write!(f, "agent {} unavailable: {}", agent_id, reason)
+                write!(f, "agent {agent_id} unavailable: {reason}")
             }
             Self::NoAgentsAvailable => {
                 write!(f, "no agents available in pool")
             }
             Self::HealthCheckFailed { agent_id, reason } => {
-                write!(f, "health check failed for agent {}: {}", agent_id, reason)
+                write!(f, "health check failed for agent {agent_id}: {reason}")
             }
             Self::HeartbeatTimeout {
                 agent_id,
@@ -91,18 +91,17 @@ impl fmt::Display for AgentSwarmError {
             } => {
                 write!(
                     f,
-                    "heartbeat timeout for agent {}: last heartbeat {}ms ago",
-                    agent_id, last_heartbeat_ms
+                    "heartbeat timeout for agent {agent_id}: last heartbeat {last_heartbeat_ms}ms ago"
                 )
             }
             Self::PoolCapacityExceeded { current, max } => {
-                write!(f, "pool capacity exceeded: {}/{}", current, max)
+                write!(f, "pool capacity exceeded: {current}/{max}")
             }
             Self::AssignmentFailed { bead_id, reason } => {
-                write!(f, "failed to assign bead {}: {}", bead_id, reason)
+                write!(f, "failed to assign bead {bead_id}: {reason}")
             }
             Self::Internal { message } => {
-                write!(f, "internal error: {}", message)
+                write!(f, "internal error: {message}")
             }
         }
     }

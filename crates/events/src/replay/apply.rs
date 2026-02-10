@@ -57,7 +57,8 @@ pub struct EventMetadata {
 }
 
 impl EventMetadata {
-    /// Create event metadata from a BeadEvent.
+    /// Create event metadata from a `BeadEvent`.
+    #[must_use] 
     pub fn from_event(event: &BeadEvent) -> Self {
         Self {
             event_id: event.event_id().to_string(),
@@ -75,6 +76,7 @@ pub struct ApplyContext {
 
 impl ApplyContext {
     /// Create a new empty context.
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             last_events: std::collections::HashMap::new(),
@@ -88,6 +90,7 @@ impl ApplyContext {
     }
 
     /// Get the last applied event for a bead.
+    #[must_use] 
     pub fn last_event(&self, bead_id: &BeadId) -> Option<&EventMetadata> {
         self.last_events.get(bead_id)
     }
@@ -107,11 +110,11 @@ impl ApplyContext {
                 let last_id = last_meta
                     .event_id
                     .parse::<ulid::Ulid>()
-                    .map_err(|e| ApplyError::Internal(format!("invalid event ID: {}", e)))?;
+                    .map_err(|e| ApplyError::Internal(format!("invalid event ID: {e}")))?;
                 let current_id = event_meta
                     .event_id
                     .parse::<ulid::Ulid>()
-                    .map_err(|e| ApplyError::Internal(format!("invalid event ID: {}", e)))?;
+                    .map_err(|e| ApplyError::Internal(format!("invalid event ID: {e}")))?;
 
                 // Check timestamp ordering
                 if event_meta.timestamp < last_meta.timestamp {

@@ -84,7 +84,7 @@ pub enum SlotState {
 /// Unique identifier for a slot
 pub type SlotId = usize;
 
-/// Configuration for the BeadOrchestrator
+/// Configuration for the `BeadOrchestrator`
 #[derive(Debug, Clone)]
 pub struct OrchestratorConfig {
     /// Number of agent slots to spawn
@@ -105,7 +105,7 @@ impl Default for OrchestratorConfig {
     }
 }
 
-/// Messages for BeadOrchestrator
+/// Messages for `BeadOrchestrator`
 #[derive(Debug)]
 pub enum OrchestratorMessage {
     /// Tick message to poll for ready beads
@@ -125,7 +125,7 @@ pub enum OrchestratorMessage {
         reason: String,
     },
 
-    /// Event from EventBus to route to slots
+    /// Event from `EventBus` to route to slots
     RouteEvent {
         event: BeadEvent,
         target_slot_id: Option<SlotId>,
@@ -142,7 +142,7 @@ pub enum OrchestratorMessage {
     },
 }
 
-/// State of the BeadOrchestrator
+/// State of the `BeadOrchestrator`
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OrchestratorState {
     /// Slot states
@@ -167,7 +167,7 @@ struct SlotInfo {
 impl SlotInfo {
     /// Create a new slot info
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             state: SlotState::Idle,
             assigned_bead: None,
@@ -176,19 +176,19 @@ impl SlotInfo {
 
     /// Check if slot is idle
     #[must_use]
-    pub fn is_idle(&self) -> bool {
+    pub const fn is_idle(&self) -> bool {
         matches!(self.state, SlotState::Idle)
     }
 
     /// Check if slot is executing
     #[must_use]
-    pub fn is_executing(&self) -> bool {
+    pub const fn is_executing(&self) -> bool {
         matches!(self.state, SlotState::Executing { .. })
     }
 
     /// Get the current bead ID if executing
     #[must_use]
-    pub fn current_bead(&self) -> Option<&BeadId> {
+    pub const fn current_bead(&self) -> Option<&BeadId> {
         match &self.state {
             SlotState::Idle => None,
             SlotState::Executing { bead_id, .. } => Some(bead_id),
@@ -221,7 +221,7 @@ pub enum OrchestratorError {
     SlotCommunicationError(String),
 }
 
-/// Persistent state for BeadOrchestrator
+/// Persistent state for `BeadOrchestrator`
 ///
 /// Uses persistent data structures (im crate) for efficient snapshots
 /// and structural sharing during state transitions.
@@ -401,7 +401,7 @@ impl BeadOrchestratorState {
     }
 }
 
-/// BeadOrchestrator actor definition
+/// `BeadOrchestrator` actor definition
 pub struct BeadOrchestratorActorDef;
 
 // NOTE: Actor implementation temporarily simplified to avoid ractor lifetime issues
@@ -458,7 +458,7 @@ impl BeadOrchestratorActorDef {
 
         idle_slots
             .into_iter()
-            .zip(ready_beads.into_iter())
+            .zip(ready_beads)
             .take(assign_count)
             .fold(state, |acc, (slot_id, bead_id)| {
                 self.assign_bead_to_slot(acc, slot_id, bead_id)
@@ -471,23 +471,20 @@ impl BeadOrchestratorActorDef {
         slot_id: SlotId,
         bead_id: BeadId,
     ) -> BeadOrchestratorState {
-        match state.slots.get(&slot_id) {
-            Some(_slot) => {
-                info!("Assigned bead {} to slot {}", bead_id, slot_id);
-                state
-                    .mark_bead_active(bead_id.clone(), slot_id)
-                    .update_slot_state(
-                        slot_id,
-                        SlotState::Executing {
-                            bead_id: bead_id.clone(),
-                            current_stage: oya_events::StageKind::Research,
-                        },
-                    )
-            }
-            None => {
-                warn!("Cannot assign bead to slot {}: slot not found", slot_id);
-                state
-            }
+        if let Some(_slot) = state.slots.get(&slot_id) {
+            info!("Assigned bead {} to slot {}", bead_id, slot_id);
+            state
+                .mark_bead_active(bead_id.clone(), slot_id)
+                .update_slot_state(
+                    slot_id,
+                    SlotState::Executing {
+                        bead_id,
+                        current_stage: oya_events::StageKind::Research,
+                    },
+                )
+        } else {
+            warn!("Cannot assign bead to slot {}: slot not found", slot_id);
+            state
         }
     }
 
@@ -525,7 +522,7 @@ impl BeadOrchestratorActorDef {
 
         state
             .clone()
-            .mark_bead_failed(bead_id.clone(), reason.clone())
+            .mark_bead_failed(bead_id, reason)
             .clear_slot_assignment(slot_id)
     }
 
@@ -550,37 +547,28 @@ impl BeadOrchestratorActorDef {
             _ => None,
         };
 
-        let bead_id = match bead_id {
-            Some(id) => id,
-            None => {
-                debug!("Event does not contain bead_id, skipping routing");
-                return state.clone();
-            }
+        let bead_id = if let Some(id) = bead_id { id } else {
+            debug!("Event does not contain bead_id, skipping routing");
+            return state.clone();
         };
 
         // Route to specific slot or find the slot executing this bead
         let slot_id = match target_slot_id {
             Some(id) => id,
-            None => match state.get_slot_for_bead(&bead_id) {
-                Some(id) => id,
-                None => {
-                    debug!("No slot found for bead {}", bead_id);
-                    return state.clone();
-                }
+            None => if let Some(id) = state.get_slot_for_bead(&bead_id) { id } else {
+                debug!("No slot found for bead {}", bead_id);
+                return state.clone();
             },
         };
 
         // Forward event to slot
-        match state.slots.get(&slot_id) {
-            Some(_slot) => {
-                // In production, we'd send an event message to the slot
-                debug!("Forwarded event to slot {}", slot_id);
-                state.clone()
-            }
-            None => {
-                warn!("Cannot route event: slot {} not found", slot_id);
-                state.clone()
-            }
+        if let Some(_slot) = state.slots.get(&slot_id) {
+            // In production, we'd send an event message to the slot
+            debug!("Forwarded event to slot {}", slot_id);
+            state.clone()
+        } else {
+            warn!("Cannot route event: slot {} not found", slot_id);
+            state.clone()
         }
     }
 

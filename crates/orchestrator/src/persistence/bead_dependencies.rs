@@ -1,6 +1,6 @@
 //! Bead dependency persistence operations.
 //!
-//! CRUD operations for bead dependency relationships in SurrealDB.
+//! CRUD operations for bead dependency relationships in `SurrealDB`.
 //!
 //! This module handles two types of dependency edges:
 //! - `depends_on`: Bead A depends on Bead B (B must complete before A can start)
@@ -35,7 +35,7 @@ impl std::fmt::Display for DependencyRelation {
 /// Dependency edge record stored in the database.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DependencyEdge {
-    /// SurrealDB record ID
+    /// `SurrealDB` record ID
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "id")]
     pub record_id: Option<Thing>,
@@ -90,7 +90,7 @@ pub struct BlockedBead {
 }
 
 impl BlockedBead {
-    /// Create a new BlockedBead entry.
+    /// Create a new `BlockedBead` entry.
     #[must_use]
     pub fn new(bead_id: impl Into<String>, blocking_deps: Vec<String>) -> Self {
         Self {
@@ -243,12 +243,12 @@ impl OrchestratorStore {
         } else {
             Err(PersistenceError::not_found(
                 "dependency_edge",
-                format!("{}:{}", bead_id, target_bead_id),
+                format!("{bead_id}:{target_bead_id}"),
             ))
         }
     }
 
-    /// Get all outgoing edges for a bead (both depends_on and blocks).
+    /// Get all outgoing edges for a bead (both `depends_on` and blocks).
     ///
     /// # Errors
     ///
@@ -288,7 +288,7 @@ impl OrchestratorStore {
     /// Find all beads that are blocked (have incomplete dependencies).
     ///
     /// A bead is considered blocked if it has at least one incomplete dependency
-    /// (either depends_on or blocks relation). Returns each blocked bead along with
+    /// (either `depends_on` or blocks relation). Returns each blocked bead along with
     /// the list of bead IDs that are blocking it.
     ///
     /// # Errors

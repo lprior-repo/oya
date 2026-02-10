@@ -7,7 +7,7 @@ use std::io::ErrorKind as IoErrorKind;
 /// Transport layer errors.
 ///
 /// All errors are recoverable and provide diagnostic context.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TransportError {
     /// Message payload exceeds 1MB limit.
     ///
@@ -99,23 +99,25 @@ pub enum TransportError {
 }
 
 impl TransportError {
-    /// Create a MessageTooLarge error
-    pub fn message_too_large(actual_size: usize, max_size: usize) -> Self {
+    /// Create a `MessageTooLarge` error
+    #[must_use] 
+    pub const fn message_too_large(actual_size: usize, max_size: usize) -> Self {
         Self::MessageTooLarge {
             actual_size,
             max_size,
         }
     }
 
-    /// Create an UnexpectedEof error
-    pub fn unexpected_eof(bytes_read: usize, expected_bytes: usize) -> Self {
+    /// Create an `UnexpectedEof` error
+    #[must_use] 
+    pub const fn unexpected_eof(bytes_read: usize, expected_bytes: usize) -> Self {
         Self::UnexpectedEof {
             bytes_read,
             expected_bytes,
         }
     }
 
-    /// Create an InvalidLength error
+    /// Create an `InvalidLength` error
     pub fn invalid_length(length: u32, reason: impl Into<String>) -> Self {
         Self::InvalidLength {
             length,
@@ -123,14 +125,14 @@ impl TransportError {
         }
     }
 
-    /// Create a SerializationFailed error
+    /// Create a `SerializationFailed` error
     pub fn serialization_failed(cause: impl Into<String>) -> Self {
         Self::SerializationFailed {
             cause: cause.into(),
         }
     }
 
-    /// Create a DeserializationFailed error
+    /// Create a `DeserializationFailed` error
     pub fn deserialization_failed(cause: impl Into<String>, payload_bytes: usize) -> Self {
         Self::DeserializationFailed {
             cause: cause.into(),
@@ -138,7 +140,8 @@ impl TransportError {
         }
     }
 
-    /// Create a WriteFailed error from std::io::Error
+    /// Create a `WriteFailed` error from `std::io::Error`
+    #[must_use] 
     pub fn write_failed(err: &std::io::Error) -> Self {
         Self::WriteFailed {
             error_code: err.raw_os_error(),
@@ -146,7 +149,8 @@ impl TransportError {
         }
     }
 
-    /// Create a ReadFailed error from std::io::Error
+    /// Create a `ReadFailed` error from `std::io::Error`
+    #[must_use] 
     pub fn read_failed(err: &std::io::Error) -> Self {
         Self::ReadFailed {
             error_code: err.raw_os_error(),
@@ -164,8 +168,7 @@ impl std::fmt::Display for TransportError {
             } => {
                 write!(
                     f,
-                    "Message too large: {} bytes (max {} bytes)",
-                    actual_size, max_size
+                    "Message too large: {actual_size} bytes (max {max_size} bytes)"
                 )
             }
             Self::UnexpectedEof {
@@ -174,15 +177,14 @@ impl std::fmt::Display for TransportError {
             } => {
                 write!(
                     f,
-                    "Unexpected EOF: {} bytes read, expected {}",
-                    bytes_read, expected_bytes
+                    "Unexpected EOF: {bytes_read} bytes read, expected {expected_bytes}"
                 )
             }
             Self::InvalidLength { length, reason } => {
-                write!(f, "Invalid length prefix {}: {}", length, reason)
+                write!(f, "Invalid length prefix {length}: {reason}")
             }
             Self::SerializationFailed { cause } => {
-                write!(f, "Serialization failed: {}", cause)
+                write!(f, "Serialization failed: {cause}")
             }
             Self::DeserializationFailed {
                 cause,
@@ -190,15 +192,14 @@ impl std::fmt::Display for TransportError {
             } => {
                 write!(
                     f,
-                    "Deserialization failed at {} bytes: {}",
-                    payload_bytes, cause
+                    "Deserialization failed at {payload_bytes} bytes: {cause}"
                 )
             }
             Self::WriteFailed { error_code, kind } => {
-                write!(f, "Write failed: {:?} (error code: {:?})", kind, error_code)
+                write!(f, "Write failed: {kind:?} (error code: {error_code:?})")
             }
             Self::ReadFailed { error_code, kind } => {
-                write!(f, "Read failed: {:?} (error code: {:?})", kind, error_code)
+                write!(f, "Read failed: {kind:?} (error code: {error_code:?})")
             }
         }
     }

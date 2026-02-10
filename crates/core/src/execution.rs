@@ -27,10 +27,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
-use std::sync::Arc;
 
 /// Execution state for a workflow.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkflowState {
     /// Workflow ID.
     pub workflow_id: String,
@@ -59,7 +58,7 @@ pub enum TaskExecutionStatus {
 }
 
 /// Result of workflow execution.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkflowResult {
     /// Tasks that succeeded.
     pub succeeded: Vec<String>,
@@ -124,7 +123,7 @@ pub struct ExecutionEngine {
 impl ExecutionEngine {
     /// Create a new execution engine.
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             checkpoint_dir: None,
         }
@@ -221,7 +220,8 @@ impl ExecutionEngine {
                     .entry(dep_id.clone())
                     .or_default()
                     .push(task_id.clone());
-                *in_degree.entry(task_id.clone()).or_insert(0) += 1;
+                let entry = in_degree.entry(task_id.clone()).or_insert(0);
+                *entry = entry.saturating_add(1);
             }
         }
 
@@ -240,7 +240,7 @@ impl ExecutionEngine {
             if let Some(neighbors) = adj_list.get(&task_id) {
                 for neighbor in neighbors {
                     if let Some(degree) = in_degree.get_mut(neighbor) {
-                        *degree -= 1;
+                        *degree = degree.saturating_sub(1);
                         if *degree == 0 {
                             queue.push(neighbor.clone());
                         }
@@ -266,8 +266,8 @@ impl ExecutionEngine {
         let mut path: Vec<String> = Vec::new();
 
         for task_id in workflow.tasks.keys() {
-            if !visited.contains(task_id) {
-                if self.dfs_cycle_detect(
+            if !visited.contains(task_id)
+                && self.dfs_cycle_detect(
                     workflow,
                     task_id,
                     &mut visited,
@@ -276,7 +276,6 @@ impl ExecutionEngine {
                 )? {
                     return Ok(path);
                 }
-            }
         }
 
         // Should not reach here if cycle exists
@@ -307,8 +306,10 @@ impl ExecutionEngine {
                     // Found cycle - extract the cycle portion
                     let cycle_start = path.iter().position(|id| id == other_id);
                     if let Some(start) = cycle_start {
-                        *path = path[start..].to_vec();
-                        path.push(other_id.clone());
+                        if start < path.len() {
+                            *path = path[start..].to_vec();
+                            path.push(other_id.clone());
+                        }
                     }
                     return Ok(true);
                 }
@@ -380,6 +381,7 @@ impl ExecutionEngine {
     }
 
     /// Get tasks ready to execute based on current state.
+    #[must_use] 
     pub fn get_ready_tasks(&self, workflow: &Workflow, state: &WorkflowState) -> Vec<String> {
         if state.workflow_id != workflow.id.as_str() {
             return Vec::new();
@@ -393,18 +395,18 @@ impl ExecutionEngine {
                 if state
                     .task_status
                     .get(*task_id)
-                    .map_or(true, |s| !matches!(s, TaskExecutionStatus::Pending))
+                    .is_none_or(|s| !matches!(s, TaskExecutionStatus::Pending))
                 {
                     return false;
                 }
 
                 // All dependencies must be completed
-                workflow.dependencies.get(*task_id).map_or(true, |deps| {
+                workflow.dependencies.get(*task_id).is_none_or(|deps| {
                     deps.iter().all(|dep_id| {
                         state
                             .task_status
                             .get(dep_id)
-                            .map_or(false, |s| matches!(s, TaskExecutionStatus::Completed))
+                            .is_some_and(|s| matches!(s, TaskExecutionStatus::Completed))
                     })
                 })
             })
@@ -424,10 +426,10 @@ impl ExecutionEngine {
         let mut state = self.parse_workflow(workflow)?;
 
         let mut succeeded = Vec::new();
-        let mut failed = Vec::new();
-        let mut rolled_back = Vec::new();
-        let mut timed_out = Vec::new();
-        let mut rollback_failed = Vec::new();
+        let failed = Vec::new();
+        let rolled_back = Vec::new();
+        let timed_out = Vec::new();
+        let rollback_failed = Vec::new();
 
         // Execute tasks until no more are ready
         loop {
@@ -464,7 +466,7 @@ impl ExecutionEngine {
 
                 // Simulate task execution - in production would call actual task
                 // For now, we'll mark it as completed
-                let task =
+                let _task =
                     workflow
                         .get_task(&task_id)
                         .ok_or_else(|| ExecutionError::TaskFailed {
@@ -526,7 +528,7 @@ impl ExecutionEngine {
             }
             Some(other) => Err(ExecutionError::RollbackFailed {
                 task_id: task_id.to_string(),
-                cause: format!("Cannot rollback task in state {:?}", other),
+                cause: format!("Cannot rollback task in state {other:?}"),
             }),
             None => Err(ExecutionError::RollbackFailed {
                 task_id: task_id.to_string(),

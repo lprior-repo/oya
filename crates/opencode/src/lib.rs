@@ -4,7 +4,7 @@
 
 //! # oya-opencode
 //!
-//! OpenCode AI bridge for OYA - Execute AI coding tasks via opencode CLI.
+//! `OpenCode` AI bridge for OYA - Execute AI coding tasks via opencode CLI.
 //!
 //! This crate provides integration with the [OpenCode](https://opencode.ai) CLI
 //! for AI-powered code generation, analysis, and modification.

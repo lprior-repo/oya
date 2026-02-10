@@ -1,4 +1,4 @@
-//! AgentSlotActor for recursive bead stage execution.
+//! `AgentSlotActor` for recursive bead stage execution.
 //!
 //! This actor manages the lifecycle of a single bead through its recursive
 //! stage execution, handling gate decisions, reentry with feedback, and
@@ -25,7 +25,7 @@ use oya_events::{
 use crate::context_builder::{BeadContext, StageContextBuilder, StagePrompt};
 use crate::stage_gate::{GateDecision, StageGate, StageOutput};
 
-/// Messages for AgentSlotActor.
+/// Messages for `AgentSlotActor`.
 #[derive(Debug)]
 pub enum AgentSlotMessage {
     /// Start executing a bead through its stage lifecycle.
@@ -109,7 +109,7 @@ pub enum SlotError {
     BeadIdNotAvailable,
 }
 
-/// State for AgentSlotActor.
+/// State for `AgentSlotActor`.
 pub struct AgentSlotState {
     bead_id: Option<BeadId>,
     state_machine: Option<BeadStateMachine>,
@@ -141,13 +141,13 @@ impl AgentSlotState {
 
     /// Check if slot is idle.
     #[must_use]
-    pub fn is_idle(&self) -> bool {
+    pub const fn is_idle(&self) -> bool {
         self.bead_id.is_none()
     }
 
     /// Get current bead ID.
     #[must_use]
-    pub fn current_bead(&self) -> Option<&BeadId> {
+    pub const fn current_bead(&self) -> Option<&BeadId> {
         self.bead_id.as_ref()
     }
 
@@ -157,17 +157,17 @@ impl AgentSlotState {
     }
 }
 
-/// Actor definition for AgentSlotActor.
+/// Actor definition for `AgentSlotActor`.
 pub struct AgentSlotActorDef;
 
 impl AgentSlotActorDef {
     /// Spawn a new agent slot actor.
     pub async fn spawn(
         project_root: PathBuf,
-        event_bus: Option<Arc<EventBus>>,
+        _event_bus: Option<Arc<EventBus>>,
     ) -> Result<ActorRef<AgentSlotMessage>, SlotError> {
         let initial_state = AgentSlotState::new(project_root);
-        let (actor, _) = Actor::spawn(None, AgentSlotActorDef, initial_state)
+        let (actor, _) = Actor::spawn(None, Self, initial_state)
             .await
             .map_err(|e| SlotError::StageExecutionFailed(format!("spawn failed: {e}")))?;
 
@@ -192,7 +192,7 @@ impl Actor for AgentSlotActorDef {
     async fn post_stop(
         &self,
         _myself: ActorRef<Self::Msg>,
-        state: &mut Self::State,
+        _state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         info!("AgentSlotActor stopping");
         Ok(())
@@ -241,12 +241,12 @@ impl Actor for AgentSlotActorDef {
                 let slot_state = if let Some(ref bead_id) = state.bead_id {
                     if let Some(current_stage) = state.current_stage {
                         SlotState::Executing {
-                            bead_id: bead_id.clone(),
+                            bead_id: *bead_id,
                             current_stage,
                         }
                     } else {
                         SlotState::Completed {
-                            bead_id: bead_id.clone(),
+                            bead_id: *bead_id,
                             result: BeadCompletion::Accepted,
                         }
                     }
@@ -265,9 +265,9 @@ impl AgentSlotActorDef {
         &self,
         state: &mut AgentSlotState,
         bead_id: BeadId,
-        spec: String,
-        relevant_files: Vec<PathBuf>,
-        upstream_artifacts: Vec<String>,
+        _spec: String,
+        _relevant_files: Vec<PathBuf>,
+        _upstream_artifacts: Vec<String>,
     ) -> Result<BeadCompletion, SlotError> {
         if !state.is_idle() {
             return Err(SlotError::InvalidTransition);
@@ -276,13 +276,13 @@ impl AgentSlotActorDef {
         info!("Starting bead execution: {}", bead_id);
 
         // Initialize state machine
-        let state_machine = BeadStateMachine::new(bead_id.clone());
+        let state_machine = BeadStateMachine::new(bead_id);
         let policy = state_machine.policy();
         let stage_gate = StageGate::new(policy);
         let context_builder = StageContextBuilder::new(state.project_root.clone())
             .with_claude_md(state.project_root.join("CLAUDE.md"));
 
-        state.bead_id = Some(bead_id.clone());
+        state.bead_id = Some(bead_id);
         state.state_machine = Some(state_machine);
         state.stage_gate = Some(stage_gate);
         state.context_builder = Some(context_builder);
@@ -293,7 +293,7 @@ impl AgentSlotActorDef {
             state,
             BeadEvent::StateChanged {
                 event_id: oya_events::EventId::new(),
-                bead_id: bead_id.clone(),
+                bead_id,
                 from: oya_events::BeadState::Ready,
                 to: oya_events::BeadState::Running,
                 reason: None,
@@ -311,15 +311,15 @@ impl AgentSlotActorDef {
         let state_machine = state
             .state_machine
             .clone()
-            .ok_or_else(|| SlotError::InvalidTransition)?;
+            .ok_or(SlotError::InvalidTransition)?;
         let context_builder = state
             .context_builder
             .as_ref()
-            .ok_or_else(|| SlotError::InvalidTransition)?;
+            .ok_or(SlotError::InvalidTransition)?;
         let stage_gate = state
             .stage_gate
             .as_ref()
-            .ok_or_else(|| SlotError::InvalidTransition)?;
+            .ok_or(SlotError::InvalidTransition)?;
 
         let current_stage = state_machine.current_stage();
         state.current_stage = Some(current_stage);
@@ -340,8 +340,8 @@ impl AgentSlotActorDef {
         // Build context for this stage
         let bead_id = state.require_bead_id()?;
         let bead_context = BeadContext {
-            bead_id: bead_id.clone(),
-            spec: format!("Bead {}", bead_id), // Simplified
+            bead_id: *bead_id,
+            spec: format!("Bead {bead_id}"), // Simplified
             relevant_files: vec![],
             upstream_artifacts: vec![],
         };
@@ -355,7 +355,7 @@ impl AgentSlotActorDef {
             state,
             BeadEvent::StageStarted {
                 event_id: oya_events::EventId::new(),
-                bead_id: bead_id.clone(),
+                bead_id: *bead_id,
                 stage: current_stage,
                 attempt: current_attempt,
                 timestamp: chrono::Utc::now(),
@@ -370,7 +370,7 @@ impl AgentSlotActorDef {
         };
 
         // Evaluate output through gate
-        let decision = stage_gate.evaluate(&machine_clone, output.clone());
+        let decision = stage_gate.evaluate(&machine_clone, output);
 
         // Handle gate decision
         match decision {
@@ -411,7 +411,7 @@ impl AgentSlotActorDef {
                 );
 
                 // Reenter target stage
-                let mut machine_clone = state_machine.clone();
+                let mut machine_clone = state_machine;
                 let transition = machine_clone
                     .reenter(target, feedback.clone(), severity)
                     .map_err(|e| SlotError::StateMachineError(format!("reenter: {e}")))?;
@@ -432,7 +432,7 @@ impl AgentSlotActorDef {
                 self.complete_bead(
                     state,
                     BeadCompletion::Parked {
-                        reason: format!("Retry limits exhausted: {:?}", policy),
+                        reason: format!("Retry limits exhausted: {policy:?}"),
                     },
                 );
             }
@@ -446,7 +446,7 @@ impl AgentSlotActorDef {
         StageOutput {
             stage,
             success: true,
-            output: format!("Agent execution for {:?}", stage),
+            output: format!("Agent execution for {stage:?}"),
             exit_code: Some(0),
             duration_ms: 100,
         }
@@ -472,7 +472,7 @@ impl AgentSlotActorDef {
             _ => StageOutput {
                 stage,
                 success: false,
-                output: format!("Non-agent stage {:?}", stage),
+                output: format!("Non-agent stage {stage:?}"),
                 exit_code: Some(1),
                 duration_ms: 10,
             },
@@ -488,7 +488,7 @@ impl AgentSlotActorDef {
                 state,
                 BeadEvent::StageFailed {
                     event_id: oya_events::EventId::new(),
-                    bead_id: bead_id.clone(),
+                    bead_id: *bead_id,
                     stage,
                     feedback: format!("Timeout after {:?}", Duration::from_secs(60)),
                     severity: Severity::Major,
@@ -500,7 +500,7 @@ impl AgentSlotActorDef {
             self.complete_bead(
                 state,
                 BeadCompletion::Failed {
-                    reason: format!("Stage timeout: {:?}", stage),
+                    reason: format!("Stage timeout: {stage:?}"),
                 },
             );
         }
@@ -508,7 +508,7 @@ impl AgentSlotActorDef {
 
     fn complete_bead(&self, state: &mut AgentSlotState, result: BeadCompletion) {
         let bead_id = match state.require_bead_id() {
-            Ok(id) => id.clone(),
+            Ok(id) => *id,
             Err(e) => {
                 error!("Cannot complete bead: {}", e);
                 return;
@@ -524,7 +524,7 @@ impl AgentSlotActorDef {
                     state,
                     BeadEvent::Completed {
                         event_id: oya_events::EventId::new(),
-                        bead_id: bead_id.clone(),
+                        bead_id,
                         result: oya_events::BeadResult {
                             success: true,
                             output: None,
@@ -540,18 +540,18 @@ impl AgentSlotActorDef {
                     state,
                     BeadEvent::Failed {
                         event_id: oya_events::EventId::new(),
-                        bead_id: bead_id.clone(),
+                        bead_id,
                         error: reason.clone(),
                         timestamp: chrono::Utc::now(),
                     },
                 );
             }
-            BeadCompletion::Parked { ref reason } => {
+            BeadCompletion::Parked { reason: _ } => {
                 self.emit_event(
                     state,
                     BeadEvent::RecursionExhausted {
                         event_id: oya_events::EventId::new(),
-                        bead_id: bead_id.clone(),
+                        bead_id,
                         total_attempts: 0, // Would track this if needed
                         last_stage: state.current_stage.unwrap_or(StageKind::Research),
                         timestamp: chrono::Utc::now(),
@@ -581,16 +581,16 @@ impl AgentSlotActorDef {
                     // For normal completion, we could emit a stage completed event
                     BeadEvent::StageCompleted {
                         event_id: oya_events::EventId::new(),
-                        bead_id: bead_id.clone(),
+                        bead_id: *bead_id,
                         stage: transition.to,
                         artifact_ref: None,
                         timestamp: chrono::Utc::now(),
                     }
                 }
-                oya_events::TransitionReason::GateFailed { ref feedback, severity } => {
+                oya_events::TransitionReason::GateFailed { ref feedback, severity: _ } => {
                     BeadEvent::StageReentry {
                         event_id: oya_events::EventId::new(),
-                        bead_id: bead_id.clone(),
+                        bead_id: *bead_id,
                         from_stage: transition.from,
                         to_stage: transition.to,
                         reason: feedback.clone(),
@@ -602,7 +602,7 @@ impl AgentSlotActorDef {
                     // For other transition types, emit a stage failed event
                     BeadEvent::StageFailed {
                         event_id: oya_events::EventId::new(),
-                        bead_id: bead_id.clone(),
+                        bead_id: *bead_id,
                         stage: transition.from,
                         feedback: format!("Transition: {:?}", transition.reason),
                         severity: oya_events::Severity::Major,

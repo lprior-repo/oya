@@ -167,6 +167,7 @@ pub enum BeadEvent {
 
 impl BeadEvent {
     /// Create a new Created event.
+    #[must_use] 
     pub fn created(bead_id: BeadId, spec: BeadSpec) -> Self {
         Self::Created {
             event_id: EventId::new(),
@@ -176,7 +177,8 @@ impl BeadEvent {
         }
     }
 
-    /// Create a new StateChanged event.
+    /// Create a new `StateChanged` event.
+    #[must_use] 
     pub fn state_changed(bead_id: BeadId, from: BeadState, to: BeadState) -> Self {
         Self::StateChanged {
             event_id: EventId::new(),
@@ -188,7 +190,7 @@ impl BeadEvent {
         }
     }
 
-    /// Create a StateChanged event with a reason.
+    /// Create a `StateChanged` event with a reason.
     pub fn state_changed_with_reason(
         bead_id: BeadId,
         from: BeadState,
@@ -205,7 +207,7 @@ impl BeadEvent {
         }
     }
 
-    /// Create a new PhaseCompleted event.
+    /// Create a new `PhaseCompleted` event.
     pub fn phase_completed(
         bead_id: BeadId,
         phase_id: PhaseId,
@@ -222,7 +224,8 @@ impl BeadEvent {
         }
     }
 
-    /// Create a new DependencyResolved event.
+    /// Create a new `DependencyResolved` event.
+    #[must_use] 
     pub fn dependency_resolved(bead_id: BeadId, dependency_id: BeadId) -> Self {
         Self::DependencyResolved {
             event_id: EventId::new(),
@@ -243,6 +246,7 @@ impl BeadEvent {
     }
 
     /// Create a new Completed event.
+    #[must_use] 
     pub fn completed(bead_id: BeadId, result: BeadResult) -> Self {
         Self::Completed {
             event_id: EventId::new(),
@@ -263,6 +267,7 @@ impl BeadEvent {
     }
 
     /// Create a new Unclaimed event.
+    #[must_use] 
     pub fn unclaimed(bead_id: BeadId, reason: Option<String>) -> Self {
         Self::Unclaimed {
             event_id: EventId::new(),
@@ -272,7 +277,8 @@ impl BeadEvent {
         }
     }
 
-    /// Create a new PriorityChanged event.
+    /// Create a new `PriorityChanged` event.
+    #[must_use] 
     pub fn priority_changed(bead_id: BeadId, old_priority: u32, new_priority: u32) -> Self {
         Self::PriorityChanged {
             event_id: EventId::new(),
@@ -283,7 +289,8 @@ impl BeadEvent {
         }
     }
 
-    /// Create a new MetadataUpdated event.
+    /// Create a new `MetadataUpdated` event.
+    #[must_use] 
     pub fn metadata_updated(bead_id: BeadId, metadata: serde_json::Value) -> Self {
         Self::MetadataUpdated {
             event_id: EventId::new(),
@@ -293,7 +300,7 @@ impl BeadEvent {
         }
     }
 
-    /// Create a new WorkerUnhealthy event.
+    /// Create a new `WorkerUnhealthy` event.
     pub fn worker_unhealthy(worker_id: impl Into<String>, reason: impl Into<String>) -> Self {
         Self::WorkerUnhealthy {
             event_id: EventId::new(),
@@ -303,7 +310,8 @@ impl BeadEvent {
         }
     }
 
-    /// Create a new StageStarted event.
+    /// Create a new `StageStarted` event.
+    #[must_use] 
     pub fn stage_started(bead_id: BeadId, stage: StageKind, attempt: u32) -> Self {
         Self::StageStarted {
             event_id: EventId::new(),
@@ -314,7 +322,8 @@ impl BeadEvent {
         }
     }
 
-    /// Create a new StageCompleted event.
+    /// Create a new `StageCompleted` event.
+    #[must_use] 
     pub fn stage_completed(
         bead_id: BeadId,
         stage: StageKind,
@@ -329,7 +338,7 @@ impl BeadEvent {
         }
     }
 
-    /// Create a new StageFailed event.
+    /// Create a new `StageFailed` event.
     pub fn stage_failed(
         bead_id: BeadId,
         stage: StageKind,
@@ -346,7 +355,7 @@ impl BeadEvent {
         }
     }
 
-    /// Create a new StageReentry event.
+    /// Create a new `StageReentry` event.
     pub fn stage_reentry(
         bead_id: BeadId,
         from_stage: StageKind,
@@ -365,7 +374,7 @@ impl BeadEvent {
         }
     }
 
-    /// Create a new ValidationRan event.
+    /// Create a new `ValidationRan` event.
     pub fn validation_ran(
         bead_id: BeadId,
         passed: bool,
@@ -384,7 +393,8 @@ impl BeadEvent {
         }
     }
 
-    /// Create a new RecursionExhausted event.
+    /// Create a new `RecursionExhausted` event.
+    #[must_use] 
     pub fn recursion_exhausted(
         bead_id: BeadId,
         total_attempts: u32,
@@ -400,7 +410,8 @@ impl BeadEvent {
     }
 
     /// Get the event ID.
-    pub fn event_id(&self) -> EventId {
+    #[must_use] 
+    pub const fn event_id(&self) -> EventId {
         match self {
             Self::Created { event_id, .. }
             | Self::StateChanged { event_id, .. }
@@ -424,7 +435,8 @@ impl BeadEvent {
 
     /// Get the bead ID.
     ///
-    /// Returns a default BeadId for events without a bead_id field (e.g., WorkerUnhealthy).
+    /// Returns a default `BeadId` for events without a `bead_id` field (e.g., `WorkerUnhealthy`).
+    #[must_use] 
     pub fn bead_id(&self) -> BeadId {
         match self {
             Self::Created { bead_id, .. }
@@ -448,7 +460,8 @@ impl BeadEvent {
     }
 
     /// Get the timestamp.
-    pub fn timestamp(&self) -> DateTime<Utc> {
+    #[must_use] 
+    pub const fn timestamp(&self) -> DateTime<Utc> {
         match self {
             Self::Created { timestamp, .. }
             | Self::StateChanged { timestamp, .. }
@@ -471,7 +484,8 @@ impl BeadEvent {
     }
 
     /// Get the event type name.
-    pub fn event_type(&self) -> &'static str {
+    #[must_use] 
+    pub const fn event_type(&self) -> &'static str {
         match self {
             Self::Created { .. } => "created",
             Self::StateChanged { .. } => "state_changed",

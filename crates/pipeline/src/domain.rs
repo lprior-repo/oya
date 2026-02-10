@@ -190,12 +190,12 @@ impl TaskStatus {
     }
 
     #[must_use]
-    pub fn is_transient(&self) -> bool {
+    pub const fn is_transient(&self) -> bool {
         matches!(self, Self::InProgress { .. })
     }
 
     #[must_use]
-    pub fn is_failed(&self) -> bool {
+    pub const fn is_failed(&self) -> bool {
         matches!(self, Self::FailedPipeline { .. })
     }
 
@@ -273,7 +273,7 @@ impl Task {
     }
 
     #[must_use]
-    pub fn with_priority(mut self, priority: Priority) -> Self {
+    pub const fn with_priority(mut self, priority: Priority) -> Self {
         self.priority = priority;
         self
     }
@@ -347,8 +347,8 @@ fn validate_transition(from: &TaskStatus, to: &TaskStatus) -> Result<()> {
     }
 
     match (from, to) {
-        (TaskStatus::Created, TaskStatus::InProgress { .. })
-        | (TaskStatus::Created, TaskStatus::FailedPipeline { .. }) => Ok(()),
+        (TaskStatus::Created,
+TaskStatus::InProgress { .. } | TaskStatus::FailedPipeline { .. }) => Ok(()),
         (
             TaskStatus::InProgress { stage: from_stage },
             TaskStatus::InProgress { stage: to_stage },

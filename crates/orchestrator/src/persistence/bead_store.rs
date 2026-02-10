@@ -1,6 +1,6 @@
 //! Bead persistence operations.
 //!
-//! CRUD operations for bead records in SurrealDB.
+//! CRUD operations for bead records in `SurrealDB`.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -65,7 +65,7 @@ impl BeadState {
 /// Bead record stored in the database.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BeadRecord {
-    /// SurrealDB record ID
+    /// `SurrealDB` record ID
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "id")]
     pub record_id: Option<RecordId>,

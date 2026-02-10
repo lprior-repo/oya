@@ -80,7 +80,7 @@ pub fn create_strategy(name: &str) -> Option<Box<dyn DistributionStrategy>> {
 
 /// Get a list of available strategy names.
 #[must_use]
-pub fn available_strategies() -> &'static [&'static str] {
+pub const fn available_strategies() -> &'static [&'static str] {
     &[
         "fifo",
         "priority",

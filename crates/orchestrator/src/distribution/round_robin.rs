@@ -24,7 +24,7 @@ impl Default for RoundRobinStrategy {
 impl RoundRobinStrategy {
     /// Create a new round-robin strategy.
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             bead_index: AtomicUsize::new(0),
             agent_index: AtomicUsize::new(0),

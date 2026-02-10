@@ -1,4 +1,4 @@
-//! Messages for the SchedulerActor.
+//! Messages for the `SchedulerActor`.
 //!
 //! Design principles:
 //! - Commands are fire-and-forget (use `cast!`)
@@ -54,10 +54,10 @@ pub struct WorkflowStatus {
     pub is_complete: bool,
 }
 
-/// Messages for the SchedulerActor.
+/// Messages for the `SchedulerActor`.
 ///
 /// This enum defines all messages the scheduler can receive.
-/// Commands are fire-and-forget, queries expect responses via RpcReplyPort.
+/// Commands are fire-and-forget, queries expect responses via `RpcReplyPort`.
 #[derive(Debug)]
 pub enum SchedulerMessage {
     // COMMANDS (fire-and-forget via cast!)
@@ -88,11 +88,11 @@ pub enum SchedulerMessage {
         workflow_id: WorkflowId,
         /// The bead that must complete first.
         from_bead: BeadId,
-        /// The bead that depends on from_bead.
+        /// The bead that depends on `from_bead`.
         to_bead: BeadId,
     },
 
-    /// Handle external bead completion (from EventBus).
+    /// Handle external bead completion (from `EventBus`).
     OnBeadCompleted {
         /// The workflow containing the bead.
         workflow_id: WorkflowId,
@@ -100,7 +100,7 @@ pub enum SchedulerMessage {
         bead_id: BeadId,
     },
 
-    /// Handle state change (from EventBus).
+    /// Handle state change (from `EventBus`).
     OnStateChanged {
         /// The bead whose state changed.
         bead_id: BeadId,
