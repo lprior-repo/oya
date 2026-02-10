@@ -1079,16 +1079,11 @@ impl OyaPlugin {
         let renderer = Renderer::new();
 
         // Create placeholder task data for rendering
-        let mut tasks = vec![
+        let tasks = vec![
             TaskRow::new("task-3ax5", "in_progress", "P1", "Rust", "task/task-3ax5"),
             TaskRow::new("task-1xvj", "created", "P1", "Rust", "task/task-1xvj"),
             TaskRow::new("task-1k71", "created", "P2", "Rust", "task/task-1k71"),
         ];
-
-        // Set some stage states for demo
-        let _ = tasks[0].apply_stage_event("research", StageState::Completed, 1);
-        let _ = tasks[0].apply_stage_event("plan", StageState::Completed, 1);
-        let _ = tasks[0].apply_stage_event("implement", StageState::Running, 1);
 
         Ok(Self {
             layout,

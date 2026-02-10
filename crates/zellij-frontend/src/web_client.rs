@@ -407,7 +407,7 @@ impl WebClient {
                                 retries_left,
                                 "Retrying request after error"
                             );
-                            retries_left -= 1;
+                            retries_left = retries_left.saturating_sub(1);
                             tokio::time::sleep(self.config.retry_delay).await;
                             continue;
                         }
@@ -463,7 +463,7 @@ impl WebClient {
                             retries_left,
                             "Retrying request after network error"
                         );
-                        retries_left -= 1;
+                        retries_left = retries_left.saturating_sub(1);
                         tokio::time::sleep(self.config.retry_delay).await;
                         continue;
                     }

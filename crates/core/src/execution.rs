@@ -130,6 +130,8 @@ impl ExecutionEngine {
     }
 
     /// Set the checkpoint directory.
+    #[inline]
+    #[must_use]
     pub fn with_checkpoint_dir(mut self, dir: impl Into<String>) -> Self {
         self.checkpoint_dir = Some(dir.into());
         self
@@ -140,6 +142,7 @@ impl ExecutionEngine {
     /// # Errors
     /// Returns `ExecutionError::InvalidWorkflow` if validation fails.
     /// Returns `ExecutionError::CyclicGraph` if the workflow has cycles.
+    #[inline]
     pub fn parse_workflow(&self, workflow: &Workflow) -> Result<WorkflowState, ExecutionError> {
         // Validate workflow structure
         self.validate_workflow(workflow)?;

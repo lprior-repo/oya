@@ -139,7 +139,7 @@ impl CorrelationContext {
         }
 
         if self.metadata.len() > 5 {
-            parts.push(format!("(+{} more)", self.metadata.len() - 5));
+            parts.push(format!("(+{} more)", self.metadata.len().saturating_sub(5)));
         }
 
         parts.join(" ")

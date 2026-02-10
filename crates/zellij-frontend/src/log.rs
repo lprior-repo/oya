@@ -215,9 +215,9 @@ impl LogAggregator {
         // Note: rpds::Vector doesn't have a simple drop method
         // For production use, we'd need to implement proper trimming
         // using iterator-based approaches or a different data structure
-        if self.entries.len() > self.max_entries * 2 {
+        if self.entries.len() > self.max_entries.saturating_mul(2) {
             // Force trim if we get too large (2x max)
-            let start = self.entries.len() - self.max_entries;
+            let start = self.entries.len().saturating_sub(self.max_entries);
             self.entries = self.entries.iter().skip(start).cloned().collect();
         }
 
@@ -266,7 +266,7 @@ impl LogAggregator {
 
     pub fn recent_entries(&self, count: usize) -> Vector<LogEntry> {
         let start = if self.entries.len() > count {
-            self.entries.len() - count
+            self.entries.len().saturating_sub(count)
         } else {
             0
         };
