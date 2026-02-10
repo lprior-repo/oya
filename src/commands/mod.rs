@@ -12,6 +12,10 @@
 //! - Imperative shell for I/O and async operations
 //! - Railway-oriented error handling with thiserror/anyhow
 //! - Zero unwrap/expect/panic throughout
+//!
+//! # BDD-Style Tests
+//!
+//! CLI validation tests are in `tests/cli_validation.rs` using Given-When-Then format.
 
 pub mod doctor;
 pub mod init;
