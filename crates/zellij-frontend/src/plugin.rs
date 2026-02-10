@@ -430,14 +430,8 @@ pub fn stage_symbol_from_status(status: &str, stage: Option<&str>) -> char {
         // Failed stage
         ("failed", Some(_)) => '✗',
 
-        // Currently running stage
-        ("in_progress", Some(stage_name)) => {
-            // Map stage name to running symbol
-            match stage_name {
-                "research" | "plan" | "implement" | "review" | "validate" | "accept" => '◐',
-                _ => '?', // Unknown stage
-            }
-        }
+        // Currently running stage - collapse into outer match
+        ("in_progress", Some("research" | "plan" | "implement" | "review" | "validate" | "accept")) => '◐',
 
         // Created = not started
         ("created", _) => '○',

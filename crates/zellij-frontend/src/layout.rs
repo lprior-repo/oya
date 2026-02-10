@@ -128,13 +128,13 @@ impl Pane {
     /// Get the right boundary column
     #[must_use]
     pub const fn right(&self) -> usize {
-        self.col + self.width
+        self.col.saturating_add(self.width)
     }
 
     /// Get the bottom boundary row
     #[must_use]
     pub const fn bottom(&self) -> usize {
-        self.row + self.height
+        self.row.saturating_add(self.height)
     }
 }
 
