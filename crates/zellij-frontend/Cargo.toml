@@ -30,24 +30,25 @@ chrono = { workspace = true }
 rpds = { workspace = true }
 itertools = { workspace = true }
 
-# HTTP client (for web_client module)
-reqwest = { workspace = true }
-tokio = { workspace = true }
+# IPC (needed for WASM plugin communication)
+oya-ipc = { workspace = true }
 
-# UUID generation
+# UUID generation (needed for integration tests)
 uuid = { version = "1.11", features = ["v4", "serde"] }
 
-# IPC
-oya-ipc = { workspace = true }
+# HTTP client and tokio (only for native builds, NOT WASM)
+# WASM builds communicate via IPC and don't need HTTP/Tokio
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+reqwest = { version = "0.12", features = ["json"] }
+tokio = { workspace = true }
 
 [dev-dependencies]
 # Testing
-tokio = { workspace = true }
 os_pipe = "1.2"
+tokio = { workspace = true }
 
 # Test utilities
 tempfile = "3.13"
-uuid = { version = "1.11", features = ["v4", "serde"] }
 
 [profile.release]
 opt-level = "z"             # Optimize for size

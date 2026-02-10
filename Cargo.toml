@@ -214,6 +214,10 @@ oya-events = { workspace = true }
 # TODO: Re-enable oya-shared when needed
 # oya-shared = { workspace = true }
 orchestrator = { workspace = true }
+oya-ipc = { workspace = true }
+
+# Actor framework for IPC server
+ractor = "0.15"
 
 tokio = { workspace = true }
 clap = { workspace = true }

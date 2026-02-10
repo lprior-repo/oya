@@ -15,11 +15,15 @@
 
 pub mod doctor;
 pub mod init;
+pub mod install;
 pub mod logs;
+pub mod serve;
 pub mod storm;
 
 // Re-export command types for convenience
-pub use doctor::{DoctorArgs, DoctorError, DoctorOutput, doctor_command};
+pub use doctor::{CheckStatus, DoctorArgs, DoctorError, DoctorOutput, doctor_command};
 pub use init::{InitArgs, InitError, InitOutput, init_command};
+pub use install::{install_command};
 pub use logs::{LogsArgs, LogsError, LogsOutput, logs_command};
+pub use serve::{serve_command};
 pub use storm::{StormArgs, StormError, StormOutput, storm_command};

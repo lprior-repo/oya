@@ -2698,7 +2698,7 @@ checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
 name = "merge-queue"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "oya-core",
  "serde",
@@ -3066,10 +3066,9 @@ dependencies = [
 
 [[package]]
 name = "orchestrator"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "async-trait",
- "axum",
  "bincode 2.0.1",
  "chrono",
  "criterion",
@@ -3095,8 +3094,6 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tokio-test",
- "tower",
- "tower-http",
  "tracing",
  "tracing-subscriber",
  "uuid",
@@ -3114,7 +3111,7 @@ dependencies = [
 
 [[package]]
 name = "oya"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3124,9 +3121,11 @@ dependencies = [
  "orchestrator",
  "oya-core",
  "oya-events",
+ "oya-ipc",
  "oya-opencode",
  "oya-pipeline",
  "oya-workflow",
+ "ractor",
  "reqwest",
  "rusqlite",
  "serde",
@@ -3141,7 +3140,7 @@ dependencies = [
 
 [[package]]
 name = "oya-core"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3193,7 +3192,7 @@ dependencies = [
 
 [[package]]
 name = "oya-opencode"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "async-trait",
  "futures",
@@ -3215,7 +3214,7 @@ dependencies = [
 
 [[package]]
 name = "oya-pipeline"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -3237,7 +3236,7 @@ dependencies = [
 
 [[package]]
 name = "oya-web"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6457,7 +6456,7 @@ dependencies = [
 
 [[package]]
 name = "zellij-frontend"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "bincode 2.0.1",
  "chrono",
