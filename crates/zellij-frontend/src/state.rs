@@ -268,7 +268,13 @@ impl StateManager {
     ///
     /// * `Ok(Some(snapshot))` - State loaded successfully
     /// * `Ok(None)` - No state file exists (first run)
-    /// * `Err(StateError)` - Load failed (corrupted, incompatible, etc.)
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(StateError)` if:
+    /// - File read fails (I/O error)
+    /// - JSON deserialization fails (corrupted data)
+    /// - Snapshot validation fails (incompatible version, missing fields)
     pub fn load_state(&self) -> Result<Option<StateSnapshot>, StateError> {
         // Check if file exists
         if !self.state_exists() {
@@ -364,7 +370,12 @@ impl StateManager {
             message: format!("Failed to read file metadata: {e}"),
         })?;
 
-        let file_size = metadata.len() as usize;
+        // Use try_from for safe conversion - on 32-bit systems this handles overflow
+        let file_size = usize::try_from(metadata.len()).map_err(|_| StateError::FileTooLarge {
+            size: usize::MAX, // overflow indicator
+            max: self.max_file_size,
+        })?;
+
         if file_size > self.max_file_size {
             return Err(StateError::FileTooLarge {
                 size: file_size,
@@ -498,23 +509,24 @@ mod tests {
     }
 
     #[test]
-    fn test_state_manager_state_exists() {
+    fn test_state_manager_state_exists() -> Result<(), Box<dyn std::error::Error>> {
         let temp_dir = std::env::temp_dir();
         let state_file = temp_dir.join("test-state-exists.json");
-        let manager = StateManager::new(state_file.clone(), DEFAULT_MAX_FILE_SIZE)
-            .expect("Failed to create StateManager");
+        let manager = StateManager::new(state_file.clone(), DEFAULT_MAX_FILE_SIZE)?;
 
         // File doesn't exist yet
         assert!(!manager.state_exists());
 
         // Create file
-        fs::write(&state_file, "{}").expect("Failed to write test state file");
+        fs::write(&state_file, "{}")?;
 
         // File exists now
         assert!(manager.state_exists());
 
         // Cleanup
-        fs::remove_file(&state_file).expect("Failed to remove test state file");
+        fs::remove_file(&state_file)?;
+
+        Ok(())
     }
 
     #[test]
