@@ -65,6 +65,9 @@ pub trait ResultExt<T>: Sized {
     /// let result = get_user(1).and_then(|user| validate_user(user));
     /// assert!(result.is_ok());
     /// ```
+    ///
+    /// # Errors
+    /// Returns the error from the first failed operation, or from `f` if this Result is Ok and `f` fails.
     fn and_then<F, U>(self, f: F) -> Result<U>
     where
         F: FnOnce(T) -> Result<U>;
@@ -80,6 +83,9 @@ pub trait ResultExt<T>: Sized {
     /// let result = fetch_user(1).await.and_then_async(|user| validate_user(user)).await;
     /// assert!(result.is_ok());
     /// ```
+    ///
+    /// # Errors
+    /// Returns the error from the first failed operation, or from `f` if this Result is Ok and `f` fails.
     async fn and_then_async<F, U, Fut>(self, f: F) -> Result<U>
     where
         F: FnOnce(T) -> Fut + Send,
@@ -95,6 +101,9 @@ pub trait ResultExt<T>: Sized {
     /// let mapped = result.map_err(|e| format!("Error: {}", e));
     /// assert!(mapped.is_err());
     /// ```
+    ///
+    /// # Errors
+    /// This function never returns an error - it always returns a `std::result::Result`.
     fn map_err<F, E2>(self, f: F) -> std::result::Result<T, E2>
     where
         F: FnOnce(Error) -> E2;
@@ -133,6 +142,7 @@ pub trait ResultExt<T>: Sized {
     /// let result = primary.or(fallback);
     /// assert!(result.is_ok());
     /// ```
+    #[must_use]
     fn or(self, other: Result<T>) -> Result<T>;
 
     /// Try an alternative operation using a function if this Result is Err.
@@ -144,6 +154,10 @@ pub trait ResultExt<T>: Sized {
     /// let result = primary.or_else(|_| Ok(42));
     /// assert!(result.is_ok());
     /// ```
+    ///
+    /// # Errors
+    /// Returns `Ok` with the value from this Result if it's `Ok`, or the result of `f` if this Result is `Err`.
+    #[must_use]
     fn or_else<F>(self, f: F) -> Result<T>
     where
         F: FnOnce(Error) -> Result<T>;
