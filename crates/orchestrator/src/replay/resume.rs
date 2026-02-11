@@ -82,10 +82,9 @@ impl OrchestratorEventLog {
         Self { store }
     }
 
-    fn new_runtime() -> Result<Runtime, ResumeError> {
-        Runtime::new().map_err(|err| ResumeError::EventLoadFailed {
-            reason: err.to_string(),
-        })
+    fn new_runtime() -> Result<Runtime, OyaError> {
+        Runtime::new()
+            .map_err(|err| OyaError::Internal(format!("tokio runtime creation failed: {err}")))
     }
 }
 
@@ -97,26 +96,26 @@ struct EventRow {
 }
 
 impl EventLog for OrchestratorEventLog {
-    fn load_events_after(
-        &self,
-        timestamp: DateTime<Utc>,
-    ) -> Result<Vec<EventMetadata>, ResumeError> {
+    fn load_events_after(&self, timestamp: DateTime<Utc>) -> Result<Vec<EventMetadata>, OyaError> {
         let runtime = Self::new_runtime()?;
-        let response = runtime.block_on(
+        let surreal_timestamp = SurrealDatetime::from(timestamp);
+        let query_result = runtime.block_on(
             self.store
                 .db()
                 .query("SELECT event_id, sequence, timestamp FROM orchestrator_event WHERE timestamp > $timestamp ORDER BY timestamp ASC, sequence ASC")
-                .bind(("timestamp", SurrealDatetime::from(timestamp)))
-                .await,
+                .bind(("timestamp", surreal_timestamp)),
         );
-        let rows: Vec<EventRow> = match response {
-            Ok(rows) => rows.take(0).map_err(|err| ResumeError::EventLoadFailed {
-                reason: err.to_string(),
-            })?,
+
+        let rows: Vec<EventRow> = match query_result {
+            Ok(mut rows) => rows
+                .take::<Vec<EventRow>>(0)
+                .map_err(|e: surrealdb::Error| {
+                    OyaError::Internal(format!("failed to extract event rows: {e}"))
+                })?,
             Err(err) => {
-                return Err(ResumeError::EventLoadFailed {
-                    reason: err.to_string(),
-                })
+                return Err(OyaError::Internal(format!(
+                    "failed to query events after timestamp: {err}"
+                )))
             }
         };
 
