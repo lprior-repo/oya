@@ -335,8 +335,12 @@ fn should_preserve_phase_completed_fields_through_roundtrip() -> Result<(), Stri
     let phase_id = PhaseId::new();
     let output = PhaseOutput::success(vec![100, 200]);
 
-    let original =
-        BeadEvent::phase_completed(bead_id, phase_id, "integration-test", output.clone());
+    let original = BeadEvent::phase_completed(
+        bead_id,
+        phase_id,
+        "integration-test",
+        output.clone(),
+    );
 
     let json_str =
         serde_json::to_string(&original).map_err(|e| format!("Serialization failed: {e}"))?;
@@ -836,7 +840,7 @@ fn should_handle_invalid_json_gracefully() {
             // Expected - invalid JSON should produce error, not panic
         }
         Ok(_) => {
-            assert!(false, "Invalid JSON should produce error, but got Ok value");
+            panic!("Invalid JSON should produce error, but got Ok value");
         }
     }
 }
@@ -871,7 +875,7 @@ fn should_handle_empty_json_object() {
             // Expected - empty object can't be deserialized as BeadEvent
         }
         Ok(_) => {
-            assert!(false, "Empty JSON should produce error");
+            panic!("Empty JSON should produce error");
         }
     }
 }
@@ -887,7 +891,7 @@ fn should_handle_invalid_bincode_bytes() {
             // Expected - invalid bytes should error
         }
         Ok(_) => {
-            assert!(false, "Invalid bincode bytes should produce error");
+            panic!("Invalid bincode bytes should produce error");
         }
     }
 }
@@ -903,7 +907,7 @@ fn should_handle_empty_bincode_bytes() {
             // Expected - empty bytes should error
         }
         Ok(_) => {
-            assert!(false, "Empty bincode bytes should produce error");
+            panic!("Empty bincode bytes should produce error");
         }
     }
 }
@@ -935,7 +939,7 @@ fn should_enforce_max_size_for_created_event_with_large_metadata() {
             );
         }
         Err(e) => {
-            assert!(false, "Should serialize large but reasonable event: {e}");
+            panic!("Should serialize large but reasonable event: {e}");
         }
     }
 }

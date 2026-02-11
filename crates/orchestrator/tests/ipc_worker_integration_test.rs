@@ -131,8 +131,8 @@ fn persistence_to_events_state(state: PersistenceBeadState) -> BeadState {
         PersistenceBeadState::Assigned => BeadState::Ready,
         PersistenceBeadState::Running => BeadState::Running,
         PersistenceBeadState::Completed => BeadState::Completed,
-        PersistenceBeadState::Failed => BeadState::Completed,
-        PersistenceBeadState::Cancelled => BeadState::Completed,
+        PersistenceBeadState::Failed => BeadState::Failed,
+        PersistenceBeadState::Cancelled => BeadState::Cancelled,
     }
 }
 
@@ -298,7 +298,7 @@ async fn given_ipc_worker_when_cancel_bead_then_emits_state_changed_event()
         } => {
             assert_eq!(format!("{id}"), bead_id);
             assert_eq!(*from, BeadState::Running);
-            assert_eq!(*to, BeadState::Completed);
+            assert_eq!(*to, BeadState::Cancelled);
         }
         other => {
             eprintln!("Expected StateChanged event, got {:?}", other.event_type());
@@ -383,7 +383,7 @@ async fn given_ipc_worker_when_retry_bead_then_transitions_to_ready()
             ..
         } => {
             assert_eq!(format!("{id}"), bead_id);
-            assert_eq!(*from, BeadState::Completed);
+            assert_eq!(*from, BeadState::Failed);
             assert_eq!(*to, BeadState::Ready);
         }
         other => {

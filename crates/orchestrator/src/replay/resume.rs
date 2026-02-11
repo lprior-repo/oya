@@ -99,13 +99,13 @@ impl EventLog for OrchestratorEventLog {
     fn load_events_after(&self, timestamp: DateTime<Utc>) -> Result<Vec<EventMetadata>, OyaError> {
         let runtime = Self::new_runtime()?;
         let surreal_timestamp = SurrealDatetime::from(timestamp);
-        let mut result = runtime.block_on(
+        let mut result = runtime.block_on(async {
             self.store
                 .db()
                 .query("SELECT event_id, sequence, timestamp FROM orchestrator_event WHERE timestamp > $timestamp ORDER BY timestamp ASC, sequence ASC")
                 .bind(("timestamp", surreal_timestamp))
-                .await,
-        );
+                .await
+        });
 
         let rows: Vec<EventRow> = result
             .take(0)
