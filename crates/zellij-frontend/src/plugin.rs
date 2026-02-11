@@ -799,14 +799,14 @@ mod tests {
         // Test BeadList keybindings
         let bead_list_bindings = plugin.get_keybindings_for_pane(PaneType::BeadList);
         assert!(!bead_list_bindings.is_empty());
-        assert!(bead_list_bindings.iter().any(&|(key, _)| *key == '?'));
-        assert!(bead_list_bindings.iter().any(&|(key, _)| *key == '\x1b'));
+        assert!(bead_list_bindings.iter().any(|(key, _)| *key == '?'));
+        assert!(bead_list_bindings.iter().any(|(key, _)| *key == '\x1b'));
 
         // Test BeadDetail keybindings
         let bead_detail_bindings = plugin.get_keybindings_for_pane(PaneType::BeadDetail);
         assert!(!bead_detail_bindings.is_empty());
-        assert!(bead_detail_bindings.iter().any(&|(key, _)| *key == '?'));
-        assert!(bead_detail_bindings.iter().any(&|(key, _)| *key == '\x1b'));
+        assert!(bead_detail_bindings.iter().any(|(key, _)| *key == '?'));
+        assert!(bead_detail_bindings.iter().any(|(key, _)| *key == '\x1b'));
 
         // Test PipelineView keybindings
         let pipeline_view_bindings = plugin.get_keybindings_for_pane(PaneType::PipelineView);
@@ -819,7 +819,7 @@ mod tests {
         // Test WorkflowGraph keybindings
         let workflow_graph_bindings = plugin.get_keybindings_for_pane(PaneType::WorkflowGraph);
         assert!(!workflow_graph_bindings.is_empty());
-        assert!(workflow_graph_bindings.iter().any(&|(key, _)| *key == '?'));
+        assert!(workflow_graph_bindings.iter().any(|(key, _)| *key == '?'));
         assert!(workflow_graph_bindings
             .iter()
             .any(&|(key, _)| *key == '\x1b'));
@@ -895,7 +895,7 @@ mod tests {
 
             // Load state
             let load_result = state_manager.load_state();
-            assert!(load_result.is_some(), "Load should succeed");
+            assert!(load_result.is_ok(), "Load should succeed");
 
             let mut snapshot = load_result.ok_or("No snapshot found")?;
             assert!(snapshot.validate().is_ok(), "Snapshot should be valid");
