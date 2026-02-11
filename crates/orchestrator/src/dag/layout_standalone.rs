@@ -398,7 +398,9 @@ impl MemoizedLayout {
 
         if node_count == 1 {
             // Single node at center
-            positions.insert(nodes[0].clone(), Position::new(0.0, 0.0));
+            if let Some(node) = nodes.get(0) {
+                positions.insert(node.clone(), Position::new(0.0, 0.0));
+            }
             return positions;
         }
 
@@ -440,8 +442,8 @@ impl MemoizedLayout {
                             -repulsion * direction.1 * STEP_SIZE,
                         );
 
-                        *forces.entry(node.clone()).or_insert(Force::new(0.0, 0.0)) +=
-                            repulsive_force;
+                        let force = forces.entry(node.clone()).or_insert(Force::new(0.0, 0.0));
+                        *force = force.add(&repulsive_force);
                     }
                 }
             }
@@ -459,7 +461,8 @@ impl MemoizedLayout {
                 .iter()
                 .filter(|((from, _), _)| from.as_str() == node.as_str())
             {
-                *forces.entry(from.clone()).or_insert(Force::new(0.0, 0.0)) += *source_force;
+                let force = forces.entry(from.clone()).or_insert(Force::new(0.0, 0.0));
+                *force = force.add(&source_force);
             }
 
             // Find edges where this node is the target
@@ -468,7 +471,8 @@ impl MemoizedLayout {
                 .filter(|((_, to), _)| to.as_str() == node.as_str())
             {
                 // Functional pattern: dereference to avoid clone, Force is small (Copy-like)
-                *forces.entry(to.clone()).or_insert(Force::new(0.0, 0.0)) += *target_force;
+                let force = forces.entry(to.clone()).or_insert(Force::new(0.0, 0.0));
+                *force = force.add(&target_force);
             }
         }
 

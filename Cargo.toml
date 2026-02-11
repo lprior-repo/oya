@@ -96,7 +96,7 @@ empty_line_after_outer_attr = "allow"
 # Performance hints
 significant_drop_in_scrutinee = "warn"  # Avoid expensive drops in matches
 size_of_in_element_count = "warn"  # Check element count before size_of
-vec_box_then_clone = "warn"     # Avoid unnecessary clones
+ # vec_box_then_clone = "warn"     # Removed - not available in Rust 1.85
 
 # ==============================================================================
 # TEST MODULE CONFIGURATION EXAMPLE

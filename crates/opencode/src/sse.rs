@@ -45,8 +45,8 @@ impl SseFormatter {
     ///
     /// ```
     #[must_use]
-    pub fn format_message(&self, output: Output) -> String {
-        let event_type = match &output {
+    pub fn format_message(&self, output: &Output) -> String {
+        let event_type = match output {
             Output::Text(_) => "text",
             Output::ToolUse(_) => "tool",
             Output::Thinking(_) => "thinking",
@@ -55,7 +55,7 @@ impl SseFormatter {
             Output::Final(_) => "done",
         };
 
-        let content = match &output {
+        let content = match output {
             Output::Text(s)
             | Output::ToolUse(s)
             | Output::Thinking(s)
@@ -79,7 +79,7 @@ impl SseFormatter {
             crate::types::ChunkType::Status => Output::Status(chunk.content),
         };
 
-        Ok(self.format_message(output))
+        Ok(self.format_message(&output))
     }
 
     /// Format multiple `StreamChunk` values into a single SSE stream.
@@ -110,7 +110,7 @@ mod tests {
         let formatter = SseFormatter::new();
         let output = Output::Text("Hello, world!".to_string());
 
-        let message = formatter.format_message(output);
+        let message = formatter.format_message(&output);
         assert!(message.contains("event: text"));
         assert!(message.contains("data: Hello, world!"));
         assert!(message.contains("id: 1"));
@@ -122,7 +122,7 @@ mod tests {
         let formatter = SseFormatter::new();
         let output = Output::ToolUse("executed: cargo build".to_string());
 
-        let message = formatter.format_message(output);
+        let message = formatter.format_message(&output);
         assert!(message.contains("event: tool"));
         assert!(message.contains("data: executed: cargo build"));
     }
@@ -132,7 +132,7 @@ mod tests {
         let formatter = SseFormatter::new();
         let output = Output::Thinking("analyzing prompt".to_string());
 
-        let message = formatter.format_message(output);
+        let message = formatter.format_message(&output);
         assert!(message.contains("event: thinking"));
         assert!(message.contains("data: analyzing prompt"));
     }
@@ -142,7 +142,7 @@ mod tests {
         let formatter = SseFormatter::new();
         let output = Output::Error("failed to connect".to_string());
 
-        let message = formatter.format_message(output);
+        let message = formatter.format_message(&output);
         assert!(message.contains("event: error"));
         assert!(message.contains("data: failed to connect"));
     }
@@ -152,7 +152,7 @@ mod tests {
         let formatter = SseFormatter::new();
         let output = Output::Status("processing".to_string());
 
-        let message = formatter.format_message(output);
+        let message = formatter.format_message(&output);
         assert!(message.contains("event: status"));
         assert!(message.contains("data: processing"));
     }
@@ -162,7 +162,7 @@ mod tests {
         let formatter = SseFormatter::new();
         let output = Output::Final("completed".to_string());
 
-        let message = formatter.format_message(output);
+        let message = formatter.format_message(&output);
         assert!(message.contains("event: done"));
         assert!(message.contains("data: completed"));
     }

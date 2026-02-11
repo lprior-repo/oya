@@ -10,7 +10,7 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use super::persistence::TimerPersistence;
-use crate::persistence::{OrchestratorStore, PersistenceResult};
+     use crate::persistence::{OrchestratorStore, PersistenceError, PersistenceResult};
 
 /// Type alias for the timer priority queue.
 type TimerQueue = Arc<RwLock<BinaryHeap<Reverse<(DateTime<Utc>, TimerId)>>>>;
@@ -144,9 +144,10 @@ impl DurableTimer {
     }
 
     /// Create a timer with a delay from now.
+ #[allow(clippy::expect_used)]
     #[must_use]
     pub fn with_delay(delay_secs: i64, payload: serde_json::Value) -> Self {
-        let execute_at = Utc::now() + chrono::Duration::seconds(delay_secs);
+        let execute_at = Utc::now().checked_add_signed(chrono::Duration::seconds(delay_secs)).expect("timer delay is valid");
         Self::new(execute_at, payload)
     }
 
@@ -258,7 +259,7 @@ impl DurableTimer {
     /// Get the time until the timer fires (negative if overdue).
     #[must_use]
     pub fn time_until(&self) -> chrono::Duration {
-        self.execute_at - Utc::now()
+       self.execute_at.signed_duration_since(Utc::now())
     }
 
     /// Mark the timer as fired.
@@ -279,12 +280,18 @@ impl DurableTimer {
         self.updated_at = Utc::now();
     }
 
-    /// Reschedule the timer after a delay.
     pub fn reschedule_after(&mut self, delay_secs: u64) {
-        let delay_secs = delay_secs.min(i64::MAX as u64) as i64;
-        self.status = TimerStatus::Pending;
-        self.execute_at = Utc::now() + chrono::Duration::seconds(delay_secs);
-        self.updated_at = Utc::now();
+      let delay_secs = match i64::try_from(delay_secs.min(i64::MAX as u64)) {
+           Ok(v) => v,
+           Err(_) => return,
+       };
+       self.status = TimerStatus::Pending;
+        let duration = chrono::Duration::seconds(delay_secs);
+         self.execute_at = Utc::now().checked_add_signed(duration).unwrap_or_else(|| {
+             tracing::warn!("timer reschedule overflow, keeping current execute_at");
+             self.execute_at
+         });
+         self.updated_at = Utc::now();
     }
 }
 
@@ -563,8 +570,7 @@ impl TimerScheduler {
                 .await?;
         }
 
-        let mut timers = self.timers.write().await;
-        if let Some(timer) = timers.get_mut(timer_id.as_str()) {
+        if let Some(timer) = self.timers.write().await.get_mut(timer_id.as_str()) {
             timer.mark_failed();
         }
 
@@ -577,46 +583,36 @@ impl TimerScheduler {
     ///
     /// Returns an error if loading fails.
     pub async fn load_pending(&self) -> PersistenceResult<usize> {
-        let Some(persistence) = &self.persistence else {
-            return Ok(0);
-        };
+    let Some(persistence) = &self.persistence else {
+         return Ok(0);
+     };
 
-        let until = Utc::now() + chrono::Duration::seconds(self.config.lookahead_secs as i64);
-        let records = persistence.load_pending_until(until).await?;
+      let seconds: i64 = self.config.lookahead_secs.try_into().map_err(|_| {
+          PersistenceError::invalid_state("lookahead_secs conversion failed")
+      })?;
+      let until = Utc::now()
+          .checked_add_signed(chrono::Duration::seconds(seconds))
+          .ok_or_else(|| PersistenceError::invalid_state("time calculation overflow"))?;
+       let records = persistence.load_pending_until(until).await?;
         let count = records.len();
 
-        let mut timers = self.timers.write().await;
-        let mut queue = self.queue.write().await;
-        let mut loaded = 0usize;
-
         for record in records {
-            if timers.len() >= self.config.max_in_memory {
-                break;
-            }
-
-            if timers.contains_key(record.timer_id.as_str()) {
-                continue;
-            }
-
             let timer = record.into_timer()?;
-            queue.push(Reverse((timer.execute_at(), timer.id().clone())));
-            timers.insert(timer.id().as_str().to_string(), timer);
-            loaded = loaded.saturating_add(1);
+            let timer_id = timer.id().clone();
+            let execute_at = timer.execute_at();
+            self.timers.write().await.insert(timer_id.as_str().to_string(), timer);
+            self.queue.write().await.push(Reverse((execute_at, timer_id)));
         }
 
-        Ok(loaded.min(count))
-    }
+        Ok(count)
+     }
 
-    /// Clear all timers (for testing).
-    pub async fn clear(&self) {
-        let mut timers = self.timers.write().await;
-        let mut queue = self.queue.write().await;
-        let mut fired = self.fired.write().await;
-
-        timers.clear();
-        queue.clear();
-        fired.clear();
-    }
+     /// Clear all timers (for testing).
+     pub async fn clear(&self) {
+         self.timers.write().await.clear();
+         self.queue.write().await.clear();
+         self.fired.write().await.clear();
+     }
 }
 
 #[cfg(test)]

@@ -57,9 +57,8 @@ async fn given_persistence_when_workflow_saved_then_retrievable() -> Result<(), 
         .await
         .map_err(|e| format!("Failed to load workflow: {}", e))?;
 
-    let loaded_workflow = loaded_workflow_opt.ok_or_else(|| {
-        "Expected to find workflow in storage but got None".to_string()
-    })?;
+    let loaded_workflow = loaded_workflow_opt
+        .ok_or_else(|| "Expected to find workflow in storage but got None".to_string())?;
 
     // Verify workflow properties match
     assert_eq!(
@@ -115,7 +114,8 @@ async fn given_persistence_when_workflow_saved_then_retrievable() -> Result<(), 
 /// - **WHEN**: Multiple workflows are saved
 /// - **THEN**: All workflows can be retrieved via list_workflows
 #[tokio::test]
-async fn given_persistence_when_multiple_workflows_saved_then_all_retrievable() -> Result<(), String> {
+async fn given_persistence_when_multiple_workflows_saved_then_all_retrievable() -> Result<(), String>
+{
     // GIVEN: Persistence backend initialized
     let storage = InMemoryStorage::new();
 
@@ -195,7 +195,8 @@ async fn given_persistence_when_multiple_workflows_saved_then_all_retrievable() 
 /// - **WHEN**: The workflow is updated (modified and re-saved)
 /// - **THEN**: The latest version is retrievable
 #[tokio::test]
-async fn given_persistence_when_workflow_updated_then_latest_version_retrievable() -> Result<(), String> {
+async fn given_persistence_when_workflow_updated_then_latest_version_retrievable(
+) -> Result<(), String> {
     // GIVEN: A workflow saved in storage
     let storage = InMemoryStorage::new();
     let mut workflow = create_sample_workflow("updatable-workflow");
@@ -207,7 +208,9 @@ async fn given_persistence_when_workflow_updated_then_latest_version_retrievable
         .map_err(|e| format!("Failed to save initial workflow: {}", e))?;
 
     // WHEN: Workflow is updated (modified and re-saved)
-    workflow.phases.push(Phase::new("monitor").with_timeout(Duration::from_secs(60)));
+    workflow
+        .phases
+        .push(Phase::new("monitor").with_timeout(Duration::from_secs(60)));
     storage
         .save_workflow(&workflow)
         .await

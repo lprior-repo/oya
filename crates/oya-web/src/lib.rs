@@ -78,11 +78,12 @@ impl Default for ServerConfig {
 }
 
 /// Create a new router with middleware.
-///
-/// # Errors
-///
-/// Returns an error if router creation fails.
-pub fn create_router(config: ServerConfig) -> Result<Router, Error> {
+ ///
+ /// # Errors
+ ///
+ /// Returns an error if router creation fails.
+ #[allow(clippy::needless_pass_by_value)]
+ pub fn create_router(config: ServerConfig) -> Result<Router, Error> {
     info!("Creating router with CORS origin: {}", config.cors_origin);
 
     let cors = CorsLayer::new()

@@ -180,8 +180,7 @@ async fn given_ipc_worker_when_start_bead_then_emits_state_changed_event()
             reply,
         },
         5000
-    )
-    {
+    ) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("RPC call failed: {}", e);
@@ -274,8 +273,7 @@ async fn given_ipc_worker_when_cancel_bead_then_emits_state_changed_event()
             reply,
         },
         5000
-    )
-    {
+    ) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("RPC call failed: {}", e);
@@ -361,8 +359,7 @@ async fn given_ipc_worker_when_retry_bead_then_transitions_to_ready()
             reply,
         },
         5000
-    )
-    {
+    ) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("RPC call failed: {}", e);
@@ -436,8 +433,7 @@ async fn given_ipc_worker_when_start_nonexistent_bead_then_returns_error()
             reply,
         },
         5000
-    )
-    {
+    ) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("RPC call failed: {}", e);
@@ -495,8 +491,7 @@ async fn given_ipc_worker_when_start_completed_bead_then_returns_invalid_state_e
             reply,
         },
         5000
-    )
-    {
+    ) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("RPC call failed: {}", e);
@@ -673,8 +668,7 @@ async fn given_ipc_worker_when_start_running_bead_twice_then_succeeds_idempotent
             reply,
         },
         5000
-    )
-    {
+    ) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("First RPC call failed: {}", e);
@@ -701,8 +695,7 @@ async fn given_ipc_worker_when_start_running_bead_twice_then_succeeds_idempotent
             reply,
         },
         5000
-    )
-    {
+    ) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("Second RPC call failed: {}", e);
@@ -772,8 +765,7 @@ async fn given_ipc_worker_when_cancel_cancelled_bead_then_succeeds_idempotently(
             reply,
         },
         5000
-    )
-    {
+    ) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("First RPC call failed: {}", e);
@@ -800,8 +792,7 @@ async fn given_ipc_worker_when_cancel_cancelled_bead_then_succeeds_idempotently(
             reply,
         },
         5000
-    )
-    {
+    ) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("Second RPC call failed: {}", e);

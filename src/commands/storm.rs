@@ -391,8 +391,6 @@ async fn build_workflow_dag(db_path: &Path) -> Result<WorkflowDAG, StormError> {
 
 /// Get topological order of beads in DAG
 fn topological_order(_dag: &WorkflowDAG) -> Result<Vec<String>, StormError> {
-    
-
     // For now, return empty vec as topological sort will be implemented
     // when WorkflowDAG exposes its internal petgraph structure
     // The dry-run is primarily for validation that DAG can be built

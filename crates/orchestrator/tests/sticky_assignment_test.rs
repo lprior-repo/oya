@@ -28,7 +28,10 @@ async fn test_sticky_assign_same_bead_to_same_worker() {
 
     // Second assignment of same bead - should assign to agent-a (sticky hit)
     let second_assignment = pool.assign_bead(bead_id).await.unwrap();
-    assert_eq!(second_assignment, "agent-a", "Sticky assignment to same worker");
+    assert_eq!(
+        second_assignment, "agent-a",
+        "Sticky assignment to same worker"
+    );
 }
 
 #[tokio::test]
@@ -58,7 +61,10 @@ async fn test_sticky_fallback_when_previous_worker_busy() {
 
     // Re-assign same bead - should fallback to agent-b (agent-a is busy)
     let second_assignment = pool.assign_bead(bead_id).await.unwrap();
-    assert_eq!(second_assignment, "agent-b", "Fallback to agent-b when agent-a busy");
+    assert_eq!(
+        second_assignment, "agent-b",
+        "Fallback to agent-b when agent-a busy"
+    );
 }
 
 #[tokio::test]
@@ -82,11 +88,14 @@ async fn test_sticky_fallback_when_previous_worker_unhealthy() {
 
     // Mark agent-a as unhealthy
     pool.shutdown_agent("agent-a").await.unwrap();
-    
+
     // Wait for shutdown to take effect
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
     // Re-assign same bead - should fallback to agent-b (agent-a unhealthy)
     let second_assignment = pool.assign_bead(bead_id).await.unwrap();
-    assert_eq!(second_assignment, "agent-b", "Fallback to agent-b when agent-a unhealthy");
+    assert_eq!(
+        second_assignment, "agent-b",
+        "Fallback to agent-b when agent-a unhealthy"
+    );
 }

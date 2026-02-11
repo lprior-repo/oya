@@ -28,8 +28,8 @@
 #![cfg_attr(test, allow(clippy::unwrap_used))]
 #![cfg_attr(test, allow(clippy::panic))]
 
-use crate::execution::{TaskExecutionStatus, WorkflowState};
 use crate::Workflow;
+use crate::execution::{TaskExecutionStatus, WorkflowState};
 use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 

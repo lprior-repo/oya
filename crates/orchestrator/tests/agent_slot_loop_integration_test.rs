@@ -341,7 +341,10 @@ async fn given_stage_with_3_retries_when_4_attempts_then_exhausted() {
 
     let _ = state_machine.reenter(StageKind::Plan, "fail 3", oya_events::Severity::Major);
     let result4 = state_machine.enter_stage(); // 4th attempt (3rd retry) - should succeed
-    assert!(result4.is_ok(), "fourth attempt should succeed with 3 retries");
+    assert!(
+        result4.is_ok(),
+        "fourth attempt should succeed with 3 retries"
+    );
 
     let _ = state_machine.reenter(StageKind::Plan, "fail 4", oya_events::Severity::Major);
     let _ = state_machine.enter_stage(); // 5

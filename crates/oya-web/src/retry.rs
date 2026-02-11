@@ -68,6 +68,11 @@ impl RetryPolicy {
     ///
     /// Delay formula: `min(base_delay` * 2^attempt + jitter, `max_delay`)
     #[must_use]
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss
+    )]
     pub fn calculate_delay(&self, attempt: u32) -> Duration {
         let exponential_delay = self.base_delay_ms.saturating_mul(2_u64.pow(attempt));
         let capped_delay = exponential_delay.min(self.max_delay_ms);
@@ -85,6 +90,7 @@ impl RetryPolicy {
 
     /// Determine if an error should be retried.
     #[must_use]
+    #[allow(clippy::match_same_arms)]
     pub const fn should_retry(&self, error: &HttpError) -> bool {
         match error.category() {
             ErrorCategory::Network | ErrorCategory::Timeout | ErrorCategory::Server => true,
@@ -228,6 +234,11 @@ pub fn exponential_backoff(attempt: u32, base_delay_ms: u64, max_delay_ms: u64) 
 ///
 /// Adds randomness to prevent thundering herd problem.
 #[allow(dead_code)]
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
 pub fn exponential_backoff_with_jitter(
     attempt: u32,
     base_delay_ms: u64,
@@ -272,7 +283,7 @@ mod tests {
     #[test]
     fn test_retry_policy_with_jitter() {
         let policy = RetryPolicy::new(3, 100, 1000).with_jitter(0.2);
-        assert_eq!(policy.jitter_factor, 0.2);
+        assert!((policy.jitter_factor - 0.2).abs() < f64::EPSILON);
     }
 
     #[test]

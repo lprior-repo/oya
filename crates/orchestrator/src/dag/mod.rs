@@ -26,10 +26,10 @@
 
 use im::{HashMap, HashSet};
 use itertools::Itertools;
-use petgraph::Direction;
 use petgraph::algo::{is_cyclic_directed, tarjan_scc as petgraph_scc, toposort};
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::{Bfs, Dfs, EdgeRef, Reversed};
+use petgraph::Direction;
 use std::collections::VecDeque;
 use std::time::Duration;
 
@@ -1081,6 +1081,7 @@ impl WorkflowDAG {
                 if let Some(neighbor_id) = self.graph.node_weight(neighbor_idx) {
                     let neighbor_weight =
                         weights.get(neighbor_id).copied().unwrap_or(Duration::ZERO);
+                    #[allow(clippy::arithmetic_side_effects)]
                     let new_dist = current_dist + neighbor_weight;
 
                     let should_update = dist
@@ -1175,7 +1176,10 @@ impl WorkflowDAG {
                 if scc.len() > 1 {
                     true
                 } else if scc.len() == 1 {
-                    let node = scc[0];
+                    let node = match scc.get(0).copied() {
+                        Some(n) => n,
+                        None => return false,
+                    };
                     self.graph
                         .neighbors_directed(node, Direction::Outgoing)
                         .any(|n| n == node)

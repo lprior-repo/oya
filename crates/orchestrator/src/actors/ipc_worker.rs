@@ -80,24 +80,37 @@ pub struct IpcWorkerArguments {
 }
 
 impl IpcWorkerArguments {
-    /// Create new arguments with no integrations.
-    #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
+/// Create new arguments with no integrations.
+     #[must_use]
+     pub fn new() -> Self {
+         Self::default()
+     }
+
+     /// Set the \`EventBus\`.
+     pub fn with_event_bus(mut self, bus: Arc<EventBus>) -> Self {
+          self.event_bus = Some(bus);
+          self
+      }
+
+     /// Set the \`AgentPool\`.
+      #[must_use]
+      pub fn with_agent_pool(mut self, pool_: Arc<AgentPool>) -> Self {
+          self.agent_pool = Some(pool_);
+          self
+      }
+
+     /// Set the \`SchedulerState\`.
+     #[must_use]
+     pub fn with_scheduler_state(mut self, state: Arc<SchedulerState>) -> Self {
+         self.scheduler_state = Some(state);
+         self
+     }
 
     /// Set the `EventBus`.
     pub fn with_event_bus(mut self, bus: Arc<EventBus>) -> Self {
-        self.event_bus = Some(bus);
-        self
-    }
-
-    /// Set the `AgentPool`.
-    #[must_use]
-    pub fn with_agent_pool(mut self, pool: Arc<AgentPool>) -> Self {
-        self.agent_pool = Some(pool);
-        self
-    }
+         self.event_bus = Some(bus);
+         self
+     }
 
     /// Set the `SchedulerState`.
     #[must_use]
@@ -382,7 +395,7 @@ impl Actor for IpcWorkerActorDef {
 
     async fn pre_start(
         &self,
-        _myself: ActorRef<Self::Msg>,
+        myself: ActorRef<Self::Msg>,
         args: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
         info!("IpcWorker starting");
@@ -425,7 +438,7 @@ impl Actor for IpcWorkerActorDef {
 
     async fn handle(
         &self,
-        _myself: ActorRef<Self::Msg>,
+        myself: ActorRef<Self::Msg>,
         message: Self::Msg,
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
@@ -550,12 +563,12 @@ impl Actor for IpcWorkerActorDef {
         }
 
         // Special case for Shutdown
-        if matches!(message, IpcWorkerMessage::Shutdown) {
-            info!("IpcWorker shutdown requested");
-            state.shutdown_requested = true;
-            _myself.stop(Some("IpcWorker shutdown requested".to_string()));
-            return Ok(());
-        }
+         if matches!(message, IpcWorkerMessage::Shutdown) {
+             info!("IpcWorker shutdown requested");
+             state.shutdown_requested = true;
+             myself.stop(Some("IpcWorker shutdown requested".to_string()));
+             return Ok(());
+         }
 
         let (next_state, effects) = core::handle(state.clone(), message);
         *state = next_state;
@@ -573,7 +586,7 @@ impl Actor for IpcWorkerActorDef {
 
     async fn post_stop(
         &self,
-        _myself: ActorRef<Self::Msg>,
+        myself: ActorRef<Self::Msg>,
         _state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         info!("IpcWorker stopping");
@@ -653,7 +666,7 @@ mod core {
             }
 
             GuestMessage::GetAgentPool => {
-                let stats = get_agent_pool_stats(state)?;
+                let stats_ = get_agent_pool_stats(state)?;
                 Ok(HostMessage::AgentPoolStats {
                     total_agents: stats.total,
                     active_agents: stats.working,

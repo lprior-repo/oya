@@ -477,7 +477,7 @@ impl AgentSlotActorDef {
         }
     }
 
-    fn handle_stage_timeout(&self, state: &mut AgentSlotState, stage: StageKind) {
+    fn handle_stage_timeout(&self, state: &mut AgentSlotState, stage_kind: StageKind) {
         if let Some(ref bead_id) = state.bead_id {
             error!("Stage timeout for bead {}: {:?}", bead_id, stage);
 
@@ -504,7 +504,7 @@ impl AgentSlotActorDef {
         }
     }
 
-    fn complete_bead(&self, state: &mut AgentSlotState, result: BeadCompletion) {
+    fn complete_bead(&self, state: &mut AgentSlotState, result_: BeadCompletion) {
         let bead_id = match state.require_bead_id() {
             Ok(id) => *id,
             Err(e) => {
