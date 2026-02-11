@@ -472,7 +472,7 @@ pub async fn retry_with_policy<T>(
                         delay,
                     } => {
                         // Transient error: log and retry after backoff
-                        log_failed_event(event_id, attempt, &err).await;
+                        log_failed_event(event_id, attempt, &err);
 
                         tokio::time::sleep(delay).await;
                         attempt = next_attempt;
@@ -486,12 +486,12 @@ pub async fn retry_with_policy<T>(
                             event_data,
                         );
                         dlq.push_poison_event(poison_event)?;
-                        log_poison_event(event_id, attempt, &err).await;
+                        log_poison_event(event_id, attempt, &err);
                         return Err(err);
                     }
                     RecoveryStrategy::Fail => {
                         // DLQ disabled: fail immediately
-                        log_failed_event(event_id, attempt, &err).await;
+                        log_failed_event(event_id, attempt, &err);
                         return Err(err);
                     }
                 }

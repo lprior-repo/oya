@@ -594,4 +594,310 @@ mod tests {
         // For now, we just verify the signature compiles
         Ok(())
     }
+
+    // ==========================================================================
+    // ReplaySummary BEHAVIORAL TESTS
+    // ==========================================================================
+
+    #[test]
+    fn replay_summary_new_creates_summary() {
+        let summary = ReplaySummary::new(10, 2);
+        assert_eq!(summary.applied, 10);
+        assert_eq!(summary.skipped, 2);
+    }
+
+    #[test]
+    fn replay_summary_zero_is_initial() {
+        let summary = ReplaySummary::zero();
+        assert_eq!(summary.applied, 0);
+        assert_eq!(summary.skipped, 0);
+    }
+
+    #[test]
+    fn replay_summary_default_is_zero() {
+        let summary = ReplaySummary::default();
+        assert_eq!(summary.applied, 0);
+        assert_eq!(summary.skipped, 0);
+    }
+
+    #[test]
+    fn replay_summary_total_summs_applied_and_skipped() {
+        let summary = ReplaySummary::new(5, 3);
+        assert_eq!(summary.total(), 8);
+    }
+
+    #[test]
+    fn replay_summary_is_complete_true_when_no_skips() {
+        let summary = ReplaySummary::new(10, 0);
+        assert!(summary.is_complete());
+    }
+
+    #[test]
+    fn replay_summary_is_complete_false_when_skips() {
+        let summary = ReplaySummary::new(10, 1);
+        assert!(!summary.is_complete());
+    }
+
+    #[test]
+    fn replay_summary_record_applied_increments_applied() {
+        let summary = ReplaySummary::zero().record_applied();
+        assert_eq!(summary.applied, 1);
+        assert_eq!(summary.skipped, 0);
+    }
+
+    #[test]
+    fn replay_summary_record_skipped_increments_skipped() {
+        let summary = ReplaySummary::zero().record_skipped();
+        assert_eq!(summary.applied, 0);
+        assert_eq!(summary.skipped, 1);
+    }
+
+    #[test]
+    fn replay_summary_chain_records() {
+        let summary = ReplaySummary::zero()
+            .record_applied()
+            .record_applied()
+            .record_skipped()
+            .record_applied()
+            .record_skipped();
+
+        assert_eq!(summary.applied, 3);
+        assert_eq!(summary.skipped, 2);
+    }
+
+    // ==========================================================================
+    // apply_events_with_recovery BEHAVIORAL TESTS
+    // ==========================================================================
+
+    /// Mock state for testing event application.
+    #[derive(Debug, Default)]
+    struct MockState {
+        applied_events: Vec<String>,
+        should_fail: Vec<String>,
+    }
+
+    impl MockState {
+        /// Create a new mock state.
+        fn new() -> Self {
+            Self::default()
+        }
+
+        /// Mark an event ID to fail.
+        fn mark_failure(&mut self, event_id: String) {
+            self.should_fail.push(event_id);
+        }
+
+        /// Check if an event should fail.
+        fn should_fail_event(&self, event_id: &str) -> bool {
+            self.should_fail.iter().any(|id| id == event_id)
+        }
+    }
+
+    impl EventSourcedState for MockState {
+        fn validate_transition(
+            &self,
+            _bead_id: BeadId,
+            _from: BeadState,
+            _to: BeadState,
+        ) -> ApplyResult<()> {
+            Ok(())
+        }
+
+        fn apply_event(&mut self, event: &BeadEvent) -> ApplyResult<()> {
+            let event_id = event.event_id().to_string();
+            if self.should_fail_event(&event_id) {
+                Err(ApplyError::Internal(format!("Mock failure for {event_id}")))
+            } else {
+                self.applied_events.push(event_id);
+                Ok(())
+            }
+        }
+    }
+
+    #[test]
+    fn apply_events_with_recovery_applies_all_events_successfully() -> Result<(), Box<dyn std::error::Error>> {
+        let mut state = MockState::new();
+        let mut context = ApplyContext::new();
+        let config = RecoveryConfig::new();
+        let dlq = crate::replay::recovery::InMemoryDeadLetterQueue::new();
+
+        let bead_id = BeadId::new();
+        let event1 = BeadEvent::created(bead_id, BeadSpec::new("Test 1"));
+        let event2 = BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Scheduled);
+        let events = vec![event1, event2];
+
+        let result = apply_events_with_recovery(&mut state, &events, &mut context, &config, &dlq);
+
+        assert!(result.is_ok(), "Should apply all events successfully");
+        let summary = result.unwrap();
+        assert_eq!(summary.applied, 2, "Should apply 2 events");
+        assert_eq!(summary.skipped, 0, "Should skip 0 events");
+        assert!(summary.is_complete(), "Should be complete");
+        assert_eq!(dlq.count()?, 0, "DLQ should be empty");
+        Ok(())
+    }
+
+    #[test]
+    fn apply_events_with_recovery_sends_poison_to_dlq_and_continues() -> Result<(), Box<dyn std::error::Error>> {
+        let mut state = MockState::new();
+        let mut context = ApplyContext::new();
+        let config = RecoveryConfig::new();
+        let dlq = crate::replay::recovery::InMemoryDeadLetterQueue::new();
+
+        let bead_id = BeadId::new();
+        let event1 = BeadEvent::created(bead_id, BeadSpec::new("Test 1"));
+        let event2 = BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Scheduled);
+        let event3 = BeadEvent::completed(bead_id, crate::types::BeadResult::success(vec![], 0));
+
+        // Mark event2 to fail
+        let event2_id = event2.event_id().to_string();
+        state.mark_failure(event2_id.clone());
+
+        let events = vec![event1.clone(), event2, event3];
+
+        let result = apply_events_with_recovery(&mut state, &events, &mut context, &config, &dlq);
+
+        assert!(result.is_ok(), "Should complete with DLQ enabled");
+        let summary = result.unwrap();
+        assert_eq!(summary.applied, 2, "Should apply 2 events (1 and 3)");
+        assert_eq!(summary.skipped, 1, "Should skip 1 event (2)");
+        assert!(!summary.is_complete(), "Should not be complete (has skips)");
+        assert_eq!(dlq.count()?, 1, "DLQ should have 1 event");
+
+        // Verify DLQ contains the failed event
+        let poison_events = dlq.get_poison_events()?;
+        assert_eq!(poison_events.len(), 1);
+        assert_eq!(poison_events[0].event_id, event2_id);
+
+        // Verify state has events 1 and 3 applied
+        assert_eq!(state.applied_events.len(), 2);
+        assert_eq!(state.applied_events[0], event1.event_id().to_string());
+        Ok(())
+    }
+
+    #[test]
+    fn apply_events_with_recovery_fails_when_dlq_disabled() -> Result<(), Box<dyn std::error::Error>> {
+        let mut state = MockState::new();
+        let mut context = ApplyContext::new();
+        let config = RecoveryConfig::new().with_dlq(false);
+        let dlq = crate::replay::recovery::InMemoryDeadLetterQueue::new();
+
+        let bead_id = BeadId::new();
+        let event1 = BeadEvent::created(bead_id, BeadSpec::new("Test 1"));
+        let event2 = BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Scheduled);
+
+        // Mark event1 to fail
+        let event1_id = event1.event_id().to_string();
+        state.mark_failure(event1_id);
+
+        let events = vec![event1, event2];
+
+        let result = apply_events_with_recovery(&mut state, &events, &mut context, &config, &dlq);
+
+        assert!(result.is_err(), "Should fail when DLQ disabled");
+        assert_eq!(dlq.count()?, 0, "DLQ should be empty");
+        Ok(())
+    }
+
+    #[test]
+    fn apply_events_with_recovery_handles_all_poison_events() -> Result<(), Box<dyn std::error::Error>> {
+        let mut state = MockState::new();
+        let mut context = ApplyContext::new();
+        let config = RecoveryConfig::new();
+        let dlq = crate::replay::recovery::InMemoryDeadLetterQueue::new();
+
+        let bead_id = BeadId::new();
+        let event1 = BeadEvent::created(bead_id, BeadSpec::new("Test 1"));
+        let event2 = BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Scheduled);
+        let event3 = BeadEvent::completed(bead_id, crate::types::BeadResult::success(vec![], 0));
+
+        // Mark all events to fail
+        state.mark_failure(event1.event_id().to_string());
+        state.mark_failure(event2.event_id().to_string());
+        state.mark_failure(event3.event_id().to_string());
+
+        let events = vec![event1, event2, event3];
+
+        let result = apply_events_with_recovery(&mut state, &events, &mut context, &config, &dlq);
+
+        assert!(result.is_ok(), "Should complete even when all events fail");
+        let summary = result.unwrap();
+        assert_eq!(summary.applied, 0, "Should apply 0 events");
+        assert_eq!(summary.skipped, 3, "Should skip all 3 events");
+        assert_eq!(dlq.count()?, 3, "DLQ should have all 3 events");
+        Ok(())
+    }
+
+    #[test]
+    fn apply_events_with_recovery_handles_empty_event_list() -> Result<(), Box<dyn std::error::Error>> {
+        let mut state = MockState::new();
+        let mut context = ApplyContext::new();
+        let config = RecoveryConfig::new();
+        let dlq = crate::replay::recovery::InMemoryDeadLetterQueue::new();
+
+        let events: Vec<BeadEvent> = vec![];
+
+        let result = apply_events_with_recovery(&mut state, &events, &mut context, &config, &dlq);
+
+        assert!(result.is_ok(), "Should handle empty event list");
+        let summary = result.unwrap();
+        assert_eq!(summary.applied, 0);
+        assert_eq!(summary.skipped, 0);
+        assert!(summary.is_complete());
+        Ok(())
+    }
+
+    #[test]
+    fn apply_events_with_recovery_tracks_context_correctly() -> Result<(), Box<dyn std::error::Error>> {
+        let mut state = MockState::new();
+        let mut context = ApplyContext::new();
+        let config = RecoveryConfig::new();
+        let dlq = crate::replay::recovery::InMemoryDeadLetterQueue::new();
+
+        let bead_id = BeadId::new();
+        let event1 = BeadEvent::created(bead_id, BeadSpec::new("Test 1"));
+        let event2 = BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Scheduled);
+
+        let events = vec![event1, event2];
+
+        let _result = apply_events_with_recovery(&mut state, &events, &mut context, &config, &dlq);
+
+        // Verify context tracked the applied events
+        assert!(context.last_events.contains_key(&bead_id));
+        let last_event = context.last_event(&bead_id);
+        assert!(last_event.is_some());
+        assert_eq!(last_event.unwrap().event_id, event2.event_id().to_string());
+        Ok(())
+    }
+
+    #[test]
+    fn apply_events_with_recovery_mixed_success_and_poison() -> Result<(), Box<dyn std::error::Error>> {
+        let mut state = MockState::new();
+        let mut context = ApplyContext::new();
+        let config = RecoveryConfig::new();
+        let dlq = crate::replay::recovery::InMemoryDeadLetterQueue::new();
+
+        let bead_id = BeadId::new();
+        let event1 = BeadEvent::created(bead_id, BeadSpec::new("Test 1"));
+        let event2 = BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Scheduled);
+        let event3 = BeadEvent::completed(bead_id, crate::types::BeadResult::success(vec![], 0));
+        let event4 = BeadEvent::state_changed(bead_id, BeadState::Scheduled, BeadState::Running);
+        let event5 = BeadEvent::state_changed(bead_id, BeadState::Running, BeadState::Completed);
+
+        // Fail events 2 and 4
+        state.mark_failure(event2.event_id().to_string());
+        state.mark_failure(event4.event_id().to_string());
+
+        let events = vec![event1, event2, event3, event4, event5];
+
+        let result = apply_events_with_recovery(&mut state, &events, &mut context, &config, &dlq);
+
+        assert!(result.is_ok());
+        let summary = result.unwrap();
+        assert_eq!(summary.applied, 3, "Should apply events 1, 3, 5");
+        assert_eq!(summary.skipped, 2, "Should skip events 2, 4");
+        assert_eq!(dlq.count()?, 2);
+        assert_eq!(state.applied_events.len(), 3);
+        Ok(())
+    }
 }
