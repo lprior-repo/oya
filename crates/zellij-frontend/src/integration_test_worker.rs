@@ -499,6 +499,7 @@ impl IntegrationTestWorker {
 #[cfg(test)]
 mod tests {
 
+    #![allow(clippy::indexing_slicing)]
     #![allow(clippy::arithmetic_side_effects)]
 
     use super::*;

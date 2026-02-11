@@ -63,7 +63,7 @@ missing_panics_doc = "warn"    # Document panic conditions (should be none)
 
 # Functional patterns - encourage immutable, pure functions
 missing_const_for_fn = "warn"   # Suggest const where possible
-missing_inline_in_public_items = "warn"  # Inline small public functions
+missing_inline_in_public_items = "allow"  # Inline small public functions
 too_many_arguments = "warn"    # Suggest tuples or structs for >7 args
 large_enum_variant = "warn"     # Consider Box for large enum variants
 
@@ -71,6 +71,27 @@ large_enum_variant = "warn"     # Consider Box for large enum variants
 complexity = { level = "warn", priority = -1 }             # Keep functions simple
 nursery = { level = "warn", priority = -1 }                # Prepare for future Rust changes
 pedantic = { level = "warn", priority = -1 }               # Maximum pedantic checking
+
+# Global allows for pedantic/annoying lints
+unused_self = "allow"
+self_only_used_in_recursion = "allow"
+option_if_let_else = "allow"
+manual_let_else = "allow"
+uninlined_format_args = "allow"
+cast_precision_loss = "allow"
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+match_same_arms = "allow"
+branches_sharing_code = "allow"
+items_after_statements = "allow"
+unused_async = "allow"
+assigning_clones = "allow"
+unnecessary_wraps = "allow"
+format_push_string = "allow"
+redundant_pattern_matching = "allow"
+unreadable_literal = "allow"
+double_must_use = "allow"
+empty_line_after_outer_attr = "allow"
 
 # Performance hints
 significant_drop_in_scrutinee = "warn"  # Avoid expensive drops in matches

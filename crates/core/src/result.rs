@@ -3,6 +3,11 @@
 //! Provides functional combinators for Result types, enabling clean error handling
 //! without unwrap/expect/panic.
 
+#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::double_must_use)]
+#![allow(clippy::option_if_let_else)]
+#![allow(clippy::unnecessary_result_map_or_else)]
+
 use crate::error::Error;
 use async_trait::async_trait;
 use either::Either;

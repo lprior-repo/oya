@@ -18,6 +18,11 @@
 #![deny(clippy::panic)]
 #![warn(clippy::pedantic)]
 #![warn(clippy::nursery)]
+#![allow(clippy::missing_inline_in_public_items)]
+#![allow(clippy::unused_self)]
+#![allow(clippy::self_only_used_in_recursion)]
+#![allow(clippy::option_if_let_else)]
+#![allow(clippy::explicit_iter_loop)]
 #![forbid(unsafe_code)]
 
 use crate::execution::{TaskExecutionStatus, WorkflowState};
@@ -720,6 +725,11 @@ fn progress_bar(status: &TaskExecutionStatus) -> String {
 mod tests {
 
     #![allow(clippy::assertions_on_constants)]
+    #![allow(clippy::unwrap_used)]
+    #![allow(clippy::expect_used)]
+    #![allow(clippy::panic)]
+    #![allow(clippy::indexing_slicing)]
+    #![allow(clippy::single_char_pattern)]
 
     use super::*;
     use crate::execution::TaskExecutionStatus;

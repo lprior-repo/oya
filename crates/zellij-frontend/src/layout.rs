@@ -310,7 +310,6 @@ impl Default for Layout {
 }
 
 #[cfg(test)]
-
 mod tests {
 
     #![allow(clippy::unwrap_used)]

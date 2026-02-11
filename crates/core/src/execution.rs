@@ -18,6 +18,9 @@
 #![deny(clippy::panic)]
 #![warn(clippy::pedantic)]
 #![warn(clippy::nursery)]
+#![allow(clippy::missing_inline_in_public_items)]
+#![allow(clippy::unused_self)]
+#![allow(clippy::self_only_used_in_recursion)]
 #![forbid(unsafe_code)]
 
 #[cfg(test)]
