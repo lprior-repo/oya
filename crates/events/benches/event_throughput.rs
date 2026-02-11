@@ -49,7 +49,7 @@ fn bench_batch_throughput(c: &mut Criterion) {
     let batch_sizes = vec![10, 100, 1000];
 
     for size in batch_sizes {
-        group.bench_with_input(BenchmarkId::new("process", &size), &size, |b, &size| {
+        group.bench_with_input(BenchmarkId::new("process", size), &size, |b, &size| {
             b.iter(|| {
                 // Simulate processing a batch of events
                 let events: Vec<u64> = (0..size).collect();

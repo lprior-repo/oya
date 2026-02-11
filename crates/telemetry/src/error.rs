@@ -81,12 +81,14 @@ impl TelemetryError {
 }
 
 impl From<tracing::subscriber::SetGlobalDefaultError> for TelemetryError {
+    #[inline]
     fn from(err: tracing::subscriber::SetGlobalDefaultError) -> Self {
         Self::subscriber_init_failed(err.to_string())
     }
 }
 
 impl From<std::io::Error> for TelemetryError {
+    #[inline]
     fn from(err: std::io::Error) -> Self {
         Self::IoError {
             operation: "io".to_string(),

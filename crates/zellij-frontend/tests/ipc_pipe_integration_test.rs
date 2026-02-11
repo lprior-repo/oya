@@ -19,6 +19,7 @@ struct TestMessage {
 ///
 /// Reads JSON from stdin, parses it, adds a prefix, and writes it back to stdout.
 /// This simulates the backend behavior.
+#[allow(dead_code)]
 fn echo_server_main() {
     use std::io::{self, Read};
 

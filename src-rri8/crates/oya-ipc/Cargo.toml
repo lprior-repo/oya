@@ -1,0 +1,18 @@
+[package]
+name = "oya-ipc"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+
+[dependencies]
+serde = { workspace = true }
+bincode = { version = "2", features = ["serde"] }
+thiserror = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+criterion = "0.5"
+
+[lib]
+name = "oya_ipc"
+path = "src/lib.rs"

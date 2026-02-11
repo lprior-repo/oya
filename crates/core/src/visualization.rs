@@ -18,10 +18,18 @@
 #![deny(clippy::panic)]
 #![warn(clippy::pedantic)]
 #![warn(clippy::nursery)]
+#![allow(clippy::missing_inline_in_public_items)]
+#![allow(clippy::unused_self)]
+#![allow(clippy::self_only_used_in_recursion)]
+#![allow(clippy::option_if_let_else)]
+#![allow(clippy::explicit_iter_loop)]
 #![forbid(unsafe_code)]
+#![cfg_attr(test, allow(clippy::expect_used))]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
+#![cfg_attr(test, allow(clippy::panic))]
 
-use crate::Workflow;
 use crate::execution::{TaskExecutionStatus, WorkflowState};
+use crate::Workflow;
 use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 
@@ -80,6 +88,7 @@ pub enum Color {
 impl Color {
     /// Get ANSI escape code for this color.
     #[must_use]
+    #[inline]
     pub const fn ansi_code(self) -> &'static str {
         match self {
             Self::Yellow => "\x1b[33m",
@@ -95,14 +104,14 @@ impl Color {
 
     /// Get color for task status.
     #[must_use]
+    #[inline]
     pub const fn for_status(status: &TaskExecutionStatus) -> Self {
         match status {
             TaskExecutionStatus::Pending => Self::Yellow,
             TaskExecutionStatus::InProgress => Self::Blue,
             TaskExecutionStatus::Completed => Self::Green,
             TaskExecutionStatus::Failed { .. } => Self::Red,
-            TaskExecutionStatus::RolledBack => Self::Gray,
-            TaskExecutionStatus::Cancelled => Self::Gray,
+            TaskExecutionStatus::RolledBack | TaskExecutionStatus::Cancelled => Self::Gray,
         }
     }
 }
@@ -173,6 +182,7 @@ pub struct WorkflowVisualization {
 impl WorkflowVisualization {
     /// Create a new visualization renderer.
     #[must_use]
+    #[inline]
     pub const fn new() -> Self {
         Self {
             min_width: 80,
@@ -184,6 +194,7 @@ impl WorkflowVisualization {
 
     /// Set minimum terminal dimensions.
     #[must_use]
+    #[inline]
     pub const fn with_min_dimensions(mut self, width: usize, height: usize) -> Self {
         self.min_width = width;
         self.min_height = height;
@@ -192,6 +203,7 @@ impl WorkflowVisualization {
 
     /// Disable color output.
     #[must_use]
+    #[inline]
     pub const fn without_color(mut self) -> Self {
         self.enable_color = false;
         self
@@ -199,6 +211,7 @@ impl WorkflowVisualization {
 
     /// Set the focused task for navigation.
     #[must_use]
+    #[inline]
     pub fn with_focus(mut self, task_id: Option<String>) -> Self {
         self.focused_task = task_id;
         self
@@ -348,8 +361,10 @@ impl WorkflowVisualization {
                 } else if rec_stack.contains(other_id) {
                     let cycle_start = path.iter().position(|id| id == other_id);
                     if let Some(start) = cycle_start {
-                        *path = path[start..].to_vec();
-                        path.push(other_id.clone());
+                        if let Some(slice) = path.get(start..) {
+                            *path = slice.to_vec();
+                            path.push(other_id.clone());
+                        }
                     }
                     return true;
                 }
@@ -398,7 +413,7 @@ impl WorkflowVisualization {
         if max_dist > 0 {
             // Find tasks on the longest path
             for (task_id, dist) in &longest_dist {
-                if *dist == max_dist || *dist == max_dist - 1 {
+                if *dist == max_dist || *dist == max_dist.saturating_sub(1) {
                     critical_path.insert(task_id.clone());
                 }
             }
@@ -420,7 +435,10 @@ impl WorkflowVisualization {
         // Find dependent tasks
         for (other_id, deps) in &workflow.dependencies {
             if deps.contains(task_id) {
-                let new_dist = dist.get(task_id).copied().unwrap_or(0) + 1;
+                let new_dist = match dist.get(task_id).copied() {
+                    Some(d) => d.saturating_add(1),
+                    None => 1,
+                };
                 let current_dist = dist.get(other_id).copied().unwrap_or(0);
 
                 if new_dist > current_dist {
@@ -459,9 +477,9 @@ impl WorkflowVisualization {
                 break;
             }
 
-            ready.iter().for_each(|id| {
+            for id in ready.iter() {
                 assigned.insert(id.clone());
-            });
+            }
 
             levels.push(ready);
         }
@@ -588,6 +606,7 @@ impl WorkflowVisualization {
     ///
     /// # Errors
     /// This function currently always returns Ok(()) as the renderer is stateless.
+    #[inline]
     pub const fn update_task_status(
         &mut self,
         _task_id: &str,
@@ -609,28 +628,31 @@ impl WorkflowVisualization {
     ///
     /// # Errors
     /// Returns `VisualizationError::InvalidTaskStatus` if navigation fails.
+    #[inline]
     pub fn handle_keyboard_input(
         &mut self,
-        key: Key,
+        key: &Key,
         workflow: &Workflow,
     ) -> Result<InputAction, VisualizationError> {
         match key {
             Key::Up | Key::Left => {
                 // Navigate to previous task
-                let task_ids: Vec<&String> = workflow.tasks.keys().collect();
+                let task_ids: Vec<String> = workflow.tasks.keys().cloned().collect();
 
                 if let Some(current) = &self.focused_task {
-                    if let Some(pos) = task_ids.iter().position(|id| *id == current) {
+                    if let Some(pos) = task_ids.iter().position(|id| id == current) {
                         if pos > 0 {
-                            let new_focus = task_ids[pos - 1].clone();
-                            self.focused_task = Some(new_focus.clone());
-                            return Ok(InputAction::FocusTask(new_focus));
+                            if let Some(new_focus) = task_ids.get(pos.saturating_sub(1)).cloned() {
+                                self.focused_task = Some(new_focus.clone());
+                                return Ok(InputAction::FocusTask(new_focus));
+                            }
                         }
                     }
                 } else if !task_ids.is_empty() {
-                    let first = task_ids[0].clone();
-                    self.focused_task = Some(first.clone());
-                    return Ok(InputAction::FocusTask(first));
+                    if let Some(first) = task_ids.first().cloned() {
+                        self.focused_task = Some(first.clone());
+                        return Ok(InputAction::FocusTask(first));
+                    }
                 }
 
                 Ok(InputAction::None)
@@ -638,20 +660,22 @@ impl WorkflowVisualization {
 
             Key::Down | Key::Right => {
                 // Navigate to next task
-                let task_ids: Vec<&String> = workflow.tasks.keys().collect();
+                let task_ids: Vec<String> = workflow.tasks.keys().cloned().collect();
 
                 if let Some(current) = &self.focused_task {
-                    if let Some(pos) = task_ids.iter().position(|id| *id == current) {
-                        if pos + 1 < task_ids.len() {
-                            let new_focus = task_ids[pos + 1].clone();
-                            self.focused_task = Some(new_focus.clone());
-                            return Ok(InputAction::FocusTask(new_focus));
+                    if let Some(pos) = task_ids.iter().position(|id| id == current) {
+                        if pos.saturating_add(1) < task_ids.len() {
+                            if let Some(new_focus) = task_ids.get(pos.saturating_add(1)).cloned() {
+                                self.focused_task = Some(new_focus.clone());
+                                return Ok(InputAction::FocusTask(new_focus));
+                            }
                         }
                     }
                 } else if !task_ids.is_empty() {
-                    let first = task_ids[0].clone();
-                    self.focused_task = Some(first.clone());
-                    return Ok(InputAction::FocusTask(first));
+                    if let Some(first) = task_ids.first().cloned() {
+                        self.focused_task = Some(first.clone());
+                        return Ok(InputAction::FocusTask(first));
+                    }
                 }
 
                 Ok(InputAction::None)
@@ -659,20 +683,20 @@ impl WorkflowVisualization {
 
             Key::Enter => {
                 // Show details for focused task
-                if let Some(ref task_id) = self.focused_task {
-                    Ok(InputAction::ShowDetails(task_id.clone()))
-                } else {
-                    Ok(InputAction::None)
-                }
+                self.focused_task
+                    .as_ref()
+                    .map_or(Ok(InputAction::None), |task_id| {
+                        Ok(InputAction::ShowDetails(task_id.clone()))
+                    })
             }
 
             Key::Details => {
                 // 'd' key - same as Enter
-                if let Some(ref task_id) = self.focused_task {
-                    Ok(InputAction::ShowDetails(task_id.clone()))
-                } else {
-                    Ok(InputAction::None)
-                }
+                self.focused_task
+                    .as_ref()
+                    .map_or(Ok(InputAction::None), |task_id| {
+                        Ok(InputAction::ShowDetails(task_id.clone()))
+                    })
             }
 
             Key::Quit | Key::Escape => Ok(InputAction::Quit),
@@ -702,11 +726,10 @@ fn progress_bar(status: &TaskExecutionStatus) -> String {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
-    #![allow(clippy::expect_used)]
-    #![allow(clippy::panic)]
-    #![allow(clippy::indexing_slicing)]
+
     #![allow(clippy::assertions_on_constants)]
+    #![allow(clippy::indexing_slicing)]
+    #![allow(clippy::single_char_pattern)]
 
     use super::*;
     use crate::execution::TaskExecutionStatus;

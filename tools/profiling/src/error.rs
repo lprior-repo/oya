@@ -48,6 +48,10 @@ pub enum ProfilingError {
     #[error("sampling interval {0}s is too short (minimum {1}s for <10% overhead)")]
     SamplingIntervalTooShort(u64, u64),
 
+    /// Config error (used for CLI argument parsing)
+    #[error("configuration error: {0}")]
+    Config(String),
+
     /// IO error wrapper
     #[error("IO error: {0}")]
     IoError(String),

@@ -1,0 +1,153 @@
+$schema: "https://moonrepo.dev/schemas/tasks.json"
+
+# Moon Task Configuration - MVP Pipeline
+# All commands use cargo with system Rust toolchain
+
+tasks:
+  # ============================================================================
+  # STAGE 1: CODE FORMATTING & LINTING
+  # ============================================================================
+
+  fmt:
+    command: "cargo fmt --all --check"
+    description: "Check code formatting (rustfmt)"
+    inputs:
+      - "crates/**/*.rs"
+      - "Cargo.toml"
+      - "rustfmt.toml"
+    options:
+      cache: false
+
+  fmt-fix:
+    command: "cargo fmt --all"
+    description: "Auto-fix code formatting"
+    inputs:
+      - "crates/**/*.rs"
+      - "Cargo.toml"
+    options:
+      cache: false
+
+  clippy:
+    command: "cargo clippy --workspace --all-targets --all-features -- -D warnings"
+    description: "Lint with Clippy (strict mode)"
+    inputs:
+      - "crates/**/*.rs"
+      - "Cargo.toml"
+    deps:
+      - "fmt"
+
+  # ============================================================================
+  # STAGE 2: TESTING
+  # ============================================================================
+
+  test:
+    command: "cargo test --workspace --all-features"
+    description: "Run all unit tests"
+    inputs:
+      - "crates/**/*.rs"
+      - "Cargo.toml"
+    deps:
+      - "fmt"
+      - "clippy"
+
+  test-doc:
+    command: "cargo test --doc --workspace"
+    description: "Run documentation tests"
+    inputs:
+      - "crates/**/*.rs"
+      - "Cargo.toml"
+    deps:
+      - "fmt"
+
+  # ============================================================================
+  # STAGE 3: SECURITY
+  # ============================================================================
+
+  audit:
+    command: "echo 'Skipping audit - cargo-audit not installed'"
+    description: "Security audit of dependencies (advisory only for MVP)"
+    options:
+      cache: false
+
+  # ============================================================================
+  # STAGE 4: BUILD
+  # ============================================================================
+
+  build:
+    command: "cargo build --release --workspace"
+    description: "Build release binaries"
+    inputs:
+      - "crates/**/*.rs"
+      - "Cargo.toml"
+    deps:
+      - "clippy"
+      - "test"
+
+  build-docs:
+    command: "cargo doc --no-deps --document-private-items"
+    description: "Generate Rust documentation"
+    inputs:
+      - "crates/**/*.rs"
+      - "Cargo.toml"
+    deps:
+      - "clippy"
+
+  # ============================================================================
+  # COMPOSITE PIPELINES
+  # ============================================================================
+
+  quick:
+    command: "true"
+    description: "Fast lint check (format + clippy)"
+    deps:
+      - "fmt"
+      - "clippy"
+    options:
+      cache: false
+
+  ci:
+    command: "true"
+    description: "Full CI pipeline (fmt, clippy, test, build)"
+    deps:
+      - "quick"
+      - "test"
+      - "test-doc"
+      - "audit"
+      - "build"
+      - "build-docs"
+    options:
+      cache: false
+
+  # ============================================================================
+  # CONVENIENCE
+  # ============================================================================
+
+  install:
+    command: "cp target/release/jjz ~/.local/bin/jjz && chmod +x ~/.local/bin/jjz && echo 'Installed jjz to ~/.local/bin/jjz'"
+    description: "Install jjz binary to ~/.local/bin (after build)"
+    deps:
+      - "build"
+    options:
+      cache: false
+
+  dev:
+    command: "true"
+    description: "Quick development workflow: build + install"
+    deps:
+      - "build"
+      - "install"
+    options:
+      cache: false
+
+  clean:
+    command: "cargo clean"
+    description: "Clean build artifacts"
+    options:
+      cache: false
+
+  check:
+    command: "cargo check --workspace --all-features"
+    description: "Fast type check without building"
+    inputs:
+      - "crates/**/*.rs"
+      - "Cargo.toml"

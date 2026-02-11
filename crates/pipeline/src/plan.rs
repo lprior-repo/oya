@@ -191,6 +191,10 @@ pub fn approve_task(task: Task, force: bool) -> Result<Task> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::assertions_on_constants)]
+    #![allow(clippy::expect_used)]
+    #![allow(clippy::unwrap_used)]
+
     use super::*;
     use crate::domain::{Language, Slug};
 

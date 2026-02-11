@@ -1,0 +1,85 @@
+# OYA Swarm Configuration
+# 13-Agent Continuous Assembly Line for Contract-First Development
+
+[defaults]
+# Target number of beads to complete
+target_beads = 25
+
+# Number of Test Writer agents (write test contracts using rust-contract)
+test_writers = 4
+
+# Number of Implementer agents (implement following contracts)
+implementers = 4
+
+# Number of Reviewer agents (QA test and land beads)
+reviewers = 4
+
+# Enable Planner agent (contract-first development coordinator)
+planner = true
+
+[continuous-deployment]
+# ABSOLUTE LAW: Continuous deployment is ALWAYS ON and CANNOT be disabled
+# These principles are enforced at every gate:
+# 1. Velocity - Fast, small batches through the pipeline
+# 2. One-Piece Flow - Single bead at a time per agent
+# 3. Moon Gates - All quality gates must pass
+# 4. Functional Rust - Zero unwrap/expect/panic enforced
+# 5. TDD15 - Test-driven development workflow (RED → GREEN → REFACTOR)
+# 6. Shift-Left - Quality enforced early, not as afterthought
+enabled = true
+
+[quality-gates]
+# Quality gate configuration (all gates are mandatory)
+
+# Require moon run :ci to pass before implementation complete
+moon_ci = true
+
+# Require moon run :quick to pass before review complete
+moon_quick = true
+
+# Enforce zero unwrap/expect/panic
+zero_panic = true
+
+# Require red-queen QA before landing
+red_queen = true
+
+# Require successful git push before bead complete
+git_push = true
+
+[handoff]
+# Directory for handoff files (agent coordination via files)
+# Files created: bead-contracts-<id>.json, bead-ready-to-implement-<id>.json, etc.
+dir = "/tmp"
+
+[skills]
+# Required skills for swarm operation
+# These skills must be available in ~/.claude/skills/
+test_writer_skills = ["rust-contract", "functional-rust", "continuous-deployment"]
+planner_skills = ["rust-contract", "planner"]
+implementer_skills = ["continuous-deployment", "functional-rust-generator", "tdd15"]
+reviewer_skills = ["red-queen", "landing-skill", "qa-enforcer"]
+
+[execution]
+# Maximum execution time in seconds (default: 1 hour)
+max_timeout_secs = 3600
+
+# Maximum consecutive failures before abort
+max_consecutive_failures = 10
+
+# Example configurations for different scenarios:
+
+# Small scale testing (3 beads, 1 agent each type)
+# [small-test]
+# target_beads = 3
+# test_writers = 1
+# implementers = 1
+# reviewers = 1
+# planner = true
+
+# Large scale production (100 beads, 8 agents each type)
+# [production]
+# target_beads = 100
+# test_writers = 8
+# implementers = 8
+# reviewers = 8
+# planner = true

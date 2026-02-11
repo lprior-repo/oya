@@ -1,0 +1,21 @@
+--- crates/events/src/bus.rs
++++ replace EventSubscription::recv -> Result<BeadEvent> with Ok(Default::default())
+@@ -14,17 +14,17 @@
+ /// Subscription handle for receiving events.
+ pub struct EventSubscription {
+     receiver: broadcast::Receiver<BeadEvent>,
+ }
+ 
+ impl EventSubscription {
+     /// Receive the next event.
+     pub async fn recv(&mut self) -> Result<BeadEvent> {
+-        self.receiver.recv().await.map_err(|_| Error::ChannelClosed)
++        Ok(Default::default()) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Try to receive an event without waiting.
+     pub fn try_recv(&mut self) -> Result<BeadEvent> {
+         self.receiver.try_recv().map_err(|_| Error::ChannelClosed)
+     }
+ }
+ 

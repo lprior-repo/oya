@@ -145,23 +145,22 @@ pub fn validate_stage_sequence(stages: &[Stage]) -> Result<()> {
 #[must_use]
 pub fn pipeline_stage_edges() -> Vec<(Stage, Stage)> {
     Stage::all()
-        .windows(2)
-        .map(|pair| (pair[0], pair[1]))
+        .iter()
+        .zip(Stage::all().iter().skip(1))
+        .map(|(a, b)| (*a, *b))
         .collect()
 }
 
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
-    #![allow(clippy::expect_used)]
-    #![allow(clippy::panic)]
 
     use super::*;
 
     #[test]
     fn parse_accepts_known_labels() {
-        let stage = Stage::parse("unit-test").expect("stage should parse");
-        assert_eq!(stage, Stage::UnitTest);
+        let result = Stage::parse("unit-test");
+        assert_eq!(result.unwrap(), Stage::UnitTest);
     }
 
     #[test]

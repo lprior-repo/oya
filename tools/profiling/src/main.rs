@@ -29,8 +29,18 @@ fn run() -> oya_profiling::Result<()> {
         return Ok(());
     }
 
-    let command = args[1].clone();
-    let command_args = args[2..].to_vec();
+    let command = args
+        .get(1)
+        .ok_or_else(|| {
+            oya_profiling::ProfilingError::Config("Missing command argument".to_string())
+        })?
+        .clone();
+    let command_args = args
+        .get(2..)
+        .ok_or_else(|| {
+            oya_profiling::ProfilingError::Config("Missing command arguments".to_string())
+        })?
+        .to_vec();
 
     // Create configuration for 1-hour profiling
     let config = ProfilingConfig::one_hour_default(command, command_args)?;

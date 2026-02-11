@@ -1,0 +1,21 @@
+--- crates/events/src/projection.rs
++++ replace AllBeadsState::blocked -> Vec<&BeadProjection> with vec![Box::leak(Box::new(Default::default()))]
+@@ -123,17 +123,17 @@
+ 
+     /// Get ready beads (not blocked).
+     pub fn ready(&self) -> Vec<&BeadProjection> {
+         self.beads.values().filter(|b| b.is_ready()).collect()
+     }
+ 
+     /// Get blocked beads.
+     pub fn blocked(&self) -> Vec<&BeadProjection> {
+-        self.beads.values().filter(|b| b.is_blocked()).collect()
++        vec![Box::leak(Box::new(Default::default()))] /* ~ changed by cargo-mutants ~ */
+     }
+ }
+ 
+ /// Projection for all beads.
+ #[derive(Default)]
+ pub struct AllBeadsProjection;
+ 
+ impl AllBeadsProjection {

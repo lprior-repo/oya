@@ -1,0 +1,34 @@
+# cargo-mutants configuration - AGGRESSIVE MODE
+# https://mutants.rs/configuration.html
+#
+# Goal: ROCK SOLID testing - find every gap in test coverage
+
+# Enable ALL features to test maximum code paths
+all_features = true
+
+# Timeout settings - be generous to catch slow mutations
+timeout_multiplier = 3.0
+build_timeout_multiplier = 2.0
+minimum_test_timeout = 120
+
+# Generate custom error values for Result-returning functions
+# This catches functions that don't properly handle errors
+error_values = [
+    "anyhow::anyhow!(\"mutation injected\")",
+]
+
+# Cap lints so warnings don't make mutants unviable
+cap_lints = true
+
+# MINIMAL exclusions - only test files
+exclude_globs = [
+    "**/tests.rs",
+    "**/test_*.rs",
+    "**/*_test.rs",
+    "**/build.rs",
+]
+
+# Skip calls that are just capacity hints (don't affect correctness)
+skip_calls = [
+    "with_capacity",
+]

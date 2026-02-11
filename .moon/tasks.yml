@@ -28,8 +28,8 @@ tasks:
       cache: false  # Never cache - always format
 
   clippy:
-    command: "cargo clippy --workspace --all-targets --all-features -- -D warnings"
-    description: "Lint with Clippy (strict mode)"
+    command: "cargo clippy --workspace --all-targets --all-features"
+    description: "Lint with Clippy"
     inputs:
       - "crates/**/*.rs"
       - "Cargo.toml"

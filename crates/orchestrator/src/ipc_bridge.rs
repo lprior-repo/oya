@@ -114,6 +114,12 @@ impl IpcBridge {
     /// let msg = bridge.convert_event(event)?;
     /// assert!(matches!(msg, HostMessage::StageStarted { .. }));
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns `IpcBridgeError::UnsupportedEventType` if the event is not a stage lifecycle event.
+    /// Returns `IpcBridgeError::MissingField` if required fields are missing.
+    /// Returns `IpcBridgeError::InvalidTimestamp` if the timestamp is invalid.
     pub fn convert_event(&self, event: &BeadEvent) -> IpcBridgeResult<HostMessage> {
         match event {
             // Stage lifecycle events

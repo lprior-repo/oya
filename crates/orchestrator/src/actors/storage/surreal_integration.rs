@@ -91,18 +91,18 @@ impl RetryPolicy {
     }
 
     #[must_use]
-    pub fn calculate_backoff(&self, attempt: u32) -> Duration {
-        let exponential_delay = self.base_backoff_ms * 2_u64.pow(attempt.saturating_sub(1));
-        let capped_delay = exponential_delay.min(self.max_backoff_ms);
+     pub fn calculate_backoff(&self, attempt: u32) -> Duration {
+         let exponential_delay = self.base_backoff_ms.checked_mul(2_u64.pow(attempt.saturating_sub(1))).unwrap_or(self.max_backoff_ms);
+         let capped_delay = exponential_delay.min(self.max_backoff_ms);
 
-        if self.use_jitter {
-            let jitter_range = (capped_delay / 4).max(1);
-            let jitter = rand::random::<u64>() % (2 * jitter_range);
-            Duration::from_millis(capped_delay.saturating_add(jitter))
-        } else {
-            Duration::from_millis(capped_delay)
-        }
-    }
+         if self.use_jitter {
+             let jitter_range = (capped_delay / 4).max(1);
+             let jitter = rand::random::<u64>() % (2 * jitter_range);
+             Duration::from_millis(capped_delay.saturating_add(jitter))
+         } else {
+             Duration::from_millis(capped_delay)
+         }
+     }
 
     #[must_use]
     pub const fn is_retryable(&self, attempt: u32) -> bool {

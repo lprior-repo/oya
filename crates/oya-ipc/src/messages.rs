@@ -498,6 +498,7 @@ pub enum AlertLevel {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
 
@@ -622,9 +623,14 @@ mod tests {
             created_at: 1234567890,
         };
 
-        let json = serde_json::to_string(&summary).expect("serialization should succeed");
-        let decoded: BeadSummary =
-            serde_json::from_str(&json).expect("deserialization should succeed");
+        let json = match serde_json::to_string(&summary) {
+            Ok(s) => s,
+            Err(e) => panic!("serialization should succeed but failed: {}", e),
+        };
+        let decoded: BeadSummary = match serde_json::from_str(&json) {
+            Ok(d) => d,
+            Err(e) => panic!("deserialization should succeed but failed: {}", e),
+        };
 
         assert_eq!(decoded.id, "bead-123");
         assert_eq!(decoded.title, "Test bead");
@@ -633,22 +639,32 @@ mod tests {
     #[test]
     fn test_health_status_serialization() {
         let status = HealthStatus::Healthy;
-        let json = serde_json::to_string(&status).expect("serialization should succeed");
+        let json = match serde_json::to_string(&status) {
+            Ok(s) => s,
+            Err(e) => panic!("serialization should succeed but failed: {}", e),
+        };
         assert!(json.contains("healthy"));
 
-        let decoded: HealthStatus =
-            serde_json::from_str(&json).expect("deserialization should succeed");
+        let decoded: HealthStatus = match serde_json::from_str(&json) {
+            Ok(d) => d,
+            Err(e) => panic!("deserialization should succeed but failed: {}", e),
+        };
         assert!(matches!(decoded, HealthStatus::Healthy));
     }
 
     #[test]
     fn test_alert_level_serialization() {
         let level = AlertLevel::Critical;
-        let json = serde_json::to_string(&level).expect("serialization should succeed");
+        let json = match serde_json::to_string(&level) {
+            Ok(s) => s,
+            Err(e) => panic!("serialization should succeed but failed: {}", e),
+        };
         assert!(json.contains("critical"));
 
-        let decoded: AlertLevel =
-            serde_json::from_str(&json).expect("deserialization should succeed");
+        let decoded: AlertLevel = match serde_json::from_str(&json) {
+            Ok(d) => d,
+            Err(e) => panic!("deserialization should succeed but failed: {}", e),
+        };
         assert!(matches!(decoded, AlertLevel::Critical));
     }
 }

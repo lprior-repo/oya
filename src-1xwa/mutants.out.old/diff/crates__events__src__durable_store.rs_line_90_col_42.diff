@@ -1,0 +1,21 @@
+--- crates/events/src/durable_store.rs
++++ replace >= with < in EventQuery::filter_events
+@@ -82,17 +82,17 @@
+                 if let Some(ref after) = self.after {
+                     if event.timestamp() <= *after {
+                         return false;
+                     }
+                 }
+ 
+                 // Filter by before timestamp
+                 if let Some(ref before) = self.before {
+-                    if event.timestamp() >= *before {
++                    if event.timestamp() < /* ~ changed by cargo-mutants ~ */ *before {
+                         return false;
+                     }
+                 }
+ 
+                 true
+             })
+             .take(self.limit.unwrap_or(usize::MAX))
+     }

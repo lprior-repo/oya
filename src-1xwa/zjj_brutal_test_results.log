@@ -1,0 +1,12 @@
+[0;34m[13:52:56][0m === ZJJ BRUTAL QA TEST STARTING ===
+[0;34m[13:52:56][0m Test directory: /tmp/zjj_brutal_test_3918378
+[0;34m[13:52:56][0m Setting up test environment in /tmp/zjj_brutal_test_3918378
+[0;34m[13:52:56][0m Running: zjj init
+No JJ repository found. Initializing one...
+Initialized JJ repository.
+Initialized zjj in /tmp/zjj_brutal_test_3918378
+  Data directory: .zjj/
+  Configuration: .zjj/config.toml
+  State database: .zjj/state.db
+  Layouts: .zjj/layouts/
+[0;32m✓ PASS[0m Command succeeded: zjj init

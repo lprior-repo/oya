@@ -3337,6 +3337,7 @@ dependencies = [
 name = "oya-pipeline"
 version = "0.1.2"
 dependencies = [
+ "itertools 0.14.0",
  "serde",
  "serde_json",
  "tempfile",

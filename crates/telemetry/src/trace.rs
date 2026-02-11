@@ -9,6 +9,7 @@ use tracing::Span;
 
 /// Create a span with OTEL semantic conventions.
 #[must_use]
+#[inline]
 pub fn span_with_otel_attributes(name: &str, _attributes: &[(&str, &str)]) -> Span {
     let span = tracing::info_span!("{}", name);
     span
@@ -16,12 +17,14 @@ pub fn span_with_otel_attributes(name: &str, _attributes: &[(&str, &str)]) -> Sp
 
 /// Add OTEL status to span attributes.
 #[must_use]
+#[inline]
 pub fn with_otel_status(status: &'static str) -> Span {
     let span = tracing::info_span!("otel_status", otel_status = status);
     span
 }
 
 /// Record error details on a span.
+#[inline]
 pub fn record_span_error(span: &Span, error: &impl std::fmt::Display) {
     span.record("error", tracing::field::display(&error.to_string()));
 }

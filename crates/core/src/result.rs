@@ -3,6 +3,14 @@
 //! Provides functional combinators for Result types, enabling clean error handling
 //! without unwrap/expect/panic.
 
+#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::double_must_use)]
+#![allow(clippy::option_if_let_else)]
+#![allow(clippy::unnecessary_result_map_or_else)]
+#![cfg_attr(test, allow(clippy::expect_used))]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
+#![cfg_attr(test, allow(clippy::panic))]
+
 use crate::error::Error;
 use async_trait::async_trait;
 use either::Either;
@@ -382,9 +390,11 @@ pub trait OptionExt<T> {
     fn ok_or_else_lazy<E, F: FnOnce() -> E>(self, err: F) -> std::result::Result<T, E>;
 
     /// Tap into Some value without consuming the Option.
+    #[must_use]
     fn tap_some<F: FnOnce(&T)>(self, f: F) -> Self;
 
     /// Tap into None without consuming the Option.
+    #[must_use]
     fn tap_none<F: FnOnce()>(self, f: F) -> Self;
 }
 

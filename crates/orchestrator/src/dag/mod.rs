@@ -27,7 +27,7 @@
 use im::{HashMap, HashSet};
 use itertools::Itertools;
 use petgraph::Direction;
-use petgraph::algo::{is_cyclic_directed, tarjan_scc, toposort};
+use petgraph::algo::{is_cyclic_directed, tarjan_scc as petgraph_scc, toposort};
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::{Bfs, Dfs, EdgeRef, Reversed};
 use std::collections::VecDeque;
@@ -45,6 +45,7 @@ pub use layout_demo::run_demo;
 pub use layout_standalone::{
     Force, LayoutCache, MemoizedLayout, PathSegment, Position, SpringForce, SpringForceError,
 };
+pub use tarjan::{find_cycles_tarjan, tarjan_scc};
 
 /// Type alias for a Bead identifier
 pub type BeadId = String;
@@ -236,7 +237,7 @@ impl WorkflowDAG {
         // Check for cycles using Tarjan's SCC algorithm
         // If adding this edge creates a cycle, there will be a strongly connected
         // component with more than one node, or a single node with a self-loop
-        let sccs = tarjan_scc(&self.graph);
+        let sccs = petgraph_scc(&self.graph);
 
         for scc in sccs {
             // A cycle exists if SCC has more than one node
@@ -1165,7 +1166,7 @@ impl WorkflowDAG {
     /// ```
     #[must_use]
     pub fn find_cycles(&self) -> Vec<Vec<BeadId>> {
-        let sccs = tarjan_scc(&self.graph);
+        let sccs = petgraph_scc(&self.graph);
 
         sccs.into_iter()
             .filter(|scc| {

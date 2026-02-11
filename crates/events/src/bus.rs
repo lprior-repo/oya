@@ -167,7 +167,7 @@ impl EventBus {
             }
 
             // Attempt to send event to subscriber
-            if let Ok(_) = sub.sender.send(event.clone()) {
+            if sub.sender.send(event.clone()).is_ok() {
                 // Success - reset failure count
                 sub.breaker.record_success();
                 debug!(
@@ -313,8 +313,8 @@ impl EventBus {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
+
     use super::*;
     use crate::store::InMemoryEventStore;
     use crate::types::{BeadId, BeadSpec, BeadState, Complexity};

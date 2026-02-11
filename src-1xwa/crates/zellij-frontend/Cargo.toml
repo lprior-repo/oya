@@ -1,0 +1,61 @@
+[package]
+name = "zellij-frontend"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Zellij WASM plugin and UI components for OYA SDLC visualization"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+bincode = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Tracing
+tracing = { workspace = true }
+
+# Time
+chrono = { workspace = true }
+
+# Functional data structures
+rpds = { workspace = true }
+itertools = { workspace = true }
+
+# IPC (needed for WASM plugin communication)
+oya-ipc = { workspace = true }
+
+# UUID generation (needed for integration tests)
+uuid = { version = "1.11", features = ["v4", "serde"] }
+
+# HTTP client and tokio (only for native builds, NOT WASM)
+# WASM builds communicate via IPC and don't need HTTP/Tokio
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+reqwest = { version = "0.12", features = ["json"] }
+tokio = { workspace = true }
+
+[dev-dependencies]
+# Testing
+os_pipe = "1.2"
+tokio = { workspace = true }
+
+# Test utilities
+tempfile = "3.13"
+
+[profile.release]
+opt-level = "z"             # Optimize for size
+lto = true
+codegen-units = 1
+strip = true
+
+[features]
+default = []
+wasm = []

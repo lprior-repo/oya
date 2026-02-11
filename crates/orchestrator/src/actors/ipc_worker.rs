@@ -1,28 +1,38 @@
 //! IPC Worker Actor - Zellij plugin communication bridge.
+ //!
+ //! This actor manages communication between the Zellij guest plugin (UI)
+ //! and the OYA orchestrator (host). It handles `GuestMessage` commands,
+ //! queries the orchestrator state, and broadcasts `HostMessage` events.
+ //!
+ //! # Architecture
+ //!
+ //! ```text
+ //! Zellij Guest Plugin (UI)
+ //!        │
+ //!        │ GuestMessage (stdin/stdout)
+ //!        ↓
+ //! ┌─────────────────────────────┐
+ //! │   IpcWorker Actor           │
+ //! │  ────────────────────────   │
+ //! │  • transport: IpcTransport  │
+ //! │  • orchestrator: references │
+ //! │  • event_tx: broadcast      │
+ //! └─────────────────────────────┘
+ //!        │
+ //!        │ HostMessage (events, responses)
+ //!        ↓
+ //!    Subscribers
+ //! ```
+
+//! # Safety
 //!
-//! This actor manages communication between the Zellij guest plugin (UI)
-//! and the OYA orchestrator (host). It handles `GuestMessage` commands,
-//! queries the orchestrator state, and broadcasts `HostMessage` events.
+//! This module performs bounded arithmetic operations on health check
+//! component counts. The maximum value is 8 (4 components × 2 status types)
+//! which is well within i32 range. Overflow is impossible.
 //!
-//! # Architecture
-//!
-//! ```text
-//! Zellij Guest Plugin (UI)
-//!        │
-//!        │ GuestMessage (stdin/stdout)
-//!        ↓
-//! ┌─────────────────────────────┐
-//! │   IpcWorker Actor           │
-//! │  ────────────────────────   │
-//! │  • transport: IpcTransport  │
-//! │  • orchestrator: references │
-//! │  • event_tx: broadcast      │
-//! └─────────────────────────────┘
-//!        │
-//!        │ HostMessage (events, responses)
-//!        ↓
-//!    Subscribers
-//! ```
+//! Retry counts are u32 and increment by 1. Max u32 = 4,294,967,295 which is safe.
+
+#![allow(clippy::arithmetic_side_effects)]
 
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]

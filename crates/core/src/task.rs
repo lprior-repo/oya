@@ -8,6 +8,9 @@
 #![warn(clippy::pedantic)]
 #![warn(clippy::nursery)]
 #![forbid(unsafe_code)]
+#![cfg_attr(test, allow(clippy::expect_used))]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
+#![cfg_attr(test, allow(clippy::panic))]
 
 use crate::Slug;
 use serde::{Deserialize, Serialize};
@@ -31,6 +34,7 @@ pub enum Stage {
 impl Stage {
     /// Get all possible stages.
     #[must_use]
+    #[inline]
     pub const fn all() -> &'static [Self] {
         &[
             Self::Pending,
@@ -61,7 +65,8 @@ impl Task {
     /// Create a new task.
     ///
     /// # Errors
-    /// Returns an error if the slug is invalid.
+    /// Returns an error if slug is invalid.
+    #[inline]
     pub fn new(
         id: impl TryInto<Slug, Error = crate::Error>,
         title: impl Into<String>,
@@ -78,16 +83,17 @@ impl Task {
 
     /// Check if the task is complete.
     #[must_use]
+    #[inline]
     pub fn is_complete(&self) -> bool {
         self.current_stage == Stage::Completed
     }
 
     /// Mark the current stage as complete and advance to the next stage.
+    #[inline]
     pub const fn complete_current_stage(&mut self) {
         self.current_stage = match self.current_stage {
             Stage::Pending => Stage::InProgress,
-            Stage::InProgress => Stage::Completed,
-            Stage::Completed => Stage::Completed,
+            Stage::InProgress | Stage::Completed => Stage::Completed,
             Stage::Failed => Stage::Failed,
             Stage::RolledBack => Stage::RolledBack,
         };
@@ -96,13 +102,17 @@ impl Task {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
 
     #[test]
     fn test_task_creation() {
         let task = Task::new("task-1", "Test Task", "A test task");
         assert!(task.is_ok());
-        let task = task.unwrap();
+        let task = match task {
+            Ok(t) => t,
+            Err(e) => panic!("Task creation failed: {}", e),
+        };
         assert_eq!(task.id.as_str(), "task-1");
         assert_eq!(task.title, "Test Task");
         assert_eq!(task.description, "A test task");

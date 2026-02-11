@@ -1,0 +1,26 @@
+--- crates/events/src/event.rs
++++ replace BeadEvent::completed -> Self with Default::default()
+@@ -159,22 +159,17 @@
+             bead_id,
+             error: error.into(),
+             timestamp: Utc::now(),
+         }
+     }
+ 
+     /// Create a new Completed event.
+     pub fn completed(bead_id: BeadId, result: BeadResult) -> Self {
+-        Self::Completed {
+-            event_id: EventId::new(),
+-            bead_id,
+-            result,
+-            timestamp: Utc::now(),
+-        }
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Create a new Claimed event.
+     pub fn claimed(bead_id: BeadId, agent_id: impl Into<String>) -> Self {
+         Self::Claimed {
+             event_id: EventId::new(),
+             bead_id,
+             agent_id: agent_id.into(),

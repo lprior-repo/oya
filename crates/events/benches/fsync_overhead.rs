@@ -44,6 +44,7 @@ async fn benchmark_fsync_overhead(file_size: usize) -> Result<(), String> {
     let mut file = OpenOptions::new()
         .create(true)
         .write(true)
+        .truncate(true)
         .open(fixture.test_file_path())
         .await
         .map_err(|e| format!("Failed to create file: {}", e))?;
@@ -68,6 +69,7 @@ async fn benchmark_write_no_fsync(file_size: usize) -> Result<(), String> {
     let mut file = OpenOptions::new()
         .create(true)
         .write(true)
+        .truncate(true)
         .open(fixture.test_file_path())
         .await
         .map_err(|e| format!("Failed to create file: {}", e))?;

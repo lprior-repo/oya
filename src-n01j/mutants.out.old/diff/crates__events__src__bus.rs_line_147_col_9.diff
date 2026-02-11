@@ -1,0 +1,21 @@
+--- crates/events/src/bus.rs
++++ replace EventBus::replay_from -> Result<Vec<BeadEvent>> with Ok(vec![])
+@@ -139,17 +139,17 @@
+     /// Unsubscribe a pattern-based subscriber.
+     pub async fn unsubscribe(&self, subscriber_id: &str) {
+         let mut subscribers = self.subscribers.write().await;
+         subscribers.remove(subscriber_id);
+     }
+ 
+     /// Replay events from a given event ID.
+     pub async fn replay_from(&self, from: Option<EventId>) -> Result<Vec<BeadEvent>> {
+-        self.store.read(from).await
++        Ok(vec![]) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Get the underlying event store.
+     pub fn store(&self) -> &Arc<dyn EventStore> {
+         &self.store
+     }
+ }
+ 

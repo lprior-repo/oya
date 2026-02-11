@@ -1,5 +1,9 @@
 //! Slug type for task identifiers.
 
+#![cfg_attr(test, allow(clippy::expect_used))]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
+#![cfg_attr(test, allow(clippy::panic))]
+
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -32,6 +36,7 @@ impl Slug {
     ///
     /// # Errors
     /// Returns an error if the slug format is invalid.
+    #[inline]
     pub fn new(slug: impl Into<String>) -> Result<Self, crate::OyaError> {
         let slug = slug.into();
 
@@ -94,24 +99,28 @@ impl Slug {
     /// # Safety
     /// Only use this when you're certain the slug is valid.
     #[must_use]
+    #[inline]
     pub fn new_unchecked(slug: impl Into<String>) -> Self {
         Self(slug.into())
     }
 
     /// Get the underlying string value.
     #[must_use]
+    #[inline]
     pub fn as_str(&self) -> &str {
         &self.0
     }
 
     /// Convert into the underlying string.
     #[must_use]
+    #[inline]
     pub fn into_inner(self) -> String {
         self.0
     }
 }
 
 impl fmt::Display for Slug {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
     }
@@ -120,6 +129,7 @@ impl fmt::Display for Slug {
 impl TryFrom<String> for Slug {
     type Error = crate::OyaError;
 
+    #[inline]
     fn try_from(value: String) -> Result<Self, Self::Error> {
         Self::new(value)
     }
@@ -128,18 +138,21 @@ impl TryFrom<String> for Slug {
 impl TryFrom<&str> for Slug {
     type Error = crate::OyaError;
 
+    #[inline]
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         Self::new(value)
     }
 }
 
 impl From<Slug> for String {
+    #[inline]
     fn from(slug: Slug) -> Self {
         slug.0
     }
 }
 
 impl AsRef<str> for Slug {
+    #[inline]
     fn as_ref(&self) -> &str {
         &self.0
     }
@@ -147,9 +160,7 @@ impl AsRef<str> for Slug {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
-    #![allow(clippy::expect_used)]
-    #![allow(clippy::panic)]
+
     #![allow(clippy::uninlined_format_args)]
     #![allow(clippy::manual_let_else)]
     #![allow(clippy::missing_panics_doc)]
@@ -157,7 +168,6 @@ mod tests {
     #![allow(clippy::should_implement_trait)]
     #![allow(clippy::if_then_some_else_none)]
     #![allow(clippy::redundant_clone)]
-    #![allow(clippy::map_or_none)]
     #![allow(clippy::missing_docs_in_private_items)]
 
     use super::*;
