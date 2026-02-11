@@ -285,7 +285,7 @@ impl Oya {
             Some(Commands::Serve { address }) => {
                 info!("Starting IPC server");
                 match serve_command(address) {
-                    Ok(_) => Ok(()),
+                    Ok(()) => Ok(()),
                     Err(e) => {
                         eprintln!("Error: {e}");
                         std::process::exit(1);
@@ -295,7 +295,7 @@ impl Oya {
             Some(Commands::Install { force }) => {
                 info!("Installing Zellij plugin");
                 match install_command(force) {
-                    Ok(_) => Ok(()),
+                    Ok(()) => Ok(()),
                     Err(e) => {
                         eprintln!("Error: {e}");
                         std::process::exit(1);

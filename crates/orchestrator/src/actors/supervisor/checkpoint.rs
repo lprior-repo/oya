@@ -225,7 +225,7 @@ where
             last_restart: child
                 .last_restart
                 .map(|i| {
-                     let elapsed = i.elapsed().as_secs().checked_sub(1).unwrap_or(0);
+                     let elapsed = i.elapsed().as_secs().saturating_sub(1);
                      DateTime::<Utc>::from(std::time::SystemTime::now() - Duration::from_secs(elapsed))
                  }),
             args: format!("{:?}", child.args), // Debug format for args

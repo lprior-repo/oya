@@ -7,7 +7,7 @@
 
 //! Storm command implementation
 //!
-//! Orchestrates bead execution using the BeadOrchestrator and WorkflowDAG.
+//! Orchestrates bead execution using the `BeadOrchestrator` and `WorkflowDAG`.
 
 use anyhow::Result;
 use clap::Parser;
@@ -15,10 +15,10 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use thiserror::Error;
 use tokio::fs;
-use tracing::{info, instrument, warn};
+use tracing::{info, warn};
 
 /// Arguments for the storm command
 #[derive(Parser, Debug, Clone)]
@@ -56,11 +56,11 @@ pub struct StormOutput {
     /// Execution duration in milliseconds
     pub duration_ms: u64,
 
-    /// Bead execution results (if not dry_run)
+    /// Bead execution results (if not `dry_run`)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub results: Option<Vec<BeadExecutionResult>>,
 
-    /// Planned execution order (if dry_run)
+    /// Planned execution order (if `dry_run`)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub planned_order: Option<Vec<String>>,
 }
@@ -201,11 +201,11 @@ struct OrchestratorConfig {
     extra: HashMap<String, serde_yaml::Value>,
 }
 
-fn default_slots() -> usize {
+const fn default_slots() -> usize {
     4
 }
 
-fn default_timeout() -> u64 {
+const fn default_timeout() -> u64 {
     600
 }
 
@@ -305,7 +305,7 @@ async fn load_config(path: &Path) -> Result<OrchestratorConfig, StormError> {
     })
 }
 
-/// Build WorkflowDAG from beads database
+/// Build `WorkflowDAG` from beads database
 ///
 /// Preconditions:
 /// - Database connection is valid
@@ -320,7 +320,7 @@ async fn build_workflow_dag(db_path: &Path) -> Result<WorkflowDAG, StormError> {
     use orchestrator::dag::{DependencyType, WorkflowDAG};
 
     // Open database connection
-    let conn = rusqlite::Connection::open(db_path).map_err(|e| StormError::DatabaseNotFound {
+    let conn = rusqlite::Connection::open(db_path).map_err(|_e| StormError::DatabaseNotFound {
         path: db_path.to_path_buf(),
     })?;
 
@@ -338,7 +338,7 @@ async fn build_workflow_dag(db_path: &Path) -> Result<WorkflowDAG, StormError> {
             query: "SELECT id FROM issues WHERE status = 'open'".to_string(),
             source: anyhow::Error::from(e),
         })?
-        .filter_map(|r| r.ok())
+        .filter_map(std::result::Result::ok)
         .collect();
 
     if bead_ids.is_empty() {
@@ -372,7 +372,7 @@ async fn build_workflow_dag(db_path: &Path) -> Result<WorkflowDAG, StormError> {
             query: "SELECT issue_id, depends_on_id FROM dependencies".to_string(),
             source: anyhow::Error::from(e),
         })?
-        .filter_map(|r| r.ok())
+        .filter_map(std::result::Result::ok)
         .collect();
 
     for (issue_id, depends_on_id) in deps {
@@ -390,8 +390,8 @@ async fn build_workflow_dag(db_path: &Path) -> Result<WorkflowDAG, StormError> {
 }
 
 /// Get topological order of beads in DAG
-fn topological_order(dag: &WorkflowDAG) -> Result<Vec<String>, StormError> {
-    use orchestrator::dag::WorkflowDAG;
+fn topological_order(_dag: &WorkflowDAG) -> Result<Vec<String>, StormError> {
+    
 
     // For now, return empty vec as topological sort will be implemented
     // when WorkflowDAG exposes its internal petgraph structure
@@ -402,7 +402,7 @@ fn topological_order(dag: &WorkflowDAG) -> Result<Vec<String>, StormError> {
     Ok(Vec::new())
 }
 
-/// Run BeadOrchestrator with given DAG and config
+/// Run `BeadOrchestrator` with given DAG and config
 ///
 /// Preconditions:
 /// - DAG has at least one node

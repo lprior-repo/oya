@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
-use tracing::{debug, info, warn};
+use tracing::info;
 
 /// Error types for contract processing.
 #[derive(Debug, Error)]
@@ -454,86 +454,86 @@ impl ContractProcessor {
 
         // Test 2: Enumerates all error variants
         tests.push(TestCase {
-            test_name: "test_enumerates_all_error_variants_in_contract".to_string(),
+            test_name: "test_enumerates_all_error_variants_in_contract_when_feature_has_multiple_failures".to_string(),
             given: "A handoff describing a feature that can fail in multiple ways".to_string(),
             when: "The planner generates the contract".to_string(),
             then: "The contract errors array contains exhaustive variants covering: file IO, parse errors, validation errors, and state violations".to_string(),
-            covers: "exhaustive_error_variants, break_analysis_completeness".to_string(),
+            covers: "error_variant_exhaustive_enumeration, break_analysis_completeness".to_string(),
         });
 
         // Test 3: Generates expressive test names
         tests.push(TestCase {
-            test_name: "test_generates_expressive_test_names_following_fowler_conventions"
+            test_name: "test_generates_expressive_test_names_following_fowler_conventions_when_test_plan_is_generated"
                 .to_string(),
             given: "A contract with multiple edge cases and error conditions".to_string(),
             when: "The planner generates the test plan".to_string(),
             then: "All test names follow the pattern test_{verb}_{outcome}_when_{condition} and clearly describe WHAT behavior is tested and WHY the test exists".to_string(),
-            covers: "martin_fowler_test_naming_convention, test_readability".to_string(),
+            covers: "invariant_test_naming_convention, postcondition_test_plan".to_string(),
         });
 
         // Test 4: Includes break analysis
         tests.push(TestCase {
-            test_name: "test_includes_break_analysis_for_all_failure_modes".to_string(),
+            test_name: "test_includes_break_analysis_for_all_failure_modes_when_integration_points_exist".to_string(),
             given: "A feature with multiple integration points and external dependencies".to_string(),
             when: "The planner analyzes potential breaks".to_string(),
             then: "The break_analysis array contains entries for memory safety, logic errors, state violations, external failures, and error propagation".to_string(),
-            covers: "break_analysis_completeness, rust_safety_guarantees".to_string(),
+            covers: "break_analysis_completeness, invariant_failure_prevention".to_string(),
         });
 
         // Test 5: Returns contract path for notification
         tests.push(TestCase {
-            test_name: "test_returns_contract_path_for_notification_on_success".to_string(),
+            test_name: "test_returns_contract_path_for_notification_on_success_when_handoff_processed".to_string(),
             given: "A contract file has been successfully created".to_string(),
             when: "The planner completes processing".to_string(),
             then: "System returns contract path for printing CONTRACT_READY notification"
                 .to_string(),
-            covers: "postcondition_ready_notification, implementer_handoff_protocol".to_string(),
+            covers: "postcondition_contract_created, postcondition_ready_notification".to_string(),
         });
 
         // Test 6: Handles missing handoff file
         tests.push(TestCase {
-            test_name: "test_handles_missing_handoff_file_gracefully".to_string(),
+            test_name: "test_handles_missing_handoff_file_gracefully_when_file_not_found".to_string(),
             given: "No handoff file exists at the expected path".to_string(),
             when: "The planner attempts to process a non-existent handoff".to_string(),
             then: "Planner logs an error and continues monitoring without crashing".to_string(),
-            covers: "error_variant_HandoffFileNotFound, graceful_error_handling".to_string(),
+            covers: "error_variant_HandoffFileNotFound, precondition_handoff_exists".to_string(),
         });
 
         // Test 7: Validates handoff JSON structure
         tests.push(TestCase {
-            test_name: "test_validates_handoff_json_structure_before_processing".to_string(),
+            test_name: "test_validates_handoff_json_structure_before_processing_when_json_is_malformed".to_string(),
             given: "A malformed JSON file exists at /tmp/bead-handoff-malformed.json".to_string(),
             when: "The planner attempts to read and parse the file".to_string(),
             then: "Planner detects invalid JSON, logs an error, and skips to the next handoff file"
                 .to_string(),
-            covers: "error_variant_InvalidHandoffFormat, input_validation".to_string(),
+            covers: "error_variant_InvalidHandoffFormat, precondition_valid_json".to_string(),
         });
 
         // Test 8: Ensures Given-When-Then structure
         tests.push(TestCase {
-            test_name: "test_ensures_all_tests_use_given_when_then_structure".to_string(),
+            test_name: "test_ensures_all_tests_use_given_when_then_structure_when_test_plan_generated".to_string(),
             given: "A contract with multiple test cases".to_string(),
             when: "The planner generates the test plan".to_string(),
             then: "Every test in test_plan has given, when, then, and covers fields populated with descriptive text".to_string(),
-            covers: "martin_fowler_given_when_then, test_documentation".to_string(),
+            covers: "invariant_given_when_then_structure, postcondition_test_plan".to_string(),
         });
 
         // Test 9: Defines invariants
         tests.push(TestCase {
-            test_name: "test_defines_invariants_that_never_change".to_string(),
+            test_name: "test_defines_invariants_that_never_change_when_system_analyzed".to_string(),
             given: "A feature with internal state and external interfaces".to_string(),
             when: "The planner analyzes the system".to_string(),
             then: "The contract invariants array includes properties that must remain true regardless of system state or operations".to_string(),
-            covers: "invariant_definition, system_stability_guarantees".to_string(),
+            covers: "invariant_definition, invariant_system_stability".to_string(),
         });
 
         // Test 10: Maps tests to contract elements
         tests.push(TestCase {
-            test_name: "test_maps_tests_to_contract_elements".to_string(),
+            test_name: "test_maps_tests_to_contract_elements_when_test_plan_generated".to_string(),
             given: "A contract with preconditions, postconditions, error variants, and invariants".to_string(),
             when: "The planner generates the test plan".to_string(),
             then: "Each test's covers field explicitly references which precondition, postcondition, error variant, or invariant the test validates".to_string(),
-            covers: "test_traceability, contract_coverage".to_string(),
+            covers: "postcondition_test_plan, precondition_contract_elements".to_string(),
         });
 
         tests

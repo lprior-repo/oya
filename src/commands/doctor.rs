@@ -183,10 +183,10 @@ async fn check_moon() -> CheckResult {
             CheckStatus::Skipped
         },
         message,
-        fix_command: if !available {
-            Some("Install moon: curl -fsSL https://moonrepo.dev/install.sh | bash".to_string())
-        } else {
+        fix_command: if available {
             None
+        } else {
+            Some("Install moon: curl -fsSL https://moonrepo.dev/install.sh | bash".to_string())
         },
         duration_ms: start.elapsed().as_millis() as u64,
     }
@@ -216,10 +216,10 @@ async fn check_zjj() -> CheckResult {
             CheckStatus::Skipped
         },
         message,
-        fix_command: if !available {
-            Some("Install zjj from your OYA distribution".to_string())
-        } else {
+        fix_command: if available {
             None
+        } else {
+            Some("Install zjj from your OYA distribution".to_string())
         },
         duration_ms: start.elapsed().as_millis() as u64,
     }
@@ -249,10 +249,10 @@ async fn check_bead_store() -> CheckResult {
             CheckStatus::Failed
         },
         message,
-        fix_command: if !available {
-            Some("Run: br init".to_string())
-        } else {
+        fix_command: if available {
             None
+        } else {
+            Some("Run: br init".to_string())
         },
         duration_ms: start.elapsed().as_millis() as u64,
     }
@@ -276,10 +276,10 @@ async fn check_cargo_workspace() -> CheckResult {
             CheckStatus::Failed
         },
         message,
-        fix_command: if !valid {
-            Some("Run: cargo check".to_string())
-        } else {
+        fix_command: if valid {
             None
+        } else {
+            Some("Run: cargo check".to_string())
         },
         duration_ms: start.elapsed().as_millis() as u64,
     }
@@ -307,10 +307,10 @@ async fn check_clippy() -> CheckResult {
             CheckStatus::Warning
         },
         message,
-        fix_command: if !clean {
-            Some("Run: cargo clippy --fix".to_string())
-        } else {
+        fix_command: if clean {
             None
+        } else {
+            Some("Run: cargo clippy --fix".to_string())
         },
         duration_ms: start.elapsed().as_millis() as u64,
     }
@@ -337,10 +337,10 @@ async fn check_test_coverage() -> CheckResult {
             CheckStatus::Warning
         },
         message,
-        fix_command: if !tests_run {
-            Some("Run: cargo test".to_string())
-        } else {
+        fix_command: if tests_run {
             None
+        } else {
+            Some("Run: cargo test".to_string())
         },
         duration_ms: start.elapsed().as_millis() as u64,
     }
@@ -365,10 +365,10 @@ async fn check_dependencies() -> CheckResult {
             CheckStatus::Warning
         },
         message,
-        fix_command: if !up_to_date {
-            Some("Run: cargo update".to_string())
-        } else {
+        fix_command: if up_to_date {
             None
+        } else {
+            Some("Run: cargo update".to_string())
         },
         duration_ms: start.elapsed().as_millis() as u64,
     }

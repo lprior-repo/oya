@@ -25,9 +25,9 @@ pub mod serve;
 pub mod storm;
 
 // Re-export command types for convenience
-pub use doctor::{CheckStatus, DoctorArgs, DoctorError, DoctorOutput, doctor_command};
-pub use init::{InitArgs, InitError, InitOutput, init_command};
+pub use doctor::{CheckStatus, DoctorArgs, doctor_command};
+pub use init::{InitArgs, init_command};
 pub use install::install_command;
-pub use logs::{LogsArgs, LogsError, LogsOutput, logs_command};
+pub use logs::{LogsArgs, logs_command};
 pub use serve::serve_command;
-pub use storm::{StormArgs, StormError, StormOutput, storm_command};
+pub use storm::{StormArgs, storm_command};

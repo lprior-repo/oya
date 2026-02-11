@@ -20,7 +20,7 @@ pub struct AgentOutput {
     pub exit_code: Option<i32>,
     /// Execution duration in milliseconds
     pub duration_ms: u64,
-    /// Success indicator (exit_code == 0)
+    /// Success indicator (`exit_code` == 0)
     pub success: bool,
 }
 
@@ -34,7 +34,7 @@ impl AgentOutput {
         exit_code: Option<i32>,
         duration_ms: u64,
     ) -> Self {
-        let success = exit_code.map_or(false, |code| code == 0);
+        let success = exit_code == Some(0);
         Self {
             stage,
             stdout,
@@ -208,7 +208,7 @@ impl SubprocessHandle {
             // Wait for process to complete
             result = child.wait() => result?,
             // Timeout elapsed - attempt to kill and return error
-            _ = &mut sleep => {
+            () = &mut sleep => {
                 tracing::warn!(
                     "Agent timeout for bead {} stage {:?}, terminating process",
                     self.bead_id,

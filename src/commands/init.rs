@@ -9,7 +9,7 @@
 //!
 //! Scaffolds new Oya projects with best-practice templates.
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::Parser;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -163,17 +163,17 @@ panic = "deny"
         },
         TemplateFile {
             path: ".beads/README.md".to_string(),
-            content: r#"# Beads Directory
+            content: r"# Beads Directory
 
 This directory contains bead definitions for the OYA workflow system.
 
 Beads are units of work that can be tracked, tested, and integrated.
-"#
+"
             .to_string(),
         },
         TemplateFile {
             path: "CLAUDE.md".to_string(),
-            content: r#"# {{project_name}}
+            content: r"# {{project_name}}
 
 {{description}}
 
@@ -196,12 +196,12 @@ This project uses the OYA SDLC system for development workflow.
 ├── moon.yml          # Moon configuration
 └── Cargo.toml        # Workspace configuration
 ```
-"#
+"
             .to_string(),
         },
         TemplateFile {
             path: ".gitignore".to_string(),
-            content: r#"# Rust
+            content: r"# Rust
 /target
 **/*.rs.bk
 *.pdb
@@ -222,7 +222,7 @@ Thumbs.db
 
 # OYA
 .beads/*.db
-"#
+"
             .to_string(),
         },
     ]
@@ -235,7 +235,7 @@ fn get_full_template() -> Vec<TemplateFile> {
     files.extend(vec![
         TemplateFile {
             path: ".github/workflows/ci.yml".to_string(),
-            content: r#"name: CI
+            content: r"name: CI
 
 on:
   push:
@@ -250,7 +250,7 @@ jobs:
       - uses: actions/checkout@v3
       - uses: moonrepo/setup-moon@v1
       - run: moon run ci
-"#
+"
             .to_string(),
         },
         TemplateFile {
@@ -271,7 +271,7 @@ anyhow = { workspace = true }
         },
         TemplateFile {
             path: "crates/core/src/lib.rs".to_string(),
-            content: r#"#![deny(clippy::unwrap_used)]
+            content: r"#![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 #![warn(clippy::pedantic)]
@@ -279,13 +279,13 @@ anyhow = { workspace = true }
 #![forbid(unsafe_code)]
 
 //! Core library for {{project_name}}
-"#
+"
             .to_string(),
         },
         TemplateFile {
             path: "tests/integration_test.rs".to_string(),
-            content: r#"// Integration tests for {{project_name}}
-"#
+            content: r"// Integration tests for {{project_name}}
+"
             .to_string(),
         },
     ]);
@@ -473,10 +473,10 @@ pub async fn init_command(args: InitArgs) -> Result<InitOutput, InitError> {
     }
 
     // Initialize git if not disabled
-    let git_initialized = if !args.no_git {
-        init_git(&project_path).await?
-    } else {
+    let git_initialized = if args.no_git {
         false
+    } else {
+        init_git(&project_path).await?
     };
 
     Ok(InitOutput {

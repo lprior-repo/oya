@@ -22,7 +22,7 @@ pub struct AgentExecutor {
 impl AgentExecutor {
     /// Create a new agent executor.
     #[must_use]
-    pub fn new(config: AgentConfig) -> Self {
+    pub const fn new(config: AgentConfig) -> Self {
         Self {
             config,
             event_bus: None,
@@ -56,7 +56,7 @@ impl AgentExecutor {
     ///
     /// # Events
     ///
-    /// Emits the following events to the configured EventBus:
+    /// Emits the following events to the configured `EventBus`:
     /// - `BeadEvent::StageStarted` when subprocess spawns
     /// - `BeadEvent::StageCompleted` on successful execution (exit code 0)
     /// - `BeadEvent::StageFailed` on failure (non-zero exit code or timeout)
@@ -143,7 +143,7 @@ impl AgentExecutor {
         Ok(handle)
     }
 
-    /// Emit process started event to EventBus.
+    /// Emit process started event to `EventBus`.
     fn emit_process_started_event(
         &self,
         bead_id: BeadId,
@@ -166,7 +166,7 @@ impl AgentExecutor {
         });
     }
 
-    /// Emit completion event to EventBus.
+    /// Emit completion event to `EventBus`.
     async fn emit_completion_event(
         &self,
         bead_id: BeadId,
@@ -200,19 +200,12 @@ impl AgentExecutor {
 
 /// Builder for creating [`AgentExecutor`] with fluent API.
 #[derive(Clone)]
+#[derive(Default)]
 pub struct AgentExecutorBuilder {
     config: Option<AgentConfig>,
     event_bus: Option<Arc<EventBus>>,
 }
 
-impl Default for AgentExecutorBuilder {
-    fn default() -> Self {
-        Self {
-            config: None,
-            event_bus: None,
-        }
-    }
-}
 
 impl AgentExecutorBuilder {
     /// Create a new builder.
