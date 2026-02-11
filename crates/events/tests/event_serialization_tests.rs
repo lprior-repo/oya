@@ -9,10 +9,15 @@
 //! - Error handling is robust (no panics)
 //! - Serialization size limits are enforced
 
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+#![forbid(clippy::panic)]
+
+use oya_events::BeadEvent;
 use oya_events::types::{
     BeadId, BeadResult, BeadSpec, BeadState, Complexity, PhaseId, PhaseOutput,
 };
-use oya_events::BeadEvent;
+use serde_json;
 
 // ==========================================================================
 // TEST HELPERS
@@ -54,14 +59,11 @@ fn json_roundtrip(event: BeadEvent) -> Result<(), String> {
         "Event ID should be preserved through JSON round-trip"
     );
 
-    // WorkerUnhealthy doesn't have a bead_id field, so skip that check
-    if !matches!(event, BeadEvent::WorkerUnhealthy { .. }) {
-        assert_eq!(
-            event.bead_id(),
-            deserialized.bead_id(),
-            "Bead ID should be preserved through JSON round-trip"
-        );
-    }
+    assert_eq!(
+        event.bead_id(),
+        deserialized.bead_id(),
+        "Bead ID should be preserved through JSON round-trip"
+    );
 
     assert_eq!(
         event.event_type(),
@@ -203,10 +205,10 @@ fn should_preserve_created_event_fields_through_roundtrip() -> Result<(), String
     let original = BeadEvent::created(bead_id, spec);
 
     // Round-trip through JSON
-    let json_str =
-        serde_json::to_string(&original).map_err(|e| format!("Serialization failed: {e}"))?;
-    let restored: BeadEvent =
-        serde_json::from_str(&json_str).map_err(|e| format!("Deserialization failed: {e}"))?;
+    let json_str = serde_json::to_string(&original)
+        .map_err(|e| format!("Serialization failed: {e}"))?;
+    let restored: BeadEvent = serde_json::from_str(&json_str)
+        .map_err(|e| format!("Deserialization failed: {e}"))?;
 
     match restored {
         BeadEvent::Created { spec, .. } => {
@@ -218,10 +220,7 @@ fn should_preserve_created_event_fields_through_roundtrip() -> Result<(), String
             assert!(spec.dependencies.contains(&dep_id));
             Ok(())
         }
-        _ => Err(format!(
-            "Expected Created event, got {:?}",
-            restored.event_type()
-        )),
+        _ => Err(format!("Expected Created event, got {:?}", restored.event_type())),
     }
 }
 
@@ -232,7 +231,11 @@ fn should_preserve_created_event_fields_through_roundtrip() -> Result<(), String
 #[test]
 fn should_serialize_state_changed_event_to_json() -> Result<(), String> {
     let bead_id = BeadId::new();
-    let event = BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Scheduled);
+    let event = BeadEvent::state_changed(
+        bead_id,
+        BeadState::Pending,
+        BeadState::Scheduled,
+    );
 
     let json_str = serde_json::to_string(&event)
         .map_err(|e| format!("Failed to serialize StateChanged event: {e}"))?;
@@ -267,24 +270,19 @@ fn should_preserve_state_changed_fields_through_roundtrip() -> Result<(), String
         "Claimed by agent-123",
     );
 
-    let json_str =
-        serde_json::to_string(&original).map_err(|e| format!("Serialization failed: {e}"))?;
-    let restored: BeadEvent =
-        serde_json::from_str(&json_str).map_err(|e| format!("Deserialization failed: {e}"))?;
+    let json_str = serde_json::to_string(&original)
+        .map_err(|e| format!("Serialization failed: {e}"))?;
+    let restored: BeadEvent = serde_json::from_str(&json_str)
+        .map_err(|e| format!("Deserialization failed: {e}"))?;
 
     match restored {
-        BeadEvent::StateChanged {
-            from, to, reason, ..
-        } => {
+        BeadEvent::StateChanged { from, to, reason, .. } => {
             assert_eq!(from, BeadState::Ready);
             assert_eq!(to, BeadState::Running);
             assert_eq!(reason, Some("Claimed by agent-123".to_string()));
             Ok(())
         }
-        _ => Err(format!(
-            "Expected StateChanged event, got {:?}",
-            restored.event_type()
-        )),
+        _ => Err(format!("Expected StateChanged event, got {:?}", restored.event_type())),
     }
 }
 
@@ -336,16 +334,16 @@ fn should_preserve_phase_completed_fields_through_roundtrip() -> Result<(), Stri
     let output = PhaseOutput::success(vec![100, 200]);
 
     let original = BeadEvent::phase_completed(
-        bead_id,
+        bead_id.clone(),
         phase_id,
         "integration-test",
         output.clone(),
     );
 
-    let json_str =
-        serde_json::to_string(&original).map_err(|e| format!("Serialization failed: {e}"))?;
-    let restored: BeadEvent =
-        serde_json::from_str(&json_str).map_err(|e| format!("Deserialization failed: {e}"))?;
+    let json_str = serde_json::to_string(&original)
+        .map_err(|e| format!("Serialization failed: {e}"))?;
+    let restored: BeadEvent = serde_json::from_str(&json_str)
+        .map_err(|e| format!("Deserialization failed: {e}"))?;
 
     match restored {
         BeadEvent::PhaseCompleted {
@@ -358,10 +356,7 @@ fn should_preserve_phase_completed_fields_through_roundtrip() -> Result<(), Stri
             assert_eq!(restored_output.data, output.data);
             Ok(())
         }
-        _ => Err(format!(
-            "Expected PhaseCompleted event, got {:?}",
-            restored.event_type()
-        )),
+        _ => Err(format!("Expected PhaseCompleted event, got {:?}", restored.event_type())),
     }
 }
 
@@ -399,10 +394,10 @@ fn should_preserve_dependency_ids_through_roundtrip() -> Result<(), String> {
 
     let original = BeadEvent::dependency_resolved(bead_id, dep_id);
 
-    let json_str =
-        serde_json::to_string(&original).map_err(|e| format!("Serialization failed: {e}"))?;
-    let restored: BeadEvent =
-        serde_json::from_str(&json_str).map_err(|e| format!("Deserialization failed: {e}"))?;
+    let json_str = serde_json::to_string(&original)
+        .map_err(|e| format!("Serialization failed: {e}"))?;
+    let restored: BeadEvent = serde_json::from_str(&json_str)
+        .map_err(|e| format!("Deserialization failed: {e}"))?;
 
     match restored {
         BeadEvent::DependencyResolved {
@@ -454,20 +449,17 @@ fn should_preserve_error_message_through_roundtrip() -> Result<(), String> {
 
     let original = BeadEvent::failed(bead_id, error_msg);
 
-    let json_str =
-        serde_json::to_string(&original).map_err(|e| format!("Serialization failed: {e}"))?;
-    let restored: BeadEvent =
-        serde_json::from_str(&json_str).map_err(|e| format!("Deserialization failed: {e}"))?;
+    let json_str = serde_json::to_string(&original)
+        .map_err(|e| format!("Serialization failed: {e}"))?;
+    let restored: BeadEvent = serde_json::from_str(&json_str)
+        .map_err(|e| format!("Deserialization failed: {e}"))?;
 
     match restored {
         BeadEvent::Failed { error, .. } => {
             assert_eq!(error, error_msg);
             Ok(())
         }
-        _ => Err(format!(
-            "Expected Failed event, got {:?}",
-            restored.event_type()
-        )),
+        _ => Err(format!("Expected Failed event, got {:?}", restored.event_type())),
     }
 }
 
@@ -516,10 +508,10 @@ fn should_preserve_completed_result_fields_through_roundtrip() -> Result<(), Str
 
     let original = BeadEvent::completed(bead_id, BeadResult::success(output.clone(), 3000));
 
-    let json_str =
-        serde_json::to_string(&original).map_err(|e| format!("Serialization failed: {e}"))?;
-    let restored: BeadEvent =
-        serde_json::from_str(&json_str).map_err(|e| format!("Deserialization failed: {e}"))?;
+    let json_str = serde_json::to_string(&original)
+        .map_err(|e| format!("Serialization failed: {e}"))?;
+    let restored: BeadEvent = serde_json::from_str(&json_str)
+        .map_err(|e| format!("Deserialization failed: {e}"))?;
 
     match restored {
         BeadEvent::Completed { result, .. } => {
@@ -529,10 +521,7 @@ fn should_preserve_completed_result_fields_through_roundtrip() -> Result<(), Str
             assert!(result.error.is_none());
             Ok(())
         }
-        _ => Err(format!(
-            "Expected Completed event, got {:?}",
-            restored.event_type()
-        )),
+        _ => Err(format!("Expected Completed event, got {:?}", restored.event_type())),
     }
 }
 
@@ -569,23 +558,17 @@ fn should_preserve_agent_id_through_roundtrip() -> Result<(), String> {
 
     let original = BeadEvent::claimed(bead_id, agent_id);
 
-    let json_str =
-        serde_json::to_string(&original).map_err(|e| format!("Serialization failed: {e}"))?;
-    let restored: BeadEvent =
-        serde_json::from_str(&json_str).map_err(|e| format!("Deserialization failed: {e}"))?;
+    let json_str = serde_json::to_string(&original)
+        .map_err(|e| format!("Serialization failed: {e}"))?;
+    let restored: BeadEvent = serde_json::from_str(&json_str)
+        .map_err(|e| format!("Deserialization failed: {e}"))?;
 
     match restored {
-        BeadEvent::Claimed {
-            agent_id: restored_agent_id,
-            ..
-        } => {
+        BeadEvent::Claimed { agent_id: restored_agent_id, .. } => {
             assert_eq!(restored_agent_id, agent_id);
             Ok(())
         }
-        _ => Err(format!(
-            "Expected Claimed event, got {:?}",
-            restored.event_type()
-        )),
+        _ => Err(format!("Expected Claimed event, got {:?}", restored.event_type())),
     }
 }
 
@@ -629,20 +612,17 @@ fn should_preserve_unclaimed_reason_through_roundtrip() -> Result<(), String> {
 
     let original = BeadEvent::unclaimed(bead_id, Some("Agent disconnected".to_string()));
 
-    let json_str =
-        serde_json::to_string(&original).map_err(|e| format!("Serialization failed: {e}"))?;
-    let restored: BeadEvent =
-        serde_json::from_str(&json_str).map_err(|e| format!("Deserialization failed: {e}"))?;
+    let json_str = serde_json::to_string(&original)
+        .map_err(|e| format!("Serialization failed: {e}"))?;
+    let restored: BeadEvent = serde_json::from_str(&json_str)
+        .map_err(|e| format!("Deserialization failed: {e}"))?;
 
     match restored {
         BeadEvent::Unclaimed { reason, .. } => {
             assert_eq!(reason, Some("Agent disconnected".to_string()));
             Ok(())
         }
-        _ => Err(format!(
-            "Expected Unclaimed event, got {:?}",
-            restored.event_type()
-        )),
+        _ => Err(format!("Expected Unclaimed event, got {:?}", restored.event_type())),
     }
 }
 
@@ -679,10 +659,10 @@ fn should_preserve_priority_values_through_roundtrip() -> Result<(), String> {
 
     let original = BeadEvent::priority_changed(bead_id, 500, 1);
 
-    let json_str =
-        serde_json::to_string(&original).map_err(|e| format!("Serialization failed: {e}"))?;
-    let restored: BeadEvent =
-        serde_json::from_str(&json_str).map_err(|e| format!("Deserialization failed: {e}"))?;
+    let json_str = serde_json::to_string(&original)
+        .map_err(|e| format!("Serialization failed: {e}"))?;
+    let restored: BeadEvent = serde_json::from_str(&json_str)
+        .map_err(|e| format!("Deserialization failed: {e}"))?;
 
     match restored {
         BeadEvent::PriorityChanged {
@@ -750,16 +730,13 @@ fn should_preserve_metadata_object_through_roundtrip() -> Result<(), String> {
 
     let original = BeadEvent::metadata_updated(bead_id, metadata.clone());
 
-    let json_str =
-        serde_json::to_string(&original).map_err(|e| format!("Serialization failed: {e}"))?;
-    let restored: BeadEvent =
-        serde_json::from_str(&json_str).map_err(|e| format!("Deserialization failed: {e}"))?;
+    let json_str = serde_json::to_string(&original)
+        .map_err(|e| format!("Serialization failed: {e}"))?;
+    let restored: BeadEvent = serde_json::from_str(&json_str)
+        .map_err(|e| format!("Deserialization failed: {e}"))?;
 
     match restored {
-        BeadEvent::MetadataUpdated {
-            metadata: restored_metadata,
-            ..
-        } => {
+        BeadEvent::MetadataUpdated { metadata: restored_metadata, .. } => {
             assert_eq!(restored_metadata, metadata);
             Ok(())
         }
@@ -803,10 +780,10 @@ fn should_preserve_worker_fields_through_roundtrip() -> Result<(), String> {
 
     let original = BeadEvent::worker_unhealthy(worker_id, reason);
 
-    let json_str =
-        serde_json::to_string(&original).map_err(|e| format!("Serialization failed: {e}"))?;
-    let restored: BeadEvent =
-        serde_json::from_str(&json_str).map_err(|e| format!("Deserialization failed: {e}"))?;
+    let json_str = serde_json::to_string(&original)
+        .map_err(|e| format!("Serialization failed: {e}"))?;
+    let restored: BeadEvent = serde_json::from_str(&json_str)
+        .map_err(|e| format!("Deserialization failed: {e}"))?;
 
     match restored {
         BeadEvent::WorkerUnhealthy {
@@ -919,7 +896,8 @@ fn should_handle_empty_bincode_bytes() {
 #[test]
 fn should_enforce_max_size_for_created_event_with_large_metadata() {
     let bead_id = BeadId::new();
-    let mut spec = BeadSpec::new("Large task").with_description("A".repeat(100)); // 100 chars
+    let mut spec = BeadSpec::new("Large task")
+        .with_description("A".repeat(100)); // 100 chars
     spec.dependencies = (0..10).map(|_| BeadId::new()).collect(); // 10 deps
     for i in 0..10 {
         spec = spec.with_label(format!("label-{}", i));
@@ -953,16 +931,17 @@ fn should_measure_bincode_sizes_for_all_event_types() -> Result<(), String> {
         BeadId::new(),
         BeadSpec::new("Test").with_dependency(BeadId::new()),
     );
-    let bytes = created
-        .to_bincode()
+    let bytes = created.to_bincode()
         .map_err(|e| format!("Created serialization failed: {e}"))?;
     results.push(("Created", bytes.len()));
 
     // StateChanged event
-    let state_changed =
-        BeadEvent::state_changed(BeadId::new(), BeadState::Pending, BeadState::Scheduled);
-    let bytes = state_changed
-        .to_bincode()
+    let state_changed = BeadEvent::state_changed(
+        BeadId::new(),
+        BeadState::Pending,
+        BeadState::Scheduled,
+    );
+    let bytes = state_changed.to_bincode()
         .map_err(|e| format!("StateChanged serialization failed: {e}"))?;
     results.push(("StateChanged", bytes.len()));
 
@@ -973,57 +952,55 @@ fn should_measure_bincode_sizes_for_all_event_types() -> Result<(), String> {
         "test-phase",
         PhaseOutput::success(vec![1, 2, 3]),
     );
-    let bytes = phase_completed
-        .to_bincode()
+    let bytes = phase_completed.to_bincode()
         .map_err(|e| format!("PhaseCompleted serialization failed: {e}"))?;
     results.push(("PhaseCompleted", bytes.len()));
 
     // Failed event
     let failed = BeadEvent::failed(BeadId::new(), "Test error");
-    let bytes = failed
-        .to_bincode()
+    let bytes = failed.to_bincode()
         .map_err(|e| format!("Failed serialization failed: {e}"))?;
     results.push(("Failed", bytes.len()));
 
     // Completed event
-    let completed = BeadEvent::completed(BeadId::new(), BeadResult::success(vec![1, 2, 3], 1000));
-    let bytes = completed
-        .to_bincode()
+    let completed = BeadEvent::completed(
+        BeadId::new(),
+        BeadResult::success(vec![1, 2, 3], 1000),
+    );
+    let bytes = completed.to_bincode()
         .map_err(|e| format!("Completed serialization failed: {e}"))?;
     results.push(("Completed", bytes.len()));
 
     // Claimed event
     let claimed = BeadEvent::claimed(BeadId::new(), "agent-123");
-    let bytes = claimed
-        .to_bincode()
+    let bytes = claimed.to_bincode()
         .map_err(|e| format!("Claimed serialization failed: {e}"))?;
     results.push(("Claimed", bytes.len()));
 
     // Unclaimed event
     let unclaimed = BeadEvent::unclaimed(BeadId::new(), Some("reason".to_string()));
-    let bytes = unclaimed
-        .to_bincode()
+    let bytes = unclaimed.to_bincode()
         .map_err(|e| format!("Unclaimed serialization failed: {e}"))?;
     results.push(("Unclaimed", bytes.len()));
 
     // PriorityChanged event
     let priority_changed = BeadEvent::priority_changed(BeadId::new(), 100, 50);
-    let bytes = priority_changed
-        .to_bincode()
+    let bytes = priority_changed.to_bincode()
         .map_err(|e| format!("PriorityChanged serialization failed: {e}"))?;
     results.push(("PriorityChanged", bytes.len()));
 
     // MetadataUpdated event
-    let metadata = BeadEvent::metadata_updated(BeadId::new(), serde_json::json!({"key": "value"}));
-    let bytes = metadata
-        .to_bincode()
+    let metadata = BeadEvent::metadata_updated(
+        BeadId::new(),
+        serde_json::json!({"key": "value"}),
+    );
+    let bytes = metadata.to_bincode()
         .map_err(|e| format!("MetadataUpdated serialization failed: {e}"))?;
     results.push(("MetadataUpdated", bytes.len()));
 
     // WorkerUnhealthy event
     let worker_unhealthy = BeadEvent::worker_unhealthy("worker-123", "error");
-    let bytes = worker_unhealthy
-        .to_bincode()
+    let bytes = worker_unhealthy.to_bincode()
         .map_err(|e| format!("WorkerUnhealthy serialization failed: {e}"))?;
     results.push(("WorkerUnhealthy", bytes.len()));
 
@@ -1057,10 +1034,10 @@ fn should_preserve_timestamp_through_json_roundtrip() -> Result<(), String> {
 
     let original_timestamp = original.timestamp();
 
-    let json_str =
-        serde_json::to_string(&original).map_err(|e| format!("Serialization failed: {e}"))?;
-    let restored: BeadEvent =
-        serde_json::from_str(&json_str).map_err(|e| format!("Deserialization failed: {e}"))?;
+    let json_str = serde_json::to_string(&original)
+        .map_err(|e| format!("Serialization failed: {e}"))?;
+    let restored: BeadEvent = serde_json::from_str(&json_str)
+        .map_err(|e| format!("Deserialization failed: {e}"))?;
 
     let restored_timestamp = restored.timestamp();
 
@@ -1075,12 +1052,15 @@ fn should_preserve_timestamp_through_json_roundtrip() -> Result<(), String> {
 #[test]
 fn should_preserve_timestamp_through_bincode_roundtrip() -> Result<(), String> {
     let bead_id = BeadId::new();
-    let original = BeadEvent::state_changed(bead_id, BeadState::Running, BeadState::Completed);
+    let original = BeadEvent::state_changed(
+        bead_id,
+        BeadState::Running,
+        BeadState::Completed,
+    );
 
     let original_timestamp = original.timestamp();
 
-    let bytes = original
-        .to_bincode()
+    let bytes = original.to_bincode()
         .map_err(|e| format!("Bincode serialization failed: {e}"))?;
     let restored = BeadEvent::from_bincode(&bytes)
         .map_err(|e| format!("Bincode deserialization failed: {e}"))?;
@@ -1107,10 +1087,10 @@ fn should_preserve_event_id_through_both_serialization_formats() -> Result<(), S
     let original_event_id = original.event_id();
 
     // Test JSON
-    let json_str =
-        serde_json::to_string(&original).map_err(|e| format!("JSON serialization failed: {e}"))?;
-    let from_json: BeadEvent =
-        serde_json::from_str(&json_str).map_err(|e| format!("JSON deserialization failed: {e}"))?;
+    let json_str = serde_json::to_string(&original)
+        .map_err(|e| format!("JSON serialization failed: {e}"))?;
+    let from_json: BeadEvent = serde_json::from_str(&json_str)
+        .map_err(|e| format!("JSON deserialization failed: {e}"))?;
 
     assert_eq!(
         original_event_id,
@@ -1119,8 +1099,7 @@ fn should_preserve_event_id_through_both_serialization_formats() -> Result<(), S
     );
 
     // Test bincode
-    let bytes = original
-        .to_bincode()
+    let bytes = original.to_bincode()
         .map_err(|e| format!("Bincode serialization failed: {e}"))?;
     let from_bincode = BeadEvent::from_bincode(&bytes)
         .map_err(|e| format!("Bincode deserialization failed: {e}"))?;
@@ -1140,10 +1119,10 @@ fn should_preserve_bead_id_through_both_serialization_formats() -> Result<(), St
     let original = BeadEvent::claimed(original_bead_id, "agent-test");
 
     // Test JSON
-    let json_str =
-        serde_json::to_string(&original).map_err(|e| format!("JSON serialization failed: {e}"))?;
-    let from_json: BeadEvent =
-        serde_json::from_str(&json_str).map_err(|e| format!("JSON deserialization failed: {e}"))?;
+    let json_str = serde_json::to_string(&original)
+        .map_err(|e| format!("JSON serialization failed: {e}"))?;
+    let from_json: BeadEvent = serde_json::from_str(&json_str)
+        .map_err(|e| format!("JSON deserialization failed: {e}"))?;
 
     assert_eq!(
         original_bead_id,
@@ -1152,8 +1131,7 @@ fn should_preserve_bead_id_through_both_serialization_formats() -> Result<(), St
     );
 
     // Test bincode
-    let bytes = original
-        .to_bincode()
+    let bytes = original.to_bincode()
         .map_err(|e| format!("Bincode serialization failed: {e}"))?;
     let from_bincode = BeadEvent::from_bincode(&bytes)
         .map_err(|e| format!("Bincode deserialization failed: {e}"))?;
@@ -1178,7 +1156,10 @@ fn should_roundtrip_all_event_types() -> Result<(), String> {
     let phase_id = PhaseId::new();
 
     let events = vec![
-        BeadEvent::created(bead_id, BeadSpec::new("Test task").with_dependency(dep_id)),
+        BeadEvent::created(
+            bead_id,
+            BeadSpec::new("Test task").with_dependency(dep_id),
+        ),
         BeadEvent::state_changed_with_reason(
             bead_id,
             BeadState::Pending,
@@ -1195,25 +1176,18 @@ fn should_roundtrip_all_event_types() -> Result<(), String> {
         BeadEvent::claimed(bead_id, "agent-123"),
         BeadEvent::priority_changed(bead_id, 100, 50),
         // Skip MetadataUpdated - bincode doesn't support serde_json::Value
-        BeadEvent::completed(bead_id, BeadResult::success(vec![42], 1500)),
+        BeadEvent::completed(
+            bead_id,
+            BeadResult::success(vec![42], 1500),
+        ),
     ];
 
     for event in events {
         // Test JSON
-        let json_str = serde_json::to_string(&event).map_err(|e| {
-            format!(
-                "JSON serialization failed for {}: {}",
-                event.event_type(),
-                e
-            )
-        })?;
-        let from_json: BeadEvent = serde_json::from_str(&json_str).map_err(|e| {
-            format!(
-                "JSON deserialization failed for {}: {}",
-                event.event_type(),
-                e
-            )
-        })?;
+        let json_str = serde_json::to_string(&event)
+            .map_err(|e| format!("JSON serialization failed for {}: {}", event.event_type(), e))?;
+        let from_json: BeadEvent = serde_json::from_str(&json_str)
+            .map_err(|e| format!("JSON deserialization failed for {}: {}", event.event_type(), e))?;
 
         assert_eq!(
             event.event_id(),
@@ -1236,20 +1210,10 @@ fn should_roundtrip_all_event_types() -> Result<(), String> {
         );
 
         // Test bincode
-        let bytes = event.to_bincode().map_err(|e| {
-            format!(
-                "Bincode serialization failed for {}: {}",
-                event.event_type(),
-                e
-            )
-        })?;
-        let from_bincode = BeadEvent::from_bincode(&bytes).map_err(|e| {
-            format!(
-                "Bincode deserialization failed for {}: {}",
-                event.event_type(),
-                e
-            )
-        })?;
+        let bytes = event.to_bincode()
+            .map_err(|e| format!("Bincode serialization failed for {}: {}", event.event_type(), e))?;
+        let from_bincode = BeadEvent::from_bincode(&bytes)
+            .map_err(|e| format!("Bincode deserialization failed for {}: {}", event.event_type(), e))?;
 
         assert_eq!(
             event.event_id(),

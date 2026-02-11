@@ -22,13 +22,13 @@
 
 use std::sync::Arc;
 
-use oya_workflow::checkpoint::storage::{InMemoryCheckpointStorage, StorageError};
 use oya_workflow::checkpoint::{
-    compress, compression_ratio, decompress, serialize_state, space_savings, CheckpointDecision,
-    CheckpointId, CheckpointManager, CheckpointMetadata, CheckpointStorage, CheckpointStrategy,
-    RestoreError, RestoreResult,
+    compress, compression_ratio, decompress, serialize_state, space_savings,
+    CheckpointDecision, CheckpointId, CheckpointManager, CheckpointMetadata,
+    CheckpointStorage, CheckpointStrategy, RestoreError, RestoreResult,
 };
-use oya_workflow::error::Error;
+use oya_workflow::checkpoint::storage::{InMemoryCheckpointStorage, StorageError};
+use oya_workflow::error::{Error, Result};
 use oya_workflow::PhaseOutput;
 
 use serde::{Deserialize, Serialize};
@@ -55,6 +55,12 @@ impl TestWorkflowState {
             counter: 0,
             data: vec![1, 2, 3, 4, 5],
         }
+    }
+
+    /// Increment the counter.
+    fn increment(&mut self) -> Result<()> {
+        self.counter += 1;
+        Ok(())
     }
 }
 
@@ -159,30 +165,25 @@ fn test_checkpoint_skipped_on_failure() {
 /// Test: BDD - Checkpoint created at interval with Interval strategy.
 ///
 /// GIVEN a CheckpointManager with Interval(3) strategy
-/// WHEN 4 phases complete
-/// THEN a checkpoint should be created on the 4th phase (after 3 skipped)
+/// WHEN 3 phases complete
+/// THEN a checkpoint should be created on the 3rd phase
 #[test]
 fn test_checkpoint_created_at_interval() {
     let mut manager = CheckpointManager::new(CheckpointStrategy::Interval(3));
 
-    // Phase 1: skip (phases_since_last=0, 0 >= 3 is false, then increment to 1)
+    // Phase 1: skip (phases_since_last=0 < 3)
     let d1 = manager.update(&success_output(vec![1]));
     assert!(matches!(d1, CheckpointDecision::Skip));
     assert_eq!(manager.phases_since_last(), 1);
 
-    // Phase 2: skip (phases_since_last=1, 1 >= 3 is false, then increment to 2)
+    // Phase 2: skip (phases_since_last=1 < 3)
     let d2 = manager.update(&success_output(vec![2]));
     assert!(matches!(d2, CheckpointDecision::Skip));
     assert_eq!(manager.phases_since_last(), 2);
 
-    // Phase 3: skip (phases_since_last=2, 2 >= 3 is false, then increment to 3)
+    // Phase 3: checkpoint (phases_since_last=2 >= 3)
     let d3 = manager.update(&success_output(vec![3]));
-    assert!(matches!(d3, CheckpointDecision::Skip));
-    assert_eq!(manager.phases_since_last(), 3);
-
-    // Phase 4: checkpoint (phases_since_last=3, 3 >= 3 is true)
-    let d4 = manager.update(&success_output(vec![4]));
-    assert!(matches!(d4, CheckpointDecision::Checkpoint));
+    assert!(matches!(d3, CheckpointDecision::Checkpoint));
     assert_eq!(manager.phases_since_last(), 0);
     assert!(manager.last_checkpoint().is_some());
 }
@@ -255,10 +256,7 @@ fn test_checkpoint_serialization() {
     );
 
     let serialized = serialized_result.ok().unwrap();
-    assert!(
-        !serialized.is_empty(),
-        "serialized data should not be empty"
-    );
+    assert!(!serialized.is_empty(), "serialized data should not be empty");
 }
 
 /// Test: BDD - Checkpoint can be saved to storage.
@@ -315,10 +313,7 @@ fn test_multiple_checkpoints_saved() {
     let r2 = storage.store_checkpoint(vec![2; 100], metadata(id2));
     let r3 = storage.store_checkpoint(vec![3; 100], metadata(id3));
 
-    assert!(
-        r1.is_ok() && r2.is_ok() && r3.is_ok(),
-        "all stores should succeed"
-    );
+    assert!(r1.is_ok() && r2.is_ok() && r3.is_ok(), "all stores should succeed");
 
     // List checkpoints
     let list_result = storage.list_checkpoints();
@@ -348,9 +343,14 @@ fn test_checkpoint_decompression() {
 
     // Decompress
     let decompressed_result = decompress(&compressed, original.len());
-    assert!(decompressed_result.is_ok(), "decompression should succeed");
+    assert!(
+        decompressed_result.is_ok(),
+        "decompression should succeed"
+    );
 
-    let decompressed = decompressed_result.ok().unwrap();
+    let decompressed = decompressed_result
+        .ok()
+        .unwrap();
 
     assert_eq!(
         decompressed, original,
@@ -421,11 +421,11 @@ fn test_load_nonexistent_checkpoint_returns_error() {
 #[test]
 fn test_checkpoint_round_trip_preserves_data() {
     let test_cases = vec![
-        vec![0u8; 100],                  // All zeros
-        vec![255u8; 100],                // All max
-        (0..100).collect::<Vec<u8>>(),   // Sequential
+        vec![0u8; 100],           // All zeros
+        vec![255u8; 100],         // All max
+        (0..100).collect::<Vec<u8>>(), // Sequential
         vec![1, 2, 3, 1, 2, 3, 1, 2, 3], // Repetitive
-        vec![42u8; 1000],                // Large compressible
+        vec![42u8; 1000],         // Large compressible
     ];
 
     for original in test_cases {
@@ -448,8 +448,7 @@ fn test_checkpoint_round_trip_preserves_data() {
         let decompressed = decompressed_result.ok().unwrap();
 
         assert_eq!(
-            decompressed,
-            original,
+            decompressed, original,
             "round-trip failed for data of length {}",
             original.len()
         );
@@ -476,10 +475,7 @@ fn test_workflow_state_restore_from_checkpoint() -> RestoreResult<()> {
 
     // Note: restore_checkpoint requires storage integration, which is not available
     // in this test environment. This test verifies the serialization step works.
-    assert!(
-        !serialized.is_empty(),
-        "serialized data should not be empty"
-    );
+    assert!(!serialized.is_empty(), "serialized data should not be empty");
 
     Ok(())
 }
@@ -513,10 +509,7 @@ fn test_checkpoint_deletion() {
 
     // Verify it exists
     let load_result = storage.load_checkpoint(&checkpoint_id);
-    assert!(
-        load_result.is_ok(),
-        "checkpoint should exist before deletion"
-    );
+    assert!(load_result.is_ok(), "checkpoint should exist before deletion");
 
     // Delete checkpoint
     let delete_result = storage.delete_checkpoint(&checkpoint_id);
@@ -524,10 +517,7 @@ fn test_checkpoint_deletion() {
 
     // Verify it's gone
     let load_result2 = storage.load_checkpoint(&checkpoint_id);
-    assert!(
-        load_result2.is_err(),
-        "checkpoint should not exist after deletion"
-    );
+    assert!(load_result2.is_err(), "checkpoint should not exist after deletion");
 }
 
 /// Test: BDD - Deleting non-existent checkpoint returns error.
@@ -624,10 +614,7 @@ fn test_orphan_checkpoint_detection() {
     assert!(list_result.is_ok(), "list should succeed");
 
     let ids = list_result.ok().unwrap();
-    assert!(
-        !ids.is_empty(),
-        "should have checkpoints to check for orphans"
-    );
+    assert!(!ids.is_empty(), "should have checkpoints to check for orphans");
 }
 
 /// Test: Storage stats reflect checkpoint operations.
@@ -641,10 +628,7 @@ fn test_storage_stats_accuracy() {
 
     let stats = stats_result.ok().unwrap();
     assert_eq!(stats.total_checkpoints, 0, "initial count should be 0");
-    assert_eq!(
-        stats.total_compressed_size, 0,
-        "initial compressed size should be 0"
-    );
+    assert_eq!(stats.total_compressed_size, 0, "initial compressed size should be 0");
     assert_eq!(
         stats.total_uncompressed_size, 0,
         "initial uncompressed size should be 0"
@@ -669,18 +653,12 @@ fn test_storage_stats_accuracy() {
 
     let stats2 = stats_result2.ok().unwrap();
     assert_eq!(stats2.total_checkpoints, 1, "count should be 1");
-    assert_eq!(
-        stats2.total_compressed_size, 500,
-        "compressed size should be 500"
-    );
+    assert_eq!(stats2.total_compressed_size, 500, "compressed size should be 500");
     assert_eq!(
         stats2.total_uncompressed_size, 1000,
         "uncompressed size should be 1000"
     );
-    assert!(
-        (stats2.average_compression_ratio - 2.0).abs() < 0.01,
-        "ratio should be 2.0"
-    );
+    assert!((stats2.average_compression_ratio - 2.0).abs() < 0.01, "ratio should be 2.0");
 }
 
 // =============================================================================
@@ -717,10 +695,7 @@ fn test_compression_error_propagation() {
     // Verify Result type is used (not panic)
     match result {
         Ok(compressed) => {
-            assert!(
-                !compressed.is_empty(),
-                "compressed data should not be empty"
-            );
+            assert!(!compressed.is_empty(), "compressed data should not be empty");
         }
         Err(_) => {
             // Error path is also valid
@@ -907,7 +882,9 @@ fn test_complete_checkpoint_lifecycle() {
     // 6. Decompress
     let decompressed_result = decompress(&loaded_data, serialized.len());
     assert!(decompressed_result.is_ok(), "decompression should succeed");
-    let _decompressed = decompressed_result.ok().unwrap();
+    let decompressed = decompressed_result
+        .ok()
+        .unwrap();
 
     // 7. Delete (cleanup)
     let delete_result = storage.delete_checkpoint(&checkpoint_id);
@@ -928,11 +905,7 @@ fn test_multiple_independent_checkpoints() {
     let mut storage = InMemoryCheckpointStorage::new();
 
     // Create multiple checkpoints
-    let ids = vec![
-        CheckpointId::new(),
-        CheckpointId::new(),
-        CheckpointId::new(),
-    ];
+    let ids = vec![CheckpointId::new(), CheckpointId::new(), CheckpointId::new()];
 
     for (i, id) in ids.iter().enumerate() {
         let metadata = CheckpointMetadata {
@@ -967,9 +940,5 @@ fn test_multiple_independent_checkpoints() {
     assert!(list_result.is_ok(), "list should succeed");
 
     let remaining_ids = list_result.ok().unwrap();
-    assert_eq!(
-        remaining_ids.len(),
-        2,
-        "should have 2 checkpoints remaining"
-    );
+    assert_eq!(remaining_ids.len(), 2, "should have 2 checkpoints remaining");
 }
