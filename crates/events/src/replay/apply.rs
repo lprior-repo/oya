@@ -5,12 +5,9 @@
 //! - Immutable state transitions
 //! - Railway-Oriented Programming for error handling
 //! - Zero unwraps, zero panics
-//! - Error recovery with DLQ integration
 
 use crate::event::BeadEvent;
-use crate::replay::recovery::{DeadLetterQueue, PoisonEvent, RecoveryConfig};
 use crate::types::{BeadId, BeadState};
-use serde::{Deserialize, Serialize};
 
 /// Error during event application.
 #[derive(Debug, thiserror::Error)]
@@ -50,67 +47,6 @@ pub enum ApplyError {
 /// Result type for event application.
 pub type ApplyResult<T> = Result<T, ApplyError>;
 
-/// Summary of replay operation results.
-///
-/// Tracks how many events were successfully applied and how many
-/// were skipped (sent to DLQ) during replay.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ReplaySummary {
-    /// Number of events successfully applied to state.
-    pub applied: u64,
-    /// Number of events skipped (sent to DLQ).
-    pub skipped: u64,
-}
-
-impl ReplaySummary {
-    /// Create a new replay summary.
-    #[must_use]
-    pub const fn new(applied: u64, skipped: u64) -> Self {
-        Self { applied, skipped }
-    }
-
-    /// Create a summary with zero events processed.
-    #[must_use]
-    pub const fn zero() -> Self {
-        Self {
-            applied: 0,
-            skipped: 0,
-        }
-    }
-
-    /// Get the total number of events processed (applied + skipped).
-    #[must_use]
-    pub const fn total(&self) -> u64 {
-        self.applied + self.skipped
-    }
-
-    /// Check if all events were successfully applied (no skips).
-    #[must_use]
-    pub const fn is_complete(&self) -> bool {
-        self.skipped == 0
-    }
-
-    /// Record a successfully applied event.
-    #[must_use]
-    pub const fn record_applied(mut self) -> Self {
-        self.applied += 1;
-        self
-    }
-
-    /// Record a skipped event.
-    #[must_use]
-    pub const fn record_skipped(mut self) -> Self {
-        self.skipped += 1;
-        self
-    }
-}
-
-impl Default for ReplaySummary {
-    fn default() -> Self {
-        Self::zero()
-    }
-}
-
 /// Event metadata for ordering validation.
 #[derive(Debug, Clone)]
 pub struct EventMetadata {
@@ -121,8 +57,7 @@ pub struct EventMetadata {
 }
 
 impl EventMetadata {
-    /// Create event metadata from a `BeadEvent`.
-    #[must_use]
+    /// Create event metadata from a BeadEvent.
     pub fn from_event(event: &BeadEvent) -> Self {
         Self {
             event_id: event.event_id().to_string(),
@@ -140,7 +75,6 @@ pub struct ApplyContext {
 
 impl ApplyContext {
     /// Create a new empty context.
-    #[must_use]
     pub fn new() -> Self {
         Self {
             last_events: std::collections::HashMap::new(),
@@ -154,7 +88,6 @@ impl ApplyContext {
     }
 
     /// Get the last applied event for a bead.
-    #[must_use]
     pub fn last_event(&self, bead_id: &BeadId) -> Option<&EventMetadata> {
         self.last_events.get(bead_id)
     }
@@ -174,11 +107,11 @@ impl ApplyContext {
                 let last_id = last_meta
                     .event_id
                     .parse::<ulid::Ulid>()
-                    .map_err(|e| ApplyError::Internal(format!("invalid event ID: {e}")))?;
+                    .map_err(|e| ApplyError::Internal(format!("invalid event ID: {}", e)))?;
                 let current_id = event_meta
                     .event_id
                     .parse::<ulid::Ulid>()
-                    .map_err(|e| ApplyError::Internal(format!("invalid event ID: {e}")))?;
+                    .map_err(|e| ApplyError::Internal(format!("invalid event ID: {}", e)))?;
 
                 // Check timestamp ordering
                 if event_meta.timestamp < last_meta.timestamp {
@@ -324,75 +257,6 @@ where
         .try_fold((), |(), event| apply_event(state, event, context))
 }
 
-/// Apply events with recovery using dead letter queue.
-///
-/// Applies events with retry logic and sends poison events to DLQ when recovery fails.
-///
-/// # Arguments
-///
-/// * `state` - Mutable reference to state
-/// * `events` - Slice of events to apply
-/// * `context` - Application context for ordering validation
-/// * `config` - Recovery configuration (retries, backoff, DLQ enable)
-/// * `dlq` - Dead letter queue for poison events
-///
-/// # Returns
-///
-/// * `Ok(ReplaySummary)` with applied and skipped counts
-/// * `Err(ApplyError)` if DLQ disabled and an event fails
-///
-/// # Errors
-///
-/// Returns `ApplyError` when:
-/// - An event fails and DLQ is disabled
-/// - Critical state corruption detected
-pub fn apply_events_with_recovery<S>(
-    state: &mut S,
-    events: &[BeadEvent],
-    context: &mut ApplyContext,
-    config: &RecoveryConfig,
-    dlq: &dyn DeadLetterQueue,
-) -> ApplyResult<ReplaySummary>
-where
-    S: EventSourcedState,
-{
-    // Use functional fold to track summary across all events
-    events
-        .iter()
-        .fold(Ok(ReplaySummary::zero()), |summary, event| {
-            let current_summary = summary?;
-
-            // Try to apply event with retries
-            let apply_result = (0..config.max_retries)
-                .try_fold((), |_attempt, _retry| apply_event(state, event, context));
-
-            match apply_result {
-                Ok(()) => Ok(current_summary.record_applied()),
-                Err(err) => {
-                    // Event failed after all retries - send to DLQ if enabled
-                    if config.enable_dlq {
-                        let event_id = event.event_id().to_string();
-                        let event_data = serde_json::to_vec(event).ok();
-
-                        let poison_event = PoisonEvent::new(
-                            event_id,
-                            config.max_retries,
-                            err.to_string(),
-                            event_data,
-                        );
-
-                        dlq.push_poison_event(poison_event)
-                            .map_err(|e| ApplyError::Internal(format!("DLQ push failed: {e}")))?;
-
-                        Ok(current_summary.record_skipped())
-                    } else {
-                        Err(err)
-                    }
-                }
-            }
-        })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -477,9 +341,7 @@ mod tests {
             "Context should contain recorded bead"
         );
 
-        let recorded_meta = context
-            .last_events
-            .get(&bead_id)
+        let recorded_meta = context.last_events.get(&bead_id)
             .ok_or("Should retrieve recorded event")?;
         assert_eq!(
             recorded_meta.event_id,
@@ -503,8 +365,10 @@ mod tests {
         context.record_applied(bead_id, &event2);
         let second_recorded = context.last_events.get(&bead_id);
 
-        let first_meta = first_recorded.ok_or("Should have first recorded event")?;
-        let second_meta = second_recorded.ok_or("Should have second recorded event")?;
+        let first_meta = first_recorded
+            .ok_or("Should have first recorded event")?;
+        let second_meta = second_recorded
+            .ok_or("Should have second recorded event")?;
         assert_ne!(
             first_meta.event_id, second_meta.event_id,
             "Event IDs should differ"
@@ -556,7 +420,8 @@ mod tests {
         context.record_applied(bead_id, &event);
         let result = context.last_event(&bead_id);
 
-        let result_meta = result.ok_or("Should return Some for known bead")?;
+        let result_meta = result
+            .ok_or("Should return Some for known bead")?;
         assert_eq!(
             result_meta.event_id,
             event.event_id().to_string(),
@@ -577,7 +442,8 @@ mod tests {
 
         let result = context.is_in_order(&event);
 
-        let is_ordered = result.map_err(|e| format!("Should not error for first event: {}", e))?;
+        let is_ordered = result
+            .map_err(|e| format!("Should not error for first event: {}", e))?;
         assert!(is_ordered, "First event should always be in order");
         Ok(())
     }
@@ -659,319 +525,6 @@ mod tests {
     fn should_stop_on_first_error() -> Result<(), Box<dyn std::error::Error>> {
         // This test requires a mock EventSourcedState implementation
         // For now, we just verify the signature compiles
-        Ok(())
-    }
-
-    // ==========================================================================
-    // ReplaySummary BEHAVIORAL TESTS
-    // ==========================================================================
-
-    #[test]
-    fn replay_summary_new_creates_summary() {
-        let summary = ReplaySummary::new(10, 2);
-        assert_eq!(summary.applied, 10);
-        assert_eq!(summary.skipped, 2);
-    }
-
-    #[test]
-    fn replay_summary_zero_is_initial() {
-        let summary = ReplaySummary::zero();
-        assert_eq!(summary.applied, 0);
-        assert_eq!(summary.skipped, 0);
-    }
-
-    #[test]
-    fn replay_summary_default_is_zero() {
-        let summary = ReplaySummary::default();
-        assert_eq!(summary.applied, 0);
-        assert_eq!(summary.skipped, 0);
-    }
-
-    #[test]
-    fn replay_summary_total_summs_applied_and_skipped() {
-        let summary = ReplaySummary::new(5, 3);
-        assert_eq!(summary.total(), 8);
-    }
-
-    #[test]
-    fn replay_summary_is_complete_true_when_no_skips() {
-        let summary = ReplaySummary::new(10, 0);
-        assert!(summary.is_complete());
-    }
-
-    #[test]
-    fn replay_summary_is_complete_false_when_skips() {
-        let summary = ReplaySummary::new(10, 1);
-        assert!(!summary.is_complete());
-    }
-
-    #[test]
-    fn replay_summary_record_applied_increments_applied() {
-        let summary = ReplaySummary::zero().record_applied();
-        assert_eq!(summary.applied, 1);
-        assert_eq!(summary.skipped, 0);
-    }
-
-    #[test]
-    fn replay_summary_record_skipped_increments_skipped() {
-        let summary = ReplaySummary::zero().record_skipped();
-        assert_eq!(summary.applied, 0);
-        assert_eq!(summary.skipped, 1);
-    }
-
-    #[test]
-    fn replay_summary_chain_records() {
-        let summary = ReplaySummary::zero()
-            .record_applied()
-            .record_applied()
-            .record_skipped()
-            .record_applied()
-            .record_skipped();
-
-        assert_eq!(summary.applied, 3);
-        assert_eq!(summary.skipped, 2);
-    }
-
-    // ==========================================================================
-    // apply_events_with_recovery BEHAVIORAL TESTS
-    // ==========================================================================
-
-    /// Mock state for testing event application.
-    #[derive(Debug, Default)]
-    struct MockState {
-        applied_events: Vec<String>,
-        should_fail: Vec<String>,
-    }
-
-    impl MockState {
-        /// Create a new mock state.
-        fn new() -> Self {
-            Self::default()
-        }
-
-        /// Mark an event ID to fail.
-        fn mark_failure(&mut self, event_id: String) {
-            self.should_fail.push(event_id);
-        }
-
-        /// Check if an event should fail.
-        fn should_fail_event(&self, event_id: &str) -> bool {
-            self.should_fail.iter().any(|id| id == event_id)
-        }
-    }
-
-    impl EventSourcedState for MockState {
-        fn validate_transition(
-            &self,
-            _bead_id: BeadId,
-            _from: BeadState,
-            _to: BeadState,
-        ) -> ApplyResult<()> {
-            Ok(())
-        }
-
-        fn apply_event(&mut self, event: &BeadEvent) -> ApplyResult<()> {
-            let event_id = event.event_id().to_string();
-            if self.should_fail_event(&event_id) {
-                Err(ApplyError::Internal(format!("Mock failure for {event_id}")))
-            } else {
-                self.applied_events.push(event_id);
-                Ok(())
-            }
-        }
-    }
-
-    #[test]
-    fn apply_events_with_recovery_applies_all_events_successfully(
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let mut state = MockState::new();
-        let mut context = ApplyContext::new();
-        let config = RecoveryConfig::new();
-        let dlq = crate::replay::recovery::InMemoryDeadLetterQueue::new();
-
-        let bead_id = BeadId::new();
-        let event1 = BeadEvent::created(bead_id, BeadSpec::new("Test 1"));
-        let event2 = BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Scheduled);
-        let events = vec![event1, event2];
-
-        let result = apply_events_with_recovery(&mut state, &events, &mut context, &config, &dlq);
-
-        assert!(result.is_ok(), "Should apply all events successfully");
-        let summary = result.unwrap();
-        assert_eq!(summary.applied, 2, "Should apply 2 events");
-        assert_eq!(summary.skipped, 0, "Should skip 0 events");
-        assert!(summary.is_complete(), "Should be complete");
-        assert_eq!(dlq.count()?, 0, "DLQ should be empty");
-        Ok(())
-    }
-
-    #[test]
-    fn apply_events_with_recovery_sends_poison_to_dlq_and_continues(
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let mut state = MockState::new();
-        let mut context = ApplyContext::new();
-        let config = RecoveryConfig::new();
-        let dlq = crate::replay::recovery::InMemoryDeadLetterQueue::new();
-
-        let bead_id = BeadId::new();
-        let event1 = BeadEvent::created(bead_id, BeadSpec::new("Test 1"));
-        let event2 = BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Scheduled);
-        let event3 = BeadEvent::completed(bead_id, crate::types::BeadResult::success(vec![], 0));
-
-        // Mark event2 to fail
-        let event2_id = event2.event_id().to_string();
-        state.mark_failure(event2_id.clone());
-
-        let events = vec![event1.clone(), event2, event3];
-
-        let result = apply_events_with_recovery(&mut state, &events, &mut context, &config, &dlq);
-
-        assert!(result.is_ok(), "Should complete with DLQ enabled");
-        let summary = result.unwrap();
-        assert_eq!(summary.applied, 2, "Should apply 2 events (1 and 3)");
-        assert_eq!(summary.skipped, 1, "Should skip 1 event (2)");
-        assert!(!summary.is_complete(), "Should not be complete (has skips)");
-        assert_eq!(dlq.count()?, 1, "DLQ should have 1 event");
-
-        // Verify DLQ contains the failed event
-        let poison_events = dlq.get_poison_events()?;
-        assert_eq!(poison_events.len(), 1);
-        assert_eq!(poison_events[0].event_id, event2_id);
-
-        // Verify state has events 1 and 3 applied
-        assert_eq!(state.applied_events.len(), 2);
-        assert_eq!(state.applied_events[0], event1.event_id().to_string());
-        Ok(())
-    }
-
-    #[test]
-    fn apply_events_with_recovery_fails_when_dlq_disabled() -> Result<(), Box<dyn std::error::Error>>
-    {
-        let mut state = MockState::new();
-        let mut context = ApplyContext::new();
-        let config = RecoveryConfig::new().with_dlq(false);
-        let dlq = crate::replay::recovery::InMemoryDeadLetterQueue::new();
-
-        let bead_id = BeadId::new();
-        let event1 = BeadEvent::created(bead_id, BeadSpec::new("Test 1"));
-        let event2 = BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Scheduled);
-
-        // Mark event1 to fail
-        let event1_id = event1.event_id().to_string();
-        state.mark_failure(event1_id);
-
-        let events = vec![event1, event2];
-
-        let result = apply_events_with_recovery(&mut state, &events, &mut context, &config, &dlq);
-
-        assert!(result.is_err(), "Should fail when DLQ disabled");
-        assert_eq!(dlq.count()?, 0, "DLQ should be empty");
-        Ok(())
-    }
-
-    #[test]
-    fn apply_events_with_recovery_handles_all_poison_events(
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let mut state = MockState::new();
-        let mut context = ApplyContext::new();
-        let config = RecoveryConfig::new();
-        let dlq = crate::replay::recovery::InMemoryDeadLetterQueue::new();
-
-        let bead_id = BeadId::new();
-        let event1 = BeadEvent::created(bead_id, BeadSpec::new("Test 1"));
-        let event2 = BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Scheduled);
-        let event3 = BeadEvent::completed(bead_id, crate::types::BeadResult::success(vec![], 0));
-
-        // Mark all events to fail
-        state.mark_failure(event1.event_id().to_string());
-        state.mark_failure(event2.event_id().to_string());
-        state.mark_failure(event3.event_id().to_string());
-
-        let events = vec![event1, event2, event3];
-
-        let result = apply_events_with_recovery(&mut state, &events, &mut context, &config, &dlq);
-
-        assert!(result.is_ok(), "Should complete even when all events fail");
-        let summary = result.unwrap();
-        assert_eq!(summary.applied, 0, "Should apply 0 events");
-        assert_eq!(summary.skipped, 3, "Should skip all 3 events");
-        assert_eq!(dlq.count()?, 3, "DLQ should have all 3 events");
-        Ok(())
-    }
-
-    #[test]
-    fn apply_events_with_recovery_handles_empty_event_list(
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let mut state = MockState::new();
-        let mut context = ApplyContext::new();
-        let config = RecoveryConfig::new();
-        let dlq = crate::replay::recovery::InMemoryDeadLetterQueue::new();
-
-        let events: Vec<BeadEvent> = vec![];
-
-        let result = apply_events_with_recovery(&mut state, &events, &mut context, &config, &dlq);
-
-        assert!(result.is_ok(), "Should handle empty event list");
-        let summary = result.unwrap();
-        assert_eq!(summary.applied, 0);
-        assert_eq!(summary.skipped, 0);
-        assert!(summary.is_complete());
-        Ok(())
-    }
-
-    #[test]
-    fn apply_events_with_recovery_tracks_context_correctly(
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let mut state = MockState::new();
-        let mut context = ApplyContext::new();
-        let config = RecoveryConfig::new();
-        let dlq = crate::replay::recovery::InMemoryDeadLetterQueue::new();
-
-        let bead_id = BeadId::new();
-        let event1 = BeadEvent::created(bead_id, BeadSpec::new("Test 1"));
-        let event2 = BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Scheduled);
-
-        let events = vec![event1, event2.clone()];
-
-        let _result = apply_events_with_recovery(&mut state, &events, &mut context, &config, &dlq);
-
-        // Verify context tracked the applied events
-        assert!(context.last_events.contains_key(&bead_id));
-        let last_event = context.last_event(&bead_id);
-        assert!(last_event.is_some());
-        assert_eq!(last_event.unwrap().event_id, event2.event_id().to_string());
-        Ok(())
-    }
-
-    #[test]
-    fn apply_events_with_recovery_mixed_success_and_poison(
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let mut state = MockState::new();
-        let mut context = ApplyContext::new();
-        let config = RecoveryConfig::new();
-        let dlq = crate::replay::recovery::InMemoryDeadLetterQueue::new();
-
-        let bead_id = BeadId::new();
-        let event1 = BeadEvent::created(bead_id, BeadSpec::new("Test 1"));
-        let event2 = BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Scheduled);
-        let event3 = BeadEvent::completed(bead_id, crate::types::BeadResult::success(vec![], 0));
-        let event4 = BeadEvent::state_changed(bead_id, BeadState::Scheduled, BeadState::Running);
-        let event5 = BeadEvent::state_changed(bead_id, BeadState::Running, BeadState::Completed);
-
-        // Fail events 2 and 4
-        state.mark_failure(event2.event_id().to_string());
-        state.mark_failure(event4.event_id().to_string());
-
-        let events = vec![event1, event2, event3, event4, event5];
-
-        let result = apply_events_with_recovery(&mut state, &events, &mut context, &config, &dlq);
-
-        assert!(result.is_ok());
-        let summary = result.unwrap();
-        assert_eq!(summary.applied, 3, "Should apply events 1, 3, 5");
-        assert_eq!(summary.skipped, 2, "Should skip events 2, 4");
-        assert_eq!(dlq.count()?, 2);
-        assert_eq!(state.applied_events.len(), 3);
         Ok(())
     }
 }

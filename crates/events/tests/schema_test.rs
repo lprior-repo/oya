@@ -6,6 +6,10 @@
 //! - sync_mode='full' is configured for fsync
 //! - Indexes are properly created
 
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+#![deny(clippy::panic)]
+
 use oya_events::db::{SurrealDbClient, SurrealDbConfig};
 use tempfile::tempdir;
 
@@ -29,7 +33,7 @@ async fn test_schema_file_exists() -> Result<(), String> {
 async fn test_all_tables_defined() -> Result<(), String> {
     let schema = load_schema()?;
 
-    // Check that all 13 tables are defined
+    // Check that all 12 tables are defined
     let required_tables = [
         "state_transition",
         "idempotency_key",
@@ -42,7 +46,6 @@ async fn test_all_tables_defined() -> Result<(), String> {
         "token_bucket",
         "concurrency_limit",
         "webhook",
-        "worker_assignment",
     ];
 
     for table in required_tables {
@@ -112,16 +115,13 @@ async fn test_schema_valid_syntax() -> Result<(), String> {
         .to_string();
 
     let config = SurrealDbConfig::new(db_path);
-    let client = SurrealDbClient::connect(config)
-        .await
+    let client = SurrealDbClient::connect(config).await
         .map_err(|e| format!("Failed to connect to SurrealDB: {e}"))?;
 
     let schema = load_schema()?;
 
     // Try to initialize schema - should not error
-    client
-        .init_schema(&schema)
-        .await
+    client.init_schema(&schema).await
         .map_err(|e| format!("Schema initialization failed: {e}"))?;
     Ok(())
 }

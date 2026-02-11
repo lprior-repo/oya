@@ -19,13 +19,13 @@ async fn main() {
         match store.append(event).await {
             Ok(_) => (),
             Err(e) => {
-                eprintln!("Failed to append event: {e}");
+                eprintln!("Failed to append event: {}", e);
                 std::process::exit(1);
             }
         }
     }
     let append_time = start.elapsed();
-    println!("Append time: {append_time:?}");
+    println!("Append time: {:?}", append_time);
 
     // Test event retrieval - this should now be zero-copy
     println!("Testing event retrieval...");
@@ -33,7 +33,7 @@ async fn main() {
     let events = match store.read_for_bead(bead_id).await {
         Ok(e) => e,
         Err(e) => {
-            eprintln!("Failed to read events: {e}");
+            eprintln!("Failed to read events: {}", e);
             std::process::exit(1);
         }
     };
@@ -47,7 +47,7 @@ async fn main() {
         let events_clone = match store.read_for_bead(bead_id).await {
             Ok(e) => e,
             Err(e) => {
-                eprintln!("Failed to read events: {e}");
+                eprintln!("Failed to read events: {}", e);
                 std::process::exit(1);
             }
         };
@@ -55,32 +55,32 @@ async fn main() {
         assert_eq!(events_clone.len(), 1000);
     }
     let multi_read_time = start.elapsed();
-    println!("100 retrievals in {multi_read_time:?}");
+    println!("100 retrievals in {:?}", multi_read_time);
 
     // Verify we're getting the same events (zero-copy)
     let first_retrieval = match store.read_for_bead(bead_id).await {
         Ok(e) => e,
         Err(e) => {
-            eprintln!("Failed to read events: {e}");
+            eprintln!("Failed to read events: {}", e);
             std::process::exit(1);
         }
     };
     let second_retrieval = match store.read_for_bead(bead_id).await {
         Ok(e) => e,
         Err(e) => {
-            eprintln!("Failed to read events: {e}");
+            eprintln!("Failed to read events: {}", e);
             std::process::exit(1);
         }
     };
 
     // These should be the same Arc instance (same pointer)
-    let first_ptr = Arc::as_ptr(&first_retrieval).cast::<()>();
-    let second_ptr = Arc::as_ptr(&second_retrieval).cast::<()>();
+    let first_ptr = Arc::as_ptr(&first_retrieval) as *const ();
+    let second_ptr = Arc::as_ptr(&second_retrieval) as *const ();
     println!("Same Arc instance: {}", first_ptr == second_ptr);
 
     println!("\nPerformance Summary:");
-    println!("  - Append 1000 events: {append_time:?}");
-    println!("  - Read 1000 events: {read_time:?}");
-    println!("  - 100x reads (zero-copy): {multi_read_time:?}");
+    println!("  - Append 1000 events: {:?}", append_time);
+    println!("  - Read 1000 events: {:?}", read_time);
+    println!("  - 100x reads (zero-copy): {:?}", multi_read_time);
     println!("  - Average read time: {:?}", multi_read_time / 100);
 }
