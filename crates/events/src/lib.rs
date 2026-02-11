@@ -24,21 +24,35 @@ pub mod error;
 pub mod event;
 pub mod projection;
 pub mod replay;
+pub mod stage;
+pub mod store;
+pub mod types;
+
+pub use error::{Error, Result};
+
+pub use durable_store::{connect, ConnectionConfig, DurableEventStore};
+
+pub use replay::{apply_event, apply_events, ApplyContext, EventSourcedState};
+
+pub use bus::{EventBus, EventBusBuilder, EventPattern, EventSubscription};
+pub use event::BeadEvent;
+pub use stage::{BeadStateMachine, ExhaustionPolicy, RecursionPolicy, Severity, StageKind, StageTransition, StateMachineError, TransitionReason};
+pub use types::{
+    BeadId, BeadResult, BeadSpec, BeadState, Complexity, EventId, PhaseId, PhaseOutput,
+};
 
 /// Initialize telemetry with JSON logging.
 ///
 /// # Errors
 ///
 /// Returns `Error` if initialization fails.
-pub fn init_telemetry_json() -> Result<(), Box<dyn std::error::Error>> {
-    use oya_telemetry::{TelemetryConfig, TracingGuard};
-
-    let config = TelemetryConfig::new("oya-events")
+pub fn init_telemetry_json() -> Result<()> {
+    let config = oya_telemetry::config::TelemetryConfig::new("oya-events")
         .with_json_logging(true)
         .with_log_level(tracing::Level::INFO);
 
     let _guard = oya_telemetry::init_telemetry(config)
-        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+        .map_err(|e| Error::serialization(format!("telemetry init failed: {e}")))?;
 
     Ok(())
 }

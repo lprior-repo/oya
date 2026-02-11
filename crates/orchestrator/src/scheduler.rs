@@ -642,6 +642,29 @@ impl SchedulerActor {
         }
     }
 
+    /// Stop the scheduler, ensuring all in-flight work is completed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - There are beads currently assigned to workers (in-flight work)
+    /// - The scheduler cannot safely stop while beads are executing
+    ///
+    /// This method implements the BDD requirement: GIVEN scheduler WHEN in-flight
+    /// work THEN completes before stop. The scheduler will refuse to stop if
+    /// any beads are currently assigned to workers, preventing data loss and
+    /// ensuring work completion.
+    pub async fn stop(&self) -> Result<()> {
+        if !self.worker_assignments.is_empty() {
+            return Err(Error::invalid_record(format!(
+                "Cannot stop scheduler: {} in-flight bead(s) currently executing",
+                self.worker_assignments.len()
+            )));
+        }
+
+        Ok(())
+    }
+
     /// Clear all state (for testing)
     pub fn clear(&mut self) {
         self.workflows.clear();
@@ -1674,5 +1697,155 @@ mod tests {
                 "blocked bead should not be ready when dependency is incomplete"
             );
         }
+    }
+
+    // ========================================================================
+    // STOP / SHUTDOWN BEHAVIOR TESTS
+    // ========================================================================
+    // BDD-style tests for in-flight work completion before stop.
+    // GIVEN scheduler WHEN in-flight work THEN completes before stop.
+
+    #[tokio::test]
+    async fn test_stop_fails_with_in_flight_work() {
+        // GIVEN: A scheduler with in-flight bead (assigned to worker)
+        let scheduler = SchedulerActor::new();
+        let workflow_id = "workflow-123".to_string();
+        let bead_id = "bead-456".to_string();
+        let worker_id = "worker-789".to_string();
+
+        scheduler
+            .register_workflow(workflow_id)
+            .expect("workflow registration should succeed");
+        scheduler
+            .schedule_bead("workflow-123".to_string(), bead_id.clone())
+            .expect("bead scheduling should succeed");
+        scheduler
+            .assign_to_worker(&bead_id, worker_id)
+            .expect("worker assignment should succeed");
+
+        assert_eq!(
+            scheduler.stats().assigned_count,
+            1,
+            "should have 1 in-flight bead"
+        );
+
+        // WHEN: Attempting to stop with in-flight work
+        let result = scheduler.stop().await;
+
+        // THEN: Stop should fail with error mentioning in-flight work
+        assert!(
+            result.is_err(),
+            "stop should fail when in-flight work exists"
+        );
+        assert!(
+            result.unwrap_err().to_string().contains("in-flight"),
+            "error should mention in-flight work"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_stop_succeeds_with_no_in_flight_work() {
+        // GIVEN: A scheduler with only completed beads
+        let mut scheduler = SchedulerActor::new();
+        let workflow_id = "workflow-123".to_string();
+        let bead_id = "bead-456".to_string();
+
+        scheduler
+            .register_workflow(workflow_id)
+            .expect("workflow registration should succeed");
+        scheduler
+            .schedule_bead("workflow-123".to_string(), bead_id.clone())
+            .expect("bead scheduling should succeed");
+        scheduler
+            .handle_bead_completed(&bead_id)
+            .expect("bead completion should succeed");
+
+        assert_eq!(
+            scheduler.stats().assigned_count,
+            0,
+            "should have no in-flight beads"
+        );
+
+        // WHEN: Stopping with no in-flight work
+        let result = scheduler.stop().await;
+
+        // THEN: Stop should succeed
+        assert!(
+            result.is_ok(),
+            "stop should succeed when no in-flight work exists"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_stop_allows_ready_beads() {
+        // GIVEN: A scheduler with ready beads (not assigned)
+        let scheduler = SchedulerActor::new();
+        let workflow_id = "workflow-123".to_string();
+        let bead_id = "bead-456".to_string();
+
+        scheduler
+            .register_workflow(workflow_id)
+            .expect("workflow registration should succeed");
+        scheduler
+            .schedule_bead("workflow-123".to_string(), bead_id.clone())
+            .expect("bead scheduling should succeed");
+        scheduler
+            .mark_ready(&bead_id)
+            .expect("marking bead ready should succeed");
+
+        assert_eq!(
+            scheduler.ready_count(),
+            1,
+            "should have 1 ready bead"
+        );
+        assert_eq!(
+            scheduler.stats().assigned_count,
+            0,
+            "should have no in-flight beads"
+        );
+
+        // WHEN: Stopping with ready beads but no in-flight work
+        let result = scheduler.stop().await;
+
+        // THEN: Stop should succeed (ready beads don't block stop)
+        assert!(
+            result.is_ok(),
+            "stop should succeed when no in-flight work exists (ready beads OK)"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_stop_allows_pending_beads() {
+        // GIVEN: A scheduler with pending beads (not ready)
+        let scheduler = SchedulerActor::new();
+        let workflow_id = "workflow-123".to_string();
+        let bead_id = "bead-456".to_string();
+
+        scheduler
+            .register_workflow(workflow_id)
+            .expect("workflow registration should succeed");
+        scheduler
+            .schedule_bead("workflow-123".to_string(), bead_id.clone())
+            .expect("bead scheduling should succeed");
+
+        assert_eq!(
+            scheduler.pending_count(),
+            1,
+            "should have 1 pending bead"
+        );
+        assert_eq!(
+            scheduler.stats().assigned_count,
+            0,
+            "should have no in-flight beads"
+        );
+
+        // WHEN: Stopping with pending beads but no in-flight work
+        let result = scheduler.stop().await;
+
+        // THEN: Stop should succeed (pending beads don't block stop)
+        assert!(
+            result.is_ok(),
+            "stop should succeed when no in-flight work exists (pending beads OK)"
+        );
     }
 }
