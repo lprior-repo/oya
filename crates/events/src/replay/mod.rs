@@ -26,6 +26,8 @@ use tokio::sync::watch;
 
 use crate::error::Result;
 
+// Re-export apply types for convenience
+pub use apply::{apply_event, apply_events, ApplyContext, EventSourcedState};
 // Re-export loader types for convenience
 pub use loader::{EventFilter, EventLoader, LoadError};
 // Re-export recovery types for convenience
