@@ -25,17 +25,23 @@
 //! ```
 
 mod agent_info;
+mod config;
 mod error;
+mod executor;
 mod handle;
 mod health;
 mod messages;
 mod pool;
+mod subprocess;
+mod subprocess_handle;
 
 pub use agent_info::{
     AgentApiResponse, AgentCapability, AgentInfo, AgentInfoError, AgentState, AgentStats,
     HealthMetrics, WorkloadHistory,
 };
+pub use config::{AgentConfig, AgentConfigBuilder};
 pub use error::{AgentSwarmError, AgentSwarmResult};
+pub use executor::AgentExecutor;
 pub use handle::{AgentHandle, AgentState as AgentStateLegacy};
 pub use health::{HealthCheckResult, HealthConfig, HealthMonitor};
 pub use messages::{AgentMessage, AgentResponse};

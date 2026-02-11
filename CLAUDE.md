@@ -1,6 +1,47 @@
 # CLAUDE.md - Project Instructions for Claude Code
 
-## CRITICAL: Use Codanna for Code Exploration
+## CRITICAL: Swarm CLI is PRIMARY WORKFLOW
+
+**ALWAYS START WORK BY RUNNING SWARM COMMANDS.** Never jump directly to code reading or implementation without following the swarm CLI workflow.
+
+### The Swarm Workflow (MANDATORY First Steps)
+
+```bash
+# Step 0: PREFLIGHT - Verify system state
+swarm doctor
+swarm state
+swarm status
+
+# Step 1: INIT - Initialize swarm database
+swarm init-db --seed-agents 4
+
+# Step 2: TRIAGE - Find work (MANDATORY before any implementation)
+bv --robot-triage --robot-triage-by-track  # Get parallel tracks
+# OR for single bead:
+bv --robot-next  # Get top recommendation + claim command
+
+# Step 3: CLAIM - Reserve the bead (MANDATORY)
+# bv --robot-next returns claim_command - use it EXACTLY:
+br update <bead-id> --status in_progress --json
+
+# Step 4: ISOLATE - Create isolated workspace (MANDATORY)
+zjj add <session-name>
+
+# Step 5: IMPLEMENT - Write code in isolated workspace
+# After work is done in isolated workspace:
+zjj done  # Merges back to main + cleanup
+
+# Step 6: LAND - Final quality gates and push
+# Use landing skill (MANDATORY)
+```
+
+**Why this matters:**
+- Workspace isolation prevents cross-bead contamination
+- Swarm state tracking prevents duplicate work
+- zjj ensures clean history and proper merges
+- Database maintains bead state across sessions
+
+### CRITICAL: Use Codanna for Code Exploration
 
 **MANDATORY: codanna MCP server is your PRIMARY code exploration tool.** Use it for ALL searching, symbol lookup, impact analysis, and understanding codebase structure.
 
