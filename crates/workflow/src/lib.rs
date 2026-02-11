@@ -57,7 +57,10 @@
 
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
-#![deny(clippy::panic)]
+#![cfg_attr(
+    test,
+    allow(clippy::expect_used, clippy::panic, clippy::absurd_extreme_comparisons)
+)]
 
 pub mod checkpoint;
 

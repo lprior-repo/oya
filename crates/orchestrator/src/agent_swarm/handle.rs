@@ -29,6 +29,12 @@ impl AgentState {
         matches!(self, Self::Idle)
     }
 
+    /// Check if agent is idle (alias for is_available).
+    #[must_use]
+    pub const fn is_idle(&self) -> bool {
+        matches!(self, Self::Idle)
+    }
+
     /// Check if agent is active (not terminated or shutting down).
     #[must_use]
     pub const fn is_active(&self) -> bool {

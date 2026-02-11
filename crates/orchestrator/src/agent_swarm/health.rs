@@ -73,7 +73,7 @@ pub struct HealthCheckResult {
 }
 
 /// Health monitor for tracking agent health.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct HealthMonitor {
     /// Health configuration.
     config: HealthConfig,

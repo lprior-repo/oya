@@ -111,7 +111,7 @@ mod tests {
         assert!(task.is_ok());
         let task = match task {
             Ok(t) => t,
-            Err(e) => panic!("Task creation failed: {}", e),
+            Err(e) => panic!("Task creation failed: {e}"),
         };
         assert_eq!(task.id.as_str(), "task-1");
         assert_eq!(task.title, "Test Task");

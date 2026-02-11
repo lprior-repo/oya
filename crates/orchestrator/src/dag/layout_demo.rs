@@ -169,7 +169,7 @@ fn demo_cache_behavior() -> Result<(), Box<dyn std::error::Error>> {
     println!("After cache invalidation: {recompute_time:?}");
 
     // Verify positions changed
-    assert!(positions3.len() == positions1.len() + 1);
+    assert!(positions3.len() == positions1.len().saturating_add(1));
     println!("After adding node, positions count: {}", positions3.len());
 
     Ok(())
@@ -234,23 +234,23 @@ fn create_sample_workflow_dag(size: usize) -> Result<WorkflowDAG, Box<dyn std::e
 
     // Create dependencies in a realistic pattern
     for i in 0..size {
-        if i % 5 == 0 && i + 1 < size {
+        if i % 5 == 0 && i.saturating_add(1) < size {
             // Branch every 5th node
             dag.add_dependency(
                 format!("node-{i}"),
-                format!("node-{}", i + 1),
+                format!("node-{}", i.saturating_add(1)),
                 DependencyType::BlockingDependency,
             )?;
             dag.add_dependency(
                 format!("node-{i}"),
-                format!("node-{}", i + 2),
+                format!("node-{}", i.saturating_add(2)),
                 DependencyType::BlockingDependency,
             )?;
-        } else if i + 1 < size {
+        } else if i.saturating_add(1) < size {
             // Linear chain
             dag.add_dependency(
                 format!("node-{i}"),
-                format!("node-{}", i + 1),
+                format!("node-{}", i.saturating_add(1)),
                 DependencyType::BlockingDependency,
             )?;
         }

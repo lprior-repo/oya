@@ -229,46 +229,46 @@ fn create_test_dag_with_result(size: usize) -> Result<WorkflowDAG, String> {
 
     // Create a chain structure with some branching
     for i in 0..(size.saturating_sub(1)) {
-        if i % 4 == 0 && i + 2 < size {
+        if i % 4 == 0 && i.saturating_add(2) < size {
             // Create branching every 4th node
             dag.add_edge(
                 format!("node-{i}"),
-                format!("node-{}", i + 1),
+                format!("node-{}", i.saturating_add(1)),
                 DependencyType::BlockingDependency,
             )
             .map_err(|e| {
                 format!(
                     "Failed to add edge from node-{} to node-{}: {}",
                     i,
-                    i + 1,
+                    i.saturating_add(1),
                     e
                 )
             })?;
             dag.add_edge(
                 format!("node-{i}"),
-                format!("node-{}", i + 2),
+                format!("node-{}", i.saturating_add(2)),
                 DependencyType::BlockingDependency,
             )
             .map_err(|e| {
                 format!(
                     "Failed to add edge from node-{} to node-{}: {}",
                     i,
-                    i + 2,
+                    i.saturating_add(2),
                     e
                 )
             })?;
-        } else if i + 1 < size {
+        } else if i.saturating_add(1) < size {
             // Normal chain
             dag.add_edge(
                 format!("node-{i}"),
-                format!("node-{}", i + 1),
+                format!("node-{}", i.saturating_add(1)),
                 DependencyType::BlockingDependency,
             )
             .map_err(|e| {
                 format!(
                     "Failed to add edge from node-{} to node-{}: {}",
                     i,
-                    i + 1,
+                    i.saturating_add(1),
                     e
                 )
             })?;
@@ -332,7 +332,7 @@ mod tests {
 
 /// Performance analysis functions
 pub mod analysis {
-    use super::{MemoizedLayout, WorkflowDAG, create_test_dag_with_result};
+    use super::{create_test_dag_with_result, MemoizedLayout, WorkflowDAG};
 
     /// Analyze cache effectiveness
     #[allow(clippy::cast_precision_loss)]
@@ -381,18 +381,18 @@ pub mod analysis {
     #[allow(clippy::cast_precision_loss)]
     fn simulate_cache_hits(layout: &MemoizedLayout, accesses: usize) -> f64 {
         // Simulate repeated access to the same positions (high cache hit rate)
-        let mut hit_count = 0;
+        let mut hit_count: usize = 0;
 
         // Access the same position multiple times
         for _ in 0..accesses {
             let positions = layout.compute_node_positions();
             // Access first few positions repeatedly
             if positions.get("node-0").is_some() {
-                hit_count += 1;
+                hit_count = hit_count.wrapping_add(1);
             }
         }
 
-        f64::from(hit_count) / accesses as f64
+        hit_count as f64 / accesses as f64
     }
 
     #[test]

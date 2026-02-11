@@ -60,7 +60,7 @@ impl TarjanState {
     /// Get the next discovery index and increment
     const fn next_index(&mut self) -> DiscoveryIndex {
         let idx = self.next_index;
-        self.next_index += 1;
+        self.next_index = self.next_index.saturating_add(1);
         idx
     }
 
@@ -291,7 +291,10 @@ pub fn find_cycles_tarjan(dag: &WorkflowDAG) -> Vec<Vec<BeadId>> {
 
             // OR single node with self-loop
             if scc.len() == 1 {
-                let bead_id = &scc[0];
+                let bead_id = match scc.first() {
+                    Some(b) => b,
+                    None => return false,
+                };
 
                 // Check if there's a self-loop in the DAG
                 return dag

@@ -482,7 +482,9 @@ impl ContractProcessor {
 
         // Test 5: Returns contract path for notification
         tests.push(TestCase {
-            test_name: "test_returns_contract_path_for_notification_on_success_when_handoff_processed".to_string(),
+            test_name:
+                "test_returns_contract_path_for_notification_on_success_when_handoff_processed"
+                    .to_string(),
             given: "A contract file has been successfully created".to_string(),
             when: "The planner completes processing".to_string(),
             then: "System returns contract path for printing CONTRACT_READY notification"
@@ -492,7 +494,8 @@ impl ContractProcessor {
 
         // Test 6: Handles missing handoff file
         tests.push(TestCase {
-            test_name: "test_handles_missing_handoff_file_gracefully_when_file_not_found".to_string(),
+            test_name: "test_handles_missing_handoff_file_gracefully_when_file_not_found"
+                .to_string(),
             given: "No handoff file exists at the expected path".to_string(),
             when: "The planner attempts to process a non-existent handoff".to_string(),
             then: "Planner logs an error and continues monitoring without crashing".to_string(),
@@ -501,7 +504,9 @@ impl ContractProcessor {
 
         // Test 7: Validates handoff JSON structure
         tests.push(TestCase {
-            test_name: "test_validates_handoff_json_structure_before_processing_when_json_is_malformed".to_string(),
+            test_name:
+                "test_validates_handoff_json_structure_before_processing_when_json_is_malformed"
+                    .to_string(),
             given: "A malformed JSON file exists at /tmp/bead-handoff-malformed.json".to_string(),
             when: "The planner attempts to read and parse the file".to_string(),
             then: "Planner detects invalid JSON, logs an error, and skips to the next handoff file"

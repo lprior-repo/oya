@@ -83,6 +83,7 @@ impl WorkflowStatusProjection {
 
     /// Get the count of workflows in each status.
     #[must_use]
+    #[allow(clippy::arithmetic_side_effects)]
     pub fn status_counts(&self) -> HashMap<WorkflowStatus, usize> {
         let mut counts = HashMap::new();
         for status in self.statuses.values() {

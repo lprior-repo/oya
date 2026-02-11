@@ -66,6 +66,7 @@ impl DistributionStrategy for RoundRobinStrategy {
             return None;
         }
 
+        #[allow(clippy::arithmetic_side_effects)]
         let index = self.bead_index.fetch_add(1, Ordering::SeqCst) % ready_beads.len();
         ready_beads.get(index).cloned()
     }
@@ -80,6 +81,7 @@ impl DistributionStrategy for RoundRobinStrategy {
             return None;
         }
 
+        #[allow(clippy::arithmetic_side_effects)]
         let index = self.agent_index.fetch_add(1, Ordering::SeqCst) % agents.len();
         agents.get(index).cloned()
     }

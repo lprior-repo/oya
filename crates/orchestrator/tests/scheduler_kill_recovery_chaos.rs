@@ -157,8 +157,7 @@ async fn capture_scheduler_state(
                 reply,
             },
             5000_u64
-        )
-        {
+        ) {
             Ok(Some(status)) => status,
             Ok(None) => {
                 return Err(ChaosTestError::StateMismatch {
@@ -187,8 +186,7 @@ async fn capture_scheduler_state(
         scheduler,
         |reply| SchedulerMessage::GetAllReadyBeads { reply },
         5000_u64
-    )
-    {
+    ) {
         Ok(pairs) => pairs,
         Err(e) => {
             return Err(ChaosTestError::RpcFailed {

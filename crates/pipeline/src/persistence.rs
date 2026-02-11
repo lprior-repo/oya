@@ -124,9 +124,9 @@ pub async fn list_all_tasks(repo_root: &Path) -> Result<Vec<Task>> {
 }
 
 #[cfg(test)]
- mod tests {
+mod tests {
 
-     use super::*;
+    use super::*;
     use crate::domain::{Language, Priority, TaskStatus};
 
     #[tokio::test]

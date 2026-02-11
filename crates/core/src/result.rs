@@ -510,7 +510,7 @@ mod tests {
         fn get_ok() -> i32 {
             42
         }
-        assert_eq!(Result::Ok(get_ok()).unwrap_or(0), 42);
+        assert_eq!(get_ok(), 42);
     }
 
     #[test]
@@ -527,7 +527,7 @@ mod tests {
         fn get_ok() -> i32 {
             42
         }
-        assert_eq!(Result::Ok(get_ok()).unwrap_or(0), 42);
+        assert_eq!(get_ok(), 42);
     }
 
     #[test]

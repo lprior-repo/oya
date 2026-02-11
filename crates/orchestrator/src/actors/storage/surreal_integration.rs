@@ -96,9 +96,10 @@ impl RetryPolicy {
          let capped_delay = exponential_delay.min(self.max_backoff_ms);
 
          if self.use_jitter {
-             let jitter_range = (capped_delay / 4).max(1);
-             let jitter = rand::random::<u64>() % (2 * jitter_range);
-             Duration::from_millis(capped_delay.saturating_add(jitter))
+     let jitter_range = (capped_delay / 4).max(1);
+              #[allow(clippy::arithmetic_side_effects)]
+              let jitter = rand::random::<u64>() % jitter_range.wrapping_mul(2);
+              Duration::from_millis(capped_delay.saturating_add(jitter))
          } else {
              Duration::from_millis(capped_delay)
          }

@@ -12,9 +12,9 @@
 #![forbid(unsafe_code)]
 
 use axum::{
-    Json,
     http::StatusCode,
     response::{IntoResponse, Response},
+    Json,
 };
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -208,6 +208,7 @@ impl HttpError {
 
     /// Get HTTP status code.
     #[must_use]
+    #[allow(clippy::match_same_arms)]
     pub const fn status_code(&self) -> StatusCode {
         match self {
             Self::Network { .. } => StatusCode::SERVICE_UNAVAILABLE,
@@ -222,6 +223,7 @@ impl HttpError {
 
     /// Get error message.
     #[must_use]
+    #[allow(clippy::match_same_arms)]
     pub fn message(&self) -> String {
         match self {
             Self::Network { message, .. } => message.clone(),

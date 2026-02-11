@@ -317,7 +317,8 @@ impl InMemoryAgentRepository {
     }
 
     /// Validates an agent ID.
-    fn validate_agent_id(&self, agent_id: &str) -> Result<(), AgentRepositoryError> {
+     #[allow(clippy::unused_self)]
+     fn validate_agent_id(&self, agent_id: &str) -> Result<(), AgentRepositoryError> {
         if agent_id.is_empty() {
             return Err(AgentRepositoryError::InvalidAgentId {
                 reason: "Agent ID cannot be empty".to_string(),
@@ -342,15 +343,16 @@ impl Default for InMemoryAgentRepository {
 
 #[async_trait::async_trait]
 impl AgentRepository for InMemoryAgentRepository {
-    async fn register_agent(
-        &self,
-        agent_id: String,
-    ) -> Result<RepositoryAgent, AgentRepositoryError> {
-        self.validate_agent_id(&agent_id)?;
+    #[allow(clippy::significant_drop_tightening)]
+     async fn register_agent(
+         &self,
+         agent_id: String,
+     ) -> Result<RepositoryAgent, AgentRepositoryError> {
+         self.validate_agent_id(&agent_id)?;
 
-        let mut agents = self.agents.write().await;
+         let mut agents = self.agents.write().await;
 
-        if agents.len() >= self.max_agents {
+         if agents.len() >= self.max_agents {
             return Err(AgentRepositoryError::CapacityExceeded {
                 max_agents: self.max_agents,
             });
@@ -376,68 +378,73 @@ impl AgentRepository for InMemoryAgentRepository {
             })
     }
 
-    async fn get_all_agents(&self) -> Result<Vec<RepositoryAgent>, AgentRepositoryError> {
-        let agents = self.agents.read().await;
-        let agent_list = agents.values().cloned().collect::<Vec<_>>();
-        Ok(agent_list)
-    }
+    #[allow(clippy::significant_drop_tightening)]
+     async fn get_all_agents(&self) -> Result<Vec<RepositoryAgent>, AgentRepositoryError> {
+         let agents = self.agents.read().await;
+         let agent_list = agents.values().cloned().collect::<Vec<_>>();
+         Ok(agent_list)
+     }
 
-    async fn update_heartbeat(
-        &self,
-        agent_id: &str,
-    ) -> Result<RepositoryAgent, AgentRepositoryError> {
-        let mut agents = self.agents.write().await;
-        let agent =
-            agents
-                .get_mut(agent_id)
-                .ok_or_else(|| AgentRepositoryError::AgentNotFound {
-                    agent_id: agent_id.to_string(),
-                })?;
+   #[allow(clippy::significant_drop_tightening)]
+     async fn update_heartbeat(
+         &self,
+         agent_id: &str,
+     ) -> Result<RepositoryAgent, AgentRepositoryError> {
+         let mut agents = self.agents.write().await;
+         let agent =
+             agents
+                 .get_mut(agent_id)
+                 .ok_or_else(|| AgentRepositoryError::AgentNotFound {
+                     agent_id: agent_id.to_string(),
+                 })?;
 
-        agent.record_heartbeat()?;
-        Ok(agent.clone())
-    }
+         agent.record_heartbeat()?;
+         Ok(agent.clone())
+     }
 
-    async fn assign_bead(
-        &self,
-        agent_id: &str,
-        bead_id: String,
-    ) -> Result<RepositoryAgent, AgentRepositoryError> {
-        let mut agents = self.agents.write().await;
-        let agent =
-            agents
-                .get_mut(agent_id)
-                .ok_or_else(|| AgentRepositoryError::AgentNotFound {
-                    agent_id: agent_id.to_string(),
-                })?;
+  #[allow(clippy::significant_drop_tightening)]
+     async fn assign_bead(
+         &self,
+         agent_id: &str,
+         bead_id: String,
+     ) -> Result<RepositoryAgent, AgentRepositoryError> {
+         let mut agents = self.agents.write().await;
+         let agent =
+             agents
+                 .get_mut(agent_id)
+                 .ok_or_else(|| AgentRepositoryError::AgentNotFound {
+                     agent_id: agent_id.to_string(),
+                 })?;
 
-        agent.assign_bead(bead_id)?;
-        Ok(agent.clone())
-    }
+         agent.assign_bead(bead_id)?;
+         Ok(agent.clone())
+     }
 
-    async fn complete_bead(&self, agent_id: &str) -> Result<RepositoryAgent, AgentRepositoryError> {
-        let mut agents = self.agents.write().await;
-        let agent =
-            agents
-                .get_mut(agent_id)
-                .ok_or_else(|| AgentRepositoryError::AgentNotFound {
-                    agent_id: agent_id.to_string(),
-                })?;
+  #[allow(clippy::significant_drop_tightening)]
+     async fn complete_bead(&self, agent_id: &str) -> Result<RepositoryAgent, AgentRepositoryError> {
+         let mut agents = self.agents.write().await;
+         let agent =
+             agents
+                 .get_mut(agent_id)
+                 .ok_or_else(|| AgentRepositoryError::AgentNotFound {
+                     agent_id: agent_id.to_string(),
+                 })?;
 
-        agent.complete_bead()?;
-        Ok(agent.clone())
-    }
+         agent.complete_bead()?;
+         Ok(agent.clone())
+     }
 
-    async fn get_stats(&self) -> Result<AgentRepositoryStats, AgentRepositoryError> {
-        let agents = self.agents.read().await;
+    #[allow(clippy::significant_drop_tightening, clippy::cast_precision_loss)]
+     async fn get_stats(&self) -> Result<AgentRepositoryStats, AgentRepositoryError> {
+         let agents = self.agents.read().await;
 
-        let total_agents = agents.len();
-        let mut idle_agents = 0;
-        let mut working_agents = 0;
-        let mut unhealthy_agents = 0;
-        let mut total_beads_completed = 0;
-        let mut total_operations_executed = 0;
-        let mut total_health_score = 0.0;
+         let total_agents = agents.len();
+         let mut idle_agents = 0;
+         let mut working_agents = 0;
+         let mut unhealthy_agents = 0;
+         let mut total_beads_completed = 0;
+         let mut total_operations_executed = 0;
+         let mut total_health_score = 0.0;
 
         for agent in agents.values() {
             match agent.state {

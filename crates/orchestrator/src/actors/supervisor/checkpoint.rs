@@ -223,11 +223,14 @@ where
             name: child.name.clone(),
             restart_count: child.restart_count,
             last_restart: child
-                .last_restart
-                .map(|i| {
-                     let elapsed = i.elapsed().as_secs().saturating_sub(1);
-                     DateTime::<Utc>::from(std::time::SystemTime::now() - Duration::from_secs(elapsed))
-                 }),
+    .last_restart
+                 .map(|i| {
+                      let elapsed = i.elapsed().as_secs().saturating_sub(1);
+                      std::time::SystemTime::now()
+                          .checked_sub(Duration::from_secs(elapsed))
+                          .map(DateTime::from)
+                          .unwrap_or_else(|| DateTime::from(std::time::SystemTime::UNIX_EPOCH))
+                  }),
             args: format!("{:?}", child.args), // Debug format for args
         })
         .collect()

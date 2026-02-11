@@ -134,26 +134,27 @@ impl CircuitBreaker {
         self.state
     }
 
-    /// Check if a request is allowed.
-    ///
-    /// Returns true if request should proceed, false if rejected.
-    #[must_use]
-    pub fn allow_request(&self) -> bool {
-        match self.state {
-            CircuitState::Closed => true,
-            CircuitState::Open => {
-                // Check if timeout has elapsed
-                let elapsed = self.state_changed_at.elapsed();
-                if elapsed >= Duration::from_secs(self.config.timeout_secs) {
-                    // Transition to Half-Open
-                    false // Will be transitioned in record_result
-                } else {
-                    false // Circuit is still open
-                }
-            }
-            CircuitState::HalfOpen => true,
-        }
-    }
+  /// Check if a request is allowed.
+     ///
+     /// Returns true if request should proceed, false if rejected.
+     #[must_use]
+     #[allow(clippy::match_same_arms, clippy::branches_sharing_code)]
+     pub fn allow_request(&self) -> bool {
+         match self.state {
+             CircuitState::Closed => true,
+             CircuitState::Open => {
+                 // Check if timeout has elapsed
+                 let elapsed = self.state_changed_at.elapsed();
+                 if elapsed >= Duration::from_secs(self.config.timeout_secs) {
+                     // Transition to Half-Open
+                     false // Will be transitioned in record_result
+                 } else {
+                     false // Circuit is still open
+                 }
+             }
+             CircuitState::HalfOpen => true,
+         }
+     }
 
     /// Record the result of a request and update circuit state.
     pub fn record_result(&mut self, result: RequestResult) {
@@ -232,16 +233,17 @@ impl CircuitBreaker {
         self.consecutive_successes = 0;
     }
 
-    /// Count failures in the sliding window.
-    fn count_failures_in_window(&self) -> u32 {
-        self.events
-            .iter()
-            .filter(|e| {
-                e.result == RequestResult::Failure
-                    && e.timestamp.elapsed() < Duration::from_secs(self.config.window_size_secs)
-            })
-            .count() as u32
-    }
+ /// Count failures in the sliding window.
+     #[allow(clippy::cast_possible_truncation)]
+     fn count_failures_in_window(&self) -> u32 {
+         self.events
+             .iter()
+             .filter(|e| {
+                 e.result == RequestResult::Failure
+                     && e.timestamp.elapsed() < Duration::from_secs(self.config.window_size_secs)
+             })
+             .count() as u32
+     }
 
     /// Remove events outside the sliding window.
     fn clean_old_events(&mut self) {
@@ -256,17 +258,18 @@ impl CircuitBreaker {
         self.count_failures_in_window()
     }
 
-    /// Get success count in current window.
-    #[must_use]
-    pub fn success_count(&self) -> u32 {
-        self.events
-            .iter()
-            .filter(|e| {
-                e.result == RequestResult::Success
-                    && e.timestamp.elapsed() < Duration::from_secs(self.config.window_size_secs)
-            })
-            .count() as u32
-    }
+  /// Get success count in current window.
+     #[must_use]
+     #[allow(clippy::cast_possible_truncation)]
+     pub fn success_count(&self) -> u32 {
+         self.events
+             .iter()
+             .filter(|e| {
+                 e.result == RequestResult::Success
+                     && e.timestamp.elapsed() < Duration::from_secs(self.config.window_size_secs)
+             })
+             .count() as u32
+     }
 
     /// Get time since state changed.
     #[must_use]

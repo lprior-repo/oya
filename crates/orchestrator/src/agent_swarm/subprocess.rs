@@ -30,6 +30,7 @@
 #![deny(clippy::panic)]
 
 /// Errors from agent subprocess operations.
+#[allow(dead_code)]
 #[derive(Debug, thiserror::Error)]
 pub enum AgentError {
     /// Failed to spawn subprocess
@@ -70,6 +71,7 @@ pub enum AgentError {
 }
 
 /// Result type for agent operations.
+#[allow(dead_code)]
 pub type AgentResult<T> = Result<T, AgentError>;
 
 #[cfg(test)]

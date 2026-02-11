@@ -314,6 +314,7 @@ mod tests {
         let json = r#"{"removed_count": 2, "sessions": [{"name": "test-session", "reason": "stale", "workspace_path": "/tmp/test"}]}"#;
         let result = parse_zjj_json(json.as_bytes());
         assert!(result.is_ok());
+        #[allow(clippy::expect_used)]
         let output = result.expect("valid JSON should parse successfully");
         assert_eq!(output.removed_count, 2);
         assert_eq!(output.sessions.len(), 1);
