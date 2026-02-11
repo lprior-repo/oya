@@ -13,6 +13,8 @@
 #![deny(clippy::panic)]
 
 // Import DAG types for tests
+use super::error::{DagError, DagResult};
+use super::{DependencyType, WorkflowDAG};
 
 // ============================================================================
 // ADD_DEPENDENCY VALIDATION TESTS
