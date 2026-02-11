@@ -1,0 +1,23 @@
+--- crates/events/src/durable_store.rs
++++ replace DurableEventStore::append -> Result<EventId> with Err(anyhow::anyhow!("mutation injected"))
+@@ -106,19 +106,17 @@
+ impl DurableEventStore {
+     /// Create a new durable event store.
+     pub fn new() -> Self {
+         Self { events: Vec::new() }
+     }
+ 
+     /// Append an event to the store.
+     pub fn append(&mut self, event: BeadEvent) -> Result<EventId> {
+-        let event_id = event.event_id();
+-        self.events.push(event);
+-        Ok(event_id)
++        Err(anyhow::anyhow!("mutation injected")) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Get all events for a specific stream (bead).
+     pub fn get_events(&self, stream_id: BeadId) -> Result<Vec<BeadEvent>> {
+         Ok(self
+             .events
+             .iter()
+             .filter(|e| e.bead_id() == stream_id)

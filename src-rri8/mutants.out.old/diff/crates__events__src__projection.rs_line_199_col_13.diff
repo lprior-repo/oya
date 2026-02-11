@@ -1,0 +1,25 @@
+--- crates/events/src/projection.rs
++++ delete match arm BeadEvent::Unclaimed{bead_id, ..} in <impl Projection for AllBeadsProjection>::apply
+@@ -191,21 +191,17 @@
+             }
+             BeadEvent::Claimed {
+                 bead_id, agent_id, ..
+             } => {
+                 if let Some(bead) = state.beads.get_mut(bead_id) {
+                     bead.claimed_by = Some(agent_id.clone());
+                 }
+             }
+-            BeadEvent::Unclaimed { bead_id, .. } => {
+-                if let Some(bead) = state.beads.get_mut(bead_id) {
+-                    bead.claimed_by = None;
+-                }
+-            }
++             /* ~ changed by cargo-mutants ~ */
+             _ => {}
+         }
+     }
+ 
+     fn initial_state(&self) -> Self::State {
+         AllBeadsState::new()
+     }
+ }

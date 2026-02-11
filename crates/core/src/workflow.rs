@@ -1,5 +1,9 @@
 //! Workflow type for representing DAG-based task execution.
 
+#![cfg_attr(test, allow(clippy::expect_used))]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
+#![cfg_attr(test, allow(clippy::panic))]
+
 use crate::{Slug, Task};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -33,6 +37,7 @@ impl Workflow {
     ///
     /// # Errors
     /// Returns an error if the slug is invalid.
+    #[inline]
     pub fn new(
         id: impl TryInto<Slug, Error = crate::OyaError>,
         name: impl Into<String>,
@@ -55,6 +60,7 @@ impl Workflow {
     ///
     /// # Errors
     /// Returns an error if a task with the same ID already exists.
+    #[inline]
     pub fn add_task(&mut self, task: Task) -> Result<(), crate::OyaError> {
         let task_id = task.id.as_str().to_string();
         if self.tasks.contains_key(&task_id) {
@@ -78,6 +84,7 @@ impl Workflow {
     /// - Either task doesn't exist
     /// - The dependency would create a cycle
     /// - The dependency already exists
+    #[inline]
     pub fn add_dependency(
         &mut self,
         from_task_id: impl AsRef<str>,
@@ -180,6 +187,7 @@ impl Workflow {
 
     /// Get tasks that are ready to execute (all dependencies satisfied).
     #[must_use]
+    #[inline]
     pub fn get_ready_tasks(&self) -> Vec<&Task> {
         self.tasks
             .iter()
@@ -190,6 +198,7 @@ impl Workflow {
 
     /// Check if a task is ready to execute.
     #[must_use]
+    #[inline]
     pub fn is_task_ready(&self, task_id: &str) -> bool {
         let Some(task) = self.tasks.get(task_id) else {
             return false;
@@ -210,36 +219,42 @@ impl Workflow {
     ///
     /// An empty workflow is considered complete (vacuously true).
     #[must_use]
+    #[inline]
     pub fn is_complete(&self) -> bool {
         self.tasks.is_empty() || self.tasks.values().all(Task::is_complete)
     }
 
     /// Get the total number of tasks.
     #[must_use]
+    #[inline]
     pub fn len(&self) -> usize {
         self.tasks.len()
     }
 
     /// Check if the workflow has no tasks.
     #[must_use]
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.tasks.is_empty()
     }
 
     /// Get a task by ID.
     #[must_use]
+    #[inline]
     pub fn get_task(&self, task_id: &str) -> Option<&Task> {
         self.tasks.get(task_id)
     }
 
     /// Get dependencies for a task.
     #[must_use]
+    #[inline]
     pub fn get_dependencies(&self, task_id: &str) -> Option<&HashSet<String>> {
         self.dependencies.get(task_id)
     }
 }
 
 impl fmt::Display for Workflow {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -253,9 +268,7 @@ impl fmt::Display for Workflow {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
-    #![allow(clippy::expect_used)]
-    #![allow(clippy::panic)]
+
     #![allow(clippy::indexing_slicing)]
     #![allow(clippy::assertions_on_constants)]
     #![allow(clippy::uninlined_format_args)]
@@ -266,7 +279,6 @@ mod tests {
     #![allow(clippy::should_implement_trait)]
     #![allow(clippy::if_then_some_else_none)]
     #![allow(clippy::redundant_clone)]
-    #![allow(clippy::map_or_none)]
     #![allow(clippy::missing_docs_in_private_items)]
 
     use super::*;

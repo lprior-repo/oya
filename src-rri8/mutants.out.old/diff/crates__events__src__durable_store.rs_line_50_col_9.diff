@@ -1,0 +1,22 @@
+--- crates/events/src/durable_store.rs
++++ replace EventQuery::before -> Self with Default::default()
+@@ -42,18 +42,17 @@
+     /// Filter events after this timestamp.
+     pub fn after(mut self, timestamp: DateTime<Utc>) -> Self {
+         self.after = Some(timestamp);
+         self
+     }
+ 
+     /// Filter events before this timestamp.
+     pub fn before(mut self, timestamp: DateTime<Utc>) -> Self {
+-        self.before = Some(timestamp);
+-        self
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Limit the number of results.
+     pub fn limit(mut self, limit: usize) -> Self {
+         self.limit = Some(limit);
+         self
+     }
+ 

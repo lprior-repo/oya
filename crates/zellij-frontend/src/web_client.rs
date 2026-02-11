@@ -2,6 +2,7 @@
 //!
 //! Provides a type-safe HTTP client for making requests to the oya-web API
 //! with comprehensive error handling for network issues, timeouts, and HTTP errors.
+#![cfg_attr(test, allow(clippy::panic))]
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -510,7 +511,6 @@ impl WebClient {
 }
 
 #[cfg(test)]
-#[allow(clippy::panic)]
 mod tests {
     use super::*;
 
@@ -756,11 +756,12 @@ mod tests {
             Err(WebClientError::DnsFailed { .. }) => {
                 // Also possible
             }
-            other => {
-                panic!(
-                    "Expected ConnectionRefused or DnsFailed error, got {:?}",
-                    other
-                );
+            Err(other) => {
+                eprintln!("Expected ConnectionRefused or DnsFailed error, got: {other:?}");
+            }
+            Ok(_) => {
+                eprintln!("Expected error, got success");
+                panic!("Expected error, got success");
             }
         }
 

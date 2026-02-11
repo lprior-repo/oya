@@ -17,6 +17,10 @@ static mut RENDER_OUTPUT: Option<String> = None;
 ///
 /// Zellij calls this when the plugin is first loaded.
 /// The config is a JSON string with plugin configuration including size.
+///
+/// # Safety
+/// - `config` must be a valid pointer to a null-terminated UTF-8 string
+/// - `config_len` must match the length of the string at `config`
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn load(config: *const u8, config_len: usize) {
     // Parse configuration JSON
@@ -68,6 +72,13 @@ pub unsafe extern "C" fn load(config: *const u8, config_len: usize) {
 /// Update the plugin state with a user input event
 ///
 /// Zellij calls this when there's user input (keyboard, mouse, etc.).
+///
+/// # Safety
+/// - `input` must be a valid pointer to a null-terminated UTF-8 string
+/// - `input_len` must match the length of the string at `input`
+/// - `buffer` must be a valid pointer writable for at least `buffer_len` bytes
+/// - `buffer_len` must be the size of the buffer
+///
 /// Returns: number of bytes written to the buffer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn update(
@@ -116,6 +127,11 @@ pub unsafe extern "C" fn update(
 /// Render the current plugin state without updating
 ///
 /// Zellij calls this to refresh the display without user input.
+///
+/// # Safety
+/// - `buffer` must be a valid pointer writable for at least `buffer_len` bytes
+/// - `buffer_len` must be the size of the buffer
+///
 /// Returns: number of bytes written to the buffer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn render(buffer: *mut u8, buffer_len: usize) -> usize {
@@ -138,6 +154,10 @@ pub unsafe extern "C" fn render(buffer: *mut u8, buffer_len: usize) -> usize {
 /// Clean up plugin resources
 ///
 /// Zellij calls this when unloading the plugin.
+///
+/// # Safety
+/// This function is unsafe because it modifies global static state.
+/// Should only be called once when plugin is being unloaded.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn unload() {
     unsafe {
@@ -147,6 +167,9 @@ pub unsafe extern "C" fn unload() {
 }
 
 /// Get the current rendered output from the plugin
+///
+/// # Safety
+/// This function is unsafe because it reads and modifies global static state.
 unsafe fn get_render_output() -> String {
     // Check cached render output using raw pointer
     let output_ptr = &raw mut RENDER_OUTPUT;
@@ -156,11 +179,10 @@ unsafe fn get_render_output() -> String {
     }
 
     // For now, return a simple output since we can't easily access the plugin
-    format!(
-        "OYA SDLC Plugin\n\
-        \n\
-        Press 'q' to quit, '?' for help"
-    )
+    "OYA SDLC Plugin\n\
+    \n\
+    Press 'q' to quit, '?' for help"
+        .to_string()
 }
 
 /// Convert JSON value to PluginEvent

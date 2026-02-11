@@ -86,7 +86,8 @@ async fn create_test_bead(
     store
         .save_bead(&bead)
         .await
-        .map_err(|e| format!("Failed to save bead: {}", e))
+        .map(|_| ())
+        .map_err(|e| format!("Failed to save bead: {e}"))
 }
 
 /// Wait for event with timeout and retry logic.
@@ -126,13 +127,12 @@ fn persistence_to_events_state(state: PersistenceBeadState) -> BeadState {
     match state {
         PersistenceBeadState::Pending => BeadState::Pending,
         PersistenceBeadState::Ready => BeadState::Ready,
-        PersistenceBeadState::Dispatched => BeadState::Dispatched,
-        PersistenceBeadState::Assigned => BeadState::Assigned,
+        PersistenceBeadState::Dispatched => BeadState::Scheduled,
+        PersistenceBeadState::Assigned => BeadState::Ready,
         PersistenceBeadState::Running => BeadState::Running,
         PersistenceBeadState::Completed => BeadState::Completed,
         PersistenceBeadState::Failed => BeadState::Failed,
         PersistenceBeadState::Cancelled => BeadState::Cancelled,
-        PersistenceBeadState::BackingOff => BeadState::BackingOff,
     }
 }
 
@@ -181,7 +181,6 @@ async fn given_ipc_worker_when_start_bead_then_emits_state_changed_event()
         },
         5000
     )
-    .await
     {
         Ok(r) => r,
         Err(e) => {
@@ -208,8 +207,9 @@ async fn given_ipc_worker_when_start_bead_then_emits_state_changed_event()
             bead_id: id,
             from,
             to,
+            ..
         } => {
-            assert_eq!(id.as_str(), bead_id);
+            assert_eq!(format!("{id}"), bead_id);
             assert_eq!(*from, BeadState::Ready);
             assert_eq!(*to, BeadState::Running);
         }
@@ -275,7 +275,6 @@ async fn given_ipc_worker_when_cancel_bead_then_emits_state_changed_event()
         },
         5000
     )
-    .await
     {
         Ok(r) => r,
         Err(e) => {
@@ -297,8 +296,9 @@ async fn given_ipc_worker_when_cancel_bead_then_emits_state_changed_event()
             bead_id: id,
             from,
             to,
+            ..
         } => {
-            assert_eq!(id.as_str(), bead_id);
+            assert_eq!(format!("{id}"), bead_id);
             assert_eq!(*from, BeadState::Running);
             assert_eq!(*to, BeadState::Cancelled);
         }
@@ -362,7 +362,6 @@ async fn given_ipc_worker_when_retry_bead_then_transitions_to_ready()
         },
         5000
     )
-    .await
     {
         Ok(r) => r,
         Err(e) => {
@@ -384,8 +383,9 @@ async fn given_ipc_worker_when_retry_bead_then_transitions_to_ready()
             bead_id: id,
             from,
             to,
+            ..
         } => {
-            assert_eq!(id.as_str(), bead_id);
+            assert_eq!(format!("{id}"), bead_id);
             assert_eq!(*from, BeadState::Failed);
             assert_eq!(*to, BeadState::Ready);
         }
@@ -437,7 +437,6 @@ async fn given_ipc_worker_when_start_nonexistent_bead_then_returns_error()
         },
         5000
     )
-    .await
     {
         Ok(r) => r,
         Err(e) => {
@@ -497,7 +496,6 @@ async fn given_ipc_worker_when_start_completed_bead_then_returns_invalid_state_e
         },
         5000
     )
-    .await
     {
         Ok(r) => r,
         Err(e) => {
@@ -589,8 +587,7 @@ async fn given_ipc_worker_when_multiple_bead_operations_then_all_events_emitted(
             reply,
         },
         5000
-    )
-    .await;
+    );
 
     // Cancel bead 2
     let _ = ractor::call_t!(
@@ -602,8 +599,7 @@ async fn given_ipc_worker_when_multiple_bead_operations_then_all_events_emitted(
             reply,
         },
         5000
-    )
-    .await;
+    );
 
     // Wait for both events
     let event1 = match tokio::time::timeout(Duration::from_millis(1000), sub.recv()).await {
@@ -678,7 +674,6 @@ async fn given_ipc_worker_when_start_running_bead_twice_then_succeeds_idempotent
         },
         5000
     )
-    .await
     {
         Ok(r) => r,
         Err(e) => {
@@ -707,7 +702,6 @@ async fn given_ipc_worker_when_start_running_bead_twice_then_succeeds_idempotent
         },
         5000
     )
-    .await
     {
         Ok(r) => r,
         Err(e) => {
@@ -779,7 +773,6 @@ async fn given_ipc_worker_when_cancel_cancelled_bead_then_succeeds_idempotently(
         },
         5000
     )
-    .await
     {
         Ok(r) => r,
         Err(e) => {
@@ -808,7 +801,6 @@ async fn given_ipc_worker_when_cancel_cancelled_bead_then_succeeds_idempotently(
         },
         5000
     )
-    .await
     {
         Ok(r) => r,
         Err(e) => {
@@ -933,8 +925,7 @@ async fn given_ipc_worker_when_bead_operation_then_persists_state_change()
             reply,
         },
         5000
-    )
-    .await;
+    );
 
     // Wait for operation to complete
     tokio::time::sleep(Duration::from_millis(200)).await;

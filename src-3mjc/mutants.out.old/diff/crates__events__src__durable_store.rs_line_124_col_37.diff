@@ -1,0 +1,21 @@
+--- crates/events/src/durable_store.rs
++++ replace == with != in DurableEventStore::get_events
+@@ -116,17 +116,17 @@
+         Ok(event_id)
+     }
+ 
+     /// Get all events for a specific stream (bead).
+     pub fn get_events(&self, stream_id: BeadId) -> Result<Vec<BeadEvent>> {
+         Ok(self
+             .events
+             .iter()
+-            .filter(|e| e.bead_id() == stream_id)
++            .filter(|e| e.bead_id() != /* ~ changed by cargo-mutants ~ */ stream_id)
+             .cloned()
+             .collect())
+     }
+ 
+     /// Get events since a specific event ID (sequence number filtering).
+     pub fn get_events_since(&self, since: EventId) -> Result<Vec<BeadEvent>> {
+         // Find position of the since event
+         let pos = self

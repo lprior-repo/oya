@@ -18,7 +18,13 @@
 #![deny(clippy::panic)]
 #![warn(clippy::pedantic)]
 #![warn(clippy::nursery)]
+#![allow(clippy::missing_inline_in_public_items)]
+#![allow(clippy::unused_self)]
+#![allow(clippy::self_only_used_in_recursion)]
 #![forbid(unsafe_code)]
+#![cfg_attr(test, allow(clippy::expect_used))]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
+#![cfg_attr(test, allow(clippy::panic))]
 
 #[cfg(test)]
 use crate::Task;
@@ -310,8 +316,8 @@ impl ExecutionEngine {
                     // Found cycle - extract the cycle portion
                     let cycle_start = path.iter().position(|id| id == other_id);
                     if let Some(start) = cycle_start {
-                        if start < path.len() {
-                            *path = path[start..].to_vec();
+                        if let Some(slice) = path.get(start..) {
+                            *path = slice.to_vec();
                             path.push(other_id.clone());
                         }
                     }
@@ -603,11 +609,12 @@ impl Default for ExecutionEngine {
 
 #[cfg(test)]
 mod tests {
+
+    #![allow(clippy::assertions_on_constants)]
     #![allow(clippy::unwrap_used)]
     #![allow(clippy::expect_used)]
     #![allow(clippy::panic)]
     #![allow(clippy::indexing_slicing)]
-    #![allow(clippy::assertions_on_constants)]
 
     use super::*;
     use crate::Task;

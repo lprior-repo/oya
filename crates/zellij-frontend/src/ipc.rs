@@ -22,7 +22,7 @@ pub enum IpcError {
     ReceiveFailed(String),
 
     #[error("unexpected response: {0:?}")]
-    UnexpectedResponse(HostMessage),
+    UnexpectedResponse(Box<HostMessage>),
 
     #[error("serialization failed: {0}")]
     SerializationFailed(String),

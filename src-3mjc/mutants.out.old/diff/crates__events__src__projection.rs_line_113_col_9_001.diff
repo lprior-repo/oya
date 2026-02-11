@@ -1,0 +1,21 @@
+--- crates/events/src/projection.rs
++++ replace AllBeadsState::get -> Option<&BeadProjection> with Some(Box::leak(Box::new(Default::default())))
+@@ -105,17 +105,17 @@
+ impl AllBeadsState {
+     /// Create a new empty state.
+     pub fn new() -> Self {
+         Self::default()
+     }
+ 
+     /// Get a bead projection.
+     pub fn get(&self, bead_id: &BeadId) -> Option<&BeadProjection> {
+-        self.beads.get(bead_id)
++        Some(Box::leak(Box::new(Default::default()))) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Get beads in a given state.
+     pub fn in_state(&self, state: BeadState) -> Vec<&BeadProjection> {
+         self.beads
+             .values()
+             .filter(|b| b.current_state == state)
+             .collect()

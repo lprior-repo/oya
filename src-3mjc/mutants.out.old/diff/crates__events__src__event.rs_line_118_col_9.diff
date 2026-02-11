@@ -1,0 +1,28 @@
+--- crates/events/src/event.rs
++++ replace BeadEvent::state_changed_with_reason -> Self with Default::default()
+@@ -110,24 +110,17 @@
+ 
+     /// Create a StateChanged event with a reason.
+     pub fn state_changed_with_reason(
+         bead_id: BeadId,
+         from: BeadState,
+         to: BeadState,
+         reason: impl Into<String>,
+     ) -> Self {
+-        Self::StateChanged {
+-            event_id: EventId::new(),
+-            bead_id,
+-            from,
+-            to,
+-            reason: Some(reason.into()),
+-            timestamp: Utc::now(),
+-        }
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Create a new PhaseCompleted event.
+     pub fn phase_completed(
+         bead_id: BeadId,
+         phase_id: PhaseId,
+         phase_name: impl Into<String>,
+         output: PhaseOutput,

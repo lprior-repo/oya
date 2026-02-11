@@ -20,11 +20,12 @@ pub struct TelemetryConfig {
 }
 
 impl Default for TelemetryConfig {
+    #[inline]
     fn default() -> Self {
         Self {
             service_name: env!("CARGO_PKG_NAME").to_string(),
             service_version: env!("CARGO_PKG_VERSION").to_string(),
-            environment: env::var("OYA_ENV").map_or("development".to_string(), |v| v),
+            environment: env::var("OYA_ENV").unwrap_or_else(|_| "development".to_string()),
             otlp_endpoint: env::var("OTEL_EXPORTER_OTLP_ENDPOINT").ok(),
             log_level: Level::INFO,
             json_logging: true,
@@ -35,6 +36,7 @@ impl Default for TelemetryConfig {
 
 impl TelemetryConfig {
     #[must_use]
+    #[inline]
     pub fn new(service_name: impl Into<String>) -> Self {
         Self {
             service_name: service_name.into(),
@@ -43,41 +45,49 @@ impl TelemetryConfig {
     }
 
     #[must_use]
+    #[inline]
     pub fn with_service_version(mut self, version: impl Into<String>) -> Self {
         self.service_version = version.into();
         self
     }
 
     #[must_use]
+    #[inline]
     pub fn with_environment(mut self, environment: impl Into<String>) -> Self {
         self.environment = environment.into();
         self
     }
 
     #[must_use]
+    #[inline]
     pub fn with_otlp_endpoint(mut self, endpoint: Option<impl Into<String>>) -> Self {
         self.otlp_endpoint = endpoint.map(Into::into);
         self
     }
 
     #[must_use]
-    pub fn with_log_level(mut self, level: Level) -> Self {
+    #[inline]
+    pub const fn with_log_level(mut self, level: Level) -> Self {
         self.log_level = level;
         self
     }
 
     #[must_use]
-    pub fn with_json_logging(mut self, enabled: bool) -> Self {
+    #[inline]
+    pub const fn with_json_logging(mut self, enabled: bool) -> Self {
         self.json_logging = enabled;
         self
     }
 
     #[must_use]
-    pub fn with_otel_enabled(mut self, enabled: bool) -> Self {
+    #[inline]
+    pub const fn with_otel_enabled(mut self, enabled: bool) -> Self {
         self.otel_enabled = enabled;
         self
     }
 
+    #[must_use]
+    #[inline]
     pub fn from_env() -> Self {
         let mut config = Self::default();
 

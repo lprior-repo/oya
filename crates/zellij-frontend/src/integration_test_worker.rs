@@ -498,9 +498,7 @@ impl IntegrationTestWorker {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
-    #![allow(clippy::expect_used)]
-    #![allow(clippy::panic)]
+
     #![allow(clippy::indexing_slicing)]
     #![allow(clippy::arithmetic_side_effects)]
 

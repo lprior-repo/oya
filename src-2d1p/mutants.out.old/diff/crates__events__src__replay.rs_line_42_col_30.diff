@@ -1,0 +1,21 @@
+--- crates/events/src/replay.rs
++++ replace == with != in ReplayProgress::calculate_percent
+@@ -34,17 +34,17 @@
+             percent_complete,
+             eta: None,
+         }
+     }
+ 
+     /// Calculate percentage complete.
+     #[allow(dead_code)]
+     fn calculate_percent(&self) -> f64 {
+-        if self.events_total == 0 {
++        if self.events_total != /* ~ changed by cargo-mutants ~ */ 0 {
+             100.0
+         } else {
+             (self.events_processed as f64 / self.events_total as f64) * 100.0
+         }
+     }
+ 
+     /// Update progress with new event count.
+     #[allow(dead_code)]

@@ -74,8 +74,8 @@ impl CompressionLevel {
 /// ```rust
 /// use oya_workflow::checkpoint::compression::compress;
 ///
-/// let data = b"repetitive data repetitive data";
-/// let compressed = compress(data).unwrap();
+/// let data = b"repetitive data repetitive data repetitive data repetitive data".repeat(10);
+/// let compressed = compress(&data).unwrap();
 /// assert!(compressed.len() < data.len());
 /// ```
 pub fn compress(data: &[u8]) -> Result<Vec<u8>> {

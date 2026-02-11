@@ -109,15 +109,15 @@ pub enum SlotError {
 
 /// State for `AgentSlotActor`.
 pub struct AgentSlotState {
-    bead_id: Option<BeadId>,
-    state_machine: Option<BeadStateMachine>,
-    artifacts: HashMap<StageKind, String>,
-    stage_gate: Option<StageGate>,
-    context_builder: Option<StageContextBuilder>,
-    event_bus: Option<Arc<EventBus>>,
-    project_root: PathBuf,
-    pending_feedback: Option<String>,
-    current_stage: Option<StageKind>,
+    pub bead_id: Option<BeadId>,
+    pub state_machine: Option<BeadStateMachine>,
+    pub artifacts: HashMap<StageKind, String>,
+    pub stage_gate: Option<StageGate>,
+    pub context_builder: Option<StageContextBuilder>,
+    pub event_bus: Option<Arc<EventBus>>,
+    pub project_root: PathBuf,
+    pub pending_feedback: Option<String>,
+    pub current_stage: Option<StageKind>,
 }
 
 impl AgentSlotState {
@@ -150,7 +150,7 @@ impl AgentSlotState {
     }
 
     /// Get bead ID or return error.
-    fn require_bead_id(&self) -> Result<&BeadId, SlotError> {
+    pub fn require_bead_id(&self) -> Result<&BeadId, SlotError> {
         self.bead_id.as_ref().ok_or(SlotError::BeadIdNotAvailable)
     }
 }

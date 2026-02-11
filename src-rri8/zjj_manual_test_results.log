@@ -1,0 +1,18 @@
+=== MANUAL CORRUPTION TEST ===
+Test: Invalid TOML
+Time: Sat Feb  7 02:07:21 PM CST 2026
+
+📍 WORKFLOW STATE: No active session
+
+Next step: zjj spawn <bead-id> "task description"
+           └─ Creates isolated workspace + starts work
+
+Full workflow:
+  1. zjj spawn <bead-id> "desc"  ← YOU ARE HERE
+  2. [do work in isolated workspace]
+  3. zjj sync
+  4. zjj done
+
+Exit code: 0
+=================================
+

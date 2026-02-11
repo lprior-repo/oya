@@ -1,0 +1,9 @@
+# OYA Zellij Plugin Configuration
+layout {
+    default_tab_name: "OYA"
+    pane size=1 borderless=true {
+        plugin location="file:///home/lewis/.config/zellij/plugins/zellij_frontend.wasm" {
+            _plugin_version = "0.91.0"
+        }
+    }
+}

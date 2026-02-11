@@ -1,4 +1,7 @@
 #![forbid(unsafe_code)]
+#![cfg_attr(test, allow(clippy::expect_used))]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
+#![cfg_attr(test, allow(clippy::panic))]
 
 //! OYA Core - Shared domain types and utilities.
 //!

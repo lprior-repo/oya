@@ -1,13 +1,12 @@
 //! Agent pool for managing a collection of agents.
 
 use std::collections::HashMap;
-use std::sync::Arc;
+ use std::sync::Arc;
 
-use itertools::Itertools;
-use tokio::sync::RwLock;
-use tracing::instrument;
+ use itertools::Itertools;
+ use tokio::sync::RwLock;
 
-use super::error::{AgentSwarmError, AgentSwarmResult};
+ use super::error::{AgentSwarmError, AgentSwarmResult};
 use super::handle::{AgentHandle, AgentState};
 use super::health::{HealthConfig, HealthMonitor};
 
@@ -105,6 +104,7 @@ impl AgentPool {
     ///
     /// Returns an error if the agent is already registered or pool is at capacity.
     #[tracing::instrument(skip(self, agent))]
+    #[allow(clippy::unreachable)]
     pub async fn register_agent(&self, agent: AgentHandle) -> AgentSwarmResult<()> {
         let mut agents = self.agents.write().await;
 
@@ -133,6 +133,7 @@ impl AgentPool {
     ///
     /// Returns an error if the agent is not found.
     #[tracing::instrument(skip(self))]
+    #[allow(clippy::unreachable)]
     pub async fn unregister_agent(&self, agent_id: &str) -> AgentSwarmResult<AgentHandle> {
         let mut agents = self.agents.write().await;
 
@@ -186,6 +187,7 @@ impl AgentPool {
     ///
     /// Returns an error if no agents are available.
     #[tracing::instrument(skip(self), fields(bead_id))]
+    #[allow(clippy::unreachable)]
     pub async fn assign_bead(&self, bead_id: &str) -> AgentSwarmResult<String> {
         let mut agents = self.agents.write().await;
 
@@ -225,6 +227,7 @@ impl AgentPool {
     ///
     /// Returns an error if the agent is not found or unavailable.
     #[tracing::instrument(skip(self), fields(bead_id, agent_id))]
+    #[allow(clippy::unreachable)]
     pub async fn assign_bead_to_agent(
         &self,
         bead_id: &str,
@@ -265,7 +268,8 @@ impl AgentPool {
     ///
     /// Returns an error if the agent is not found.
     #[tracing::instrument(skip(self))]
-    pub async fn complete_bead(&self, actor_id: &str) -> AgentSwarmResult<()> {
+    #[allow(clippy::unreachable)]
+    pub async fn complete_bead(&self, agent_id: &str) -> AgentSwarmResult<()> {
         let mut agents = self.agents.write().await;
 
         let agent = agents

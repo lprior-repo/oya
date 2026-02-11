@@ -3,9 +3,12 @@
 //! HTTP API with tower middleware for CORS, tracing, and compression.
 
 #![forbid(unsafe_code)]
-#![forbid(clippy::unwrap_used)]
-#![forbid(clippy::panic)]
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::panic)]
 #![deny(clippy::expect_used)]
+#![cfg_attr(test, allow(clippy::expect_used))]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
+#![cfg_attr(test, allow(clippy::panic))]
 
 use axum::{Json, Router, http::Method, routing::get};
 use serde::{Deserialize, Serialize};
@@ -203,8 +206,11 @@ impl From<std::convert::Infallible> for Error {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
+ mod tests {
+     #![allow(clippy::indexing_slicing)]
+     #![allow(clippy::float_cmp)]
+
+     use super::*;
     use axum::{body::Body, http::StatusCode};
     use http_body_util::BodyExt;
     use tower::ServiceExt;

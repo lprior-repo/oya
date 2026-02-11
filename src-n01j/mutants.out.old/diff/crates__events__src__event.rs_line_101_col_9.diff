@@ -1,0 +1,28 @@
+--- crates/events/src/event.rs
++++ replace BeadEvent::state_changed -> Self with Default::default()
+@@ -93,24 +93,17 @@
+             bead_id,
+             spec,
+             timestamp: Utc::now(),
+         }
+     }
+ 
+     /// Create a new StateChanged event.
+     pub fn state_changed(bead_id: BeadId, from: BeadState, to: BeadState) -> Self {
+-        Self::StateChanged {
+-            event_id: EventId::new(),
+-            bead_id,
+-            from,
+-            to,
+-            reason: None,
+-            timestamp: Utc::now(),
+-        }
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Create a StateChanged event with a reason.
+     pub fn state_changed_with_reason(
+         bead_id: BeadId,
+         from: BeadState,
+         to: BeadState,
+         reason: impl Into<String>,
