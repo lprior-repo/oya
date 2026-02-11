@@ -213,7 +213,7 @@ impl OpencodeClient {
         let mut attempt = 0u32;
 
         loop {
-            attempt += 1;
+            attempt = attempt.saturating_add(1);
 
             match self.execute_request(&url, prompt).await {
                 Ok(result) => return Ok(result),
@@ -222,7 +222,8 @@ impl OpencodeClient {
                         return Err(e);
                     }
 
-                    let delay_ms = BASE_DELAY_MS * 2u64.pow(attempt - 1);
+                    let delay_ms = BASE_DELAY_MS
+                        .saturating_mul(2u64.saturating_pow(attempt.saturating_sub(1) as u32));
                     info!(
                         attempt,
                         delay_ms, "Retrying after error (attempt {}/{})", attempt, MAX_RETRIES
@@ -365,7 +366,7 @@ async fn stream_cli_output(
     let mut sequence = 0u64;
 
     while let Ok(Some(line)) = reader.next_line().await {
-        sequence += 1;
+        sequence = sequence.saturating_add(1);
         let chunk = StreamChunk::text(line, sequence);
         if tx.send(Ok(chunk)).await.is_err() {
             warn!("Stream receiver dropped");
@@ -381,11 +382,11 @@ async fn stream_cli_output(
 
     // Send final chunk
     let final_chunk = if status.success() {
-        StreamChunk::final_chunk("", sequence + 1)
+        StreamChunk::final_chunk("", sequence.saturating_add(1))
     } else {
         StreamChunk::error(
             format!("Process exited with status: {status}"),
-            sequence + 1,
+            sequence.saturating_add(1),
         )
     };
 

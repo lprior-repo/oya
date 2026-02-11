@@ -163,7 +163,7 @@ impl<S: EventStore> EventStore for TracingEventStore<S> {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used, clippy::unwrap_used)]
+
 mod tests {
     use super::*;
     use crate::types::{BeadSpec, BeadState, Complexity};

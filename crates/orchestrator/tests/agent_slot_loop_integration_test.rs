@@ -17,9 +17,6 @@
 //! 5. Feedback propagation on reentry
 
 // Integration tests allow unwrap/panic for assertions
-#![allow(clippy::unwrap_used)]
-#![allow(clippy::expect_used)]
-#![allow(clippy::panic)]
 
 use orchestrator::actors::agent_slot::{
     AgentSlotActorDef, AgentSlotMessage, AgentSlotState, BeadCompletion, SlotError, SlotState,

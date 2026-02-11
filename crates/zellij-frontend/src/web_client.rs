@@ -510,7 +510,6 @@ impl WebClient {
 }
 
 #[cfg(test)]
-#[allow(clippy::panic)]
 mod tests {
     use super::*;
 

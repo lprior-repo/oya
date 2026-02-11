@@ -2,6 +2,8 @@
 
 use std::fmt;
 
+use oya_telemetry::TelemetryError;
+
 /// Result type alias for workflow operations.
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -121,6 +123,14 @@ impl fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
+
+impl From<TelemetryError> for Error {
+    fn from(err: TelemetryError) -> Self {
+        Self::CheckpointFailed {
+            reason: format!("telemetry initialization failed: {}", err),
+        }
+    }
+}
 
 impl Error {
     /// Create a phase failed error.

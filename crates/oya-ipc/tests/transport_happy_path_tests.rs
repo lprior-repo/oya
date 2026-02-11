@@ -2,10 +2,6 @@
 //!
 //! Tests verify the transport layer correctly handles normal operation.
 
-#![allow(clippy::unwrap_used)]
-#![allow(clippy::expect_used)]
-#![allow(clippy::panic)]
-
 use oya_ipc::IpcTransport;
 use serde::{Deserialize, Serialize};
 

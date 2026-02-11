@@ -69,6 +69,10 @@ pub enum Error {
     // Generic I/O error wrapper
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
+
+    // Telemetry errors
+    #[error("telemetry initialization failed: {reason}")]
+    TelemetryInitFailed { reason: String },
 }
 
 impl Error {
@@ -149,6 +153,15 @@ impl Error {
         Self::NotFound {
             resource: resource.into(),
             id: id.into(),
+        }
+    }
+
+    /// Create a telemetry initialization error.
+    #[must_use]
+    #[inline]
+    pub fn telemetry_init_failed(reason: impl Into<String>) -> Self {
+        Self::TelemetryInitFailed {
+            reason: reason.into(),
         }
     }
 }

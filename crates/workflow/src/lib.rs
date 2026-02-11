@@ -66,15 +66,14 @@ pub mod checkpoint;
 /// # Errors
 ///
 /// Returns `Error` if initialization fails.
-pub fn init_telemetry_json() -> Result<(), Box<dyn std::error::Error>> {
-    use oya_telemetry::{TelemetryConfig, TracingGuard};
+pub fn init_telemetry_json() -> Result<()> {
+    use oya_telemetry::TelemetryConfig;
 
     let config = TelemetryConfig::new("oya-workflow")
         .with_json_logging(true)
         .with_log_level(tracing::Level::INFO);
 
-    let _guard = oya_telemetry::init_telemetry(config)
-        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+    let _guard = oya_telemetry::init_telemetry(config).map_err(Error::from)?;
 
     Ok(())
 }

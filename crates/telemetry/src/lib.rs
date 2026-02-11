@@ -16,8 +16,8 @@ pub mod config;
 pub mod error;
 pub mod trace;
 
-use crate::config::TelemetryConfig;
-use crate::error::{TelemetryError, TelemetryResult};
+pub use crate::config::TelemetryConfig;
+pub use crate::error::{TelemetryError, TelemetryResult};
 
 /// Initialize telemetry with the given configuration.
 ///

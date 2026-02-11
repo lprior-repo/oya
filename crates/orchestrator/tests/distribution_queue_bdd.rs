@@ -13,9 +13,6 @@
 //! Then: Beads are queued (not lost or rejected)
 
 // Integration tests allow unwrap/panic for assertions
-#![allow(clippy::unwrap_used)]
-#![allow(clippy::expect_used)]
-#![allow(clippy::panic)]
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;

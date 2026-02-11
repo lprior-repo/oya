@@ -147,9 +147,7 @@ impl AsRef<str> for Slug {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
-    #![allow(clippy::expect_used)]
-    #![allow(clippy::panic)]
+
     #![allow(clippy::uninlined_format_args)]
     #![allow(clippy::manual_let_else)]
     #![allow(clippy::missing_panics_doc)]

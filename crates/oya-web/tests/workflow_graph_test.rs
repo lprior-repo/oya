@@ -5,7 +5,7 @@
 #![forbid(unsafe_code)]
 #![forbid(clippy::unwrap_used)]
 #![forbid(clippy::panic)]
-#![allow(clippy::expect_used)] // Tests are allowed to use expect
+// Tests are allowed to use expect
 
 use axum::{body::Body, http::StatusCode};
 use http_body_util::BodyExt;

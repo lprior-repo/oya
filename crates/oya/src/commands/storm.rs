@@ -553,10 +553,9 @@ async fn run_orchestrator_execution(
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
-    #![allow(clippy::expect_used)]
-    #![allow(clippy::panic)]
-
+    
+    
+    
     use super::*;
 
     #[test]

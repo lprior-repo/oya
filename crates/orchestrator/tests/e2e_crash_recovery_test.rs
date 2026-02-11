@@ -22,9 +22,6 @@
 //! - **Deterministic**: Each test is isolated and repeatable
 
 // Integration tests allow unwrap/panic for assertions
-#![allow(clippy::unwrap_used)]
-#![allow(clippy::expect_used)]
-#![allow(clippy::panic)]
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};

@@ -1,9 +1,5 @@
 //! Chaos tests for SurrealDB connection management.
 
-#![allow(clippy::unwrap_used)]
-#![allow(clippy::expect_used)]
-#![allow(clippy::panic)]
-
 use orchestrator::actors::storage::{
     DatabaseConfig,
     surreal_integration::{

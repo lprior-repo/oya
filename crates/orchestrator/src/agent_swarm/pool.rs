@@ -265,7 +265,7 @@ impl AgentPool {
     ///
     /// Returns an error if the agent is not found.
     #[tracing::instrument(skip(self))]
-    pub async fn complete_bead(&self, actor_id: &str) -> AgentSwarmResult<()> {
+    pub async fn complete_bead(&self, agent_id: &str) -> AgentSwarmResult<()> {
         let mut agents = self.agents.write().await;
 
         let agent = agents

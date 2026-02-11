@@ -8,10 +8,6 @@
 //! - Queries: Request-response messages (LoadState, StateExists, GetStateVersion, ListKeys)
 //! - Resilience: Actor remains responsive after errors
 
-#![allow(clippy::unwrap_used)]
-#![allow(clippy::expect_used)]
-#![allow(clippy::panic)]
-
 use orchestrator::actors::ActorError;
 use orchestrator::actors::storage::{DatabaseConfig, StateManagerActorDef, StateManagerMessage};
 use ractor::{Actor, ActorRef, RpcReplyPort};

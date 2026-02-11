@@ -20,9 +20,9 @@
 #![deny(clippy::panic)]
 
 use oya_events::{
-    connect, ConnectionConfig, DurableEventStore, BeadEvent, BeadId, BeadSpec,
-    BeadState, BeadResult, PhaseId, PhaseOutput, Complexity,
-    replay::{apply_event, apply_events, ApplyContext, EventSourcedState},
+    BeadEvent, BeadId, BeadResult, BeadSpec, BeadState, Complexity, ConnectionConfig,
+    DurableEventStore, PhaseId, PhaseOutput, connect,
+    replay::{ApplyContext, EventSourcedState, apply_event, apply_events},
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -60,7 +60,7 @@ impl EventSourcedState for InMemoryState {
         to: BeadState,
     ) -> Result<(), oya_events::replay::apply::ApplyError> {
         let current_state = self.get_state(bead_id);
-        
+
         match current_state {
             None => {
                 // Bead doesn't exist yet - first state is valid
@@ -80,7 +80,10 @@ impl EventSourcedState for InMemoryState {
         }
     }
 
-    fn apply_event(&mut self, event: &BeadEvent) -> Result<(), oya_events::replay::apply::ApplyError> {
+    fn apply_event(
+        &mut self,
+        event: &BeadEvent,
+    ) -> Result<(), oya_events::replay::apply::ApplyError> {
         let bead_id = event.bead_id();
 
         match event {
@@ -132,8 +135,8 @@ impl ReplayTestContext {
 }
 
 #[tokio::test]
-async fn given_recorded_events_when_replayed_then_state_matches_original(
-) -> Result<(), Box<dyn std::error::Error>> {
+async fn given_recorded_events_when_replayed_then_state_matches_original()
+-> Result<(), Box<dyn std::error::Error>> {
     // ==========================================================================
     // GIVEN: A sequence of recorded events
     // ==========================================================================
@@ -235,8 +238,8 @@ async fn given_recorded_events_when_replayed_then_state_matches_original(
 }
 
 #[tokio::test]
-async fn given_multiple_beads_when_replayed_then_all_states_match(
-) -> Result<(), Box<dyn std::error::Error>> {
+async fn given_multiple_beads_when_replayed_then_all_states_match()
+-> Result<(), Box<dyn std::error::Error>> {
     // GIVEN: Multiple beads with recorded events
     let context = ReplayTestContext::new().await?;
 
@@ -294,7 +297,11 @@ async fn given_multiple_beads_when_replayed_then_all_states_match(
     let mut original_state = InMemoryState::new();
     let mut original_context = ApplyContext::new();
 
-    for event in bead1_events.iter().chain(beead2_events.iter()).chain(beead3_events.iter()) {
+    for event in bead1_events
+        .iter()
+        .chain(bead2_events.iter())
+        .chain(bead3_events.iter())
+    {
         apply_event(&mut original_state, event, &mut original_context)?;
     }
 
@@ -349,8 +356,8 @@ async fn given_multiple_beads_when_replayed_then_all_states_match(
 }
 
 #[tokio::test]
-async fn given_empty_event_log_when_replayed_then_state_remains_empty(
-) -> Result<(), Box<dyn std::error::Error>> {
+async fn given_empty_event_log_when_replayed_then_state_remains_empty()
+-> Result<(), Box<dyn std::error::Error>> {
     // GIVEN: Empty event log
     let context = ReplayTestContext::new().await?;
     let bead_id = BeadId::new();
@@ -373,8 +380,8 @@ async fn given_empty_event_log_when_replayed_then_state_remains_empty(
 }
 
 #[tokio::test]
-async fn given_partial_event_sequence_when_replayed_then_state_is_partially_restored(
-) -> Result<(), Box<dyn std::error::Error>> {
+async fn given_partial_event_sequence_when_replayed_then_state_is_partially_restored()
+-> Result<(), Box<dyn std::error::Error>> {
     // GIVEN: Partial event sequence (not completed)
     let context = ReplayTestContext::new().await?;
 

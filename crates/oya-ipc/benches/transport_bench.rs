@@ -6,9 +6,6 @@
 //! - round-trip 1KB: <5µs
 //! - send() 100KB: <20µs
 
-#![allow(clippy::unwrap_used)]
-#![allow(clippy::expect_used)]
-
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use oya_ipc::IpcTransport;
 use serde::{Deserialize, Serialize};

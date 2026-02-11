@@ -7,10 +7,6 @@
 //! - Worker-based queries work correctly
 //! - No orphaned assignments (via FK constraints if supported)
 
-#![allow(clippy::unwrap_used)]
-#![allow(clippy::expect_used)]
-#![allow(clippy::panic)]
-
 use oya_events::db::{SurrealDbClient, SurrealDbConfig};
 use tempfile::tempdir;
 

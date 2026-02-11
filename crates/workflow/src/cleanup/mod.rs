@@ -254,9 +254,6 @@ pub async fn cleanup_task(config: &CleanupConfig) -> CleanupResult<()> {
 #[cfg(test)]
 mod tests {
     // Allow unwrap/panic in test code for test assertions
-    #![allow(clippy::unwrap_used)]
-    #![allow(clippy::expect_used)]
-    #![allow(clippy::panic)]
 
     use super::*;
 

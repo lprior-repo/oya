@@ -303,11 +303,9 @@ pub fn suggest_completions(partial: &str) -> Vec<String> {
 #[cfg(test)]
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
-    #![allow(clippy::expect_used)]
-    #![allow(clippy::panic)]
-    #![allow(clippy::indexing_slicing)]
-    #![allow(clippy::arithmetic_side_effects)]
+    
+    
+            #![allow(clippy::arithmetic_side_effects)]
 
     use super::*;
 

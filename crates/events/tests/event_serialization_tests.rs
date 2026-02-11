@@ -9,10 +9,6 @@
 //! - Error handling is robust (no panics)
 //! - Serialization size limits are enforced
 
-#![allow(clippy::unwrap_used)]
-#![allow(clippy::expect_used)]
-#![allow(clippy::panic)]
-
 use oya_events::types::{
     BeadId, BeadResult, BeadSpec, BeadState, Complexity, PhaseId, PhaseOutput,
 };

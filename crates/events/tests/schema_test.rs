@@ -6,10 +6,6 @@
 //! - sync_mode='full' is configured for fsync
 //! - Indexes are properly created
 
-#![allow(clippy::unwrap_used)]
-#![allow(clippy::expect_used)]
-#![allow(clippy::panic)]
-
 use oya_events::db::{SurrealDbClient, SurrealDbConfig};
 use tempfile::tempdir;
 

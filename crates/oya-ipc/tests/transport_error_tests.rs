@@ -2,10 +2,6 @@
 //!
 //! Tests verify the transport layer correctly handles error conditions.
 
-#![allow(clippy::unwrap_used)]
-#![allow(clippy::expect_used)]
-#![allow(clippy::panic)]
-
 use oya_ipc::{IpcTransport, TransportError};
 use serde::{Deserialize, Serialize};
 

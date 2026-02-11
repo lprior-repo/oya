@@ -380,7 +380,7 @@ impl IpcTransport<DuplexReader, DuplexWriter> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::expect_used)] // Test assertions need expect()
+    // Test assertions need expect()
     use super::*;
 
     #[test]

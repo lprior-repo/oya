@@ -13,9 +13,6 @@
 //! Then: Unhealthy agent is skipped
 
 // Integration tests allow unwrap/panic for assertions
-#![allow(clippy::unwrap_used)]
-#![allow(clippy::expect_used)]
-#![allow(clippy::panic)]
 
 use orchestrator::agent_swarm::AgentStateLegacy as AgentState;
 use orchestrator::agent_swarm::{AgentHandle, AgentPool, PoolConfig};

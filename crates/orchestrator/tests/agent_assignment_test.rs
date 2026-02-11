@@ -13,9 +13,6 @@
 //! Then: Bead is assigned to agent
 
 // Integration tests allow unwrap/panic for assertions
-#![allow(clippy::unwrap_used)]
-#![allow(clippy::expect_used)]
-#![allow(clippy::panic)]
 
 use orchestrator::agent_swarm::{AgentHandle, AgentPool, PoolConfig};
 
