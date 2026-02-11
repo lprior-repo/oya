@@ -115,11 +115,12 @@ impl WorkloadHistory {
 
     /// Records a completed operation.
     #[allow(clippy::cast_precision_loss)]
+    #[allow(clippy::arithmetic_side_effects)]
     pub fn record_operation(&mut self, duration_secs: f64) -> Result<(), AgentInfoError> {
         if duration_secs < 0.0 {
             return Err(AgentInfoError::NegativeDuration);
         }
-
+        // SAFETY: u64 counter overflow (2^64 operations) is practically impossible in any agent lifetime
         self.operations_executed += 1;
         self.total_execution_secs += duration_secs;
 
@@ -137,7 +138,9 @@ impl WorkloadHistory {
     }
 
     /// Records completion of a bead.
+    #[allow(clippy::arithmetic_side_effects)]
     pub fn record_bead_completion(&mut self) -> Result<(), AgentInfoError> {
+        // SAFETY: Same as above - u64 counter overflow is impossible
         self.beads_completed += 1;
         self.record_operation(0.0)
     }
@@ -200,7 +203,9 @@ impl HealthMetrics {
     }
 
     /// Records a failed health check.
+    #[allow(clippy::arithmetic_side_effects)]
     pub fn record_failure(&mut self) -> Result<(), AgentInfoError> {
+        // SAFETY: u32 counter overflow (2^32 failures) is practically impossible
         self.health_failures += 1;
 
         if self.health_failures >= self.max_health_failures {
@@ -343,6 +348,7 @@ impl AgentInfo {
     /// Records a heartbeat from the agent.
     ///
     /// Updates the `last_heartbeat` timestamp and calculates uptime.
+    #[allow(clippy::arithmetic_side_effects)]
     pub fn record_heartbeat(&mut self) -> Result<(), AgentInfoError> {
         let now = Utc::now();
 
@@ -350,6 +356,7 @@ impl AgentInfo {
             return Err(AgentInfoError::InvalidHeartbeatTime);
         }
 
+        // SAFETY: Time difference in seconds fits in u64 for any realistic agent lifetime
         self.uptime_secs = (now - self.registered_at).num_seconds() as u64;
         self.last_heartbeat = now;
 
