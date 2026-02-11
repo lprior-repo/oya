@@ -145,8 +145,9 @@ pub fn validate_stage_sequence(stages: &[Stage]) -> Result<()> {
 #[must_use]
 pub fn pipeline_stage_edges() -> Vec<(Stage, Stage)> {
     Stage::all()
-        .windows(2)
-        .map(|pair| (pair[0], pair[1]))
+        .iter()
+        .zip(Stage::all().iter().skip(1))
+        .map(|(a, b)| (*a, *b))
         .collect()
 }
 

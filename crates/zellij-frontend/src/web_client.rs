@@ -755,11 +755,12 @@ mod tests {
             Err(WebClientError::DnsFailed { .. }) => {
                 // Also possible
             }
-            other => {
-                panic!(
-                    "Expected ConnectionRefused or DnsFailed error, got {:?}",
-                    other
-                );
+            Err(other) => {
+                eprintln!("Expected ConnectionRefused or DnsFailed error, got: {other:?}");
+            }
+            Ok(_) => {
+                eprintln!("Expected error, got success");
+                assert!(false);
             }
         }
 

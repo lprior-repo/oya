@@ -27,8 +27,9 @@ pub use crate::error::{TelemetryError, TelemetryResult};
 /// # Errors
 ///
 /// Returns `TelemetryError` if initialization fails.
-pub fn init_telemetry(config: TelemetryConfig) -> TelemetryResult<TracingGuard> {
-    let env_filter = create_env_filter(&config);
+#[inline]
+pub fn init_telemetry(config: &TelemetryConfig) -> TelemetryResult<TracingGuard> {
+    let env_filter = create_env_filter(config);
 
     if config.json_logging {
         let subscriber = tracing_subscriber::fmt()
@@ -71,9 +72,8 @@ fn create_env_filter(config: &TelemetryConfig) -> tracing_subscriber::EnvFilter 
 pub struct TracingGuard;
 
 impl Drop for TracingGuard {
-    fn drop(&mut self) {
-        // No-op for now
-    }
+    #[inline]
+    fn drop(&mut self) {}
 }
 
 #[cfg(test)]
@@ -86,7 +86,7 @@ mod tests {
             .with_otel_enabled(false)
             .with_json_logging(false);
 
-        let _guard = init_telemetry(config);
+        let _guard = init_telemetry(&config);
     }
 
     #[test]
@@ -95,7 +95,7 @@ mod tests {
             .with_otel_enabled(false)
             .with_json_logging(true);
 
-        let _guard = init_telemetry(config);
+        let _guard = init_telemetry(&config);
     }
 
     #[test]
@@ -103,7 +103,7 @@ mod tests {
         let config = TelemetryConfig::new("test-service").with_otel_enabled(false);
 
         {
-            let _guard = init_telemetry(config);
+            let _guard = init_telemetry(&config);
         }
     }
 }

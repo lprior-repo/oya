@@ -545,6 +545,7 @@ impl ExecutionEngine {
     ///
     /// # Errors
     /// Returns `ExecutionError` if recovery fails.
+    #[inline]
     pub async fn recover_from_checkpoint(
         &self,
         path: &Path,
@@ -595,11 +596,12 @@ impl ExecutionEngine {
     }
 }
 
-impl Default for ExecutionEngine {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+ impl Default for ExecutionEngine {
+     #[inline]
+     fn default() -> Self {
+         Self::new()
+     }
+ }
 
 #[cfg(test)]
 mod tests {

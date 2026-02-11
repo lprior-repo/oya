@@ -451,9 +451,14 @@ mod tests {
 
         let rendered = aggregator.render();
         assert_eq!(rendered.len(), 1);
-        assert!(rendered[0].contains("ERROR"));
-        assert!(rendered[0].contains("WRKR"));
-        assert!(rendered[0].contains("Error occurred"));
+        let first_entry = if let Some(e) = rendered.get(0) {
+            e
+        } else {
+            panic!("rendered should have at least one entry");
+        };
+        assert!(first_entry.contains("ERROR"));
+        assert!(first_entry.contains("WRKR"));
+        assert!(first_entry.contains("Error occurred"));
     }
 
     #[test]

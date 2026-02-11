@@ -46,7 +46,9 @@ pub use bus::{CircuitBreaker, EventBus, EventBusBuilder, EventPattern, EventSubs
 pub use store::{EventStore, InMemoryEventStore};
 
 // Re-export durable store types
-pub use durable_store::{connect, AppendBatchError, AppendError, ConnectionConfig, DurableEventStore};
+pub use durable_store::{
+    connect, AppendBatchError, AppendError, ConnectionConfig, DurableEventStore,
+};
 
 // Re-export stage types
 pub use stage::{

@@ -303,9 +303,8 @@ pub fn suggest_completions(partial: &str) -> Vec<String> {
 #[cfg(test)]
 #[cfg(test)]
 mod tests {
-    
-    
-            #![allow(clippy::arithmetic_side_effects)]
+
+    #![allow(clippy::arithmetic_side_effects)]
 
     use super::*;
 
@@ -412,12 +411,16 @@ mod tests {
         let input = format!(":filter {long_pattern}");
         let result = parse_command(&input);
         assert!(result.is_err());
-        match result.unwrap_err() {
+        let err = result.unwrap_err();
+        match err {
             ParseError::FilterTooLong { max, actual } => {
                 assert_eq!(max, MAX_FILTER_PATTERN_LENGTH);
                 assert_eq!(actual, MAX_FILTER_PATTERN_LENGTH + 1);
             }
-            _ => panic!("Expected FilterTooLong error"),
+            other => {
+                eprintln!("Expected FilterTooLong error, got: {other:?}");
+                assert!(false);
+            }
         }
     }
 
@@ -497,11 +500,15 @@ mod tests {
     fn test_parse_unknown_command_returns_error() {
         let result = parse_command(":unknown command");
         assert!(result.is_err());
-        match result.unwrap_err() {
+        let err = result.unwrap_err();
+        match err {
             ParseError::UnknownCommand(cmd) => {
                 assert_eq!(cmd, "unknown");
             }
-            _ => panic!("Expected UnknownCommand error"),
+            other => {
+                eprintln!("Expected UnknownCommand error, got: {other:?}");
+                assert!(false);
+            }
         }
     }
 
@@ -510,12 +517,16 @@ mod tests {
         let long_input = format!(":filter {}", "a".repeat(MAX_COMMAND_LENGTH));
         let result = parse_command(&long_input);
         assert!(result.is_err());
-        match result.unwrap_err() {
+        let err = result.unwrap_err();
+        match err {
             ParseError::CommandTooLong { max, actual } => {
                 assert_eq!(max, MAX_COMMAND_LENGTH);
                 assert!(actual > MAX_COMMAND_LENGTH);
             }
-            _ => panic!("Expected CommandTooLong error"),
+            other => {
+                eprintln!("Expected CommandTooLong error, got: {other:?}");
+                assert!(false);
+            }
         }
     }
 

@@ -78,6 +78,7 @@ impl Task {
 
     /// Check if the task is complete.
     #[must_use]
+    #[inline]
     pub fn is_complete(&self) -> bool {
         self.current_stage == Stage::Completed
     }

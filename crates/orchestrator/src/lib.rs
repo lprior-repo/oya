@@ -64,8 +64,8 @@ pub fn init_telemetry_json() -> oya_core::Result<()> {
         .with_json_logging(true)
         .with_log_level(tracing::Level::INFO);
 
-    let _guard = oya_telemetry::init_telemetry(config)
-        .map_err(|e| oya_core::Error::telemetry_init_failed(e.to_string()))?;
+let _guard = oya_telemetry::init_telemetry(&config)
+         .map_err(|e| oya_core::Error::telemetry_init_failed(e.to_string()))?;
 
     Ok(())
 }

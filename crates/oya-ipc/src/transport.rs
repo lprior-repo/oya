@@ -479,11 +479,21 @@ mod tests {
         let client_msg = "from client".to_string();
         let server_msg = "from server".to_string();
 
-        client.send(&client_msg).expect("send should succeed");
-        server.send(&server_msg).expect("send should succeed");
+        if let Err(e) = client.send(&client_msg) {
+                panic!("send failed: {}", e);
+            }
+        if let Err(e) = server.send(&server_msg) {
+                panic!("send failed: {}", e);
+            }
 
-        let server_received = server.recv::<String>().expect("recv should succeed");
-        let client_received = client.recv::<String>().expect("recv should succeed");
+        let server_received = match server.recv::<String>() {
+                Ok(v) => v,
+                Err(e) => panic!("recv failed: {}", e),
+            };
+        let client_received = match client.recv::<String>() {
+                Ok(v) => v,
+                Err(e) => panic!("recv failed: {}", e),
+            };
 
         assert_eq!(server_received, client_msg);
         assert_eq!(client_received, server_msg);
