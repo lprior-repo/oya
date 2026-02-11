@@ -99,7 +99,7 @@ impl EventLog for OrchestratorEventLog {
     fn load_events_after(&self, timestamp: DateTime<Utc>) -> Result<Vec<EventMetadata>, OyaError> {
         let runtime = Self::new_runtime()?;
         let surreal_timestamp = SurrealDatetime::from(timestamp);
-        let query_result = runtime.block_on(
+        let mut result = runtime.block_on(
             self.store
                 .db()
                 .query("SELECT event_id, sequence, timestamp FROM orchestrator_event WHERE timestamp > $timestamp ORDER BY timestamp ASC, sequence ASC")
@@ -107,18 +107,9 @@ impl EventLog for OrchestratorEventLog {
                 .await,
         );
 
-        let rows: Vec<EventRow> = match query_result {
-            Ok(mut rows) => rows
-                .take::<Vec<EventRow>>(0)
-                .map_err(|e: surrealdb::Error| {
-                    OyaError::Internal(format!("failed to extract event rows: {e}"))
-                })?,
-            Err(err) => {
-                return Err(OyaError::Internal(format!(
-                    "failed to query events after timestamp: {err}"
-                )))
-            }
-        };
+        let rows: Vec<EventRow> = result
+            .take(0)
+            .map_err(|e| OyaError::Internal(format!("failed to extract event rows: {e}")))?;
 
         let events = rows
             .into_iter()

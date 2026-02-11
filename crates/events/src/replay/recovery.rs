@@ -17,7 +17,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use crate::error::{ConnectionError, Error, Result};
+use crate::error::{Error, Result};
 use std::time::Duration;
 use tracing::{error, warn};
 
@@ -510,7 +510,7 @@ pub async fn retry_with_policy<T>(
 /// * `event_id` - Identifier of the poison event
 /// * `attempt_count` - Number of retry attempts before DLQ
 /// * `error` - The error that caused the event to be poisoned
-pub async fn log_poison_event(event_id: &str, attempt_count: u32, error: &Error) {
+pub fn log_poison_event(event_id: &str, attempt_count: u32, error: &Error) {
     warn!(
         event_id = %event_id,
         attempt_count = attempt_count,
@@ -529,7 +529,7 @@ pub async fn log_poison_event(event_id: &str, attempt_count: u32, error: &Error)
 /// * `event_id` - Identifier of the failed event
 /// * `attempt_count` - Current retry attempt number
 /// * `error` - The error that caused the retry to fail
-pub async fn log_failed_event(event_id: &str, attempt_count: u32, error: &Error) {
+pub fn log_failed_event(event_id: &str, attempt_count: u32, error: &Error) {
     error!(
         event_id = %event_id,
         attempt_count = attempt_count,
@@ -1603,43 +1603,43 @@ mod tests {
     // log_poison_event TESTS
     // ==========================================================================
 
-    #[tokio::test]
-    async fn test_log_poison_event_returns_unit() {
+    #[test]
+    fn test_log_poison_event_returns_unit() {
         let error = Error::InvalidEvent { reason: "corrupted".to_string() };
 
         // Just ensure it compiles and doesn't panic
-        log_poison_event("evt-1", 3, &error).await;
+        log_poison_event("evt-1", 3, &error);
     }
 
     // ==========================================================================
     // log_failed_event TESTS
     // ==========================================================================
 
-    #[tokio::test]
-    async fn test_log_failed_event_returns_unit() {
+    #[test]
+    fn test_log_failed_event_returns_unit() {
         let error = Error::Connection(ConnectionError::Timeout { timeout_ms: 100 });
 
         // Just ensure it compiles and doesn't panic
-        log_failed_event("evt-2", 1, &error).await;
+        log_failed_event("evt-2", 1, &error);
     }
 
-    #[tokio::test]
-    async fn test_log_failed_event_with_transient_error() {
+    #[test]
+    fn test_log_failed_event_with_transient_error() {
         let error = Error::StoreFailed {
             operation: "append".to_string(),
             reason: "lock contention".to_string(),
         };
 
         // Just ensure it compiles and doesn't panic
-        log_failed_event("evt-3", 2, &error).await;
+        log_failed_event("evt-3", 2, &error);
     }
 
-    #[tokio::test]
-    async fn test_log_failed_event_with_permanent_error() {
+    #[test]
+    fn test_log_failed_event_with_permanent_error() {
         let error = Error::InvalidEvent { reason: "missing field".to_string() };
 
         // Just ensure it compiles and doesn't panic
-        log_failed_event("evt-4", 0, &error).await;
+        log_failed_event("evt-4", 0, &error);
     }
 
     // ==========================================================================
