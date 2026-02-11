@@ -596,12 +596,12 @@ impl ExecutionEngine {
     }
 }
 
- impl Default for ExecutionEngine {
-     #[inline]
-     fn default() -> Self {
-         Self::new()
-     }
- }
+impl Default for ExecutionEngine {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[cfg(test)]
 mod tests {

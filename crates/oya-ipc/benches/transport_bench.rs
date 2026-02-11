@@ -52,9 +52,7 @@ fn bench_roundtrip_1kb(c: &mut Criterion) {
             let msg = create_message_of_size(1024);
 
             client.send(black_box(&msg)).unwrap();
-            let received = server.recv::<TestMessage>().unwrap();
-
-            received
+            server.recv::<TestMessage>().unwrap()
         })
     });
 }

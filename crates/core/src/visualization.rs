@@ -20,8 +20,8 @@
 #![warn(clippy::nursery)]
 #![forbid(unsafe_code)]
 
-use crate::Workflow;
 use crate::execution::{TaskExecutionStatus, WorkflowState};
+use crate::Workflow;
 use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 
@@ -80,6 +80,7 @@ pub enum Color {
 impl Color {
     /// Get ANSI escape code for this color.
     #[must_use]
+    #[inline]
     pub const fn ansi_code(self) -> &'static str {
         match self {
             Self::Yellow => "\x1b[33m",
@@ -95,14 +96,14 @@ impl Color {
 
     /// Get color for task status.
     #[must_use]
+    #[inline]
     pub const fn for_status(status: &TaskExecutionStatus) -> Self {
         match status {
             TaskExecutionStatus::Pending => Self::Yellow,
             TaskExecutionStatus::InProgress => Self::Blue,
             TaskExecutionStatus::Completed => Self::Green,
             TaskExecutionStatus::Failed { .. } => Self::Red,
-            TaskExecutionStatus::RolledBack => Self::Gray,
-            TaskExecutionStatus::Cancelled => Self::Gray,
+            TaskExecutionStatus::RolledBack | TaskExecutionStatus::Cancelled => Self::Gray,
         }
     }
 }
@@ -173,6 +174,7 @@ pub struct WorkflowVisualization {
 impl WorkflowVisualization {
     /// Create a new visualization renderer.
     #[must_use]
+    #[inline]
     pub const fn new() -> Self {
         Self {
             min_width: 80,
@@ -184,6 +186,7 @@ impl WorkflowVisualization {
 
     /// Set minimum terminal dimensions.
     #[must_use]
+    #[inline]
     pub const fn with_min_dimensions(mut self, width: usize, height: usize) -> Self {
         self.min_width = width;
         self.min_height = height;
@@ -192,6 +195,7 @@ impl WorkflowVisualization {
 
     /// Disable color output.
     #[must_use]
+    #[inline]
     pub const fn without_color(mut self) -> Self {
         self.enable_color = false;
         self
@@ -199,6 +203,7 @@ impl WorkflowVisualization {
 
     /// Set the focused task for navigation.
     #[must_use]
+    #[inline]
     pub fn with_focus(mut self, task_id: Option<String>) -> Self {
         self.focused_task = task_id;
         self
@@ -327,7 +332,6 @@ impl WorkflowVisualization {
 
     /// DFS helper for cycle detection.
     fn dfs_cycle_detect(
-        &self,
         workflow: &Workflow,
         task_id: &str,
         visited: &mut HashSet<String>,
@@ -390,7 +394,7 @@ impl WorkflowVisualization {
 
         // DFS from each source to find longest path
         for source in sources {
-            self.find_longest_path(workflow, &source, &mut longest_dist, &mut visited);
+            Self::find_longest_path(workflow, &source, &mut longest_dist, &mut visited);
         }
 
         // Backtrack to find the critical path
@@ -433,7 +437,7 @@ impl WorkflowVisualization {
                 }
 
                 if !visited.contains(other_id) {
-                    self.find_longest_path(workflow, other_id, dist, visited);
+                    Self::find_longest_path(workflow, other_id, dist, visited);
                 }
             }
         }
@@ -464,9 +468,9 @@ impl WorkflowVisualization {
                 break;
             }
 
-            ready.iter().for_each(|id| {
+            for id in ready.iter() {
                 assigned.insert(id.clone());
-            });
+            }
 
             levels.push(ready);
         }
@@ -593,6 +597,7 @@ impl WorkflowVisualization {
     ///
     /// # Errors
     /// This function currently always returns Ok(()) as the renderer is stateless.
+    #[inline]
     pub const fn update_task_status(
         &mut self,
         _task_id: &str,
@@ -614,9 +619,10 @@ impl WorkflowVisualization {
     ///
     /// # Errors
     /// Returns `VisualizationError::InvalidTaskStatus` if navigation fails.
+    #[inline]
     pub fn handle_keyboard_input(
         &mut self,
-        key: Key,
+        key: &Key,
         workflow: &Workflow,
     ) -> Result<InputAction, VisualizationError> {
         match key {
@@ -668,20 +674,20 @@ impl WorkflowVisualization {
 
             Key::Enter => {
                 // Show details for focused task
-                if let Some(ref task_id) = self.focused_task {
-                    Ok(InputAction::ShowDetails(task_id.clone()))
-                } else {
-                    Ok(InputAction::None)
-                }
+                self.focused_task
+                    .as_ref()
+                    .map_or(Ok(InputAction::None), |task_id| {
+                        Ok(InputAction::ShowDetails(task_id.clone()))
+                    })
             }
 
             Key::Details => {
                 // 'd' key - same as Enter
-                if let Some(ref task_id) = self.focused_task {
-                    Ok(InputAction::ShowDetails(task_id.clone()))
-                } else {
-                    Ok(InputAction::None)
-                }
+                self.focused_task
+                    .as_ref()
+                    .map_or(Ok(InputAction::None), |task_id| {
+                        Ok(InputAction::ShowDetails(task_id.clone()))
+                    })
             }
 
             Key::Quit | Key::Escape => Ok(InputAction::Quit),

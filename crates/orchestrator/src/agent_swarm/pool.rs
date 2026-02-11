@@ -100,12 +100,13 @@ impl AgentPool {
     }
 
     /// Register a new agent in the pool.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the agent is already registered or pool is at capacity.
-    #[tracing::instrument(skip(self, agent))]
-    pub async fn register_agent(&self, agent: AgentHandle) -> AgentSwarmResult<()> {
+     ///
+     /// # Errors
+     ///
+     /// Returns an error if the agent is already registered or pool is at capacity.
+     #[tracing::instrument(skip(self, agent))]
+     #[allow(clippy::unreachable)]
+     pub async fn register_agent(&self, agent: AgentHandle) -> AgentSwarmResult<()> {
         let mut agents = self.agents.write().await;
 
         if agents.len() >= self.config.max_agents {
@@ -127,13 +128,14 @@ impl AgentPool {
         Ok(())
     }
 
-    /// Unregister an agent from the pool.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the agent is not found.
-    #[tracing::instrument(skip(self))]
-    pub async fn unregister_agent(&self, agent_id: &str) -> AgentSwarmResult<AgentHandle> {
+   /// Unregister an agent from the pool.
+     ///
+     /// # Errors
+     ///
+     /// Returns an error if the agent is not found.
+     #[tracing::instrument(skip(self))]
+     #[allow(clippy::unreachable)]
+     pub async fn unregister_agent(&self, agent_id: &str) -> AgentSwarmResult<AgentHandle> {
         let mut agents = self.agents.write().await;
 
         agents
@@ -185,8 +187,9 @@ impl AgentPool {
     /// # Errors
     ///
     /// Returns an error if no agents are available.
-    #[tracing::instrument(skip(self), fields(bead_id))]
-    pub async fn assign_bead(&self, bead_id: &str) -> AgentSwarmResult<String> {
+     #[tracing::instrument(skip(self), fields(bead_id))]
+     #[allow(clippy::unreachable)]
+     pub async fn assign_bead(&self, bead_id: &str) -> AgentSwarmResult<String> {
         let mut agents = self.agents.write().await;
 
         // Find first available agent using deterministic ordering (sorted by ID)
@@ -224,12 +227,13 @@ impl AgentPool {
     /// # Errors
     ///
     /// Returns an error if the agent is not found or unavailable.
-    #[tracing::instrument(skip(self), fields(bead_id, agent_id))]
-    pub async fn assign_bead_to_agent(
-        &self,
-        bead_id: &str,
-        agent_id: &str,
-    ) -> AgentSwarmResult<()> {
+     #[tracing::instrument(skip(self), fields(bead_id, agent_id))]
+     #[allow(clippy::unreachable)]
+     pub async fn assign_bead_to_agent(
+         &self,
+         bead_id: &str,
+         agent_id: &str,
+     ) -> AgentSwarmResult<()> {
         let mut agents = self.agents.write().await;
 
         let agent = agents
@@ -261,11 +265,12 @@ impl AgentPool {
 
     /// Mark a bead as completed on an agent.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the agent is not found.
-    #[tracing::instrument(skip(self))]
-    pub async fn complete_bead(&self, agent_id: &str) -> AgentSwarmResult<()> {
+   /// # Errors
+     ///
+     /// Returns an error if the agent is not found.
+     #[tracing::instrument(skip(self))]
+     #[allow(clippy::unreachable)]
+     pub async fn complete_bead(&self, agent_id: &str) -> AgentSwarmResult<()> {
         let mut agents = self.agents.write().await;
 
         let agent = agents
