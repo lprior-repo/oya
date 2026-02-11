@@ -8,7 +8,7 @@
 // NOTE: IPC integration with oya-orchestrator will be added in a future bead
 
 use crate::ipc::IpcClient;
-use crate::layout::Layout;
+use crate::layout::{Layout, PaneType};
 use crate::render::Renderer;
 use crate::state::StateManager;
 use crate::timer::{RefreshTimer, TimerConfig};
@@ -453,40 +453,40 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_stage_symbol_returns_running_for_in_progress_stage()
-    -> Result<(), Box<dyn std::error::Error>> {
+    fn test_stage_symbol_returns_running_for_in_progress_stage(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let result = stage_symbol_from_status("in_progress", Some("implement"));
         assert_eq!(result, '◐');
         Ok(())
     }
 
     #[test]
-    fn test_stage_symbol_returns_complete_for_passed_status()
-    -> Result<(), Box<dyn std::error::Error>> {
+    fn test_stage_symbol_returns_complete_for_passed_status(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let result = stage_symbol_from_status("passed", None);
         assert_eq!(result, '●');
         Ok(())
     }
 
     #[test]
-    fn test_stage_symbol_returns_failed_for_failed_status_with_stage()
-    -> Result<(), Box<dyn std::error::Error>> {
+    fn test_stage_symbol_returns_failed_for_failed_status_with_stage(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let result = stage_symbol_from_status("failed", Some("validate: 3 tests failed"));
         assert_eq!(result, '✗');
         Ok(())
     }
 
     #[test]
-    fn test_stage_symbol_returns_pending_for_created_status()
-    -> Result<(), Box<dyn std::error::Error>> {
+    fn test_stage_symbol_returns_pending_for_created_status(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let result = stage_symbol_from_status("created", None);
         assert_eq!(result, '○');
         Ok(())
     }
 
     #[test]
-    fn test_stage_symbol_returns_question_mark_for_unknown_stage_name()
-    -> Result<(), Box<dyn std::error::Error>> {
+    fn test_stage_symbol_returns_question_mark_for_unknown_stage_name(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let result = stage_symbol_from_status("in_progress", Some("unknown-stage"));
         assert_eq!(result, '?');
         Ok(())
@@ -1010,13 +1010,11 @@ mod tests {
 
         assert!(result.is_ok());
         assert!(plugin.auto_save_timer.is_some());
-        assert!(
-            plugin
-                .auto_save_timer
-                .as_ref()
-                .map(|t| t.is_running())
-                .unwrap_or(false)
-        );
+        assert!(plugin
+            .auto_save_timer
+            .as_ref()
+            .map(|t| t.is_running())
+            .unwrap_or(false));
         Ok(())
     }
 
@@ -1066,13 +1064,11 @@ mod tests {
         // If save succeeds, status message should be updated
         if result.is_ok() {
             assert!(plugin.status_message.is_some());
-            assert!(
-                plugin
-                    .status_message
-                    .as_ref()
-                    .map(|msg| msg.contains("State saved at"))
-                    .unwrap_or(false)
-            );
+            assert!(plugin
+                .status_message
+                .as_ref()
+                .map(|msg| msg.contains("State saved at"))
+                .unwrap_or(false));
         }
         // If save fails, that's acceptable in test environment
         Ok(())
