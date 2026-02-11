@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{RwLock, Semaphore, mpsc};
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 use crate::swarm::error::{BeadWorkState, SwarmError, SwarmResult};
 
@@ -220,7 +220,7 @@ impl WorkQueue {
             reason: e.to_string(),
         })?;
 
-        let mut inner = self.inner.write().await;
+        let inner = self.inner.write().await;
 
         // Find first pending bead
         let bead_id = inner

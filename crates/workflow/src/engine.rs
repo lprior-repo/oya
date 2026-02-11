@@ -8,7 +8,7 @@ use chrono::Utc;
 use itertools::Itertools;
 use std::env;
 
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::error::{Error, Result};
 use crate::handler::HandlerRegistry;

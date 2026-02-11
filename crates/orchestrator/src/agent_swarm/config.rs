@@ -49,7 +49,7 @@ impl AgentConfig {
 
     /// Get environment variables.
     #[must_use]
-    pub fn env_vars(&self) -> &HashMap<String, String> {
+    pub const fn env_vars(&self) -> &HashMap<String, String> {
         &self.env_vars
     }
 
@@ -119,7 +119,7 @@ impl AgentConfigBuilder {
     ///
     /// # Errors
     ///
-    /// Returns error if executable or working_dir not set, or if executable
+    /// Returns error if executable or `working_dir` not set, or if executable
     /// does not exist at the specified path.
     pub fn build(self) -> super::AgentSwarmResult<AgentConfig> {
         let executable = self

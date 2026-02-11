@@ -223,7 +223,7 @@ impl OpencodeClient {
                     }
 
                     let delay_ms = BASE_DELAY_MS
-                        .saturating_mul(2u64.saturating_pow(attempt.saturating_sub(1) as u32));
+                        .saturating_mul(2u64.saturating_pow(attempt.saturating_sub(1)));
                     info!(
                         attempt,
                         delay_ms, "Retrying after error (attempt {}/{})", attempt, MAX_RETRIES

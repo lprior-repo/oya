@@ -47,14 +47,14 @@ async fn test_sticky_fallback_when_previous_worker_busy() {
     let first_assignment = pool.assign_bead(bead_id).await.unwrap();
     assert_eq!(first_assignment, "agent-a");
 
-    // Agent-a is still working with a different bead
-    pool.assign_bead_to_agent("other-bead-1", "agent-a")
-        .await
-        .unwrap();
-
+    // Agent-a is still working with bead-fallback-1
     // Verify agent-a is working
     let stats = pool.stats().await;
     assert_eq!(stats.working, 1, "Agent-a should be working");
+
+    // Attempting to assign to busy agent should fail
+    let busy_result = pool.assign_bead_to_agent("other-bead-1", "agent-a").await;
+    assert!(busy_result.is_err(), "Assigning to busy agent should fail");
 
     // Re-assign same bead - should fallback to agent-b (agent-a is busy)
     let second_assignment = pool.assign_bead(bead_id).await.unwrap();

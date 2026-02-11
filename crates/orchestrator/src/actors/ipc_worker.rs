@@ -60,7 +60,6 @@ use crate::ipc_messages::{
 use crate::actors::SchedulerState;
 use crate::actors::errors::ActorError;
 use crate::agent_swarm::{AgentPool, PoolStats};
-use crate::persistence::{BeadRecord, StoreConfig};
 use crate::persistence::{BeadState, OrchestratorStore};
 
 /// IPC worker actor definition.

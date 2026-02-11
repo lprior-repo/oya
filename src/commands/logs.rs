@@ -9,7 +9,7 @@
 //!
 //! Provides centralized log viewing with filtering and tailing capabilities.
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use chrono::{DateTime, Utc};
 use clap::Parser;
 use itertools::Itertools;
@@ -51,7 +51,7 @@ pub struct LogsArgs {
     #[arg(long, default_value = "0")]
     pub lines: usize,
 
-    /// Log directory path (default: from OYA_LOG_DIR or ./logs)
+    /// Log directory path (default: from `OYA_LOG_DIR` or ./logs)
     #[arg(long)]
     pub log_dir: Option<PathBuf>,
 }
@@ -267,21 +267,21 @@ fn filter_entries(entries: Vec<LogEntry>, args: &LogsArgs) -> Vec<LogEntry> {
         .filter(|entry| {
             // Filter by bead
             if let Some(ref bead) = args.bead {
-                if entry.source.bead.as_ref().map_or(true, |b| b != bead) {
+                if entry.source.bead.as_ref() != Some(bead) {
                     return false;
                 }
             }
 
             // Filter by stage
             if let Some(ref stage) = args.stage {
-                if entry.source.stage.as_ref().map_or(true, |s| s != stage) {
+                if entry.source.stage.as_ref() != Some(stage) {
                     return false;
                 }
             }
 
             // Filter by agent
             if let Some(ref agent) = args.agent {
-                if entry.source.agent.as_ref().map_or(true, |a| a != agent) {
+                if entry.source.agent.as_ref() != Some(agent) {
                     return false;
                 }
             }
@@ -353,7 +353,7 @@ async fn read_log_directory(log_dir: &PathBuf) -> Result<Vec<LogEntry>, LogsErro
         let path = entry.path();
 
         // Only process .log files
-        if path.extension().map_or(true, |e| e != "log") {
+        if path.extension().is_none_or(|e| e != "log") {
             continue;
         }
 
