@@ -25,7 +25,6 @@
 
 // Zellij plugin modules (from oya-ui)
 pub mod components;
-pub mod exports;
 pub mod ipc;
 pub mod ipc_zellij;
 pub mod layout;
@@ -51,7 +50,7 @@ pub use plugin::{OyaPlugin, PluginEvent, PluginInfo, Size};
 pub use render::Renderer;
 
 // Re-exports for convenience - UI components
-pub use correlation::{CorrelationContext, RequestId, keys};
+pub use correlation::{keys, CorrelationContext, RequestId};
 pub use health::{
     ComponentHealth, HealthError, ResourceUsage, SystemHealthSnapshot, SystemStatus,
     ThroughputMetrics,
@@ -63,7 +62,7 @@ pub use integration_test_worker::{
 pub use ipc_zellij::{ZellijIpcClient, ZellijStdin, ZellijStdout};
 pub use log::{LogAggregator, LogEntry, LogLevel, LogSource};
 pub use metrics::{AgentMetrics, MetricsSnapshot, PoolMetrics};
-pub use state::{STATE_VERSION, StateError, StateManager, StateSnapshot};
+pub use state::{StateError, StateManager, StateSnapshot, STATE_VERSION};
 pub use timer::{RefreshTimer, TimerConfig, TimerError, TimerEvent, TimerState};
 
 // Web client is not available in WASM builds

@@ -2,6 +2,8 @@
 //!
 //! Provides a type-safe HTTP client for making requests to the oya-web API
 //! with comprehensive error handling for network issues, timeouts, and HTTP errors.
+
+#![cfg(not(target_arch = "wasm32"))]
 #![cfg_attr(test, allow(clippy::panic))]
 
 use std::collections::BTreeMap;

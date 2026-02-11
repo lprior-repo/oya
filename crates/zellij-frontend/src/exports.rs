@@ -53,19 +53,11 @@ pub unsafe extern "C" fn load(config: *const u8, config_len: usize) {
         config: config_value,
     };
 
-    // Create plugin instance
-    match OyaPlugin::new() {
-        Ok(mut plugin) => {
-            // Initialize plugin with info
-            let _ = plugin.start(info);
-            unsafe {
-                PLUGIN = Some(plugin);
-            }
-        }
-        Err(e) => {
-            // Log error but continue with minimal state
-            eprintln!("Plugin initialization error: {}", e);
-        }
+    // Create plugin instance (never panics, always returns a valid plugin)
+    let mut plugin = OyaPlugin::new();
+    let _ = plugin.start(info);
+    unsafe {
+        PLUGIN = Some(plugin);
     }
 }
 

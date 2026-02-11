@@ -157,28 +157,32 @@ pub enum BeadState {
     Paused,
     /// Terminal: success or failure.
     Completed,
+    /// Failed due to error.
+    Failed,
+    /// Cancelled by user.
+    Cancelled,
 }
 
 impl BeadState {
     /// Check if this is a terminal state.
     #[must_use]
     pub const fn is_terminal(&self) -> bool {
-        matches!(self, Self::Completed)
+        matches!(self, Self::Completed | Self::Failed | Self::Cancelled)
     }
 
     /// Check if transition to target state is valid.
     #[must_use]
     pub const fn can_transition_to(&self, target: Self) -> bool {
-        use BeadState::{
-            BackingOff, Completed, Paused, Pending, Ready, Running, Scheduled, Suspended,
-        };
+        use BeadState::{BackingOff, Paused, Pending, Ready, Running, Scheduled, Suspended};
         matches!(
             (self, target),
             // From Pending
             (Pending | Ready, Scheduled)
                 | (
                     Pending | Scheduled | Ready | Running | Suspended | BackingOff | Paused,
-                    Completed
+                    crate::BeadState::Completed
+                        | crate::BeadState::Failed
+                        | crate::BeadState::Cancelled
                 )
                 | (Scheduled, Ready | Pending)
                 | (Ready | Suspended | BackingOff | Paused, Running)
@@ -200,7 +204,9 @@ impl BeadState {
             Suspended => vec![Running, Completed],
             BackingOff => vec![Running, Completed],
             Paused => vec![Running, Completed],
-            Completed => vec![],
+            crate::BeadState::Cancelled
+            | crate::BeadState::Failed
+            | crate::BeadState::Completed => vec![],
         }
     }
 }
@@ -216,6 +222,8 @@ impl std::fmt::Display for BeadState {
             Self::BackingOff => "backing_off",
             Self::Paused => "paused",
             Self::Completed => "completed",
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
         };
         write!(f, "{s}")
     }

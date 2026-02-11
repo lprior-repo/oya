@@ -10,8 +10,10 @@ use crate::durable_store::DurableEventStore;
 use crate::error::Error;
 use chrono::{DateTime, Utc};
 
-use super::resume::{CheckpointData, CheckpointId, EventLog, EventMetadata, ReplayState, ResumeError};
-use super::resume::{CheckpointStore as ResumeCheckpointStore};
+use super::resume::CheckpointStore as ResumeCheckpointStore;
+use super::resume::{
+    CheckpointData, CheckpointId, EventLog, EventMetadata, ReplayState, ResumeError,
+};
 
 /// Checkpoint-based resume error for EventSourcingReplay.
 #[derive(Debug, thiserror::Error, Clone, PartialEq, Eq)]
@@ -137,7 +139,8 @@ impl EventSourcingReplay {
         let checkpoint_store = CheckpointStoreImpl::new(self.store.clone());
         let event_log = EventLogImpl::new(self.store.clone());
 
-        let result = super::resume::resume_from_checkpoint(checkpoint_id, &checkpoint_store, &event_log);
+        let result =
+            super::resume::resume_from_checkpoint(checkpoint_id, &checkpoint_store, &event_log);
 
         result.map_err(|e| ReplayResumeError::from(e))
     }
@@ -158,21 +161,21 @@ impl CheckpointStoreImpl {
     }
 }
 
- impl ResumeCheckpointStore for CheckpointStoreImpl {
-     fn load_checkpoint(
-         &self,
-         #[allow(unused_variables)] checkpoint_id: &CheckpointId,
-     ) -> Result<Option<(CheckpointData, DateTime<Utc>)>, Error> {
+impl ResumeCheckpointStore for CheckpointStoreImpl {
+    fn load_checkpoint(
+        &self,
+        #[allow(unused_variables)] checkpoint_id: &CheckpointId,
+    ) -> Result<Option<(CheckpointData, DateTime<Utc>)>, Error> {
         // For now, return Ok(None) since we don't have checkpoint data stored separately
         // This will be implemented when we add proper checkpoint storage
         Ok(None)
     }
 
     fn validate_timestamp(
-         &self,
-         #[allow(unused_variables)] checkpoint_id: &CheckpointId,
-         #[allow(unused_variables)] checkpoint_timestamp: DateTime<Utc>,
-     ) -> Result<bool, Error> {
+        &self,
+        #[allow(unused_variables)] checkpoint_id: &CheckpointId,
+        #[allow(unused_variables)] checkpoint_timestamp: DateTime<Utc>,
+    ) -> Result<bool, Error> {
         // For now, return Ok(true) - validation can be implemented later
         Ok(true)
     }
@@ -191,7 +194,10 @@ impl EventLogImpl {
 }
 
 impl EventLog for EventLogImpl {
-     fn load_events_after(&self, #[allow(unused_variables)] timestamp: DateTime<Utc>) -> Result<Vec<EventMetadata>, Error> {
+    fn load_events_after(
+        &self,
+        #[allow(unused_variables)] timestamp: DateTime<Utc>,
+    ) -> Result<Vec<EventMetadata>, Error> {
         // For now, return empty vector - this will be implemented with proper db access
         Ok(Vec::new())
     }

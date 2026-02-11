@@ -8,7 +8,7 @@
 // NOTE: IPC integration with oya-orchestrator will be added in a future bead
 
 use crate::ipc::IpcClient;
-use crate::layout::{Layout, PaneType};
+use crate::layout::Layout;
 use crate::render::Renderer;
 use crate::state::StateManager;
 use crate::timer::{RefreshTimer, TimerConfig};
@@ -599,7 +599,7 @@ mod tests {
 
     #[test]
     fn test_plugin_restores_state_from_snapshot() -> Result<(), Box<dyn std::error::Error>> {
-        let mut plugin = OyaPlugin::new()?;
+        let mut plugin = OyaPlugin::new();
 
         // Create a snapshot with specific state
         let snapshot = crate::state::StateSnapshot {
@@ -637,7 +637,7 @@ mod tests {
     #[test]
     fn test_plugin_restore_clamps_invalid_selected_index() -> Result<(), Box<dyn std::error::Error>>
     {
-        let mut plugin = OyaPlugin::new()?;
+        let mut plugin = OyaPlugin::new();
 
         // Create snapshot with invalid selected_index (out of bounds)
         let mut snapshot = crate::state::StateSnapshot {
@@ -665,7 +665,7 @@ mod tests {
     #[test]
     fn test_plugin_restore_rejects_incompatible_version() -> Result<(), Box<dyn std::error::Error>>
     {
-        let mut plugin = OyaPlugin::new()?;
+        let mut plugin = OyaPlugin::new();
 
         // Create snapshot with incompatible version
         let snapshot = crate::state::StateSnapshot {
@@ -693,7 +693,7 @@ mod tests {
 
     #[test]
     fn test_plugin_create_snapshot() -> Result<(), Box<dyn std::error::Error>> {
-        let plugin = OyaPlugin::new()?;
+        let plugin = OyaPlugin::new();
 
         // Create snapshot
         let snapshot = plugin.create_snapshot();
@@ -712,7 +712,7 @@ mod tests {
     #[test]
     fn test_plugin_restore_preserves_task_stage_history() -> Result<(), Box<dyn std::error::Error>>
     {
-        let mut plugin = OyaPlugin::new()?;
+        let mut plugin = OyaPlugin::new();
 
         // Set up task with stage history
         let mut task = TaskRow::new("test-task", "in_progress", "P0", "Rust", "task/test");
@@ -755,7 +755,7 @@ mod tests {
 
     #[test]
     fn test_help_overlay_toggle() -> Result<(), Box<dyn std::error::Error>> {
-        let mut plugin = OyaPlugin::new()?;
+        let mut plugin = OyaPlugin::new();
 
         // Initially not in help overlay
         assert_eq!(plugin.state, PluginState::Starting);
@@ -775,7 +775,7 @@ mod tests {
 
     #[test]
     fn test_help_overlay_preconditions() -> Result<(), Box<dyn std::error::Error>> {
-        let mut plugin = OyaPlugin::new()?;
+        let mut plugin = OyaPlugin::new();
 
         // Test terminal too small error
         plugin.size = Size { rows: 5, cols: 10 };
@@ -794,30 +794,31 @@ mod tests {
 
     #[test]
     fn test_get_keybindings_for_all_panes() -> Result<(), Box<dyn std::error::Error>> {
-        let plugin = OyaPlugin::new()?;
+        let plugin = OyaPlugin::new();
 
         // Test BeadList keybindings
-        let bead_list_bindings = plugin.get_keybindings_for_pane(PaneType::BeadList);
+        let bead_list_bindings = plugin.get_keybindings_for_pane(crate::layout::PaneType::BeadList);
         assert!(!bead_list_bindings.is_empty());
         assert!(bead_list_bindings.iter().any(|(key, _)| *key == '?'));
         assert!(bead_list_bindings.iter().any(|(key, _)| *key == '\x1b'));
 
         // Test BeadDetail keybindings
-        let bead_detail_bindings = plugin.get_keybindings_for_pane(PaneType::BeadDetail);
+        let bead_detail_bindings =
+            plugin.get_keybindings_for_pane(crate::layout::PaneType::BeadDetail);
         assert!(!bead_detail_bindings.is_empty());
         assert!(bead_detail_bindings.iter().any(|(key, _)| *key == '?'));
         assert!(bead_detail_bindings.iter().any(|(key, _)| *key == '\x1b'));
 
         // Test PipelineView keybindings
-        let pipeline_view_bindings = plugin.get_keybindings_for_pane(PaneType::PipelineView);
+        let pipeline_view_bindings =
+            plugin.get_keybindings_for_pane(crate::layout::PaneType::PipelineView);
         assert!(!pipeline_view_bindings.is_empty());
         assert!(pipeline_view_bindings.iter().any(|&(key, _)| key == '?'));
-        assert!(pipeline_view_bindings
-            .iter()
-            .any(|(key, _)| *key == '\x1b'));
+        assert!(pipeline_view_bindings.iter().any(|(key, _)| *key == '\x1b'));
 
         // Test WorkflowGraph keybindings
-        let workflow_graph_bindings = plugin.get_keybindings_for_pane(PaneType::WorkflowGraph);
+        let workflow_graph_bindings =
+            plugin.get_keybindings_for_pane(crate::layout::PaneType::WorkflowGraph);
         assert!(!workflow_graph_bindings.is_empty());
         assert!(workflow_graph_bindings.iter().any(|(key, _)| *key == '?'));
         assert!(workflow_graph_bindings
@@ -829,7 +830,7 @@ mod tests {
 
     #[test]
     fn test_multiple_saves_update_timestamp() -> Result<(), Box<dyn std::error::Error>> {
-        let mut plugin = OyaPlugin::new()?;
+        let mut plugin = OyaPlugin::new();
 
         // First save
         let result1 = plugin.save_state_now();
@@ -855,7 +856,7 @@ mod tests {
 
     #[test]
     fn test_auto_save_timer_is_running_after_init() -> Result<(), Box<dyn std::error::Error>> {
-        let mut plugin = OyaPlugin::new()?;
+        let mut plugin = OyaPlugin::new();
 
         let _ = plugin.init_auto_save(30);
 
@@ -877,7 +878,7 @@ mod tests {
         let state_file = temp_dir.join("test-state.json");
 
         // Create plugin and set up specific state
-        let mut plugin1 = OyaPlugin::new()?;
+        let mut plugin1 = OyaPlugin::new();
 
         // Modify state to test restoration
         plugin1.selected_index = 2;
@@ -891,7 +892,7 @@ mod tests {
         // Verify save succeeded (or skip if filesystem unavailable)
         if save_result.is_ok() {
             // Create a new plugin instance
-            let mut plugin2 = OyaPlugin::new()?;
+            let mut plugin2 = OyaPlugin::new();
 
             // Load state
             let load_result = state_manager.load_state();
@@ -937,31 +938,23 @@ pub enum PluginState {
 }
 
 impl OyaPlugin {
-    /// Create a new OYA plugin instance
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if layout calculation fails
-    pub fn new() -> PluginResult<Self> {
-        // Default terminal size (will be updated on first event)
-        let size = Size { rows: 24, cols: 80 };
+    pub fn new() -> Self {
+        let default_size = Size { rows: 24, cols: 80 };
 
-        // Calculate initial layout
-        let layout = Layout::calculate_for_terminal(size.rows, size.cols)
-            .map_err(|e| PluginError::LayoutError(e.to_string()))?;
+        let layout = Layout::calculate_for_terminal(default_size.rows, default_size.cols)
+            .unwrap_or_else(|_| Layout::new_3_pane());
 
         let renderer = Renderer::new();
 
-        // Create placeholder task data for rendering
         let tasks = vec![
             TaskRow::new("task-3ax5", "in_progress", "P1", "Rust", "task/task-3ax5"),
             TaskRow::new("task-1xvj", "created", "P1", "Rust", "task/task-1xvj"),
             TaskRow::new("task-1k71", "created", "P2", "Rust", "task/task-1k71"),
         ];
 
-        Ok(Self {
+        Self {
             layout,
-            size,
+            size: default_size,
             renderer,
             focused_pane: crate::layout::PaneType::BeadList,
             state: PluginState::Starting,
@@ -972,27 +965,26 @@ impl OyaPlugin {
             auto_save_timer: None,
             last_save_timestamp: None,
             last_timer_tick_ms: None,
-        })
+        }
     }
 
     /// Start the plugin
     ///
     /// # Errors
     ///
-    /// Returns an error if initialization fails
-    pub fn start(&mut self, info: PluginInfo) -> PluginResult<String> {
+    pub fn start(&mut self, info: PluginInfo) {
         self.size = info.size;
 
-        // Recalculate layout for actual terminal size
+        // Recalculate layout for actual terminal size (never panics)
         self.layout = Layout::calculate_for_terminal(self.size.rows, self.size.cols)
-            .map_err(|e| PluginError::LayoutError(e.to_string()))?;
+            .unwrap_or_else(|_| Layout::new_3_pane());
 
         // Attempt to restore previous state
         let state_manager = crate::state::StateManager::default();
         match state_manager.load_state() {
             Ok(Some(snapshot)) => {
                 // Restore state from snapshot
-                self.restore_from_snapshot(snapshot)?;
+                let _ = self.restore_from_snapshot(snapshot);
                 self.status_message = Some("State restored from disk".to_string());
             }
             Ok(None) => {
@@ -1006,7 +998,7 @@ impl OyaPlugin {
         }
 
         self.state = PluginState::Running;
-        self.connect_ipc(&info.config)?;
+        let _ = self.connect_ipc(&info.config);
         let _ = self.refresh_tasks();
 
         // Initialize auto-save timer from config
@@ -1018,27 +1010,23 @@ impl OyaPlugin {
         let _ = self.init_auto_save(interval_secs);
 
         // Render initial UI
-        match self.render()? {
-            Some(rendered) => Ok(rendered),
-            None => Ok(String::from("OYA UI Plugin started")),
-        }
+        let _ = self.render();
     }
 
     /// Handle a plugin event
     ///
     /// # Errors
     ///
-    /// Returns an error if event handling fails
     pub fn handle_event(&mut self, event: PluginEvent) -> PluginResult<Option<String>> {
         match event {
             PluginEvent::Start { info } => {
-                let rendered = self.start(info)?;
-                Ok(Some(rendered))
+                self.start(info);
+                self.render()
             }
             PluginEvent::Resize { size } => {
                 self.size = size;
                 self.layout = Layout::calculate_for_terminal(self.size.rows, self.size.cols)
-                    .map_err(|e| PluginError::LayoutError(e.to_string()))?;
+                    .unwrap_or_else(|_| Layout::new_3_pane());
                 self.render()
             }
             PluginEvent::Key { key, modifiers } => {
@@ -1084,10 +1072,10 @@ impl OyaPlugin {
             }
             // Vim-style navigation
             'j' | 'J' => {
-                self.move_selection(1)?;
+                self.move_selection(1);
             }
             'k' | 'K' => {
-                self.move_selection(-1)?;
+                self.move_selection(-1);
             }
             'g' | 'G' => {
                 let _ = self.refresh_tasks();
@@ -1124,11 +1112,11 @@ impl OyaPlugin {
     /// # Errors
     ///
     /// Returns an error if movement fails
-    fn move_selection(&mut self, direction: i32) -> PluginResult<()> {
+    fn move_selection(&mut self, direction: i32) {
         let len = self.tasks.len();
 
         if len == 0 {
-            return Ok(());
+            return;
         }
 
         let new_index = if direction > 0 {
@@ -1139,8 +1127,6 @@ impl OyaPlugin {
 
         // Wrap around
         self.selected_index = if new_index >= len { 0 } else { new_index };
-
-        Ok(())
     }
 
     /// Handle incoming stage update from orchestrator

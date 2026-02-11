@@ -335,12 +335,8 @@ fn should_preserve_phase_completed_fields_through_roundtrip() -> Result<(), Stri
     let phase_id = PhaseId::new();
     let output = PhaseOutput::success(vec![100, 200]);
 
-    let original = BeadEvent::phase_completed(
-        bead_id,
-        phase_id,
-        "integration-test",
-        output.clone(),
-    );
+    let original =
+        BeadEvent::phase_completed(bead_id, phase_id, "integration-test", output.clone());
 
     let json_str =
         serde_json::to_string(&original).map_err(|e| format!("Serialization failed: {e}"))?;

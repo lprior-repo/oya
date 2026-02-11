@@ -288,8 +288,8 @@ fn test_json_process_communication() {
 #[test]
 fn test_concurrent_pipe_access() {
     use std::sync::{
-        Arc,
         atomic::{AtomicUsize, Ordering},
+        Arc,
     };
 
     let success_count = Arc::new(AtomicUsize::new(0));
@@ -565,8 +565,8 @@ fn test_message_payload_formatting() {
 /// 3. Each client has independent state
 #[test]
 fn test_concurrent_client_creation() {
-    use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
 
     let success_count = Arc::new(AtomicUsize::new(0));
     let mut handles = vec![];
