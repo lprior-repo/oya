@@ -1708,7 +1708,7 @@ mod tests {
     #[tokio::test]
     async fn test_stop_fails_with_in_flight_work() {
         // GIVEN: A scheduler with in-flight bead (assigned to worker)
-        let mut scheduler = SchedulerActor::new();
+        let scheduler = SchedulerActor::new();
         let workflow_id = "workflow-123".to_string();
         let bead_id = "bead-456".to_string();
         let worker_id = "worker-789".to_string();
@@ -1779,7 +1779,7 @@ mod tests {
     #[tokio::test]
     async fn test_stop_allows_ready_beads() {
         // GIVEN: A scheduler with ready beads (not assigned)
-        let mut scheduler = SchedulerActor::new();
+        let scheduler = SchedulerActor::new();
         let workflow_id = "workflow-123".to_string();
         let bead_id = "bead-456".to_string();
 
@@ -1817,7 +1817,7 @@ mod tests {
     #[tokio::test]
     async fn test_stop_allows_pending_beads() {
         // GIVEN: A scheduler with pending beads (not ready)
-        let mut scheduler = SchedulerActor::new();
+        let scheduler = SchedulerActor::new();
         let workflow_id = "workflow-123".to_string();
         let bead_id = "bead-456".to_string();
 
