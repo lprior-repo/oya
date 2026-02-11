@@ -57,7 +57,7 @@ pub async fn show_command(args: ShowArgs) -> Result<ShowOutput> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oya_pipeline::{Language, Priority, TaskStatus};
+    use oya_pipeline::{Language, Task, TaskStatus};
 
     #[tokio::test]
     async fn show_command_finds_task() {

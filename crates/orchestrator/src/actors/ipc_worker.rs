@@ -61,6 +61,9 @@ use crate::actors::errors::ActorError;
 use crate::agent_swarm::{AgentPool, PoolStats};
 use crate::persistence::{BeadState, OrchestratorStore};
 
+#[cfg(test)]
+use crate::persistence::{BeadRecord, StoreConfig};
+
 /// IPC worker actor definition.
 #[derive(Clone, Default)]
 pub struct IpcWorkerActorDef;

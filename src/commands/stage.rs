@@ -82,7 +82,7 @@ pub async fn stage_command(args: StageArgs) -> Result<StageOutput> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oya_pipeline::{Language, Priority, TaskStatus};
+    use oya_pipeline::{Language, Task, TaskStatus};
 
     #[tokio::test]
     async fn stage_command_runs_stage() {
