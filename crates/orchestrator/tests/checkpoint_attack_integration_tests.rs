@@ -4,11 +4,10 @@
 //! to find every possible way to break the system.
 
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::Barrier;
 
 use orchestrator::persistence::{OrchestratorStore, StoreConfig, CheckpointRecord};
-use orchestrator::replay::checkpoint::{CheckpointManager, CheckpointConfig};
+use orchestrator::replay::{CheckpointManager, CheckpointConfig};
 
 /// Attack harness for checkpoint restoration testing
 struct CheckpointAttackHarness {
