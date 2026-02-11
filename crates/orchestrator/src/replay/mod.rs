@@ -17,7 +17,7 @@
 //! - `ReplayEngine`: Recovers state by replaying events
 //! - `CheckpointManager`: Creates and manages checkpoints
 
-mod checkpoint;
+pub mod checkpoint;
 mod engine;
 mod events;
 mod projection;
