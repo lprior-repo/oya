@@ -324,6 +324,11 @@ pub enum CircuitBreakerError<E> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::items_after_statements)]
+    #![allow(clippy::unused_async)]
+    #![allow(clippy::unwrap_used)]
+    #![allow(clippy::expect_used)]
+
     use super::*;
 
     #[test]

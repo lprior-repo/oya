@@ -1,0 +1,21 @@
+--- crates/events/src/projection.rs
++++ replace Projection::rebuild -> Result<Self::State> with Err(anyhow::anyhow!("mutation injected"))
+@@ -20,17 +20,17 @@
+     /// Apply an event to the state.
+     fn apply(&self, state: &mut Self::State, event: &BeadEvent);
+ 
+     /// Get the initial state.
+     fn initial_state(&self) -> Self::State;
+ 
+     /// Rebuild the state from a store.
+     async fn rebuild(&self, store: &dyn EventStore) -> Result<Self::State> {
+-        self.rebuild_with_progress(store, None).await
++        Err(anyhow::anyhow!("mutation injected")) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Rebuild the state from a store with optional progress tracking.
+     async fn rebuild_with_progress(
+         &self,
+         store: &dyn EventStore,
+         tracker: Option<&ReplayTracker>,
+     ) -> Result<Self::State> {

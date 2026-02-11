@@ -367,12 +367,8 @@ fn validate_transition(from: &TaskStatus, to: &TaskStatus) -> Result<()> {
 mod tests {
 
     #![allow(clippy::expect_used)]
-
     #![allow(clippy::unwrap_used)]
-
     #![allow(clippy::panic)]
-
-
 
     use super::*;
 

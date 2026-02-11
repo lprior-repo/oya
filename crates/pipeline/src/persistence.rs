@@ -127,10 +127,7 @@ pub async fn list_all_tasks(repo_root: &Path) -> Result<Vec<Task>> {
 mod tests {
 
     #![allow(clippy::expect_used)]
-
     #![allow(clippy::unwrap_used)]
-
-
 
     use super::*;
     use crate::domain::{Language, Priority, TaskStatus};

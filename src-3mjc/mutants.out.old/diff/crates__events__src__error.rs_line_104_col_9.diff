@@ -1,0 +1,23 @@
+--- crates/events/src/error.rs
++++ replace Error::serialization -> Self with Default::default()
+@@ -96,19 +96,17 @@
+     pub fn subscription_failed(reason: impl Into<String>) -> Self {
+         Self::SubscriptionFailed {
+             reason: reason.into(),
+         }
+     }
+ 
+     /// Create a serialization error.
+     pub fn serialization(reason: impl Into<String>) -> Self {
+-        Self::Serialization {
+-            reason: reason.into(),
+-        }
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Create a projection failed error.
+     pub fn projection_failed(projection: impl Into<String>, reason: impl Into<String>) -> Self {
+         Self::ProjectionFailed {
+             projection: projection.into(),
+             reason: reason.into(),
+         }

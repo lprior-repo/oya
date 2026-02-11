@@ -254,9 +254,11 @@ mod tests {
             "Unexpected EOF: 100 bytes read, expected 504"
         );
 
-        assert!(TransportError::invalid_length(0, "zero length")
-            .to_string()
-            .contains("zero length"));
+        assert!(
+            TransportError::invalid_length(0, "zero length")
+                .to_string()
+                .contains("zero length")
+        );
 
         assert_eq!(
             TransportError::serialization_failed("test error").to_string(),

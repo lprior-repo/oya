@@ -313,8 +313,11 @@ impl EventBus {
 }
 
 #[cfg(test)]
-
 mod tests {
+
+    #![allow(clippy::expect_used)]
+    #![allow(clippy::unwrap_used)]
+
     use super::*;
     use crate::store::InMemoryEventStore;
     use crate::types::{BeadId, BeadSpec, BeadState, Complexity};

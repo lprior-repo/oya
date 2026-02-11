@@ -25,8 +25,8 @@
 #![allow(clippy::explicit_iter_loop)]
 #![forbid(unsafe_code)]
 
-use crate::execution::{TaskExecutionStatus, WorkflowState};
 use crate::Workflow;
+use crate::execution::{TaskExecutionStatus, WorkflowState};
 use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 

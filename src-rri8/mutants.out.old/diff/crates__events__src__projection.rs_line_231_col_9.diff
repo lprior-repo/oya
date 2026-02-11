@@ -1,0 +1,24 @@
+--- crates/events/src/projection.rs
++++ replace ManagedProjection<P>::with_state -> Self with Default::default()
+@@ -223,20 +223,17 @@
+         Self {
+             projection,
+             state: RwLock::new(state),
+         }
+     }
+ 
+     /// Create from an existing state.
+     pub fn with_state(projection: P, state: P::State) -> Self {
+-        Self {
+-            projection,
+-            state: RwLock::new(state),
+-        }
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Apply an event.
+     pub async fn apply(&self, event: &BeadEvent) {
+         let mut state = self.state.write().await;
+         self.projection.apply(&mut state, event);
+     }
+ 

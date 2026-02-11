@@ -1,0 +1,22 @@
+--- crates/events/src/bus.rs
++++ replace EventBusBuilder::with_channel_capacity -> Self with Default::default()
+@@ -171,18 +171,17 @@
+     /// Set the event store.
+     pub fn with_store(mut self, store: Arc<dyn EventStore>) -> Self {
+         self.store = Some(store);
+         self
+     }
+ 
+     /// Set the broadcast channel capacity.
+     pub fn with_channel_capacity(mut self, capacity: usize) -> Self {
+-        self.channel_capacity = capacity;
+-        self
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Build the event bus.
+     pub fn build(self) -> Result<EventBus> {
+         let store = self
+             .store
+             .ok_or_else(|| Error::invalid_event("No event store configured"))?;
+ 

@@ -1,0 +1,17 @@
+[0;34m[13:53:45][0m === BRUTAL ZJJ QA TEST ===
+[0;34m[13:53:45][0m Test directory: /tmp/zjj_brutal_3930559
+[0;34m[13:53:45][0m 
+[INIT] Initializing zjj...
+/home/lewis/src/oya/zjj_test_direct.sh: line 33: expect: command not found
+No JJ repository found. Initializing one...
+Initialized JJ repository.
+Initialized zjj in /tmp/zjj_brutal_3930559
+  Data directory: .zjj/
+  Configuration: .zjj/config.toml
+  State database: .zjj/state.db
+  Layouts: .zjj/layouts/
+[0;34m[13:53:46][0m 
+[TEST 1] List with no sessions
+No sessions found.
+Use 'zjj add <name>' to create a session.
+[0;32m✓[0m Empty list shows 'no sessions'

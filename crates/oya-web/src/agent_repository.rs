@@ -451,6 +451,11 @@ impl AgentRepository for InMemoryAgentRepository {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::float_cmp)]
+    #![allow(clippy::indexing_slicing)]
+    #![allow(clippy::expect_used)]
+    #![allow(clippy::unwrap_used)]
+
     use super::*;
 
     /// Creates a test repository.

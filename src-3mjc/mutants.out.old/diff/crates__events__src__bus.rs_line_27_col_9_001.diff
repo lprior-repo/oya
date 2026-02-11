@@ -1,0 +1,21 @@
+--- crates/events/src/bus.rs
++++ replace EventSubscription::try_recv -> Result<BeadEvent> with Err(anyhow::anyhow!("mutation injected"))
+@@ -19,17 +19,17 @@
+ impl EventSubscription {
+     /// Receive the next event.
+     pub async fn recv(&mut self) -> Result<BeadEvent> {
+         self.receiver.recv().await.map_err(|_| Error::ChannelClosed)
+     }
+ 
+     /// Try to receive an event without waiting.
+     pub fn try_recv(&mut self) -> Result<BeadEvent> {
+-        self.receiver.try_recv().map_err(|_| Error::ChannelClosed)
++        Err(anyhow::anyhow!("mutation injected")) /* ~ changed by cargo-mutants ~ */
+     }
+ }
+ 
+ /// Pattern for filtering events.
+ #[derive(Debug, Clone)]
+ pub enum EventPattern {
+     /// Match all events.
+     All,

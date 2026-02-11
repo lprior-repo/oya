@@ -1,0 +1,22 @@
+--- crates/events/src/durable_store.rs
++++ replace EventQuery::with_stream_id -> Self with Default::default()
+@@ -24,18 +24,17 @@
+ impl EventQuery {
+     /// Create a new query builder.
+     pub fn new() -> Self {
+         Self::default()
+     }
+ 
+     /// Filter by stream (bead) ID.
+     pub fn with_stream_id(mut self, stream_id: BeadId) -> Self {
+-        self.stream_id = Some(stream_id);
+-        self
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Filter by event type.
+     pub fn with_event_type(mut self, event_type: impl Into<String>) -> Self {
+         self.event_type = Some(event_type.into());
+         self
+     }
+ 
