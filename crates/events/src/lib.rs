@@ -47,11 +47,13 @@ pub use types::{
 ///
 /// Returns `Error` if initialization fails.
 pub fn init_telemetry_json() -> Result<()> {
-    let config = oya_telemetry::config::TelemetryConfig::new("oya-events")
+    use oya_telemetry::TelemetryConfig;
+
+    let config = TelemetryConfig::new("oya-events")
         .with_json_logging(true)
         .with_log_level(tracing::Level::INFO);
 
-    let _guard = oya_telemetry::init_telemetry(config)
+    let _guard = oya_telemetry::init_telemetry(&config)
         .map_err(|e| Error::serialization(format!("telemetry init failed: {e}")))?;
 
     Ok(())
