@@ -50,8 +50,8 @@ async fn test_worker_assignment_table_exists() -> Result<(), String> {
 }
 
 #[tokio::test]
-async fn test_worker_assignment_create() {
-    let client = init_test_db().await;
+async fn test_worker_assignment_create() -> Result<(), String> {
+    let client = init_test_db().await?;
 
     // Create a worker assignment
     let _result = client
@@ -69,11 +69,12 @@ async fn test_worker_assignment_create() {
 
     // If no error, creation succeeded
     assert!(true);
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_worker_assignment_query_by_bead_id() {
-    let client = init_test_db().await;
+async fn test_worker_assignment_query_by_bead_id() -> Result<(), String> {
+    let client = init_test_db().await?;
 
     // Create an assignment
     client
@@ -101,11 +102,12 @@ async fn test_worker_assignment_query_by_bead_id() {
         !assignments.is_empty(),
         "Should find assignment for bead-456"
     );
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_worker_assignment_query_by_worker_id() {
-    let client = init_test_db().await;
+async fn test_worker_assignment_query_by_worker_id() -> Result<(), String> {
+    let client = init_test_db().await?;
 
     // Create multiple assignments for same worker
     client
@@ -145,6 +147,7 @@ async fn test_worker_assignment_query_by_worker_id() {
         !assignments.is_empty(),
         "Should find assignments for worker-c"
     );
+    Ok(())
 }
 
 #[tokio::test]
