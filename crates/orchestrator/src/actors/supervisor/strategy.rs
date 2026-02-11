@@ -261,6 +261,7 @@ mod tests {
             _shutdown_rx: None,
             restart_strategy: Box::new(OneForOne::new()),
             checkpoint_manager: None,
+            replay_engine: None,
         }
     }
 

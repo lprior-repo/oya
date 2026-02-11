@@ -1,58 +1,136 @@
-#![deny(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-#![deny(clippy::panic)]
-#![warn(clippy::pedantic)]
-#![warn(clippy::nursery)]
-#![forbid(unsafe_code)]
-
-// OYA - Storm goddess of transformation
-// 100x developer throughput with AI agent swarms
-
-mod commands;
+//! OYA CLI - Storm goddess of transformation
+//!
+//! 100x developer throughput with AI agent swarms
 
 use anyhow::Result;
-use clap::{CommandFactory, Parser, Subcommand};
-use commands::{
-    DoctorArgs, InitArgs, LogsArgs, StormArgs, doctor_command, init_command, install_command,
-    logs_command, serve_command, storm_command,
-};
-use oya_telemetry::TelemetryConfig;
+use clap::{Parser, Subcommand};
+use std::path::PathBuf;
 use tracing::info;
 
+use oya::commands::{AddArgs, ApproveArgs, DoneArgs, FocusArgs, NewArgs,
+    RemoveArgs, ShowArgs, SpawnArgs, StageArgs, StatusArgs, SyncArgs, WorkspaceArgs,
+    WorkspaceCommand, WorkspaceListArgs, approve_command, list_command, new_command,
+    show_command, stage_command, workspace_add_command, workspace_done_command,
+    workspace_focus_command, workspace_list_command, workspace_remove_command,
+    workspace_spawn_command, workspace_status_command, workspace_sync_command,
+};
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let oya = Oya::parse();
+
+    match oya.command {
+        Some(Commands::List(args)) => {
+            let result = list_command(args).await?;
+            info!("Listed {} tasks", result.total);
+            Ok(())
+        }
+        Some(Commands::Show(args)) => {
+            let result = show_command(args).await?;
+            info!("Showed task: {}", result.task.slug);
+            Ok(())
+        }
+        Some(Commands::New(args)) => {
+            let result = new_command(args).await?;
+            info!("Created task: {}", result.task.slug);
+            if let Some(workspace) = result.workspace_path {
+                info!("Workspace: {}", workspace);
+            }
+            Ok(())
+        }
+        Some(Commands::Stage(args)) => {
+            let result = stage_command(args).await?;
+            info!("{}", result.report);
+            Ok(())
+        }
+        Some(Commands::Approve(args)) => {
+            let result = approve_command(args).await?;
+            info!("Approved task: {}", result.task.slug);
+            Ok(())
+        }
+        Some(Commands::Workspace(args)) => {
+            match args.command {
+                WorkspaceCommand::List(a) => {
+                    let result = workspace_list_command(a).await?;
+                    info!("Workspace list retrieved");
+                    println!("{}", result);
+                    Ok(())
+                }
+                WorkspaceCommand::Status(a) => {
+                    let result = workspace_status_command(a).await?;
+                    info!("Status for workspace: {}", result);
+                    println!("{}", result);
+                    Ok(())
+                }
+                WorkspaceCommand::Sync(a) => {
+                    let result = workspace_sync_command(a).await?;
+                    info!("Synced workspace: {}", result);
+                    println!("{}", result);
+                    Ok(())
+                }
+                WorkspaceCommand::Done(a) => {
+                    let result = workspace_done_command(a).await?;
+                    info!("Completed workspace: {}", result);
+                    println!("{}", result);
+                    Ok(())
+                }
+                WorkspaceCommand::Remove(a) => {
+                    let result = workspace_remove_command(a).await?;
+                    info!("Removed workspace: {}", result);
+                    println!("{}", result);
+                    Ok(())
+                }
+                WorkspaceCommand::Add(a) => {
+                    let result = workspace_add_command(a).await?;
+                    info!("Added workspace: {}", result);
+                    println!("{}", result);
+                    Ok(())
+                }
+                WorkspaceCommand::Spawn(a) => {
+                    let result = workspace_spawn_command(a).await?;
+                    info!("Spawned workspace for bead: {}", result);
+                    println!("{}", result);
+                    Ok(())
+                }
+                WorkspaceCommand::Focus(a) => {
+                    let result = workspace_focus_command(a).await?;
+                    info!("Focused on workspace: {}", result);
+                    println!("{}", result);
+                    Ok(())
+                }
+            }
+        }
+        None => {
+            println!("OYA CLI - Storm goddess of transformation");
+            println!("Use --help for more information");
+            Ok(())
+        }
+    }
+}
+
 /// OYA SDLC System - Storm goddess of transformation
-///
-/// 100x developer throughput with AI agent swarms
-///
-/// # Examples
-///
-/// Create a new task:
-///   oya new --slug my-feature
-///
-/// Run a pipeline stage:
-///   oya stage --slug my-feature --stage implement
-///
-/// Approve a task for integration:
-///   oya approve --slug my-feature
-///
-/// View workspace diagnostics:
-///   oya doctor
-///
-/// Start the IPC server:
-///   oya serve
-///   oya serve --address 127.0.0.1:5555
 #[derive(Parser, Debug)]
 #[command(name = "oya")]
-#[command(author = "Lewis Prior <lewis@lewisandquark.com>")]
 #[command(version = "0.1.0")]
-#[command(about = "100x developer throughput with AI agent swarms")]
+#[command(about = "100x developer throughput with AI agent swarms", long_about = None)]
 #[command(long_about = "100x developer throughput with AI agent swarms
 
-Examples:
-  oya new --slug my-feature
-  oya stage --slug my-feature --stage implement
-  oya approve --slug my-feature
-  oya doctor
-  oya serve --address 127.0.0.1:5555")]
+ Examples:
+   oya new --slug my-feature
+   oya stage --slug my-feature --stage implement
+   oya approve --slug my-feature
+   oya list
+   oya show --slug my-feature
+
+ Workspace Commands:
+   oya workspace list
+   oya workspace status <name>
+   oya workspace sync <name>
+   oya workspace done <name>
+   oya workspace add <name>
+   oya workspace spawn <bead>
+   oya workspace focus <name>
+   oya workspace remove <name>")]
 struct Oya {
     #[command(subcommand)]
     command: Option<Commands>,
@@ -60,269 +138,112 @@ struct Oya {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// List all beads in the workspace
-    List,
-    /// Show details of a specific bead
-    Show {
-        /// Bead ID or slug
-        slug: String,
-    },
+    /// List all tasks in the workspace
+    List(ListArgs),
+    /// Show details of a specific task
+    Show(ShowArgs),
     /// Create a new task
-    New {
-        /// Slug for the task
-        #[arg(short, long)]
-        slug: String,
-    },
+    New(NewArgs),
     /// Run a pipeline stage
-    Stage {
-        /// Slug for the task
-        #[arg(short, long)]
-        slug: String,
-        /// Stage name to run
-        #[arg(short, long)]
-        stage: String,
-    },
+    Stage(StageArgs),
     /// Approve a task for integration
-    Approve {
-        /// Slug for the task
-        #[arg(short, long)]
-        slug: String,
-    },
-    /// View and filter logs
-    Logs(LogsArgs),
-    /// Initialize a new project
-    Init(InitArgs),
-    /// Run workspace diagnostics
-    Doctor(DoctorArgs),
-    /// Orchestrate bead execution with workflow DAG
-    Storm(StormArgs),
-    /// Start the IPC server (background daemon)
-    Serve {
-        /// IPC server address (default: 127.0.0.1:5555)
-        #[arg(short, long)]
-        address: Option<String>,
-    },
-    /// Install Zellij WASM plugin
-    Install {
-        /// Force reinstall even if already installed
-        #[arg(long)]
-        force: bool,
-    },
+    Approve(ApproveArgs),
+    /// Manage workspace sessions via zjj
+    Workspace(WorkspaceArgs),
 }
 
-impl Oya {
-    #[allow(clippy::too_many_lines)]
-    #[tracing::instrument(skip(self))]
-    fn run(self) -> Result<()> {
-        match self.command {
-            Some(Commands::List) => {
-                info!("Listing all beads");
-                println!("List command not yet implemented");
-                eprintln!("Error: This command is not yet implemented");
-                std::process::exit(1);
-            }
-            Some(Commands::Show { slug }) => {
-                // Validate slug doesn't contain path traversal characters
-                if slug.contains('/') || slug.contains("..") {
-                    eprintln!("Error: Slug cannot contain path separators or traversal sequences");
-                    eprintln!("Hint: Use a simple identifier like 'my-feature' or 'task-123'");
-                    std::process::exit(2);
-                }
-                info!("Showing bead: {slug}");
-                println!("Show command not yet implemented for bead: {slug}");
-                eprintln!("Error: Show command is not yet implemented");
-                std::process::exit(1);
-            }
-            Some(Commands::New { slug }) => {
-                // Validate slug is not empty
-                if slug.trim().is_empty() {
-                    eprintln!("Error: Slug cannot be empty");
-                    eprintln!("Hint: Provide a valid task slug, e.g., oya new --slug my-task");
-                    std::process::exit(2);
-                }
-                // Validate slug doesn't contain path traversal characters
-                if slug.contains('/') || slug.contains("..") {
-                    eprintln!("Error: Slug cannot contain path separators or traversal sequences");
-                    eprintln!("Hint: Use a simple identifier like 'my-feature' or 'fix-bug-123'");
-                    std::process::exit(2);
-                }
-                info!("Creating new task: {slug}");
-                println!("New command not yet implemented for task: {slug}");
-                eprintln!("Error: New command is not yet implemented");
-                std::process::exit(1);
-            }
-            Some(Commands::Stage { slug, stage }) => {
-                // Validate slug doesn't contain path traversal characters
-                if slug.contains('/') || slug.contains("..") {
-                    eprintln!("Error: Slug cannot contain path separators or traversal sequences");
-                    eprintln!("Hint: Use a simple identifier like 'my-feature' or 'task-123'");
-                    std::process::exit(2);
-                }
-                info!("Running stage {stage} for task: {slug}");
-                println!("Stage command not yet implemented for task: {slug}, stage: {stage}");
-                eprintln!("Error: Stage command is not yet implemented");
-                std::process::exit(1);
-            }
-            Some(Commands::Approve { slug }) => {
-                // Validate slug doesn't contain path traversal characters
-                if slug.contains('/') || slug.contains("..") {
-                    eprintln!("Error: Slug cannot contain path separators or traversal sequences");
-                    eprintln!("Hint: Use a simple identifier like 'my-feature' or 'task-123'");
-                    std::process::exit(2);
-                }
-                info!("Approving task: {slug}");
-                println!("Approve command not yet implemented for task: {slug}");
-                eprintln!("Error: Approve command is not yet implemented");
-                std::process::exit(1);
-            }
-            Some(Commands::Logs(args)) => {
-                info!("Running logs command");
-                let rt = tokio::runtime::Runtime::new()?;
-                rt.block_on(async {
-                    match logs_command(args).await {
-                        Ok(output) => {
-                            info!("Logs command completed: {} entries", output.entries.len());
-                            Ok(())
-                        }
-                        Err(e) => {
-                            eprintln!("Error: {e}");
-                            if let Some(hint) = e.hint() {
-                                eprintln!("Hint: {hint}");
-                            }
-                            std::process::exit(e.exit_code());
-                        }
-                    }
-                })
-            }
-            Some(Commands::Init(args)) => {
-                info!("Running init command");
-                let rt = tokio::runtime::Runtime::new()?;
-                rt.block_on(async {
-                    match init_command(args).await {
-                        Ok(output) => {
-                            println!("Project created successfully at: {:?}", output.project_path);
-                            println!("Files created: {}", output.files_created.len());
-                            if output.git_initialized {
-                                println!("Git repository initialized");
-                            }
-                            Ok(())
-                        }
-                        Err(e) => {
-                            eprintln!("Error: {e}");
-                            if let Some(hint) = e.hint() {
-                                eprintln!("Hint: {hint}");
-                            }
-                            std::process::exit(e.exit_code());
-                        }
-                    }
-                })
-            }
-            Some(Commands::Doctor(args)) => {
-                info!("Running doctor command");
-                let rt = tokio::runtime::Runtime::new()?;
-                rt.block_on(async {
-                    match doctor_command(args).await {
-                        Ok(output) => {
-                            println!("Workspace diagnostics:");
-                            println!("Status: {:?}", output.status);
-                            println!("{}", output.summary);
-                            for check in output.checks {
-                                println!(
-                                    "  {}: {:?} - {}",
-                                    check.name, check.status, check.message
-                                );
-                            }
-                            // Exit with code 1 if status is not Passed
-                            if output.status != crate::commands::CheckStatus::Passed {
-                                eprintln!("Error: Workspace diagnostics failed");
-                                std::process::exit(1);
-                            }
-                            Ok(())
-                        }
-                        Err(e) => {
-                            eprintln!("Error: {e}");
-                            if let Some(hint) = e.hint() {
-                                eprintln!("Hint: {hint}");
-                            }
-                            std::process::exit(e.exit_code());
-                        }
-                    }
-                })
-            }
-            Some(Commands::Storm(args)) => {
-                info!("Running storm command");
-                let rt = tokio::runtime::Runtime::new()?;
-                let output_format = args.output.clone();
-                rt.block_on(async {
-                    match storm_command(args).await {
-                        Ok(output) => {
-                            if output_format == "json" {
-                                match serde_json::to_string_pretty(&output) {
-                                    Ok(json) => println!("{json}"),
-                                    Err(_) => println!("{{}}"),
-                                }
-                            } else {
-                                println!("Storm completed:");
-                                println!("  Beads completed: {}", output.beads_completed);
-                                println!("  Beads failed: {}", output.beads_failed);
-                                println!("  Duration: {}ms", output.duration_ms);
-                                if let Some(order) = output.planned_order {
-                                    println!("  Planned order: {} beads", order.len());
-                                }
-                            }
-                            Ok(())
-                        }
-                        Err(e) => {
-                            eprintln!("Error: {e}");
-                            if let Some(hint) = e.hint() {
-                                eprintln!("Hint: {hint}");
-                            }
-                            std::process::exit(e.exit_code());
-                        }
-                    }
-                })
-            }
-            Some(Commands::Serve { address }) => {
-                info!("Starting IPC server");
-                match serve_command(address) {
-                    Ok(()) => Ok(()),
-                    Err(e) => {
-                        eprintln!("Error: {e}");
-                        std::process::exit(1);
-                    }
-                }
-            }
-            Some(Commands::Install { force }) => {
-                info!("Installing Zellij plugin");
-                match install_command(force) {
-                    Ok(()) => Ok(()),
-                    Err(e) => {
-                        eprintln!("Error: {e}");
-                        std::process::exit(1);
-                    }
-                }
-            }
-            None => {
-                // No subcommand provided, show help
-                Self::command().print_long_help()?;
-                Ok(())
-            }
-        }
-    }
+/// Arguments for the list command
+#[derive(Parser, Debug, Clone)]
+struct ListArgs {
+    /// Format output as JSON
+    #[arg(long)]
+    json: bool,
+
+    /// Repository root path (default: current directory)
+    #[arg(long)]
+    root: Option<PathBuf>,
 }
 
-fn main() {
-    let config = TelemetryConfig::new("oya-cli")
-        .with_json_logging(false)
-        .with_otel_enabled(false);
+/// Arguments for the show command
+#[derive(Parser, Debug, Clone)]
+struct ShowArgs {
+    /// Task slug to show
+    #[arg(short, long)]
+    slug: String,
 
-    let _guard = oya_telemetry::init_telemetry(&config);
+    /// Format output as JSON
+    #[arg(long)]
+    json: bool,
 
-    let oya = Oya::parse();
+    /// Repository root path (default: current directory)
+    #[arg(long)]
+    root: Option<PathBuf>,
+}
 
-    // Run the CLI and handle errors with proper exit codes
-    if let Err(error) = oya.run() {
-        eprintln!("Error: {error}");
-        std::process::exit(1);
-    }
+/// Arguments for the new command
+#[derive(Parser, Debug, Clone)]
+struct NewArgs {
+    /// Slug for the task (lowercase alphanumeric + hyphens)
+    #[arg(short, long)]
+    slug: String,
+
+    /// Language for the task (rust, go, python, js, gleam)
+    #[arg(short, long, default_value = "rust")]
+    language: String,
+
+    /// Priority level (P0, P1, P2, P3)
+    #[arg(short, long, default_value = "P2")]
+    priority: String,
+
+    /// Repository root path (default: current directory)
+    #[arg(long)]
+    root: Option<PathBuf>,
+
+    /// Skip workspace creation (debug mode)
+    #[arg(long)]
+    skip_workspace: bool,
+}
+
+/// Arguments for the stage command
+#[derive(Parser, Debug, Clone)]
+struct StageArgs {
+    /// Slug for the task
+    #[arg(short, long)]
+    slug: String,
+
+    /// Stage name to run
+    #[arg(short, long)]
+    stage: String,
+
+    /// Optional start stage for range
+    #[arg(long)]
+    from: Option<String>,
+
+    /// Optional end stage for range
+    #[arg(long)]
+    to: Option<String>,
+
+    /// Dry run (validate but don't persist)
+    #[arg(long)]
+    dry_run: bool,
+
+    /// Repository root path (default: current directory)
+    #[arg(long)]
+    root: Option<PathBuf>,
+}
+
+/// Arguments for the approve command
+#[derive(Parser, Debug, Clone)]
+struct ApproveArgs {
+    /// Slug for the task
+    #[arg(short, long)]
+    slug: String,
+
+    /// Force approval even if pipeline not passed
+    #[arg(long)]
+    force: bool,
+
+    /// Repository root path (default: current directory)
+    #[arg(long)]
+    root: Option<PathBuf>,
 }

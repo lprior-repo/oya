@@ -30,6 +30,8 @@
 #![cfg_attr(test, allow(clippy::unwrap_used))]
 #![cfg_attr(test, allow(clippy::panic))]
 
+use std::sync::Arc;
+
 pub use oya_core::{Error, Result};
 
 /// Actor-based concurrency for the orchestrator.
@@ -61,17 +63,17 @@ pub mod agent_swarm;
 ///
 /// Returns `Error` if initialization fails.
 pub fn init_telemetry_json() -> oya_core::Result<()> {
-     use oya_telemetry::TelemetryConfig;
+    use oya_telemetry::TelemetryConfig;
 
-     let config = TelemetryConfig::new("orchestrator")
-         .with_json_logging(true)
-         .with_log_level(tracing::Level::INFO);
+    let config = TelemetryConfig::new("orchestrator")
+        .with_json_logging(true)
+        .with_log_level(tracing::Level::INFO);
 
-     let _guard = oya_telemetry::init_telemetry(&config)
-         .map_err(|e| oya_core::Error::telemetry_init_failed(e.to_string()))?;
+    let _guard = oya_telemetry::init_telemetry(&config)
+        .map_err(|e| oya_core::Error::telemetry_init_failed(e.to_string()))?;
 
-     Ok(())
- }
+    Ok(())
+}
 /// Workflow DAG module for managing bead dependencies
 pub mod dag;
 

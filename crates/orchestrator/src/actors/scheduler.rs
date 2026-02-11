@@ -59,16 +59,16 @@ impl SchedulerArguments {
 
     /// Set the `EventBus`.
     pub fn with_event_bus(mut self, bus: Arc<EventBus>) -> Self {
-         self.event_bus = Some(bus);
-         self
-     }
+        self.event_bus = Some(bus);
+        self
+    }
 
-     /// Set the `ShutdownCoordinator`.
-     #[must_use]
-     pub fn with_shutdown_coordinator(mut self, coordinator_: Arc<ShutdownCoordinator>) -> Self {
-         self.shutdown_coordinator = Some(coordinator_);
-         self
-     }
+    /// Set the `ShutdownCoordinator`.
+    #[must_use]
+    pub fn with_shutdown_coordinator(mut self, coordinator_: Arc<ShutdownCoordinator>) -> Self {
+        self.shutdown_coordinator = Some(coordinator_);
+        self
+    }
 
     /// Set the `ReplayEngine`.
     #[must_use]
@@ -99,8 +99,8 @@ pub struct SchedulerState {
     // Integration handles
     /// Event subscription ID (for cleanup).
     _event_subscription_id: Option<String>,
-     /// Shutdown signal receiver.
-     shutdown_rx: Option<broadcast::Receiver<ShutdownSignal>>,
+    /// Shutdown signal receiver.
+    shutdown_rx: Option<broadcast::Receiver<ShutdownSignal>>,
     /// Checkpoint result sender.
     pub checkpoint_tx: Option<mpsc::Sender<CheckpointResult>>,
     /// `ReplayEngine` for event sourcing and recovery.
@@ -236,7 +236,7 @@ impl Actor for SchedulerActorDef {
 
     async fn post_stop(
         &self,
-        myself: ActorRef<Self::Msg>,
+        _myself: ActorRef<Self::Msg>,
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         info!("SchedulerActor stopping");
@@ -403,7 +403,7 @@ mod core {
                 effects.push(SchedulerEffect::ReplyReadyBeads { reply, result });
             }
             SchedulerMessage::GetStats { reply } => {
-                let stats_ = build_stats(&next_state);
+                let stats = build_stats(&next_state);
                 effects.push(SchedulerEffect::ReplyStats { reply, stats });
             }
             SchedulerMessage::IsBeadReady {

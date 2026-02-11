@@ -75,7 +75,11 @@ impl AgentPool {
     }
 
     /// Assign a bead to a specific agent.
-    pub async fn assign_bead_to_agent(&self, bead_id: &str, agent_id: &str) -> AgentSwarmResult<()> {
+    pub async fn assign_bead_to_agent(
+        &self,
+        bead_id: &str,
+        agent_id: &str,
+    ) -> AgentSwarmResult<()> {
         let mut agents = self.agents.write().await;
         if let Some(agent) = agents.get_mut(agent_id) {
             if agent.assign_bead(bead_id) {
@@ -120,15 +124,21 @@ impl AgentPool {
         let mut stats = PoolStats::default();
 
         for agent in agents.values() {
-             stats.total = stats.total.wrapping_add(1);
-             match agent.state() {
-                 super::handle::AgentState::Idle => stats.idle = stats.idle.wrapping_add(1),
-                 super::handle::AgentState::Working => stats.working = stats.working.wrapping_add(1),
-                 super::handle::AgentState::Unhealthy => stats.unhealthy = stats.unhealthy.wrapping_add(1),
-                 super::handle::AgentState::ShuttingDown => stats.shutting_down = stats.shutting_down.wrapping_add(1),
-                 super::handle::AgentState::Terminated => stats.terminated = stats.terminated.wrapping_add(1),
-             }
-         }
+            stats.total = stats.total.wrapping_add(1);
+            match agent.state() {
+                super::handle::AgentState::Idle => stats.idle = stats.idle.wrapping_add(1),
+                super::handle::AgentState::Working => stats.working = stats.working.wrapping_add(1),
+                super::handle::AgentState::Unhealthy => {
+                    stats.unhealthy = stats.unhealthy.wrapping_add(1)
+                }
+                super::handle::AgentState::ShuttingDown => {
+                    stats.shutting_down = stats.shutting_down.wrapping_add(1)
+                }
+                super::handle::AgentState::Terminated => {
+                    stats.terminated = stats.terminated.wrapping_add(1)
+                }
+            }
+        }
 
         stats
     }

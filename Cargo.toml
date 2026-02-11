@@ -269,8 +269,12 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 tempfile = "3"
 
 [[bin]]
-name = "test_pipeline_cache"
-path = "test_pipeline_cache.rs"
+ name = "test_pipeline_cache"
+ path = "test_pipeline_cache.rs"
+
+[[bin]]
+name = "oya"
+path = "src/main.rs"
 
 [[bin]]
 name = "test_unwrap_hook"

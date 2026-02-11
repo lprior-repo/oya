@@ -479,7 +479,7 @@ impl AgentSlotActorDef {
 
     fn handle_stage_timeout(&self, state: &mut AgentSlotState, stage_kind: StageKind) {
         if let Some(ref bead_id) = state.bead_id {
-            error!("Stage timeout for bead {}: {:?}", bead_id, stage);
+            error!("Stage timeout for bead {}: {:?}", bead_id, stage_kind);
 
             // Emit timeout event
             self.emit_event(
@@ -487,7 +487,7 @@ impl AgentSlotActorDef {
                 BeadEvent::StageFailed {
                     event_id: oya_events::EventId::new(),
                     bead_id: *bead_id,
-                    stage,
+                    stage: stage_kind,
                     feedback: format!("Timeout after {:?}", Duration::from_secs(60)),
                     severity: Severity::Major,
                     timestamp: chrono::Utc::now(),
@@ -498,13 +498,13 @@ impl AgentSlotActorDef {
             self.complete_bead(
                 state,
                 BeadCompletion::Failed {
-                    reason: format!("Stage timeout: {stage:?}"),
+                    reason: format!("Stage timeout: {stage_kind:?}"),
                 },
             );
         }
     }
 
-    fn complete_bead(&self, state: &mut AgentSlotState, result_: BeadCompletion) {
+    fn complete_bead(&self, state: &mut AgentSlotState, result: BeadCompletion) {
         let bead_id = match state.require_bead_id() {
             Ok(id) => *id,
             Err(e) => {
