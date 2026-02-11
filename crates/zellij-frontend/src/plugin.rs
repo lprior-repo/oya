@@ -1259,6 +1259,8 @@ mod tests {
     }
 }
 
+// End of tests module
+
 /// Plugin state machine
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PluginState {
