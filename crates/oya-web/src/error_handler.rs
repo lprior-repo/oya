@@ -7,7 +7,11 @@
 #![deny(clippy::panic)]
 #![deny(clippy::expect_used)]
 
-use axum::{http::StatusCode, Json, response::{IntoResponse, Response}};
+use axum::{
+    Json,
+    http::StatusCode,
+    response::{IntoResponse, Response},
+};
 use serde::{Deserialize, Serialize};
 
 /// Error categories for retry logic.
@@ -185,21 +189,31 @@ impl From<HttpError> for ErrorResponse {
             HttpError::Network { message, .. } => {
                 (StatusCode::SERVICE_UNAVAILABLE, message.clone(), None)
             }
-            HttpError::Timeout { operation, .. } => {
-                (StatusCode::REQUEST_TIMEOUT, format!("Operation timed out: {operation}"), None)
-            }
-            HttpError::Server { status, message, .. } => {
-                (StatusCode::from_u16(*status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR), message.clone(), None)
-            }
-            HttpError::Client { status, message, .. } => {
-                (StatusCode::from_u16(*status).unwrap_or(StatusCode::BAD_REQUEST), message.clone(), None)
-            }
-            HttpError::Validation { field, message, .. } => {
-                (StatusCode::BAD_REQUEST, message.clone(), Some(field.clone()))
-            }
-            HttpError::Auth { message, .. } => {
-                (StatusCode::UNAUTHORIZED, message.clone(), None)
-            }
+            HttpError::Timeout { operation, .. } => (
+                StatusCode::REQUEST_TIMEOUT,
+                format!("Operation timed out: {operation}"),
+                None,
+            ),
+            HttpError::Server {
+                status, message, ..
+            } => (
+                StatusCode::from_u16(*status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
+                message.clone(),
+                None,
+            ),
+            HttpError::Client {
+                status, message, ..
+            } => (
+                StatusCode::from_u16(*status).unwrap_or(StatusCode::BAD_REQUEST),
+                message.clone(),
+                None,
+            ),
+            HttpError::Validation { field, message, .. } => (
+                StatusCode::BAD_REQUEST,
+                message.clone(),
+                Some(field.clone()),
+            ),
+            HttpError::Auth { message, .. } => (StatusCode::UNAUTHORIZED, message.clone(), None),
             HttpError::Unknown { message, .. } => {
                 (StatusCode::INTERNAL_SERVER_ERROR, message.clone(), None)
             }

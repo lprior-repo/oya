@@ -12,7 +12,7 @@ use tempfile::tempdir;
 
 /// Helper to load and initialize the schema
 async fn init_test_db() -> SurrealDbClient {
-    let temp_dir = tempdir().expect("Should create temp dir");
+    let temp_dir = tempdir().map_err(|e| format!("Failed to create temp dir: {}", e))?;
     let db_path = temp_dir
         .path()
         .join("test_worker_assignment_db")
@@ -22,30 +22,31 @@ async fn init_test_db() -> SurrealDbClient {
     let config = SurrealDbConfig::new(db_path);
     let client = SurrealDbClient::connect(config)
         .await
-        .expect("Failed to connect to SurrealDB");
+        .map_err(|e| format!("Failed to connect to SurrealDB: {}", e))?;
 
-    let schema = std::fs::read_to_string("schema.surql").expect("Schema file should exist");
+    let schema = std::fs::read_to_string("schema.surql").map_err(|e| format!("Failed to read schema: {}", e))?;
     client
         .init_schema(&schema)
         .await
-        .expect("Schema initialization should succeed");
+        .map_err(|e| format!("Schema initialization failed: {}", e))?;
 
-    client
+    Ok(client)
 }
 
 #[tokio::test]
-async fn test_worker_assignment_table_exists() {
-    let client = init_test_db().await;
+async fn test_worker_assignment_table_exists() -> Result<(), String> {
+    let client = init_test_db().await?;
 
     // Query table information - if it executes, table exists
     let _result = client
         .client()
         .query("SELECT * FROM information WHERE name = 'worker_assignment'")
         .await
-        .expect("Query should execute");
+        .map_err(|e| format!("Query should execute: {}", e))?;
 
     // If we get here without error, table exists
     assert!(true);
+    Ok(())
 }
 
 #[tokio::test]

@@ -500,8 +500,7 @@ mod tests {
         }
 
         let result = breaker.call(success_fn()).await;
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), "success");
+        assert!(matches!(result, Ok(value) if value == "success"));
         assert_eq!(breaker.state(), CircuitState::Closed);
     }
 

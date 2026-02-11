@@ -160,11 +160,11 @@ pub trait EventLog: Send + Sync {
 /// * `event_log` - Event log backend
 ///
 /// # Returns
-/// `ReplayState` if successful, `ResumeError` otherwise
+/// `ReplayState` if successful, or a `ResumeError` when validation fails
 ///
 /// # Errors
 /// Returns `ResumeError::CheckpointNotFound` if checkpoint doesn't exist
-/// Returns `ResumeError::TimestampMismatch` if checkpoint timestamp doesn't match event log
+/// Returns `ResumeError::TimestampMismatch` when validation fails (exposes the first event timestamp)
 pub fn resume_from_checkpoint<S, L>(
     checkpoint_id: &CheckpointId,
     checkpoints: &S,

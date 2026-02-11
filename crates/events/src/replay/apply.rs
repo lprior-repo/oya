@@ -5,9 +5,14 @@
 //! - Immutable state transitions
 //! - Railway-Oriented Programming for error handling
 //! - Zero unwraps, zero panics
+//! - Error recovery with DLQ integration
 
 use crate::event::BeadEvent;
+use crate::replay::recovery::{
+    log_poison_event, DeadLetterQueue, PoisonEvent, RecoveryConfig, RetryPolicy,
+};
 use crate::types::{BeadId, BeadState};
+use serde::{Deserialize, Serialize};
 
 /// Error during event application.
 #[derive(Debug, thiserror::Error)]
@@ -46,6 +51,67 @@ pub enum ApplyError {
 
 /// Result type for event application.
 pub type ApplyResult<T> = Result<T, ApplyError>;
+
+/// Summary of replay operation results.
+///
+/// Tracks how many events were successfully applied and how many
+/// were skipped (sent to DLQ) during replay.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReplaySummary {
+    /// Number of events successfully applied to state.
+    pub applied: u64,
+    /// Number of events skipped (sent to DLQ).
+    pub skipped: u64,
+}
+
+impl ReplaySummary {
+    /// Create a new replay summary.
+    #[must_use]
+    pub const fn new(applied: u64, skipped: u64) -> Self {
+        Self { applied, skipped }
+    }
+
+    /// Create a summary with zero events processed.
+    #[must_use]
+    pub const fn zero() -> Self {
+        Self {
+            applied: 0,
+            skipped: 0,
+        }
+    }
+
+    /// Get the total number of events processed (applied + skipped).
+    #[must_use]
+    pub const fn total(&self) -> u64 {
+        self.applied + self.skipped
+    }
+
+    /// Check if all events were successfully applied (no skips).
+    #[must_use]
+    pub const fn is_complete(&self) -> bool {
+        self.skipped == 0
+    }
+
+    /// Record a successfully applied event.
+    #[must_use]
+    pub const fn record_applied(mut self) -> Self {
+        self.applied += 1;
+        self
+    }
+
+    /// Record a skipped event.
+    #[must_use]
+    pub const fn record_skipped(mut self) -> Self {
+        self.skipped += 1;
+        self
+    }
+}
+
+impl Default for ReplaySummary {
+    fn default() -> Self {
+        Self::zero()
+    }
+}
 
 /// Event metadata for ordering validation.
 #[derive(Debug, Clone)]

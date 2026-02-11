@@ -20,6 +20,7 @@ fn unwrap_result<T, E: std::fmt::Display>(
     result: std::result::Result<T, E>,
     context: &str,
 ) -> Result<T, String> {
+    #[allow(clippy::expect_used)]
     result.map_err(|e| format!("{}: {}", context, e))
 }
 
