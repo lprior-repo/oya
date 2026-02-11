@@ -6,10 +6,13 @@
 use std::time::Duration;
 
 use chrono::Utc;
+use serde::de::DeserializeOwned;
 use tokio::sync::mpsc;
 use tokio::time::interval;
 
-use crate::persistence::{CheckpointRecord, OrchestratorStore, PersistenceResult};
+use crate::persistence::{
+    CheckpointRecord, OrchestratorStore, PersistenceError, PersistenceResult,
+};
 
 /// Configuration for the checkpoint manager.
 #[derive(Debug, Clone)]
@@ -180,6 +183,167 @@ impl CheckpointManager {
                 }
             }
         }
+    }
+
+    /// Helper function to deserialize JSON data with consistent error handling.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - The type to deserialize the JSON data into
+    ///
+    /// # Parameters
+    ///
+    /// * `json_str` - The JSON string to deserialize
+    /// * `field_name` - The name of the field being deserialized (for error messages)
+    ///
+    /// # Errors
+    ///
+    /// Returns a serialization error if deserialization fails.
+    fn deserialize_json<T>(json_str: &str, field_name: &str) -> PersistenceResult<T>
+    where
+        T: DeserializeOwned,
+    {
+        serde_json::from_str(json_str).map_err(|e| {
+            PersistenceError::serialization_error(format!(
+                "Failed to deserialize {}: {}",
+                field_name,
+                e
+            ))
+        })
+    }
+
+    /// Helper function to restore scheduler state from a checkpoint.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - The type to deserialize the scheduler state into
+    ///
+    /// # Parameters
+    ///
+    /// * `checkpoint` - The checkpoint record to restore from
+    ///
+    /// # Errors
+    ///
+    /// Returns a serialization error if deserialization fails.
+    fn restore_scheduler_state_from_checkpoint<T>(checkpoint: &CheckpointRecord) -> PersistenceResult<T>
+    where
+        T: DeserializeOwned,
+    {
+        Self::deserialize_json(&checkpoint.scheduler_state, "scheduler state")
+    }
+
+    /// Helper function to restore workflow snapshots from a checkpoint.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - The type to deserialize the workflow snapshots into
+    ///
+    /// # Parameters
+    ///
+    /// * `checkpoint` - The checkpoint record to restore from
+    ///
+    /// # Errors
+    ///
+    /// Returns a serialization error if deserialization fails.
+    fn restore_workflow_snapshots_from_checkpoint<T>(
+        checkpoint: &CheckpointRecord,
+    ) -> PersistenceResult<Option<T>>
+    where
+        T: DeserializeOwned,
+    {
+        match &checkpoint.workflow_snapshots {
+            Some(snapshots_json) => {
+                let snapshots = Self::deserialize_json(snapshots_json, "workflow snapshots")?;
+                Ok(Some(snapshots))
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// Restore scheduler state from the latest checkpoint.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - The type to deserialize the scheduler state into
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - No checkpoint exists
+    /// - JSON deserialization fails
+    /// - Database query fails
+    pub async fn restore_scheduler_state<T>(&self) -> PersistenceResult<T>
+    where
+        T: DeserializeOwned,
+    {
+        let checkpoint = self.get_latest().await?;
+        Self::restore_scheduler_state_from_checkpoint(&checkpoint)
+    }
+
+    /// Restore workflow snapshots from the latest checkpoint.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - The type to deserialize the workflow snapshots into
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - No checkpoint exists
+    /// - JSON deserialization fails (when snapshots are present)
+    /// - Database query fails
+    pub async fn restore_workflow_snapshots<T>(&self) -> PersistenceResult<Option<T>>
+    where
+        T: DeserializeOwned,
+    {
+        let checkpoint = self.get_latest().await?;
+        Self::restore_workflow_snapshots_from_checkpoint(&checkpoint)
+    }
+
+    /// Restore scheduler state from a specific checkpoint by ID.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - The type to deserialize the scheduler state into
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Checkpoint with the given ID doesn't exist
+    /// - JSON deserialization fails
+    /// - Database query fails
+    pub async fn restore_scheduler_state_by_id<T>(
+        &self,
+        checkpoint_id: &str,
+    ) -> PersistenceResult<T>
+    where
+        T: DeserializeOwned,
+    {
+        let checkpoint = self.get_checkpoint(checkpoint_id).await?;
+        Self::restore_scheduler_state_from_checkpoint(&checkpoint)
+    }
+
+    /// Restore workflow snapshots from a specific checkpoint by ID.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - The type to deserialize the workflow snapshots into
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Checkpoint with the given ID doesn't exist
+    /// - JSON deserialization fails (when snapshots are present)
+    /// - Database query fails
+    pub async fn restore_workflow_snapshots_by_id<T>(
+        &self,
+        checkpoint_id: &str,
+    ) -> PersistenceResult<Option<T>>
+    where
+        T: DeserializeOwned,
+    {
+        let checkpoint = self.get_checkpoint(checkpoint_id).await?;
+        Self::restore_workflow_snapshots_from_checkpoint(&checkpoint)
     }
 }
 
