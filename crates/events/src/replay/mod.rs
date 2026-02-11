@@ -13,10 +13,11 @@
 //! - Replay lifecycle state machine
 
 pub mod apply;
-pub mod loader;
-pub mod recovery;
-pub mod resume;
-pub mod state;
+ pub mod event_sourcing;
+ pub mod loader;
+ pub mod recovery;
+ pub mod resume;
+ pub mod state;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -27,12 +28,19 @@ use tokio::sync::watch;
 use crate::error::Result;
 
 // Re-export apply types for convenience
-pub use apply::{apply_event, apply_events, ApplyContext, EventSourcedState};
-// Re-export loader types for convenience
-pub use loader::{EventFilter, EventLoader, LoadError};
-// Re-export recovery types for convenience
-pub use recovery::{is_transient_error, RecoveryConfig, RecoveryStrategy, RetryPolicy};
-pub use state::ReplayState;
+ pub use apply::{apply_event, apply_events, ApplyContext, EventSourcedState};
+ // Re-export loader types for convenience
+ pub use loader::{EventFilter, EventLoader, LoadError};
+ // Re-export recovery types for convenience
+pub use recovery::{
+    is_transient_error, DeadLetterQueue, InMemoryDeadLetterQueue, PoisonEvent, RecoveryConfig,
+    RecoveryStrategy, RetryPolicy,
+};
+ // Re-export resume types for convenience
+ pub use resume::{CheckpointId, EventLog, EventMetadata, ResumeError};
+ // Re-export event sourcing replay for convenience
+ pub use event_sourcing::{EventSourcingReplay, ReplayResumeError};
+ pub use state::ReplayState;
 
 /// Progress information for event replay.
 #[derive(Debug, Clone, PartialEq)]

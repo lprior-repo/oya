@@ -52,8 +52,8 @@ pub async fn approve_command(args: ApproveArgs) -> Result<ApproveOutput> {
 
 #[cfg(test)]
 mod tests {
-        use super::*;
-        use oya_pipeline::{Language, Task};
+    use super::*;
+    use oya_pipeline::{Language, Task};
 
     #[tokio::test]
     async fn approve_command_rejects_non_eligible_task() {

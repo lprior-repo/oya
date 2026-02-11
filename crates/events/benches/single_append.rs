@@ -133,12 +133,11 @@ async fn measure_append_with_breakdown(
 
     // Phase 1: Measure serialization time
     let serialize_start = std::time::Instant::now();
-    let serialized_data = bincode::serialize(event)
-        .map_err(|e| format!("Serialization failed: {}", e))?;
+    let serialized_data =
+        bincode::serialize(event).map_err(|e| format!("Serialization failed: {}", e))?;
     let serialization_time = serialize_start.elapsed();
 
-    let wal_path = std::path::PathBuf::from(wal_dir)
-        .join(format!("{}.wal", event.bead_id()));
+    let wal_path = std::path::PathBuf::from(wal_dir).join(format!("{}.wal", event.bead_id()));
     let mut file = tokio::fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -179,7 +178,11 @@ async fn measure_append_with_breakdown(
     // Combine WAL insert + DB insert time
     let total_insert = insert_time + db_insert_time;
 
-    Ok(TimingBreakdown::new(serialization_time, total_insert, fsync_time))
+    Ok(TimingBreakdown::new(
+        serialization_time,
+        total_insert,
+        fsync_time,
+    ))
 }
 
 /// Core benchmark function: measure single event append latency

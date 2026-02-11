@@ -9,7 +9,7 @@
 // - Help overlay rendering
 
 use crate::layout::{Layout, Pane, PaneType};
-use crate::plugin::{StageState, TaskRow};
+use crate::plugin::{StageInfo, StageState, TaskRow};
 use thiserror::Error;
 
 // Style helper functions using functional patterns
@@ -288,22 +288,26 @@ impl Renderer {
         let (running_stage, failed_stage, completed) = get_stage_info(task);
 
         // Render pipeline stages using functional fold
-        let pipeline_stages = task
-            .stages
-            .iter()
-            .fold(String::new(), |mut acc, stage_info| {
-                let progress =
-                    calculate_stage_progress(&task.stages, running_stage, failed_stage, completed);
-                let bar = render_progress_bar(progress, 15);
-                acc.push_str(style_helpers::text());
-                acc.push_str("  ");
-                acc.push_str(stage_info.symbol());
-                acc.push(' ');
-                acc.push_str(&stage_info.name);
-                acc.push_str(&bar);
-                acc.push('\n');
-                acc
-            });
+        let pipeline_stages =
+            task.stages
+                .iter()
+                .fold(String::new(), |mut acc: String, stage_info: &StageInfo| {
+                    let progress = calculate_stage_progress(
+                        &task.stages,
+                        running_stage,
+                        failed_stage,
+                        completed,
+                    );
+                    let bar = render_progress_bar(progress, 15);
+                    acc.push_str(style_helpers::text());
+                    acc.push_str("  ");
+                    acc.push_str(stage_info.symbol());
+                    acc.push(' ');
+                    acc.push_str(&stage_info.name);
+                    acc.push_str(&bar);
+                    acc.push('\n');
+                    acc
+                });
 
         // Assemble complete detail view
         format!("{header}{field_lines}{stage_line}{pipeline_header}{pipeline_stages}")
@@ -317,21 +321,25 @@ impl Renderer {
         let (running_stage, failed_stage, completed) = get_stage_info(task);
 
         // Render pipeline stages using functional fold
-        let stages = task
-            .stages
-            .iter()
-            .fold(String::new(), |mut acc, stage_info| {
-                let progress =
-                    calculate_stage_progress(&task.stages, running_stage, failed_stage, completed);
-                let bar = render_progress_bar(progress, pane.width.saturating_sub(20));
-                acc.push_str(style_helpers::text());
-                acc.push_str(stage_info.symbol());
-                acc.push(' ');
-                acc.push_str(&stage_info.name);
-                acc.push_str(&bar);
-                acc.push('\n');
-                acc
-            });
+        let stages =
+            task.stages
+                .iter()
+                .fold(String::new(), |mut acc: String, stage_info: &StageInfo| {
+                    let progress = calculate_stage_progress(
+                        &task.stages,
+                        running_stage,
+                        failed_stage,
+                        completed,
+                    );
+                    let bar = render_progress_bar(progress, pane.width.saturating_sub(20));
+                    acc.push_str(style_helpers::text());
+                    acc.push_str(stage_info.symbol());
+                    acc.push(' ');
+                    acc.push_str(&stage_info.name);
+                    acc.push_str(&bar);
+                    acc.push('\n');
+                    acc
+                });
 
         format!("{header}{stages}")
     }
@@ -528,16 +536,23 @@ impl Default for Renderer {
 /// Uses char_indices for byte-efficient truncation without collecting into Vec.
 #[must_use]
 fn truncate(text: &str, width: usize) -> String {
-    // Find the byte position at which to truncate
-    let byte_pos = text.char_indices().map(|(pos, _)| pos).nth(width);
+    // Handle edge case where text already fits
+    if text.chars().count() <= width {
+        return text.to_string();
+    }
+
+    // If width is too small for meaningful truncation with ellipsis
+    if width <= 3 {
+        return "...".to_string();
+    }
+
+    // Find the byte position at which to truncate (leave room for "...")
+    let target_chars = width.saturating_sub(3);
+    let byte_pos = text.char_indices().map(|(pos, _)| pos).nth(target_chars);
 
     match byte_pos {
-        None => text.to_string(), // Text fits within width
-        Some(pos) if width > 3 && pos < text.len() => {
-            // Truncate and add ellipsis
-            format!("{}...", &text[..pos])
-        }
-        Some(_) => "...".to_string(), // Width too small for meaningful truncation
+        Some(pos) => format!("{}...", &text[..pos]),
+        None => text.to_string(), // Shouldn't happen if count > width
     }
 }
 

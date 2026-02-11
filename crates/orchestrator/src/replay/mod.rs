@@ -21,11 +21,13 @@ mod checkpoint;
 mod engine;
 mod events;
 mod projection;
+mod resume;
 
 pub use checkpoint::CheckpointManager;
 pub use engine::ReplayEngine;
 pub use events::OrchestratorEvent;
 pub use projection::OrchestratorProjection;
+pub use resume::{OrchestratorCheckpointStore, OrchestratorEventLog};
 
 #[cfg(test)]
 mod tests {

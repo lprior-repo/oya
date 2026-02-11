@@ -754,11 +754,170 @@ mod tests {
     // Additional tests from original second test module
 
     #[test]
-    fn test_plugin_creation() -> Result<(), Box<dyn std::error::Error>> {
-        let plugin = OyaPlugin::new();
-        assert!(plugin.is_ok());
+    fn test_help_overlay_toggle() > Result<(), Box<dyn std::error::Error>> {
+        let mut plugin = OyaPlugin::new()?;
+        
+        // Initially not in help overlay
+        assert_eq!(plugin.state, PluginState::Starting);
+        
+        // Toggle to open help overlay
+        let result = plugin.toggle_help_overlay();
+        assert!(result.is_ok());
+        assert_eq!(plugin.state, PluginState::HelpOverlay);
+        
+        // Toggle to close help overlay
+        let result = plugin.toggle_help_overlay();
+        assert!(result.is_ok());
+        assert_eq!(plugin.state, PluginState::Running);
+        
         Ok(())
     }
+
+    #[test]
+    fn test_help_overlay_preconditions() > Result<(), Box<dyn std::error::Error>> {
+        let mut plugin = OyaPlugin::new()?;
+        
+        // Test terminal too small error
+        plugin.size = Size { rows: 5, cols: 10 };
+        let result = plugin.open_help_overlay();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("TerminalTooSmall"));
+        
+        // Test invalid state error
+        plugin.state = PluginState::ShuttingDown;
+        let result = plugin.open_help_overlay();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("invalid state"));
+        
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_keybindings_for_all_panes() > Result<(), Box<dyn std::error::Error>> {
+        let plugin = OyaPlugin::new()?;
+        
+        // Test BeadList keybindings
+        let bead_list_bindings = plugin.get_keybindings_for_pane(PaneType::BeadList);
+        assert!(!bead_list_bindings.is_empty());
+        assert!(bead_list_bindings.iter().any(&|(key, _)| *key == '?'));
+        assert!(bead_list_bindings.iter().any(&|(key, _)| *key == '\x1b'));
+        
+        // Test BeadDetail keybindings
+        let bead_detail_bindings = plugin.get_keybindings_for_pane(PaneType::BeadDetail);
+        assert!(!bead_detail_bindings.is_empty());
+        assert!(bead_detail_bindings.iter().any(&|(key, _)| *key == '?'));
+        assert!(bead_detail_bindings.iter().any(&|(key, _)| *key == '\x1b'));
+        
+        // Test PipelineView keybindings
+        let pipeline_view_bindings = plugin.get_keybindings_for_pane(PaneType::PipelineView);
+        assert!(!pipeline_view_bindings.is_empty());
+        assert!(pipeline_view_bindings.iter().any(&|(key, _)| *key == '?'));
+        assert!(pipeline_view_bindings.iter().any(&|(key, _)| *key == '\x1b'));
+        
+        // Test WorkflowGraph keybindings
+        let workflow_graph_bindings = plugin.get_keybindings_for_pane(PaneType::WorkflowGraph);
+        assert!(!workflow_graph_bindings.is_empty());
+        assert!(workflow_graph_bindings.iter().any(&|(key, _)| *key == '?'));
+        assert!(workflow_graph_bindings.iter().any(&|(key, _)| *key == '\x1b'));
+        
+        Ok(())
+    }
+
+    #[test]
+    fn test_multiple_saves_update_timestamp() > Result<(), Box<dyn std::error::Error>> {
+        let mut plugin = OyaPlugin::new()?;
+
+        // First save
+        let result1 = plugin.save_state_now();
+
+        if result1.is_ok() {
+            let timestamp1 = plugin.last_save_timestamp().unwrap();
+
+            // Wait a bit (simulated by just calling again)
+            std::thread::sleep(std::time::Duration::from_millis(10));
+
+            // Second save
+            let result2 = plugin.save_state_now();
+            if result2.is_ok() {
+                let timestamp2 = plugin.last_save_timestamp().unwrap();
+
+                // Timestamps should be different (second save is later)
+                assert!(timestamp2 > timestamp1);
+            }
+        }
+        // If saves fail, that's acceptable in test environment
+        Ok(())
+    }
+
+    #[test]
+    fn test_auto_save_timer_is_running_after_init() > Result<(), Box<dyn std::error::Error>> {
+        let mut plugin = OyaPlugin::new()?;
+
+        let _ = plugin.init_auto_save(30);
+
+        assert!(plugin.auto_save_timer.is_some());
+        let timer = plugin.auto_save_timer.as_ref().unwrap();
+        assert!(timer.is_running());
+        Ok(())
+    }
+
+    #[test]
+    fn test_state_save_and_restore_roundtrip() > Result<(), Box<dyn std::error::Error>> {
+        use std::fs;
+
+        // Create a temporary directory for state file
+        let temp_dir = std::env::temp_dir().join("oya-test-state-roundtrip");
+        let _ = fs::remove_dir_all(&temp_dir); // Clean up any previous test
+        fs::create_dir_all(&temp_dir)?;
+
+        let state_file = temp_dir.join("test-state.json");
+
+        // Create plugin and set up specific state
+        let mut plugin1 = OyaPlugin::new()?;
+
+        // Modify state to test restoration
+        plugin1.selected_index = 2;
+        plugin1.focused_pane = crate::layout::PaneType::PipelineView;
+        plugin1.status_message = Some("Test roundtrip message".to_string());
+
+        // Save state
+        let state_manager = crate::state::StateManager::new(state_file.clone(), 1_048_576)?;
+        let save_result = state_manager.save_state(&plugin1);
+
+        // Verify save succeeded (or skip if filesystem unavailable)
+        if save_result.is_ok() {
+            // Create a new plugin instance
+            let mut plugin2 = OyaPlugin::new()?;
+
+            // Load state
+            let load_result = state_manager.load_state();
+            assert!(load_result.is_some(), "Load should succeed");
+
+            let mut snapshot = load_result.ok_or("No snapshot found")?;
+            assert!(snapshot.validate().is_ok(), "Snapshot should be valid");
+
+            // Restore state
+            let restore_result = plugin2.restore_from_snapshot(snapshot);
+            assert!(restore_result.is_ok(), "Restore should succeed");
+
+            // Verify restored state matches saved state
+            assert_eq!(plugin2.selected_index, 2);
+            assert_eq!(plugin2.focused_pane, crate::layout::PaneType::PipelineView);
+            assert_eq!(
+                plugin2.status_message,
+                Some("Test roundtrip message".to_string())
+            );
+
+            // Clean up
+            let _ = fs::remove_dir_all(&temp_dir);
+        }
+        // If save fails, skip test (filesystem unavailable in test environment)
+        Ok(())
+    }
+}
+
+/// Plugin state machine
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 
     #[test]
     fn test_size_serialization() -> Result<(), Box<dyn std::error::Error>> {

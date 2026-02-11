@@ -7,12 +7,13 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use tracing::info;
 
-use oya::commands::{AddArgs, ApproveArgs, DoneArgs, FocusArgs, ListArgs, NewArgs,
-    RemoveArgs, ShowArgs, SpawnArgs, StageArgs, StatusArgs, SyncArgs, WorkspaceArgs,
-    WorkspaceCommand, approve_command, list_command, new_command,
-    show_command, stage_command, workspace_add_command, workspace_done_command,
-    workspace_focus_command, workspace_list_command, workspace_remove_command,
-    workspace_spawn_command, workspace_status_command, workspace_sync_command,
+use oya::commands::{
+    AddArgs, ApproveArgs, DoneArgs, FocusArgs, ListArgs, NewArgs, RemoveArgs, ShowArgs, SpawnArgs,
+    StageArgs, StatusArgs, SyncArgs, WorkspaceArgs, WorkspaceCommand, approve_command,
+    list_command, new_command, show_command, stage_command, workspace_add_command,
+    workspace_done_command, workspace_focus_command, workspace_list_command,
+    workspace_remove_command, workspace_spawn_command, workspace_status_command,
+    workspace_sync_command,
 };
 
 #[tokio::main]
@@ -48,58 +49,56 @@ async fn main() -> Result<()> {
             info!("Approved task: {}", result.task.slug);
             Ok(())
         }
-        Some(Commands::Workspace(args)) => {
-            match args.command {
-                WorkspaceCommand::List(a) => {
-                    let result = workspace_list_command(a).await?;
-                    info!("Workspace list retrieved");
-                    println!("{}", result);
-                    Ok(())
-                }
-                WorkspaceCommand::Status(a) => {
-                    let result = workspace_status_command(a).await?;
-                    info!("Status for workspace: {}", result);
-                    println!("{}", result);
-                    Ok(())
-                }
-                WorkspaceCommand::Sync(a) => {
-                    let result = workspace_sync_command(a).await?;
-                    info!("Synced workspace: {}", result);
-                    println!("{}", result);
-                    Ok(())
-                }
-                WorkspaceCommand::Done(a) => {
-                    let result = workspace_done_command(a).await?;
-                    info!("Completed workspace: {}", result);
-                    println!("{}", result);
-                    Ok(())
-                }
-                WorkspaceCommand::Remove(a) => {
-                    let result = workspace_remove_command(a).await?;
-                    info!("Removed workspace: {}", result);
-                    println!("{}", result);
-                    Ok(())
-                }
-                WorkspaceCommand::Add(a) => {
-                    let result = workspace_add_command(a).await?;
-                    info!("Added workspace: {}", result);
-                    println!("{}", result);
-                    Ok(())
-                }
-                WorkspaceCommand::Spawn(a) => {
-                    let result = workspace_spawn_command(a).await?;
-                    info!("Spawned workspace for bead: {}", result);
-                    println!("{}", result);
-                    Ok(())
-                }
-                WorkspaceCommand::Focus(a) => {
-                    let result = workspace_focus_command(a).await?;
-                    info!("Focused on workspace: {}", result);
-                    println!("{}", result);
-                    Ok(())
-                }
+        Some(Commands::Workspace(args)) => match args.command {
+            WorkspaceCommand::List(a) => {
+                let result = workspace_list_command(a).await?;
+                info!("Workspace list retrieved");
+                println!("{}", result);
+                Ok(())
             }
-        }
+            WorkspaceCommand::Status(a) => {
+                let result = workspace_status_command(a).await?;
+                info!("Status for workspace: {}", result);
+                println!("{}", result);
+                Ok(())
+            }
+            WorkspaceCommand::Sync(a) => {
+                let result = workspace_sync_command(a).await?;
+                info!("Synced workspace: {}", result);
+                println!("{}", result);
+                Ok(())
+            }
+            WorkspaceCommand::Done(a) => {
+                let result = workspace_done_command(a).await?;
+                info!("Completed workspace: {}", result);
+                println!("{}", result);
+                Ok(())
+            }
+            WorkspaceCommand::Remove(a) => {
+                let result = workspace_remove_command(a).await?;
+                info!("Removed workspace: {}", result);
+                println!("{}", result);
+                Ok(())
+            }
+            WorkspaceCommand::Add(a) => {
+                let result = workspace_add_command(a).await?;
+                info!("Added workspace: {}", result);
+                println!("{}", result);
+                Ok(())
+            }
+            WorkspaceCommand::Spawn(a) => {
+                let result = workspace_spawn_command(a).await?;
+                info!("Spawned workspace for bead: {}", result);
+                println!("{}", result);
+                Ok(())
+            }
+            WorkspaceCommand::Focus(a) => {
+                let result = workspace_focus_command(a).await?;
+                info!("Focused on workspace: {}", result);
+                println!("{}", result);
+                Ok(())
+            }
+        },
         None => {
             println!("OYA CLI - Storm goddess of transformation");
             println!("Use --help for more information");

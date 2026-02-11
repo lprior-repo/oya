@@ -8,10 +8,14 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use surrealdb::sql::Datetime as SurrealDatetime;
+use std::sync::Arc;
+
+use oya_events::replay::resume::{resume_from_checkpoint, CheckpointId, ReplayState, ResumeError};
 
 use super::events::{EventRecord, OrchestratorEvent};
 use super::projection::OrchestratorProjection;
 use crate::persistence::{OrchestratorStore, PersistenceError, PersistenceResult};
+use crate::replay::resume::{OrchestratorCheckpointStore, OrchestratorEventLog};
 
 /// Input for storing events in `SurrealDB`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -131,15 +135,29 @@ impl ReplayEngine {
         // Try to load latest checkpoint
         let checkpoint_result = self.store.get_latest_checkpoint().await;
 
-        let (from_sequence, checkpoint_id) = match checkpoint_result {
+        let mut resume_state = None;
+        let mut checkpoint_id = None;
+
+        let from_sequence = match checkpoint_result {
             Ok(cp) => {
                 self.current_sequence = cp.event_sequence;
-                (cp.event_sequence, Some(cp.checkpoint_id))
+                checkpoint_id = Some(cp.checkpoint_id.clone());
+
+                let store_handle = Arc::new(self.store.clone());
+                let checkpoint_store = OrchestratorCheckpointStore::new(store_handle.clone());
+                let event_log = OrchestratorEventLog::new(store_handle);
+                let checkpoint_key = CheckpointId::new(cp.checkpoint_id.clone());
+
+                let resumed_state = resume_from_checkpoint(&checkpoint_key, &checkpoint_store, &event_log)
+                    .map_err(resume_error_to_persistence)?;
+                resume_state = Some(resumed_state);
+
+                cp.event_sequence
             }
             Err(PersistenceError::NotFound { .. }) => {
                 // No checkpoint exists, replay from beginning
                 self.current_sequence = 0;
-                (0, None)
+                0
             }
             Err(e) => return Err(e),
         };
@@ -159,6 +177,7 @@ impl ReplayEngine {
             checkpoint_id,
             events_replayed,
             final_sequence: self.current_sequence,
+            resume_state,
         })
     }
 
@@ -179,6 +198,10 @@ impl ReplayEngine {
     }
 }
 
+fn resume_error_to_persistence(err: ResumeError) -> PersistenceError {
+    PersistenceError::invalid_state(format!("checkpoint resume failed: {err}"))
+}
+
 /// Result of a recovery operation.
 #[derive(Debug)]
 pub struct RecoveryResult {
@@ -188,13 +211,17 @@ pub struct RecoveryResult {
     pub events_replayed: usize,
     /// Final sequence number after recovery
     pub final_sequence: u64,
+    /// Resume metadata captured by `resume_from_checkpoint`
+    pub resume_state: Option<ReplayState>,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::persistence::StoreConfig;
+    use crate::persistence::CheckpointRecord;
     use crate::replay::projection::WorkflowStatusProjection;
+    use std::time::{Duration, Instant};
 
     async fn setup_engine() -> Option<ReplayEngine> {
         let config = StoreConfig::in_memory();
@@ -203,10 +230,30 @@ mod tests {
         Some(ReplayEngine::new(store))
     }
 
+    async fn setup_engine_with_store() -> Option<(ReplayEngine, OrchestratorStore)> {
+        let config = StoreConfig::in_memory();
+        let store = OrchestratorStore::connect(config).await.ok()?;
+        let _ = store.initialize_schema().await;
+        let engine = ReplayEngine::new(store.clone());
+        Some((engine, store))
+    }
+
     macro_rules! require_engine {
         ($engine_opt:expr) => {
             match $engine_opt {
                 Some(e) => e,
+                None => {
+                    eprintln!("Skipping test: engine setup failed");
+                    return;
+                }
+            }
+        };
+    }
+
+    macro_rules! require_engine_with_store {
+        ($engine_store_opt:expr) => {
+            match $engine_store_opt {
+                Some((engine, store)) => (engine, store),
                 None => {
                     eprintln!("Skipping test: engine setup failed");
                     return;
@@ -287,6 +334,83 @@ mod tests {
 
             // Recovery should work but find no events (different in-memory store)
             assert!(result.is_ok());
+            if let Ok(recovery) = result {
+                assert!(
+                    recovery.resume_state.is_none(),
+                    "Resume state should be None when no checkpoint exists"
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_recover_records_resume_state() {
+        let (mut engine, store) = require_engine_with_store!(setup_engine_with_store().await);
+
+        let _ = engine
+            .record_event(OrchestratorEvent::WorkflowRegistered {
+                workflow_id: "wf-1".to_string(),
+                name: "Test Resume".to_string(),
+                dag_json: "{}".to_string(),
+            })
+            .await;
+
+        let _ = engine
+            .record_event(OrchestratorEvent::WorkflowStatusChanged {
+                workflow_id: "wf-1".to_string(),
+                status: "running".to_string(),
+            })
+            .await;
+
+        let checkpoint = CheckpointRecord::new("cp-resume", "{}", engine.current_sequence());
+        let saved = store.save_checkpoint(&checkpoint).await;
+        assert!(saved.is_ok(), "checkpoint save should succeed");
+
+        let mut projection = WorkflowStatusProjection::new();
+        let result = engine.recover(&mut projection).await;
+
+        assert!(result.is_ok(), "recovery should succeed");
+        if let Ok(recovery) = result {
+            assert_eq!(recovery.checkpoint_id, Some("cp-resume".to_string()));
+            let resume = recovery.resume_state.expect("resume state should be present");
+            assert_eq!(resume.checkpoint_id.as_str(), "cp-resume");
+            assert_eq!(recovery.events_replayed, resume.events_replayed as usize);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_recover_handles_large_event_volume() {
+        let (mut engine, store) = require_engine_with_store!(setup_engine_with_store().await);
+
+        for i in 0..1_000 {
+            let _ = engine
+                .record_event(OrchestratorEvent::WorkflowStatusChanged {
+                    workflow_id: format!("wf-{}", i % 5),
+                    status: "running".to_string(),
+                })
+                .await;
+        }
+
+        let checkpoint = CheckpointRecord::new("cp-large", "{}", engine.current_sequence());
+        let saved = store.save_checkpoint(&checkpoint).await;
+        assert!(saved.is_ok(), "checkpoint save should succeed");
+
+        let mut projection = WorkflowStatusProjection::new();
+        let start = Instant::now();
+        let result = engine.recover(&mut projection).await;
+        let duration = start.elapsed();
+
+        assert!(result.is_ok(), "recovery should succeed for large workload");
+        assert!(
+            duration < Duration::from_secs(5),
+            "Recovery should complete within 5s, took {:?}",
+            duration
+        );
+
+        if let Ok(recovery) = result {
+            let resume = recovery.resume_state.expect("resume state should be present");
+            assert!(resume.events_replayed as usize >= 1_000);
+            assert_eq!(recovery.events_replayed, resume.events_replayed as usize);
         }
     }
 

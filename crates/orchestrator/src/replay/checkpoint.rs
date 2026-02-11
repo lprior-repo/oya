@@ -206,8 +206,7 @@ impl CheckpointManager {
         serde_json::from_str(json_str).map_err(|e| {
             PersistenceError::serialization_error(format!(
                 "Failed to deserialize {}: {}",
-                field_name,
-                e
+                field_name, e
             ))
         })
     }
@@ -225,7 +224,9 @@ impl CheckpointManager {
     /// # Errors
     ///
     /// Returns a serialization error if deserialization fails.
-    fn restore_scheduler_state_from_checkpoint<T>(checkpoint: &CheckpointRecord) -> PersistenceResult<T>
+    fn restore_scheduler_state_from_checkpoint<T>(
+        checkpoint: &CheckpointRecord,
+    ) -> PersistenceResult<T>
     where
         T: DeserializeOwned,
     {

@@ -6,9 +6,10 @@
 #![forbid(clippy::unwrap_used)]
 #![forbid(clippy::panic)]
 // Tests are allowed to use expect
+#![allow(clippy::expect_used)]
 
-use anyhow::{anyhow, Result};
-use axum::{body::Body, http::StatusCode, Router};
+use anyhow::{Result, anyhow};
+use axum::{Router, body::Body, http::StatusCode};
 use http_body_util::BodyExt;
 use oya_web::{ServerConfig, create_router};
 use serde_json::Value;

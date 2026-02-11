@@ -34,6 +34,7 @@ pub mod render;
 
 // UI component modules (from oya-zellij)
 pub mod correlation;
+pub mod health;
 pub mod integration_test_worker;
 pub mod log;
 pub mod metrics;
@@ -51,6 +52,10 @@ pub use render::Renderer;
 
 // Re-exports for convenience - UI components
 pub use correlation::{CorrelationContext, RequestId, keys};
+pub use health::{
+    ComponentHealth, HealthError, ResourceUsage, SystemHealthSnapshot, SystemStatus,
+    ThroughputMetrics,
+};
 pub use integration_test_worker::{
     IntegrationTestConfig, IntegrationTestError, IntegrationTestWorker, TestMode, TestResult,
     TestSummary,

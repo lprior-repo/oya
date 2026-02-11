@@ -310,6 +310,10 @@ impl DurableEventStore {
         self
     }
 
+    pub fn db(&self) -> &Arc<Surreal<Db>> {
+        &self.db
+    }
+
     pub async fn append_event(&self, event: &BeadEvent) -> Result<()> {
         let serialized = SerializedEvent::from_bead_event(event)?;
 

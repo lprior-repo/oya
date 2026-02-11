@@ -57,7 +57,7 @@ fn test_serializes_graph_data_when_response_has_nodes_and_edges() -> TestResult 
 
 /// Given a WorkflowGraphResponse JSON,
 /// When deserializing from JSON,
-/// Then the response should reconstruct nodes and edges correctly
+/// Then response should reconstruct nodes and edges correctly
 #[test]
 fn test_deserializes_from_json_when_json_is_valid() -> TestResult {
     // Given: Valid JSON representation
@@ -76,10 +76,15 @@ fn test_deserializes_from_json_when_json_is_valid() -> TestResult {
 
     // Then: Should succeed with correct data
     assert_eq!(response.nodes.len(), 2, "Should have 2 nodes");
-    assert_eq!(response.nodes[0].id, "task-a", "First node id should match");
+    assert_eq!(
+        response.nodes.get(0).map(|n| &n.id),
+        Some(&"task-a".to_string()),
+        "First node id should match"
+    );
     assert_eq!(response.edges.len(), 1, "Should have 1 edge");
     assert_eq!(
-        response.edges[0].source, "task-a",
+        response.edges.get(0).map(|e| &e.source),
+        Some(&"task-a".to_string()),
         "Edge source should match"
     );
     Ok(())
@@ -112,9 +117,10 @@ fn test_serializes_empty_graph_when_response_has_no_data() -> TestResult {
 }
 
 /// Given a GraphNode with position data,
-/// When accessing the x and y coordinates,
-/// Then the values should be accessible and correct
+/// When accessing x and y coordinates,
+/// Then values should be accessible and correct
 #[test]
+#[allow(clippy::float_cmp)]
 fn test_graph_node_has_position_when_created() {
     // Given: A node with specific position
     let node = GraphNode {
@@ -264,7 +270,7 @@ fn test_calculates_graph_metrics_when_response_has_data() {
 }
 
 /// Given GraphNodes with various labels,
-/// When accessing the labels,
+/// When accessing labels,
 /// Then all labels should be preserved correctly
 #[test]
 fn test_preserves_node_labels_when_labels_have_special_characters() -> TestResult {
@@ -289,8 +295,14 @@ fn test_preserves_node_labels_when_labels_have_special_characters() -> TestResul
     let deserialized: Vec<GraphNode> = serde_json::from_str(&json)?;
 
     // Then: Labels should match
-    assert_eq!(deserialized[0].label, "Task: Fix Bug #123");
-    assert_eq!(deserialized[1].label, "UTF-8: 你好世界");
+    assert_eq!(
+        deserialized.get(0).map(|n| &n.label),
+        Some(&"Task: Fix Bug #123".to_string())
+    );
+    assert_eq!(
+        deserialized.get(1).map(|n| &n.label),
+        Some(&"UTF-8: 你好世界".to_string())
+    );
     Ok(())
 }
 
