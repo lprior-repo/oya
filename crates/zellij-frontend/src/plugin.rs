@@ -918,6 +918,10 @@ mod tests {
 
 /// Plugin state machine
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+}
+
+/// Plugin state machine
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 
     #[test]
     fn test_size_serialization() -> Result<(), Box<dyn std::error::Error>> {

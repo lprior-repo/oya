@@ -8,9 +8,7 @@
 //! - Error recovery with DLQ integration
 
 use crate::event::BeadEvent;
-use crate::replay::recovery::{
-    log_poison_event, DeadLetterQueue, PoisonEvent, RecoveryConfig, RetryPolicy,
-};
+use crate::replay::recovery::{DeadLetterQueue, PoisonEvent, RecoveryConfig};
 use crate::types::{BeadId, BeadState};
 use serde::{Deserialize, Serialize};
 
@@ -324,6 +322,75 @@ where
     events
         .iter()
         .try_fold((), |(), event| apply_event(state, event, context))
+}
+
+/// Apply events with recovery using dead letter queue.
+///
+/// Applies events with retry logic and sends poison events to DLQ when recovery fails.
+///
+/// # Arguments
+///
+/// * `state` - Mutable reference to state
+/// * `events` - Slice of events to apply
+/// * `context` - Application context for ordering validation
+/// * `config` - Recovery configuration (retries, backoff, DLQ enable)
+/// * `dlq` - Dead letter queue for poison events
+///
+/// # Returns
+///
+/// * `Ok(ReplaySummary)` with applied and skipped counts
+/// * `Err(ApplyError)` if DLQ disabled and an event fails
+///
+/// # Errors
+///
+/// Returns `ApplyError` when:
+/// - An event fails and DLQ is disabled
+/// - Critical state corruption detected
+pub fn apply_events_with_recovery<S>(
+    state: &mut S,
+    events: &[BeadEvent],
+    context: &mut ApplyContext,
+    config: &RecoveryConfig,
+    dlq: &dyn DeadLetterQueue,
+) -> ApplyResult<ReplaySummary>
+where
+    S: EventSourcedState,
+{
+    // Use functional fold to track summary across all events
+    events
+        .iter()
+        .fold(Ok(ReplaySummary::zero()), |summary, event| {
+            let current_summary = summary?;
+
+            // Try to apply event with retries
+            let apply_result = (0..config.max_retries)
+                .try_fold((), |_attempt, _retry| apply_event(state, event, context));
+
+            match apply_result {
+                Ok(()) => Ok(current_summary.record_applied()),
+                Err(err) => {
+                    // Event failed after all retries - send to DLQ if enabled
+                    if config.enable_dlq {
+                        let event_id = event.event_id().to_string();
+                        let event_data = serde_json::to_vec(event).ok();
+
+                        let poison_event = PoisonEvent::new(
+                            event_id,
+                            config.max_retries,
+                            err.to_string(),
+                            event_data,
+                        );
+
+                        dlq.push_poison_event(poison_event)
+                            .map_err(|e| ApplyError::Internal(format!("DLQ push failed: {e}")))?;
+
+                        Ok(current_summary.record_skipped())
+                    } else {
+                        Err(err)
+                    }
+                }
+            }
+        })
 }
 
 #[cfg(test)]
@@ -715,7 +782,8 @@ mod tests {
     }
 
     #[test]
-    fn apply_events_with_recovery_applies_all_events_successfully() -> Result<(), Box<dyn std::error::Error>> {
+    fn apply_events_with_recovery_applies_all_events_successfully(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut state = MockState::new();
         let mut context = ApplyContext::new();
         let config = RecoveryConfig::new();
@@ -738,7 +806,8 @@ mod tests {
     }
 
     #[test]
-    fn apply_events_with_recovery_sends_poison_to_dlq_and_continues() -> Result<(), Box<dyn std::error::Error>> {
+    fn apply_events_with_recovery_sends_poison_to_dlq_and_continues(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut state = MockState::new();
         let mut context = ApplyContext::new();
         let config = RecoveryConfig::new();
@@ -776,7 +845,8 @@ mod tests {
     }
 
     #[test]
-    fn apply_events_with_recovery_fails_when_dlq_disabled() -> Result<(), Box<dyn std::error::Error>> {
+    fn apply_events_with_recovery_fails_when_dlq_disabled() -> Result<(), Box<dyn std::error::Error>>
+    {
         let mut state = MockState::new();
         let mut context = ApplyContext::new();
         let config = RecoveryConfig::new().with_dlq(false);
@@ -800,7 +870,8 @@ mod tests {
     }
 
     #[test]
-    fn apply_events_with_recovery_handles_all_poison_events() -> Result<(), Box<dyn std::error::Error>> {
+    fn apply_events_with_recovery_handles_all_poison_events(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut state = MockState::new();
         let mut context = ApplyContext::new();
         let config = RecoveryConfig::new();
@@ -829,7 +900,8 @@ mod tests {
     }
 
     #[test]
-    fn apply_events_with_recovery_handles_empty_event_list() -> Result<(), Box<dyn std::error::Error>> {
+    fn apply_events_with_recovery_handles_empty_event_list(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut state = MockState::new();
         let mut context = ApplyContext::new();
         let config = RecoveryConfig::new();
@@ -848,7 +920,8 @@ mod tests {
     }
 
     #[test]
-    fn apply_events_with_recovery_tracks_context_correctly() -> Result<(), Box<dyn std::error::Error>> {
+    fn apply_events_with_recovery_tracks_context_correctly(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut state = MockState::new();
         let mut context = ApplyContext::new();
         let config = RecoveryConfig::new();
@@ -871,7 +944,8 @@ mod tests {
     }
 
     #[test]
-    fn apply_events_with_recovery_mixed_success_and_poison() -> Result<(), Box<dyn std::error::Error>> {
+    fn apply_events_with_recovery_mixed_success_and_poison(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut state = MockState::new();
         let mut context = ApplyContext::new();
         let config = RecoveryConfig::new();
