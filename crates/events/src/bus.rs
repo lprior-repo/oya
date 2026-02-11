@@ -167,7 +167,7 @@ impl EventBus {
             }
 
             // Attempt to send event to subscriber
-            if let Ok(_) = sub.sender.send(event.clone()) {
+            if sub.sender.send(event.clone()).is_ok() {
                 // Success - reset failure count
                 sub.breaker.record_success();
                 debug!(
@@ -314,9 +314,6 @@ impl EventBus {
 
 #[cfg(test)]
 mod tests {
-
-    #![allow(clippy::expect_used)]
-    #![allow(clippy::unwrap_used)]
 
     use super::*;
     use crate::store::InMemoryEventStore;

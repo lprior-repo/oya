@@ -16,6 +16,8 @@
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
+#![cfg_attr(test, allow(clippy::expect_used))]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 
 pub mod bus;
 pub mod db;
@@ -41,6 +43,11 @@ pub use event::{BeadEvent, SerializationError, SerializationResult};
 
 // Re-export bus types
 pub use bus::{CircuitBreaker, EventBus, EventBusBuilder, EventPattern, EventSubscription};
+
+// Re-export projection types
+pub use projection::{
+    AllBeadsProjection, AllBeadsState, BeadProjection, ManagedProjection, Projection,
+};
 
 // Re-export store types
 pub use store::{EventStore, InMemoryEventStore};

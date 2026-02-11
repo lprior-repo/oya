@@ -8,6 +8,9 @@
 #![warn(clippy::pedantic)]
 #![warn(clippy::nursery)]
 #![forbid(unsafe_code)]
+#![cfg_attr(test, allow(clippy::expect_used))]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
+#![cfg_attr(test, allow(clippy::panic))]
 
 use crate::Slug;
 use serde::{Deserialize, Serialize};
@@ -99,7 +102,6 @@ impl Task {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
 
     use super::*;
 
@@ -107,7 +109,10 @@ mod tests {
     fn test_task_creation() {
         let task = Task::new("task-1", "Test Task", "A test task");
         assert!(task.is_ok());
-        let task = task.unwrap();
+        let task = match task {
+            Ok(t) => t,
+            Err(e) => panic!("Task creation failed: {}", e),
+        };
         assert_eq!(task.id.as_str(), "task-1");
         assert_eq!(task.title, "Test Task");
         assert_eq!(task.description, "A test task");

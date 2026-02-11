@@ -266,9 +266,7 @@ mod tests {
     use super::*;
     use std::time::Duration;
 
-    // Allow unwrap/panic in test code for test assertions
-    #[allow(clippy::unwrap_used)]
-    #[allow(clippy::expect_used)]
+ 
     
     /// Helper to spawn a logger actor for testing
     async fn spawn_logger()

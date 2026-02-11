@@ -22,6 +22,9 @@
 #![allow(clippy::unused_self)]
 #![allow(clippy::self_only_used_in_recursion)]
 #![forbid(unsafe_code)]
+#![cfg_attr(test, allow(clippy::expect_used))]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
+#![cfg_attr(test, allow(clippy::panic))]
 
 #[cfg(test)]
 use crate::Task;
@@ -548,7 +551,6 @@ impl ExecutionEngine {
     ///
     /// # Errors
     /// Returns `ExecutionError` if recovery fails.
-    #[inline]
     pub async fn recover_from_checkpoint(
         &self,
         path: &Path,
@@ -600,7 +602,6 @@ impl ExecutionEngine {
 }
 
 impl Default for ExecutionEngine {
-    #[inline]
     fn default() -> Self {
         Self::new()
     }
@@ -608,11 +609,12 @@ impl Default for ExecutionEngine {
 
 #[cfg(test)]
 mod tests {
+
+    #![allow(clippy::assertions_on_constants)]
     #![allow(clippy::unwrap_used)]
     #![allow(clippy::expect_used)]
     #![allow(clippy::panic)]
-    #![allow(clippy::assertions_on_constants)]
-    #![allow(clippy::unwrap_in_result)]
+    #![allow(clippy::indexing_slicing)]
 
     use super::*;
     use crate::Task;

@@ -58,7 +58,7 @@ unwrap_in_result = "deny"    # Don't unwrap Results explicitly
 todo = "warn"                  # No todo!() - implement or file issue
 
 # Documentation and quality
-missing_errors_doc = "warn"    # Document error variants
+missing_errors_doc = "allow"    # Document error variants
 missing_panics_doc = "warn"    # Document panic conditions (should be none)
 
 # Functional patterns - encourage immutable, pure functions

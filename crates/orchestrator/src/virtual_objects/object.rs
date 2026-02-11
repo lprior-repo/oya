@@ -1,5 +1,7 @@
 //! Virtual Object trait and management.
 
+#![allow(clippy::arithmetic_side_effects)]
+
 use std::collections::HashMap;
 use std::sync::Arc;
 

@@ -55,9 +55,9 @@
 //! }
 //! ```
 
-#![forbid(clippy::unwrap_used)]
+#![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
-#![forbid(clippy::panic)]
+#![deny(clippy::panic)]
 
 pub mod checkpoint;
 

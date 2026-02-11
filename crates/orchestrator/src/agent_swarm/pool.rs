@@ -1,13 +1,12 @@
 //! Agent pool for managing a collection of agents.
 
 use std::collections::HashMap;
-use std::sync::Arc;
+ use std::sync::Arc;
 
-use itertools::Itertools;
-use tokio::sync::RwLock;
-use tracing::instrument;
+ use itertools::Itertools;
+ use tokio::sync::RwLock;
 
-use super::error::{AgentSwarmError, AgentSwarmResult};
+ use super::error::{AgentSwarmError, AgentSwarmResult};
 use super::handle::{AgentHandle, AgentState};
 use super::health::{HealthConfig, HealthMonitor};
 

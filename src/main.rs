@@ -316,7 +316,7 @@ fn main() {
         .with_json_logging(false)
         .with_otel_enabled(false);
 
-    let _guard = oya_telemetry::init_telemetry(config);
+    let _guard = oya_telemetry::init_telemetry(&config);
 
     let oya = Oya::parse();
 

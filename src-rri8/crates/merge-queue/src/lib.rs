@@ -3,8 +3,8 @@
 //! Parallel task merging and conflict resolution for OYA.
 
 #![forbid(unsafe_code)]
-#![forbid(clippy::unwrap_used)]
-#![forbid(clippy::panic)]
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::panic)]
 #![deny(clippy::expect_used)]
 
 mod conflict;

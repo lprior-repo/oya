@@ -158,7 +158,6 @@ async fn capture_scheduler_state(
             },
             5000_u64
         )
-        .await
         {
             Ok(Some(status)) => status,
             Ok(None) => {
@@ -184,12 +183,11 @@ async fn capture_scheduler_state(
     }
 
     // Get all ready beads
-    let ready_pairs = match ractor::call_t!(
+    let ready_pairs: Vec<(String, String)> = match ractor::call_t!(
         scheduler,
         |reply| SchedulerMessage::GetAllReadyBeads { reply },
         5000_u64
     )
-    .await
     {
         Ok(pairs) => pairs,
         Err(e) => {

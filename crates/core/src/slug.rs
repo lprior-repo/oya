@@ -1,5 +1,9 @@
 //! Slug type for task identifiers.
 
+#![cfg_attr(test, allow(clippy::expect_used))]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
+#![cfg_attr(test, allow(clippy::panic))]
+
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -157,7 +161,6 @@ impl AsRef<str> for Slug {
 #[cfg(test)]
 mod tests {
 
-    #![allow(clippy::panic)]
     #![allow(clippy::uninlined_format_args)]
     #![allow(clippy::manual_let_else)]
     #![allow(clippy::missing_panics_doc)]

@@ -3,10 +3,12 @@
 //!
 //! Examples of using the ACP (Agent Client Protocol) schemas in oya-opencode.
 //!
-//! Note: These are OpenCode's internal message format types (MessageV2),
+//! Note: These are OpenCode's internal message format types (`MessageV2`),
 //! not the Anthropic Context Protocol.
 
-use oya_opencode::acp_schemas::*;
+use std::collections::HashMap;
+
+use oya_opencode::acp_schemas::{AcpMessage, CacheStats, TokenUsage, ToolState, ToolTimeRange};
 
 fn main() {
     // Create a text message
@@ -23,7 +25,7 @@ fn main() {
 
     // Create a tool state
     let tool_state = ToolState::Completed {
-        input: Default::default(),
+        input: HashMap::default(),
         output: "Success!".to_string(),
         title: "Test Tool".to_string(),
         metadata: None,

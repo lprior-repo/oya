@@ -23,8 +23,8 @@
 //! - **Timers**: Durable scheduled task execution
 
 #![forbid(unsafe_code)]
-#![forbid(clippy::unwrap_used)]
-#![forbid(clippy::panic)]
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::panic)]
 #![deny(clippy::expect_used)]
 
 pub use oya_core::{Error, Result};

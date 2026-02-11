@@ -6,9 +6,9 @@
 //! - Semantic convention attributes
 
 #![forbid(unsafe_code)]
-#![forbid(clippy::unwrap_used)]
+#![deny(clippy::unwrap_used)]
 #![forbid(clippy::expect_used)]
-#![forbid(clippy::panic)]
+#![deny(clippy::panic)]
 #![warn(clippy::pedantic)]
 #![warn(clippy::nursery)]
 

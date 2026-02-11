@@ -24,9 +24,12 @@
 #![allow(clippy::option_if_let_else)]
 #![allow(clippy::explicit_iter_loop)]
 #![forbid(unsafe_code)]
+#![cfg_attr(test, allow(clippy::expect_used))]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
+#![cfg_attr(test, allow(clippy::panic))]
 
-use crate::Workflow;
 use crate::execution::{TaskExecutionStatus, WorkflowState};
+use crate::Workflow;
 use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 
@@ -725,9 +728,6 @@ fn progress_bar(status: &TaskExecutionStatus) -> String {
 mod tests {
 
     #![allow(clippy::assertions_on_constants)]
-    #![allow(clippy::unwrap_used)]
-    #![allow(clippy::expect_used)]
-    #![allow(clippy::panic)]
     #![allow(clippy::indexing_slicing)]
     #![allow(clippy::single_char_pattern)]
 

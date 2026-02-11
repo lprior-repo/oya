@@ -3,8 +3,8 @@
 //! Parallel task merging and conflict resolution for OYA.
 
 #![forbid(unsafe_code)]
-#![forbid(clippy::unwrap_used)]
-#![forbid(clippy::panic)]
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::panic)]
 #![deny(clippy::expect_used)]
 
 mod conflict;
@@ -100,7 +100,8 @@ pub mod queue {
 }
 
 /// Conflict resolution module
-pub use conflict::{ConflictDetection, RebaseResult, attempt_rebase, detect};
+pub use conflict::{attempt_rebase, detect, ConflictDetection, RebaseResult};
+pub use queue::{MergeTask, Queue};
 
 // Include test modules
 #[cfg(test)]

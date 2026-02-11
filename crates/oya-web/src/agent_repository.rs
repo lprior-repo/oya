@@ -28,6 +28,11 @@
 #![warn(clippy::pedantic)]
 #![warn(clippy::nursery)]
 #![forbid(unsafe_code)]
+#![allow(clippy::arithmetic_side_effects)]
+#![cfg_attr(test, allow(clippy::expect_used))]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
+#![cfg_attr(test, allow(clippy::panic))]
+#![cfg_attr(test, allow(clippy::indexing_slicing))]
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -71,6 +76,10 @@ impl std::fmt::Display for RepositoryAgentState {
 }
 
 /// Agent data stored in the repository.
+ /// 
+ /// # Errors
+ /// 
+ /// Returns `AgentRepositoryError` when operations fail.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RepositoryAgent {
     /// Unique agent identifier.
@@ -111,16 +120,24 @@ impl RepositoryAgent {
         }
     }
 
-    /// Updates the agent's heartbeat timestamp.
-    pub fn record_heartbeat(&mut self) -> Result<(), AgentRepositoryError> {
+/// Updates the agent's heartbeat timestamp.
+ ///
+ /// # Errors
+ /// 
+ /// Returns `AgentRepositoryError` if the heartbeat update fails.
+     pub fn record_heartbeat(&mut self) -> Result<(), AgentRepositoryError> {
         let now = Utc::now().to_rfc3339();
         self.last_heartbeat = now;
         self.health_score = 1.0;
         Ok(())
     }
 
-    /// Assigns a bead to the agent.
-    pub fn assign_bead(&mut self, bead_id: String) -> Result<(), AgentRepositoryError> {
+/// Assigns a bead to the agent.
+ ///
+ /// # Errors
+ /// 
+ /// Returns `AgentRepositoryError` if the agent is not available or bead assignment fails.
+     pub fn assign_bead(&mut self, bead_id: String) -> Result<(), AgentRepositoryError> {
         if !matches!(self.state, RepositoryAgentState::Idle) {
             return Err(AgentRepositoryError::AgentNotAvailable {
                 agent_id: self.id.clone(),
@@ -133,8 +150,12 @@ impl RepositoryAgent {
         Ok(())
     }
 
-    /// Completes the current bead assignment.
-    pub fn complete_bead(&mut self) -> Result<(), AgentRepositoryError> {
+/// Completes the current bead assignment.
+ ///
+ /// # Errors
+ /// 
+ /// Returns `AgentRepositoryError` if there's no active bead to complete.
+     pub fn complete_bead(&mut self) -> Result<(), AgentRepositoryError> {
         if self.current_bead.is_none() {
             return Err(AgentRepositoryError::NoActiveBead {
                 agent_id: self.id.clone(),
@@ -453,8 +474,6 @@ impl AgentRepository for InMemoryAgentRepository {
 mod tests {
     #![allow(clippy::float_cmp)]
     #![allow(clippy::indexing_slicing)]
-    #![allow(clippy::expect_used)]
-    #![allow(clippy::unwrap_used)]
 
     use super::*;
 

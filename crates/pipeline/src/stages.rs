@@ -153,15 +153,14 @@ pub fn pipeline_stage_edges() -> Vec<(Stage, Stage)> {
 
 #[cfg(test)]
 mod tests {
-
-    #![allow(clippy::expect_used)]
+    #![allow(clippy::unwrap_used)]
 
     use super::*;
 
     #[test]
     fn parse_accepts_known_labels() {
-        let stage = Stage::parse("unit-test").expect("stage should parse");
-        assert_eq!(stage, Stage::UnitTest);
+        let result = Stage::parse("unit-test");
+        assert_eq!(result.unwrap(), Stage::UnitTest);
     }
 
     #[test]

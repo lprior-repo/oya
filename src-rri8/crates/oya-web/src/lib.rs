@@ -3,8 +3,8 @@
 //! HTTP API with tower middleware for CORS, tracing, and compression.
 
 #![forbid(unsafe_code)]
-#![forbid(clippy::unwrap_used)]
-#![forbid(clippy::panic)]
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::panic)]
 #![deny(clippy::expect_used)]
 
 use axum::{Json, Router, http::Method, routing::get};

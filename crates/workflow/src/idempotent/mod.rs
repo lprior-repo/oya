@@ -53,7 +53,10 @@ pub mod keys;
 pub mod namespace;
 pub mod types;
 
-pub use hash::{hash_input, hash_serializable};
+pub use hash::{
+    clear_hash_caches, hash_input, hash_serializable, memoized_hash_input,
+    memoized_hash_input_single_threaded, memoized_hash_serializable,
+};
 pub use keys::{idempotency_key, idempotency_key_from_bytes, idempotency_key_from_json};
 pub use namespace::namespace_from_bead;
 pub use types::IdempotencyKey;

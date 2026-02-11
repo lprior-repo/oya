@@ -1,5 +1,9 @@
 //! Workflow type for representing DAG-based task execution.
 
+#![cfg_attr(test, allow(clippy::expect_used))]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
+#![cfg_attr(test, allow(clippy::panic))]
+
 use crate::{Slug, Task};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -266,7 +270,6 @@ impl fmt::Display for Workflow {
 mod tests {
 
     #![allow(clippy::indexing_slicing)]
-    #![allow(clippy::unwrap_used)]
     #![allow(clippy::assertions_on_constants)]
     #![allow(clippy::uninlined_format_args)]
     #![allow(clippy::single_char_pattern)]

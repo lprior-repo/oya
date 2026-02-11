@@ -182,7 +182,7 @@ impl BeadState {
                 )
                 | (Scheduled, Ready | Pending)
                 | (Ready | Suspended | BackingOff | Paused, Running)
-                | (Running, Suspended | BackingOff | Paused) // Cancelled
+                | (Running, Suspended | BackingOff | Paused)
         )
     }
 

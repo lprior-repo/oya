@@ -284,9 +284,14 @@ impl CircuitBreaker {
 
     /// Execute a function with circuit breaker protection.
     ///
-    /// Returns `Err(CircuitBreakerError::Open)` if circuit is open.
-    /// Otherwise executes the function and records the result.
-    pub async fn call<F, T, E>(&mut self, f: F) -> Result<T, CircuitBreakerError<E>>
+/// Returns `Err(CircuitBreakerError::Open)` if circuit is open.
+     /// Otherwise executes the function and records the result.
+     /// 
+     /// # Errors
+     /// 
+     /// Returns `CircuitBreakerError::Open` if circuit is open.
+     /// Returns `CircuitBreakerError::Inner` if the inner function returns an error.
+     pub async fn call<F, T, E>(&mut self, f: F) -> Result<T, CircuitBreakerError<E>>
     where
         F: std::future::Future<Output = Result<T, E>>,
     {
@@ -326,8 +331,6 @@ pub enum CircuitBreakerError<E> {
 mod tests {
     #![allow(clippy::items_after_statements)]
     #![allow(clippy::unused_async)]
-    #![allow(clippy::unwrap_used)]
-    #![allow(clippy::expect_used)]
 
     use super::*;
 
@@ -495,7 +498,11 @@ mod tests {
 
         let result = breaker.call(success_fn()).await;
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), "success");
+        let success = match result {
+            Ok(v) => v,
+            Err(_) => panic!("Expected success"),
+        };
+        assert_eq!(success, "success");
         assert_eq!(breaker.state(), CircuitState::Closed);
     }
 
