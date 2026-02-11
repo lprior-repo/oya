@@ -1,6 +1,7 @@
 //! Agent swarm error types.
 
 use std::fmt;
+use std::time::Duration;
 
 /// Errors that can occur in agent swarm operations.
 #[derive(Debug)]
@@ -65,6 +66,36 @@ pub enum AgentSwarmError {
         /// Error message
         message: String,
     },
+
+    /// Agent subprocess spawn failed.
+    SpawnFailed {
+        /// Error details
+        message: String,
+    },
+
+    /// Executable not found at specified path.
+    ExecutableNotFound {
+        /// The path that was checked
+        path: std::path::PathBuf,
+    },
+
+    /// No active subprocess.
+    NoActiveSubprocess,
+
+    /// Stdin not available.
+    StdinUnavailable,
+
+    /// Stdout not available.
+    StdoutUnavailable,
+
+    /// IO error.
+    Io(std::io::Error),
+
+    /// Timeout elapsed.
+    Timeout {
+        /// The timeout duration
+        timeout: Duration,
+    },
 }
 
 impl fmt::Display for AgentSwarmError {
@@ -103,11 +134,38 @@ impl fmt::Display for AgentSwarmError {
             Self::Internal { message } => {
                 write!(f, "internal error: {message}")
             }
+            Self::SpawnFailed { message } => {
+                write!(f, "spawn failed: {message}")
+            }
+            Self::ExecutableNotFound { path } => {
+                write!(f, "executable not found: {}", path.display())
+            }
+            Self::NoActiveSubprocess => {
+                write!(f, "no active subprocess")
+            }
+            Self::StdinUnavailable => {
+                write!(f, "stdin not available")
+            }
+            Self::StdoutUnavailable => {
+                write!(f, "stdout not available")
+            }
+            Self::Io(e) => {
+                write!(f, "io error: {e}")
+            }
+            Self::Timeout { timeout } => {
+                write!(f, "timeout after {:?}", timeout)
+            }
         }
     }
 }
 
 impl std::error::Error for AgentSwarmError {}
+
+impl From<std::io::Error> for AgentSwarmError {
+    fn from(value: std::io::Error) -> Self {
+        Self::Io(value)
+    }
+}
 
 impl AgentSwarmError {
     /// Create an agent not found error.
