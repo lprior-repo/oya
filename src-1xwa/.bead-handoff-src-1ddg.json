@@ -1,0 +1,89 @@
+{
+  "bead_id": "src-1ddg",
+  "title": "storage-actors: Integration with SurrealDB and DurableEventStore",
+  "description": "Integrate StateManagerActor and EventStoreActor with SurrealDB backend and DurableEventStore. The actors are already implemented with message handlers but need proper initialization with real storage backends through the supervision system.",
+  "context": {
+    "related_files": [
+      "/home/lewis/src/oya/crates/orchestrator/src/actors/storage.rs",
+      "/home/lewis/src/oya/crates/orchestrator/src/actors/storage/surreal_integration.rs",
+      "/home/lewis/src/oya/crates/events/src/durable_store.rs",
+      "/home/lewis/src/oya/crates/orchestrator/src/supervision.rs",
+      "/home/lewis/src/oya/crates/orchestrator/tests/state_manager_actor_test.rs",
+      "/home/lewis/src/oya/crates/orchestrator/tests/event_store_actor_test.rs"
+    ],
+    "dependencies": [
+      "surrealdb with RocksDB backend",
+      "oya-events crate (BeadEvent, DurableEventStore, ConnectionConfig)",
+      "ractor for actor framework",
+      "tokio for async runtime"
+    ],
+    "impact_summary": "This enables durable state persistence and event sourcing for the entire orchestrator system. Both actors already have working handlers - they just need proper storage initialization."
+  },
+  "requirements": [
+    "StateManagerActor must connect to SurrealDB on startup (pre_start)",
+    "EventStoreActor must receive initialized DurableEventStore on spawn",
+    "Both actors must propagate connection failures as ActorProcessingErr (fail-fast)",
+    "Connection pooling must be configured for SurrealDB",
+    "WAL (write-ahead log) directory must be configured for DurableEventStore",
+    "Actors should integrate into tier-1 supervision system",
+    "All operations must use Result<T, Error> - zero unwraps/panics"
+  ],
+  "current_status": {
+    "implemented": [
+      "StateManagerActor has complete message handlers (SaveState, LoadState, DeleteState, etc.)",
+      "EventStoreActor has complete message handlers (AppendEvent, ReadEvents, ReplayEvents)",
+      "DurableEventStore is fully implemented with fsync guarantees",
+      "SurrealConnectionManager with connection pooling and retry logic exists",
+      "Unit tests for both actors exist and pass"
+    ],
+    "missing": [
+      "StateManagerActor creates its own SurrealDB connection in pre_start (not using SurrealConnectionManager)",
+      "EventStoreActor requires external DurableEventStore instance (not created by supervision system)",
+      "No integration with SurrealConnectionManager for connection pooling",
+      "Tier-1 supervision spawns StateManagerActor but doesn't pass DurableEventStore to EventStoreActor"
+    ],
+    "technical_details": {
+      "state_manager_implementation": "Lines 145-187 of storage.rs show StateManagerActor::pre_start creates SurrealDB client directly, bypassing SurrealConnectionManager",
+      "event_store_implementation": "Lines 421-439 show EventStoreActor::pre_start requires Some(Arc<DurableEventStore>) argument, returns error if None",
+      "supervision_integration": "supervision.rs line 97 shows spawn_tier1_supervisor::<StateManagerActorDef>() with default args, no custom config"
+    }
+  },
+  "acceptance_criteria": [
+    "StateManagerActor uses SurrealConnectionManager instead of raw SurrealDB client",
+    "EventStoreActor spawns successfully within supervision system with DurableEventStore instance",
+    "Connection failures in pre_start cause actor spawn to fail (fail-fast principle)",
+    "Connection pooling is active and configurable",
+    "WAL directory is properly configured for event persistence",
+    "All existing unit tests continue to pass",
+    "Integration test shows actors working with tier-1 supervision"
+  ],
+  "implementation_guidance": {
+    "approach": "Two-phase integration: (1) Update StateManagerActor to use SurrealConnectionManager, (2) Add factory method for DurableEventStore in supervision system",
+    "code_patterns": {
+      "connection_manager": "Use SurrealConnectionManager::new(ConnectionManagerConfig::new(db_config)).await?",
+      "state_store_args": "Modify StateManagerActorDef::Arguments to take ConnectionManagerConfig instead of DatabaseConfig",
+      "event_store_factory": "Add create_durable_event_store() helper in supervision.rs that returns Arc<DurableEventStore>",
+      "error_handling": "Connection failures return Err(ActorProcessingErr::from(...)) from pre_start"
+    },
+    "testing_strategy": "Write integration test in crates/orchestrator/tests/storage_actors_integration.rs that spawns both actors through supervision system and verifies real storage operations"
+  },
+  "anti_patterns": [
+    "DO NOT create SurrealDB client directly in StateManagerActor::pre_start",
+    "DO NOT use unwrap/expect/panic - all errors must propagate as Result",
+    "DO NOT modify clippy.toml or lint attributes",
+    "DO NOT bypass SurrealConnectionManager for 'simplicity'"
+  ],
+  "validation": {
+    "pre_commit_checks": [
+      "moon run :quick (format + clippy check)",
+      "All tests pass: moon run :test",
+      "No unwrap/expect/panic in new code"
+    ],
+    "evidence_required": [
+      "Integration test showing both actors spawned through supervision",
+      "Logs showing successful SurrealDB connection",
+      "Logs showing event persistence with fsync",
+      "moon run :ci passes"
+    ]
+  }
+}
