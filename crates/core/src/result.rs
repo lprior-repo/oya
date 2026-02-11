@@ -379,20 +379,27 @@ impl<T, E> GenericResultExt<T, E> for std::result::Result<T, E> {
 /// Extension trait for Option types providing Railway-style operations.
 pub trait OptionExt<T> {
     /// Convert Option to Result with a lazy error message.
+    ///
+    /// # Errors
+    /// Returns `Err` with the result of `err` if this Option is `None`.
     fn ok_or_else_lazy<E, F: FnOnce() -> E>(self, err: F) -> std::result::Result<T, E>;
 
     /// Tap into Some value without consuming the Option.
+    #[must_use]
     fn tap_some<F: FnOnce(&T)>(self, f: F) -> Self;
 
     /// Tap into None without consuming the Option.
+    #[must_use]
     fn tap_none<F: FnOnce()>(self, f: F) -> Self;
 }
 
 impl<T> OptionExt<T> for Option<T> {
+    #[inline]
     fn ok_or_else_lazy<E, F: FnOnce() -> E>(self, err: F) -> std::result::Result<T, E> {
         self.ok_or_else(err)
     }
 
+    #[inline]
     fn tap_some<F: FnOnce(&T)>(self, f: F) -> Self {
         if let Some(ref v) = self {
             f(v);
@@ -400,6 +407,7 @@ impl<T> OptionExt<T> for Option<T> {
         self
     }
 
+    #[inline]
     fn tap_none<F: FnOnce()>(self, f: F) -> Self {
         if self.is_none() {
             f();

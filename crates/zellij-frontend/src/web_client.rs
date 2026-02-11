@@ -1,18 +1,19 @@
 //! HTTP web client with graceful error handling
-//!
-//! Provides a type-safe HTTP client for making requests to the oya-web API
-//! with comprehensive error handling for network issues, timeouts, and HTTP errors.
+ //!
+ //! Provides a type-safe HTTP client for making requests to the oya-web API
+ //! with comprehensive error handling for network issues, timeouts, and HTTP errors.
+ #![cfg_attr(test, allow(clippy::panic))]
 
-use std::collections::BTreeMap;
-use std::sync::Arc;
-use std::time::Duration;
-
-use reqwest::Client;
-use serde::Deserialize;
-use thiserror::Error;
-use tracing::{debug, error, info, warn};
-
-use crate::correlation::{CorrelationContext, RequestId};
+ use std::collections::BTreeMap;
+ use std::sync::Arc;
+ use std::time::Duration;
+ 
+ use reqwest::Client;
+ use serde::Deserialize;
+ use thiserror::Error;
+ use tracing::{debug, error, info, warn};
+ 
+ use crate::correlation::{CorrelationContext, RequestId};
 
 /// HTTP client configuration
 #[derive(Debug, Clone)]
@@ -760,7 +761,7 @@ mod tests {
             }
             Ok(_) => {
                 eprintln!("Expected error, got success");
-                assert!(false);
+                panic!("Expected error, got success");
             }
         }
 

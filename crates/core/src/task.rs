@@ -31,6 +31,7 @@ pub enum Stage {
 impl Stage {
     /// Get all possible stages.
     #[must_use]
+    #[inline]
     pub const fn all() -> &'static [Self] {
         &[
             Self::Pending,
@@ -61,7 +62,8 @@ impl Task {
     /// Create a new task.
     ///
     /// # Errors
-    /// Returns an error if the slug is invalid.
+    /// Returns an error if slug is invalid.
+    #[inline]
     pub fn new(
         id: impl TryInto<Slug, Error = crate::Error>,
         title: impl Into<String>,
@@ -84,11 +86,11 @@ impl Task {
     }
 
     /// Mark the current stage as complete and advance to the next stage.
+    #[inline]
     pub const fn complete_current_stage(&mut self) {
         self.current_stage = match self.current_stage {
             Stage::Pending => Stage::InProgress,
-            Stage::InProgress => Stage::Completed,
-            Stage::Completed => Stage::Completed,
+            Stage::InProgress | Stage::Completed => Stage::Completed,
             Stage::Failed => Stage::Failed,
             Stage::RolledBack => Stage::RolledBack,
         };

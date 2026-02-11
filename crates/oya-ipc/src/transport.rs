@@ -9,9 +9,9 @@
 //! - Use within actor context for safe concurrent access
 
 use crate::{
-    LENGTH_PREFIX_SIZE, MAX_FRAME_SIZE, MAX_PAYLOAD_SIZE, TransportError, TransportResult,
+    TransportError, TransportResult, LENGTH_PREFIX_SIZE, MAX_FRAME_SIZE, MAX_PAYLOAD_SIZE,
 };
-use serde::{Serialize, de::DeserializeOwned};
+use serde::{de::DeserializeOwned, Serialize};
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 
 /// Transport layer for length-prefixed bincode messages.
@@ -379,6 +379,7 @@ impl IpcTransport<DuplexReader, DuplexWriter> {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::panic)]
 mod tests {
     // Test assertions need expect()
     use super::*;
@@ -480,20 +481,20 @@ mod tests {
         let server_msg = "from server".to_string();
 
         if let Err(e) = client.send(&client_msg) {
-                panic!("send failed: {}", e);
-            }
+            panic!("send failed: {}", e);
+        }
         if let Err(e) = server.send(&server_msg) {
-                panic!("send failed: {}", e);
-            }
+            panic!("send failed: {}", e);
+        }
 
         let server_received = match server.recv::<String>() {
-                Ok(v) => v,
-                Err(e) => panic!("recv failed: {}", e),
-            };
+            Ok(v) => v,
+            Err(e) => panic!("recv failed: {}", e),
+        };
         let client_received = match client.recv::<String>() {
-                Ok(v) => v,
-                Err(e) => panic!("recv failed: {}", e),
-            };
+            Ok(v) => v,
+            Err(e) => panic!("recv failed: {}", e),
+        };
 
         assert_eq!(server_received, client_msg);
         assert_eq!(client_received, server_msg);

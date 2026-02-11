@@ -73,7 +73,7 @@ pub fn init_telemetry_json() -> Result<()> {
         .with_json_logging(true)
         .with_log_level(tracing::Level::INFO);
 
-    let _guard = oya_telemetry::init_telemetry(config).map_err(Error::from)?;
+    let _guard = oya_telemetry::init_telemetry(&config).map_err(Error::from)?;
 
     Ok(())
 }

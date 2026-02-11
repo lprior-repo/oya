@@ -607,12 +607,22 @@ test result: ok. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out
         let results = worker.parse_cargo_test_output(output);
 
         assert_eq!(results.len(), 3);
-        assert_eq!(results[0].test_name, "test_foo");
-        assert!(results[0].passed);
-        assert_eq!(results[1].test_name, "test_bar");
-        assert!(results[1].passed);
-        assert_eq!(results[2].test_name, "test_baz");
-        assert!(!results[2].passed);
+        if let Some(r0) = results.get(0) {
+            if let Some(r1) = results.get(1) {
+                if let Some(r2) = results.get(2) {
+                    assert_eq!(r0.test_name, "test_foo");
+                    assert!(r0.passed);
+                    assert_eq!(r1.test_name, "test_bar");
+                    assert!(r1.passed);
+                    assert_eq!(r2.test_name, "test_baz");
+                    assert!(!r2.passed);
+                }
+            }
+        }
+        assert_eq!(r1.test_name, "test_bar");
+        assert!(r1.passed);
+        assert_eq!(r2.test_name, "test_baz");
+        assert!(!r2.passed);
     }
 
     #[test]

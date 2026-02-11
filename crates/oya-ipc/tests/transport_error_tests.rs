@@ -220,7 +220,7 @@ fn test_recv_with_corrupted_payload_returns_error() {
                 }
                 1 => {
                     // Send invalid bincode payload (all zeros)
-                    let payload = vec![0u8; 100];
+                    let payload = [0u8; 100];
                     let to_send = std::cmp::min(payload.len(), buf.len());
                     buf[..to_send].copy_from_slice(&payload[..to_send]);
                     self.state = 2;
