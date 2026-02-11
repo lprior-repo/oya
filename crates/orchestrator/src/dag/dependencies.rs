@@ -13,6 +13,7 @@
 #![deny(clippy::panic)]
 
 // Import DAG types for tests
+#[cfg(test)]
 use super::{DagError, DagResult, DependencyType, WorkflowDAG};
 
 // ============================================================================
