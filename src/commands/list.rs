@@ -58,7 +58,7 @@ pub async fn list_command(args: ListArgs) -> Result<ListOutput> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oya_pipeline::{Language, Priority, TaskStatus};
+    use oya_pipeline::{Language, Task};
 
     #[tokio::test]
     async fn list_command_returns_tasks() {

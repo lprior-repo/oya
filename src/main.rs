@@ -7,9 +7,9 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use tracing::info;
 
-use oya::commands::{AddArgs, ApproveArgs, DoneArgs, FocusArgs, NewArgs,
+use oya::commands::{AddArgs, ApproveArgs, DoneArgs, FocusArgs, ListArgs, NewArgs,
     RemoveArgs, ShowArgs, SpawnArgs, StageArgs, StatusArgs, SyncArgs, WorkspaceArgs,
-    WorkspaceCommand, WorkspaceListArgs, approve_command, list_command, new_command,
+    WorkspaceCommand, approve_command, list_command, new_command,
     show_command, stage_command, workspace_add_command, workspace_done_command,
     workspace_focus_command, workspace_list_command, workspace_remove_command,
     workspace_spawn_command, workspace_status_command, workspace_sync_command,
@@ -150,100 +150,4 @@ enum Commands {
     Approve(ApproveArgs),
     /// Manage workspace sessions via zjj
     Workspace(WorkspaceArgs),
-}
-
-/// Arguments for the list command
-#[derive(Parser, Debug, Clone)]
-struct ListArgs {
-    /// Format output as JSON
-    #[arg(long)]
-    json: bool,
-
-    /// Repository root path (default: current directory)
-    #[arg(long)]
-    root: Option<PathBuf>,
-}
-
-/// Arguments for the show command
-#[derive(Parser, Debug, Clone)]
-struct ShowArgs {
-    /// Task slug to show
-    #[arg(short, long)]
-    slug: String,
-
-    /// Format output as JSON
-    #[arg(long)]
-    json: bool,
-
-    /// Repository root path (default: current directory)
-    #[arg(long)]
-    root: Option<PathBuf>,
-}
-
-/// Arguments for the new command
-#[derive(Parser, Debug, Clone)]
-struct NewArgs {
-    /// Slug for the task (lowercase alphanumeric + hyphens)
-    #[arg(short, long)]
-    slug: String,
-
-    /// Language for the task (rust, go, python, js, gleam)
-    #[arg(short, long, default_value = "rust")]
-    language: String,
-
-    /// Priority level (P0, P1, P2, P3)
-    #[arg(short, long, default_value = "P2")]
-    priority: String,
-
-    /// Repository root path (default: current directory)
-    #[arg(long)]
-    root: Option<PathBuf>,
-
-    /// Skip workspace creation (debug mode)
-    #[arg(long)]
-    skip_workspace: bool,
-}
-
-/// Arguments for the stage command
-#[derive(Parser, Debug, Clone)]
-struct StageArgs {
-    /// Slug for the task
-    #[arg(short, long)]
-    slug: String,
-
-    /// Stage name to run
-    #[arg(short, long)]
-    stage: String,
-
-    /// Optional start stage for range
-    #[arg(long)]
-    from: Option<String>,
-
-    /// Optional end stage for range
-    #[arg(long)]
-    to: Option<String>,
-
-    /// Dry run (validate but don't persist)
-    #[arg(long)]
-    dry_run: bool,
-
-    /// Repository root path (default: current directory)
-    #[arg(long)]
-    root: Option<PathBuf>,
-}
-
-/// Arguments for the approve command
-#[derive(Parser, Debug, Clone)]
-struct ApproveArgs {
-    /// Slug for the task
-    #[arg(short, long)]
-    slug: String,
-
-    /// Force approval even if pipeline not passed
-    #[arg(long)]
-    force: bool,
-
-    /// Repository root path (default: current directory)
-    #[arg(long)]
-    root: Option<PathBuf>,
 }

@@ -7,7 +7,8 @@
 #![forbid(clippy::panic)]
 // Tests are allowed to use expect
 
-use axum::{body::Body, http::StatusCode};
+use anyhow::{anyhow, Result};
+use axum::{body::Body, http::StatusCode, Router};
 use http_body_util::BodyExt;
 use oya_web::{ServerConfig, create_router};
 use serde_json::Value;
@@ -184,22 +185,22 @@ async fn test_returns_valid_json_content_type_when_graph_is_requested() {
 }
 
 #[tokio::test]
-async fn test_handles_cors_headers_when_graph_is_requested_from_browser() {
+async fn test_handles_cors_headers_when_graph_is_requested_from_browser() -> Result<()> {
     // Given: A browser making a cross-origin request
     // When: Graph data is requested
     let config = ServerConfig::default();
     let router = create_router(config).expect("Router creation failed");
 
-    let response = router
-        .oneshot(
-            axum::http::Request::builder()
-                .uri("/api/graph")
-                .header("Origin", "tauri://localhost")
-                .body(Body::empty())
-                .expect("Failed to build request"),
-        )
-        .await
-        .expect("Request failed");
+    let request = axum::http::Request::builder()
+        .uri("/api/graph")
+        .header("Origin", "tauri://localhost")
+        .body(Body::empty())
+        .map_err(|e| anyhow!("Failed to build request: {}", e))?;
+
+    let response: axum::http::Response<Body> =
+        <Router as ServiceExt<axum::http::Request<Body>>>::oneshot(router, request)
+            .await
+            .map_err(|e| anyhow!("Request failed: {}", e))?;
 
     // Then: CORS headers should be present
     let headers = response.headers();
@@ -210,6 +211,8 @@ async fn test_handles_cors_headers_when_graph_is_requested_from_browser() {
 
     // And: Response should be successful
     assert_eq!(response.status(), StatusCode::OK);
+
+    Ok(())
 }
 
 #[tokio::test]
