@@ -31,10 +31,9 @@ impl OrchestratorCheckpointStore {
         Self { store }
     }
 
-    fn new_runtime() -> Result<Runtime, ResumeError> {
-        Runtime::new().map_err(|err| ResumeError::InvalidCheckpoint {
-            reason: err.to_string(),
-        })
+    fn new_runtime() -> Result<Runtime, OyaError> {
+        Runtime::new()
+            .map_err(|err| OyaError::Internal(format!("tokio runtime creation failed: {err}")))
     }
 }
 
@@ -42,37 +41,31 @@ impl CheckpointStore for OrchestratorCheckpointStore {
     fn load_checkpoint(
         &self,
         checkpoint_id: &CheckpointId,
-    ) -> Result<Option<(CheckpointData, DateTime<Utc>)>, ResumeError> {
+    ) -> Result<Option<(CheckpointData, DateTime<Utc>)>, OyaError> {
         let runtime = Self::new_runtime()?;
-        match runtime.block_on(self.store.get_checkpoint(checkpoint_id.as_str())) {
-            Ok(record) => {
+        runtime
+            .block_on(self.store.get_checkpoint(checkpoint_id.as_str()))
+            .map_err(|e| OyaError::Internal(format!("checkpoint load failed: {e}")))
+            .map(|record| {
                 let checkpoint_data = CheckpointData {
                     state: record.scheduler_state.into_bytes(),
                     sequence_number: record.event_sequence,
                     compressed: false,
                 };
-                Ok(Some((checkpoint_data, record.created_at)))
-            }
-            Err(PersistenceError::NotFound { .. }) => Ok(None),
-            Err(err) => Err(ResumeError::InvalidCheckpoint {
-                reason: err.to_string(),
-            }),
-        }
+                Some((checkpoint_data, record.created_at))
+            })
     }
 
     fn validate_timestamp(
         &self,
         checkpoint_id: &CheckpointId,
         checkpoint_timestamp: DateTime<Utc>,
-    ) -> Result<bool, ResumeError> {
+    ) -> Result<bool, OyaError> {
         let runtime = Self::new_runtime()?;
-        match runtime.block_on(self.store.get_checkpoint(checkpoint_id.as_str())) {
-            Ok(record) => Ok(record.created_at == checkpoint_timestamp),
-            Err(PersistenceError::NotFound { .. }) => Ok(false),
-            Err(err) => Err(ResumeError::InvalidCheckpoint {
-                reason: err.to_string(),
-            }),
-        }
+        runtime
+            .block_on(self.store.get_checkpoint(checkpoint_id.as_str()))
+            .map_err(|e| OyaError::Internal(format!("checkpoint validation failed: {e}")))
+            .map(|record| record.created_at == checkpoint_timestamp)
     }
 }
 
