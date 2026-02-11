@@ -58,7 +58,7 @@ impl RouteConfig {
             return true;
         }
 
-       if self.source.ends_with('*') {
+        if self.source.ends_with('*') {
             #[allow(clippy::arithmetic_side_effects)]
             let prefix = &self.source[..self.source.len() - 1];
             return channel_id.starts_with(prefix);

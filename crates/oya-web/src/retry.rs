@@ -345,7 +345,7 @@ mod tests {
     fn test_should_retry_server_error() {
         let policy = RetryPolicy::default();
         let error = HttpError::Server {
-            status: axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            status: 500,
             message: "Internal error".to_string(),
         };
 
@@ -356,7 +356,7 @@ mod tests {
     fn test_should_not_retry_client_error() {
         let policy = RetryPolicy::default();
         let error = HttpError::Client {
-            status: axum::http::StatusCode::NOT_FOUND,
+            status: 404,
             message: "Not found".to_string(),
         };
 
@@ -435,7 +435,7 @@ mod tests {
 
         // Should not retry client error
         let client_error = HttpError::Client {
-            status: axum::http::StatusCode::BAD_REQUEST,
+            status: 400,
             message: "Bad request".to_string(),
         };
         let delay2 = state.should_retry_with_delay(&client_error);

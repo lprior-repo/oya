@@ -1,28 +1,28 @@
 //! IPC Worker Actor - Zellij plugin communication bridge.
- //!
- //! This actor manages communication between the Zellij guest plugin (UI)
- //! and the OYA orchestrator (host). It handles `GuestMessage` commands,
- //! queries the orchestrator state, and broadcasts `HostMessage` events.
- //!
- //! # Architecture
- //!
- //! ```text
- //! Zellij Guest Plugin (UI)
- //!        │
- //!        │ GuestMessage (stdin/stdout)
- //!        ↓
- //! ┌─────────────────────────────┐
- //! │   IpcWorker Actor           │
- //! │  ────────────────────────   │
- //! │  • transport: IpcTransport  │
- //! │  • orchestrator: references │
- //! │  • event_tx: broadcast      │
- //! └─────────────────────────────┘
- //!        │
- //!        │ HostMessage (events, responses)
- //!        ↓
- //!    Subscribers
- //! ```
+//!
+//! This actor manages communication between the Zellij guest plugin (UI)
+//! and the OYA orchestrator (host). It handles `GuestMessage` commands,
+//! queries the orchestrator state, and broadcasts `HostMessage` events.
+//!
+//! # Architecture
+//!
+//! ```text
+//! Zellij Guest Plugin (UI)
+//!        │
+//!        │ GuestMessage (stdin/stdout)
+//!        ↓
+//! ┌─────────────────────────────┐
+//! │   IpcWorker Actor           │
+//! │  ────────────────────────   │
+//! │  • transport: IpcTransport  │
+//! │  • orchestrator: references │
+//! │  • event_tx: broadcast      │
+//! └─────────────────────────────┘
+//!        │
+//!        │ HostMessage (events, responses)
+//!        ↓
+//!    Subscribers
+//! ```
 
 //! # Safety
 //!
@@ -33,7 +33,6 @@
 //! Retry counts are u32 and increment by 1. Max u32 = 4,294,967,295 which is safe.
 
 #![allow(clippy::arithmetic_side_effects)]
-
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
@@ -80,39 +79,27 @@ pub struct IpcWorkerArguments {
 }
 
 impl IpcWorkerArguments {
-/// Create new arguments with no integrations.
-     #[must_use]
-     pub fn new() -> Self {
-         Self::default()
-     }
+    /// Create new arguments with no integrations.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
 
-     /// Set the \`EventBus\`.
-     pub fn with_event_bus(mut self, bus: Arc<EventBus>) -> Self {
-          self.event_bus = Some(bus);
-          self
-      }
-
-     /// Set the \`AgentPool\`.
-      #[must_use]
-      pub fn with_agent_pool(mut self, pool_: Arc<AgentPool>) -> Self {
-          self.agent_pool = Some(pool_);
-          self
-      }
-
-     /// Set the \`SchedulerState\`.
-     #[must_use]
-     pub fn with_scheduler_state(mut self, state: Arc<SchedulerState>) -> Self {
-         self.scheduler_state = Some(state);
-         self
-     }
-
-    /// Set the `EventBus`.
+    /// Set the \`EventBus\`.
+    #[must_use]
     pub fn with_event_bus(mut self, bus: Arc<EventBus>) -> Self {
-         self.event_bus = Some(bus);
-         self
-     }
+        self.event_bus = Some(bus);
+        self
+    }
 
-    /// Set the `SchedulerState`.
+    /// Set the \`AgentPool\`.
+    #[must_use]
+    pub fn with_agent_pool(mut self, pool_: Arc<AgentPool>) -> Self {
+        self.agent_pool = Some(pool_);
+        self
+    }
+
+    /// Set the \`SchedulerState\`.
     #[must_use]
     pub fn with_scheduler_state(mut self, state: Arc<SchedulerState>) -> Self {
         self.scheduler_state = Some(state);
@@ -563,12 +550,12 @@ impl Actor for IpcWorkerActorDef {
         }
 
         // Special case for Shutdown
-         if matches!(message, IpcWorkerMessage::Shutdown) {
-             info!("IpcWorker shutdown requested");
-             state.shutdown_requested = true;
-             myself.stop(Some("IpcWorker shutdown requested".to_string()));
-             return Ok(());
-         }
+        if matches!(message, IpcWorkerMessage::Shutdown) {
+            info!("IpcWorker shutdown requested");
+            state.shutdown_requested = true;
+            myself.stop(Some("IpcWorker shutdown requested".to_string()));
+            return Ok(());
+        }
 
         let (next_state, effects) = core::handle(state.clone(), message);
         *state = next_state;
@@ -666,7 +653,7 @@ mod core {
             }
 
             GuestMessage::GetAgentPool => {
-                let stats_ = get_agent_pool_stats(state)?;
+                let stats = get_agent_pool_stats(state)?;
                 Ok(HostMessage::AgentPoolStats {
                     total_agents: stats.total,
                     active_agents: stats.working,

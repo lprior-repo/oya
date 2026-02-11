@@ -129,7 +129,10 @@ impl SubprocessHandle {
             .as_mut()
             .ok_or(AgentSwarmError::NoActiveSubprocess)?;
 
-        let stdin = child.stdin.as_mut().ok_or(AgentSwarmError::StdinUnavailable)?;
+        let stdin = child
+            .stdin
+            .as_mut()
+            .ok_or(AgentSwarmError::StdinUnavailable)?;
 
         use tokio::io::AsyncWriteExt;
         stdin
@@ -161,7 +164,10 @@ impl SubprocessHandle {
             .as_mut()
             .ok_or(AgentSwarmError::NoActiveSubprocess)?;
 
-        let stdout = child.stdout.as_mut().ok_or(AgentSwarmError::StdoutUnavailable)?;
+        let stdout = child
+            .stdout
+            .as_mut()
+            .ok_or(AgentSwarmError::StdoutUnavailable)?;
 
         use tokio::io::{AsyncBufReadExt, BufReader};
         let reader = BufReader::new(stdout);
@@ -179,10 +185,7 @@ impl SubprocessHandle {
     /// # Errors
     ///
     /// Returns error if timeout occurs or process wait fails.
-    pub async fn wait_for_completion(
-        mut self,
-        timeout: Duration,
-    ) -> AgentSwarmResult<AgentOutput> {
+    pub async fn wait_for_completion(mut self, timeout: Duration) -> AgentSwarmResult<AgentOutput> {
         let mut child = self
             .child
             .take()
@@ -193,12 +196,9 @@ impl SubprocessHandle {
             .stdout
             .take()
             .ok_or(AgentSwarmError::StdoutUnavailable)?;
-        let mut stderr = child
-            .stderr
-            .take()
-            .ok_or(AgentSwarmError::SpawnFailed {
-                message: "stderr not captured".to_string(),
-            })?;
+        let mut stderr = child.stderr.take().ok_or(AgentSwarmError::SpawnFailed {
+            message: "stderr not captured".to_string(),
+        })?;
 
         // Race between process completion and timeout
         let sleep = tokio::time::sleep(timeout);

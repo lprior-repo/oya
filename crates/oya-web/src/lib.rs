@@ -78,12 +78,12 @@ impl Default for ServerConfig {
 }
 
 /// Create a new router with middleware.
- ///
- /// # Errors
- ///
- /// Returns an error if router creation fails.
- #[allow(clippy::needless_pass_by_value)]
- pub fn create_router(config: ServerConfig) -> Result<Router, Error> {
+///
+/// # Errors
+///
+/// Returns an error if router creation fails.
+#[allow(clippy::needless_pass_by_value)]
+pub fn create_router(config: ServerConfig) -> Result<Router, Error> {
     info!("Creating router with CORS origin: {}", config.cors_origin);
 
     let cors = CorsLayer::new()
@@ -207,11 +207,11 @@ impl From<std::convert::Infallible> for Error {
 }
 
 #[cfg(test)]
- mod tests {
-     #![allow(clippy::indexing_slicing)]
-     #![allow(clippy::float_cmp)]
+mod tests {
+    #![allow(clippy::indexing_slicing)]
+    #![allow(clippy::float_cmp)]
 
-     use super::*;
+    use super::*;
     use axum::{body::Body, http::StatusCode};
     use http_body_util::BodyExt;
     use tower::ServiceExt;

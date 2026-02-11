@@ -332,7 +332,7 @@ mod tests {
 
 /// Performance analysis functions
 pub mod analysis {
-    use super::{create_test_dag_with_result, MemoizedLayout, WorkflowDAG};
+    use super::{MemoizedLayout, WorkflowDAG, create_test_dag_with_result};
 
     /// Analyze cache effectiveness
     #[allow(clippy::cast_precision_loss)]

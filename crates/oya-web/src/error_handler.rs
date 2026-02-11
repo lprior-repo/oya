@@ -1,284 +1,216 @@
-//! HTTP error handling middleware.
+//! HTTP error handling with categorized errors for retry logic.
 //!
-//! Provides comprehensive error categorization, structured error responses,
-//! and recovery strategies for HTTP failures. All error handling follows
-//! Railway-Oriented Programming with zero unwraps/panics.
+//! Provides structured error types that can be categorized for retry decisions.
 
-#![deny(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-#![deny(clippy::panic)]
-#![warn(clippy::pedantic)]
-#![warn(clippy::nursery)]
 #![forbid(unsafe_code)]
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::panic)]
+#![deny(clippy::expect_used)]
 
-use axum::{
-    http::StatusCode,
-    response::{IntoResponse, Response},
-    Json,
-};
+use axum::{http::StatusCode, Json, response::{IntoResponse, Response}};
 use serde::{Deserialize, Serialize};
-use std::fmt;
 
-/// HTTP error categories for classification and handling.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Error categories for retry logic.
+///
+/// Determines whether an error should be retried based on its category.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ErrorCategory {
-    /// Network-level errors (connection refused, timeout, DNS failure)
+    /// Network errors (connection refused, DNS failure, etc.)
     Network,
-    /// Client errors (4xx) - permanent, should not retry
-    Client,
-    /// Server errors (5xx) - transient, may retry
-    Server,
-    /// Timeout errors - transient, may retry
+    /// Timeout errors
     Timeout,
-    /// Request validation errors
+    /// Server errors (5xx responses)
+    Server,
+    /// Client errors (4xx responses - never retry)
+    Client,
+    /// Validation errors (bad input - never retry)
     Validation,
-    /// Authentication/authorization errors
+    /// Authentication/authorization errors (never retry)
     Auth,
-    /// Unknown or uncategorized errors
+    /// Unknown error type
     Unknown,
 }
 
-impl fmt::Display for ErrorCategory {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for ErrorCategory {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Network => write!(f, "network"),
-            Self::Client => write!(f, "client"),
-            Self::Server => write!(f, "server"),
-            Self::Timeout => write!(f, "timeout"),
-            Self::Validation => write!(f, "validation"),
-            Self::Auth => write!(f, "auth"),
-            Self::Unknown => write!(f, "unknown"),
+            Self::Network => write!(f, "Network"),
+            Self::Timeout => write!(f, "Timeout"),
+            Self::Server => write!(f, "Server"),
+            Self::Client => write!(f, "Client"),
+            Self::Validation => write!(f, "Validation"),
+            Self::Auth => write!(f, "Auth"),
+            Self::Unknown => write!(f, "Unknown"),
         }
     }
 }
 
-/// Recovery strategy for error handling.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RecoveryStrategy {
-    /// Safe to retry with exponential backoff
-    RetryWithBackoff,
-    /// Safe to retry immediately
-    RetryImmediately,
-    /// Do not retry - permanent failure
-    NoRetry,
-    /// Degraded service - return cached/partial data
-    GracefulDegradation,
-}
-
-/// Structured error response for HTTP clients.
+/// HTTP error with categorization for retry logic.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ErrorResponse {
-    /// HTTP status code
-    pub status: u16,
-    /// Error category for client-side handling
-    pub category: String,
-    /// Human-readable error message
-    pub message: String,
-    /// Machine-readable error code
-    pub code: String,
-    /// Whether the error is retryable
-    pub retryable: bool,
-    /// ISO 8601 timestamp when error occurred
-    pub timestamp: String,
-    /// Request ID for tracing (optional)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub request_id: Option<String>,
-}
-
-impl ErrorResponse {
-    /// Create a new error response.
-    #[must_use]
-    pub fn new(
-        status: u16,
-        category: ErrorCategory,
-        message: String,
-        code: String,
-        retryable: bool,
-    ) -> Self {
-        let timestamp = Self::current_timestamp();
-        Self {
-            status,
-            category: category.to_string(),
-            message,
-            code,
-            retryable,
-            timestamp,
-            request_id: None,
-        }
-    }
-
-    /// Add request ID for tracing.
-    #[must_use]
-    pub fn with_request_id(mut self, request_id: String) -> Self {
-        self.request_id = Some(request_id);
-        self
-    }
-
-    /// Get current timestamp as ISO 8601 string.
-    fn current_timestamp() -> String {
-        std::time::SystemTime::now()
-            .duration_since(std::time::SystemTime::UNIX_EPOCH)
-            .map_or_else(
-                |_| "unknown".to_string(),
-                |d| {
-                    format!("{}", d.as_secs()) // Simplified - in production use chrono or time crate
-                },
-            )
-    }
-
-    /// Categorize HTTP status code into error category.
-    #[must_use]
-    pub fn categorize_status_code(status: StatusCode) -> ErrorCategory {
-        match status {
-            s if s.is_client_error() => match s {
-                StatusCode::BAD_REQUEST
-                | StatusCode::UNPROCESSABLE_ENTITY
-                | StatusCode::TOO_MANY_REQUESTS => ErrorCategory::Validation,
-                StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => ErrorCategory::Auth,
-                _ => ErrorCategory::Client,
-            },
-            s if s.is_server_error() => ErrorCategory::Server,
-            _ => ErrorCategory::Unknown,
-        }
-    }
-
-    /// Determine recovery strategy for error category.
-    #[must_use]
-    pub const fn recovery_strategy(category: ErrorCategory) -> RecoveryStrategy {
-        match category {
-            ErrorCategory::Network | ErrorCategory::Timeout | ErrorCategory::Server => {
-                RecoveryStrategy::RetryWithBackoff
-            }
-            ErrorCategory::Validation | ErrorCategory::Auth | ErrorCategory::Client => {
-                RecoveryStrategy::NoRetry
-            }
-            ErrorCategory::Unknown => RecoveryStrategy::NoRetry,
-        }
-    }
-
-    /// Check if error is retryable based on category.
-    #[must_use]
-    pub const fn is_retryable(category: ErrorCategory) -> bool {
-        matches!(
-            category,
-            ErrorCategory::Network | ErrorCategory::Timeout | ErrorCategory::Server
-        )
-    }
-}
-
-/// Comprehensive HTTP error for middleware.
-#[derive(Debug)]
 pub enum HttpError {
     /// Network error (connection refused, DNS failure, etc.)
     Network {
+        /// Human-readable error message
         message: String,
+        /// Underlying error source
         source: Option<String>,
     },
+
     /// Timeout error
     Timeout {
+        /// Timeout duration in seconds
         duration_secs: u64,
+        /// Operation that timed out
         operation: String,
     },
-    /// Client error (4xx)
-    Client { status: StatusCode, message: String },
-    /// Server error (5xx)
-    Server { status: StatusCode, message: String },
-    /// Validation error
-    Validation { field: String, message: String },
-    /// Authentication error
-    Auth { message: String },
-    /// Unknown error
-    Unknown { message: String },
+
+    /// Server error (5xx response)
+    Server {
+        /// HTTP status code
+        status: u16,
+        /// Error message
+        message: String,
+    },
+
+    /// Client error (4xx response - should not retry)
+    Client {
+        /// HTTP status code
+        status: u16,
+        /// Error message
+        message: String,
+    },
+
+    /// Validation error (bad input - should not retry)
+    Validation {
+        /// Field that failed validation
+        field: String,
+        /// Validation error message
+        message: String,
+    },
+
+    /// Authentication/authorization error (should not retry)
+    Auth {
+        /// Error message
+        message: String,
+    },
+
+    /// Unknown error type
+    Unknown {
+        /// Error message
+        message: String,
+    },
 }
 
 impl HttpError {
-    /// Get error category.
+    /// Get the error category for retry logic.
     #[must_use]
     pub const fn category(&self) -> ErrorCategory {
         match self {
             Self::Network { .. } => ErrorCategory::Network,
             Self::Timeout { .. } => ErrorCategory::Timeout,
-            Self::Client { .. } => ErrorCategory::Client,
             Self::Server { .. } => ErrorCategory::Server,
+            Self::Client { .. } => ErrorCategory::Client,
             Self::Validation { .. } => ErrorCategory::Validation,
             Self::Auth { .. } => ErrorCategory::Auth,
             Self::Unknown { .. } => ErrorCategory::Unknown,
         }
     }
 
-    /// Get HTTP status code.
+    /// Get the error message.
     #[must_use]
-    #[allow(clippy::match_same_arms)]
-    pub const fn status_code(&self) -> StatusCode {
+    pub fn message(&self) -> &str {
         match self {
-            Self::Network { .. } => StatusCode::SERVICE_UNAVAILABLE,
-            Self::Timeout { .. } => StatusCode::GATEWAY_TIMEOUT,
-            Self::Client { status, .. } => *status,
-            Self::Server { status, .. } => *status,
-            Self::Validation { .. } => StatusCode::BAD_REQUEST,
-            Self::Auth { .. } => StatusCode::UNAUTHORIZED,
-            Self::Unknown { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::Network { message, .. } => message,
+            Self::Timeout { operation, .. } => operation,
+            Self::Server { message, .. } => message,
+            Self::Client { message, .. } => message,
+            Self::Validation { message, .. } => message,
+            Self::Auth { message, .. } => message,
+            Self::Unknown { message, .. } => message,
         }
-    }
-
-    /// Get error message.
-    #[must_use]
-    #[allow(clippy::match_same_arms)]
-    pub fn message(&self) -> String {
-        match self {
-            Self::Network { message, .. } => message.clone(),
-            Self::Timeout {
-                duration_secs,
-                operation,
-            } => format!("Operation '{operation}' timed out after {duration_secs}s"),
-            Self::Client { message, .. } => message.clone(),
-            Self::Server { message, .. } => message.clone(),
-            Self::Validation { message, .. } => message.clone(),
-            Self::Auth { message } => message.clone(),
-            Self::Unknown { message } => message.clone(),
-        }
-    }
-
-    /// Get error code for machine readability.
-    #[must_use]
-    pub fn error_code(&self) -> String {
-        match self {
-            Self::Network { .. } => "NETWORK_ERROR".to_string(),
-            Self::Timeout { .. } => "TIMEOUT_ERROR".to_string(),
-            Self::Client { .. } => "CLIENT_ERROR".to_string(),
-            Self::Server { .. } => "SERVER_ERROR".to_string(),
-            Self::Validation { .. } => "VALIDATION_ERROR".to_string(),
-            Self::Auth { .. } => "AUTH_ERROR".to_string(),
-            Self::Unknown { .. } => "UNKNOWN_ERROR".to_string(),
-        }
-    }
-
-    /// Convert to structured error response.
-    #[must_use]
-    pub fn to_response(&self) -> ErrorResponse {
-        let category = self.category();
-        let status = self.status_code();
-        let message = self.message();
-        let code = self.error_code();
-        let retryable = ErrorResponse::is_retryable(category);
-
-        ErrorResponse::new(status.as_u16(), category, message, code, retryable)
     }
 }
 
-impl fmt::Display for HttpError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[{}] {}", self.category(), self.message())
+impl std::fmt::Display for HttpError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.category(), self.message())
     }
 }
 
 impl std::error::Error for HttpError {}
 
-impl IntoResponse for HttpError {
-    fn into_response(self) -> Response {
-        let response = self.to_response();
-        let status = self.status_code();
-        (status, Json(response)).into_response()
+/// Standard error response format for HTTP APIs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ErrorResponse {
+    /// Error category for client-side handling
+    pub category: String,
+    /// Human-readable error message
+    pub message: String,
+    /// Optional field name for validation errors
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub field: Option<String>,
+    /// HTTP status code
+    pub status: u16,
+}
+
+impl ErrorResponse {
+    /// Create a new error response.
+    #[must_use]
+    pub fn new(category: ErrorCategory, message: String, status: StatusCode) -> Self {
+        Self {
+            category: format!("{category}"),
+            message,
+            field: None,
+            status: status.as_u16(),
+        }
+    }
+
+    /// Add field name for validation errors.
+    #[must_use]
+    pub fn with_field(mut self, field: String) -> Self {
+        self.field = Some(field);
+        self
+    }
+
+    /// Convert to Axum response.
+    pub fn into_response(self) -> Response {
+        let status = StatusCode::from_u16(self.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+        (status, Json(self)).into_response()
+    }
+}
+
+impl From<HttpError> for ErrorResponse {
+    fn from(error: HttpError) -> Self {
+        let (status, message, field) = match &error {
+            HttpError::Network { message, .. } => {
+                (StatusCode::SERVICE_UNAVAILABLE, message.clone(), None)
+            }
+            HttpError::Timeout { operation, .. } => {
+                (StatusCode::REQUEST_TIMEOUT, format!("Operation timed out: {operation}"), None)
+            }
+            HttpError::Server { status, message, .. } => {
+                (StatusCode::from_u16(*status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR), message.clone(), None)
+            }
+            HttpError::Client { status, message, .. } => {
+                (StatusCode::from_u16(*status).unwrap_or(StatusCode::BAD_REQUEST), message.clone(), None)
+            }
+            HttpError::Validation { field, message, .. } => {
+                (StatusCode::BAD_REQUEST, message.clone(), Some(field.clone()))
+            }
+            HttpError::Auth { message, .. } => {
+                (StatusCode::UNAUTHORIZED, message.clone(), None)
+            }
+            HttpError::Unknown { message, .. } => {
+                (StatusCode::INTERNAL_SERVER_ERROR, message.clone(), None)
+            }
+        };
+
+        Self {
+            category: format!("{}", error.category()),
+            message,
+            field,
+            status: status.as_u16(),
+        }
     }
 }
 
@@ -287,181 +219,124 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_error_category_display() {
-        assert_eq!(ErrorCategory::Network.to_string(), "network");
-        assert_eq!(ErrorCategory::Client.to_string(), "client");
-        assert_eq!(ErrorCategory::Server.to_string(), "server");
-        assert_eq!(ErrorCategory::Timeout.to_string(), "timeout");
+    fn test_error_category_network() {
+        let error = HttpError::Network {
+            message: "Connection refused".to_string(),
+            source: Some("tcp".to_string()),
+        };
+        assert_eq!(error.category(), ErrorCategory::Network);
     }
 
     #[test]
-    fn test_categorize_status_code() {
-        // Client errors
-        assert_eq!(
-            ErrorResponse::categorize_status_code(StatusCode::BAD_REQUEST),
-            ErrorCategory::Validation
-        );
-        assert_eq!(
-            ErrorResponse::categorize_status_code(StatusCode::UNAUTHORIZED),
-            ErrorCategory::Auth
-        );
-        assert_eq!(
-            ErrorResponse::categorize_status_code(StatusCode::NOT_FOUND),
-            ErrorCategory::Client
-        );
-
-        // Server errors
-        assert_eq!(
-            ErrorResponse::categorize_status_code(StatusCode::INTERNAL_SERVER_ERROR),
-            ErrorCategory::Server
-        );
-        assert_eq!(
-            ErrorResponse::categorize_status_code(StatusCode::BAD_GATEWAY),
-            ErrorCategory::Server
-        );
+    fn test_error_category_timeout() {
+        let error = HttpError::Timeout {
+            duration_secs: 30,
+            operation: "API call".to_string(),
+        };
+        assert_eq!(error.category(), ErrorCategory::Timeout);
     }
 
     #[test]
-    fn test_is_retryable() {
-        assert!(ErrorResponse::is_retryable(ErrorCategory::Network));
-        assert!(ErrorResponse::is_retryable(ErrorCategory::Timeout));
-        assert!(ErrorResponse::is_retryable(ErrorCategory::Server));
-
-        assert!(!ErrorResponse::is_retryable(ErrorCategory::Client));
-        assert!(!ErrorResponse::is_retryable(ErrorCategory::Validation));
-        assert!(!ErrorResponse::is_retryable(ErrorCategory::Auth));
+    fn test_error_category_server() {
+        let error = HttpError::Server {
+            status: 500,
+            message: "Internal error".to_string(),
+        };
+        assert_eq!(error.category(), ErrorCategory::Server);
     }
 
     #[test]
-    fn test_recovery_strategy() {
-        assert_eq!(
-            ErrorResponse::recovery_strategy(ErrorCategory::Network),
-            RecoveryStrategy::RetryWithBackoff
-        );
-        assert_eq!(
-            ErrorResponse::recovery_strategy(ErrorCategory::Timeout),
-            RecoveryStrategy::RetryWithBackoff
-        );
-        assert_eq!(
-            ErrorResponse::recovery_strategy(ErrorCategory::Server),
-            RecoveryStrategy::RetryWithBackoff
-        );
-        assert_eq!(
-            ErrorResponse::recovery_strategy(ErrorCategory::Client),
-            RecoveryStrategy::NoRetry
-        );
-        assert_eq!(
-            ErrorResponse::recovery_strategy(ErrorCategory::Validation),
-            RecoveryStrategy::NoRetry
-        );
+    fn test_error_category_client() {
+        let error = HttpError::Client {
+            status: 404,
+            message: "Not found".to_string(),
+        };
+        assert_eq!(error.category(), ErrorCategory::Client);
+    }
+
+    #[test]
+    fn test_error_category_validation() {
+        let error = HttpError::Validation {
+            field: "email".to_string(),
+            message: "Invalid email".to_string(),
+        };
+        assert_eq!(error.category(), ErrorCategory::Validation);
+    }
+
+    #[test]
+    fn test_error_category_auth() {
+        let error = HttpError::Auth {
+            message: "Unauthorized".to_string(),
+        };
+        assert_eq!(error.category(), ErrorCategory::Auth);
+    }
+
+    #[test]
+    fn test_error_message() {
+        let error = HttpError::Network {
+            message: "Connection refused".to_string(),
+            source: None,
+        };
+        assert_eq!(error.message(), "Connection refused");
     }
 
     #[test]
     fn test_error_response_new() {
         let response = ErrorResponse::new(
-            500,
-            ErrorCategory::Server,
-            "Internal error".to_string(),
-            "INTERNAL_ERROR".to_string(),
-            true,
-        );
-
-        assert_eq!(response.status, 500);
-        assert_eq!(response.category, "server");
-        assert_eq!(response.message, "Internal error");
-        assert_eq!(response.code, "INTERNAL_ERROR");
-        assert!(response.retryable);
-        assert!(!response.timestamp.is_empty());
-    }
-
-    #[test]
-    fn test_error_response_with_request_id() {
-        let response = ErrorResponse::new(
-            400,
             ErrorCategory::Validation,
-            "Invalid input".to_string(),
-            "VALIDATION_ERROR".to_string(),
-            false,
+            "Invalid email".to_string(),
+            StatusCode::BAD_REQUEST,
+        );
+        assert_eq!(response.category, "Validation");
+        assert_eq!(response.message, "Invalid email");
+        assert_eq!(response.status, 400);
+        assert!(response.field.is_none());
+    }
+
+    #[test]
+    fn test_error_response_with_field() {
+        let response = ErrorResponse::new(
+            ErrorCategory::Validation,
+            "Invalid email".to_string(),
+            StatusCode::BAD_REQUEST,
         )
-        .with_request_id("req-123".to_string());
-
-        assert_eq!(response.request_id, Some("req-123".to_string()));
+        .with_field("email".to_string());
+        assert_eq!(response.field, Some("email".to_string()));
     }
 
     #[test]
-    fn test_http_error_network() {
-        let error = HttpError::Network {
+    fn test_error_response_from_http_error_network() {
+        let http_error = HttpError::Network {
             message: "Connection refused".to_string(),
-            source: Some("backend-service".to_string()),
+            source: None,
         };
-
-        assert_eq!(error.category(), ErrorCategory::Network);
-        assert_eq!(error.status_code(), StatusCode::SERVICE_UNAVAILABLE);
-        assert_eq!(error.message(), "Connection refused");
-        assert_eq!(error.error_code(), "NETWORK_ERROR");
+        let response = ErrorResponse::from(http_error);
+        assert_eq!(response.category, "Network");
+        assert_eq!(response.message, "Connection refused");
+        assert_eq!(response.status, 503);
     }
 
     #[test]
-    fn test_http_error_timeout() {
-        let error = HttpError::Timeout {
-            duration_secs: 30,
-            operation: "database query".to_string(),
-        };
-
-        assert_eq!(error.category(), ErrorCategory::Timeout);
-        assert_eq!(error.status_code(), StatusCode::GATEWAY_TIMEOUT);
-        assert!(error.message().contains("timed out after 30s"));
-        assert_eq!(error.error_code(), "TIMEOUT_ERROR");
-    }
-
-    #[test]
-    fn test_http_error_client() {
-        let error = HttpError::Client {
-            status: StatusCode::NOT_FOUND,
-            message: "Resource not found".to_string(),
-        };
-
-        assert_eq!(error.category(), ErrorCategory::Client);
-        assert_eq!(error.status_code(), StatusCode::NOT_FOUND);
-        assert_eq!(error.message(), "Resource not found");
-        assert_eq!(error.error_code(), "CLIENT_ERROR");
-    }
-
-    #[test]
-    fn test_http_error_server() {
-        let error = HttpError::Server {
-            status: StatusCode::INTERNAL_SERVER_ERROR,
-            message: "Database connection failed".to_string(),
-        };
-
-        assert_eq!(error.category(), ErrorCategory::Server);
-        assert_eq!(error.status_code(), StatusCode::INTERNAL_SERVER_ERROR);
-        assert_eq!(error.message(), "Database connection failed");
-        assert_eq!(error.error_code(), "SERVER_ERROR");
-    }
-
-    #[test]
-    fn test_http_error_to_response() {
-        let error = HttpError::Timeout {
-            duration_secs: 10,
-            operation: "API call".to_string(),
-        };
-
-        let response = error.to_response();
-        assert_eq!(response.status, 504); // GATEWAY_TIMEOUT
-        assert_eq!(response.category, "timeout");
-        assert!(response.retryable);
-    }
-
-    #[test]
-    fn test_http_error_display() {
-        let error = HttpError::Validation {
+    fn test_error_response_from_http_error_validation() {
+        let http_error = HttpError::Validation {
             field: "email".to_string(),
-            message: "Invalid email format".to_string(),
+            message: "Invalid email".to_string(),
         };
+        let response = ErrorResponse::from(http_error);
+        assert_eq!(response.category, "Validation");
+        assert_eq!(response.message, "Invalid email");
+        assert_eq!(response.field, Some("email".to_string()));
+        assert_eq!(response.status, 400);
+    }
 
-        let display = format!("{}", error);
-        assert!(display.contains("validation"));
-        assert!(display.contains("Invalid email format"));
+    #[test]
+    fn test_error_response_from_http_error_auth() {
+        let http_error = HttpError::Auth {
+            message: "Unauthorized".to_string(),
+        };
+        let response = ErrorResponse::from(http_error);
+        assert_eq!(response.category, "Auth");
+        assert_eq!(response.message, "Unauthorized");
+        assert_eq!(response.status, 401);
     }
 }

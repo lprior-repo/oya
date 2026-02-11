@@ -392,13 +392,13 @@ impl ObjectManager {
 
     /// Remove an object.
     pub async fn remove(&self, id: &str) -> Option<Arc<RwLock<VirtualObject>>> {
-         let object = self.objects.write().await.remove(id)?;
-         object.write().await.destroy().await;
-         Some(object)
-     }
+        let object = self.objects.write().await.remove(id)?;
+        object.write().await.destroy().await;
+        Some(object)
+    }
 
-     /// Get the number of managed objects.
-     pub async fn object_count(&self) -> usize {
+    /// Get the number of managed objects.
+    pub async fn object_count(&self) -> usize {
         let objects = self.objects.read().await;
         objects.len()
     }

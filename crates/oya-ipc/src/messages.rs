@@ -104,6 +104,15 @@ pub enum GuestMessage {
         dry_run: bool,
     },
 
+    /// Subscribe to plugin events.
+    SubscribeEvents {
+        /// Event types the guest wants to listen for.
+        event_types: Vec<String>,
+    },
+
+    /// Unsubscribe from all plugin events.
+    UnsubscribeEvents,
+
     /// Approve a task for integration.
     ApproveTask {
         /// Task slug to approve
@@ -518,6 +527,37 @@ mod tests {
             decoded,
             GuestMessage::GetBeadDetail { bead_id } if bead_id == "bead-123"
         ));
+    }
+
+    #[test]
+    fn test_guest_message_subscribe_events_serialization() {
+        let msg = GuestMessage::SubscribeEvents {
+            event_types: vec!["build".to_string(), "deploy".to_string()],
+        };
+
+        let json = serde_json::to_string(&msg).expect("serialization should succeed");
+        assert!(json.contains("subscribe_events"));
+        assert!(json.contains("build"));
+        assert!(json.contains("deploy"));
+
+        let decoded: GuestMessage =
+            serde_json::from_str(&json).expect("deserialization should succeed");
+        assert!(matches!(
+            decoded,
+            GuestMessage::SubscribeEvents { event_types } if event_types == vec!["build".to_string(), "deploy".to_string()]
+        ));
+    }
+
+    #[test]
+    fn test_guest_message_unsubscribe_events_serialization() {
+        let msg = GuestMessage::UnsubscribeEvents;
+
+        let json = serde_json::to_string(&msg).expect("serialization should succeed");
+        assert!(json.contains("unsubscribe_events"));
+
+        let decoded: GuestMessage =
+            serde_json::from_str(&json).expect("deserialization should succeed");
+        assert!(matches!(decoded, GuestMessage::UnsubscribeEvents));
     }
 
     #[test]

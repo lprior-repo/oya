@@ -1793,11 +1793,7 @@ mod tests {
             .mark_ready(&bead_id)
             .expect("marking bead ready should succeed");
 
-        assert_eq!(
-            scheduler.ready_count(),
-            1,
-            "should have 1 ready bead"
-        );
+        assert_eq!(scheduler.ready_count(), 1, "should have 1 ready bead");
         assert_eq!(
             scheduler.stats().assigned_count,
             0,
@@ -1828,11 +1824,7 @@ mod tests {
             .schedule_bead("workflow-123".to_string(), bead_id.clone())
             .expect("bead scheduling should succeed");
 
-        assert_eq!(
-            scheduler.pending_count(),
-            1,
-            "should have 1 pending bead"
-        );
+        assert_eq!(scheduler.pending_count(), 1, "should have 1 pending bead");
         assert_eq!(
             scheduler.stats().assigned_count,
             0,

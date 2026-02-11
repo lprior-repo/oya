@@ -13,5 +13,8 @@ pub use orchestrator;
 pub use oya_core;
 pub use oya_pipeline;
 
+// Command modules
+pub mod commands;
+
 // Swarm module for 13-agent continuous assembly line
 pub mod swarm;

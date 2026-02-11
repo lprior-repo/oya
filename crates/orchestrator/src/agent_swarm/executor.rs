@@ -3,13 +3,13 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::process::Command;
 use oya_events::{BeadEvent, BeadId, EventBus, StageKind};
+use tokio::process::Command;
 
 use super::{
+    AgentSwarmError, AgentSwarmResult,
     config::AgentConfig,
     subprocess_handle::{AgentOutput, SubprocessHandle},
-    AgentSwarmError, AgentSwarmResult,
 };
 
 /// High-level executor for orchestrating agent subprocess execution.
@@ -111,9 +111,7 @@ impl AgentExecutor {
         let path = self.config.executable();
 
         if !path.exists() {
-            return Err(AgentSwarmError::ExecutableNotFound {
-                path: path.clone(),
-            });
+            return Err(AgentSwarmError::ExecutableNotFound { path: path.clone() });
         }
 
         tracing::info!(
@@ -144,12 +142,7 @@ impl AgentExecutor {
     }
 
     /// Emit process started event to `EventBus`.
-    fn emit_process_started_event(
-        &self,
-        bead_id: BeadId,
-        stage: StageKind,
-        bus: &Arc<EventBus>,
-    ) {
+    fn emit_process_started_event(&self, bead_id: BeadId, stage: StageKind, bus: &Arc<EventBus>) {
         let event = BeadEvent::StageStarted {
             event_id: oya_events::EventId::new(),
             bead_id,
@@ -199,6 +192,38 @@ impl AgentExecutor {
 }
 
 /// Builder for creating [`AgentExecutor`] with fluent API.
-#[derive(Clone)]
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct AgentExecutorBuilder {
+    config: Option<AgentConfig>,
+    event_bus: Option<Arc<EventBus>>,
+}
+
+impl AgentExecutorBuilder {
+    pub fn new() -> Self {
+        Self {
+            config: None,
+            event_bus: None,
+        }
+    }
+
+    pub fn config(mut self, config: AgentConfig) -> Self {
+        self.config = Some(config);
+        self
+    }
+
+    pub fn event_bus(mut self, bus: Arc<EventBus>) -> Self {
+        self.event_bus = Some(bus);
+        self
+    }
+
+    pub fn build(self) -> AgentExecutor {
+        let config = self
+            .config
+            .expect("AgentExecutorBuilder: config is required");
+        let mut executor = AgentExecutor::new(config);
+        if let Some(bus) = self.event_bus {
+            executor = executor.with_event_bus(bus);
+        }
+        executor
+    }
+}

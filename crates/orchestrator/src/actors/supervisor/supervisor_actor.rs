@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 use tracing::{debug, error, info, warn};
 
-use crate::replay::CheckpointManager;
+use crate::replay::{CheckpointManager, ReplayEngine};
 use crate::shutdown::{ShutdownCoordinator, ShutdownSignal};
 
 use super::super::errors::ActorError;
@@ -258,6 +258,8 @@ where
     pub restart_strategy: Box<dyn RestartStrategy<A>>,
     /// Checkpoint manager for shutdown state persistence.
     pub checkpoint_manager: Option<CheckpointManager>,
+    /// Replay engine for event recovery.
+    pub replay_engine: Option<ReplayEngine>,
 }
 
 impl<A: GenericSupervisableActor> Debug for SupervisorActorState<A>
@@ -274,6 +276,10 @@ where
             .field("total_restarts", &self.total_restarts)
             .field("child_id_counter", &self.child_id_counter)
             .field("restart_strategy", &self.restart_strategy.name())
+            .field("shutdown_coordinator", &self.shutdown_coordinator.is_some())
+            .field("_shutdown_rx", &self._shutdown_rx.is_some())
+            .field("checkpoint_manager", &self.checkpoint_manager.is_some())
+            .field("replay_engine", &self.replay_engine.is_some())
             .finish_non_exhaustive()
     }
 }
@@ -287,6 +293,8 @@ pub struct SupervisorArguments {
     pub shutdown_coordinator: Option<Arc<ShutdownCoordinator>>,
     /// Optional checkpoint manager.
     pub checkpoint_manager: Option<CheckpointManager>,
+    /// Optional replay engine.
+    pub replay_engine: Option<ReplayEngine>,
 }
 
 impl SupervisorArguments {
@@ -314,6 +322,13 @@ impl SupervisorArguments {
     #[must_use]
     pub fn with_checkpoint_manager(mut self, manager: CheckpointManager) -> Self {
         self.checkpoint_manager = Some(manager);
+        self
+    }
+
+    /// Set replay engine.
+    #[must_use]
+    pub fn with_replay_engine(mut self, engine: ReplayEngine) -> Self {
+        self.replay_engine = Some(engine);
         self
     }
 }
@@ -345,6 +360,7 @@ where
             _shutdown_rx: None,
             restart_strategy: Box::new(OneForOne::new()),
             checkpoint_manager: args.checkpoint_manager,
+            replay_engine: args.replay_engine,
         };
 
         // Subscribe to shutdown signals
@@ -738,6 +754,7 @@ mod tests {
             _shutdown_rx: None,
             restart_strategy: Box::new(OneForOne::new()),
             checkpoint_manager: None,
+            replay_engine: None,
         };
 
         assert_eq!(state.restart_strategy.name(), "one_for_one");
@@ -775,6 +792,7 @@ mod tests {
             _shutdown_rx: None,
             restart_strategy: Box::new(OneForOne::new()),
             checkpoint_manager: None,
+            replay_engine: None,
         };
 
         let def = SupervisorActorDef::new(SchedulerActorDef);
