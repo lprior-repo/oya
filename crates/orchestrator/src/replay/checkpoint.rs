@@ -349,6 +349,9 @@ impl CheckpointManager {
 }
 
 #[cfg(test)]
+mod checkpoint_attack_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::persistence::StoreConfig;
