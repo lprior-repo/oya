@@ -151,8 +151,8 @@ async fn test_worker_assignment_query_by_worker_id() -> Result<(), String> {
 }
 
 #[tokio::test]
-async fn test_worker_assignment_uniqueness_per_bead() {
-    let client = init_test_db().await;
+async fn test_worker_assignment_uniqueness_per_bead() -> Result<(), String> {
+    let client = init_test_db().await?;
 
     // Create first assignment
     client
@@ -185,11 +185,12 @@ async fn test_worker_assignment_uniqueness_per_bead() {
         result.is_err(),
         "Second assignment with same bead_id should fail due to unique constraint"
     );
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_worker_assignment_update() {
-    let client = init_test_db().await;
+async fn test_worker_assignment_update() -> Result<(), String> {
+    let client = init_test_db().await?;
 
     // Create assignment
     client
@@ -233,11 +234,12 @@ async fn test_worker_assignment_update() {
     } else {
         panic!("Worker ID field should exist");
     }
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_worker_assignment_delete() {
-    let client = init_test_db().await;
+async fn test_worker_assignment_delete() -> Result<(), String> {
+    let client = init_test_db().await?;
 
     // Create assignment
     client
@@ -268,11 +270,12 @@ async fn test_worker_assignment_delete() {
 
     let assignments: Vec<serde_json::Value> = result.take(0).expect("Should get result");
     assert!(assignments.is_empty(), "Assignment should be deleted");
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_worker_assignment_multiple_workers_distribution() {
-    let client = init_test_db().await;
+async fn test_worker_assignment_multiple_workers_distribution() -> Result<(), String> {
+    let client = init_test_db().await?;
 
     // Create multiple assignments across different workers
     let workers = vec!["worker-g", "worker-h", "worker-i"];
@@ -306,11 +309,12 @@ async fn test_worker_assignment_multiple_workers_distribution() {
         "Should retrieve at least 3 worker assignments, got {}",
         assignments.len()
     );
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_worker_assignment_bead_id_unique_index() {
-    let client = init_test_db().await;
+async fn test_worker_assignment_bead_id_unique_index() -> Result<(), String> {
+    let client = init_test_db().await?;
 
     // Create first assignment
     client
@@ -342,4 +346,5 @@ async fn test_worker_assignment_bead_id_unique_index() {
         result.is_err(),
         "Duplicate bead_id should violate unique constraint"
     );
+    Ok(())
 }

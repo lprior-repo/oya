@@ -19,7 +19,9 @@ use crate::replay::resume::{OrchestratorCheckpointStore, OrchestratorEventLog};
 
 /// Convert `oya_events::Error` to `PersistenceError`.
 fn error_to_persistence(err: oya_events::Error) -> PersistenceError {
-    PersistenceError::Internal { reason: err.to_string() }
+    PersistenceError::QueryFailed {
+        reason: err.to_string(),
+    }
 }
 
 /// Input for storing events in `SurrealDB`.
