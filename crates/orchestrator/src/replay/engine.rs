@@ -10,12 +10,17 @@ use serde::{Deserialize, Serialize};
 use surrealdb::sql::Datetime as SurrealDatetime;
 use std::sync::Arc;
 
-use oya_events::replay::resume::{resume_from_checkpoint, CheckpointId, ReplayState, ResumeError};
+use oya_events::replay::resume::{resume_from_checkpoint, CheckpointId, ReplayState};
 
 use super::events::{EventRecord, OrchestratorEvent};
 use super::projection::OrchestratorProjection;
 use crate::persistence::{OrchestratorStore, PersistenceError, PersistenceResult};
 use crate::replay::resume::{OrchestratorCheckpointStore, OrchestratorEventLog};
+
+/// Convert `oya_events::Error` to `PersistenceError`.
+fn error_to_persistence(err: oya_events::Error) -> PersistenceError {
+    PersistenceError::Internal { reason: err.to_string() }
+}
 
 /// Input for storing events in `SurrealDB`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,7 +63,7 @@ impl ReplayEngine {
 
         let event_id = format!(
             "evt-{}-{}",
-            Utc::now().timestamp_nanos_opt().unwrap_or(0),
+            Utc::now().timestamp_nanos_opt().map_or(0, |v| v),
             self.current_sequence
         );
 
@@ -149,7 +154,7 @@ impl ReplayEngine {
                 let checkpoint_key = CheckpointId::new(cp.checkpoint_id.clone());
 
                 let resumed_state = resume_from_checkpoint(&checkpoint_key, &checkpoint_store, &event_log)
-                    .map_err(resume_error_to_persistence)?;
+                    .map_err(error_to_persistence)?;
                 resume_state = Some(resumed_state);
 
                 cp.event_sequence
