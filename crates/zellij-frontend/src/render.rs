@@ -262,7 +262,7 @@ impl Renderer {
 
         let field_lines = fields
             .iter()
-            .fold(String::new(), |mut acc, (label, value)| {
+            .fold(String::new(), |mut acc: String, (label, value)| {
                 acc.push_str(style_helpers::label());
                 acc.push_str(&format!("{label:<9} "));
                 acc.push_str(style_helpers::text());

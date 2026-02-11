@@ -754,411 +754,76 @@ mod tests {
     // Additional tests from original second test module
 
     #[test]
-    fn test_help_overlay_toggle() > Result<(), Box<dyn std::error::Error>> {
+    fn test_help_overlay_toggle() -> Result<(), Box<dyn std::error::Error>> {
         let mut plugin = OyaPlugin::new()?;
-        
+
         // Initially not in help overlay
         assert_eq!(plugin.state, PluginState::Starting);
-        
+
         // Toggle to open help overlay
         let result = plugin.toggle_help_overlay();
         assert!(result.is_ok());
         assert_eq!(plugin.state, PluginState::HelpOverlay);
-        
+
         // Toggle to close help overlay
         let result = plugin.toggle_help_overlay();
         assert!(result.is_ok());
         assert_eq!(plugin.state, PluginState::Running);
-        
+
         Ok(())
     }
 
     #[test]
-    fn test_help_overlay_preconditions() > Result<(), Box<dyn std::error::Error>> {
+    fn test_help_overlay_preconditions() -> Result<(), Box<dyn std::error::Error>> {
         let mut plugin = OyaPlugin::new()?;
-        
+
         // Test terminal too small error
         plugin.size = Size { rows: 5, cols: 10 };
         let result = plugin.open_help_overlay();
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("TerminalTooSmall"));
-        
+
         // Test invalid state error
         plugin.state = PluginState::ShuttingDown;
         let result = plugin.open_help_overlay();
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("invalid state"));
-        
+
         Ok(())
     }
 
     #[test]
-    fn test_get_keybindings_for_all_panes() > Result<(), Box<dyn std::error::Error>> {
+    fn test_get_keybindings_for_all_panes() -> Result<(), Box<dyn std::error::Error>> {
         let plugin = OyaPlugin::new()?;
-        
+
         // Test BeadList keybindings
         let bead_list_bindings = plugin.get_keybindings_for_pane(PaneType::BeadList);
         assert!(!bead_list_bindings.is_empty());
         assert!(bead_list_bindings.iter().any(&|(key, _)| *key == '?'));
         assert!(bead_list_bindings.iter().any(&|(key, _)| *key == '\x1b'));
-        
+
         // Test BeadDetail keybindings
         let bead_detail_bindings = plugin.get_keybindings_for_pane(PaneType::BeadDetail);
         assert!(!bead_detail_bindings.is_empty());
         assert!(bead_detail_bindings.iter().any(&|(key, _)| *key == '?'));
         assert!(bead_detail_bindings.iter().any(&|(key, _)| *key == '\x1b'));
-        
+
         // Test PipelineView keybindings
         let pipeline_view_bindings = plugin.get_keybindings_for_pane(PaneType::PipelineView);
         assert!(!pipeline_view_bindings.is_empty());
-        assert!(pipeline_view_bindings.iter().any(&|(key, _)| *key == '?'));
-        assert!(pipeline_view_bindings.iter().any(&|(key, _)| *key == '\x1b'));
-        
+        assert!(pipeline_view_bindings.iter().any(|&(key, _)| key == '?'));
+        assert!(pipeline_view_bindings
+            .iter()
+            .any(&|(key, _)| *key == '\x1b'));
+
         // Test WorkflowGraph keybindings
         let workflow_graph_bindings = plugin.get_keybindings_for_pane(PaneType::WorkflowGraph);
         assert!(!workflow_graph_bindings.is_empty());
         assert!(workflow_graph_bindings.iter().any(&|(key, _)| *key == '?'));
-        assert!(workflow_graph_bindings.iter().any(&|(key, _)| *key == '\x1b'));
-        
-        Ok(())
-    }
+        assert!(workflow_graph_bindings
+            .iter()
+            .any(&|(key, _)| *key == '\x1b'));
 
-    #[test]
-    fn test_multiple_saves_update_timestamp() > Result<(), Box<dyn std::error::Error>> {
-        let mut plugin = OyaPlugin::new()?;
-
-        // First save
-        let result1 = plugin.save_state_now();
-
-        if result1.is_ok() {
-            let timestamp1 = plugin.last_save_timestamp().unwrap();
-
-            // Wait a bit (simulated by just calling again)
-            std::thread::sleep(std::time::Duration::from_millis(10));
-
-            // Second save
-            let result2 = plugin.save_state_now();
-            if result2.is_ok() {
-                let timestamp2 = plugin.last_save_timestamp().unwrap();
-
-                // Timestamps should be different (second save is later)
-                assert!(timestamp2 > timestamp1);
-            }
-        }
-        // If saves fail, that's acceptable in test environment
-        Ok(())
-    }
-
-    #[test]
-    fn test_auto_save_timer_is_running_after_init() > Result<(), Box<dyn std::error::Error>> {
-        let mut plugin = OyaPlugin::new()?;
-
-        let _ = plugin.init_auto_save(30);
-
-        assert!(plugin.auto_save_timer.is_some());
-        let timer = plugin.auto_save_timer.as_ref().unwrap();
-        assert!(timer.is_running());
-        Ok(())
-    }
-
-    #[test]
-    fn test_state_save_and_restore_roundtrip() > Result<(), Box<dyn std::error::Error>> {
-        use std::fs;
-
-        // Create a temporary directory for state file
-        let temp_dir = std::env::temp_dir().join("oya-test-state-roundtrip");
-        let _ = fs::remove_dir_all(&temp_dir); // Clean up any previous test
-        fs::create_dir_all(&temp_dir)?;
-
-        let state_file = temp_dir.join("test-state.json");
-
-        // Create plugin and set up specific state
-        let mut plugin1 = OyaPlugin::new()?;
-
-        // Modify state to test restoration
-        plugin1.selected_index = 2;
-        plugin1.focused_pane = crate::layout::PaneType::PipelineView;
-        plugin1.status_message = Some("Test roundtrip message".to_string());
-
-        // Save state
-        let state_manager = crate::state::StateManager::new(state_file.clone(), 1_048_576)?;
-        let save_result = state_manager.save_state(&plugin1);
-
-        // Verify save succeeded (or skip if filesystem unavailable)
-        if save_result.is_ok() {
-            // Create a new plugin instance
-            let mut plugin2 = OyaPlugin::new()?;
-
-            // Load state
-            let load_result = state_manager.load_state();
-            assert!(load_result.is_some(), "Load should succeed");
-
-            let mut snapshot = load_result.ok_or("No snapshot found")?;
-            assert!(snapshot.validate().is_ok(), "Snapshot should be valid");
-
-            // Restore state
-            let restore_result = plugin2.restore_from_snapshot(snapshot);
-            assert!(restore_result.is_ok(), "Restore should succeed");
-
-            // Verify restored state matches saved state
-            assert_eq!(plugin2.selected_index, 2);
-            assert_eq!(plugin2.focused_pane, crate::layout::PaneType::PipelineView);
-            assert_eq!(
-                plugin2.status_message,
-                Some("Test roundtrip message".to_string())
-            );
-
-            // Clean up
-            let _ = fs::remove_dir_all(&temp_dir);
-        }
-        // If save fails, skip test (filesystem unavailable in test environment)
-        Ok(())
-    }
-}
-
-/// Plugin state machine
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-
-    #[test]
-    fn test_size_serialization() -> Result<(), Box<dyn std::error::Error>> {
-        let size = Size { rows: 24, cols: 80 };
-        let json = serde_json::to_string(&size)?;
-        let decoded: Size = serde_json::from_str(&json)?;
-        assert_eq!(decoded.rows, 24);
-        assert_eq!(decoded.cols, 80);
-        Ok(())
-    }
-
-    #[test]
-    fn test_plugin_state() -> Result<(), Box<dyn std::error::Error>> {
-        assert_ne!(PluginState::Running, PluginState::Starting);
-        assert_ne!(PluginState::Running, PluginState::Error);
-        Ok(())
-    }
-
-    #[test]
-    fn test_key_modifiers() {
-        let mods = KeyModifiers {
-            shift: true,
-            ctrl: false,
-            alt: false,
-        };
-        assert!(mods.shift);
-        assert!(!mods.ctrl);
-    }
-
-    #[test]
-    fn test_sample_beads() -> Result<(), Box<dyn std::error::Error>> {
-        let plugin = OyaPlugin::new()?;
-        assert!(!plugin.tasks.is_empty());
-        assert_eq!(plugin.tasks[0].slug, "task-3ax5");
-        Ok(())
-    }
-
-    // ========================================================================
-    // AUTO-SAVE TIMER TESTS
-    // ========================================================================
-
-    #[test]
-    fn test_init_auto_save_with_maximum_interval() -> Result<(), Box<dyn std::error::Error>> {
-        let mut plugin = OyaPlugin::new()?;
-
-        let result = plugin.init_auto_save(600);
-
-        assert!(result.is_ok());
-        assert!(plugin.auto_save_timer.is_some());
-        Ok(())
-    }
-
-    #[test]
-    fn test_init_auto_save_clamps_too_short_interval() -> Result<(), Box<dyn std::error::Error>> {
-        let mut plugin = OyaPlugin::new()?;
-
-        // Interval too short (5 seconds) should be clamped to 10
-        let result = plugin.init_auto_save(5);
-
-        assert!(result.is_ok());
-        assert!(plugin.auto_save_timer.is_some());
-
-        // Verify the timer interval is at least 10 seconds (10000 ms)
-        let timer = plugin.auto_save_timer.as_ref().unwrap();
-        assert!(timer.config().interval_ms() >= 10000);
-        Ok(())
-    }
-
-    #[test]
-    fn test_init_auto_save_clamps_too_long_interval() -> Result<(), Box<dyn std::error::Error>> {
-        let mut plugin = OyaPlugin::new()?;
-
-        // Interval too long (700 seconds) should be clamped to 600
-        let result = plugin.init_auto_save(700);
-
-        assert!(result.is_ok());
-        assert!(plugin.auto_save_timer.is_some());
-
-        // Verify the timer interval is at most 600 seconds (600000 ms)
-        let timer = plugin.auto_save_timer.as_ref().unwrap();
-        assert!(timer.config().interval_ms() <= 600000);
-        Ok(())
-    }
-
-    #[test]
-    fn test_init_auto_save_with_valid_interval() -> Result<(), Box<dyn std::error::Error>> {
-        let mut plugin = OyaPlugin::new()?;
-
-        let result = plugin.init_auto_save(30);
-
-        assert!(result.is_ok());
-        assert!(plugin.auto_save_timer.is_some());
-        assert!(plugin
-            .auto_save_timer
-            .as_ref()
-            .map(|t| t.is_running())
-            .unwrap_or(false));
-        Ok(())
-    }
-
-    #[test]
-    fn test_init_auto_save_with_minimum_interval() -> Result<(), Box<dyn std::error::Error>> {
-        let mut plugin = OyaPlugin::new()?;
-
-        let result = plugin.init_auto_save(10);
-
-        assert!(result.is_ok());
-        assert!(plugin.auto_save_timer.is_some());
-        Ok(())
-    }
-
-    #[test]
-    fn test_save_state_now_updates_timestamp() -> Result<(), Box<dyn std::error::Error>> {
-        let mut plugin = OyaPlugin::new()?;
-
-        // Initially no timestamp
-        assert!(plugin.last_save_timestamp().is_none());
-
-        // Save state (may fail in test environment due to filesystem, that's ok)
-        let result = plugin.save_state_now();
-
-        // If save succeeds, timestamp should be updated
-        if result.is_ok() {
-            assert!(plugin.last_save_timestamp().is_some());
-
-            // Timestamp should be recent (within last 5 seconds)
-            let timestamp = plugin.last_save_timestamp().unwrap();
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map_or_else(|_| 0, |d| d.as_secs());
-
-            assert!(now.saturating_sub(timestamp) < 5);
-        }
-        // If save fails, that's acceptable in test environment (no XDG dirs, etc.)
-        Ok(())
-    }
-
-    #[test]
-    fn test_save_state_now_updates_status_message() -> Result<(), Box<dyn std::error::Error>> {
-        let mut plugin = OyaPlugin::new()?;
-
-        let result = plugin.save_state_now();
-
-        // If save succeeds, status message should be updated
-        if result.is_ok() {
-            assert!(plugin.status_message.is_some());
-            assert!(plugin
-                .status_message
-                .as_ref()
-                .map(|msg| msg.contains("State saved at"))
-                .unwrap_or(false));
-        }
-        // If save fails, that's acceptable in test environment
-        Ok(())
-    }
-
-    #[test]
-    fn test_last_save_timestamp_returns_none_initially() -> Result<(), Box<dyn std::error::Error>> {
-        let plugin = OyaPlugin::new()?;
-
-        assert!(plugin.last_save_timestamp().is_none());
-        Ok(())
-    }
-
-    #[test]
-    fn test_last_save_timestamp_returns_value_after_save() -> Result<(), Box<dyn std::error::Error>>
-    {
-        let mut plugin = OyaPlugin::new()?;
-
-        // Attempt to save state (may fail in test environment)
-        let save_result = plugin.save_state_now();
-
-        // If save succeeded, timestamp should be updated
-        if save_result.is_ok() {
-            let timestamp = plugin.last_save_timestamp();
-            assert!(timestamp.is_some());
-            assert!(timestamp.unwrap() > 0);
-        }
-        // If save failed, that's acceptable in test environment
-        Ok(())
-    }
-
-    #[test]
-    fn test_handle_timer_event_saves_state_when_due() -> Result<(), Box<dyn std::error::Error>> {
-        let mut plugin = OyaPlugin::new()?;
-        let _ = plugin.init_auto_save(1); // 1 second interval for testing
-
-        // Set last tick to 2 seconds ago to make tick due
-        let now_ms = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_or_else(|_| 0, |d| d.as_millis() as u64);
-        plugin.last_timer_tick_ms = Some(now_ms.saturating_sub(2000));
-
-        // Initially no save timestamp
-        assert!(plugin.last_save_timestamp().is_none());
-
-        // Handle timer event
-        let result = plugin.handle_timer_event();
-
-        assert!(result.is_ok());
-
-        // State should have been saved if filesystem available
-        // In test environment with limited filesystem access, save may fail
-        // but the timer event should still be processed without panic
-        Ok(())
-    }
-
-    #[test]
-    fn test_handle_timer_event_skips_save_when_not_due() -> Result<(), Box<dyn std::error::Error>> {
-        let mut plugin = OyaPlugin::new()?;
-        let _ = plugin.init_auto_save(30); // 30 second interval
-
-        // Set last tick to just now (not due yet)
-        let now_ms = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_or_else(|_| 0, |d| d.as_millis() as u64);
-        plugin.last_timer_tick_ms = Some(now_ms);
-
-        // Handle timer event immediately
-        let result = plugin.handle_timer_event();
-
-        assert!(result.is_ok());
-        // State should NOT have been saved (returns None from handle_timer_event)
-        assert!(plugin.last_save_timestamp().is_none());
-        assert!(result.unwrap().is_none());
-        Ok(())
-    }
-
-    #[test]
-    fn test_handle_timer_event_with_no_timer_configured() -> Result<(), Box<dyn std::error::Error>>
-    {
-        let mut plugin = OyaPlugin::new()?;
-
-        // No timer initialized
-        assert!(plugin.auto_save_timer.is_none());
-
-        // Handle timer event should return Ok(None)
-        let result = plugin.handle_timer_event();
-
-        assert!(result.is_ok());
-        assert!(result.unwrap().is_none());
         Ok(())
     }
 
@@ -1229,7 +894,7 @@ mod tests {
             let mut plugin2 = OyaPlugin::new()?;
 
             // Load state
-            let load_result = state_manager.load_state()?;
+            let load_result = state_manager.load_state();
             assert!(load_result.is_some(), "Load should succeed");
 
             let mut snapshot = load_result.ok_or("No snapshot found")?;
@@ -1255,10 +920,9 @@ mod tests {
     }
 }
 
-// End of tests module
-
 /// Plugin state machine
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+
 pub enum PluginState {
     /// Plugin starting
     Starting,

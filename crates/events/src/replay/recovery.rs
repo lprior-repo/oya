@@ -17,7 +17,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use crate::error::{Error, Result};
+use crate::error::{ConnectionError, Error, Result};
 use std::time::Duration;
 use tracing::{error, warn};
 
@@ -542,6 +542,7 @@ pub fn log_failed_event(event_id: &str, attempt_count: u32, error: &Error) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::ConnectionError;
 
     // ==========================================================================
     // PoisonEvent BEHAVIORAL TESTS

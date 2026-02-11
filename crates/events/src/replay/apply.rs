@@ -931,7 +931,7 @@ mod tests {
         let event1 = BeadEvent::created(bead_id, BeadSpec::new("Test 1"));
         let event2 = BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Scheduled);
 
-        let events = vec![event1, event2];
+        let events = vec![event1, event2.clone()];
 
         let _result = apply_events_with_recovery(&mut state, &events, &mut context, &config, &dlq);
 
