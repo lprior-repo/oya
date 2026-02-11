@@ -169,7 +169,7 @@ pub fn resume_from_checkpoint<S, L>(
     checkpoint_id: &CheckpointId,
     checkpoints: &S,
     event_log: &L,
-) -> Result<ReplayState>
+) -> std::result::Result<ReplayState, ResumeError>
 where
     S: CheckpointStore,
     L: EventLog,
@@ -196,21 +196,28 @@ where
             reason: e.to_string(),
         })?;
 
-    if !timestamp_valid {
-        return Err(Error::Internal(
-            "Checkpoint timestamp validation failed".to_string(),
-        ));
-    }
-
-    // Create initial replay state
-    let mut state = ReplayState::new(checkpoint_id.clone(), checkpoint_timestamp);
-
-    // Load events after checkpoint timestamp
+    // Load events after checkpoint timestamp for replay and for timestamp validation
     let events = event_log
         .load_events_after(checkpoint_timestamp)
         .map_err(|e| ResumeError::EventLoadFailed {
             reason: e.to_string(),
         })?;
+
+    if !timestamp_valid {
+        let log_timestamp = events
+            .first()
+            .map(|event| event.timestamp.clone())
+            .unwrap_or_else(|| checkpoint_timestamp.clone());
+
+        return Err(ResumeError::TimestampMismatch {
+            checkpoint_id: checkpoint_id.as_str().to_string(),
+            checkpoint_timestamp,
+            log_timestamp,
+        });
+    }
+
+    // Create initial replay state
+    let mut state = ReplayState::new(checkpoint_id.clone(), checkpoint_timestamp);
 
     // Record events as replayed
     for event in events {
