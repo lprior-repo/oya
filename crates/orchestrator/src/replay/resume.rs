@@ -103,7 +103,8 @@ impl EventLog for OrchestratorEventLog {
             self.store
                 .db()
                 .query("SELECT event_id, sequence, timestamp FROM orchestrator_event WHERE timestamp > $timestamp ORDER BY timestamp ASC, sequence ASC")
-                .bind(("timestamp", surreal_timestamp)),
+                .bind(("timestamp", surreal_timestamp))
+                .await,
         );
 
         let rows: Vec<EventRow> = match query_result {
