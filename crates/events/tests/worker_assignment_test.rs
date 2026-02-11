@@ -11,7 +11,7 @@ use oya_events::db::{SurrealDbClient, SurrealDbConfig};
 use tempfile::tempdir;
 
 /// Helper to load and initialize the schema
-async fn init_test_db() -> SurrealDbClient {
+async fn init_test_db() -> Result<SurrealDbClient, String> {
     let temp_dir = tempdir().map_err(|e| format!("Failed to create temp dir: {}", e))?;
     let db_path = temp_dir
         .path()
