@@ -814,7 +814,7 @@ mod tests {
         assert!(pipeline_view_bindings.iter().any(|&(key, _)| key == '?'));
         assert!(pipeline_view_bindings
             .iter()
-            .any(&|(key, _)| *key == '\x1b'));
+            .any(|(key, _)| *key == '\x1b'));
 
         // Test WorkflowGraph keybindings
         let workflow_graph_bindings = plugin.get_keybindings_for_pane(PaneType::WorkflowGraph);
@@ -822,7 +822,7 @@ mod tests {
         assert!(workflow_graph_bindings.iter().any(|(key, _)| *key == '?'));
         assert!(workflow_graph_bindings
             .iter()
-            .any(&|(key, _)| *key == '\x1b'));
+            .any(|(key, _)| *key == '\x1b'));
 
         Ok(())
     }
@@ -897,7 +897,7 @@ mod tests {
             let load_result = state_manager.load_state();
             assert!(load_result.is_ok(), "Load should succeed");
 
-            let mut snapshot = load_result.ok_or("No snapshot found")?;
+            let mut snapshot = load_result?.ok_or("No snapshot found")?;
             assert!(snapshot.validate().is_ok(), "Snapshot should be valid");
 
             // Restore state
