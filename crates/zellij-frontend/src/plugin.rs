@@ -446,6 +446,10 @@ pub fn stage_symbol_from_status(status: &str, stage: Option<&str>) -> char {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+    #![allow(clippy::indexing_slicing)]
+    #![allow(clippy::unwrap_in_result)]
+
     use super::*;
 
     #[test]

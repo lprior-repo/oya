@@ -51,7 +51,8 @@ pub trait ResultExt<T>: Sized {
     fn or_default_logged(self, default: T) -> T;
 
    /// Inspect the error without consuming the Result.
-     fn inspect_error<F: FnOnce(&Error)>(self, f: F) -> Self;
+    #[must_use]
+    fn inspect_error<F: FnOnce(&Error)>(self, f: F) -> Self;
 
     /// Chain with another fallible operation.
     ///
@@ -140,9 +141,8 @@ pub trait ResultExt<T>: Sized {
     /// let fallback: Result<i32> = Ok(42);
     /// let result = primary.or(fallback);
     /// assert!(result.is_ok());
-    /// ```
-    #[must_use]
-    fn or(self, other: Result<T>) -> Result<T>;
+ /// ```
+     fn or(self, other: Result<T>) -> Result<T>;
 
     /// Try an alternative operation using a function if this Result is Err.
     ///
@@ -156,10 +156,9 @@ pub trait ResultExt<T>: Sized {
     ///
     /// # Errors
     /// Returns `Ok` with the value from this Result if it's `Ok`, or the result of `f` if this Result is `Err`.
-    #[must_use]
-    fn or_else<F>(self, f: F) -> Result<T>
-    where
-        F: FnOnce(Error) -> Result<T>;
+  fn or_else<F>(self, f: F) -> Result<T>
+     where
+         F: FnOnce(Error) -> Result<T>;
 
     /// Convert Result to Either type (useful for error type unification).
     ///
@@ -408,6 +407,10 @@ impl<T> OptionExt<T> for Option<T> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+    #![allow(clippy::expect_used)]
+    #![allow(clippy::unnecessary_literal_unwrap)]
+
     use super::*;
 
     // Original tests

@@ -265,6 +265,8 @@ impl fmt::Display for Workflow {
 #[cfg(test)]
 mod tests {
 
+    #![allow(clippy::indexing_slicing)]
+    #![allow(clippy::unwrap_used)]
     #![allow(clippy::assertions_on_constants)]
     #![allow(clippy::uninlined_format_args)]
     #![allow(clippy::single_char_pattern)]
