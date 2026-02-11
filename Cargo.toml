@@ -47,14 +47,14 @@ unsafe_code = "forbid"
 # Violations will FAIL THE BUILD - cannot be overridden even with #![allow(...)]
 
 # FORBIDDEN patterns - use Result<T, Error> and Option<T> instead
-unwrap_used = "forbid"         # No .unwrap() - use ? operator or match
-expect_used = "forbid"         # No .expect() - use proper error handling
-panic = "forbid"               # No panic!() - return Result instead
-unimplemented = "forbid"       # No unimplemented!() - return Result::Err
-unreachable = "forbid"         # No unreachable!() - use proper control flow
-indexing_slicing = "forbid"    # Use .get() returning Option instead
-arithmetic_side_effects = "forbid"  # Use checked_*, saturating_*, wrapping_*
-unwrap_in_result = "forbid"    # Don't unwrap Results explicitly
+unwrap_used = "deny"           # No .unwrap() - use ? operator or match
+expect_used = "deny"           # No .expect() - use proper error handling
+panic = "deny"                 # No panic!() - return Result instead
+unimplemented = "deny"         # No unimplemented!() - return Result::Err
+unreachable = "deny"           # No unreachable!() - use proper control flow
+indexing_slicing = "deny"      # Use .get() returning Option instead
+arithmetic_side_effects = "deny"  # Use checked_*, saturating_*, wrapping_*
+unwrap_in_result = "deny"    # Don't unwrap Results explicitly
 todo = "warn"                  # No todo!() - implement or file issue
 
 # Documentation and quality

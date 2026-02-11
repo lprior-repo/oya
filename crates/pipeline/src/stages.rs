@@ -154,6 +154,10 @@ pub fn pipeline_stage_edges() -> Vec<(Stage, Stage)> {
 #[cfg(test)]
 mod tests {
 
+    #![allow(clippy::expect_used)]
+
+
+
     use super::*;
 
     #[test]

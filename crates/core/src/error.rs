@@ -168,6 +168,11 @@ impl Error {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::redundant_clone)]
+    #![allow(clippy::used_underscore_binding)]
+    #![allow(clippy::manual_let_else)]
+    #![allow(clippy::uninlined_format_args)]
+
     use super::*;
 
     #[test]

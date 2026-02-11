@@ -50,9 +50,8 @@ pub trait ResultExt<T>: Sized {
     /// Get the value or a default, logging the error if present.
     fn or_default_logged(self, default: T) -> T;
 
-    /// Inspect the error without consuming the Result.
-    #[must_use]
-    fn inspect_error<F: FnOnce(&Error)>(self, f: F) -> Self;
+   /// Inspect the error without consuming the Result.
+     fn inspect_error<F: FnOnce(&Error)>(self, f: F) -> Self;
 
     /// Chain with another fallible operation.
     ///
@@ -245,31 +244,22 @@ impl<T: std::fmt::Debug + Send> ResultExt<T> for Result<T> {
     }
 
     #[inline]
-    fn unwrap_or(self, default: T) -> T {
-        match self {
-            Ok(v) => v,
-            Err(_) => default,
-        }
-    }
+     fn unwrap_or(self, default: T) -> T {
+         self.map_or(default, |v| v)
+     }
 
-    #[inline]
-    fn unwrap_or_else<F>(self, f: F) -> T
-    where
-        F: FnOnce(Error) -> T,
-    {
-        match self {
-            Ok(v) => v,
-            Err(e) => f(e),
-        }
-    }
+     #[inline]
+     fn unwrap_or_else<F>(self, f: F) -> T
+     where
+         F: FnOnce(Error) -> T,
+     {
+         self.map_or_else(f, |v| v)
+     }
 
-    #[inline]
-    fn or(self, other: Self) -> Self {
-        match self {
-            Ok(v) => Ok(v),
-            Err(_) => other,
-        }
-    }
+     #[inline]
+     fn or(self, other: Self) -> Self {
+         self.map_or_else(|_| other, |v| Ok(v))
+     }
 
     #[inline]
     fn or_else<F>(self, f: F) -> Self

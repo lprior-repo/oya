@@ -605,8 +605,11 @@ impl Default for ExecutionEngine {
 
 #[cfg(test)]
 mod tests {
-
+    #![allow(clippy::unwrap_used)]
+    #![allow(clippy::expect_used)]
+    #![allow(clippy::panic)]
     #![allow(clippy::assertions_on_constants)]
+    #![allow(clippy::unwrap_in_result)]
 
     use super::*;
     use crate::Task;

@@ -4,10 +4,38 @@
 
 use std::io::ErrorKind as IoErrorKind;
 
+/// Helper trait for converting to Box<str>.
+///
+/// This trait is implemented for String, &str and Box<str> to allow all
+/// to be converted to Box<str> in error constructors.
+pub trait IntoBoxStr {
+    fn into_box_str(self) -> Box<str>;
+}
+
+impl IntoBoxStr for String {
+    fn into_box_str(self) -> Box<str> {
+        self.into()
+    }
+}
+
+impl IntoBoxStr for Box<str> {
+    fn into_box_str(self) -> Box<str> {
+        self
+    }
+}
+
+impl IntoBoxStr for &str {
+    fn into_box_str(self) -> Box<str> {
+        self.to_string().into()
+    }
+}
+
 /// Transport layer errors.
 ///
 /// All errors are recoverable and provide diagnostic context.
+/// Using Box<str> for large String fields to keep enum size under 216 bytes.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(clippy::large_enum_variant)]
 pub enum TransportError {
     /// Message payload exceeds 1MB limit.
     ///
@@ -43,7 +71,7 @@ pub enum TransportError {
         /// Invalid length value
         length: u32,
         /// Reason why length is invalid
-        reason: String,
+        reason: Box<str>,
     },
 
     /// Serialization failed (bincode error).
@@ -54,7 +82,7 @@ pub enum TransportError {
     /// - Out-of-range numeric values
     SerializationFailed {
         /// Bincode error message
-        cause: String,
+        cause: Box<str>,
     },
 
     /// Deserialization failed (bincode error).
@@ -65,7 +93,7 @@ pub enum TransportError {
     /// - Invalid bincode format
     DeserializationFailed {
         /// Bincode error message
-        cause: String,
+        cause: Box<str>,
         /// Bytes of payload read
         payload_bytes: usize,
     },
@@ -118,24 +146,24 @@ impl TransportError {
     }
 
     /// Create an `InvalidLength` error
-    pub fn invalid_length(length: u32, reason: impl Into<String>) -> Self {
+    pub fn invalid_length(length: u32, reason: impl IntoBoxStr) -> Self {
         Self::InvalidLength {
             length,
-            reason: reason.into(),
+            reason: reason.into_box_str(),
         }
     }
 
     /// Create a `SerializationFailed` error
-    pub fn serialization_failed(cause: impl Into<String>) -> Self {
+    pub fn serialization_failed(cause: impl IntoBoxStr) -> Self {
         Self::SerializationFailed {
-            cause: cause.into(),
+            cause: cause.into_box_str(),
         }
     }
 
     /// Create a `DeserializationFailed` error
-    pub fn deserialization_failed(cause: impl Into<String>, payload_bytes: usize) -> Self {
+    pub fn deserialization_failed(cause: impl IntoBoxStr, payload_bytes: usize) -> Self {
         Self::DeserializationFailed {
-            cause: cause.into(),
+            cause: cause.into_box_str(),
             payload_bytes,
         }
     }
@@ -226,11 +254,9 @@ mod tests {
             "Unexpected EOF: 100 bytes read, expected 504"
         );
 
-        assert!(
-            TransportError::invalid_length(0, "zero length")
-                .to_string()
-                .contains("zero length")
-        );
+        assert!(TransportError::invalid_length(0, "zero length")
+            .to_string()
+            .contains("zero length"));
 
         assert_eq!(
             TransportError::serialization_failed("test error").to_string(),

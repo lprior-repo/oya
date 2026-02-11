@@ -455,6 +455,7 @@ fn test_invalid_working_directory_path_fails() {
 // Helper Methods for Event Inspection
 // ============================================================================
 
+#[allow(dead_code)]
 impl CommandPaneEvent {
     fn pane_id(&self) -> &str {
         match self {

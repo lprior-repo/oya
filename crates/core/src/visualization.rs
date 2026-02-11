@@ -332,6 +332,7 @@ impl WorkflowVisualization {
 
     /// DFS helper for cycle detection.
     fn dfs_cycle_detect(
+        &self,
         workflow: &Workflow,
         task_id: &str,
         visited: &mut HashSet<String>,
@@ -394,7 +395,7 @@ impl WorkflowVisualization {
 
         // DFS from each source to find longest path
         for source in sources {
-            Self::find_longest_path(workflow, &source, &mut longest_dist, &mut visited);
+            self.find_longest_path(workflow, &source, &mut longest_dist, &mut visited);
         }
 
         // Backtrack to find the critical path
@@ -437,7 +438,7 @@ impl WorkflowVisualization {
                 }
 
                 if !visited.contains(other_id) {
-                    Self::find_longest_path(workflow, other_id, dist, visited);
+                    self.find_longest_path(workflow, other_id, dist, visited);
                 }
             }
         }
