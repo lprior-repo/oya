@@ -205,10 +205,6 @@ impl ReplayEngine {
     }
 }
 
-fn resume_error_to_persistence(err: ResumeError) -> PersistenceError {
-    PersistenceError::invalid_state(format!("checkpoint resume failed: {err}"))
-}
-
 /// Result of a recovery operation.
 #[derive(Debug)]
 pub struct RecoveryResult {
