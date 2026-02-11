@@ -57,22 +57,12 @@ pub enum Error {
     #[error("invalid record: {reason}")]
     InvalidRecord { reason: String },
 
-    #[error("validation error in {context}: {message}")]
-    Validation { context: String, message: String },
-
-    #[error("{resource} not found: {id}")]
-    NotFound { resource: String, id: String },
-
     #[error("unknown error: {0}")]
     Unknown(String),
 
     // Generic I/O error wrapper
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
-
-    // Telemetry errors
-    #[error("telemetry initialization failed: {reason}")]
-    TelemetryInitFailed { reason: String },
 }
 
 impl Error {
@@ -109,21 +99,21 @@ impl Error {
     /// Create a JSON parse error.
     #[must_use]
     #[inline]
-    pub const fn json_parse_failed(source: serde_json::Error) -> Self {
+    pub fn json_parse_failed(source: serde_json::Error) -> Self {
         Self::JsonParseFailed { source }
     }
 
     /// Create a YAML parse error.
     #[must_use]
     #[inline]
-    pub const fn yaml_parse_failed(source: serde_yaml::Error) -> Self {
+    pub fn yaml_parse_failed(source: serde_yaml::Error) -> Self {
         Self::YamlParseFailed { source }
     }
 
     /// Create a TOML parse error.
     #[must_use]
     #[inline]
-    pub const fn toml_parse_failed(source: toml::de::Error) -> Self {
+    pub fn toml_parse_failed(source: toml::de::Error) -> Self {
         Self::TomlParseFailed { source }
     }
 
@@ -136,43 +126,27 @@ impl Error {
         }
     }
 
-    /// Create a validation error.
+    /// Create a validation error (alias for invalid_record for compatibility).
     #[must_use]
     #[inline]
-    pub fn validation(context: impl Into<String>, message: impl Into<String>) -> Self {
-        Self::Validation {
-            context: context.into(),
-            message: message.into(),
+    pub fn validation(context: impl std::fmt::Display, reason: impl Into<String>) -> Self {
+        Self::InvalidRecord {
+            reason: format!("{}: {}", context, reason.into()),
         }
     }
 
-    /// Create a not found error.
+    /// Create a not found error (uses InvalidRecord for now).
     #[must_use]
     #[inline]
-    pub fn not_found(resource: impl Into<String>, id: impl Into<String>) -> Self {
-        Self::NotFound {
-            resource: resource.into(),
-            id: id.into(),
-        }
-    }
-
-    /// Create a telemetry initialization error.
-    #[must_use]
-    #[inline]
-    pub fn telemetry_init_failed(reason: impl Into<String>) -> Self {
-        Self::TelemetryInitFailed {
-            reason: reason.into(),
+    pub fn not_found(entity_type: impl std::fmt::Display, id: impl std::fmt::Display) -> Self {
+        Self::InvalidRecord {
+            reason: format!("{} not found: {}", entity_type, id),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::redundant_clone)]
-    #![allow(clippy::used_underscore_binding)]
-    #![allow(clippy::manual_let_else)]
-    #![allow(clippy::uninlined_format_args)]
-
     use super::*;
 
     #[test]

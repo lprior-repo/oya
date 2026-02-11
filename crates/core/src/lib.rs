@@ -1,7 +1,4 @@
 #![forbid(unsafe_code)]
-#![cfg_attr(test, allow(clippy::expect_used))]
-#![cfg_attr(test, allow(clippy::unwrap_used))]
-#![cfg_attr(test, allow(clippy::panic))]
 
 //! OYA Core - Shared domain types and utilities.
 //!
@@ -18,13 +15,14 @@ pub mod workflow;
 
 // Re-export commonly used types
 pub use error::Error;
-pub use execution::{ExecutionEngine, WorkflowResult, WorkflowState};
 pub use result::Result;
+pub use execution::{ExecutionEngine, WorkflowResult, WorkflowState};
 pub use slug::Slug;
-pub use task::{Stage, Task};
+pub use task::Task;
 pub use visualization::WorkflowVisualization;
 pub use workflow::Workflow;
 
-// Type aliases for convenience
+// Type aliases for backward compatibility
 pub type OyaError = Error;
 pub type OyaResult<T> = Result<T>;
+
