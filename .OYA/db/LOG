@@ -1,0 +1,1 @@
+2026/02/06-08:50:34.175375 354267 [WARN] [db/db_impl/db_impl_open.cc:2687] DB::Open() failed: IO error: lock hold by current process, acquire time 1770389434 acquiring thread 354257: /home/lewis/src/oya/.OYA/db/LOCK: No locks available
