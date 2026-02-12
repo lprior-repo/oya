@@ -67,7 +67,9 @@ impl SlowAgentTestContext {
         let mut agent_ids = Vec::with_capacity(num_agents);
         for i in 0..num_agents {
             let agent_id = format!("agent-{i}");
-            pool.register_agent(AgentHandle::new(&agent_id))
+            let agent = AgentHandle::new(&agent_id)
+                .with_max_health_failures(health_config.max_failures);
+            pool.register_agent(agent)
                 .await
                 .map_err(|e| SlowAgentChaosError::SetupFailed {
                     reason: e.to_string(),

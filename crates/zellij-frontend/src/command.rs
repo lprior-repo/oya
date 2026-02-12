@@ -398,6 +398,23 @@ fn parse_sort_command(args: &[&str]) -> ParseResult<ParsedCommand> {
     Ok(ParsedCommand::Sort { field, direction })
 }
 
+fn parse_goto_command(args: &[&str]) -> ParseResult<ParsedCommand> {
+    if args.is_empty() {
+        return Err(ParseError::MissingArgument("goto".to_string()));
+    }
+
+    let target = args.join(" ");
+    let trimmed = target.trim();
+
+    if trimmed.is_empty() {
+        return Err(ParseError::MissingArgument("goto".to_string()));
+    }
+
+    Ok(ParsedCommand::Goto {
+        target: trimmed.to_string(),
+    })
+}
+
 /// Suggest completions for a partial command
 ///
 /// This function provides command suggestions based on partial input.
@@ -424,7 +441,9 @@ fn parse_sort_command(args: &[&str]) -> ParseResult<ParsedCommand> {
 /// ```
 #[must_use]
 pub fn suggest_completions(partial: &str) -> Vec<String> {
-    let commands = ["filter", "clear", "refresh", "help", "export", "sort"];
+    let commands = [
+        "filter", "clear", "refresh", "help", "export", "sort", "goto",
+    ];
 
     let input = partial.strip_prefix(':').unwrap_or(partial).to_lowercase();
 
@@ -671,7 +690,7 @@ mod tests {
     #[test]
     fn test_suggest_completions_with_empty_input() {
         let suggestions = suggest_completions(":");
-        assert_eq!(suggestions.len(), 6); // All commands
+        assert_eq!(suggestions.len(), 7); // All commands (filter, clear, refresh, help, export, sort, goto)
     }
 
     #[test]
@@ -994,5 +1013,89 @@ mod tests {
     fn test_suggest_completions_with_partial_s() {
         let suggestions = suggest_completions(":s");
         assert_eq!(suggestions, vec!["sort".to_string()]);
+    }
+
+    // ============================================================================
+    // Parse Goto Command Tests
+    // ============================================================================
+
+    #[test]
+    fn test_parse_goto_command_with_numeric_index() {
+        let result = parse_command(":goto 5");
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            ParsedCommand::Goto {
+                target: "5".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_goto_command_with_slug_prefix() {
+        let result = parse_command(":goto src-rkze");
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            ParsedCommand::Goto {
+                target: "src-rkze".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_goto_command_with_whitespace() {
+        let result = parse_command(":goto   10   ");
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            ParsedCommand::Goto {
+                target: "10".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_goto_command_without_target_returns_error() {
+        let result = parse_command(":goto");
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            ParseError::MissingArgument("goto".to_string())
+        );
+    }
+
+    #[test]
+    fn test_parse_goto_command_with_whitespace_only_target_returns_error() {
+        let result = parse_command(":goto    ");
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            ParseError::MissingArgument("goto".to_string())
+        );
+    }
+
+    #[test]
+    fn test_parsed_command_name_goto() {
+        assert_eq!(
+            ParsedCommand::Goto {
+                target: "5".to_string()
+            }
+            .name(),
+            "goto"
+        );
+    }
+
+    #[test]
+    fn test_suggest_completions_with_partial_g() {
+        let suggestions = suggest_completions(":g");
+        assert_eq!(suggestions, vec!["goto".to_string()]);
+    }
+
+    #[test]
+    fn test_suggest_completions_with_empty_input_now_has_goto() {
+        let suggestions = suggest_completions(":");
+        assert!(suggestions.contains(&"goto".to_string()));
+        assert_eq!(suggestions.len(), 7);
     }
 }
