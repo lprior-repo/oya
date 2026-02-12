@@ -380,7 +380,13 @@ mod core {
                     let _ = ws.add_bead(bead_id.clone());
                     next_state
                         .pending_beads
-                        .insert(bead_id.clone(), ScheduledBead::new(bead_id, workflow_id));
+                        .insert(bead_id.clone(), ScheduledBead::new(bead_id.clone(), workflow_id.clone()));
+                    effects.push(SchedulerEffect::RecordEvent {
+                        event: OrchestratorEvent::BeadScheduled {
+                            workflow_id,
+                            bead_id,
+                        },
+                    });
                 }
             }
             SchedulerMessage::AddDependency {
@@ -400,18 +406,25 @@ mod core {
                 workflow_id,
                 bead_id,
             } => {
-                handle_bead_completed(&mut next_state, &workflow_id, &bead_id);
+                handle_bead_completed(&mut next_state, &workflow_id, &bead_id, &mut effects);
             }
             SchedulerMessage::OnStateChanged { bead_id, to, .. } => {
                 if to == MsgBeadState::Completed {
-                    // Find workflow for bead
                     if let Some(workflow_id) = next_state
                         .pending_beads
                         .get(&bead_id)
                         .map(|b| b.workflow_id.clone())
                     {
-                        handle_bead_completed(&mut next_state, &workflow_id, &bead_id);
+                        handle_bead_completed(&mut next_state, &workflow_id, &bead_id, &mut effects);
                     }
+                } else if to == MsgBeadState::Failed {
+                    effects.push(SchedulerEffect::RecordEvent {
+                        event: OrchestratorEvent::BeadFailed {
+                            bead_id,
+                            error: "Bead execution failed".to_string(),
+                            failed_at: Utc::now(),
+                        },
+                    });
                 }
             }
             SchedulerMessage::ClaimBead { bead_id, worker_id } => {
@@ -512,6 +525,7 @@ mod core {
         state: &mut CoreSchedulerState,
         workflow_id: &WorkflowId,
         bead_id: &BeadId,
+        effects: &mut Vec<SchedulerEffect>,
     ) {
         if let Some(ws) = state.workflows.get_mut(workflow_id) {
             ws.mark_completed(bead_id);
@@ -521,6 +535,13 @@ mod core {
         }
         state.ready_beads.retain(|id| id != bead_id);
         state.worker_assignments.remove(bead_id);
+
+        effects.push(SchedulerEffect::RecordEvent {
+            event: OrchestratorEvent::BeadCompleted {
+                bead_id: bead_id.clone(),
+                completed_at: Utc::now(),
+            },
+        });
     }
 
     fn build_stats(state: &CoreSchedulerState) -> SchedulerStats {

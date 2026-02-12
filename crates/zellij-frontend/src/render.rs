@@ -749,17 +749,15 @@ impl Renderer {
         tasks.iter().enumerate().fold(output, |mut acc, (i, task)| {
             let is_selected = i == selected_index;
 
+            let status_color = style_helpers::status_color(&task.status);
+            acc.push_str(status_color);
+
             if is_selected {
                 acc.push_str(style_helpers::selected());
             }
 
             let indicator = if is_selected { "►" } else { " " };
             acc.push_str(indicator);
-
-            if !is_selected {
-                let status_color = style_helpers::status_color(&task.status);
-                acc.push_str(status_color);
-            }
 
             let slug = truncate(&task.slug, 12);
             let slug_padding = " ".repeat(14_usize.saturating_sub(slug.chars().count()));

@@ -26,7 +26,6 @@ fn test_bead_list_in_progress_row_has_blue_color() {
     let tasks = vec![create_test_task("src-abc", "in_progress")];
 
     let output = get_bead_list_output(&renderer, &layout, &tasks, 0);
-    eprintln!("OUTPUT: {output:?}");
 
     assert!(
         output.contains("\x1b[34m"),

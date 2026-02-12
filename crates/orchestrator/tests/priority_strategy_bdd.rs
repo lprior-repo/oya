@@ -6,9 +6,8 @@
 //!
 //! GIVEN priority strategy WHEN mixed priorities THEN high selected first.
 
-use orchestrator::distribution::priority::PriorityStrategy;
-use orchestrator::distribution::strategy::{
-    AgentMetadata, BeadMetadata, DistributionContext, DistributionStrategy,
+use orchestrator::distribution::{
+    AgentMetadata, BeadMetadata, DistributionContext, DistributionStrategy, PriorityStrategy,
 };
 
 /// BDD Test: Priority strategy selects highest priority first
