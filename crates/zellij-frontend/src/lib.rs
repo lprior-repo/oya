@@ -24,6 +24,7 @@
 #![warn(clippy::unwrap_in_result)]
 
 // Zellij plugin modules (from oya-ui)
+pub mod backpressure;
 pub mod components;
 pub mod exports;
 pub mod ipc;
