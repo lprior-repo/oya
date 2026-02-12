@@ -129,8 +129,11 @@ fn render_pipeline_view_hides_empty_substeps() {
     let output = renderer.render_pipeline_view(pane, &task);
 
     assert!(
-        !output.contains("○"),
-        "Should not show substep indicators when none exist"
+        !output.contains("  ○ ")
+            && !output.contains("  ● ")
+            && !output.contains("  ✓ ")
+            && !output.contains("  ✗ "),
+        "Should not show indented substep lines when none exist"
     );
 }
 

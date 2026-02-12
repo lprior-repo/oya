@@ -25,7 +25,9 @@ mod projection;
 mod resume;
 
 pub use checkpoint::{CheckpointConfig, CheckpointManager};
-pub use compression::{CheckpointCompressor, CompressionConfig, CompressionError, CompressionLevel, CompressionStats};
+pub use compression::{
+    CheckpointCompressor, CompressionConfig, CompressionError, CompressionLevel, CompressionStats,
+};
 pub use engine::ReplayEngine;
 pub use events::OrchestratorEvent;
 pub use projection::OrchestratorProjection;

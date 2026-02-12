@@ -621,7 +621,7 @@ impl Renderer {
     }
 
     /// Render pipeline view pane
-    fn render_pipeline_view(&self, pane: &Pane, task: &TaskRow) -> String {
+    pub fn render_pipeline_view(&self, pane: &Pane, task: &TaskRow) -> String {
         let header = format!("{}Pipeline: {}\n\n", style_helpers::header(), task.slug);
 
         // Calculate stage info once
@@ -645,6 +645,17 @@ impl Renderer {
                     acc.push_str(&stage_info.name);
                     acc.push_str(&bar);
                     acc.push('\n');
+
+                    // Render substeps if any exist
+                    for substep in &stage_info.substeps {
+                        acc.push_str(style_helpers::text());
+                        acc.push_str("  ");
+                        acc.push_str(substep.symbol());
+                        acc.push(' ');
+                        acc.push_str(&substep.name);
+                        acc.push('\n');
+                    }
+
                     acc
                 });
 
