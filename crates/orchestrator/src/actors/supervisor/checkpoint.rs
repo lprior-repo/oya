@@ -520,7 +520,7 @@ mod tests {
         let error = SupervisorCheckpointError::SerializationFailed {
             reason: "test error".to_string(),
         };
-        assert!(error.to_string().contains("Serialization failed"));
+        assert!(error.to_string().contains("serialization failed"));
 
         let error = SupervisorCheckpointError::CheckpointTimeout { duration_ms: 1000 };
         assert!(error.to_string().contains("timeout"));
@@ -639,13 +639,13 @@ mod tests {
         let error = SupervisorCheckpointError::DeserializationFailed {
             reason: "invalid JSON".to_string(),
         };
-        assert!(error.to_string().contains("Deserialization failed"));
+        assert!(error.to_string().contains("deserialization failed"));
         assert!(error.to_string().contains("invalid JSON"));
     }
 
     #[test]
     fn test_no_checkpoint_found_error_display() {
         let error = SupervisorCheckpointError::NoCheckpointFound;
-        assert!(error.to_string().contains("No checkpoint found"));
+        assert!(error.to_string().contains("no checkpoint found"));
     }
 }

@@ -14,11 +14,11 @@ mod error {
 
     #[derive(Debug, Error)]
     pub enum CompressionError {
-        #[error("Compression failed: {0}")]
+        #[error("compression failed: {0}")]
         CompressFailed(String),
-        #[error("Decompression failed: {0}")]
+        #[error("decompression failed: {0}")]
         DecompressFailed(String),
-        #[error("Invalid compression level: {0}. Valid range is 1-22")]
+        #[error("invalid compression level: {0}. Valid range is 1-22")]
         InvalidLevel(i32),
     }
 }
