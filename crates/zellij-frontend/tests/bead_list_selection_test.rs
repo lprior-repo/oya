@@ -1,4 +1,4 @@
-use zellij_frontend::layout::{Layout, Pane, PaneType};
+use zellij_frontend::layout::{Layout, PaneType};
 use zellij_frontend::plugin::TaskRow;
 use zellij_frontend::render::Renderer;
 
