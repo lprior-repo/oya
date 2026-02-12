@@ -56,14 +56,12 @@ mod tests {
     use oya_pipeline::{Language, Task};
 
     #[tokio::test]
-    async fn approve_command_rejects_non_eligible_task() {
-        let temp_dir = tempfile::tempdir().expect("tempdir should create");
-        let slug = oya_pipeline::Slug::new("task-1").expect("slug should parse");
+    async fn approve_command_rejects_non_eligible_task() -> Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let slug = oya_pipeline::Slug::new("task-1")?;
         let task = Task::new(slug, Language::Rust);
 
-        oya_pipeline::save_task_record(&task, temp_dir.path())
-            .await
-            .expect("save should succeed");
+        oya_pipeline::save_task_record(&task, temp_dir.path()).await?;
 
         let args = ApproveArgs {
             slug: "task-1".to_string(),
@@ -74,17 +72,16 @@ mod tests {
         let result = approve_command(args).await;
 
         assert!(result.is_err());
+        Ok(())
     }
 
     #[tokio::test]
-    async fn approve_command_approves_passed_pipeline_task() {
-        let temp_dir = tempfile::tempdir().expect("tempdir should create");
-        let slug = oya_pipeline::Slug::new("task-1").expect("slug should parse");
+    async fn approve_command_approves_passed_pipeline_task() -> Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let slug = oya_pipeline::Slug::new("task-1")?;
         let task = Task::new(slug, Language::Rust);
 
-        oya_pipeline::save_task_record(&task, temp_dir.path())
-            .await
-            .expect("save should succeed");
+        oya_pipeline::save_task_record(&task, temp_dir.path()).await?;
 
         let args = ApproveArgs {
             slug: "task-1".to_string(),
@@ -95,5 +92,6 @@ mod tests {
         let result = approve_command(args).await;
 
         assert!(result.is_err());
+        Ok(())
     }
 }

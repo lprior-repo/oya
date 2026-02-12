@@ -11,7 +11,6 @@
 
 use anyhow::Result;
 use clap::Parser;
-use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -118,11 +117,11 @@ impl DoctorError {
 }
 
 /// Core function to check if current directory is a workspace
-async fn check_workspace(path: &PathBuf) -> Result<bool, DoctorError> {
+async fn check_workspace(path: &std::path::Path) -> Result<bool, DoctorError> {
     let cargo_toml = path.join("Cargo.toml");
 
     if !cargo_toml.exists() {
-        return Err(DoctorError::NotWorkspace { path: path.clone() });
+        return Err(DoctorError::NotWorkspace { path: path.to_path_buf() });
     }
 
     // Check if it's a workspace
@@ -130,7 +129,7 @@ async fn check_workspace(path: &PathBuf) -> Result<bool, DoctorError> {
 
     let content: String = match content_result {
         Ok(c) => c,
-        Err(_) => return Err(DoctorError::NotWorkspace { path: path.clone() }),
+        Err(_) => return Err(DoctorError::NotWorkspace { path: path.to_path_buf() }),
     };
 
     Ok(content.contains("[workspace]"))
@@ -190,7 +189,7 @@ async fn check_moon() -> CheckResult {
         } else {
             Some("Install moon: curl -fsSL https://moonrepo.dev/install.sh | bash".to_string())
         },
-        duration_ms: start.elapsed().as_millis() as u64,
+        duration_ms: start.elapsed().as_millis().try_into().unwrap_or(u64::MAX),
     }
 }
 
@@ -223,7 +222,7 @@ async fn check_zjj() -> CheckResult {
         } else {
             Some("Install zjj from your OYA distribution".to_string())
         },
-        duration_ms: start.elapsed().as_millis() as u64,
+        duration_ms: start.elapsed().as_millis().try_into().unwrap_or(u64::MAX),
     }
 }
 
@@ -256,7 +255,7 @@ async fn check_bead_store() -> CheckResult {
         } else {
             Some("Run: br init".to_string())
         },
-        duration_ms: start.elapsed().as_millis() as u64,
+        duration_ms: start.elapsed().as_millis().try_into().unwrap_or(u64::MAX),
     }
 }
 
@@ -283,7 +282,7 @@ async fn check_cargo_workspace() -> CheckResult {
         } else {
             Some("Run: cargo check".to_string())
         },
-        duration_ms: start.elapsed().as_millis() as u64,
+        duration_ms: start.elapsed().as_millis().try_into().unwrap_or(u64::MAX),
     }
 }
 
@@ -314,7 +313,7 @@ async fn check_clippy() -> CheckResult {
         } else {
             Some("Run: cargo clippy --fix".to_string())
         },
-        duration_ms: start.elapsed().as_millis() as u64,
+        duration_ms: start.elapsed().as_millis().try_into().unwrap_or(u64::MAX),
     }
 }
 
@@ -344,7 +343,7 @@ async fn check_test_coverage() -> CheckResult {
         } else {
             Some("Run: cargo test".to_string())
         },
-        duration_ms: start.elapsed().as_millis() as u64,
+        duration_ms: start.elapsed().as_millis().try_into().unwrap_or(u64::MAX),
     }
 }
 
@@ -372,12 +371,12 @@ async fn check_dependencies() -> CheckResult {
         } else {
             Some("Run: cargo update".to_string())
         },
-        duration_ms: start.elapsed().as_millis() as u64,
+        duration_ms: start.elapsed().as_millis().try_into().unwrap_or(u64::MAX),
     }
 }
 
 /// Get all available checks
-fn get_all_checks() -> Vec<&'static str> {
+fn get_all_checks() -> Vec<String> {
     vec![
         "moon",
         "zjj",
@@ -387,6 +386,9 @@ fn get_all_checks() -> Vec<&'static str> {
         "test-coverage",
         "dependencies",
     ]
+    .into_iter()
+    .map(String::from)
+    .collect()
 }
 
 /// Run a specific check
@@ -410,6 +412,11 @@ async fn run_check(check_name: &str) -> CheckResult {
 }
 
 /// Main doctor command implementation
+///
+/// # Errors
+///
+/// Returns `DoctorError::NotWorkspace` if the current directory is not an Oya workspace.
+/// Returns `DoctorError` if any check fails or times out.
 pub async fn doctor_command(args: DoctorArgs) -> Result<DoctorOutput, DoctorError> {
     debug!("Running doctor command with args: {args:?}");
 
@@ -421,16 +428,12 @@ pub async fn doctor_command(args: DoctorArgs) -> Result<DoctorOutput, DoctorErro
     check_workspace(&current_dir).await?;
 
     // Determine which checks to run
-    let checks_to_run = if let Some(ref check) = args.check {
-        vec![check.as_str()]
-    } else {
-        get_all_checks()
-    };
+    let checks_to_run = args.check.as_ref().map_or_else(get_all_checks, |check| vec![check.clone()]);
 
     // Run checks
     let mut checks = Vec::new();
 
-    for check_name in checks_to_run {
+    for check_name in &checks_to_run {
         info!("Running check: {check_name}");
         let result = run_check(check_name).await;
         checks.push(result);
@@ -504,9 +507,9 @@ mod tests {
     fn test_get_all_checks() {
         let checks = get_all_checks();
 
-        assert!(checks.contains(&"moon"));
-        assert!(checks.contains(&"clippy"));
-        assert!(checks.contains(&"test-coverage"));
+        assert!(checks.contains(&"moon".to_string()));
+        assert!(checks.contains(&"clippy".to_string()));
+        assert!(checks.contains(&"test-coverage".to_string()));
     }
 
     #[test]

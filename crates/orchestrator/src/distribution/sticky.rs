@@ -144,23 +144,6 @@ impl StickyStrategy {
         ctx.get_agent(worker_id).map(|agent| agent.load < 0.5)
     }
 
-    /// Calculate the idle score for a worker (higher = more idle).
-    ///
-    /// # Arguments
-    ///
-    /// * `worker_id` - The worker ID to score
-    /// * `ctx` - The distribution context containing agent metadata
-    ///
-    /// # Returns
-    ///
-    /// * Score in range [0.0, 1.0], where 1.0 = completely idle (load = 0.0)
-    fn idle_score(&self, worker_id: &str, ctx: &DistributionContext) -> f64 {
-        ctx.get_agent(worker_id)
-            .map(|agent| 1.0 - agent.load)
-            .filter(|score| score.is_finite())
-            .unwrap_or(0.5)
-    }
-
     /// Select the least-loaded worker from a list of candidates.
     ///
     /// # Arguments
@@ -188,24 +171,6 @@ impl StickyStrategy {
                     .unwrap_or(std::cmp::Ordering::Equal)
             })
             .cloned()
-    }
-
-    /// Calculate the combined score for a worker (sticky + load).
-    ///
-    /// # Arguments
-    ///
-    /// * `worker_id` - The worker ID to score
-    /// * `is_previous` - Whether this worker previously handled the bead
-    /// * `ctx` - The distribution context
-    ///
-    /// # Returns
-    ///
-    /// * Combined score in range [0.0, 1.0]
-    fn combined_score(&self, worker_id: &str, is_previous: bool, ctx: &DistributionContext) -> f64 {
-        let sticky_score = if is_previous { 1.0 } else { 0.0 };
-        let load_score = self.idle_score(worker_id, ctx);
-
-        (sticky_score * self.sticky_weight) + (load_score * self.load_weight)
     }
 }
 
@@ -524,33 +489,6 @@ mod tests {
     }
 
     #[test]
-    fn test_sticky_idle_score_completely_idle() {
-        let strategy = StickyStrategy::new();
-        let ctx = create_context_with_agents(vec![("worker-a", 0.0)]);
-
-        let score = strategy.idle_score("worker-a", &ctx);
-        assert!((score - 1.0).abs() < f64::EPSILON);
-    }
-
-    #[test]
-    fn test_sticky_idle_score_half_loaded() {
-        let strategy = StickyStrategy::new();
-        let ctx = create_context_with_agents(vec![("worker-a", 0.5)]);
-
-        let score = strategy.idle_score("worker-a", &ctx);
-        assert!((score - 0.5).abs() < f64::EPSILON);
-    }
-
-    #[test]
-    fn test_sticky_idle_score_completely_loaded() {
-        let strategy = StickyStrategy::new();
-        let ctx = create_context_with_agents(vec![("worker-a", 1.0)]);
-
-        let score = strategy.idle_score("worker-a", &ctx);
-        assert!(score.abs() < f64::EPSILON);
-    }
-
-    #[test]
     fn test_sticky_select_least_loaded_single() {
         let strategy = StickyStrategy::new();
         let ctx = create_context_with_agents(vec![("worker-a", 0.5)]);
@@ -589,30 +527,6 @@ mod tests {
         let result = strategy.select_least_loaded(&agents, &ctx);
 
         assert!(result.is_none());
-    }
-
-    #[test]
-    fn test_sticky_combined_score_previous_worker() {
-        let strategy = StickyStrategy::new()
-            .with_sticky_weight(0.7)
-            .with_load_weight(0.3);
-        let ctx = create_context_with_agents(vec![("worker-a", 0.2)]);
-
-        let score = strategy.combined_score("worker-a", true, &ctx);
-        let expected = (1.0 * 0.7) + (0.8 * 0.3); // sticky=1.0, idle=0.8
-        assert!((score - expected).abs() < f64::EPSILON);
-    }
-
-    #[test]
-    fn test_sticky_combined_score_new_worker() {
-        let strategy = StickyStrategy::new()
-            .with_sticky_weight(0.7)
-            .with_load_weight(0.3);
-        let ctx = create_context_with_agents(vec![("worker-b", 0.3)]);
-
-        let score = strategy.combined_score("worker-b", false, &ctx);
-        let expected = (0.0 * 0.7) + (0.7 * 0.3); // sticky=0.0, idle=0.7
-        assert!((score - expected).abs() < f64::EPSILON);
     }
 
     #[test]

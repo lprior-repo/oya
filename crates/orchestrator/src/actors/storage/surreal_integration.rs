@@ -289,17 +289,17 @@ impl SurrealConnectionManager {
 
     pub async fn execute_with_retry<F, T, Fut>(&self, operation: F) -> Result<T, SurrealError>
     where
-        F: Fn(PooledConnection) -> Fut,
-        Fut: std::future::Future<Output = Result<T, SurrealError>>,
+        F: Fn(PooledConnection) -> Fut + Send + Sync,
+        Fut: std::future::Future<Output = Result<T, SurrealError>> + Send,
+        T: Send,
     {
         let mut attempt: u32 = 0;
 
         loop {
             attempt = attempt.saturating_add(1);
-            let conn = self.get_connection().await?;
 
             let timeout_result =
-                tokio::time::timeout(self.config.query_timeout, operation(conn)).await;
+                tokio::time::timeout(self.config.query_timeout, operation(self.get_connection().await?)).await;
 
             match timeout_result {
                 Ok(Ok(result)) => return Ok(result),

@@ -198,7 +198,7 @@ impl DeliveryTracker {
                 if let Some((existing_id, cached_at)) = cache.get(key) {
                     // Check if cache entry is still valid
                     let age = Utc::now().signed_duration_since(*cached_at).num_seconds();
-                    if age < self.config.dedup_ttl_secs as i64 {
+                    if age < self.config.dedup_ttl_secs.try_into().unwrap_or(i64::MAX) {
                         return Ok(TrackResult::Duplicate(existing_id.clone()));
                     }
                 }
@@ -325,7 +325,7 @@ impl DeliveryTracker {
     /// Clean up expired entries from the deduplication cache.
     pub async fn cleanup_dedup_cache(&self) {
         let now = Utc::now();
-        let ttl = self.config.dedup_ttl_secs as i64;
+        let ttl = self.config.dedup_ttl_secs.try_into().unwrap_or(i64::MAX);
 
         let mut cache = self.idempotency_cache.write().await;
         cache.retain(|_, (_, cached_at)| now.signed_duration_since(*cached_at).num_seconds() < ttl);

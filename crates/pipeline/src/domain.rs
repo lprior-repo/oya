@@ -21,7 +21,7 @@ impl Slug {
     pub fn new(input: impl AsRef<str>) -> Result<Self> {
         let raw = input.as_ref().trim();
         if raw.is_empty() {
-            return Err(Error::InvalidSlug("slug cannot be empty".to_string()));
+            return Err(Error::InvalidSlug("be empty".to_string()));
         }
 
         let invalid = raw
@@ -30,7 +30,7 @@ impl Slug {
 
         if invalid {
             return Err(Error::InvalidSlug(
-                "slug must use lowercase letters, digits, or '-'".to_string(),
+                "contain path separators or traversal sequences".to_string(),
             ));
         }
 
@@ -379,9 +379,10 @@ mod tests {
     }
 
     #[test]
-    fn slug_accepts_lowercase_and_dashes() {
-        let slug = Slug::new("good-slug-1").expect("slug should parse");
+    fn slug_accepts_lowercase_and_dashes() -> Result<()> {
+        let slug = Slug::new("good-slug-1")?;
         assert_eq!(slug.as_str(), "good-slug-1");
+        Ok(())
     }
 
     #[test]
@@ -397,18 +398,20 @@ mod tests {
     }
 
     #[test]
-    fn priority_parse_accepts_known_values() {
-        let parsed = Priority::parse("p1").expect("priority should parse");
+    fn priority_parse_accepts_known_values() -> Result<()> {
+        let parsed = Priority::parse("p1")?;
         assert_eq!(parsed, Priority::P1);
+        Ok(())
     }
 
     #[test]
-    fn status_helpers_match_behavior() {
-        let status = TaskStatus::in_progress("implement").expect("stage should be valid");
+    fn status_helpers_match_behavior() -> Result<()> {
+        let status = TaskStatus::in_progress("implement")?;
 
         assert!(status.is_transient());
         assert!(!status.is_failed());
         assert_eq!(status.to_filter_status(), "open");
+        Ok(())
     }
 
     #[test]
@@ -424,59 +427,58 @@ mod tests {
     }
 
     #[test]
-    fn failed_accepts_valid_inputs() {
+    fn failed_accepts_valid_inputs() -> Result<()> {
         let status =
-            TaskStatus::failed("lint", "error").expect("failure status should be constructed");
+            TaskStatus::failed("lint", "error")?;
         assert!(status.is_failed());
         assert_eq!(status.to_filter_status(), "failed");
+        Ok(())
     }
 
     #[test]
-    fn task_builds_default_fields() {
-        let slug = Slug::new("task-1").expect("slug should parse");
+    fn task_builds_default_fields() -> Result<()> {
+        let slug = Slug::new("task-1")?;
         let task = Task::new(slug, Language::Rust);
 
         assert_eq!(task.priority, Priority::P2);
         assert_eq!(task.status, TaskStatus::Created);
         assert!(task.branch.starts_with("task/"));
+        Ok(())
     }
 
     #[test]
-    fn task_transition_rejects_invalid_jump() {
-        let slug = Slug::new("task-2").expect("slug should parse");
+    fn task_transition_rejects_invalid_jump() -> Result<()> {
+        let slug = Slug::new("task-2")?;
         let task = Task::new(slug, Language::Rust);
         let result = task.transition_to(TaskStatus::Integrated);
         assert!(result.is_err());
+        Ok(())
     }
 
     #[test]
-    fn task_transition_allows_retry_after_failure() {
-        let slug = Slug::new("task-3").expect("slug should parse");
+    fn task_transition_allows_retry_after_failure() -> Result<()> {
+        let slug = Slug::new("task-3")?;
         let task = Task::new(slug, Language::Rust)
-            .start_stage(Stage::Implement)
-            .expect("stage should start");
+            .start_stage(Stage::Implement)?;
 
         let failed = task
-            .fail_stage(Stage::Implement, "failure")
-            .expect("failure should be recorded");
+            .fail_stage(Stage::Implement, "failure")?;
 
         let retried = failed
-            .start_stage(Stage::Implement)
-            .expect("retry should be allowed");
+            .start_stage(Stage::Implement)?;
 
         assert!(matches!(retried.status, TaskStatus::InProgress { .. }));
+        Ok(())
     }
 
     #[test]
-    fn task_transition_allows_stage_to_stage_progression() {
-        let slug = Slug::new("task-5").expect("slug should parse");
+    fn task_transition_allows_stage_to_stage_progression() -> Result<()> {
+        let slug = Slug::new("task-5")?;
         let task = Task::new(slug, Language::Rust)
-            .start_stage(Stage::Implement)
-            .expect("stage should start");
+            .start_stage(Stage::Implement)?;
 
         let advanced = task
-            .start_stage(Stage::UnitTest)
-            .expect("transition to next stage should be allowed");
+            .start_stage(Stage::UnitTest)?;
 
         assert_eq!(
             advanced.status,
@@ -484,29 +486,30 @@ mod tests {
                 stage: Stage::UnitTest.as_str().to_string()
             }
         );
+        Ok(())
     }
 
     #[test]
-    fn task_transition_rejects_regressing_stage() {
-        let slug = Slug::new("task-6").expect("slug should parse");
+    fn task_transition_rejects_regressing_stage() -> Result<()> {
+        let slug = Slug::new("task-6")?;
         let task = Task::new(slug, Language::Rust)
-            .start_stage(Stage::UnitTest)
-            .expect("stage should start");
+            .start_stage(Stage::UnitTest)?;
 
         let result = task.start_stage(Stage::Implement);
         assert!(matches!(result, Err(Error::InvalidTransition { .. })));
+        Ok(())
     }
 
     #[test]
-    fn task_pass_and_integrate_follow_order() {
-        let slug = Slug::new("task-4").expect("slug should parse");
+    fn task_pass_and_integrate_follow_order() -> Result<()> {
+        let slug = Slug::new("task-4")?;
         let task = Task::new(slug, Language::Rust)
-            .start_stage(Stage::Implement)
-            .expect("stage should start");
+            .start_stage(Stage::Implement)?;
 
-        let passed = task.pass_pipeline().expect("pipeline should pass");
-        let integrated = passed.integrate().expect("integration should succeed");
+        let passed = task.pass_pipeline()?;
+        let integrated = passed.integrate()?;
 
         assert_eq!(integrated.status, TaskStatus::Integrated);
+        Ok(())
     }
 }

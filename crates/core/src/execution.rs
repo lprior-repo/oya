@@ -861,19 +861,19 @@ mod tests {
     }
 
     #[test]
-    fn test_get_ready_tasks_with_dependencies() {
+    fn test_get_ready_tasks_with_dependencies() -> Result<()> {
         let engine = ExecutionEngine::new();
         let mut workflow = Workflow::new("test-workflow", "Test", "Description")
-            .expect("Failed to create workflow");
+            .map_err(|e| anyhow!(e.to_string()))?;
 
-        let task1 = Task::new("task-1", "Task 1", "First task").expect("Failed to create task");
-        let task2 = Task::new("task-2", "Task 2", "Second task").expect("Failed to create task");
+        let task1 = Task::new("task-1", "Task 1", "First task").map_err(|e| anyhow!(e.to_string()))?;
+        let task2 = Task::new("task-2", "Task 2", "Second task").map_err(|e| anyhow!(e.to_string()))?;
 
-        workflow.add_task(task1).expect("Failed to add task");
-        workflow.add_task(task2).expect("Failed to add task");
+        workflow.add_task(task1).map_err(|e| anyhow!(e.to_string()))?;
+        workflow.add_task(task2).map_err(|e| anyhow!(e.to_string()))?;
         workflow
             .add_dependency("task-1", "task-2")
-            .expect("Failed to add dependency");
+            .map_err(|e| anyhow!(e.to_string()))?;
 
         let state = WorkflowState {
             workflow_id: "test-workflow".to_string(),
@@ -887,22 +887,23 @@ mod tests {
         let ready = engine.get_ready_tasks(&workflow, &state);
         assert_eq!(ready.len(), 1);
         assert!(ready.contains(&"task-2".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn test_get_ready_tasks_dependencies_not_complete() {
+    fn test_get_ready_tasks_dependencies_not_complete() -> Result<()> {
         let engine = ExecutionEngine::new();
         let mut workflow = Workflow::new("test-workflow", "Test", "Description")
-            .expect("Failed to create workflow");
+            .map_err(|e| anyhow!(e.to_string()))?;
 
-        let task1 = Task::new("task-1", "Task 1", "First task").expect("Failed to create task");
-        let task2 = Task::new("task-2", "Task 2", "Second task").expect("Failed to create task");
+        let task1 = Task::new("task-1", "Task 1", "First task").map_err(|e| anyhow!(e.to_string()))?;
+        let task2 = Task::new("task-2", "Task 2", "Second task").map_err(|e| anyhow!(e.to_string()))?;
 
-        workflow.add_task(task1).expect("Failed to add task");
-        workflow.add_task(task2).expect("Failed to add task");
+        workflow.add_task(task1).map_err(|e| anyhow!(e.to_string()))?;
+        workflow.add_task(task2).map_err(|e| anyhow!(e.to_string()))?;
         workflow
             .add_dependency("task-1", "task-2")
-            .expect("Failed to add dependency");
+            .map_err(|e| anyhow!(e.to_string()))?;
 
         let state = WorkflowState {
             workflow_id: "test-workflow".to_string(),
@@ -915,16 +916,17 @@ mod tests {
 
         let ready = engine.get_ready_tasks(&workflow, &state);
         assert!(ready.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_get_ready_tasks_returns_empty_for_workflow_id_mismatch() {
+    fn test_get_ready_tasks_returns_empty_for_workflow_id_mismatch() -> Result<()> {
         let engine = ExecutionEngine::new();
         let mut workflow =
-            Workflow::new("wf-1", "Test", "Description").expect("Failed to create workflow");
+            Workflow::new("wf-1", "Test", "Description").map_err(|e| anyhow!(e.to_string()))?;
 
-        let task1 = Task::new("task-1", "Task 1", "First task").expect("Failed to create task");
-        workflow.add_task(task1).expect("Failed to add task");
+        let task1 = Task::new("task-1", "Task 1", "First task").map_err(|e| anyhow!(e.to_string()))?;
+        workflow.add_task(task1).map_err(|e| anyhow!(e.to_string()))?;
 
         let state = WorkflowState {
             workflow_id: "wf-2".to_string(),
@@ -934,12 +936,13 @@ mod tests {
 
         let ready = engine.get_ready_tasks(&workflow, &state);
         assert!(ready.is_empty());
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_save_and_load_checkpoint() {
-        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
-        let checkpoint_dir = temp_dir.path().to_str().expect("Invalid path");
+    async fn test_save_and_load_checkpoint() -> Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let checkpoint_dir = temp_dir.path().to_str().ok_or_else(|| anyhow!("invalid path"))?;
 
         let engine = ExecutionEngine::new().with_checkpoint_dir(checkpoint_dir);
 
@@ -955,23 +958,22 @@ mod tests {
         let checkpoint_path = engine
             .save_checkpoint(&state)
             .await
-            .expect("Failed to save checkpoint");
+            .map_err(|e| anyhow!(e.to_string()))?;
 
         assert!(checkpoint_path.contains("test-workflow.json"));
 
         // Verify file exists
-        tokio::fs::metadata(&checkpoint_path)
-            .await
-            .expect("Checkpoint file not found");
+        tokio::fs::metadata(&checkpoint_path).await?;
 
         // Load checkpoint
         let loaded_state = engine
             .load_checkpoint(Path::new(&checkpoint_path))
             .await
-            .expect("Failed to load checkpoint");
+            .map_err(|e| anyhow!(e.to_string()))?;
 
         assert_eq!(loaded_state.workflow_id, state.workflow_id);
         assert_eq!(loaded_state.task_status, state.task_status);
+        Ok(())
     }
 
     #[tokio::test]
@@ -1067,42 +1069,38 @@ mod tests {
 }
 
 #[test]
-fn test_execute_workflow_empty() {
+fn test_execute_workflow_empty() -> Result<()> {
     let engine = ExecutionEngine::new();
     let workflow =
-        Workflow::new("test-workflow", "Test", "Description").expect("Failed to create workflow");
+        Workflow::new("test-workflow", "Test", "Description").map_err(|e| anyhow!(e.to_string()))?;
 
-    let result = engine.execute_workflow(&workflow);
-    assert!(result.is_ok());
-
-    let workflow_result = result.unwrap();
-    assert!(workflow_result.succeeded.is_empty());
-    assert!(workflow_result.failed.is_empty());
+    let result = engine.execute_workflow(&workflow).map_err(|e| anyhow!(e.to_string()))?;
+    assert!(result.succeeded.is_empty());
+    assert!(result.failed.is_empty());
+    Ok(())
 }
 
 #[test]
-fn test_execute_workflow_linear() {
+fn test_execute_workflow_linear() -> Result<()> {
     let engine = ExecutionEngine::new();
     let mut workflow =
-        Workflow::new("test-workflow", "Test", "Description").expect("Failed to create workflow");
+        Workflow::new("test-workflow", "Test", "Description").map_err(|e| anyhow!(e.to_string()))?;
 
-    let task1 = Task::new("task-1", "Task 1", "First task").expect("Failed to create task");
-    let task2 = Task::new("task-2", "Task 2", "Second task").expect("Failed to create task");
+    let task1 = Task::new("task-1", "Task 1", "First task").map_err(|e| anyhow!(e.to_string()))?;
+    let task2 = Task::new("task-2", "Task 2", "Second task").map_err(|e| anyhow!(e.to_string()))?;
 
-    workflow.add_task(task1).expect("Failed to add task");
-    workflow.add_task(task2).expect("Failed to add task");
+    workflow.add_task(task1).map_err(|e| anyhow!(e.to_string()))?;
+    workflow.add_task(task2).map_err(|e| anyhow!(e.to_string()))?;
     workflow
         .add_dependency("task-1", "task-2")
-        .expect("Failed to add dependency");
+        .map_err(|e| anyhow!(e.to_string()))?;
 
-    let result = engine.execute_workflow(&workflow);
-    assert!(result.is_ok());
-
-    let workflow_result = result.unwrap();
-    assert_eq!(workflow_result.succeeded.len(), 2);
-    assert!(workflow_result.succeeded.contains(&"task-1".to_string()));
-    assert!(workflow_result.succeeded.contains(&"task-2".to_string()));
-    assert!(workflow_result.failed.is_empty());
+    let result = engine.execute_workflow(&workflow).map_err(|e| anyhow!(e.to_string()))?;
+    assert_eq!(result.succeeded.len(), 2);
+    assert!(result.succeeded.contains(&"task-1".to_string()));
+    assert!(result.succeeded.contains(&"task-2".to_string()));
+    assert!(result.failed.is_empty());
+    Ok(())
 }
 
 #[test]
@@ -1159,10 +1157,10 @@ fn test_rollback_task_idempotent() {
 }
 
 #[test]
-fn test_rollback_task_not_found() {
+fn test_rollback_task_not_found() -> Result<()> {
     let engine = ExecutionEngine::new();
     let workflow =
-        Workflow::new("test-workflow", "Test", "Description").expect("Failed to create workflow");
+        Workflow::new("test-workflow", "Test", "Description").map_err(|e| anyhow!(e.to_string()))?;
 
     let mut state = WorkflowState {
         workflow_id: "test-workflow".to_string(),
@@ -1173,20 +1171,21 @@ fn test_rollback_task_not_found() {
     let result = engine.rollback_task("non-existent", &workflow, &mut state);
     assert!(result.is_err());
     assert!(matches!(result, Err(ExecutionError::RollbackFailed { .. })));
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_recover_from_checkpoint() {
-    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
-    let checkpoint_dir = temp_dir.path().to_str().expect("Invalid path");
+async fn test_recover_from_checkpoint() -> Result<()> {
+    let temp_dir = tempfile::tempdir()?;
+    let checkpoint_dir = temp_dir.path().to_str().ok_or_else(|| anyhow!("invalid path"))?;
 
     let engine = ExecutionEngine::new().with_checkpoint_dir(checkpoint_dir);
 
     let mut workflow =
-        Workflow::new("test-workflow", "Test", "Description").expect("Failed to create workflow");
+        Workflow::new("test-workflow", "Test", "Description").map_err(|e| anyhow!(e.to_string()))?;
 
-    let task1 = Task::new("task-1", "Task 1", "First task").expect("Failed to create task");
-    workflow.add_task(task1).expect("Failed to add task");
+    let task1 = Task::new("task-1", "Task 1", "First task").map_err(|e| anyhow!(e.to_string()))?;
+    workflow.add_task(task1).map_err(|e| anyhow!(e.to_string()))?;
 
     let state = WorkflowState {
         workflow_id: "test-workflow".to_string(),
@@ -1198,27 +1197,28 @@ async fn test_recover_from_checkpoint() {
     let checkpoint_path = engine
         .save_checkpoint(&state)
         .await
-        .expect("Failed to save checkpoint");
+        .map_err(|e| anyhow!(e.to_string()))?;
 
     // Recover from checkpoint
     let recovered_state = engine
         .recover_from_checkpoint(Path::new(&checkpoint_path), &workflow)
         .await
-        .expect("Failed to recover from checkpoint");
+        .map_err(|e| anyhow!(e.to_string()))?;
 
     assert_eq!(recovered_state.workflow_id, state.workflow_id);
     assert_eq!(recovered_state.task_status, state.task_status);
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_recover_from_checkpoint_workflow_id_mismatch() {
-    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
-    let checkpoint_dir = temp_dir.path().to_str().expect("Invalid path");
+async fn test_recover_from_checkpoint_workflow_id_mismatch() -> Result<()> {
+    let temp_dir = tempfile::tempdir()?;
+    let checkpoint_dir = temp_dir.path().to_str().ok_or_else(|| anyhow!("invalid path"))?;
 
     let engine = ExecutionEngine::new().with_checkpoint_dir(checkpoint_dir);
 
     let _workflow1 =
-        Workflow::new("workflow-1", "Test", "Description").expect("Failed to create workflow");
+        Workflow::new("workflow-1", "Test", "Description").map_err(|e| anyhow!(e.to_string()))?;
 
     let state = WorkflowState {
         workflow_id: "workflow-1".to_string(),
@@ -1230,11 +1230,11 @@ async fn test_recover_from_checkpoint_workflow_id_mismatch() {
     let checkpoint_path = engine
         .save_checkpoint(&state)
         .await
-        .expect("Failed to save checkpoint");
+        .map_err(|e| anyhow!(e.to_string()))?;
 
     // Try to recover with different workflow
     let workflow2 =
-        Workflow::new("workflow-2", "Test", "Description").expect("Failed to create workflow");
+        Workflow::new("workflow-2", "Test", "Description").map_err(|e| anyhow!(e.to_string()))?;
 
     let result = engine
         .recover_from_checkpoint(Path::new(&checkpoint_path), &workflow2)
@@ -1245,4 +1245,5 @@ async fn test_recover_from_checkpoint_workflow_id_mismatch() {
         result,
         Err(ExecutionError::CheckpointCorrupted { .. })
     ));
+    Ok(())
 }

@@ -373,9 +373,8 @@ async fn create_directory(path: &PathBuf) -> Result<(), InitError> {
 
 /// Shell function: Write file
 async fn write_file(path: &PathBuf, content: &str) -> Result<(), InitError> {
-    let parent = match path.parent() {
-        Some(p) => p,
-        None => return Ok(()),
+    let Some(parent) = path.parent() else {
+        return Ok(());
     };
 
     fs::create_dir_all(parent)
@@ -419,6 +418,14 @@ async fn init_git(project_path: &PathBuf) -> Result<bool, InitError> {
 }
 
 /// Main init command implementation
+///
+/// # Errors
+///
+/// Returns `InitError::InvalidProjectName` if name is invalid.
+/// Returns `InitError::DirectoryExists` if target directory already exists.
+/// Returns `InitError::TemplateNotFound` if template doesn't exist.
+/// Returns `InitError::PermissionDenied` if filesystem operations fail.
+/// Returns `InitError::GitFailed` if git initialization fails.
 pub async fn init_command(args: InitArgs) -> Result<InitOutput, InitError> {
     debug!("Running init command with args: {args:?}");
 
@@ -531,27 +538,23 @@ mod tests {
     }
 
     #[test]
-    fn test_get_template_files_minimal() {
-        let files = get_template_files("minimal");
-
-        assert!(files.is_ok());
-        let files = files.unwrap();
+    fn test_get_template_files_minimal() -> Result<(), InitError> {
+        let files = get_template_files("minimal")?;
 
         assert!(files.iter().any(|f| f.path == "Cargo.toml"));
         assert!(files.iter().any(|f| f.path == "moon.yml"));
         assert!(files.iter().any(|f| f.path == "CLAUDE.md"));
+        Ok(())
     }
 
     #[test]
-    fn test_get_template_files_full() {
-        let files = get_template_files("full");
-
-        assert!(files.is_ok());
-        let files = files.unwrap();
+    fn test_get_template_files_full() -> Result<(), InitError> {
+        let files = get_template_files("full")?;
 
         assert!(files.iter().any(|f| f.path == "Cargo.toml"));
         assert!(files.iter().any(|f| f.path == ".github/workflows/ci.yml"));
         assert!(files.iter().any(|f| f.path == "crates/core/src/lib.rs"));
+        Ok(())
     }
 
     #[test]

@@ -507,61 +507,60 @@ pub enum AlertLevel {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_guest_message_serialization() {
+    fn test_guest_message_serialization() -> Result<(), Box<dyn std::error::Error>> {
         let msg = GuestMessage::GetBeadDetail {
             bead_id: "bead-123".to_string(),
         };
 
-        let json = serde_json::to_string(&msg).expect("serialization should succeed");
+        let json = serde_json::to_string(&msg)?;
         assert!(json.contains("get_bead_detail"));
         assert!(json.contains("bead-123"));
 
-        let decoded: GuestMessage =
-            serde_json::from_str(&json).expect("deserialization should succeed");
+        let decoded: GuestMessage = serde_json::from_str(&json)?;
         assert!(matches!(
             decoded,
             GuestMessage::GetBeadDetail { bead_id } if bead_id == "bead-123"
         ));
+        Ok(())
     }
 
     #[test]
-    fn test_guest_message_subscribe_events_serialization() {
+    fn test_guest_message_subscribe_events_serialization() -> Result<(), Box<dyn std::error::Error>> {
         let msg = GuestMessage::SubscribeEvents {
             event_types: vec!["build".to_string(), "deploy".to_string()],
         };
 
-        let json = serde_json::to_string(&msg).expect("serialization should succeed");
+        let json = serde_json::to_string(&msg)?;
         assert!(json.contains("subscribe_events"));
         assert!(json.contains("build"));
         assert!(json.contains("deploy"));
 
-        let decoded: GuestMessage =
-            serde_json::from_str(&json).expect("deserialization should succeed");
+        let decoded: GuestMessage = serde_json::from_str(&json)?;
         assert!(matches!(
             decoded,
             GuestMessage::SubscribeEvents { event_types } if event_types == vec!["build".to_string(), "deploy".to_string()]
         ));
+        Ok(())
     }
 
     #[test]
-    fn test_guest_message_unsubscribe_events_serialization() {
+    fn test_guest_message_unsubscribe_events_serialization() -> Result<(), Box<dyn std::error::Error>> {
         let msg = GuestMessage::UnsubscribeEvents;
 
-        let json = serde_json::to_string(&msg).expect("serialization should succeed");
+        let json = serde_json::to_string(&msg)?;
         assert!(json.contains("unsubscribe_events"));
 
-        let decoded: GuestMessage =
-            serde_json::from_str(&json).expect("deserialization should succeed");
+        let decoded: GuestMessage = serde_json::from_str(&json)?;
         assert!(matches!(decoded, GuestMessage::UnsubscribeEvents));
+        Ok(())
     }
 
     #[test]
-    fn test_task_summary_serialization() {
+    fn test_task_summary_serialization() -> Result<(), Box<dyn std::error::Error>> {
         let summary = TaskSummary {
             slug: "task-123".to_string(),
             status: "in_progress".to_string(),
@@ -571,16 +570,16 @@ mod tests {
             branch: "task/task-123".to_string(),
         };
 
-        let json = serde_json::to_string(&summary).expect("serialization should succeed");
-        let decoded: TaskSummary =
-            serde_json::from_str(&json).expect("deserialization should succeed");
+        let json = serde_json::to_string(&summary)?;
+        let decoded: TaskSummary = serde_json::from_str(&json)?;
 
         assert_eq!(decoded.slug, "task-123");
         assert_eq!(decoded.stage.as_deref(), Some("lint"));
+        Ok(())
     }
 
     #[test]
-    fn test_task_batch_update_serialization() {
+    fn test_task_batch_update_serialization() -> Result<(), Box<dyn std::error::Error>> {
         let msg = HostMessage::TaskBatchUpdated {
             updated: vec![TaskUpdate {
                 slug: "task-1".to_string(),
@@ -594,47 +593,47 @@ mod tests {
             }],
         };
 
-        let json = serde_json::to_string(&msg).expect("serialization should succeed");
+        let json = serde_json::to_string(&msg)?;
         assert!(json.contains("task_batch_updated"));
 
-        let decoded: HostMessage =
-            serde_json::from_str(&json).expect("deserialization should succeed");
+        let decoded: HostMessage = serde_json::from_str(&json)?;
         assert!(matches!(decoded, HostMessage::TaskBatchUpdated { .. }));
+        Ok(())
     }
 
     #[test]
-    fn test_run_pipeline_batch_serialization() {
+    fn test_run_pipeline_batch_serialization() -> Result<(), Box<dyn std::error::Error>> {
         let msg = GuestMessage::RunPipelineBatch {
             slugs: vec!["task-1".to_string(), "task-2".to_string()],
             dry_run: true,
         };
 
-        let json = serde_json::to_string(&msg).expect("serialization should succeed");
+        let json = serde_json::to_string(&msg)?;
         assert!(json.contains("run_pipeline_batch"));
 
-        let decoded: GuestMessage =
-            serde_json::from_str(&json).expect("deserialization should succeed");
+        let decoded: GuestMessage = serde_json::from_str(&json)?;
         assert!(matches!(decoded, GuestMessage::RunPipelineBatch { .. }));
+        Ok(())
     }
 
     #[test]
-    fn test_task_update_serialization() {
+    fn test_task_update_serialization() -> Result<(), Box<dyn std::error::Error>> {
         let update = TaskUpdate {
             slug: "task-99".to_string(),
             status: Some("failed".to_string()),
             message: "pipeline failed".to_string(),
         };
 
-        let json = serde_json::to_string(&update).expect("serialization should succeed");
-        let decoded: TaskUpdate =
-            serde_json::from_str(&json).expect("deserialization should succeed");
+        let json = serde_json::to_string(&update)?;
+        let decoded: TaskUpdate = serde_json::from_str(&json)?;
 
         assert_eq!(decoded.slug, "task-99");
         assert_eq!(decoded.status.as_deref(), Some("failed"));
+        Ok(())
     }
 
     #[test]
-    fn test_host_message_serialization() {
+    fn test_host_message_serialization() -> Result<(), Box<dyn std::error::Error>> {
         let msg = HostMessage::BeadStateChanged {
             bead_id: "bead-123".to_string(),
             from_state: "pending".to_string(),
@@ -642,19 +641,19 @@ mod tests {
             timestamp: 1234567890,
         };
 
-        let json = serde_json::to_string(&msg).expect("serialization should succeed");
+        let json = serde_json::to_string(&msg)?;
         assert!(json.contains("bead_state_changed"));
 
-        let decoded: HostMessage =
-            serde_json::from_str(&json).expect("deserialization should succeed");
+        let decoded: HostMessage = serde_json::from_str(&json)?;
         assert!(matches!(
             decoded,
             HostMessage::BeadStateChanged { bead_id, .. } if bead_id == "bead-123"
         ));
+        Ok(())
     }
 
     #[test]
-    fn test_bead_summary_serialization() {
+    fn test_bead_summary_serialization() -> Result<(), Box<dyn std::error::Error>> {
         let summary = BeadSummary {
             id: "bead-123".to_string(),
             title: "Test bead".to_string(),
@@ -663,48 +662,33 @@ mod tests {
             created_at: 1234567890,
         };
 
-        let json = match serde_json::to_string(&summary) {
-            Ok(s) => s,
-            Err(e) => panic!("serialization should succeed but failed: {}", e),
-        };
-        let decoded: BeadSummary = match serde_json::from_str(&json) {
-            Ok(d) => d,
-            Err(e) => panic!("deserialization should succeed but failed: {}", e),
-        };
+        let json = serde_json::to_string(&summary)?;
+        let decoded: BeadSummary = serde_json::from_str(&json)?;
 
         assert_eq!(decoded.id, "bead-123");
         assert_eq!(decoded.title, "Test bead");
+        Ok(())
     }
 
     #[test]
-    fn test_health_status_serialization() {
+    fn test_health_status_serialization() -> Result<(), Box<dyn std::error::Error>> {
         let status = HealthStatus::Healthy;
-        let json = match serde_json::to_string(&status) {
-            Ok(s) => s,
-            Err(e) => panic!("serialization should succeed but failed: {}", e),
-        };
+        let json = serde_json::to_string(&status)?;
         assert!(json.contains("healthy"));
 
-        let decoded: HealthStatus = match serde_json::from_str(&json) {
-            Ok(d) => d,
-            Err(e) => panic!("deserialization should succeed but failed: {}", e),
-        };
+        let decoded: HealthStatus = serde_json::from_str(&json)?;
         assert!(matches!(decoded, HealthStatus::Healthy));
+        Ok(())
     }
 
     #[test]
-    fn test_alert_level_serialization() {
+    fn test_alert_level_serialization() -> Result<(), Box<dyn std::error::Error>> {
         let level = AlertLevel::Critical;
-        let json = match serde_json::to_string(&level) {
-            Ok(s) => s,
-            Err(e) => panic!("serialization should succeed but failed: {}", e),
-        };
+        let json = serde_json::to_string(&level)?;
         assert!(json.contains("critical"));
 
-        let decoded: AlertLevel = match serde_json::from_str(&json) {
-            Ok(d) => d,
-            Err(e) => panic!("deserialization should succeed but failed: {}", e),
-        };
+        let decoded: AlertLevel = serde_json::from_str(&json)?;
         assert!(matches!(decoded, AlertLevel::Critical));
+        Ok(())
     }
 }

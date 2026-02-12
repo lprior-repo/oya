@@ -398,7 +398,7 @@ impl MemoizedLayout {
 
         if node_count == 1 {
             // Single node at center
-            if let Some(node) = nodes.get(0) {
+            if let Some(node) = nodes.first() {
                 positions.insert(node.clone(), Position::new(0.0, 0.0));
             }
             return positions;
@@ -462,7 +462,7 @@ impl MemoizedLayout {
                 .filter(|((from, _), _)| from.as_str() == node.as_str())
             {
                 let force = forces.entry(from.clone()).or_insert(Force::new(0.0, 0.0));
-                *force = force.add(&source_force);
+                *force = force.add(source_force);
             }
 
             // Find edges where this node is the target
@@ -472,7 +472,7 @@ impl MemoizedLayout {
             {
                 // Functional pattern: dereference to avoid clone, Force is small (Copy-like)
                 let force = forces.entry(to.clone()).or_insert(Force::new(0.0, 0.0));
-                *force = force.add(&target_force);
+                *force = force.add(target_force);
             }
         }
 
@@ -827,7 +827,7 @@ mod tests {
     }
 
     #[test]
-    fn test_benchmark_utilities() {
+    fn test_benchmark_utilities() -> Result<(), Box<dyn std::error::Error>> {
         let mut dag = WorkflowDAG::new();
         for i in 0..10 {
             let result = dag.add_node(format!("node-{i}"));
@@ -835,8 +835,8 @@ mod tests {
         }
         for i in 0..9 {
             let result = dag.add_edge(
-                format!("node-{i}"),
-                format!("node-{}", i + 1),
+                &format!("node-{i}"),
+                &format!("node-{}", i + 1),
                 DependencyType::BlockingDependency,
             );
             assert!(
@@ -849,7 +849,7 @@ mod tests {
         let result = benchmark::benchmark_layout_computation(&dag, 10);
         assert!(result.is_ok(), "benchmark should succeed");
 
-        let (cold_time, warm_time) = result.unwrap();
+        let (cold_time, warm_time) = result.map_err(|e| format!("benchmark failed: {e}"))?;
 
         // Cold time includes one cold computation + cached ones
         // Warm time is all cached
@@ -865,6 +865,7 @@ mod tests {
             // Speedup should be at least 1.0x (warm is not slower)
             assert!(speedup >= 1.0, "speedup should be >= 1.0, got {}", speedup);
         }
+        Ok(())
     }
 
     #[test]

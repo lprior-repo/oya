@@ -49,16 +49,6 @@ pub enum ContractProcessorError {
 /// Result type for contract processing.
 pub type ContractProcessorResult<T> = Result<T, ContractProcessorError>;
 
-/// Validation error for handoff content.
-#[derive(Debug, Clone)]
-pub struct HandoffValidationError {
-    /// Missing field name.
-    pub field: String,
-
-    /// Reason for validation failure.
-    pub reason: String,
-}
-
 /// Handoff file structure.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HandoffFile {
@@ -301,33 +291,29 @@ impl ContractProcessor {
 
     /// Generate error variants based on handoff.
     fn generate_error_variants(&self, handoff: &HandoffFile) -> Vec<ErrorVariant> {
-        let mut errors = Vec::new();
-
-        // Base errors for all contracts
-        errors.push(ErrorVariant {
-            variant: "HandoffFileNotFound".to_string(),
-            description: "Handoff JSON file does not exist at expected path".to_string(),
-            recoverable: false,
-        });
-
-        errors.push(ErrorVariant {
-            variant: "ContractFileNotFound".to_string(),
-            description: "Contract JSON file not created after processing".to_string(),
-            recoverable: false,
-        });
-
-        errors.push(ErrorVariant {
-            variant: "InvalidHandoffFormat".to_string(),
-            description: "Handoff JSON missing required fields (bead_id, title)".to_string(),
-            recoverable: false,
-        });
-
-        errors.push(ErrorVariant {
-            variant: "MissingContractSections".to_string(),
-            description: "Generated contract missing required sections (errors, test_plan)"
-                .to_string(),
-            recoverable: false,
-        });
+        let mut errors = vec![
+            ErrorVariant {
+                variant: "HandoffFileNotFound".to_string(),
+                description: "Handoff JSON file does not exist at expected path".to_string(),
+                recoverable: false,
+            },
+            ErrorVariant {
+                variant: "ContractFileNotFound".to_string(),
+                description: "Contract JSON file not created after processing".to_string(),
+                recoverable: false,
+            },
+            ErrorVariant {
+                variant: "InvalidHandoffFormat".to_string(),
+                description: "Handoff JSON missing required fields (bead_id, title)".to_string(),
+                recoverable: false,
+            },
+            ErrorVariant {
+                variant: "MissingContractSections".to_string(),
+                description: "Generated contract missing required sections (errors, test_plan)"
+                    .to_string(),
+                recoverable: false,
+            },
+        ];
 
         // Add custom error scenarios from handoff
         for scenario in &handoff.error_scenarios {
@@ -395,36 +381,32 @@ impl ContractProcessor {
 
     /// Generate break analysis.
     fn generate_break_analysis(&self, handoff: &HandoffFile) -> Vec<BreakAnalysisEntry> {
-        let mut analysis = Vec::new();
-
-        // Base break analysis
-        analysis.push(BreakAnalysisEntry {
-            scenario: "Handoff file does not exist".to_string(),
-            impact: "Cannot proceed - no requirements to analyze".to_string(),
-            prevention: "Check file existence before reading".to_string(),
-            mitigation: "Log error and skip to next handoff".to_string(),
-        });
-
-        analysis.push(BreakAnalysisEntry {
-            scenario: "Handoff JSON is malformed".to_string(),
-            impact: "Cannot parse requirements".to_string(),
-            prevention: "Validate JSON structure before processing".to_string(),
-            mitigation: "Log parse error and skip".to_string(),
-        });
-
-        analysis.push(BreakAnalysisEntry {
-            scenario: "Contract file write fails".to_string(),
-            impact: "Implementer cannot proceed".to_string(),
-            prevention: "Verify write permissions on /tmp".to_string(),
-            mitigation: "Retry write with error logging".to_string(),
-        });
-
-        analysis.push(BreakAnalysisEntry {
-            scenario: "Missing required fields in handoff".to_string(),
-            impact: "Incomplete contract generation".to_string(),
-            prevention: "Validate bead_id, title, description exist".to_string(),
-            mitigation: "Use defaults for optional fields, fail on required".to_string(),
-        });
+        let mut analysis = vec![
+            BreakAnalysisEntry {
+                scenario: "Handoff file does not exist".to_string(),
+                impact: "Cannot proceed - no requirements to analyze".to_string(),
+                prevention: "Check file existence before reading".to_string(),
+                mitigation: "Log error and skip to next handoff".to_string(),
+            },
+            BreakAnalysisEntry {
+                scenario: "Handoff JSON is malformed".to_string(),
+                impact: "Cannot parse requirements".to_string(),
+                prevention: "Validate JSON structure before processing".to_string(),
+                mitigation: "Log parse error and skip".to_string(),
+            },
+            BreakAnalysisEntry {
+                scenario: "Contract file write fails".to_string(),
+                impact: "Implementer cannot proceed".to_string(),
+                prevention: "Verify write permissions on /tmp".to_string(),
+                mitigation: "Retry write with error logging".to_string(),
+            },
+            BreakAnalysisEntry {
+                scenario: "Missing required fields in handoff".to_string(),
+                impact: "Incomplete contract generation".to_string(),
+                prevention: "Validate bead_id, title, description exist".to_string(),
+                mitigation: "Use defaults for optional fields, fail on required".to_string(),
+            },
+        ];
 
         // Add integration point specific analysis
         for integration in &handoff.integration_points {

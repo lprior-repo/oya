@@ -96,9 +96,6 @@ pub mod replay;
 /// Scheduler actor for managing workflow DAGs and bead scheduling
 pub mod scheduler;
 
-/// BeadOrchestrator for slot-based bead execution
-pub mod bead_orchestrator;
-
 /// Stage gate decision engine for recursive stage transitions.
 pub mod stage_gate;
 

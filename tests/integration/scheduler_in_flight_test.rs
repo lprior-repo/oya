@@ -15,7 +15,7 @@ use oya_orchestrator::scheduler::{SchedulerActor, BeadScheduleState};
 /// WHEN stop is requested with in-flight work
 /// THEN scheduler completes all in-flight work before stopping
 #[tokio::test]
-async fn given_scheduler_with_in_flight_work_when_stop_requested_then_completes_all_work() {
+async fn given_scheduler_with_in_flight_work_when_stop_requested_then_completes_all_work() -> Result<(), Box<dyn std::error::Error>> {
     // GIVEN: A scheduler with beads in different states
     let mut scheduler = SchedulerActor::new();
     let workflow_id = "workflow-test".to_string();
@@ -27,33 +27,25 @@ async fn given_scheduler_with_in_flight_work_when_stop_requested_then_completes_
 
     // Register workflow
     scheduler
-        .register_workflow(workflow_id.clone())
-        .expect("workflow registration should succeed");
+        .register_workflow(workflow_id.clone())?;
 
     // Schedule beads
     scheduler
-        .schedule_bead(workflow_id.clone(), bead_pending.clone())
-        .expect("pending bead scheduling should succeed");
+        .schedule_bead(workflow_id.clone(), bead_pending.clone())?;
     scheduler
-        .schedule_bead(workflow_id.clone(), bead_ready.clone())
-        .expect("ready bead scheduling should succeed");
+        .schedule_bead(workflow_id.clone(), bead_ready.clone())?;
     scheduler
-        .schedule_bead(workflow_id.clone(), bead_in_flight.clone())
-        .expect("in-flight bead scheduling should succeed");
+        .schedule_bead(workflow_id.clone(), bead_in_flight.clone())?;
     scheduler
-        .schedule_bead(workflow_id, bead_completed.clone())
-        .expect("completed bead scheduling should succeed");
+        .schedule_bead(workflow_id, bead_completed.clone())?;
 
     // Set up bead states
     scheduler
-        .mark_ready(&bead_ready)
-        .expect("marking bead ready should succeed");
+        .mark_ready(&bead_ready)?;
     scheduler
-        .assign_to_worker(&bead_in_flight, worker_id.clone())
-        .expect("assigning bead to worker should succeed");
+        .assign_to_worker(&bead_in_flight, worker_id.clone())?;
     scheduler
-        .handle_bead_completed(&bead_completed)
-        .expect("handling bead completion should succeed");
+        .handle_bead_completed(&bead_completed)?;
 
     // Verify initial state
     assert_eq!(
@@ -81,18 +73,20 @@ async fn given_scheduler_with_in_flight_work_when_stop_requested_then_completes_
         "stop should fail when in-flight work exists"
     );
 
-    let error = stop_result.expect_err("should have error");
-    assert!(
-        error.to_string().contains("in-flight"),
-        "error should mention in-flight work"
-    );
+    if let Err(error) = stop_result {
+        assert!(
+            error.to_string().contains("in-flight"),
+            "error should mention in-flight work"
+        );
+    }
+    Ok(())
 }
 
 /// GIVEN scheduler with only completed beads
 /// WHEN stop is requested
 /// THEN stop succeeds immediately
 #[tokio::test]
-async fn given_scheduler_with_completed_work_when_stop_requested_then_stops_immediately() {
+async fn given_scheduler_with_completed_work_when_stop_requested_then_stops_immediately() -> Result<(), Box<dyn std::error::Error>> {
     // GIVEN: A scheduler with only completed beads
     let mut scheduler = SchedulerActor::new();
     let workflow_id = "workflow-test".to_string();
@@ -100,23 +94,18 @@ async fn given_scheduler_with_completed_work_when_stop_requested_then_stops_imme
     let bead_2 = "bead-2".to_string();
 
     scheduler
-        .register_workflow(workflow_id.clone())
-        .expect("workflow registration should succeed");
+        .register_workflow(workflow_id.clone())?;
 
     scheduler
-        .schedule_bead(workflow_id.clone(), bead_1.clone())
-        .expect("bead-1 scheduling should succeed");
+        .schedule_bead(workflow_id.clone(), bead_1.clone())?;
     scheduler
-        .schedule_bead(workflow_id, bead_2.clone())
-        .expect("bead-2 scheduling should succeed");
+        .schedule_bead(workflow_id, bead_2.clone())?;
 
     // Mark all beads as completed
     scheduler
-        .handle_bead_completed(&bead_1)
-        .expect("bead-1 completion should succeed");
+        .handle_bead_completed(&bead_1)?;
     scheduler
-        .handle_bead_completed(&bead_2)
-        .expect("bead-2 completion should succeed");
+        .handle_bead_completed(&bead_2)?;
 
     // Verify no in-flight work
     assert_eq!(
@@ -143,28 +132,26 @@ async fn given_scheduler_with_completed_work_when_stop_requested_then_stops_imme
         stop_result.is_ok(),
         "stop should succeed when no in-flight work exists"
     );
+    Ok(())
 }
 
 /// GIVEN scheduler with ready beads but not in-flight
 /// WHEN stop is requested
 /// THEN stop succeeds without waiting for ready beads
 #[tokio::test]
-async fn given_scheduler_with_ready_beads_when_stop_requested_then_stops_without_dispatching() {
+async fn given_scheduler_with_ready_beads_when_stop_requested_then_stops_without_dispatching() -> Result<(), Box<dyn std::error::Error>> {
     // GIVEN: A scheduler with ready beads (not yet assigned)
     let mut scheduler = SchedulerActor::new();
     let workflow_id = "workflow-test".to_string();
     let bead_ready = "bead-ready".to_string();
 
     scheduler
-        .register_workflow(workflow_id)
-        .expect("workflow registration should succeed");
+        .register_workflow(workflow_id)?;
 
     scheduler
-        .schedule_bead("workflow-test".to_string(), bead_ready.clone())
-        .expect("bead scheduling should succeed");
+        .schedule_bead("workflow-test".to_string(), bead_ready.clone())?;
     scheduler
-        .mark_ready(&bead_ready)
-        .expect("marking bead ready should succeed");
+        .mark_ready(&bead_ready)?;
 
     // Verify state
     assert_eq!(
@@ -186,4 +173,5 @@ async fn given_scheduler_with_ready_beads_when_stop_requested_then_stops_without
         stop_result.is_ok(),
         "stop should succeed when no in-flight work exists (ready beads OK)"
     );
+    Ok(())
 }

@@ -2,7 +2,7 @@
 //!
 //! This module provides:
 //! - Checkpoint creation during supervisor shutdown
-//! - Crash recovery during supervisor pre_start
+//! - Crash recovery during supervisor `pre_start`
 //!
 //! The crash recovery process:
 //! 1. Checks for existing checkpoints from previous crashes
@@ -109,7 +109,7 @@ pub struct ChildSnapshot {
 }
 
 /// Result of crash recovery attempt.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct RecoveryResult {
     /// Whether recovery was performed from a checkpoint.
     pub recovered: bool,
@@ -123,19 +123,6 @@ pub struct RecoveryResult {
     pub child_id_counter: u64,
     /// Time of the snapshot used for recovery.
     pub snapshot_time: Option<DateTime<Utc>>,
-}
-
-impl Default for RecoveryResult {
-    fn default() -> Self {
-        Self {
-            recovered: false,
-            checkpoint_id: None,
-            children_restored: 0,
-            total_restarts: 0,
-            child_id_counter: 0,
-            snapshot_time: None,
-        }
-    }
 }
 
 impl RecoveryResult {
@@ -154,7 +141,7 @@ impl RecoveryResult {
 
     /// Create a result from a successful recovery.
     #[must_use]
-    pub const fn from_snapshot(snapshot: &SupervisorSnapshot, checkpoint_id: String) -> Self {
+    pub fn from_snapshot(snapshot: &SupervisorSnapshot, checkpoint_id: String) -> Self {
         Self {
             recovered: true,
             checkpoint_id: Some(checkpoint_id),
@@ -166,7 +153,7 @@ impl RecoveryResult {
     }
 }
 
-/// Attempt crash recovery from the latest checkpoint during pre_start.
+/// Attempt crash recovery from the latest checkpoint during `pre_start`.
 ///
 /// This function is called during supervisor initialization to recover
 /// state from a previous crash. If a checkpoint exists, it loads the
@@ -191,9 +178,8 @@ impl RecoveryResult {
 pub async fn attempt_crash_recovery(
     checkpoint_manager: Option<&CheckpointManager>,
 ) -> Result<RecoveryResult, SupervisorCheckpointError> {
-    let checkpoint_manager = match checkpoint_manager {
-        Some(cm) => cm,
-        None => return Ok(RecoveryResult::no_recovery()),
+    let Some(checkpoint_manager) = checkpoint_manager else {
+        return Ok(RecoveryResult::no_recovery());
     };
 
     info!("Attempting crash recovery from checkpoint");
@@ -266,9 +252,8 @@ where
 pub async fn load_recovery_snapshot(
     checkpoint_manager: Option<&CheckpointManager>,
 ) -> Result<Option<(SupervisorSnapshot, String)>, SupervisorCheckpointError> {
-    let checkpoint_manager = match checkpoint_manager {
-        Some(cm) => cm,
-        None => return Ok(None),
+    let Some(checkpoint_manager) = checkpoint_manager else {
+        return Ok(None);
     };
 
     let checkpoint = match checkpoint_manager.get_latest().await {
@@ -324,7 +309,7 @@ where
             checkpoint_manager.ok_or(SupervisorCheckpointError::CheckpointManagerUnavailable)?;
 
         // Serialize state
-        let serialized = serialize_supervisor_state(self).await?;
+        let serialized = serialize_supervisor_state(self)?;
 
         // Create checkpoint with timeout
         let checkpoint_result = tokio::time::timeout(
@@ -366,7 +351,7 @@ where
 ///
 /// Returns `SupervisorCheckpointError::SerializationFailed` if JSON
 /// serialization fails.
-async fn serialize_supervisor_state<A>(
+fn serialize_supervisor_state<A>(
     state: &SupervisorActorState<A>,
 ) -> Result<String, SupervisorCheckpointError>
 where
@@ -374,7 +359,7 @@ where
     A::Arguments: Clone + Send + Sync + std::fmt::Debug,
     A::Msg: Send,
 {
-    let snapshot = build_snapshot(state).await;
+    let snapshot = build_snapshot(state);
 
     serde_json::to_string_pretty(&snapshot).map_err(|e| {
         error!(error = %e, "Failed to serialize supervisor state");
@@ -385,13 +370,13 @@ where
 }
 
 /// Build a snapshot from supervisor state.
-async fn build_snapshot<A>(state: &SupervisorActorState<A>) -> SupervisorSnapshot
+fn build_snapshot<A>(state: &SupervisorActorState<A>) -> SupervisorSnapshot
 where
     A: GenericSupervisableActor,
     A::Arguments: Clone + Send + Sync + std::fmt::Debug,
     A::Msg: Send,
 {
-    let children = build_child_snapshots(state).await;
+    let children = build_child_snapshots(state);
 
     SupervisorSnapshot {
         config: state.config.clone(),
@@ -406,7 +391,7 @@ where
 }
 
 /// Build child snapshots from supervisor state.
-async fn build_child_snapshots<A>(state: &SupervisorActorState<A>) -> Vec<ChildSnapshot>
+fn build_child_snapshots<A>(state: &SupervisorActorState<A>) -> Vec<ChildSnapshot>
 where
     A: GenericSupervisableActor,
     A::Arguments: Clone + Send + Sync + std::fmt::Debug,
@@ -422,8 +407,7 @@ where
                 let elapsed = i.elapsed().as_secs().saturating_sub(1);
                 std::time::SystemTime::now()
                     .checked_sub(Duration::from_secs(elapsed))
-                    .map(DateTime::from)
-                    .unwrap_or_else(|| DateTime::from(std::time::SystemTime::UNIX_EPOCH))
+                    .map_or_else(|| DateTime::from(std::time::SystemTime::UNIX_EPOCH), DateTime::from)
             }),
             args: format!("{:?}", child.args), // Debug format for args
         })

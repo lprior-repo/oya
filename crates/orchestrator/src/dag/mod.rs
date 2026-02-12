@@ -151,26 +151,26 @@ impl WorkflowDAG {
     /// ```
     pub fn add_edge(
         &mut self,
-        from_bead: BeadId,
-        to_bead: BeadId,
+        from_bead: &str,
+        to_bead: &str,
         dep_type: DependencyType,
     ) -> DagResult<()> {
         if from_bead == to_bead {
-            return Err(DagError::self_loop(from_bead));
+            return Err(DagError::self_loop(from_bead.to_string()));
         }
 
         let from_index = self
             .node_map
-            .get(&from_bead)
-            .ok_or_else(|| DagError::node_not_found(from_bead.clone()))?;
+            .get(from_bead)
+            .ok_or_else(|| DagError::node_not_found(from_bead.to_string()))?;
 
         let to_index = self
             .node_map
-            .get(&to_bead)
-            .ok_or_else(|| DagError::node_not_found(to_bead.clone()))?;
+            .get(to_bead)
+            .ok_or_else(|| DagError::node_not_found(to_bead.to_string()))?;
 
         if self.graph.find_edge(*from_index, *to_index).is_some() {
-            return Err(DagError::edge_already_exists(from_bead, to_bead));
+            return Err(DagError::edge_already_exists(from_bead.to_string(), to_bead.to_string()));
         }
 
         self.graph.add_edge(*from_index, *to_index, dep_type);
@@ -217,8 +217,8 @@ impl WorkflowDAG {
     ///
     /// // test depends on build
     /// dag.add_dependency(
-    ///     "build".to_string(),
-    ///     "test".to_string(),
+    ///     "build",
+    ///     "test",
     ///     DependencyType::BlockingDependency
     /// )?;
     ///
@@ -227,12 +227,12 @@ impl WorkflowDAG {
     /// ```
     pub fn add_dependency(
         &mut self,
-        from: BeadId,
-        to: BeadId,
+        from: &str,
+        to: &str,
         dep_type: DependencyType,
     ) -> DagResult<()> {
         // Validate basic edge constraints
-        self.add_edge(from.clone(), to.clone(), dep_type)?;
+        self.add_edge(from, to, dep_type)?;
 
         // Check for cycles using Tarjan's SCC algorithm
         // If adding this edge creates a cycle, there will be a strongly connected
@@ -249,8 +249,8 @@ impl WorkflowDAG {
                     .collect();
 
                 // Remove the edge we just added
-                let from_index = self.node_map.get(&from);
-                let to_index = self.node_map.get(&to);
+                let from_index = self.node_map.get(from);
+                let to_index = self.node_map.get(to);
                 if let (Some(&from_idx), Some(&to_idx)) = (from_index, to_index) {
                     if let Some(edge_idx) = self.graph.find_edge(from_idx, to_idx) {
                         self.graph.remove_edge(edge_idx);
@@ -1173,18 +1173,18 @@ impl WorkflowDAG {
             .filter(|scc| {
                 // A cycle exists if SCC has more than one node, or if a single
                 // node has a self-loop
-                if scc.len() > 1 {
-                    true
-                } else if scc.len() == 1 {
-                    let node = match scc.get(0).copied() {
-                        Some(n) => n,
-                        None => return false,
-                    };
-                    self.graph
-                        .neighbors_directed(node, Direction::Outgoing)
-                        .any(|n| n == node)
-                } else {
-                    false
+                match scc.len().cmp(&1) {
+                    std::cmp::Ordering::Greater => true,
+                    std::cmp::Ordering::Equal => {
+                        let node = match scc.first().copied() {
+                            Some(n) => n,
+                            None => return false,
+                        };
+                        self.graph
+                            .neighbors_directed(node, Direction::Outgoing)
+                            .any(|n| n == node)
+                    }
+                    std::cmp::Ordering::Less => false,
                 }
             })
             .map(|scc| {
@@ -1430,7 +1430,7 @@ impl WorkflowDAG {
 
             if let (Some(from_id), Some(to_id)) = (from, to) {
                 if node_set.contains(from_id) && node_set.contains(to_id) {
-                    subgraph.add_edge(from_id.clone(), to_id.clone(), *edge.weight())?;
+                    subgraph.add_edge(from_id, to_id, *edge.weight())?;
                 }
             }
         }
@@ -1587,6 +1587,7 @@ impl DagBuilder {
     /// let builder = WorkflowDAG::builder()
     ///     .with_nodes(vec!["a".to_string(), "b".to_string()]);
     /// ```
+    #[must_use]
     pub fn with_nodes(mut self, nodes: impl IntoIterator<Item = String>) -> Self {
         self.nodes.extend(nodes);
         self
@@ -1628,6 +1629,7 @@ impl DagBuilder {
     ///     .with_nodes(vec!["a".to_string(), "b".to_string()])
     ///     .with_edges(vec![("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)]);
     /// ```
+    #[must_use]
     pub fn with_edges(
         mut self,
         edges: impl IntoIterator<Item = (String, String, DependencyType)>,
@@ -1690,7 +1692,7 @@ impl DagBuilder {
 
         // Add all edges
         for (from, to, dep_type) in self.edges {
-            dag.add_edge(from, to, dep_type)?;
+            dag.add_edge(&from, &to, dep_type)?;
         }
 
         Ok(dag)
@@ -1759,8 +1761,8 @@ mod tests {
         dag.add_node("bead-002".to_string())?;
 
         let result = dag.add_edge(
-            "bead-001".to_string(),
-            "bead-002".to_string(),
+            "bead-001",
+            "bead-002",
             DependencyType::BlockingDependency,
         );
         assert!(result.is_ok());

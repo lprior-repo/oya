@@ -100,24 +100,6 @@ impl SubprocessHandle {
         }
     }
 
-    /// Get the stage kind.
-    #[must_use]
-    pub const fn stage(&self) -> StageKind {
-        self.stage
-    }
-
-    /// Get the bead ID.
-    #[must_use]
-    pub const fn bead_id(&self) -> oya_events::BeadId {
-        self.bead_id
-    }
-
-    /// Get the started timestamp.
-    #[must_use]
-    pub const fn started_at(&self) -> chrono::DateTime<chrono::Utc> {
-        self.started_at
-    }
-
     /// Send prompt input to running agent subprocess.
     ///
     /// # Errors
@@ -153,33 +135,6 @@ impl SubprocessHandle {
         Ok(())
     }
 
-    /// Read a single line of output from agent stdout.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if stdout is not available or read fails.
-    pub async fn read_output_line(&mut self) -> AgentSwarmResult<Option<String>> {
-        let child = self
-            .child
-            .as_mut()
-            .ok_or(AgentSwarmError::NoActiveSubprocess)?;
-
-        let stdout = child
-            .stdout
-            .as_mut()
-            .ok_or(AgentSwarmError::StdoutUnavailable)?;
-
-        use tokio::io::{AsyncBufReadExt, BufReader};
-        let reader = BufReader::new(stdout);
-        let mut lines = reader.lines();
-
-        match lines.next_line().await {
-            Ok(Some(line)) => Ok(Some(line)),
-            Ok(None) => Ok(None),
-            Err(e) => Err(AgentSwarmError::Io(e)),
-        }
-    }
-
     /// Wait for subprocess completion and collect all output.
     ///
     /// # Errors
@@ -196,7 +151,7 @@ impl SubprocessHandle {
             .stdout
             .take()
             .ok_or(AgentSwarmError::StdoutUnavailable)?;
-        let mut stderr = child.stderr.take().ok_or(AgentSwarmError::SpawnFailed {
+        let mut stderr = child.stderr.take().ok_or_else(|| AgentSwarmError::SpawnFailed {
             message: "stderr not captured".to_string(),
         })?;
 
@@ -350,24 +305,6 @@ mod tests {
         };
 
         let result = handle.send_prompt("test prompt").await;
-        assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            AgentSwarmError::NoActiveSubprocess
-        ));
-    }
-
-    #[tokio::test]
-    async fn test_subprocess_handle_read_output_no_process() {
-        let bead_id = BeadId::new();
-        let mut handle = SubprocessHandle {
-            child: None,
-            started_at: chrono::Utc::now(),
-            stage: StageKind::Implement,
-            bead_id,
-        };
-
-        let result = handle.read_output_line().await;
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),

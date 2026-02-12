@@ -352,10 +352,7 @@ impl AgentInfo {
 
         let duration = now.signed_duration_since(self.registered_at);
         let uptime_secs = duration.num_seconds().max(0);
-        self.uptime_secs = match u64::try_from(uptime_secs) {
-            Ok(seconds) => seconds,
-            Err(_) => u64::MAX,
-        };
+        self.uptime_secs = u64::try_from(uptime_secs).unwrap_or(u64::MAX);
         self.last_heartbeat = now;
 
         // Reset health failures on successful heartbeat

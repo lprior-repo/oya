@@ -1467,9 +1467,9 @@ mod tests {
     }
 
     #[test]
-    fn test_render_agent_view_empty() {
+    fn test_render_agent_view_empty() -> Result<(), crate::layout::LayoutError> {
         let renderer = Renderer::new();
-        let pane = Pane::new(PaneType::AgentView, 1, 1, 10, 40).expect("Failed to create pane");
+        let pane = Pane::new(PaneType::AgentView, 1, 1, 10, 40)?;
         let agents = Vector::new();
         let pool = PoolMetrics {
             total: 0,
@@ -1485,12 +1485,13 @@ mod tests {
         assert!(output.contains("Agent Pool Status"));
         assert!(output.contains("Total: 0"));
         assert!(output.contains("No agents connected"));
+        Ok(())
     }
 
     #[test]
-    fn test_render_agent_view_with_agents() {
+    fn test_render_agent_view_with_agents() -> Result<(), crate::layout::LayoutError> {
         let renderer = Renderer::new();
-        let pane = Pane::new(PaneType::AgentView, 1, 1, 15, 60).expect("Failed to create pane");
+        let pane = Pane::new(PaneType::AgentView, 1, 1, 15, 60)?;
 
         let agents = Vector::from_iter(vec![
             AgentMetrics {
@@ -1530,12 +1531,13 @@ mod tests {
         assert!(output.contains("idle"));
         assert!(output.contains("Total: 2"));
         assert!(output.contains("Idle: 1"));
+        Ok(())
     }
 
     #[test]
-    fn test_render_agent_view_health_status() {
+    fn test_render_agent_view_health_status() -> Result<(), crate::layout::LayoutError> {
         let renderer = Renderer::new();
-        let pane = Pane::new(PaneType::AgentView, 1, 1, 10, 50).expect("Failed to create pane");
+        let pane = Pane::new(PaneType::AgentView, 1, 1, 10, 50)?;
 
         let agents = Vector::from_iter(vec![
             AgentMetrics {
@@ -1573,12 +1575,13 @@ mod tests {
         assert!(output.contains("degraded-agent"));
         assert!(output.contains("100%"));
         assert!(output.contains("50%"));
+        Ok(())
     }
 
     #[test]
-    fn test_render_agent_view_pool_summary() {
+    fn test_render_agent_view_pool_summary() -> Result<(), crate::layout::LayoutError> {
         let renderer = Renderer::new();
-        let pane = Pane::new(PaneType::AgentView, 1, 1, 10, 70).expect("Failed to create pane");
+        let pane = Pane::new(PaneType::AgentView, 1, 1, 10, 70)?;
 
         let agents = Vector::new();
         let pool = PoolMetrics {
@@ -1596,5 +1599,6 @@ mod tests {
         assert!(output.contains("Idle: 3"));
         assert!(output.contains("Working: 4"));
         assert!(output.contains("Unhealthy: 1"));
+        Ok(())
     }
 }

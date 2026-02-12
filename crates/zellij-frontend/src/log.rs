@@ -1,6 +1,4 @@
 //! Log aggregation and display for multi-source logging
-#![cfg_attr(test, allow(clippy::panic))]
-#![cfg_attr(test, allow(clippy::expect_used))]
 
 use chrono::{DateTime, Utc};
 use rpds::Vector;
@@ -444,7 +442,7 @@ mod tests {
     }
 
     #[test]
-    fn test_log_aggregator_render() {
+    fn test_log_aggregator_render() -> Result<(), Box<dyn std::error::Error>> {
         let mut aggregator = LogAggregator::new();
 
         let entry = LogEntry::new(LogLevel::Error, LogSource::Worker, "Error occurred");
@@ -455,10 +453,11 @@ mod tests {
         assert_eq!(rendered.len(), 1);
         let first_entry = rendered
             .first()
-            .expect("rendered should have at least one entry");
+            .ok_or("rendered should have at least one entry")?;
         assert!(first_entry.contains("ERROR"));
         assert!(first_entry.contains("WRKR"));
         assert!(first_entry.contains("Error occurred"));
+        Ok(())
     }
 
     #[test]

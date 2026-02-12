@@ -21,7 +21,7 @@ impl AgentPool {
     #[must_use]
     pub fn new(config: PoolConfig) -> Self {
         let agents = Arc::new(RwLock::new(HashMap::new()));
-        let health_monitor = HealthMonitor::new(config.health_config.clone(), agents.clone());
+        let health_monitor = HealthMonitor::new(config.health_config, agents.clone());
         Self {
             agents,
             health_monitor,
@@ -30,28 +30,24 @@ impl AgentPool {
 
     /// Register an agent in the pool.
     pub async fn register_agent(&self, agent: AgentHandle) -> AgentSwarmResult<()> {
-        let mut agents = self.agents.write().await;
-        agents.insert(agent.id().to_string(), agent);
+        self.agents.write().await.insert(agent.id().to_string(), agent);
         Ok(())
     }
 
     /// Unregister an agent from the pool.
     pub async fn unregister_agent(&self, agent_id: &str) -> AgentSwarmResult<()> {
-        let mut agents = self.agents.write().await;
-        agents.remove(agent_id);
+        self.agents.write().await.remove(agent_id);
         Ok(())
     }
 
     /// Get a specific agent by ID.
     pub async fn get_agent(&self, agent_id: &str) -> Option<AgentHandle> {
-        let agents = self.agents.read().await;
-        agents.get(agent_id).cloned()
+        self.agents.read().await.get(agent_id).cloned()
     }
 
     /// Get all agents in the pool.
     pub async fn all_agents(&self) -> Vec<AgentHandle> {
-        let agents = self.agents.read().await;
-        agents.values().cloned().collect()
+        self.agents.read().await.values().cloned().collect()
     }
 
     /// Assign a bead to an available agent.
@@ -64,10 +60,8 @@ impl AgentPool {
 
         for agent_id in &agent_ids {
             if let Some(agent) = agents.get_mut(agent_id) {
-                if agent.state().is_idle() {
-                    if agent.assign_bead(bead_id) {
-                        return Ok(agent_id.clone());
-                    }
+                if agent.state().is_idle() && agent.assign_bead(bead_id) {
+                    return Ok(agent_id.clone());
                 }
             }
         }
@@ -81,18 +75,22 @@ impl AgentPool {
         agent_id: &str,
     ) -> AgentSwarmResult<()> {
         let mut agents = self.agents.write().await;
-        if let Some(agent) = agents.get_mut(agent_id) {
+        let res = if let Some(agent) = agents.get_mut(agent_id) {
             if agent.assign_bead(bead_id) {
-                return Ok(());
+                Ok(())
+            } else {
+                Err(AgentSwarmError::unavailable(agent_id, "cannot accept work"))
             }
-        }
-        Err(AgentSwarmError::unavailable(agent_id, "cannot accept work"))
+        } else {
+            Err(AgentSwarmError::unavailable(agent_id, "cannot accept work"))
+        };
+        drop(agents);
+        res
     }
 
     /// Complete a bead assigned to an agent.
     pub async fn complete_bead(&self, agent_id: &str) -> AgentSwarmResult<()> {
-        let mut agents = self.agents.write().await;
-        if let Some(agent) = agents.get_mut(agent_id) {
+        if let Some(agent) = self.agents.write().await.get_mut(agent_id) {
             agent.complete_bead();
         }
         Ok(())
@@ -103,16 +101,15 @@ impl AgentPool {
         let mut agents = self.agents.write().await;
         if let Some(agent) = agents.get_mut(agent_id) {
             agent.record_heartbeat();
+            Ok(())
         } else {
-            return Err(AgentSwarmError::agent_not_found(agent_id));
+            Err(AgentSwarmError::agent_not_found(agent_id))
         }
-        Ok(())
     }
 
     /// Shutdown a specific agent.
     pub async fn shutdown_agent(&self, agent_id: &str) -> AgentSwarmResult<()> {
-        let mut agents = self.agents.write().await;
-        if let Some(agent) = agents.get_mut(agent_id) {
+        if let Some(agent) = self.agents.write().await.get_mut(agent_id) {
             agent.shutdown();
         }
         Ok(())
@@ -129,17 +126,18 @@ impl AgentPool {
                 super::handle::AgentState::Idle => stats.idle = stats.idle.wrapping_add(1),
                 super::handle::AgentState::Working => stats.working = stats.working.wrapping_add(1),
                 super::handle::AgentState::Unhealthy => {
-                    stats.unhealthy = stats.unhealthy.wrapping_add(1)
+                    stats.unhealthy = stats.unhealthy.wrapping_add(1);
                 }
                 super::handle::AgentState::ShuttingDown => {
-                    stats.shutting_down = stats.shutting_down.wrapping_add(1)
+                    stats.shutting_down = stats.shutting_down.wrapping_add(1);
                 }
                 super::handle::AgentState::Terminated => {
-                    stats.terminated = stats.terminated.wrapping_add(1)
+                    stats.terminated = stats.terminated.wrapping_add(1);
                 }
             }
         }
 
+        drop(agents);
         stats
     }
 
@@ -195,7 +193,7 @@ impl PoolConfig {
 }
 
 /// Statistics about the agent pool.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PoolStats {
     /// Total number of agents
     pub total: usize,

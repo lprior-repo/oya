@@ -81,7 +81,7 @@ impl QueueState {
                     .or_default()
                     .push_back(bead_id);
             }
-            _ => {
+            QueueType::FIFO | QueueType::LIFO => {
                 self.fifo.push_back(bead_id);
             }
         }
@@ -92,7 +92,7 @@ impl QueueState {
             QueueType::Priority => self.priority.pop().map(|item| item.bead_id),
             QueueType::LIFO => self.fifo.pop_back(),
             QueueType::RoundRobin => self.dequeue_round_robin(),
-            _ => self.fifo.pop_front(),
+            QueueType::FIFO => self.fifo.pop_front(),
         }
     }
 
@@ -105,7 +105,7 @@ impl QueueState {
                     .get(tenant)
                     .and_then(|queue| queue.front().cloned())
             }),
-            _ => self.fifo.front().cloned(),
+            QueueType::FIFO => self.fifo.front().cloned(),
         }
     }
 
@@ -113,7 +113,7 @@ impl QueueState {
         match self.queue_type {
             QueueType::Priority => self.priority.len(),
             QueueType::RoundRobin => self.tenant_queues.values().map(VecDeque::len).sum(),
-            _ => self.fifo.len(),
+            QueueType::FIFO | QueueType::LIFO => self.fifo.len(),
         }
     }
 

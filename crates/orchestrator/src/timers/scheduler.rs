@@ -69,11 +69,11 @@ pub enum TimerStatus {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TimerMetadata {
     /// Associated workflow ID
-    pub workflow_id: Option<String>,
+    pub workflow: Option<String>,
     /// Associated bead ID
-    pub bead_id: Option<String>,
+    pub bead: Option<String>,
     /// Callback identifier
-    pub callback_id: Option<String>,
+    pub callback: Option<String>,
 }
 
 impl TimerStatus {
@@ -144,6 +144,10 @@ impl DurableTimer {
     }
 
     /// Create a timer with a delay from now.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the current time plus `delay_secs` would overflow `DateTime<Utc>`.
     #[allow(clippy::expect_used)]
     #[must_use]
     pub fn with_delay(delay_secs: i64, payload: serde_json::Value) -> Self {
@@ -198,9 +202,9 @@ impl DurableTimer {
             status,
             created_at,
             updated_at,
-            workflow_id: metadata.workflow_id,
-            bead_id: metadata.bead_id,
-            callback_id: metadata.callback_id,
+            workflow_id: metadata.workflow,
+            bead_id: metadata.bead,
+            callback_id: metadata.callback,
         }
     }
 
@@ -506,6 +510,8 @@ impl TimerScheduler {
                     }
                 }
             }
+            drop(queue);
+            drop(timers);
         }
 
         // Move to fired list

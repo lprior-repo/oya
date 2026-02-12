@@ -379,9 +379,7 @@ impl IpcTransport<DuplexReader, DuplexWriter> {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used, clippy::panic)]
 mod tests {
-    // Test assertions need expect()
     use super::*;
 
     #[test]
@@ -395,30 +393,32 @@ mod tests {
     }
 
     #[test]
-    fn test_send_recv_small_message() {
+    fn test_send_recv_small_message() -> Result<(), TransportError> {
         let (mut client, mut server) = transport_pair();
 
         let msg = "hello world".to_string();
-        client.send(&msg).expect("send should succeed");
+        client.send(&msg)?;
 
-        let received = server.recv::<String>().expect("recv should succeed");
+        let received = server.recv::<String>()?;
         assert_eq!(received, msg);
+        Ok(())
     }
 
     #[test]
-    fn test_send_recv_multiple_messages() {
+    fn test_send_recv_multiple_messages() -> Result<(), TransportError> {
         let (mut client, mut server) = transport_pair();
 
         let msgs = vec!["first", "second", "third"];
 
         for msg in &msgs {
-            client.send(msg).expect("send should succeed");
+            client.send(msg)?;
         }
 
         for expected in msgs {
-            let received = server.recv::<String>().expect("recv should succeed");
+            let received = server.recv::<String>()?;
             assert_eq!(received, expected);
         }
+        Ok(())
     }
 
     #[test]
@@ -445,58 +445,50 @@ mod tests {
     }
 
     #[test]
-    fn test_send_max_size_message_succeeds() {
+    fn test_send_max_size_message_succeeds() -> Result<(), TransportError> {
         let (mut client, mut server) = transport_pair();
 
         // Create a message just under 1MB to account for bincode overhead
         // bincode serializes strings with a length prefix, so we leave room
         let large_msg: String = "x".repeat(1_048_500);
 
-        client.send(&large_msg).expect("send should succeed");
+        client.send(&large_msg)?;
 
-        let received = server.recv::<String>().expect("recv should succeed");
+        let received = server.recv::<String>()?;
         assert_eq!(received.len(), 1_048_500);
+        Ok(())
     }
 
     #[test]
-    fn test_recv_with_zero_length_returns_error() {
+    fn test_recv_with_zero_length_returns_error() -> Result<(), Box<dyn std::error::Error>> {
         // Write invalid length prefix = 0
         let (mut writer, reader) = duplex_pair();
         writer
-            .write_all(&0u32.to_be_bytes())
-            .expect("write should succeed");
-        writer.flush().expect("flush should succeed");
+            .write_all(&0u32.to_be_bytes())?;
+        writer.flush()?;
 
         let mut transport = IpcTransport::new(reader, writer);
 
         let result: Result<String, _> = transport.recv();
         assert!(matches!(result, Err(TransportError::InvalidLength { .. })));
+        Ok(())
     }
 
     #[test]
-    fn test_bidirectional_communication() {
+    fn test_bidirectional_communication() -> Result<(), Box<dyn std::error::Error>> {
         let (mut client, mut server) = transport_pair();
 
         let client_msg = "from client".to_string();
         let server_msg = "from server".to_string();
 
-        if let Err(e) = client.send(&client_msg) {
-            panic!("send failed: {}", e);
-        }
-        if let Err(e) = server.send(&server_msg) {
-            panic!("send failed: {}", e);
-        }
+        client.send(&client_msg)?;
+        server.send(&server_msg)?;
 
-        let server_received = match server.recv::<String>() {
-            Ok(v) => v,
-            Err(e) => panic!("recv failed: {}", e),
-        };
-        let client_received = match client.recv::<String>() {
-            Ok(v) => v,
-            Err(e) => panic!("recv failed: {}", e),
-        };
+        let server_received: String = server.recv()?;
+        let client_received: String = client.recv()?;
 
         assert_eq!(server_received, client_msg);
         assert_eq!(client_received, server_msg);
+        Ok(())
     }
 }

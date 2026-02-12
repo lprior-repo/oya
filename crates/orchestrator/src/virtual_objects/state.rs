@@ -206,9 +206,10 @@ impl StateSnapshot {
     /// Create a new snapshot.
     #[must_use]
     pub fn new(object_id: ObjectId, state: HashMap<String, StateValue>, version: u64) -> Self {
+        let snapshot_id = format!("snap-{}-{}", object_id.as_str(), version);
         Self {
-            object_id: object_id.clone(),
-            snapshot_id: format!("snap-{}-{}", object_id.as_str(), version),
+            object_id,
+            snapshot_id,
             state,
             created_at: Utc::now(),
             version,

@@ -39,13 +39,13 @@ async fn test_bead_failure_with_retry_exhaustion() -> Result<(), Box<dyn std::er
     let bead_id = BeadId::new();
     let bead_spec = BeadSpec::new("failing-bead").with_complexity(Complexity::Simple);
 
+    // Subscribe to bead lifecycle events BEFORE publishing
+    let mut sub = event_bus.subscribe();
+
     // Publish bead creation event
     event_bus
         .publish(oya_events::BeadEvent::created(bead_id, bead_spec.clone()))
         .await?;
-
-    // Subscribe to bead lifecycle events
-    let mut sub = event_bus.subscribe();
 
     // Verify creation event
     let event = timeout(Duration::from_secs(1), sub.recv())
@@ -93,6 +93,11 @@ async fn test_bead_failure_with_retry_exhaustion() -> Result<(), Box<dyn std::er
                             BeadState::Running,
                         ))
                         .await?;
+
+                    // Consume the state change event
+                    let _ = timeout(Duration::from_secs(1), sub.recv())
+                        .await
+                        .map_err(|e| format!("Timeout waiting for state change event: {e:?}"))??;
                 }
             }
             _ => {

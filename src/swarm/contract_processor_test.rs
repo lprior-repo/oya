@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use tempfile::TempDir;
 
 use crate::swarm::contract_processor::{
-    ContractProcessor, ContractProcessorError, HandoffValidationError,
+    ContractProcessor, ContractProcessorError,
 };
 
 /// Test: Creates contract file when handoff is valid
@@ -21,11 +21,9 @@ use crate::swarm::contract_processor::{
 /// When: The processor processes the handoff
 /// Then: A contract file is created with all required sections populated
 #[test]
-fn test_creates_contract_file_when_handoff_is_valid() {
+fn test_creates_contract_file_when_handoff_is_valid() -> Result<(), Box<dyn std::error::Error>> {
     // Given
-    let temp_dir = TempDir::new()
-        .map_err(|e| format!("Failed to create temp dir: {e}"))
-        .expect("temp dir creation");
+    let temp_dir = TempDir::new()?;
     let handoff_dir = temp_dir.path();
 
     let handoff_path = handoff_dir.join("bead-handoff-test-123.json");
@@ -34,9 +32,7 @@ fn test_creates_contract_file_when_handoff_is_valid() {
         "title": "Test Feature",
         "description": "A test feature for contract generation",
     });
-    fs::write(&handoff_path, handoff_content.to_string())
-        .map_err(|e| format!("Failed to write handoff: {e}"))
-        .expect("handoff write");
+    fs::write(&handoff_path, handoff_content.to_string())?;
 
     // When
     let processor = ContractProcessor::new(handoff_dir.to_path_buf());
@@ -51,12 +47,8 @@ fn test_creates_contract_file_when_handoff_is_valid() {
                 Some(std::ffi::OsStr::new("bead-contracts-test-123.json"))
             );
 
-            let contract_content = fs::read_to_string(&contract_path)
-                .map_err(|e| format!("Failed to read contract: {e}"))
-                .expect("contract read");
-            let contract: serde_json::Value = serde_json::from_str(&contract_content)
-                .map_err(|e| format!("Failed to parse contract JSON: {e}"))
-                .expect("contract parse");
+            let contract_content = fs::read_to_string(&contract_path)?;
+            let contract: serde_json::Value = serde_json::from_str(&contract_content)?;
 
             assert!(
                 contract["bead_id"].is_string(),
@@ -84,8 +76,9 @@ fn test_creates_contract_file_when_handoff_is_valid() {
                 "Contract should have test_plan"
             );
         }
-        Err(e) => panic!("Expected Ok, got Err: {e}"),
+        Err(e) => return Err(format!("Expected Ok, got Err: {e}").into()),
     }
+    Ok(())
 }
 
 /// Test: Enumerates all error variants in contract
@@ -94,11 +87,9 @@ fn test_creates_contract_file_when_handoff_is_valid() {
 /// When: The processor generates the contract
 /// Then: The contract errors array contains exhaustive variants
 #[test]
-fn test_enumerates_all_error_variants_in_contract() {
+fn test_enumerates_all_error_variants_in_contract() -> Result<(), Box<dyn std::error::Error>> {
     // Given
-    let temp_dir = TempDir::new()
-        .map_err(|e| format!("Failed to create temp dir: {e}"))
-        .expect("temp dir creation");
+    let temp_dir = TempDir::new()?;
     let handoff_dir = temp_dir.path();
 
     let handoff_path = handoff_dir.join("bead-handoff-error-variants.json");
@@ -113,9 +104,7 @@ fn test_enumerates_all_error_variants_in_contract() {
             "state violation"
         ],
     });
-    fs::write(&handoff_path, handoff_content.to_string())
-        .map_err(|e| format!("Failed to write handoff: {e}"))
-        .expect("handoff write");
+    fs::write(&handoff_path, handoff_content.to_string())?;
 
     // When
     let processor = ContractProcessor::new(handoff_dir.to_path_buf());
@@ -124,16 +113,12 @@ fn test_enumerates_all_error_variants_in_contract() {
     // Then
     match result {
         Ok(contract_path) => {
-            let contract_content = fs::read_to_string(&contract_path)
-                .map_err(|e| format!("Failed to read contract: {e}"))
-                .expect("contract read");
-            let contract: serde_json::Value = serde_json::from_str(&contract_content)
-                .map_err(|e| format!("Failed to parse contract JSON: {e}"))
-                .expect("contract parse");
+            let contract_content = fs::read_to_string(&contract_path)?;
+            let contract: serde_json::Value = serde_json::from_str(&contract_content)?;
 
             let errors = contract["contract"]["errors"]
                 .as_array()
-                .expect("errors should be array");
+                .ok_or("errors should be array")?;
 
             assert!(!errors.is_empty(), "Errors array should not be empty");
             assert!(
@@ -158,8 +143,9 @@ fn test_enumerates_all_error_variants_in_contract() {
                 );
             }
         }
-        Err(e) => panic!("Expected Ok, got Err: {e}"),
+        Err(e) => return Err(format!("Expected Ok, got Err: {e}").into()),
     }
+    Ok(())
 }
 
 /// Test: Generates expressive test names following Fowler conventions
@@ -168,11 +154,9 @@ fn test_enumerates_all_error_variants_in_contract() {
 /// When: The processor generates the test plan
 /// Then: All test names follow the pattern test_{verb}_{outcome}_when_{condition}
 #[test]
-fn test_generates_expressive_test_names_following_fowler_conventions() {
+fn test_generates_expressive_test_names_following_fowler_conventions() -> Result<(), Box<dyn std::error::Error>> {
     // Given
-    let temp_dir = TempDir::new()
-        .map_err(|e| format!("Failed to create temp dir: {e}"))
-        .expect("temp dir creation");
+    let temp_dir = TempDir::new()?;
     let handoff_dir = temp_dir.path();
 
     let handoff_path = handoff_dir.join("bead-handoff-test-names.json");
@@ -181,9 +165,7 @@ fn test_generates_expressive_test_names_following_fowler_conventions() {
         "title": "Test Naming Convention",
         "description": "Verify Fowler-style test names",
     });
-    fs::write(&handoff_path, handoff_content.to_string())
-        .map_err(|e| format!("Failed to write handoff: {e}"))
-        .expect("handoff write");
+    fs::write(&handoff_path, handoff_content.to_string())?;
 
     // When
     let processor = ContractProcessor::new(handoff_dir.to_path_buf());
@@ -192,22 +174,18 @@ fn test_generates_expressive_test_names_following_fowler_conventions() {
     // Then
     match result {
         Ok(contract_path) => {
-            let contract_content = fs::read_to_string(&contract_path)
-                .map_err(|e| format!("Failed to read contract: {e}"))
-                .expect("contract read");
-            let contract: serde_json::Value = serde_json::from_str(&contract_content)
-                .map_err(|e| format!("Failed to parse contract JSON: {e}"))
-                .expect("contract parse");
+            let contract_content = fs::read_to_string(&contract_path)?;
+            let contract: serde_json::Value = serde_json::from_str(&contract_content)?;
 
             let test_plan = contract["contract"]["test_plan"]
                 .as_array()
-                .expect("test_plan should be array");
+                .ok_or("test_plan should be array")?;
 
             // Check that test names follow the pattern
             for test_entry in test_plan {
                 let test_name = test_entry["test_name"]
                     .as_str()
-                    .expect("test_name should be string");
+                    .ok_or("test_name should be string")?;
 
                 // Should follow pattern: test_{verb}_{outcome}_when_{condition}
                 assert!(
@@ -240,8 +218,9 @@ fn test_generates_expressive_test_names_following_fowler_conventions() {
                 );
             }
         }
-        Err(e) => panic!("Expected Ok, got Err: {e}"),
+        Err(e) => return Err(format!("Expected Ok, got Err: {e}").into()),
     }
+    Ok(())
 }
 
 /// Test: Includes break analysis for all failure modes
@@ -250,11 +229,9 @@ fn test_generates_expressive_test_names_following_fowler_conventions() {
 /// When: The processor analyzes potential breaks
 /// Then: The break_analysis array contains entries for various failure modes
 #[test]
-fn test_includes_break_analysis_for_all_failure_modes() {
+fn test_includes_break_analysis_for_all_failure_modes() -> Result<(), Box<dyn std::error::Error>> {
     // Given
-    let temp_dir = TempDir::new()
-        .map_err(|e| format!("Failed to create temp dir: {e}"))
-        .expect("temp dir creation");
+    let temp_dir = TempDir::new()?;
     let handoff_dir = temp_dir.path();
 
     let handoff_path = handoff_dir.join("bead-handoff-break-analysis.json");
@@ -264,9 +241,7 @@ fn test_includes_break_analysis_for_all_failure_modes() {
         "description": "Verify break analysis completeness",
         "integration_points": ["file system", "JSON parsing", "network"],
     });
-    fs::write(&handoff_path, handoff_content.to_string())
-        .map_err(|e| format!("Failed to write handoff: {e}"))
-        .expect("handoff write");
+    fs::write(&handoff_path, handoff_content.to_string())?;
 
     // When
     let processor = ContractProcessor::new(handoff_dir.to_path_buf());
@@ -275,16 +250,12 @@ fn test_includes_break_analysis_for_all_failure_modes() {
     // Then
     match result {
         Ok(contract_path) => {
-            let contract_content = fs::read_to_string(&contract_path)
-                .map_err(|e| format!("Failed to read contract: {e}"))
-                .expect("contract read");
-            let contract: serde_json::Value = serde_json::from_str(&contract_content)
-                .map_err(|e| format!("Failed to parse contract JSON: {e}"))
-                .expect("contract parse");
+            let contract_content = fs::read_to_string(&contract_path)?;
+            let contract: serde_json::Value = serde_json::from_str(&contract_content)?;
 
             let break_analysis = contract["contract"]["break_analysis"]
                 .as_array()
-                .expect("break_analysis should be array");
+                .ok_or("break_analysis should be array")?;
 
             assert!(
                 !break_analysis.is_empty(),
@@ -311,8 +282,9 @@ fn test_includes_break_analysis_for_all_failure_modes() {
                 );
             }
         }
-        Err(e) => panic!("Expected Ok, got Err: {e}"),
+        Err(e) => return Err(format!("Expected Ok, got Err: {e}").into()),
     }
+    Ok(())
 }
 
 /// Test: Prints contract ready notification on success
@@ -321,11 +293,9 @@ fn test_includes_break_analysis_for_all_failure_modes() {
 /// When: The processor completes processing
 /// Then: System returns contract path for notification
 #[test]
-fn test_returns_contract_path_for_notification_on_success() {
+fn test_returns_contract_path_for_notification_on_success() -> Result<(), Box<dyn std::error::Error>> {
     // Given
-    let temp_dir = TempDir::new()
-        .map_err(|e| format!("Failed to create temp dir: {e}"))
-        .expect("temp dir creation");
+    let temp_dir = TempDir::new()?;
     let handoff_dir = temp_dir.path();
 
     let handoff_path = handoff_dir.join("bead-handoff-notification.json");
@@ -334,9 +304,7 @@ fn test_returns_contract_path_for_notification_on_success() {
         "title": "Notification Test",
         "description": "Verify contract path is returned",
     });
-    fs::write(&handoff_path, handoff_content.to_string())
-        .map_err(|e| format!("Failed to write handoff: {e}"))
-        .expect("handoff write");
+    fs::write(&handoff_path, handoff_content.to_string())?;
 
     // When
     let processor = ContractProcessor::new(handoff_dir.to_path_buf());
@@ -352,8 +320,9 @@ fn test_returns_contract_path_for_notification_on_success() {
                 "Contract path should contain expected filename: {path_str}"
             );
         }
-        Err(e) => panic!("Expected Ok, got Err: {e}"),
+        Err(e) => return Err(format!("Expected Ok, got Err: {e}").into()),
     }
+    Ok(())
 }
 
 /// Test: Handles missing handoff file gracefully
@@ -362,11 +331,9 @@ fn test_returns_contract_path_for_notification_on_success() {
 /// When: The processor attempts to process a non-existent handoff
 /// Then: Processor returns HandoffFileNotFound error without crashing
 #[test]
-fn test_handles_missing_handoff_file_gracefully() {
+fn test_handles_missing_handoff_file_gracefully() -> Result<(), Box<dyn std::error::Error>> {
     // Given
-    let temp_dir = TempDir::new()
-        .map_err(|e| format!("Failed to create temp dir: {e}"))
-        .expect("temp dir creation");
+    let temp_dir = TempDir::new()?;
     let handoff_dir = temp_dir.path();
 
     let non_existent_path = handoff_dir.join("bead-handoff-missing.json");
@@ -380,9 +347,10 @@ fn test_handles_missing_handoff_file_gracefully() {
         Err(ContractProcessorError::HandoffFileNotFound { file_path }) => {
             assert!(file_path.contains("bead-handoff-missing.json"));
         }
-        Ok(_) => panic!("Expected Err, got Ok"),
-        Err(e) => panic!("Expected HandoffFileNotFound, got: {e}"),
+        Ok(_) => return Err("Expected Err, got Ok".into()),
+        Err(e) => return Err(format!("Expected HandoffFileNotFound, got: {e}").into()),
     }
+    Ok(())
 }
 
 /// Test: Validates handoff JSON structure before processing
@@ -391,17 +359,13 @@ fn test_handles_missing_handoff_file_gracefully() {
 /// When: The processor attempts to read and parse the file
 /// Then: Processor detects invalid JSON and returns InvalidHandoffFormat error
 #[test]
-fn test_validates_handoff_json_structure_before_processing() {
+fn test_validates_handoff_json_structure_before_processing() -> Result<(), Box<dyn std::error::Error>> {
     // Given
-    let temp_dir = TempDir::new()
-        .map_err(|e| format!("Failed to create temp dir: {e}"))
-        .expect("temp dir creation");
+    let temp_dir = TempDir::new()?;
     let handoff_dir = temp_dir.path();
 
     let handoff_path = handoff_dir.join("bead-handoff-malformed.json");
-    fs::write(&handoff_path, "{ invalid json }")
-        .map_err(|e| format!("Failed to write malformed handoff: {e}"))
-        .expect("malformed handoff write");
+    fs::write(&handoff_path, "{ invalid json }")?;
 
     // When
     let processor = ContractProcessor::new(handoff_dir.to_path_buf());
@@ -412,9 +376,10 @@ fn test_validates_handoff_json_structure_before_processing() {
         Err(ContractProcessorError::InvalidHandoffFormat { reason }) => {
             assert!(!reason.is_empty(), "Error reason should not be empty");
         }
-        Ok(_) => panic!("Expected Err, got Ok"),
-        Err(e) => panic!("Expected InvalidHandoffFormat, got: {e}"),
+        Ok(_) => return Err("Expected Err, got Ok".into()),
+        Err(e) => return Err(format!("Expected InvalidHandoffFormat, got: {e}").into()),
     }
+    Ok(())
 }
 
 /// Test: Ensures all tests use Given-When-Then structure
@@ -423,11 +388,9 @@ fn test_validates_handoff_json_structure_before_processing() {
 /// When: The processor generates the test plan
 /// Then: Every test has given, when, then, and covers fields populated
 #[test]
-fn test_ensures_all_tests_use_given_when_then_structure() {
+fn test_ensures_all_tests_use_given_when_then_structure() -> Result<(), Box<dyn std::error::Error>> {
     // Given
-    let temp_dir = TempDir::new()
-        .map_err(|e| format!("Failed to create temp dir: {e}"))
-        .expect("temp dir creation");
+    let temp_dir = TempDir::new()?;
     let handoff_dir = temp_dir.path();
 
     let handoff_path = handoff_dir.join("bead-handoff-gwt-structure.json");
@@ -436,9 +399,7 @@ fn test_ensures_all_tests_use_given_when_then_structure() {
         "title": "Given-When-Then Structure Test",
         "description": "Verify GWT structure in test plan",
     });
-    fs::write(&handoff_path, handoff_content.to_string())
-        .map_err(|e| format!("Failed to write handoff: {e}"))
-        .expect("handoff write");
+    fs::write(&handoff_path, handoff_content.to_string())?;
 
     // When
     let processor = ContractProcessor::new(handoff_dir.to_path_buf());
@@ -447,16 +408,12 @@ fn test_ensures_all_tests_use_given_when_then_structure() {
     // Then
     match result {
         Ok(contract_path) => {
-            let contract_content = fs::read_to_string(&contract_path)
-                .map_err(|e| format!("Failed to read contract: {e}"))
-                .expect("contract read");
-            let contract: serde_json::Value = serde_json::from_str(&contract_content)
-                .map_err(|e| format!("Failed to parse contract JSON: {e}"))
-                .expect("contract parse");
+            let contract_content = fs::read_to_string(&contract_path)?;
+            let contract: serde_json::Value = serde_json::from_str(&contract_content)?;
 
             let test_plan = contract["contract"]["test_plan"]
                 .as_array()
-                .expect("test_plan should be array");
+                .ok_or("test_plan should be array")?;
 
             for test_entry in test_plan {
                 assert!(
@@ -477,8 +434,9 @@ fn test_ensures_all_tests_use_given_when_then_structure() {
                 );
             }
         }
-        Err(e) => panic!("Expected Ok, got Err: {e}"),
+        Err(e) => return Err(format!("Expected Ok, got Err: {e}").into()),
     }
+    Ok(())
 }
 
 /// Test: Defines invariants that never change
@@ -487,11 +445,9 @@ fn test_ensures_all_tests_use_given_when_then_structure() {
 /// When: The processor analyzes the system
 /// Then: The contract invariants array includes properties that must remain true
 #[test]
-fn test_defines_invariants_that_never_change() {
+fn test_defines_invariants_that_never_change() -> Result<(), Box<dyn std::error::Error>> {
     // Given
-    let temp_dir = TempDir::new()
-        .map_err(|e| format!("Failed to create temp dir: {e}"))
-        .expect("temp dir creation");
+    let temp_dir = TempDir::new()?;
     let handoff_dir = temp_dir.path();
 
     let handoff_path = handoff_dir.join("bead-handoff-invariants.json");
@@ -500,9 +456,7 @@ fn test_defines_invariants_that_never_change() {
         "title": "Invariants Test",
         "description": "Verify invariant definitions",
     });
-    fs::write(&handoff_path, handoff_content.to_string())
-        .map_err(|e| format!("Failed to write handoff: {e}"))
-        .expect("handoff write");
+    fs::write(&handoff_path, handoff_content.to_string())?;
 
     // When
     let processor = ContractProcessor::new(handoff_dir.to_path_buf());
@@ -511,16 +465,12 @@ fn test_defines_invariants_that_never_change() {
     // Then
     match result {
         Ok(contract_path) => {
-            let contract_content = fs::read_to_string(&contract_path)
-                .map_err(|e| format!("Failed to read contract: {e}"))
-                .expect("contract read");
-            let contract: serde_json::Value = serde_json::from_str(&contract_content)
-                .map_err(|e| format!("Failed to parse contract JSON: {e}"))
-                .expect("contract parse");
+            let contract_content = fs::read_to_string(&contract_path)?;
+            let contract: serde_json::Value = serde_json::from_str(&contract_content)?;
 
             let invariants = contract["contract"]["invariants"]
                 .as_array()
-                .expect("invariants should be array");
+                .ok_or("invariants should be array")?;
 
             assert!(!invariants.is_empty(), "Invariants should not be empty");
 
@@ -531,8 +481,9 @@ fn test_defines_invariants_that_never_change() {
                 );
             }
         }
-        Err(e) => panic!("Expected Ok, got Err: {e}"),
+        Err(e) => return Err(format!("Expected Ok, got Err: {e}").into()),
     }
+    Ok(())
 }
 
 /// Test: Maps tests to contract elements
@@ -541,11 +492,9 @@ fn test_defines_invariants_that_never_change() {
 /// When: The processor generates the test plan
 /// Then: Each test's covers field explicitly references contract elements
 #[test]
-fn test_maps_tests_to_contract_elements() {
+fn test_maps_tests_to_contract_elements() -> Result<(), Box<dyn std::error::Error>> {
     // Given
-    let temp_dir = TempDir::new()
-        .map_err(|e| format!("Failed to create temp dir: {e}"))
-        .expect("temp dir creation");
+    let temp_dir = TempDir::new()?;
     let handoff_dir = temp_dir.path();
 
     let handoff_path = handoff_dir.join("bead-handoff-test-mapping.json");
@@ -554,9 +503,7 @@ fn test_maps_tests_to_contract_elements() {
         "title": "Test Mapping Test",
         "description": "Verify test to contract element mapping",
     });
-    fs::write(&handoff_path, handoff_content.to_string())
-        .map_err(|e| format!("Failed to write handoff: {e}"))
-        .expect("handoff write");
+    fs::write(&handoff_path, handoff_content.to_string())?;
 
     // When
     let processor = ContractProcessor::new(handoff_dir.to_path_buf());
@@ -565,21 +512,17 @@ fn test_maps_tests_to_contract_elements() {
     // Then
     match result {
         Ok(contract_path) => {
-            let contract_content = fs::read_to_string(&contract_path)
-                .map_err(|e| format!("Failed to read contract: {e}"))
-                .expect("contract read");
-            let contract: serde_json::Value = serde_json::from_str(&contract_content)
-                .map_err(|e| format!("Failed to parse contract JSON: {e}"))
-                .expect("contract parse");
+            let contract_content = fs::read_to_string(&contract_path)?;
+            let contract: serde_json::Value = serde_json::from_str(&contract_content)?;
 
             let test_plan = contract["contract"]["test_plan"]
                 .as_array()
-                .expect("test_plan should be array");
+                .ok_or("test_plan should be array")?;
 
             for test_entry in test_plan {
                 let covers = test_entry["covers"]
                     .as_str()
-                    .expect("covers should be string");
+                    .ok_or("covers should be string")?;
 
                 assert!(
                     !covers.is_empty(),
@@ -597,8 +540,9 @@ fn test_maps_tests_to_contract_elements() {
                 );
             }
         }
-        Err(e) => panic!("Expected Ok, got Err: {e}"),
+        Err(e) => return Err(format!("Expected Ok, got Err: {e}").into()),
     }
+    Ok(())
 }
 
 /// Test: Validates required fields in handoff
@@ -607,11 +551,9 @@ fn test_maps_tests_to_contract_elements() {
 /// When: The processor attempts to process
 /// Then: Processor returns InvalidHandoffFormat error
 #[test]
-fn test_validates_required_fields_in_handoff() {
+fn test_validates_required_fields_in_handoff() -> Result<(), Box<dyn std::error::Error>> {
     // Given
-    let temp_dir = TempDir::new()
-        .map_err(|e| format!("Failed to create temp dir: {e}"))
-        .expect("temp dir creation");
+    let temp_dir = TempDir::new()?;
     let handoff_dir = temp_dir.path();
 
     // Missing bead_id field
@@ -620,9 +562,7 @@ fn test_validates_required_fields_in_handoff() {
         "title": "Missing Bead ID",
         // bead_id is missing
     });
-    fs::write(&handoff_path, handoff_content.to_string())
-        .map_err(|e| format!("Failed to write handoff: {e}"))
-        .expect("handoff write");
+    fs::write(&handoff_path, handoff_content.to_string())?;
 
     // When
     let processor = ContractProcessor::new(handoff_dir.to_path_buf());
@@ -636,7 +576,8 @@ fn test_validates_required_fields_in_handoff() {
                 "Error should mention missing bead_id or required fields: {reason}"
             );
         }
-        Ok(_) => panic!("Expected Err, got Ok"),
-        Err(e) => panic!("Expected InvalidHandoffFormat, got: {e}"),
+        Ok(_) => return Err("Expected Err, got Ok".into()),
+        Err(e) => return Err(format!("Expected InvalidHandoffFormat, got: {e}").into()),
     }
+    Ok(())
 }

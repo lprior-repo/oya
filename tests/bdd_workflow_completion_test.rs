@@ -490,10 +490,10 @@ mod property_tests {
     use oya_core::Stage;
     use proptest::prelude::*;
 
-    /// Property: ∀ workflow, if all beads complete -> workflow complete
-    ///
-    /// This test generates random workflows with varying numbers of tasks
-    /// and verifies that completing all tasks always results in a complete workflow.
+    // Property: ∀ workflow, if all beads complete -> workflow complete
+    //
+    // This test generates random workflows with varying numbers of tasks
+    // and verifies that completing all tasks always results in a complete workflow.
     proptest! {
         #[test]
         fn prop_all_beads_complete_implies_workflow_complete(

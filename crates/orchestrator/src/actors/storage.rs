@@ -184,6 +184,7 @@ impl Actor for StateManagerActorDef {
         Ok(StateManagerState { db })
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn handle(
         &self,
         _myself: ActorRef<Self::Msg>,
@@ -431,6 +432,7 @@ impl Actor for EventStoreActorDef {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn handle(
         &self,
         _myself: ActorRef<Self::Msg>,
@@ -540,7 +542,7 @@ mod tests {
     }
 
     #[test]
-    fn should_serialize_database_config() {
+    fn should_serialize_database_config() -> Result<(), Box<dyn std::error::Error>> {
         let config = DatabaseConfig {
             storage_path: "/tmp/test".to_string(),
             namespace: "test_ns".to_string(),
@@ -548,17 +550,16 @@ mod tests {
         };
 
         // Test bincode serialization
-        let encoded = bincode::serde::encode_to_vec(&config, bincode::config::standard())
-            .expect("Failed to encode config");
+        let encoded = bincode::serde::encode_to_vec(&config, bincode::config::standard())?;
 
         // Test bincode deserialization
         let (decoded, _): (DatabaseConfig, _) =
-            bincode::serde::decode_from_slice(&encoded, bincode::config::standard())
-                .expect("Failed to decode config");
+            bincode::serde::decode_from_slice(&encoded, bincode::config::standard())?;
 
         assert_eq!(config.storage_path, decoded.storage_path);
         assert_eq!(config.namespace, decoded.namespace);
         assert_eq!(config.database, decoded.database);
+        Ok(())
     }
 
     // ============================================================================
@@ -566,7 +567,7 @@ mod tests {
     // ============================================================================
 
     #[tokio::test]
-    async fn test_state_manager_save_and_load() {
+    async fn test_state_manager_save_and_load() -> Result<(), Box<dyn std::error::Error>> {
         let temp_dir = tempfile::tempdir().ok();
         let storage_path = temp_dir
             .as_ref()
@@ -579,9 +580,7 @@ mod tests {
             database: "test_db".to_string(),
         };
 
-        let (actor, handle) = Actor::spawn(None, StateManagerActorDef, config)
-            .await
-            .expect("Failed to spawn StateManagerActor");
+        let (actor, handle) = Actor::spawn(None, StateManagerActorDef, config).await?;
 
         let key = "test_key_1".to_string();
         let data = vec![1, 2, 3, 4, 5];
@@ -592,8 +591,7 @@ mod tests {
                 key: key.clone(),
                 data: data.clone(),
                 version: None,
-            })
-            .expect("Failed to send SaveState");
+            })?;
 
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
@@ -608,20 +606,21 @@ mod tests {
         );
 
         assert!(loaded.is_ok(), "LoadState should succeed");
-        let loaded_data = loaded.expect("LoadState outer result should be Ok");
-        assert!(loaded_data.is_ok(), "LoadState result should be Ok");
+        let loaded_data = loaded.map_err(|e| format!("Outer failed: {e}"))?;
+        let final_data = loaded_data.map_err(|e| format!("Inner failed: {e}"))?;
         assert_eq!(
-            loaded_data.expect("LoadState inner result should be Ok"),
+            final_data,
             data,
             "Loaded data should match saved data"
         );
 
         actor.stop(None);
-        handle.await.expect("Actor shutdown failed");
+        handle.await?;
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_state_manager_delete() {
+    async fn test_state_manager_delete() -> Result<(), Box<dyn std::error::Error>> {
         let temp_dir = tempfile::tempdir().ok();
         let storage_path = temp_dir
             .as_ref()
@@ -634,9 +633,7 @@ mod tests {
             database: "test_db".to_string(),
         };
 
-        let (actor, handle) = Actor::spawn(None, StateManagerActorDef, config)
-            .await
-            .expect("Failed to spawn StateManagerActor");
+        let (actor, handle) = Actor::spawn(None, StateManagerActorDef, config).await?;
 
         let key = "test_key_delete".to_string();
         let data = vec![10, 20, 30];
@@ -647,14 +644,12 @@ mod tests {
                 key: key.clone(),
                 data,
                 version: None,
-            })
-            .expect("Failed to send SaveState");
+            })?;
 
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
         actor
-            .send_message(StateManagerMessage::DeleteState { key: key.clone() })
-            .expect("Failed to send DeleteState");
+            .send_message(StateManagerMessage::DeleteState { key: key.clone() })?;
 
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
@@ -669,15 +664,16 @@ mod tests {
         );
 
         assert!(loaded.is_ok());
-        let result = loaded.expect("LoadState result should be Ok");
+        let result = loaded.map_err(|e| format!("Outer failed: {e}"))?;
         assert!(result.is_err(), "Deleted key should return error");
 
         actor.stop(None);
-        handle.await.expect("Actor shutdown failed");
+        handle.await?;
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_state_manager_exists() {
+    async fn test_state_manager_exists() -> Result<(), Box<dyn std::error::Error>> {
         let temp_dir = tempfile::tempdir().ok();
         let storage_path = temp_dir
             .as_ref()
@@ -690,9 +686,7 @@ mod tests {
             database: "test_db".to_string(),
         };
 
-        let (actor, handle) = Actor::spawn(None, StateManagerActorDef, config)
-            .await
-            .expect("Failed to spawn StateManagerActor");
+        let (actor, handle) = Actor::spawn(None, StateManagerActorDef, config).await?;
 
         let key = "test_key_exists".to_string();
 
@@ -707,14 +701,8 @@ mod tests {
         );
 
         assert!(exists.is_ok());
-        let inner_exists = exists.unwrap_or_else(|e| {
-            eprintln!("StateExists outer call failed: {e:?}");
-            Ok(false)
-        });
-        let result = inner_exists.unwrap_or_else(|e| {
-            eprintln!("StateExists inner result failed: {e:?}");
-            false
-        });
+        let inner_exists = exists.map_err(|e| format!("Outer failed: {e}"))?;
+        let result = inner_exists.map_err(|e| format!("Inner failed: {e}"))?;
         assert!(!result, "key should not exist initially");
 
         // Save key
@@ -723,8 +711,7 @@ mod tests {
                 key: key.clone(),
                 data: vec![1, 2, 3],
                 version: None,
-            })
-            .expect("Failed to send SaveState");
+            })?;
 
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
@@ -739,22 +726,17 @@ mod tests {
         );
 
         assert!(exists.is_ok());
-        let inner_exists = exists.unwrap_or_else(|e| {
-            eprintln!("StateExists outer call failed: {e:?}");
-            Ok(false)
-        });
-        let result = inner_exists.unwrap_or_else(|e| {
-            eprintln!("StateExists inner result failed: {e:?}");
-            false
-        });
+        let inner_exists = exists.map_err(|e| format!("Outer failed: {e}"))?;
+        let result = inner_exists.map_err(|e| format!("Inner failed: {e}"))?;
         assert!(result, "key should exist after save");
 
         actor.stop(None);
-        handle.await.expect("Actor shutdown failed");
+        handle.await?;
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_state_manager_list_keys() {
+    async fn test_state_manager_list_keys() -> Result<(), Box<dyn std::error::Error>> {
         let temp_dir = tempfile::tempdir().ok();
         let storage_path = temp_dir
             .as_ref()
@@ -767,9 +749,7 @@ mod tests {
             database: "test_db".to_string(),
         };
 
-        let (actor, handle) = Actor::spawn(None, StateManagerActorDef, config)
-            .await
-            .expect("Failed to spawn StateManagerActor");
+        let (actor, handle) = Actor::spawn(None, StateManagerActorDef, config).await?;
 
         // Save multiple keys with different prefixes
         for i in 1..=3 {
@@ -778,8 +758,7 @@ mod tests {
                     key: format!("workflow:{}", i),
                     data: vec![i as u8],
                     version: None,
-                })
-                .expect("Failed to send SaveState");
+                })?;
         }
 
         for i in 1..=2 {
@@ -788,8 +767,7 @@ mod tests {
                     key: format!("checkpoint:{}", i),
                     data: vec![i as u8],
                     version: None,
-                })
-                .expect("Failed to send SaveState");
+                })?;
         }
 
         tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
@@ -806,8 +784,8 @@ mod tests {
 
         assert!(all_keys.is_ok());
         let keys = all_keys
-            .expect("ListKeys outer result should be Ok")
-            .expect("ListKeys inner result should be Ok");
+            .map_err(|e| format!("Outer failed: {e}"))?
+            .map_err(|e| format!("Inner failed: {e}"))?;
         assert_eq!(keys.len(), 5);
 
         // List with prefix
@@ -822,16 +800,17 @@ mod tests {
 
         assert!(workflow_keys.is_ok());
         let keys = workflow_keys
-            .expect("ListKeys outer result should be Ok")
-            .expect("ListKeys inner result should be Ok");
+            .map_err(|e| format!("Outer failed: {e}"))?
+            .map_err(|e| format!("Inner failed: {e}"))?;
         assert_eq!(keys.len(), 3);
 
         actor.stop(None);
-        handle.await.expect("Actor shutdown failed");
+        handle.await?;
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_state_manager_version() {
+    async fn test_state_manager_version() -> Result<(), Box<dyn std::error::Error>> {
         let temp_dir = tempfile::tempdir().ok();
         let storage_path = temp_dir
             .as_ref()
@@ -844,9 +823,7 @@ mod tests {
             database: "test_db".to_string(),
         };
 
-        let (actor, handle) = Actor::spawn(None, StateManagerActorDef, config)
-            .await
-            .expect("Failed to spawn StateManagerActor");
+        let (actor, handle) = Actor::spawn(None, StateManagerActorDef, config).await?;
 
         let key = "versioned_key".to_string();
 
@@ -856,8 +833,7 @@ mod tests {
                 key: key.clone(),
                 data: vec![1, 2, 3],
                 version: Some(5),
-            })
-            .expect("Failed to send SaveState");
+            })?;
 
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
@@ -872,15 +848,14 @@ mod tests {
         );
 
         assert!(version.is_ok());
-        assert_eq!(
-            version
-                .expect("GetStateVersion outer result should be Ok")
-                .expect("GetStateVersion inner result should be Ok"),
-            Some(5)
-        );
+        let version_data = version
+            .map_err(|e| format!("Outer failed: {e}"))?
+            .map_err(|e| format!("Inner failed: {e}"))?;
+        assert_eq!(version_data, Some(5));
 
         actor.stop(None);
-        handle.await.expect("Actor shutdown failed");
+        handle.await?;
+        Ok(())
     }
 
     // ============================================================================
@@ -888,7 +863,7 @@ mod tests {
     // ============================================================================
 
     #[tokio::test]
-    async fn test_event_store_append_and_read() {
+    async fn test_event_store_append_and_read() -> Result<(), Box<dyn std::error::Error>> {
         use oya_events::durable_store::{self, ConnectionConfig};
 
         let temp_dir = tempfile::tempdir().ok();
@@ -905,17 +880,15 @@ mod tests {
             ..Default::default()
         })
         .await
-        .expect("Failed to connect to test DB");
+        .map_err(|e| format!("Failed to connect: {e}"))?;
 
         let store = DurableEventStore::new(db)
             .await
-            .expect("Failed to create DurableEventStore")
+            .map_err(|e| format!("Failed to create store: {e}"))?
             .with_wal_dir(format!("{}/.wal", storage_path));
 
         let (actor, handle) =
-            Actor::spawn(None, EventStoreActorDef, Some(std::sync::Arc::new(store)))
-                .await
-                .expect("Failed to spawn EventStoreActor");
+            Actor::spawn(None, EventStoreActorDef, Some(std::sync::Arc::new(store))).await?;
 
         let bead_id = BeadId::new();
         let spec = BeadSpec::new("Test Event").with_complexity(Complexity::Simple);
@@ -931,12 +904,8 @@ mod tests {
         );
 
         assert!(append_result.is_ok(), "AppendEvent should succeed");
-        assert!(
-            append_result
-                .expect("AppendEvent outer result should be Ok")
-                .is_ok(),
-            "AppendEvent inner result should be Ok"
-        );
+        let inner_result = append_result.map_err(|e| format!("Outer failed: {e}"))?;
+        assert!(inner_result.is_ok(), "AppendEvent inner result should be Ok");
 
         // Read events
         let events = ractor::call_t!(
@@ -946,22 +915,21 @@ mod tests {
         );
 
         assert!(events.is_ok(), "ReadEvents should succeed");
-        let event_list = events.expect("ReadEvents outer result should be Ok");
-        assert!(event_list.is_ok(), "ReadEvents inner result should be Ok");
+        let event_list_res = events.map_err(|e| format!("Outer failed: {e}"))?;
+        let event_list = event_list_res.map_err(|e| format!("Inner failed: {e}"))?;
         assert_eq!(
-            event_list
-                .expect("ReadEvents innermost result should be Ok")
-                .len(),
+            event_list.len(),
             1,
             "Should have one event"
         );
 
         actor.stop(None);
-        handle.await.expect("Actor shutdown failed");
+        handle.await?;
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_event_store_replay() {
+    async fn test_event_store_replay() -> Result<(), Box<dyn std::error::Error>> {
         use oya_events::durable_store::{self, ConnectionConfig};
 
         let temp_dir = tempfile::tempdir().ok();
@@ -978,17 +946,15 @@ mod tests {
             ..Default::default()
         })
         .await
-        .expect("Failed to connect to test DB");
+        .map_err(|e| format!("Failed to connect: {e}"))?;
 
         let store = DurableEventStore::new(db)
             .await
-            .expect("Failed to create DurableEventStore")
+            .map_err(|e| format!("Failed to create store: {e}"))?
             .with_wal_dir(format!("{}/.wal", storage_path));
 
         let (actor, handle) =
-            Actor::spawn(None, EventStoreActorDef, Some(std::sync::Arc::new(store)))
-                .await
-                .expect("Failed to spawn EventStoreActor");
+            Actor::spawn(None, EventStoreActorDef, Some(std::sync::Arc::new(store))).await?;
 
         let bead_id = BeadId::new();
 
@@ -1024,9 +990,8 @@ mod tests {
         );
 
         assert!(all_events.is_ok());
-        let event_list = all_events
-            .expect("ReadEvents outer result should be Ok")
-            .expect("ReadEvents inner result should be Ok");
+        let event_list_res = all_events.map_err(|e| format!("Outer failed: {e}"))?;
+        let event_list = event_list_res.map_err(|e| format!("Inner failed: {e}"))?;
         assert_eq!(event_list.len(), 2);
 
         let checkpoint_id = event_list[0].event_id().to_string();
@@ -1042,21 +1007,17 @@ mod tests {
         );
 
         assert!(replayed.is_ok(), "ReplayEvents should succeed");
-        let replayed_events = replayed.expect("ReplayEvents outer result should be Ok");
-        assert!(
-            replayed_events.is_ok(),
-            "ReplayEvents inner result should be Ok"
-        );
+        let replayed_events_res = replayed.map_err(|e| format!("Outer failed: {e}"))?;
+        let replayed_events = replayed_events_res.map_err(|e| format!("Inner failed: {e}"))?;
         // Should have events after checkpoint (could be 1 or 2 depending on timestamp)
-        let replayed_count = replayed_events
-            .expect("ReplayEvents innermost result should be Ok")
-            .len();
+        let replayed_count = replayed_events.len();
         assert!(
             replayed_count >= 1,
             "Should have at least one replayed event"
         );
 
         actor.stop(None);
-        handle.await.expect("Actor shutdown failed");
+        handle.await?;
+        Ok(())
     }
 }

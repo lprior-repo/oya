@@ -135,7 +135,7 @@ impl EventSourcingReplay {
     /// - **Event log query**: <500ms for 1000 events after timestamp
     pub async fn resume_from_checkpoint(
         &self,
-        #[allow(unused_variables)] checkpoint_id: &CheckpointId,
+        checkpoint_id: &CheckpointId,
     ) -> ReplayResult<ReplayState> {
         let checkpoint_store = CheckpointStoreImpl::new(self.store.clone());
         let event_log = EventLogImpl::new(self.store.clone());
@@ -165,8 +165,6 @@ impl CheckpointStoreImpl {
 /// Internal record for checkpoint queries.
 #[derive(Debug, Deserialize)]
 struct CheckpointRecord {
-    #[allow(dead_code)]
-    event_id: String,
     timestamp: DateTime<Utc>,
     data: Option<Vec<u8>>,
     sequence_number: Option<u64>,
@@ -184,12 +182,12 @@ impl ResumeCheckpointStore for CheckpointStoreImpl {
         let rt = tokio::runtime::Handle::try_current();
         let result = match rt {
             Ok(handle) => {
-                handle.block_on(async { self.load_checkpoint_async(&db, &checkpoint_id_str).await })
+                handle.block_on(async { self.load_checkpoint_async(db, &checkpoint_id_str).await })
             }
             Err(_) => {
                 let rt = tokio::runtime::Runtime::new()
                     .map_err(|e| Error::Internal(format!("failed to create runtime: {e}")))?;
-                rt.block_on(async { self.load_checkpoint_async(&db, &checkpoint_id_str).await })
+                rt.block_on(async { self.load_checkpoint_async(db, &checkpoint_id_str).await })
             }
         };
 
@@ -208,14 +206,14 @@ impl ResumeCheckpointStore for CheckpointStoreImpl {
         let rt = tokio::runtime::Handle::try_current();
         let result = match rt {
             Ok(handle) => handle.block_on(async {
-                self.validate_timestamp_async(&db, &checkpoint_id_str, checkpoint_timestamp)
+                self.validate_timestamp_async(db, &checkpoint_id_str, checkpoint_timestamp)
                     .await
             }),
             Err(_) => {
                 let rt = tokio::runtime::Runtime::new()
                     .map_err(|e| Error::Internal(format!("failed to create runtime: {e}")))?;
                 rt.block_on(async {
-                    self.validate_timestamp_async(&db, &checkpoint_id_str, checkpoint_timestamp)
+                    self.validate_timestamp_async(db, &checkpoint_id_str, checkpoint_timestamp)
                         .await
                 })
             }
@@ -233,7 +231,7 @@ impl CheckpointStoreImpl {
     ) -> Result<Option<(CheckpointData, DateTime<Utc>)>, Error> {
         let mut result = db
             .query(
-                "SELECT event_id, timestamp, data, sequence_number FROM state_transition WHERE event_id = $checkpoint_id LIMIT 1",
+                "SELECT timestamp, data, sequence_number FROM state_transition WHERE event_id = $checkpoint_id LIMIT 1",
             )
             .bind(("checkpoint_id", checkpoint_id.to_string()))
             .await
@@ -313,12 +311,12 @@ impl EventLog for EventLogImpl {
         let rt = tokio::runtime::Handle::try_current();
         let result = match rt {
             Ok(handle) => {
-                handle.block_on(async { self.load_events_after_async(&db, timestamp).await })
+                handle.block_on(async { self.load_events_after_async(db, timestamp).await })
             }
             Err(_) => {
                 let rt = tokio::runtime::Runtime::new()
                     .map_err(|e| Error::Internal(format!("failed to create runtime: {e}")))?;
-                rt.block_on(async { self.load_events_after_async(&db, timestamp).await })
+                rt.block_on(async { self.load_events_after_async(db, timestamp).await })
             }
         };
 

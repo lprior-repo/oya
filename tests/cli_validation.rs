@@ -5,7 +5,7 @@
 // When: Action or event
 // Then: Expected outcome
 
-use std::process::{Command, ExitCode};
+use std::process::Command;
 
 /// Helper struct to capture command execution results
 struct CommandResult {
@@ -151,66 +151,30 @@ mod slug_validation {
 mod exit_codes {
     use super::*;
 
-    mod unimplemented_commands {
+    mod command_execution {
         use super::*;
 
         #[test]
-        fn given_list_command_when_executed_then_exits_with_code_1() {
-            // Given: The list command is not yet implemented
+        fn given_list_command_when_executed_then_exits_with_code_0() {
+            // Given: The list command is implemented
             // When: Running list command
             let result = run_oya_command(&["list"]);
 
-            // Then: Should exit with code 1 (error), not 0 (success)
+            // Then: Should exit with code 0 (success)
             assert_eq!(
-                result.exit_code, 1,
-                "Unimplemented command should exit with code 1"
-            );
-
-            // And: Error message should be present
-            assert!(
-                result.stderr.contains("Error:") || result.stderr.contains("not yet implemented"),
-                "Should indicate command is not implemented"
+                result.exit_code, 0,
+                "Implemented command should exit with code 0"
             );
         }
 
         #[test]
-        fn given_show_command_when_executed_then_exits_with_code_1() {
-            // Given: The show command is not yet implemented
+        fn given_show_command_with_missing_task_when_executed_then_exits_with_code_2() {
+            // Given: The show command is implemented but task is missing
             // When: Running show command
-            let result = run_oya_command(&["show", "some-task"]);
+            let result = run_oya_command(&["show", "--slug", "nonexistent-task"]);
 
-            // Then: Should exit with code 1
-            assert_eq!(result.exit_code, 1);
-        }
-
-        #[test]
-        fn given_new_command_when_executed_then_exits_with_code_1() {
-            // Given: The new command is not yet implemented
-            // When: Running new command with valid slug
-            let result = run_oya_command(&["new", "--slug", "valid-task"]);
-
-            // Then: Should exit with code 1
-            assert_eq!(result.exit_code, 1);
-        }
-
-        #[test]
-        fn given_stage_command_when_executed_then_exits_with_code_1() {
-            // Given: The stage command is not yet implemented
-            // When: Running stage command
-            let result = run_oya_command(&["stage", "--slug", "task", "--stage", "implement"]);
-
-            // Then: Should exit with code 1
-            assert_eq!(result.exit_code, 1);
-        }
-
-        #[test]
-        fn given_approve_command_when_executed_then_exits_with_code_1() {
-            // Given: The approve command is not yet implemented
-            // When: Running approve command
-            let result = run_oya_command(&["approve", "--slug", "task"]);
-
-            // Then: Should exit with code 1
-            assert_eq!(result.exit_code, 1);
+            // Then: Should exit with code 2 (not found/validation error)
+            assert_eq!(result.exit_code, 2);
         }
     }
 }

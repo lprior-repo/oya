@@ -6,11 +6,11 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("invalid slug: {0}")]
+    #[error("Slug cannot {0}")]
     InvalidSlug(String),
-    #[error("invalid stage: {0}")]
+    #[error("Stage cannot be {0}")]
     InvalidStage(String),
-    #[error("invalid failure reason: {0}")]
+    #[error("Failure reason cannot be {0}")]
     InvalidFailureReason(String),
     #[error("invalid transition from {from} to {to}")]
     InvalidTransition { from: String, to: String },

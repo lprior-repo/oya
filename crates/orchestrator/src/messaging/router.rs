@@ -188,10 +188,10 @@ impl MessageRouter {
         source_channel: &str,
         message: Message,
     ) -> PersistenceResult<Vec<MessageId>> {
-        let routes = self.routes.read().await;
+        let routes = self.routes.read().await.clone();
         let mut routed_ids = Vec::new();
 
-        for route in routes.iter() {
+        for route in &routes {
             if route.matches(source_channel) {
                 // Apply filter if present
                 if let Some(ref filter) = route.filter {
