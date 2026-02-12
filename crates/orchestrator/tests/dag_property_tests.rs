@@ -38,9 +38,7 @@ struct DagSpec {
 }
 
 fn dag_strategy() -> impl Strategy<Value = DagSpec> {
-    let node_count = 2usize..20;
-
-    node_count.flat_map(|n| {
+    (2usize..20).prop_flat_map(|n| {
         let node_ids: Vec<String> = (0..n).map(|i| format!("node-{}", i)).collect();
 
         let edges: Vec<(usize, usize)> = (0..n)

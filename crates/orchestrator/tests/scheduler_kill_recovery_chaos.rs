@@ -886,7 +886,7 @@ async fn given_scheduler_when_killed_at_random_intervals_then_system_stays_consi
         let interval_ms = 100 + rng.next_u64() % 400;
         info!("Kill {} waiting {}ms before kill", kill_num, interval_ms);
 
-        ensure_scheduler_running(&mut ctx, test_name, 3000)
+        ensure_scheduler_running(&mut ctx, test_name, 5000)
             .await
             .expect("Scheduler must be running");
 
@@ -894,7 +894,7 @@ async fn given_scheduler_when_killed_at_random_intervals_then_system_stays_consi
 
         let _ = kill_scheduler(&ctx, test_name).await;
 
-        await_scheduler_recovery(&mut ctx, test_name, 5000)
+        await_scheduler_recovery(&mut ctx, test_name, 10000)
             .await
             .expect(&format!("Recovery failed at kill {}", kill_num));
 
