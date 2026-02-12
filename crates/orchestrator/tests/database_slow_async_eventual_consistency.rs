@@ -13,8 +13,8 @@
 #![warn(clippy::nursery)]
 #![forbid(unsafe_code)]
 
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use orchestrator::actors::storage::{
@@ -103,7 +103,8 @@ impl SlowDatabaseConfig {
 
     fn record_operation(&self, latency_ms: u64) {
         self.total_operations.fetch_add(1, Ordering::SeqCst);
-        self.total_latency_ms.fetch_add(latency_ms, Ordering::SeqCst);
+        self.total_latency_ms
+            .fetch_add(latency_ms, Ordering::SeqCst);
     }
 
     fn get_avg_latency(&self) -> f64 {
@@ -243,9 +244,15 @@ impl ChaosTestContext {
     fn set_slow_mode(&self, slow: bool) {
         self.slow_config.set_slow(slow);
         if slow {
-            info!("Database switched to SLOW mode ({}ms latency)", self.slow_config.slow_latency_ms);
+            info!(
+                "Database switched to SLOW mode ({}ms latency)",
+                self.slow_config.slow_latency_ms
+            );
         } else {
-            info!("Database switched to NORMAL mode ({}ms latency)", self.slow_config.base_latency_ms);
+            info!(
+                "Database switched to NORMAL mode ({}ms latency)",
+                self.slow_config.base_latency_ms
+            );
         }
     }
 
@@ -358,7 +365,8 @@ async fn given_slow_database_when_async_writes_then_not_blocked() {
     let async_result = async_handle.await.expect("Async check should complete");
     assert!(async_result, "Async operation should complete");
 
-    let async_duration = async_check_end.load(Ordering::SeqCst)
+    let async_duration = async_check_end
+        .load(Ordering::SeqCst)
         .saturating_sub(async_check_start.load(Ordering::SeqCst));
 
     assert!(
@@ -367,7 +375,10 @@ async fn given_slow_database_when_async_writes_then_not_blocked() {
         async_duration
     );
 
-    info!("Test passed: async operation completed in {}ms despite slow DB", async_duration);
+    info!(
+        "Test passed: async operation completed in {}ms despite slow DB",
+        async_duration
+    );
 
     drop(ctx_ref);
 }
@@ -396,10 +407,7 @@ async fn given_slow_database_when_concurrent_writes_then_eventual_consistency() 
             for i in 0..writes_per_writer {
                 let key = format!("writer{}-key{}", writer_id, i);
                 let value = format!("value-{}-{}", writer_id, i);
-                ctx_clone
-                    .write(key, value)
-                    .await
-                    .expect("Failed to write");
+                ctx_clone.write(key, value).await.expect("Failed to write");
             }
             writes_per_writer
         });
@@ -459,7 +467,12 @@ async fn given_slow_database_when_reads_and_writes_interleaved_then_no_deadlock(
     let reader_handle = tokio::spawn(async move {
         for i in 0..10 {
             let key = format!("read-key-{}", i);
-            let _ = reader_ctx.database.read().await.read_with_latency(&key).await;
+            let _ = reader_ctx
+                .database
+                .read()
+                .await
+                .read_with_latency(&key)
+                .await;
         }
         10
     });
@@ -522,7 +535,10 @@ async fn given_flapping_latency_when_writes_continue_then_eventual_consistency()
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     let final_count = ctx.completed_count().await;
-    assert_eq!(final_count, 20, "All writes should complete despite flapping latency");
+    assert_eq!(
+        final_count, 20,
+        "All writes should complete despite flapping latency"
+    );
 
     info!("Test passed: eventual consistency with flapping latency");
 }
@@ -550,10 +566,7 @@ async fn given_slow_database_when_high_throughput_then_latency_stats_accurate() 
     let total_duration = start.elapsed();
     let avg_latency = ctx.slow_config.get_avg_latency();
 
-    assert!(
-        avg_latency > 0.0,
-        "Average latency should be recorded"
-    );
+    assert!(avg_latency > 0.0, "Average latency should be recorded");
 
     assert!(
         total_duration.as_millis() >= (write_count as u128 * 100),

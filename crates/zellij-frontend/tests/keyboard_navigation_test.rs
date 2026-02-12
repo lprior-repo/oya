@@ -645,3 +645,70 @@ fn esc_exits_command_mode_and_returns_to_parent_pane() -> Result<(), Box<dyn std
     assert_eq!(plugin.input_mode(), InputMode::Normal);
     Ok(())
 }
+
+#[test]
+fn enter_drills_down_to_bead_detail() -> Result<(), Box<dyn std::error::Error>> {
+    let mut plugin = OyaPlugin::new()?;
+    start_plugin(&mut plugin)?;
+
+    let tasks = vec![
+        TaskRow::new("task-1", "created", "P1", "Rust", "task/1"),
+        TaskRow::new("task-2", "created", "P1", "Rust", "task/2"),
+    ];
+    restore_with_tasks(&mut plugin, tasks, 0)?;
+
+    assert_eq!(plugin.focused_pane(), PaneType::BeadList);
+    assert_eq!(plugin.selected_index(), 0);
+
+    let _ = plugin.handle_event(PluginEvent::Key {
+        key: '\n',
+        modifiers: make_mods(false, false),
+    });
+
+    assert_eq!(plugin.focused_pane(), PaneType::BeadDetail);
+    assert_eq!(plugin.selected_index(), 0);
+
+    Ok(())
+}
+
+#[test]
+fn enter_drills_down_preserves_selection() -> Result<(), Box<dyn std::error::Error>> {
+    let mut plugin = OyaPlugin::new()?;
+    start_plugin(&mut plugin)?;
+
+    let tasks = vec![
+        TaskRow::new("task-1", "created", "P1", "Rust", "task/1"),
+        TaskRow::new("task-2", "created", "P1", "Rust", "task/2"),
+        TaskRow::new("task-3", "created", "P1", "Rust", "task/3"),
+    ];
+    restore_with_tasks(&mut plugin, tasks, 2)?;
+
+    assert_eq!(plugin.selected_index(), 2);
+
+    let _ = plugin.handle_event(PluginEvent::Key {
+        key: '\n',
+        modifiers: make_mods(false, false),
+    });
+
+    assert_eq!(plugin.focused_pane(), PaneType::BeadDetail);
+    assert_eq!(plugin.selected_index(), 2);
+
+    Ok(())
+}
+
+#[test]
+fn enter_does_nothing_in_bead_detail() -> Result<(), Box<dyn std::error::Error>> {
+    let mut plugin = OyaPlugin::new()?;
+    start_plugin(&mut plugin)?;
+
+    restore_with_tasks_and_pane(&mut plugin, vec![], 0, PaneType::BeadDetail)?;
+
+    let _ = plugin.handle_event(PluginEvent::Key {
+        key: '\n',
+        modifiers: make_mods(false, false),
+    });
+
+    assert_eq!(plugin.focused_pane(), PaneType::BeadDetail);
+
+    Ok(())
+}
