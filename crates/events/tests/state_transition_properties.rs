@@ -36,10 +36,7 @@ fn arb_bead_state() -> impl Strategy<Value = BeadState> {
 
 proptest! {
     #[test]
-    fn prop_can_transition_consistent_with_valid_transitions(
-        from_state in arb_bead_state(),
-        to_state in arb_bead_state(),
-    ) {
+    fn prop_can_transition_consistent(from_state in arb_bead_state(), to_state in arb_bead_state()) {
         let valid_targets: Vec<BeadState> = from_state.valid_transitions();
         let can_transition = from_state.can_transition_to(to_state);
         let is_in_valid = valid_targets.contains(&to_state);
@@ -58,74 +55,45 @@ proptest! {
     #[test]
     fn prop_completed_has_no_transitions(target in arb_bead_state()) {
         let completed = BeadState::Completed;
-        prop_assert!(
-            !completed.can_transition_to(target),
-            "Completed should not transition to {:?}",
-            target
-        );
+        prop_assert!(!completed.can_transition_to(target), "Completed should not transition to {:?}", target);
     }
 
     #[test]
     fn prop_completed_valid_transitions_empty() {
         let transitions = BeadState::Completed.valid_transitions();
-        prop_assert!(
-            transitions.is_empty(),
-            "Completed valid_transitions() should be empty, got {:?}",
-            transitions
-        );
+        prop_assert!(transitions.is_empty(), "Completed valid_transitions() should be empty, got {:?}", transitions);
     }
 
     #[test]
-    fn prop_non_terminal_states_can_reach_completed(state in arb_bead_state()) {
+    fn prop_non_terminal_can_reach_completed(state in arb_bead_state()) {
         if state.is_terminal() {
             return Ok(());
         }
-
         let can_reach = can_reach_completed(state);
-        prop_assert!(
-            can_reach,
-            "State {:?} should be able to reach Completed",
-            state
-        );
+        prop_assert!(can_reach, "State {:?} should be able to reach Completed", state);
     }
 
     #[test]
-    fn prop_transitions_preserve_completed_reachability(state in arb_bead_state()) {
+    fn prop_transitions_preserve_reachability(state in arb_bead_state()) {
         if state.is_terminal() {
             return Ok(());
         }
-
         for target in state.valid_transitions() {
             let can_reach = can_reach_completed(target);
-            prop_assert!(
-                can_reach,
-                "Transition {:?} -> {:?} breaks Completed reachability",
-                state,
-                target
-            );
+            prop_assert!(can_reach, "Transition {:?} -> {:?} breaks Completed reachability", state, target);
         }
         Ok(())
     }
 
     #[test]
     fn prop_no_self_transitions(state in arb_bead_state()) {
-        prop_assert!(
-            !state.can_transition_to(state),
-            "State {:?} should not transition to itself",
-            state
-        );
+        prop_assert!(!state.can_transition_to(state), "State {:?} should not transition to itself", state);
     }
 
     #[test]
     fn prop_is_terminal_only_completed(state in arb_bead_state()) {
         let expected = matches!(state, BeadState::Completed);
-        prop_assert_eq!(
-            state.is_terminal(),
-            expected,
-            "is_terminal({:?}) should be {}",
-            state,
-            expected
-        );
+        prop_assert_eq!(state.is_terminal(), expected, "is_terminal({:?}) should be {}", state, expected);
     }
 }
 

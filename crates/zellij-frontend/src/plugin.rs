@@ -7,12 +7,12 @@
 //
 // NOTE: IPC integration with oya-orchestrator will be added in a future bead
 
+use crate::command::{parse_command, ParsedCommand, SortDirection, SortField};
 use crate::ipc::IpcClient;
 use crate::layout::Layout;
 use crate::render::Renderer;
 use crate::state::StateManager;
 use crate::timer::{RefreshTimer, TimerConfig};
-use crate::{command::parse_command, command::ParsedCommand};
 use oya_ipc::{GuestMessage, HostMessage, TaskSummary};
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -1295,10 +1295,18 @@ impl OyaPlugin {
             }
             // Neovim-style pane and list navigation
             'h' | 'H' => {
-                self.cycle_focus_backward();
+                if self.pane_supports_horizontal_scroll() {
+                    self.scroll_horizontal(-1)?;
+                } else {
+                    self.cycle_focus_backward();
+                }
             }
             'l' | 'L' => {
-                self.cycle_focus();
+                if self.pane_supports_horizontal_scroll() {
+                    self.scroll_horizontal(1)?;
+                } else {
+                    self.cycle_focus();
+                }
             }
             'j' | 'J' => {
                 if self.focused_pane == crate::layout::PaneType::BeadList {
@@ -1380,6 +1388,33 @@ impl OyaPlugin {
             crate::layout::PaneType::WorkflowGraph => crate::layout::PaneType::PipelineView,
             crate::layout::PaneType::AgentView => crate::layout::PaneType::WorkflowGraph,
         };
+    }
+
+    fn pane_supports_horizontal_scroll(&self) -> bool {
+        matches!(
+            self.focused_pane,
+            crate::layout::PaneType::BeadDetail
+                | crate::layout::PaneType::PipelineView
+                | crate::layout::PaneType::WorkflowGraph
+        )
+    }
+
+    fn scroll_horizontal(&mut self, direction: i32) -> PluginResult<()> {
+        const SCROLL_AMOUNT: usize = 4;
+        if direction > 0 {
+            self.horizontal_scroll = self.horizontal_scroll.saturating_add(SCROLL_AMOUNT);
+            self.status_message = Some(format!("Scroll right: {}", self.horizontal_scroll));
+        } else if self.horizontal_scroll > 0 {
+            self.horizontal_scroll = self.horizontal_scroll.saturating_sub(SCROLL_AMOUNT);
+            self.status_message = Some(format!("Scroll left: {}", self.horizontal_scroll));
+        } else {
+            self.status_message = Some("At left edge".to_string());
+        }
+        Ok(())
+    }
+
+    fn scroll_reset(&mut self) {
+        self.horizontal_scroll = 0;
     }
 
     /// Move selection in bead list
@@ -1544,6 +1579,18 @@ impl OyaPlugin {
                     }
                 }
             }
+            ParsedCommand::Sort { field, direction } => {
+                self.sort_tasks_by(field, direction);
+                self.status_message = Some(format!("Sorted by {:?} ({:?})", field, direction));
+            }
+            ParsedCommand::Goto { target } => match self.goto_task(&target) {
+                Ok(slug) => {
+                    self.status_message = Some(format!("Jumped to task: {slug}"));
+                }
+                Err(err) => {
+                    self.status_message = Some(format!("Goto error: {err}"));
+                }
+            },
         }
     }
 
@@ -1784,6 +1831,47 @@ impl OyaPlugin {
             .map_err(|e| PluginError::StateSaveError(format!("Write failed: {e}")))?;
 
         Ok(self.tasks.len())
+    }
+
+    fn sort_tasks_by(&mut self, field: SortField, direction: SortDirection) {
+        self.tasks.sort_by(|a, b| {
+            let cmp = match field {
+                SortField::Priority => a.priority.cmp(&b.priority),
+                SortField::Status => a.status.cmp(&b.status),
+                SortField::Slug => a.slug.cmp(&b.slug),
+                SortField::Created => std::cmp::Ordering::Equal,
+                SortField::Updated => std::cmp::Ordering::Equal,
+            };
+            match direction {
+                SortDirection::Asc => cmp,
+                SortDirection::Desc => cmp.reverse(),
+            }
+        });
+    }
+
+    fn goto_task(&mut self, target: &str) -> PluginResult<String> {
+        if self.tasks.is_empty() {
+            return Err(PluginError::InvalidState("No tasks available".to_string()));
+        }
+
+        let index = if let Ok(idx) = target.parse::<usize>() {
+            if idx == 0 || idx > self.tasks.len() {
+                return Err(PluginError::InvalidState(format!(
+                    "Index {} out of range (1-{})",
+                    idx,
+                    self.tasks.len()
+                )));
+            }
+            idx - 1
+        } else {
+            self.tasks
+                .iter()
+                .position(|task| task.slug.starts_with(target))
+                .ok_or_else(|| PluginError::InvalidState(format!("No task matching '{target}'")))?
+        };
+
+        self.selected_index = index;
+        Ok(self.tasks[index].slug.clone())
     }
 
     fn run_pipeline_for_selected(&mut self, dry_run: bool) -> PluginResult<()> {

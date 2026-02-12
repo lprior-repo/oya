@@ -16,12 +16,14 @@
 //! - `:clear` - Clear active filter
 //! - `:refresh` - Refresh task list
 //! - `:help` - Show help overlay
+//! - `:export <path>` - Export tasks to file
+//! - `:sort <field> [direction]` - Sort tasks by field (priority, status, created, updated, slug)
 //!
 //! ## Grammar
 //!
 //! ```text
 //! command       ::= ':' command_name [arg_string]
-//! command_name  ::= 'filter' | 'clear' | 'refresh' | 'help'
+//! command_name  ::= 'filter' | 'clear' | 'refresh' | 'help' | 'export' | 'sort'
 //! arg_string    ::= [^\n]+  # Any characters except newline
 //! ```
 //!
@@ -171,6 +173,14 @@ pub enum ParsedCommand {
         /// Sort direction (defaults to ascending)
         direction: SortDirection,
     },
+
+    /// Navigate to a specific task
+    ///
+    /// Jump to task by 1-based index or slug prefix
+    Goto {
+        /// Target: numeric index (1-based) or slug prefix
+        target: String,
+    },
 }
 
 impl ParsedCommand {
@@ -188,6 +198,7 @@ impl ParsedCommand {
             Self::Help => "help",
             Self::Export { .. } => "export",
             Self::Sort { .. } => "sort",
+            Self::Goto { .. } => "goto",
         }
     }
 }
@@ -659,7 +670,7 @@ mod tests {
     #[test]
     fn test_suggest_completions_with_empty_input() {
         let suggestions = suggest_completions(":");
-        assert_eq!(suggestions.len(), 5); // All commands
+        assert_eq!(suggestions.len(), 6); // All commands
     }
 
     #[test]
@@ -819,5 +830,168 @@ mod tests {
     fn test_suggest_completions_with_partial_e() {
         let suggestions = suggest_completions(":e");
         assert_eq!(suggestions, vec!["export".to_string()]);
+    }
+
+    // ============================================================================
+    // Parse Sort Command Tests
+    // ============================================================================
+
+    #[test]
+    fn test_parse_sort_command_with_field_only() {
+        let result = parse_command(":sort priority");
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            ParsedCommand::Sort {
+                field: SortField::Priority,
+                direction: SortDirection::Asc,
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_sort_command_with_field_and_asc() {
+        let result = parse_command(":sort status asc");
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            ParsedCommand::Sort {
+                field: SortField::Status,
+                direction: SortDirection::Asc,
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_sort_command_with_field_and_desc() {
+        let result = parse_command(":sort created desc");
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            ParsedCommand::Sort {
+                field: SortField::Created,
+                direction: SortDirection::Desc,
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_sort_command_all_fields() {
+        let fields = [
+            ("priority", SortField::Priority),
+            ("status", SortField::Status),
+            ("created", SortField::Created),
+            ("updated", SortField::Updated),
+            ("slug", SortField::Slug),
+        ];
+
+        for (field_str, expected_field) in fields {
+            let result = parse_command(&format!(":sort {field_str}"));
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap(),
+                ParsedCommand::Sort {
+                    field: expected_field,
+                    direction: SortDirection::Asc,
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn test_parse_sort_command_case_insensitive_field() {
+        let result = parse_command(":sort PRIORITY");
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            ParsedCommand::Sort {
+                field: SortField::Priority,
+                direction: SortDirection::Asc,
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_sort_command_case_insensitive_direction() {
+        let result = parse_command(":sort priority DESC");
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            ParsedCommand::Sort {
+                field: SortField::Priority,
+                direction: SortDirection::Desc,
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_sort_command_without_field_returns_error() {
+        let result = parse_command(":sort");
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            ParseError::MissingArgument("sort".to_string())
+        );
+    }
+
+    #[test]
+    fn test_parse_sort_command_with_invalid_field_returns_error() {
+        let result = parse_command(":sort invalid");
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ParseError::InvalidSortField(field) => {
+                assert_eq!(field, "invalid");
+            }
+            other => {
+                eprintln!("Expected InvalidSortField error, got: {other:?}");
+                assert!(false);
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_sort_command_with_invalid_direction_returns_error() {
+        let result = parse_command(":sort priority ascending");
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ParseError::InvalidSortDirection(dir) => {
+                assert_eq!(dir, "ascending");
+            }
+            other => {
+                eprintln!("Expected InvalidSortDirection error, got: {other:?}");
+                assert!(false);
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_sort_command_with_whitespace() {
+        let result = parse_command(":sort   priority   desc  ");
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            ParsedCommand::Sort {
+                field: SortField::Priority,
+                direction: SortDirection::Desc,
+            }
+        );
+    }
+
+    #[test]
+    fn test_parsed_command_name_sort() {
+        assert_eq!(
+            ParsedCommand::Sort {
+                field: SortField::Priority,
+                direction: SortDirection::Desc,
+            }
+            .name(),
+            "sort"
+        );
+    }
+
+    #[test]
+    fn test_suggest_completions_with_partial_s() {
+        let suggestions = suggest_completions(":s");
+        assert_eq!(suggestions, vec!["sort".to_string()]);
     }
 }

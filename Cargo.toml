@@ -267,7 +267,7 @@ rusqlite = "0.32"
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 tempfile = "3"
-proptest = { workspace = true }
+proptest = "1"
 
 [[bin]]
  name = "test_pipeline_cache"

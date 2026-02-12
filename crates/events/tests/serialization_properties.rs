@@ -5,57 +5,23 @@
 //! Tests both JSON and bincode formats for all serializable types.
 
 use chrono::{TimeZone, Utc};
+use oya_events::types::StateTransition;
 use oya_events::{
     BeadEvent, BeadId, BeadResult, BeadSpec, BeadState, Complexity, EventId, PhaseId, PhaseOutput,
-    StateTransition,
 };
 use proptest::collection::vec;
 use proptest::prelude::*;
-use proptest::string::string_regex;
 
-prop_compose! {
-    fn arb_bead_id()(ulid_bytes in vec(any::<u8>(), 16..=16)) -> BeadId {
-        let bytes: [u8; 16] = ulid_bytes.try_into().unwrap_or_else(|_| [0u8; 16]);
-        let milliseconds = u64::from_be_bytes(bytes[0..8].try_into().unwrap_or([0u8; 8]));
-        let random = u128::from_be_bytes([
-            0, 0, 0, 0, 0, 0, 0, 0,
-            bytes[8], bytes[9], bytes[10], bytes[11],
-            bytes[12], bytes[13], bytes[14], bytes[15],
-        ]);
-        ulid::Ulid::from_parts(milliseconds / 1000, random)
-            .map(BeadId::from_ulid)
-            .unwrap_or_else(BeadId::new)
-    }
+fn arb_bead_id() -> impl Strategy<Value = BeadId> {
+    (0..u128::MAX).prop_map(|_| BeadId::new())
 }
 
-prop_compose! {
-    fn arb_event_id()(ulid_bytes in vec(any::<u8>(), 16..=16)) -> EventId {
-        let bytes: [u8; 16] = ulid_bytes.try_into().unwrap_or_else(|_| [0u8; 16]);
-        let milliseconds = u64::from_be_bytes(bytes[0..8].try_into().unwrap_or([0u8; 8]));
-        let random = u128::from_be_bytes([
-            0, 0, 0, 0, 0, 0, 0, 0,
-            bytes[8], bytes[9], bytes[10], bytes[11],
-            bytes[12], bytes[13], bytes[14], bytes[15],
-        ]);
-        ulid::Ulid::from_parts(milliseconds / 1000, random)
-            .map(EventId::from_ulid)
-            .unwrap_or_else(EventId::new)
-    }
+fn arb_event_id() -> impl Strategy<Value = EventId> {
+    (0..u128::MAX).prop_map(|_| EventId::new())
 }
 
-prop_compose! {
-    fn arb_phase_id()(ulid_bytes in vec(any::<u8>(), 16..=16)) -> PhaseId {
-        let bytes: [u8; 16] = ulid_bytes.try_into().unwrap_or_else(|_| [0u8; 16]);
-        let milliseconds = u64::from_be_bytes(bytes[0..8].try_into().unwrap_or([0u8; 8]));
-        let random = u128::from_be_bytes([
-            0, 0, 0, 0, 0, 0, 0, 0,
-            bytes[8], bytes[9], bytes[10], bytes[11],
-            bytes[12], bytes[13], bytes[14], bytes[15],
-        ]);
-        ulid::Ulid::from_parts(milliseconds / 1000, random)
-            .map(PhaseId::from_ulid)
-            .unwrap_or_else(PhaseId::new)
-    }
+fn arb_phase_id() -> impl Strategy<Value = PhaseId> {
+    (0..u128::MAX).prop_map(|_| PhaseId::new())
 }
 
 fn arb_bead_state() -> impl Strategy<Value = BeadState> {
@@ -150,27 +116,17 @@ prop_compose! {
 }
 
 fn arb_bead_event() -> impl Strategy<Value = BeadEvent> {
-    let bead_id = BeadId::new();
-    let event_id = EventId::new();
-    let phase_id = PhaseId::new();
-    let timestamp = Utc::now();
-
     prop_oneof![
-        arb_bead_id().prop_map(move |b| {
-            let b_id = b;
-            let e_id = EventId::new();
-            let ts = Utc::now();
-            BeadEvent::created(b_id, BeadSpec::new("test"))
-        }),
+        arb_bead_id().prop_map(|b| BeadEvent::created(b, BeadSpec::new("test"))),
         (arb_bead_id(), arb_bead_state(), arb_bead_state())
-            .prop_map(move |(b, from, to)| { BeadEvent::state_changed(b, from, to) }),
+            .prop_map(|(b, from, to)| BeadEvent::state_changed(b, from, to)),
         (
             arb_bead_id(),
             arb_phase_id(),
             "[a-z]{3,10}",
             arb_phase_output()
         )
-            .prop_map(move |(b, p, name, out)| { BeadEvent::phase_completed(b, p, name, out) }),
+            .prop_map(|(b, p, name, out)| BeadEvent::phase_completed(b, p, name, out)),
         (arb_bead_id(), arb_bead_id()).prop_map(|(b, dep)| BeadEvent::dependency_resolved(b, dep)),
         (arb_bead_id(), "[a-z ]{5,30}").prop_map(|(b, err)| BeadEvent::failed(b, err)),
         (arb_bead_id(), arb_bead_result()).prop_map(|(b, r)| BeadEvent::completed(b, r)),
