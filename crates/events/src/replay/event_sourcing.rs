@@ -9,6 +9,7 @@ use std::sync::Arc;
 use crate::durable_store::DurableEventStore;
 use crate::error::Error;
 use chrono::{DateTime, Utc};
+use serde::Deserialize;
 
 use super::resume::CheckpointStore as ResumeCheckpointStore;
 use super::resume::{
@@ -161,23 +162,135 @@ impl CheckpointStoreImpl {
     }
 }
 
+/// Internal record for checkpoint queries.
+#[derive(Debug, Deserialize)]
+struct CheckpointRecord {
+    #[allow(dead_code)]
+    event_id: String,
+    timestamp: DateTime<Utc>,
+    data: Option<Vec<u8>>,
+    sequence_number: Option<u64>,
+}
+
 impl ResumeCheckpointStore for CheckpointStoreImpl {
     fn load_checkpoint(
         &self,
-        #[allow(unused_variables)] checkpoint_id: &CheckpointId,
+        checkpoint_id: &CheckpointId,
     ) -> Result<Option<(CheckpointData, DateTime<Utc>)>, Error> {
-        // For now, return Ok(None) since we don't have checkpoint data stored separately
-        // This will be implemented when we add proper checkpoint storage
-        Ok(None)
+        let checkpoint_id_str = checkpoint_id.as_str().to_string();
+        
+        let db = self.store.db();
+        
+        let rt = tokio::runtime::Handle::try_current();
+        let result = match rt {
+            Ok(handle) => {
+                handle.block_on(async {
+                    self.load_checkpoint_async(&db, &checkpoint_id_str).await
+                })
+            }
+            Err(_) => {
+                let rt = tokio::runtime::Runtime::new()
+                    .map_err(|e| Error::Internal(format!("failed to create runtime: {e}")))?;
+                rt.block_on(async {
+                    self.load_checkpoint_async(&db, &checkpoint_id_str).await
+                })
+            }
+        };
+        
+        result
     }
 
     fn validate_timestamp(
         &self,
-        #[allow(unused_variables)] checkpoint_id: &CheckpointId,
-        #[allow(unused_variables)] checkpoint_timestamp: DateTime<Utc>,
+        checkpoint_id: &CheckpointId,
+        checkpoint_timestamp: DateTime<Utc>,
     ) -> Result<bool, Error> {
-        // For now, return Ok(true) - validation can be implemented later
-        Ok(true)
+        let checkpoint_id_str = checkpoint_id.as_str().to_string();
+        
+        let db = self.store.db();
+        
+        let rt = tokio::runtime::Handle::try_current();
+        let result = match rt {
+            Ok(handle) => {
+                handle.block_on(async {
+                    self.validate_timestamp_async(&db, &checkpoint_id_str, checkpoint_timestamp).await
+                })
+            }
+            Err(_) => {
+                let rt = tokio::runtime::Runtime::new()
+                    .map_err(|e| Error::Internal(format!("failed to create runtime: {e}")))?;
+                rt.block_on(async {
+                    self.validate_timestamp_async(&db, &checkpoint_id_str, checkpoint_timestamp).await
+                })
+            }
+        };
+        
+        result
+    }
+}
+
+impl CheckpointStoreImpl {
+    async fn load_checkpoint_async(
+        &self,
+        db: &Arc<surrealdb::Surreal<surrealdb::engine::local::Db>>,
+        checkpoint_id: &str,
+    ) -> Result<Option<(CheckpointData, DateTime<Utc>)>, Error> {
+        let mut result = db
+            .query(
+                "SELECT event_id, timestamp, data, sequence_number FROM state_transition WHERE event_id = $checkpoint_id LIMIT 1",
+            )
+            .bind(("checkpoint_id", checkpoint_id.to_string()))
+            .await
+            .map_err(|e| {
+                Error::store_failed("load_checkpoint", format!("failed to query checkpoint: {e}"))
+            })?;
+
+        let records: Vec<CheckpointRecord> = result.take(0).map_err(|e| {
+            Error::store_failed("load_checkpoint", format!("failed to extract results: {e}"))
+        })?;
+
+        match records.into_iter().next() {
+            Some(record) => {
+                let checkpoint_data = CheckpointData {
+                    state: record.data.clone().unwrap_or_default(),
+                    sequence_number: record.sequence_number.unwrap_or(0),
+                    compressed: false,
+                };
+                Ok(Some((checkpoint_data, record.timestamp)))
+            }
+            None => Ok(None),
+        }
+    }
+
+    async fn validate_timestamp_async(
+        &self,
+        db: &Arc<surrealdb::Surreal<surrealdb::engine::local::Db>>,
+        checkpoint_id: &str,
+        checkpoint_timestamp: DateTime<Utc>,
+    ) -> Result<bool, Error> {
+        let mut result = db
+            .query(
+                "SELECT timestamp FROM state_transition WHERE event_id = $checkpoint_id LIMIT 1",
+            )
+            .bind(("checkpoint_id", checkpoint_id.to_string()))
+            .await
+            .map_err(|e| {
+                Error::store_failed("validate_timestamp", format!("failed to query checkpoint: {e}"))
+            })?;
+
+        #[derive(Debug, Deserialize)]
+        struct TimestampRecord {
+            timestamp: DateTime<Utc>,
+        }
+
+        let records: Vec<TimestampRecord> = result.take(0).map_err(|e| {
+            Error::store_failed("validate_timestamp", format!("failed to extract results: {e}"))
+        })?;
+
+        match records.into_iter().next() {
+            Some(record) => Ok(record.timestamp == checkpoint_timestamp),
+            None => Ok(false),
+        }
     }
 }
 
@@ -194,12 +307,66 @@ impl EventLogImpl {
 }
 
 impl EventLog for EventLogImpl {
-    fn load_events_after(
+    fn load_events_after(&self, timestamp: DateTime<Utc>) -> Result<Vec<EventMetadata>, Error> {
+        let db = self.store.db();
+        
+        let rt = tokio::runtime::Handle::try_current();
+        let result = match rt {
+            Ok(handle) => {
+                handle.block_on(async {
+                    self.load_events_after_async(&db, timestamp).await
+                })
+            }
+            Err(_) => {
+                let rt = tokio::runtime::Runtime::new()
+                    .map_err(|e| Error::Internal(format!("failed to create runtime: {e}")))?;
+                rt.block_on(async {
+                    self.load_events_after_async(&db, timestamp).await
+                })
+            }
+        };
+        
+        result
+    }
+}
+
+impl EventLogImpl {
+    async fn load_events_after_async(
         &self,
-        #[allow(unused_variables)] timestamp: DateTime<Utc>,
+        db: &Arc<surrealdb::Surreal<surrealdb::engine::local::Db>>,
+        timestamp: DateTime<Utc>,
     ) -> Result<Vec<EventMetadata>, Error> {
-        // For now, return empty vector - this will be implemented with proper db access
-        Ok(Vec::new())
+        let mut result = db
+            .query(
+                "SELECT event_id, timestamp, sequence_number FROM state_transition WHERE timestamp > $timestamp ORDER BY timestamp ASC, event_id ASC",
+            )
+            .bind(("timestamp", timestamp))
+            .await
+            .map_err(|e| {
+                Error::store_failed("load_events_after", format!("failed to query events: {e}"))
+            })?;
+
+        #[derive(Debug, Deserialize)]
+        struct EventRecord {
+            event_id: String,
+            timestamp: DateTime<Utc>,
+            sequence_number: Option<u64>,
+        }
+
+        let records: Vec<EventRecord> = result.take(0).map_err(|e| {
+            Error::store_failed("load_events_after", format!("failed to extract results: {e}"))
+        })?;
+
+        let events = records
+            .into_iter()
+            .map(|record| EventMetadata {
+                event_id: record.event_id,
+                timestamp: record.timestamp,
+                sequence_number: record.sequence_number.unwrap_or(0),
+            })
+            .collect();
+
+        Ok(events)
     }
 }
 
