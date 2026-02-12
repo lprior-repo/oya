@@ -160,6 +160,8 @@ pub struct OyaPlugin {
     ipc: Option<IpcClient>,
     /// Last configured IPC address for reconnect attempts
     ipc_address: String,
+    /// Last IPC connect attempt timestamp (unix ms)
+    last_ipc_connect_attempt_ms: Option<u64>,
     /// Status message shown in the UI
     status_message: Option<String>,
     /// Auto-save timer for periodic state saves
@@ -762,6 +764,43 @@ mod tests {
     }
 
     #[test]
+    fn test_refresh_tasks_throttles_rapid_reconnect_attempts(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut plugin = OyaPlugin::new()?;
+        plugin.ipc = None;
+        plugin.ipc_address = "not-an-address".to_string();
+        plugin.last_ipc_connect_attempt_ms = Some(OyaPlugin::now_ms());
+
+        let result = plugin.refresh_tasks();
+
+        assert!(result.is_ok());
+        assert!(plugin.ipc.is_none());
+        assert_eq!(
+            plugin.status_message.as_deref(),
+            Some("IPC reconnect throttled")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_refresh_tasks_retries_after_cooldown_expires() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let mut plugin = OyaPlugin::new()?;
+        plugin.ipc = None;
+        plugin.ipc_address = "not-an-address".to_string();
+        plugin.last_ipc_connect_attempt_ms = Some(OyaPlugin::now_ms().saturating_sub(1000));
+
+        let result = plugin.refresh_tasks();
+
+        assert!(result.is_ok());
+        assert!(plugin
+            .status_message
+            .as_deref()
+            .is_some_and(|msg| msg.contains("IPC unavailable")));
+        Ok(())
+    }
+
+    #[test]
     fn test_plugin_restore_preserves_task_stage_history() -> Result<(), Box<dyn std::error::Error>>
     {
         let mut plugin = OyaPlugin::new()?;
@@ -1059,6 +1098,7 @@ impl OyaPlugin {
             selected_index: 0,
             ipc: None,
             ipc_address: "127.0.0.1:5555".to_string(),
+            last_ipc_connect_attempt_ms: None,
             status_message: None,
             auto_save_timer: None,
             last_save_timestamp: None,
@@ -1382,11 +1422,13 @@ impl OyaPlugin {
         match IpcClient::connect(address) {
             Ok(client) => {
                 self.ipc = Some(client);
+                self.last_ipc_connect_attempt_ms = None;
                 self.status_message = Some(format!("IPC connected to {address}"));
                 Ok(())
             }
             Err(err) => {
                 self.ipc = None;
+                self.last_ipc_connect_attempt_ms = Some(Self::now_ms());
                 self.status_message = Some(format!("IPC unavailable: {err}"));
                 Ok(())
             }
@@ -1508,9 +1550,25 @@ impl OyaPlugin {
             return true;
         }
 
+        const IPC_RECONNECT_COOLDOWN_MS: u64 = 250;
+        let now_ms = Self::now_ms();
+        let should_throttle = self
+            .last_ipc_connect_attempt_ms
+            .is_some_and(|last_attempt_ms| {
+                now_ms.saturating_sub(last_attempt_ms) < IPC_RECONNECT_COOLDOWN_MS
+            });
+
+        if should_throttle {
+            self.status_message = Some("IPC reconnect throttled".to_string());
+            return false;
+        }
+
+        self.last_ipc_connect_attempt_ms = Some(now_ms);
+
         match IpcClient::connect(&self.ipc_address) {
             Ok(client) => {
                 self.ipc = Some(client);
+                self.last_ipc_connect_attempt_ms = None;
                 self.status_message = Some(format!("IPC reconnected to {}", self.ipc_address));
                 true
             }
@@ -1519,6 +1577,12 @@ impl OyaPlugin {
                 false
             }
         }
+    }
+
+    fn now_ms() -> u64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or_else(|_| 0, |d| d.as_millis() as u64)
     }
 
     /// Get keybindings for a specific pane type
@@ -1697,6 +1761,7 @@ impl OyaPlugin {
         // IPC client is not restored (must be re-established)
         // Reset to None to force reconnection
         self.ipc = None;
+        self.last_ipc_connect_attempt_ms = None;
 
         Ok(())
     }
