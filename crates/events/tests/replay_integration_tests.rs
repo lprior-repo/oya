@@ -331,9 +331,9 @@ async fn bdd_event_replay_preserves_event_order() -> TestResult<()> {
     let transitions = [
         (BeadState::Pending, BeadState::Scheduled),
         (BeadState::Scheduled, BeadState::Ready),
-        (BeadState::Ready, BeadState::InProgress),
-        (BeadState::InProgress, BeadState::Review),
-        (BeadState::Review, BeadState::Completed),
+        (BeadState::Ready, BeadState::Running),
+        (BeadState::Running, BeadState::Suspended),
+        (BeadState::Suspended, BeadState::Completed),
     ];
 
     for (from, to) in transitions {
@@ -411,8 +411,8 @@ async fn bdd_event_replay_state_counts_match() -> TestResult<()> {
         let target_state = match i % 4 {
             0 => BeadState::Scheduled,
             1 => BeadState::Ready,
-            2 => BeadState::InProgress,
-            _ => BeadState::Review,
+            2 => BeadState::Running,
+            _ => BeadState::Suspended,
         };
         check_result(
             store
@@ -430,8 +430,8 @@ async fn bdd_event_replay_state_counts_match() -> TestResult<()> {
         BeadState::Pending,
         BeadState::Scheduled,
         BeadState::Ready,
-        BeadState::InProgress,
-        BeadState::Review,
+        BeadState::Running,
+        BeadState::Suspended,
     ] {
         assert_eq!(
             original.count_in_state(state),

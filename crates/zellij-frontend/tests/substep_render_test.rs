@@ -5,7 +5,7 @@
 #![allow(clippy::unwrap_used)]
 #![allow(clippy::expect_used)]
 
-use zellij_frontend::layout::{Layout, Pane, PaneType};
+use zellij_frontend::layout::{Layout, PaneType};
 use zellij_frontend::plugin::{StageInfo, StageState, SubStep, SubStepState, TaskRow};
 use zellij_frontend::render::Renderer;
 
