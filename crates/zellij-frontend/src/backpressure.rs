@@ -103,8 +103,9 @@ impl BackpressureState {
 
         self.is_throttled.store(should_throttle, Ordering::SeqCst);
 
-        let mut last_check = self.last_check.lock().map_err(|_| ()).unwrap();
-        *last_check = Instant::now();
+        if let Ok(mut last_check) = self.last_check.lock() {
+            *last_check = Instant::now();
+        }
     }
 
     /// Check if currently throttled

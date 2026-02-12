@@ -342,7 +342,7 @@ fn test_graceful_degradation_under_load() {
         let message = "Z".repeat(MESSAGE_SIZE);
         for i in 0..BURST_SIZE {
             let payload = format!("{:010}:{}", i, message);
-            if let Err(_) = writer.write_all(payload.as_bytes()) {
+            if writer.write_all(payload.as_bytes()).is_err() {
                 errors_clone.fetch_add(1, Ordering::SeqCst);
                 break;
             }
