@@ -162,7 +162,7 @@ impl CheckpointManager {
             );
         }
 
-        if let Some(m) = &snapshots_metrics.flatten() {
+        if let Some(Some(m)) = snapshots_metrics.as_ref() {
             tracing::debug!(
                 checkpoint_id = %checkpoint_id,
                 field = "workflow_snapshots",

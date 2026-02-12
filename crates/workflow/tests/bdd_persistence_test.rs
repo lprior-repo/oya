@@ -16,8 +16,8 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
-use oya_workflow::{storage::InMemoryStorage, types::Phase, Workflow};
-use std::time::Duration;
+use oya_workflow::{storage::InMemoryStorage, storage::WorkflowStorage, types::Phase, Workflow};
+ use std::time::Duration;
 
 /// Test helper: Create a sample workflow for testing.
 ///
