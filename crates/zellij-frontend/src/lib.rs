@@ -36,6 +36,7 @@ pub mod render;
 pub mod sparkline;
 
 // UI component modules (from oya-zellij)
+pub mod agent_info;
 pub mod correlation;
 pub mod health;
 pub mod integration_test_worker;
