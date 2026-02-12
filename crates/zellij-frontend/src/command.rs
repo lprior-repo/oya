@@ -290,6 +290,7 @@ pub fn parse_command(input: &str) -> ParseResult<ParsedCommand> {
         )),
         "export" => parse_export_command(parts.get(1..).unwrap_or(&[])),
         "sort" => parse_sort_command(parts.get(1..).unwrap_or(&[])),
+        "goto" => parse_goto_command(parts.get(1..).unwrap_or(&[])),
         unknown => Err(ParseError::UnknownCommand(unknown.to_string())),
     }
 }

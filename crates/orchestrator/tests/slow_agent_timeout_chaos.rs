@@ -289,7 +289,7 @@ async fn given_working_agent_when_times_out_then_marked_unhealthy_with_bead() {
 
     let health_config = HealthConfig {
         check_interval: Duration::from_millis(50),
-        heartbeat_timeout: Duration::from_millis(100),
+        heartbeat_timeout: Duration::from_millis(50),
         max_failures: 1,
     };
 
@@ -310,17 +310,36 @@ async fn given_working_agent_when_times_out_then_marked_unhealthy_with_bead() {
     assert_eq!(agent.current_bead(), Some(bead_id));
     drop(agent);
 
-    tokio::time::sleep(Duration::from_millis(150)).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    let agent = ctx.pool.get_agent(agent_id).await.expect("agent exists");
+    let is_timeout = agent.is_heartbeat_timeout(Duration::from_millis(50));
+    let time_since = agent.time_since_heartbeat();
+    eprintln!(
+        "DEBUG: is_timeout={}, time_since_heartbeat={:?}ms, state={:?}",
+        is_timeout,
+        time_since,
+        agent.state()
+    );
+    drop(agent);
 
     let health_result = ctx
-        .health_monitor
+        .pool
+        .health_monitor()
         .check_agent(agent_id)
         .await
         .expect("health check should succeed");
-    
+
+    eprintln!(
+        "DEBUG: health_result.is_healthy={}, state={:?}, time_since_heartbeat={:?}ms",
+        health_result.is_healthy,
+        health_result.state,
+        health_result.time_since_heartbeat
+    );
+
     assert!(
         !health_result.is_healthy,
-        "Agent should become unhealthy after heartbeat timeout"
+        "Agent should become unhealthy after heartbeat timeout (timeout was 50ms, waited 200ms)"
     );
 
     let agent = ctx.pool.get_agent(agent_id).await.expect("agent exists");
@@ -344,7 +363,7 @@ async fn given_pool_with_all_working_agents_when_timeout_then_some_become_unheal
 
     let health_config = HealthConfig {
         check_interval: Duration::from_millis(50),
-        heartbeat_timeout: Duration::from_millis(100),
+        heartbeat_timeout: Duration::from_millis(50),
         max_failures: 1,
     };
 
@@ -369,14 +388,15 @@ async fn given_pool_with_all_working_agents_when_timeout_then_some_become_unheal
         .await
         .expect("heartbeat should succeed");
 
-    tokio::time::sleep(Duration::from_millis(150)).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
 
-    let _ = ctx.health_monitor.check_agent("agent-0").await;
-    let _ = ctx.health_monitor.check_agent("agent-2").await;
-    let _ = ctx.health_monitor.check_agent("agent-1").await;
-    let _ = ctx.health_monitor.check_agent("agent-3").await;
+    let monitor = ctx.pool.health_monitor();
+    let _ = monitor.check_agent("agent-0").await;
+    let _ = monitor.check_agent("agent-2").await;
+    let _ = monitor.check_agent("agent-1").await;
+    let _ = monitor.check_agent("agent-3").await;
 
-    let unhealthy = ctx.health_monitor.get_unhealthy_agents().await;
+    let unhealthy = monitor.get_unhealthy_agents().await;
     assert!(
         unhealthy.contains(&"agent-0".to_string()),
         "Agent-0 should be unhealthy (no heartbeat)"

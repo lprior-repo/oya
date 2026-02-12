@@ -15,18 +15,13 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
 use thiserror::Error;
 use tokio::sync::RwLock;
 use tracing::info;
 
 use orchestrator::agent_swarm::{
-    AgentHandle, AgentState, HealthCheckResult, HealthConfig, HealthMonitor,
+    AgentHandle, AgentStateLegacy, HealthCheckResult, HealthConfig, HealthMonitor,
 };
-
-// =============================================================================
-// Error Types
-// =============================================================================
 
 #[derive(Debug, Error)]
 pub enum ClockSkewChaosError {
@@ -51,10 +46,6 @@ pub enum ClockSkewChaosError {
 
 pub type ChaosResult<T> = Result<T, ClockSkewChaosError>;
 
-// =============================================================================
-// Test Context with Clock Manipulation
-// =============================================================================
-
 pub struct ClockSkewTestContext {
     agents: Arc<RwLock<std::collections::HashMap<String, AgentHandle>>>,
     health_monitor: HealthMonitor,
@@ -65,7 +56,10 @@ impl ClockSkewTestContext {
         let mut agents = std::collections::HashMap::new();
         for i in 0..num_agents {
             let agent_id = format!("agent-{i}");
-            agents.insert(agent_id.clone(), AgentHandle::new(&agent_id));
+            agents.insert(
+                agent_id.clone(),
+                AgentHandle::new(&agent_id).with_max_health_failures(health_config.max_failures),
+            );
         }
 
         let agents = Arc::new(RwLock::new(agents));
@@ -111,7 +105,11 @@ impl ClockSkewTestContext {
                 reason: format!("Agent {agent_id} not found"),
             })?;
 
-        let skewed_time = agent.last_heartbeat() - chrono::Duration::from_std(skew_duration).map_err(|e| ClockSkewChaosError::SetupFailed { reason: e.to_string() })?;
+        let skewed_time = agent.last_heartbeat()
+            - chrono::Duration::from_std(skew_duration)
+                .map_err(|e| ClockSkewChaosError::SetupFailed {
+                    reason: e.to_string(),
+                })?;
         agent.set_last_heartbeat_for_test(skewed_time);
         info!(
             "Simulated forward clock skew for {}: last_heartbeat moved back by {:?}",
@@ -132,7 +130,11 @@ impl ClockSkewTestContext {
                 reason: format!("Agent {agent_id} not found"),
             })?;
 
-        let skewed_time = agent.last_heartbeat() + chrono::Duration::from_std(skew_duration).map_err(|e| ClockSkewChaosError::SetupFailed { reason: e.to_string() })?;
+        let skewed_time = agent.last_heartbeat()
+            + chrono::Duration::from_std(skew_duration)
+                .map_err(|e| ClockSkewChaosError::SetupFailed {
+                    reason: e.to_string(),
+                })?;
         agent.set_last_heartbeat_for_test(skewed_time);
         info!(
             "Simulated backward clock skew for {}: last_heartbeat moved forward by {:?}",
@@ -150,7 +152,7 @@ impl ClockSkewTestContext {
             })
     }
 
-    pub async fn get_agent_state(&self, agent_id: &str) -> ChaosResult<AgentState> {
+    pub async fn get_agent_state(&self, agent_id: &str) -> ChaosResult<AgentStateLegacy> {
         let agents = self.agents.read().await;
         let agent = agents
             .get(agent_id)
@@ -176,10 +178,6 @@ impl ClockSkewTestContext {
         self.health_monitor.stop().await;
     }
 }
-
-// =============================================================================
-// Chaos Tests
-// =============================================================================
 
 #[tokio::test]
 async fn given_recent_heartbeat_when_clock_forward_skew_then_not_falsely_marked_unhealthy() {
@@ -351,7 +349,7 @@ async fn given_agent_with_bead_when_clock_skew_then_bead_remains_assigned() {
         .expect("assign should succeed");
 
     let state = ctx.get_agent_state(agent_id).await.expect("state check");
-    assert_eq!(state, AgentState::Working, "Agent should be working");
+    assert_eq!(state, AgentStateLegacy::Working, "Agent should be working");
 
     ctx.record_heartbeat(agent_id)
         .await
@@ -413,7 +411,7 @@ async fn given_ongoing_clock_skew_when_heartbeat_restored_then_recovered() {
 
     let recovered = ctx.get_agent_state(agent_id).await.expect("state check");
     assert!(
-        recovered == AgentState::Idle || recovered == AgentState::Working,
+        recovered == AgentStateLegacy::Idle || recovered == AgentStateLegacy::Working,
         "Agent should recover to healthy state after heartbeat (got {:?})",
         recovered
     );
@@ -506,7 +504,7 @@ async fn given_rapid_clock_fluctuations_then_health_state_stable() {
 
     let state = ctx.get_agent_state(agent_id).await.expect("state check");
     assert!(
-        state == AgentState::Idle,
+        state == AgentStateLegacy::Idle,
         "Agent should remain healthy despite clock fluctuations (state: {:?})",
         state
     );
@@ -607,7 +605,7 @@ async fn given_clock_skew_invariant_health_failures_bounded() {
     let state = ctx.get_agent_state(agent_id).await.expect("state check");
     assert_eq!(
         state,
-        AgentState::Unhealthy,
+        AgentStateLegacy::Unhealthy,
         "Agent should be unhealthy after max_failures"
     );
 
@@ -618,7 +616,7 @@ async fn given_clock_skew_invariant_health_failures_bounded() {
     let recovered_state = ctx.get_agent_state(agent_id).await.expect("state check");
     assert_eq!(
         recovered_state,
-        AgentState::Idle,
+        AgentStateLegacy::Idle,
         "Agent should recover to Idle after heartbeat"
     );
 
