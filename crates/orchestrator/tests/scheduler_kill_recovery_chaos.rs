@@ -338,6 +338,7 @@ async fn setup_chaos_test(test_name: &str) -> ChaosTestResult<ChaosTestContext> 
         supervisor,
         workflow_ids: Vec::new(),
         pre_kill_state: None,
+        replay_engine: None,
     })
 }
 
@@ -607,7 +608,8 @@ async fn test_invariant_workflow_count_non_decreasing() {
     let test_name = "workflow_count_invariant";
     info!("Starting test: {}", test_name);
 
-    let mut ctx = setup_chaos_test(test_name)
+    // Setup with persistence for state recovery
+    let mut ctx = setup_chaos_test_with_persistence(test_name)
         .await
         .expect("Failed to setup test context");
 

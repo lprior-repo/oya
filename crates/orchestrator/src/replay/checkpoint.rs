@@ -497,16 +497,22 @@ mod tests {
     async fn test_create_checkpoint_with_compression() {
         let mut manager = require_manager!(setup_manager().await);
 
-        let result = manager
-            .create_checkpoint(r#"{"state":"active","workflows":[]}"#, None)
-            .await;
+        let original_state = r#"{"state":"active","workflows":[]}"#;
+        let result = manager.create_checkpoint(original_state, None).await;
 
         assert!(result.is_ok(), "checkpoint creation should succeed");
 
-        if let Ok(cp) = result {
-            assert_eq!(cp.event_sequence, 0);
-            assert!(cp.scheduler_state.contains("active"));
-        }
+        let created = result.expect("checked is_ok");
+        assert_eq!(created.event_sequence, 0);
+
+        let retrieved = manager
+            .get_latest()
+            .await
+            .expect("get_latest should succeed");
+        assert_eq!(
+            retrieved.scheduler_state, original_state,
+            "decompressed state should match original"
+        );
     }
 
     #[tokio::test]

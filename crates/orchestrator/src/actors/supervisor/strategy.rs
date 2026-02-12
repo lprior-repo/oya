@@ -262,6 +262,7 @@ mod tests {
             restart_strategy: Box::new(OneForOne::new()),
             checkpoint_manager: None,
             replay_engine: None,
+            _periodic_checkpoint_shutdown_tx: None,
         }
     }
 
