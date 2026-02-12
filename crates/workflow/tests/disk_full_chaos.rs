@@ -638,11 +638,8 @@ async fn test_invariant_no_data_loss_on_disk_full() {
     }
 
     for (id, expected_state) in stored_ids.iter().zip(stored_states.iter()) {
-        let (data, _) = storage.load_checkpoint(id).expect("Should load stored checkpoint");
-
-        let restored: TestState = bincode::decode_from_slice(&data, bincode::config::standard())
-            .map(|(s, _)| s)
-            .expect("Should deserialize");
+        let restored: TestState = restore_checkpoint(id, &storage)
+            .expect("Should restore stored checkpoint");
 
         assert_eq!(
             restored, *expected_state,
