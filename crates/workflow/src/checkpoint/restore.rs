@@ -348,11 +348,11 @@ fn validate_version(data: &[u8]) -> RestoreResult<()> {
     let found = u32::from_le_bytes(version_bytes);
 
     if found != CHECKPOINT_VERSION {
-        return Err(RestoreError::VersionMismatch {
-            expected: CHECKPOINT_VERSION,
+        return Err(RestoreError::version_mismatch(
+            CHECKPOINT_VERSION,
             found,
-            reason: "checkpoint format version incompatible".to_string(),
-        });
+            "checkpoint format version incompatible",
+        ));
     }
 
     Ok(())

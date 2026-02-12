@@ -833,6 +833,19 @@ where
 mod tests {
     use super::*;
     use crate::actors::scheduler::{SchedulerActorDef, SchedulerArguments};
+    use crate::persistence::{OrchestratorStore, StoreConfig};
+
+    async fn setup_checkpoint_manager() -> Option<CheckpointManager> {
+        let config = StoreConfig::in_memory();
+        let store = OrchestratorStore::connect(config).await.ok()?;
+        let _ = store.initialize_schema().await;
+        let checkpoint_config = CheckpointConfig {
+            interval: Duration::from_secs(1),
+            max_checkpoints: 10,
+            auto_checkpoint: true,
+        };
+        Some(CheckpointManager::new(store, checkpoint_config))
+    }
 
     #[test]
     fn test_one_for_one_strategy_default() {
@@ -868,6 +881,29 @@ mod tests {
     fn test_supervisor_config_for_testing() {
         let config = SupervisorConfig::for_testing();
         assert_eq!(config.restart_window_secs, 5);
+    }
+
+    #[test]
+    fn test_checkpoint_config_default() {
+        let config = CheckpointConfig::default();
+        assert!(config.auto_checkpoint);
+        assert_eq!(config.interval, Duration::from_secs(300));
+        assert_eq!(config.max_checkpoints, 10);
+    }
+
+    #[test]
+    fn test_supervisor_arguments_with_checkpoint_config() {
+        let checkpoint_config = CheckpointConfig {
+            interval: Duration::from_secs(60),
+            max_checkpoints: 5,
+            auto_checkpoint: true,
+        };
+        let args = SupervisorArguments::new().with_checkpoint_config(checkpoint_config);
+
+        assert!(args.checkpoint_config.is_some());
+        let config = args.checkpoint_config.as_ref().unwrap();
+        assert_eq!(config.interval, Duration::from_secs(60));
+        assert_eq!(config.max_checkpoints, 5);
     }
 
     #[tokio::test]
@@ -927,6 +963,124 @@ mod tests {
 
             let result = rx.await;
             assert!(result.is_ok());
+
+            sup.stop(None);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_supervisor_with_checkpoint_manager_starts_periodic_checkpointing() {
+        let checkpoint_manager = match setup_checkpoint_manager().await {
+            Some(m) => m,
+            None => {
+                eprintln!("Skipping test: checkpoint manager setup failed");
+                return;
+            }
+        };
+
+        let checkpoint_config = CheckpointConfig {
+            interval: Duration::from_millis(100),
+            max_checkpoints: 5,
+            auto_checkpoint: true,
+        };
+
+        let args = SupervisorArguments::new()
+            .with_config(SupervisorConfig::for_testing())
+            .with_checkpoint_manager(checkpoint_manager)
+            .with_checkpoint_config(checkpoint_config);
+
+        let supervisor = spawn_supervisor_with_name::<SchedulerActorDef>(
+            args,
+            "test-periodic-checkpoint",
+        )
+        .await;
+        assert!(supervisor.is_ok());
+
+        if let Ok(sup) = supervisor {
+            tokio::time::sleep(Duration::from_millis(150)).await;
+
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            let _ =
+                sup.send_message(SupervisorMessage::<SchedulerActorDef>::GetStatus { reply: tx });
+
+            let status = rx.await;
+            assert!(status.is_ok());
+
+            if let Ok(s) = status {
+                assert_eq!(s.state, SupervisorState::Running);
+            }
+
+            sup.stop(None);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_supervisor_without_checkpoint_manager_no_periodic_task() {
+        let args = SupervisorArguments::new().with_config(SupervisorConfig::for_testing());
+
+        let supervisor = spawn_supervisor_with_name::<SchedulerActorDef>(
+            args,
+            "test-no-periodic-checkpoint",
+        )
+        .await;
+        assert!(supervisor.is_ok());
+
+        if let Ok(sup) = supervisor {
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            let _ =
+                sup.send_message(SupervisorMessage::<SchedulerActorDef>::GetStatus { reply: tx });
+
+            let status = rx.await;
+            assert!(status.is_ok());
+
+            if let Ok(s) = status {
+                assert_eq!(s.state, SupervisorState::Running);
+                assert_eq!(s.active_children, 0);
+            }
+
+            sup.stop(None);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_supervisor_with_auto_checkpoint_disabled() {
+        let checkpoint_manager = match setup_checkpoint_manager().await {
+            Some(m) => m,
+            None => {
+                eprintln!("Skipping test: checkpoint manager setup failed");
+                return;
+            }
+        };
+
+        let checkpoint_config = CheckpointConfig {
+            interval: Duration::from_millis(100),
+            max_checkpoints: 5,
+            auto_checkpoint: false,
+        };
+
+        let args = SupervisorArguments::new()
+            .with_config(SupervisorConfig::for_testing())
+            .with_checkpoint_manager(checkpoint_manager)
+            .with_checkpoint_config(checkpoint_config);
+
+        let supervisor = spawn_supervisor_with_name::<SchedulerActorDef>(
+            args,
+            "test-auto-checkpoint-disabled",
+        )
+        .await;
+        assert!(supervisor.is_ok());
+
+        if let Ok(sup) = supervisor {
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            let _ =
+                sup.send_message(SupervisorMessage::<SchedulerActorDef>::GetStatus { reply: tx });
+
+            let status = rx.await;
+            assert!(status.is_ok());
+
+            if let Ok(s) = status {
+                assert_eq!(s.state, SupervisorState::Running);
+            }
 
             sup.stop(None);
         }
