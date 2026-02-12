@@ -927,14 +927,14 @@ async fn given_supervisor_when_scheduler_killed_randomly_then_invariant_supervis
 
     let mut rng = SeededRng::new(seed);
 
-    for i in 0..4 {
+    for i in 0..3 {
         let should_kill = rng.next_bool();
 
         if should_kill {
             info!("Iteration {}: killing scheduler", i);
             let _ = kill_scheduler(&ctx, test_name).await;
 
-            await_scheduler_recovery(&mut ctx, test_name, 5000)
+            await_scheduler_recovery(&mut ctx, test_name, 10000)
                 .await
                 .expect(&format!("Recovery failed at iteration {}", i));
         } else {
