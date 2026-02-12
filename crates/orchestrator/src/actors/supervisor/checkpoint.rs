@@ -1,7 +1,14 @@
-//! Supervisor checkpoint functionality for graceful shutdown.
+//! Supervisor checkpoint functionality for graceful shutdown and crash recovery.
 //!
-//! This module provides checkpoint creation during supervisor shutdown,
-//! capturing supervisor state for recovery purposes.
+//! This module provides:
+//! - Checkpoint creation during supervisor shutdown
+//! - Crash recovery during supervisor pre_start
+//!
+//! The crash recovery process:
+//! 1. Checks for existing checkpoints from previous crashes
+//! 2. Loads the latest checkpoint if available
+//! 3. Restores supervisor state from the checkpoint
+//! 4. Returns recovery result indicating what was restored
 
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
@@ -23,9 +30,9 @@ use crate::replay::CheckpointManager;
 use crate::shutdown::CheckpointResult;
 
 use super::GenericSupervisableActor;
-use super::supervisor_actor::{SupervisorActorState, SupervisorConfig};
+use super::supervisor_actor::{SupervisorActorState, SupervisorConfig, SupervisorState};
 
-/// Errors that can occur during supervisor checkpoint creation.
+/// Errors that can occur during supervisor checkpoint operations.
 #[derive(Debug, Error)]
 pub enum SupervisorCheckpointError {
     /// `CheckpointManager` not available in supervisor state.
@@ -35,6 +42,10 @@ pub enum SupervisorCheckpointError {
     /// Failed to serialize supervisor state to JSON.
     #[error("Serialization failed: {reason}")]
     SerializationFailed { reason: String },
+
+    /// Failed to deserialize checkpoint data.
+    #[error("Deserialization failed: {reason}")]
+    DeserializationFailed { reason: String },
 
     /// Checkpoint creation timed out (25 second limit).
     #[error("Checkpoint timeout after {duration_ms}ms")]
@@ -57,6 +68,10 @@ pub enum SupervisorCheckpointError {
         /// Description of invalid state.
         reason: String,
     },
+
+    /// No checkpoint found for recovery.
+    #[error("No checkpoint found for recovery")]
+    NoCheckpointFound,
 }
 
 /// Serializable snapshot of supervisor state for checkpoint.
@@ -91,6 +106,187 @@ pub struct ChildSnapshot {
     pub last_restart: Option<DateTime<Utc>>,
     /// Actor arguments (JSON-serialized).
     pub args: String,
+}
+
+/// Result of crash recovery attempt.
+#[derive(Debug, Clone)]
+pub struct RecoveryResult {
+    /// Whether recovery was performed from a checkpoint.
+    pub recovered: bool,
+    /// ID of the checkpoint used (if any).
+    pub checkpoint_id: Option<String>,
+    /// Number of children restored from checkpoint.
+    pub children_restored: usize,
+    /// Total restarts restored from checkpoint.
+    pub total_restarts: u32,
+    /// Child ID counter restored from checkpoint.
+    pub child_id_counter: u64,
+    /// Time of the snapshot used for recovery.
+    pub snapshot_time: Option<DateTime<Utc>>,
+}
+
+impl Default for RecoveryResult {
+    fn default() -> Self {
+        Self {
+            recovered: false,
+            checkpoint_id: None,
+            children_restored: 0,
+            total_restarts: 0,
+            child_id_counter: 0,
+            snapshot_time: None,
+        }
+    }
+}
+
+impl RecoveryResult {
+    /// Create a result indicating no recovery was performed.
+    #[must_use]
+    pub const fn no_recovery() -> Self {
+        Self {
+            recovered: false,
+            checkpoint_id: None,
+            children_restored: 0,
+            total_restarts: 0,
+            child_id_counter: 0,
+            snapshot_time: None,
+        }
+    }
+
+    /// Create a result from a successful recovery.
+    #[must_use]
+    pub const fn from_snapshot(snapshot: &SupervisorSnapshot, checkpoint_id: String) -> Self {
+        Self {
+            recovered: true,
+            checkpoint_id: Some(checkpoint_id),
+            children_restored: snapshot.children.len(),
+            total_restarts: snapshot.total_restarts,
+            child_id_counter: snapshot.child_id_counter,
+            snapshot_time: Some(snapshot.snapshot_time),
+        }
+    }
+}
+
+/// Attempt crash recovery from the latest checkpoint during pre_start.
+///
+/// This function is called during supervisor initialization to recover
+/// state from a previous crash. If a checkpoint exists, it loads the
+/// snapshot and restores supervisor state.
+///
+/// # Errors
+///
+/// Returns `SupervisorCheckpointError` if:
+/// - Checkpoint exists but deserialization fails
+/// - Checkpoint persistence layer fails
+///
+/// Note: If no checkpoint exists, returns `Ok(RecoveryResult::no_recovery())`.
+///
+/// # Example
+///
+/// ```ignore
+/// let result = attempt_crash_recovery(&checkpoint_manager).await?;
+/// if result.recovered {
+///     info!("Recovered from checkpoint {:?}", result.checkpoint_id);
+/// }
+/// ```
+pub async fn attempt_crash_recovery(
+    checkpoint_manager: Option<&CheckpointManager>,
+) -> Result<RecoveryResult, SupervisorCheckpointError> {
+    let checkpoint_manager = match checkpoint_manager {
+        Some(cm) => cm,
+        None => return Ok(RecoveryResult::no_recovery()),
+    };
+
+    info!("Attempting crash recovery from checkpoint");
+
+    let checkpoint = match checkpoint_manager.get_latest().await {
+        Ok(cp) => cp,
+        Err(PersistenceError::NotFound { .. }) => {
+            info!("No checkpoint found, starting fresh");
+            return Ok(RecoveryResult::no_recovery());
+        }
+        Err(e) => {
+            warn!(error = %e, "Failed to query checkpoints");
+            return Err(SupervisorCheckpointError::CheckpointPersistenceFailed { source: e });
+        }
+    };
+
+    let snapshot: SupervisorSnapshot =
+        serde_json::from_str(&checkpoint.scheduler_state).map_err(|e| {
+            error!(error = %e, "Failed to deserialize supervisor snapshot");
+            SupervisorCheckpointError::DeserializationFailed {
+                reason: e.to_string(),
+            }
+        })?;
+
+    info!(
+        checkpoint_id = %checkpoint.checkpoint_id,
+        children = snapshot.children.len(),
+        total_restarts = snapshot.total_restarts,
+        "Recovered supervisor state from checkpoint"
+    );
+
+    Ok(RecoveryResult::from_snapshot(
+        &snapshot,
+        checkpoint.checkpoint_id,
+    ))
+}
+
+/// Apply recovered snapshot to supervisor state.
+///
+/// This function takes a recovered snapshot and applies it to the
+/// supervisor state, restoring configuration, counters, and metadata.
+///
+/// Note: Children must be re-spawned separately as actor references
+/// cannot be persisted.
+pub fn apply_recovery_to_state<A>(state: &mut SupervisorActorState<A>, snapshot: SupervisorSnapshot)
+where
+    A: GenericSupervisableActor,
+    A::Arguments: Clone + Send + Sync + std::fmt::Debug,
+    A::Msg: Send,
+{
+    state.config = snapshot.config;
+    state.total_restarts = snapshot.total_restarts;
+    state.child_id_counter = snapshot.child_id_counter;
+    state.state = SupervisorState::Running;
+
+    info!(
+        total_restarts = state.total_restarts,
+        child_id_counter = state.child_id_counter,
+        "Applied recovery to supervisor state"
+    );
+}
+
+/// Load snapshot from checkpoint manager.
+///
+/// Returns the snapshot if a checkpoint exists, or None if no checkpoint.
+///
+/// # Errors
+///
+/// Returns `SupervisorCheckpointError` if checkpoint exists but cannot be loaded.
+pub async fn load_recovery_snapshot(
+    checkpoint_manager: Option<&CheckpointManager>,
+) -> Result<Option<(SupervisorSnapshot, String)>, SupervisorCheckpointError> {
+    let checkpoint_manager = match checkpoint_manager {
+        Some(cm) => cm,
+        None => return Ok(None),
+    };
+
+    let checkpoint = match checkpoint_manager.get_latest().await {
+        Ok(cp) => cp,
+        Err(PersistenceError::NotFound { .. }) => return Ok(None),
+        Err(e) => {
+            return Err(SupervisorCheckpointError::CheckpointPersistenceFailed { source: e });
+        }
+    };
+
+    let snapshot: SupervisorSnapshot =
+        serde_json::from_str(&checkpoint.scheduler_state).map_err(|e| {
+            SupervisorCheckpointError::DeserializationFailed {
+                reason: e.to_string(),
+            }
+        })?;
+
+    Ok(Some((snapshot, checkpoint.checkpoint_id)))
 }
 
 impl<A: GenericSupervisableActor> SupervisorActorState<A>
@@ -328,5 +524,126 @@ mod tests {
         let error = SupervisorCheckpointError::CheckpointTimeout { duration_ms: 1000 };
         assert!(error.to_string().contains("timeout"));
         assert!(error.to_string().contains("1000"));
+    }
+
+    #[test]
+    fn test_recovery_result_default() {
+        let result = RecoveryResult::default();
+        assert!(!result.recovered);
+        assert!(result.checkpoint_id.is_none());
+        assert_eq!(result.children_restored, 0);
+        assert_eq!(result.total_restarts, 0);
+        assert_eq!(result.child_id_counter, 0);
+    }
+
+    #[test]
+    fn test_recovery_result_no_recovery() {
+        let result = RecoveryResult::no_recovery();
+        assert!(!result.recovered);
+        assert!(result.checkpoint_id.is_none());
+    }
+
+    #[test]
+    fn test_recovery_result_from_snapshot() {
+        let snapshot = SupervisorSnapshot {
+            config: SupervisorConfig::default(),
+            active_children: 3,
+            total_restarts: 7,
+            children: vec![
+                ChildSnapshot {
+                    name: "child-1".to_string(),
+                    restart_count: 2,
+                    last_restart: None,
+                    args: "{}".to_string(),
+                },
+                ChildSnapshot {
+                    name: "child-2".to_string(),
+                    restart_count: 1,
+                    last_restart: None,
+                    args: "{}".to_string(),
+                },
+            ],
+            failure_count_in_window: 2,
+            child_id_counter: 42,
+            snapshot_time: Utc::now(),
+            shutdown_reason: None,
+        };
+
+        let result = RecoveryResult::from_snapshot(&snapshot, "cp-test-123".to_string());
+
+        assert!(result.recovered);
+        assert_eq!(result.checkpoint_id, Some("cp-test-123".to_string()));
+        assert_eq!(result.children_restored, 2);
+        assert_eq!(result.total_restarts, 7);
+        assert_eq!(result.child_id_counter, 42);
+        assert!(result.snapshot_time.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_attempt_crash_recovery_no_manager() {
+        let result = attempt_crash_recovery(None).await;
+        assert!(result.is_ok());
+
+        let recovery = result.expect("result should be ok");
+        assert!(!recovery.recovered);
+    }
+
+    #[tokio::test]
+    async fn test_load_recovery_snapshot_no_manager() {
+        let result = load_recovery_snapshot(None).await;
+        assert!(result.is_ok());
+
+        let snapshot = result.expect("result should be ok");
+        assert!(snapshot.is_none());
+    }
+
+    #[test]
+    fn test_apply_recovery_to_state() {
+        let mut state = SupervisorActorState::<SchedulerActorDef> {
+            config: SupervisorConfig::default(),
+            state: SupervisorState::Running,
+            children: std::collections::HashMap::new(),
+            failure_times: vec![],
+            total_restarts: 0,
+            child_id_counter: 0,
+            shutdown_coordinator: None,
+            _shutdown_rx: None,
+            restart_strategy: Box::new(OneForOne::new()),
+            checkpoint_manager: None,
+            replay_engine: None,
+        };
+
+        let snapshot = SupervisorSnapshot {
+            config: SupervisorConfig::for_testing(),
+            active_children: 2,
+            total_restarts: 15,
+            children: vec![],
+            failure_count_in_window: 3,
+            child_id_counter: 99,
+            snapshot_time: Utc::now(),
+            shutdown_reason: None,
+        };
+
+        apply_recovery_to_state(&mut state, snapshot);
+
+        assert_eq!(state.config.restart_window_secs, 5); // for_testing config
+        assert_eq!(state.total_restarts, 15);
+        assert_eq!(state.child_id_counter, 99);
+        assert_eq!(state.state, SupervisorState::Running);
+    }
+
+    #[test]
+    fn test_deserialization_error_display() {
+        let error = SupervisorCheckpointError::DeserializationFailed {
+            reason: "invalid JSON".to_string(),
+        };
+        assert!(error.to_string().contains("Deserialization failed"));
+        assert!(error.to_string().contains("invalid JSON"));
+    }
+
+    #[test]
+    fn test_no_checkpoint_found_error_display() {
+        let error = SupervisorCheckpointError::NoCheckpointFound;
+        assert!(error.to_string().contains("No checkpoint found"));
     }
 }

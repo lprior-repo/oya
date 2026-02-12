@@ -82,6 +82,7 @@ pub enum InitError {
 
 impl InitError {
     /// Get the exit code for this error
+    #[must_use]
     pub const fn exit_code(&self) -> i32 {
         match self {
             Self::DirectoryExists { .. } => 3,
@@ -94,6 +95,7 @@ impl InitError {
     }
 
     /// Get a hint for remediation
+    #[must_use]
     pub fn hint(&self) -> Option<String> {
         match self {
             Self::DirectoryExists { .. } => {

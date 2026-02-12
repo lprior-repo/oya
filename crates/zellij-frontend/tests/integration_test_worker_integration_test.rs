@@ -51,9 +51,11 @@ fn discover_tests_returns_only_rust_test_files() -> Result<(), Box<dyn std::erro
     let tests = worker.discover_tests()?;
 
     assert_eq!(tests.len(), 2);
-    assert!(tests
-        .iter()
-        .all(|path| path.extension().and_then(|s| s.to_str()) == Some("rs")));
+    assert!(
+        tests
+            .iter()
+            .all(|path| path.extension().and_then(|s| s.to_str()) == Some("rs"))
+    );
     Ok(())
 }
 

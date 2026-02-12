@@ -385,7 +385,7 @@ impl Actor for IpcWorkerActorDef {
 
     async fn pre_start(
         &self,
-        myself: ActorRef<Self::Msg>,
+        _myself: ActorRef<Self::Msg>,
         args: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
         info!("IpcWorker starting");
@@ -576,7 +576,7 @@ impl Actor for IpcWorkerActorDef {
 
     async fn post_stop(
         &self,
-        myself: ActorRef<Self::Msg>,
+        _myself: ActorRef<Self::Msg>,
         _state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         info!("IpcWorker stopping");

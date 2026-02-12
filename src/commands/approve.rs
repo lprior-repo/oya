@@ -36,7 +36,7 @@ pub struct ApproveOutput {
 /// Returns error if task cannot be found, is not eligible for integration, or force flag is not set
 pub async fn approve_command(args: ApproveArgs) -> Result<ApproveOutput> {
     let root = args.root.unwrap_or_else(|| PathBuf::from("."));
-    let slug = Slug::new(&args.slug)?;
+    let _slug = Slug::new(&args.slug)?;
 
     // Load existing task
     let task = load_task_record(args.slug.as_str(), &root).await?;

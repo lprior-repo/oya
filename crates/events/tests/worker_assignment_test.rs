@@ -55,7 +55,7 @@ async fn test_worker_assignment_create() -> Result<(), String> {
     let client = init_test_db().await?;
 
     // Create a worker assignment
-    let _result = client
+    client
         .client()
         .query(
             "CREATE worker_assignment CONTENT {
@@ -66,7 +66,7 @@ async fn test_worker_assignment_create() -> Result<(), String> {
             }",
         )
         .await
-        .expect("Query should execute");
+        .map_err(|e| format!("Query should execute: {e}"))?;
 
     // If no error, creation succeeded
     assert!(true);
@@ -88,17 +88,19 @@ async fn test_worker_assignment_query_by_bead_id() -> Result<(), String> {
             }",
         )
         .await
-        .expect("Create should succeed");
+        .map_err(|e| format!("Create should succeed: {e}"))?;
 
     // Query by bead_id
     let mut result = client
         .client()
         .query("SELECT * FROM worker_assignment WHERE bead_id = 'bead-456'")
         .await
-        .expect("Query should execute");
+        .map_err(|e| format!("Query should execute: {e}"))?;
 
     // Check that we got results
-    let assignments: Vec<serde_json::Value> = result.take(0).expect("Should get result");
+    let assignments: Vec<serde_json::Value> = result
+        .take(0)
+        .map_err(|_| "Should get result".to_string())?;
     assert!(
         !assignments.is_empty(),
         "Should find assignment for bead-456"
@@ -121,7 +123,7 @@ async fn test_worker_assignment_query_by_worker_id() -> Result<(), String> {
             }",
         )
         .await
-        .expect("Create should succeed");
+        .map_err(|e| format!("Create should succeed: {e}"))?;
 
     client
         .client()
@@ -133,17 +135,19 @@ async fn test_worker_assignment_query_by_worker_id() -> Result<(), String> {
             }",
         )
         .await
-        .expect("Create should succeed");
+        .map_err(|e| format!("Create should succeed: {e}"))?;
 
     // Query by worker_id
     let mut result = client
         .client()
         .query("SELECT * FROM worker_assignment WHERE worker_id = 'worker-c'")
         .await
-        .expect("Query should execute");
+        .map_err(|e| format!("Query should execute: {e}"))?;
 
     // Check that we got results
-    let assignments: Vec<serde_json::Value> = result.take(0).expect("Should get result");
+    let assignments: Vec<serde_json::Value> = result
+        .take(0)
+        .map_err(|_| "Should get result".to_string())?;
     assert!(
         !assignments.is_empty(),
         "Should find assignments for worker-c"
@@ -166,7 +170,7 @@ async fn test_worker_assignment_uniqueness_per_bead() -> Result<(), String> {
             }",
         )
         .await
-        .expect("First create should succeed");
+        .map_err(|e| format!("First create should succeed: {e}"))?;
 
     // Try to create second assignment with same bead_id (should fail)
     let result = client
@@ -204,10 +208,10 @@ async fn test_worker_assignment_update() -> Result<(), String> {
             }",
         )
         .await
-        .expect("Create should succeed");
+        .map_err(|e| format!("Create should succeed: {e}"))?;
 
     // Update worker_id
-    let _result = client
+    client
         .client()
         .query(
             "UPDATE worker_assignment CONTENT {
@@ -217,23 +221,28 @@ async fn test_worker_assignment_update() -> Result<(), String> {
             }",
         )
         .await
-        .expect("Update should execute");
+        .map_err(|e| format!("Update should execute: {e}"))?;
 
     // Verify update
     let mut result = client
         .client()
         .query("SELECT * FROM worker_assignment WHERE assignment_id = 'assign-6'")
         .await
-        .expect("Query should execute");
+        .map_err(|e| format!("Query should execute: {e}"))?;
 
-    let assignments: Vec<serde_json::Value> = result.take(0).expect("Should get result");
+    let assignments: Vec<serde_json::Value> = result
+        .take(0)
+        .map_err(|_| "Should get result".to_string())?;
     assert_eq!(assignments.len(), 1, "Should find exactly one assignment");
 
     let assignment = &assignments[0];
-    if let Some(worker_id) = assignment.get("worker_id").and_then(|v| v.as_str()) {
+    if let Some(worker_id) = assignment
+        .get("worker_id")
+        .and_then(|v: &serde_json::Value| v.as_str())
+    {
         assert_eq!(worker_id, "worker-e", "Worker ID should be updated");
     } else {
-        panic!("Worker ID field should exist");
+        return Err("Worker ID field should exist".to_string());
     }
     Ok(())
 }
@@ -253,23 +262,25 @@ async fn test_worker_assignment_delete() -> Result<(), String> {
             }",
         )
         .await
-        .expect("Create should succeed");
+        .map_err(|e| format!("Create should succeed: {e}"))?;
 
     // Delete assignment
-    let _result = client
+    client
         .client()
         .query("DELETE worker_assignment WHERE bead_id = 'bead-delete'")
         .await
-        .expect("Delete should execute");
+        .map_err(|e| format!("Delete should execute: {e}"))?;
 
     // Verify deletion
     let mut result = client
         .client()
         .query("SELECT * FROM worker_assignment WHERE bead_id = 'bead-delete'")
         .await
-        .expect("Query should execute");
+        .map_err(|e| format!("Query should execute: {e}"))?;
 
-    let assignments: Vec<serde_json::Value> = result.take(0).expect("Should get result");
+    let assignments: Vec<serde_json::Value> = result
+        .take(0)
+        .map_err(|_| "Should get result".to_string())?;
     assert!(assignments.is_empty(), "Assignment should be deleted");
     Ok(())
 }
@@ -294,7 +305,7 @@ async fn test_worker_assignment_multiple_workers_distribution() -> Result<(), St
                 i, bead, worker
             ))
             .await
-            .expect("Create should succeed");
+            .map_err(|e| format!("Create should succeed: {e}"))?;
     }
 
     // Query all assignments
@@ -302,9 +313,11 @@ async fn test_worker_assignment_multiple_workers_distribution() -> Result<(), St
         .client()
         .query("SELECT * FROM worker_assignment")
         .await
-        .expect("Query should execute");
+        .map_err(|e| format!("Query should execute: {e}"))?;
 
-    let assignments: Vec<serde_json::Value> = result.take(0).expect("Should get result");
+    let assignments: Vec<serde_json::Value> = result
+        .take(0)
+        .map_err(|_| "Should get result".to_string())?;
     assert!(
         assignments.len() >= 3,
         "Should retrieve at least 3 worker assignments, got {}",
@@ -328,7 +341,7 @@ async fn test_worker_assignment_bead_id_unique_index() -> Result<(), String> {
             }",
         )
         .await
-        .expect("First create should succeed");
+        .map_err(|e| format!("First create should succeed: {e}"))?;
 
     // Try to create duplicate bead_id
     let result = client

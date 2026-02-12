@@ -50,7 +50,9 @@ pub enum ConfigValidationError {
     #[error("Field '{field}' has invalid value: {reason}")]
     InvalidValue { field: String, reason: String },
 
-    #[error("Auto-save interval must be between {min_interval} and {max_interval} seconds, got {interval}")]
+    #[error(
+        "Auto-save interval must be between {min_interval} and {max_interval} seconds, got {interval}"
+    )]
     InvalidAutoSaveInterval {
         interval: u64,
         min_interval: u64,
@@ -85,7 +87,7 @@ pub struct ValidatedConfig {
 ///
 /// Returns an error if rows or cols are outside valid range
 pub fn validate_size(rows: usize, cols: usize) -> Result<(), ConfigValidationError> {
-    if rows < MIN_ROWS || rows > MAX_ROWS {
+    if !(MIN_ROWS..=MAX_ROWS).contains(&rows) {
         return Err(ConfigValidationError::InvalidRows {
             rows,
             min_rows: MIN_ROWS,
@@ -93,7 +95,7 @@ pub fn validate_size(rows: usize, cols: usize) -> Result<(), ConfigValidationErr
         });
     }
 
-    if cols < MIN_COLS || cols > MAX_COLS {
+    if !(MIN_COLS..=MAX_COLS).contains(&cols) {
         return Err(ConfigValidationError::InvalidCols {
             cols,
             min_cols: MIN_COLS,
@@ -135,7 +137,7 @@ pub fn validate_size_from_json(
 ///
 /// Returns an error if interval is outside valid range
 pub fn validate_auto_save_interval(interval: u64) -> Result<u64, ConfigValidationError> {
-    if interval < MIN_AUTO_SAVE_INTERVAL || interval > MAX_AUTO_SAVE_INTERVAL {
+    if !(MIN_AUTO_SAVE_INTERVAL..=MAX_AUTO_SAVE_INTERVAL).contains(&interval) {
         return Err(ConfigValidationError::InvalidAutoSaveInterval {
             interval,
             min_interval: MIN_AUTO_SAVE_INTERVAL,
@@ -172,10 +174,12 @@ pub fn validate_ipc_address(address: &str) -> Result<String, ConfigValidationErr
     if address.contains(':') {
         let parts: Vec<&str> = address.rsplitn(2, ':').collect();
         if parts.len() == 2 {
-            let host = parts[1];
-            let port = parts[0];
-            if host.parse::<u16>().is_ok() || port.parse::<u16>().is_ok() {
-                return Ok(address.to_string());
+            let host = parts.get(1);
+            let port = parts.first();
+            if let (Some(h), Some(p)) = (host, port) {
+                if h.parse::<u16>().is_ok() || p.parse::<u16>().is_ok() {
+                    return Ok(address.to_string());
+                }
             }
         }
     }

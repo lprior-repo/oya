@@ -24,6 +24,7 @@
 #![warn(clippy::unwrap_in_result)]
 
 // Zellij plugin modules (from oya-ui)
+pub mod command;
 pub mod components;
 pub mod config_validation;
 pub mod exports;

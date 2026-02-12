@@ -30,8 +30,6 @@
 #![cfg_attr(test, allow(clippy::unwrap_used))]
 #![cfg_attr(test, allow(clippy::panic))]
 
-use std::sync::Arc;
-
 pub use oya_core::{Error, Result};
 
 /// Actor-based concurrency for the orchestrator.

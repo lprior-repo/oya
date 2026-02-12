@@ -142,7 +142,7 @@ impl EventSourcingReplay {
         let result =
             super::resume::resume_from_checkpoint(checkpoint_id, &checkpoint_store, &event_log);
 
-        result.map_err(|e| ReplayResumeError::from(e))
+        result.map_err(ReplayResumeError::from)
     }
 }
 

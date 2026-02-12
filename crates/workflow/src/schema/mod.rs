@@ -9,8 +9,8 @@
 
 pub mod isolation;
 pub mod limits;
+pub mod sticky;
 
-// Re-export commonly used types
 pub use isolation::{
     IsolationError, Schedule, ScheduleConfig, Workspace, WorkspaceConfig, WorkspacePath,
     WorkspaceStatus,
@@ -18,4 +18,10 @@ pub use isolation::{
 pub use limits::{
     ConcurrencyLimit, ConcurrencyLimitConfig, RateLimitError, ResourceId, TokenBucket,
     TokenBucketConfig,
+};
+pub use sticky::{
+    build_count_by_worker_query, build_create_assignment_query, build_delete_by_bead_query,
+    build_find_all_query, build_find_by_bead_query, build_find_by_worker_query,
+    build_update_worker_query, AssignmentId, BeadIdRef, StickyAssignment, StickyAssignmentError,
+    WorkerIdRef,
 };

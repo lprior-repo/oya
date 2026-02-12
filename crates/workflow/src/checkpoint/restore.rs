@@ -28,6 +28,36 @@ const VERSION_HEADER_SIZE: usize = 12;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct CheckpointId([u8; 16]);
 
+/// Errors that can occur when parsing a checkpoint ID.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CheckpointIdParseError {
+    /// The input string was empty.
+    Empty,
+    /// The input has an invalid format.
+    InvalidFormat { input: String },
+    /// The UUID has an invalid version (must be v4).
+    InvalidVersion { found: u8 },
+    /// The UUID is all zeros (nil UUID).
+    NilUuid,
+}
+
+impl std::fmt::Display for CheckpointIdParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Empty => write!(f, "checkpoint ID cannot be empty"),
+            Self::InvalidFormat { input } => {
+                write!(f, "invalid checkpoint ID format: '{input}'")
+            }
+            Self::InvalidVersion { found } => {
+                write!(f, "invalid UUID version: expected v4, found v{found}")
+            }
+            Self::NilUuid => write!(f, "checkpoint ID cannot be nil (all zeros)"),
+        }
+    }
+}
+
+impl std::error::Error for CheckpointIdParseError {}
+
 impl CheckpointId {
     /// Create a new checkpoint ID.
     #[must_use]
@@ -45,6 +75,45 @@ impl CheckpointId {
     #[must_use]
     pub const fn as_bytes(&self) -> &[u8; 16] {
         &self.0
+    }
+
+    /// Parse a checkpoint ID from a string.
+    ///
+    /// Accepts UUID format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`
+    ///
+    /// # Errors
+    ///
+    /// Returns `CheckpointIdParseError` if:
+    /// - The input is empty
+    /// - The format is invalid
+    /// - The UUID version is not v4
+    /// - The UUID is nil (all zeros)
+    pub fn parse(input: &str) -> Result<Self, CheckpointIdParseError> {
+        if input.is_empty() {
+            return Err(CheckpointIdParseError::Empty);
+        }
+
+        let parsed_uuid =
+            uuid::Uuid::parse_str(input).map_err(|_| CheckpointIdParseError::InvalidFormat {
+                input: input.to_string(),
+            })?;
+
+        if parsed_uuid.is_nil() {
+            return Err(CheckpointIdParseError::NilUuid);
+        }
+
+        let version = parsed_uuid.get_version();
+        match version {
+            Some(uuid::Version::Random) => {}
+            Some(v) => {
+                return Err(CheckpointIdParseError::InvalidVersion { found: v as u8 });
+            }
+            None => {
+                return Err(CheckpointIdParseError::InvalidVersion { found: 0 });
+            }
+        }
+
+        Ok(Self(*parsed_uuid.as_bytes()))
     }
 }
 
@@ -81,6 +150,8 @@ pub enum RestoreError {
     InvalidData { reason: String },
     /// Storage operation failed.
     StorageFailed { operation: String, reason: String },
+    /// Database has not been initialized.
+    DatabaseNotInitialized { reason: String },
 }
 
 impl std::fmt::Display for RestoreError {
@@ -110,6 +181,9 @@ impl std::fmt::Display for RestoreError {
             }
             Self::StorageFailed { operation, reason } => {
                 write!(f, "storage operation '{operation}' failed: {reason}")
+            }
+            Self::DatabaseNotInitialized { reason } => {
+                write!(f, "database not initialized: {reason}")
             }
         }
     }
@@ -163,6 +237,13 @@ impl RestoreError {
         }
     }
 
+    /// Create a database not initialized error.
+    pub fn database_not_initialized(reason: impl Into<String>) -> Self {
+        Self::DatabaseNotInitialized {
+            reason: reason.into(),
+        }
+    }
+
     /// Check if this error is retryable.
     #[must_use]
     pub const fn is_retryable(&self) -> bool {
@@ -203,6 +284,9 @@ fn load_checkpoint_data(
             StorageError::CodecFailed { reason } => RestoreError::InvalidData {
                 reason: format!("checkpoint data codec error: {reason}"),
             },
+            StorageError::DatabaseNotInitialized { reason } => {
+                RestoreError::DatabaseNotInitialized { reason }
+            }
         })
 }
 
@@ -672,6 +756,203 @@ mod tests {
             }
             .is_retryable(),
             "version mismatch should not be retryable"
+        );
+    }
+
+    // ==========================================================================
+    // CheckpointId Input Validation Tests (TDD RED Phase)
+    // ==========================================================================
+
+    /// Test: CheckpointId::parse accepts valid UUID format.
+    #[test]
+    fn test_checkpoint_id_parse_valid_uuid() {
+        let valid_uuid = "550e8400-e29b-41d4-a716-446655440000";
+        let result = CheckpointId::parse(valid_uuid);
+        assert!(result.is_ok(), "should accept valid UUID: {}", valid_uuid);
+    }
+
+    /// Test: CheckpointId::parse rejects empty string.
+    #[test]
+    fn test_checkpoint_id_parse_rejects_empty() {
+        let result = CheckpointId::parse("");
+        assert!(result.is_err(), "should reject empty string");
+        assert!(
+            matches!(result, Err(CheckpointIdParseError::Empty)),
+            "should return Empty error"
+        );
+    }
+
+    /// Test: CheckpointId::parse rejects string that is too long.
+    #[test]
+    fn test_checkpoint_id_parse_rejects_too_long() {
+        let too_long = "550e8400-e29b-41d4-a716-446655440000-extra";
+        let result = CheckpointId::parse(too_long);
+        assert!(result.is_err(), "should reject string that is too long");
+    }
+
+    /// Test: CheckpointId::parse rejects invalid UUID format.
+    #[test]
+    fn test_checkpoint_id_parse_rejects_invalid_format() {
+        let invalid_cases = vec![
+            "not-a-uuid",
+            "550e8400e29b41d4a716446655440000",
+            "GG0e8400-e29b-41d4-a716-446655440000",
+            "550e8400-e29b-41d4-a716",
+            "",
+        ];
+
+        for invalid in invalid_cases {
+            if invalid.is_empty() {
+                continue;
+            }
+            let result = CheckpointId::parse(invalid);
+            assert!(
+                result.is_err(),
+                "should reject invalid UUID format: {}",
+                invalid
+            );
+        }
+    }
+
+    /// Test: CheckpointId::parse rejects UUID with wrong version (not v4).
+    #[test]
+    fn test_checkpoint_id_parse_rejects_wrong_version() {
+        let uuid_v1 = "550e8400-e29b-11d4-a716-446655440000";
+        let result = CheckpointId::parse(uuid_v1);
+        assert!(result.is_err(), "should reject UUID that is not version 4");
+        assert!(
+            matches!(result, Err(CheckpointIdParseError::InvalidVersion { .. })),
+            "should return InvalidVersion error"
+        );
+    }
+
+    /// Test: CheckpointId::parse round-trips correctly.
+    #[test]
+    fn test_checkpoint_id_parse_roundtrip() {
+        let original = CheckpointId::new();
+        let uuid_string = original.to_string();
+        let parsed = CheckpointId::parse(&uuid_string);
+        assert!(parsed.is_ok(), "should parse generated UUID");
+        assert_eq!(
+            parsed.as_ref().map(|p| p.as_bytes()),
+            Ok(original.as_bytes()),
+            "round-trip should preserve bytes"
+        );
+    }
+
+    /// Test: ValidateCheckpointId function rejects nil UUID.
+    #[test]
+    fn test_validate_checkpoint_id_rejects_nil() {
+        let nil_uuid = "00000000-0000-0000-0000-000000000000";
+        let result = CheckpointId::parse(nil_uuid);
+        assert!(result.is_err(), "should reject nil UUID");
+        assert!(
+            matches!(result, Err(CheckpointIdParseError::NilUuid)),
+            "should return NilUuid error"
+        );
+    }
+
+    /// Test: CheckpointIdParseError Display implementation.
+    #[test]
+    fn test_checkpoint_id_parse_error_display() {
+        let err = CheckpointIdParseError::Empty;
+        assert!(err.to_string().contains("empty"));
+
+        let err = CheckpointIdParseError::InvalidFormat {
+            input: "bad".to_string(),
+        };
+        assert!(err.to_string().contains("invalid format"));
+
+        let err = CheckpointIdParseError::InvalidVersion { found: 1 };
+        assert!(err.to_string().contains("version"));
+        assert!(err.to_string().contains('1'));
+
+        let err = CheckpointIdParseError::NilUuid;
+        assert!(err.to_string().contains("nil"));
+    }
+
+    // ==========================================================================
+    // Database Initialization Error Handling Tests (TDD RED Phase)
+    // ==========================================================================
+
+    /// Test: DatabaseNotInitialized error creation.
+    #[test]
+    fn test_database_not_initialized_error() {
+        let err = RestoreError::database_not_initialized("checkpoints table missing");
+        assert!(
+            matches!(err, RestoreError::DatabaseNotInitialized { .. }),
+            "should be DatabaseNotInitialized variant"
+        );
+        let display = err.to_string();
+        assert!(
+            display.contains("database not initialized"),
+            "error message should contain 'database not initialized', got: {display}"
+        );
+        assert!(
+            display.contains("checkpoints table missing"),
+            "error message should contain reason, got: {display}"
+        );
+    }
+
+    /// Test: DatabaseNotInitialized is NOT retryable (requires manual intervention).
+    #[test]
+    fn test_database_not_initialized_not_retryable() {
+        let err = RestoreError::database_not_initialized("schema missing");
+        assert!(
+            !err.is_retryable(),
+            "DatabaseNotInitialized should not be retryable"
+        );
+    }
+
+    /// Test: Storage DatabaseNotInitialized maps to RestoreError::DatabaseNotInitialized.
+    #[test]
+    fn test_load_checkpoint_database_not_initialized() {
+        struct MockUninitializedStorage;
+
+        impl CheckpointStorage for MockUninitializedStorage {
+            fn store_checkpoint(
+                &mut self,
+                _data: Vec<u8>,
+                _metadata: CheckpointMetadata,
+            ) -> StorageResult<CheckpointId> {
+                Ok(CheckpointId::new())
+            }
+
+            fn load_checkpoint(
+                &self,
+                _id: &CheckpointId,
+            ) -> StorageResult<(Vec<u8>, CheckpointMetadata)> {
+                Err(StorageError::DatabaseNotInitialized {
+                    reason: "table 'checkpoints' does not exist".to_string(),
+                })
+            }
+
+            fn delete_checkpoint(&mut self, _id: &CheckpointId) -> StorageResult<()> {
+                Ok(())
+            }
+
+            fn list_checkpoints(&self) -> StorageResult<Vec<CheckpointId>> {
+                Ok(Vec::new())
+            }
+
+            fn get_stats(&self) -> StorageResult<StorageStats> {
+                Ok(StorageStats::default())
+            }
+
+            fn clear_all(&mut self) -> StorageResult<()> {
+                Ok(())
+            }
+        }
+
+        let storage = MockUninitializedStorage;
+        let checkpoint_id = CheckpointId::new();
+        let result: RestoreResult<String> = restore_checkpoint(&checkpoint_id, &storage);
+
+        assert!(result.is_err(), "should fail with uninitialized database");
+        assert!(
+            matches!(result, Err(RestoreError::DatabaseNotInitialized { .. })),
+            "should return DatabaseNotInitialized error, got: {:?}",
+            result
         );
     }
 }

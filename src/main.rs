@@ -4,13 +4,11 @@
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
 use tracing::info;
 
 use oya::commands::{
-    AddArgs, ApproveArgs, DoneArgs, FocusArgs, ListArgs, NewArgs, RemoveArgs, ShowArgs, SpawnArgs,
-    StageArgs, StatusArgs, SyncArgs, WorkspaceArgs, WorkspaceCommand, approve_command,
-    list_command, new_command, show_command, stage_command, workspace_add_command,
+    ApproveArgs, ListArgs, NewArgs, ShowArgs, StageArgs, WorkspaceArgs, WorkspaceCommand,
+    approve_command, list_command, new_command, show_command, stage_command, workspace_add_command,
     workspace_done_command, workspace_focus_command, workspace_list_command,
     workspace_remove_command, workspace_spawn_command, workspace_status_command,
     workspace_sync_command,

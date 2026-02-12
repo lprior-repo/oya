@@ -4,8 +4,8 @@
 
 use anyhow::Result;
 use clap::Parser;
+use oya_pipeline::resolve_stage_range;
 use oya_pipeline::{Slug, load_task_record, save_task_record};
-use oya_pipeline::{Stage, resolve_stage_range};
 use std::path::PathBuf;
 
 /// Arguments for the stage command
@@ -51,7 +51,7 @@ pub struct StageOutput {
 /// Returns error if task cannot be found, stage is invalid, or transition fails
 pub async fn stage_command(args: StageArgs) -> Result<StageOutput> {
     let root = args.root.unwrap_or_else(|| PathBuf::from("."));
-    let slug = Slug::new(&args.slug)?;
+    let _slug = Slug::new(&args.slug)?;
 
     // Load existing task
     let task = load_task_record(args.slug.as_str(), &root).await?;

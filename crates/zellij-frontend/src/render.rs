@@ -7,9 +7,11 @@
 // - Color and styling support
 // - Focused pane highlighting
 // - Help overlay rendering
+// - DAG visualization for workflow graphs
 
 use crate::layout::{Layout, Pane, PaneType};
 use crate::plugin::{StageInfo, StageState, TaskRow};
+use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 
 // Style helper functions using functional patterns
@@ -62,6 +64,311 @@ pub enum HelpOverlayError {
 
 /// Result type for help overlay rendering
 pub type HelpOverlayResult<T> = Result<T, HelpOverlayError>;
+
+/// Node status for DAG visualization
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum NodeStatus {
+    /// Node is pending execution
+    #[default]
+    Pending,
+    /// Node is currently in progress
+    InProgress,
+    /// Node completed successfully
+    Completed,
+    /// Node failed
+    Failed,
+    /// Node is blocked by dependencies
+    Blocked,
+}
+
+/// A node in the DAG for visualization
+#[derive(Debug, Clone, PartialEq)]
+pub struct DagNode {
+    /// Unique identifier for the node
+    pub id: String,
+    /// Display name for the node
+    pub name: String,
+    /// List of dependency node IDs
+    pub dependencies: Vec<String>,
+    /// Current status of the node
+    pub status: NodeStatus,
+}
+
+impl DagNode {
+    /// Create a new DAG node with default status
+    #[must_use]
+    pub fn new(id: &str, name: &str) -> Self {
+        Self {
+            id: id.to_string(),
+            name: name.to_string(),
+            dependencies: Vec::new(),
+            status: NodeStatus::default(),
+        }
+    }
+}
+
+/// Rendered DAG output
+#[derive(Debug, Clone)]
+pub struct RenderedDag {
+    /// Lines of rendered output
+    pub lines: Vec<String>,
+}
+
+/// Errors during DAG rendering
+#[derive(Debug, Error, Clone, PartialEq)]
+pub enum DagRenderError {
+    /// Cycle detected in the graph
+    #[error("Cycle detected in DAG: {cycle:?}")]
+    CycleDetected { cycle: Vec<String> },
+}
+
+/// DAG renderer for workflow visualization
+#[derive(Debug, Clone)]
+pub struct DagRenderer {
+    width: usize,
+    height: usize,
+}
+
+impl DagRenderer {
+    /// Create a new DAG renderer with default dimensions
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            width: 78,
+            height: 6,
+        }
+    }
+
+    /// Set custom dimensions
+    #[must_use]
+    pub const fn with_dimensions(mut self, width: usize, height: usize) -> Self {
+        self.width = width;
+        self.height = height;
+        self
+    }
+
+    /// Get the configured width
+    #[must_use]
+    pub const fn width(&self) -> usize {
+        self.width
+    }
+
+    /// Get the configured height
+    #[must_use]
+    pub const fn height(&self) -> usize {
+        self.height
+    }
+
+    /// Render a DAG to ASCII art
+    #[must_use]
+    pub fn render(&self, nodes: &[DagNode]) -> RenderedDag {
+        if nodes.is_empty() {
+            return RenderedDag {
+                lines: vec!["No workflow data available".to_string()],
+            };
+        }
+
+        // Check for cycles first
+        if let Some(cycle) = self.detect_cycle(nodes) {
+            return RenderedDag {
+                lines: vec![format!("Error: Cycle detected in graph: {:?}", cycle)],
+            };
+        }
+
+        // Calculate levels for topological layout
+        let levels = self.calculate_levels(nodes);
+
+        // Render each level as a row
+        let lines = self.render_levels(nodes, &levels);
+
+        RenderedDag { lines }
+    }
+
+    /// Calculate topological levels for nodes
+    #[must_use]
+    pub fn calculate_levels(&self, nodes: &[DagNode]) -> Vec<Vec<String>> {
+        let node_map: HashMap<&str, &DagNode> = nodes.iter().map(|n| (n.id.as_str(), n)).collect();
+        let mut levels: Vec<Vec<String>> = Vec::new();
+        let mut assigned: HashSet<String> = HashSet::new();
+
+        loop {
+            // Find nodes whose dependencies are all assigned
+            let ready: Vec<String> = nodes
+                .iter()
+                .filter(|n| !assigned.contains(&n.id))
+                .filter(|n| n.dependencies.iter().all(|dep| assigned.contains(dep)))
+                .map(|n| n.id.clone())
+                .collect();
+
+            if ready.is_empty() {
+                break;
+            }
+
+            for id in &ready {
+                assigned.insert(id.clone());
+            }
+
+            levels.push(ready);
+        }
+
+        levels
+    }
+
+    /// Detect cycle in the graph using DFS
+    fn detect_cycle(&self, nodes: &[DagNode]) -> Option<Vec<String>> {
+        let mut visited: HashSet<String> = HashSet::new();
+        let mut rec_stack: HashSet<String> = HashSet::new();
+        let mut path: Vec<String> = Vec::new();
+
+        for node in nodes {
+            if !visited.contains(&node.id) {
+                if self.dfs_cycle(node, nodes, &mut visited, &mut rec_stack, &mut path) {
+                    return Some(path);
+                }
+            }
+        }
+
+        None
+    }
+
+    /// DFS helper for cycle detection
+    fn dfs_cycle(
+        &self,
+        node: &DagNode,
+        nodes: &[DagNode],
+        visited: &mut HashSet<String>,
+        rec_stack: &mut HashSet<String>,
+        path: &mut Vec<String>,
+    ) -> bool {
+        visited.insert(node.id.clone());
+        rec_stack.insert(node.id.clone());
+        path.push(node.id.clone());
+
+        // Find nodes that depend on this node
+        for other in nodes {
+            if other.dependencies.contains(&node.id) {
+                if !visited.contains(&other.id) {
+                    if self.dfs_cycle(other, nodes, visited, rec_stack, path) {
+                        return true;
+                    }
+                } else if rec_stack.contains(&other.id) {
+                    // Found cycle
+                    let start_pos = path.iter().position(|id| id == &other.id);
+                    if let Some(start) = start_pos {
+                        if let Some(slice) = path.get(start..) {
+                            *path = slice.to_vec();
+                            path.push(other.id.clone());
+                        }
+                    }
+                    return true;
+                }
+            }
+        }
+
+        rec_stack.remove(&node.id);
+        path.pop();
+        false
+    }
+
+    /// Render levels to ASCII lines
+    fn render_levels(&self, nodes: &[DagNode], levels: &[Vec<String>]) -> Vec<String> {
+        let node_map: HashMap<&str, &DagNode> = nodes.iter().map(|n| (n.id.as_str(), n)).collect();
+        let mut lines = Vec::new();
+
+        for (level_idx, level) in levels.iter().enumerate() {
+            // Render boxes for this level side by side
+            let box_lines = self.render_level_boxes(level, &node_map, level_idx);
+            lines.extend(box_lines);
+
+            // Add connector lines between levels (except after last level)
+            if level_idx < levels.len().saturating_sub(1) {
+                lines.push(String::new());
+            }
+        }
+
+        lines
+    }
+
+    /// Render boxes for a single level
+    fn render_level_boxes(
+        &self,
+        level: &[String],
+        node_map: &HashMap<&str, &DagNode>,
+        _level_idx: usize,
+    ) -> Vec<String> {
+        if level.is_empty() {
+            return vec![];
+        }
+
+        // Max box width (accounting for spacing)
+        let box_width = ((self.width.saturating_sub(2)) / level.len().max(1))
+            .min(12)
+            .max(6);
+
+        // Render each node as a box
+        let mut top_line = String::new();
+        let mut mid_line = String::new();
+        let mut bot_line = String::new();
+
+        for (i, node_id) in level.iter().enumerate() {
+            let node = node_map.get(node_id.as_str());
+            let (name, status_color, status_symbol) = match node {
+                Some(n) => {
+                    let truncated = truncate(&n.name, box_width.saturating_sub(2));
+                    let (color, symbol) = status_style(n.status);
+                    (truncated, color, symbol)
+                }
+                None => (
+                    truncate(node_id, box_width.saturating_sub(2)),
+                    "\x1b[0m",
+                    "○",
+                ),
+            };
+
+            let padding = box_width
+                .saturating_sub(name.chars().count())
+                .saturating_sub(2);
+            let left_pad = padding / 2;
+            let right_pad = padding.saturating_sub(left_pad);
+
+            // Add spacing between boxes
+            if i > 0 {
+                top_line.push_str("   ");
+                mid_line.push_str("──▶");
+                bot_line.push_str("   ");
+            }
+
+            top_line.push_str(&format!("┌{}┐", "─".repeat(box_width.saturating_sub(2))));
+            mid_line.push_str(&format!(
+                "{}│{}{}{}│\x1b[0m",
+                status_color,
+                " ".repeat(left_pad),
+                name,
+                " ".repeat(right_pad)
+            ));
+            bot_line.push_str(&format!("└{}┘", "─".repeat(box_width.saturating_sub(2))));
+        }
+
+        vec![top_line, mid_line, bot_line]
+    }
+}
+
+impl Default for DagRenderer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Get status color and symbol
+fn status_style(status: NodeStatus) -> (&'static str, &'static str) {
+    match status {
+        NodeStatus::Pending => ("\x1b[33m", "○"),    // Yellow
+        NodeStatus::InProgress => ("\x1b[34m", "◐"), // Blue
+        NodeStatus::Completed => ("\x1b[32m", "✓"),  // Green
+        NodeStatus::Failed => ("\x1b[31m", "✗"),     // Red
+        NodeStatus::Blocked => ("\x1b[90m", "⊗"),    // Gray
+    }
+}
 
 /// Terminal renderer for OYA UI
 pub struct Renderer {
@@ -360,20 +667,35 @@ impl Renderer {
         }
     }
 
-    /// Render a horizontal DAG (left-to-right flow)
+    /// Render a horizontal DAG (left-to-right flow) using the DAG renderer
     fn render_horizontal_dag(&self) -> String {
-        // Static DAG visualization using multiline string
-        concat!(
-            "┌─────────┐     ┌─────────┐     ┌─────────┐\n",
-            "│ src-abc │ ──▶ │ src-def │ ──▶ │ src-ghi │\n",
-            "└─────────┘     └─────────┘     └─────────┘\n",
-            "                   │\n",
-            "                   ▼\n",
-            "                ┌─────────┐\n",
-            "                │ src-jkl │\n",
-            "                └─────────┘\n",
-        )
-        .to_string()
+        // Create sample workflow nodes for demonstration
+        // In production, this data would come from the actual task list
+        let nodes = vec![
+            DagNode::new("src-abc", "Setup Project"),
+            DagNode {
+                id: "src-def".to_string(),
+                name: "Core Module".to_string(),
+                dependencies: vec!["src-abc".to_string()],
+                status: NodeStatus::InProgress,
+            },
+            DagNode {
+                id: "src-ghi".to_string(),
+                name: "API Layer".to_string(),
+                dependencies: vec!["src-def".to_string()],
+                status: NodeStatus::Pending,
+            },
+            DagNode {
+                id: "src-jkl".to_string(),
+                name: "Tests".to_string(),
+                dependencies: vec!["src-def".to_string()],
+                status: NodeStatus::Pending,
+            },
+        ];
+
+        let renderer = DagRenderer::new().with_dimensions(78, 6);
+        let result = renderer.render(&nodes);
+        result.lines.join("\n")
     }
 
     /// Render status bar at bottom of screen

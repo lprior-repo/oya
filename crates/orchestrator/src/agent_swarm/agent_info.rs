@@ -120,7 +120,7 @@ impl WorkloadHistory {
             return Err(AgentInfoError::NegativeDuration);
         }
 
-        self.operations_executed += 1;
+        self.operations_executed = self.operations_executed.saturating_add(1);
         self.total_execution_secs += duration_secs;
 
         self.recent_operations.push(OperationRecord {
@@ -138,7 +138,7 @@ impl WorkloadHistory {
 
     /// Records completion of a bead.
     pub fn record_bead_completion(&mut self) -> Result<(), AgentInfoError> {
-        self.beads_completed += 1;
+        self.beads_completed = self.beads_completed.saturating_add(1);
         self.record_operation(0.0)
     }
 }
@@ -201,7 +201,7 @@ impl HealthMetrics {
 
     /// Records a failed health check.
     pub fn record_failure(&mut self) -> Result<(), AgentInfoError> {
-        self.health_failures += 1;
+        self.health_failures = self.health_failures.saturating_add(1);
 
         if self.health_failures >= self.max_health_failures {
             self.health_score = 0.0;
@@ -350,7 +350,12 @@ impl AgentInfo {
             return Err(AgentInfoError::InvalidHeartbeatTime);
         }
 
-        self.uptime_secs = (now - self.registered_at).num_seconds() as u64;
+        let duration = now.signed_duration_since(self.registered_at);
+        let uptime_secs = duration.num_seconds().max(0);
+        self.uptime_secs = match u64::try_from(uptime_secs) {
+            Ok(seconds) => seconds,
+            Err(_) => u64::MAX,
+        };
         self.last_heartbeat = now;
 
         // Reset health failures on successful heartbeat

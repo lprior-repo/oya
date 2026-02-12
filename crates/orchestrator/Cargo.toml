@@ -85,3 +85,6 @@ uuid = { version = "1.0", features = ["v4"] }
 
 # Random number generation for jitter in backoff
 rand = "0.8"
+
+# Compression for checkpoint data
+zstd = { workspace = true }

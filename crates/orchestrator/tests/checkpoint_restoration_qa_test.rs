@@ -232,6 +232,44 @@ async fn test_restoration_performance_benchmark() -> Result<(), Box<dyn std::err
     Ok(())
 }
 
+/// Test: Error message consistency across restoration methods.
+///
+/// GIVEN restoration methods fail for various reasons
+/// WHEN error messages are generated
+/// THEN they follow consistent lowercase format with context
+#[tokio::test]
+async fn test_error_message_consistency() {
+    let config = StoreConfig::in_memory();
+    let store = OrchestratorStore::connect(config).await.unwrap();
+    let _ = store.initialize_schema().await;
+    let mut manager = CheckpointManager::new(store, CheckpointConfig::default());
+
+    // Create checkpoint with invalid JSON that will fail deserialization
+    manager.set_sequence(1);
+    let _ = manager.create_checkpoint("invalid json {", None).await;
+
+    // Attempt to restore with wrong type to trigger deserialization error
+    let result: PersistenceResult<TestSchedulerState> = manager.restore_scheduler_state().await;
+
+    match result {
+        Err(PersistenceError::SerializationError { reason }) => {
+            // Verify lowercase format: "failed to deserialize <field>: <reason>"
+            assert!(
+                reason.to_lowercase().starts_with("failed to deserialize"),
+                "Error message should start with lowercase 'failed to deserialize', got: {}",
+                reason
+            );
+            assert!(
+                reason.contains("scheduler state"),
+                "Error message should include field context 'scheduler state', got: {}",
+                reason
+            );
+        }
+        Err(e) => panic!("Expected SerializationError, got: {:?}", e),
+        Ok(_) => panic!("Expected error when deserializing invalid JSON"),
+    }
+}
+
 /// Generate a QA report after all tests run.
 #[test]
 fn generate_qa_report() {

@@ -826,7 +826,7 @@ fn should_preserve_worker_fields_through_roundtrip() -> Result<(), String> {
 // ==========================================================================
 
 #[test]
-fn should_handle_invalid_json_gracefully() {
+fn should_handle_invalid_json_gracefully() -> Result<(), String> {
     let invalid_json = "{invalid json}";
 
     let result: Result<BeadEvent, _> = serde_json::from_str(invalid_json);
@@ -836,9 +836,11 @@ fn should_handle_invalid_json_gracefully() {
             // Expected - invalid JSON should produce error, not panic
         }
         Ok(_) => {
-            panic!("Invalid JSON should produce error, but got Ok value");
+            return Err("Invalid JSON should produce error, but got Ok value".to_string());
         }
     }
+
+    Ok(())
 }
 
 #[test]
@@ -861,7 +863,7 @@ fn should_handle_unknown_event_variant_in_json() {
 }
 
 #[test]
-fn should_handle_empty_json_object() {
+fn should_handle_empty_json_object() -> Result<(), String> {
     let empty_json = "{}";
 
     let result: Result<BeadEvent, _> = serde_json::from_str(empty_json);
@@ -871,13 +873,15 @@ fn should_handle_empty_json_object() {
             // Expected - empty object can't be deserialized as BeadEvent
         }
         Ok(_) => {
-            panic!("Empty JSON should produce error");
+            return Err("Empty JSON should produce error".to_string());
         }
     }
+
+    Ok(())
 }
 
 #[test]
-fn should_handle_invalid_bincode_bytes() {
+fn should_handle_invalid_bincode_bytes() -> Result<(), String> {
     let invalid_bytes = vec![0xFF, 0xFF, 0xFF, 0xFF];
 
     let result = BeadEvent::from_bincode(&invalid_bytes);
@@ -887,13 +891,15 @@ fn should_handle_invalid_bincode_bytes() {
             // Expected - invalid bytes should error
         }
         Ok(_) => {
-            panic!("Invalid bincode bytes should produce error");
+            return Err("Invalid bincode bytes should produce error".to_string());
         }
     }
+
+    Ok(())
 }
 
 #[test]
-fn should_handle_empty_bincode_bytes() {
+fn should_handle_empty_bincode_bytes() -> Result<(), String> {
     let empty_bytes: Vec<u8> = vec![];
 
     let result = BeadEvent::from_bincode(&empty_bytes);
@@ -903,9 +909,11 @@ fn should_handle_empty_bincode_bytes() {
             // Expected - empty bytes should error
         }
         Ok(_) => {
-            panic!("Empty bincode bytes should produce error");
+            return Err("Empty bincode bytes should produce error".to_string());
         }
     }
+
+    Ok(())
 }
 
 // ==========================================================================
@@ -913,7 +921,7 @@ fn should_handle_empty_bincode_bytes() {
 // ==========================================================================
 
 #[test]
-fn should_enforce_max_size_for_created_event_with_large_metadata() {
+fn should_enforce_max_size_for_created_event_with_large_metadata() -> Result<(), String> {
     let bead_id = BeadId::new();
     let mut spec = BeadSpec::new("Large task").with_description("A".repeat(100)); // 100 chars
     spec.dependencies = (0..10).map(|_| BeadId::new()).collect(); // 10 deps
@@ -935,9 +943,10 @@ fn should_enforce_max_size_for_created_event_with_large_metadata() {
             );
         }
         Err(e) => {
-            panic!("Should serialize large but reasonable event: {e}");
+            return Err(format!("Should serialize large but reasonable event: {e}"));
         }
     }
+    Ok(())
 }
 
 #[test]

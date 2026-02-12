@@ -195,10 +195,19 @@ pub fn parse_command(input: &str) -> ParseResult<ParsedCommand> {
     let command_name = parts.first().ok_or(ParseError::EmptyCommand)?;
 
     match *command_name {
-        "filter" => parse_filter_command(&parts[1..]),
-        "clear" => parse_no_arg_command(ParsedCommand::ClearFilter, &parts[1..]),
-        "refresh" => parse_no_arg_command(ParsedCommand::Refresh, &parts[1..]),
-        "help" => parse_no_arg_command(ParsedCommand::Help, &parts[1..]),
+        "filter" => parse_filter_command(parts.get(1..).unwrap_or(&[])),
+        "clear" => Ok(parse_no_arg_command(
+            ParsedCommand::ClearFilter,
+            parts.get(1..).unwrap_or(&[]),
+        )),
+        "refresh" => Ok(parse_no_arg_command(
+            ParsedCommand::Refresh,
+            parts.get(1..).unwrap_or(&[]),
+        )),
+        "help" => Ok(parse_no_arg_command(
+            ParsedCommand::Help,
+            parts.get(1..).unwrap_or(&[]),
+        )),
         unknown => Err(ParseError::UnknownCommand(unknown.to_string())),
     }
 }
@@ -251,16 +260,11 @@ fn parse_filter_command(args: &[&str]) -> ParseResult<ParsedCommand> {
 ///
 /// # Returns
 ///
-/// - `Ok(command)` if no extra arguments
-/// - `Err(ParseError)` if unexpected arguments provided
-fn parse_no_arg_command(command: ParsedCommand, args: &[&str]) -> ParseResult<ParsedCommand> {
-    if args.is_empty() {
-        Ok(command)
-    } else {
-        // For commands like :clear, :refresh, :help, we ignore extra arguments
-        // rather than erroring. This provides better UX.
-        Ok(command)
-    }
+/// - `command` - Extra arguments are ignored for better UX
+const fn parse_no_arg_command(command: ParsedCommand, _args: &[&str]) -> ParsedCommand {
+    // For commands like :clear, :refresh, :help, we ignore extra arguments
+    // rather than erroring. This provides better UX.
+    command
 }
 
 /// Suggest completions for a partial command
@@ -300,7 +304,6 @@ pub fn suggest_completions(partial: &str) -> Vec<String> {
         .collect()
 }
 
-#[cfg(test)]
 #[cfg(test)]
 mod tests {
 
