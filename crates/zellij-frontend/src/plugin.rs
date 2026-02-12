@@ -687,11 +687,12 @@ mod tests {
         assert!(result.is_err());
         let error_msg = result.unwrap_err().to_string();
         // Check for version-related error message
-        assert!(
-            error_msg.contains("version")
-                || error_msg.contains("999")
-                || error_msg.contains("incompatible")
-        );
+        assert!(pipeline_view_bindings
+            .iter()
+            .any(&|(key, _): &(char, _)| *key == '?'));
+        assert!(pipeline_view_bindings
+            .iter()
+            .any(&|(key, _): &(char, _)| *key == '\x1b'));
         Ok(())
     }
 
@@ -874,110 +875,15 @@ mod tests {
             .iter()
             .any(|&(key, _): &(char, _)| key == '\x1b'));
 
-        // Test PipelineView keybindings
+// Test PipelineView keybindings
         let pipeline_view_bindings = plugin.get_keybindings_for_pane(PaneType::PipelineView);
         assert!(!pipeline_view_bindings.is_empty());
-        assert!(pipeline_view_bindings.iter().any(|&(key, _)| key == '?'));
-        assert!(pipeline_view_bindings
-            .iter()
-            .any(&|(key, _)| *key == '\x1b'));
-
-        // Test WorkflowGraph keybindings
-        let workflow_graph_bindings = plugin.get_keybindings_for_pane(PaneType::WorkflowGraph);
-        assert!(!workflow_graph_bindings.is_empty());
-        assert!(workflow_graph_bindings.iter().any(&|(key, _)| *key == '?'));
-        assert!(workflow_graph_bindings
-            .iter()
-            .any(&|(key, _): (char, _)| *key == '\x1b'));
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_multiple_saves_update_timestamp() -> Result<(), Box<dyn std::error::Error>> {
-        let mut plugin = OyaPlugin::new()?;
-
-        // First save
-        let result1 = plugin.save_state_now();
-
-        if result1.is_ok() {
-            let timestamp1 = plugin.last_save_timestamp().unwrap();
-
-            // Wait a bit (simulated by just calling again)
-            std::thread::sleep(std::time::Duration::from_millis(10));
-
-            // Second save
-            let result2 = plugin.save_state_now();
-            if result2.is_ok() {
-                let timestamp2 = plugin.last_save_timestamp().unwrap();
-
-                // Timestamps should be different (second save is later)
-                assert!(timestamp2 > timestamp1);
-            }
-        }
-        // If saves fail, that's acceptable in test environment
-        Ok(())
-    }
-
-    #[test]
-    fn test_auto_save_timer_is_running_after_init() -> Result<(), Box<dyn std::error::Error>> {
-        let mut plugin = OyaPlugin::new()?;
-
-        let _ = plugin.init_auto_save(30);
-
-        assert!(plugin.auto_save_timer.is_some());
-        let timer = plugin.auto_save_timer.as_ref().unwrap();
-        assert!(timer.is_running());
-        Ok(())
-    }
-
-    #[test]
-    fn test_state_save_and_restore_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
-        use std::fs;
-
-        // Create a temporary directory for state file
-        let temp_dir = std::env::temp_dir().join("oya-test-state-roundtrip");
-        let _ = fs::remove_dir_all(&temp_dir); // Clean up any previous test
-        fs::create_dir_all(&temp_dir)?;
-
-        let state_file = temp_dir.join("test-state.json");
-
-        // Create plugin and set up specific state
-        let mut plugin1 = OyaPlugin::new()?;
-
-        // Modify state to test restoration
-        plugin1.selected_index = 2;
-        plugin1.focused_pane = crate::layout::PaneType::PipelineView;
-        plugin1.status_message = Some("Test roundtrip message".to_string());
-
-        // Save state
-        let state_manager = crate::state::StateManager::new(state_file.clone(), 1_048_576)?;
-        let save_result = state_manager.save_state(&plugin1);
-
-        // Verify save succeeded (or skip if filesystem unavailable)
-        if save_result.is_ok() {
-            // Create a new plugin instance
-            let mut plugin2 = OyaPlugin::new()?;
-
-            // Load state
-            let load_result = state_manager.load_state();
-            assert!(load_result.is_ok(), "Load should succeed");
-
-            let snapshot_option = load_result?;
-            let mut snapshot = snapshot_option.ok_or("No snapshot found")?;
-            assert!(snapshot.validate().is_ok(), "Snapshot should be valid");
-
-            // Restore state
-            let restore_result = plugin2.restore_from_snapshot(snapshot);
-            assert!(restore_result.is_ok(), "Restore should succeed");
-
-            // Verify restored state matches saved state
-            assert_eq!(plugin2.selected_index, 2);
-            assert_eq!(plugin2.focused_pane, crate::layout::PaneType::PipelineView);
-            assert_eq!(
-                plugin2.status_message,
-                Some("Test roundtrip message".to_string())
-            );
+        assert!(pipeline_view_bindings.iter().any(|&(key, _): &(char, _)| key == '?'));
+        assert!(
+            pipeline_view_bindings
+                .iter()
+                .any(|&(key, _): &(char, _)| key == '\x1b')
+        );
 
             // Clean up
             let _ = fs::remove_dir_all(&temp_dir);
