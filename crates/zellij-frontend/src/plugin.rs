@@ -1861,24 +1861,6 @@ impl OyaPlugin {
         });
     }
 
-    fn pane_supports_horizontal_scroll(&self) -> bool {
-        matches!(
-            self.focused_pane,
-            crate::layout::PaneType::BeadDetail
-                | crate::layout::PaneType::PipelineView
-                | crate::layout::PaneType::WorkflowGraph
-        )
-    }
-
-    fn scroll_horizontal(&mut self, delta: i32) -> PluginResult<()> {
-        if delta > 0 {
-            self.horizontal_scroll = self.horizontal_scroll.saturating_add(delta as usize);
-        } else {
-            self.horizontal_scroll = self.horizontal_scroll.saturating_sub((-delta) as usize);
-        }
-        Ok(())
-    }
-
     fn goto_task(&mut self, target: &str) -> PluginResult<String> {
         if self.tasks.is_empty() {
             return Err(PluginError::InvalidState("No tasks available".to_string()));

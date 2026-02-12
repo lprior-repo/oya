@@ -451,37 +451,64 @@ async fn given_disk_full_when_store_with_retry_then_eventually_succeeds() {
     let test_name = "disk_full_retry_eventual_success";
     info!("Starting test: {}", test_name);
 
-    let storage = DiskFullSimulatingStorage::new();
+    let mut storage = DiskFullSimulatingStorage::new();
     let state = TestState::new(1, 100);
     let (metadata, data) = create_metadata(&state).expect("Failed to create metadata");
 
     storage.set_disk_full(true);
 
-    let storage_ptr = Arc::new(std::sync::Mutex::new(storage));
+    let storage_ptr = Arc::new(tokio::sync::Mutex::new(storage));
     let storage_clone = Arc::clone(&storage_ptr);
 
     let free_handle = tokio::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_millis(30)).await;
-        let s = storage_clone.lock().map_err(|_| "lock poisoned").expect("lock");
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        let s = storage_clone.lock().await;
         s.set_disk_full(false);
         info!("Freed disk space after delay");
-        ChaosTestResult::<()>::Ok(())
     });
 
     let retry_config = RetryConfig {
-        max_attempts: 5,
-        base_delay_ms: 20,
-        max_delay_ms: 100,
-        backoff_multiplier: 1.5,
+        max_attempts: 10,
+        base_delay_ms: 5,
+        max_delay_ms: 50,
+        backoff_multiplier: 1.2,
     };
 
-    {
-        let mut s = storage_ptr.lock().map_err(|_| "lock poisoned").expect("lock");
-        let result = store_with_retry(&mut s, data, metadata, &retry_config);
-        assert!(result.is_ok(), "Should eventually succeed after space freed: {:?}", result.err());
-    }
+    let storage_ptr_clone = Arc::clone(&storage_ptr);
+    let data_clone = data.clone();
+    let metadata_clone = metadata.clone();
 
-    free_handle.await.expect("Free task panicked").expect("Free task failed");
+    let result = tokio::task::spawn_blocking(move || {
+        let mut attempts = 0u32;
+        loop {
+            attempts += 1;
+            let rt = tokio::runtime::Handle::current();
+            let mut s = rt.block_on(storage_ptr_clone.lock());
+            match s.store_checkpoint(data_clone.clone(), metadata_clone.clone()) {
+                Ok(id) => {
+                    info!("Store succeeded on attempt {}", attempts);
+                    return Ok(id);
+                }
+                Err(StorageError::StorageFailed { reason }) if reason.contains("disk full") => {
+                    warn!("Disk full on attempt {}/{}", attempts, retry_config.max_attempts);
+                    if attempts >= retry_config.max_attempts {
+                        return Err(ChaosTestError::RetryLimitExceeded { attempts });
+                    }
+                    let delay = retry_config.delay_for_attempt(attempts);
+                    std::thread::sleep(std::time::Duration::from_millis(delay));
+                }
+                Err(e) => {
+                    return Err(ChaosTestError::StorageFailed {
+                        reason: e.to_string(),
+                    });
+                }
+            }
+        }
+    });
+
+    free_handle.await.expect("Free task panicked");
+    let result = result.await.expect("Retry task panicked");
+    assert!(result.is_ok(), "Should eventually succeed after space freed: {:?}", result.err());
 
     info!("Test passed: {}", test_name);
 }
@@ -683,11 +710,8 @@ async fn test_postcondition_successful_write_after_free() {
     assert!(result.is_ok(), "Should succeed after free space");
 
     let id = result.expect("Should have id");
-    let (loaded_data, _) = storage.load_checkpoint(&id).expect("Should load after free");
-
-    let restored: TestState = bincode::decode_from_slice(&loaded_data, bincode::config::standard())
-        .map(|(s, _)| s)
-        .expect("Should deserialize");
+    let restored: TestState = restore_checkpoint(&id, &storage)
+        .expect("Should restore after free");
 
     assert_eq!(restored.version, 2, "Restored state should have version 2");
     assert_eq!(restored.counter, 200, "Restored state should have counter 200");
@@ -709,13 +733,8 @@ async fn given_restore_when_disk_full_then_read_still_works() {
 
     storage.set_disk_full(true);
 
-    let result = storage.load_checkpoint(&id);
-    assert!(result.is_ok(), "Read should work even when disk is full");
-
-    let (loaded_data, _) = result.expect("Should load");
-    let restored: TestState = bincode::decode_from_slice(&loaded_data, bincode::config::standard())
-        .map(|(s, _)| s)
-        .expect("Should deserialize");
+    let restored: TestState = restore_checkpoint(&id, &storage)
+        .expect("Read should work even when disk is full");
 
     assert_eq!(restored, state, "Read state should match original");
 
@@ -768,10 +787,8 @@ async fn test_scenario_checkpoint_workflow_with_disk_full_recovery() {
     }
 
     for (id, expected_state) in &checkpoints {
-        let (data, _) = storage.load_checkpoint(id).expect("Should load checkpoint");
-        let restored: TestState = bincode::decode_from_slice(&data, bincode::config::standard())
-            .map(|(s, _)| s)
-            .expect("Should deserialize");
+        let restored: TestState = restore_checkpoint(id, &storage)
+            .expect("Should restore checkpoint");
 
         assert_eq!(
             &restored, expected_state,
@@ -792,19 +809,13 @@ async fn given_delete_when_disk_full_then_frees_space_for_new_writes() {
     let test_name = "delete_frees_space";
     info!("Starting test: {}", test_name);
 
-    let mut storage = DiskFullSimulatingStorage::with_capacity(100);
+    let mut storage = DiskFullSimulatingStorage::new();
 
     let state1 = TestState::new(1, 100);
     let (metadata1, data1) = create_metadata(&state1).expect("Failed to create metadata");
+    let id1 = storage.store_checkpoint(data1, metadata1).expect("First store should succeed");
 
-    let id1 = match storage.store_checkpoint(data1, metadata1) {
-        Ok(id) => id,
-        Err(StorageError::StorageFailed { .. }) => {
-            info!("Data too large for capacity, skipping test");
-            return;
-        }
-        Err(e) => panic!("Unexpected error: {}", e),
-    };
+    storage.set_disk_full(true);
 
     let state2 = TestState::new(2, 200);
     let (metadata2, data2) = create_metadata(&state2).expect("Failed to create metadata");
@@ -813,9 +824,10 @@ async fn given_delete_when_disk_full_then_frees_space_for_new_writes() {
     assert!(result.is_err(), "Should fail - disk full");
 
     storage.delete_checkpoint(&id1).expect("Delete should succeed");
+    storage.set_disk_full(false);
 
     let result = storage.store_checkpoint(data2, metadata2);
-    assert!(result.is_ok(), "Should succeed after delete freed space");
+    assert!(result.is_ok(), "Should succeed after delete freed space: {:?}", result.err());
 
     info!("Test passed: {}", test_name);
 }

@@ -336,7 +336,7 @@ impl SchedulerActorDef {
 }
 
 /// Functional core for `SchedulerActor`.
-mod core {
+pub mod core {
     use chrono::Utc;
 
     use super::{
@@ -369,6 +369,16 @@ mod core {
             }
             SchedulerMessage::UnregisterWorkflow { workflow_id } => {
                 next_state.workflows.remove(&workflow_id);
+                let workflow_id_clone = workflow_id.clone();
+                next_state.pending_beads.retain(|_, bead| {
+                    bead.workflow_id != workflow_id_clone
+                });
+                next_state.ready_beads.retain(|bead_id| {
+                    next_state.pending_beads.contains_key(bead_id)
+                });
+                next_state.worker_assignments.retain(|bead_id, _| {
+                    next_state.pending_beads.contains_key(bead_id)
+                });
             }
             SchedulerMessage::ScheduleBead {
                 workflow_id,
@@ -517,6 +527,10 @@ mod core {
             }
             SchedulerMessage::UnregisterAgent { agent_id } => {
                 next_state.agents.remove(&agent_id);
+                let agent_id_clone = agent_id.clone();
+                next_state.worker_assignments.retain(|_, assigned_agent| {
+                    assigned_agent != &agent_id_clone
+                });
                 effects.push(SchedulerEffect::RecordEvent {
                     event: OrchestratorEvent::AgentUnregistered { agent_id },
                 });
