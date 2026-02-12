@@ -28,6 +28,42 @@ pub struct PoolMetrics {
     pub terminated: usize,
 }
 
+/// Pool statistics from IPC HostMessage::AgentPoolStats
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct PoolStats {
+    pub total_agents: usize,
+    pub active_agents: usize,
+    pub idle_agents: usize,
+    pub beads_assigned: usize,
+    pub beads_completed: usize,
+}
+
+impl PoolStats {
+    pub fn new(
+        total_agents: usize,
+        active_agents: usize,
+        idle_agents: usize,
+        beads_assigned: usize,
+        beads_completed: usize,
+    ) -> Self {
+        Self {
+            total_agents,
+            active_agents,
+            idle_agents,
+            beads_assigned,
+            beads_completed,
+        }
+    }
+
+    pub fn utilization_percent(&self) -> u8 {
+        if self.total_agents == 0 {
+            return 0;
+        }
+        let percent = (self.active_agents * 100) / self.total_agents;
+        percent.min(100) as u8
+    }
+}
+
 /// Aggregated metrics from the orchestrator
 #[derive(Debug, Clone, PartialEq)]
 pub struct MetricsSnapshot {
@@ -150,5 +186,43 @@ mod tests {
         let output = snapshot.format_for_zellij();
 
         assert!(output.contains("Total: 0"));
+    }
+
+    #[test]
+    fn test_pool_stats_default() {
+        let stats = PoolStats::default();
+        assert_eq!(stats.total_agents, 0);
+        assert_eq!(stats.active_agents, 0);
+        assert_eq!(stats.idle_agents, 0);
+        assert_eq!(stats.beads_assigned, 0);
+        assert_eq!(stats.beads_completed, 0);
+    }
+
+    #[test]
+    fn test_pool_stats_new() {
+        let stats = PoolStats::new(10, 7, 3, 15, 42);
+        assert_eq!(stats.total_agents, 10);
+        assert_eq!(stats.active_agents, 7);
+        assert_eq!(stats.idle_agents, 3);
+        assert_eq!(stats.beads_assigned, 15);
+        assert_eq!(stats.beads_completed, 42);
+    }
+
+    #[test]
+    fn test_pool_stats_utilization() {
+        let stats = PoolStats::new(10, 5, 5, 0, 0);
+        assert_eq!(stats.utilization_percent(), 50);
+    }
+
+    #[test]
+    fn test_pool_stats_utilization_zero_agents() {
+        let stats = PoolStats::default();
+        assert_eq!(stats.utilization_percent(), 0);
+    }
+
+    #[test]
+    fn test_pool_stats_utilization_full() {
+        let stats = PoolStats::new(4, 4, 0, 0, 0);
+        assert_eq!(stats.utilization_percent(), 100);
     }
 }

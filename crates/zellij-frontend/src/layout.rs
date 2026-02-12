@@ -33,6 +33,8 @@ pub enum PaneType {
     PipelineView,
     /// Bottom pane showing workflow graph
     WorkflowGraph,
+    /// Agent pool view showing agent status and metrics
+    AgentView,
 }
 
 impl fmt::Display for PaneType {
@@ -42,6 +44,7 @@ impl fmt::Display for PaneType {
             PaneType::BeadDetail => write!(f, "Bead Detail"),
             PaneType::PipelineView => write!(f, "Pipeline View"),
             PaneType::WorkflowGraph => write!(f, "Workflow Graph"),
+            PaneType::AgentView => write!(f, "Agent View"),
         }
     }
 }
@@ -95,6 +98,7 @@ impl Pane {
             PaneType::BeadDetail => "Details",
             PaneType::PipelineView => "Pipeline",
             PaneType::WorkflowGraph => "Workflow",
+            PaneType::AgentView => "Agents",
         }
         .to_string();
 
@@ -217,7 +221,7 @@ impl Layout {
         let left_width = cols.saturating_mul(40).saturating_div(100);
         // Right panes: 60% width
         let right_width = cols.saturating_sub(left_width).saturating_sub(3); // -3 for borders
-        // Top panes: 60% height
+                                                                             // Top panes: 60% height
         let top_height = rows.saturating_mul(60).saturating_div(100);
         // Bottom pane: 40% height
         let bottom_height = rows.saturating_sub(top_height).saturating_sub(3); // -3 for borders

@@ -124,6 +124,20 @@ pub enum SchedulerMessage {
         bead_id: BeadId,
     },
 
+    /// Register an agent with the scheduler.
+    RegisterAgent {
+        /// The agent ID.
+        agent_id: String,
+        /// Agent capabilities.
+        capabilities: Vec<String>,
+    },
+
+    /// Unregister an agent from the scheduler.
+    UnregisterAgent {
+        /// The agent ID.
+        agent_id: String,
+    },
+
     /// Initiate graceful shutdown.
     Shutdown,
 

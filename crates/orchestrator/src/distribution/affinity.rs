@@ -546,4 +546,28 @@ mod tests {
         let score = strategy.preference_score("agent", "bead", &ctx);
         assert!(score.abs() < f64::EPSILON);
     }
+
+    #[test]
+    fn bdd_affinity_strategy_preferred_agent_selected() {
+        // GIVEN: Affinity strategy with a bead that has a preferred agent
+        let strategy = AffinityStrategy::soft()
+            .with_preference_weight(0.8)
+            .with_capability_weight(0.1)
+            .with_load_weight(0.1);
+
+        let ctx = DistributionContext::new()
+            .with_bead(
+                BeadMetadata::new("test-bead")
+                    .with_preferred_agents(vec!["preferred-agent".to_string()]),
+            )
+            .with_agent(AgentMetadata::new("preferred-agent").with_load(0.8))
+            .with_agent(AgentMetadata::new("other-agent").with_load(0.1));
+
+        // WHEN: Selecting an agent for the bead
+        let agents = vec!["preferred-agent".to_string(), "other-agent".to_string()];
+        let result = strategy.select_agent("test-bead", &agents, &ctx);
+
+        // THEN: The preferred agent is selected
+        assert_eq!(result, Some("preferred-agent".to_string()));
+    }
 }

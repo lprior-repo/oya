@@ -252,6 +252,33 @@ impl SystemHealthSnapshot {
         }
     }
 
+    /// Format component list for display in Zellij pane.
+    ///
+    /// Renders each component with its status symbol, name, and optional message.
+    /// Uses functional patterns with zero panics.
+    #[must_use]
+    pub fn format_component_list(&self, width: usize) -> String {
+        let inner_width = width.saturating_sub(4);
+
+        self.components
+            .iter()
+            .fold(String::new(), |mut acc, component| {
+                acc.push_str(component.status.color());
+                acc.push_str(component.status.symbol());
+                acc.push_str("\x1b[0m ");
+                acc.push_str(&truncate_component_name(&component.name, inner_width));
+                if let Some(ref msg) = component.message {
+                    let remaining = inner_width.saturating_sub(component.name.chars().count() + 3);
+                    if remaining > 0 {
+                        acc.push_str(" ");
+                        acc.push_str(&truncate_message(msg, remaining));
+                    }
+                }
+                acc.push('\n');
+                acc
+            })
+    }
+
     /// Format for display in Zellij dashboard
     #[must_use]
     pub fn format_dashboard(&self, width: usize) -> String {
@@ -271,18 +298,7 @@ impl SystemHealthSnapshot {
 
         // Components section
         output.push_str("Components:\n");
-        let component_lines = self.components.iter().fold(String::new(), |mut acc, c| {
-            let msg = c.message.as_deref().unwrap_or("");
-            acc.push_str("  ");
-            acc.push_str(c.status.symbol());
-            acc.push(' ');
-            acc.push_str(&c.name);
-            acc.push(' ');
-            acc.push_str(msg);
-            acc.push('\n');
-            acc
-        });
-        output.push_str(&component_lines);
+        output.push_str(&self.format_component_list(width));
         output.push('\n');
 
         // Resources section
@@ -315,6 +331,36 @@ impl SystemHealthSnapshot {
 
         output
     }
+}
+
+fn truncate_component_name(name: &str, max_width: usize) -> String {
+    if name.chars().count() <= max_width {
+        return name.to_string();
+    }
+    if max_width <= 3 {
+        return "...".to_string();
+    }
+    let target = max_width.saturating_sub(3);
+    name.char_indices()
+        .take_while(|(pos, _)| *pos < target)
+        .map(|(_, c)| c)
+        .collect::<String>()
+        + "..."
+}
+
+fn truncate_message(msg: &str, max_width: usize) -> String {
+    if msg.chars().count() <= max_width {
+        return msg.to_string();
+    }
+    if max_width <= 3 {
+        return "...".to_string();
+    }
+    let target = max_width.saturating_sub(3);
+    msg.char_indices()
+        .take_while(|(pos, _)| *pos < target)
+        .map(|(_, c)| c)
+        .collect::<String>()
+        + "..."
 }
 
 #[cfg(test)]
@@ -449,6 +495,163 @@ mod tests {
     }
 
     #[test]
+    fn test_format_dashboard() {
+        let components = Vector::from_iter(vec![ComponentHealth::new(
+            "api",
+            SystemStatus::Healthy,
+            1234567890,
+        )
+        .with_message("Operational")]);
+        let resources = ResourceUsage::new(45.5, 2048.0, 50.0, 8192.0, 500.0);
+        let throughput = ThroughputMetrics::new(100.5, 1024000.0, 15.5, 45.0);
+
+        let snapshot = SystemHealthSnapshot::new(
+            SystemStatus::Healthy,
+            components,
+            resources,
+            throughput,
+            1234567890,
+        );
+
+        let output = snapshot.format_dashboard(80);
+        assert!(output.contains("System Health"));
+        assert!(output.contains("Healthy"));
+        assert!(output.contains("api"));
+        assert!(output.contains("CPU:"));
+        assert!(output.contains("Memory:"));
+        assert!(output.contains("Requests/sec:"));
+    }
+
+    #[test]
+    fn test_format_component_list_empty() {
+        let components = Vector::new();
+        let resources = ResourceUsage::new(0.0, 0.0, 0.0, 0.0, 0.0);
+        let throughput = ThroughputMetrics::new(0.0, 0.0, 0.0, 0.0);
+
+        let snapshot =
+            SystemHealthSnapshot::new(SystemStatus::Healthy, components, resources, throughput, 0);
+
+        let output = snapshot.format_component_list(80);
+        assert!(output.is_empty());
+    }
+
+    #[test]
+    fn test_format_component_list_single_healthy() {
+        let components = Vector::from_iter(vec![ComponentHealth::new(
+            "api-server",
+            SystemStatus::Healthy,
+            1234567890,
+        )]);
+        let resources = ResourceUsage::new(0.0, 0.0, 0.0, 0.0, 0.0);
+        let throughput = ThroughputMetrics::new(0.0, 0.0, 0.0, 0.0);
+
+        let snapshot = SystemHealthSnapshot::new(
+            SystemStatus::Healthy,
+            components,
+            resources,
+            throughput,
+            1234567890,
+        );
+
+        let output = snapshot.format_component_list(80);
+        assert!(output.contains("✓"));
+        assert!(output.contains("api-server"));
+        assert!(output.contains("\x1b[32m")); // Green color
+    }
+
+    #[test]
+    fn test_format_component_list_with_message() {
+        let components = Vector::from_iter(vec![ComponentHealth::new(
+            "database",
+            SystemStatus::Healthy,
+            1234567890,
+        )
+        .with_message("Connected")]);
+        let resources = ResourceUsage::new(0.0, 0.0, 0.0, 0.0, 0.0);
+        let throughput = ThroughputMetrics::new(0.0, 0.0, 0.0, 0.0);
+
+        let snapshot = SystemHealthSnapshot::new(
+            SystemStatus::Healthy,
+            components,
+            resources,
+            throughput,
+            1234567890,
+        );
+
+        let output = snapshot.format_component_list(80);
+        assert!(output.contains("database"));
+        assert!(output.contains("Connected"));
+    }
+
+    #[test]
+    fn test_format_component_list_mixed_status() {
+        let components = Vector::from_iter(vec![
+            ComponentHealth::new("api", SystemStatus::Healthy, 1234567890),
+            ComponentHealth::new("cache", SystemStatus::Degraded, 1234567890),
+            ComponentHealth::new("worker", SystemStatus::Unhealthy, 1234567890),
+        ]);
+        let resources = ResourceUsage::new(0.0, 0.0, 0.0, 0.0, 0.0);
+        let throughput = ThroughputMetrics::new(0.0, 0.0, 0.0, 0.0);
+
+        let snapshot = SystemHealthSnapshot::new(
+            SystemStatus::Unhealthy,
+            components,
+            resources,
+            throughput,
+            1234567890,
+        );
+
+        let output = snapshot.format_component_list(80);
+        assert!(output.contains("✓")); // Healthy
+        assert!(output.contains("⚠")); // Degraded
+        assert!(output.contains("✗")); // Unhealthy
+        assert!(output.contains("\x1b[32m")); // Green
+        assert!(output.contains("\x1b[33m")); // Yellow
+        assert!(output.contains("\x1b[31m")); // Red
+    }
+
+    #[test]
+    fn test_format_component_list_truncation() {
+        let long_name = "very-long-component-name-that-exceeds-width";
+        let components = Vector::from_iter(vec![ComponentHealth::new(
+            long_name,
+            SystemStatus::Healthy,
+            1234567890,
+        )]);
+        let resources = ResourceUsage::new(0.0, 0.0, 0.0, 0.0, 0.0);
+        let throughput = ThroughputMetrics::new(0.0, 0.0, 0.0, 0.0);
+
+        let snapshot = SystemHealthSnapshot::new(
+            SystemStatus::Healthy,
+            components,
+            resources,
+            throughput,
+            1234567890,
+        );
+
+        let output = snapshot.format_component_list(20);
+        assert!(output.contains("..."));
+        let line = output.lines().next();
+        assert!(line.is_some());
+        let line = line.unwrap_or(&String::new());
+        assert!(line.chars().count() <= 25); // Allow some slack for ANSI codes
+    }
+
+    #[test]
+    fn test_truncate_component_name() {
+        assert_eq!(truncate_component_name("short", 20), "short");
+        assert_eq!(truncate_component_name("verylongname", 8), "veryl...");
+        assert_eq!(truncate_component_name("ab", 3), "...");
+    }
+
+    #[test]
+    fn test_truncate_message() {
+        assert_eq!(truncate_message("short message", 20), "short message");
+        assert_eq!(truncate_message("very long message here", 10), "very l...");
+        assert_eq!(truncate_message("ab", 3), "...");
+    }
+
+    #[test]
     fn test_derive_status_from_components() {
         let healthy_components = Vector::from_iter(vec![
             ComponentHealth::new("api", SystemStatus::Healthy, 1234567890),
@@ -459,7 +662,7 @@ mod tests {
 
         let snapshot = SystemHealthSnapshot::new(
             SystemStatus::Healthy,
-            healthy_components.clone(),
+            healthy_components,
             resources,
             throughput,
             1234567890,
@@ -500,31 +703,5 @@ mod tests {
             snapshot3.derive_status_from_components(),
             SystemStatus::Unhealthy
         );
-    }
-
-    #[test]
-    fn test_format_dashboard() {
-        let components = Vector::from_iter(vec![
-            ComponentHealth::new("api", SystemStatus::Healthy, 1234567890)
-                .with_message("Operational"),
-        ]);
-        let resources = ResourceUsage::new(45.5, 2048.0, 50.0, 8192.0, 500.0);
-        let throughput = ThroughputMetrics::new(100.5, 1024000.0, 15.5, 45.0);
-
-        let snapshot = SystemHealthSnapshot::new(
-            SystemStatus::Healthy,
-            components,
-            resources,
-            throughput,
-            1234567890,
-        );
-
-        let output = snapshot.format_dashboard(80);
-        assert!(output.contains("System Health"));
-        assert!(output.contains("Healthy"));
-        assert!(output.contains("api"));
-        assert!(output.contains("CPU:"));
-        assert!(output.contains("Memory:"));
-        assert!(output.contains("Requests/sec:"));
     }
 }
