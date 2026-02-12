@@ -56,6 +56,11 @@ mod style_helpers {
     pub const fn border_focused() -> &'static str {
         components::border_focused()
     }
+
+    #[must_use]
+    pub fn status_color(status: &str) -> &'static str {
+        components::status_color(status)
+    }
 }
 
 /// Errors that can occur during help overlay rendering
@@ -139,6 +144,74 @@ pub enum WorkflowGraphError {
 
 /// Result type for workflow graph operations
 pub type WorkflowGraphResult<T> = Result<T, WorkflowGraphError>;
+
+/// The type/kind of relationship represented by a graph edge
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum EdgeKind {
+    /// Standard dependency relationship (default)
+    #[default]
+    Dependency,
+    /// Blocking relationship - this edge blocks the target
+    Blocks,
+    /// Required relationship - hard requirement
+    Requires,
+    /// Soft/optional relationship
+    Soft,
+}
+
+/// An edge in the workflow graph representing a relationship between two nodes
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GraphEdge {
+    source: String,
+    target: String,
+    kind: EdgeKind,
+}
+
+impl GraphEdge {
+    /// Create a new edge with default kind (Dependency)
+    #[must_use]
+    pub fn new(source: &str, target: &str) -> Self {
+        Self {
+            source: source.to_string(),
+            target: target.to_string(),
+            kind: EdgeKind::default(),
+        }
+    }
+
+    /// Create a new edge with a specific kind
+    #[must_use]
+    pub fn new_with_kind(source: &str, target: &str, kind: EdgeKind) -> Self {
+        Self {
+            source: source.to_string(),
+            target: target.to_string(),
+            kind,
+        }
+    }
+
+    /// Get the source node ID
+    #[must_use]
+    pub fn source(&self) -> &str {
+        &self.source
+    }
+
+    /// Get the target node ID
+    #[must_use]
+    pub fn target(&self) -> &str {
+        &self.target
+    }
+
+    /// Get the edge kind
+    #[must_use]
+    pub const fn kind(&self) -> EdgeKind {
+        self.kind
+    }
+
+    /// Check if this edge connects the given source to target
+    #[must_use]
+    pub fn connects(&self, source: &str, target: &str) -> bool {
+        self.source == source && self.target == target
+    }
+}
 
 /// A workflow graph that manages nodes and dependencies for DAG visualization.
 ///
@@ -649,17 +722,14 @@ impl Renderer {
         tasks: &[TaskRow],
         selected_index: usize,
     ) -> String {
-        // Get the bead list pane for width calculation
         let pane_width = layout.get_pane(PaneType::BeadList).map_or(40, |p| p.width);
 
-        // Render each task line using functional fold pattern
         tasks
             .iter()
             .enumerate()
             .fold(String::new(), |mut acc, (i, task)| {
                 let is_selected = i == selected_index;
 
-                // Selection indicator
                 let indicator = if is_selected {
                     format!("{}►", style_helpers::selected())
                 } else {
@@ -667,13 +737,14 @@ impl Renderer {
                 };
                 acc.push_str(&indicator);
 
-                // Slug (truncated if needed)
+                let status_color = style_helpers::status_color(&task.status);
+                acc.push_str(status_color);
+
                 let slug = truncate(&task.slug, 12);
                 let slug_padding = " ".repeat(14_usize.saturating_sub(slug.chars().count()));
                 acc.push_str(&slug);
                 acc.push_str(&slug_padding);
 
-                // Stage symbol - use map_or for default
                 let symbol = task
                     .stage
                     .as_ref()
@@ -683,14 +754,11 @@ impl Renderer {
                 acc.push_str(symbol);
                 acc.push_str(&symbol_padding);
 
-                // Slug as title
                 let title = truncate(&task.slug, pane_width.saturating_sub(40));
                 acc.push_str(&title);
 
-                // Reset colors
                 acc.push_str("\x1b[0m");
 
-                // Progress bar if in progress
                 if task.status == "in_progress" {
                     let (running_stage, failed_stage, completed) = get_stage_info(task);
                     let progress = calculate_stage_progress(

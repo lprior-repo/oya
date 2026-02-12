@@ -52,7 +52,7 @@ pub mod web_client;
 // Re-exports for convenience - Zellij plugin
 pub use layout::{Layout, Pane, PaneType};
 pub use plugin::{OyaPlugin, PluginEvent, PluginInfo, Size};
-pub use render::Renderer;
+pub use render::{EdgeKind, GraphEdge, Renderer, WorkflowGraph, WorkflowGraphError};
 
 // Re-exports for convenience - UI components
 pub use correlation::{CorrelationContext, RequestId, keys};
@@ -67,6 +67,7 @@ pub use integration_test_worker::{
 pub use ipc_zellij::{ZellijIpcClient, ZellijStdin, ZellijStdout};
 pub use log::{LogAggregator, LogEntry, LogLevel, LogSource};
 pub use metrics::{AgentMetrics, MetricsSnapshot, PoolMetrics, PoolStats};
+pub use agent_info::{AgentCapability, AgentInfo, AgentInfoError, AgentState, AgentSummary};
 pub use state::{STATE_VERSION, StateError, StateManager, StateSnapshot};
 pub use timer::{RefreshTimer, TimerConfig, TimerError, TimerEvent, TimerState};
 pub use sparkline::{render_sparkline, SparklineBuilder, SparklineConfig, SparklineError};

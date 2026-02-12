@@ -362,3 +362,59 @@ fn workflow_graph_default_creates_empty_graph() {
     let graph = WorkflowGraph::default();
     assert_eq!(graph.node_count(), 0);
 }
+
+// ==================== GraphEdge Tests ====================
+
+use zellij_frontend::render::{EdgeKind, GraphEdge};
+
+#[test]
+fn graph_edge_new_creates_edge_with_default_kind() {
+    let edge = GraphEdge::new("A", "B");
+    assert_eq!(edge.source(), "A");
+    assert_eq!(edge.target(), "B");
+    assert_eq!(edge.kind(), EdgeKind::Dependency);
+}
+
+#[test]
+fn graph_edge_new_with_kind_sets_custom_kind() {
+    let edge = GraphEdge::new_with_kind("A", "B", EdgeKind::Blocks);
+    assert_eq!(edge.source(), "A");
+    assert_eq!(edge.target(), "B");
+    assert_eq!(edge.kind(), EdgeKind::Blocks);
+}
+
+#[test]
+fn graph_edge_connects_returns_correct_relation() {
+    let edge = GraphEdge::new("src-abc", "src-def");
+    assert!(edge.connects("src-abc", "src-def"));
+    assert!(!edge.connects("src-def", "src-abc"));
+    assert!(!edge.connects("src-abc", "src-xyz"));
+}
+
+#[test]
+fn graph_edge_clone_preserves_all_fields() {
+    let edge = GraphEdge::new_with_kind("A", "B", EdgeKind::Requires);
+    let cloned = edge.clone();
+    assert_eq!(edge.source(), cloned.source());
+    assert_eq!(edge.target(), cloned.target());
+    assert_eq!(edge.kind(), cloned.kind());
+}
+
+#[test]
+fn edge_kind_variants_exist() {
+    let kinds = [
+        EdgeKind::Dependency,
+        EdgeKind::Blocks,
+        EdgeKind::Requires,
+        EdgeKind::Soft,
+    ];
+    assert_eq!(kinds.len(), 4);
+}
+
+#[test]
+fn graph_edge_debug_format_includes_fields() {
+    let edge = GraphEdge::new("node-a", "node-b");
+    let debug_str = format!("{:?}", edge);
+    assert!(debug_str.contains("node-a"));
+    assert!(debug_str.contains("node-b"));
+}
