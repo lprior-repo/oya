@@ -1458,8 +1458,20 @@ impl OyaPlugin {
             'k' | 'K' => {
                 self.move_selection(-1)?;
             }
-            'h' | 'H' => self.cycle_focus_backward(),
-            'l' | 'L' => self.cycle_focus(),
+            'h' | 'H' => {
+                if self.pane_supports_horizontal_scroll() {
+                    self.scroll_horizontal(-1)?;
+                } else {
+                    self.cycle_focus_backward();
+                }
+            }
+            'l' | 'L' => {
+                if self.pane_supports_horizontal_scroll() {
+                    self.scroll_horizontal(1)?;
+                } else {
+                    self.cycle_focus();
+                }
+            }
             _ => {}
         }
 
@@ -1847,6 +1859,24 @@ impl OyaPlugin {
                 SortDirection::Desc => cmp.reverse(),
             }
         });
+    }
+
+    fn pane_supports_horizontal_scroll(&self) -> bool {
+        matches!(
+            self.focused_pane,
+            crate::layout::PaneType::BeadDetail
+                | crate::layout::PaneType::PipelineView
+                | crate::layout::PaneType::WorkflowGraph
+        )
+    }
+
+    fn scroll_horizontal(&mut self, delta: i32) -> PluginResult<()> {
+        if delta > 0 {
+            self.horizontal_scroll = self.horizontal_scroll.saturating_add(delta as usize);
+        } else {
+            self.horizontal_scroll = self.horizontal_scroll.saturating_sub((-delta) as usize);
+        }
+        Ok(())
     }
 
     fn goto_task(&mut self, target: &str) -> PluginResult<String> {

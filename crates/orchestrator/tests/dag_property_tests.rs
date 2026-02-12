@@ -21,7 +21,7 @@
 use std::collections::HashMap as StdHashMap;
 
 use im::HashSet;
-use proptest::collection::{hash_map, hash_set, vec};
+use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::string::string_regex;
 
