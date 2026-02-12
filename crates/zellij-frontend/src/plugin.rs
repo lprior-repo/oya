@@ -1231,7 +1231,13 @@ impl OyaPlugin {
             self.command_buffer.clear();
             self.search_buffer.clear();
             self.visual_anchor = None;
-            self.status_message = Some("Normal mode".to_string());
+
+            if self.focused_pane != crate::layout::PaneType::BeadList {
+                self.focused_pane = crate::layout::PaneType::BeadList;
+                self.status_message = Some("Focus: Bead List".to_string());
+            } else {
+                self.status_message = Some("Normal mode".to_string());
+            }
             return Ok(());
         }
 

@@ -238,7 +238,8 @@ impl AgentHandle {
     }
 
     /// Set last heartbeat timestamp for testing clock skew scenarios.
-    #[cfg(test)]
+    ///
+    /// This method is intended for chaos testing where clock skew needs to be simulated.
     pub fn set_last_heartbeat_for_test(&mut self, timestamp: DateTime<Utc>) {
         self.last_heartbeat = timestamp;
     }

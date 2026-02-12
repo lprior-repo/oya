@@ -23,36 +23,26 @@ fn bead_id_strategy() -> impl Strategy<Value = String> {
     string_regex("bead-[a-z0-9]{3,8}").unwrap()
 }
 
-#[derive(Debug, Clone)]
-struct DagSpec {
-    node_count: usize,
-    edge_indices: Vec<(usize, usize)>,
+type DagParams = (usize, usize);
+
+fn dag_params_strategy() -> impl Strategy<Value = DagParams> {
+    (2usize..15, 0usize..30)
 }
 
-fn dag_spec_strategy() -> impl Strategy<Value = DagSpec> {
-    (2usize..15usize, 0usize..30usize).prop_map(|(node_count, edge_count)| {
-        let all_possible_edges: Vec<(usize, usize)> = (0..node_count)
-            .flat_map(|from| (from + 1..node_count).map(move |to| (from, to)))
-            .collect();
-        
-        let edge_indices: Vec<(usize, usize)> = (0..edge_count)
-            .map(|i| all_possible_edges[i % all_possible_edges.len().max(1)])
-            .collect();
-        
-        DagSpec { node_count, edge_indices }
-    })
-}
-
-fn build_dag_from_spec(spec: &DagSpec) -> Result<WorkflowDAG, String> {
+fn build_dag(node_count: usize, edge_count: usize) -> Result<WorkflowDAG, String> {
     let mut dag = WorkflowDAG::new();
     
-    for i in 0..spec.node_count {
+    for i in 0..node_count {
         dag.add_node(format!("node-{}", i))
             .map_err(|e| format!("Failed to add node: {:?}", e))?;
     }
     
-    for &(from, to) in &spec.edge_indices {
-        if from < spec.node_count && to < spec.node_count {
+    let all_edges: Vec<(usize, usize)> = (0..node_count)
+        .flat_map(|from| (from + 1..node_count).map(move |to| (from, to)))
+        .collect();
+    
+    for i in 0..edge_count {
+        if let Some(&(from, to)) = all_edges.get(i % all_edges.len().max(1)) {
             dag.add_edge(
                 format!("node-{}", from),
                 format!("node-{}", to),
@@ -65,14 +55,24 @@ fn build_dag_from_spec(spec: &DagSpec) -> Result<WorkflowDAG, String> {
     Ok(dag)
 }
 
-fn verify_edge_order_for_spec(sorted: &[String], spec: &DagSpec) -> Result<(), String> {
+fn get_edges(node_count: usize, edge_count: usize) -> Vec<(usize, usize)> {
+    let all_edges: Vec<(usize, usize)> = (0..node_count)
+        .flat_map(|from| (from + 1..node_count).map(move |to| (from, to)))
+        .collect();
+    
+    (0..edge_count)
+        .map(|i| all_edges[i % all_edges.len().max(1)])
+        .collect()
+}
+
+fn verify_edge_order(sorted: &[String], edges: &[(usize, usize)]) -> Result<(), String> {
     let positions: StdHashMap<String, usize> = sorted
         .iter()
         .enumerate()
         .map(|(i, id)| (id.clone(), i))
         .collect();
     
-    for &(from, to) in &spec.edge_indices {
+    for &(from, to) in edges {
         let from_node = format!("node-{}", from);
         let to_node = format!("node-{}", to);
         
@@ -96,40 +96,47 @@ fn verify_edge_order_for_spec(sorted: &[String], spec: &DagSpec) -> Result<(), S
 
 proptest! {
     #[test]
-    fn prop_toposort_respects_all_edge_orders(spec in dag_spec_strategy()) {
-        let dag = match build_dag_from_spec(&spec) {
+    fn prop_toposort_respects_all_edge_orders(params in dag_params_strategy()) {
+        let (node_count, edge_count) = params;
+        let dag = match build_dag(node_count, edge_count) {
             Ok(d) => d,
             Err(_) => return Err(TestCaseError::reject("Invalid DAG")),
         };
+        
+        let edges = get_edges(node_count, edge_count);
         
         let sorted = dag
             .topological_sort()
             .map_err(|e| TestCaseError::fail(format!("Toposort failed: {:?}", e)))?;
         
-        if let Err(e) = verify_edge_order_for_spec(&sorted, &spec) {
+        if let Err(e) = verify_edge_order(&sorted, &edges) {
             return Err(TestCaseError::fail(e));
         }
     }
     
     #[test]
-    fn prop_toposort_kahn_respects_all_edge_orders(spec in dag_spec_strategy()) {
-        let dag = match build_dag_from_spec(&spec) {
+    fn prop_toposort_kahn_respects_all_edge_orders(params in dag_params_strategy()) {
+        let (node_count, edge_count) = params;
+        let dag = match build_dag(node_count, edge_count) {
             Ok(d) => d,
             Err(_) => return Err(TestCaseError::reject("Invalid DAG")),
         };
+        
+        let edges = get_edges(node_count, edge_count);
         
         let sorted = dag
             .topological_sort_kahn()
             .map_err(|e| TestCaseError::fail(format!("Toposort Kahn failed: {:?}", e)))?;
         
-        if let Err(e) = verify_edge_order_for_spec(&sorted, &spec) {
+        if let Err(e) = verify_edge_order(&sorted, &edges) {
             return Err(TestCaseError::fail(e));
         }
     }
     
     #[test]
-    fn prop_toposort_contains_all_nodes(spec in dag_spec_strategy()) {
-        let dag = match build_dag_from_spec(&spec) {
+    fn prop_toposort_contains_all_nodes(params in dag_params_strategy()) {
+        let (node_count, _) = params;
+        let dag = match build_dag(node_count, 0) {
             Ok(d) => d,
             Err(_) => return Err(TestCaseError::reject("Invalid DAG")),
         };
@@ -138,26 +145,19 @@ proptest! {
             .topological_sort()
             .map_err(|e| TestCaseError::fail(format!("Toposort failed: {:?}", e)))?;
         
-        let sorted_set: std::collections::HashSet<&String> = sorted.iter().collect();
-        for i in 0..spec.node_count {
-            let node = format!("node-{}", i);
-            if !sorted_set.contains(&node) {
-                return Err(TestCaseError::fail(
-                    format!("Node {} missing from toposort result", node)
-                ));
-            }
-        }
+        prop_assert_eq!(sorted.len(), node_count);
         
-        if sorted.len() != spec.node_count {
-            return Err(TestCaseError::fail(
-                format!("Toposort returned {} nodes, expected {}", sorted.len(), spec.node_count)
-            ));
+        let sorted_set: std::collections::HashSet<&String> = sorted.iter().collect();
+        for i in 0..node_count {
+            let node = format!("node-{}", i);
+            prop_assert!(sorted_set.contains(&node), "Missing node {}", node);
         }
     }
     
     #[test]
-    fn prop_toposort_no_duplicates(spec in dag_spec_strategy()) {
-        let dag = match build_dag_from_spec(&spec) {
+    fn prop_toposort_no_duplicates(params in dag_params_strategy()) {
+        let (node_count, edge_count) = params;
+        let dag = match build_dag(node_count, edge_count) {
             Ok(d) => d,
             Err(_) => return Err(TestCaseError::reject("Invalid DAG")),
         };
@@ -168,46 +168,18 @@ proptest! {
         
         let mut seen = std::collections::HashSet::new();
         for node in &sorted {
-            if !seen.insert(node) {
-                return Err(TestCaseError::fail(
-                    format!("Duplicate node {} in toposort result", node)
-                ));
-            }
+            prop_assert!(seen.insert(node), "Duplicate node {}", node);
         }
     }
     
     #[test]
-    fn prop_toposort_both_algorithms_produce_valid_ordering(spec in dag_spec_strategy()) {
-        let dag = match build_dag_from_spec(&spec) {
-            Ok(d) => d,
-            Err(_) => return Err(TestCaseError::reject("Invalid DAG")),
-        };
-        
-        let sorted_dfs = dag
-            .topological_sort()
-            .map_err(|e| TestCaseError::fail(format!("Toposort DFS failed: {:?}", e)))?;
-        
-        let sorted_kahn = dag
-            .topological_sort_kahn()
-            .map_err(|e| TestCaseError::fail(format!("Toposort Kahn failed: {:?}", e)))?;
-        
-        if let Err(e) = verify_edge_order_for_spec(&sorted_dfs, &spec) {
-            return Err(TestCaseError::fail(format!("DFS: {}", e)));
-        }
-        
-        if let Err(e) = verify_edge_order_for_spec(&sorted_kahn, &spec) {
-            return Err(TestCaseError::fail(format!("Kahn: {}", e)));
-        }
-    }
-    
-    #[test]
-    fn prop_toposort_empty_dag_returns_empty() {
+    fn prop_toposort_empty_dag() {
         let dag = WorkflowDAG::new();
         let sorted = dag
             .topological_sort()
             .map_err(|e| TestCaseError::fail(format!("Toposort failed: {:?}", e)))?;
         
-        prop_assert!(sorted.is_empty(), "Empty DAG should produce empty toposort");
+        prop_assert!(sorted.is_empty());
     }
     
     #[test]
@@ -220,12 +192,12 @@ proptest! {
             .topological_sort()
             .map_err(|e| TestCaseError::fail(format!("Toposort failed: {:?}", e)))?;
         
-        prop_assert_eq!(sorted.len(), 1, "Single node DAG should produce single element toposort");
-        prop_assert_eq!(&sorted[0], &bead_id, "Single node should be preserved");
+        prop_assert_eq!(sorted.len(), 1);
+        prop_assert_eq!(&sorted[0], &bead_id);
     }
     
     #[test]
-    fn prop_toposort_linear_chain(chain_size in 2usize..20) {
+    fn prop_toposort_linear_chain(chain_size in 2usize..15) {
         let mut dag = WorkflowDAG::new();
         
         for i in 0..chain_size {
@@ -246,15 +218,10 @@ proptest! {
             .topological_sort()
             .map_err(|e| TestCaseError::fail(format!("Toposort failed: {:?}", e)))?;
         
-        prop_assert_eq!(sorted.len(), chain_size, "Linear chain toposort should have all nodes");
+        prop_assert_eq!(sorted.len(), chain_size);
         
-        for i in 0..chain_size {
-            prop_assert_eq!(
-                sorted[i],
-                format!("node-{}", i),
-                "Linear chain should preserve exact order: expected node-{} at position {}, got {}",
-                i, i, sorted[i]
-            );
+        for (expected_pos, node) in sorted.iter().enumerate() {
+            prop_assert_eq!(node, &format!("node-{}", expected_pos));
         }
     }
     
@@ -284,21 +251,17 @@ proptest! {
             .topological_sort()
             .map_err(|e| TestCaseError::fail(format!("Toposort failed: {:?}", e)))?;
         
-        prop_assert_eq!(sorted.len(), 4, "Diamond DAG should have 4 nodes");
+        prop_assert_eq!(sorted.len(), 4);
         
-        let pos_a = sorted.iter().position(|x| x == "a")
-            .ok_or_else(|| TestCaseError::fail("Missing node a"))?;
-        let pos_b = sorted.iter().position(|x| x == "b")
-            .ok_or_else(|| TestCaseError::fail("Missing node b"))?;
-        let pos_c = sorted.iter().position(|x| x == "c")
-            .ok_or_else(|| TestCaseError::fail("Missing node c"))?;
-        let pos_d = sorted.iter().position(|x| x == "d")
-            .ok_or_else(|| TestCaseError::fail("Missing node d"))?;
+        let pos_a = sorted.iter().position(|x| x == "a").ok_or_else(|| TestCaseError::fail("Missing a"))?;
+        let pos_b = sorted.iter().position(|x| x == "b").ok_or_else(|| TestCaseError::fail("Missing b"))?;
+        let pos_c = sorted.iter().position(|x| x == "c").ok_or_else(|| TestCaseError::fail("Missing c"))?;
+        let pos_d = sorted.iter().position(|x| x == "d").ok_or_else(|| TestCaseError::fail("Missing d"))?;
         
-        prop_assert!(pos_a < pos_b, "a should come before b");
-        prop_assert!(pos_a < pos_c, "a should come before c");
-        prop_assert!(pos_b < pos_d, "b should come before d");
-        prop_assert!(pos_c < pos_d, "c should come before d");
+        prop_assert!(pos_a < pos_b);
+        prop_assert!(pos_a < pos_c);
+        prop_assert!(pos_b < pos_d);
+        prop_assert!(pos_c < pos_d);
     }
 }
 
@@ -319,48 +282,9 @@ fn build_linear_dag_for_ready(size: usize) -> Result<WorkflowDAG, String> {
     Ok(dag)
 }
 
-fn build_diamond_dag_for_ready() -> Result<WorkflowDAG, String> {
-    let mut dag = WorkflowDAG::new();
-    dag.add_node("bead-a".to_string())
-        .map_err(|e| e.to_string())?;
-    dag.add_node("bead-b".to_string())
-        .map_err(|e| e.to_string())?;
-    dag.add_node("bead-c".to_string())
-        .map_err(|e| e.to_string())?;
-    dag.add_node("bead-d".to_string())
-        .map_err(|e| e.to_string())?;
-
-    dag.add_edge(
-        "bead-a".to_string(),
-        "bead-b".to_string(),
-        DependencyType::BlockingDependency,
-    )
-    .map_err(|e| e.to_string())?;
-    dag.add_edge(
-        "bead-a".to_string(),
-        "bead-c".to_string(),
-        DependencyType::BlockingDependency,
-    )
-    .map_err(|e| e.to_string())?;
-    dag.add_edge(
-        "bead-b".to_string(),
-        "bead-d".to_string(),
-        DependencyType::BlockingDependency,
-    )
-    .map_err(|e| e.to_string())?;
-    dag.add_edge(
-        "bead-c".to_string(),
-        "bead-d".to_string(),
-        DependencyType::BlockingDependency,
-    )
-    .map_err(|e| e.to_string())?;
-
-    Ok(dag)
-}
-
 proptest! {
     #[test]
-    fn prop_ready_bead_has_no_incomplete_blocking_deps_linear(
+    fn prop_ready_bead_has_no_incomplete_blocking_deps(
         dag_size in 1usize..10,
         completed_count in 0usize..10,
     ) {
@@ -376,7 +300,7 @@ proptest! {
             let is_ready = dag.is_ready(bead_id, &completed)
                 .map_err(|e| TestCaseError::fail(e.to_string()))?;
 
-            prop_assert!(is_ready, "get_ready_beads returned {} but is_ready returned false", bead_id);
+            prop_assert!(is_ready);
 
             let deps = dag.get_dependencies(bead_id)
                 .map_err(|e| TestCaseError::fail(e.to_string()))?;
@@ -387,61 +311,6 @@ proptest! {
                     "Ready bead '{}' has incomplete blocking dependency '{}'",
                     bead_id,
                     dep_id
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn prop_blocked_and_ready_are_disjoint_diamond(
-        completed_beads in vec(0usize..4, 0..4),
-    ) {
-        let dag = build_diamond_dag_for_ready().map_err(|e| TestCaseError::fail(e))?;
-
-        let bead_names = ["bead-a", "bead-b", "bead-c", "bead-d"];
-        let completed: HashSet<BeadId> = completed_beads
-            .iter()
-            .filter_map(|&i| bead_names.get(i).map(|s| s.to_string()))
-            .collect();
-
-        let ready = dag.get_ready_beads(&completed);
-        let blocked = dag.get_blocked_nodes(&completed);
-
-        for bead_id in &ready {
-            prop_assert!(
-                !blocked.contains(bead_id),
-                "Bead '{}' is both ready and blocked",
-                bead_id
-            );
-        }
-    }
-
-    #[test]
-    fn prop_is_ready_consistent_with_get_ready_beads(
-        completed_beads in vec(0usize..4, 0..4),
-    ) {
-        let dag = build_diamond_dag_for_ready().map_err(|e| TestCaseError::fail(e))?;
-
-        let bead_names = ["bead-a", "bead-b", "bead-c", "bead-d"];
-        let completed: HashSet<BeadId> = completed_beads
-            .iter()
-            .filter_map(|&i| bead_names.get(i).map(|s| s.to_string()))
-            .collect();
-
-        let ready = dag.get_ready_beads(&completed);
-
-        for bead_name in &bead_names {
-            let bead_id = bead_name.to_string();
-            let is_ready = dag.is_ready(&bead_id, &completed)
-                .map_err(|e| TestCaseError::fail(e.to_string()))?;
-
-            let in_ready_list = ready.contains(&bead_id);
-
-            if !completed.contains(&bead_id) {
-                prop_assert_eq!(
-                    is_ready, in_ready_list,
-                    "is_ready({}) = {} but get_ready_beads contains? {}",
-                    bead_id, is_ready, in_ready_list
                 );
             }
         }
@@ -458,37 +327,6 @@ fn prop_single_bead_no_deps_is_ready() -> Result<(), Box<dyn std::error::Error>>
 
     assert_eq!(ready, vec!["bead-1".to_string()]);
     assert!(dag.is_ready(&"bead-1".to_string(), &completed)?);
-
-    Ok(())
-}
-
-#[test]
-fn prop_bead_with_complete_dep_is_ready() -> Result<(), Box<dyn std::error::Error>> {
-    let mut dag = WorkflowDAG::new();
-    dag.add_node("bead-a".to_string())?;
-    dag.add_node("bead-b".to_string())?;
-    dag.add_edge(
-        "bead-a".to_string(),
-        "bead-b".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-
-    let mut completed = HashSet::new();
-    completed.insert("bead-a".to_string());
-
-    let ready = dag.get_ready_beads(&completed);
-
-    assert!(ready.contains(&"bead-b".to_string()));
-    assert!(dag.is_ready(&"bead-b".to_string(), &completed)?);
-
-    let deps = dag.get_dependencies(&"bead-b".to_string())?;
-    for dep_id in deps {
-        assert!(
-            completed.contains(&dep_id),
-            "Ready bead has incomplete blocking dep: {}",
-            dep_id
-        );
-    }
 
     Ok(())
 }

@@ -313,35 +313,41 @@ mod edge_case_tests {
     use super::*;
 
     #[test]
-    fn should_roundtrip_empty_bead_spec() {
+    fn should_roundtrip_empty_bead_spec() -> Result<(), String> {
         let spec = BeadSpec::new("");
-        let json = serde_json::to_string(&spec).expect("serialize");
-        let restored: BeadSpec = serde_json::from_str(&json).expect("deserialize");
+        let json = serde_json::to_string(&spec).map_err(|e| format!("serialize: {}", e))?;
+        let restored: BeadSpec =
+            serde_json::from_str(&json).map_err(|e| format!("deserialize: {}", e))?;
         assert_eq!(spec.title, restored.title);
+        Ok(())
     }
 
     #[test]
-    fn should_roundtrip_bead_spec_with_large_dependencies() {
+    fn should_roundtrip_bead_spec_with_large_dependencies() -> Result<(), String> {
         let deps: Vec<BeadId> = (0..100).map(|_| BeadId::new()).collect();
         let spec = BeadSpec::new("test").with_dependencies(deps.clone());
-        let json = serde_json::to_string(&spec).expect("serialize");
-        let restored: BeadSpec = serde_json::from_str(&json).expect("deserialize");
+        let json = serde_json::to_string(&spec).map_err(|e| format!("serialize: {}", e))?;
+        let restored: BeadSpec =
+            serde_json::from_str(&json).map_err(|e| format!("deserialize: {}", e))?;
         assert_eq!(spec.dependencies.len(), restored.dependencies.len());
+        Ok(())
     }
 
     #[test]
-    fn should_roundtrip_bead_spec_with_many_labels() {
+    fn should_roundtrip_bead_spec_with_many_labels() -> Result<(), String> {
         let mut spec = BeadSpec::new("test");
         for i in 0..50 {
             spec = spec.with_label(format!("label-{}", i));
         }
-        let json = serde_json::to_string(&spec).expect("serialize");
-        let restored: BeadSpec = serde_json::from_str(&json).expect("deserialize");
+        let json = serde_json::to_string(&spec).map_err(|e| format!("serialize: {}", e))?;
+        let restored: BeadSpec =
+            serde_json::from_str(&json).map_err(|e| format!("deserialize: {}", e))?;
         assert_eq!(spec.labels.len(), restored.labels.len());
+        Ok(())
     }
 
     #[test]
-    fn should_roundtrip_all_bead_states() {
+    fn should_roundtrip_all_bead_states() -> Result<(), String> {
         let states = [
             BeadState::Pending,
             BeadState::Scheduled,
@@ -354,46 +360,60 @@ mod edge_case_tests {
         ];
 
         for state in states {
-            let json = serde_json::to_string(&state).expect("serialize");
-            let restored: BeadState = serde_json::from_str(&json).expect("deserialize");
+            let json = serde_json::to_string(&state).map_err(|e| format!("serialize: {}", e))?;
+            let restored: BeadState =
+                serde_json::from_str(&json).map_err(|e| format!("deserialize: {}", e))?;
             assert_eq!(state, restored, "Failed for {:?}", state);
         }
+        Ok(())
     }
 
     #[test]
-    fn should_roundtrip_all_complexities() {
+    fn should_roundtrip_all_complexities() -> Result<(), String> {
         let complexities = [Complexity::Simple, Complexity::Medium, Complexity::Complex];
 
         for complexity in complexities {
-            let json = serde_json::to_string(&complexity).expect("serialize");
-            let restored: Complexity = serde_json::from_str(&json).expect("deserialize");
+            let json =
+                serde_json::to_string(&complexity).map_err(|e| format!("serialize: {}", e))?;
+            let restored: Complexity =
+                serde_json::from_str(&json).map_err(|e| format!("deserialize: {}", e))?;
             assert_eq!(complexity, restored);
         }
+        Ok(())
     }
 
     #[test]
-    fn should_roundtrip_empty_phase_output_data() {
+    fn should_roundtrip_empty_phase_output_data() -> Result<(), String> {
         let output = PhaseOutput::success(vec![]);
-        let json = serde_json::to_string(&output).expect("serialize");
-        let restored: PhaseOutput = serde_json::from_str(&json).expect("deserialize");
+        let json = serde_json::to_string(&output).map_err(|e| format!("serialize: {}", e))?;
+        let restored: PhaseOutput =
+            serde_json::from_str(&json).map_err(|e| format!("deserialize: {}", e))?;
         assert!(restored.data.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn should_roundtrip_large_phase_output_data() {
+    fn should_roundtrip_large_phase_output_data() -> Result<(), String> {
         let data = vec![0u8; 1000];
         let output = PhaseOutput::success(data.clone());
-        let json = serde_json::to_string(&output).expect("serialize");
-        let restored: PhaseOutput = serde_json::from_str(&json).expect("deserialize");
+        let json = serde_json::to_string(&output).map_err(|e| format!("serialize: {}", e))?;
+        let restored: PhaseOutput =
+            serde_json::from_str(&json).map_err(|e| format!("deserialize: {}", e))?;
         assert_eq!(data, restored.data);
+        Ok(())
     }
 
     #[test]
-    fn should_roundtrip_bead_result_with_large_output() {
+    fn should_roundtrip_bead_result_with_large_output() -> Result<(), String> {
         let output = vec![42u8; 500];
         let result = BeadResult::success(output.clone(), 1000);
-        let json = serde_json::to_string(&result).expect("serialize");
-        let restored: BeadResult = serde_json::from_str(&json).expect("deserialize");
-        assert_eq!(output, restored.output.expect("should have output"));
+        let json = serde_json::to_string(&result).map_err(|e| format!("serialize: {}", e))?;
+        let restored: BeadResult =
+            serde_json::from_str(&json).map_err(|e| format!("deserialize: {}", e))?;
+        let restored_output = restored
+            .output
+            .ok_or_else(|| "should have output".to_string())?;
+        assert_eq!(output, restored_output);
+        Ok(())
     }
 }
