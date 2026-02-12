@@ -86,7 +86,9 @@ fn test_render_sparkline_with_config() {
         min_char: '░',
         max_char: '█',
     };
-    let result = render_sparkline(&[0, 25, 50, 75, 100]).with_config(&config);
+    let result = SparklineBuilder::new(&[0, 25, 50, 75, 100])
+        .with_config(&config)
+        .build();
     assert!(result.is_ok());
     let output = result.unwrap();
     assert_eq!(output.chars().count(), 5);
