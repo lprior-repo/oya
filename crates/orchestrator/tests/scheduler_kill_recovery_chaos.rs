@@ -342,6 +342,90 @@ async fn setup_chaos_test(test_name: &str) -> ChaosTestResult<ChaosTestContext> 
     })
 }
 
+async fn create_persistence_stack() -> ChaosTestResult<(Arc<ReplayEngine>, OrchestratorStore)> {
+    let config = StoreConfig::in_memory();
+    let store = OrchestratorStore::connect(config)
+        .await
+        .map_err(|e| ChaosTestError::SetupFailed {
+            reason: format!("Failed to connect store: {e}"),
+        })?;
+    store
+        .initialize_schema()
+        .await
+        .map_err(|e| ChaosTestError::SetupFailed {
+            reason: format!("Failed to initialize schema: {e}"),
+        })?;
+    let engine = Arc::new(ReplayEngine::new(store.clone()));
+    Ok((engine, store))
+}
+
+/// Setup test environment with persistence for state recovery tests.
+async fn setup_chaos_test_with_persistence(
+    test_name: &str,
+) -> ChaosTestResult<ChaosTestContext> {
+    info!("Setting up chaos test with persistence: {}", test_name);
+
+    let (replay_engine, _store) = create_persistence_stack().await?;
+
+    // Create supervisor with test config
+    let args = SupervisorArguments::new().with_config(test_supervisor_config());
+    let supervisor =
+        spawn_supervisor_with_name::<SchedulerActorDef>(args, &format!("supervisor-{test_name}"))
+            .await
+            .map_err(|e| ChaosTestError::SetupFailed {
+                reason: format!("Failed to spawn supervisor: {e}"),
+            })?;
+
+    // Wait for supervisor to be running
+    await_actor_status(&supervisor, ActorStatus::Running, 1000).await?;
+
+    // Spawn scheduler child with replay engine
+    let scheduler_name = format!("scheduler-{test_name}");
+    let scheduler_args = SchedulerArguments::new().with_replay_engine(Arc::clone(&replay_engine));
+    let (spawn_tx, spawn_rx) = tokio::sync::oneshot::channel();
+    let _ = supervisor.send_message(SupervisorMessage::<SchedulerActorDef>::SpawnChild {
+        name: scheduler_name.clone(),
+        args: scheduler_args,
+        reply: spawn_tx,
+    });
+
+    spawn_rx
+        .await
+        .map_err(|e| ChaosTestError::SetupFailed {
+            reason: format!("Failed to spawn scheduler: {e}"),
+        })?
+        .map_err(|e| ChaosTestError::SetupFailed {
+            reason: format!("Scheduler spawn error: {e}"),
+        })?;
+
+    // Wait for scheduler to start
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // Get scheduler reference from supervisor
+    let (get_tx, get_rx) = tokio::sync::oneshot::channel();
+    let _ = supervisor.send_message(SupervisorMessage::<SchedulerActorDef>::GetChild {
+        name: scheduler_name.clone(),
+        reply: get_tx,
+    });
+
+    let scheduler = get_rx
+        .await
+        .map_err(|e| ChaosTestError::SetupFailed {
+            reason: format!("Failed to get scheduler ref: {e}"),
+        })?
+        .ok_or_else(|| ChaosTestError::SetupFailed {
+            reason: format!("Scheduler '{scheduler_name}' not found in supervisor"),
+        })?;
+
+    Ok(ChaosTestContext {
+        scheduler,
+        supervisor,
+        workflow_ids: Vec::new(),
+        pre_kill_state: None,
+        replay_engine: Some(replay_engine),
+    })
+}
+
 /// Register test workflows with the scheduler.
 async fn register_test_workflows(ctx: &mut ChaosTestContext) -> ChaosTestResult<()> {
     // Register 3 test workflows
