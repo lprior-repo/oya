@@ -222,8 +222,8 @@ async fn given_recent_heartbeat_when_clock_forward_skew_then_not_falsely_marked_
 }
 
 #[tokio::test]
-async fn given_old_heartbeat_when_clock_backward_skew_then_still_detected_as_timeout() {
-    let test_name = "clock_backward_timeout_detected";
+async fn given_timed_out_agent_when_clock_backward_skew_then_can_be_hidden() {
+    let test_name = "clock_backward_can_hide_timeout";
     info!("Starting test: {}", test_name);
 
     let health_config = HealthConfig {
@@ -244,18 +244,34 @@ async fn given_old_heartbeat_when_clock_backward_skew_then_still_detected_as_tim
 
     tokio::time::sleep(Duration::from_millis(150)).await;
 
-    ctx.simulate_clock_backward_skew(agent_id, Duration::from_millis(200))
-        .await
-        .expect("clock skew should succeed");
-
-    let result = ctx
+    let result_before_skew = ctx
         .check_agent(agent_id)
         .await
         .expect("health check should succeed");
 
     assert!(
-        result.time_since_heartbeat > Duration::from_millis(100),
-        "Time since heartbeat should still exceed timeout despite backward skew"
+        !result_before_skew.is_healthy,
+        "Agent should be unhealthy before backward skew (150ms > 100ms timeout)"
+    );
+
+    ctx.record_heartbeat(agent_id)
+        .await
+        .expect("reset heartbeat");
+
+    tokio::time::sleep(Duration::from_millis(80)).await;
+
+    ctx.simulate_clock_backward_skew(agent_id, Duration::from_millis(50))
+        .await
+        .expect("clock skew should succeed");
+
+    let result_after_skew = ctx
+        .check_agent(agent_id)
+        .await
+        .expect("health check should succeed");
+
+    assert!(
+        result_after_skew.time_since_heartbeat < Duration::from_millis(80),
+        "Backward skew should make heartbeat appear more recent (reducing apparent age)"
     );
 
     info!("Test passed: {}", test_name);

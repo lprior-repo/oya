@@ -1366,6 +1366,13 @@ impl OyaPlugin {
                 let _ = self.refresh_tasks();
                 self.pending_g = false;
             }
+            // Enter key: drill-down to detail view
+            '\n' | '\r' => {
+                if self.focused_pane == crate::layout::PaneType::BeadList {
+                    self.focused_pane = crate::layout::PaneType::BeadDetail;
+                    self.status_message = Some("Focus: Bead Detail".to_string());
+                }
+            }
             _ => {
                 // Other keys ignored
                 self.pending_g = false;

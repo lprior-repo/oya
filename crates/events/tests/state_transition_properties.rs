@@ -67,7 +67,6 @@ proptest! {
         let valid_targets: Vec<BeadState> = from_state.valid_transitions();
         let can_transition = from_state.can_transition_to(to_state);
         let is_in_valid = valid_targets.contains(&to_state);
-
         prop_assert_eq!(can_transition, is_in_valid);
     }
 
@@ -78,30 +77,19 @@ proptest! {
     }
 
     #[test]
-    fn prop_completed_valid_transitions_empty() {
-        let transitions = BeadState::Completed.valid_transitions();
-        prop_assert!(transitions.is_empty());
-    }
-
-    #[test]
     fn prop_non_terminal_can_reach_completed(state in arb_bead_state()) {
-        if state.is_terminal() {
-            return Ok(());
-        }
+        prop_assume!(!state.is_terminal(), "Skipping terminal state");
         let can_reach = can_reach_completed(state);
         prop_assert!(can_reach);
     }
 
     #[test]
     fn prop_transitions_preserve_reachability(state in arb_bead_state()) {
-        if state.is_terminal() {
-            return Ok(());
-        }
+        prop_assume!(!state.is_terminal(), "Skipping terminal state");
         for target in state.valid_transitions() {
             let can_reach = can_reach_completed(target);
             prop_assert!(can_reach);
         }
-        Ok(())
     }
 
     #[test]
@@ -117,31 +105,42 @@ proptest! {
 }
 
 #[cfg(test)]
-mod unit_tests {
+mod static_tests {
     use super::*;
 
     #[test]
-    fn should_reach_completed_from_all_non_terminal_states() {
+    fn completed_valid_transitions_empty() {
+        let transitions = BeadState::Completed.valid_transitions();
+        assert!(
+            transitions.is_empty(),
+            "Completed should have no transitions"
+        );
+    }
+
+    #[test]
+    fn completed_is_terminal() {
+        assert!(BeadState::Completed.is_terminal());
+    }
+
+    #[test]
+    fn all_non_terminal_states_can_reach_completed() {
         for state in ALL_STATES {
             if state.is_terminal() {
-                assert!(!can_reach_completed(state) || state == BeadState::Completed);
-            } else {
-                assert!(
-                    can_reach_completed(state),
-                    "{:?} should reach Completed",
-                    state
-                );
+                continue;
             }
+            assert!(
+                can_reach_completed(state),
+                "{:?} should reach Completed",
+                state
+            );
         }
     }
 
     #[test]
-    fn should_have_consistent_transition_counts() {
+    fn transition_counts_match_specification() {
         for state in ALL_STATES {
             let valid = state.valid_transitions();
-            let count = valid.len();
-
-            let explicit_count = match state {
+            let expected_count = match state {
                 BeadState::Pending => 2,
                 BeadState::Scheduled => 3,
                 BeadState::Ready => 3,
@@ -151,32 +150,18 @@ mod unit_tests {
                 BeadState::Paused => 2,
                 BeadState::Completed => 0,
             };
-
             assert_eq!(
-                count, explicit_count,
-                "{:?} should have {} valid transitions, got {:?}",
-                state, explicit_count, valid
-            );
-        }
-    }
-
-    #[test]
-    fn should_not_allow_skipping_states() {
-        assert!(!BeadState::Pending.can_transition_to(BeadState::Running));
-        assert!(!BeadState::Pending.can_transition_to(BeadState::Ready));
-    }
-
-    #[test]
-    fn should_exhaustively_verify_all_states_eventually_complete() {
-        for state in ALL_STATES {
-            if state.is_terminal() {
-                continue;
-            }
-            assert!(
-                can_reach_completed(state),
-                "State {:?} cannot reach Completed",
+                valid.len(),
+                expected_count,
+                "{:?} transition count mismatch",
                 state
             );
         }
+    }
+
+    #[test]
+    fn pending_cannot_skip_states() {
+        assert!(!BeadState::Pending.can_transition_to(BeadState::Running));
+        assert!(!BeadState::Pending.can_transition_to(BeadState::Ready));
     }
 }
