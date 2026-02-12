@@ -311,31 +311,12 @@ impl IntegrationTestWorker {
         );
 
         let start_time = std::time::Instant::now();
-
-        // Build the cargo test command
-        let mut cmd = Command::new("cargo");
-        cmd.current_dir(&self.config.crate_path)
-            .arg("test")
-            .arg("--test")
-            .arg("*");
-
-        // Add release flag if in release mode
-        if let Some(flag) = self.config.mode.cargo_flag() {
-            cmd.arg(flag);
-        }
-
-        // Execute the test command
-        let output = cmd.output().map_err(|e| {
-            IntegrationTestError::ExecutionFailed(format!("Failed to execute cargo test: {e}"))
-        })?;
-
+        let test_files = self.discover_tests()?;
+        let test_results = test_files
+            .iter()
+            .map(|path| self.run_test_file(path))
+            .collect::<Result<Vec<_>, _>>()?;
         let duration_ms = start_time.elapsed().as_millis() as u64;
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-        let combined_output = format!("{}\n{}", stdout, stderr);
-
-        // Parse the test output to extract results
-        let test_results = self.parse_cargo_test_output(&combined_output);
 
         // Calculate summary statistics
         let total = test_results.len() as u32;
@@ -362,10 +343,16 @@ impl IntegrationTestWorker {
     ///
     /// Executes a single test file and returns the result.
     pub fn run_test_file(&self, test_file: &Path) -> Result<TestResult, IntegrationTestError> {
+        if !test_file.exists() {
+            return Err(IntegrationTestError::TestFileNotFound(
+                test_file.to_path_buf(),
+            ));
+        }
+
         let test_name = test_file
             .file_stem()
             .and_then(|s| s.to_str())
-            .unwrap_or("unknown")
+            .ok_or_else(|| IntegrationTestError::TestFileNotFound(test_file.to_path_buf()))?
             .to_string();
 
         info!(
@@ -411,48 +398,6 @@ impl IntegrationTestWorker {
         };
 
         Ok(result)
-    }
-
-    /// Parse cargo test output to extract individual test results.
-    ///
-    /// This is a simplified parser that extracts test names and pass/fail status.
-    fn parse_cargo_test_output(&self, output: &str) -> Vec<TestResult> {
-        let mut results = Vec::new();
-
-        // Look for test result lines like "test test_name ... ok" or "test test_name ... FAILED"
-        for line in output.lines() {
-            let line = line.trim();
-
-            // Parse test result lines
-            if line.starts_with("test ")
-                && (line.ends_with(" ... ok") || line.ends_with(" ... FAILED"))
-            {
-                let parts = line.split_whitespace().collect::<Vec<_>>();
-
-                if parts.len() >= 4 {
-                    // Use get for functional safety - we know parts.len() >= 4
-                    let test_name = parts.get(1).map_or_else(String::new, |s| s.to_string());
-                    let status = parts.get(3).map_or("", |s| *s);
-
-                    let passed = status == "ok" || status == "ignored";
-
-                    results.push(TestResult {
-                        test_name,
-                        passed,
-                        duration_ms: 0, // Cargo doesn't always provide timing per test
-                        output: line.to_string(),
-                        error: if passed {
-                            None
-                        } else {
-                            Some(format!("Test {status}"))
-                        },
-                        timestamp: Utc::now(),
-                    });
-                }
-            }
-        }
-
-        results
     }
 
     /// Run tests with retry logic on failure.
@@ -589,31 +534,6 @@ mod tests {
         let worker = IntegrationTestWorker::new(config);
 
         assert!(worker.worker_id().starts_with("integration-test-worker-"));
-    }
-
-    #[test]
-    fn test_parse_cargo_test_output() {
-        let config = IntegrationTestConfig::default();
-        let worker = IntegrationTestWorker::new(config);
-
-        let output = r#"
-running 3 tests
-test test_foo ... ok
-test test_bar ... ok
-test test_baz ... FAILED
-
-test result: ok. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out
-"#;
-
-        let results = worker.parse_cargo_test_output(output);
-
-        assert_eq!(results.len(), 3);
-        assert_eq!(results[0].test_name, "test_foo");
-        assert!(results[0].passed);
-        assert_eq!(results[1].test_name, "test_bar");
-        assert!(results[1].passed);
-        assert_eq!(results[2].test_name, "test_baz");
-        assert!(!results[2].passed);
     }
 
     #[test]
