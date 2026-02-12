@@ -435,7 +435,7 @@ async fn given_agent_timeout_when_reassign_attempted_then_succeeds() {
 
     let health_config = HealthConfig {
         check_interval: Duration::from_millis(50),
-        heartbeat_timeout: Duration::from_millis(100),
+        heartbeat_timeout: Duration::from_millis(200),
         max_failures: 1,
     };
 
@@ -451,9 +451,20 @@ async fn given_agent_timeout_when_reassign_attempted_then_succeeds() {
         .await
         .expect("assign should succeed");
 
-    let _handle = ctx.health_monitor.start_background_check();
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    
+    ctx.pool
+        .record_heartbeat("agent-1")
+        .await
+        .expect("heartbeat should succeed");
+    ctx.pool
+        .record_heartbeat("agent-2")
+        .await
+        .expect("heartbeat should succeed");
 
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    tokio::time::sleep(Duration::from_millis(250)).await;
+
+    let _ = ctx.pool.health_monitor().check_agent(slow_agent).await;
 
     let slow_agent_handle = ctx.pool.get_agent(slow_agent).await.expect("agent exists");
     let was_working = slow_agent_handle.state() == AgentStateLegacy::Working

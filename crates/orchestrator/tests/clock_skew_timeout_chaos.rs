@@ -297,7 +297,6 @@ async fn given_multiple_agents_when_mixed_clock_skew_then_correct_agents_unhealt
     };
 
     let ctx = ClockSkewTestContext::new(4, health_config)
-        .await
         .expect("Failed to setup test context");
 
     ctx.record_heartbeat("agent-0")
