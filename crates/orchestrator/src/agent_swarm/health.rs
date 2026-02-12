@@ -127,6 +127,8 @@ impl HealthMonitor {
             );
         }
 
+        drop(agents);
+
         Ok(HealthCheckResult {
             agent_id: agent_id.to_string(),
             is_healthy,

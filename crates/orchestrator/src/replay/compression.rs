@@ -40,6 +40,7 @@ mod types {
             }
         }
 
+        #[must_use]
         pub const fn as_i32(self) -> i32 {
             self.0
         }
@@ -60,6 +61,7 @@ mod types {
     }
 
     impl CompressionStats {
+        #[must_use]
         pub fn new(
             original_size: usize,
             compressed_size: usize,
@@ -95,6 +97,7 @@ mod types {
     }
 
     impl CompressionConfig {
+        #[must_use]
         pub const fn new(level: CompressionLevel) -> Self {
             Self {
                 level,
@@ -102,6 +105,7 @@ mod types {
             }
         }
 
+        #[must_use]
         pub const fn with_checksum(mut self, enable: bool) -> Self {
             self.enable_checksum = enable;
             self
@@ -125,7 +129,7 @@ impl CheckpointCompressor {
     }
 
     #[must_use]
-    pub fn config(&self) -> &CompressionConfig {
+    pub const fn config(&self) -> &CompressionConfig {
         &self.config
     }
 

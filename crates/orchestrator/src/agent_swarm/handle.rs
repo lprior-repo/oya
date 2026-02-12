@@ -29,7 +29,7 @@ impl AgentState {
         matches!(self, Self::Idle)
     }
 
-    /// Check if agent is idle (alias for is_available).
+    /// Check if agent is idle (alias for `is_available`).
     #[must_use]
     pub const fn is_idle(&self) -> bool {
         matches!(self, Self::Idle)
@@ -240,7 +240,7 @@ impl AgentHandle {
     /// Set last heartbeat timestamp for testing clock skew scenarios.
     ///
     /// This method is intended for chaos testing where clock skew needs to be simulated.
-    pub fn set_last_heartbeat_for_test(&mut self, timestamp: DateTime<Utc>) {
+    pub const fn set_last_heartbeat_for_test(&mut self, timestamp: DateTime<Utc>) {
         self.last_heartbeat = timestamp;
     }
 

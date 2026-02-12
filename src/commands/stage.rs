@@ -85,14 +85,13 @@ mod tests {
     use oya_pipeline::{Language, Task, TaskStatus};
 
     #[tokio::test]
-    async fn stage_command_runs_stage() {
-        let temp_dir = tempfile::tempdir().expect("tempdir should create");
-        let slug = oya_pipeline::Slug::new("task-1").expect("slug should parse");
+    async fn stage_command_runs_stage() -> Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let slug = oya_pipeline::Slug::new("task-1")?;
         let task = Task::new(slug, Language::Rust);
 
         oya_pipeline::save_task_record(&task, temp_dir.path())
-            .await
-            .expect("save should succeed");
+            .await?;
 
         let args = StageArgs {
             slug: "task-1".to_string(),
@@ -103,21 +102,21 @@ mod tests {
             root: Some(temp_dir.path().to_path_buf()),
         };
 
-        let result = stage_command(args).await.expect("stage should succeed");
+        let result = stage_command(args).await?;
 
         assert_eq!(result.task.slug.as_str(), "task-1");
         assert!(matches!(result.task.status, TaskStatus::InProgress { .. }));
+        Ok(())
     }
 
     #[tokio::test]
-    async fn stage_command_rejects_invalid_stage() {
-        let temp_dir = tempfile::tempdir().expect("tempdir should create");
-        let slug = oya_pipeline::Slug::new("task-1").expect("slug should parse");
+    async fn stage_command_rejects_invalid_stage() -> Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let slug = oya_pipeline::Slug::new("task-1")?;
         let task = Task::new(slug, Language::Rust);
 
         oya_pipeline::save_task_record(&task, temp_dir.path())
-            .await
-            .expect("save should succeed");
+            .await?;
 
         let args = StageArgs {
             slug: "task-1".to_string(),
@@ -131,5 +130,6 @@ mod tests {
         let result = stage_command(args).await;
 
         assert!(result.is_err());
+        Ok(())
     }
 }

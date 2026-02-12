@@ -996,11 +996,11 @@ mod tests {
 
         let result1 = plugin.save_state_now();
         if result1.is_ok() {
-            let timestamp1 = plugin.last_save_timestamp().unwrap();
+            let timestamp1 = plugin.last_save_timestamp().ok_or("timestamp missing")?;
             std::thread::sleep(std::time::Duration::from_millis(10));
             let result2 = plugin.save_state_now();
             if result2.is_ok() {
-                let timestamp2 = plugin.last_save_timestamp().unwrap();
+                let timestamp2 = plugin.last_save_timestamp().ok_or("timestamp missing")?;
                 assert!(timestamp2 > timestamp1);
             }
         }
@@ -1013,7 +1013,7 @@ mod tests {
         let mut plugin = OyaPlugin::new()?;
         let _ = plugin.init_auto_save(30);
         assert!(plugin.auto_save_timer.is_some());
-        let timer = plugin.auto_save_timer.as_ref().unwrap();
+        let timer = plugin.auto_save_timer.as_ref().ok_or("timer missing")?;
         assert!(timer.is_running());
         Ok(())
     }

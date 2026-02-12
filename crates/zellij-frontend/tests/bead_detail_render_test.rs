@@ -19,10 +19,10 @@ fn create_test_bead_detail() -> BeadDetail {
 }
 
 #[test]
-fn test_render_bead_detail_metadata_happy_path() {
+fn test_render_bead_detail_metadata_happy_path() -> Result<(), Box<dyn std::error::Error>> {
     let renderer = Renderer::new();
     let bead = create_test_bead_detail();
-    let pane = Pane::new(PaneType::BeadDetail, 0, 0, 20, 50).expect("pane");
+    let pane = Pane::new(PaneType::BeadDetail, 0, 0, 20, 50)?;
 
     let output = renderer.render_bead_detail_metadata(&pane, &bead);
 
@@ -37,14 +37,15 @@ fn test_render_bead_detail_metadata_happy_path() {
     assert!(output.contains("wf-main"), "Should contain workflow_id");
     assert!(output.contains("size:small"), "Should contain labels");
     assert!(output.contains("src-001"), "Should contain dependencies");
+    Ok(())
 }
 
 #[test]
-fn test_render_bead_detail_metadata_with_empty_labels() {
+fn test_render_bead_detail_metadata_with_empty_labels() -> Result<(), Box<dyn std::error::Error>> {
     let renderer = Renderer::new();
     let mut bead = create_test_bead_detail();
     bead.labels = vec![];
-    let pane = Pane::new(PaneType::BeadDetail, 0, 0, 20, 50).expect("pane");
+    let pane = Pane::new(PaneType::BeadDetail, 0, 0, 20, 50)?;
 
     let output = renderer.render_bead_detail_metadata(&pane, &bead);
 
@@ -53,14 +54,15 @@ fn test_render_bead_detail_metadata_with_empty_labels() {
         output.contains("none") || !output.contains("size:small"),
         "Should show empty state"
     );
+    Ok(())
 }
 
 #[test]
-fn test_render_bead_detail_metadata_with_empty_dependencies() {
+fn test_render_bead_detail_metadata_with_empty_dependencies() -> Result<(), Box<dyn std::error::Error>> {
     let renderer = Renderer::new();
     let mut bead = create_test_bead_detail();
     bead.dependencies = vec![];
-    let pane = Pane::new(PaneType::BeadDetail, 0, 0, 20, 50).expect("pane");
+    let pane = Pane::new(PaneType::BeadDetail, 0, 0, 20, 50)?;
 
     let output = renderer.render_bead_detail_metadata(&pane, &bead);
 
@@ -68,14 +70,15 @@ fn test_render_bead_detail_metadata_with_empty_dependencies() {
         output.contains("Dependencies:") || output.contains("Deps:"),
         "Should have dependencies section"
     );
+    Ok(())
 }
 
 #[test]
-fn test_render_bead_detail_metadata_format_priority() {
+fn test_render_bead_detail_metadata_format_priority() -> Result<(), Box<dyn std::error::Error>> {
     let renderer = Renderer::new();
     let mut bead = create_test_bead_detail();
     bead.priority = 0;
-    let pane = Pane::new(PaneType::BeadDetail, 0, 0, 20, 50).expect("pane");
+    let pane = Pane::new(PaneType::BeadDetail, 0, 0, 20, 50)?;
 
     let output_p0 = renderer.render_bead_detail_metadata(&pane, &bead);
     assert!(output_p0.contains("P0"), "Should show P0 for priority 0");
@@ -83,14 +86,15 @@ fn test_render_bead_detail_metadata_format_priority() {
     bead.priority = 3;
     let output_p3 = renderer.render_bead_detail_metadata(&pane, &bead);
     assert!(output_p3.contains("P3"), "Should show P3 for priority 3");
+    Ok(())
 }
 
 #[test]
-fn test_render_bead_detail_metadata_truncates_long_description() {
+fn test_render_bead_detail_metadata_truncates_long_description() -> Result<(), Box<dyn std::error::Error>> {
     let renderer = Renderer::new();
     let mut bead = create_test_bead_detail();
     bead.description = "This is a very long description that should be truncated when rendered in a small pane to avoid overflow issues in the terminal display".to_string();
-    let pane = Pane::new(PaneType::BeadDetail, 0, 0, 10, 40).expect("pane");
+    let pane = Pane::new(PaneType::BeadDetail, 0, 0, 10, 40)?;
 
     let output = renderer.render_bead_detail_metadata(&pane, &bead);
 
@@ -99,10 +103,11 @@ fn test_render_bead_detail_metadata_truncates_long_description() {
         output.contains("Description:"),
         "Should have description section"
     );
+    Ok(())
 }
 
 #[test]
-fn test_render_bead_detail_metadata_handles_special_chars() {
+fn test_render_bead_detail_metadata_handles_special_chars() -> Result<(), Box<dyn std::error::Error>> {
     let renderer = Renderer::new();
     let mut bead = create_test_bead_detail();
     bead.title = "Feature with \"quotes\" and <brackets>".to_string();
@@ -110,7 +115,7 @@ fn test_render_bead_detail_metadata_handles_special_chars() {
         "label:with:colons".to_string(),
         "label/with/slashes".to_string(),
     ];
-    let pane = Pane::new(PaneType::BeadDetail, 0, 0, 20, 50).expect("pane");
+    let pane = Pane::new(PaneType::BeadDetail, 0, 0, 20, 50)?;
 
     let output = renderer.render_bead_detail_metadata(&pane, &bead);
 
@@ -119,4 +124,5 @@ fn test_render_bead_detail_metadata_handles_special_chars() {
         output.contains("brackets"),
         "Should handle brackets in title"
     );
+    Ok(())
 }

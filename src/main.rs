@@ -14,10 +14,37 @@ use oya::commands::{
     workspace_sync_command,
 };
 
+use std::process::ExitCode;
+
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> ExitCode {
     let oya = Oya::parse();
 
+    let result = run_command(oya).await;
+
+    match result {
+        Ok(_) => ExitCode::SUCCESS,
+        Err(err) => {
+            eprintln!("Error: {}", err);
+            
+            // Check for specific error types to determine exit code
+            if let Some(pipeline_err) = err.downcast_ref::<oya_pipeline::Error>() {
+                match pipeline_err {
+                    oya_pipeline::Error::InvalidSlug(_) => {
+                        eprintln!("Hint: Slug must use lowercase letters, digits, or '-' (e.g. my-feature-123)");
+                        return ExitCode::from(2);
+                    }
+                    oya_pipeline::Error::TaskNotFound(_) => return ExitCode::from(2),
+                    _ => return ExitCode::from(1),
+                }
+            }
+            
+            ExitCode::from(1)
+        }
+    }
+}
+
+async fn run_command(oya: Oya) -> Result<()> {
     match oya.command {
         Some(Commands::List(args)) => {
             let result = list_command(args).await?;

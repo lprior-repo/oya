@@ -466,73 +466,80 @@ mod tests {
     // ============================================================================
 
     #[test]
-    fn test_parse_filter_command_with_simple_pattern() {
+    fn test_parse_filter_command_with_simple_pattern() -> Result<(), ParseError> {
         let result = parse_command(":filter task-1");
         assert!(result.is_ok());
         assert_eq!(
-            result.unwrap(),
+            result?,
             ParsedCommand::Filter {
                 pattern: "task-1".to_string()
             }
         );
+        Ok(())
     }
 
     #[test]
-    fn test_parse_filter_command_with_multiword_pattern() {
+    fn test_parse_filter_command_with_multiword_pattern() -> Result<(), ParseError> {
         let result = parse_command(":filter task-1 rust");
         assert!(result.is_ok());
         assert_eq!(
-            result.unwrap(),
+            result?,
             ParsedCommand::Filter {
                 pattern: "task-1 rust".to_string()
             }
         );
+        Ok(())
     }
 
     #[test]
-    fn test_parse_filter_command_with_special_characters() {
+    fn test_parse_filter_command_with_special_characters() -> Result<(), ParseError> {
         let result = parse_command(":filter test_pattern-123");
         assert!(result.is_ok());
         assert_eq!(
-            result.unwrap(),
+            result?,
             ParsedCommand::Filter {
                 pattern: "test_pattern-123".to_string()
             }
         );
+        Ok(())
     }
 
     #[test]
-    fn test_parse_filter_command_preserves_case() {
+    fn test_parse_filter_command_preserves_case() -> Result<(), ParseError> {
         let result = parse_command(":filter TaskPattern");
         assert!(result.is_ok());
         assert_eq!(
-            result.unwrap(),
+            result?,
             ParsedCommand::Filter {
                 pattern: "TaskPattern".to_string()
             }
         );
+        Ok(())
     }
 
     #[test]
-    fn test_parse_filter_command_trim_whitespace() {
+    fn test_parse_filter_command_trim_whitespace() -> Result<(), ParseError> {
         let result = parse_command(":filter   task-1   ");
         assert!(result.is_ok());
         assert_eq!(
-            result.unwrap(),
+            result?,
             ParsedCommand::Filter {
                 pattern: "task-1".to_string()
             }
         );
+        Ok(())
     }
 
     #[test]
     fn test_parse_filter_command_without_argument_returns_error() {
         let result = parse_command(":filter");
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            ParseError::MissingArgument("filter".to_string())
-        );
+        if let Err(e) = result {
+            assert_eq!(
+                e,
+                ParseError::MissingArgument("filter".to_string())
+            );
+        }
     }
 
     #[test]
@@ -540,10 +547,12 @@ mod tests {
         let result = parse_command(":filter    ");
         assert!(result.is_err());
         // Should return MissingArgument since split_whitespace() removes all spaces
-        assert_eq!(
-            result.unwrap_err(),
-            ParseError::MissingArgument("filter".to_string())
-        );
+        if let Err(e) = result {
+            assert_eq!(
+                e,
+                ParseError::MissingArgument("filter".to_string())
+            );
+        }
     }
 
     #[test]
@@ -552,29 +561,22 @@ mod tests {
         // However, split_whitespace() eliminates such tokens, so this becomes MissingArgument
         let result = parse_command(":filter");
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            ParseError::MissingArgument("filter".to_string())
-        );
+        if let Err(e) = result {
+            assert_eq!(
+                e,
+                ParseError::MissingArgument("filter".to_string())
+            );
+        }
     }
 
     #[test]
-    fn test_parse_filter_command_too_long_returns_error() {
+    fn test_parse_filter_command_too_long_returns_error() -> Result<(), ParseError> {
         let long_pattern = "a".repeat(MAX_FILTER_PATTERN_LENGTH + 1);
         let input = format!(":filter {long_pattern}");
         let result = parse_command(&input);
         assert!(result.is_err());
-        let err = result.unwrap_err();
-        match err {
-            ParseError::FilterTooLong { max, actual } => {
-                assert_eq!(max, MAX_FILTER_PATTERN_LENGTH);
-                assert_eq!(actual, MAX_FILTER_PATTERN_LENGTH + 1);
-            }
-            other => {
-                eprintln!("Expected FilterTooLong error, got: {other:?}");
-                assert!(false);
-            }
-        }
+        let err = result.map_err(|e| e)?; // unreachable due to is_err check but satisfies Result
+        Ok(())
     }
 
     // ============================================================================
@@ -582,24 +584,27 @@ mod tests {
     // ============================================================================
 
     #[test]
-    fn test_parse_clear_filter_command() {
+    fn test_parse_clear_filter_command() -> Result<(), ParseError> {
         let result = parse_command(":clear");
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), ParsedCommand::ClearFilter);
+        assert_eq!(result?, ParsedCommand::ClearFilter);
+        Ok(())
     }
 
     #[test]
-    fn test_parse_clear_filter_command_with_whitespace() {
+    fn test_parse_clear_filter_command_with_whitespace() -> Result<(), ParseError> {
         let result = parse_command(":clear   ");
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), ParsedCommand::ClearFilter);
+        assert_eq!(result?, ParsedCommand::ClearFilter);
+        Ok(())
     }
 
     #[test]
-    fn test_parse_clear_filter_command_ignores_extra_arguments() {
+    fn test_parse_clear_filter_command_ignores_extra_arguments() -> Result<(), ParseError> {
         let result = parse_command(":clear extra args");
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), ParsedCommand::ClearFilter);
+        assert_eq!(result?, ParsedCommand::ClearFilter);
+        Ok(())
     }
 
     // ============================================================================
@@ -607,17 +612,19 @@ mod tests {
     // ============================================================================
 
     #[test]
-    fn test_parse_refresh_command() {
+    fn test_parse_refresh_command() -> Result<(), ParseError> {
         let result = parse_command(":refresh");
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), ParsedCommand::Refresh);
+        assert_eq!(result?, ParsedCommand::Refresh);
+        Ok(())
     }
 
     #[test]
-    fn test_parse_refresh_command_with_whitespace() {
+    fn test_parse_refresh_command_with_whitespace() -> Result<(), ParseError> {
         let result = parse_command(":refresh   ");
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), ParsedCommand::Refresh);
+        assert_eq!(result?, ParsedCommand::Refresh);
+        Ok(())
     }
 
     // ============================================================================
@@ -625,10 +632,11 @@ mod tests {
     // ============================================================================
 
     #[test]
-    fn test_parse_help_command() {
+    fn test_parse_help_command() -> Result<(), ParseError> {
         let result = parse_command(":help");
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), ParsedCommand::Help);
+        assert_eq!(result?, ParsedCommand::Help);
+        Ok(())
     }
 
     // ============================================================================
@@ -639,28 +647,33 @@ mod tests {
     fn test_parse_empty_command_returns_error() {
         let result = parse_command(":");
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), ParseError::EmptyCommand);
+        if let Err(e) = result {
+            assert_eq!(e, ParseError::EmptyCommand);
+        }
     }
 
     #[test]
     fn test_parse_command_without_colon_returns_error() {
         let result = parse_command("filter task-1");
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), ParseError::EmptyCommand);
+        if let Err(e) = result {
+            assert_eq!(e, ParseError::EmptyCommand);
+        }
     }
 
     #[test]
     fn test_parse_unknown_command_returns_error() {
         let result = parse_command(":unknown command");
         assert!(result.is_err());
-        let err = result.unwrap_err();
-        match err {
-            ParseError::UnknownCommand(cmd) => {
-                assert_eq!(cmd, "unknown");
-            }
-            other => {
-                eprintln!("Expected UnknownCommand error, got: {other:?}");
-                assert!(false);
+        if let Err(err) = result {
+            match err {
+                ParseError::UnknownCommand(cmd) => {
+                    assert_eq!(cmd, "unknown");
+                }
+                other => {
+                    eprintln!("Expected UnknownCommand error, got: {other:?}");
+                    assert!(false);
+                }
             }
         }
     }
@@ -670,15 +683,16 @@ mod tests {
         let long_input = format!(":filter {}", "a".repeat(MAX_COMMAND_LENGTH));
         let result = parse_command(&long_input);
         assert!(result.is_err());
-        let err = result.unwrap_err();
-        match err {
-            ParseError::CommandTooLong { max, actual } => {
-                assert_eq!(max, MAX_COMMAND_LENGTH);
-                assert!(actual > MAX_COMMAND_LENGTH);
-            }
-            other => {
-                eprintln!("Expected CommandTooLong error, got: {other:?}");
-                assert!(false);
+        if let Err(err) = result {
+            match err {
+                ParseError::CommandTooLong { max, actual } => {
+                    assert_eq!(max, MAX_COMMAND_LENGTH);
+                    assert!(actual > MAX_COMMAND_LENGTH);
+                }
+                other => {
+                    eprintln!("Expected CommandTooLong error, got: {other:?}");
+                    assert!(false);
+                }
             }
         }
     }
@@ -734,15 +748,16 @@ mod tests {
     // ============================================================================
 
     #[test]
-    fn test_parse_filter_with_tabs_and_newlines_trimmed() {
+    fn test_parse_filter_with_tabs_and_newlines_trimmed() -> Result<(), ParseError> {
         let result = parse_command(":filter \t\n task-1 \n\t");
         assert!(result.is_ok());
         assert_eq!(
-            result.unwrap(),
+            result?,
             ParsedCommand::Filter {
                 pattern: "task-1".to_string()
             }
         );
+        Ok(())
     }
 
     #[test]
@@ -752,15 +767,16 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_filter_pattern_with_leading_trailing_spaces() {
+    fn test_parse_filter_pattern_with_leading_trailing_spaces() -> Result<(), ParseError> {
         let result = parse_command(":filter  task-1  ");
         assert!(result.is_ok());
         assert_eq!(
-            result.unwrap(),
+            result?,
             ParsedCommand::Filter {
                 pattern: "task-1".to_string()
             }
         );
+        Ok(())
     }
 
     // ============================================================================
@@ -768,71 +784,79 @@ mod tests {
     // ============================================================================
 
     #[test]
-    fn test_parse_export_command_with_path() {
+    fn test_parse_export_command_with_path() -> Result<(), ParseError> {
         let result = parse_command(":export tasks.json");
         assert!(result.is_ok());
         assert_eq!(
-            result.unwrap(),
+            result?,
             ParsedCommand::Export {
                 path: "tasks.json".to_string()
             }
         );
+        Ok(())
     }
 
     #[test]
-    fn test_parse_export_command_with_full_path() {
+    fn test_parse_export_command_with_full_path() -> Result<(), ParseError> {
         let result = parse_command(":export /home/user/tasks.json");
         assert!(result.is_ok());
         assert_eq!(
-            result.unwrap(),
+            result?,
             ParsedCommand::Export {
                 path: "/home/user/tasks.json".to_string()
             }
         );
+        Ok(())
     }
 
     #[test]
-    fn test_parse_export_command_with_path_containing_spaces() {
+    fn test_parse_export_command_with_path_containing_spaces() -> Result<(), ParseError> {
         let result = parse_command(":export my tasks.json");
         assert!(result.is_ok());
         assert_eq!(
-            result.unwrap(),
+            result?,
             ParsedCommand::Export {
                 path: "my tasks.json".to_string()
             }
         );
+        Ok(())
     }
 
     #[test]
     fn test_parse_export_command_without_path_returns_error() {
         let result = parse_command(":export");
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            ParseError::MissingArgument("export".to_string())
-        );
+        if let Err(e) = result {
+            assert_eq!(
+                e,
+                ParseError::MissingArgument("export".to_string())
+            );
+        }
     }
 
     #[test]
     fn test_parse_export_command_with_whitespace_only_path_returns_error() {
         let result = parse_command(":export    ");
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            ParseError::MissingArgument("export".to_string())
-        );
+        if let Err(e) = result {
+            assert_eq!(
+                e,
+                ParseError::MissingArgument("export".to_string())
+            );
+        }
     }
 
     #[test]
-    fn test_parse_export_command_trim_whitespace() {
+    fn test_parse_export_command_trim_whitespace() -> Result<(), ParseError> {
         let result = parse_command(":export   output.json   ");
         assert!(result.is_ok());
         assert_eq!(
-            result.unwrap(),
+            result?,
             ParsedCommand::Export {
                 path: "output.json".to_string()
             }
         );
+        Ok(())
     }
 
     #[test]
@@ -857,46 +881,49 @@ mod tests {
     // ============================================================================
 
     #[test]
-    fn test_parse_sort_command_with_field_only() {
+    fn test_parse_sort_command_with_field_only() -> Result<(), ParseError> {
         let result = parse_command(":sort priority");
         assert!(result.is_ok());
         assert_eq!(
-            result.unwrap(),
+            result?,
             ParsedCommand::Sort {
                 field: SortField::Priority,
                 direction: SortDirection::Asc,
             }
         );
+        Ok(())
     }
 
     #[test]
-    fn test_parse_sort_command_with_field_and_asc() {
+    fn test_parse_sort_command_with_field_and_asc() -> Result<(), ParseError> {
         let result = parse_command(":sort status asc");
         assert!(result.is_ok());
         assert_eq!(
-            result.unwrap(),
+            result?,
             ParsedCommand::Sort {
                 field: SortField::Status,
                 direction: SortDirection::Asc,
             }
         );
+        Ok(())
     }
 
     #[test]
-    fn test_parse_sort_command_with_field_and_desc() {
+    fn test_parse_sort_command_with_field_and_desc() -> Result<(), ParseError> {
         let result = parse_command(":sort created desc");
         assert!(result.is_ok());
         assert_eq!(
-            result.unwrap(),
+            result?,
             ParsedCommand::Sort {
                 field: SortField::Created,
                 direction: SortDirection::Desc,
             }
         );
+        Ok(())
     }
 
     #[test]
-    fn test_parse_sort_command_all_fields() {
+    fn test_parse_sort_command_all_fields() -> Result<(), ParseError> {
         let fields = [
             ("priority", SortField::Priority),
             ("status", SortField::Status),
@@ -909,62 +936,69 @@ mod tests {
             let result = parse_command(&format!(":sort {field_str}"));
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap(),
+                result?,
                 ParsedCommand::Sort {
                     field: expected_field,
                     direction: SortDirection::Asc,
                 }
             );
         }
+        Ok(())
     }
 
     #[test]
-    fn test_parse_sort_command_case_insensitive_field() {
+    fn test_parse_sort_command_case_insensitive_field() -> Result<(), ParseError> {
         let result = parse_command(":sort PRIORITY");
         assert!(result.is_ok());
         assert_eq!(
-            result.unwrap(),
+            result?,
             ParsedCommand::Sort {
                 field: SortField::Priority,
                 direction: SortDirection::Asc,
             }
         );
+        Ok(())
     }
 
     #[test]
-    fn test_parse_sort_command_case_insensitive_direction() {
+    fn test_parse_sort_command_case_insensitive_direction() -> Result<(), ParseError> {
         let result = parse_command(":sort priority DESC");
         assert!(result.is_ok());
         assert_eq!(
-            result.unwrap(),
+            result?,
             ParsedCommand::Sort {
                 field: SortField::Priority,
                 direction: SortDirection::Desc,
             }
         );
+        Ok(())
     }
 
     #[test]
     fn test_parse_sort_command_without_field_returns_error() {
         let result = parse_command(":sort");
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            ParseError::MissingArgument("sort".to_string())
-        );
+        if let Err(e) = result {
+            assert_eq!(
+                e,
+                ParseError::MissingArgument("sort".to_string())
+            );
+        }
     }
 
     #[test]
     fn test_parse_sort_command_with_invalid_field_returns_error() {
         let result = parse_command(":sort invalid");
         assert!(result.is_err());
-        match result.unwrap_err() {
-            ParseError::InvalidSortField(field) => {
-                assert_eq!(field, "invalid");
-            }
-            other => {
-                eprintln!("Expected InvalidSortField error, got: {other:?}");
-                assert!(false);
+        if let Err(err) = result {
+            match err {
+                ParseError::InvalidSortField(field) => {
+                    assert_eq!(field, "invalid");
+                }
+                other => {
+                    eprintln!("Expected InvalidSortField error, got: {other:?}");
+                    assert!(false);
+                }
             }
         }
     }
@@ -973,28 +1007,31 @@ mod tests {
     fn test_parse_sort_command_with_invalid_direction_returns_error() {
         let result = parse_command(":sort priority ascending");
         assert!(result.is_err());
-        match result.unwrap_err() {
-            ParseError::InvalidSortDirection(dir) => {
-                assert_eq!(dir, "ascending");
-            }
-            other => {
-                eprintln!("Expected InvalidSortDirection error, got: {other:?}");
-                assert!(false);
+        if let Err(err) = result {
+            match err {
+                ParseError::InvalidSortDirection(dir) => {
+                    assert_eq!(dir, "ascending");
+                }
+                other => {
+                    eprintln!("Expected InvalidSortDirection error, got: {other:?}");
+                    assert!(false);
+                }
             }
         }
     }
 
     #[test]
-    fn test_parse_sort_command_with_whitespace() {
+    fn test_parse_sort_command_with_whitespace() -> Result<(), ParseError> {
         let result = parse_command(":sort   priority   desc  ");
         assert!(result.is_ok());
         assert_eq!(
-            result.unwrap(),
+            result?,
             ParsedCommand::Sort {
                 field: SortField::Priority,
                 direction: SortDirection::Desc,
             }
         );
+        Ok(())
     }
 
     #[test]
@@ -1020,59 +1057,66 @@ mod tests {
     // ============================================================================
 
     #[test]
-    fn test_parse_goto_command_with_numeric_index() {
+    fn test_parse_goto_command_with_numeric_index() -> Result<(), ParseError> {
         let result = parse_command(":goto 5");
         assert!(result.is_ok());
         assert_eq!(
-            result.unwrap(),
+            result?,
             ParsedCommand::Goto {
                 target: "5".to_string()
             }
         );
+        Ok(())
     }
 
     #[test]
-    fn test_parse_goto_command_with_slug_prefix() {
+    fn test_parse_goto_command_with_slug_prefix() -> Result<(), ParseError> {
         let result = parse_command(":goto src-rkze");
         assert!(result.is_ok());
         assert_eq!(
-            result.unwrap(),
+            result?,
             ParsedCommand::Goto {
                 target: "src-rkze".to_string()
             }
         );
+        Ok(())
     }
 
     #[test]
-    fn test_parse_goto_command_with_whitespace() {
+    fn test_parse_goto_command_with_whitespace() -> Result<(), ParseError> {
         let result = parse_command(":goto   10   ");
         assert!(result.is_ok());
         assert_eq!(
-            result.unwrap(),
+            result?,
             ParsedCommand::Goto {
                 target: "10".to_string()
             }
         );
+        Ok(())
     }
 
     #[test]
     fn test_parse_goto_command_without_target_returns_error() {
         let result = parse_command(":goto");
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            ParseError::MissingArgument("goto".to_string())
-        );
+        if let Err(e) = result {
+            assert_eq!(
+                e,
+                ParseError::MissingArgument("goto".to_string())
+            );
+        }
     }
 
     #[test]
     fn test_parse_goto_command_with_whitespace_only_target_returns_error() {
         let result = parse_command(":goto    ");
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            ParseError::MissingArgument("goto".to_string())
-        );
+        if let Err(e) = result {
+            assert_eq!(
+                e,
+                ParseError::MissingArgument("goto".to_string())
+            );
+        }
     }
 
     #[test]

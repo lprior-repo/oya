@@ -1,13 +1,9 @@
-//! Agent metrics endpoint tests
-//!
-//! Tests for GET /api/agents/metrics endpoint that returns agent metrics information.
-
 #![forbid(unsafe_code)]
 #![forbid(clippy::unwrap_used)]
 #![forbid(clippy::panic)]
-// Tests are allowed to use expect
-#![allow(clippy::expect_used)]
+#![forbid(clippy::expect_used)]
 
+use anyhow::{Result, anyhow};
 use axum::{body::Body, http::StatusCode};
 use http_body_util::BodyExt;
 use oya_web::{AgentMetricsResponse, ServerConfig, create_router};
@@ -15,19 +11,19 @@ use serde_json::Value;
 use tower::ServiceExt;
 
 /// Test helper to make requests and parse JSON responses
-async fn get_json(path: &str) -> (StatusCode, Value) {
+async fn get_json(path: &str) -> Result<(StatusCode, Value)> {
     let config = ServerConfig::default();
-    let router = create_router(config).expect("Router creation failed");
+    let router = create_router(config).map_err(|e| anyhow!("Router creation failed: {e}"))?;
 
     let response = router
         .oneshot(
             axum::http::Request::builder()
                 .uri(path)
                 .body(Body::empty())
-                .expect("Failed to build request"),
+                .map_err(|e| anyhow!("Failed to build request: {e}"))?,
         )
         .await
-        .expect("Request failed");
+        .map_err(|e| anyhow!("Request failed: {e}"))?;
 
     let status = response.status();
 
@@ -35,19 +31,19 @@ async fn get_json(path: &str) -> (StatusCode, Value) {
     let body_bytes = body
         .collect()
         .await
-        .expect("Failed to collect body")
+        .map_err(|e| anyhow!("Failed to collect body: {e}"))?
         .to_bytes();
 
-    let json: Value = serde_json::from_slice(&body_bytes).expect("Failed to parse JSON");
+    let json: Value = serde_json::from_slice(&body_bytes).map_err(|e| anyhow!("Failed to parse JSON: {e}"))?;
 
-    (status, json)
+    Ok((status, json))
 }
 
 #[tokio::test]
-async fn test_returns_agent_metrics_when_endpoint_is_called() {
+async fn test_returns_agent_metrics_when_endpoint_is_called() -> Result<()> {
     // Given: The server is running with the metrics endpoint configured
     // When: A GET request is made to /api/agents/metrics
-    let (status, json) = get_json("/api/agents/metrics").await;
+    let (status, json) = get_json("/api/agents/metrics").await?;
 
     // Then: The response should be successful (200 OK)
     assert_eq!(
@@ -61,165 +57,168 @@ async fn test_returns_agent_metrics_when_endpoint_is_called() {
         json.get("agent_id").is_some(),
         "Response should include agent_id field"
     );
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_includes_agent_id_field_when_metrics_is_requested() {
+async fn test_includes_agent_id_field_when_metrics_is_requested() -> Result<()> {
     // Given: The metrics endpoint exists
     // When: Metrics are requested
-    let (_status, json) = get_json("/api/agents/metrics").await;
+    let (_status, json) = get_json("/api/agents/metrics").await?;
 
     // Then: The agent_id field should be a string
     let agent_id = json
         .get("agent_id")
         .and_then(|v| v.as_str())
-        .expect("Agent ID should be a string");
+        .ok_or_else(|| anyhow!("Agent ID should be a string"))?;
 
     // And: Agent ID should not be empty
     assert!(!agent_id.is_empty(), "Agent ID should not be empty");
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_includes_state_field_when_metrics_is_requested() {
+async fn test_includes_state_field_when_metrics_is_requested() -> Result<()> {
     // Given: The agent has a state
     // When: Metrics are requested
-    let (_status, json) = get_json("/api/agents/metrics").await;
+    let (_status, json) = get_json("/api/agents/metrics").await?;
 
     // Then: State field should be present
     let state = json
         .get("state")
         .and_then(|v| v.as_str())
-        .expect("State should be a string");
+        .ok_or_else(|| anyhow!("State should be a string"))?;
 
     // And: State should be one of expected values
     assert!(
         matches!(state, "idle" | "working" | "unhealthy"),
         "State should be idle, working, or unhealthy"
     );
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_includes_uptime_field_when_metrics_is_requested() {
+async fn test_includes_uptime_field_when_metrics_is_requested() -> Result<()> {
     // Given: The agent has been running
     // When: Metrics are requested
-    let (_status, json) = get_json("/api/agents/metrics").await;
+    let (_status, json) = get_json("/api/agents/metrics").await?;
 
     // Then: Uptime should be present
     let _uptime = json
         .get("uptime_secs")
         .and_then(|v| v.as_u64())
-        .expect("Uptime should be a number");
+        .ok_or_else(|| anyhow!("Uptime should be a number"))?;
 
-    // And: Uptime is a u64 which is always non-negative
-    // No comparison needed as u64 >= 0 is always true
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_includes_beads_completed_field_when_metrics_is_requested() {
+async fn test_includes_beads_completed_field_when_metrics_is_requested() -> Result<()> {
     // Given: The agent has completed beads
     // When: Metrics are requested
-    let (_status, json) = get_json("/api/agents/metrics").await;
+    let (_status, json) = get_json("/api/agents/metrics").await?;
 
     // Then: Beads completed should be present
     let _beads_completed = json
         .get("beads_completed")
         .and_then(|v| v.as_u64())
-        .expect("Beads completed should be a number");
+        .ok_or_else(|| anyhow!("Beads completed should be a number"))?;
 
-    // And: beads_completed is a u64 which is always non-negative
-    // No comparison needed as u64 >= 0 is always true
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_includes_operations_executed_field_when_metrics_is_requested() {
+async fn test_includes_operations_executed_field_when_metrics_is_requested() -> Result<()> {
     // Given: The agent has executed operations
     // When: Metrics are requested
-    let (_status, json) = get_json("/api/agents/metrics").await;
+    let (_status, json) = get_json("/api/agents/metrics").await?;
 
     // Then: Operations executed should be present
     let _operations = json
         .get("operations_executed")
         .and_then(|v| v.as_u64())
-        .expect("Operations executed should be a number");
+        .ok_or_else(|| anyhow!("Operations executed should be a number"))?;
 
-    // And: operations is a u64 which is always non-negative
-    // No comparison needed as u64 >= 0 is always true
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_includes_health_score_field_when_metrics_is_requested() {
+async fn test_includes_health_score_field_when_metrics_is_requested() -> Result<()> {
     // Given: The agent has a health score
     // When: Metrics are requested
-    let (_status, json) = get_json("/api/agents/metrics").await;
+    let (_status, json) = get_json("/api/agents/metrics").await?;
 
     // Then: Health score should be present
     let health_score = json
         .get("health_score")
         .and_then(|v| v.as_f64())
-        .expect("Health score should be a number");
+        .ok_or_else(|| anyhow!("Health score should be a number"))?;
 
     // And: Should be between 0.0 and 1.0
     assert!(
         (0.0..=1.0).contains(&health_score),
         "Health score should be between 0.0 and 1.0"
     );
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_includes_last_heartbeat_field_when_metrics_is_requested() {
+async fn test_includes_last_heartbeat_field_when_metrics_is_requested() -> Result<()> {
     // Given: The agent sends heartbeats
     // When: Metrics are requested
-    let (_status, json) = get_json("/api/agents/metrics").await;
+    let (_status, json) = get_json("/api/agents/metrics").await?;
 
     // Then: Last heartbeat should be present
     let last_heartbeat = json
         .get("last_heartbeat")
         .and_then(|v| v.as_str())
-        .expect("Last heartbeat should be a string");
+        .ok_or_else(|| anyhow!("Last heartbeat should be a string"))?;
 
     // And: Should not be empty
     assert!(
         !last_heartbeat.is_empty(),
         "Last heartbeat should not be empty"
     );
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_returns_valid_json_content_type_when_metrics_is_requested() {
+async fn test_returns_valid_json_content_type_when_metrics_is_requested() -> Result<()> {
     // Given: The metrics endpoint exists
     // When: A request is made to /api/agents/metrics
     let config = ServerConfig::default();
-    let router = create_router(config).expect("Router creation failed");
+    let router = create_router(config).map_err(|e| anyhow!("Router creation failed: {e}"))?;
 
     let response = router
         .oneshot(
             axum::http::Request::builder()
                 .uri("/api/agents/metrics")
                 .body(Body::empty())
-                .expect("Failed to build request"),
+                .map_err(|e| anyhow!("Failed to build request: {e}"))?,
         )
         .await
-        .expect("Request failed");
+        .map_err(|e| anyhow!("Request failed: {e}"))?;
 
     // Then: The Content-Type header should be application/json
     let content_type = response
         .headers()
         .get("content-type")
         .and_then(|v| v.to_str().ok())
-        .expect("Content-Type header should be present");
+        .ok_or_else(|| anyhow!("Content-Type header should be present"))?;
 
     assert!(
         content_type.contains("application/json"),
         "Content-Type should be application/json, got: {content_type}"
     );
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_handles_cors_headers_when_metrics_is_requested_from_browser() {
+async fn test_handles_cors_headers_when_metrics_is_requested_from_browser() -> Result<()> {
     // Given: A browser making a cross-origin request
     // When: Metrics are requested
     let config = ServerConfig::default();
-    let router = create_router(config).expect("Router creation failed");
+    let router = create_router(config).map_err(|e| anyhow!("Router creation failed: {e}"))?;
 
     let response = router
         .oneshot(
@@ -227,10 +226,10 @@ async fn test_handles_cors_headers_when_metrics_is_requested_from_browser() {
                 .uri("/api/agents/metrics")
                 .header("Origin", "tauri://localhost")
                 .body(Body::empty())
-                .expect("Failed to build request"),
+                .map_err(|e| anyhow!("Failed to build request: {e}"))?,
         )
         .await
-        .expect("Request failed");
+        .map_err(|e| anyhow!("Request failed: {e}"))?;
 
     // Then: CORS headers should be present
     let headers = response.headers();
@@ -241,31 +240,32 @@ async fn test_handles_cors_headers_when_metrics_is_requested_from_browser() {
 
     // And: Response should be successful
     assert_eq!(response.status(), StatusCode::OK);
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_response_size_is_reasonable() {
+async fn test_response_size_is_reasonable() -> Result<()> {
     // Given: The metrics endpoint returns agent information
     // When: A request is made
     let config = ServerConfig::default();
-    let router = create_router(config).expect("Router creation failed");
+    let router = create_router(config).map_err(|e| anyhow!("Router creation failed: {e}"))?;
 
     let response = router
         .oneshot(
             axum::http::Request::builder()
                 .uri("/api/agents/metrics")
                 .body(Body::empty())
-                .expect("Failed to build request"),
+                .map_err(|e| anyhow!("Failed to build request: {e}"))?,
         )
         .await
-        .expect("Request failed");
+        .map_err(|e| anyhow!("Request failed: {e}"))?;
 
     // Then: Response size should be reasonable (< 10KB)
     let body = response.into_body();
     let body_bytes = body
         .collect()
         .await
-        .expect("Failed to collect body")
+        .map_err(|e| anyhow!("Failed to collect body: {e}"))?
         .to_bytes();
 
     assert!(
@@ -273,10 +273,11 @@ async fn test_response_size_is_reasonable() {
         "Response size should be reasonable (< 10KB), got: {} bytes",
         body_bytes.len()
     );
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_metrics_response_struct_matches_json_schema() {
+async fn test_metrics_response_struct_matches_json_schema() -> Result<()> {
     // Given: An AgentMetricsResponse struct
     // When: It's serialized to JSON
     let metrics = AgentMetricsResponse {
@@ -289,7 +290,7 @@ async fn test_metrics_response_struct_matches_json_schema() {
         last_heartbeat: "2026-02-08T04:00:00Z".to_string(),
     };
 
-    let json = serde_json::to_string(&metrics).expect("Serialization should succeed");
+    let json = serde_json::to_string(&metrics).map_err(|e| anyhow!("Serialization failed: {e}"))?;
 
     // Then: All fields should be present
     assert!(json.contains("agent_id"), "Should contain agent_id");
@@ -308,4 +309,5 @@ async fn test_metrics_response_struct_matches_json_schema() {
         json.contains("last_heartbeat"),
         "Should contain last_heartbeat"
     );
+    Ok(())
 }

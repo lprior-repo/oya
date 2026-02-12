@@ -125,8 +125,8 @@ mod tests {
     use oya_pipeline::{Language, Priority, TaskStatus};
 
     #[tokio::test]
-    async fn new_command_creates_task() {
-        let temp_dir = tempfile::tempdir().expect("tempdir should create");
+    async fn new_command_creates_task() -> Result<()> {
+        let temp_dir = tempfile::tempdir()?;
         let args = NewArgs {
             slug: "test-task".to_string(),
             language: "rust".to_string(),
@@ -135,17 +135,18 @@ mod tests {
             skip_workspace: true,
         };
 
-        let result = new_command(args).await.expect("new should succeed");
+        let result = new_command(args).await?;
 
         assert_eq!(result.task.slug.as_str(), "test-task");
         assert_eq!(result.task.language, Language::Rust);
         assert_eq!(result.task.priority, Priority::P1);
         assert_eq!(result.task.status, TaskStatus::Created);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn new_command_rejects_invalid_slug() {
-        let temp_dir = tempfile::tempdir().expect("tempdir should create");
+    async fn new_command_rejects_invalid_slug() -> Result<()> {
+        let temp_dir = tempfile::tempdir()?;
         let args = NewArgs {
             slug: "Invalid_Slug".to_string(), // uppercase not allowed
             language: "rust".to_string(),
@@ -157,11 +158,12 @@ mod tests {
         let result = new_command(args).await;
 
         assert!(result.is_err());
+        Ok(())
     }
 
     #[tokio::test]
-    async fn new_command_rejects_path_traversal() {
-        let temp_dir = tempfile::tempdir().expect("tempdir should create");
+    async fn new_command_rejects_path_traversal() -> Result<()> {
+        let temp_dir = tempfile::tempdir()?;
         let args = NewArgs {
             slug: "../etc/passwd".to_string(),
             language: "rust".to_string(),
@@ -173,5 +175,6 @@ mod tests {
         let result = new_command(args).await;
 
         assert!(result.is_err());
+        Ok(())
     }
 }

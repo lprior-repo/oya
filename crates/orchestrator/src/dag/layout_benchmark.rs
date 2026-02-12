@@ -201,8 +201,8 @@ fn benchmark_cache_invalidation() {
         return;
     }
     if let Err(e) = dag.add_edge(
-        "node-19".to_string(),
-        "new_node".to_string(),
+        "node-19",
+        "new_node",
         DependencyType::BlockingDependency,
     ) {
         eprintln!("Failed to add edge: {e}");
@@ -232,8 +232,8 @@ fn create_test_dag_with_result(size: usize) -> Result<WorkflowDAG, String> {
         if i % 4 == 0 && i.saturating_add(2) < size {
             // Create branching every 4th node
             dag.add_edge(
-                format!("node-{i}"),
-                format!("node-{}", i.saturating_add(1)),
+                &format!("node-{i}"),
+                &format!("node-{}", i.saturating_add(1)),
                 DependencyType::BlockingDependency,
             )
             .map_err(|e| {
@@ -245,8 +245,8 @@ fn create_test_dag_with_result(size: usize) -> Result<WorkflowDAG, String> {
                 )
             })?;
             dag.add_edge(
-                format!("node-{i}"),
-                format!("node-{}", i.saturating_add(2)),
+                &format!("node-{i}"),
+                &format!("node-{}", i.saturating_add(2)),
                 DependencyType::BlockingDependency,
             )
             .map_err(|e| {
@@ -260,8 +260,8 @@ fn create_test_dag_with_result(size: usize) -> Result<WorkflowDAG, String> {
         } else if i.saturating_add(1) < size {
             // Normal chain
             dag.add_edge(
-                format!("node-{i}"),
-                format!("node-{}", i.saturating_add(1)),
+                &format!("node-{i}"),
+                &format!("node-{}", i.saturating_add(1)),
                 DependencyType::BlockingDependency,
             )
             .map_err(|e| {

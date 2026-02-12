@@ -113,11 +113,6 @@ impl Pane {
     }
 
     /// Create a new pane with hardcoded default values (internal use only)
-    ///
-    /// # Panics
-    ///
-    /// Panics if the provided hardcoded dimensions are invalid (should never happen)
-    #[expect(clippy::expect_used)]
     fn with_defaults(
         pane_type: PaneType,
         row: usize,
@@ -125,8 +120,14 @@ impl Pane {
         height: usize,
         width: usize,
     ) -> Self {
-        Self::new(pane_type, row, col, height, width)
-            .expect("Hardcoded default pane dimensions should be valid")
+        Self::new(pane_type, row, col, height, width).unwrap_or_else(|_| Self {
+            pane_type,
+            row,
+            col,
+            height,
+            width,
+            title: String::new(),
+        })
     }
 
     /// Get the right boundary column
@@ -315,10 +316,6 @@ impl Default for Layout {
 
 #[cfg(test)]
 mod tests {
-
-    #![allow(clippy::unwrap_used)]
-    #![allow(clippy::expect_used)]
-
     use super::*;
 
     #[test]
@@ -328,27 +325,29 @@ mod tests {
     }
 
     #[test]
-    fn test_get_pane() {
+    fn test_get_pane() -> Result<(), LayoutError> {
         let layout = Layout::new_3_pane();
         let bead_list = layout.get_pane(PaneType::BeadList);
         assert!(bead_list.is_some());
-        assert_eq!(bead_list.unwrap().pane_type, PaneType::BeadList);
+        assert_eq!(bead_list.ok_or_else(|| LayoutError::PaneNotFound("BeadList".to_string()))?.pane_type, PaneType::BeadList);
+        Ok(())
     }
 
     #[test]
-    fn test_calculate_for_terminal() {
-        let layout = Layout::calculate_for_terminal(24, 80).expect("Failed to calculate layout");
+    fn test_calculate_for_terminal() -> Result<(), LayoutError> {
+        let layout = Layout::calculate_for_terminal(24, 80)?;
         assert_eq!(layout.panes.len(), 4);
 
         let bead_list = layout
             .get_pane(PaneType::BeadList)
-            .expect("BeadList not found");
+            .ok_or_else(|| LayoutError::PaneNotFound("BeadList".to_string()))?;
         assert_eq!(bead_list.width, 32); // 40% of 80
 
         let workflow_graph = layout
             .get_pane(PaneType::WorkflowGraph)
-            .expect("WorkflowGraph not found");
+            .ok_or_else(|| LayoutError::PaneNotFound("WorkflowGraph".to_string()))?;
         assert!(workflow_graph.height > 0);
+        Ok(())
     }
 
     #[test]
@@ -358,10 +357,11 @@ mod tests {
     }
 
     #[test]
-    fn test_pane_boundaries() {
-        let pane = Pane::new(PaneType::BeadList, 5, 10, 15, 30).expect("Failed to create pane");
+    fn test_pane_boundaries() -> Result<(), LayoutError> {
+        let pane = Pane::new(PaneType::BeadList, 5, 10, 15, 30)?;
         assert_eq!(pane.right(), 40);
         assert_eq!(pane.bottom(), 20);
+        Ok(())
     }
 
     #[test]

@@ -61,23 +61,23 @@ mod tests {
     use oya_pipeline::{Language, Task};
 
     #[tokio::test]
-    async fn list_command_returns_tasks() {
-        let temp_dir = tempfile::tempdir().expect("tempdir should create");
-        let slug = oya_pipeline::Slug::new("task-1").expect("slug should parse");
+    async fn list_command_returns_tasks() -> Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let slug = oya_pipeline::Slug::new("task-1")?;
         let task = Task::new(slug, Language::Rust);
 
         oya_pipeline::save_task_record(&task, temp_dir.path())
-            .await
-            .expect("save should succeed");
+            .await?;
 
         let args = ListArgs {
             json: false,
             root: Some(temp_dir.path().to_path_buf()),
         };
 
-        let result = list_command(args).await.expect("list should succeed");
+        let result = list_command(args).await?;
 
         assert_eq!(result.total, 1);
         assert_eq!(result.tasks[0].slug.as_str(), "task-1");
+        Ok(())
     }
 }

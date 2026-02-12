@@ -158,6 +158,12 @@ struct WorkQueueInner {
     claim_semaphore: Arc<Semaphore>,
 }
 
+impl Default for WorkQueue {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WorkQueue {
     /// Create a new work queue.
     #[must_use]
@@ -371,50 +377,48 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_work_queue_add_and_claim() {
+    async fn test_work_queue_add_and_claim() -> SwarmResult<()> {
         let queue = WorkQueue::new();
 
         queue
             .add_bead("test-123".to_string())
-            .await
-            .expect("Failed to add bead");
+            .await?;
 
         let bead = queue
             .claim_next("agent-1".to_string())
-            .await
-            .expect("Failed to claim bead");
+            .await?;
 
         assert_eq!(bead.bead_id, "test-123");
         assert_eq!(bead.state, BeadWorkState::Pending);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_work_queue_stats() {
+    async fn test_work_queue_stats() -> SwarmResult<()> {
         let queue = WorkQueue::new();
 
         queue
             .add_bead("test-1".to_string())
-            .await
-            .expect("Failed to add bead");
+            .await?;
         queue
             .add_bead("test-2".to_string())
-            .await
-            .expect("Failed to add bead");
+            .await?;
 
         let stats = queue.stats().await;
         assert_eq!(stats.pending, 2);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_bead_work_item_transition() {
+    async fn test_bead_work_item_transition() -> SwarmResult<()> {
         let mut bead = BeadWorkItem::new("test-123".to_string());
 
-        bead.transition_to(BeadWorkState::Claimed)
-            .expect("Failed to transition");
+        bead.transition_to(BeadWorkState::Claimed)?;
 
         assert_eq!(bead.state, BeadWorkState::Claimed);
 
         let result = bead.transition_to(BeadWorkState::Pending);
         assert!(result.is_err());
+        Ok(())
     }
 }

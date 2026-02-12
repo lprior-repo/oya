@@ -387,9 +387,10 @@ mod tests {
     }
 
     #[test]
-    fn test_assignment_id_display() {
-        let id = AssignmentId::new("test-id".to_string()).expect("valid id");
+    fn test_assignment_id_display() -> Result<()> {
+        let id = AssignmentId::new("test-id".to_string())?;
         assert_eq!(format!("{}", id), "test-id");
+        Ok(())
     }
 
     // ========================================================================
@@ -431,14 +432,12 @@ mod tests {
     // ========================================================================
 
     #[test]
-    fn test_sticky_assignment_create() {
-        let assignment = StickyAssignment::create("bead-1", "worker-a");
-        assert!(assignment.is_ok());
-
-        let a = assignment.expect("valid assignment");
-        assert_eq!(a.bead_id, "bead-1");
-        assert_eq!(a.worker_id, "worker-a");
-        assert!(!a.assignment_id.is_empty());
+    fn test_sticky_assignment_create() -> Result<()> {
+        let assignment = StickyAssignment::create("bead-1", "worker-a")?;
+        assert_eq!(assignment.bead_id, "bead-1");
+        assert_eq!(assignment.worker_id, "worker-a");
+        assert!(!assignment.assignment_id.is_empty());
+        Ok(())
     }
 
     #[test]
@@ -454,27 +453,26 @@ mod tests {
     }
 
     #[test]
-    fn test_sticky_assignment_reconstitute() {
+    fn test_sticky_assignment_reconstitute() -> Result<()> {
         let assigned_at = Utc::now() - chrono::Duration::hours(1);
         let assignment = StickyAssignment::reconstitute(
             "assign-existing",
             "bead-old",
             "worker-old",
             assigned_at,
-        );
+        )?;
 
-        assert!(assignment.is_ok());
-        let a = assignment.expect("valid assignment");
-        assert_eq!(a.assignment_id, "assign-existing");
-        assert_eq!(a.bead_id, "bead-old");
-        assert_eq!(a.worker_id, "worker-old");
-        assert_eq!(a.assigned_at, assigned_at);
+        assert_eq!(assignment.assignment_id, "assign-existing");
+        assert_eq!(assignment.bead_id, "bead-old");
+        assert_eq!(assignment.worker_id, "worker-old");
+        assert_eq!(assignment.assigned_at, assigned_at);
+        Ok(())
     }
 
     #[test]
-    fn test_sticky_assignment_reassign() {
+    fn test_sticky_assignment_reassign() -> Result<()> {
         let mut assignment =
-            StickyAssignment::create("bead-1", "worker-a").expect("valid assignment");
+            StickyAssignment::create("bead-1", "worker-a")?;
 
         let old_updated = assignment.updated_at;
         std::thread::sleep(std::time::Duration::from_millis(10));
@@ -483,28 +481,31 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(assignment.worker_id, "worker-b");
         assert!(assignment.updated_at > old_updated);
+        Ok(())
     }
 
     #[test]
-    fn test_sticky_assignment_reassign_empty() {
+    fn test_sticky_assignment_reassign_empty() -> Result<()> {
         let mut assignment =
-            StickyAssignment::create("bead-1", "worker-a").expect("valid assignment");
+            StickyAssignment::create("bead-1", "worker-a")?;
 
         let result = assignment.reassign("");
         assert!(result.is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_sticky_assignment_is_assigned_to() {
-        let assignment = StickyAssignment::create("bead-1", "worker-a").expect("valid assignment");
+    fn test_sticky_assignment_is_assigned_to() -> Result<()> {
+        let assignment = StickyAssignment::create("bead-1", "worker-a")?;
 
         assert!(assignment.is_assigned_to("worker-a"));
         assert!(!assignment.is_assigned_to("worker-b"));
+        Ok(())
     }
 
     #[test]
-    fn test_sticky_assignment_age_seconds() {
-        let assignment = StickyAssignment::create("bead-1", "worker-a").expect("valid assignment");
+    fn test_sticky_assignment_age_seconds() -> Result<()> {
+        let assignment = StickyAssignment::create("bead-1", "worker-a")?;
 
         let age = assignment.age_seconds();
         assert!(age >= 0);
@@ -512,6 +513,7 @@ mod tests {
             age < 5,
             "Age should be less than 5 seconds for new assignment"
         );
+        Ok(())
     }
 
     // ========================================================================

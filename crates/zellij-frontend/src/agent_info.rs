@@ -216,27 +216,25 @@ pub enum AgentInfoError {
 mod tests {
     use super::*;
 
-    fn test_capability() -> AgentCapability {
+    fn test_capability() -> Result<AgentCapability, AgentInfoError> {
         AgentCapability::new(
             "test-cap".to_string(),
             "Test capability".to_string(),
             "1.0".to_string(),
         )
-        .expect("test capability should be valid")
     }
 
     #[test]
-    fn test_agent_capability_new() {
+    fn test_agent_capability_new() -> Result<(), AgentInfoError> {
         let cap = AgentCapability::new(
             "code-gen".to_string(),
             "Generates code".to_string(),
             "1.0".to_string(),
-        );
-        assert!(cap.is_ok());
-        let cap = cap.expect("valid capability");
+        )?;
         assert_eq!(cap.id, "code-gen");
         assert_eq!(cap.description, "Generates code");
         assert_eq!(cap.version, "1.0");
+        Ok(())
     }
 
     #[test]
@@ -277,20 +275,20 @@ mod tests {
     }
 
     #[test]
-    fn test_agent_info_new() {
-        let agent = AgentInfo::new("agent-001".to_string(), vec![test_capability()], 0.95);
-        assert!(agent.is_ok());
-        let agent = agent.expect("valid agent");
+    fn test_agent_info_new() -> Result<(), AgentInfoError> {
+        let agent = AgentInfo::new("agent-001".to_string(), vec![test_capability()?], 0.95)?;
         assert_eq!(agent.id, "agent-001");
         assert_eq!(agent.state, AgentState::Idle);
         assert!(agent.current_bead.is_none());
         assert_eq!(agent.capabilities.len(), 1);
+        Ok(())
     }
 
     #[test]
-    fn test_agent_info_empty_id() {
-        let result = AgentInfo::new(String::new(), vec![test_capability()], 0.95);
+    fn test_agent_info_empty_id() -> Result<(), AgentInfoError> {
+        let result = AgentInfo::new(String::new(), vec![test_capability()?], 0.95);
         assert!(matches!(result, Err(AgentInfoError::EmptyAgentId)));
+        Ok(())
     }
 
     #[test]
@@ -300,103 +298,99 @@ mod tests {
     }
 
     #[test]
-    fn test_agent_info_invalid_health_score() {
-        let result = AgentInfo::new("agent-001".to_string(), vec![test_capability()], 1.5);
+    fn test_agent_info_invalid_health_score() -> Result<(), AgentInfoError> {
+        let result = AgentInfo::new("agent-001".to_string(), vec![test_capability()?], 1.5);
         assert!(matches!(result, Err(AgentInfoError::InvalidHealthScore)));
 
-        let result = AgentInfo::new("agent-001".to_string(), vec![test_capability()], -0.1);
+        let result = AgentInfo::new("agent-001".to_string(), vec![test_capability()?], -0.1);
         assert!(matches!(result, Err(AgentInfoError::InvalidHealthScore)));
+        Ok(())
     }
 
     #[test]
-    fn test_agent_info_with_state() {
-        let agent = AgentInfo::new("agent-001".to_string(), vec![test_capability()], 0.95)
-            .expect("valid agent")
+    fn test_agent_info_with_state() -> Result<(), AgentInfoError> {
+        let agent = AgentInfo::new("agent-001".to_string(), vec![test_capability()?], 0.95)?
             .with_state(AgentState::Working);
         assert_eq!(agent.state, AgentState::Working);
+        Ok(())
     }
 
     #[test]
-    fn test_agent_info_with_current_bead() {
-        let agent = AgentInfo::new("agent-001".to_string(), vec![test_capability()], 0.95)
-            .expect("valid agent")
+    fn test_agent_info_with_current_bead() -> Result<(), AgentInfoError> {
+        let agent = AgentInfo::new("agent-001".to_string(), vec![test_capability()?], 0.95)?
             .with_current_bead(Some("bead-123".to_string()));
         assert_eq!(agent.current_bead, Some("bead-123".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn test_agent_info_with_uptime() {
-        let agent = AgentInfo::new("agent-001".to_string(), vec![test_capability()], 0.95)
-            .expect("valid agent")
+    fn test_agent_info_with_uptime() -> Result<(), AgentInfoError> {
+        let agent = AgentInfo::new("agent-001".to_string(), vec![test_capability()?], 0.95)?
             .with_uptime(3665);
         assert_eq!(agent.uptime_secs, 3665);
+        Ok(())
     }
 
     #[test]
-    fn test_agent_info_format_uptime() {
-        let agent = AgentInfo::new("agent-001".to_string(), vec![test_capability()], 0.95)
-            .expect("valid agent")
+    fn test_agent_info_format_uptime() -> Result<(), AgentInfoError> {
+        let agent = AgentInfo::new("agent-001".to_string(), vec![test_capability()?], 0.95)?
             .with_uptime(3665);
         assert_eq!(agent.format_uptime(), "1h 1m 5s");
 
-        let agent = AgentInfo::new("agent-001".to_string(), vec![test_capability()], 0.95)
-            .expect("valid agent")
+        let agent = AgentInfo::new("agent-001".to_string(), vec![test_capability()?], 0.95)?
             .with_uptime(125);
         assert_eq!(agent.format_uptime(), "2m 5s");
 
-        let agent = AgentInfo::new("agent-001".to_string(), vec![test_capability()], 0.95)
-            .expect("valid agent")
+        let agent = AgentInfo::new("agent-001".to_string(), vec![test_capability()?], 0.95)?
             .with_uptime(30);
         assert_eq!(agent.format_uptime(), "30s");
+        Ok(())
     }
 
     #[test]
-    fn test_agent_info_format_health() {
-        let agent = AgentInfo::new("agent-001".to_string(), vec![test_capability()], 0.95)
-            .expect("valid agent");
+    fn test_agent_info_format_health() -> Result<(), AgentInfoError> {
+        let agent = AgentInfo::new("agent-001".to_string(), vec![test_capability()?], 0.95)?;
         assert_eq!(agent.format_health(), "95%");
 
-        let agent = AgentInfo::new("agent-001".to_string(), vec![test_capability()], 1.0)
-            .expect("valid agent");
+        let agent = AgentInfo::new("agent-001".to_string(), vec![test_capability()?], 1.0)?;
         assert_eq!(agent.format_health(), "100%");
 
-        let agent = AgentInfo::new("agent-001".to_string(), vec![test_capability()], 0.0)
-            .expect("valid agent");
+        let agent = AgentInfo::new("agent-001".to_string(), vec![test_capability()?], 0.0)?;
         assert_eq!(agent.format_health(), "0%");
+        Ok(())
     }
 
     #[test]
-    fn test_agent_info_add_metadata() {
-        let mut agent = AgentInfo::new("agent-001".to_string(), vec![test_capability()], 0.95)
-            .expect("valid agent");
+    fn test_agent_info_add_metadata() -> Result<(), AgentInfoError> {
+        let mut agent = AgentInfo::new("agent-001".to_string(), vec![test_capability()?], 0.95)?;
 
         let result = agent.add_metadata("env".to_string(), "production".to_string());
         assert!(result.is_ok());
         assert_eq!(agent.metadata.get("env"), Some(&"production".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn test_agent_info_add_metadata_empty_key() {
-        let mut agent = AgentInfo::new("agent-001".to_string(), vec![test_capability()], 0.95)
-            .expect("valid agent");
+    fn test_agent_info_add_metadata_empty_key() -> Result<(), AgentInfoError> {
+        let mut agent = AgentInfo::new("agent-001".to_string(), vec![test_capability()?], 0.95)?;
 
         let result = agent.add_metadata(String::new(), "value".to_string());
         assert!(matches!(result, Err(AgentInfoError::EmptyMetadataKey)));
+        Ok(())
     }
 
     #[test]
-    fn test_agent_info_add_metadata_empty_value() {
-        let mut agent = AgentInfo::new("agent-001".to_string(), vec![test_capability()], 0.95)
-            .expect("valid agent");
+    fn test_agent_info_add_metadata_empty_value() -> Result<(), AgentInfoError> {
+        let mut agent = AgentInfo::new("agent-001".to_string(), vec![test_capability()?], 0.95)?;
 
         let result = agent.add_metadata("key".to_string(), String::new());
         assert!(matches!(result, Err(AgentInfoError::EmptyMetadataValue)));
+        Ok(())
     }
 
     #[test]
-    fn test_agent_info_summary() {
-        let agent = AgentInfo::new("agent-001".to_string(), vec![test_capability()], 0.95)
-            .expect("valid agent")
+    fn test_agent_info_summary() -> Result<(), AgentInfoError> {
+        let agent = AgentInfo::new("agent-001".to_string(), vec![test_capability()?], 0.95)?
             .with_state(AgentState::Working)
             .with_current_bead(Some("bead-123".to_string()));
 
@@ -405,6 +399,7 @@ mod tests {
         assert_eq!(summary.state, AgentState::Working);
         assert_eq!(summary.current_bead, Some("bead-123".to_string()));
         assert!((summary.health_score - 0.95).abs() < f64::EPSILON);
+        Ok(())
     }
 
     #[test]

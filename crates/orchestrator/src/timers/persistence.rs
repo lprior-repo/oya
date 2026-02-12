@@ -74,9 +74,9 @@ impl TimerRecord {
             self.created_at,
             self.updated_at,
             TimerMetadata {
-                workflow_id: self.workflow_id,
-                bead_id: self.bead_id,
-                callback_id: self.callback_id,
+                workflow: self.workflow_id,
+                bead: self.bead_id,
+                callback: self.callback_id,
             },
         ))
     }

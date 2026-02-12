@@ -41,7 +41,7 @@ struct BeadDetail {
 }
 
 #[test]
-fn test_send_recv_1kb_message_roundtrip_succeeds() {
+fn test_send_recv_1kb_message_roundtrip_succeeds() -> Result<(), Box<dyn std::error::Error>> {
     let (mut client, mut server) = IpcTransport::pair();
     let original = HostMessage::BeadList(vec![BeadSummary {
         id: "src-123".to_string(),
@@ -50,14 +50,15 @@ fn test_send_recv_1kb_message_roundtrip_succeeds() {
         priority: Priority::P1,
     }]);
 
-    client.send(&original).expect("send should succeed");
-    let received = server.recv::<HostMessage>().expect("recv should succeed");
+    client.send(&original)?;
+    let received = server.recv::<HostMessage>()?;
 
     assert_eq!(original, received);
+    Ok(())
 }
 
 #[test]
-fn test_length_prefix_encoded_as_big_endian() {
+fn test_length_prefix_encoded_as_big_endian() -> Result<(), Box<dyn std::error::Error>> {
     #[derive(Debug)]
     struct CaptureWriter {
         buffer: Vec<u8>,
@@ -80,18 +81,19 @@ fn test_length_prefix_encoded_as_big_endian() {
     let mut transport = IpcTransport::new(reader, writer);
     let msg = HostMessage::BeadList(vec![]);
 
-    transport.send(&msg).unwrap();
+    transport.send(&msg)?;
 
-    let written = transport.split().1.into_inner().unwrap().buffer;
+    let written = transport.split().1.into_inner().ok_or("failed to get writer")?.buffer;
     assert!(written.len() >= 4);
 
     let length_prefix = u32::from_be_bytes([written[0], written[1], written[2], written[3]]);
 
     assert_eq!(length_prefix as usize, written.len() - 4);
+    Ok(())
 }
 
 #[test]
-fn test_flush_is_called_after_each_send() {
+fn test_flush_is_called_after_each_send() -> Result<(), Box<dyn std::error::Error>> {
     use std::cell::RefCell;
     use std::rc::Rc;
 
@@ -122,57 +124,60 @@ fn test_flush_is_called_after_each_send() {
     let mut transport = IpcTransport::new(reader, writer);
     let msg = HostMessage::BeadList(vec![]);
 
-    transport.send(&msg).unwrap();
+    transport.send(&msg)?;
 
     assert!(*flush_count.borrow() > 0);
+    Ok(())
 }
 
 #[test]
-fn test_multiple_messages_are_independently_framed() {
+fn test_multiple_messages_are_independently_framed() -> Result<(), Box<dyn std::error::Error>> {
     let (mut client, mut server) = IpcTransport::pair();
 
-    client.send(&HostMessage::BeadList(vec![])).unwrap();
+    client.send(&HostMessage::BeadList(vec![]))?;
     client
-        .send(&HostMessage::Error("test".to_string()))
-        .unwrap();
-    client.send(&HostMessage::BeadDetail(None)).unwrap();
+        .send(&HostMessage::Error("test".to_string()))?;
+    client.send(&HostMessage::BeadDetail(None))?;
 
-    let msg1 = server.recv::<HostMessage>().unwrap();
-    let msg2 = server.recv::<HostMessage>().unwrap();
-    let msg3 = server.recv::<HostMessage>().unwrap();
+    let msg1 = server.recv::<HostMessage>()?;
+    let msg2 = server.recv::<HostMessage>()?;
+    let msg3 = server.recv::<HostMessage>()?;
 
     assert!(matches!(msg1, HostMessage::BeadList(_)));
     assert!(matches!(msg2, HostMessage::Error(_)));
     assert!(matches!(msg3, HostMessage::BeadDetail(_)));
+    Ok(())
 }
 
 #[test]
-fn test_message_at_exactly_1mb_limit_succeeds() {
+fn test_message_at_exactly_1mb_limit_succeeds() -> Result<(), Box<dyn std::error::Error>> {
     let (mut client, mut server) = IpcTransport::pair();
 
     // Create a message that serializes to ~1MB
     let large_string = "x".repeat(1_000_000);
     let large_msg = HostMessage::Error(large_string);
 
-    client.send(&large_msg).expect("send should succeed");
-    let received = server.recv::<HostMessage>().expect("recv should succeed");
+    client.send(&large_msg)?;
+    let received = server.recv::<HostMessage>()?;
 
     assert_eq!(large_msg, received);
+    Ok(())
 }
 
 #[test]
-fn test_bidirectional_send_recv_in_both_directions() {
+fn test_bidirectional_send_recv_in_both_directions() -> Result<(), Box<dyn std::error::Error>> {
     let (mut client, mut server) = IpcTransport::pair();
 
     let client_msg = HostMessage::BeadList(vec![]);
     let server_msg = HostMessage::Error("ack".to_string());
 
-    client.send(&client_msg).unwrap();
-    server.send(&server_msg).unwrap();
+    client.send(&client_msg)?;
+    server.send(&server_msg)?;
 
-    let server_received = server.recv::<HostMessage>().unwrap();
-    let client_received = client.recv::<HostMessage>().unwrap();
+    let server_received = server.recv::<HostMessage>()?;
+    let client_received = client.recv::<HostMessage>()?;
 
     assert_eq!(server_received, client_msg);
     assert_eq!(client_received, server_msg);
+    Ok(())
 }

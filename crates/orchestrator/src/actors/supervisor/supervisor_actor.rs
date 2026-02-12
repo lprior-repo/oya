@@ -255,7 +255,7 @@ where
     /// Shutdown coordinator reference.
     pub shutdown_coordinator: Option<Arc<ShutdownCoordinator>>,
     /// Shutdown signal receiver.
-    pub _shutdown_rx: Option<broadcast::Receiver<ShutdownSignal>>,
+    pub shutdown_rx: Option<broadcast::Receiver<ShutdownSignal>>,
     /// Restart strategy.
     pub restart_strategy: Box<dyn RestartStrategy<A>>,
     /// Checkpoint manager for shutdown state persistence.
@@ -263,7 +263,7 @@ where
     /// Replay engine for event recovery.
     pub replay_engine: Option<ReplayEngine>,
     /// Shutdown sender for periodic checkpoint task.
-    pub _periodic_checkpoint_shutdown_tx: Option<tokio::sync::mpsc::Sender<()>>,
+    pub periodic_checkpoint_shutdown_tx: Option<tokio::sync::mpsc::Sender<()>>,
 }
 
 impl<A: GenericSupervisableActor> Debug for SupervisorActorState<A>
@@ -281,7 +281,7 @@ where
             .field("child_id_counter", &self.child_id_counter)
             .field("restart_strategy", &self.restart_strategy.name())
             .field("shutdown_coordinator", &self.shutdown_coordinator.is_some())
-            .field("_shutdown_rx", &self._shutdown_rx.is_some())
+            .field("shutdown_rx", &self.shutdown_rx.is_some())
             .field("checkpoint_manager", &self.checkpoint_manager.is_some())
             .field("replay_engine", &self.replay_engine.is_some())
             .finish_non_exhaustive()
@@ -376,11 +376,11 @@ where
             total_restarts: 0,
             child_id_counter: 0,
             shutdown_coordinator: args.shutdown_coordinator.clone(),
-            _shutdown_rx: None,
+            shutdown_rx: None,
             restart_strategy: Box::new(OneForOne::new()),
             checkpoint_manager: args.checkpoint_manager,
             replay_engine: args.replay_engine,
-            _periodic_checkpoint_shutdown_tx: None,
+            periodic_checkpoint_shutdown_tx: None,
         };
 
         if let Some((snapshot, checkpoint_id)) = recovered_snapshot {
@@ -395,7 +395,7 @@ where
 
         if let Some(coordinator) = &args.shutdown_coordinator {
             let shutdown_rx = coordinator.subscribe();
-            state._shutdown_rx = Some(shutdown_rx);
+            state.shutdown_rx = Some(shutdown_rx);
 
             let myself_clone = myself.clone();
             let mut rx = coordinator.subscribe();
@@ -416,7 +416,7 @@ where
                 if let Some(mut shutdown_rx) = shutdown_rx {
                     let (shutdown_tx, mut periodic_shutdown_rx) =
                         tokio::sync::mpsc::channel::<()>(1);
-                    state._periodic_checkpoint_shutdown_tx = Some(shutdown_tx);
+                    state.periodic_checkpoint_shutdown_tx = Some(shutdown_tx);
 
                     let interval_duration = checkpoint_config.interval;
 
@@ -743,7 +743,7 @@ where
     ///
     /// Note: This simulates a crash for chaos testing. The child remains in
     /// state and will be restarted when the `ChildExited` message is processed.
-    fn stop_child(&self, state: &mut SupervisorActorState<A>, name: &str) {
+    fn stop_child(&self, state: &SupervisorActorState<A>, name: &str) {
         if let Some(child) = state.children.get(name) {
             debug!(child = %name, "Stopping child (will be restarted by supervision)");
             child
@@ -858,11 +858,11 @@ mod tests {
             total_restarts: 0,
             child_id_counter: 0,
             shutdown_coordinator: None,
-            _shutdown_rx: None,
+            shutdown_rx: None,
             restart_strategy: Box::new(OneForOne::new()),
             checkpoint_manager: None,
             replay_engine: None,
-            _periodic_checkpoint_shutdown_tx: None,
+            periodic_checkpoint_shutdown_tx: None,
         };
 
         let def = SupervisorActorDef::new(SchedulerActorDef);
@@ -893,7 +893,7 @@ mod tests {
     }
 
     #[test]
-    fn test_supervisor_arguments_with_checkpoint_config() {
+    fn test_supervisor_arguments_with_checkpoint_config() -> Result<(), Box<dyn std::error::Error>> {
         let checkpoint_config = CheckpointConfig {
             interval: Duration::from_secs(60),
             max_checkpoints: 5,
@@ -903,9 +903,10 @@ mod tests {
         let args = SupervisorArguments::new().with_checkpoint_config(checkpoint_config);
 
         assert!(args.checkpoint_config.is_some());
-        let config = args.checkpoint_config.as_ref().unwrap();
+        let config = args.checkpoint_config.as_ref().ok_or("checkpoint_config missing")?;
         assert_eq!(config.interval, Duration::from_secs(60));
         assert_eq!(config.max_checkpoints, 5);
+        Ok(())
     }
 
     #[tokio::test]

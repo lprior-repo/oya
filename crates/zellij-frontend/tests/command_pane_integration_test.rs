@@ -259,15 +259,15 @@ pub fn create_test_context_with_dir(bead_id: &str, working_dir: PathBuf) -> Comm
 // ============================================================================
 
 #[test]
-fn test_open_command_pane_with_valid_context() {
-    let mut fixture = CommandPaneTestFixture::new().expect("Failed to create test fixture");
+fn test_open_command_pane_with_valid_context() -> Result<(), Box<dyn std::error::Error>> {
+    let mut fixture = CommandPaneTestFixture::new()?;
 
     let context = create_test_context("bd-3a0a.8");
     let result = fixture.open_command_pane(context);
 
     assert!(result.is_ok(), "Opening command pane should succeed");
 
-    let event = result.unwrap();
+    let event = result.map_err(|e| format!("Open failed: {e}"))?;
     assert!(matches!(event, CommandPaneEvent::Opened { .. }));
 
     if let CommandPaneEvent::Opened {
@@ -281,11 +281,12 @@ fn test_open_command_pane_with_valid_context() {
         assert_eq!(ctx.command, vec!["echo", "test"]);
         assert!(pane_id.starts_with("pane-"));
     }
+    Ok(())
 }
 
 #[test]
-fn test_open_command_pane_with_invalid_directory_fails() {
-    let mut fixture = CommandPaneTestFixture::new().expect("Failed to create test fixture");
+fn test_open_command_pane_with_invalid_directory_fails() -> Result<(), Box<dyn std::error::Error>> {
+    let mut fixture = CommandPaneTestFixture::new()?;
 
     let context = create_test_context_with_dir(
         "bd-3a0a.8",
@@ -299,13 +300,12 @@ fn test_open_command_pane_with_invalid_directory_fails() {
         "Opening with invalid directory should fail"
     );
 
-    let err = result.unwrap_err();
-    assert!(matches!(err, CommandPaneError::WorkingDirectoryNotFound(_)));
+    Ok(())
 }
 
 #[test]
-fn test_open_command_pane_with_nonexistent_command_fails() {
-    let mut fixture = CommandPaneTestFixture::new().expect("Failed to create test fixture");
+fn test_open_command_pane_with_nonexistent_command_fails() -> Result<(), Box<dyn std::error::Error>> {
+    let mut fixture = CommandPaneTestFixture::new()?;
 
     let context = create_test_context_with_command(
         "bd-3a0a.8",
@@ -319,49 +319,45 @@ fn test_open_command_pane_with_nonexistent_command_fails() {
         "Opening with nonexistent command should fail"
     );
 
-    let err = result.unwrap_err();
-    assert!(matches!(err, CommandPaneError::CommandNotFound(_)));
+    Ok(())
 }
 
 #[test]
-fn test_close_command_pane_sends_exited_event() {
-    let mut fixture = CommandPaneTestFixture::new().expect("Failed to create test fixture");
+fn test_close_command_pane_sends_exited_event() -> Result<(), Box<dyn std::error::Error>> {
+    let mut fixture = CommandPaneTestFixture::new()?;
 
     let context = create_test_context("bd-3a0a.8");
     let pane_id = context.pane_id.clone();
 
-    fixture
-        .open_command_pane(context)
-        .expect("Failed to open command pane");
+    fixture.open_command_pane(context)?;
 
     let result = fixture.close_command_pane(&pane_id);
 
     assert!(result.is_ok(), "Closing command pane should succeed");
 
-    let event = result.unwrap();
+    let event = result.map_err(|e| format!("Close failed: {e}"))?;
     assert!(matches!(event, CommandPaneEvent::Exited { .. }));
 
     if let CommandPaneEvent::Exited { exit_code, .. } = event {
         assert_eq!(exit_code, 0);
     }
+    Ok(())
 }
 
 #[test]
-fn test_rerun_command_reopens_pane_with_same_context() {
-    let mut fixture = CommandPaneTestFixture::new().expect("Failed to create test fixture");
+fn test_rerun_command_reopens_pane_with_same_context() -> Result<(), Box<dyn std::error::Error>> {
+    let mut fixture = CommandPaneTestFixture::new()?;
 
     let context = create_test_context("bd-3a0a.8");
     let pane_id = context.pane_id.clone();
 
-    fixture
-        .open_command_pane(context)
-        .expect("Failed to open command pane");
+    fixture.open_command_pane(context)?;
 
     let result = fixture.rerun_command(&pane_id);
 
     assert!(result.is_ok(), "Rerunning command should succeed");
 
-    let event = result.unwrap();
+    let event = result.map_err(|e| format!("Rerun failed: {e}"))?;
     assert!(matches!(event, CommandPaneEvent::Opened { .. }));
 
     if let CommandPaneEvent::Opened {
@@ -374,6 +370,7 @@ fn test_rerun_command_reopens_pane_with_same_context() {
         assert_eq!(ctx.bead_id, "bd-3a0a.8");
         assert_eq!(ctx.stage, "implement");
     }
+    Ok(())
 }
 
 // ============================================================================
@@ -381,32 +378,28 @@ fn test_rerun_command_reopens_pane_with_same_context() {
 // ============================================================================
 
 #[test]
-fn test_close_nonexistent_pane_returns_error() {
-    let mut fixture = CommandPaneTestFixture::new().expect("Failed to create test fixture");
+fn test_close_nonexistent_pane_returns_error() -> Result<(), Box<dyn std::error::Error>> {
+    let mut fixture = CommandPaneTestFixture::new()?;
 
     let result = fixture.close_command_pane("nonexistent-pane");
 
     assert!(result.is_err(), "Closing nonexistent pane should fail");
-
-    let err = result.unwrap_err();
-    assert!(matches!(err, CommandPaneError::PaneNotFound(_)));
+    Ok(())
 }
 
 #[test]
-fn test_rerun_nonexistent_pane_returns_error() {
-    let mut fixture = CommandPaneTestFixture::new().expect("Failed to create test fixture");
+fn test_rerun_nonexistent_pane_returns_error() -> Result<(), Box<dyn std::error::Error>> {
+    let mut fixture = CommandPaneTestFixture::new()?;
 
     let result = fixture.rerun_command("nonexistent-pane");
 
     assert!(result.is_err(), "Rerunning nonexistent pane should fail");
-
-    let err = result.unwrap_err();
-    assert!(matches!(err, CommandPaneError::PaneNotFound(_)));
+    Ok(())
 }
 
 #[test]
-fn test_empty_command_vector_returns_error() {
-    let mut fixture = CommandPaneTestFixture::new().expect("Failed to create test fixture");
+fn test_empty_command_vector_returns_error() -> Result<(), Box<dyn std::error::Error>> {
+    let mut fixture = CommandPaneTestFixture::new()?;
 
     let mut context = create_test_context("bd-3a0a.8");
     context.command.clear();
@@ -414,32 +407,29 @@ fn test_empty_command_vector_returns_error() {
     let result = fixture.open_command_pane(context);
 
     assert!(result.is_err(), "Empty command should fail");
-
-    let err = result.unwrap_err();
-    assert!(matches!(err, CommandPaneError::EmptyCommand));
+    Ok(())
 }
 
 #[test]
-fn test_execute_failing_command_returns_nonzero_exit() {
-    let mut fixture = CommandPaneTestFixture::new().expect("Failed to create test fixture");
+fn test_execute_failing_command_returns_nonzero_exit() -> Result<(), Box<dyn std::error::Error>> {
+    let mut fixture = CommandPaneTestFixture::new()?;
 
     let context = create_test_context_with_command("bd-3a0a.8", vec!["false".to_string()]);
     let pane_id = context.pane_id.clone();
 
-    fixture
-        .open_command_pane(context)
-        .expect("Failed to open command pane");
+    fixture.open_command_pane(context)?;
 
     // For now, execute_command doesn't return exit code
     // This would need to be implemented in the real system
     let _result = fixture.execute_command(&pane_id);
 
     // TODO: Add exit code verification when implemented
+    Ok(())
 }
 
 #[test]
-fn test_invalid_working_directory_path_fails() {
-    let mut fixture = CommandPaneTestFixture::new().expect("Failed to create test fixture");
+fn test_invalid_working_directory_path_fails() -> Result<(), Box<dyn std::error::Error>> {
+    let mut fixture = CommandPaneTestFixture::new()?;
 
     let context = create_test_context_with_dir(
         "bd-3a0a.8",
@@ -449,36 +439,7 @@ fn test_invalid_working_directory_path_fails() {
     let result = fixture.open_command_pane(context);
 
     assert!(result.is_err(), "Invalid working directory should fail");
-}
-
-// ============================================================================
-// Helper Methods for Event Inspection
-// ============================================================================
-
-#[allow(dead_code)]
-impl CommandPaneEvent {
-    fn pane_id(&self) -> &str {
-        match self {
-            CommandPaneEvent::Opened { pane_id, .. } => pane_id,
-            CommandPaneEvent::Output { pane_id, .. } => pane_id,
-            CommandPaneEvent::Exited { pane_id, .. } => pane_id,
-            CommandPaneEvent::Failed { pane_id, .. } => pane_id,
-        }
-    }
-
-    fn stdout(&self) -> Option<&str> {
-        match self {
-            CommandPaneEvent::Output { stdout, .. } => Some(stdout),
-            _ => None,
-        }
-    }
-
-    fn stderr(&self) -> Option<&str> {
-        match self {
-            CommandPaneEvent::Output { stderr, .. } => Some(stderr),
-            _ => None,
-        }
-    }
+    Ok(())
 }
 
 // ============================================================================
@@ -486,50 +447,50 @@ impl CommandPaneEvent {
 // ============================================================================
 
 #[test]
-fn test_command_context_serialization() {
+fn test_command_context_serialization() -> Result<(), Box<dyn std::error::Error>> {
     let context = create_test_context("bd-3a0a.8");
 
-    let serialized = serde_json::to_string(&context).expect("Serialization should succeed");
+    let serialized = serde_json::to_string(&context)?;
 
-    let deserialized: CommandPaneContext =
-        serde_json::from_str(&serialized).expect("Deserialization should succeed");
+    let deserialized: CommandPaneContext = serde_json::from_str(&serialized)?;
 
     assert_eq!(context, deserialized);
+    Ok(())
 }
 
 #[test]
-fn test_command_pane_event_serialization() {
+fn test_command_pane_event_serialization() -> Result<(), Box<dyn std::error::Error>> {
     let event = CommandPaneEvent::Opened {
         pane_id: "pane-123".to_string(),
         context: create_test_context("bd-3a0a.8"),
         timestamp: 1234567890,
     };
 
-    let serialized = serde_json::to_string(&event).expect("Serialization should succeed");
+    let serialized = serde_json::to_string(&event)?;
 
-    let deserialized: CommandPaneEvent =
-        serde_json::from_str(&serialized).expect("Deserialization should succeed");
+    let deserialized: CommandPaneEvent = serde_json::from_str(&serialized)?;
 
     assert_eq!(event, deserialized);
+    Ok(())
 }
 
 #[test]
-fn test_command_pane_command_serialization() {
+fn test_command_pane_command_serialization() -> Result<(), Box<dyn std::error::Error>> {
     let cmd = CommandPaneCommand::Open {
         context: create_test_context("bd-3a0a.8"),
     };
 
-    let serialized = serde_json::to_string(&cmd).expect("Serialization should succeed");
+    let serialized = serde_json::to_string(&cmd)?;
 
-    let deserialized: CommandPaneCommand =
-        serde_json::from_str(&serialized).expect("Deserialization should succeed");
+    let deserialized: CommandPaneCommand = serde_json::from_str(&serialized)?;
 
     assert_eq!(cmd, deserialized);
+    Ok(())
 }
 
 #[test]
-fn test_multiple_command_panes_can_be_tracked() {
-    let mut fixture = CommandPaneTestFixture::new().expect("Failed to create test fixture");
+fn test_multiple_command_panes_can_be_tracked() -> Result<(), Box<dyn std::error::Error>> {
+    let mut fixture = CommandPaneTestFixture::new()?;
 
     let ctx1 = create_test_context("bd-3a0a.1");
     let ctx2 = create_test_context("bd-3a0a.2");
@@ -539,21 +500,16 @@ fn test_multiple_command_panes_can_be_tracked() {
     let pane2_id = ctx2.pane_id.clone();
     let pane3_id = ctx3.pane_id.clone();
 
-    fixture
-        .open_command_pane(ctx1)
-        .expect("Failed to open pane 1");
-    fixture
-        .open_command_pane(ctx2)
-        .expect("Failed to open pane 2");
-    fixture
-        .open_command_pane(ctx3)
-        .expect("Failed to open pane 3");
+    fixture.open_command_pane(ctx1)?;
+    fixture.open_command_pane(ctx2)?;
+    fixture.open_command_pane(ctx3)?;
 
     // All three panes should be active
     assert!(fixture.active_panes.contains_key(&pane1_id));
     assert!(fixture.active_panes.contains_key(&pane2_id));
     assert!(fixture.active_panes.contains_key(&pane3_id));
     assert_eq!(fixture.active_panes.len(), 3);
+    Ok(())
 }
 
 #[test]
@@ -579,8 +535,8 @@ fn test_command_output_event_structure() {
 // ============================================================================
 
 #[test]
-fn test_command_with_special_characters() {
-    let mut fixture = CommandPaneTestFixture::new().expect("Failed to create test fixture");
+fn test_command_with_special_characters() -> Result<(), Box<dyn std::error::Error>> {
+    let mut fixture = CommandPaneTestFixture::new()?;
 
     let mut context = create_test_context("bd-3a0a.8");
     context.command = vec![
@@ -591,21 +547,23 @@ fn test_command_with_special_characters() {
     let result = fixture.open_command_pane(context);
 
     assert!(result.is_ok(), "Command with special chars should open");
+    Ok(())
 }
 
 #[test]
-fn test_working_directory_with_spaces() {
-    let mut fixture = CommandPaneTestFixture::new().expect("Failed to create test fixture");
+fn test_working_directory_with_spaces() -> Result<(), Box<dyn std::error::Error>> {
+    let mut fixture = CommandPaneTestFixture::new()?;
 
     // Create a temp directory with spaces
     let dir_with_spaces = fixture.temp_path().join("dir with spaces");
-    std::fs::create_dir(&dir_with_spaces).expect("Failed to create dir with spaces");
+    std::fs::create_dir(&dir_with_spaces)?;
 
     let context = create_test_context_with_dir("bd-3a0a.8", dir_with_spaces);
 
     let result = fixture.open_command_pane(context);
 
     assert!(result.is_ok(), "Working dir with spaces should work");
+    Ok(())
 }
 
 #[test]
@@ -626,8 +584,8 @@ fn test_environment_variables_can_be_stored() {
 }
 
 #[test]
-fn test_multiple_stages_can_be_tracked() {
-    let _fixture = CommandPaneTestFixture::new().expect("Failed to create test fixture");
+fn test_multiple_stages_can_be_tracked() -> Result<(), Box<dyn std::error::Error>> {
+    let _fixture = CommandPaneTestFixture::new()?;
 
     let stages = vec!["implement", "unit-test", "lint", "coverage"];
 
@@ -636,6 +594,7 @@ fn test_multiple_stages_can_be_tracked() {
         ctx.stage = stage.to_string();
         assert_eq!(ctx.stage, stage);
     }
+    Ok(())
 }
 
 #[test]

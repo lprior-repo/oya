@@ -48,44 +48,45 @@ impl CheckpointAttackHarness {
 // ===== ATTACK 1: HAPPY PATH VERIFICATION =====
 
 #[tokio::test]
-async fn attack_happy_path_basic_restoration() {
+async fn attack_happy_path_basic_restoration() -> Result<(), Box<dyn std::error::Error>> {
     let harness = CheckpointAttackHarness::new()
         .await
-        .expect("Failed to create harness");
+        .ok_or("Failed to create harness")?;
     let mut manager = harness.manager;
 
     // Create valid checkpoint
     let valid_data = r#"{"active_workflows": ["wf-1"], "sequence": 42}"#;
-    let checkpoint = manager
+    let _checkpoint = manager
         .create_checkpoint(valid_data, None)
         .await
-        .expect("Failed to create checkpoint");
+        .map_err(|e| format!("Failed to create checkpoint: {e}"))?;
 
     // Test restoration - should succeed
     let restored: Result<serde_json::Value, _> = manager.restore_scheduler_state().await;
     assert!(restored.is_ok(), "Happy path restoration should succeed");
 
-    let restored_value = restored.unwrap();
+    let restored_value = restored.map_err(|e| format!("Restore failed: {e}"))?;
     assert_eq!(
         restored_value
             .get("active_workflows")
-            .unwrap()
+            .ok_or("missing active_workflows")?
             .as_array()
-            .unwrap()
+            .ok_or("not an array")?
             .len(),
         1
     );
     assert_eq!(
-        restored_value.get("sequence").unwrap().as_u64().unwrap(),
+        restored_value.get("sequence").ok_or("missing sequence")?.as_u64().ok_or("not a u64")?,
         42
     );
+    Ok(())
 }
 
 #[tokio::test]
-async fn attack_happy_path_with_snapshots() {
+async fn attack_happy_path_with_snapshots() -> Result<(), Box<dyn std::error::Error>> {
     let harness = CheckpointAttackHarness::new()
         .await
-        .expect("Failed to create harness");
+        .ok_or("Failed to create harness")?;
     let mut manager = harness.manager;
 
     let scheduler_data = r#"{"active_workflows": ["wf-1"]}"#;
@@ -94,7 +95,7 @@ async fn attack_happy_path_with_snapshots() {
     let _checkpoint = manager
         .create_checkpoint(scheduler_data, Some(snapshots_data))
         .await
-        .expect("Failed to create checkpoint with snapshots");
+        .map_err(|e| format!("Failed to create checkpoint: {e}"))?;
 
     // Test scheduler restoration
     let scheduler: Result<serde_json::Value, _> = manager.restore_scheduler_state().await;
@@ -105,21 +106,24 @@ async fn attack_happy_path_with_snapshots() {
         manager.restore_workflow_snapshots().await;
     assert!(snapshots.is_ok(), "Snapshot restoration should succeed");
 
-    let snapshots = snapshots.unwrap();
-    assert!(snapshots.is_some(), "Snapshots should be present");
-    assert!(
-        snapshots.unwrap().get("wf-1").is_some(),
-        "wf-1 should be in snapshots"
-    );
+    let snapshots_opt = snapshots.map_err(|e| format!("Snapshot restore failed: {e}"))?;
+    assert!(snapshots_opt.is_some(), "Snapshots should be present");
+    if let Some(s) = snapshots_opt {
+        assert!(
+            s.get("wf-1").is_some(),
+            "wf-1 should be in snapshots"
+        );
+    }
+    Ok(())
 }
 
 // ===== ATTACK 2: INPUT BOUNDARY ATTACKS =====
 
 #[tokio::test]
-async fn attack_empty_checkpoint_id() {
+async fn attack_empty_checkpoint_id() -> Result<(), Box<dyn std::error::Error>> {
     let harness = CheckpointAttackHarness::new()
         .await
-        .expect("Failed to create harness");
+        .ok_or("Failed to create harness")?;
     let manager = harness.manager;
 
     // Try to restore with empty checkpoint ID
@@ -127,20 +131,22 @@ async fn attack_empty_checkpoint_id() {
     assert!(result.is_err(), "Empty checkpoint ID should fail");
 
     // Verify error is appropriate
-    let error = result.unwrap_err();
-    let error_msg = error.to_string();
-    assert!(
-        error_msg.contains("not found") || error_msg.contains("checkpoint"),
-        "Error should indicate checkpoint not found, got: {}",
-        error_msg
-    );
+    if let Err(error) = result {
+        let error_msg = error.to_string();
+        assert!(
+            error_msg.contains("not found") || error_msg.contains("checkpoint"),
+            "Error should indicate checkpoint not found, got: {}",
+            error_msg
+        );
+    }
+    Ok(())
 }
 
 #[tokio::test]
-async fn attack_malformed_checkpoint_id() {
+async fn attack_malformed_checkpoint_id() -> Result<(), Box<dyn std::error::Error>> {
     let harness = CheckpointAttackHarness::new()
         .await
-        .expect("Failed to create harness");
+        .ok_or("Failed to create harness")?;
     let manager = harness.manager;
 
     // Try various malformed checkpoint IDs
@@ -161,15 +167,16 @@ async fn attack_malformed_checkpoint_id() {
             id
         );
     }
+    Ok(())
 }
 
 // ===== ATTACK 3: STATE ATTACKS =====
 
 #[tokio::test]
-async fn attack_uninitialized_database() {
+async fn attack_uninitialized_database() -> Result<(), Box<dyn std::error::Error>> {
     let harness = CheckpointAttackHarness::new_uninitialized()
         .await
-        .expect("Failed to create uninitialized harness");
+        .ok_or("Failed to create uninitialized harness")?;
     let manager = harness.manager;
 
     // Try restoration without initializing schema
@@ -180,19 +187,19 @@ async fn attack_uninitialized_database() {
     );
 
     // Check if error is actionable
-    let error = result.unwrap_err();
-    let error_msg = error.to_string();
-    println!("Uninitialized database error: {}", error_msg);
+    if let Err(error) = result {
+        let error_msg = error.to_string();
+        println!("Uninitialized database error: {}", error_msg);
+    }
 
-    // This test reveals whether the system provides actionable error messages
-    // for configuration issues
+    Ok(())
 }
 
 #[tokio::test]
-async fn attack_corrupted_json_in_checkpoint() {
+async fn attack_corrupted_json_in_checkpoint() -> Result<(), Box<dyn std::error::Error>> {
     let harness = CheckpointAttackHarness::new()
         .await
-        .expect("Failed to create harness");
+        .ok_or("Failed to create harness")?;
     let mut manager = harness.manager;
 
     // Create checkpoint with corrupted JSON
@@ -208,7 +215,7 @@ async fn attack_corrupted_json_in_checkpoint() {
         .store
         .save_checkpoint(&checkpoint)
         .await
-        .expect("Failed to save corrupted checkpoint");
+        .map_err(|e| format!("Failed to save corrupted checkpoint: {e}"))?;
 
     // Try to restore - should fail gracefully
     let result: Result<serde_json::Value, _> =
@@ -219,23 +226,25 @@ async fn attack_corrupted_json_in_checkpoint() {
     );
 
     // Verify error is a serialization error
-    let error = result.unwrap_err();
-    let error_msg = error.to_string();
-    assert!(
-        error_msg.contains("serialization")
-            || error_msg.contains("deserialize")
-            || error_msg.contains("json"),
-        "Error should indicate JSON deserialization failed, got: {}",
-        error_msg
-    );
+    if let Err(error) = result {
+        let error_msg = error.to_string();
+        assert!(
+            error_msg.contains("serialization")
+                || error_msg.contains("deserialize")
+                || error_msg.contains("json"),
+            "Error should indicate JSON deserialization failed, got: {}",
+            error_msg
+        );
+    }
+    Ok(())
 }
 
 #[tokio::test]
-async fn attack_concurrent_restoration() {
+async fn attack_concurrent_restoration() -> Result<(), Box<dyn std::error::Error>> {
     let harness = Arc::new(
         CheckpointAttackHarness::new()
             .await
-            .expect("Failed to create harness"),
+            .ok_or("Failed to create harness")?,
     );
     let manager = Arc::new(harness.manager.clone());
 
@@ -247,7 +256,7 @@ async fn attack_concurrent_restoration() {
         let _checkpoint = mutable_manager
             .create_checkpoint(valid_data, None)
             .await
-            .expect("Failed to create checkpoint");
+            .map_err(|e| format!("Failed to create checkpoint: {e}"))?;
     }
 
     // Launch concurrent restoration attempts
@@ -272,7 +281,7 @@ async fn attack_concurrent_restoration() {
     // Wait for all to complete
     let mut success_count = 0;
     for handle in handles {
-        let (i, success) = handle.await.expect("Task panicked");
+        let (i, success) = handle.await.map_err(|e| format!("Task failed: {e}"))?;
         if success {
             success_count += 1;
             println!("Concurrent restoration {} succeeded", i);
@@ -289,15 +298,16 @@ async fn attack_concurrent_restoration() {
         success_count,
         10 - success_count
     );
+    Ok(())
 }
 
 // ===== ATTACK 4: OUTPUT CONTRACT ATTACKS =====
 
 #[tokio::test]
-async fn attack_type_safety_violations() {
+async fn attack_type_safety_violations() -> Result<(), Box<dyn std::error::Error>> {
     let harness = CheckpointAttackHarness::new()
         .await
-        .expect("Failed to create harness");
+        .ok_or("Failed to create harness")?;
     let mut manager = harness.manager;
 
     // Create checkpoint with data that would violate type expectations
@@ -306,7 +316,7 @@ async fn attack_type_safety_violations() {
     let _checkpoint = manager
         .create_checkpoint(type_confusing_data, None)
         .await
-        .expect("Failed to create type-confusing checkpoint");
+        .map_err(|e| format!("Failed to create checkpoint: {e}"))?;
 
     // Try to restore as different types
     let as_string: Result<String, _> = manager.restore_scheduler_state().await;
@@ -327,13 +337,14 @@ async fn attack_type_safety_violations() {
         as_json.is_ok(),
         "Restoring as serde_json::Value should work"
     );
+    Ok(())
 }
 
 #[tokio::test]
-async fn attack_error_message_consistency() {
+async fn attack_error_message_consistency() -> Result<(), Box<dyn std::error::Error>> {
     let harness = CheckpointAttackHarness::new()
         .await
-        .expect("Failed to create harness");
+        .ok_or("Failed to create harness")?;
     let manager = harness.manager;
 
     // Check error message consistency between similar methods
@@ -355,55 +366,54 @@ async fn attack_error_message_consistency() {
     );
 
     // Error messages should be consistent
-    let scheduler_error = scheduler_result.unwrap_err().to_string();
-    let snapshots_error = snapshots_result.unwrap_err().to_string();
+    if let (Err(scheduler_err), Err(snapshots_err)) = (&scheduler_result, &snapshots_result) {
+        let scheduler_error = scheduler_err.to_string();
+        let snapshots_error = snapshots_err.to_string();
 
-    // Both should mention the checkpoint ID
-    assert!(
-        scheduler_error.contains(non_existent_id),
-        "Scheduler error should mention checkpoint ID: {}",
-        scheduler_error
-    );
-    assert!(
-        snapshots_error.contains(non_existent_id),
-        "Snapshots error should mention checkpoint ID: {}",
-        snapshots_error
-    );
+        // Both should mention the checkpoint ID
+        assert!(
+            scheduler_error.contains(non_existent_id),
+            "Scheduler error should mention checkpoint ID: {}",
+            scheduler_error
+        );
+        assert!(
+            snapshots_error.contains(non_existent_id),
+            "Snapshots error should mention checkpoint ID: {}",
+            snapshots_error
+        );
 
-    // Error types should be consistent
-    match (scheduler_result, snapshots_result) {
-        (Err(scheduler_err), Err(snapshots_err)) => {
-            // Should be the same error variant
-            assert!(
-                std::mem::discriminant(&scheduler_err) == std::mem::discriminant(&snapshots_err),
-                "Error types should be consistent between scheduler and snapshot restoration"
-            );
-        }
-        _ => panic!("Both methods should have returned errors"),
+        // Error types should be consistent
+        assert!(
+            std::mem::discriminant(scheduler_err) == std::mem::discriminant(snapshots_err),
+            "Error types should be consistent between scheduler and snapshot restoration"
+        );
+    } else {
+        panic!("Both methods should have returned errors");
     }
+    Ok(())
 }
 
 // ===== ATTACK 5: CROSS-COMMAND CONSISTENCY =====
 
 #[tokio::test]
-async fn cross_command_consistency_latest_vs_by_id() {
+async fn cross_command_consistency_latest_vs_by_id() -> Result<(), Box<dyn std::error::Error>> {
     let harness = CheckpointAttackHarness::new()
         .await
-        .expect("Failed to create harness");
+        .ok_or("Failed to create harness")?;
     let mut manager = harness.manager;
 
     // Create multiple checkpoints
     let data1 = r#"{"sequence": 1}"#;
     let data2 = r#"{"sequence": 2}"#;
 
-    let cp1 = manager
+    let _cp1 = manager
         .create_checkpoint(data1, None)
         .await
-        .expect("Failed to create cp1");
+        .map_err(|e| format!("Failed to create cp1: {e}"))?;
     let cp2 = manager
         .create_checkpoint(data2, None)
         .await
-        .expect("Failed to create cp2");
+        .map_err(|e| format!("Failed to create cp2: {e}"))?;
 
     // Restore latest and by ID - should be consistent
     let latest: Result<serde_json::Value, _> = manager.restore_scheduler_state().await;
@@ -414,21 +424,22 @@ async fn cross_command_consistency_latest_vs_by_id() {
     assert!(latest.is_ok(), "Latest restoration should succeed");
     assert!(by_id.is_ok(), "By ID restoration should succeed");
 
-    let latest_value = latest.unwrap();
-    let by_id_value = by_id.unwrap();
+    let latest_value = latest.map_err(|e| format!("Latest restore failed: {e}"))?;
+    let by_id_value = by_id.map_err(|e| format!("By ID restore failed: {e}"))?;
 
     // Should return the same data since cp2 is latest
     assert_eq!(
         latest_value, by_id_value,
         "Latest and by-ID restoration should be consistent"
     );
+    Ok(())
 }
 
 #[tokio::test]
-async fn attack_workflow_snapshots_none_consistency() {
+async fn attack_workflow_snapshots_none_consistency() -> Result<(), Box<dyn std::error::Error>> {
     let harness = CheckpointAttackHarness::new()
         .await
-        .expect("Failed to create harness");
+        .ok_or("Failed to create harness")?;
     let mut manager = harness.manager;
 
     // Create checkpoint WITHOUT snapshots
@@ -436,11 +447,11 @@ async fn attack_workflow_snapshots_none_consistency() {
     let _checkpoint = manager
         .create_checkpoint(data, None)
         .await
-        .expect("Failed to create checkpoint");
+        .map_err(|e| format!("Failed to create checkpoint: {e}"))?;
 
     // Restore snapshots - should return None consistently
-    let latest: Result<Option<String>, _> = manager.restore_workflow_snapshots().await;
-    let by_id: Result<Option<String>, _> = manager
+    let latest: Result<Option<serde_json::Value>, _> = manager.restore_workflow_snapshots().await;
+    let by_id: Result<Option<serde_json::Value>, _> = manager
         .restore_workflow_snapshots_by_id(&_checkpoint.checkpoint_id)
         .await;
 
@@ -450,8 +461,8 @@ async fn attack_workflow_snapshots_none_consistency() {
     );
     assert!(by_id.is_ok(), "By-ID snapshots restoration should succeed");
 
-    let latest_value = latest.unwrap();
-    let by_id_value = by_id.unwrap();
+    let latest_value = latest.map_err(|e| format!("Latest snapshots restore failed: {e}"))?;
+    let by_id_value = by_id.map_err(|e| format!("By-ID snapshots restore failed: {e}"))?;
 
     // Both should return None
     assert!(latest_value.is_none(), "Latest snapshots should be None");
@@ -460,6 +471,7 @@ async fn attack_workflow_snapshots_none_consistency() {
         latest_value, by_id_value,
         "None values should be consistent"
     );
+    Ok(())
 }
 
 #[cfg(test)]

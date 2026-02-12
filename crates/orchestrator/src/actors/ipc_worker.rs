@@ -88,21 +88,21 @@ impl IpcWorkerArguments {
         Self::default()
     }
 
-    /// Set the \`EventBus\`.
+    /// Set the `EventBus`.
     #[must_use]
     pub fn with_event_bus(mut self, bus: Arc<EventBus>) -> Self {
         self.event_bus = Some(bus);
         self
     }
 
-    /// Set the \`AgentPool\`.
+    /// Set the `AgentPool`.
     #[must_use]
     pub fn with_agent_pool(mut self, pool_: Arc<AgentPool>) -> Self {
         self.agent_pool = Some(pool_);
         self
     }
 
-    /// Set the \`SchedulerState\`.
+    /// Set the `SchedulerState`.
     #[must_use]
     pub fn with_scheduler_state(mut self, state: Arc<SchedulerState>) -> Self {
         self.scheduler_state = Some(state);
@@ -121,7 +121,7 @@ impl IpcWorkerArguments {
 #[derive(Clone)]
 pub struct IpcWorkerState {
     /// Event subscription ID (for cleanup).
-    _event_subscription_id: Option<String>,
+    event_subscription_id: Option<String>,
     /// Broadcast sender for `HostMessage` events.
     event_tx: broadcast::Sender<HostMessage>,
     /// `EventBus` for subscribing to events.
@@ -132,8 +132,6 @@ pub struct IpcWorkerState {
     scheduler_state: Option<Arc<SchedulerState>>,
     /// `OrchestratorStore` for bead persistence queries.
     store: Option<Arc<OrchestratorStore>>,
-    /// Whether shutdown has been requested.
-    shutdown_requested: bool,
 }
 
 impl IpcWorkerState {
@@ -141,13 +139,12 @@ impl IpcWorkerState {
     pub(crate) fn new() -> Self {
         let (event_tx, _) = broadcast::channel(100);
         Self {
-            _event_subscription_id: None,
+            event_subscription_id: None,
             event_tx,
             event_bus: None,
             agent_pool: None,
             scheduler_state: None,
             store: None,
-            shutdown_requested: false,
         }
     }
 
@@ -156,13 +153,12 @@ impl IpcWorkerState {
     fn with_store(store: Arc<OrchestratorStore>) -> Self {
         let (event_tx, _) = broadcast::channel(100);
         Self {
-            _event_subscription_id: None,
+            event_subscription_id: None,
             event_tx,
             event_bus: None,
             agent_pool: None,
             scheduler_state: None,
             store: Some(store),
-            shutdown_requested: false,
         }
     }
 }
@@ -258,6 +254,7 @@ fn truncate_with_indicator(s: &str, max_len: usize) -> String {
 }
 
 /// Convert `BeadEvent` to `HostMessage` for stage updates.
+#[allow(clippy::too_many_lines)]
 pub fn event_to_host_message(event: &BeadEvent) -> Result<HostMessage, IpcBridgeError> {
     match event {
         BeadEvent::StageStarted {
@@ -414,13 +411,13 @@ impl Actor for IpcWorkerActorDef {
 
         // Subscribe to event bus if provided
         if let Some(bus) = &state.event_bus {
-            let (subscription_id, _subscription) =
+            let (subscription_id, subscription) =
                 bus.subscribe_with_pattern(EventPattern::All).await;
-            state._event_subscription_id = Some(subscription_id);
+            state.event_subscription_id = Some(subscription_id);
 
             // Spawn event forwarder
             let event_tx = state.event_tx.clone();
-            tokio::spawn(Self::event_forwarder(_subscription, event_tx));
+            tokio::spawn(Self::event_forwarder(subscription, event_tx));
         }
 
         Ok(state)
@@ -432,145 +429,26 @@ impl Actor for IpcWorkerActorDef {
         message: Self::Msg,
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
-        if let IpcWorkerMessage::HandleGuestMessage {
-            message:
-                GuestMessage::RunStage {
-                    slug,
-                    stage,
-                    from,
-                    to,
-                    dry_run,
-                },
-            reply,
-        } = message
-        {
-            let response =
-                Self::handle_run_stage(&slug, &stage, from.as_deref(), to.as_deref(), dry_run)
-                    .await;
-            let _ = reply.send(response);
-            return Ok(());
-        }
-
-        if let IpcWorkerMessage::HandleGuestMessage {
-            message: GuestMessage::RunPipeline { slug, dry_run },
-            reply,
-        } = message
-        {
-            let response = Self::handle_run_pipeline(&slug, dry_run).await;
-            let _ = reply.send(response);
-            return Ok(());
-        }
-
-        if let IpcWorkerMessage::HandleGuestMessage {
-            message: GuestMessage::RunPipelineBatch { slugs, dry_run },
-            reply,
-        } = message
-        {
-            let response = Self::handle_run_pipeline_batch(&slugs, dry_run).await;
-            let _ = reply.send(response);
-            return Ok(());
-        }
-
-        if let IpcWorkerMessage::HandleGuestMessage {
-            message: GuestMessage::ApproveTask { slug, force },
-            reply,
-        } = message
-        {
-            let response = Self::handle_approve_task(&slug, force).await;
-            let _ = reply.send(response);
-            return Ok(());
-        }
-
-        if let IpcWorkerMessage::HandleGuestMessage {
-            message: GuestMessage::GetTaskList,
-            reply,
-        } = message
-        {
-            let response = Self::handle_get_task_list().await;
-            let _ = reply.send(response);
-            return Ok(());
-        }
-
-        if let IpcWorkerMessage::HandleGuestMessage {
-            message: GuestMessage::GetTaskDetail { slug },
-            reply,
-        } = message
-        {
-            let response = Self::handle_get_task_detail(&slug).await;
-            let _ = reply.send(response);
-            return Ok(());
-        }
-
-        if let IpcWorkerMessage::HandleGuestMessage {
-            message: GuestMessage::GetBeadList,
-            reply,
-        } = message
-        {
-            let response = Self::handle_get_task_list().await;
-            let _ = reply.send(response);
-            return Ok(());
-        }
-
-        if let IpcWorkerMessage::HandleGuestMessage {
-            message: GuestMessage::GetBeadDetail { bead_id },
-            reply,
-        } = message
-        {
-            let response = Self::handle_get_task_detail(&bead_id).await;
-            let _ = reply.send(response);
-            return Ok(());
-        }
-
-        // Bead operation commands (async, require persistence)
-        if let IpcWorkerMessage::HandleGuestMessage {
-            message: GuestMessage::StartBead { bead_id },
-            reply,
-        } = message
-        {
-            let response = Self::handle_start_bead(state, &bead_id).await;
-            let _ = reply.send(response);
-            return Ok(());
-        }
-
-        if let IpcWorkerMessage::HandleGuestMessage {
-            message: GuestMessage::CancelBead { bead_id },
-            reply,
-        } = message
-        {
-            let response = Self::handle_cancel_bead(state, &bead_id).await;
-            let _ = reply.send(response);
-            return Ok(());
-        }
-
-        if let IpcWorkerMessage::HandleGuestMessage {
-            message: GuestMessage::RetryBead { bead_id },
-            reply,
-        } = message
-        {
-            let response = Self::handle_retry_bead(state, &bead_id).await;
-            let _ = reply.send(response);
-            return Ok(());
-        }
-
-        // Special case for Shutdown
-        if matches!(message, IpcWorkerMessage::Shutdown) {
-            info!("IpcWorker shutdown requested");
-            state.shutdown_requested = true;
-            myself.stop(Some("IpcWorker shutdown requested".to_string()));
-            return Ok(());
-        }
-
-        let (next_state, effects) = core::handle(state.clone(), message);
-        *state = next_state;
-
-        for effect in effects {
-            match effect {
-                IpcWorkerEffect::ReplyGuestMessage { reply, response } => {
-                    let _ = reply.send(response);
+        match message {
+            IpcWorkerMessage::HandleGuestMessage { message, reply } => {
+                self.process_guest_message(message, reply, state).await?;
+            }
+            IpcWorkerMessage::Subscribe { sender } => {
+                let (next_state, effects) = core::handle(state.clone(), IpcWorkerMessage::Subscribe { sender });
+                *state = next_state;
+                for effect in effects {
+                    match effect {
+                        IpcWorkerEffect::ReplyGuestMessage { reply, response } => {
+                            let _ = reply.send(response);
+                        }
+                    }
                 }
             }
+            IpcWorkerMessage::Shutdown => {
+                info!("IpcWorker shutdown requested");
+                myself.stop(Some("IpcWorker shutdown requested".to_string()));
+            }
         }
-
         Ok(())
     }
 
@@ -580,6 +458,81 @@ impl Actor for IpcWorkerActorDef {
         _state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         info!("IpcWorker stopping");
+        Ok(())
+    }
+}
+
+impl IpcWorkerActorDef {
+    #[allow(clippy::too_many_lines)]
+    async fn process_guest_message(
+        &self,
+        message: GuestMessage,
+        reply: ractor::RpcReplyPort<Result<HostMessage, ActorError>>,
+        state: &mut IpcWorkerState,
+    ) -> Result<(), ActorProcessingErr> {
+        match message {
+            GuestMessage::RunStage {
+                slug,
+                stage,
+                from,
+                to,
+                dry_run,
+            } => {
+                let response =
+                    Self::handle_run_stage(&slug, &stage, from.as_deref(), to.as_deref(), dry_run)
+                        .await;
+                let _ = reply.send(response);
+            }
+            GuestMessage::RunPipeline { slug, dry_run } => {
+                let response = Self::handle_run_pipeline(&slug, dry_run).await;
+                let _ = reply.send(response);
+            }
+            GuestMessage::RunPipelineBatch { slugs, dry_run } => {
+                let response = Self::handle_run_pipeline_batch(&slugs, dry_run).await;
+                let _ = reply.send(response);
+            }
+            GuestMessage::ApproveTask { slug, force } => {
+                let response = Self::handle_approve_task(&slug, force).await;
+                let _ = reply.send(response);
+            }
+            GuestMessage::GetTaskList | GuestMessage::GetBeadList => {
+                let response = Self::handle_get_task_list().await;
+                let _ = reply.send(response);
+            }
+            GuestMessage::GetTaskDetail { slug } | GuestMessage::GetBeadDetail { bead_id: slug } => {
+                let response = Self::handle_get_task_detail(&slug).await;
+                let _ = reply.send(response);
+            }
+            GuestMessage::StartBead { bead_id } => {
+                let response = Self::handle_start_bead(state, &bead_id).await;
+                let _ = reply.send(response);
+            }
+            GuestMessage::CancelBead { bead_id } => {
+                let response = Self::handle_cancel_bead(state, &bead_id).await;
+                let _ = reply.send(response);
+            }
+            GuestMessage::RetryBead { bead_id } => {
+                let response = Self::handle_retry_bead(state, &bead_id).await;
+                let _ = reply.send(response);
+            }
+            other => {
+                let (next_state, effects) = core::handle(
+                    state.clone(),
+                    IpcWorkerMessage::HandleGuestMessage {
+                        message: other,
+                        reply,
+                    },
+                );
+                *state = next_state;
+                for effect in effects {
+                    match effect {
+                        IpcWorkerEffect::ReplyGuestMessage { reply, response } => {
+                            let _ = reply.send(response);
+                        }
+                    }
+                }
+            }
+        }
         Ok(())
     }
 }
@@ -656,11 +609,11 @@ mod core {
             }
 
             GuestMessage::GetAgentPool => {
-                let stats = get_agent_pool_stats(state)?;
+                let pool_stats = get_agent_pool_stats(state)?;
                 Ok(HostMessage::AgentPoolStats {
-                    total_agents: stats.total,
-                    active_agents: stats.working,
-                    idle_agents: stats.idle,
+                    total_agents: pool_stats.total,
+                    active_agents: pool_stats.working,
+                    idle_agents: pool_stats.idle,
                     beads_assigned: 0,  // TODO: Track assigned beads
                     beads_completed: 0, // TODO: Track completed beads
                 })

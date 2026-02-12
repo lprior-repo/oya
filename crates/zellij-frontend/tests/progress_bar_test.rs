@@ -2,9 +2,6 @@
 //!
 //! Tests the rendering of progress bars in the BeadList pane.
 
-#![allow(clippy::unwrap_used)]
-#![allow(clippy::expect_used)]
-
 use zellij_frontend::layout::{Layout, PaneType};
 use zellij_frontend::plugin::{StageState, TaskRow};
 use zellij_frontend::render::Renderer;
@@ -164,12 +161,12 @@ fn render_bead_detail_shows_pipeline_stages() {
 }
 
 #[test]
-fn render_pipeline_view_shows_stages() {
+fn render_pipeline_view_shows_stages() -> Result<(), Box<dyn std::error::Error>> {
     let renderer = Renderer::new();
     let layout = Layout::new_3_pane();
     let pane = layout
         .get_pane(PaneType::PipelineView)
-        .expect("PipelineView pane");
+        .ok_or("PipelineView pane missing")?;
     let task = create_task_with_progress();
 
     let output = renderer.render_pipeline_view(pane, &task);
@@ -182,6 +179,7 @@ fn render_pipeline_view_shows_stages() {
         output.contains('█') || output.contains('░'),
         "PipelineView should show progress bars"
     );
+    Ok(())
 }
 
 #[test]

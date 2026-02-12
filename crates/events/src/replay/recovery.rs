@@ -158,7 +158,6 @@ impl DeadLetterQueue for InMemoryDeadLetterQueue {
             .map_err(|e| Error::Internal(format!("DLQ lock poisoned: {e}")))
             .map(|mut events| {
                 events.push_back(event);
-                ()
             })
     }
 
@@ -355,15 +354,6 @@ pub fn is_transient_error(error: &Error) -> bool {
                 || reason.to_lowercase().contains("temporary")
         }
 
-        // Serialization errors are permanent (data corruption)
-        Error::Serialization { .. } => false,
-
-        // Invalid events are permanent
-        Error::InvalidEvent { .. } => false,
-
-        // Event not found is permanent
-        Error::EventNotFound { .. } => false,
-
         // Projection failures might be transient
         Error::ProjectionFailed { reason, .. } => {
             reason.to_lowercase().contains("timeout")
@@ -371,16 +361,8 @@ pub fn is_transient_error(error: &Error) -> bool {
                 || reason.to_lowercase().contains("temporary")
         }
 
-        // Invalid transitions are permanent
-        Error::InvalidTransition { .. } => false,
-
-        // Channel closed is permanent
-        Error::ChannelClosed => false,
-
-        // Internal errors are permanent by default
-        Error::Internal(_) => false,
-
-        // Other errors are not transient
+        // Serialization errors, invalid events, missing events, invalid transitions,
+        // closed channels, and internal errors are generally permanent.
         _ => false,
     }
 }
@@ -498,7 +480,7 @@ pub async fn retry_with_policy<T>(
 /// Log a poison event that was sent to the dead letter queue.
 ///
 /// Uses structured logging at WARN level with tracing.
-/// Includes event_id, attempt_count, and error context.
+/// Includes `event_id`, `attempt_count`, and error context.
 ///
 /// # Arguments
 ///
@@ -517,7 +499,7 @@ pub fn log_poison_event(event_id: &str, attempt_count: u32, error: &Error) {
 /// Log a failed event retry attempt.
 ///
 /// Uses structured logging at ERROR level with tracing.
-/// Includes event_id, attempt_count, and error context.
+/// Includes `event_id`, `attempt_count`, and error context.
 ///
 /// # Arguments
 ///

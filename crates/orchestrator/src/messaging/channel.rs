@@ -242,7 +242,7 @@ impl DurableChannel {
                     .signed_duration_since(queued.queued_at)
                     .num_seconds();
 
-                if age > self.config.message_ttl_secs as i64 {
+                if age > self.config.message_ttl_secs.try_into().unwrap_or(i64::MAX) {
                     // Message expired, try next
                     drop(queue);
                     continue;

@@ -16,7 +16,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 use crate::swarm::error::{SwarmError, SwarmResult};
 
@@ -252,134 +252,6 @@ impl HandoffFile {
 
         Ok(())
     }
-}
-
-/// Find handoff files by state pattern.
-///
-/// # Errors
-///
-/// Returns error if directory read fails.
-pub fn find_handoffs(handoff_dir: &str, pattern: &str) -> SwarmResult<Vec<HandoffFile>> {
-    let glob_pattern = format!("{}/{}", handoff_dir, pattern);
-    let mut handoffs = Vec::new();
-
-    // Use glob to find matching files
-    let paths = glob::glob(&glob_pattern).map_err(|e| SwarmError::HandoffFailed {
-        file_path: glob_pattern,
-        operation: "glob".to_string(),
-        reason: e.to_string(),
-    })?;
-
-    for entry in paths {
-        match entry {
-            Ok(path) => match HandoffFile::read(&path) {
-                Ok(handoff) => handoffs.push(handoff),
-                Err(e) => {
-                    warn!(
-                        path = %path.display(),
-                        error = %e,
-                        "Failed to read handoff file"
-                    );
-                }
-            },
-            Err(e) => {
-                warn!(error = %e, "Glob iteration error");
-            }
-        }
-    }
-
-    Ok(handoffs)
-}
-
-/// Find handoffs ready for implementation.
-///
-/// # Errors
-///
-/// Returns error if directory read fails.
-pub fn find_ready_to_implement(handoff_dir: &str) -> SwarmResult<Vec<HandoffFile>> {
-    find_handoffs(handoff_dir, "bead-ready-to-implement-*.json")
-}
-
-/// Find handoffs ready for review.
-///
-/// # Errors
-///
-/// Returns error if directory read fails.
-pub fn find_ready_review(handoff_dir: &str) -> SwarmResult<Vec<HandoffFile>> {
-    find_handoffs(handoff_dir, "bead-ready-review-*.json")
-}
-
-/// Transition handoff to new state via atomic file move.
-///
-/// # Errors
-///
-/// Returns error if transition fails.
-pub fn transition_handoff(
-    handoff: HandoffFile,
-    new_state: HandoffState,
-    handoff_dir: &str,
-) -> SwarmResult<HandoffFile> {
-    let old_path = handoff.file_path(handoff_dir);
-
-    let mut new_handoff = handoff.clone();
-    new_handoff.state = new_state;
-    new_handoff.updated_at = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-
-    // Write new handoff file
-    new_handoff.write(handoff_dir)?;
-
-    // Atomically remove old file (using rename to ensure atomicity)
-    if old_path.exists() {
-        fs::remove_file(&old_path).map_err(|e| SwarmError::HandoffFailed {
-            file_path: old_path.display().to_string(),
-            operation: "remove_old".to_string(),
-            reason: e.to_string(),
-        })?;
-    }
-
-    info!(
-        bead_id = %handoff.bead_id,
-        from = %handoff.state,
-        to = %new_state,
-        "Transitioned handoff state"
-    );
-
-    Ok(new_handoff)
-}
-
-/// Clean up all handoff files for a bead.
-///
-/// # Errors
-///
-/// Returns error if cleanup fails.
-pub fn cleanup_bead_handoffs(bead_id: &str, handoff_dir: &str) -> SwarmResult<()> {
-    let patterns = vec![
-        format!("bead-contracts-{}.json", bead_id),
-        format!("bead-ready-to-implement-{}.json", bead_id),
-        format!("bead-implementation-in-progress-{}.json", bead_id),
-        format!("bead-implementation-complete-{}.json", bead_id),
-        format!("bead-ready-review-{}.json", bead_id),
-        format!("bead-reviewing-{}.json", bead_id),
-    ];
-
-    for pattern in patterns {
-        let path = PathBuf::from(format!("{}/{}", handoff_dir, pattern));
-        if path.exists() {
-            fs::remove_file(&path).map_err(|e| SwarmError::HandoffFailed {
-                file_path: path.display().to_string(),
-                operation: "cleanup".to_string(),
-                reason: e.to_string(),
-            })?;
-            debug!(path = %path.display(), "Cleaned up handoff file");
-        }
-    }
-
-    // Keep bead-complete-<id>.json for audit trail
-
-    Ok(())
 }
 
 #[cfg(test)]

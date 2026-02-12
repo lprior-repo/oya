@@ -40,13 +40,13 @@ fn demo_basic_usage() -> Result<(), Box<dyn std::error::Error>> {
     dag.add_node("test".to_string())?;
     dag.add_node("deploy".to_string())?;
     dag.add_dependency(
-        "build".to_string(),
-        "test".to_string(),
+        "build",
+        "test",
         DependencyType::BlockingDependency,
     )?;
     dag.add_dependency(
-        "test".to_string(),
-        "deploy".to_string(),
+        "test",
+        "deploy",
         DependencyType::BlockingDependency,
     )?;
 
@@ -155,8 +155,8 @@ fn demo_cache_behavior() -> Result<(), Box<dyn std::error::Error>> {
     // Add a new node to the DAG
     dag.add_node("new-node".to_string())?;
     dag.add_dependency(
-        "node-19".to_string(),
-        "new-node".to_string(),
+        "node-19",
+        "new-node",
         DependencyType::BlockingDependency,
     )?;
 
@@ -237,20 +237,20 @@ fn create_sample_workflow_dag(size: usize) -> Result<WorkflowDAG, Box<dyn std::e
         if i % 5 == 0 && i.saturating_add(1) < size {
             // Branch every 5th node
             dag.add_dependency(
-                format!("node-{i}"),
-                format!("node-{}", i.saturating_add(1)),
+                &format!("node-{i}"),
+                &format!("node-{}", i.saturating_add(1)),
                 DependencyType::BlockingDependency,
             )?;
             dag.add_dependency(
-                format!("node-{i}"),
-                format!("node-{}", i.saturating_add(2)),
+                &format!("node-{i}"),
+                &format!("node-{}", i.saturating_add(2)),
                 DependencyType::BlockingDependency,
             )?;
         } else if i.saturating_add(1) < size {
             // Linear chain
             dag.add_dependency(
-                format!("node-{i}"),
-                format!("node-{}", i.saturating_add(1)),
+                &format!("node-{i}"),
+                &format!("node-{}", i.saturating_add(1)),
                 DependencyType::BlockingDependency,
             )?;
         }
@@ -291,8 +291,8 @@ fn create_ci_cd_workflow() -> Result<WorkflowDAG, Box<dyn std::error::Error>> {
 
     for (from, to) in dependencies {
         dag.add_dependency(
-            from.to_string(),
-            to.to_string(),
+            from,
+            to,
             DependencyType::BlockingDependency,
         )?;
     }

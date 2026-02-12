@@ -187,7 +187,7 @@ async fn given_recorded_events_when_replayed_then_state_matches_original(
 
     let original_bead_state = original_state
         .get_state(bead_id)
-        .expect("Original state should have bead state");
+        .ok_or("Original state should have bead state")?;
 
     // ==========================================================================
     // WHEN: Events are replayed
@@ -208,7 +208,7 @@ async fn given_recorded_events_when_replayed_then_state_matches_original(
 
     let replayed_bead_state = replayed_state
         .get_state(bead_id)
-        .expect("Replayed state should have bead state");
+        .ok_or("Replayed state should have bead state")?;
 
     assert_eq!(
         original_bead_state, replayed_bead_state,

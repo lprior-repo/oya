@@ -11,9 +11,7 @@
 
 use anyhow::Result;
 use clap::Parser;
-use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use thiserror::Error;
@@ -196,11 +194,6 @@ struct OrchestratorConfig {
     /// Maximum execution time in seconds
     #[serde(default = "default_timeout")]
     timeout_secs: u64,
-
-    /// Additional configuration options
-    #[serde(default)]
-    #[allow(dead_code)]
-    extra: HashMap<String, serde_yaml::Value>,
 }
 
 const fn default_slots() -> usize {
@@ -213,15 +206,14 @@ const fn default_timeout() -> u64 {
 
 /// Core storm command implementation
 ///
-/// Preconditions:
-/// - Config file exists and is valid
-/// - Beads database exists and contains open beads
-/// - DAG can be built without cycles
+/// # Errors
 ///
-/// Postconditions:
-/// - Returns Ok(StormOutput) with execution results
-/// - Or returns Err(StormError) with specific failure
-/// - All orchestrator resources are cleaned up
+/// Returns `StormError::ConfigFileNotFound` if config file is missing.
+/// Returns `StormError::ConfigParseFailed` if config file is invalid.
+/// Returns `StormError::DatabaseNotFound` if beads database is missing.
+/// Returns `StormError::DatabaseQueryFailed` if database query fails.
+/// Returns `StormError::DagBuildFailed` if workflow DAG has cycles.
+/// Returns `StormError::NoBeadsToExecute` if no open beads found.
 #[tracing::instrument(skip(args))]
 pub async fn storm_command(args: StormArgs) -> Result<StormOutput, StormError> {
     let start = Instant::now();
@@ -253,18 +245,18 @@ pub async fn storm_command(args: StormArgs) -> Result<StormOutput, StormError> {
     // Handle dry-run mode
     if args.dry_run {
         info!("Dry run mode: planning execution without running beads");
-        let planned_order = topological_order(&dag)?;
+        let planned_order = topological_order(&dag);
         return Ok(StormOutput {
             beads_completed: 0,
             beads_failed: 0,
-            duration_ms: start.elapsed().as_millis() as u64,
+            duration_ms: start.elapsed().as_millis().try_into().unwrap_or(u64::MAX),
             results: None,
             planned_order: Some(planned_order),
         });
     }
 
     // Run orchestrator
-    let results = run_orchestrator(dag, slots, timeout).await?;
+    let results = run_orchestrator(dag, slots, timeout);
 
     // Count completed and failed beads
     let beads_completed = results
@@ -280,7 +272,7 @@ pub async fn storm_command(args: StormArgs) -> Result<StormOutput, StormError> {
     Ok(StormOutput {
         beads_completed,
         beads_failed,
-        duration_ms: start.elapsed().as_millis() as u64,
+        duration_ms: start.elapsed().as_millis().try_into().unwrap_or(u64::MAX),
         results: Some(results),
         planned_order: None,
     })
@@ -379,8 +371,8 @@ async fn build_workflow_dag(db_path: &Path) -> Result<WorkflowDAG, StormError> {
 
     for (issue_id, depends_on_id) in deps {
         dag.add_edge(
-            depends_on_id.clone(),
-            issue_id.clone(),
+            &depends_on_id,
+            &issue_id,
             DependencyType::BlockingDependency,
         )
         .map_err(|e| StormError::DagBuildFailed {
@@ -392,31 +384,22 @@ async fn build_workflow_dag(db_path: &Path) -> Result<WorkflowDAG, StormError> {
 }
 
 /// Get topological order of beads in DAG
-fn topological_order(_dag: &WorkflowDAG) -> Result<Vec<String>, StormError> {
+fn topological_order(_dag: &WorkflowDAG) -> Vec<String> {
     // For now, return empty vec as topological sort will be implemented
     // when WorkflowDAG exposes its internal petgraph structure
     // The dry-run is primarily for validation that DAG can be built
     warn!("Topological sort not yet implemented - returning empty order");
     warn!("This will be completed when WorkflowDAG exposes petgraph accessors");
 
-    Ok(Vec::new())
+    Vec::new()
 }
 
 /// Run `BeadOrchestrator` with given DAG and config
-///
-/// Preconditions:
-/// - DAG has at least one node
-/// - Orchestrator initializes successfully
-///
-/// Postconditions:
-/// - Returns Ok(ExecutionResults) on completion
-/// - Returns Err(OrchestratorExecutionFailed) on failure
-/// - All resources are cleaned up
-async fn run_orchestrator(
+fn run_orchestrator(
     _dag: WorkflowDAG,
     _slots: usize,
     _timeout_secs: u64,
-) -> Result<Vec<BeadExecutionResult>, StormError> {
+) -> Vec<BeadExecutionResult> {
     // Placeholder implementation
     // This will be implemented in bd-3a0a.7 (BeadOrchestrator)
     // For now, return empty results to satisfy the contract
@@ -424,7 +407,7 @@ async fn run_orchestrator(
     info!("Orchestrator execution not yet implemented");
     info!("This will be provided by bd-3a0a.7 (BeadOrchestrator)");
 
-    Ok(Vec::new())
+    Vec::new()
 }
 
 // Type alias for WorkflowDAG to avoid import issues

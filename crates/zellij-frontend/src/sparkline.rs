@@ -8,8 +8,9 @@
 //! ```
 //! use zellij_frontend::sparkline::{render_sparkline, SparklineConfig};
 //!
-//! let result = render_sparkline(&[0, 25, 50, 75, 100], 5).unwrap();
+//! let result = render_sparkline(&[0, 25, 50, 75, 100], 5)?;
 //! // Produces something like: ▁▂▄▆█
+//! # Ok::<(), zellij_frontend::sparkline::SparklineError>(())
 //! ```
 
 use thiserror::Error;
@@ -214,47 +215,52 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_render_sparkline_basic() {
+    fn test_render_sparkline_basic() -> Result<(), SparklineError> {
         let result = render_sparkline(&[0, 50, 100], 3);
         assert!(result.is_ok());
-        let output = result.unwrap();
+        let output = result?;
         assert_eq!(output.chars().count(), 3);
+        Ok(())
     }
 
     #[test]
-    fn test_render_sparkline_ascending() {
+    fn test_render_sparkline_ascending() -> Result<(), SparklineError> {
         let result = render_sparkline(&[10, 20, 30, 40], 4);
         assert!(result.is_ok());
-        let output = result.unwrap();
+        let output = result?;
         let chars: Vec<char> = output.chars().collect();
         assert!(chars[0] <= chars[1]);
         assert!(chars[1] <= chars[2]);
         assert!(chars[2] <= chars[3]);
+        Ok(())
     }
 
     #[test]
-    fn test_render_sparkline_all_max() {
+    fn test_render_sparkline_all_max() -> Result<(), SparklineError> {
         let data = [100_u8; 10];
         let result = render_sparkline(&data, 10);
         assert!(result.is_ok());
-        let output = result.unwrap();
+        let output = result?;
         assert!(output.chars().all(|c| c == '█'));
+        Ok(())
     }
 
     #[test]
-    fn test_render_sparkline_all_min() {
+    fn test_render_sparkline_all_min() -> Result<(), SparklineError> {
         let data = [0_u8; 5];
         let result = render_sparkline(&data, 5);
         assert!(result.is_ok());
-        let output = result.unwrap();
+        let output = result?;
         assert!(output.chars().all(|c| c == '▁'));
+        Ok(())
     }
 
     #[test]
-    fn test_render_sparkline_empty() {
+    fn test_render_sparkline_empty() -> Result<(), SparklineError> {
         let result = render_sparkline(&[], 5);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), "");
+        assert_eq!(result?, "");
+        Ok(())
     }
 
     #[test]
@@ -264,19 +270,21 @@ mod tests {
     }
 
     #[test]
-    fn test_render_sparkline_clamps_high_values() {
+    fn test_render_sparkline_clamps_high_values() -> Result<(), SparklineError> {
         let result = render_sparkline(&[255, 255, 255], 3);
         assert!(result.is_ok());
-        let output = result.unwrap();
+        let output = result?;
         assert_eq!(output.chars().count(), 3);
+        Ok(())
     }
 
     #[test]
-    fn test_render_sparkline_pads_data() {
+    fn test_render_sparkline_pads_data() -> Result<(), SparklineError> {
         let result = render_sparkline(&[50], 10);
         assert!(result.is_ok());
-        let output = result.unwrap();
+        let output = result?;
         assert_eq!(output.chars().count(), 10);
+        Ok(())
     }
 
     #[test]
@@ -322,10 +330,11 @@ mod tests {
     }
 
     #[test]
-    fn test_sparkline_builder() {
+    fn test_sparkline_builder() -> Result<(), SparklineError> {
         let result = SparklineBuilder::new(&[0, 50, 100]).width(3).build();
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().chars().count(), 3);
+        assert_eq!(result?.chars().count(), 3);
+        Ok(())
     }
 
     #[test]

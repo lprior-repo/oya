@@ -104,7 +104,7 @@ pub struct CheckpointManager {
 impl CheckpointManager {
     /// Create a new checkpoint manager.
     #[must_use]
-    pub fn new(store: OrchestratorStore, config: CheckpointConfig) -> Self {
+    pub const fn new(store: OrchestratorStore, config: CheckpointConfig) -> Self {
         let compressor = CheckpointCompressor::new(config.compression);
         Self {
             store,
@@ -117,7 +117,7 @@ impl CheckpointManager {
 
     /// Get the compression configuration.
     #[must_use]
-    pub fn compression_config(&self) -> &CompressionConfig {
+    pub const fn compression_config(&self) -> &CompressionConfig {
         &self.config.compression
     }
 
@@ -599,12 +599,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_compression_level_config() {
-        let level = CompressionLevel::new(19).expect("valid level");
+    async fn test_compression_level_config() -> Result<(), Box<dyn std::error::Error>> {
+        let level = CompressionLevel::new(19)?;
         let config = CheckpointConfig::with_compression_level(level);
 
         assert!(config.enable_compression);
         assert_eq!(config.compression.level.as_i32(), 19);
+        Ok(())
     }
 
     #[tokio::test]
@@ -615,20 +616,21 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_large_state_compression() {
-        let mut manager = require_manager!(setup_manager().await);
+    async fn test_large_state_compression() -> Result<(), Box<dyn std::error::Error>> {
+        let mut manager = setup_manager().await.ok_or("setup failed")?;
 
         let large_state = serde_json::to_string(&serde_json::json!({
             "workflows": (0..100).map(|i| format!("workflow-{}", i)).collect::<Vec<_>>(),
             "states": (0..100).map(|i| serde_json::json!({"id": i, "data": "x".repeat(100)})).collect::<Vec<_>>()
-        })).expect("serialize");
+        }))?;
 
         let result = manager.create_checkpoint(&large_state, None).await;
 
         assert!(result.is_ok());
 
-        let retrieved = manager.get_latest().await.expect("get should succeed");
+        let retrieved = manager.get_latest().await.map_err(|e| format!("Get failed: {e}"))?;
         assert_eq!(retrieved.scheduler_state, large_state);
+        Ok(())
     }
 
     // =========================================================================
@@ -678,8 +680,8 @@ mod tests {
 
     /// BDD: GIVEN a checkpoint with scheduler state WHEN restore_scheduler_state is called THEN state is recovered.
     #[tokio::test]
-    async fn test_restore_scheduler_state_succeeds() {
-        let mut manager = require_manager!(setup_manager().await);
+    async fn test_restore_scheduler_state_succeeds() -> Result<(), Box<dyn std::error::Error>> {
+        let mut manager = setup_manager().await.ok_or("setup failed")?;
 
         let original_state = TestSchedulerState {
             active_workflows: vec!["wf-1".to_string(), "wf-2".to_string()],
@@ -687,26 +689,27 @@ mod tests {
             event_count: 42,
         };
 
-        let state_json = serde_json::to_string(&original_state).expect("serialize");
+        let state_json = serde_json::to_string(&original_state)?;
         let _ = manager
             .create_checkpoint(&state_json, None)
             .await
-            .expect("create checkpoint");
+            .map_err(|e| format!("Create failed: {e}"))?;
 
         let restored: TestSchedulerState = manager
             .restore_scheduler_state()
             .await
-            .expect("restore should succeed");
+            .map_err(|e| format!("Restore failed: {e}"))?;
 
         assert_eq!(restored.active_workflows, original_state.active_workflows);
         assert_eq!(restored.current_phase, original_state.current_phase);
         assert_eq!(restored.event_count, original_state.event_count);
+        Ok(())
     }
 
     /// BDD: GIVEN a checkpoint with workflow snapshots WHEN restore_workflow_snapshots is called THEN snapshots are recovered.
     #[tokio::test]
-    async fn test_restore_workflow_snapshots_succeeds() {
-        let mut manager = require_manager!(setup_manager().await);
+    async fn test_restore_workflow_snapshots_succeeds() -> Result<(), Box<dyn std::error::Error>> {
+        let mut manager = setup_manager().await.ok_or("setup failed")?;
 
         let scheduler_state = r#"{"phase":"running"}"#;
         let original_snapshots = TestWorkflowSnapshots {
@@ -716,22 +719,22 @@ mod tests {
             ]),
         };
 
-        let snapshots_json = serde_json::to_string(&original_snapshots).expect("serialize");
+        let snapshots_json = serde_json::to_string(&original_snapshots)?;
         let _ = manager
             .create_checkpoint(scheduler_state, Some(&snapshots_json))
             .await
-            .expect("create checkpoint");
+            .map_err(|e| format!("Create failed: {e}"))?;
 
-        let restored: Option<TestWorkflowSnapshots> = manager
+        let restored_opt: Option<TestWorkflowSnapshots> = manager
             .restore_workflow_snapshots()
             .await
-            .expect("restore should succeed");
+            .map_err(|e| format!("Restore failed: {e}"))?;
 
         assert!(
-            restored.is_some(),
+            restored_opt.is_some(),
             "snapshots should be present in restored data"
         );
-        let restored = restored.expect("checked is_some");
+        let restored = restored_opt.ok_or("checked is_some")?;
         assert_eq!(
             restored.snapshots.get("wf-1"),
             original_snapshots.snapshots.get("wf-1")
@@ -740,34 +743,36 @@ mod tests {
             restored.snapshots.get("wf-2"),
             original_snapshots.snapshots.get("wf-2")
         );
+        Ok(())
     }
 
     /// BDD: GIVEN a checkpoint without workflow snapshots WHEN restore_workflow_snapshots is called THEN None is returned.
     #[tokio::test]
-    async fn test_restore_workflow_snapshots_none_when_not_stored() {
-        let mut manager = require_manager!(setup_manager().await);
+    async fn test_restore_workflow_snapshots_none_when_not_stored() -> Result<(), Box<dyn std::error::Error>> {
+        let mut manager = setup_manager().await.ok_or("setup failed")?;
 
         let scheduler_state = r#"{"phase":"running"}"#;
         let _ = manager
             .create_checkpoint(scheduler_state, None)
             .await
-            .expect("create checkpoint");
+            .map_err(|e| format!("Create failed: {e}"))?;
 
         let restored: Option<TestWorkflowSnapshots> = manager
             .restore_workflow_snapshots()
             .await
-            .expect("restore should succeed");
+            .map_err(|e| format!("Restore failed: {e}"))?;
 
         assert!(
             restored.is_none(),
             "snapshots should be None when not stored"
         );
+        Ok(())
     }
 
     /// BDD: GIVEN multiple checkpoints WHEN restore_scheduler_state is called THEN latest state is returned.
     #[tokio::test]
-    async fn test_restore_returns_latest_checkpoint() {
-        let mut manager = require_manager!(setup_manager().await);
+    async fn test_restore_returns_latest_checkpoint() -> Result<(), Box<dyn std::error::Error>> {
+        let mut manager = setup_manager().await.ok_or("setup failed")?;
 
         let state_v1 = TestSchedulerState {
             active_workflows: vec!["wf-1".to_string()],
@@ -786,23 +791,23 @@ mod tests {
         };
 
         let _ = manager
-            .create_checkpoint(&serde_json::to_string(&state_v1).expect("serialize"), None)
+            .create_checkpoint(&serde_json::to_string(&state_v1)?, None)
             .await;
         manager.set_sequence(10);
         let checkpoint_v2 = manager
-            .create_checkpoint(&serde_json::to_string(&state_v2).expect("serialize"), None)
+            .create_checkpoint(&serde_json::to_string(&state_v2)?, None)
             .await
-            .expect("create v2");
+            .map_err(|e| format!("Create failed: {e}"))?;
         manager.set_sequence(100);
         let checkpoint_v3 = manager
-            .create_checkpoint(&serde_json::to_string(&state_v3).expect("serialize"), None)
+            .create_checkpoint(&serde_json::to_string(&state_v3)?, None)
             .await
-            .expect("create v3");
+            .map_err(|e| format!("Create failed: {e}"))?;
 
         let latest: TestSchedulerState = manager
             .restore_scheduler_state()
             .await
-            .expect("restore latest");
+            .map_err(|e| format!("Restore failed: {e}"))?;
 
         assert_eq!(latest.event_count, 100, "should restore v3 (latest)");
         assert_eq!(latest.current_phase, "end");
@@ -810,14 +815,15 @@ mod tests {
         let by_id_v2: TestSchedulerState = manager
             .restore_scheduler_state_by_id(&checkpoint_v2.checkpoint_id)
             .await
-            .expect("restore v2 by id");
+            .map_err(|e| format!("Restore failed: {e}"))?;
         assert_eq!(by_id_v2.event_count, 10);
 
         let by_id_v3: TestSchedulerState = manager
             .restore_scheduler_state_by_id(&checkpoint_v3.checkpoint_id)
             .await
-            .expect("restore v3 by id");
+            .map_err(|e| format!("Restore failed: {e}"))?;
         assert_eq!(by_id_v3.event_count, 100);
+        Ok(())
     }
 
     /// BDD: GIVEN invalid checkpoint ID WHEN restore_scheduler_state_by_id is called THEN error is returned.
@@ -862,8 +868,8 @@ mod tests {
 
     /// BDD: GIVEN complete checkpoint/resume cycle WHEN executed THEN state is preserved exactly.
     #[tokio::test]
-    async fn test_complete_checkpoint_resume_cycle() {
-        let mut manager = require_manager!(setup_manager().await);
+    async fn test_complete_checkpoint_resume_cycle() -> Result<(), Box<dyn std::error::Error>> {
+        let mut manager = setup_manager().await.ok_or("setup failed")?;
 
         let original_scheduler = TestSchedulerState {
             active_workflows: vec!["wf-alpha".to_string(), "wf-beta".to_string()],
@@ -881,41 +887,42 @@ mod tests {
         manager.set_sequence(500);
         let checkpoint = manager
             .create_checkpoint(
-                &serde_json::to_string(&original_scheduler).expect("serialize scheduler"),
-                Some(&serde_json::to_string(&original_snapshots).expect("serialize snapshots")),
+                &serde_json::to_string(&original_scheduler)?,
+                Some(&serde_json::to_string(&original_snapshots)?),
             )
             .await
-            .expect("create checkpoint");
+            .map_err(|e| format!("Create failed: {e}"))?;
 
         let restored_scheduler: TestSchedulerState = manager
             .restore_scheduler_state()
             .await
-            .expect("restore scheduler");
+            .map_err(|e| format!("Restore failed: {e}"))?;
         assert_eq!(restored_scheduler, original_scheduler);
 
         let restored_snapshots: Option<TestWorkflowSnapshots> = manager
             .restore_workflow_snapshots()
             .await
-            .expect("restore snapshots");
+            .map_err(|e| format!("Restore failed: {e}"))?;
         assert_eq!(restored_snapshots, Some(original_snapshots.clone()));
 
         let by_id_scheduler: TestSchedulerState = manager
             .restore_scheduler_state_by_id(&checkpoint.checkpoint_id)
             .await
-            .expect("restore scheduler by id");
+            .map_err(|e| format!("Restore failed: {e}"))?;
         assert_eq!(by_id_scheduler, original_scheduler);
 
         let by_id_snapshots: Option<TestWorkflowSnapshots> = manager
             .restore_workflow_snapshots_by_id(&checkpoint.checkpoint_id)
             .await
-            .expect("restore snapshots by id");
+            .map_err(|e| format!("Restore failed: {e}"))?;
         assert_eq!(by_id_snapshots, Some(original_snapshots));
+        Ok(())
     }
 
     /// BDD: GIVEN checkpoint with compression WHEN resume is called THEN decompression succeeds.
     #[tokio::test]
-    async fn test_resume_with_compression_enabled() {
-        let mut manager = require_manager!(setup_manager().await);
+    async fn test_resume_with_compression_enabled() -> Result<(), Box<dyn std::error::Error>> {
+        let mut manager = setup_manager().await.ok_or("setup failed")?;
 
         let large_state = TestSchedulerState {
             active_workflows: (0..100).map(|i| format!("workflow-{i}")).collect(),
@@ -923,25 +930,27 @@ mod tests {
             event_count: 1000000,
         };
 
-        let state_json = serde_json::to_string(&large_state).expect("serialize");
+        let state_json = serde_json::to_string(&large_state)?;
         let _ = manager
             .create_checkpoint(&state_json, None)
             .await
-            .expect("create checkpoint with compression");
+            .map_err(|e| format!("Create failed: {e}"))?;
 
         let restored: TestSchedulerState = manager
             .restore_scheduler_state()
             .await
-            .expect("restore should succeed with decompression");
+            .map_err(|e| format!("Restore failed: {e}"))?;
 
         assert_eq!(restored.active_workflows.len(), 100);
         assert_eq!(restored.event_count, 1000000);
+        Ok(())
     }
 
     /// BDD: GIVEN checkpoint without compression WHEN resume is called THEN data is returned directly.
     #[tokio::test]
-    async fn test_resume_without_compression() {
-        let mut manager = require_manager!(setup_manager_no_compression().await);
+    #[tokio::test]
+    async fn test_resume_without_compression() -> Result<(), Box<dyn std::error::Error>> {
+        let mut manager = setup_manager_no_compression().await.ok_or("setup failed")?;
 
         let original_state = TestSchedulerState {
             active_workflows: vec!["wf-test".to_string()],
@@ -949,24 +958,25 @@ mod tests {
             event_count: 1,
         };
 
-        let state_json = serde_json::to_string(&original_state).expect("serialize");
+        let state_json = serde_json::to_string(&original_state)?;
         let _ = manager
             .create_checkpoint(&state_json, None)
             .await
-            .expect("create checkpoint");
+            .map_err(|e| format!("Create failed: {e}"))?;
 
         let restored: TestSchedulerState = manager
             .restore_scheduler_state()
             .await
-            .expect("restore should succeed without compression");
+            .map_err(|e| format!("Restore failed: {e}"))?;
 
         assert_eq!(restored, original_state);
+        Ok(())
     }
 
     /// BDD: GIVEN workflow snapshots with snapshots WHEN restore_workflow_snapshots_by_id is called THEN correct snapshots are returned.
     #[tokio::test]
-    async fn test_restore_workflow_snapshots_by_id_succeeds() {
-        let mut manager = require_manager!(setup_manager().await);
+    async fn test_restore_workflow_snapshots_by_id_succeeds() -> Result<(), Box<dyn std::error::Error>> {
+        let mut manager = setup_manager().await.ok_or("setup failed")?;
 
         let snapshots_v1 = TestWorkflowSnapshots {
             snapshots: std::collections::HashMap::from([("wf-1".to_string(), "v1".to_string())]),
@@ -981,47 +991,49 @@ mod tests {
         let checkpoint_v1 = manager
             .create_checkpoint(
                 "{}",
-                Some(&serde_json::to_string(&snapshots_v1).expect("serialize v1")),
+                Some(&serde_json::to_string(&snapshots_v1)?),
             )
             .await
-            .expect("create v1");
+            .map_err(|e| format!("Create failed: {e}"))?;
 
         let checkpoint_v2 = manager
             .create_checkpoint(
                 "{}",
-                Some(&serde_json::to_string(&snapshots_v2).expect("serialize v2")),
+                Some(&serde_json::to_string(&snapshots_v2)?),
             )
             .await
-            .expect("create v2");
+            .map_err(|e| format!("Create failed: {e}"))?;
 
-        let restored_v1: Option<TestWorkflowSnapshots> = manager
+        let restored_v1_opt: Option<TestWorkflowSnapshots> = manager
             .restore_workflow_snapshots_by_id(&checkpoint_v1.checkpoint_id)
             .await
-            .expect("restore v1");
+            .map_err(|e| format!("Restore failed: {e}"))?;
+        let restored_v1 = restored_v1_opt.ok_or("v1 snapshots missing")?;
         assert_eq!(
-            restored_v1.expect("v1 snapshots").snapshots.get("wf-1"),
+            restored_v1.snapshots.get("wf-1"),
             Some(&"v1".to_string())
         );
 
-        let restored_v2: Option<TestWorkflowSnapshots> = manager
+        let restored_v2_opt: Option<TestWorkflowSnapshots> = manager
             .restore_workflow_snapshots_by_id(&checkpoint_v2.checkpoint_id)
             .await
-            .expect("restore v2");
-        let v2 = restored_v2.expect("v2 snapshots");
+            .map_err(|e| format!("Restore failed: {e}"))?;
+        let v2 = restored_v2_opt.ok_or("v2 snapshots missing")?;
         assert_eq!(v2.snapshots.get("wf-1"), Some(&"v2".to_string()));
         assert_eq!(v2.snapshots.get("wf-2"), Some(&"v2".to_string()));
+        Ok(())
     }
 
     /// BDD: GIVEN invalid snapshot JSON WHEN restore_workflow_snapshots is called THEN error is returned.
     #[tokio::test]
-    async fn test_restore_invalid_snapshot_json_returns_error() {
-        let mut manager = require_manager!(setup_manager().await);
+    async fn test_restore_invalid_snapshot_json_returns_error() -> Result<(), Box<dyn std::error::Error>> {
+        let mut manager = setup_manager().await.ok_or("setup failed")?;
 
         let invalid_json = r#"{not: valid json}"#;
         let _ = manager
             .create_checkpoint("{}", Some(invalid_json))
             .await
-            .expect("create checkpoint");
+            .map_err(|e| format!("Create failed: {e}"))?;
 
         let result: PersistenceResult<Option<TestWorkflowSnapshots>> =
             manager.restore_workflow_snapshots().await;
@@ -1030,12 +1042,13 @@ mod tests {
             result.is_err(),
             "restore should fail for invalid snapshot JSON"
         );
+        Ok(())
     }
 
     /// BDD: GIVEN checkpoint created and manager sequence updated WHEN new checkpoint is created THEN sequence is correct.
     #[tokio::test]
-    async fn test_checkpoint_sequence_tracking_across_resume() {
-        let mut manager = require_manager!(setup_manager().await);
+    async fn test_checkpoint_sequence_tracking_across_resume() -> Result<(), Box<dyn std::error::Error>> {
+        let mut manager = setup_manager().await.ok_or("setup failed")?;
 
         assert_eq!(manager.current_sequence(), 0);
 
@@ -1043,39 +1056,41 @@ mod tests {
         let _ = manager
             .create_checkpoint(r#"{"seq":50}"#, None)
             .await
-            .expect("checkpoint at seq 50");
+            .map_err(|e| format!("Create failed: {e}"))?;
 
-        let cp1 = manager.get_latest().await.expect("get latest");
+        let cp1 = manager.get_latest().await.map_err(|e| format!("Get failed: {e}"))?;
         assert_eq!(cp1.event_sequence, 50);
 
         manager.set_sequence(100);
         let _ = manager
             .create_checkpoint(r#"{"seq":100}"#, None)
             .await
-            .expect("checkpoint at seq 100");
+            .map_err(|e| format!("Create failed: {e}"))?;
 
-        let cp2 = manager.get_latest().await.expect("get latest");
+        let cp2 = manager.get_latest().await.map_err(|e| format!("Get failed: {e}"))?;
         assert_eq!(cp2.event_sequence, 100);
+        Ok(())
     }
 
     /// BDD: GIVEN checkpoint without snapshots WHEN restore_workflow_snapshots_by_id is called THEN None is returned.
     #[tokio::test]
-    async fn test_restore_snapshots_by_id_returns_none_when_not_stored() {
-        let mut manager = require_manager!(setup_manager().await);
+    async fn test_restore_snapshots_by_id_returns_none_when_not_stored() -> Result<(), Box<dyn std::error::Error>> {
+        let mut manager = setup_manager().await.ok_or("setup failed")?;
 
         let checkpoint = manager
             .create_checkpoint("{}", None)
             .await
-            .expect("create checkpoint");
+            .map_err(|e| format!("Create failed: {e}"))?;
 
         let result: Option<TestWorkflowSnapshots> = manager
             .restore_workflow_snapshots_by_id(&checkpoint.checkpoint_id)
             .await
-            .expect("restore should succeed");
+            .map_err(|e| format!("Restore failed: {e}"))?;
 
         assert!(
             result.is_none(),
             "snapshots should be None when not stored in checkpoint"
         );
+        Ok(())
     }
 }

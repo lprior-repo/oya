@@ -27,7 +27,7 @@ pub struct OrchestratorCheckpointStore {
 impl OrchestratorCheckpointStore {
     /// Create a new checkpoint bridge.
     #[must_use]
-    pub fn new(store: Arc<OrchestratorStore>) -> Self {
+    pub const fn new(store: Arc<OrchestratorStore>) -> Self {
         Self { store }
     }
 
@@ -78,7 +78,7 @@ pub struct OrchestratorEventLog {
 impl OrchestratorEventLog {
     /// Create a new event log adapter.
     #[must_use]
-    pub fn new(store: Arc<OrchestratorStore>) -> Self {
+    pub const fn new(store: Arc<OrchestratorStore>) -> Self {
         Self { store }
     }
 

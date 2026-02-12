@@ -130,74 +130,64 @@ mod tests {
     use crate::domain::{Language, Priority, TaskStatus};
 
     #[tokio::test]
-    async fn save_and_load_round_trip() {
-        let temp_dir = tempfile::tempdir().expect("tempdir should create");
-        let slug = Slug::new("task-1").expect("slug should parse");
+    async fn save_and_load_round_trip() -> Result<()> {
+        let temp_dir = tempfile::tempdir().map_err(|e| Error::ReadFailure { path: PathBuf::new(), source: e })?;
+        let slug = Slug::new("task-1")?;
         let task = Task::new(slug, Language::Rust)
             .with_priority(Priority::P1)
             .with_status(TaskStatus::PassedPipeline);
 
-        save_task_record(&task, temp_dir.path())
-            .await
-            .expect("save should succeed");
+        save_task_record(&task, temp_dir.path()).await?;
 
-        let loaded = load_task_record("task-1", temp_dir.path())
-            .await
-            .expect("load should succeed");
+        let loaded = load_task_record("task-1", temp_dir.path()).await?;
 
         assert_eq!(loaded, task);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn list_all_tasks_returns_empty_when_missing() {
-        let temp_dir = tempfile::tempdir().expect("tempdir should create");
-        let tasks = list_all_tasks(temp_dir.path())
-            .await
-            .expect("list should succeed");
+    async fn list_all_tasks_returns_empty_when_missing() -> Result<()> {
+        let temp_dir = tempfile::tempdir().map_err(|e| Error::ReadFailure { path: PathBuf::new(), source: e })?;
+        let tasks = list_all_tasks(temp_dir.path()).await?;
 
         assert!(tasks.is_empty());
+        Ok(())
     }
 
     #[tokio::test]
-    async fn save_overwrites_existing_task() {
-        let temp_dir = tempfile::tempdir().expect("tempdir should create");
-        let slug = Slug::new("task-2").expect("slug should parse");
+    async fn save_overwrites_existing_task() -> Result<()> {
+        let temp_dir = tempfile::tempdir().map_err(|e| Error::ReadFailure { path: PathBuf::new(), source: e })?;
+        let slug = Slug::new("task-2")?;
         let task = Task::new(slug.clone(), Language::Rust);
 
-        save_task_record(&task, temp_dir.path())
-            .await
-            .expect("save should succeed");
+        save_task_record(&task, temp_dir.path()).await?;
 
         let updated = task.with_status(TaskStatus::Integrated);
 
-        save_task_record(&updated, temp_dir.path())
-            .await
-            .expect("save should succeed");
+        save_task_record(&updated, temp_dir.path()).await?;
 
-        let loaded = load_task_record(slug.as_str(), temp_dir.path())
-            .await
-            .expect("load should succeed");
+        let loaded = load_task_record(slug.as_str(), temp_dir.path()).await?;
 
         assert_eq!(loaded.status, TaskStatus::Integrated);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn load_returns_not_found_for_missing_task() {
-        let temp_dir = tempfile::tempdir().expect("tempdir should create");
+    async fn load_returns_not_found_for_missing_task() -> Result<()> {
+        let temp_dir = tempfile::tempdir().map_err(|e| Error::ReadFailure { path: PathBuf::new(), source: e })?;
         let result = load_task_record("missing-task", temp_dir.path()).await;
 
         assert!(matches!(result, Err(Error::TaskNotFound(_))));
+        Ok(())
     }
 
     #[tokio::test]
-    async fn update_task_status_applies_transition_rules() {
-        let temp_dir = tempfile::tempdir().expect("tempdir should create");
-        let slug = Slug::new("task-3").expect("slug should parse");
+    async fn update_task_status_applies_transition_rules() -> Result<()> {
+        let temp_dir = tempfile::tempdir().map_err(|e| Error::ReadFailure { path: PathBuf::new(), source: e })?;
+        let slug = Slug::new("task-3")?;
         let task = Task::new(slug.clone(), Language::Rust);
 
-        save_task_record(&task, temp_dir.path())
-            .await
-            .expect("save should succeed");
+        save_task_record(&task, temp_dir.path()).await?;
 
         let updated = update_task_status(
             slug.as_str(),
@@ -206,9 +196,9 @@ mod tests {
             },
             temp_dir.path(),
         )
-        .await
-        .expect("transition should succeed");
+        .await?;
 
         assert!(matches!(updated.status, TaskStatus::InProgress { .. }));
+        Ok(())
     }
 }

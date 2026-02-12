@@ -1,12 +1,7 @@
-//! Workflow graph endpoint tests
-//!
-//! Tests for GET /api/graph endpoint that returns DAG workflow graph data.
-
 #![forbid(unsafe_code)]
 #![forbid(clippy::unwrap_used)]
 #![forbid(clippy::panic)]
-// Tests are allowed to use expect
-#![allow(clippy::expect_used)]
+#![forbid(clippy::expect_used)]
 
 use anyhow::{Result, anyhow};
 use axum::{Router, body::Body, http::StatusCode};
@@ -16,19 +11,19 @@ use serde_json::Value;
 use tower::ServiceExt;
 
 /// Test helper to make requests and parse JSON responses
-async fn get_json(path: &str) -> (StatusCode, Value) {
+async fn get_json(path: &str) -> Result<(StatusCode, Value)> {
     let config = ServerConfig::default();
-    let router = create_router(config).expect("Router creation failed");
+    let router = create_router(config).map_err(|e| anyhow!("Router creation failed: {e}"))?;
 
     let response = router
         .oneshot(
             axum::http::Request::builder()
                 .uri(path)
                 .body(Body::empty())
-                .expect("Failed to build request"),
+                .map_err(|e| anyhow!("Failed to build request: {e}"))?,
         )
         .await
-        .expect("Request failed");
+        .map_err(|e| anyhow!("Request failed: {e}"))?;
 
     let status = response.status();
 
@@ -36,19 +31,19 @@ async fn get_json(path: &str) -> (StatusCode, Value) {
     let body_bytes = body
         .collect()
         .await
-        .expect("Failed to collect body")
+        .map_err(|e| anyhow!("Failed to collect body: {e}"))?
         .to_bytes();
 
-    let json: Value = serde_json::from_slice(&body_bytes).expect("Failed to parse JSON");
+    let json: Value = serde_json::from_slice(&body_bytes).map_err(|e| anyhow!("Failed to parse JSON: {e}"))?;
 
-    (status, json)
+    Ok((status, json))
 }
 
 #[tokio::test]
-async fn test_returns_graph_data_when_endpoint_is_called() {
+async fn test_returns_graph_data_when_endpoint_is_called() -> Result<()> {
     // Given: The server is running with the graph endpoint configured
     // When: A GET request is made to /api/graph
-    let (status, json) = get_json("/api/graph").await;
+    let (status, json) = get_json("/api/graph").await?;
 
     // Then: The response should be successful (200 OK)
     assert_eq!(
@@ -62,50 +57,53 @@ async fn test_returns_graph_data_when_endpoint_is_called() {
         json.get("nodes").is_some(),
         "Response should include nodes array"
     );
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_includes_nodes_array_when_graph_is_requested() {
+async fn test_includes_nodes_array_when_graph_is_requested() -> Result<()> {
     // Given: The graph endpoint exists
     // When: Graph data is requested
-    let (_status, json) = get_json("/api/graph").await;
+    let (_status, json) = get_json("/api/graph").await?;
 
     // Then: Nodes field should be an array
     let nodes = json
         .get("nodes")
         .and_then(|v| v.as_array())
-        .expect("Nodes should be an array");
+        .ok_or_else(|| anyhow!("Nodes should be an array"))?;
 
     // And: Should be valid (even if empty)
     let _node_count = nodes.len();
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_includes_edges_array_when_graph_is_requested() {
+async fn test_includes_edges_array_when_graph_is_requested() -> Result<()> {
     // Given: The graph endpoint exists
     // When: Graph data is requested
-    let (_status, json) = get_json("/api/graph").await;
+    let (_status, json) = get_json("/api/graph").await?;
 
     // Then: Edges field should be an array
     let edges = json
         .get("edges")
         .and_then(|v| v.as_array())
-        .expect("Edges should be an array");
+        .ok_or_else(|| anyhow!("Edges should be an array"))?;
 
     // And: Should be valid (even if empty)
     let _edge_count = edges.len();
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_nodes_have_required_fields_when_graph_is_returned() {
+async fn test_nodes_have_required_fields_when_graph_is_returned() -> Result<()> {
     // Given: The graph endpoint returns node data
     // When: We examine the nodes
-    let (_status, json) = get_json("/api/graph").await;
+    let (_status, json) = get_json("/api/graph").await?;
 
     let nodes = json
         .get("nodes")
         .and_then(|v| v.as_array())
-        .expect("Nodes should be an array");
+        .ok_or_else(|| anyhow!("Nodes should be an array"))?;
 
     // Then: Each node should have required fields (if nodes exist)
     for node in nodes.iter().take(10) {
@@ -124,18 +122,19 @@ async fn test_nodes_have_required_fields_when_graph_is_returned() {
             "Node should have a y coordinate field"
         );
     }
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_edges_have_required_fields_when_graph_is_returned() {
+async fn test_edges_have_required_fields_when_graph_is_returned() -> Result<()> {
     // Given: The graph endpoint returns edge data
     // When: We examine the edges
-    let (_status, json) = get_json("/api/graph").await;
+    let (_status, json) = get_json("/api/graph").await?;
 
     let edges = json
         .get("edges")
         .and_then(|v| v.as_array())
-        .expect("Edges should be an array");
+        .ok_or_else(|| anyhow!("Edges should be an array"))?;
 
     // Then: Each edge should have required fields (if edges exist)
     for edge in edges.iter().take(10) {
@@ -153,36 +152,38 @@ async fn test_edges_have_required_fields_when_graph_is_returned() {
             "Edge should have an edge_type field"
         );
     }
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_returns_valid_json_content_type_when_graph_is_requested() {
+async fn test_returns_valid_json_content_type_when_graph_is_requested() -> Result<()> {
     // Given: The graph endpoint exists
     // When: A request is made to /api/graph
     let config = ServerConfig::default();
-    let router = create_router(config).expect("Router creation failed");
+    let router = create_router(config).map_err(|e| anyhow!("Router creation failed: {e}"))?;
 
     let response = router
         .oneshot(
             axum::http::Request::builder()
                 .uri("/api/graph")
                 .body(Body::empty())
-                .expect("Failed to build request"),
+                .map_err(|e| anyhow!("Failed to build request: {e}"))?,
         )
         .await
-        .expect("Request failed");
+        .map_err(|e| anyhow!("Request failed: {e}"))?;
 
     // Then: The Content-Type header should be application/json
     let content_type = response
         .headers()
         .get("content-type")
         .and_then(|v| v.to_str().ok())
-        .expect("Content-Type header should be present");
+        .ok_or_else(|| anyhow!("Content-Type header should be present"))?;
 
     assert!(
         content_type.contains("application/json"),
         "Content-Type should be application/json, got: {content_type}"
     );
+    Ok(())
 }
 
 #[tokio::test]
@@ -190,7 +191,7 @@ async fn test_handles_cors_headers_when_graph_is_requested_from_browser() -> Res
     // Given: A browser making a cross-origin request
     // When: Graph data is requested
     let config = ServerConfig::default();
-    let router = create_router(config).expect("Router creation failed");
+    let router = create_router(config).map_err(|e| anyhow!("Router creation failed: {e}"))?;
 
     let request = axum::http::Request::builder()
         .uri("/api/graph")
@@ -217,28 +218,28 @@ async fn test_handles_cors_headers_when_graph_is_requested_from_browser() -> Res
 }
 
 #[tokio::test]
-async fn test_response_size_is_reasonable() {
+async fn test_response_size_is_reasonable() -> Result<()> {
     // Given: The graph endpoint returns workflow information
     // When: A request is made
     let config = ServerConfig::default();
-    let router = create_router(config).expect("Router creation failed");
+    let router = create_router(config).map_err(|e| anyhow!("Router creation failed: {e}"))?;
 
     let response = router
         .oneshot(
             axum::http::Request::builder()
                 .uri("/api/graph")
                 .body(Body::empty())
-                .expect("Failed to build request"),
+                .map_err(|e| anyhow!("Failed to build request: {e}"))?,
         )
         .await
-        .expect("Request failed");
+        .map_err(|e| anyhow!("Request failed: {e}"))?;
 
     // Then: Response size should be reasonable (< 100KB for graph data)
     let body = response.into_body();
     let body_bytes = body
         .collect()
         .await
-        .expect("Failed to collect body")
+        .map_err(|e| anyhow!("Failed to collect body: {e}"))?
         .to_bytes();
 
     assert!(
@@ -246,32 +247,34 @@ async fn test_response_size_is_reasonable() {
         "Response size should be reasonable (< 100KB), got: {} bytes",
         body_bytes.len()
     );
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_empty_graph_returns_valid_structure() {
+async fn test_empty_graph_returns_valid_structure() -> Result<()> {
     // Given: The graph endpoint might return empty data
     // When: Graph data is requested
-    let (_status, json) = get_json("/api/graph").await;
+    let (_status, json) = get_json("/api/graph").await?;
 
     // Then: The response should still have valid structure
     let nodes = json
         .get("nodes")
         .and_then(|v| v.as_array())
-        .expect("Nodes should be an array");
+        .ok_or_else(|| anyhow!("Nodes should be an array"))?;
 
     let edges = json
         .get("edges")
         .and_then(|v| v.as_array())
-        .expect("Edges should be an array");
+        .ok_or_else(|| anyhow!("Edges should be an array"))?;
 
     // And: Empty arrays are valid
     let _ = nodes.is_empty();
     let _ = edges.is_empty();
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_graph_response_matches_schema() {
+async fn test_graph_response_matches_schema() -> Result<()> {
     // Given: A WorkflowGraphResponse struct
     // When: It's serialized to JSON
     use oya_web::workflow_graph::WorkflowGraphResponse;
@@ -281,9 +284,10 @@ async fn test_graph_response_matches_schema() {
         edges: vec![],
     };
 
-    let json = serde_json::to_string(&response).expect("Serialization should succeed");
+    let json = serde_json::to_string(&response).map_err(|e| anyhow!("Serialization failed: {e}"))?;
 
     // Then: All top-level fields should be present
     assert!(json.contains("nodes"), "Should contain nodes field");
     assert!(json.contains("edges"), "Should contain edges field");
+    Ok(())
 }

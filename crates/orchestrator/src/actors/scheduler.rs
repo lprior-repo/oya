@@ -60,6 +60,7 @@ impl SchedulerArguments {
     }
 
     /// Set the `EventBus`.
+    #[must_use]
     pub fn with_event_bus(mut self, bus: Arc<EventBus>) -> Self {
         self.event_bus = Some(bus);
         self
@@ -109,7 +110,7 @@ pub struct SchedulerState {
 
     // Integration handles
     /// Event subscription ID (for cleanup).
-    _event_subscription_id: Option<String>,
+    pub event_subscription_id: Option<String>,
     /// Shutdown signal receiver.
     shutdown_rx: Option<broadcast::Receiver<ShutdownSignal>>,
     /// Checkpoint result sender.
@@ -127,7 +128,7 @@ impl SchedulerState {
     fn new() -> Self {
         Self {
             core: CoreSchedulerState::default(),
-            _event_subscription_id: None,
+            event_subscription_id: None,
             shutdown_rx: None,
             checkpoint_tx: None,
             replay_engine: None,
@@ -192,7 +193,7 @@ impl Actor for SchedulerActorDef {
         if let Some(bus) = args.event_bus {
             let (subscription_id, subscription) =
                 bus.subscribe_with_pattern(EventPattern::All).await;
-            state._event_subscription_id = Some(subscription_id);
+            state.event_subscription_id = Some(subscription_id);
             // Spawn event forwarder
             tokio::spawn(Self::event_forwarder(subscription, myself.clone()));
         }
@@ -253,8 +254,7 @@ impl Actor for SchedulerActorDef {
                     if let Some(engine) = &state.replay_engine {
                         let engine = Arc::clone(engine);
                         tokio::spawn(async move {
-                            let mut guard = engine.lock().await;
-                            let _ = guard.record_event(event).await;
+                            let _ = engine.lock().await.record_event(event).await;
                         });
                     }
                 }
@@ -288,7 +288,7 @@ impl SchedulerActorDef {
         actor_ref: ActorRef<SchedulerMessage>,
     ) {
         while let Ok(event) = subscription.recv().await {
-            if Self::forward_event(&actor_ref, event).is_err() {
+            if Self::forward_event(&actor_ref, &event).is_err() {
                 break;
             }
         }
@@ -296,7 +296,7 @@ impl SchedulerActorDef {
 
     fn forward_event(
         actor_ref: &ActorRef<SchedulerMessage>,
-        event: BeadEvent,
+        event: &BeadEvent,
     ) -> Result<(), ActorError> {
         match event {
             // Handle StateChanged events (including transitions to Completed)
@@ -305,8 +305,8 @@ impl SchedulerActorDef {
             } => {
                 let _ = actor_ref.send_message(SchedulerMessage::OnStateChanged {
                     bead_id: bead_id.to_string(),
-                    from: Self::convert_bead_state(&from),
-                    to: Self::convert_bead_state(&to),
+                    from: Self::convert_bead_state(*from),
+                    to: Self::convert_bead_state(*to),
                 });
             }
             // Handle BeadCompleted events directly
@@ -324,7 +324,7 @@ impl SchedulerActorDef {
         Ok(())
     }
 
-    const fn convert_bead_state(state: &oya_events::BeadState) -> MsgBeadState {
+    const fn convert_bead_state(state: oya_events::BeadState) -> MsgBeadState {
         match state {
             oya_events::BeadState::Pending => MsgBeadState::Pending,
             oya_events::BeadState::Ready => MsgBeadState::Ready,
@@ -345,6 +345,8 @@ pub mod core {
         WorkflowStatus,
     };
 
+    #[must_use]
+    #[allow(clippy::too_many_lines)]
     pub fn handle(
         state: CoreSchedulerState,
         msg: SchedulerMessage,
@@ -405,8 +407,8 @@ pub mod core {
             } => {
                 if let Some(ws) = next_state.workflows.get_mut(&workflow_id) {
                     let _ = ws.add_dependency(
-                        from_bead,
-                        to_bead,
+                        &from_bead,
+                        &to_bead,
                         crate::dag::DependencyType::BlockingDependency,
                     );
                 }
@@ -472,8 +474,8 @@ pub mod core {
                 effects.push(SchedulerEffect::ReplyReadyBeads { reply, result });
             }
             SchedulerMessage::GetStats { reply } => {
-                let stats = build_stats(&next_state);
-                effects.push(SchedulerEffect::ReplyStats { reply, stats });
+                let scheduler_stats = build_stats(&next_state);
+                effects.push(SchedulerEffect::ReplyStats { reply, stats: scheduler_stats });
             }
             SchedulerMessage::IsBeadReady {
                 workflow_id,
@@ -803,11 +805,15 @@ mod tests {
 
     fn setup_state_with_workflow_and_bead() -> CoreSchedulerState {
         let mut state = CoreSchedulerState::default();
+        let workflow_id = "wf-1".to_string();
         state
             .workflows
-            .insert("wf-1".to_string(), WorkflowState::new("wf-1".to_string()));
-        let ws = state.workflows.get_mut("wf-1").unwrap();
-        let _ = ws.add_bead("bead-1".to_string());
+            .insert(workflow_id.clone(), WorkflowState::new(workflow_id.clone()));
+        
+        if let Some(ws) = state.workflows.get_mut(&workflow_id) {
+            let _ = ws.add_bead("bead-1".to_string());
+        }
+
         state.pending_beads.insert(
             "bead-1".to_string(),
             ScheduledBead::new("bead-1".to_string(), "wf-1".to_string()),
@@ -816,7 +822,7 @@ mod tests {
     }
 
     #[test]
-    fn test_schedule_bead_produces_bead_scheduled_event() {
+    fn test_schedule_bead_produces_bead_scheduled_event() -> Result<(), Box<dyn std::error::Error>> {
         let state = setup_state_with_workflow_and_bead();
         let msg = SchedulerMessage::ScheduleBead {
             workflow_id: "wf-1".to_string(),
@@ -834,7 +840,7 @@ mod tests {
             "ScheduleBead should produce a RecordEvent effect"
         );
 
-        let event = record_event.expect("checked is_some");
+        let event = record_event.ok_or("RecordEvent missing")?;
         assert!(
             matches!(
                 event,
@@ -843,10 +849,11 @@ mod tests {
             ),
             "Expected BeadScheduled event with correct ids"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_on_bead_completed_produces_bead_completed_event() {
+    fn test_on_bead_completed_produces_bead_completed_event() -> Result<(), Box<dyn std::error::Error>> {
         let state = setup_state_with_workflow_and_bead();
         let msg = SchedulerMessage::OnBeadCompleted {
             workflow_id: "wf-1".to_string(),
@@ -863,7 +870,7 @@ mod tests {
             "OnBeadCompleted should produce a RecordEvent effect"
         );
 
-        let event = record_event.expect("checked is_some");
+        let event = record_event.ok_or("RecordEvent missing")?;
         assert!(
             matches!(
                 event,
@@ -872,10 +879,11 @@ mod tests {
             ),
             "Expected BeadCompleted event with correct bead_id"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_on_state_changed_to_completed_produces_bead_completed_event() {
+    fn test_on_state_changed_to_completed_produces_bead_completed_event() -> Result<(), Box<dyn std::error::Error>> {
         let state = setup_state_with_workflow_and_bead();
         let msg = SchedulerMessage::OnStateChanged {
             bead_id: "bead-1".to_string(),
@@ -893,15 +901,16 @@ mod tests {
             "OnStateChanged to Completed should produce a RecordEvent effect"
         );
 
-        let event = record_event.expect("checked is_some");
+        let event = record_event.ok_or("RecordEvent missing")?;
         assert!(
             matches!(event, OrchestratorEvent::BeadCompleted { .. }),
             "Expected BeadCompleted event"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_on_state_changed_to_failed_produces_bead_failed_event() {
+    fn test_on_state_changed_to_failed_produces_bead_failed_event() -> Result<(), Box<dyn std::error::Error>> {
         let state = setup_state_with_workflow_and_bead();
         let msg = SchedulerMessage::OnStateChanged {
             bead_id: "bead-1".to_string(),
@@ -919,7 +928,7 @@ mod tests {
             "OnStateChanged to Failed should produce a RecordEvent effect"
         );
 
-        let event = record_event.expect("checked is_some");
+        let event = record_event.ok_or("RecordEvent missing")?;
         assert!(
             matches!(
                 event,
@@ -928,5 +937,6 @@ mod tests {
             ),
             "Expected BeadFailed event with correct bead_id and error message"
         );
+        Ok(())
     }
 }

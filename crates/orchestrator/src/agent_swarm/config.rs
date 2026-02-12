@@ -172,7 +172,7 @@ mod tests {
     }
 
     #[test]
-    fn test_agent_config_builder_complete() {
+    fn test_agent_config_builder_complete() -> super::AgentSwarmResult<()> {
         let result = AgentConfigBuilder::new()
             .executable(PathBuf::from("/usr/bin/env"))
             .working_dir(PathBuf::from("/project"))
@@ -181,11 +181,12 @@ mod tests {
             .build();
 
         assert!(result.is_ok());
-        let config = result.unwrap();
+        let config = result?;
         assert_eq!(config.executable(), &PathBuf::from("/usr/bin/env"));
         assert_eq!(config.working_dir(), &PathBuf::from("/project"));
         assert_eq!(config.default_timeout(), Duration::from_secs(120));
         assert_eq!(config.env_vars().len(), 1);
+        Ok(())
     }
 
     #[test]
@@ -211,7 +212,7 @@ mod tests {
     }
 
     #[test]
-    fn test_agent_config_builder_multiple_env_vars() {
+    fn test_agent_config_builder_multiple_env_vars() -> super::AgentSwarmResult<()> {
         let result = AgentConfigBuilder::new()
             .executable(PathBuf::from("/usr/bin/env"))
             .working_dir(PathBuf::from("/project"))
@@ -220,8 +221,9 @@ mod tests {
             .build();
 
         assert!(result.is_ok());
-        let config = result.unwrap();
+        let config = result?;
         assert_eq!(config.env_vars().len(), 2);
+        Ok(())
     }
 
     #[test]

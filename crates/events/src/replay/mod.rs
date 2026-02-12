@@ -67,24 +67,6 @@ impl ReplayProgress {
             eta: None,
         }
     }
-
-    /// Calculate percentage complete.
-    #[allow(dead_code)]
-    fn calculate_percent(&self) -> f64 {
-        if self.events_total == 0 {
-            100.0
-        } else {
-            (self.events_processed as f64 / self.events_total as f64) * 100.0
-        }
-    }
-
-    /// Update progress with new event count.
-    #[allow(dead_code)]
-    fn update(&mut self, events_processed: u64, eta: Option<Duration>) {
-        self.events_processed = events_processed;
-        self.percent_complete = self.calculate_percent();
-        self.eta = eta;
-    }
 }
 
 /// Thread-safe progress tracker for event replay.
@@ -205,16 +187,6 @@ mod tests {
         assert_eq!(progress.events_processed, 0);
         assert_eq!(progress.percent_complete, 0.0);
         assert!(progress.eta.is_none());
-    }
-
-    #[test]
-    fn test_replay_progress_calculate_percent() {
-        let mut progress = ReplayProgress::new(100);
-        progress.update(50, None);
-        assert_eq!(progress.percent_complete, 50.0);
-
-        progress.update(100, None);
-        assert_eq!(progress.percent_complete, 100.0);
     }
 
     #[test]

@@ -370,21 +370,29 @@ impl AgentSlotActorDef {
         // Evaluate output through gate
         let decision = stage_gate.evaluate(&machine_clone, output);
 
-        // Handle gate decision
+        self.handle_gate_decision(state, decision, state_machine)
+    }
+
+    fn handle_gate_decision(
+        &self,
+        state: &mut AgentSlotState,
+        decision: GateDecision,
+        state_machine: BeadStateMachine,
+    ) -> Result<(), SlotError> {
         match decision {
             GateDecision::Proceed { next_stage } => {
                 info!(
-                    "Stage {:?} succeeded, proceeding to {:?}",
-                    current_stage, next_stage
+                    "Stage succeeded, proceeding to {:?}",
+                    next_stage
                 );
 
                 // Store artifact for this stage
                 state
                     .artifacts
-                    .insert(current_stage, "artifact-placeholder".to_string());
+                    .insert(state.current_stage.unwrap_or(StageKind::Research), "artifact-placeholder".to_string());
 
                 // Advance state machine
-                let mut machine_clone = state_machine.clone();
+                let mut machine_clone = state_machine;
                 let transition = machine_clone
                     .advance()
                     .map_err(|e| SlotError::StateMachineError(format!("advance: {e}")))?;
@@ -394,8 +402,8 @@ impl AgentSlotActorDef {
                 self.emit_transition_event(state, &transition);
 
                 // Check if complete
-                if state_machine.current_stage() == StageKind::Accept {
-                    self.complete_bead(state, BeadCompletion::Accepted);
+                if state.state_machine.as_ref().is_some_and(|m| m.current_stage() == StageKind::Accept) {
+                    self.complete_bead(state, &BeadCompletion::Accepted);
                 }
             }
             GateDecision::Reenter {
@@ -404,8 +412,8 @@ impl AgentSlotActorDef {
                 severity,
             } => {
                 warn!(
-                    "Stage {:?} failed, reentering {:?} with severity: {:?}",
-                    current_stage, target, severity
+                    "Stage failed, reentering {:?} with severity: {:?}",
+                    target, severity
                 );
 
                 // Reenter target stage
@@ -423,13 +431,13 @@ impl AgentSlotActorDef {
             }
             GateDecision::Fail { reason } => {
                 error!("Bead failed: {}", reason);
-                self.complete_bead(state, BeadCompletion::Failed { reason });
+                self.complete_bead(state, &BeadCompletion::Failed { reason });
             }
             GateDecision::Exhausted { policy } => {
                 warn!("Retry limits exhausted, policy: {:?}", policy);
                 self.complete_bead(
                     state,
-                    BeadCompletion::Parked {
+                    &BeadCompletion::Parked {
                         reason: format!("Retry limits exhausted: {policy:?}"),
                     },
                 );
@@ -497,14 +505,14 @@ impl AgentSlotActorDef {
             // Mark as failed
             self.complete_bead(
                 state,
-                BeadCompletion::Failed {
+                &BeadCompletion::Failed {
                     reason: format!("Stage timeout: {stage_kind:?}"),
                 },
             );
         }
     }
 
-    fn complete_bead(&self, state: &mut AgentSlotState, result: BeadCompletion) {
+    fn complete_bead(&self, state: &mut AgentSlotState, result: &BeadCompletion) {
         let bead_id = match state.require_bead_id() {
             Ok(id) => *id,
             Err(e) => {
@@ -533,7 +541,7 @@ impl AgentSlotActorDef {
                     },
                 );
             }
-            BeadCompletion::Failed { ref reason } => {
+            BeadCompletion::Failed { reason } => {
                 self.emit_event(
                     state,
                     BeadEvent::Failed {

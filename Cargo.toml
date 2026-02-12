@@ -277,10 +277,6 @@ proptest = "1"
 name = "oya"
 path = "src/main.rs"
 
-[[bin]]
-name = "test_unwrap_hook"
-path = "crates/oya/src/bin/test_unwrap_hook.rs"
-
 [profile.dev]
 opt-level = 0
 debug = true

@@ -286,39 +286,39 @@ mod tests {
     }
 
     #[test]
-    fn test_check_zjj_exit_code_success() {
+    fn test_check_zjj_exit_code_success() -> Result<(), Box<dyn std::error::Error>> {
         // Mock successful exit using a real command
         let output = std::process::Command::new("true")
-            .output()
-            .expect("true command should exist on all Unix systems");
+            .output()?;
 
         assert!(check_zjj_exit_code(&output).is_ok());
+        Ok(())
     }
 
     #[test]
-    fn test_check_zjj_exit_code_failure() {
+    fn test_check_zjj_exit_code_failure() -> Result<(), Box<dyn std::error::Error>> {
         // Mock failed exit using a real command
         let output = std::process::Command::new("false")
-            .output()
-            .expect("false command should exist on all Unix systems");
+            .output()?;
 
         let result = check_zjj_exit_code(&output);
         assert!(matches!(
             result,
             Err(CleanupError::ZjjCleanExecutionFailed { .. })
         ));
+        Ok(())
     }
 
     #[test]
-    fn test_parse_zjj_json_valid() {
+    fn test_parse_zjj_json_valid() -> Result<(), CleanupError> {
         let json = r#"{"removed_count": 2, "sessions": [{"name": "test-session", "reason": "stale", "workspace_path": "/tmp/test"}]}"#;
         let result = parse_zjj_json(json.as_bytes());
         assert!(result.is_ok());
-        #[allow(clippy::expect_used)]
-        let output = result.expect("valid JSON should parse successfully");
+        let output = result?;
         assert_eq!(output.removed_count, 2);
         assert_eq!(output.sessions.len(), 1);
         assert_eq!(output.sessions[0].name, "test-session");
+        Ok(())
     }
 
     #[test]

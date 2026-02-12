@@ -264,7 +264,7 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_size_invalid_rows() {
+    fn test_validate_size_invalid_rows() -> Result<(), ConfigValidationError> {
         let result = validate_size(0, 80);
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -272,10 +272,11 @@ mod tests {
 
         let result = validate_size(501, 80);
         assert!(result.is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_validate_size_invalid_cols() {
+    fn test_validate_size_invalid_cols() -> Result<(), ConfigValidationError> {
         let result = validate_size(24, 0);
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -283,13 +284,15 @@ mod tests {
 
         let result = validate_size(24, 501);
         assert!(result.is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_validate_auto_save_interval_valid() {
-        assert_eq!(validate_auto_save_interval(10).unwrap(), 10);
-        assert_eq!(validate_auto_save_interval(30).unwrap(), 30);
-        assert_eq!(validate_auto_save_interval(600).unwrap(), 600);
+    fn test_validate_auto_save_interval_valid() -> Result<(), ConfigValidationError> {
+        assert_eq!(validate_auto_save_interval(10)?, 10);
+        assert_eq!(validate_auto_save_interval(30)?, 30);
+        assert_eq!(validate_auto_save_interval(600)?, 600);
+        Ok(())
     }
 
     #[test]
@@ -316,26 +319,28 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_config_valid() {
+    fn test_validate_config_valid() -> Result<(), ConfigValidationError> {
         let config = json!({
             "auto_save_interval_secs": 30,
             "ipc_address": "127.0.0.1:5555"
         });
         let result = validate_config(&config);
         assert!(result.is_ok());
-        let validated = result.unwrap();
+        let validated = result?;
         assert_eq!(validated.auto_save_interval_secs, 30);
         assert_eq!(validated.ipc_address, "127.0.0.1:5555");
+        Ok(())
     }
 
     #[test]
-    fn test_validate_config_defaults() {
+    fn test_validate_config_defaults() -> Result<(), ConfigValidationError> {
         let config = json!({});
         let result = validate_config(&config);
         assert!(result.is_ok());
-        let validated = result.unwrap();
+        let validated = result?;
         assert_eq!(validated.auto_save_interval_secs, 30);
         assert_eq!(validated.ipc_address, "127.0.0.1:5555");
+        Ok(())
     }
 
     #[test]
@@ -346,11 +351,12 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_size_from_json_valid() {
+    fn test_validate_size_from_json_valid() -> Result<(), ConfigValidationError> {
         let size = json!({"rows": 24, "cols": 80});
         let result = validate_size_from_json(&size);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), (24, 80));
+        assert_eq!(result?, (24, 80));
+        Ok(())
     }
 
     #[test]

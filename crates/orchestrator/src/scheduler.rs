@@ -73,7 +73,7 @@ impl WorkflowState {
     /// - The DAG structure becomes invalid due to the addition
     /// - Internal graph operations fail
     pub fn add_bead(&mut self, bead_id: BeadId) -> Result<()> {
-        self.dag.add_node(bead_id).map_err(dag_error_to_error)
+        self.dag.add_node(bead_id).map_err(|e| dag_error_to_error(&e))
     }
 
     /// Add a dependency between beads
@@ -87,13 +87,13 @@ impl WorkflowState {
     /// - The dependency already exists with a different type
     pub fn add_dependency(
         &mut self,
-        from_bead: BeadId,
-        to_bead: BeadId,
+        from_bead: &str,
+        to_bead: &str,
         dep_type: DependencyType,
     ) -> Result<()> {
         self.dag
             .add_edge(from_bead, to_bead, dep_type)
-            .map_err(dag_error_to_error)
+            .map_err(|e| dag_error_to_error(&e))
     }
 
     /// Mark a bead as completed
@@ -118,7 +118,7 @@ impl WorkflowState {
     pub fn is_bead_ready(&self, bead_id: &BeadId) -> Result<bool> {
         self.dag
             .is_ready(bead_id, &self.completed)
-            .map_err(dag_error_to_error)
+            .map_err(|e| dag_error_to_error(&e))
     }
 
     /// Check if DAG is empty
@@ -171,8 +171,8 @@ impl WorkflowState {
 
         for (from, to) in pipeline_stage_edges() {
             state.add_dependency(
-                from.as_str().to_string(),
-                to.as_str().to_string(),
+                from.as_str(),
+                to.as_str(),
                 DependencyType::BlockingDependency,
             )?;
         }
@@ -182,7 +182,7 @@ impl WorkflowState {
 }
 
 /// Convert `DagError` to the crate Error type
-fn dag_error_to_error(e: DagError) -> Error {
+fn dag_error_to_error(e: &DagError) -> Error {
     Error::invalid_record(e.to_string())
 }
 
@@ -462,8 +462,8 @@ impl SchedulerActor {
     pub fn add_dependency(
         &mut self,
         workflow_id: &WorkflowId,
-        from_bead: BeadId,
-        to_bead: BeadId,
+        from_bead: &str,
+        to_bead: &str,
     ) -> Result<()> {
         let workflow_state = self
             .workflows
@@ -1400,9 +1400,8 @@ mod tests {
     }
 
     #[test]
-    fn test_workflow_state_from_pipeline_builds_linear_dag() {
-        let state = WorkflowState::from_pipeline("pipeline-1".to_string())
-            .expect("pipeline state should build");
+    fn test_workflow_state_from_pipeline_builds_linear_dag() -> Result<()> {
+        let state = WorkflowState::from_pipeline("pipeline-1".to_string())?;
 
         assert_eq!(state.len(), Stage::all().len());
         assert!(state.contains_bead(&Stage::Implement.as_str().to_string()));
@@ -1410,6 +1409,7 @@ mod tests {
 
         let ready = state.get_ready_beads();
         assert_eq!(ready, vec![Stage::Implement.as_str().to_string()]);
+        Ok(())
     }
 
     #[test]
@@ -1706,7 +1706,7 @@ mod tests {
     // GIVEN scheduler WHEN in-flight work THEN completes before stop.
 
     #[tokio::test]
-    async fn test_stop_fails_with_in_flight_work() {
+    async fn test_stop_fails_with_in_flight_work() -> Result<()> {
         // GIVEN: A scheduler with in-flight bead (assigned to worker)
         let mut scheduler = SchedulerActor::new();
         let workflow_id = "workflow-123".to_string();
@@ -1714,14 +1714,11 @@ mod tests {
         let worker_id = "worker-789".to_string();
 
         scheduler
-            .register_workflow(workflow_id)
-            .expect("workflow registration should succeed");
+            .register_workflow(workflow_id)?;
         scheduler
-            .schedule_bead("workflow-123".to_string(), bead_id.clone())
-            .expect("bead scheduling should succeed");
+            .schedule_bead("workflow-123".to_string(), bead_id.clone())?;
         scheduler
-            .assign_to_worker(&bead_id, worker_id)
-            .expect("worker assignment should succeed");
+            .assign_to_worker(&bead_id, worker_id)?;
 
         assert_eq!(
             scheduler.stats().assigned_count,
@@ -1737,28 +1734,28 @@ mod tests {
             result.is_err(),
             "stop should fail when in-flight work exists"
         );
-        assert!(
-            result.unwrap_err().to_string().contains("in-flight"),
-            "error should mention in-flight work"
-        );
+        if let Err(e) = result {
+            assert!(
+                e.to_string().contains("in-flight"),
+                "error should mention in-flight work"
+            );
+        }
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_stop_succeeds_with_no_in_flight_work() {
+    async fn test_stop_succeeds_with_no_in_flight_work() -> Result<()> {
         // GIVEN: A scheduler with only completed beads
         let mut scheduler = SchedulerActor::new();
         let workflow_id = "workflow-123".to_string();
         let bead_id = "bead-456".to_string();
 
         scheduler
-            .register_workflow(workflow_id)
-            .expect("workflow registration should succeed");
+            .register_workflow(workflow_id)?;
         scheduler
-            .schedule_bead("workflow-123".to_string(), bead_id.clone())
-            .expect("bead scheduling should succeed");
+            .schedule_bead("workflow-123".to_string(), bead_id.clone())?;
         scheduler
-            .handle_bead_completed(&bead_id)
-            .expect("bead completion should succeed");
+            .handle_bead_completed(&bead_id)?;
 
         assert_eq!(
             scheduler.stats().assigned_count,
@@ -1774,24 +1771,22 @@ mod tests {
             result.is_ok(),
             "stop should succeed when no in-flight work exists"
         );
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_stop_allows_ready_beads() {
+    async fn test_stop_allows_ready_beads() -> Result<()> {
         // GIVEN: A scheduler with ready beads (not assigned)
         let mut scheduler = SchedulerActor::new();
         let workflow_id = "workflow-123".to_string();
         let bead_id = "bead-456".to_string();
 
         scheduler
-            .register_workflow(workflow_id)
-            .expect("workflow registration should succeed");
+            .register_workflow(workflow_id)?;
         scheduler
-            .schedule_bead("workflow-123".to_string(), bead_id.clone())
-            .expect("bead scheduling should succeed");
+            .schedule_bead("workflow-123".to_string(), bead_id.clone())?;
         scheduler
-            .mark_ready(&bead_id)
-            .expect("marking bead ready should succeed");
+            .mark_ready(&bead_id)?;
 
         assert_eq!(scheduler.ready_count(), 1, "should have 1 ready bead");
         assert_eq!(
@@ -1808,21 +1803,20 @@ mod tests {
             result.is_ok(),
             "stop should succeed when no in-flight work exists (ready beads OK)"
         );
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_stop_allows_pending_beads() {
+    async fn test_stop_allows_pending_beads() -> Result<()> {
         // GIVEN: A scheduler with pending beads (not ready)
         let mut scheduler = SchedulerActor::new();
         let workflow_id = "workflow-123".to_string();
         let bead_id = "bead-456".to_string();
 
         scheduler
-            .register_workflow(workflow_id)
-            .expect("workflow registration should succeed");
+            .register_workflow(workflow_id)?;
         scheduler
-            .schedule_bead("workflow-123".to_string(), bead_id.clone())
-            .expect("bead scheduling should succeed");
+            .schedule_bead("workflow-123".to_string(), bead_id.clone())?;
 
         assert_eq!(scheduler.pending_count(), 1, "should have 1 pending bead");
         assert_eq!(
@@ -1839,5 +1833,6 @@ mod tests {
             result.is_ok(),
             "stop should succeed when no in-flight work exists (pending beads OK)"
         );
+        Ok(())
     }
 }

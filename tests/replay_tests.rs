@@ -25,7 +25,6 @@ use oya_events::{
     replay::{ApplyContext, EventSourcedState, apply_event, apply_events},
 };
 use std::collections::HashMap;
-use std::sync::Arc;
 use tempfile::TempDir;
 
 /// Simple in-memory state that tracks bead states from events.
@@ -44,11 +43,6 @@ impl InMemoryState {
     /// Get the current state of a bead.
     fn get_state(&self, bead_id: BeadId) -> Option<BeadState> {
         self.bead_states.get(&bead_id).copied()
-    }
-
-    /// Set the state of a bead.
-    fn set_state(&mut self, bead_id: BeadId, state: BeadState) {
-        self.bead_states.insert(bead_id, state);
     }
 }
 
@@ -87,7 +81,7 @@ impl EventSourcedState for InMemoryState {
         let bead_id = event.bead_id();
 
         match event {
-            BeadEvent::Created { spec, .. } => {
+            BeadEvent::Created { .. } => {
                 self.bead_states.insert(bead_id, BeadState::Pending);
             }
             BeadEvent::StateChanged { from: _, to, .. } => {
@@ -150,22 +144,27 @@ async fn given_recorded_events_when_replayed_then_state_matches_original()
     // Event 1: Create the bead
     let event1 = BeadEvent::created(bead_id, spec.clone());
     context.store.append_event(&event1).await?;
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
 
     // Event 2: Transition from Pending to Scheduled
     let event2 = BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Scheduled);
     context.store.append_event(&event2).await?;
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
 
     // Event 3: Transition from Scheduled to Ready
     let event3 = BeadEvent::state_changed(bead_id, BeadState::Scheduled, BeadState::Ready);
     context.store.append_event(&event3).await?;
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
 
     // Event 4: Claim the bead
     let event4 = BeadEvent::claimed(bead_id, "agent-1");
     context.store.append_event(&event4).await?;
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
 
     // Event 5: Transition from Ready to Running
     let event5 = BeadEvent::state_changed(bead_id, BeadState::Ready, BeadState::Running);
     context.store.append_event(&event5).await?;
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
 
     // Event 6: Complete a phase
     let phase_id = PhaseId::new();
@@ -176,6 +175,7 @@ async fn given_recorded_events_when_replayed_then_state_matches_original()
         PhaseOutput::success(vec![1, 2, 3]),
     );
     context.store.append_event(&event6).await?;
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
 
     // Event 7: Transition to Completed
     let event7 = BeadEvent::completed(bead_id, BeadResult::success(vec![1, 2, 3], 1000));
@@ -190,7 +190,7 @@ async fn given_recorded_events_when_replayed_then_state_matches_original()
 
     let original_bead_state = original_state
         .get_state(bead_id)
-        .expect("Original state should have bead state");
+        .ok_or("Original state should have bead state")?;
 
     // ==========================================================================
     // WHEN: Events are replayed
@@ -211,7 +211,7 @@ async fn given_recorded_events_when_replayed_then_state_matches_original()
 
     let replayed_bead_state = replayed_state
         .get_state(bead_id)
-        .expect("Replayed state should have bead state");
+        .ok_or("Replayed state should have bead state")?;
 
     assert_eq!(
         original_bead_state, replayed_bead_state,
@@ -243,54 +243,68 @@ async fn given_multiple_beads_when_replayed_then_all_states_match()
     // GIVEN: Multiple beads with recorded events
     let context = ReplayTestContext::new().await?;
 
-    let bead1_id = BeadId::new();
-    let bead2_id = BeadId::new();
-    let bead3_id = BeadId::new();
-
     // Bead 1: Simple lifecycle
+    let bead1_id = BeadId::new();
     let bead1_events = vec![
         BeadEvent::created(
             bead1_id,
             BeadSpec::new("Bead 1").with_complexity(Complexity::Simple),
         ),
-        BeadEvent::state_changed(bead1_id, BeadState::Pending, BeadState::Scheduled),
-        BeadEvent::completed(bead1_id, BeadResult::success(vec![1], 100)),
     ];
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    let mut bead1_events = bead1_events;
+    bead1_events.push(BeadEvent::state_changed(bead1_id, BeadState::Pending, BeadState::Scheduled));
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    bead1_events.push(BeadEvent::completed(bead1_id, BeadResult::success(vec![1], 100)));
 
     // Bead 2: Full lifecycle
-    let bead2_events = vec![
+    let bead2_id = BeadId::new();
+    let mut bead2_events = vec![
         BeadEvent::created(
             bead2_id,
             BeadSpec::new("Bead 2").with_complexity(Complexity::Medium),
         ),
-        BeadEvent::state_changed(bead2_id, BeadState::Pending, BeadState::Scheduled),
-        BeadEvent::state_changed(bead2_id, BeadState::Scheduled, BeadState::Ready),
-        BeadEvent::claimed(bead2_id, "agent-1"),
-        BeadEvent::state_changed(bead2_id, BeadState::Ready, BeadState::Running),
-        BeadEvent::completed(bead2_id, BeadResult::success(vec![1, 2], 200)),
     ];
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    bead2_events.push(BeadEvent::state_changed(bead2_id, BeadState::Pending, BeadState::Scheduled));
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    bead2_events.push(BeadEvent::state_changed(bead2_id, BeadState::Scheduled, BeadState::Ready));
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    bead2_events.push(BeadEvent::claimed(bead2_id, "agent-1"));
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    bead2_events.push(BeadEvent::state_changed(bead2_id, BeadState::Ready, BeadState::Running));
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    bead2_events.push(BeadEvent::completed(bead2_id, BeadResult::success(vec![1, 2], 200)));
 
     // Bead 3: Failed lifecycle
-    let bead3_events = vec![
+    let bead3_id = BeadId::new();
+    let mut bead3_events = vec![
         BeadEvent::created(
             bead3_id,
             BeadSpec::new("Bead 3").with_complexity(Complexity::Complex),
         ),
-        BeadEvent::state_changed(bead3_id, BeadState::Pending, BeadState::Scheduled),
-        BeadEvent::state_changed(bead3_id, BeadState::Scheduled, BeadState::Ready),
-        BeadEvent::claimed(bead3_id, "agent-2"),
-        BeadEvent::failed(bead3_id, "execution error"),
     ];
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    bead3_events.push(BeadEvent::state_changed(bead3_id, BeadState::Pending, BeadState::Scheduled));
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    bead3_events.push(BeadEvent::state_changed(bead3_id, BeadState::Scheduled, BeadState::Ready));
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    bead3_events.push(BeadEvent::claimed(bead3_id, "agent-2"));
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    bead3_events.push(BeadEvent::failed(bead3_id, "execution error"));
 
     // Store all events
     for event in &bead1_events {
         context.store.append_event(event).await?;
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     }
     for event in &bead2_events {
         context.store.append_event(event).await?;
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     }
     for event in &bead3_events {
         context.store.append_event(event).await?;
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     }
 
     // Build original state
@@ -387,17 +401,20 @@ async fn given_partial_event_sequence_when_replayed_then_state_is_partially_rest
 
     let bead_id = BeadId::new();
 
-    let events = vec![
+    let mut events = vec![
         BeadEvent::created(
             bead_id,
             BeadSpec::new("Partial Bead").with_complexity(Complexity::Medium),
         ),
-        BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Scheduled),
-        BeadEvent::state_changed(bead_id, BeadState::Scheduled, BeadState::Ready),
     ];
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    events.push(BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Scheduled));
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    events.push(BeadEvent::state_changed(bead_id, BeadState::Scheduled, BeadState::Ready));
 
     for event in &events {
         context.store.append_event(event).await?;
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     }
 
     // Build original state

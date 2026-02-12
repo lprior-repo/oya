@@ -129,7 +129,7 @@ impl IpcBridge {
                 attempt,
                 timestamp,
                 event_id: _,
-            } => self.convert_stage_started(bead_id, *stage, *attempt, timestamp),
+            } => Self::convert_stage_started(bead_id, *stage, *attempt, timestamp),
 
             BeadEvent::StageCompleted {
                 bead_id,
@@ -137,7 +137,7 @@ impl IpcBridge {
                 artifact_ref,
                 timestamp,
                 event_id: _,
-            } => self.convert_stage_completed(bead_id, *stage, artifact_ref, timestamp),
+            } => Self::convert_stage_completed(bead_id, *stage, artifact_ref.as_ref(), timestamp),
 
             BeadEvent::StageFailed {
                 bead_id,
@@ -146,7 +146,7 @@ impl IpcBridge {
                 severity,
                 timestamp,
                 event_id: _,
-            } => self.convert_stage_failed(bead_id, *stage, feedback, *severity, timestamp),
+            } => Self::convert_stage_failed(bead_id, *stage, feedback, *severity, timestamp),
 
             BeadEvent::StageReentry {
                 bead_id,
@@ -156,7 +156,7 @@ impl IpcBridge {
                 attempt,
                 timestamp,
                 event_id: _,
-            } => self.convert_stage_reentry(
+            } => Self::convert_stage_reentry(
                 bead_id,
                 *from_stage,
                 *to_stage,
@@ -173,8 +173,14 @@ impl IpcBridge {
                 exit_code,
                 timestamp,
                 event_id: _,
-            } => self
-                .convert_validation_ran(bead_id, *passed, output, command, *exit_code, timestamp),
+            } => Self::convert_validation_ran(
+                bead_id,
+                *passed,
+                output,
+                command,
+                *exit_code,
+                timestamp,
+            ),
 
             BeadEvent::RecursionExhausted {
                 bead_id,
@@ -182,7 +188,7 @@ impl IpcBridge {
                 last_stage,
                 timestamp,
                 event_id: _,
-            } => self.convert_recursion_exhausted(bead_id, *total_attempts, *last_stage, timestamp),
+            } => Self::convert_recursion_exhausted(bead_id, *total_attempts, *last_stage, timestamp),
 
             // Non-stage events are not supported
             _ => Err(IpcBridgeError::UnsupportedEventType {
@@ -213,16 +219,15 @@ impl IpcBridge {
 
     /// Convert `StageStarted` event to IPC message.
     fn convert_stage_started(
-        &self,
         bead_id: &oya_events::BeadId,
         stage: StageKind,
         attempt: u32,
         timestamp: &chrono::DateTime<chrono::Utc>,
     ) -> IpcBridgeResult<HostMessage> {
-        let ts = self.datetime_to_timestamp(timestamp)?;
+        let ts = Self::datetime_to_timestamp(timestamp)?;
         Ok(HostMessage::StageStarted {
             bead_id: bead_id.to_string(),
-            stage: self.stage_kind_to_string(stage),
+            stage: Self::stage_kind_to_string(stage),
             attempt,
             timestamp: ts,
         })
@@ -230,43 +235,40 @@ impl IpcBridge {
 
     /// Convert `StageCompleted` event to IPC message.
     fn convert_stage_completed(
-        &self,
         bead_id: &oya_events::BeadId,
         stage: StageKind,
-        artifact_ref: &Option<String>,
+        artifact_ref: Option<&String>,
         timestamp: &chrono::DateTime<chrono::Utc>,
     ) -> IpcBridgeResult<HostMessage> {
-        let ts = self.datetime_to_timestamp(timestamp)?;
+        let ts = Self::datetime_to_timestamp(timestamp)?;
         Ok(HostMessage::StageCompleted {
             bead_id: bead_id.to_string(),
-            stage: self.stage_kind_to_string(stage),
-            artifact_ref: artifact_ref.clone(),
+            stage: Self::stage_kind_to_string(stage),
+            artifact_ref: artifact_ref.cloned(),
             timestamp: ts,
         })
     }
 
     /// Convert `StageFailed` event to IPC message.
     fn convert_stage_failed(
-        &self,
         bead_id: &oya_events::BeadId,
         stage: StageKind,
         feedback: &str,
         severity: Severity,
         timestamp: &chrono::DateTime<chrono::Utc>,
     ) -> IpcBridgeResult<HostMessage> {
-        let ts = self.datetime_to_timestamp(timestamp)?;
+        let ts = Self::datetime_to_timestamp(timestamp)?;
         Ok(HostMessage::StageFailed {
             bead_id: bead_id.to_string(),
-            stage: self.stage_kind_to_string(stage),
+            stage: Self::stage_kind_to_string(stage),
             feedback: feedback.to_string(),
-            severity: self.severity_to_string(severity),
+            severity: Self::severity_to_string(severity),
             timestamp: ts,
         })
     }
 
     /// Convert `StageReentry` event to IPC message.
     fn convert_stage_reentry(
-        &self,
         bead_id: &oya_events::BeadId,
         from_stage: StageKind,
         to_stage: StageKind,
@@ -274,11 +276,11 @@ impl IpcBridge {
         attempt: u32,
         timestamp: &chrono::DateTime<chrono::Utc>,
     ) -> IpcBridgeResult<HostMessage> {
-        let ts = self.datetime_to_timestamp(timestamp)?;
+        let ts = Self::datetime_to_timestamp(timestamp)?;
         Ok(HostMessage::StageReentry {
             bead_id: bead_id.to_string(),
-            from_stage: self.stage_kind_to_string(from_stage),
-            to_stage: self.stage_kind_to_string(to_stage),
+            from_stage: Self::stage_kind_to_string(from_stage),
+            to_stage: Self::stage_kind_to_string(to_stage),
             reason: reason.to_string(),
             attempt,
             timestamp: ts,
@@ -287,7 +289,6 @@ impl IpcBridge {
 
     /// Convert `ValidationRan` event to IPC message.
     fn convert_validation_ran(
-        &self,
         bead_id: &oya_events::BeadId,
         passed: bool,
         output: &str,
@@ -295,7 +296,7 @@ impl IpcBridge {
         exit_code: i32,
         timestamp: &chrono::DateTime<chrono::Utc>,
     ) -> IpcBridgeResult<HostMessage> {
-        let ts = self.datetime_to_timestamp(timestamp)?;
+        let ts = Self::datetime_to_timestamp(timestamp)?;
         Ok(HostMessage::ValidationRan {
             bead_id: bead_id.to_string(),
             passed,
@@ -308,23 +309,22 @@ impl IpcBridge {
 
     /// Convert `RecursionExhausted` event to IPC message.
     fn convert_recursion_exhausted(
-        &self,
         bead_id: &oya_events::BeadId,
         total_attempts: u32,
         last_stage: StageKind,
         timestamp: &chrono::DateTime<chrono::Utc>,
     ) -> IpcBridgeResult<HostMessage> {
-        let ts = self.datetime_to_timestamp(timestamp)?;
+        let ts = Self::datetime_to_timestamp(timestamp)?;
         Ok(HostMessage::RecursionExhausted {
             bead_id: bead_id.to_string(),
             total_attempts,
-            last_stage: self.stage_kind_to_string(last_stage),
+            last_stage: Self::stage_kind_to_string(last_stage),
             timestamp: ts,
         })
     }
 
     /// Convert `StageKind` to IPC string representation.
-    fn stage_kind_to_string(&self, stage: StageKind) -> String {
+    fn stage_kind_to_string(stage: StageKind) -> String {
         match stage {
             StageKind::Research => "research",
             StageKind::Plan => "plan",
@@ -337,7 +337,7 @@ impl IpcBridge {
     }
 
     /// Convert Severity to IPC string representation.
-    fn severity_to_string(&self, severity: Severity) -> String {
+    fn severity_to_string(severity: Severity) -> String {
         match severity {
             Severity::Minor => "minor",
             Severity::Major => "major",
@@ -347,7 +347,7 @@ impl IpcBridge {
     }
 
     /// Convert chrono `DateTime` to Unix timestamp (seconds).
-    fn datetime_to_timestamp(&self, dt: &chrono::DateTime<chrono::Utc>) -> IpcBridgeResult<u64> {
+    fn datetime_to_timestamp(dt: &chrono::DateTime<chrono::Utc>) -> IpcBridgeResult<u64> {
         dt.timestamp()
             .try_into()
             .map_err(|_| IpcBridgeError::InvalidTimestamp {

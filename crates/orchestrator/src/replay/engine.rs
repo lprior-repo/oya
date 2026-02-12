@@ -17,15 +17,8 @@ use super::projection::OrchestratorProjection;
 use crate::persistence::{OrchestratorStore, PersistenceError, PersistenceResult};
 use crate::replay::resume::{OrchestratorCheckpointStore, OrchestratorEventLog};
 
-/// Convert `oya_events::Error` to `PersistenceError`.
-fn error_to_persistence(err: oya_events::Error) -> PersistenceError {
-    PersistenceError::QueryFailed {
-        reason: err.to_string(),
-    }
-}
-
 /// Convert `ResumeError` to `PersistenceError`.
-fn resume_error_to_persistence(err: ResumeError) -> PersistenceError {
+fn resume_error_to_persistence(err: &ResumeError) -> PersistenceError {
     PersistenceError::invalid_state(format!("checkpoint resume failed: {err}"))
 }
 
@@ -160,10 +153,10 @@ impl ReplayEngine {
                 let event_log = OrchestratorEventLog::new(store_handle);
                 let checkpoint_key = CheckpointId::new(cp.checkpoint_id.clone());
 
-                let resumed_state =
+                let checkpoint_resume_state =
                     resume_from_checkpoint(&checkpoint_key, &checkpoint_store, &event_log)
-                        .map_err(resume_error_to_persistence)?;
-                resume_state = Some(resumed_state);
+                        .map_err(|e| resume_error_to_persistence(&e))?;
+                resume_state = Some(checkpoint_resume_state);
 
                 cp.event_sequence
             }
@@ -353,8 +346,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_recover_records_resume_state() {
-        let (mut engine, store) = require_engine_with_store!(setup_engine_with_store().await);
+    async fn test_recover_records_resume_state() -> Result<(), Box<dyn std::error::Error>> {
+        let (mut engine, store) = setup_engine_with_store().await.ok_or("Failed setup")?;
 
         let _ = engine
             .record_event(OrchestratorEvent::WorkflowRegistered {
@@ -362,36 +355,34 @@ mod tests {
                 name: "Test Resume".to_string(),
                 dag_json: "{}".to_string(),
             })
-            .await;
+            .await?;
 
         let _ = engine
             .record_event(OrchestratorEvent::WorkflowStatusChanged {
                 workflow_id: "wf-1".to_string(),
                 status: "running".to_string(),
             })
-            .await;
+            .await?;
 
         let checkpoint = CheckpointRecord::new("cp-resume", "{}", engine.current_sequence());
         let saved = store.save_checkpoint(&checkpoint).await;
         assert!(saved.is_ok(), "checkpoint save should succeed");
 
         let mut projection = WorkflowStatusProjection::new();
-        let result = engine.recover(&mut projection).await;
+        let result = engine.recover(&mut projection).await?;
 
-        assert!(result.is_ok(), "recovery should succeed");
-        if let Ok(recovery) = result {
-            assert_eq!(recovery.checkpoint_id, Some("cp-resume".to_string()));
-            let resume = recovery
-                .resume_state
-                .expect("resume state should be present");
-            assert_eq!(resume.checkpoint_id.as_str(), "cp-resume");
-            assert_eq!(recovery.events_replayed, resume.events_replayed as usize);
-        }
+        assert_eq!(result.checkpoint_id, Some("cp-resume".to_string()));
+        let resume = result
+            .resume_state
+            .ok_or("resume state should be present")?;
+        assert_eq!(resume.checkpoint_id.as_str(), "cp-resume");
+        assert_eq!(result.events_replayed, resume.events_replayed as usize);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_recover_handles_large_event_volume() {
-        let (mut engine, store) = require_engine_with_store!(setup_engine_with_store().await);
+    async fn test_recover_handles_large_event_volume() -> Result<(), Box<dyn std::error::Error>> {
+        let (mut engine, store) = setup_engine_with_store().await.ok_or("Failed setup")?;
 
         for i in 0..1_000 {
             let _ = engine
@@ -399,7 +390,7 @@ mod tests {
                     workflow_id: format!("wf-{}", i % 5),
                     status: "running".to_string(),
                 })
-                .await;
+                .await?;
         }
 
         let checkpoint = CheckpointRecord::new("cp-large", "{}", engine.current_sequence());
@@ -408,23 +399,21 @@ mod tests {
 
         let mut projection = WorkflowStatusProjection::new();
         let start = Instant::now();
-        let result = engine.recover(&mut projection).await;
+        let result = engine.recover(&mut projection).await?;
         let duration = start.elapsed();
 
-        assert!(result.is_ok(), "recovery should succeed for large workload");
         assert!(
             duration < Duration::from_secs(5),
             "Recovery should complete within 5s, took {:?}",
             duration
         );
 
-        if let Ok(recovery) = result {
-            let resume = recovery
-                .resume_state
-                .expect("resume state should be present");
-            assert!(resume.events_replayed as usize >= 1_000);
-            assert_eq!(recovery.events_replayed, resume.events_replayed as usize);
-        }
+        let resume = result
+            .resume_state
+            .ok_or("resume state should be present")?;
+        assert!(resume.events_replayed as usize >= 1_000);
+        assert_eq!(result.events_replayed, resume.events_replayed as usize);
+        Ok(())
     }
 
     #[tokio::test]

@@ -60,14 +60,13 @@ mod tests {
     use oya_pipeline::{Language, Task, TaskStatus};
 
     #[tokio::test]
-    async fn show_command_finds_task() {
-        let temp_dir = tempfile::tempdir().expect("tempdir should create");
-        let slug = oya_pipeline::Slug::new("task-1").expect("slug should parse");
+    async fn show_command_finds_task() -> Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let slug = oya_pipeline::Slug::new("task-1")?;
         let task = Task::new(slug, Language::Rust);
 
         oya_pipeline::save_task_record(&task, temp_dir.path())
-            .await
-            .expect("save should succeed");
+            .await?;
 
         let args = ShowArgs {
             slug: "task-1".to_string(),
@@ -75,15 +74,16 @@ mod tests {
             root: Some(temp_dir.path().to_path_buf()),
         };
 
-        let result = show_command(args).await.expect("show should succeed");
+        let result = show_command(args).await?;
 
         assert_eq!(result.task.slug.as_str(), "task-1");
         assert_eq!(result.task.status, TaskStatus::Created);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn show_command_rejects_missing_task() {
-        let temp_dir = tempfile::tempdir().expect("tempdir should create");
+    async fn show_command_rejects_missing_task() -> Result<()> {
+        let temp_dir = tempfile::tempdir()?;
         let args = ShowArgs {
             slug: "missing-task".to_string(),
             json: false,
@@ -93,5 +93,6 @@ mod tests {
         let result = show_command(args).await;
 
         assert!(result.is_err());
+        Ok(())
     }
 }

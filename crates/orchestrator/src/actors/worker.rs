@@ -316,6 +316,7 @@ impl Actor for WorkerActorDef {
         Ok(state)
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn handle(
         &self,
         myself: ActorRef<Self::Msg>,
