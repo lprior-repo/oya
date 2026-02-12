@@ -102,12 +102,12 @@ pub struct WorkflowSnapshot {
 }
 
 /// Test context holding actor references and state.
-#[derive(Clone)]
 pub struct ChaosTestContext {
     pub scheduler: ActorRef<SchedulerMessage>,
     pub supervisor: ActorRef<SupervisorMessage<SchedulerActorDef>>,
     pub workflow_ids: Vec<String>,
     pub pre_kill_state: Option<SchedulerSnapshot>,
+    pub replay_engine: Option<Arc<ReplayEngine>>,
 }
 
 /// Report from state comparison.

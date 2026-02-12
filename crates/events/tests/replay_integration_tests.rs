@@ -15,7 +15,10 @@ use oya_events::{
 
 type TestResult<T> = std::result::Result<T, String>;
 
-fn check_result<T, E: std::fmt::Display>(result: std::result::Result<T, E>, context: &str) -> TestResult<T> {
+fn check_result<T, E: std::fmt::Display>(
+    result: std::result::Result<T, E>,
+    context: &str,
+) -> TestResult<T> {
     result.map_err(|e| format!("{}: {}", context, e))
 }
 
@@ -25,16 +28,29 @@ async fn bdd_event_replay_restores_single_bead_state() -> TestResult<()> {
     let bead_id = BeadId::new();
     let spec = BeadSpec::new("Test Bead").with_complexity(Complexity::Medium);
 
-    check_result(store.append(BeadEvent::created(bead_id, spec.clone())).await, "append created")?;
     check_result(
         store
-            .append(BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Scheduled))
+            .append(BeadEvent::created(bead_id, spec.clone()))
+            .await,
+        "append created",
+    )?;
+    check_result(
+        store
+            .append(BeadEvent::state_changed(
+                bead_id,
+                BeadState::Pending,
+                BeadState::Scheduled,
+            ))
             .await,
         "append state change 1",
     )?;
     check_result(
         store
-            .append(BeadEvent::state_changed(bead_id, BeadState::Scheduled, BeadState::Ready))
+            .append(BeadEvent::state_changed(
+                bead_id,
+                BeadState::Scheduled,
+                BeadState::Ready,
+            ))
             .await,
         "append state change 2",
     )?;
@@ -65,7 +81,8 @@ async fn bdd_event_replay_restores_single_bead_state() -> TestResult<()> {
         "State should match after replay"
     );
     assert_eq!(
-        original_bead.history.len(), replayed_bead.history.len(),
+        original_bead.history.len(),
+        replayed_bead.history.len(),
         "History length should match after replay"
     );
     assert_eq!(
@@ -93,7 +110,11 @@ async fn bdd_event_replay_restores_multiple_beads_state() -> TestResult<()> {
     for (i, bead_id) in bead_ids.iter().enumerate() {
         check_result(
             store
-                .append(BeadEvent::state_changed(*bead_id, BeadState::Pending, BeadState::Scheduled))
+                .append(BeadEvent::state_changed(
+                    *bead_id,
+                    BeadState::Pending,
+                    BeadState::Scheduled,
+                ))
                 .await,
             &format!("append scheduled for bead {}", i),
         )?;
@@ -102,7 +123,11 @@ async fn bdd_event_replay_restores_multiple_beads_state() -> TestResult<()> {
     for bead_id in &bead_ids[0..3] {
         check_result(
             store
-                .append(BeadEvent::state_changed(*bead_id, BeadState::Scheduled, BeadState::Ready))
+                .append(BeadEvent::state_changed(
+                    *bead_id,
+                    BeadState::Scheduled,
+                    BeadState::Ready,
+                ))
                 .await,
             "append ready",
         )?;
@@ -110,7 +135,9 @@ async fn bdd_event_replay_restores_multiple_beads_state() -> TestResult<()> {
 
     for (i, bead_id) in bead_ids.iter().enumerate() {
         check_result(
-            store.append(BeadEvent::claimed(*bead_id, format!("agent-{}", i))).await,
+            store
+                .append(BeadEvent::claimed(*bead_id, format!("agent-{}", i)))
+                .await,
             &format!("append claimed for bead {}", i),
         )?;
     }
@@ -174,10 +201,17 @@ async fn bdd_event_replay_restores_phase_completion() -> TestResult<()> {
     let spec = BeadSpec::new("Phase Test").with_complexity(Complexity::Complex);
     let phase_id = PhaseId::new();
 
-    check_result(store.append(BeadEvent::created(bead_id, spec)).await, "append created")?;
+    check_result(
+        store.append(BeadEvent::created(bead_id, spec)).await,
+        "append created",
+    )?;
     check_result(
         store
-            .append(BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Scheduled))
+            .append(BeadEvent::state_changed(
+                bead_id,
+                BeadState::Pending,
+                BeadState::Scheduled,
+            ))
             .await,
         "append state change",
     )?;
@@ -222,7 +256,9 @@ async fn bdd_event_replay_restores_dependencies() -> TestResult<()> {
 
     let parent_spec = BeadSpec::new("Parent").with_complexity(Complexity::Simple);
     check_result(
-        store.append(BeadEvent::created(parent_id, parent_spec)).await,
+        store
+            .append(BeadEvent::created(parent_id, parent_spec))
+            .await,
         "append parent",
     )?;
 
@@ -279,7 +315,11 @@ async fn bdd_event_replay_is_idempotent() -> TestResult<()> {
         )?;
         check_result(
             store
-                .append(BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Scheduled))
+                .append(BeadEvent::state_changed(
+                    bead_id,
+                    BeadState::Pending,
+                    BeadState::Scheduled,
+                ))
                 .await,
             "append state change",
         )?;
@@ -310,9 +350,11 @@ async fn bdd_event_replay_is_idempotent() -> TestResult<()> {
                 i, bead_id
             );
             assert_eq!(
-                bead.history.len(), other.history.len(),
+                bead.history.len(),
+                other.history.len(),
                 "History mismatch in replay {} for bead {:?}",
-                i, bead_id
+                i,
+                bead_id
             );
         }
     }
@@ -326,7 +368,10 @@ async fn bdd_event_replay_preserves_event_order() -> TestResult<()> {
     let bead_id = BeadId::new();
     let spec = BeadSpec::new("Order Test").with_complexity(Complexity::Simple);
 
-    check_result(store.append(BeadEvent::created(bead_id, spec)).await, "append created")?;
+    check_result(
+        store.append(BeadEvent::created(bead_id, spec)).await,
+        "append created",
+    )?;
 
     let transitions = [
         (BeadState::Pending, BeadState::Scheduled),
@@ -338,7 +383,9 @@ async fn bdd_event_replay_preserves_event_order() -> TestResult<()> {
 
     for (from, to) in transitions {
         check_result(
-            store.append(BeadEvent::state_changed(bead_id, from, to)).await,
+            store
+                .append(BeadEvent::state_changed(bead_id, from, to))
+                .await,
             &format!("append {:?} -> {:?}", from, to),
         )?;
     }
@@ -382,7 +429,11 @@ async fn bdd_event_replay_handles_empty_store() -> TestResult<()> {
     let projection = AllBeadsProjection::new();
     let state = check_result(projection.rebuild(&store).await, "rebuild empty store")?;
 
-    assert_eq!(state.beads.len(), 0, "Empty store should produce empty state");
+    assert_eq!(
+        state.beads.len(),
+        0,
+        "Empty store should produce empty state"
+    );
     assert!(
         state.state_counts.is_empty(),
         "Empty store should have no state counts"
@@ -404,7 +455,10 @@ async fn bdd_event_replay_state_counts_match() -> TestResult<()> {
         .collect();
 
     for (id, spec) in &beads {
-        check_result(store.append(BeadEvent::created(*id, spec.clone())).await, "append created")?;
+        check_result(
+            store.append(BeadEvent::created(*id, spec.clone())).await,
+            "append created",
+        )?;
     }
 
     for (i, (id, _)) in beads.iter().enumerate() {
@@ -416,7 +470,11 @@ async fn bdd_event_replay_state_counts_match() -> TestResult<()> {
         };
         check_result(
             store
-                .append(BeadEvent::state_changed(*id, BeadState::Pending, target_state))
+                .append(BeadEvent::state_changed(
+                    *id,
+                    BeadState::Pending,
+                    target_state,
+                ))
                 .await,
             "append state change",
         )?;
