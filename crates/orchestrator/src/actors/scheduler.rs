@@ -558,6 +558,50 @@ mod tests {
     }
 
     #[test]
+    fn test_register_workflow_records_event() {
+        let state = CoreSchedulerState::default();
+        let msg = SchedulerMessage::RegisterWorkflow {
+            workflow_id: "wf-test".to_string(),
+        };
+        let (next_state, effects) = core::handle(state, msg);
+
+        assert!(next_state.workflows.contains_key("wf-test"));
+
+        let record_event = effects.iter().find_map(|e| match e {
+            SchedulerEffect::RecordEvent { event } => Some(event.clone()),
+            _ => None,
+        });
+        assert!(
+            record_event.is_some(),
+            "RegisterWorkflow should produce a RecordEvent effect"
+        );
+
+        let event = record_event.expect("checked is_some");
+        assert!(
+            matches!(event, OrchestratorEvent::WorkflowRegistered { workflow_id, .. } if workflow_id == "wf-test"),
+            "Expected WorkflowRegistered event"
+        );
+    }
+
+    #[test]
+    fn test_register_workflow_idempotent_no_duplicate_events() {
+        let state = CoreSchedulerState::default();
+
+        let (state, effects1) = core::handle(state, SchedulerMessage::RegisterWorkflow {
+            workflow_id: "wf-dupe".to_string(),
+        });
+        let (_, effects2) = core::handle(state, SchedulerMessage::RegisterWorkflow {
+            workflow_id: "wf-dupe".to_string(),
+        });
+
+        let count1 = effects1.iter().filter(|e| matches!(e, SchedulerEffect::RecordEvent { .. })).count();
+        let count2 = effects2.iter().filter(|e| matches!(e, SchedulerEffect::RecordEvent { .. })).count();
+
+        assert_eq!(count1, 1, "First registration should record one event");
+        assert_eq!(count2, 0, "Duplicate registration should not record event");
+    }
+
+    #[test]
     fn test_scheduler_arguments_with_replay_engine() {
         // Test that SchedulerArguments can accept a replay engine
         let args = SchedulerArguments::new();
