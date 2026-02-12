@@ -43,6 +43,12 @@ impl From<serde_json::Error> for TestError {
     }
 }
 
+impl From<std::string::FromUtf8Error> for TestError {
+    fn from(e: std::string::FromUtf8Error) -> Self {
+        TestError(e.to_string())
+    }
+}
+
 /// Test basic send/receive through a pipe
 ///
 /// This test verifies that:
@@ -671,7 +677,7 @@ fn test_rapid_sequential_messages() -> Result<(), TestError> {
 /// 3. No indefinite blocking
 #[test]
 fn test_pipe_non_blocking_read() -> Result<(), TestError> {
-    let (reader, mut writer) = os_pipe::pipe()?;
+    let (mut reader, mut writer) = os_pipe::pipe()?;
 
     writer.write_all(b"short data")?;
     writer.flush()?;

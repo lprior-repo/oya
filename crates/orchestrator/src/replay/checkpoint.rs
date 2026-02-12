@@ -194,7 +194,7 @@ impl CheckpointManager {
     fn compress_data(&self, data: &str) -> PersistenceResult<(String, Option<CompressionStats>)> {
         if self.config.enable_compression {
             let (compressed, stats) = self.compressor.compress_string(data).map_err(|e| {
-                PersistenceError::serialization_error(format!("Compression failed: {e}"))
+                PersistenceError::serialization_error(format!("compression failed: {e}"))
             })?;
             Ok((base64_encode(&compressed), Some(stats)))
         } else {
