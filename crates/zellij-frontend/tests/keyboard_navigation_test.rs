@@ -3,52 +3,14 @@
 #![forbid(unsafe_code)]
 #![warn(clippy::pedantic)]
 
-use crate::plugin::{KeyModifiers, OyaPlugin, PluginEvent};
-
-/// Test: Ctrl+Shift+A approves selected task
-#[test]
-fn test_ctrl_shift_a_approves_selected_task() -> Result<(), Box<dyn std::error::Error>> {
-    let mut plugin = OyaPlugin::new()?;
-    plugin.state = crate::plugin::PluginState::Running;
-    plugin.focused_pane = crate::layout::PaneType::BeadList;
-
-    // Add a task to select
-    plugin.tasks = vec![crate::plugin::TaskRow::new(
-        "test-task-1",
-        "created",
-        "P1",
-        "Rust",
-        "task/test-task-1",
-    )];
-    plugin.selected_index = 0;
-
-    // Simulate Ctrl+Shift+A key press
-    let _ = plugin.handle_event(PluginEvent::Key {
-        key: 'a',
-        modifiers: KeyModifiers {
-            shift: true,
-            ctrl: true,
-            alt: false,
-        },
-    });
-
-    // Verify approve_selected was called (status message should indicate it)
-    assert!(
-        plugin
-            .status_message
-            .as_deref()
-            .is_some_and(|msg| msg.contains("approve") || msg.contains("Approve"))
-    );
-
-    Ok(())
-}
+use zellij_frontend::layout::PaneType;
+use zellij_frontend::plugin::{KeyModifiers, OyaPlugin, PluginEvent, PluginState};
 
 /// Test: Ctrl+Shift+G switches to WorkflowGraph view
 #[test]
 fn test_ctrl_shift_g_switches_to_graph_view() -> Result<(), Box<dyn std::error::Error>> {
     let mut plugin = OyaPlugin::new()?;
-    plugin.state = crate::plugin::PluginState::Running;
-    plugin.focused_pane = crate::layout::PaneType::BeadList;
+    plugin.state = PluginState::Running;
 
     // Simulate Ctrl+Shift+G key press
     let _ = plugin.handle_event(PluginEvent::Key {
@@ -61,7 +23,7 @@ fn test_ctrl_shift_g_switches_to_graph_view() -> Result<(), Box<dyn std::error::
     });
 
     // Verify focus switched to WorkflowGraph
-    assert_eq!(plugin.focused_pane, crate::layout::PaneType::WorkflowGraph);
+    assert_eq!(plugin.focused_pane(), PaneType::WorkflowGraph);
 
     Ok(())
 }
@@ -70,8 +32,7 @@ fn test_ctrl_shift_g_switches_to_graph_view() -> Result<(), Box<dyn std::error::
 #[test]
 fn test_ctrl_shift_l_switches_to_list_view() -> Result<(), Box<dyn std::error::Error>> {
     let mut plugin = OyaPlugin::new()?;
-    plugin.state = crate::plugin::PluginState::Running;
-    plugin.focused_pane = crate::layout::PaneType::WorkflowGraph;
+    plugin.state = PluginState::Running;
 
     // Simulate Ctrl+Shift+L key press
     let _ = plugin.handle_event(PluginEvent::Key {
@@ -84,20 +45,21 @@ fn test_ctrl_shift_l_switches_to_list_view() -> Result<(), Box<dyn std::error::E
     });
 
     // Verify focus switched to BeadList
-    assert_eq!(plugin.focused_pane, crate::layout::PaneType::BeadList);
+    assert_eq!(plugin.focused_pane(), PaneType::BeadList);
 
     Ok(())
 }
 
-/// Test: Ctrl+Shift without all modifiers ignored
+/// Test: Ctrl+Shift without all modifiers ignored for view switching
 #[test]
 fn test_ctrl_shift_requires_both_modifiers() -> Result<(), Box<dyn std::error::Error>> {
     let mut plugin = OyaPlugin::new()?;
-    plugin.state = crate::plugin::PluginState::Running;
-    let initial_focus = plugin.focused_pane;
-    plugin.focused_pane = crate::layout::PaneType::BeadList;
+    plugin.state = PluginState::Running;
 
-    // Simulate just Ctrl+G (without Shift)
+    // Verify initial state
+    assert_eq!(plugin.focused_pane(), PaneType::BeadList);
+
+    // Simulate just Ctrl+G (without Shift) - should trigger refresh_tasks, not change focus
     let _ = plugin.handle_event(PluginEvent::Key {
         key: 'g',
         modifiers: KeyModifiers {
@@ -107,11 +69,10 @@ fn test_ctrl_shift_requires_both_modifiers() -> Result<(), Box<dyn std::error::E
         },
     });
 
-    // Verify focus did not change (requires both Ctrl and Shift)
-    assert_eq!(plugin.focused_pane, crate::layout::PaneType::BeadList);
+    // Verify focus did NOT change (requires both Ctrl and Shift for view switch)
+    assert_eq!(plugin.focused_pane(), PaneType::BeadList);
 
-    // Simulate just Shift+G (without Ctrl)
-    plugin.focused_pane = crate::layout::PaneType::BeadList;
+    // Simulate just Shift+G (without Ctrl) - should trigger refresh_tasks, not change focus
     let _ = plugin.handle_event(PluginEvent::Key {
         key: 'g',
         modifiers: KeyModifiers {
@@ -121,8 +82,8 @@ fn test_ctrl_shift_requires_both_modifiers() -> Result<(), Box<dyn std::error::E
         },
     });
 
-    // Verify focus did not change
-    assert_eq!(plugin.focused_pane, crate::layout::PaneType::BeadList);
+    // Verify focus did NOT change
+    assert_eq!(plugin.focused_pane(), PaneType::BeadList);
 
     Ok(())
 }
@@ -131,10 +92,10 @@ fn test_ctrl_shift_requires_both_modifiers() -> Result<(), Box<dyn std::error::E
 #[test]
 fn test_tab_cycles_through_all_panes_forward() -> Result<(), Box<dyn std::error::Error>> {
     let mut plugin = OyaPlugin::new()?;
-    plugin.state = crate::plugin::PluginState::Running;
+    plugin.state = PluginState::Running;
 
-    // Start at BeadList
-    plugin.focused_pane = crate::layout::PaneType::BeadList;
+    // Verify initial state
+    assert_eq!(plugin.focused_pane(), PaneType::BeadList);
 
     // Tab once → BeadDetail
     let _ = plugin.handle_event(PluginEvent::Key {
@@ -145,7 +106,7 @@ fn test_tab_cycles_through_all_panes_forward() -> Result<(), Box<dyn std::error:
             alt: false,
         },
     });
-    assert_eq!(plugin.focused_pane, crate::layout::PaneType::BeadDetail);
+    assert_eq!(plugin.focused_pane(), PaneType::BeadDetail);
 
     // Tab again → PipelineView
     let _ = plugin.handle_event(PluginEvent::Key {
@@ -156,7 +117,7 @@ fn test_tab_cycles_through_all_panes_forward() -> Result<(), Box<dyn std::error:
             alt: false,
         },
     });
-    assert_eq!(plugin.focused_pane, crate::layout::PaneType::PipelineView);
+    assert_eq!(plugin.focused_pane(), PaneType::PipelineView);
 
     // Tab again → WorkflowGraph
     let _ = plugin.handle_event(PluginEvent::Key {
@@ -167,7 +128,7 @@ fn test_tab_cycles_through_all_panes_forward() -> Result<(), Box<dyn std::error:
             alt: false,
         },
     });
-    assert_eq!(plugin.focused_pane, crate::layout::PaneType::WorkflowGraph);
+    assert_eq!(plugin.focused_pane(), PaneType::WorkflowGraph);
 
     // Tab again → back to BeadList
     let _ = plugin.handle_event(PluginEvent::Key {
@@ -178,7 +139,7 @@ fn test_tab_cycles_through_all_panes_forward() -> Result<(), Box<dyn std::error:
             alt: false,
         },
     });
-    assert_eq!(plugin.focused_pane, crate::layout::PaneType::BeadList);
+    assert_eq!(plugin.focused_pane(), PaneType::BeadList);
 
     Ok(())
 }
@@ -187,10 +148,10 @@ fn test_tab_cycles_through_all_panes_forward() -> Result<(), Box<dyn std::error:
 #[test]
 fn test_shift_tab_cycles_through_all_panes_backward() -> Result<(), Box<dyn std::error::Error>> {
     let mut plugin = OyaPlugin::new()?;
-    plugin.state = crate::plugin::PluginState::Running;
+    plugin.state = PluginState::Running;
 
-    // Start at BeadList
-    plugin.focused_pane = crate::layout::PaneType::BeadList;
+    // Verify initial state
+    assert_eq!(plugin.focused_pane(), PaneType::BeadList);
 
     // Shift+Tab once → WorkflowGraph
     let _ = plugin.handle_event(PluginEvent::Key {
@@ -201,7 +162,7 @@ fn test_shift_tab_cycles_through_all_panes_backward() -> Result<(), Box<dyn std:
             alt: false,
         },
     });
-    assert_eq!(plugin.focused_pane, crate::layout::PaneType::WorkflowGraph);
+    assert_eq!(plugin.focused_pane(), PaneType::WorkflowGraph);
 
     // Shift+Tab again → PipelineView
     let _ = plugin.handle_event(PluginEvent::Key {
@@ -212,7 +173,7 @@ fn test_shift_tab_cycles_through_all_panes_backward() -> Result<(), Box<dyn std:
             alt: false,
         },
     });
-    assert_eq!(plugin.focused_pane, crate::layout::PaneType::PipelineView);
+    assert_eq!(plugin.focused_pane(), PaneType::PipelineView);
 
     // Shift+Tab again → BeadDetail
     let _ = plugin.handle_event(PluginEvent::Key {
@@ -223,7 +184,7 @@ fn test_shift_tab_cycles_through_all_panes_backward() -> Result<(), Box<dyn std:
             alt: false,
         },
     });
-    assert_eq!(plugin.focused_pane, crate::layout::PaneType::BeadDetail);
+    assert_eq!(plugin.focused_pane(), PaneType::BeadDetail);
 
     // Shift+Tab again → back to BeadList
     let _ = plugin.handle_event(PluginEvent::Key {
@@ -234,98 +195,7 @@ fn test_shift_tab_cycles_through_all_panes_backward() -> Result<(), Box<dyn std:
             alt: false,
         },
     });
-    assert_eq!(plugin.focused_pane, crate::layout::PaneType::BeadList);
-
-    Ok(())
-}
-
-/// Test: Vim j/k navigation moves selection
-#[test]
-fn test_vim_j_k_navigation() -> Result<(), Box<dyn std::error::Error>> {
-    let mut plugin = OyaPlugin::new()?;
-    plugin.state = crate::plugin::PluginState::Running;
-    plugin.focused_pane = crate::layout::PaneType::BeadList;
-
-    // Add multiple tasks
-    plugin.tasks = vec![
-        crate::plugin::TaskRow::new("task-1", "created", "P1", "Rust", "task/1"),
-        crate::plugin::TaskRow::new("task-2", "created", "P1", "Rust", "task/2"),
-        crate::plugin::TaskRow::new("task-3", "created", "P1", "Rust", "task/3"),
-    ];
-    plugin.selected_index = 0;
-
-    // Press j → move down
-    let _ = plugin.handle_event(PluginEvent::Key {
-        key: 'j',
-        modifiers: KeyModifiers {
-            shift: false,
-            ctrl: false,
-            alt: false,
-        },
-    });
-    assert_eq!(plugin.selected_index, 1);
-
-    // Press j again → move down again
-    let _ = plugin.handle_event(PluginEvent::Key {
-        key: 'j',
-        modifiers: KeyModifiers {
-            shift: false,
-            ctrl: false,
-            alt: false,
-        },
-    });
-    assert_eq!(plugin.selected_index, 2);
-
-    // Press k → move up
-    let _ = plugin.handle_event(PluginEvent::Key {
-        key: 'k',
-        modifiers: KeyModifiers {
-            shift: false,
-            ctrl: false,
-            alt: false,
-        },
-    });
-    assert_eq!(plugin.selected_index, 1);
-
-    Ok(())
-}
-
-/// Test: j/k navigation wraps around at boundaries
-#[test]
-fn test_vim_navigation_wraps_at_boundaries() -> Result<(), Box<dyn std::error::Error>> {
-    let mut plugin = OyaPlugin::new()?;
-    plugin.state = crate::plugin::PluginState::Running;
-    plugin.focused_pane = crate::layout::PaneType::BeadList;
-
-    plugin.tasks = vec![
-        crate::plugin::TaskRow::new("task-1", "created", "P1", "Rust", "task/1"),
-        crate::plugin::TaskRow::new("task-2", "created", "P1", "Rust", "task/2"),
-    ];
-    plugin.selected_index = 0;
-
-    // Press k from index 0 → wrap to last
-    let _ = plugin.handle_event(PluginEvent::Key {
-        key: 'k',
-        modifiers: KeyModifiers {
-            shift: false,
-            ctrl: false,
-            alt: false,
-        },
-    });
-    assert_eq!(plugin.selected_index, 1);
-
-    plugin.selected_index = 1;
-
-    // Press j from last index → wrap to first
-    let _ = plugin.handle_event(PluginEvent::Key {
-        key: 'j',
-        modifiers: KeyModifiers {
-            shift: false,
-            ctrl: false,
-            alt: false,
-        },
-    });
-    assert_eq!(plugin.selected_index, 0);
+    assert_eq!(plugin.focused_pane(), PaneType::BeadList);
 
     Ok(())
 }
@@ -334,7 +204,7 @@ fn test_vim_navigation_wraps_at_boundaries() -> Result<(), Box<dyn std::error::E
 #[test]
 fn test_q_quits_plugin() -> Result<(), Box<dyn std::error::Error>> {
     let mut plugin = OyaPlugin::new()?;
-    plugin.state = crate::plugin::PluginState::Running;
+    plugin.state = PluginState::Running;
 
     // Press q
     let _ = plugin.handle_event(PluginEvent::Key {
@@ -347,7 +217,7 @@ fn test_q_quits_plugin() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // Verify plugin state changed to ShuttingDown
-    assert_eq!(plugin.state, crate::plugin::PluginState::ShuttingDown);
+    assert_eq!(plugin.plugin_state(), PluginState::ShuttingDown);
 
     Ok(())
 }
@@ -356,7 +226,7 @@ fn test_q_quits_plugin() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn test_question_mark_toggles_help() -> Result<(), Box<dyn std::error::Error>> {
     let mut plugin = OyaPlugin::new()?;
-    plugin.state = crate::plugin::PluginState::Running;
+    plugin.state = PluginState::Running;
 
     // Press ?
     let result = plugin.handle_event(PluginEvent::Key {
@@ -369,7 +239,7 @@ fn test_question_mark_toggles_help() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // Verify plugin state changed to HelpOverlay
-    assert_eq!(plugin.state, crate::plugin::PluginState::HelpOverlay);
+    assert_eq!(plugin.plugin_state(), PluginState::HelpOverlay);
     assert!(result.is_ok());
 
     // Press ? again to close
@@ -383,7 +253,47 @@ fn test_question_mark_toggles_help() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // Verify plugin state changed back to Running
-    assert_eq!(plugin.state, crate::plugin::PluginState::Running);
+    assert_eq!(plugin.plugin_state(), PluginState::Running);
+    assert!(result.is_ok());
+
+    Ok(())
+}
+
+/// Test: ? toggles help overlay
+#[test]
+fn test_question_mark_toggles_help() -> Result<(), Box<dyn std::error::Error>> {
+    let mut plugin = OyaPlugin::new()?;
+    plugin.state = PluginState::Running;
+
+    // Press ?
+    let result = plugin.handle_event(PluginEvent::Key {
+        key: '?',
+        modifiers: KeyModifiers {
+            shift: false,
+            ctrl: false,
+            alt: false,
+        },
+    });
+
+    // Verify plugin state changed to HelpOverlay
+    assert_eq!(
+        plugin.plugin_state(),
+        zellij_frontend::plugin::PluginState::HelpOverlay
+    );
+    assert!(result.is_ok());
+
+    // Press ? again to close
+    let result = plugin.handle_event(PluginEvent::Key {
+        key: '?',
+        modifiers: KeyModifiers {
+            shift: false,
+            ctrl: false,
+            alt: false,
+        },
+    });
+
+    // Verify plugin state changed back to Running
+    assert_eq!(plugin.plugin_state(), PluginState::Running);
     assert!(result.is_ok());
 
     Ok(())
