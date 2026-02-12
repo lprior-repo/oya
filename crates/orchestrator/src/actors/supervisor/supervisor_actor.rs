@@ -1059,6 +1059,7 @@ mod tests {
             interval: Duration::from_millis(100),
             max_checkpoints: 5,
             auto_checkpoint: false,
+            ..CheckpointConfig::default()
         };
 
         let args = SupervisorArguments::new()
