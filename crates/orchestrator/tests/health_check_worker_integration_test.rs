@@ -10,7 +10,7 @@ use oya_events::{BeadEvent, EventBus};
 use crate::actors::health_check_worker::{HealthCheckConfig, HealthCheckMessage, HealthCheckWorkerDef, HealthCheckWorkerState, HealthStatus};
 
 #[tokio::test]
-async fn test_health_check_worker_basic_functionality() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_health_check_worker_integration() -> Result<(), Box<dyn std::error::Error>> {
     // Setup test environment
     let config = HealthCheckConfig::for_testing();
     let event_bus = Some(Arc::new(EventBus::new()));
@@ -29,7 +29,5 @@ async fn test_health_check_worker_basic_functionality() -> Result<(), Box<dyn st
     handle.await?;
     
     // Test passes if we reach this point without errors
-    debug!("Health check worker basic functionality test completed");
-    
     Ok(())
 }

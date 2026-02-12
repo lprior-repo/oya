@@ -8,8 +8,8 @@
 
 use serde_json::json;
 use zellij_frontend::config_validation::{
-    validate_auto_save_interval, validate_config, validate_size, ConfigValidationError,
-    ValidatedConfig,
+    ConfigValidationError, ValidatedConfig, validate_auto_save_interval, validate_config,
+    validate_size,
 };
 use zellij_frontend::plugin::Size;
 

@@ -33,10 +33,12 @@ fn test_ctrl_shift_a_approves_selected_task() -> Result<(), Box<dyn std::error::
     });
 
     // Verify approve_selected was called (status message should indicate it)
-    assert!(plugin
-        .status_message
-        .as_deref()
-        .is_some_and(|msg| msg.contains("approve") || msg.contains("Approve")));
+    assert!(
+        plugin
+            .status_message
+            .as_deref()
+            .is_some_and(|msg| msg.contains("approve") || msg.contains("Approve"))
+    );
 
     Ok(())
 }
