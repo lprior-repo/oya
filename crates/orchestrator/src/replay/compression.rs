@@ -24,8 +24,6 @@ mod error {
 }
 
 mod types {
-    use std::time::Instant;
-
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct CompressionLevel(i32);
 

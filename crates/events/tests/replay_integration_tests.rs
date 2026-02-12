@@ -110,7 +110,7 @@ async fn bdd_event_replay_restores_multiple_beads_state() -> TestResult<()> {
 
     for (i, bead_id) in bead_ids.iter().enumerate() {
         check_result(
-            store.append(BeadEvent::claimed(*bead_id, &format!("agent-{}", i))).await,
+            store.append(BeadEvent::claimed(*bead_id, format!("agent-{}", i))).await,
             &format!("append claimed for bead {}", i),
         )?;
     }

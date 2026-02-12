@@ -10,6 +10,7 @@
 #![forbid(unsafe_code)]
 
 use std::collections::HashSet;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use im::{HashMap, HashSet as ImHashSet};
@@ -24,6 +25,8 @@ use orchestrator::actors::supervisor::{
     SupervisorArguments, SupervisorConfig, SupervisorMessage, SupervisorState,
     spawn_supervisor_with_name,
 };
+use orchestrator::persistence::{OrchestratorStore, StoreConfig};
+use orchestrator::replay::ReplayEngine;
 
 // =============================================================================
 // Error Types
