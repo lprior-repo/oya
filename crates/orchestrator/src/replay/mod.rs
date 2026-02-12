@@ -18,12 +18,14 @@
 //! - `CheckpointManager`: Creates and manages checkpoints
 
 pub mod checkpoint;
+mod compression;
 mod engine;
 mod events;
 mod projection;
 mod resume;
 
-pub use checkpoint::CheckpointManager;
+pub use checkpoint::{CheckpointConfig, CheckpointManager};
+pub use compression::{CheckpointCompressor, CompressionConfig, CompressionError, CompressionLevel, CompressionStats};
 pub use engine::ReplayEngine;
 pub use events::OrchestratorEvent;
 pub use projection::OrchestratorProjection;
