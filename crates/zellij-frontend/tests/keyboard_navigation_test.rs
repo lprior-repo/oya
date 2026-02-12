@@ -256,21 +256,32 @@ fn ctrl_shift_a_triggers_approve_action_message() -> Result<(), Box<dyn std::err
 }
 
 #[test]
-fn h_and_l_cycle_panes_like_vim_window_nav() -> Result<(), Box<dyn std::error::Error>> {
+fn h_and_l_cycle_panes_in_bead_list() -> Result<(), Box<dyn std::error::Error>> {
     let mut plugin = OyaPlugin::new()?;
     start_plugin(&mut plugin)?;
 
+    // Start in BeadList - h/l should cycle panes
+    assert_eq!(plugin.focused_pane(), PaneType::BeadList);
+
+    // l from BeadList cycles to next pane (BeadDetail)
     let _ = plugin.handle_event(PluginEvent::Key {
         key: 'l',
         modifiers: make_mods(false, false),
     });
     assert_eq!(plugin.focused_pane(), PaneType::BeadDetail);
 
+    // Go back to BeadList via Tab
+    let _ = plugin.handle_event(PluginEvent::Key {
+        key: '\x1b',
+        modifiers: make_mods(false, false),
+    });
+    assert_eq!(plugin.focused_pane(), PaneType::BeadDetail);
+
+    // h from BeadList should cycle backward to AgentView
     let _ = plugin.handle_event(PluginEvent::Key {
         key: 'h',
         modifiers: make_mods(false, false),
     });
-    assert_eq!(plugin.focused_pane(), PaneType::BeadList);
 
     Ok(())
 }
@@ -709,6 +720,152 @@ fn enter_does_nothing_in_bead_detail() -> Result<(), Box<dyn std::error::Error>>
     });
 
     assert_eq!(plugin.focused_pane(), PaneType::BeadDetail);
+
+    Ok(())
+}
+
+#[test]
+fn h_and_l_scroll_horizontally_in_bead_detail() -> Result<(), Box<dyn std::error::Error>> {
+    let mut plugin = OyaPlugin::new()?;
+    start_plugin(&mut plugin)?;
+
+    restore_with_tasks_and_pane(
+        &mut plugin,
+        vec![TaskRow::new("task-1", "created", "P1", "Rust", "task/1")],
+        0,
+        PaneType::BeadDetail,
+    )?;
+
+    // l should scroll right
+    let _ = plugin.handle_event(PluginEvent::Key {
+        key: 'l',
+        modifiers: make_mods(false, false),
+    });
+    assert_eq!(plugin.focused_pane(), PaneType::BeadDetail);
+    assert!(plugin
+        .status_message()
+        .is_some_and(|msg| msg.contains("right")));
+
+    // h should scroll back left
+    let _ = plugin.handle_event(PluginEvent::Key {
+        key: 'h',
+        modifiers: make_mods(false, false),
+    });
+    assert_eq!(plugin.focused_pane(), PaneType::BeadDetail);
+    assert!(plugin
+        .status_message()
+        .is_some_and(|msg| msg.contains("left") || msg.contains("edge")));
+
+    Ok(())
+}
+
+#[test]
+fn h_and_l_scroll_horizontally_in_pipeline_view() -> Result<(), Box<dyn std::error::Error>> {
+    let mut plugin = OyaPlugin::new()?;
+    start_plugin(&mut plugin)?;
+
+    restore_with_tasks_and_pane(
+        &mut plugin,
+        vec![TaskRow::new("task-1", "created", "P1", "Rust", "task/1")],
+        0,
+        PaneType::PipelineView,
+    )?;
+
+    // l should scroll right
+    let _ = plugin.handle_event(PluginEvent::Key {
+        key: 'l',
+        modifiers: make_mods(false, false),
+    });
+    assert_eq!(plugin.focused_pane(), PaneType::PipelineView);
+    assert!(plugin
+        .status_message()
+        .is_some_and(|msg| msg.contains("right")));
+
+    // h should scroll back left
+    let _ = plugin.handle_event(PluginEvent::Key {
+        key: 'h',
+        modifiers: make_mods(false, false),
+    });
+    assert_eq!(plugin.focused_pane(), PaneType::PipelineView);
+
+    Ok(())
+}
+
+#[test]
+fn h_and_l_scroll_horizontally_in_workflow_graph() -> Result<(), Box<dyn std::error::Error>> {
+    let mut plugin = OyaPlugin::new()?;
+    start_plugin(&mut plugin)?;
+
+    restore_with_tasks_and_pane(
+        &mut plugin,
+        vec![TaskRow::new("task-1", "created", "P1", "Rust", "task/1")],
+        0,
+        PaneType::WorkflowGraph,
+    )?;
+
+    // l should scroll right
+    let _ = plugin.handle_event(PluginEvent::Key {
+        key: 'l',
+        modifiers: make_mods(false, false),
+    });
+    assert_eq!(plugin.focused_pane(), PaneType::WorkflowGraph);
+    assert!(plugin
+        .status_message()
+        .is_some_and(|msg| msg.contains("right")));
+
+    // h should scroll back left
+    let _ = plugin.handle_event(PluginEvent::Key {
+        key: 'h',
+        modifiers: make_mods(false, false),
+    });
+    assert_eq!(plugin.focused_pane(), PaneType::WorkflowGraph);
+
+    Ok(())
+}
+
+#[test]
+fn h_at_left_edge_shows_status() -> Result<(), Box<dyn std::error::Error>> {
+    let mut plugin = OyaPlugin::new()?;
+    start_plugin(&mut plugin)?;
+
+    restore_with_tasks_and_pane(
+        &mut plugin,
+        vec![TaskRow::new("task-1", "created", "P1", "Rust", "task/1")],
+        0,
+        PaneType::BeadDetail,
+    )?;
+
+    // h at left edge should show message
+    let _ = plugin.handle_event(PluginEvent::Key {
+        key: 'h',
+        modifiers: make_mods(false, false),
+    });
+    assert_eq!(plugin.focused_pane(), PaneType::BeadDetail);
+    assert!(plugin
+        .status_message()
+        .is_some_and(|msg| msg.contains("edge")));
+
+    Ok(())
+}
+
+#[test]
+fn h_and_l_cycle_panes_in_agent_view() -> Result<(), Box<dyn std::error::Error>> {
+    let mut plugin = OyaPlugin::new()?;
+    start_plugin(&mut plugin)?;
+
+    restore_with_tasks_and_pane(
+        &mut plugin,
+        vec![TaskRow::new("task-1", "created", "P1", "Rust", "task/1")],
+        0,
+        PaneType::AgentView,
+    )?;
+
+    // In AgentView, l should cycle to next pane (BeadList)
+    let _ = plugin.handle_event(PluginEvent::Key {
+        key: 'l',
+        modifiers: make_mods(false, false),
+    });
+    assert_eq!(plugin.focused_pane(), PaneType::BeadList);
 
     Ok(())
 }

@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 338713582db15b0a94afb6ad1b913803a26af12e8d18a86f2329af11ef90f336 # shrinks to workflow_id = "wf-a0a", bead_ids = ["bead-0aa"], agent_id = "agent-a0"
+cc d29b35f8c434df956f5171c937a74c3c00bf2f9a8f4143aba1070780461be1ec # shrinks to workflow_ids = ["wf-00a", "wf-aa0"], bead_id = "bead-00a", agent_id = "agent-aa"

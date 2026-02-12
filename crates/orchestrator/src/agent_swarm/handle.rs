@@ -237,6 +237,12 @@ impl AgentHandle {
         self.state = AgentState::ShuttingDown;
     }
 
+    /// Set last heartbeat timestamp for testing clock skew scenarios.
+    #[cfg(test)]
+    pub fn set_last_heartbeat_for_test(&mut self, timestamp: DateTime<Utc>) {
+        self.last_heartbeat = timestamp;
+    }
+
     /// Mark agent as terminated.
     pub fn terminate(&mut self) {
         self.state = AgentState::Terminated;
