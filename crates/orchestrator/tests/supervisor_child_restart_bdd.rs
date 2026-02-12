@@ -11,12 +11,12 @@ use std::time::Duration;
 
 use ractor::{ActorRef, ActorStatus};
 
+use orchestrator::actors::messages::SchedulerMessage;
 use orchestrator::actors::scheduler::{SchedulerActorDef, SchedulerArguments};
 use orchestrator::actors::supervisor::{
-    spawn_supervisor_with_name, SupervisorArguments, SupervisorConfig, SupervisorMessage,
-    SupervisorState, MeltdownStatus,
+    MeltdownStatus, SupervisorArguments, SupervisorConfig, SupervisorMessage, SupervisorState,
+    spawn_supervisor_with_name,
 };
-use orchestrator::actors::messages::SchedulerMessage;
 
 static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -72,15 +72,14 @@ async fn get_supervisor_status(
 ) -> orchestrator::actors::supervisor::SupervisorStatus {
     let (tx, rx) = tokio::sync::oneshot::channel();
     let _ = supervisor.send_message(SupervisorMessage::GetStatus { reply: tx });
-    rx.await.unwrap_or_else(|_| {
-        orchestrator::actors::supervisor::SupervisorStatus {
+    rx.await
+        .unwrap_or_else(|_| orchestrator::actors::supervisor::SupervisorStatus {
             state: SupervisorState::Stopped,
             meltdown_status: MeltdownStatus::Normal,
             active_children: 0,
             total_restarts: 0,
             failures_in_window: 0,
-        }
-    })
+        })
 }
 
 #[tokio::test]

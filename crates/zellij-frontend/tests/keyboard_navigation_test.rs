@@ -7,7 +7,7 @@ use zellij_frontend::layout::PaneType;
 use zellij_frontend::plugin::{
     InputMode, KeyModifiers, OyaPlugin, PluginEvent, PluginInfo, PluginState, Size, TaskRow,
 };
-use zellij_frontend::state::{STATE_VERSION, StateSnapshot};
+use zellij_frontend::state::{StateSnapshot, STATE_VERSION};
 
 fn start_plugin(plugin: &mut OyaPlugin) -> Result<(), Box<dyn std::error::Error>> {
     let _ = plugin.handle_event(PluginEvent::Start {
@@ -434,11 +434,9 @@ fn command_mode_unknown_command_reports_error() -> Result<(), Box<dyn std::error
     });
 
     assert_eq!(plugin.input_mode(), InputMode::Normal);
-    assert!(
-        plugin
-            .status_message()
-            .is_some_and(|msg| msg.contains("Command error"))
-    );
+    assert!(plugin
+        .status_message()
+        .is_some_and(|msg| msg.contains("Command error")));
     Ok(())
 }
 
@@ -468,11 +466,9 @@ fn search_reports_no_matches() -> Result<(), Box<dyn std::error::Error>> {
         modifiers: make_mods(false, false),
     });
 
-    assert!(
-        plugin
-            .status_message()
-            .is_some_and(|msg| msg.contains("No matches found"))
-    );
+    assert!(plugin
+        .status_message()
+        .is_some_and(|msg| msg.contains("No matches found")));
     Ok(())
 }
 
@@ -486,11 +482,9 @@ fn n_without_active_pattern_reports_status() -> Result<(), Box<dyn std::error::E
         modifiers: make_mods(false, false),
     });
 
-    assert!(
-        plugin
-            .status_message()
-            .is_some_and(|msg| msg.contains("No active search pattern"))
-    );
+    assert!(plugin
+        .status_message()
+        .is_some_and(|msg| msg.contains("No active search pattern")));
     Ok(())
 }
 
@@ -511,5 +505,143 @@ fn question_mark_and_esc_toggle_help_overlay() -> Result<(), Box<dyn std::error:
     });
     assert_eq!(plugin.plugin_state(), PluginState::Running);
 
+    Ok(())
+}
+
+#[test]
+fn esc_returns_to_parent_pane_from_bead_detail() -> Result<(), Box<dyn std::error::Error>> {
+    let mut plugin = OyaPlugin::new()?;
+    start_plugin(&mut plugin)?;
+
+    restore_with_tasks_and_pane(
+        &mut plugin,
+        vec![TaskRow::new("task-1", "created", "P1", "Rust", "task/1")],
+        0,
+        PaneType::BeadDetail,
+    )?;
+
+    let _ = plugin.handle_event(PluginEvent::Key {
+        key: '\x1b',
+        modifiers: make_mods(false, false),
+    });
+
+    assert_eq!(plugin.focused_pane(), PaneType::BeadList);
+    assert_eq!(plugin.input_mode(), InputMode::Normal);
+    Ok(())
+}
+
+#[test]
+fn esc_returns_to_parent_pane_from_pipeline_view() -> Result<(), Box<dyn std::error::Error>> {
+    let mut plugin = OyaPlugin::new()?;
+    start_plugin(&mut plugin)?;
+
+    restore_with_tasks_and_pane(
+        &mut plugin,
+        vec![TaskRow::new("task-1", "created", "P1", "Rust", "task/1")],
+        0,
+        PaneType::PipelineView,
+    )?;
+
+    let _ = plugin.handle_event(PluginEvent::Key {
+        key: '\x1b',
+        modifiers: make_mods(false, false),
+    });
+
+    assert_eq!(plugin.focused_pane(), PaneType::BeadList);
+    assert_eq!(plugin.input_mode(), InputMode::Normal);
+    Ok(())
+}
+
+#[test]
+fn esc_returns_to_parent_pane_from_workflow_graph() -> Result<(), Box<dyn std::error::Error>> {
+    let mut plugin = OyaPlugin::new()?;
+    start_plugin(&mut plugin)?;
+
+    restore_with_tasks_and_pane(
+        &mut plugin,
+        vec![TaskRow::new("task-1", "created", "P1", "Rust", "task/1")],
+        0,
+        PaneType::WorkflowGraph,
+    )?;
+
+    let _ = plugin.handle_event(PluginEvent::Key {
+        key: '\x1b',
+        modifiers: make_mods(false, false),
+    });
+
+    assert_eq!(plugin.focused_pane(), PaneType::BeadList);
+    assert_eq!(plugin.input_mode(), InputMode::Normal);
+    Ok(())
+}
+
+#[test]
+fn esc_returns_to_parent_pane_from_agent_view() -> Result<(), Box<dyn std::error::Error>> {
+    let mut plugin = OyaPlugin::new()?;
+    start_plugin(&mut plugin)?;
+
+    restore_with_tasks_and_pane(
+        &mut plugin,
+        vec![TaskRow::new("task-1", "created", "P1", "Rust", "task/1")],
+        0,
+        PaneType::AgentView,
+    )?;
+
+    let _ = plugin.handle_event(PluginEvent::Key {
+        key: '\x1b',
+        modifiers: make_mods(false, false),
+    });
+
+    assert_eq!(plugin.focused_pane(), PaneType::BeadList);
+    assert_eq!(plugin.input_mode(), InputMode::Normal);
+    Ok(())
+}
+
+#[test]
+fn esc_stays_on_bead_list_when_already_there() -> Result<(), Box<dyn std::error::Error>> {
+    let mut plugin = OyaPlugin::new()?;
+    start_plugin(&mut plugin)?;
+
+    restore_with_tasks_and_pane(
+        &mut plugin,
+        vec![TaskRow::new("task-1", "created", "P1", "Rust", "task/1")],
+        0,
+        PaneType::BeadList,
+    )?;
+
+    let _ = plugin.handle_event(PluginEvent::Key {
+        key: '\x1b',
+        modifiers: make_mods(false, false),
+    });
+
+    assert_eq!(plugin.focused_pane(), PaneType::BeadList);
+    assert_eq!(plugin.input_mode(), InputMode::Normal);
+    Ok(())
+}
+
+#[test]
+fn esc_exits_command_mode_and_returns_to_parent_pane() -> Result<(), Box<dyn std::error::Error>> {
+    let mut plugin = OyaPlugin::new()?;
+    start_plugin(&mut plugin)?;
+
+    restore_with_tasks_and_pane(
+        &mut plugin,
+        vec![TaskRow::new("task-1", "created", "P1", "Rust", "task/1")],
+        0,
+        PaneType::BeadDetail,
+    )?;
+
+    let _ = plugin.handle_event(PluginEvent::Key {
+        key: ':',
+        modifiers: make_mods(false, false),
+    });
+    assert_eq!(plugin.input_mode(), InputMode::Command);
+
+    let _ = plugin.handle_event(PluginEvent::Key {
+        key: '\x1b',
+        modifiers: make_mods(false, false),
+    });
+
+    assert_eq!(plugin.focused_pane(), PaneType::BeadList);
+    assert_eq!(plugin.input_mode(), InputMode::Normal);
     Ok(())
 }

@@ -70,7 +70,8 @@ async fn given_persistence_when_bead_state_updated_then_state_persisted() -> Tes
         .map_err(|e| format!("Failed to retrieve bead: {}", e))?;
 
     assert_eq!(
-        retrieved.state, BeadState::Running,
+        retrieved.state,
+        BeadState::Running,
         "Retrieved bead should have persisted Running state"
     );
     assert_eq!(
@@ -139,8 +140,8 @@ async fn given_persistence_when_bead_completed_then_timestamps_persisted() -> Te
 /// - **WHEN**: The bead transitions through multiple states
 /// - **THEN**: Only the final state is persisted
 #[tokio::test]
-async fn given_persistence_when_multiple_state_transitions_then_final_state_persisted(
-) -> TestResult {
+async fn given_persistence_when_multiple_state_transitions_then_final_state_persisted() -> TestResult
+{
     let store = setup_store().await?;
 
     let bead = BeadRecord::new("bead-transitions", "workflow-transitions");

@@ -3202,6 +3202,7 @@ dependencies = [
  "oya-telemetry",
  "oya-workflow",
  "petgraph 0.8.3",
+ "proptest",
  "ractor",
  "rand 0.8.5",
  "reqwest",

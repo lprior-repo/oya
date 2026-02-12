@@ -12,7 +12,7 @@ use crate::layout::Layout;
 use crate::render::Renderer;
 use crate::state::StateManager;
 use crate::timer::{RefreshTimer, TimerConfig};
-use crate::{command::ParsedCommand, command::parse_command};
+use crate::{command::parse_command, command::ParsedCommand};
 use oya_ipc::{GuestMessage, HostMessage, TaskSummary};
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -185,6 +185,8 @@ pub struct OyaPlugin {
     pending_g: bool,
     /// Visual mode selection anchor index
     visual_anchor: Option<usize>,
+    /// Horizontal scroll offset for detail panes (BeadDetail, PipelineView, WorkflowGraph)
+    horizontal_scroll: usize,
 }
 
 /// Input mode state machine for keyboard handling.
@@ -534,40 +536,40 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_stage_symbol_returns_running_for_in_progress_stage()
-    -> Result<(), Box<dyn std::error::Error>> {
+    fn test_stage_symbol_returns_running_for_in_progress_stage(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let result = stage_symbol_from_status("in_progress", Some("implement"));
         assert_eq!(result, '◐');
         Ok(())
     }
 
     #[test]
-    fn test_stage_symbol_returns_complete_for_passed_status()
-    -> Result<(), Box<dyn std::error::Error>> {
+    fn test_stage_symbol_returns_complete_for_passed_status(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let result = stage_symbol_from_status("passed", None);
         assert_eq!(result, '●');
         Ok(())
     }
 
     #[test]
-    fn test_stage_symbol_returns_failed_for_failed_status_with_stage()
-    -> Result<(), Box<dyn std::error::Error>> {
+    fn test_stage_symbol_returns_failed_for_failed_status_with_stage(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let result = stage_symbol_from_status("failed", Some("validate: 3 tests failed"));
         assert_eq!(result, '✗');
         Ok(())
     }
 
     #[test]
-    fn test_stage_symbol_returns_pending_for_created_status()
-    -> Result<(), Box<dyn std::error::Error>> {
+    fn test_stage_symbol_returns_pending_for_created_status(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let result = stage_symbol_from_status("created", None);
         assert_eq!(result, '○');
         Ok(())
     }
 
     #[test]
-    fn test_stage_symbol_returns_question_mark_for_unknown_stage_name()
-    -> Result<(), Box<dyn std::error::Error>> {
+    fn test_stage_symbol_returns_question_mark_for_unknown_stage_name(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let result = stage_symbol_from_status("in_progress", Some("unknown-stage"));
         assert_eq!(result, '?');
         Ok(())
@@ -784,8 +786,8 @@ mod tests {
     }
 
     #[test]
-    fn test_connect_ipc_gracefully_degrades_on_invalid_address()
-    -> Result<(), Box<dyn std::error::Error>> {
+    fn test_connect_ipc_gracefully_degrades_on_invalid_address(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut plugin = OyaPlugin::new()?;
         let config = serde_json::json!({ "ipc_address": "not-an-address" });
 
@@ -793,18 +795,16 @@ mod tests {
 
         assert!(result.is_ok());
         assert!(plugin.ipc.is_none());
-        assert!(
-            plugin
-                .status_message
-                .as_deref()
-                .is_some_and(|msg| msg.contains("IPC unavailable"))
-        );
+        assert!(plugin
+            .status_message
+            .as_deref()
+            .is_some_and(|msg| msg.contains("IPC unavailable")));
         Ok(())
     }
 
     #[test]
-    fn test_refresh_tasks_reports_action_specific_skip_when_throttled()
-    -> Result<(), Box<dyn std::error::Error>> {
+    fn test_refresh_tasks_reports_action_specific_skip_when_throttled(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut plugin = OyaPlugin::new()?;
         plugin.ipc = None;
         plugin.last_ipc_connect_attempt_ms = Some(OyaPlugin::now_ms());
@@ -820,8 +820,8 @@ mod tests {
     }
 
     #[test]
-    fn test_send_task_command_reports_action_specific_skip_when_throttled()
-    -> Result<(), Box<dyn std::error::Error>> {
+    fn test_send_task_command_reports_action_specific_skip_when_throttled(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut plugin = OyaPlugin::new()?;
         plugin.ipc = None;
         plugin.last_ipc_connect_attempt_ms = Some(OyaPlugin::now_ms());
@@ -947,61 +947,45 @@ mod tests {
         // Test BeadList keybindings
         let bead_list_bindings = plugin.get_keybindings_for_pane(crate::layout::PaneType::BeadList);
         assert!(!bead_list_bindings.is_empty());
-        assert!(
-            bead_list_bindings
-                .iter()
-                .any(|&(key, _): &(char, _)| key == '?')
-        );
-        assert!(
-            bead_list_bindings
-                .iter()
-                .any(|&(key, _): &(char, _)| key == '\x1b')
-        );
+        assert!(bead_list_bindings
+            .iter()
+            .any(|&(key, _): &(char, _)| key == '?'));
+        assert!(bead_list_bindings
+            .iter()
+            .any(|&(key, _): &(char, _)| key == '\x1b'));
 
         // Test BeadDetail keybindings
         let bead_detail_bindings =
             plugin.get_keybindings_for_pane(crate::layout::PaneType::BeadDetail);
         assert!(!bead_detail_bindings.is_empty());
-        assert!(
-            bead_detail_bindings
-                .iter()
-                .any(|&(key, _): &(char, _)| key == '?')
-        );
-        assert!(
-            bead_detail_bindings
-                .iter()
-                .any(|&(key, _): &(char, _)| key == '\x1b')
-        );
+        assert!(bead_detail_bindings
+            .iter()
+            .any(|&(key, _): &(char, _)| key == '?'));
+        assert!(bead_detail_bindings
+            .iter()
+            .any(|&(key, _): &(char, _)| key == '\x1b'));
 
         // Test PipelineView keybindings
         let pipeline_view_bindings =
             plugin.get_keybindings_for_pane(crate::layout::PaneType::PipelineView);
         assert!(!pipeline_view_bindings.is_empty());
-        assert!(
-            pipeline_view_bindings
-                .iter()
-                .any(|&(key, _): &(char, _)| key == '?')
-        );
-        assert!(
-            pipeline_view_bindings
-                .iter()
-                .any(|&(key, _): &(char, _)| key == '\x1b')
-        );
+        assert!(pipeline_view_bindings
+            .iter()
+            .any(|&(key, _): &(char, _)| key == '?'));
+        assert!(pipeline_view_bindings
+            .iter()
+            .any(|&(key, _): &(char, _)| key == '\x1b'));
 
         // Test WorkflowGraph keybindings
         let workflow_graph_bindings =
             plugin.get_keybindings_for_pane(crate::layout::PaneType::WorkflowGraph);
         assert!(!workflow_graph_bindings.is_empty());
-        assert!(
-            workflow_graph_bindings
-                .iter()
-                .any(|&(key, _): &(char, _)| key == '?')
-        );
-        assert!(
-            workflow_graph_bindings
-                .iter()
-                .any(|&(key, _): &(char, _)| key == '\x1b')
-        );
+        assert!(workflow_graph_bindings
+            .iter()
+            .any(|&(key, _): &(char, _)| key == '?'));
+        assert!(workflow_graph_bindings
+            .iter()
+            .any(|&(key, _): &(char, _)| key == '\x1b'));
 
         Ok(())
     }
@@ -1138,6 +1122,7 @@ impl OyaPlugin {
             unfiltered_tasks: Vec::new(),
             pending_g: false,
             visual_anchor: None,
+            horizontal_scroll: 0,
         })
     }
 
@@ -1548,6 +1533,17 @@ impl OyaPlugin {
                 self.state = PluginState::Running;
                 let _ = self.toggle_help_overlay();
             }
+            ParsedCommand::Export { path } => {
+                let export_result = self.export_tasks_to_file(&path);
+                match export_result {
+                    Ok(count) => {
+                        self.status_message = Some(format!("Exported {count} tasks to '{path}'"));
+                    }
+                    Err(err) => {
+                        self.status_message = Some(format!("Export error: {err}"));
+                    }
+                }
+            }
         }
     }
 
@@ -1772,6 +1768,22 @@ impl OyaPlugin {
                 Ok(())
             }
         }
+    }
+
+    fn export_tasks_to_file(&self, path: &str) -> PluginResult<usize> {
+        use std::fs::File;
+        use std::io::Write;
+
+        let json = serde_json::to_string_pretty(&self.tasks)
+            .map_err(|e| PluginError::StateSaveError(format!("JSON serialization failed: {e}")))?;
+
+        let mut file = File::create(path)
+            .map_err(|e| PluginError::StateSaveError(format!("File creation failed: {e}")))?;
+
+        file.write_all(json.as_bytes())
+            .map_err(|e| PluginError::StateSaveError(format!("Write failed: {e}")))?;
+
+        Ok(self.tasks.len())
     }
 
     fn run_pipeline_for_selected(&mut self, dry_run: bool) -> PluginResult<()> {

@@ -480,3 +480,115 @@ fn bdd_linear_workflow_blocked_start_blocks_all() -> Result<(), Box<dyn std::err
 
     Ok(())
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PROPERTY TESTS: WORKFLOW COMPLETION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+mod property_tests {
+    use super::*;
+    use oya_core::Stage;
+    use proptest::prelude::*;
+
+    /// Property: ∀ workflow, if all beads complete -> workflow complete
+    ///
+    /// This test generates random workflows with varying numbers of tasks
+    /// and verifies that completing all tasks always results in a complete workflow.
+    proptest! {
+        #[test]
+        fn prop_all_beads_complete_implies_workflow_complete(
+            task_count in 0usize..100,
+        ) {
+            let mut workflow = Workflow::new(
+                "prop-workflow",
+                "Property Test Workflow",
+                "Tests all beads complete implies workflow complete",
+            )
+            .map_err(|e| proptest::test_runner::TestCaseError::fail(e.to_string()))?;
+
+            for i in 0..task_count {
+                let task = Task::new(
+                    format!("task-{i}"),
+                    format!("Task {i}"),
+                    "Property test task",
+                )
+                .map_err(|e| proptest::test_runner::TestCaseError::fail(e.to_string()))?;
+                workflow
+                    .add_task(task)
+                    .map_err(|e| proptest::test_runner::TestCaseError::fail(e.to_string()))?;
+            }
+
+            if task_count == 0 {
+                prop_assert!(workflow.is_complete(), "Empty workflow should be complete");
+            } else {
+                prop_assert!(
+                    !workflow.is_complete(),
+                    "Workflow with pending tasks should not be complete"
+                );
+
+                for task in workflow.tasks.values_mut() {
+                    task.current_stage = Stage::Completed;
+                }
+
+                prop_assert!(
+                    workflow.is_complete(),
+                    "Workflow with all completed tasks should be complete"
+                );
+            }
+        }
+
+        #[test]
+        fn prop_workflow_completion_invariant_across_dag_shapes(
+            task_count in 1usize..50,
+            edge_probability in 0.0f64..1.0,
+        ) {
+            use std::collections::HashSet;
+
+            let mut workflow = Workflow::new(
+                "prop-dag-workflow",
+                "DAG Property Test",
+                "Tests completion invariant across DAG shapes",
+            )
+            .map_err(|e| proptest::test_runner::TestCaseError::fail(e.to_string()))?;
+
+            for i in 0..task_count {
+                let task = Task::new(
+                    format!("task-{i}"),
+                    format!("Task {i}"),
+                    "DAG task",
+                )
+                .map_err(|e| proptest::test_runner::TestCaseError::fail(e.to_string()))?;
+                workflow
+                    .add_task(task)
+                    .map_err(|e| proptest::test_runner::TestCaseError::fail(e.to_string()))?;
+            }
+
+            let mut added_edges: HashSet<(String, String)> = HashSet::new();
+            for i in 0..task_count {
+                for j in (i + 1)..task_count {
+                    if (j as f64 * edge_probability) as usize > (j - 1) as usize {
+                        let from = format!("task-{i}");
+                        let to = format!("task-{j}");
+                        if added_edges.insert((from.clone(), to.clone())) {
+                            let _ = workflow.add_dependency(&from, &to);
+                        }
+                    }
+                }
+            }
+
+            prop_assert!(
+                !workflow.is_complete(),
+                "Workflow with pending tasks should not be complete"
+            );
+
+            for task in workflow.tasks.values_mut() {
+                task.current_stage = Stage::Completed;
+            }
+
+            prop_assert!(
+                workflow.is_complete(),
+                "Workflow with all completed tasks must be complete regardless of DAG shape"
+            );
+        }
+    }
+}

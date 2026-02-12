@@ -31,6 +31,7 @@ tempfile = "3"
 criterion = { version = "0.5", features = ["html_reports"] }
 tokio-test = "0.4"
 oya-workflow = { path = "../workflow" }
+proptest = { workspace = true }
 
 [lib]
 bench = false
