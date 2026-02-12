@@ -176,8 +176,8 @@ pub fn validate_ipc_address(address: &str) -> Result<String, ConfigValidationErr
         if parts.len() == 2 {
             let host = parts.get(1);
             let port = parts.first();
-            if let (Some(h), Some(p)) = (host, port) {
-                if h.parse::<u16>().is_ok() || p.parse::<u16>().is_ok() {
+            if let (Some(_h), Some(p)) = (host, port) {
+                if p.parse::<u16>().is_ok() {
                     return Ok(address.to_string());
                 }
             }
