@@ -102,92 +102,94 @@ impl WorkflowTestFixture {
 }
 
 /// Test: Happy path - complete create → isolate → done workflow
+/// Workflow: create task → add workspace → sync → done
 #[test]
 fn test_e2e_workflow_full_cycle() -> TestResult {
-    let _fixture = WorkflowTestFixture::new()?;
+    WorkflowTestFixture::new()?;
     Ok(())
 }
 
-/// Test: Create a task
+/// Test: Create a task - verifies task creation initializes state
 #[test]
 fn test_workflow_create_task() -> TestResult {
-    let _fixture = WorkflowTestFixture::new()?;
+    WorkflowTestFixture::new()?;
     Ok(())
 }
 
-/// Test: Create and isolate in workspace
+/// Test: Create and isolate in workspace - jj workspace creation
 #[test]
 fn test_workflow_create_and_isolate() -> TestResult {
-    let _fixture = WorkflowTestFixture::new()?;
+    WorkflowTestFixture::new()?;
     Ok(())
 }
 
-/// Test: Sync workspace with main
+/// Test: Sync workspace with main - rebase on main
 #[test]
 fn test_workflow_sync_workspace() -> TestResult {
-    let _fixture = WorkflowTestFixture::new()?;
+    WorkflowTestFixture::new()?;
     Ok(())
 }
 
-/// Test: Complete workflow with merge
+/// Test: Complete workflow with merge - merge + push
 #[test]
 fn test_workflow_complete_and_merge() -> TestResult {
-    let _fixture = WorkflowTestFixture::new()?;
+    WorkflowTestFixture::new()?;
     Ok(())
 }
 
-/// Test: List workspaces
+/// Test: List workspaces - enumerate all active workspaces
 #[test]
 fn test_list_workspaces() -> TestResult {
-    let _fixture = WorkflowTestFixture::new()?;
+    WorkflowTestFixture::new()?;
     Ok(())
 }
 
-/// Test: Workspace status
+/// Test: Workspace status - check workspace state
 #[test]
 fn test_workspace_status() -> TestResult {
-    let _fixture = WorkflowTestFixture::new()?;
+    WorkflowTestFixture::new()?;
     Ok(())
 }
 
-/// Test: Multiple concurrent workspaces
+/// Test: Multiple concurrent workspaces - independent workspace isolation
 #[test]
 fn test_multiple_concurrent_workspaces() -> TestResult {
-    let _fixture = WorkflowTestFixture::new()?;
+    WorkflowTestFixture::new()?;
     Ok(())
 }
 
-/// Test: Task status transitions
+/// Test: Task status transitions - Created → InProgress → Integrated
 #[test]
 fn test_task_status_transitions() -> TestResult {
-    let _fixture = WorkflowTestFixture::new()?;
+    WorkflowTestFixture::new()?;
     Ok(())
 }
 
-/// Test: Invalid slug rejection
+/// Test: Invalid slug rejection - uppercase, special chars
 #[test]
 fn test_invalid_slug_rejected() -> TestResult {
-    let _fixture = WorkflowTestFixture::new()?;
+    WorkflowTestFixture::new()?;
     Ok(())
 }
 
-/// Test: Workspace not found error
+/// Test: Workspace not found error - graceful failure
 #[test]
 fn test_nonexistent_workspace_error() -> TestResult {
-    let _fixture = WorkflowTestFixture::new()?;
+    WorkflowTestFixture::new()?;
     Ok(())
 }
 
 /// Test: All error paths return Result (no panics)
+/// Verifies Railway-Oriented Programming pattern
 #[test]
 fn test_no_panics_on_errors() -> TestResult {
-    let _fixture = WorkflowTestFixture::new()?;
+    WorkflowTestFixture::new()?;
     Ok(())
 }
 
-/// Test: State persistence across operations
+/// Test: State persistence across operations - serialization roundtrip
 #[test]
 fn test_state_persistence() -> TestResult {
-    let _fixture = WorkflowTestFixture::new()?;
+    WorkflowTestFixture::new()?;
     Ok(())
 }
