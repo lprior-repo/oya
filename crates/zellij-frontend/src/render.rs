@@ -732,58 +732,65 @@ impl Renderer {
     ) -> String {
         let pane_width = layout.get_pane(PaneType::BeadList).map_or(40, |p| p.width);
 
-        tasks
-            .iter()
-            .enumerate()
-            .fold(String::new(), |mut acc, (i, task)| {
-                let is_selected = i == selected_index;
+        let mut output = String::new();
 
-                if is_selected {
-                    acc.push_str(style_helpers::selected());
-                }
+        let header = format!(
+            "{}{:<1} {:<13} {:<6} Title\x1b[0m\n",
+            style_helpers::header(),
+            "",
+            "Slug",
+            "Stage"
+        );
+        output.push_str(&header);
 
-                let indicator = if is_selected { "►" } else { " " };
-                acc.push_str(indicator);
+        let separator = format!("{}\n", "─".repeat(pane_width.saturating_sub(2)));
+        output.push_str(&separator);
 
-                if !is_selected {
-                    let status_color = style_helpers::status_color(&task.status);
-                    acc.push_str(status_color);
-                }
+        tasks.iter().enumerate().fold(output, |mut acc, (i, task)| {
+            let is_selected = i == selected_index;
 
-                let slug = truncate(&task.slug, 12);
-                let slug_padding = " ".repeat(14_usize.saturating_sub(slug.chars().count()));
-                acc.push_str(&slug);
-                acc.push_str(&slug_padding);
+            if is_selected {
+                acc.push_str(style_helpers::selected());
+            }
 
-                let symbol = task
-                    .stage
-                    .as_ref()
-                    .and_then(|s| s.split(':').next())
-                    .map_or("○", stage_symbol);
-                let symbol_padding = " ".repeat(16_usize.saturating_sub(symbol.chars().count()));
-                acc.push_str(symbol);
-                acc.push_str(&symbol_padding);
+            let indicator = if is_selected { "►" } else { " " };
+            acc.push_str(indicator);
 
-                let title = truncate(&task.slug, pane_width.saturating_sub(40));
-                acc.push_str(&title);
+            if !is_selected {
+                let status_color = style_helpers::status_color(&task.status);
+                acc.push_str(status_color);
+            }
 
-                acc.push_str("\x1b[0m");
+            let slug = truncate(&task.slug, 12);
+            let slug_padding = " ".repeat(14_usize.saturating_sub(slug.chars().count()));
+            acc.push_str(&slug);
+            acc.push_str(&slug_padding);
 
-                if task.status == "in_progress" {
-                    let (running_stage, failed_stage, completed) = get_stage_info(task);
-                    let progress = calculate_stage_progress(
-                        &task.stages,
-                        running_stage,
-                        failed_stage,
-                        completed,
-                    );
-                    let bar = render_progress_bar(progress, 10);
-                    acc.push_str(&bar);
-                }
+            let symbol = task
+                .stage
+                .as_ref()
+                .and_then(|s| s.split(':').next())
+                .map_or("○", stage_symbol);
+            let symbol_padding = " ".repeat(16_usize.saturating_sub(symbol.chars().count()));
+            acc.push_str(symbol);
+            acc.push_str(&symbol_padding);
 
-                acc.push('\n');
-                acc
-            })
+            let title = truncate(&task.slug, pane_width.saturating_sub(40));
+            acc.push_str(&title);
+
+            acc.push_str("\x1b[0m");
+
+            if task.status == "in_progress" {
+                let (running_stage, failed_stage, completed) = get_stage_info(task);
+                let progress =
+                    calculate_stage_progress(&task.stages, running_stage, failed_stage, completed);
+                let bar = render_progress_bar(progress, 10);
+                acc.push_str(&bar);
+            }
+
+            acc.push('\n');
+            acc
+        })
     }
 
     /// Render task detail pane
