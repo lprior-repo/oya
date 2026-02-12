@@ -75,7 +75,7 @@ impl SchedulerArguments {
 
     /// Set the `ReplayEngine`.
     #[must_use]
-    pub fn with_replay_engine(mut self, engine: Arc<ReplayEngine>) -> Self {
+    pub fn with_replay_engine(mut self, engine: Arc<Mutex<ReplayEngine>>) -> Self {
         self.replay_engine = Some(engine);
         self
     }
@@ -256,7 +256,8 @@ impl Actor for SchedulerActorDef {
                     if let Some(engine) = &state.replay_engine {
                         let engine = Arc::clone(engine);
                         tokio::spawn(async move {
-                            let _ = engine.record_event(event).await;
+                            let mut guard = engine.lock().await;
+                            let _ = guard.record_event(event).await;
                         });
                     }
                 }
