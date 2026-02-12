@@ -749,4 +749,134 @@ mod tests {
         assert!(state.agents.contains_key("agent-3"), "agent-3 should exist");
         assert!(!state.agents.contains_key("agent-2"), "agent-2 should be removed");
     }
+
+    fn setup_state_with_workflow_and_bead() -> CoreSchedulerState {
+        let mut state = CoreSchedulerState::default();
+        state.workflows.insert(
+            "wf-1".to_string(),
+            WorkflowState::new("wf-1".to_string()),
+        );
+        let ws = state.workflows.get_mut("wf-1").unwrap();
+        let _ = ws.add_bead("bead-1".to_string());
+        state.pending_beads.insert(
+            "bead-1".to_string(),
+            ScheduledBead::new("bead-1".to_string(), "wf-1".to_string()),
+        );
+        state
+    }
+
+    #[test]
+    fn test_schedule_bead_produces_bead_scheduled_event() {
+        let state = setup_state_with_workflow_and_bead();
+        let msg = SchedulerMessage::ScheduleBead {
+            workflow_id: "wf-1".to_string(),
+            bead_id: "bead-2".to_string(),
+        };
+        let (next_state, effects) = core::handle(state, msg);
+
+        assert!(next_state.pending_beads.contains_key("bead-2"));
+        let record_event = effects.iter().find_map(|e| match e {
+            SchedulerEffect::RecordEvent { event } => Some(event.clone()),
+            _ => None,
+        });
+        assert!(
+            record_event.is_some(),
+            "ScheduleBead should produce a RecordEvent effect"
+        );
+
+        let event = record_event.expect("checked is_some");
+        assert!(
+            matches!(
+                event,
+                OrchestratorEvent::BeadScheduled { workflow_id, bead_id }
+                    if workflow_id == "wf-1" && bead_id == "bead-2"
+            ),
+            "Expected BeadScheduled event with correct ids"
+        );
+    }
+
+    #[test]
+    fn test_on_bead_completed_produces_bead_completed_event() {
+        let state = setup_state_with_workflow_and_bead();
+        let msg = SchedulerMessage::OnBeadCompleted {
+            workflow_id: "wf-1".to_string(),
+            bead_id: "bead-1".to_string(),
+        };
+        let (_, effects) = core::handle(state, msg);
+
+        let record_event = effects.iter().find_map(|e| match e {
+            SchedulerEffect::RecordEvent { event } => Some(event.clone()),
+            _ => None,
+        });
+        assert!(
+            record_event.is_some(),
+            "OnBeadCompleted should produce a RecordEvent effect"
+        );
+
+        let event = record_event.expect("checked is_some");
+        assert!(
+            matches!(
+                event,
+                OrchestratorEvent::BeadCompleted { bead_id, .. }
+                    if bead_id == "bead-1"
+            ),
+            "Expected BeadCompleted event with correct bead_id"
+        );
+    }
+
+    #[test]
+    fn test_on_state_changed_to_completed_produces_bead_completed_event() {
+        let state = setup_state_with_workflow_and_bead();
+        let msg = SchedulerMessage::OnStateChanged {
+            bead_id: "bead-1".to_string(),
+            from: MsgBeadState::Running,
+            to: MsgBeadState::Completed,
+        };
+        let (_, effects) = core::handle(state, msg);
+
+        let record_event = effects.iter().find_map(|e| match e {
+            SchedulerEffect::RecordEvent { event } => Some(event.clone()),
+            _ => None,
+        });
+        assert!(
+            record_event.is_some(),
+            "OnStateChanged to Completed should produce a RecordEvent effect"
+        );
+
+        let event = record_event.expect("checked is_some");
+        assert!(
+            matches!(event, OrchestratorEvent::BeadCompleted { .. }),
+            "Expected BeadCompleted event"
+        );
+    }
+
+    #[test]
+    fn test_on_state_changed_to_failed_produces_bead_failed_event() {
+        let state = setup_state_with_workflow_and_bead();
+        let msg = SchedulerMessage::OnStateChanged {
+            bead_id: "bead-1".to_string(),
+            from: MsgBeadState::Running,
+            to: MsgBeadState::Failed,
+        };
+        let (_, effects) = core::handle(state, msg);
+
+        let record_event = effects.iter().find_map(|e| match e {
+            SchedulerEffect::RecordEvent { event } => Some(event.clone()),
+            _ => None,
+        });
+        assert!(
+            record_event.is_some(),
+            "OnStateChanged to Failed should produce a RecordEvent effect"
+        );
+
+        let event = record_event.expect("checked is_some");
+        assert!(
+            matches!(
+                event,
+                OrchestratorEvent::BeadFailed { bead_id, error, .. }
+                    if bead_id == "bead-1" && !error.is_empty()
+            ),
+            "Expected BeadFailed event with correct bead_id and error message"
+        );
+    }
 }
