@@ -205,10 +205,10 @@ impl CheckpointManager {
     fn decompress_data(&self, data: &str) -> PersistenceResult<String> {
         if self.config.enable_compression {
             let bytes = base64_decode(data).map_err(|e| {
-                PersistenceError::serialization_error(format!("Base64 decode failed: {e}"))
+                PersistenceError::serialization_error(format!("base64 decode failed: {e}"))
             })?;
             self.compressor.decompress_to_string(&bytes).map_err(|e| {
-                PersistenceError::serialization_error(format!("Decompression failed: {e}"))
+                PersistenceError::serialization_error(format!("decompression failed: {e}"))
             })
         } else {
             Ok(data.to_string())
@@ -357,8 +357,7 @@ impl CheckpointManager {
     {
         serde_json::from_str(json_str).map_err(|e| {
             PersistenceError::serialization_error(format!(
-                "Failed to deserialize {}: {}",
-                field_name, e
+                "failed to deserialize {field_name}: {e}"
             ))
         })
     }

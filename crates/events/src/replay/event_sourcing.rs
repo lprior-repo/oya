@@ -178,25 +178,21 @@ impl ResumeCheckpointStore for CheckpointStoreImpl {
         checkpoint_id: &CheckpointId,
     ) -> Result<Option<(CheckpointData, DateTime<Utc>)>, Error> {
         let checkpoint_id_str = checkpoint_id.as_str().to_string();
-        
+
         let db = self.store.db();
-        
+
         let rt = tokio::runtime::Handle::try_current();
         let result = match rt {
             Ok(handle) => {
-                handle.block_on(async {
-                    self.load_checkpoint_async(&db, &checkpoint_id_str).await
-                })
+                handle.block_on(async { self.load_checkpoint_async(&db, &checkpoint_id_str).await })
             }
             Err(_) => {
                 let rt = tokio::runtime::Runtime::new()
                     .map_err(|e| Error::Internal(format!("failed to create runtime: {e}")))?;
-                rt.block_on(async {
-                    self.load_checkpoint_async(&db, &checkpoint_id_str).await
-                })
+                rt.block_on(async { self.load_checkpoint_async(&db, &checkpoint_id_str).await })
             }
         };
-        
+
         result
     }
 
@@ -206,25 +202,25 @@ impl ResumeCheckpointStore for CheckpointStoreImpl {
         checkpoint_timestamp: DateTime<Utc>,
     ) -> Result<bool, Error> {
         let checkpoint_id_str = checkpoint_id.as_str().to_string();
-        
+
         let db = self.store.db();
-        
+
         let rt = tokio::runtime::Handle::try_current();
         let result = match rt {
-            Ok(handle) => {
-                handle.block_on(async {
-                    self.validate_timestamp_async(&db, &checkpoint_id_str, checkpoint_timestamp).await
-                })
-            }
+            Ok(handle) => handle.block_on(async {
+                self.validate_timestamp_async(&db, &checkpoint_id_str, checkpoint_timestamp)
+                    .await
+            }),
             Err(_) => {
                 let rt = tokio::runtime::Runtime::new()
                     .map_err(|e| Error::Internal(format!("failed to create runtime: {e}")))?;
                 rt.block_on(async {
-                    self.validate_timestamp_async(&db, &checkpoint_id_str, checkpoint_timestamp).await
+                    self.validate_timestamp_async(&db, &checkpoint_id_str, checkpoint_timestamp)
+                        .await
                 })
             }
         };
-        
+
         result
     }
 }
@@ -269,13 +265,14 @@ impl CheckpointStoreImpl {
         checkpoint_timestamp: DateTime<Utc>,
     ) -> Result<bool, Error> {
         let mut result = db
-            .query(
-                "SELECT timestamp FROM state_transition WHERE event_id = $checkpoint_id LIMIT 1",
-            )
+            .query("SELECT timestamp FROM state_transition WHERE event_id = $checkpoint_id LIMIT 1")
             .bind(("checkpoint_id", checkpoint_id.to_string()))
             .await
             .map_err(|e| {
-                Error::store_failed("validate_timestamp", format!("failed to query checkpoint: {e}"))
+                Error::store_failed(
+                    "validate_timestamp",
+                    format!("failed to query checkpoint: {e}"),
+                )
             })?;
 
         #[derive(Debug, Deserialize)]
@@ -284,7 +281,10 @@ impl CheckpointStoreImpl {
         }
 
         let records: Vec<TimestampRecord> = result.take(0).map_err(|e| {
-            Error::store_failed("validate_timestamp", format!("failed to extract results: {e}"))
+            Error::store_failed(
+                "validate_timestamp",
+                format!("failed to extract results: {e}"),
+            )
         })?;
 
         match records.into_iter().next() {
@@ -309,23 +309,19 @@ impl EventLogImpl {
 impl EventLog for EventLogImpl {
     fn load_events_after(&self, timestamp: DateTime<Utc>) -> Result<Vec<EventMetadata>, Error> {
         let db = self.store.db();
-        
+
         let rt = tokio::runtime::Handle::try_current();
         let result = match rt {
             Ok(handle) => {
-                handle.block_on(async {
-                    self.load_events_after_async(&db, timestamp).await
-                })
+                handle.block_on(async { self.load_events_after_async(&db, timestamp).await })
             }
             Err(_) => {
                 let rt = tokio::runtime::Runtime::new()
                     .map_err(|e| Error::Internal(format!("failed to create runtime: {e}")))?;
-                rt.block_on(async {
-                    self.load_events_after_async(&db, timestamp).await
-                })
+                rt.block_on(async { self.load_events_after_async(&db, timestamp).await })
             }
         };
-        
+
         result
     }
 }
@@ -354,7 +350,10 @@ impl EventLogImpl {
         }
 
         let records: Vec<EventRecord> = result.take(0).map_err(|e| {
-            Error::store_failed("load_events_after", format!("failed to extract results: {e}"))
+            Error::store_failed(
+                "load_events_after",
+                format!("failed to extract results: {e}"),
+            )
         })?;
 
         let events = records
@@ -380,18 +379,15 @@ impl EventLog for EventSourcingReplay {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::TimeZone;
 
-    // Test that EventSourcingReplay can be created
     #[test]
     fn test_event_sourcing_replay_creation() {
-        // This test verifies the struct can be created
-        // Actual tests require async runtime and database connection
         assert!(true);
     }
 
-    // Test error conversion
     #[test]
-    fn test_error_conversion() {
+    fn test_error_conversion_checkpoint_not_found() {
         let resume_err = ResumeError::CheckpointNotFound {
             checkpoint_id: "test-123".to_string(),
         };
@@ -405,19 +401,147 @@ mod tests {
         }
     }
 
-    // Test checkpoint store implementation
+    #[test]
+    fn test_error_conversion_invalid_checkpoint() {
+        let resume_err = ResumeError::InvalidCheckpoint {
+            reason: "corrupted data".to_string(),
+        };
+        let replay_err = ReplayResumeError::from(resume_err);
+
+        match replay_err {
+            ReplayResumeError::CheckpointLoadFailed(msg) => {
+                assert_eq!(msg, "corrupted data");
+            }
+            _ => panic!("Expected CheckpointLoadFailed variant"),
+        }
+    }
+
+    #[test]
+    fn test_error_conversion_event_load_failed() {
+        let resume_err = ResumeError::EventLoadFailed {
+            reason: "connection timeout".to_string(),
+        };
+        let replay_err = ReplayResumeError::from(resume_err);
+
+        match replay_err {
+            ReplayResumeError::EventLoadFailed(msg) => {
+                assert_eq!(msg, "connection timeout");
+            }
+            _ => panic!("Expected EventLoadFailed variant"),
+        }
+    }
+
+    #[test]
+    fn test_error_conversion_timestamp_mismatch() {
+        let ts1 = Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
+        let ts2 = Utc.with_ymd_and_hms(2024, 1, 1, 12, 1, 0).unwrap();
+
+        let resume_err = ResumeError::TimestampMismatch {
+            checkpoint_id: "cp-456".to_string(),
+            checkpoint_timestamp: ts1,
+            log_timestamp: ts2,
+        };
+        let replay_err = ReplayResumeError::from(resume_err);
+
+        match replay_err {
+            ReplayResumeError::TimestampMismatch(msg) => {
+                assert!(msg.contains("cp-456"));
+                assert!(msg.contains("timestamp"));
+            }
+            _ => panic!("Expected TimestampMismatch variant"),
+        }
+    }
+
+    #[test]
+    fn test_replay_resume_error_display() {
+        let err = ReplayResumeError::CheckpointNotFound("missing-checkpoint".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("missing-checkpoint"));
+        assert!(msg.contains("not found"));
+
+        let err = ReplayResumeError::CheckpointLoadFailed("io error".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("load"));
+        assert!(msg.contains("io error"));
+
+        let err = ReplayResumeError::EventLoadFailed("db error".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("load events"));
+        assert!(msg.contains("db error"));
+    }
+
     #[test]
     fn test_checkpoint_store_impl_new() {
-        // Test can be created
-        // Actual functionality requires database
         assert!(true);
     }
 
-    // Test event log implementation
     #[test]
     fn test_event_log_impl_new() {
-        // Test can be created
-        // Actual functionality requires database
         assert!(true);
+    }
+
+    #[test]
+    fn test_replay_result_is_result_type() {
+        fn returns_replay_result() -> ReplayResult<String> {
+            Ok("success".to_string())
+        }
+
+        let result = returns_replay_result();
+        assert!(result.is_ok());
+        assert_eq!(result.ok(), Some("success".to_string()));
+    }
+
+    #[test]
+    fn test_replay_result_error_propagation() {
+        fn inner_fails() -> ReplayResult<String> {
+            Err(ReplayResumeError::CheckpointNotFound("missing".to_string()))
+        }
+
+        fn outer() -> ReplayResult<String> {
+            let _ = inner_fails()?;
+            Ok("should not reach here".to_string())
+        }
+
+        let result = outer();
+        assert!(result.is_err());
+        match result {
+            Err(ReplayResumeError::CheckpointNotFound(id)) => {
+                assert_eq!(id, "missing");
+            }
+            _ => panic!("Expected CheckpointNotFound error"),
+        }
+    }
+
+    #[test]
+    fn test_checkpoint_id_variations() {
+        let id1 = CheckpointId::new("simple-id");
+        assert_eq!(id1.as_str(), "simple-id");
+
+        let id2 = CheckpointId::new("complex-id-with-hyphens-123".to_string());
+        assert_eq!(id2.as_str(), "complex-id-with-hyphens-123");
+
+        let id3 = CheckpointId::new("");
+        assert_eq!(id3.as_str(), "");
+    }
+
+    #[test]
+    fn test_replay_resume_error_is_clone() {
+        let err = ReplayResumeError::CheckpointNotFound("test".to_string());
+        let cloned = err.clone();
+
+        match cloned {
+            ReplayResumeError::CheckpointNotFound(id) => assert_eq!(id, "test"),
+            _ => panic!("Clone failed"),
+        }
+    }
+
+    #[test]
+    fn test_replay_resume_error_is_partial_eq() {
+        let err1 = ReplayResumeError::CheckpointNotFound("same".to_string());
+        let err2 = ReplayResumeError::CheckpointNotFound("same".to_string());
+        let err3 = ReplayResumeError::CheckpointNotFound("different".to_string());
+
+        assert_eq!(err1, err2);
+        assert_ne!(err1, err3);
     }
 }
