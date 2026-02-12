@@ -357,7 +357,14 @@ mod core {
                 if !next_state.workflows.contains_key(&workflow_id) {
                     next_state
                         .workflows
-                        .insert(workflow_id.clone(), WorkflowState::new(workflow_id));
+                        .insert(workflow_id.clone(), WorkflowState::new(workflow_id.clone()));
+                    effects.push(SchedulerEffect::RecordEvent {
+                        event: OrchestratorEvent::WorkflowRegistered {
+                            workflow_id,
+                            name: String::new(),
+                            dag_json: String::new(),
+                        },
+                    });
                 }
             }
             SchedulerMessage::UnregisterWorkflow { workflow_id } => {

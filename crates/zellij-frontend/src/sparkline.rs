@@ -85,7 +85,10 @@ pub fn render_sparkline(data: &[u8], width: usize) -> Result<String, SparklineEr
         return Ok(String::new());
     }
 
-    let config = SparklineConfig::default();
+    let config = SparklineConfig {
+        width,
+        ..SparklineConfig::default()
+    };
     render_sparkline_with_config(data, &config)
 }
 
