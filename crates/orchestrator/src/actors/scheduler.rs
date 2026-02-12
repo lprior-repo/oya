@@ -13,7 +13,7 @@ use tracing::info;
 use oya_events::{BeadEvent, EventBus, EventPattern, EventSubscription};
 
 use crate::dag::BeadId;
-use crate::replay::{CheckpointManager, OrchestratorEvent, OrchestratorProjection, ReplayEngine};
+use crate::replay::{CheckpointManager, OrchestratorEvent, ReplayEngine};
 use crate::scheduler::{ScheduledBead, SchedulerStats, WorkflowId, WorkflowState};
 use crate::shutdown::{CheckpointResult, ShutdownCoordinator, ShutdownSignal};
 
@@ -339,6 +339,8 @@ impl SchedulerActorDef {
 
 /// Functional core for `SchedulerActor`.
 mod core {
+    use chrono::Utc;
+
     use super::{
         ActorError, BeadId, CoreSchedulerState, MsgBeadState, OrchestratorEvent, ScheduledBead,
         SchedulerEffect, SchedulerMessage, SchedulerStats, WorkflowId, WorkflowState,

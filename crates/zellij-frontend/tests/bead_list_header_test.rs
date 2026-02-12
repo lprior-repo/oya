@@ -81,7 +81,10 @@ fn test_bead_list_header_uses_header_style() {
 
     let output = get_bead_list_output(&renderer, &layout, &tasks, 0);
 
-    assert!(output.contains("\x1b[1m"), "Header should use bold style");
+    assert!(
+        output.contains("\x1b[1;33m"),
+        "Header should use bold yellow style"
+    );
 }
 
 #[test]
