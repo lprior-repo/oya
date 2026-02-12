@@ -52,7 +52,7 @@ pub struct ClockSkewTestContext {
 }
 
 impl ClockSkewTestContext {
-    pub async fn new(num_agents: usize, health_config: HealthConfig) -> ChaosResult<Self> {
+    pub fn new(num_agents: usize, health_config: HealthConfig) -> ChaosResult<Self> {
         let mut agents = std::collections::HashMap::new();
         for i in 0..num_agents {
             let agent_id = format!("agent-{i}");
@@ -105,11 +105,16 @@ impl ClockSkewTestContext {
                 reason: format!("Agent {agent_id} not found"),
             })?;
 
-        let skewed_time = agent.last_heartbeat()
-            - chrono::Duration::from_std(skew_duration)
-                .map_err(|e| ClockSkewChaosError::SetupFailed {
-                    reason: e.to_string(),
-                })?;
+        let skew_chrono = chrono::Duration::from_std(skew_duration)
+            .map_err(|e| ClockSkewChaosError::SetupFailed {
+                reason: e.to_string(),
+            })?;
+        let skewed_time = agent
+            .last_heartbeat()
+            .checked_sub_signed(skew_chrono)
+            .ok_or_else(|| ClockSkewChaosError::SetupFailed {
+                reason: "Clock skew calculation underflow".to_string(),
+            })?;
         agent.set_last_heartbeat_for_test(skewed_time);
         info!(
             "Simulated forward clock skew for {}: last_heartbeat moved back by {:?}",
@@ -130,11 +135,16 @@ impl ClockSkewTestContext {
                 reason: format!("Agent {agent_id} not found"),
             })?;
 
-        let skewed_time = agent.last_heartbeat()
-            + chrono::Duration::from_std(skew_duration)
-                .map_err(|e| ClockSkewChaosError::SetupFailed {
-                    reason: e.to_string(),
-                })?;
+        let skew_chrono = chrono::Duration::from_std(skew_duration)
+            .map_err(|e| ClockSkewChaosError::SetupFailed {
+                reason: e.to_string(),
+            })?;
+        let skewed_time = agent
+            .last_heartbeat()
+            .checked_add_signed(skew_chrono)
+            .ok_or_else(|| ClockSkewChaosError::SetupFailed {
+                reason: "Clock skew calculation overflow".to_string(),
+            })?;
         agent.set_last_heartbeat_for_test(skewed_time);
         info!(
             "Simulated backward clock skew for {}: last_heartbeat moved forward by {:?}",
@@ -191,7 +201,6 @@ async fn given_recent_heartbeat_when_clock_forward_skew_then_not_falsely_marked_
     };
 
     let ctx = ClockSkewTestContext::new(2, health_config)
-        .await
         .expect("Failed to setup test context");
 
     let agent_id = "agent-0";
@@ -233,7 +242,6 @@ async fn given_timed_out_agent_when_clock_backward_skew_then_can_be_hidden() {
     };
 
     let ctx = ClockSkewTestContext::new(2, health_config)
-        .await
         .expect("Failed to setup test context");
 
     let agent_id = "agent-0";
@@ -354,7 +362,6 @@ async fn given_agent_with_bead_when_clock_skew_then_bead_remains_assigned() {
     };
 
     let ctx = ClockSkewTestContext::new(2, health_config)
-        .await
         .expect("Failed to setup test context");
 
     let agent_id = "agent-0";
@@ -400,7 +407,6 @@ async fn given_ongoing_clock_skew_when_heartbeat_restored_then_recovered() {
     };
 
     let ctx = ClockSkewTestContext::new(2, health_config)
-        .await
         .expect("Failed to setup test context");
 
     let agent_id = "agent-0";
@@ -447,7 +453,6 @@ async fn given_extreme_clock_forward_skew_then_timeout_detected_immediately() {
     };
 
     let ctx = ClockSkewTestContext::new(2, health_config)
-        .await
         .expect("Failed to setup test context");
 
     let agent_id = "agent-0";
@@ -489,7 +494,6 @@ async fn given_rapid_clock_fluctuations_then_health_state_stable() {
     };
 
     let ctx = ClockSkewTestContext::new(2, health_config)
-        .await
         .expect("Failed to setup test context");
 
     let agent_id = "agent-0";
@@ -601,7 +605,6 @@ async fn given_clock_skew_invariant_health_failures_bounded() {
     };
 
     let ctx = ClockSkewTestContext::new(2, health_config)
-        .await
         .expect("Failed to setup test context");
 
     let agent_id = "agent-0";

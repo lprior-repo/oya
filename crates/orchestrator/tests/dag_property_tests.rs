@@ -1,23 +1,19 @@
-//! Property-based tests for bead selection strategies.
+//! Property-based tests for DAG topological sort.
 //!
-//! This module tests the property described in bead src-209z:
+//! This module tests the property described in bead src-as6n:
 //!
 //! ## Phase 5 - Property Tests
 //!
-//! ∀ distribution: selected bead ∈ ready beads
+//! ∀ dag: toposort(dag) -> all edges respect order
 
 #![forbid(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
 #![forbid(clippy::panic)]
 
-use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::string::string_regex;
 
-use orchestrator::distribution::{
-    AffinityStrategy, DistributionContext, DistributionStrategy, FifoStrategy, PriorityStrategy,
-    RoundRobinStrategy, StickyStrategy, available_strategies, create_strategy,
-};
+use orchestrator::dag::{DependencyType, WorkflowDAG};
 
 fn bead_id_strategy() -> impl Strategy<Value = String> {
     string_regex("bead-[a-z0-9]{3,8}").unwrap()

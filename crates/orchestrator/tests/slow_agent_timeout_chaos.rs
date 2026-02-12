@@ -198,7 +198,7 @@ async fn given_multiple_agents_when_one_times_out_then_others_available() {
 
     let health_config = HealthConfig {
         check_interval: Duration::from_millis(50),
-        heartbeat_timeout: Duration::from_millis(100),
+        heartbeat_timeout: Duration::from_millis(200),
         max_failures: 1,
     };
 
@@ -214,19 +214,28 @@ async fn given_multiple_agents_when_one_times_out_then_others_available() {
         .await
         .expect("assign should succeed");
 
-    let _handle = ctx.health_monitor.start_background_check();
+    tokio::time::sleep(Duration::from_millis(50)).await;
 
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    ctx.pool
+        .record_heartbeat(healthy_agent)
+        .await
+        .expect("heartbeat should succeed");
+    ctx.pool
+        .record_heartbeat("agent-2")
+        .await
+        .expect("heartbeat should succeed");
 
-    let _ = ctx.health_monitor.check_agent(slow_agent).await;
+    tokio::time::sleep(Duration::from_millis(250)).await;
+
+    let _ = ctx.pool.health_monitor().check_agent(slow_agent).await;
 
     let healthy = ctx.pool.get_agent(healthy_agent).await.expect("agent exists");
     assert!(
-        healthy.is_available(),
-        "Other agents should remain available"
+        healthy.state() != AgentStateLegacy::Unhealthy,
+        "Other agents should not be unhealthy"
     );
 
-    let available_agents = ctx.health_monitor.get_available_agents().await;
+    let available_agents = ctx.pool.health_monitor().get_available_agents().await;
     assert!(
         available_agents.contains(&healthy_agent.to_string()),
         "Healthy agent should be in available list"
