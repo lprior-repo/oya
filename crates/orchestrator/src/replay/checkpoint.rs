@@ -10,9 +10,12 @@ use serde::de::DeserializeOwned;
 use tokio::sync::mpsc;
 use tokio::time::interval;
 
+use crate::replay::checkpoint::checkpoint_attack_tests;
+
 use crate::persistence::{
     CheckpointRecord, OrchestratorStore, PersistenceError, PersistenceResult,
 };
+use super::compression::{CheckpointCompressor, CompressionConfig, CompressionLevel};
 
 /// Configuration for the checkpoint manager.
 #[derive(Debug, Clone)]
@@ -23,6 +26,10 @@ pub struct CheckpointConfig {
     pub max_checkpoints: usize,
     /// Whether to create checkpoints automatically
     pub auto_checkpoint: bool,
+    /// Compression configuration
+    pub compression: CompressionConfig,
+    /// Whether to enable compression
+    pub enable_compression: bool,
 }
 
 impl Default for CheckpointConfig {
@@ -31,6 +38,34 @@ impl Default for CheckpointConfig {
             interval: Duration::from_secs(300), // 5 minutes
             max_checkpoints: 10,
             auto_checkpoint: true,
+            compression: CompressionConfig::default(),
+            enable_compression: true,
+        }
+    }
+}
+
+impl CheckpointConfig {
+    /// Create a config with a specific compression level.
+    #[must_use]
+    pub const fn with_compression_level(level: CompressionLevel) -> Self {
+        Self {
+            interval: Duration::from_secs(300),
+            max_checkpoints: 10,
+            auto_checkpoint: true,
+            compression: CompressionConfig::new(level),
+            enable_compression: true,
+        }
+    }
+
+    /// Create a config with compression disabled.
+    #[must_use]
+    pub const fn without_compression() -> Self {
+        Self {
+            interval: Duration::from_secs(300),
+            max_checkpoints: 10,
+            auto_checkpoint: true,
+            compression: CompressionConfig::new(CompressionLevel::DEFAULT),
+            enable_compression: false,
         }
     }
 }

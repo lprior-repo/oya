@@ -9,7 +9,7 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
-use oya_orchestrator::scheduler::{SchedulerActor, WorkflowId};
+use orchestrator::scheduler::{SchedulerActor, WorkflowId};
 
 /// GIVEN a scheduler with no workflows
 /// WHEN RegisterWorkflow is called with a new workflow ID

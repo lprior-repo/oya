@@ -628,7 +628,6 @@ async fn test_scenario_workflow_checkpoint_recovery_after_corruption() {
 
     // Verify recovery to "validate" stage
     let validate_id = checkpoints[2].0;
-    let validate_state = &checkpoints[2].1;
 
     assert_eq!(
         recovered_id, validate_id,
