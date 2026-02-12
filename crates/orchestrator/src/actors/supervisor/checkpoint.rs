@@ -496,6 +496,7 @@ mod tests {
             child_id_counter: 0,
             shutdown_coordinator: None,
             _shutdown_rx: None,
+            _periodic_checkpoint_shutdown_tx: None,
             restart_strategy: Box::new(OneForOne::new()),
             checkpoint_manager: None,
             replay_engine: None,
