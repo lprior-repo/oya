@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort};
-use tokio::sync::{broadcast, mpsc, Mutex};
+use tokio::sync::{Mutex, broadcast, mpsc};
 use tracing::info;
 
 use oya_events::{BeadEvent, EventBus, EventPattern, EventSubscription};
@@ -161,9 +161,7 @@ pub enum SchedulerEffect {
         ready: Vec<(WorkflowId, BeadId)>,
     },
     /// Record an event to the replay engine.
-    RecordEvent {
-        event: OrchestratorEvent,
-    },
+    RecordEvent { event: OrchestratorEvent },
 }
 
 impl Actor for SchedulerActorDef {
@@ -378,9 +376,10 @@ mod core {
             } => {
                 if let Some(ws) = next_state.workflows.get_mut(&workflow_id) {
                     let _ = ws.add_bead(bead_id.clone());
-                    next_state
-                        .pending_beads
-                        .insert(bead_id.clone(), ScheduledBead::new(bead_id.clone(), workflow_id.clone()));
+                    next_state.pending_beads.insert(
+                        bead_id.clone(),
+                        ScheduledBead::new(bead_id.clone(), workflow_id.clone()),
+                    );
                     effects.push(SchedulerEffect::RecordEvent {
                         event: OrchestratorEvent::BeadScheduled {
                             workflow_id,
@@ -415,7 +414,12 @@ mod core {
                         .get(&bead_id)
                         .map(|b| b.workflow_id.clone())
                     {
-                        handle_bead_completed(&mut next_state, &workflow_id, &bead_id, &mut effects);
+                        handle_bead_completed(
+                            &mut next_state,
+                            &workflow_id,
+                            &bead_id,
+                            &mut effects,
+                        );
                     }
                 } else if to == MsgBeadState::Failed {
                     effects.push(SchedulerEffect::RecordEvent {
@@ -501,7 +505,9 @@ mod core {
                 agent_id,
                 capabilities,
             } => {
-                next_state.agents.insert(agent_id.clone(), capabilities.clone());
+                next_state
+                    .agents
+                    .insert(agent_id.clone(), capabilities.clone());
                 effects.push(SchedulerEffect::RecordEvent {
                     event: OrchestratorEvent::AgentRegistered {
                         agent_id,
@@ -610,15 +616,27 @@ mod tests {
     fn test_register_workflow_idempotent_no_duplicate_events() {
         let state = CoreSchedulerState::default();
 
-        let (state, effects1) = core::handle(state, SchedulerMessage::RegisterWorkflow {
-            workflow_id: "wf-dupe".to_string(),
-        });
-        let (_, effects2) = core::handle(state, SchedulerMessage::RegisterWorkflow {
-            workflow_id: "wf-dupe".to_string(),
-        });
+        let (state, effects1) = core::handle(
+            state,
+            SchedulerMessage::RegisterWorkflow {
+                workflow_id: "wf-dupe".to_string(),
+            },
+        );
+        let (_, effects2) = core::handle(
+            state,
+            SchedulerMessage::RegisterWorkflow {
+                workflow_id: "wf-dupe".to_string(),
+            },
+        );
 
-        let count1 = effects1.iter().filter(|e| matches!(e, SchedulerEffect::RecordEvent { .. })).count();
-        let count2 = effects2.iter().filter(|e| matches!(e, SchedulerEffect::RecordEvent { .. })).count();
+        let count1 = effects1
+            .iter()
+            .filter(|e| matches!(e, SchedulerEffect::RecordEvent { .. }))
+            .count();
+        let count2 = effects2
+            .iter()
+            .filter(|e| matches!(e, SchedulerEffect::RecordEvent { .. }))
+            .count();
 
         assert_eq!(count1, 1, "First registration should record one event");
         assert_eq!(count2, 0, "Duplicate registration should not record event");
@@ -725,37 +743,55 @@ mod tests {
     fn test_agent_count_matches_events_no_orphans() {
         let state = CoreSchedulerState::default();
 
-        let (state, _) = core::handle(state, SchedulerMessage::RegisterAgent {
-            agent_id: "agent-1".to_string(),
-            capabilities: vec!["a".to_string()],
-        });
-        let (state, _) = core::handle(state, SchedulerMessage::RegisterAgent {
-            agent_id: "agent-2".to_string(),
-            capabilities: vec!["b".to_string()],
-        });
-        let (state, _) = core::handle(state, SchedulerMessage::RegisterAgent {
-            agent_id: "agent-3".to_string(),
-            capabilities: vec!["c".to_string()],
-        });
+        let (state, _) = core::handle(
+            state,
+            SchedulerMessage::RegisterAgent {
+                agent_id: "agent-1".to_string(),
+                capabilities: vec!["a".to_string()],
+            },
+        );
+        let (state, _) = core::handle(
+            state,
+            SchedulerMessage::RegisterAgent {
+                agent_id: "agent-2".to_string(),
+                capabilities: vec!["b".to_string()],
+            },
+        );
+        let (state, _) = core::handle(
+            state,
+            SchedulerMessage::RegisterAgent {
+                agent_id: "agent-3".to_string(),
+                capabilities: vec!["c".to_string()],
+            },
+        );
 
         assert_eq!(state.agents.len(), 3, "should have 3 agents");
 
-        let (state, _) = core::handle(state, SchedulerMessage::UnregisterAgent {
-            agent_id: "agent-2".to_string(),
-        });
+        let (state, _) = core::handle(
+            state,
+            SchedulerMessage::UnregisterAgent {
+                agent_id: "agent-2".to_string(),
+            },
+        );
 
-        assert_eq!(state.agents.len(), 2, "should have 2 agents after unregister");
+        assert_eq!(
+            state.agents.len(),
+            2,
+            "should have 2 agents after unregister"
+        );
         assert!(state.agents.contains_key("agent-1"), "agent-1 should exist");
         assert!(state.agents.contains_key("agent-3"), "agent-3 should exist");
-        assert!(!state.agents.contains_key("agent-2"), "agent-2 should be removed");
+        assert!(
+            !state.agents.contains_key("agent-2"),
+            "agent-2 should be removed"
+        );
     }
 
     fn setup_state_with_workflow_and_bead() -> CoreSchedulerState {
         let mut state = CoreSchedulerState::default();
-        state.workflows.insert(
-            "wf-1".to_string(),
-            WorkflowState::new("wf-1".to_string()),
-        );
+        state
+            .workflows
+            .insert("wf-1".to_string(), WorkflowState::new("wf-1".to_string()));
         let ws = state.workflows.get_mut("wf-1").unwrap();
         let _ = ws.add_bead("bead-1".to_string());
         state.pending_beads.insert(

@@ -2,6 +2,9 @@
 //!
 //! Tests scheduler crash recovery by killing the scheduler actor mid-execution
 //! and verifying that the supervisor restarts it with consistent state.
+//!
+//! **Bead:** src-3066
+//! **Phase 4 - Chaos Tests:** Random actor kills -> supervisor restart -> system recovers
 #![allow(clippy::unwrap_used)]
 #![allow(clippy::expect_used)]
 #![deny(clippy::panic)]
@@ -10,6 +13,8 @@
 #![forbid(unsafe_code)]
 
 use std::collections::HashSet;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 
 use im::{HashMap, HashSet as ImHashSet};
@@ -449,7 +454,7 @@ async fn await_scheduler_recovery(
 
 #[tokio::test]
 async fn given_scheduler_with_active_workflows_when_killed_gracefully_then_supervisor_restarts_it()
- {
+{
     let test_name = "graceful_kill_recovery";
     info!("Starting test: {}", test_name);
 
@@ -710,4 +715,379 @@ async fn test_given_100_bead_workflow_when_killed_then_recovers_within_10_second
         "Test passed: {} (recovery: {}ms)",
         test_name, recovery_time_ms
     );
+}
+
+// =============================================================================
+// Random Actor Kill Chaos Tests (src-3066)
+// =============================================================================
+
+/// Kill pattern for random chaos testing.
+#[derive(Debug, Clone)]
+struct KillPattern {
+    iteration: u32,
+    delay_ms: u64,
+    label: String,
+}
+
+/// Deterministic pseudo-random number generator for reproducible tests.
+struct SeededRng {
+    state: u64,
+}
+
+impl SeededRng {
+    fn new(seed: u64) -> Self {
+        Self { state: seed }
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        self.state = self
+            .state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        self.state
+    }
+
+    fn next_u32(&mut self, max: u32) -> u32 {
+        (self.next_u64() % u64::from(max)) as u32
+    }
+
+    fn next_bool(&mut self) -> bool {
+        self.next_u64() % 2 == 0
+    }
+}
+
+/// Generate a sequence of kill patterns for chaos testing.
+fn generate_kill_patterns(seed: u64, num_patterns: u32) -> Vec<KillPattern> {
+    let mut rng = SeededRng::new(seed);
+    let mut patterns = Vec::with_capacity(num_patterns as usize);
+
+    for i in 0..num_patterns {
+        patterns.push(KillPattern {
+            iteration: i,
+            delay_ms: 50 + rng.next_u64() % 200,
+            label: format!("kill-{}", i),
+        });
+    }
+
+    patterns
+}
+
+/// Wait for scheduler to be running (or restarted and running).
+async fn ensure_scheduler_running(
+    ctx: &mut ChaosTestContext,
+    test_name: &str,
+    timeout_ms: u64,
+) -> ChaosTestResult<()> {
+    let start = Instant::now();
+    let deadline = Duration::from_millis(timeout_ms);
+
+    while start.elapsed() < deadline {
+        if ctx.scheduler.get_status() == ActorStatus::Running {
+            return Ok(());
+        }
+
+        if let Ok(new_ref) = get_scheduler_ref(&ctx.supervisor, test_name).await {
+            ctx.scheduler = new_ref;
+            return Ok(());
+        }
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+
+    Err(ChaosTestError::RecoveryTimeout { timeout_ms })
+}
+
+#[tokio::test]
+async fn given_scheduler_when_randomly_killed_multiple_times_then_recovers_each_time() {
+    let test_name = "random_kill_recovery";
+    let seed = 42u64;
+    let num_kills = 5;
+
+    info!(
+        "Starting test: {} (seed={}, kills={})",
+        test_name, seed, num_kills
+    );
+
+    let mut ctx = setup_chaos_test(test_name)
+        .await
+        .expect("Failed to setup test context");
+
+    register_test_workflows(&mut ctx)
+        .await
+        .expect("Failed to register workflows");
+
+    let kill_patterns = generate_kill_patterns(seed, num_kills);
+    let successful_recoveries = Arc::new(AtomicU32::new(0));
+
+    for (idx, pattern) in kill_patterns.into_iter().enumerate() {
+        info!("Kill iteration {} with delay {}ms", idx, pattern.delay_ms);
+
+        ensure_scheduler_running(&mut ctx, test_name, 3000)
+            .await
+            .expect("Scheduler must be running before kill");
+
+        let _ = kill_scheduler(&ctx, test_name).await;
+
+        tokio::time::sleep(Duration::from_millis(pattern.delay_ms)).await;
+
+        await_scheduler_recovery(&mut ctx, test_name, 5000)
+            .await
+            .expect(&format!("Recovery failed at iteration {}", idx));
+
+        assert_eq!(
+            ctx.supervisor.get_status(),
+            ActorStatus::Running,
+            "Supervisor must remain running after kill {}",
+            idx
+        );
+
+        assert_eq!(
+            ctx.scheduler.get_status(),
+            ActorStatus::Running,
+            "Scheduler must be running after recovery {}",
+            idx
+        );
+
+        successful_recoveries.fetch_add(1, Ordering::SeqCst);
+    }
+
+    let final_count = successful_recoveries.load(Ordering::SeqCst);
+    assert_eq!(
+        final_count, num_kills,
+        "All {} kills should have recovered",
+        num_kills
+    );
+
+    info!(
+        "Test passed: {} ({} successful recoveries)",
+        test_name, final_count
+    );
+}
+
+#[tokio::test]
+async fn given_scheduler_when_killed_at_random_intervals_then_system_stays_consistent() {
+    let test_name = "random_interval_consistency";
+    let seed = 12345u64;
+
+    info!("Starting test: {}", test_name);
+
+    let mut ctx = setup_chaos_test(test_name)
+        .await
+        .expect("Failed to setup test context");
+
+    register_test_workflows(&mut ctx)
+        .await
+        .expect("Failed to register workflows");
+
+    let mut rng = SeededRng::new(seed);
+    let num_kills = 3;
+
+    for kill_num in 0..num_kills {
+        let interval_ms = 100 + rng.next_u64() % 400;
+        info!("Kill {} waiting {}ms before kill", kill_num, interval_ms);
+
+        ensure_scheduler_running(&mut ctx, test_name, 3000)
+            .await
+            .expect("Scheduler must be running");
+
+        tokio::time::sleep(Duration::from_millis(interval_ms)).await;
+
+        let _ = kill_scheduler(&ctx, test_name).await;
+
+        await_scheduler_recovery(&mut ctx, test_name, 5000)
+            .await
+            .expect(&format!("Recovery failed at kill {}", kill_num));
+
+        assert_eq!(
+            ctx.supervisor.get_status(),
+            ActorStatus::Running,
+            "Supervisor consistency check failed at kill {}",
+            kill_num
+        );
+    }
+
+    info!("Test passed: {}", test_name);
+}
+
+#[tokio::test]
+async fn given_supervisor_when_scheduler_killed_randomly_then_invariant_supervisor_remains_running()
+{
+    let test_name = "invariant_supervisor_random";
+    let seed = 999u64;
+
+    info!("Starting test: {}", test_name);
+
+    let mut ctx = setup_chaos_test(test_name)
+        .await
+        .expect("Failed to setup test context");
+
+    register_test_workflows(&mut ctx)
+        .await
+        .expect("Failed to register workflows");
+
+    let mut rng = SeededRng::new(seed);
+
+    for i in 0..4 {
+        let should_kill = rng.next_bool();
+
+        if should_kill {
+            info!("Iteration {}: killing scheduler", i);
+            let _ = kill_scheduler(&ctx, test_name).await;
+
+            await_scheduler_recovery(&mut ctx, test_name, 5000)
+                .await
+                .expect(&format!("Recovery failed at iteration {}", i));
+        } else {
+            info!("Iteration {}: skipping kill (random)", i);
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+
+        assert_eq!(
+            ctx.supervisor.get_status(),
+            ActorStatus::Running,
+            "INVARIANT VIOLATION: Supervisor stopped at iteration {}",
+            i
+        );
+    }
+
+    info!("Test passed: {}", test_name);
+}
+
+#[tokio::test]
+async fn given_scheduler_when_rapid_random_kills_then_supervisor_handles_gracefully() {
+    let test_name = "rapid_random_kills";
+    let seed = 777u64;
+
+    info!("Starting test: {}", test_name);
+
+    let mut ctx = setup_chaos_test(test_name)
+        .await
+        .expect("Failed to setup test context");
+
+    register_test_workflows(&mut ctx)
+        .await
+        .expect("Failed to register workflows");
+
+    let mut rng = SeededRng::new(seed);
+    let rapid_kills = 3;
+    let mut total_restarts = 0u32;
+
+    for i in 0..rapid_kills {
+        ensure_scheduler_running(&mut ctx, test_name, 3000)
+            .await
+            .expect("Scheduler must be running");
+
+        let short_delay = 20 + rng.next_u64() % 80;
+        info!("Rapid kill {} with {}ms delay", i, short_delay);
+
+        let _ = kill_scheduler(&ctx, test_name).await;
+
+        tokio::time::sleep(Duration::from_millis(short_delay)).await;
+
+        let recovery_start = Instant::now();
+        await_scheduler_recovery(&mut ctx, test_name, 5000)
+            .await
+            .expect(&format!("Rapid recovery failed at iteration {}", i));
+
+        let recovery_ms = recovery_start.elapsed().as_millis();
+        info!("Rapid recovery {} took {}ms", i, recovery_ms);
+
+        total_restarts += 1;
+    }
+
+    let (status_tx, status_rx) = tokio::sync::oneshot::channel();
+    let _ = ctx
+        .supervisor
+        .send_message(SupervisorMessage::GetStatus { reply: status_tx });
+
+    if let Ok(status) = status_rx.await {
+        assert!(
+            status.total_restarts >= total_restarts,
+            "Expected at least {} restarts, got {}",
+            total_restarts,
+            status.total_restarts
+        );
+        info!("Total restarts recorded: {}", status.total_restarts);
+    }
+
+    assert_eq!(
+        ctx.supervisor.get_status(),
+        ActorStatus::Running,
+        "Supervisor must survive rapid random kills"
+    );
+
+    info!("Test passed: {}", test_name);
+}
+
+#[tokio::test]
+async fn given_multiple_random_kill_scenarios_then_all_scenarios_pass() {
+    let scenarios: Vec<(&str, u64, u32)> = vec![
+        ("scenario_a", 111, 3),
+        ("scenario_b", 222, 4),
+        ("scenario_c", 333, 2),
+    ];
+
+    let mut all_passed = true;
+
+    for (scenario_name, seed, num_kills) in scenarios {
+        info!(
+            "Running scenario: {} (seed={}, kills={})",
+            scenario_name, seed, num_kills
+        );
+
+        let test_name = format!("multi-{}", scenario_name);
+        let mut ctx = match setup_chaos_test(&test_name).await {
+            Ok(ctx) => ctx,
+            Err(e) => {
+                info!("Scenario {} setup failed: {:?}", scenario_name, e);
+                all_passed = false;
+                continue;
+            }
+        };
+
+        if register_test_workflows(&mut ctx).await.is_err() {
+            all_passed = false;
+            continue;
+        }
+
+        let kill_patterns = generate_kill_patterns(seed, num_kills);
+        let mut scenario_passed = true;
+
+        for (idx, pattern) in kill_patterns.into_iter().enumerate() {
+            if ensure_scheduler_running(&mut ctx, &test_name, 3000)
+                .await
+                .is_err()
+            {
+                scenario_passed = false;
+                break;
+            }
+
+            let _ = kill_scheduler(&ctx, &test_name).await;
+            tokio::time::sleep(Duration::from_millis(pattern.delay_ms)).await;
+
+            if await_scheduler_recovery(&mut ctx, &test_name, 5000)
+                .await
+                .is_err()
+            {
+                info!("Scenario {} failed at kill {}", scenario_name, idx);
+                scenario_passed = false;
+                break;
+            }
+
+            if ctx.supervisor.get_status() != ActorStatus::Running {
+                scenario_passed = false;
+                break;
+            }
+        }
+
+        if scenario_passed {
+            info!("Scenario {} PASSED", scenario_name);
+        } else {
+            info!("Scenario {} FAILED", scenario_name);
+            all_passed = false;
+        }
+    }
+
+    assert!(all_passed, "All scenarios must pass");
+    info!("Test passed: multi-scenario chaos test");
 }

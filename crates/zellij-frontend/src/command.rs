@@ -67,10 +67,59 @@ pub enum ParseError {
     /// Command missing required arguments
     #[error("command '{0}' requires an argument")]
     MissingArgument(String),
+
+    /// Invalid sort field
+    #[error("invalid sort field: {0}. Valid fields: priority, status, created, updated, slug")]
+    InvalidSortField(String),
+
+    /// Invalid sort direction
+    #[error("invalid sort direction: {0}. Valid directions: asc, desc")]
+    InvalidSortDirection(String),
 }
 
 /// Result type for command parsing
 pub type ParseResult<T> = Result<T, ParseError>;
+
+/// Sort field for task sorting
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SortField {
+    Priority,
+    Status,
+    Created,
+    Updated,
+    Slug,
+}
+
+impl SortField {
+    fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "priority" => Some(Self::Priority),
+            "status" => Some(Self::Status),
+            "created" => Some(Self::Created),
+            "updated" => Some(Self::Updated),
+            "slug" => Some(Self::Slug),
+            _ => None,
+        }
+    }
+}
+
+/// Sort direction
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SortDirection {
+    #[default]
+    Asc,
+    Desc,
+}
+
+impl SortDirection {
+    fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "asc" => Some(Self::Asc),
+            "desc" => Some(Self::Desc),
+            _ => None,
+        }
+    }
+}
 
 /// Parsed command with arguments
 ///
@@ -104,6 +153,14 @@ pub enum ParsedCommand {
     ///
     /// Displays command and key binding help
     Help,
+
+    /// Export tasks to file
+    ///
+    /// Exports the current task list to a JSON file
+    Export {
+        /// Output file path
+        path: String,
+    },
 }
 
 impl ParsedCommand {
@@ -119,6 +176,7 @@ impl ParsedCommand {
             Self::ClearFilter => "clear",
             Self::Refresh => "refresh",
             Self::Help => "help",
+            Self::Export { .. } => "export",
         }
     }
 }
@@ -208,6 +266,7 @@ pub fn parse_command(input: &str) -> ParseResult<ParsedCommand> {
             ParsedCommand::Help,
             parts.get(1..).unwrap_or(&[]),
         )),
+        "export" => parse_export_command(parts.get(1..).unwrap_or(&[])),
         unknown => Err(ParseError::UnknownCommand(unknown.to_string())),
     }
 }
@@ -267,6 +326,33 @@ const fn parse_no_arg_command(command: ParsedCommand, _args: &[&str]) -> ParsedC
     command
 }
 
+/// Parse an export command with path argument
+///
+/// # Arguments
+///
+/// * `args` - Command arguments after "export" keyword
+///
+/// # Returns
+///
+/// - `Ok(ParsedCommand::Export)` with path if valid
+/// - `Err(ParseError)` if path is missing or empty
+fn parse_export_command(args: &[&str]) -> ParseResult<ParsedCommand> {
+    if args.is_empty() {
+        return Err(ParseError::MissingArgument("export".to_string()));
+    }
+
+    let path = args.join(" ");
+    let trimmed = path.trim();
+
+    if trimmed.is_empty() {
+        return Err(ParseError::MissingArgument("export".to_string()));
+    }
+
+    Ok(ParsedCommand::Export {
+        path: trimmed.to_string(),
+    })
+}
+
 /// Suggest completions for a partial command
 ///
 /// This function provides command suggestions based on partial input.
@@ -293,7 +379,7 @@ const fn parse_no_arg_command(command: ParsedCommand, _args: &[&str]) -> ParsedC
 /// ```
 #[must_use]
 pub fn suggest_completions(partial: &str) -> Vec<String> {
-    let commands = ["filter", "clear", "refresh", "help"];
+    let commands = ["filter", "clear", "refresh", "help", "export"];
 
     let input = partial.strip_prefix(':').unwrap_or(partial).to_lowercase();
 
@@ -540,7 +626,7 @@ mod tests {
     #[test]
     fn test_suggest_completions_with_empty_input() {
         let suggestions = suggest_completions(":");
-        assert_eq!(suggestions.len(), 4); // All commands
+        assert_eq!(suggestions.len(), 5); // All commands
     }
 
     #[test]
@@ -611,5 +697,94 @@ mod tests {
                 pattern: "task-1".to_string()
             }
         );
+    }
+
+    // ============================================================================
+    // Parse Export Command Tests
+    // ============================================================================
+
+    #[test]
+    fn test_parse_export_command_with_path() {
+        let result = parse_command(":export tasks.json");
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            ParsedCommand::Export {
+                path: "tasks.json".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_export_command_with_full_path() {
+        let result = parse_command(":export /home/user/tasks.json");
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            ParsedCommand::Export {
+                path: "/home/user/tasks.json".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_export_command_with_path_containing_spaces() {
+        let result = parse_command(":export my tasks.json");
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            ParsedCommand::Export {
+                path: "my tasks.json".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_export_command_without_path_returns_error() {
+        let result = parse_command(":export");
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            ParseError::MissingArgument("export".to_string())
+        );
+    }
+
+    #[test]
+    fn test_parse_export_command_with_whitespace_only_path_returns_error() {
+        let result = parse_command(":export    ");
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            ParseError::MissingArgument("export".to_string())
+        );
+    }
+
+    #[test]
+    fn test_parse_export_command_trim_whitespace() {
+        let result = parse_command(":export   output.json   ");
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            ParsedCommand::Export {
+                path: "output.json".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn test_parsed_command_name_export() {
+        assert_eq!(
+            ParsedCommand::Export {
+                path: "test.json".to_string()
+            }
+            .name(),
+            "export"
+        );
+    }
+
+    #[test]
+    fn test_suggest_completions_with_partial_e() {
+        let suggestions = suggest_completions(":e");
+        assert_eq!(suggestions, vec!["export".to_string()]);
     }
 }

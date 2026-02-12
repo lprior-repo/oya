@@ -992,11 +992,8 @@ mod tests {
             .with_checkpoint_manager(checkpoint_manager)
             .with_checkpoint_config(checkpoint_config);
 
-        let supervisor = spawn_supervisor_with_name::<SchedulerActorDef>(
-            args,
-            "test-periodic-checkpoint",
-        )
-        .await;
+        let supervisor =
+            spawn_supervisor_with_name::<SchedulerActorDef>(args, "test-periodic-checkpoint").await;
         assert!(supervisor.is_ok());
 
         if let Ok(sup) = supervisor {
@@ -1021,11 +1018,9 @@ mod tests {
     async fn test_supervisor_without_checkpoint_manager_no_periodic_task() {
         let args = SupervisorArguments::new().with_config(SupervisorConfig::for_testing());
 
-        let supervisor = spawn_supervisor_with_name::<SchedulerActorDef>(
-            args,
-            "test-no-periodic-checkpoint",
-        )
-        .await;
+        let supervisor =
+            spawn_supervisor_with_name::<SchedulerActorDef>(args, "test-no-periodic-checkpoint")
+                .await;
         assert!(supervisor.is_ok());
 
         if let Ok(sup) = supervisor {
@@ -1067,11 +1062,9 @@ mod tests {
             .with_checkpoint_manager(checkpoint_manager)
             .with_checkpoint_config(checkpoint_config);
 
-        let supervisor = spawn_supervisor_with_name::<SchedulerActorDef>(
-            args,
-            "test-auto-checkpoint-disabled",
-        )
-        .await;
+        let supervisor =
+            spawn_supervisor_with_name::<SchedulerActorDef>(args, "test-auto-checkpoint-disabled")
+                .await;
         assert!(supervisor.is_ok());
 
         if let Ok(sup) = supervisor {
