@@ -24,7 +24,8 @@ async fn init_test_db() -> Result<SurrealDbClient, String> {
         .await
         .map_err(|e| format!("Failed to connect to SurrealDB: {}", e))?;
 
-    let schema = std::fs::read_to_string("schema.surql").map_err(|e| format!("Failed to read schema: {}", e))?;
+    let schema = std::fs::read_to_string("schema.surql")
+        .map_err(|e| format!("Failed to read schema: {}", e))?;
     client
         .init_schema(&schema)
         .await

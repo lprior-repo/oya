@@ -11,10 +11,10 @@ use serde::Deserialize;
 use surrealdb::sql::Datetime as SurrealDatetime;
 use tokio::runtime::Runtime;
 
+use oya_events::Error as OyaError;
 use oya_events::replay::resume::{
     CheckpointData, CheckpointId, CheckpointStore, EventLog, EventMetadata, ReplayState,
 };
-use oya_events::Error as OyaError;
 
 use crate::persistence::{OrchestratorStore, PersistenceError};
 

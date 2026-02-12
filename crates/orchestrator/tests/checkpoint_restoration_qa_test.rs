@@ -16,8 +16,8 @@ use serde::{Deserialize, Serialize};
 use orchestrator::persistence::{
     OrchestratorStore, PersistenceError, PersistenceResult, StoreConfig,
 };
-use orchestrator::replay::checkpoint::CheckpointConfig;
 use orchestrator::replay::CheckpointManager;
+use orchestrator::replay::checkpoint::CheckpointConfig;
 
 /// Test workflow state for serialization/deserialization.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -136,7 +136,10 @@ async fn test_restore_nonexistent_checkpoint_error() {
         .restore_scheduler_state_by_id("non-existent-checkpoint")
         .await;
 
-    assert!(result.is_err(), "Should return error for non-existent checkpoint");
+    assert!(
+        result.is_err(),
+        "Should return error for non-existent checkpoint"
+    );
     match result.unwrap_err() {
         PersistenceError::NotFound { .. } => {
             // Expected error type
@@ -154,7 +157,10 @@ async fn test_restore_when_no_checkpoints() {
 
     // Try to restore latest when none exist
     let result: PersistenceResult<TestSchedulerState> = manager.restore_scheduler_state().await;
-    assert!(result.is_err(), "Should return error when no checkpoints exist");
+    assert!(
+        result.is_err(),
+        "Should return error when no checkpoints exist"
+    );
 }
 
 /// Test: Performance benchmark for restoration operations.
@@ -171,7 +177,9 @@ async fn test_restoration_performance_benchmark() -> Result<(), Box<dyn std::err
         let complexity = i * 100; // 100 to 500 workflows
         let state = TestSchedulerState {
             version: i,
-            active_workflows: (1..=complexity).map(|j| format!("workflow-{}", j)).collect(),
+            active_workflows: (1..=complexity)
+                .map(|j| format!("workflow-{}", j))
+                .collect(),
             last_event_id: format!("event-{}", i * 1000),
             metrics: TestMetrics {
                 total_processed: (i * 100000) as u64,
@@ -190,15 +198,18 @@ async fn test_restoration_performance_benchmark() -> Result<(), Box<dyn std::err
     let mut durations = Vec::new();
     for checkpoint_id in &checkpoint_ids {
         let start = Instant::now();
-        let _: TestSchedulerState = manager
-            .restore_scheduler_state_by_id(checkpoint_id)
-            .await?;
+        let _: TestSchedulerState = manager.restore_scheduler_state_by_id(checkpoint_id).await?;
         durations.push(start.elapsed());
     }
 
     // Verify performance characteristics
     for (i, duration) in durations.iter().enumerate() {
-        println!("Restored checkpoint {} (complexity: {}) in {:?}", i + 1, (i + 1) * 100, duration);
+        println!(
+            "Restored checkpoint {} (complexity: {}) in {:?}",
+            i + 1,
+            (i + 1) * 100,
+            duration
+        );
         assert!(
             duration < &std::time::Duration::from_millis(500),
             "Checkpoint {} restoration should be under 500ms, took {:?}",
@@ -225,33 +236,33 @@ async fn test_restoration_performance_benchmark() -> Result<(), Box<dyn std::err
 #[test]
 fn generate_qa_report() {
     println!("\n=== CHECKPOINT RESTORATION QA REPORT ===\n");
-    
+
     println!("✅ UNIT TEST VALIDATION:");
     println!("   - All restoration methods tested and working");
     println!("   - JSON deserialization verified");
     println!("   - Error paths tested and handling correctly\n");
-    
+
     println!("✅ INTEGRATION TESTING:");
     println!("   - Checkpoint creation and restoration cycle validated");
     println!("   - Multiple checkpoints at different sequences tested");
     println!("   - State restoration verified\n");
-    
+
     println!("✅ EDGE CASE TESTING:");
     println!("   - Non-existent checkpoint handling verified");
     println!("   - Empty checkpoints handling verified");
     println!("   - Error conditions tested\n");
-    
+
     println!("✅ PERFORMANCE TESTING:");
     println!("   - Restoration benchmark completed");
     println!("   - Performance within acceptable limits");
     println!("   - Multiple data sizes handled efficiently\n");
-    
+
     println!("🎯 FINDINGS:");
     println!("   - Checkpoint restoration is working correctly");
     println!("   - Error handling is robust and graceful");
     println!("   - Performance is acceptable for production use");
     println!("   - JSON deserialization handles edge cases properly");
     println!("   - Ready for production deployment\n");
-    
+
     println!("=== END QA REPORT ===\n");
 }

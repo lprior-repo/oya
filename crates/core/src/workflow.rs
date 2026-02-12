@@ -404,10 +404,8 @@ mod tests {
         let mut workflow = Workflow::new("test-workflow", "Test", "Description")?;
         let mut task = Task::new("task-1", "Task 1", "First task")?;
 
-        for stage in crate::Stage::all() {
-            task.current_stage = stage.clone();
-            task.complete_current_stage();
-        }
+        // Mark task as completed
+        task.current_stage = crate::Stage::Completed;
 
         workflow.add_task(task)?;
         let ready = workflow.get_ready_tasks();
@@ -442,10 +440,8 @@ mod tests {
                 .get_mut(&current)
                 .ok_or_else(|| crate::OyaError::not_found("task", current.clone()))?;
 
-            for stage in crate::Stage::all() {
-                task.current_stage = stage.clone();
-                task.complete_current_stage();
-            }
+            // Mark task as completed
+            task.current_stage = crate::Stage::Completed;
         }
 
         assert!(workflow.get_ready_tasks().is_empty());

@@ -158,6 +158,10 @@ pub struct OyaPlugin {
     selected_index: usize,
     /// IPC client for orchestrator communication (not persisted)
     ipc: Option<IpcClient>,
+    /// Last configured IPC address for reconnect attempts
+    ipc_address: String,
+    /// Last IPC connect attempt timestamp (unix ms)
+    last_ipc_connect_attempt_ms: Option<u64>,
     /// Status message shown in the UI
     status_message: Option<String>,
     /// Auto-save timer for periodic state saves
@@ -710,6 +714,60 @@ mod tests {
     }
 
     #[test]
+    fn test_connect_ipc_gracefully_degrades_on_invalid_address(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut plugin = OyaPlugin::new()?;
+        let config = serde_json::json!({ "ipc_address": "not-an-address" });
+
+        let result = plugin.connect_ipc(&config);
+
+        assert!(result.is_ok());
+        assert!(plugin.ipc.is_none());
+        assert!(plugin
+            .status_message
+            .as_deref()
+            .is_some_and(|msg| msg.contains("IPC unavailable")));
+        Ok(())
+    }
+
+    #[test]
+    fn test_refresh_tasks_reports_action_specific_skip_when_throttled(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut plugin = OyaPlugin::new()?;
+        plugin.ipc = None;
+        plugin.last_ipc_connect_attempt_ms = Some(OyaPlugin::now_ms());
+
+        let result = plugin.refresh_tasks();
+
+        assert!(result.is_ok());
+        assert_eq!(
+            plugin.status_message.as_deref(),
+            Some("Refresh skipped: IPC reconnect throttled")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_send_task_command_reports_action_specific_skip_when_throttled(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut plugin = OyaPlugin::new()?;
+        plugin.ipc = None;
+        plugin.last_ipc_connect_attempt_ms = Some(OyaPlugin::now_ms());
+
+        let result = plugin.send_task_command(GuestMessage::RunPipeline {
+            slug: "task-3ax5".to_string(),
+            dry_run: false,
+        });
+
+        assert!(result.is_ok());
+        assert_eq!(
+            plugin.status_message.as_deref(),
+            Some("Run pipeline skipped: IPC reconnect throttled")
+        );
+        Ok(())
+    }
+
+    #[test]
     fn test_plugin_restore_preserves_task_stage_history() -> Result<(), Box<dyn std::error::Error>>
     {
         let mut plugin = OyaPlugin::new()?;
@@ -799,14 +857,22 @@ mod tests {
         // Test BeadList keybindings
         let bead_list_bindings = plugin.get_keybindings_for_pane(PaneType::BeadList);
         assert!(!bead_list_bindings.is_empty());
-        assert!(bead_list_bindings.iter().any(&|(key, _)| *key == '?'));
-        assert!(bead_list_bindings.iter().any(&|(key, _)| *key == '\x1b'));
+        assert!(bead_list_bindings
+            .iter()
+            .any(|&(key, _): &(char, _)| key == '?'));
+        assert!(bead_list_bindings
+            .iter()
+            .any(|&(key, _): &(char, _)| key == '\x1b'));
 
         // Test BeadDetail keybindings
         let bead_detail_bindings = plugin.get_keybindings_for_pane(PaneType::BeadDetail);
         assert!(!bead_detail_bindings.is_empty());
-        assert!(bead_detail_bindings.iter().any(&|(key, _)| *key == '?'));
-        assert!(bead_detail_bindings.iter().any(&|(key, _)| *key == '\x1b'));
+        assert!(bead_detail_bindings
+            .iter()
+            .any(|&(key, _): &(char, _)| key == '?'));
+        assert!(bead_detail_bindings
+            .iter()
+            .any(|&(key, _): &(char, _)| key == '\x1b'));
 
         // Test PipelineView keybindings
         let pipeline_view_bindings = plugin.get_keybindings_for_pane(PaneType::PipelineView);
@@ -968,6 +1034,8 @@ impl OyaPlugin {
             tasks,
             selected_index: 0,
             ipc: None,
+            ipc_address: "127.0.0.1:5555".to_string(),
+            last_ipc_connect_attempt_ms: None,
             status_message: None,
             auto_save_timer: None,
             last_save_timestamp: None,
@@ -1272,14 +1340,18 @@ impl OyaPlugin {
             .and_then(|value| value.as_str())
             .unwrap_or("127.0.0.1:5555");
 
+        self.ipc_address = address.to_string();
+
         match IpcClient::connect(address) {
             Ok(client) => {
                 self.ipc = Some(client);
+                self.last_ipc_connect_attempt_ms = None;
                 self.status_message = Some(format!("IPC connected to {address}"));
                 Ok(())
             }
             Err(err) => {
                 self.ipc = None;
+                self.last_ipc_connect_attempt_ms = Some(Self::now_ms());
                 self.status_message = Some(format!("IPC unavailable: {err}"));
                 Ok(())
             }
@@ -1287,12 +1359,13 @@ impl OyaPlugin {
     }
 
     fn refresh_tasks(&mut self) -> PluginResult<()> {
+        if !self.ensure_ipc_connected_for_action("Refresh") {
+            return Ok(());
+        }
+
         let ipc = match self.ipc.as_mut() {
             Some(ipc) => ipc,
-            None => {
-                self.status_message = Some("IPC not connected".to_string());
-                return Ok(());
-            }
+            None => return Ok(()),
         };
 
         match ipc.request(GuestMessage::GetTaskList) {
@@ -1307,6 +1380,7 @@ impl OyaPlugin {
                 Ok(())
             }
             Err(err) => {
+                self.ipc = None;
                 self.status_message = Some(format!("IPC error: {err}"));
                 Ok(())
             }
@@ -1349,12 +1423,14 @@ impl OyaPlugin {
     }
 
     fn send_task_command(&mut self, message: GuestMessage) -> PluginResult<()> {
+        let action = Self::action_name_for_message(&message);
+        if !self.ensure_ipc_connected_for_action(action) {
+            return Ok(());
+        }
+
         let ipc = match self.ipc.as_mut() {
             Some(ipc) => ipc,
-            None => {
-                self.status_message = Some("IPC not connected".to_string());
-                return Ok(());
-            }
+            None => return Ok(()),
         };
 
         match ipc.request(message) {
@@ -1386,10 +1462,73 @@ impl OyaPlugin {
                 Ok(())
             }
             Err(err) => {
+                self.ipc = None;
                 self.status_message = Some(format!("IPC error: {err}"));
                 Ok(())
             }
         }
+    }
+
+    fn action_name_for_message(message: &GuestMessage) -> &'static str {
+        match message {
+            GuestMessage::RunPipeline { .. } => "Run pipeline",
+            GuestMessage::RunPipelineBatch { .. } => "Batch run",
+            GuestMessage::ApproveTask { .. } => "Approve task",
+            _ => "Action",
+        }
+    }
+
+    fn ensure_ipc_connected_for_action(&mut self, action: &str) -> bool {
+        if self.ensure_ipc_connected() {
+            return true;
+        }
+
+        let detail = self
+            .status_message
+            .clone()
+            .unwrap_or_else(|| "IPC unavailable".to_string());
+        self.status_message = Some(format!("{action} skipped: {detail}"));
+        false
+    }
+
+    fn ensure_ipc_connected(&mut self) -> bool {
+        if self.ipc.is_some() {
+            return true;
+        }
+
+        const IPC_RECONNECT_COOLDOWN_MS: u64 = 250;
+        let now_ms = Self::now_ms();
+        let should_throttle = self
+            .last_ipc_connect_attempt_ms
+            .is_some_and(|last_attempt_ms| {
+                now_ms.saturating_sub(last_attempt_ms) < IPC_RECONNECT_COOLDOWN_MS
+            });
+
+        if should_throttle {
+            self.status_message = Some("IPC reconnect throttled".to_string());
+            return false;
+        }
+
+        self.last_ipc_connect_attempt_ms = Some(now_ms);
+
+        match IpcClient::connect(&self.ipc_address) {
+            Ok(client) => {
+                self.ipc = Some(client);
+                self.last_ipc_connect_attempt_ms = None;
+                self.status_message = Some(format!("IPC reconnected to {}", self.ipc_address));
+                true
+            }
+            Err(err) => {
+                self.status_message = Some(format!("IPC unavailable: {err}"));
+                false
+            }
+        }
+    }
+
+    fn now_ms() -> u64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or_else(|_| 0, |d| d.as_millis() as u64)
     }
 
     /// Get keybindings for a specific pane type
@@ -1568,6 +1707,7 @@ impl OyaPlugin {
         // IPC client is not restored (must be re-established)
         // Reset to None to force reconnection
         self.ipc = None;
+        self.last_ipc_connect_attempt_ms = None;
 
         Ok(())
     }
