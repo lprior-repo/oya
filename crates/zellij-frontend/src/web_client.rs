@@ -28,6 +28,84 @@ pub struct WebClientConfig {
     pub retry_delay: Duration,
 }
 
+/// Configuration validation errors
+#[derive(Debug, Error, Clone, PartialEq)]
+pub enum ConfigError {
+    #[error("Invalid base URL: {message}")]
+    InvalidBaseUrl { message: String },
+
+    #[error("Timeout must be positive, got {seconds}s")]
+    InvalidTimeout { seconds: u64 },
+
+    #[error("Max retries must be between 0 and 10, got {value}")]
+    InvalidMaxRetries { value: u32 },
+
+    #[error("Retry delay must be positive, got {milliseconds}ms")]
+    InvalidRetryDelay { milliseconds: u64 },
+}
+
+impl WebClientConfig {
+    /// Validate the configuration
+    ///
+    /// # Errors
+    ///
+    /// Returns a `ConfigError` if any configuration value is invalid.
+    pub fn validate(&self) -> Result<(), ConfigError> {
+        validate_url(&self.base_url)?;
+        validate_timeout(self.timeout)?;
+        validate_max_retries(self.max_retries)?;
+        validate_retry_delay(self.retry_delay)?;
+        Ok(())
+    }
+}
+
+fn validate_url(url: &str) -> Result<(), ConfigError> {
+    if url.is_empty() {
+        return Err(ConfigError::InvalidBaseUrl {
+            message: "URL cannot be empty".to_string(),
+        });
+    }
+
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return Err(ConfigError::InvalidBaseUrl {
+            message: "URL must start with http:// or https://".to_string(),
+        });
+    }
+
+    let without_scheme = url.trim_start_matches("http://").trim_start_matches("https://");
+    if without_scheme.is_empty() {
+        return Err(ConfigError::InvalidBaseUrl {
+            message: "URL must have a host".to_string(),
+        });
+    }
+
+    Ok(())
+}
+
+fn validate_timeout(timeout: Duration) -> Result<(), ConfigError> {
+    let seconds = timeout.as_secs();
+    if seconds == 0 {
+        return Err(ConfigError::InvalidTimeout { seconds });
+    }
+    Ok(())
+}
+
+fn validate_max_retries(retries: u32) -> Result<(), ConfigError> {
+    if retries > 10 {
+        return Err(ConfigError::InvalidMaxRetries { value: retries });
+    }
+    Ok(())
+}
+
+fn validate_retry_delay(delay: Duration) -> Result<(), ConfigError> {
+    if delay.as_millis() == 0 {
+        return Err(ConfigError::InvalidRetryDelay {
+            milliseconds: 0,
+        });
+    }
+    Ok(())
+}
+
 impl Default for WebClientConfig {
     fn default() -> Self {
         Self {
@@ -785,6 +863,136 @@ mod tests {
             message: "test".to_string(),
         };
         let error3 = WebClientError::Network {
+            message: "different".to_string(),
+        };
+
+        assert_eq!(error1, error2);
+        assert_ne!(error1, error3);
+    }
+
+    #[test]
+    fn test_config_validate_valid() {
+        let config = WebClientConfig::default();
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_config_validate_empty_base_url() {
+        let config = WebClientConfig {
+            base_url: "".to_string(),
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+        match config.validate() {
+            Err(ConfigError::InvalidBaseUrl { message }) => {
+                assert_eq!(message, "URL cannot be empty");
+            }
+            _ => panic!("Expected InvalidBaseUrl error"),
+        }
+    }
+
+    #[test]
+    fn test_config_validate_missing_scheme() {
+        let config = WebClientConfig {
+            base_url: "localhost:8080".to_string(),
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+        match config.validate() {
+            Err(ConfigError::InvalidBaseUrl { message }) => {
+                assert!(message.contains("http:// or https://"));
+            }
+            _ => panic!("Expected InvalidBaseUrl error"),
+        }
+    }
+
+    #[test]
+    fn test_config_validate_no_host() {
+        let config = WebClientConfig {
+            base_url: "http://".to_string(),
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+        match config.validate() {
+            Err(ConfigError::InvalidBaseUrl { message }) => {
+                assert_eq!(message, "URL must have a host");
+            }
+            _ => panic!("Expected InvalidBaseUrl error"),
+        }
+    }
+
+    #[test]
+    fn test_config_validate_invalid_timeout() {
+        let config = WebClientConfig {
+            timeout: Duration::from_secs(0),
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+        match config.validate() {
+            Err(ConfigError::InvalidTimeout { seconds }) => {
+                assert_eq!(seconds, 0);
+            }
+            _ => panic!("Expected InvalidTimeout error"),
+        }
+    }
+
+    #[test]
+    fn test_config_validate_excessive_retries() {
+        let config = WebClientConfig {
+            max_retries: 15,
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+        match config.validate() {
+            Err(ConfigError::InvalidMaxRetries { value }) => {
+                assert_eq!(value, 15);
+            }
+            _ => panic!("Expected InvalidMaxRetries error"),
+        }
+    }
+
+    #[test]
+    fn test_config_validate_zero_retry_delay() {
+        let config = WebClientConfig {
+            retry_delay: Duration::from_secs(0),
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+        match config.validate() {
+            Err(ConfigError::InvalidRetryDelay { milliseconds }) => {
+                assert_eq!(milliseconds, 0);
+            }
+            _ => panic!("Expected InvalidRetryDelay error"),
+        }
+    }
+
+    #[test]
+    fn test_config_validate_valid_http_url() {
+        let config = WebClientConfig {
+            base_url: "http://localhost:3000".to_string(),
+            ..Default::default()
+        };
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_config_validate_valid_https_url() {
+        let config = WebClientConfig {
+            base_url: "https://api.example.com/v1".to_string(),
+            ..Default::default()
+        };
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_config_error_equality() {
+        let error1 = ConfigError::InvalidBaseUrl {
+            message: "test".to_string(),
+        };
+        let error2 = ConfigError::InvalidBaseUrl {
+            message: "test".to_string(),
+        };
+        let error3 = ConfigError::InvalidBaseUrl {
             message: "different".to_string(),
         };
 
