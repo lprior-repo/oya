@@ -126,7 +126,7 @@ fn test_invalid_config_structure_nested_invalid_objects() {
             "should": "be rejected"
         }
     });
-    
+
     let _plugin_info = PluginInfo { size, config };
 
     // This test will fail because the current implementation doesn't validate nested structures
@@ -197,7 +197,7 @@ fn test_error_handling_for_invalid_ipc_address_format() {
         "ipc_address": "not-a-valid-address" // Invalid format
     });
 
-    let plugin_info = PluginInfo { size, config };
+    let _plugin_info = PluginInfo { size, config };
 
     // This test will fail because the current implementation doesn't validate address format
     assert!(
@@ -214,7 +214,7 @@ fn test_error_handling_for_negative_auto_save_interval() {
         "auto_save_interval_secs": -30 // Should be positive
     });
 
-    let plugin_info = PluginInfo { size, config };
+    let _plugin_info = PluginInfo { size, config };
 
     // This test will fail because the current implementation doesn't validate interval range
     assert!(
@@ -231,7 +231,7 @@ fn test_error_handling_for_zero_auto_save_interval() {
         "auto_save_interval_secs": 0 // Should be at least 10
     });
 
-    let plugin_info = PluginInfo { size, config };
+    let _plugin_info = PluginInfo { size, config };
 
     // This test will fail because the current implementation doesn't validate minimum interval
     assert!(
@@ -248,7 +248,7 @@ fn test_error_handling_for_too_large_auto_save_interval() {
         "auto_save_interval_secs": 10000 // Should be max 600
     });
 
-    let plugin_info = PluginInfo { size, config };
+    let _plugin_info = PluginInfo { size, config };
 
     // This test will fail because the current implementation doesn't validate maximum interval
     assert!(
@@ -263,7 +263,7 @@ fn test_validation_should_return_clear_error_messages() {
     let size = Size { rows: 24, cols: 80 };
     let config = json!({}); // Empty config should be invalid
 
-    let plugin_info = PluginInfo { size, config };
+    let _plugin_info = PluginInfo { size, config };
 
     // This test will fail because the current implementation returns generic errors
     assert!(
@@ -282,7 +282,7 @@ fn test_validation_should_be_strict_but_flexible() {
         // Missing optional fields should be ok
     });
 
-    let plugin_info = PluginInfo { size, config };
+    let _plugin_info = PluginInfo { size, config };
 
     // This test will fail because the current implementation doesn't distinguish required vs optional
     assert!(
@@ -299,7 +299,7 @@ fn test_validation_should_handle_partial_updates() {
         "auto_save_interval_secs": 45 // Partial update - should be valid
     });
 
-    let plugin_info = PluginInfo { size, config };
+    let _plugin_info = PluginInfo { size, config };
 
     // This test will fail because the current implementation requires full config
     assert!(
@@ -314,7 +314,7 @@ fn test_validation_should_support_default_values() {
     let size = Size { rows: 24, cols: 80 };
     let config = json!({}); // Empty config should use defaults
 
-    let plugin_info = PluginInfo { size, config };
+    let _plugin_info = PluginInfo { size, config };
 
     // This test will fail because the current implementation doesn't provide defaults
     assert!(
@@ -332,7 +332,7 @@ fn test_validation_should_be_performative() {
         "ipc_address": "127.0.0.1:5555"
     });
 
-    let plugin_info = PluginInfo { size, config };
+    let _plugin_info = PluginInfo { size, config };
 
     // This test will fail because the current implementation has no validation overhead
     assert!(
@@ -351,7 +351,7 @@ fn test_validation_should_support_backward_compatibility() {
         "ipc_address": "127.0.0.1:5555"
     });
 
-    let plugin_info = PluginInfo { size, config };
+    let _plugin_info = PluginInfo { size, config };
 
     // This test will fail because the current implementation doesn't support backward compatibility
     assert!(
@@ -370,7 +370,7 @@ fn test_validation_should_support_forward_compatibility() {
         "new_feature_flag": true // New field that should be ignored
     });
 
-    let plugin_info = PluginInfo { size, config };
+    let _plugin_info = PluginInfo { size, config };
 
     // This test will fail because the current implementation doesn't handle new fields gracefully
     assert!(

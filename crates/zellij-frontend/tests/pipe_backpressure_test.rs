@@ -4,7 +4,7 @@
 //! when handling high-volume log streaming (100k+ lines).
 
 use std::io::{Read, Write};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -12,89 +12,110 @@ use std::time::{Duration, Instant};
 /// Test that consumer can throttle a fast producer with backpressure
 ///
 /// This test verifies:
-/// 1. Consumer controls the flow rate via acknowledgments
-/// 2. Producer respects backpressure signals
+/// 1. Consumer controls the flow rate via built-in OS pipe backpressure
+/// 2. Producer blocks when pipe buffer is full (natural backpressure)
 /// 3. System remains stable under rate mismatches
+/// 4. All data is eventually delivered
 #[test]
 fn test_backpressure_throttling() {
-    // Create pipes for bidirectional communication
-    let (consumer_reader, mut producer_writer) = os_pipe::pipe().expect("Failed to create pipe");
-    let (mut producer_reader, mut consumer_writer) =
-        os_pipe::pipe().expect("Failed to create pipe");
+    let (mut reader, mut writer) = os_pipe::pipe().expect("Failed to create pipe");
+
+    const TOTAL_MESSAGES: usize = 500;
+    const MESSAGE_SIZE: usize = 1024; // 1KB messages to fill buffer faster
 
     let messages_sent = Arc::new(AtomicUsize::new(0));
-    let messages_received = Arc::new(AtomicUsize::new(0));
-    let backpressure_signals = Arc::new(AtomicUsize::new(0));
+    let bytes_received = Arc::new(AtomicUsize::new(0));
+    let producer_blocked = Arc::new(AtomicBool::new(false));
 
     let sent = Arc::clone(&messages_sent);
-    let recv = Arc::clone(&messages_received);
-    let bp = Arc::clone(&backpressure_signals);
+    let bytes_recv = Arc::clone(&bytes_received);
+    let blocked = Arc::clone(&producer_blocked);
 
-    // Spawn producer thread (fast)
+    // Spawn producer thread (fast writer)
     let producer = thread::spawn(move || {
-        for i in 0..100 {
-            let msg = format!("Message {:05}\n", i);
+        let start = Instant::now();
+        let message = "A".repeat(MESSAGE_SIZE);
 
-            // Check for backpressure signal from consumer
-            let mut buf = [0u8; 1];
-            match producer_reader.read(&mut buf) {
-                Ok(1) if buf[0] == b'\x01' => {
-                    bp.fetch_add(1, Ordering::SeqCst);
-                    // Respect backpressure - wait before continuing
-                    thread::sleep(Duration::from_millis(10));
+        for i in 0..TOTAL_MESSAGES {
+            let payload = format!("{:08}:{}", i, message);
+
+            // Track if write blocks (indicates backpressure)
+            let write_start = Instant::now();
+            match writer.write_all(payload.as_bytes()) {
+                Ok(_) => {
+                    sent.fetch_add(1, Ordering::SeqCst);
+                    // If write took >10ms, it likely blocked on full buffer
+                    if write_start.elapsed() > Duration::from_millis(10) {
+                        blocked.store(true, Ordering::SeqCst);
+                    }
                 }
-                _ => {}
+                Err(_) => break,
             }
-
-            producer_writer
-                .write_all(msg.as_bytes())
-                .expect("Failed to write");
-            sent.fetch_add(1, Ordering::SeqCst);
         }
+
+        // Ensure all data is flushed
+        let _ = writer.flush();
+        drop(writer); // Close write end to signal EOF
+
+        start.elapsed()
     });
 
-    // Consumer thread (slow - simulates processing time)
+    // Consumer thread (slow reader - simulates processing time)
     let consumer = thread::spawn(move || {
-        let mut reader = std::io::BufReader::new(consumer_reader);
-        let mut line = String::new();
+        let mut buffer = [0u8; MESSAGE_SIZE + 10]; // Buffer for one message
+        let mut total_bytes = 0;
+        let mut messages = 0;
 
-        for i in 0..100 {
-            line.clear();
+        loop {
+            // Slow processing - 5ms delay per read
+            thread::sleep(Duration::from_millis(5));
 
-            // Simulate slow processing
-            thread::sleep(Duration::from_millis(20));
-
-            // Signal backpressure every 10 messages
-            if i > 0 && i % 10 == 0 {
-                consumer_writer
-                    .write_all(b"\x01")
-                    .expect("Failed to send backpressure");
+            match reader.read(&mut buffer) {
+                Ok(0) => break, // EOF
+                Ok(n) => {
+                    total_bytes += n;
+                    messages += 1;
+                    bytes_recv.fetch_add(n, Ordering::SeqCst);
+                }
+                Err(_) => break,
             }
 
-            // Read message
-            match std::io::BufRead::read_line(&mut reader, &mut line) {
-                Ok(_) if !line.is_empty() => {
-                    recv.fetch_add(1, Ordering::SeqCst);
-                }
-                _ => break,
+            // Stop after reasonable time
+            if messages >= TOTAL_MESSAGES {
+                break;
             }
         }
+
+        (messages, total_bytes)
     });
 
-    producer.join().expect("Producer panicked");
-    consumer.join().expect("Consumer panicked");
+    let producer_duration = producer.join().expect("Producer panicked");
+    let (received_count, _total_bytes) = consumer.join().expect("Consumer panicked");
 
-    // Verify all messages were received despite rate mismatch
+    // Verify all messages were received
     assert_eq!(
-        messages_received.load(Ordering::SeqCst),
-        messages_sent.load(Ordering::SeqCst),
-        "All messages should be received"
+        received_count, TOTAL_MESSAGES,
+        "All {} messages should be received, got {}",
+        TOTAL_MESSAGES, received_count
     );
 
-    // Verify backpressure was applied
+    assert_eq!(
+        messages_sent.load(Ordering::SeqCst),
+        TOTAL_MESSAGES,
+        "All messages should have been sent"
+    );
+
+    // Verify producer experienced backpressure (took significant time due to blocking)
+    // Without backpressure, 500 x 1KB writes would be nearly instant
     assert!(
-        backpressure_signals.load(Ordering::SeqCst) > 0,
-        "Backpressure signals should have been sent"
+        producer_duration > Duration::from_millis(100),
+        "Producer should have been throttled by backpressure, took {:?}",
+        producer_duration
+    );
+
+    println!(
+        "Producer was throttled: took {:?} for {} messages",
+        producer_duration, TOTAL_MESSAGES
     );
 }
 

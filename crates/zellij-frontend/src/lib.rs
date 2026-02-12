@@ -69,3 +69,10 @@ pub use log::{LogAggregator, LogEntry, LogLevel, LogSource};
 pub use metrics::{AgentMetrics, MetricsSnapshot, PoolMetrics};
 pub use state::{STATE_VERSION, StateError, StateManager, StateSnapshot};
 pub use timer::{RefreshTimer, TimerConfig, TimerError, TimerEvent, TimerState};
+
+// Re-exports for backpressure handling
+pub use backpressure::{
+    BackpressureConfig, BackpressureReader, BackpressureState, BackpressureWriter,
+};
+#[cfg(test)]
+pub use backpressure::backpressure_pipe;

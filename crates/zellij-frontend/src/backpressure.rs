@@ -205,6 +205,7 @@ impl<R: Read> Read for BackpressureReader<R> {
 /// Create a backpressure-controlled pipe pair
 ///
 /// Returns a (reader, writer) pair that shares backpressure state
+#[cfg(test)]
 pub fn backpressure_pipe(
     config: BackpressureConfig,
 ) -> io::Result<(
@@ -291,7 +292,7 @@ mod tests {
         assert_eq!(state.buffered_count(), 1);
 
         // Read to clear
-        let mut bp_reader = BackpressureReader::new(reader, state);
+        let mut bp_reader = BackpressureReader::new(reader, Arc::clone(&state));
         let mut buf = [0u8; 4];
         bp_reader.read_exact(&mut buf).unwrap();
 

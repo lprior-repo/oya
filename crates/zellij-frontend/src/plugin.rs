@@ -8,7 +8,7 @@
 // NOTE: IPC integration with oya-orchestrator will be added in a future bead
 
 use crate::ipc::IpcClient;
-use crate::layout::{Layout, PaneType};
+use crate::layout::Layout;
 use crate::render::Renderer;
 use crate::state::StateManager;
 use crate::timer::{RefreshTimer, TimerConfig};
@@ -158,6 +158,8 @@ pub struct OyaPlugin {
     selected_index: usize,
     /// IPC client for orchestrator communication (not persisted)
     ipc: Option<IpcClient>,
+    /// Last configured IPC address for reconnect attempts
+    ipc_address: String,
     /// Status message shown in the UI
     status_message: Option<String>,
     /// Auto-save timer for periodic state saves
@@ -710,6 +712,56 @@ mod tests {
     }
 
     #[test]
+    fn test_connect_ipc_gracefully_degrades_on_invalid_address(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut plugin = OyaPlugin::new()?;
+        let config = serde_json::json!({ "ipc_address": "not-an-address" });
+
+        let result = plugin.connect_ipc(&config);
+
+        assert!(result.is_ok());
+        assert!(plugin.ipc.is_none());
+        assert!(plugin
+            .status_message
+            .as_deref()
+            .is_some_and(|msg| msg.contains("IPC unavailable")));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_refresh_tasks_attempts_reconnect_with_valid_address(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut plugin = OyaPlugin::new()?;
+        plugin.ipc = None;
+        plugin.ipc_address = "stdio://zellij".to_string();
+
+        let result = plugin.refresh_tasks();
+
+        assert!(result.is_ok());
+        assert!(plugin.ipc.is_some());
+        Ok(())
+    }
+
+    #[test]
+    fn test_refresh_tasks_gracefully_degrades_when_reconnect_fails(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut plugin = OyaPlugin::new()?;
+        plugin.ipc = None;
+        plugin.ipc_address = "not-an-address".to_string();
+
+        let result = plugin.refresh_tasks();
+
+        assert!(result.is_ok());
+        assert!(plugin.ipc.is_none());
+        assert!(plugin
+            .status_message
+            .as_deref()
+            .is_some_and(|msg| msg.contains("IPC unavailable")));
+        Ok(())
+    }
+
+    #[test]
     fn test_plugin_restore_preserves_task_stage_history() -> Result<(), Box<dyn std::error::Error>>
     {
         let mut plugin = OyaPlugin::new()?;
@@ -1006,6 +1058,7 @@ impl OyaPlugin {
             tasks,
             selected_index: 0,
             ipc: None,
+            ipc_address: "127.0.0.1:5555".to_string(),
             status_message: None,
             auto_save_timer: None,
             last_save_timestamp: None,
@@ -1324,6 +1377,8 @@ impl OyaPlugin {
             .and_then(|value| value.as_str())
             .unwrap_or("127.0.0.1:5555");
 
+        self.ipc_address = address.to_string();
+
         match IpcClient::connect(address) {
             Ok(client) => {
                 self.ipc = Some(client);
@@ -1339,12 +1394,13 @@ impl OyaPlugin {
     }
 
     fn refresh_tasks(&mut self) -> PluginResult<()> {
+        if !self.ensure_ipc_connected() {
+            return Ok(());
+        }
+
         let ipc = match self.ipc.as_mut() {
             Some(ipc) => ipc,
-            None => {
-                self.status_message = Some("IPC not connected".to_string());
-                return Ok(());
-            }
+            None => return Ok(()),
         };
 
         match ipc.request(GuestMessage::GetTaskList) {
@@ -1359,6 +1415,7 @@ impl OyaPlugin {
                 Ok(())
             }
             Err(err) => {
+                self.ipc = None;
                 self.status_message = Some(format!("IPC error: {err}"));
                 Ok(())
             }
@@ -1401,12 +1458,13 @@ impl OyaPlugin {
     }
 
     fn send_task_command(&mut self, message: GuestMessage) -> PluginResult<()> {
+        if !self.ensure_ipc_connected() {
+            return Ok(());
+        }
+
         let ipc = match self.ipc.as_mut() {
             Some(ipc) => ipc,
-            None => {
-                self.status_message = Some("IPC not connected".to_string());
-                return Ok(());
-            }
+            None => return Ok(()),
         };
 
         match ipc.request(message) {
@@ -1438,8 +1496,27 @@ impl OyaPlugin {
                 Ok(())
             }
             Err(err) => {
+                self.ipc = None;
                 self.status_message = Some(format!("IPC error: {err}"));
                 Ok(())
+            }
+        }
+    }
+
+    fn ensure_ipc_connected(&mut self) -> bool {
+        if self.ipc.is_some() {
+            return true;
+        }
+
+        match IpcClient::connect(&self.ipc_address) {
+            Ok(client) => {
+                self.ipc = Some(client);
+                self.status_message = Some(format!("IPC reconnected to {}", self.ipc_address));
+                true
+            }
+            Err(err) => {
+                self.status_message = Some(format!("IPC unavailable: {err}"));
+                false
             }
         }
     }
