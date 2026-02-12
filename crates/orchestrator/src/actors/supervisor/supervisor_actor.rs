@@ -843,6 +843,7 @@ mod tests {
             interval: Duration::from_secs(1),
             max_checkpoints: 10,
             auto_checkpoint: true,
+            ..CheckpointConfig::default()
         };
         Some(CheckpointManager::new(store, checkpoint_config))
     }
@@ -897,6 +898,7 @@ mod tests {
             interval: Duration::from_secs(60),
             max_checkpoints: 5,
             auto_checkpoint: true,
+            ..CheckpointConfig::default()
         };
         let args = SupervisorArguments::new().with_checkpoint_config(checkpoint_config);
 
@@ -982,6 +984,7 @@ mod tests {
             interval: Duration::from_millis(100),
             max_checkpoints: 5,
             auto_checkpoint: true,
+            ..CheckpointConfig::default()
         };
 
         let args = SupervisorArguments::new()
