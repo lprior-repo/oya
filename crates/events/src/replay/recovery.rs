@@ -17,7 +17,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use crate::error::{ConnectionError, Error, Result};
+use crate::error::{Error, Result};
 use std::time::Duration;
 use tracing::{error, warn};
 
@@ -156,9 +156,9 @@ impl DeadLetterQueue for InMemoryDeadLetterQueue {
         self.events
             .lock()
             .map_err(|e| Error::Internal(format!("DLQ lock poisoned: {e}")))
-            .and_then(|mut events| {
+            .map(|mut events| {
                 events.push_back(event);
-                Ok(())
+                ()
             })
     }
 

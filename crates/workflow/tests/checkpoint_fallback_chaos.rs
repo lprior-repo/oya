@@ -17,9 +17,7 @@
 use thiserror::Error;
 use tracing::{debug, info, warn};
 
-use oya_workflow::checkpoint::restore::{
-    restore_checkpoint, CheckpointId, RestoreError, RestoreResult,
-};
+use oya_workflow::checkpoint::restore::{restore_checkpoint, CheckpointId, RestoreError};
 use oya_workflow::checkpoint::serialize::serialize_state;
 use oya_workflow::checkpoint::storage::{
     CheckpointMetadata, CheckpointStorage, InMemoryCheckpointStorage,
@@ -281,9 +279,9 @@ async fn given_corrupted_latest_checkpoint_when_restoring_then_falls_back_to_pre
     let checkpoints =
         create_checkpoint_sequence(&mut storage, 3).expect("Failed to create checkpoint sequence");
 
-    let (cp1_id, state1) = &checkpoints[0];
+    let (cp1_id, _state1) = &checkpoints[0];
     let (cp2_id, state2) = &checkpoints[1];
-    let (cp3_id, state3) = &checkpoints[2];
+    let (cp3_id, _state3) = &checkpoints[2];
 
     info!("Created checkpoints: {}, {}, {}", cp1_id, cp2_id, cp3_id);
 

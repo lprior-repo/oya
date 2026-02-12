@@ -206,8 +206,8 @@ where
     if !timestamp_valid {
         let log_timestamp = events
             .first()
-            .map(|event| event.timestamp.clone())
-            .unwrap_or_else(|| checkpoint_timestamp.clone());
+            .map(|event| event.timestamp)
+            .unwrap_or_else(|| checkpoint_timestamp);
 
         return Err(ResumeError::TimestampMismatch {
             checkpoint_id: checkpoint_id.as_str().to_string(),

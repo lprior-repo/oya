@@ -728,12 +728,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_circuit_breaker_blocks_failing_subscriber() {
+    async fn test_circuit_breaker_blocks_failing_subscriber() -> std::result::Result<(), String> {
         let bus = EventBusBuilder::new()
             .with_store(Arc::new(InMemoryEventStore::new()))
             .with_failure_threshold(2)
             .build()
-            .expect("Failed to build EventBus");
+            .map_err(|e| format!("Failed to build EventBus: {e}"))?;
 
         let bead_id = BeadId::new();
 
@@ -786,15 +786,16 @@ mod tests {
 
         // Unsubscribe
         bus.unsubscribe(&sub_id).await;
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_circuit_breaker_resets_after_success() {
+    async fn test_circuit_breaker_resets_after_success() -> std::result::Result<(), String> {
         let bus = EventBusBuilder::new()
             .with_store(Arc::new(InMemoryEventStore::new()))
             .with_failure_threshold(2)
             .build()
-            .expect("Failed to build EventBus");
+            .map_err(|e| format!("Failed to build EventBus: {e}"))?;
 
         let bead_id = BeadId::new();
 
@@ -813,7 +814,7 @@ mod tests {
             BeadState::Scheduled,
         ))
         .await
-        .expect("Failed to publish event");
+        .map_err(|e| format!("Failed to publish event: {e}"))?;
 
         // Second event - failure, count = 2 (circuit opens)
         bus.publish(BeadEvent::state_changed(
@@ -822,7 +823,7 @@ mod tests {
             BeadState::Ready,
         ))
         .await
-        .expect("Failed to publish event");
+        .map_err(|e| format!("Failed to publish event: {e}"))?;
 
         // Third event - should be blocked
         bus.publish(BeadEvent::state_changed(
@@ -831,7 +832,7 @@ mod tests {
             BeadState::Completed,
         ))
         .await
-        .expect("Failed to publish event");
+        .map_err(|e| format!("Failed to publish event: {e}"))?;
 
         // Create a new subscriber that should work
         let (sub_id2, mut sub2) = bus
@@ -858,15 +859,16 @@ mod tests {
         // Unsubscribe
         bus.unsubscribe(&sub_id).await;
         bus.unsubscribe(&sub_id2).await;
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_custom_failure_threshold() {
+    async fn test_custom_failure_threshold() -> std::result::Result<(), String> {
         let bus = EventBusBuilder::new()
             .with_store(Arc::new(InMemoryEventStore::new()))
             .with_failure_threshold(1)
             .build()
-            .expect("Failed to build EventBus");
+            .map_err(|e| format!("Failed to build EventBus: {e}"))?;
 
         assert_eq!(bus.failure_threshold(), 1, "Should use custom threshold");
 
@@ -905,5 +907,6 @@ mod tests {
 
         // Unsubscribe
         bus.unsubscribe(&sub_id).await;
+        Ok(())
     }
 }

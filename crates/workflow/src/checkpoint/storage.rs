@@ -16,6 +16,8 @@ pub enum StorageError {
     StorageFailed { reason: String },
     /// Serialization/deserialization failed.
     CodecFailed { reason: String },
+    /// Database has not been initialized.
+    DatabaseNotInitialized { reason: String },
 }
 
 impl std::fmt::Display for StorageError {
@@ -29,6 +31,9 @@ impl std::fmt::Display for StorageError {
             }
             Self::CodecFailed { reason } => {
                 write!(f, "codec failed: {reason}")
+            }
+            Self::DatabaseNotInitialized { reason } => {
+                write!(f, "database not initialized: {reason}")
             }
         }
     }

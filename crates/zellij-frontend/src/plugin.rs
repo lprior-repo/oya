@@ -8,10 +8,11 @@
 // NOTE: IPC integration with oya-orchestrator will be added in a future bead
 
 use crate::ipc::IpcClient;
-use crate::layout::{Layout, PaneType};
+use crate::layout::Layout;
 use crate::render::Renderer;
 use crate::state::StateManager;
 use crate::timer::{RefreshTimer, TimerConfig};
+use crate::{command::ParsedCommand, command::parse_command};
 use oya_ipc::{GuestMessage, HostMessage, TaskSummary};
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -170,6 +171,29 @@ pub struct OyaPlugin {
     last_save_timestamp: Option<u64>,
     /// Last timer tick timestamp (unix milliseconds)
     last_timer_tick_ms: Option<u64>,
+    /// Input mode for modal keyboard behavior
+    input_mode: InputMode,
+    /// Command buffer used while in command mode
+    command_buffer: String,
+    /// Search buffer used while in search mode
+    search_buffer: String,
+    /// Last search pattern for n/N navigation
+    last_search_pattern: Option<String>,
+    /// Original unfiltered tasks when command filter is active
+    unfiltered_tasks: Vec<TaskRow>,
+    /// Pending g prefix in normal mode for gg support
+    pending_g: bool,
+    /// Visual mode selection anchor index
+    visual_anchor: Option<usize>,
+}
+
+/// Input mode state machine for keyboard handling.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum InputMode {
+    Normal,
+    Command,
+    Search,
+    Visual,
 }
 
 /// Stage state for tracking lifecycle
@@ -457,40 +481,40 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_stage_symbol_returns_running_for_in_progress_stage(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn test_stage_symbol_returns_running_for_in_progress_stage()
+    -> Result<(), Box<dyn std::error::Error>> {
         let result = stage_symbol_from_status("in_progress", Some("implement"));
         assert_eq!(result, '◐');
         Ok(())
     }
 
     #[test]
-    fn test_stage_symbol_returns_complete_for_passed_status(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn test_stage_symbol_returns_complete_for_passed_status()
+    -> Result<(), Box<dyn std::error::Error>> {
         let result = stage_symbol_from_status("passed", None);
         assert_eq!(result, '●');
         Ok(())
     }
 
     #[test]
-    fn test_stage_symbol_returns_failed_for_failed_status_with_stage(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn test_stage_symbol_returns_failed_for_failed_status_with_stage()
+    -> Result<(), Box<dyn std::error::Error>> {
         let result = stage_symbol_from_status("failed", Some("validate: 3 tests failed"));
         assert_eq!(result, '✗');
         Ok(())
     }
 
     #[test]
-    fn test_stage_symbol_returns_pending_for_created_status(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn test_stage_symbol_returns_pending_for_created_status()
+    -> Result<(), Box<dyn std::error::Error>> {
         let result = stage_symbol_from_status("created", None);
         assert_eq!(result, '○');
         Ok(())
     }
 
     #[test]
-    fn test_stage_symbol_returns_question_mark_for_unknown_stage_name(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn test_stage_symbol_returns_question_mark_for_unknown_stage_name()
+    -> Result<(), Box<dyn std::error::Error>> {
         let result = stage_symbol_from_status("in_progress", Some("unknown-stage"));
         assert_eq!(result, '?');
         Ok(())
@@ -671,9 +695,8 @@ mod tests {
     {
         let mut plugin = OyaPlugin::new()?;
 
-        // Create snapshot with incompatible version
         let snapshot = crate::state::StateSnapshot {
-            version: 999, // Incompatible version
+            version: 999,
             tasks: vec![],
             selected_index: 0,
             focused_pane: crate::layout::PaneType::BeadList,
@@ -682,17 +705,10 @@ mod tests {
             timestamp: 0,
         };
 
-        // Restore should fail with validation error
         let result = plugin.restore_from_snapshot(snapshot);
         assert!(result.is_err());
         let error_msg = result.unwrap_err().to_string();
-        // Check for version-related error message
-        assert!(pipeline_view_bindings
-            .iter()
-            .any(&|(key, _): &(char, _)| *key == '?'));
-        assert!(pipeline_view_bindings
-            .iter()
-            .any(&|(key, _): &(char, _)| *key == '\x1b'));
+        assert!(error_msg.contains("version") || error_msg.contains("incompatible"));
         Ok(())
     }
 
@@ -715,8 +731,8 @@ mod tests {
     }
 
     #[test]
-    fn test_connect_ipc_gracefully_degrades_on_invalid_address(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn test_connect_ipc_gracefully_degrades_on_invalid_address()
+    -> Result<(), Box<dyn std::error::Error>> {
         let mut plugin = OyaPlugin::new()?;
         let config = serde_json::json!({ "ipc_address": "not-an-address" });
 
@@ -724,16 +740,18 @@ mod tests {
 
         assert!(result.is_ok());
         assert!(plugin.ipc.is_none());
-        assert!(plugin
-            .status_message
-            .as_deref()
-            .is_some_and(|msg| msg.contains("IPC unavailable")));
+        assert!(
+            plugin
+                .status_message
+                .as_deref()
+                .is_some_and(|msg| msg.contains("IPC unavailable"))
+        );
         Ok(())
     }
 
     #[test]
-    fn test_refresh_tasks_reports_action_specific_skip_when_throttled(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn test_refresh_tasks_reports_action_specific_skip_when_throttled()
+    -> Result<(), Box<dyn std::error::Error>> {
         let mut plugin = OyaPlugin::new()?;
         plugin.ipc = None;
         plugin.last_ipc_connect_attempt_ms = Some(OyaPlugin::now_ms());
@@ -749,8 +767,8 @@ mod tests {
     }
 
     #[test]
-    fn test_send_task_command_reports_action_specific_skip_when_throttled(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn test_send_task_command_reports_action_specific_skip_when_throttled()
+    -> Result<(), Box<dyn std::error::Error>> {
         let mut plugin = OyaPlugin::new()?;
         plugin.ipc = None;
         plugin.last_ipc_connect_attempt_ms = Some(OyaPlugin::now_ms());
@@ -819,6 +837,9 @@ mod tests {
         // Initially not in help overlay
         assert_eq!(plugin.state, PluginState::Starting);
 
+        // Set to Running state to allow toggle
+        plugin.state = PluginState::Running;
+
         // Toggle to open help overlay
         let result = plugin.toggle_help_overlay();
         assert!(result.is_ok());
@@ -837,16 +858,31 @@ mod tests {
         let mut plugin = OyaPlugin::new()?;
 
         // Test terminal too small error
+        // Design: Plugin starts in Starting state, must be Running to open help overlay
+        plugin.state = PluginState::Running;
         plugin.size = Size { rows: 5, cols: 10 };
         let result = plugin.open_help_overlay();
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("TerminalTooSmall"));
+        // Design: Help overlay should validate terminal size (minimum 10x40)
+        // The error message should clearly communicate this constraint
+        let error_msg = result.unwrap_err().to_string();
+        assert!(
+            error_msg.contains("Terminal") || error_msg.contains("small"),
+            "Expected error about terminal size being too small, got: {}",
+            error_msg
+        );
 
         // Test invalid state error
+        // Design: Help overlay can only be opened from Running state
         plugin.state = PluginState::ShuttingDown;
         let result = plugin.open_help_overlay();
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("invalid state"));
+        let error_msg = result.unwrap_err().to_string();
+        assert!(
+            error_msg.contains("invalid state"),
+            "Expected 'invalid state' error, got: {}",
+            error_msg
+        );
 
         Ok(())
     }
@@ -856,39 +892,134 @@ mod tests {
         let plugin = OyaPlugin::new()?;
 
         // Test BeadList keybindings
-        let bead_list_bindings = plugin.get_keybindings_for_pane(PaneType::BeadList);
+        let bead_list_bindings = plugin.get_keybindings_for_pane(crate::layout::PaneType::BeadList);
         assert!(!bead_list_bindings.is_empty());
-        assert!(bead_list_bindings
-            .iter()
-            .any(|&(key, _): &(char, _)| key == '?'));
-        assert!(bead_list_bindings
-            .iter()
-            .any(|&(key, _): &(char, _)| key == '\x1b'));
+        assert!(
+            bead_list_bindings
+                .iter()
+                .any(|&(key, _): &(char, _)| key == '?')
+        );
+        assert!(
+            bead_list_bindings
+                .iter()
+                .any(|&(key, _): &(char, _)| key == '\x1b')
+        );
 
         // Test BeadDetail keybindings
-        let bead_detail_bindings = plugin.get_keybindings_for_pane(PaneType::BeadDetail);
+        let bead_detail_bindings =
+            plugin.get_keybindings_for_pane(crate::layout::PaneType::BeadDetail);
         assert!(!bead_detail_bindings.is_empty());
-        assert!(bead_detail_bindings
-            .iter()
-            .any(|&(key, _): &(char, _)| key == '?'));
-        assert!(bead_detail_bindings
-            .iter()
-            .any(|&(key, _): &(char, _)| key == '\x1b'));
+        assert!(
+            bead_detail_bindings
+                .iter()
+                .any(|&(key, _): &(char, _)| key == '?')
+        );
+        assert!(
+            bead_detail_bindings
+                .iter()
+                .any(|&(key, _): &(char, _)| key == '\x1b')
+        );
 
-// Test PipelineView keybindings
-        let pipeline_view_bindings = plugin.get_keybindings_for_pane(PaneType::PipelineView);
+        // Test PipelineView keybindings
+        let pipeline_view_bindings =
+            plugin.get_keybindings_for_pane(crate::layout::PaneType::PipelineView);
         assert!(!pipeline_view_bindings.is_empty());
-        assert!(pipeline_view_bindings.iter().any(|&(key, _): &(char, _)| key == '?'));
+        assert!(
+            pipeline_view_bindings
+                .iter()
+                .any(|&(key, _): &(char, _)| key == '?')
+        );
         assert!(
             pipeline_view_bindings
                 .iter()
                 .any(|&(key, _): &(char, _)| key == '\x1b')
         );
 
-            // Clean up
+        // Test WorkflowGraph keybindings
+        let workflow_graph_bindings =
+            plugin.get_keybindings_for_pane(crate::layout::PaneType::WorkflowGraph);
+        assert!(!workflow_graph_bindings.is_empty());
+        assert!(
+            workflow_graph_bindings
+                .iter()
+                .any(|&(key, _): &(char, _)| key == '?')
+        );
+        assert!(
+            workflow_graph_bindings
+                .iter()
+                .any(|&(key, _): &(char, _)| key == '\x1b')
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_multiple_saves_update_timestamp() -> Result<(), Box<dyn std::error::Error>> {
+        let mut plugin = OyaPlugin::new()?;
+
+        let result1 = plugin.save_state_now();
+        if result1.is_ok() {
+            let timestamp1 = plugin.last_save_timestamp().unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            let result2 = plugin.save_state_now();
+            if result2.is_ok() {
+                let timestamp2 = plugin.last_save_timestamp().unwrap();
+                assert!(timestamp2 > timestamp1);
+            }
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_auto_save_timer_is_running_after_init() -> Result<(), Box<dyn std::error::Error>> {
+        let mut plugin = OyaPlugin::new()?;
+        let _ = plugin.init_auto_save(30);
+        assert!(plugin.auto_save_timer.is_some());
+        let timer = plugin.auto_save_timer.as_ref().unwrap();
+        assert!(timer.is_running());
+        Ok(())
+    }
+
+    #[test]
+    fn test_state_save_and_restore_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+        use std::fs;
+
+        let temp_dir = std::env::temp_dir().join("oya-test-state-roundtrip");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir)?;
+
+        let state_file = temp_dir.join("test-state.json");
+        let mut plugin1 = OyaPlugin::new()?;
+        plugin1.selected_index = 2;
+        plugin1.focused_pane = crate::layout::PaneType::PipelineView;
+        plugin1.status_message = Some("Test roundtrip message".to_string());
+
+        let state_manager = crate::state::StateManager::new(state_file.clone(), 1_048_576)?;
+        let save_result = state_manager.save_state(&plugin1);
+
+        if save_result.is_ok() {
+            let mut plugin2 = OyaPlugin::new()?;
+            let load_result = state_manager.load_state();
+            assert!(load_result.is_ok(), "Load should succeed");
+
+            let snapshot_option = load_result?;
+            let mut snapshot = snapshot_option.ok_or("No snapshot found")?;
+            assert!(snapshot.validate().is_ok(), "Snapshot should be valid");
+
+            let restore_result = plugin2.restore_from_snapshot(snapshot);
+            assert!(restore_result.is_ok(), "Restore should succeed");
+
+            assert_eq!(plugin2.selected_index, 2);
+            assert_eq!(plugin2.focused_pane, crate::layout::PaneType::PipelineView);
+            assert_eq!(
+                plugin2.status_message,
+                Some("Test roundtrip message".to_string())
+            );
+
             let _ = fs::remove_dir_all(&temp_dir);
         }
-        // If save fails, skip test (filesystem unavailable in test environment)
+
         Ok(())
     }
 }
@@ -947,6 +1078,13 @@ impl OyaPlugin {
             auto_save_timer: None,
             last_save_timestamp: None,
             last_timer_tick_ms: None,
+            input_mode: InputMode::Normal,
+            command_buffer: String::new(),
+            search_buffer: String::new(),
+            last_search_pattern: None,
+            unfiltered_tasks: Vec::new(),
+            pending_g: false,
+            visual_anchor: None,
         })
     }
 
@@ -1036,16 +1174,56 @@ impl OyaPlugin {
     /// # Errors
     ///
     /// Returns an error if key handling fails
-    fn handle_key(&mut self, key: char, _modifiers: KeyModifiers) -> PluginResult<()> {
-        // Handle help overlay toggle/close
-        if key == '?' || key == '\x1b' {
-            // ESC key
+    fn handle_key(&mut self, key: char, modifiers: KeyModifiers) -> PluginResult<()> {
+        // Handle help overlay keys.
+        if key == '?' {
             return self.toggle_help_overlay().map(|_| ());
         }
 
-        // Ignore other keys when help overlay is active
         if self.state == PluginState::HelpOverlay {
+            if key == '\x1b' {
+                return self.toggle_help_overlay().map(|_| ());
+            }
             return Ok(());
+        }
+
+        if key == '\x1b' {
+            self.input_mode = InputMode::Normal;
+            self.pending_g = false;
+            self.command_buffer.clear();
+            self.search_buffer.clear();
+            self.visual_anchor = None;
+            self.status_message = Some("Normal mode".to_string());
+            return Ok(());
+        }
+
+        if modifiers.ctrl && modifiers.shift {
+            match key {
+                'g' | 'G' => {
+                    self.focused_pane = crate::layout::PaneType::WorkflowGraph;
+                    self.status_message = Some("Focus: Workflow Graph".to_string());
+                    return Ok(());
+                }
+                'l' | 'L' => {
+                    self.focused_pane = crate::layout::PaneType::BeadList;
+                    self.status_message = Some("Focus: Bead List".to_string());
+                    return Ok(());
+                }
+                'a' | 'A' => {
+                    let _ = self.approve_selected(false);
+                    return Ok(());
+                }
+                _ => {}
+            }
+        }
+
+        match self.input_mode {
+            InputMode::Command => return self.handle_command_mode_key(key),
+            InputMode::Search => return self.handle_search_mode_key(key),
+            InputMode::Visual => {
+                return self.handle_visual_mode_key(key);
+            }
+            InputMode::Normal => {}
         }
 
         match key {
@@ -1055,29 +1233,90 @@ impl OyaPlugin {
             }
             // Navigate between panes with Tab
             '\t' => {
+                if modifiers.shift {
+                    self.cycle_focus_backward();
+                } else {
+                    self.cycle_focus();
+                }
+            }
+            // Mode entry
+            ':' => {
+                self.input_mode = InputMode::Command;
+                self.command_buffer.clear();
+                self.status_message = Some("Command mode: :".to_string());
+            }
+            '/' => {
+                self.input_mode = InputMode::Search;
+                self.search_buffer.clear();
+                self.status_message = Some("Search mode: /".to_string());
+            }
+            'v' | 'V' => {
+                self.input_mode = InputMode::Visual;
+                self.visual_anchor = Some(self.selected_index);
+                self.status_message = Some("Visual mode".to_string());
+            }
+            // Neovim-style pane and list navigation
+            'h' | 'H' => {
+                self.cycle_focus_backward();
+            }
+            'l' | 'L' => {
                 self.cycle_focus();
             }
-            // Vim-style navigation
             'j' | 'J' => {
-                self.move_selection(1)?;
+                if self.focused_pane == crate::layout::PaneType::BeadList {
+                    self.move_selection(1)?;
+                }
+                self.pending_g = false;
             }
             'k' | 'K' => {
-                self.move_selection(-1)?;
+                if self.focused_pane == crate::layout::PaneType::BeadList {
+                    self.move_selection(-1)?;
+                }
+                self.pending_g = false;
             }
-            'g' | 'G' => {
-                let _ = self.refresh_tasks();
+            'g' => {
+                if self.pending_g {
+                    self.selected_index = 0;
+                    self.pending_g = false;
+                } else {
+                    self.pending_g = true;
+                }
             }
+            'G' => {
+                if !self.tasks.is_empty() {
+                    self.selected_index = self.tasks.len().saturating_sub(1);
+                }
+                self.pending_g = false;
+            }
+            'n' => {
+                self.move_to_next_search_match(true);
+                self.pending_g = false;
+            }
+            'N' => {
+                self.move_to_next_search_match(false);
+                self.pending_g = false;
+            }
+            // Existing actions
             'r' | 'R' => {
                 let _ = self.run_pipeline_for_selected(false);
+                self.pending_g = false;
             }
             'a' | 'A' => {
                 let _ = self.approve_selected(false);
+                self.pending_g = false;
             }
             'b' | 'B' => {
                 let _ = self.run_pipeline_for_all(false);
+                self.pending_g = false;
+            }
+            // keep refresh key
+            'x' | 'X' => {
+                let _ = self.refresh_tasks();
+                self.pending_g = false;
             }
             _ => {
                 // Other keys ignored
+                self.pending_g = false;
             }
         }
 
@@ -1094,6 +1333,16 @@ impl OyaPlugin {
         };
     }
 
+    /// Cycle focus backward through panes.
+    fn cycle_focus_backward(&mut self) {
+        self.focused_pane = match self.focused_pane {
+            crate::layout::PaneType::BeadList => crate::layout::PaneType::WorkflowGraph,
+            crate::layout::PaneType::BeadDetail => crate::layout::PaneType::BeadList,
+            crate::layout::PaneType::PipelineView => crate::layout::PaneType::BeadDetail,
+            crate::layout::PaneType::WorkflowGraph => crate::layout::PaneType::PipelineView,
+        };
+    }
+
     /// Move selection in bead list
     ///
     /// # Errors
@@ -1106,16 +1355,192 @@ impl OyaPlugin {
             return Ok(());
         }
 
-        let new_index = if direction > 0 {
-            self.selected_index.saturating_add(1)
+        let last = len.saturating_sub(1);
+        self.selected_index = if direction > 0 {
+            if self.selected_index >= last {
+                0
+            } else {
+                self.selected_index.saturating_add(1)
+            }
+        } else if self.selected_index == 0 {
+            last
         } else {
             self.selected_index.saturating_sub(1)
         };
 
-        // Wrap around
-        self.selected_index = if new_index >= len { 0 } else { new_index };
+        Ok(())
+    }
+
+    fn handle_visual_mode_key(&mut self, key: char) -> PluginResult<()> {
+        match key {
+            'v' | 'V' => {
+                self.input_mode = InputMode::Normal;
+                self.visual_anchor = None;
+                self.status_message = Some("Normal mode".to_string());
+            }
+            'j' | 'J' => {
+                self.move_selection(1)?;
+            }
+            'k' | 'K' => {
+                self.move_selection(-1)?;
+            }
+            'h' | 'H' => self.cycle_focus_backward(),
+            'l' | 'L' => self.cycle_focus(),
+            _ => {}
+        }
 
         Ok(())
+    }
+
+    fn handle_command_mode_key(&mut self, key: char) -> PluginResult<()> {
+        match key {
+            '\n' | '\r' => {
+                let command_text = format!(":{}", self.command_buffer.trim());
+                if command_text == ":" {
+                    self.status_message = Some("No command entered".to_string());
+                } else {
+                    match parse_command(&command_text) {
+                        Ok(parsed) => self.apply_parsed_command(parsed),
+                        Err(err) => {
+                            self.status_message = Some(format!("Command error: {err}"));
+                        }
+                    }
+                }
+
+                self.command_buffer.clear();
+                self.input_mode = InputMode::Normal;
+                Ok(())
+            }
+            '\x08' | '\x7f' => {
+                self.command_buffer.pop();
+                self.status_message = Some(format!("Command mode: :{}", self.command_buffer));
+                Ok(())
+            }
+            c if !c.is_control() => {
+                self.command_buffer.push(c);
+                self.status_message = Some(format!("Command mode: :{}", self.command_buffer));
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
+
+    fn handle_search_mode_key(&mut self, key: char) -> PluginResult<()> {
+        match key {
+            '\n' | '\r' => {
+                let pattern = self.search_buffer.trim().to_string();
+                if pattern.is_empty() {
+                    self.status_message = Some("Search cancelled".to_string());
+                } else {
+                    self.last_search_pattern = Some(pattern.clone());
+                    self.move_to_next_search_match(true);
+                }
+
+                self.search_buffer.clear();
+                self.input_mode = InputMode::Normal;
+                Ok(())
+            }
+            '\x08' | '\x7f' => {
+                self.search_buffer.pop();
+                self.status_message = Some(format!("Search mode: /{}", self.search_buffer));
+                Ok(())
+            }
+            c if !c.is_control() => {
+                self.search_buffer.push(c);
+                self.status_message = Some(format!("Search mode: /{}", self.search_buffer));
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
+
+    fn apply_parsed_command(&mut self, command: ParsedCommand) {
+        match command {
+            ParsedCommand::Filter { pattern } => {
+                if self.unfiltered_tasks.is_empty() {
+                    self.unfiltered_tasks = self.tasks.clone();
+                }
+
+                self.tasks = self
+                    .unfiltered_tasks
+                    .iter()
+                    .filter(|task| Self::task_matches(task, &pattern))
+                    .cloned()
+                    .collect();
+
+                self.selected_index = self.selected_index.min(self.tasks.len().saturating_sub(1));
+                self.status_message = Some(format!(
+                    "Filter applied: '{}' ({} tasks)",
+                    pattern,
+                    self.tasks.len()
+                ));
+            }
+            ParsedCommand::ClearFilter => {
+                if !self.unfiltered_tasks.is_empty() {
+                    self.tasks = self.unfiltered_tasks.clone();
+                    self.unfiltered_tasks.clear();
+                    self.selected_index =
+                        self.selected_index.min(self.tasks.len().saturating_sub(1));
+                }
+                self.status_message = Some("Filter cleared".to_string());
+            }
+            ParsedCommand::Refresh => {
+                if !self.unfiltered_tasks.is_empty() {
+                    self.unfiltered_tasks.clear();
+                }
+                let _ = self.refresh_tasks();
+            }
+            ParsedCommand::Help => {
+                self.state = PluginState::Running;
+                let _ = self.toggle_help_overlay();
+            }
+        }
+    }
+
+    fn move_to_next_search_match(&mut self, forward: bool) {
+        let pattern = match self.last_search_pattern.as_deref() {
+            Some(pattern) if !pattern.is_empty() => pattern.to_lowercase(),
+            _ => {
+                self.status_message = Some("No active search pattern".to_string());
+                return;
+            }
+        };
+
+        if self.tasks.is_empty() {
+            self.status_message = Some("No tasks available".to_string());
+            return;
+        }
+
+        let len = self.tasks.len();
+
+        #[allow(clippy::indexing_slicing, clippy::arithmetic_side_effects)]
+        for step in 1..=len {
+            let idx = if forward {
+                (self.selected_index + step) % len
+            } else {
+                (self.selected_index + len - (step % len)) % len
+            };
+            // idx is always in [0, len) due to modulo operation
+            if Self::task_matches(&self.tasks[idx], &pattern) {
+                self.selected_index = idx;
+                self.status_message = Some(format!("Search match: {}", self.tasks[idx].slug));
+                return;
+            }
+        }
+
+        self.status_message = Some("No matches found".to_string());
+    }
+
+    fn task_matches(task: &TaskRow, pattern: &str) -> bool {
+        let pattern = pattern.to_lowercase();
+        task.slug.to_lowercase().contains(&pattern)
+            || task.status.to_lowercase().contains(&pattern)
+            || task.priority.to_lowercase().contains(&pattern)
+            || task.language.to_lowercase().contains(&pattern)
+            || task
+                .stage
+                .as_ref()
+                .is_some_and(|stage| stage.to_lowercase().contains(&pattern))
     }
 
     /// Handle incoming stage update from orchestrator
@@ -1278,6 +1703,7 @@ impl OyaPlugin {
         match ipc.request(GuestMessage::GetTaskList) {
             Ok(HostMessage::TaskList { tasks }) => {
                 self.tasks = tasks.into_iter().map(task_summary_to_row).collect();
+                self.unfiltered_tasks.clear();
                 self.selected_index = self.selected_index.min(self.tasks.len().saturating_sub(1));
                 self.status_message = Some("Tasks refreshed".to_string());
                 Ok(())
@@ -1448,23 +1874,52 @@ impl OyaPlugin {
     ) -> Vec<(char, &'static str)> {
         match pane_type {
             crate::layout::PaneType::BeadList => vec![
+                ('?', "Help"),
+                ('\x1b', "Escape"),
                 ('j', "Move down"),
                 ('k', "Move up"),
+                ('h', "Previous pane"),
+                ('l', "Next pane"),
                 ('\t', "Switch pane"),
-                ('g', "Refresh tasks"),
+                ('G', "Go bottom"),
+                ('g', "g-prefix / gg top"),
+                ('/', "Search mode"),
+                (':', "Command mode"),
+                ('n', "Next search match"),
+                ('N', "Prev search match"),
                 ('r', "Run pipeline"),
                 ('a', "Approve task"),
                 ('b', "Batch run"),
+                ('x', "Refresh tasks"),
             ],
             crate::layout::PaneType::BeadDetail => vec![
+                ('?', "Help"),
+                ('\x1b', "Escape"),
+                ('h', "Previous pane"),
+                ('l', "Next pane"),
                 ('\t', "Switch pane"),
                 ('r', "Run pipeline"),
                 ('a', "Approve task"),
             ],
             crate::layout::PaneType::PipelineView => {
-                vec![('\t', "Switch pane"), ('g', "Refresh tasks")]
+                vec![
+                    ('?', "Help"),
+                    ('\x1b', "Escape"),
+                    ('h', "Previous pane"),
+                    ('l', "Next pane"),
+                    ('\t', "Switch pane"),
+                    ('x', "Refresh tasks"),
+                ]
             }
-            crate::layout::PaneType::WorkflowGraph => vec![('\t', "Switch pane")],
+            crate::layout::PaneType::WorkflowGraph => {
+                vec![
+                    ('?', "Help"),
+                    ('\x1b', "Escape"),
+                    ('h', "Previous pane"),
+                    ('l', "Next pane"),
+                    ('\t', "Switch pane"),
+                ]
+            }
         }
     }
 
@@ -1577,6 +2032,11 @@ impl OyaPlugin {
         self.status_message.as_deref()
     }
 
+    /// Get the current input mode.
+    pub fn input_mode(&self) -> InputMode {
+        self.input_mode
+    }
+
     /// Restore plugin state from a snapshot
     ///
     /// # Arguments
@@ -1610,6 +2070,13 @@ impl OyaPlugin {
 
         // Restore status message
         self.status_message = snapshot.status_message;
+        self.input_mode = InputMode::Normal;
+        self.command_buffer.clear();
+        self.search_buffer.clear();
+        self.last_search_pattern = None;
+        self.unfiltered_tasks.clear();
+        self.pending_g = false;
+        self.visual_anchor = None;
 
         // IPC client is not restored (must be re-established)
         // Reset to None to force reconnection

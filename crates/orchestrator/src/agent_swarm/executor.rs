@@ -216,14 +216,14 @@ impl AgentExecutorBuilder {
         self
     }
 
-    pub fn build(self) -> AgentExecutor {
+    pub fn build(self) -> AgentSwarmResult<AgentExecutor> {
         let config = self
             .config
-            .expect("AgentExecutorBuilder: config is required");
+            .ok_or_else(|| AgentSwarmError::internal("AgentExecutorBuilder: config is required"))?;
         let mut executor = AgentExecutor::new(config);
         if let Some(bus) = self.event_bus {
             executor = executor.with_event_bus(bus);
         }
-        executor
+        Ok(executor)
     }
 }

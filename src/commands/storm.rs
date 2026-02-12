@@ -135,6 +135,7 @@ pub enum StormError {
 
 impl StormError {
     /// Get the exit code for this error
+    #[must_use]
     pub const fn exit_code(&self) -> i32 {
         match self {
             Self::ConfigFileNotFound { .. } => 3,
@@ -151,6 +152,7 @@ impl StormError {
     }
 
     /// Get a hint for remediation
+    #[must_use]
     pub fn hint(&self) -> Option<String> {
         match self {
             Self::ConfigFileNotFound { .. } => Some(

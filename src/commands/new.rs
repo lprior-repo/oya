@@ -101,7 +101,7 @@ async fn create_zjj_workspace(slug: &str, root: &PathBuf) -> Result<Option<Strin
         .arg("spawn")
         .arg(slug)
         .arg("--root")
-        .arg(&root)
+        .arg(root)
         .output()
         .await?;
 

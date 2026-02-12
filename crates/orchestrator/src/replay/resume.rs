@@ -13,10 +13,10 @@ use tokio::runtime::Runtime;
 
 use oya_events::Error as OyaError;
 use oya_events::replay::resume::{
-    CheckpointData, CheckpointId, CheckpointStore, EventLog, EventMetadata, ReplayState,
+    CheckpointData, CheckpointId, CheckpointStore, EventLog, EventMetadata,
 };
 
-use crate::persistence::{OrchestratorStore, PersistenceError};
+use crate::persistence::OrchestratorStore;
 
 /// Checkpoint store backed by the orchestrator persistence layer.
 #[derive(Clone, Debug)]

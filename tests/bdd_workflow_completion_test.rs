@@ -231,3 +231,252 @@ fn bdd_workflow_completion_empty_workflow() -> Result<(), Box<dyn std::error::Er
 
     Ok(())
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BDD TESTS: LINEAR WORKFLOW SEQUENTIAL EXECUTION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// BDD Test: Linear workflow executes tasks in strict sequential order
+///
+/// GIVEN a linear workflow with chain A → B → C
+/// WHEN executing the workflow
+/// THEN tasks complete in dependency order (A, then B, then C)
+#[test]
+fn bdd_linear_workflow_sequential_execution_order() -> Result<(), Box<dyn std::error::Error>> {
+    // GIVEN: A linear workflow with chain A → B → C
+    let mut workflow = Workflow::new(
+        "linear-sequential",
+        "Linear Sequential Workflow",
+        "Tests sequential execution order",
+    )?;
+
+    let task_a = Task::new("task-a", "Task A", "First task in chain")?;
+    let task_b = Task::new("task-b", "Task B", "Second task in chain")?;
+    let task_c = Task::new("task-c", "Task C", "Third task in chain")?;
+
+    workflow.add_task(task_a)?;
+    workflow.add_task(task_b)?;
+    workflow.add_task(task_c)?;
+
+    workflow.add_dependency("task-a", "task-b")?;
+    workflow.add_dependency("task-b", "task-c")?;
+
+    let engine = ExecutionEngine::new();
+
+    // WHEN: Executing the workflow
+    let result = engine.execute_workflow(&workflow)?;
+
+    // THEN: Tasks complete in dependency order
+    assert_eq!(result.succeeded.len(), 3, "All 3 tasks should succeed");
+    assert_eq!(
+        result.succeeded,
+        vec!["task-a", "task-b", "task-c"],
+        "Tasks must complete in sequential dependency order"
+    );
+    assert!(result.failed.is_empty(), "No tasks should fail");
+
+    Ok(())
+}
+
+/// BDD Test: Linear workflow respects dependency chain - B cannot start before A
+///
+/// GIVEN a linear workflow A → B
+/// WHEN checking ready tasks before A completes
+/// THEN only A is ready, B is blocked
+#[test]
+fn bdd_linear_workflow_dependency_blocks_downstream() -> Result<(), Box<dyn std::error::Error>> {
+    // GIVEN: A linear workflow A → B
+    let mut workflow = Workflow::new(
+        "linear-block-test",
+        "Linear Block Test",
+        "Tests that downstream tasks are blocked",
+    )?;
+
+    let task_a = Task::new("task-a", "Task A", "Upstream task")?;
+    let task_b = Task::new("task-b", "Task B", "Downstream task")?;
+
+    workflow.add_task(task_a)?;
+    workflow.add_task(task_b)?;
+
+    workflow.add_dependency("task-a", "task-b")?;
+
+    let engine = ExecutionEngine::new();
+    let state = engine.parse_workflow(&workflow)?;
+
+    // WHEN: Checking ready tasks before any execution
+    let ready = engine.get_ready_tasks(&workflow, &state);
+
+    // THEN: Only A is ready, B is blocked by dependency
+    assert_eq!(ready.len(), 1, "Only one task should be ready");
+    assert_eq!(
+        ready.first(),
+        Some(&"task-a".to_string()),
+        "Only task-a (no dependencies) should be ready"
+    );
+    assert!(
+        !ready.contains(&"task-b".to_string()),
+        "task-b should be blocked by dependency on task-a"
+    );
+
+    Ok(())
+}
+
+/// BDD Test: Linear workflow with 5-task chain executes in order
+///
+/// GIVEN a linear workflow with 5 tasks in chain A → B → C → D → E
+/// WHEN executing the workflow
+/// THEN all tasks complete in strict sequential order
+#[test]
+fn bdd_linear_workflow_five_task_chain() -> Result<(), Box<dyn std::error::Error>> {
+    // GIVEN: A linear workflow with 5 tasks in chain
+    let mut workflow = Workflow::new(
+        "linear-five-chain",
+        "Linear Five Chain",
+        "Tests 5-task linear chain execution",
+    )?;
+
+    let tasks = [
+        ("task-a", "Task A"),
+        ("task-b", "Task B"),
+        ("task-c", "Task C"),
+        ("task-d", "Task D"),
+        ("task-e", "Task E"),
+    ];
+
+    for (id, name) in tasks {
+        let task = Task::new(id, name, "Chain task")?;
+        workflow.add_task(task)?;
+    }
+
+    workflow.add_dependency("task-a", "task-b")?;
+    workflow.add_dependency("task-b", "task-c")?;
+    workflow.add_dependency("task-c", "task-d")?;
+    workflow.add_dependency("task-d", "task-e")?;
+
+    let engine = ExecutionEngine::new();
+
+    // WHEN: Executing the workflow
+    let result = engine.execute_workflow(&workflow)?;
+
+    // THEN: All tasks complete in strict sequential order
+    assert_eq!(result.succeeded.len(), 5, "All 5 tasks should succeed");
+    assert_eq!(
+        result.succeeded,
+        vec!["task-a", "task-b", "task-c", "task-d", "task-e"],
+        "Tasks must complete in strict sequential order"
+    );
+    assert!(result.failed.is_empty(), "No tasks should fail");
+
+    Ok(())
+}
+
+/// BDD Test: Linear workflow - dependency resolution after completion
+///
+/// GIVEN a linear workflow A → B → C where A has completed
+/// WHEN checking ready tasks
+/// THEN only B is ready (C still blocked by B)
+#[test]
+fn bdd_linear_workflow_partial_completion_unblocks_next() -> Result<(), Box<dyn std::error::Error>>
+{
+    use oya_core::execution::{TaskExecutionStatus, WorkflowState};
+
+    // GIVEN: A linear workflow A → B → C
+    let mut workflow = Workflow::new(
+        "linear-partial",
+        "Linear Partial",
+        "Tests partial completion unblocks next",
+    )?;
+
+    let task_a = Task::new("task-a", "Task A", "First task")?;
+    let task_b = Task::new("task-b", "Task B", "Second task")?;
+    let task_c = Task::new("task-c", "Task C", "Third task")?;
+
+    workflow.add_task(task_a)?;
+    workflow.add_task(task_b)?;
+    workflow.add_task(task_c)?;
+
+    workflow.add_dependency("task-a", "task-b")?;
+    workflow.add_dependency("task-b", "task-c")?;
+
+    let engine = ExecutionEngine::new();
+
+    // Simulate A completed
+    let state = WorkflowState {
+        workflow_id: "linear-partial".to_string(),
+        task_status: std::collections::HashMap::from([
+            ("task-a".to_string(), TaskExecutionStatus::Completed),
+            ("task-b".to_string(), TaskExecutionStatus::Pending),
+            ("task-c".to_string(), TaskExecutionStatus::Pending),
+        ]),
+        timestamp: chrono::Utc::now(),
+    };
+
+    // WHEN: Checking ready tasks after A completed
+    let ready = engine.get_ready_tasks(&workflow, &state);
+
+    // THEN: Only B is ready (C still blocked by B)
+    assert_eq!(ready.len(), 1, "Only one task should be ready");
+    assert_eq!(
+        ready.first(),
+        Some(&"task-b".to_string()),
+        "Only task-b should be ready after task-a completes"
+    );
+    assert!(
+        !ready.contains(&"task-c".to_string()),
+        "task-c should still be blocked by task-b"
+    );
+
+    Ok(())
+}
+
+/// BDD Test: Linear workflow - all tasks blocked until chain starts
+///
+/// GIVEN a linear workflow A → B → C with all tasks pending
+/// WHEN A is blocked (not pending)
+/// THEN no tasks are ready
+#[test]
+fn bdd_linear_workflow_blocked_start_blocks_all() -> Result<(), Box<dyn std::error::Error>> {
+    use oya_core::execution::{TaskExecutionStatus, WorkflowState};
+
+    // GIVEN: A linear workflow A → B → C
+    let mut workflow = Workflow::new(
+        "linear-blocked-start",
+        "Linear Blocked Start",
+        "Tests blocked start blocks entire chain",
+    )?;
+
+    let task_a = Task::new("task-a", "Task A", "First task")?;
+    let task_b = Task::new("task-b", "Task B", "Second task")?;
+    let task_c = Task::new("task-c", "Task C", "Third task")?;
+
+    workflow.add_task(task_a)?;
+    workflow.add_task(task_b)?;
+    workflow.add_task(task_c)?;
+
+    workflow.add_dependency("task-a", "task-b")?;
+    workflow.add_dependency("task-b", "task-c")?;
+
+    let engine = ExecutionEngine::new();
+
+    // Simulate A is in-progress (not completed, not pending)
+    let state = WorkflowState {
+        workflow_id: "linear-blocked-start".to_string(),
+        task_status: std::collections::HashMap::from([
+            ("task-a".to_string(), TaskExecutionStatus::InProgress),
+            ("task-b".to_string(), TaskExecutionStatus::Pending),
+            ("task-c".to_string(), TaskExecutionStatus::Pending),
+        ]),
+        timestamp: chrono::Utc::now(),
+    };
+
+    // WHEN: Checking ready tasks while A is in-progress
+    let ready = engine.get_ready_tasks(&workflow, &state);
+
+    // THEN: No tasks are ready (A in progress, B and C blocked)
+    assert!(
+        ready.is_empty(),
+        "No tasks should be ready when head of chain is in-progress"
+    );
+
+    Ok(())
+}

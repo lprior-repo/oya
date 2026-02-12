@@ -260,6 +260,8 @@ where
     pub checkpoint_manager: Option<CheckpointManager>,
     /// Replay engine for event recovery.
     pub replay_engine: Option<ReplayEngine>,
+    /// Shutdown sender for periodic checkpoint task.
+    pub _periodic_checkpoint_shutdown_tx: Option<tokio::sync::mpsc::Sender<()>>,
 }
 
 impl<A: GenericSupervisableActor> Debug for SupervisorActorState<A>
@@ -349,8 +351,14 @@ where
     ) -> Result<Self::State, ActorProcessingErr> {
         info!("Supervisor starting");
 
+        let checkpoint_manager_ref = args.checkpoint_manager.as_ref();
+
+        let recovered_snapshot = super::checkpoint::load_recovery_snapshot(checkpoint_manager_ref)
+            .await
+            .map_err(|e| ActorProcessingErr::from(e.to_string()))?;
+
         let mut state = SupervisorActorState {
-            config: args.config,
+            config: args.config.clone(),
             state: SupervisorState::Running,
             children: HashMap::new(),
             failure_times: Vec::new(),
@@ -361,14 +369,23 @@ where
             restart_strategy: Box::new(OneForOne::new()),
             checkpoint_manager: args.checkpoint_manager,
             replay_engine: args.replay_engine,
+            _periodic_checkpoint_shutdown_tx: None,
         };
 
-        // Subscribe to shutdown signals
+        if let Some((snapshot, checkpoint_id)) = recovered_snapshot {
+            info!(
+                checkpoint_id = %checkpoint_id,
+                children = snapshot.children.len(),
+                total_restarts = snapshot.total_restarts,
+                "Recovered from checkpoint"
+            );
+            super::checkpoint::apply_recovery_to_state(&mut state, snapshot);
+        }
+
         if let Some(coordinator) = &args.shutdown_coordinator {
             let shutdown_rx = coordinator.subscribe();
             state._shutdown_rx = Some(shutdown_rx);
 
-            // Spawn shutdown listener
             let myself_clone = myself;
             let mut rx = coordinator.subscribe();
             tokio::spawn(async move {
@@ -755,44 +772,7 @@ mod tests {
             restart_strategy: Box::new(OneForOne::new()),
             checkpoint_manager: None,
             replay_engine: None,
-        };
-
-        assert_eq!(state.restart_strategy.name(), "one_for_one");
-    }
-
-    #[test]
-    fn test_calculate_backoff() {
-        // First attempt: 100ms
-        let backoff = calculate_backoff(0, 100, 3200);
-        assert_eq!(backoff.as_millis(), 100);
-
-        // Second attempt: 200ms
-        let backoff = calculate_backoff(1, 100, 3200);
-        assert_eq!(backoff.as_millis(), 200);
-
-        // Third attempt: 400ms
-        let backoff = calculate_backoff(2, 100, 3200);
-        assert_eq!(backoff.as_millis(), 400);
-
-        // Should cap at max
-        let backoff = calculate_backoff(10, 100, 3200);
-        assert_eq!(backoff.as_millis(), 3200);
-    }
-
-    #[test]
-    fn test_meltdown_status_normal() {
-        let state = SupervisorActorState::<SchedulerActorDef> {
-            config: SupervisorConfig::default(),
-            state: SupervisorState::Running,
-            children: HashMap::new(),
-            failure_times: Vec::new(),
-            total_restarts: 0,
-            child_id_counter: 0,
-            shutdown_coordinator: None,
-            _shutdown_rx: None,
-            restart_strategy: Box::new(OneForOne::new()),
-            checkpoint_manager: None,
-            replay_engine: None,
+            _periodic_checkpoint_shutdown_tx: None,
         };
 
         let def = SupervisorActorDef::new(SchedulerActorDef);

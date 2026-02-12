@@ -359,15 +359,13 @@ where
     // Use functional fold to track summary across all events
     events
         .iter()
-        .fold(Ok(ReplaySummary::zero()), |summary, event| {
-            let current_summary = summary?;
-
+        .try_fold(ReplaySummary::zero(), |summary, event| {
             // Try to apply event with retries
             let apply_result = (0..config.max_retries)
                 .try_fold((), |_attempt, _retry| apply_event(state, event, context));
 
             match apply_result {
-                Ok(()) => Ok(current_summary.record_applied()),
+                Ok(()) => Ok(summary.record_applied()),
                 Err(err) => {
                     // Event failed after all retries - send to DLQ if enabled
                     if config.enable_dlq {
@@ -384,7 +382,7 @@ where
                         dlq.push_poison_event(poison_event)
                             .map_err(|e| ApplyError::Internal(format!("DLQ push failed: {e}")))?;
 
-                        Ok(current_summary.record_skipped())
+                        Ok(summary.record_skipped())
                     } else {
                         Err(err)
                     }
