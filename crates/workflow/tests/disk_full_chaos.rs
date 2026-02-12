@@ -451,7 +451,7 @@ async fn given_disk_full_when_store_with_retry_then_eventually_succeeds() {
     let test_name = "disk_full_retry_eventual_success";
     info!("Starting test: {}", test_name);
 
-    let mut storage = DiskFullSimulatingStorage::new();
+    let storage = DiskFullSimulatingStorage::new();
     let state = TestState::new(1, 100);
     let (metadata, data) = create_metadata(&state).expect("Failed to create metadata");
 

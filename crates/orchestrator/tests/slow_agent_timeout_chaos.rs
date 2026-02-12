@@ -310,14 +310,23 @@ async fn given_working_agent_when_times_out_then_marked_unhealthy_with_bead() {
     assert_eq!(agent.current_bead(), Some(bead_id));
     drop(agent);
 
-    let _handle = ctx.health_monitor.start_background_check();
+    tokio::time::sleep(Duration::from_millis(150)).await;
 
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    let health_result = ctx
+        .health_monitor
+        .check_agent(agent_id)
+        .await
+        .expect("health check should succeed");
+    
+    assert!(
+        !health_result.is_healthy,
+        "Agent should become unhealthy after heartbeat timeout"
+    );
 
     let agent = ctx.pool.get_agent(agent_id).await.expect("agent exists");
     assert!(
         agent.state() == AgentStateLegacy::Unhealthy,
-        "Working agent should become unhealthy after timeout"
+        "Working agent should be marked unhealthy"
     );
     assert_eq!(
         agent.current_bead(),
@@ -360,9 +369,12 @@ async fn given_pool_with_all_working_agents_when_timeout_then_some_become_unheal
         .await
         .expect("heartbeat should succeed");
 
-    let _handle = ctx.health_monitor.start_background_check();
+    tokio::time::sleep(Duration::from_millis(150)).await;
 
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    let _ = ctx.health_monitor.check_agent("agent-0").await;
+    let _ = ctx.health_monitor.check_agent("agent-2").await;
+    let _ = ctx.health_monitor.check_agent("agent-1").await;
+    let _ = ctx.health_monitor.check_agent("agent-3").await;
 
     let unhealthy = ctx.health_monitor.get_unhealthy_agents().await;
     assert!(

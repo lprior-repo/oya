@@ -112,7 +112,7 @@ impl ClockSkewTestContext {
             })?;
 
         let skewed_time = agent.last_heartbeat() - chrono::Duration::from_std(skew_duration).map_err(|e| ClockSkewChaosError::SetupFailed { reason: e.to_string() })?;
-        self.set_last_heartbeat_internal(agent, skewed_time);
+        agent.set_last_heartbeat_for_test(skewed_time);
         info!(
             "Simulated forward clock skew for {}: last_heartbeat moved back by {:?}",
             agent_id, skew_duration
@@ -133,24 +133,12 @@ impl ClockSkewTestContext {
             })?;
 
         let skewed_time = agent.last_heartbeat() + chrono::Duration::from_std(skew_duration).map_err(|e| ClockSkewChaosError::SetupFailed { reason: e.to_string() })?;
-        self.set_last_heartbeat_internal(agent, skewed_time);
+        agent.set_last_heartbeat_for_test(skewed_time);
         info!(
             "Simulated backward clock skew for {}: last_heartbeat moved forward by {:?}",
             agent_id, skew_duration
         );
         Ok(())
-    }
-
-    fn set_last_heartbeat_internal(&self, agent: &mut AgentHandle, timestamp: DateTime<Utc>) {
-        let mut handle = AgentHandle::new(agent.id());
-        handle.last_heartbeat = timestamp;
-        if agent.current_bead().is_some() {
-            handle.assign_bead(agent.current_bead().map(str::to_string).unwrap_or_default());
-        }
-        for _ in 0..agent.health_failures {
-            handle.record_health_failure();
-        }
-        *agent = handle;
     }
 
     pub async fn check_agent(&self, agent_id: &str) -> ChaosResult<HealthCheckResult> {
