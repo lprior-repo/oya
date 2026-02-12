@@ -33,6 +33,7 @@ pub mod ipc_zellij;
 pub mod layout;
 pub mod plugin;
 pub mod render;
+pub mod sparkline;
 
 // UI component modules (from oya-zellij)
 pub mod correlation;
@@ -64,9 +65,10 @@ pub use integration_test_worker::{
 };
 pub use ipc_zellij::{ZellijIpcClient, ZellijStdin, ZellijStdout};
 pub use log::{LogAggregator, LogEntry, LogLevel, LogSource};
-pub use metrics::{AgentMetrics, MetricsSnapshot, PoolMetrics};
+pub use metrics::{AgentMetrics, MetricsSnapshot, PoolMetrics, PoolStats};
 pub use state::{STATE_VERSION, StateError, StateManager, StateSnapshot};
 pub use timer::{RefreshTimer, TimerConfig, TimerError, TimerEvent, TimerState};
+pub use sparkline::{render_sparkline, SparklineBuilder, SparklineConfig, SparklineError};
 
 // Web client is not available in WASM builds
 #[cfg(not(target_arch = "wasm32"))]

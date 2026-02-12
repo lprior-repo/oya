@@ -55,12 +55,10 @@ fn dag_render_single_node_displays_box() {
     let result = renderer.render(&nodes);
 
     assert!(result.lines.iter().any(|l| l.contains("Feature X")));
-    assert!(
-        result
-            .lines
-            .iter()
-            .any(|l| l.contains("┌") || l.contains("╭"))
-    );
+    assert!(result
+        .lines
+        .iter()
+        .any(|l| l.contains("┌") || l.contains("╭")));
 }
 
 #[test]
@@ -164,12 +162,10 @@ fn dag_render_cycle_detection_returns_error() {
 
     let result = renderer.render(&nodes);
 
-    assert!(
-        result
-            .lines
-            .iter()
-            .any(|l| l.contains("cycle") || l.contains("Cycle"))
-    );
+    assert!(result
+        .lines
+        .iter()
+        .any(|l| l.contains("cycle") || l.contains("Cycle")));
 }
 
 #[test]
@@ -233,7 +229,7 @@ fn strip_ansi_codes(s: &str) -> String {
             // Skip ANSI escape sequence
             if chars.peek() == Some(&'[') {
                 chars.next(); // consume '['
-                // Skip until we reach a letter (the terminator)
+                              // Skip until we reach a letter (the terminator)
                 while let Some(&next) = chars.peek() {
                     chars.next();
                     if next.is_ascii_alphabetic() {
@@ -247,4 +243,122 @@ fn strip_ansi_codes(s: &str) -> String {
     }
 
     result
+}
+
+// ==================== WorkflowGraph Tests ====================
+
+use zellij_frontend::render::{NodeStatus, WorkflowGraph, WorkflowGraphError};
+
+#[test]
+fn workflow_graph_new_creates_empty_graph() {
+    let graph = WorkflowGraph::new();
+    assert_eq!(graph.node_count(), 0);
+}
+
+#[test]
+fn workflow_graph_add_node_increases_count() {
+    let mut graph = WorkflowGraph::new();
+    let result = graph.add_node("src-abc", "Setup Project");
+    assert!(result.is_ok());
+    assert_eq!(graph.node_count(), 1);
+}
+
+#[test]
+fn workflow_graph_add_duplicate_node_returns_error() {
+    let mut graph = WorkflowGraph::new();
+    let _ = graph.add_node("src-abc", "Setup");
+    let result = graph.add_node("src-abc", "Setup Again");
+    assert!(result.is_err());
+    assert!(matches!(
+        result,
+        Err(WorkflowGraphError::DuplicateNode { .. })
+    ));
+}
+
+#[test]
+fn workflow_graph_add_dependency_creates_edge() {
+    let mut graph = WorkflowGraph::new();
+    let _ = graph.add_node("A", "First");
+    let _ = graph.add_node("B", "Second");
+    let result = graph.add_dependency("B", "A");
+    assert!(result.is_ok());
+}
+
+#[test]
+fn workflow_graph_add_dependency_to_missing_node_returns_error() {
+    let mut graph = WorkflowGraph::new();
+    let _ = graph.add_node("A", "First");
+    let result = graph.add_dependency("B", "A");
+    assert!(result.is_err());
+    assert!(matches!(
+        result,
+        Err(WorkflowGraphError::NodeNotFound { .. })
+    ));
+}
+
+#[test]
+fn workflow_graph_set_status_updates_node() {
+    let mut graph = WorkflowGraph::new();
+    let _ = graph.add_node("A", "Task");
+    let result = graph.set_node_status("A", NodeStatus::InProgress);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn workflow_graph_set_status_missing_node_returns_error() {
+    let mut graph = WorkflowGraph::new();
+    let result = graph.set_node_status("missing", NodeStatus::Completed);
+    assert!(result.is_err());
+}
+
+#[test]
+fn workflow_graph_render_returns_rendered_output() {
+    let mut graph = WorkflowGraph::new();
+    let _ = graph.add_node("A", "First");
+    let _ = graph.add_node("B", "Second");
+    let _ = graph.add_dependency("B", "A");
+
+    let output = graph.render();
+    assert!(output.lines.iter().any(|l| l.contains("First")));
+    assert!(output.lines.iter().any(|l| l.contains("Second")));
+}
+
+#[test]
+fn workflow_graph_render_empty_returns_placeholder() {
+    let graph = WorkflowGraph::new();
+    let output = graph.render();
+    assert!(output.lines.iter().any(|l| l.contains("No workflow data")));
+}
+
+#[test]
+fn workflow_graph_get_node_returns_reference() {
+    let mut graph = WorkflowGraph::new();
+    let _ = graph.add_node("A", "Task");
+    let node = graph.get_node("A");
+    assert!(node.is_some());
+    assert_eq!(node.map(|n| n.name.as_str()), Some("Task"));
+}
+
+#[test]
+fn workflow_graph_get_nodes_returns_all_nodes() {
+    let mut graph = WorkflowGraph::new();
+    let _ = graph.add_node("A", "First");
+    let _ = graph.add_node("B", "Second");
+    let nodes = graph.nodes();
+    assert_eq!(nodes.len(), 2);
+}
+
+#[test]
+fn workflow_graph_with_dimensions_customizes_renderer() {
+    let mut graph = WorkflowGraph::new();
+    let _ = graph.add_node("A", "Task");
+    graph = graph.with_dimensions(60, 8);
+    let output = graph.render();
+    assert!(!output.lines.is_empty());
+}
+
+#[test]
+fn workflow_graph_default_creates_empty_graph() {
+    let graph = WorkflowGraph::default();
+    assert_eq!(graph.node_count(), 0);
 }

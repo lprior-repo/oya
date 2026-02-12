@@ -7,14 +7,14 @@
 use std::sync::Arc;
 
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort};
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::{broadcast, mpsc, Mutex};
 use tracing::info;
 
 use oya_events::{BeadEvent, EventBus, EventPattern, EventSubscription};
 
 use crate::dag::BeadId;
 use crate::persistence::OrchestratorStore;
-use crate::replay::{OrchestratorEvent, OrchestratorProjection, ReplayEngine};
+use crate::replay::{CheckpointManager, OrchestratorEvent, OrchestratorProjection, ReplayEngine};
 use crate::scheduler::{ScheduledBead, SchedulerStats, WorkflowId, WorkflowState};
 use crate::shutdown::{CheckpointResult, ShutdownCoordinator, ShutdownSignal};
 
@@ -43,6 +43,8 @@ pub struct SchedulerArguments {
     pub shutdown_coordinator: Option<Arc<ShutdownCoordinator>>,
     /// Optional `ReplayEngine` for event sourcing and recovery.
     pub replay_engine: Option<Arc<ReplayEngine>>,
+    /// Optional `CheckpointManager` for checkpoint persistence.
+    pub checkpoint_manager: Option<Arc<CheckpointManager>>,
 }
 
 impl std::fmt::Debug for SchedulerArguments {
@@ -77,6 +79,13 @@ impl SchedulerArguments {
         self.replay_engine = Some(engine);
         self
     }
+
+    /// Set the `CheckpointManager`.
+    #[must_use]
+    pub fn with_checkpoint_manager(mut self, manager: Arc<CheckpointManager>) -> Self {
+        self.checkpoint_manager = Some(manager);
+        self
+    }
 }
 
 /// Core functional state for the scheduler.
@@ -90,6 +99,8 @@ pub struct CoreSchedulerState {
     pub ready_beads: Vector<BeadId>,
     /// Worker assignments (`bead_id` -> `worker_id`).
     pub worker_assignments: HashMap<BeadId, String>,
+    /// Registered agents with their capabilities.
+    pub agents: HashMap<String, Vec<String>>,
 }
 
 /// Actor state containing core state and integration handles.
@@ -106,6 +117,8 @@ pub struct SchedulerState {
     pub checkpoint_tx: Option<mpsc::Sender<CheckpointResult>>,
     /// `ReplayEngine` for event sourcing and recovery.
     pub replay_engine: Option<Arc<ReplayEngine>>,
+    /// `CheckpointManager` for periodic checkpointing.
+    pub checkpoint_manager: Option<Arc<CheckpointManager>>,
     /// Whether shutdown has been requested.
     pub shutdown_requested: bool,
 }
@@ -119,6 +132,7 @@ impl SchedulerState {
             shutdown_rx: None,
             checkpoint_tx: None,
             replay_engine: None,
+            checkpoint_manager: None,
             shutdown_requested: false,
         }
     }
@@ -147,6 +161,10 @@ pub enum SchedulerEffect {
         reply: RpcReplyPort<Vec<(WorkflowId, BeadId)>>,
         ready: Vec<(WorkflowId, BeadId)>,
     },
+    /// Record an event to the replay engine.
+    RecordEvent {
+        event: OrchestratorEvent,
+    },
 }
 
 impl Actor for SchedulerActorDef {
@@ -166,6 +184,11 @@ impl Actor for SchedulerActorDef {
         // Initialize replay engine if provided
         if let Some(engine) = args.replay_engine {
             state.replay_engine = Some(engine);
+        }
+
+        // Initialize checkpoint manager if provided
+        if let Some(manager) = args.checkpoint_manager {
+            state.checkpoint_manager = Some(manager);
         }
 
         // Subscribe to event bus if provided
@@ -228,6 +251,14 @@ impl Actor for SchedulerActorDef {
                 }
                 SchedulerEffect::ReplyAllReady { reply, ready } => {
                     let _ = reply.send(ready);
+                }
+                SchedulerEffect::RecordEvent { event } => {
+                    if let Some(engine) = &mut state.replay_engine {
+                        let engine = Arc::clone(engine);
+                        tokio::spawn(async move {
+                            let _ = engine.record_event(event).await;
+                        });
+                    }
                 }
             }
         }
@@ -309,8 +340,9 @@ impl SchedulerActorDef {
 /// Functional core for `SchedulerActor`.
 mod core {
     use super::{
-        ActorError, BeadId, CoreSchedulerState, MsgBeadState, ScheduledBead, SchedulerEffect,
-        SchedulerMessage, SchedulerStats, WorkflowId, WorkflowState, WorkflowStatus,
+        ActorError, BeadId, CoreSchedulerState, MsgBeadState, OrchestratorEvent, ScheduledBead,
+        SchedulerEffect, SchedulerMessage, SchedulerStats, WorkflowId, WorkflowState,
+        WorkflowStatus,
     };
 
     pub fn handle(
@@ -443,6 +475,24 @@ mod core {
                 }
                 effects.push(SchedulerEffect::ReplyAllReady { reply, ready });
             }
+            SchedulerMessage::RegisterAgent {
+                agent_id,
+                capabilities,
+            } => {
+                next_state.agents.insert(agent_id.clone(), capabilities.clone());
+                effects.push(SchedulerEffect::RecordEvent {
+                    event: OrchestratorEvent::AgentRegistered {
+                        agent_id,
+                        capabilities,
+                    },
+                });
+            }
+            SchedulerMessage::UnregisterAgent { agent_id } => {
+                next_state.agents.remove(&agent_id);
+                effects.push(SchedulerEffect::RecordEvent {
+                    event: OrchestratorEvent::AgentUnregistered { agent_id },
+                });
+            }
             SchedulerMessage::Shutdown => {} // Handled by shell
         }
 
@@ -506,5 +556,15 @@ mod tests {
         let args = SchedulerArguments::new();
         // Verify the field exists and is None by default
         assert!(args.replay_engine.is_none());
+    }
+
+    #[test]
+    fn test_scheduler_state_has_checkpoint_manager_field() {
+        // BDD: GIVEN SchedulerState is created WHEN inspecting fields THEN checkpoint_manager exists
+        let state = SchedulerState::new();
+        assert!(
+            state.checkpoint_manager.is_none(),
+            "checkpoint_manager should be None by default"
+        );
     }
 }

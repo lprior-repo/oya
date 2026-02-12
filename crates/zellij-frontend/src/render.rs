@@ -8,9 +8,13 @@
 // - Focused pane highlighting
 // - Help overlay rendering
 // - DAG visualization for workflow graphs
+// - Agent list view for pool monitoring
 
 use crate::layout::{Layout, Pane, PaneType};
+use crate::metrics::{AgentMetrics, PoolMetrics};
 use crate::plugin::{StageInfo, StageState, TaskRow};
+use oya_ipc::BeadDetail;
+use rpds::Vector;
 use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 
@@ -428,6 +432,7 @@ impl Renderer {
                     PaneType::PipelineView => tasks
                         .get(selected_index)
                         .map_or_else(String::new, |task| self.render_pipeline_view(pane, task)),
+                    PaneType::AgentView => String::new(),
                 };
 
                 let rendered = self.render_pane(pane, &pane_content, focused_pane);
@@ -709,6 +714,102 @@ impl Renderer {
         result.lines.join("\n")
     }
 
+    /// Render BeadDetail metadata section for displaying detailed bead information
+    ///
+    /// Renders the metadata section of a BeadDetail including:
+    /// - ID, title, description
+    /// - State, priority, issue type, workflow
+    /// - Labels and dependencies
+    ///
+    /// # Arguments
+    ///
+    /// * `pane` - Pane configuration for width calculation
+    /// * `bead` - BeadDetail containing the metadata to render
+    ///
+    /// # Returns
+    ///
+    /// Formatted string with bead metadata section
+    #[must_use]
+    pub fn render_bead_detail_metadata(&self, pane: &Pane, bead: &BeadDetail) -> String {
+        let max_width = pane.width.saturating_sub(4);
+
+        let header = format!(
+            "{}{}\n\x1b[0m",
+            style_helpers::header(),
+            truncate(&bead.title, max_width)
+        );
+
+        let priority_label = format!("P{}", bead.priority);
+
+        let fields = [
+            ("ID", bead.id.as_str()),
+            ("State", bead.state.as_str()),
+            ("Priority", priority_label.as_str()),
+            ("Type", bead.issue_type.as_str()),
+            ("Workflow", bead.workflow_id.as_str()),
+        ];
+
+        let field_lines = fields
+            .iter()
+            .fold(String::new(), |mut acc, (label, value)| {
+                acc.push_str(style_helpers::label());
+                acc.push_str(&format!("{:<9} ", label));
+                acc.push_str(style_helpers::text());
+                acc.push_str(value);
+                acc.push('\n');
+                acc
+            });
+
+        let description_line = if !bead.description.is_empty() {
+            let truncated_desc = truncate(&bead.description, max_width.saturating_sub(12));
+            format!(
+                "{}Description: {}{}\n",
+                style_helpers::label(),
+                style_helpers::text(),
+                truncated_desc
+            )
+        } else {
+            String::new()
+        };
+
+        let labels_line = if bead.labels.is_empty() {
+            format!(
+                "{}Labels:    {}none\n",
+                style_helpers::label(),
+                style_helpers::text()
+            )
+        } else {
+            let labels_str = bead.labels.join(", ");
+            format!(
+                "{}Labels:    {}{}\n",
+                style_helpers::label(),
+                style_helpers::text(),
+                truncate(&labels_str, max_width.saturating_sub(12))
+            )
+        };
+
+        let deps_line = if bead.dependencies.is_empty() {
+            format!(
+                "{}Deps:      {}none\n",
+                style_helpers::label(),
+                style_helpers::text()
+            )
+        } else {
+            let deps_str = bead.dependencies.join(", ");
+            format!(
+                "{}Deps:      {}{}\n",
+                style_helpers::label(),
+                style_helpers::text(),
+                truncate(&deps_str, max_width.saturating_sub(12))
+            )
+        };
+
+        format!(
+            "{}\n{}{}{}{}\x1b[0m",
+            header, field_lines, description_line, labels_line, deps_line
+        )
+    }
+
     /// Render status bar at bottom of screen
     fn render_status_bar(&self, focused_pane: PaneType, status_message: Option<&str>) -> String {
         let border_line = "─".repeat(78);
@@ -719,6 +820,7 @@ impl Renderer {
             PaneType::BeadDetail => "Details",
             PaneType::WorkflowGraph => "Graph",
             PaneType::PipelineView => "Pipeline",
+            PaneType::AgentView => "Agents",
         };
 
         // Status message using map_or for default
@@ -978,6 +1080,8 @@ fn calculate_stage_progress(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::metrics::{AgentMetrics, PoolMetrics};
+    use rpds::Vector;
 
     #[test]
     fn test_renderer_creation() {
@@ -1013,5 +1117,137 @@ mod tests {
         let border = renderer.render_bottom_border(20);
         assert!(border.starts_with('└'));
         assert!(border.ends_with("┘"));
+    }
+
+    #[test]
+    fn test_render_agent_view_empty() {
+        let renderer = Renderer::new();
+        let pane = Pane::new(PaneType::AgentView, 1, 1, 10, 40).expect("Failed to create pane");
+        let agents = Vector::new();
+        let pool = PoolMetrics {
+            total: 0,
+            idle: 0,
+            working: 0,
+            unhealthy: 0,
+            shutting_down: 0,
+            terminated: 0,
+        };
+
+        let output = renderer.render_agent_view(&pane, &agents, &pool);
+
+        assert!(output.contains("Agents"));
+        assert!(output.contains("Total: 0"));
+        assert!(output.contains("No agents connected"));
+    }
+
+    #[test]
+    fn test_render_agent_view_with_agents() {
+        let renderer = Renderer::new();
+        let pane = Pane::new(PaneType::AgentView, 1, 1, 15, 60).expect("Failed to create pane");
+
+        let agents = Vector::from_iter(vec![
+            AgentMetrics {
+                id: "agent-001".to_string(),
+                state: "working".to_string(),
+                uptime_secs: 3600,
+                beads_completed: 10,
+                operations_executed: 50,
+                avg_execution_secs: Some(1.5),
+                health_score: 95.0,
+            },
+            AgentMetrics {
+                id: "agent-002".to_string(),
+                state: "idle".to_string(),
+                uptime_secs: 7200,
+                beads_completed: 25,
+                operations_executed: 100,
+                avg_execution_secs: Some(2.0),
+                health_score: 100.0,
+            },
+        ]);
+
+        let pool = PoolMetrics {
+            total: 2,
+            idle: 1,
+            working: 1,
+            unhealthy: 0,
+            shutting_down: 0,
+            terminated: 0,
+        };
+
+        let output = renderer.render_agent_view(&pane, &agents, &pool);
+
+        assert!(output.contains("agent-001"));
+        assert!(output.contains("agent-002"));
+        assert!(output.contains("working"));
+        assert!(output.contains("idle"));
+        assert!(output.contains("Total: 2"));
+        assert!(output.contains("Idle: 1"));
+    }
+
+    #[test]
+    fn test_render_agent_view_health_status() {
+        let renderer = Renderer::new();
+        let pane = Pane::new(PaneType::AgentView, 1, 1, 10, 50).expect("Failed to create pane");
+
+        let agents = Vector::from_iter(vec![
+            AgentMetrics {
+                id: "healthy-agent".to_string(),
+                state: "working".to_string(),
+                uptime_secs: 3600,
+                beads_completed: 10,
+                operations_executed: 50,
+                avg_execution_secs: Some(1.5),
+                health_score: 100.0,
+            },
+            AgentMetrics {
+                id: "degraded-agent".to_string(),
+                state: "working".to_string(),
+                uptime_secs: 3600,
+                beads_completed: 5,
+                operations_executed: 20,
+                avg_execution_secs: Some(1.5),
+                health_score: 50.0,
+            },
+        ]);
+
+        let pool = PoolMetrics {
+            total: 2,
+            idle: 0,
+            working: 2,
+            unhealthy: 1,
+            shutting_down: 0,
+            terminated: 0,
+        };
+
+        let output = renderer.render_agent_view(&pane, &agents, &pool);
+
+        assert!(output.contains("healthy-agent"));
+        assert!(output.contains("degraded-agent"));
+        assert!(output.contains("100%"));
+        assert!(output.contains("50%"));
+    }
+
+    #[test]
+    fn test_render_agent_view_pool_summary() {
+        let renderer = Renderer::new();
+        let pane = Pane::new(PaneType::AgentView, 1, 1, 10, 70).expect("Failed to create pane");
+
+        let agents = Vector::new();
+        let pool = PoolMetrics {
+            total: 8,
+            idle: 3,
+            working: 4,
+            unhealthy: 1,
+            shutting_down: 0,
+            terminated: 0,
+        };
+
+        let output = renderer.render_agent_view(&pane, &agents, &pool);
+
+        assert!(output.contains("Total: 8"));
+        assert!(output.contains("Idle: 3"));
+        assert!(output.contains("Working: 4"));
+        assert!(output.contains("Unhealthy: 1"));
     }
 }
