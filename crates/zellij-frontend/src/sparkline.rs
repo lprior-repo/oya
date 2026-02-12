@@ -200,11 +200,13 @@ fn value_to_sparkline_char(value: u8, max_val: u8) -> char {
         return SPARKLINE_CHARS[0];
     }
 
-    // Normalize to 0-7 range
     let normalized = (value as u32 * 7) / max_val as u32;
     let index = normalized.min(7) as usize;
 
-    SPARKLINE_CHARS[index]
+    SPARKLINE_CHARS
+        .get(index)
+        .copied()
+        .unwrap_or(SPARKLINE_CHARS[0])
 }
 
 #[cfg(test)]
