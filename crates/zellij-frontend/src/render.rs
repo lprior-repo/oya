@@ -74,6 +74,14 @@ pub enum HelpOverlayError {
 /// Result type for help overlay rendering
 pub type HelpOverlayResult<T> = Result<T, HelpOverlayError>;
 
+/// Column widths for agent view rendering
+struct AgentColumnWidths {
+    id: usize,
+    state: usize,
+    health: usize,
+    beads: usize,
+}
+
 /// Node status for DAG visualization
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum NodeStatus {
@@ -730,15 +738,17 @@ impl Renderer {
             .fold(String::new(), |mut acc, (i, task)| {
                 let is_selected = i == selected_index;
 
-                let indicator = if is_selected {
-                    format!("{}►", style_helpers::selected())
-                } else {
-                    " ".to_string()
-                };
-                acc.push_str(&indicator);
+                if is_selected {
+                    acc.push_str(style_helpers::selected());
+                }
 
-                let status_color = style_helpers::status_color(&task.status);
-                acc.push_str(status_color);
+                let indicator = if is_selected { "►" } else { " " };
+                acc.push_str(indicator);
+
+                if !is_selected {
+                    let status_color = style_helpers::status_color(&task.status);
+                    acc.push_str(status_color);
+                }
 
                 let slug = truncate(&task.slug, 12);
                 let slug_padding = " ".repeat(14_usize.saturating_sub(slug.chars().count()));
@@ -929,6 +939,120 @@ impl Renderer {
         let renderer = DagRenderer::new().with_dimensions(78, 6);
         let result = renderer.render(&nodes);
         result.lines.join("\n")
+    }
+
+    /// Render agent list view for pool monitoring
+    ///
+    /// Renders a list of agents with their status, health, and metrics.
+    /// Includes pool-wide summary at the top.
+    ///
+    /// # Arguments
+    ///
+    /// * `pane` - Pane configuration for width calculation
+    /// * `agents` - Vector of agent metrics
+    /// * `pool` - Pool-wide metrics summary
+    ///
+    /// # Returns
+    ///
+    /// Formatted string with agent list view
+    #[must_use]
+    pub fn render_agent_view(
+        &self,
+        pane: &Pane,
+        agents: &Vector<AgentMetrics>,
+        pool: &PoolMetrics,
+    ) -> String {
+        let max_width = pane.width.saturating_sub(2);
+
+        let header = format!("{}Agent Pool Status\n\x1b[0m", style_helpers::header());
+
+        let pool_summary = format!(
+            "{}Total: {}  Idle: {}  Working: {}  Unhealthy: {}\n\n",
+            style_helpers::label(),
+            pool.total,
+            pool.idle,
+            pool.working,
+            pool.unhealthy
+        );
+
+        if agents.is_empty() {
+            let empty_msg = format!("{}No agents connected\n", style_helpers::text());
+            return format!("{header}{pool_summary}{empty_msg}");
+        }
+
+        let col_widths = self.calculate_agent_column_widths(max_width);
+        let headers = format!(
+            "{}{:<width_id$} {:<width_state$} {:>width_health$} {:>width_beads$}\n\x1b[0m",
+            style_helpers::label(),
+            "ID",
+            "State",
+            "Health",
+            "Beads",
+            width_id = col_widths.id,
+            width_state = col_widths.state,
+            width_health = col_widths.health,
+            width_beads = col_widths.beads,
+        );
+
+        let agent_rows = agents.iter().fold(String::new(), |mut acc, agent| {
+            let health_display = format!("{:.0}%", agent.health_score);
+            let health_color = self.health_score_color(agent.health_score);
+
+            acc.push_str(style_helpers::text());
+            acc.push_str(&format!(
+                "{:<width_id$} ",
+                truncate(&agent.id, col_widths.id.saturating_sub(1)),
+                width_id = col_widths.id
+            ));
+            acc.push_str(&format!(
+                "{:<width_state$} ",
+                truncate(&agent.state, col_widths.state.saturating_sub(1)),
+                width_state = col_widths.state
+            ));
+            acc.push_str(health_color);
+            acc.push_str(&format!(
+                "{:>width_health$} ",
+                health_display,
+                width_health = col_widths.health
+            ));
+            acc.push_str(style_helpers::text());
+            acc.push_str(&format!(
+                "{:>width_beads$}\n",
+                agent.beads_completed,
+                width_beads = col_widths.beads
+            ));
+            acc
+        });
+
+        format!("{header}{pool_summary}{headers}{agent_rows}")
+    }
+
+    /// Calculate column widths for agent view based on pane width
+    fn calculate_agent_column_widths(&self, max_width: usize) -> AgentColumnWidths {
+        let state_width = 8;
+        let health_width = 7;
+        let beads_width = 6;
+        let spacing = 3;
+
+        let fixed_width = state_width + health_width + beads_width + spacing;
+        let id_width = max_width.saturating_sub(fixed_width).max(8);
+
+        AgentColumnWidths {
+            id: id_width,
+            state: state_width,
+            health: health_width,
+            beads: beads_width,
+        }
+    }
+
+    /// Get color code for health score
+    fn health_score_color(&self, score: f64) -> &'static str {
+        match score {
+            s if s >= 90.0 => "\x1b[32m",
+            s if s >= 70.0 => "\x1b[33m",
+            s if s >= 50.0 => "\x1b[35m",
+            _ => "\x1b[31m",
+        }
     }
 
     /// Render BeadDetail metadata section for displaying detailed bead information
@@ -1353,7 +1477,7 @@ mod tests {
 
         let output = renderer.render_agent_view(&pane, &agents, &pool);
 
-        assert!(output.contains("Agents"));
+        assert!(output.contains("Agent Pool Status"));
         assert!(output.contains("Total: 0"));
         assert!(output.contains("No agents connected"));
     }

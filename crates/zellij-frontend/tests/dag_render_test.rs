@@ -55,10 +55,12 @@ fn dag_render_single_node_displays_box() {
     let result = renderer.render(&nodes);
 
     assert!(result.lines.iter().any(|l| l.contains("Feature X")));
-    assert!(result
-        .lines
-        .iter()
-        .any(|l| l.contains("┌") || l.contains("╭")));
+    assert!(
+        result
+            .lines
+            .iter()
+            .any(|l| l.contains("┌") || l.contains("╭"))
+    );
 }
 
 #[test]
@@ -162,10 +164,12 @@ fn dag_render_cycle_detection_returns_error() {
 
     let result = renderer.render(&nodes);
 
-    assert!(result
-        .lines
-        .iter()
-        .any(|l| l.contains("cycle") || l.contains("Cycle")));
+    assert!(
+        result
+            .lines
+            .iter()
+            .any(|l| l.contains("cycle") || l.contains("Cycle"))
+    );
 }
 
 #[test]
@@ -229,7 +233,7 @@ fn strip_ansi_codes(s: &str) -> String {
             // Skip ANSI escape sequence
             if chars.peek() == Some(&'[') {
                 chars.next(); // consume '['
-                              // Skip until we reach a letter (the terminator)
+                // Skip until we reach a letter (the terminator)
                 while let Some(&next) = chars.peek() {
                     chars.next();
                     if next.is_ascii_alphabetic() {

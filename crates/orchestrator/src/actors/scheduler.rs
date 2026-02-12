@@ -13,7 +13,6 @@ use tracing::info;
 use oya_events::{BeadEvent, EventBus, EventPattern, EventSubscription};
 
 use crate::dag::BeadId;
-use crate::persistence::OrchestratorStore;
 use crate::replay::{CheckpointManager, OrchestratorEvent, OrchestratorProjection, ReplayEngine};
 use crate::scheduler::{ScheduledBead, SchedulerStats, WorkflowId, WorkflowState};
 use crate::shutdown::{CheckpointResult, ShutdownCoordinator, ShutdownSignal};
@@ -580,12 +579,15 @@ mod tests {
     #[tokio::test]
     async fn test_register_workflow_idempotent_no_duplicate_events() {
         let state = CoreSchedulerState::default();
-        let msg = SchedulerMessage::RegisterWorkflow {
+        let msg1 = SchedulerMessage::RegisterWorkflow {
+            workflow_id: "wf-dupe".to_string(),
+        };
+        let msg2 = SchedulerMessage::RegisterWorkflow {
             workflow_id: "wf-dupe".to_string(),
         };
 
-        let (state, effects1) = core::handle(state, msg.clone());
-        let (_, effects2) = core::handle(state, msg);
+        let (state, effects1) = core::handle(state, msg1);
+        let (_, effects2) = core::handle(state, msg2);
 
         let count1 = effects1.iter().filter(|e| matches!(e, SchedulerEffect::RecordEvent { .. })).count();
         let count2 = effects2.iter().filter(|e| matches!(e, SchedulerEffect::RecordEvent { .. })).count();
@@ -610,5 +612,113 @@ mod tests {
             state.checkpoint_manager.is_none(),
             "checkpoint_manager should be None by default"
         );
+    }
+
+    #[test]
+    fn test_register_agent_adds_to_state_and_records_event() {
+        let state = CoreSchedulerState::default();
+        let msg = SchedulerMessage::RegisterAgent {
+            agent_id: "agent-1".to_string(),
+            capabilities: vec!["compute".to_string(), "storage".to_string()],
+        };
+        let (next_state, effects) = core::handle(state, msg);
+
+        assert!(
+            next_state.agents.contains_key("agent-1"),
+            "agent should be in state"
+        );
+        assert_eq!(
+            next_state.agents.get("agent-1"),
+            Some(&vec!["compute".to_string(), "storage".to_string()]),
+            "capabilities should match"
+        );
+
+        let record_event = effects.iter().find_map(|e| match e {
+            SchedulerEffect::RecordEvent { event } => Some(event.clone()),
+            _ => None,
+        });
+        assert!(
+            record_event.is_some(),
+            "RegisterAgent should produce a RecordEvent effect"
+        );
+
+        let event = record_event.expect("checked is_some");
+        assert!(
+            matches!(
+                event,
+                OrchestratorEvent::AgentRegistered {
+                    agent_id,
+                    capabilities,
+                } if agent_id == "agent-1" && capabilities == vec!["compute", "storage"]
+            ),
+            "Expected AgentRegistered event with correct data"
+        );
+    }
+
+    #[test]
+    fn test_unregister_agent_removes_from_state_and_records_event() {
+        let state = CoreSchedulerState::default();
+        let register_msg = SchedulerMessage::RegisterAgent {
+            agent_id: "agent-1".to_string(),
+            capabilities: vec!["compute".to_string()],
+        };
+        let (state, _) = core::handle(state, register_msg);
+
+        let unregister_msg = SchedulerMessage::UnregisterAgent {
+            agent_id: "agent-1".to_string(),
+        };
+        let (next_state, effects) = core::handle(state, unregister_msg);
+
+        assert!(
+            !next_state.agents.contains_key("agent-1"),
+            "agent should be removed from state"
+        );
+
+        let record_event = effects.iter().find_map(|e| match e {
+            SchedulerEffect::RecordEvent { event } => Some(event.clone()),
+            _ => None,
+        });
+        assert!(
+            record_event.is_some(),
+            "UnregisterAgent should produce a RecordEvent effect"
+        );
+
+        let event = record_event.expect("checked is_some");
+        assert!(
+            matches!(
+                event,
+                OrchestratorEvent::AgentUnregistered { agent_id } if agent_id == "agent-1"
+            ),
+            "Expected AgentUnregistered event with correct agent_id"
+        );
+    }
+
+    #[test]
+    fn test_agent_count_matches_events_no_orphans() {
+        let state = CoreSchedulerState::default();
+
+        let (state, _) = core::handle(state, SchedulerMessage::RegisterAgent {
+            agent_id: "agent-1".to_string(),
+            capabilities: vec!["a".to_string()],
+        });
+        let (state, _) = core::handle(state, SchedulerMessage::RegisterAgent {
+            agent_id: "agent-2".to_string(),
+            capabilities: vec!["b".to_string()],
+        });
+        let (state, _) = core::handle(state, SchedulerMessage::RegisterAgent {
+            agent_id: "agent-3".to_string(),
+            capabilities: vec!["c".to_string()],
+        });
+
+        assert_eq!(state.agents.len(), 3, "should have 3 agents");
+
+        let (state, _) = core::handle(state, SchedulerMessage::UnregisterAgent {
+            agent_id: "agent-2".to_string(),
+        });
+
+        assert_eq!(state.agents.len(), 2, "should have 2 agents after unregister");
+        assert!(state.agents.contains_key("agent-1"), "agent-1 should exist");
+        assert!(state.agents.contains_key("agent-3"), "agent-3 should exist");
+        assert!(!state.agents.contains_key("agent-2"), "agent-2 should be removed");
     }
 }
