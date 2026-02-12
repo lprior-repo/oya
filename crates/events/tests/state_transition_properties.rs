@@ -10,7 +10,6 @@
 use oya_events::BeadState;
 use proptest::prelude::*;
 
-/// All possible BeadState values for property testing.
 const ALL_STATES: [BeadState; 8] = [
     BeadState::Pending,
     BeadState::Scheduled,
@@ -22,18 +21,20 @@ const ALL_STATES: [BeadState; 8] = [
     BeadState::Completed,
 ];
 
-/// Generate arbitrary BeadState for proptest.
 fn arb_bead_state() -> impl Strategy<Value = BeadState> {
-    proptest::sample::select(ALL_STATES.to_vec())
+    prop_oneof![
+        Just(BeadState::Pending),
+        Just(BeadState::Scheduled),
+        Just(BeadState::Ready),
+        Just(BeadState::Running),
+        Just(BeadState::Suspended),
+        Just(BeadState::BackingOff),
+        Just(BeadState::Paused),
+        Just(BeadState::Completed),
+    ]
 }
 
 proptest! {
-    // ==========================================================================
-    // PROPERTY: can_transition_to and valid_transitions() are consistent
-    // ==========================================================================
-
-    /// Property: For any state S and target T, can_transition_to(T) returns true
-    /// if and only if T is in valid_transitions().
     #[test]
     fn prop_can_transition_consistent_with_valid_transitions(
         from_state in arb_bead_state(),
@@ -54,11 +55,6 @@ proptest! {
         );
     }
 
-    // ==========================================================================
-    // PROPERTY: Terminal state has no outgoing transitions
-    // ==========================================================================
-
-    /// Property: Completed state cannot transition to any state (including itself).
     #[test]
     fn prop_completed_has_no_transitions(target in arb_bead_state()) {
         let completed = BeadState::Completed;
@@ -69,7 +65,6 @@ proptest! {
         );
     }
 
-    /// Property: valid_transitions() for Completed returns empty vector.
     #[test]
     fn prop_completed_valid_transitions_empty() {
         let transitions = BeadState::Completed.valid_transitions();
@@ -80,19 +75,12 @@ proptest! {
         );
     }
 
-    // ==========================================================================
-    // PROPERTY: Non-terminal states have at least one valid transition
-    // ==========================================================================
-
-    /// Property: All non-terminal states can reach Completed (directly or indirectly).
-    /// This tests that Completed is always reachable, not immediate.
     #[test]
     fn prop_non_terminal_states_can_reach_completed(state in arb_bead_state()) {
         if state.is_terminal() {
-            return Ok(()); // Skip terminal state
+            return Ok(());
         }
 
-        // Check if state can reach Completed (directly or through valid transitions)
         let can_reach = can_reach_completed(state);
         prop_assert!(
             can_reach,
@@ -101,15 +89,10 @@ proptest! {
         );
     }
 
-    // ==========================================================================
-    // PROPERTY: Transitivity - if A->B and B can reach Completed, then A can reach Completed
-    // ==========================================================================
-
-    /// Property: All valid transitions from any state preserve ability to reach Completed.
     #[test]
     fn prop_transitions_preserve_completed_reachability(state in arb_bead_state()) {
         if state.is_terminal() {
-            return Ok(()); // Completed cannot transition
+            return Ok(());
         }
 
         for target in state.valid_transitions() {
@@ -124,11 +107,6 @@ proptest! {
         Ok(())
     }
 
-    // ==========================================================================
-    // PROPERTY: No self-transitions except via normal flow
-    // ==========================================================================
-
-    /// Property: No state can transition to itself.
     #[test]
     fn prop_no_self_transitions(state in arb_bead_state()) {
         prop_assert!(
@@ -138,11 +116,6 @@ proptest! {
         );
     }
 
-    // ==========================================================================
-    // PROPERTY: is_terminal matches state being Completed
-    // ==========================================================================
-
-    /// Property: is_terminal returns true only for Completed.
     #[test]
     fn prop_is_terminal_only_completed(state in arb_bead_state()) {
         let expected = matches!(state, BeadState::Completed);
@@ -154,52 +127,8 @@ proptest! {
             expected
         );
     }
-
-    // ==========================================================================
-    // PROPERTY: Bidirectional consistency
-    // ==========================================================================
-
-    /// Property: If A can transition to B, B cannot always transition back to A.
-    /// This ensures the state machine is directional (mostly DAG-like).
-    #[test]
-    fn prop_transitions_are_mostly_unidirectional(
-        from_state in arb_bead_state(),
-        to_state in arb_bead_state(),
-    ) {
-        if from_state.can_transition_to(to_state) && !to_state.is_terminal() {
-            // Most transitions should not be bidirectional
-            let back_transitions = to_state.valid_transitions();
-            // Note: Some bidirectional transitions are valid (e.g., Running <-> Paused)
-            // This is just documenting the behavior, not asserting
-            let _ = back_transitions.contains(&from_state);
-        }
-        Ok(())
-    }
-
-    // ==========================================================================
-    // PROPERTY: Exhaustive transition matrix coverage
-    // ==========================================================================
-
-    /// Property: Every state either transitions to Completed or has a path to it.
-    #[test]
-    fn prop_all_states_eventually_complete() {
-        for state in ALL_STATES {
-            if state.is_terminal() {
-                continue;
-            }
-            let reachable = can_reach_completed(state);
-            prop_assert!(
-                reachable,
-                "State {:?} cannot reach Completed - workflow may deadlock",
-                state
-            );
-        }
-        Ok(())
-    }
 }
 
-/// Check if a state can reach Completed through valid transitions.
-/// Uses BFS to find shortest path.
 fn can_reach_completed(start: BeadState) -> bool {
     if start.is_terminal() {
         return true;
@@ -281,5 +210,20 @@ mod unit_tests {
             !BeadState::Pending.can_transition_to(BeadState::Ready),
             "Cannot skip Scheduled"
         );
+    }
+
+    #[test]
+    fn should_exhaustively_verify_all_states_eventually_complete() {
+        for state in ALL_STATES {
+            if state.is_terminal() {
+                continue;
+            }
+            let reachable = can_reach_completed(state);
+            assert!(
+                reachable,
+                "State {:?} cannot reach Completed - workflow may deadlock",
+                state
+            );
+        }
     }
 }

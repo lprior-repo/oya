@@ -15,8 +15,8 @@ use proptest::prelude::*;
 use proptest::string::string_regex;
 
 use orchestrator::distribution::{
-    available_strategies, create_strategy, AffinityStrategy, DistributionContext,
-    DistributionStrategy, FifoStrategy, PriorityStrategy, RoundRobinStrategy, StickyStrategy,
+    AffinityStrategy, DistributionContext, DistributionStrategy, FifoStrategy, PriorityStrategy,
+    RoundRobinStrategy, StickyStrategy, available_strategies, create_strategy,
 };
 
 fn bead_id_strategy() -> impl Strategy<Value = String> {
@@ -218,8 +218,8 @@ proptest! {
         strategy_name in proptest::sample::select(available_strategies().to_vec()),
         ready_beads in ready_beads_strategy()
     ) {
-        let strategy1 = create_strategy(strategy_name.as_str());
-        let strategy2 = create_strategy(strategy_name.as_str());
+        let strategy1 = create_strategy(&strategy_name);
+        let strategy2 = create_strategy(&strategy_name);
         let ctx = DistributionContext::new();
 
         if let (Some(s1), Some(s2)) = (strategy1, strategy2) {

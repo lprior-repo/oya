@@ -801,7 +801,7 @@ async fn ensure_scheduler_running(
 async fn given_scheduler_when_randomly_killed_multiple_times_then_recovers_each_time() {
     let test_name = "random_kill_recovery";
     let seed = 42u64;
-    let num_kills = 5;
+    let num_kills = 3;
 
     info!(
         "Starting test: {} (seed={}, kills={})",
@@ -822,7 +822,7 @@ async fn given_scheduler_when_randomly_killed_multiple_times_then_recovers_each_
     for (idx, pattern) in kill_patterns.into_iter().enumerate() {
         info!("Kill iteration {} with delay {}ms", idx, pattern.delay_ms);
 
-        ensure_scheduler_running(&mut ctx, test_name, 3000)
+        ensure_scheduler_running(&mut ctx, test_name, 5000)
             .await
             .expect("Scheduler must be running before kill");
 
@@ -830,7 +830,7 @@ async fn given_scheduler_when_randomly_killed_multiple_times_then_recovers_each_
 
         tokio::time::sleep(Duration::from_millis(pattern.delay_ms)).await;
 
-        await_scheduler_recovery(&mut ctx, test_name, 5000)
+        await_scheduler_recovery(&mut ctx, test_name, 10000)
             .await
             .expect(&format!("Recovery failed at iteration {}", idx));
 

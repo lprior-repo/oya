@@ -3248,6 +3248,7 @@ dependencies = [
  "oya-pipeline",
  "oya-telemetry",
  "oya-workflow",
+ "proptest",
  "ractor",
  "reqwest",
  "rusqlite",

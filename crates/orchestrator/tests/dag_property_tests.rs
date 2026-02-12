@@ -1,10 +1,18 @@
-//! Property-based tests for DAG topological sort.
+//! Property-based tests for DAG invariants.
 //!
-//! This module tests the property described in bead src-as6n:
+//! This module tests multiple properties:
 //!
-//! ## Phase 5 - Property Tests
+//! ## Bead src-as6n: Topological Sort
 //!
 //! ∀ dag: toposort(dag) -> all edges respect order
+//!
+//! ## Bead src-yaw2: Ready State Invariant
+//!
+//! ∀ bead: ready state -> no incomplete blocking deps
+//!
+//! Invariant: If a bead is in "ready" state, it must have no incomplete
+//! blocking dependencies. This means all blocking dependencies must be
+//! in the completed set.
 
 #![forbid(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
@@ -12,11 +20,12 @@
 
 use std::collections::HashMap as StdHashMap;
 
-use proptest::collection::{hash_map, vec};
+use im::HashSet;
+use proptest::collection::{hash_map, hash_set, vec};
 use proptest::prelude::*;
 use proptest::string::string_regex;
 
-use orchestrator::dag::{DependencyType, WorkflowDAG};
+use orchestrator::dag::{BeadId, DependencyType, WorkflowDAG};
 
 fn bead_id_strategy() -> impl Strategy<Value = String> {
     string_regex("bead-[a-z0-9]{3,8}").unwrap()

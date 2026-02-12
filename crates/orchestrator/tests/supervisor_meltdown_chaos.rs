@@ -11,7 +11,7 @@
 
 use std::time::{Duration, Instant};
 
-use ractor::{Actor, ActorRef, ActorStatus};
+use ractor::{ActorRef, ActorStatus};
 use thiserror::Error;
 use tracing::{info, warn};
 
@@ -121,11 +121,8 @@ async fn spawn_child(
         })
 }
 
-async fn kill_child(
-    supervisor: &ActorRef<SupervisorMessage<SchedulerActorDef>>,
-    name: &str,
-) {
-    supervisor.send_message(SupervisorMessage::<SchedulerActorDef>::StopChild {
+async fn kill_child(supervisor: &ActorRef<SupervisorMessage<SchedulerActorDef>>, name: &str) {
+    let _ = supervisor.send_message(SupervisorMessage::<SchedulerActorDef>::StopChild {
         name: name.to_string(),
     });
 }
@@ -147,9 +144,10 @@ async fn given_rapid_restarts_when_exceeds_meltdown_threshold_then_supervisor_sh
     let config = meltdown_test_config();
     let args = SupervisorArguments::new().with_config(config);
 
-    let supervisor = spawn_supervisor_with_name::<SchedulerActorDef>(args, &format!("supervisor-{test_name}"))
-        .await
-        .expect("Failed to spawn supervisor");
+    let supervisor =
+        spawn_supervisor_with_name::<SchedulerActorDef>(args, &format!("supervisor-{test_name}"))
+            .await
+            .expect("Failed to spawn supervisor");
 
     tokio::time::sleep(Duration::from_millis(50)).await;
 
@@ -163,7 +161,11 @@ async fn given_rapid_restarts_when_exceeds_meltdown_threshold_then_supervisor_sh
     let initial_status = get_meltdown_status(&supervisor)
         .await
         .expect("Failed to get initial status");
-    assert_eq!(initial_status, MeltdownStatus::Normal, "Should start in normal state");
+    assert_eq!(
+        initial_status,
+        MeltdownStatus::Normal,
+        "Should start in normal state"
+    );
 
     for i in 1..=8 {
         info!("Killing child (iteration {})", i);
@@ -176,8 +178,7 @@ async fn given_rapid_restarts_when_exceeds_meltdown_threshold_then_supervisor_sh
             Ok(MeltdownStatus::Meltdown) => {
                 info!("Meltdown detected at iteration {}", i);
 
-                let shutdown_result =
-                    wait_for_supervisor_shutdown(&supervisor, 2000).await;
+                let shutdown_result = wait_for_supervisor_shutdown(&supervisor, 2000).await;
                 assert!(
                     shutdown_result.is_ok(),
                     "Supervisor should shut down after meltdown"
@@ -197,7 +198,10 @@ async fn given_rapid_restarts_when_exceeds_meltdown_threshold_then_supervisor_sh
     }
 
     let shutdown_result = wait_for_supervisor_shutdown(&supervisor, 1000).await;
-    assert!(shutdown_result.is_ok(), "Supervisor should eventually shut down due to meltdown");
+    assert!(
+        shutdown_result.is_ok(),
+        "Supervisor should eventually shut down due to meltdown"
+    );
 
     info!("Test passed: {}", test_name);
 }
@@ -215,9 +219,10 @@ async fn given_meltdown_when_additional_failures_then_no_restarts() {
     let config = meltdown_test_config();
     let args = SupervisorArguments::new().with_config(config);
 
-    let supervisor = spawn_supervisor_with_name::<SchedulerActorDef>(args, &format!("supervisor-{test_name}"))
-        .await
-        .expect("Failed to spawn supervisor");
+    let supervisor =
+        spawn_supervisor_with_name::<SchedulerActorDef>(args, &format!("supervisor-{test_name}"))
+            .await
+            .expect("Failed to spawn supervisor");
 
     tokio::time::sleep(Duration::from_millis(50)).await;
 
@@ -234,7 +239,10 @@ async fn given_meltdown_when_additional_failures_then_no_restarts() {
 
         let status = supervisor.get_status();
         if matches!(status, ActorStatus::Stopped | ActorStatus::Stopping) {
-            info!("Supervisor stopped at iteration {} (circuit breaker worked)", i);
+            info!(
+                "Supervisor stopped at iteration {} (circuit breaker worked)",
+                i
+            );
 
             let (tx, rx) = tokio::sync::oneshot::channel();
             let send_result = supervisor.send_message(SupervisorMessage::GetStatus { reply: tx });
@@ -279,9 +287,10 @@ async fn given_gradual_failures_when_below_threshold_then_no_meltdown() {
     };
     let args = SupervisorArguments::new().with_config(config);
 
-    let supervisor = spawn_supervisor_with_name::<SchedulerActorDef>(args, &format!("supervisor-{test_name}"))
-        .await
-        .expect("Failed to spawn supervisor");
+    let supervisor =
+        spawn_supervisor_with_name::<SchedulerActorDef>(args, &format!("supervisor-{test_name}"))
+            .await
+            .expect("Failed to spawn supervisor");
 
     tokio::time::sleep(Duration::from_millis(50)).await;
 
@@ -299,7 +308,10 @@ async fn given_gradual_failures_when_below_threshold_then_no_meltdown() {
 
         let status = supervisor.get_status();
         if matches!(status, ActorStatus::Stopped | ActorStatus::Stopping) {
-            panic!("Supervisor should NOT shut down with gradual failures (iteration {})", i);
+            panic!(
+                "Supervisor should NOT shut down with gradual failures (iteration {})",
+                i
+            );
         }
 
         let meltdown = get_meltdown_status(&supervisor).await;
@@ -318,7 +330,11 @@ async fn given_gradual_failures_when_below_threshold_then_no_meltdown() {
     }
 
     let status = supervisor.get_status();
-    assert_eq!(status, ActorStatus::Running, "Supervisor should remain running");
+    assert_eq!(
+        status,
+        ActorStatus::Running,
+        "Supervisor should remain running"
+    );
 
     supervisor.stop(Some("Test complete".to_string()));
 
@@ -345,9 +361,10 @@ async fn given_failures_when_status_queried_then_includes_meltdown_info() {
     };
     let args = SupervisorArguments::new().with_config(config);
 
-    let supervisor = spawn_supervisor_with_name::<SchedulerActorDef>(args, &format!("supervisor-{test_name}"))
-        .await
-        .expect("Failed to spawn supervisor");
+    let supervisor =
+        spawn_supervisor_with_name::<SchedulerActorDef>(args, &format!("supervisor-{test_name}"))
+            .await
+            .expect("Failed to spawn supervisor");
 
     tokio::time::sleep(Duration::from_millis(50)).await;
 
@@ -411,9 +428,10 @@ async fn given_repeated_failures_when_restarting_then_backoff_increases() {
     };
     let args = SupervisorArguments::new().with_config(config);
 
-    let supervisor = spawn_supervisor_with_name::<SchedulerActorDef>(args, &format!("supervisor-{test_name}"))
-        .await
-        .expect("Failed to spawn supervisor");
+    let supervisor =
+        spawn_supervisor_with_name::<SchedulerActorDef>(args, &format!("supervisor-{test_name}"))
+            .await
+            .expect("Failed to spawn supervisor");
 
     tokio::time::sleep(Duration::from_millis(50)).await;
 

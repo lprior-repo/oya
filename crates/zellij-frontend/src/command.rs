@@ -161,6 +161,16 @@ pub enum ParsedCommand {
         /// Output file path
         path: String,
     },
+
+    /// Sort tasks by field
+    ///
+    /// Sorts the task list by the specified field and direction
+    Sort {
+        /// Field to sort by
+        field: SortField,
+        /// Sort direction (defaults to ascending)
+        direction: SortDirection,
+    },
 }
 
 impl ParsedCommand {
@@ -177,6 +187,7 @@ impl ParsedCommand {
             Self::Refresh => "refresh",
             Self::Help => "help",
             Self::Export { .. } => "export",
+            Self::Sort { .. } => "sort",
         }
     }
 }
@@ -267,6 +278,7 @@ pub fn parse_command(input: &str) -> ParseResult<ParsedCommand> {
             parts.get(1..).unwrap_or(&[]),
         )),
         "export" => parse_export_command(parts.get(1..).unwrap_or(&[])),
+        "sort" => parse_sort_command(parts.get(1..).unwrap_or(&[])),
         unknown => Err(ParseError::UnknownCommand(unknown.to_string())),
     }
 }
@@ -353,6 +365,27 @@ fn parse_export_command(args: &[&str]) -> ParseResult<ParsedCommand> {
     })
 }
 
+fn parse_sort_command(args: &[&str]) -> ParseResult<ParsedCommand> {
+    if args.is_empty() {
+        return Err(ParseError::MissingArgument("sort".to_string()));
+    }
+
+    let field_str = args[0];
+    let field = SortField::from_str(field_str)
+        .ok_or_else(|| ParseError::InvalidSortField(field_str.to_string()))?;
+
+    let direction = args
+        .get(1)
+        .map(|d| {
+            SortDirection::from_str(d)
+                .ok_or_else(|| ParseError::InvalidSortDirection(d.to_string()))
+        })
+        .transpose()?
+        .unwrap_or_default();
+
+    Ok(ParsedCommand::Sort { field, direction })
+}
+
 /// Suggest completions for a partial command
 ///
 /// This function provides command suggestions based on partial input.
@@ -379,7 +412,7 @@ fn parse_export_command(args: &[&str]) -> ParseResult<ParsedCommand> {
 /// ```
 #[must_use]
 pub fn suggest_completions(partial: &str) -> Vec<String> {
-    let commands = ["filter", "clear", "refresh", "help", "export"];
+    let commands = ["filter", "clear", "refresh", "help", "export", "sort"];
 
     let input = partial.strip_prefix(':').unwrap_or(partial).to_lowercase();
 
