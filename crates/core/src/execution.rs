@@ -712,10 +712,8 @@ mod tests {
 
         let mut completed_task =
             Task::new("task-1", "Task 1", "First task").expect("Failed to create task");
-        for stage in crate::Stage::all() {
-            completed_task.current_stage = stage.clone();
-            completed_task.complete_current_stage();
-        }
+        // Mark task as completed
+        completed_task.current_stage = crate::Stage::Completed;
 
         workflow
             .add_task(completed_task)

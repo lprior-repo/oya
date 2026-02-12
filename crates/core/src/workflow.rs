@@ -457,11 +457,8 @@ mod tests {
         workflow.add_task(task.clone())?;
         assert!(!workflow.is_complete());
 
-        // Complete all stages
-        for stage in crate::Stage::all() {
-            task.current_stage = stage.clone();
-            task.complete_current_stage();
-        }
+        // Mark task as completed
+        task.current_stage = crate::Stage::Completed;
         workflow.tasks.insert(task.id.as_str().to_string(), task);
         assert!(workflow.is_complete());
         Ok(())
