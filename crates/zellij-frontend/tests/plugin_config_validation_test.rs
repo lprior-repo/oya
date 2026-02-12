@@ -6,8 +6,8 @@
 //! - Errors are handled gracefully
 //! - Invalid configurations are rejected with clear error messages
 
-use crate::plugin::{PluginError, PluginInfo, Size};
 use serde_json::json;
+use zellij_frontend::plugin::{PluginInfo, Size};
 
 #[test]
 fn test_invalid_size_configuration_negative_rows() {
@@ -17,7 +17,7 @@ fn test_invalid_size_configuration_negative_rows() {
     let config = json!({"auto_save_interval_secs": 30});
 
     // Create PluginInfo with invalid size
-    let plugin_info = PluginInfo { size, config };
+    let _plugin_info = PluginInfo { size, config };
 
     // The current implementation accepts this, but it should be rejected
     // because rows=0 is not a valid terminal size
@@ -35,7 +35,7 @@ fn test_invalid_size_configuration_negative_cols() {
     let size = Size { rows: 24, cols: 0 };
     let config = json!({"auto_save_interval_secs": 30});
 
-    let plugin_info = PluginInfo { size, config };
+    let _plugin_info = PluginInfo { size, config };
 
     // This test will fail because the current implementation doesn't validate cols
     assert!(
@@ -53,7 +53,7 @@ fn test_invalid_size_configuration_extreme_values() {
     };
     let config = json!({"auto_save_interval_secs": 30});
 
-    let plugin_info = PluginInfo { size, config };
+    let _plugin_info = PluginInfo { size, config };
 
     // This test will fail because the current implementation doesn't validate size limits
     assert!(
@@ -68,7 +68,7 @@ fn test_invalid_config_structure_missing_required_fields() {
     let size = Size { rows: 24, cols: 80 };
     let config = json!({}); // Empty config - should be invalid
 
-    let plugin_info = PluginInfo { size, config };
+    let _plugin_info = PluginInfo { size, config };
 
     // This test will fail because the current implementation accepts empty config
     assert!(
@@ -86,7 +86,7 @@ fn test_invalid_config_structure_wrong_data_types() {
         "ipc_address": 12345 // Should be string
     });
 
-    let plugin_info = PluginInfo { size, config };
+    let _plugin_info = PluginInfo { size, config };
 
     // This test will fail because the current implementation doesn't validate data types
     assert!(
@@ -106,7 +106,7 @@ fn test_invalid_config_structure_extra_unknown_fields() {
         "another_unknown": 123
     });
 
-    let plugin_info = PluginInfo { size, config };
+    let _plugin_info = PluginInfo { size, config };
 
     // This test will fail because the current implementation silently accepts unknown fields
     assert!(
@@ -126,8 +126,8 @@ fn test_invalid_config_structure_nested_invalid_objects() {
             "should": "be rejected"
         }
     });
-
-    let plugin_info = PluginInfo { size, config };
+    
+    let _plugin_info = PluginInfo { size, config };
 
     // This test will fail because the current implementation doesn't validate nested structures
     assert!(
