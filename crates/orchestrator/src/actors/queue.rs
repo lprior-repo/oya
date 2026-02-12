@@ -300,6 +300,166 @@ mod tests {
         assert_eq!(state.dequeue(), Some(String::from("two")));
     }
 
+    fn lifo_state() -> QueueState {
+        QueueState {
+            queue_id: String::from("lifo"),
+            queue_type: QueueType::LIFO,
+            fifo: VecDeque::new(),
+            priority: BinaryHeap::new(),
+            tenant_queues: HashMap::new(),
+            tenant_rotation: VecDeque::new(),
+        }
+    }
+
+    #[test]
+    fn test_lifo_enqueue_three_beads_dequeue_in_reverse_order() {
+        let mut state = lifo_state();
+
+        state.enqueue(String::from("bead-alpha"), None, None);
+        state.enqueue(String::from("bead-beta"), None, None);
+        state.enqueue(String::from("bead-gamma"), None, None);
+
+        assert_eq!(
+            state.dequeue(),
+            Some(String::from("bead-gamma")),
+            "LIFO should return last enqueued first"
+        );
+        assert_eq!(
+            state.dequeue(),
+            Some(String::from("bead-beta")),
+            "LIFO should return second-to-last next"
+        );
+        assert_eq!(
+            state.dequeue(),
+            Some(String::from("bead-alpha")),
+            "LIFO should return first enqueued last"
+        );
+    }
+
+    #[test]
+    fn test_lifo_dequeue_from_empty_queue_returns_none() {
+        let state = lifo_state();
+
+        assert_eq!(state.len(), 0, "Empty queue should have zero length");
+    }
+
+    #[test]
+    fn test_lifo_dequeue_mut_from_empty_queue_returns_none() {
+        let mut state = lifo_state();
+
+        assert_eq!(
+            state.dequeue(),
+            None,
+            "Dequeue from empty LIFO queue should return None"
+        );
+    }
+
+    #[test]
+    fn test_lifo_peek_returns_last_enqueued_without_removing() {
+        let mut state = lifo_state();
+
+        assert_eq!(
+            state.peek(),
+            None,
+            "Peek on empty LIFO queue should return None"
+        );
+
+        state.enqueue(String::from("first"), None, None);
+        state.enqueue(String::from("second"), None, None);
+        state.enqueue(String::from("third"), None, None);
+
+        assert_eq!(
+            state.peek(),
+            Some(String::from("third")),
+            "LIFO peek should return last enqueued"
+        );
+        assert_eq!(state.len(), 3, "Peek should not remove items");
+        assert_eq!(
+            state.peek(),
+            Some(String::from("third")),
+            "Second peek should return same value"
+        );
+    }
+
+    #[test]
+    fn test_lifo_enqueue_appends_to_back() {
+        let mut state = lifo_state();
+
+        state.enqueue(String::from("a"), None, None);
+        assert_eq!(state.peek(), Some(String::from("a")));
+
+        state.enqueue(String::from("b"), None, None);
+        assert_eq!(state.peek(), Some(String::from("b")));
+
+        state.enqueue(String::from("c"), None, None);
+        assert_eq!(state.peek(), Some(String::from("c")));
+    }
+
+    #[test]
+    fn test_lifo_dequeue_pops_from_back() {
+        let mut state = lifo_state();
+
+        state.enqueue(String::from("1"), None, None);
+        state.enqueue(String::from("2"), None, None);
+        state.enqueue(String::from("3"), None, None);
+
+        let first_dequeue = state.dequeue();
+        assert_eq!(
+            first_dequeue,
+            Some(String::from("3")),
+            "First dequeue should pop from back"
+        );
+
+        let second_dequeue = state.dequeue();
+        assert_eq!(
+            second_dequeue,
+            Some(String::from("2")),
+            "Second dequeue should pop next from back"
+        );
+
+        assert_eq!(state.len(), 1, "Should have 1 item remaining");
+    }
+
+    #[test]
+    fn test_lifo_no_lost_messages() {
+        let mut state = lifo_state();
+
+        let items: Vec<String> = (0..100).map(|i| format!("item-{}", i)).collect();
+
+        for item in &items {
+            state.enqueue(item.clone(), None, None);
+        }
+
+        assert_eq!(state.len(), 100, "All 100 items should be in queue");
+
+        let mut dequeued: Vec<String> = Vec::new();
+        while let Some(item) = state.dequeue() {
+            dequeued.push(item);
+        }
+
+        assert_eq!(dequeued.len(), 100, "All 100 items should be dequeued");
+
+        let expected: Vec<String> = items.into_iter().rev().collect();
+        assert_eq!(
+            dequeued, expected,
+            "Items should be dequeued in reverse order"
+        );
+    }
+
+    #[test]
+    fn test_lifo_interleaved_operations() {
+        let mut state = lifo_state();
+
+        state.enqueue(String::from("a"), None, None);
+        state.enqueue(String::from("b"), None, None);
+        assert_eq!(state.dequeue(), Some(String::from("b")));
+
+        state.enqueue(String::from("c"), None, None);
+        assert_eq!(state.dequeue(), Some(String::from("c")));
+        assert_eq!(state.dequeue(), Some(String::from("a")));
+        assert_eq!(state.dequeue(), None);
+    }
+
     #[test]
     fn test_round_robin_enqueue_auto_creates_tenant_queue() {
         let mut state = round_robin_state();
