@@ -260,7 +260,7 @@ fn h_and_l_cycle_panes_in_bead_list() -> Result<(), Box<dyn std::error::Error>> 
     let mut plugin = OyaPlugin::new()?;
     start_plugin(&mut plugin)?;
 
-    // Start in BeadList - h/l should cycle panes
+    // Start in BeadList - h/l should cycle panes (not scroll)
     assert_eq!(plugin.focused_pane(), PaneType::BeadList);
 
     // l from BeadList cycles to next pane (BeadDetail)
@@ -270,18 +270,19 @@ fn h_and_l_cycle_panes_in_bead_list() -> Result<(), Box<dyn std::error::Error>> 
     });
     assert_eq!(plugin.focused_pane(), PaneType::BeadDetail);
 
-    // Go back to BeadList via Tab
+    // ESC returns to BeadList
     let _ = plugin.handle_event(PluginEvent::Key {
         key: '\x1b',
         modifiers: make_mods(false, false),
     });
-    assert_eq!(plugin.focused_pane(), PaneType::BeadDetail);
+    assert_eq!(plugin.focused_pane(), PaneType::BeadList);
 
     // h from BeadList should cycle backward to AgentView
     let _ = plugin.handle_event(PluginEvent::Key {
         key: 'h',
         modifiers: make_mods(false, false),
     });
+    assert_eq!(plugin.focused_pane(), PaneType::AgentView);
 
     Ok(())
 }
