@@ -6,8 +6,7 @@
 //!
 //! GIVEN fifo strategy WHEN multiple ready THEN first selected.
 
-use orchestrator::distribution::fifo::FifoStrategy;
-use orchestrator::distribution::strategy::{DistributionContext, DistributionStrategy};
+use orchestrator::distribution::{DistributionContext, DistributionStrategy, FifoStrategy};
 
 /// BDD Test: FIFO strategy selects first ready bead
 ///

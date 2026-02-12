@@ -496,12 +496,10 @@ mod tests {
 
     #[test]
     fn test_format_dashboard() {
-        let components = Vector::from_iter(vec![ComponentHealth::new(
-            "api",
-            SystemStatus::Healthy,
-            1234567890,
-        )
-        .with_message("Operational")]);
+        let components = Vector::from_iter(vec![
+            ComponentHealth::new("api", SystemStatus::Healthy, 1234567890)
+                .with_message("Operational"),
+        ]);
         let resources = ResourceUsage::new(45.5, 2048.0, 50.0, 8192.0, 500.0);
         let throughput = ThroughputMetrics::new(100.5, 1024000.0, 15.5, 45.0);
 
@@ -561,12 +559,10 @@ mod tests {
 
     #[test]
     fn test_format_component_list_with_message() {
-        let components = Vector::from_iter(vec![ComponentHealth::new(
-            "database",
-            SystemStatus::Healthy,
-            1234567890,
-        )
-        .with_message("Connected")]);
+        let components = Vector::from_iter(vec![
+            ComponentHealth::new("database", SystemStatus::Healthy, 1234567890)
+                .with_message("Connected"),
+        ]);
         let resources = ResourceUsage::new(0.0, 0.0, 0.0, 0.0, 0.0);
         let throughput = ThroughputMetrics::new(0.0, 0.0, 0.0, 0.0);
 

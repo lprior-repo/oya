@@ -8,7 +8,7 @@
 use zellij_frontend::layout::{Layout, PaneType};
 use zellij_frontend::plugin::{StageInfo, StageState, TaskRow};
 use zellij_frontend::render::{
-    calculate_stage_progress, get_stage_info, render_progress_bar, Renderer,
+    Renderer, calculate_stage_progress, get_stage_info, render_progress_bar,
 };
 
 fn create_task_with_progress() -> TaskRow {

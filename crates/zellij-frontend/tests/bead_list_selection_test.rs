@@ -1,5 +1,5 @@
 use zellij_frontend::layout::{Layout, Pane, PaneType};
-use zellij_frontend::plugin::{StageInfo, StageState, TaskRow};
+use zellij_frontend::plugin::TaskRow;
 use zellij_frontend::render::Renderer;
 
 fn create_test_task(slug: &str, status: &str) -> TaskRow {
@@ -7,10 +7,7 @@ fn create_test_task(slug: &str, status: &str) -> TaskRow {
 }
 
 fn create_test_layout() -> Layout {
-    let mut layout = Layout::new(80, 24).expect("Failed to create layout");
-    let pane = Pane::new(PaneType::BeadList, 1, 1, 20, 40).expect("Failed to create pane");
-    layout.add_pane(pane);
-    layout
+    Layout::new_3_pane()
 }
 
 fn get_bead_list_output(

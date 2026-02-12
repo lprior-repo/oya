@@ -55,6 +55,7 @@ pub use plugin::{OyaPlugin, PluginEvent, PluginInfo, Size};
 pub use render::{EdgeKind, GraphEdge, Renderer, WorkflowGraph, WorkflowGraphError};
 
 // Re-exports for convenience - UI components
+pub use agent_info::{AgentCapability, AgentInfo, AgentInfoError, AgentState, AgentSummary};
 pub use correlation::{CorrelationContext, RequestId, keys};
 pub use health::{
     ComponentHealth, HealthError, ResourceUsage, SystemHealthSnapshot, SystemStatus,
@@ -67,10 +68,9 @@ pub use integration_test_worker::{
 pub use ipc_zellij::{ZellijIpcClient, ZellijStdin, ZellijStdout};
 pub use log::{LogAggregator, LogEntry, LogLevel, LogSource};
 pub use metrics::{AgentMetrics, MetricsSnapshot, PoolMetrics, PoolStats};
-pub use agent_info::{AgentCapability, AgentInfo, AgentInfoError, AgentState, AgentSummary};
+pub use sparkline::{SparklineBuilder, SparklineConfig, SparklineError, render_sparkline};
 pub use state::{STATE_VERSION, StateError, StateManager, StateSnapshot};
 pub use timer::{RefreshTimer, TimerConfig, TimerError, TimerEvent, TimerState};
-pub use sparkline::{render_sparkline, SparklineBuilder, SparklineConfig, SparklineError};
 
 // Web client is not available in WASM builds
 #[cfg(not(target_arch = "wasm32"))]

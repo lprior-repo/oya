@@ -9,14 +9,14 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use ractor::{Actor, ActorRef, ActorStatus};
-use tokio::time::timeout;
+use ractor::{ActorRef, ActorStatus};
 
 use orchestrator::actors::scheduler::{SchedulerActorDef, SchedulerArguments};
 use orchestrator::actors::supervisor::{
     spawn_supervisor_with_name, SupervisorArguments, SupervisorConfig, SupervisorMessage,
-    SupervisorState,
+    SupervisorState, MeltdownStatus,
 };
+use orchestrator::actors::messages::SchedulerMessage;
 
 static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -25,8 +25,8 @@ fn unique_name(prefix: &str) -> String {
     format!("{}-{}", prefix, id)
 }
 
-async fn await_actor_status(
-    actor: &ActorRef<impl ractor::Actor>,
+async fn await_scheduler_status(
+    actor: &ActorRef<SchedulerMessage>,
     expected: ActorStatus,
     timeout_ms: u64,
 ) -> Result<(), String> {
@@ -46,6 +46,27 @@ async fn await_actor_status(
     }
 }
 
+async fn await_supervisor_status(
+    actor: &ActorRef<SupervisorMessage<SchedulerActorDef>>,
+    expected: ActorStatus,
+    timeout_ms: u64,
+) -> Result<(), String> {
+    let deadline = tokio::time::Instant::now() + Duration::from_millis(timeout_ms);
+    loop {
+        if tokio::time::Instant::now() > deadline {
+            return Err(format!(
+                "Timeout waiting for supervisor status {:?}, got {:?}",
+                expected,
+                actor.get_status()
+            ));
+        }
+        if actor.get_status() == expected {
+            return Ok(());
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+}
+
 async fn get_supervisor_status(
     supervisor: &ActorRef<SupervisorMessage<SchedulerActorDef>>,
 ) -> orchestrator::actors::supervisor::SupervisorStatus {
@@ -54,7 +75,7 @@ async fn get_supervisor_status(
     rx.await.unwrap_or_else(|_| {
         orchestrator::actors::supervisor::SupervisorStatus {
             state: SupervisorState::Stopped,
-            meltdown_status: orchestrator::actors::supervisor::MeltdownStatus::Normal,
+            meltdown_status: MeltdownStatus::Normal,
             active_children: 0,
             total_restarts: 0,
             failures_in_window: 0,
@@ -68,12 +89,11 @@ async fn given_supervisor_with_child_when_child_fails_then_restarted()
     let test_name = unique_name("sup-child-restart");
 
     let args = SupervisorArguments::new().with_config(SupervisorConfig::for_testing());
-    let supervisor =
-        spawn_supervisor_with_name::<SchedulerActorDef>(args, &test_name).map_err(|e| {
-            format!("Failed to spawn supervisor: {e}")
-        })?;
+    let supervisor = spawn_supervisor_with_name::<SchedulerActorDef>(args, &test_name)
+        .await
+        .map_err(|e| format!("Failed to spawn supervisor: {e}"))?;
 
-    await_actor_status(&supervisor, ActorStatus::Running, 1000)
+    await_supervisor_status(&supervisor, ActorStatus::Running, 1000)
         .await
         .map_err(|e| format!("Supervisor not running: {e}"))?;
 
@@ -97,7 +117,7 @@ async fn given_supervisor_with_child_when_child_fails_then_restarted()
         .await?
         .ok_or_else(|| format!("Child {child_name} not found"))?;
 
-    await_actor_status(&child_ref, ActorStatus::Running, 1000)
+    await_scheduler_status(&child_ref, ActorStatus::Running, 1000)
         .await
         .map_err(|e| format!("Child not running: {e}"))?;
 
@@ -122,7 +142,7 @@ async fn given_supervisor_with_child_when_child_fails_then_restarted()
     );
     let restarted_ref = restarted_ref.unwrap();
 
-    await_actor_status(&restarted_ref, ActorStatus::Running, 2000)
+    await_scheduler_status(&restarted_ref, ActorStatus::Running, 2000)
         .await
         .map_err(|e| format!("Restarted child not running: {e}"))?;
 
@@ -143,12 +163,11 @@ async fn given_supervisor_when_child_fails_multiple_times_then_restarts_each_tim
     let test_name = unique_name("sup-multi-restart");
 
     let args = SupervisorArguments::new().with_config(SupervisorConfig::for_testing());
-    let supervisor =
-        spawn_supervisor_with_name::<SchedulerActorDef>(args, &test_name).map_err(|e| {
-            format!("Failed to spawn supervisor: {e}")
-        })?;
+    let supervisor = spawn_supervisor_with_name::<SchedulerActorDef>(args, &test_name)
+        .await
+        .map_err(|e| format!("Failed to spawn supervisor: {e}"))?;
 
-    await_actor_status(&supervisor, ActorStatus::Running, 1000).await?;
+    await_supervisor_status(&supervisor, ActorStatus::Running, 1000).await?;
 
     let child_name = unique_name("child");
     let (spawn_tx, spawn_rx) = tokio::sync::oneshot::channel();
@@ -171,7 +190,7 @@ async fn given_supervisor_when_child_fails_multiple_times_then_restarts_each_tim
             .await?
             .ok_or_else(|| format!("Child {child_name} not found on iteration {i}"))?;
 
-        await_actor_status(&child_ref, ActorStatus::Running, 2000)
+        await_scheduler_status(&child_ref, ActorStatus::Running, 2000)
             .await
             .map_err(|e| format!("Child not running on iteration {i}: {e}"))?;
 
@@ -213,12 +232,11 @@ async fn given_supervisor_with_max_restarts_when_exceeded_then_no_restart()
         ..SupervisorConfig::for_testing()
     };
     let args = SupervisorArguments::new().with_config(config);
-    let supervisor =
-        spawn_supervisor_with_name::<SchedulerActorDef>(args, &test_name).map_err(|e| {
-            format!("Failed to spawn supervisor: {e}")
-        })?;
+    let supervisor = spawn_supervisor_with_name::<SchedulerActorDef>(args, &test_name)
+        .await
+        .map_err(|e| format!("Failed to spawn supervisor: {e}"))?;
 
-    await_actor_status(&supervisor, ActorStatus::Running, 1000).await?;
+    await_supervisor_status(&supervisor, ActorStatus::Running, 1000).await?;
 
     let child_name = unique_name("child");
     let (spawn_tx, spawn_rx) = tokio::sync::oneshot::channel();
@@ -278,12 +296,11 @@ async fn given_supervisor_when_child_restarted_then_supervisor_remains_running()
     let test_name = unique_name("sup-invariant");
 
     let args = SupervisorArguments::new().with_config(SupervisorConfig::for_testing());
-    let supervisor =
-        spawn_supervisor_with_name::<SchedulerActorDef>(args, &test_name).map_err(|e| {
-            format!("Failed to spawn supervisor: {e}")
-        })?;
+    let supervisor = spawn_supervisor_with_name::<SchedulerActorDef>(args, &test_name)
+        .await
+        .map_err(|e| format!("Failed to spawn supervisor: {e}"))?;
 
-    await_actor_status(&supervisor, ActorStatus::Running, 1000).await?;
+    await_supervisor_status(&supervisor, ActorStatus::Running, 1000).await?;
 
     let child_name = unique_name("child");
     let (spawn_tx, spawn_rx) = tokio::sync::oneshot::channel();

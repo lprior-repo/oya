@@ -1,6 +1,8 @@
 //! Tests for sparkline rendering functionality
 
-use zellij_frontend::sparkline::{render_sparkline, SparklineConfig, SparklineError};
+use zellij_frontend::sparkline::{
+    render_sparkline, SparklineBuilder, SparklineConfig, SparklineError,
+};
 
 #[test]
 fn test_render_sparkline_basic() {
