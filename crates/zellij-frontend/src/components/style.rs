@@ -49,3 +49,45 @@ pub const fn text() -> &'static str {
 pub const fn overlay() -> &'static str {
     "\x1b[48;5;236m" // Dark gray background
 }
+
+/// Status color for open/ready items
+#[must_use]
+pub const fn status_open() -> &'static str {
+    "\x1b[37m" // White
+}
+
+/// Status color for in-progress items
+#[must_use]
+pub const fn status_in_progress() -> &'static str {
+    "\x1b[34m" // Blue
+}
+
+/// Status color for passed/completed items
+#[must_use]
+pub const fn status_passed() -> &'static str {
+    "\x1b[32m" // Green
+}
+
+/// Status color for failed items
+#[must_use]
+pub const fn status_failed() -> &'static str {
+    "\x1b[31m" // Red
+}
+
+/// Status color for blocked items
+#[must_use]
+pub const fn status_blocked() -> &'static str {
+    "\x1b[33m" // Yellow
+}
+
+/// Get status color based on status string
+#[must_use]
+pub fn status_color(status: &str) -> &'static str {
+    match status {
+        "in_progress" | "running" => status_in_progress(),
+        "passed" | "completed" | "integrated" => status_passed(),
+        "failed" | "error" => status_failed(),
+        "blocked" => status_blocked(),
+        _ => status_open(),
+    }
+}

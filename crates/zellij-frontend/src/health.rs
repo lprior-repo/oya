@@ -631,10 +631,9 @@ mod tests {
 
         let output = snapshot.format_component_list(20);
         assert!(output.contains("..."));
-        let line = output.lines().next();
-        assert!(line.is_some());
-        let line = line.unwrap_or(&String::new());
-        assert!(line.chars().count() <= 25); // Allow some slack for ANSI codes
+        let empty = String::new();
+        let line = output.lines().next().unwrap_or(&empty);
+        assert!(line.chars().count() <= 25);
     }
 
     #[test]

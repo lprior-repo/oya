@@ -115,8 +115,8 @@ pub struct SchedulerState {
     shutdown_rx: Option<broadcast::Receiver<ShutdownSignal>>,
     /// Checkpoint result sender.
     pub checkpoint_tx: Option<mpsc::Sender<CheckpointResult>>,
-    /// `ReplayEngine` for event sourcing and recovery.
-    pub replay_engine: Option<Arc<ReplayEngine>>,
+    /// `ReplayEngine` for event sourcing and recovery (wrapped in Mutex for async access).
+    pub replay_engine: Option<Arc<Mutex<ReplayEngine>>>,
     /// `CheckpointManager` for periodic checkpointing.
     pub checkpoint_manager: Option<Arc<CheckpointManager>>,
     /// Whether shutdown has been requested.
@@ -253,7 +253,7 @@ impl Actor for SchedulerActorDef {
                     let _ = reply.send(ready);
                 }
                 SchedulerEffect::RecordEvent { event } => {
-                    if let Some(engine) = &mut state.replay_engine {
+                    if let Some(engine) = &state.replay_engine {
                         let engine = Arc::clone(engine);
                         tokio::spawn(async move {
                             let _ = engine.record_event(event).await;

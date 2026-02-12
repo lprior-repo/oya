@@ -126,6 +126,155 @@ pub enum DagRenderError {
     CycleDetected { cycle: Vec<String> },
 }
 
+/// Errors that can occur during workflow graph operations
+#[derive(Debug, Error, Clone, PartialEq)]
+pub enum WorkflowGraphError {
+    /// Node with the given ID already exists
+    #[error("Node already exists: {id}")]
+    DuplicateNode { id: String },
+    /// Node with the given ID was not found
+    #[error("Node not found: {id}")]
+    NodeNotFound { id: String },
+}
+
+/// Result type for workflow graph operations
+pub type WorkflowGraphResult<T> = Result<T, WorkflowGraphError>;
+
+/// A workflow graph that manages nodes and dependencies for DAG visualization.
+///
+/// This struct provides a higher-level API for building and managing
+/// workflow graphs that can be rendered using `DagRenderer`.
+#[derive(Debug, Clone)]
+pub struct WorkflowGraph {
+    nodes: Vec<DagNode>,
+    renderer: DagRenderer,
+}
+
+impl WorkflowGraph {
+    /// Create a new empty workflow graph
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            nodes: Vec::new(),
+            renderer: DagRenderer::new(),
+        }
+    }
+
+    /// Set custom dimensions for the renderer
+    #[must_use]
+    pub fn with_dimensions(mut self, width: usize, height: usize) -> Self {
+        self.renderer = self.renderer.with_dimensions(width, height);
+        self
+    }
+
+    /// Add a node to the graph
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - Unique identifier for the node
+    /// * `name` - Display name for the node
+    ///
+    /// # Errors
+    ///
+    /// Returns `WorkflowGraphError::DuplicateNode` if a node with the same ID already exists
+    pub fn add_node(&mut self, id: &str, name: &str) -> WorkflowGraphResult<()> {
+        if self.nodes.iter().any(|n| n.id == id) {
+            return Err(WorkflowGraphError::DuplicateNode { id: id.to_string() });
+        }
+        self.nodes.push(DagNode::new(id, name));
+        Ok(())
+    }
+
+    /// Add a dependency relationship between two nodes
+    ///
+    /// # Arguments
+    ///
+    /// * `dependent` - ID of the node that has the dependency
+    /// * `dependency` - ID of the node that is depended upon
+    ///
+    /// # Errors
+    ///
+    /// Returns `WorkflowGraphError::NodeNotFound` if either node doesn't exist
+    pub fn add_dependency(&mut self, dependent: &str, dependency: &str) -> WorkflowGraphResult<()> {
+        let dependent_exists = self.nodes.iter().any(|n| n.id == dependent);
+        if !dependent_exists {
+            return Err(WorkflowGraphError::NodeNotFound {
+                id: dependent.to_string(),
+            });
+        }
+
+        let dependency_exists = self.nodes.iter().any(|n| n.id == dependency);
+        if !dependency_exists {
+            return Err(WorkflowGraphError::NodeNotFound {
+                id: dependency.to_string(),
+            });
+        }
+
+        for node in &mut self.nodes {
+            if node.id == dependent && !node.dependencies.contains(&dependency.to_string()) {
+                node.dependencies.push(dependency.to_string());
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Set the status of a node
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - ID of the node to update
+    /// * `status` - New status for the node
+    ///
+    /// # Errors
+    ///
+    /// Returns `WorkflowGraphError::NodeNotFound` if the node doesn't exist
+    pub fn set_node_status(&mut self, id: &str, status: NodeStatus) -> WorkflowGraphResult<()> {
+        for node in &mut self.nodes {
+            if node.id == id {
+                node.status = status;
+                return Ok(());
+            }
+        }
+        Err(WorkflowGraphError::NodeNotFound { id: id.to_string() })
+    }
+
+    /// Get a reference to a node by ID
+    #[must_use]
+    pub fn get_node(&self, id: &str) -> Option<&DagNode> {
+        self.nodes.iter().find(|n| n.id == id)
+    }
+
+    /// Get all nodes in the graph
+    #[must_use]
+    pub fn nodes(&self) -> &[DagNode] {
+        &self.nodes
+    }
+
+    /// Get the number of nodes in the graph
+    #[must_use]
+    pub fn node_count(&self) -> usize {
+        self.nodes.len()
+    }
+
+    /// Render the workflow graph to ASCII art
+    #[must_use]
+    pub fn render(&self) -> RenderedDag {
+        self.renderer.render(&self.nodes)
+    }
+
+    /// Clear all nodes from the graph
+    pub fn clear(&mut self) {
+        self.nodes.clear();
+    }
+}
+
+impl Default for WorkflowGraph {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// DAG renderer for workflow visualization
 #[derive(Debug, Clone)]
 pub struct DagRenderer {
@@ -880,6 +1029,7 @@ impl Renderer {
             PaneType::BeadDetail => "Bead Details",
             PaneType::WorkflowGraph => "Workflow Graph",
             PaneType::PipelineView => "Pipeline View",
+            PaneType::AgentView => "Agent View",
         };
 
         // Build all content lines using functional patterns
