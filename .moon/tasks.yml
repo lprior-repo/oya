@@ -329,17 +329,17 @@ tasks:
       cache: true
 
   build-zellij:
-    command: "cargo build --release --target wasm32-wasip1 -p zellij-frontend"
+    command: "cargo build --release --target wasm32-wasip1 -p zellij-frontend --bin zellij-frontend"
     description: "Build Zellij plugin to WASM"
     inputs:
-      - "crates/zellij-frontend/**/*.rs"
-      - "crates/zellij-frontend/Cargo.toml"
+      - "src/**/*.rs"
+      - "Cargo.toml"
     options:
-      cache: true
+      cache: false
       runFromWorkspaceRoot: true
 
   install-zellij:
-    command: "mkdir -p ~/.config/zellij/plugins && cp target/wasm32-wasip1/release/zellij_frontend.wasm ~/.config/zellij/plugins/ && cp crates/zellij-frontend/plugin.yaml ~/.config/zellij/plugins/oya.yaml && echo '✅ Installed zellij-frontend plugin to ~/.config/zellij/plugins/'"
+    command: "mkdir -p ~/.config/zellij/plugins && cp target/wasm32-wasip1/release/zellij-frontend.wasm ~/.config/zellij/plugins/zellij_frontend.wasm && cp crates/zellij-frontend/plugin.yaml ~/.config/zellij/plugins/oya.yaml && echo '✅ Installed zellij-frontend plugin to ~/.config/zellij/plugins/'"
     description: "Install Zellij plugin to user config"
     deps:
       - "build-zellij"

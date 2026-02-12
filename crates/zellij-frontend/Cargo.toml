@@ -1,15 +1,16 @@
 [package]
 name = "zellij-frontend"
 version.workspace = true
-edition.workspace = true
+edition = "2021"
 rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Zellij WASM plugin and UI components for OYA SDLC visualization"
 
-[lib]
-crate-type = ["cdylib", "rlib"]
+[[bin]]
+name = "zellij-frontend"
+path = "src/main.rs"
 
 [dependencies]
 # Serialization
@@ -29,6 +30,7 @@ chrono = { workspace = true }
 # Functional data structures
 rpds = { workspace = true }
 itertools = { workspace = true }
+zellij-tile = "0.41.1"
 
 # IPC (needed for WASM plugin communication)
 oya-ipc = { workspace = true }
