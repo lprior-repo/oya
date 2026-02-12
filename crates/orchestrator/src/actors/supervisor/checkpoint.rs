@@ -40,37 +40,37 @@ pub enum SupervisorCheckpointError {
     CheckpointManagerUnavailable,
 
     /// Failed to serialize supervisor state to JSON.
-    #[error("Serialization failed: {reason}")]
+    #[error("serialization failed: {reason}")]
     SerializationFailed { reason: String },
 
     /// Failed to deserialize checkpoint data.
-    #[error("Deserialization failed: {reason}")]
+    #[error("deserialization failed: {reason}")]
     DeserializationFailed { reason: String },
 
     /// Checkpoint creation timed out (25 second limit).
-    #[error("Checkpoint timeout after {duration_ms}ms")]
+    #[error("checkpoint timeout after {duration_ms}ms")]
     CheckpointTimeout { duration_ms: u64 },
 
     /// Database error during checkpoint persistence.
-    #[error("Checkpoint persistence failed: {source}")]
+    #[error("checkpoint persistence failed: {source}")]
     CheckpointPersistenceFailed {
         /// Underlying error from persistence layer.
         source: PersistenceError,
     },
 
     /// Checkpoint result channel closed unexpectedly.
-    #[error("Checkpoint result channel closed")]
+    #[error("checkpoint result channel closed")]
     ResultChannelClosed,
 
     /// Invalid supervisor state for checkpoint.
-    #[error("Invalid state: {reason}")]
+    #[error("invalid state: {reason}")]
     InvalidState {
         /// Description of invalid state.
         reason: String,
     },
 
     /// No checkpoint found for recovery.
-    #[error("No checkpoint found for recovery")]
+    #[error("no checkpoint found for recovery")]
     NoCheckpointFound,
 }
 
