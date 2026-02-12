@@ -7,10 +7,10 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use surrealdb::sql::Datetime as SurrealDatetime;
 use std::sync::Arc;
+use surrealdb::sql::Datetime as SurrealDatetime;
 
-use oya_events::replay::resume::{resume_from_checkpoint, CheckpointId, ReplayState, ResumeError};
+use oya_events::replay::resume::{CheckpointId, ReplayState, ResumeError, resume_from_checkpoint};
 
 use super::events::{EventRecord, OrchestratorEvent};
 use super::projection::OrchestratorProjection;
@@ -160,8 +160,9 @@ impl ReplayEngine {
                 let event_log = OrchestratorEventLog::new(store_handle);
                 let checkpoint_key = CheckpointId::new(cp.checkpoint_id.clone());
 
-                let resumed_state = resume_from_checkpoint(&checkpoint_key, &checkpoint_store, &event_log)
-                    .map_err(resume_error_to_persistence)?;
+                let resumed_state =
+                    resume_from_checkpoint(&checkpoint_key, &checkpoint_store, &event_log)
+                        .map_err(resume_error_to_persistence)?;
                 resume_state = Some(resumed_state);
 
                 cp.event_sequence
@@ -226,8 +227,8 @@ pub struct RecoveryResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::persistence::StoreConfig;
     use crate::persistence::CheckpointRecord;
+    use crate::persistence::StoreConfig;
     use crate::replay::projection::WorkflowStatusProjection;
     use std::time::{Duration, Instant};
 
@@ -380,7 +381,9 @@ mod tests {
         assert!(result.is_ok(), "recovery should succeed");
         if let Ok(recovery) = result {
             assert_eq!(recovery.checkpoint_id, Some("cp-resume".to_string()));
-            let resume = recovery.resume_state.expect("resume state should be present");
+            let resume = recovery
+                .resume_state
+                .expect("resume state should be present");
             assert_eq!(resume.checkpoint_id.as_str(), "cp-resume");
             assert_eq!(recovery.events_replayed, resume.events_replayed as usize);
         }
@@ -416,7 +419,9 @@ mod tests {
         );
 
         if let Ok(recovery) = result {
-            let resume = recovery.resume_state.expect("resume state should be present");
+            let resume = recovery
+                .resume_state
+                .expect("resume state should be present");
             assert!(resume.events_replayed as usize >= 1_000);
             assert_eq!(recovery.events_replayed, resume.events_replayed as usize);
         }

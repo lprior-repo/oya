@@ -28,8 +28,8 @@
 #![cfg_attr(test, allow(clippy::unwrap_used))]
 #![cfg_attr(test, allow(clippy::panic))]
 
-use crate::Workflow;
 use crate::execution::{TaskExecutionStatus, WorkflowState};
+use crate::Workflow;
 use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 
@@ -544,10 +544,10 @@ impl WorkflowVisualization {
         let focus_marker = if is_focused { ">" } else { " " };
         let critical_marker = if is_critical { "*" } else { " " };
 
-        let title = if task.title.len() > 15 {
-            format!("{}...", &task.title[..12])
+        let title = if task.name.len() > 15 {
+            format!("{}...", &task.name[..12])
         } else {
-            task.title.clone()
+            task.name.clone()
         };
 
         vec![

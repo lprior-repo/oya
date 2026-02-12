@@ -25,6 +25,7 @@
 
 // Zellij plugin modules (from oya-ui)
 pub mod components;
+pub mod config_validation;
 pub mod exports;
 pub mod ipc;
 pub mod ipc_zellij;

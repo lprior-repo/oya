@@ -64,11 +64,11 @@ pub use stage::{
 };
 
 // Re-export replay types
- pub use replay::{
-     apply_event, apply_events, create_tracker, ApplyContext, EventFilter, EventLoader,
-     EventSourcedState, EventSourcingReplay, LoadError, ReplayProgress, ReplayResumeError,
-     ReplayState, ReplayTracker, ResumeError,
- };
+pub use replay::{
+    apply_event, apply_events, create_tracker, ApplyContext, EventFilter, EventLoader,
+    EventSourcedState, EventSourcingReplay, LoadError, ReplayProgress, ReplayResumeError,
+    ReplayState, ReplayTracker, ResumeError,
+};
 
 // Re-export db types
 pub use db::{DbError, SurrealDbClient, SurrealDbConfig};

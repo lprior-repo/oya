@@ -396,8 +396,7 @@ pub type AsyncOperation<T, E> = Pin<Box<dyn Future<Output = std::result::Result<
 ///
 /// The factory creates a new Future for each retry attempt,
 /// working around the fact that Futures consume themselves when polled.
-pub type AsyncOperationFactory<T, E> =
-    dyn (Fn() -> AsyncOperation<T, E>) + Send + Sync;
+pub type AsyncOperationFactory<T, E> = dyn (Fn() -> AsyncOperation<T, E>) + Send + Sync;
 
 /// Retry an async operation with exponential backoff and DLQ on exhaustion.
 ///
@@ -479,12 +478,8 @@ pub async fn retry_with_policy<T>(
                     }
                     RecoveryStrategy::SkipToDlq => {
                         // Exhausted retries or permanent error: send to DLQ
-                        let poison_event = PoisonEvent::new(
-                            event_id,
-                            attempt,
-                            err.to_string(),
-                            event_data,
-                        );
+                        let poison_event =
+                            PoisonEvent::new(event_id, attempt, err.to_string(), event_data);
                         dlq.push_poison_event(poison_event)?;
                         log_poison_event(event_id, attempt, &err);
                         return Err(err);
@@ -1448,7 +1443,9 @@ mod tests {
                 Box::pin(async move {
                     let attempt = counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                     if attempt == 0 {
-                        Err(Error::Connection(ConnectionError::Timeout { timeout_ms: 100 }))
+                        Err(Error::Connection(ConnectionError::Timeout {
+                            timeout_ms: 100,
+                        }))
                     } else {
                         Ok::<_, Error>(99)
                     }
@@ -1474,7 +1471,9 @@ mod tests {
         let result = retry_with_policy(
             &|| {
                 Box::pin(async {
-                    Err::<(), _>(Error::Connection(ConnectionError::Timeout { timeout_ms: 100 }))
+                    Err::<(), _>(Error::Connection(ConnectionError::Timeout {
+                        timeout_ms: 100,
+                    }))
                 })
             },
             &policy,
@@ -1489,7 +1488,10 @@ mod tests {
 
         let poison_events = dlq.get_poison_events().ok();
         let events = poison_events.as_deref();
-        assert!(events.is_some_and(|e| !e.is_empty()), "DLQ should contain the event");
+        assert!(
+            events.is_some_and(|e| !e.is_empty()),
+            "DLQ should contain the event"
+        );
         if let Some(events) = events {
             assert_eq!(events[0].event_id, "evt-3");
             assert_eq!(events[0].attempt_count, 2);
@@ -1505,7 +1507,9 @@ mod tests {
         let result = retry_with_policy(
             &|| {
                 Box::pin(async {
-                    Err::<(), _>(Error::InvalidEvent { reason: "corrupted".to_string() })
+                    Err::<(), _>(Error::InvalidEvent {
+                        reason: "corrupted".to_string(),
+                    })
                 })
             },
             &policy,
@@ -1520,10 +1524,16 @@ mod tests {
 
         let poison_events = dlq.get_poison_events().ok();
         let events = poison_events.as_deref();
-        assert!(events.is_some_and(|e| !e.is_empty()), "DLQ should contain the event");
+        assert!(
+            events.is_some_and(|e| !e.is_empty()),
+            "DLQ should contain the event"
+        );
         if let Some(events) = events {
             assert_eq!(events[0].event_id, "evt-4");
-            assert_eq!(events[0].attempt_count, 0, "Should not retry permanent errors");
+            assert_eq!(
+                events[0].attempt_count, 0,
+                "Should not retry permanent errors"
+            );
             assert!(events[0].error.contains("corrupted"));
         }
     }
@@ -1537,7 +1547,9 @@ mod tests {
         let result = retry_with_policy(
             &|| {
                 Box::pin(async {
-                    Err::<(), _>(Error::Connection(ConnectionError::Timeout { timeout_ms: 100 }))
+                    Err::<(), _>(Error::Connection(ConnectionError::Timeout {
+                        timeout_ms: 100,
+                    }))
                 })
             },
             &policy,
@@ -1548,7 +1560,11 @@ mod tests {
         .await;
 
         assert!(result.is_err(), "Should fail when DLQ disabled");
-        assert_eq!(dlq.count().ok(), Some(0), "DLQ should be empty when disabled");
+        assert_eq!(
+            dlq.count().ok(),
+            Some(0),
+            "DLQ should be empty when disabled"
+        );
     }
 
     #[tokio::test]
@@ -1560,7 +1576,9 @@ mod tests {
         let result = retry_with_policy(
             &|| {
                 Box::pin(async {
-                    Err::<(), _>(Error::EventNotFound { event_id: "missing".to_string() })
+                    Err::<(), _>(Error::EventNotFound {
+                        event_id: "missing".to_string(),
+                    })
                 })
             },
             &policy,
@@ -1571,7 +1589,11 @@ mod tests {
         .await;
 
         assert!(result.is_err(), "Should fail on permanent error");
-        assert_eq!(dlq.count().ok(), Some(0), "DLQ should be empty when disabled");
+        assert_eq!(
+            dlq.count().ok(),
+            Some(0),
+            "DLQ should be empty when disabled"
+        );
     }
 
     #[tokio::test]
@@ -1586,7 +1608,9 @@ mod tests {
         let _result = retry_with_policy(
             &|| {
                 Box::pin(async {
-                    Err::<(), _>(Error::Connection(ConnectionError::Timeout { timeout_ms: 100 }))
+                    Err::<(), _>(Error::Connection(ConnectionError::Timeout {
+                        timeout_ms: 100,
+                    }))
                 })
             },
             &policy,
@@ -1597,7 +1621,10 @@ mod tests {
         .await;
 
         let elapsed = start.elapsed();
-        assert!(elapsed >= std::time::Duration::from_millis(10), "Should respect backoff delay");
+        assert!(
+            elapsed >= std::time::Duration::from_millis(10),
+            "Should respect backoff delay"
+        );
     }
 
     // ==========================================================================
@@ -1606,7 +1633,9 @@ mod tests {
 
     #[test]
     fn test_log_poison_event_returns_unit() {
-        let error = Error::InvalidEvent { reason: "corrupted".to_string() };
+        let error = Error::InvalidEvent {
+            reason: "corrupted".to_string(),
+        };
 
         // Just ensure it compiles and doesn't panic
         log_poison_event("evt-1", 3, &error);
@@ -1637,7 +1666,9 @@ mod tests {
 
     #[test]
     fn test_log_failed_event_with_permanent_error() {
-        let error = Error::InvalidEvent { reason: "missing field".to_string() };
+        let error = Error::InvalidEvent {
+            reason: "missing field".to_string(),
+        };
 
         // Just ensure it compiles and doesn't panic
         log_failed_event("evt-4", 0, &error);
@@ -1653,9 +1684,30 @@ mod tests {
         let dlq = InMemoryDeadLetterQueue::new();
 
         // Simulate a chain of operations
-        let result1 = retry_with_policy(&|| Box::pin(async { Ok::<_, Error>(10) }), &policy, &dlq, "step-1", None).await;
-        let result2 = retry_with_policy(&|| Box::pin(async { Ok::<_, Error>(20) }), &policy, &dlq, "step-2", None).await;
-        let result3 = retry_with_policy(&|| Box::pin(async { Ok::<_, Error>(30) }), &policy, &dlq, "step-3", None).await;
+        let result1 = retry_with_policy(
+            &|| Box::pin(async { Ok::<_, Error>(10) }),
+            &policy,
+            &dlq,
+            "step-1",
+            None,
+        )
+        .await;
+        let result2 = retry_with_policy(
+            &|| Box::pin(async { Ok::<_, Error>(20) }),
+            &policy,
+            &dlq,
+            "step-2",
+            None,
+        )
+        .await;
+        let result3 = retry_with_policy(
+            &|| Box::pin(async { Ok::<_, Error>(30) }),
+            &policy,
+            &dlq,
+            "step-3",
+            None,
+        )
+        .await;
 
         assert_eq!(result1.ok(), Some(10));
         assert_eq!(result2.ok(), Some(20));
@@ -1669,14 +1721,28 @@ mod tests {
         let policy = RetryPolicy::with_config(config);
         let dlq = InMemoryDeadLetterQueue::new();
 
-        let result1 = retry_with_policy(&|| Box::pin(async { Ok::<_, Error>(10) }), &policy, &dlq, "step-1", None).await;
+        let result1 = retry_with_policy(
+            &|| Box::pin(async { Ok::<_, Error>(10) }),
+            &policy,
+            &dlq,
+            "step-1",
+            None,
+        )
+        .await;
         let result2 = retry_with_policy(
-            &|| Box::pin(async { Err::<i32, Error>(Error::InvalidEvent { reason: "bad data".to_string() }) }),
+            &|| {
+                Box::pin(async {
+                    Err::<i32, Error>(Error::InvalidEvent {
+                        reason: "bad data".to_string(),
+                    })
+                })
+            },
             &policy,
             &dlq,
             "step-2",
             None,
-        ).await;
+        )
+        .await;
 
         assert_eq!(result1.ok(), Some(10), "First step should succeed");
         assert!(result2.is_err(), "Second step should fail");
@@ -1693,14 +1759,23 @@ mod tests {
 
         let attempt = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
 
-        let result1 = retry_with_policy(&|| Box::pin(async { Ok::<_, Error>(10) }), &policy, &dlq, "step-1", None).await;
+        let result1 = retry_with_policy(
+            &|| Box::pin(async { Ok::<_, Error>(10) }),
+            &policy,
+            &dlq,
+            "step-1",
+            None,
+        )
+        .await;
         let result2 = retry_with_policy(
             &move || {
                 let counter = std::sync::Arc::clone(&attempt);
                 Box::pin(async move {
                     let current = counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                     if current == 0 {
-                        Err::<_, Error>(Error::Connection(ConnectionError::Timeout { timeout_ms: 100 }))
+                        Err::<_, Error>(Error::Connection(ConnectionError::Timeout {
+                            timeout_ms: 100,
+                        }))
                     } else {
                         Ok::<_, Error>(20)
                     }
@@ -1710,7 +1785,8 @@ mod tests {
             &dlq,
             "step-2",
             None,
-        ).await;
+        )
+        .await;
 
         assert_eq!(result1.ok(), Some(10));
         assert_eq!(result2.ok(), Some(20), "Second step should recover");

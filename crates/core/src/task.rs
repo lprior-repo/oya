@@ -53,8 +53,8 @@ impl Stage {
 pub struct Task {
     /// Unique identifier for the task.
     pub id: Slug,
-    /// Human-readable title.
-    pub title: String,
+    /// Human-readable name.
+    pub name: String,
     /// Detailed description.
     pub description: String,
     /// Current execution stage.
@@ -69,13 +69,13 @@ impl Task {
     #[inline]
     pub fn new(
         id: impl TryInto<Slug, Error = crate::Error>,
-        title: impl Into<String>,
+        name: impl Into<String>,
         description: impl Into<String>,
     ) -> Result<Self, crate::Error> {
         let id = id.try_into()?;
         Ok(Self {
             id,
-            title: title.into(),
+            name: name.into(),
             description: description.into(),
             current_stage: Stage::Pending,
         })
@@ -114,7 +114,7 @@ mod tests {
             Err(e) => panic!("Task creation failed: {e}"),
         };
         assert_eq!(task.id.as_str(), "task-1");
-        assert_eq!(task.title, "Test Task");
+        assert_eq!(task.name, "Test Task"); // Changed from title to name
         assert_eq!(task.description, "A test task");
         assert_eq!(task.current_stage, Stage::Pending);
     }
