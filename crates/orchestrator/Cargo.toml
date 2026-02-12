@@ -88,3 +88,6 @@ rand = "0.8"
 
 # Compression for checkpoint data
 zstd = { workspace = true }
+
+# Base64 encoding for compressed data
+base64 = "0.22"

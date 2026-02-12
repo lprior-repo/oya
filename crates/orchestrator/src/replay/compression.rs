@@ -4,6 +4,7 @@
 //! balance between compression ratio and CPU overhead.
 
 use std::io::Cursor;
+use std::time::Instant;
 
 pub use error::CompressionError;
 pub use types::{CompressionConfig, CompressionLevel, CompressionStats};

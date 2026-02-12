@@ -3187,6 +3187,7 @@ name = "orchestrator"
 version = "0.1.2"
 dependencies = [
  "async-trait",
+ "base64 0.22.1",
  "bincode 2.0.1",
  "chrono",
  "criterion",

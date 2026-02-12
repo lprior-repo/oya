@@ -10,12 +10,13 @@ use serde::de::DeserializeOwned;
 use tokio::sync::mpsc;
 use tokio::time::interval;
 
-use crate::replay::checkpoint::checkpoint_attack_tests;
+use super::compression::{
+    CheckpointCompressor, CompressionConfig, CompressionLevel, CompressionStats,
+};
 
 use crate::persistence::{
     CheckpointRecord, OrchestratorStore, PersistenceError, PersistenceResult,
 };
-use super::compression::{CheckpointCompressor, CompressionConfig, CompressionLevel};
 
 /// Configuration for the checkpoint manager.
 #[derive(Debug, Clone)]
@@ -35,7 +36,7 @@ pub struct CheckpointConfig {
 impl Default for CheckpointConfig {
     fn default() -> Self {
         Self {
-            interval: Duration::from_secs(300), // 5 minutes
+            interval: Duration::from_secs(300),
             max_checkpoints: 10,
             auto_checkpoint: true,
             compression: CompressionConfig::default(),
@@ -70,10 +71,32 @@ impl CheckpointConfig {
     }
 }
 
-/// Manages periodic checkpointing of orchestrator state.
+/// Result of a compressed checkpoint operation.
+#[derive(Debug, Clone)]
+pub struct CompressionMetrics {
+    /// Original size in bytes
+    pub original_size: usize,
+    /// Compressed size in bytes
+    pub compressed_size: usize,
+    /// Compression ratio (compressed / original)
+    pub ratio: f64,
+}
+
+fn base64_encode(data: &[u8]) -> String {
+    use base64::prelude::*;
+    BASE64_STANDARD.encode(data)
+}
+
+fn base64_decode(s: &str) -> Result<Vec<u8>, base64::DecodeError> {
+    use base64::prelude::*;
+    BASE64_STANDARD.decode(s)
+}
+
+/// Manages periodic checkpointing of orchestrator state with zstd compression.
 pub struct CheckpointManager {
     store: OrchestratorStore,
     config: CheckpointConfig,
+    compressor: CheckpointCompressor,
     current_sequence: u64,
     shutdown_tx: Option<mpsc::Sender<()>>,
 }
@@ -81,20 +104,34 @@ pub struct CheckpointManager {
 impl CheckpointManager {
     /// Create a new checkpoint manager.
     #[must_use]
-    pub const fn new(store: OrchestratorStore, config: CheckpointConfig) -> Self {
+    pub fn new(store: OrchestratorStore, config: CheckpointConfig) -> Self {
+        let compressor = CheckpointCompressor::new(config.compression);
         Self {
             store,
             config,
+            compressor,
             current_sequence: 0,
             shutdown_tx: None,
         }
+    }
+
+    /// Get the compression configuration.
+    #[must_use]
+    pub fn compression_config(&self) -> &CompressionConfig {
+        &self.config.compression
+    }
+
+    /// Check if compression is enabled.
+    #[must_use]
+    pub const fn is_compression_enabled(&self) -> bool {
+        self.config.enable_compression
     }
 
     /// Create a checkpoint at the current event sequence.
     ///
     /// # Errors
     ///
-    /// Returns an error if the checkpoint cannot be saved.
+    /// Returns an error if the checkpoint cannot be saved or compression fails.
     pub async fn create_checkpoint(
         &mut self,
         scheduler_state: &str,
@@ -106,16 +143,46 @@ impl CheckpointManager {
             self.current_sequence
         );
 
-        let mut record =
-            CheckpointRecord::new(&checkpoint_id, scheduler_state, self.current_sequence);
+        let (compressed_state, state_metrics) = self.compress_data(scheduler_state)?;
 
-        if let Some(snapshots) = workflow_snapshots {
-            record = record.with_workflow_snapshots(snapshots);
+        let (compressed_snapshots, snapshots_metrics) = workflow_snapshots
+            .map(|s| self.compress_data(s))
+            .transpose()?
+            .unzip();
+
+        if let Some(m) = &state_metrics {
+            tracing::debug!(
+                checkpoint_id = %checkpoint_id,
+                field = "scheduler_state",
+                original_size = m.original_size,
+                compressed_size = m.compressed_size,
+                ratio = m.compression_ratio,
+                time_ms = m.compression_time_ms,
+                "Compressed checkpoint field"
+            );
+        }
+
+        if let Some(m) = &snapshots_metrics.flatten() {
+            tracing::debug!(
+                checkpoint_id = %checkpoint_id,
+                field = "workflow_snapshots",
+                original_size = m.original_size,
+                compressed_size = m.compressed_size,
+                ratio = m.compression_ratio,
+                time_ms = m.compression_time_ms,
+                "Compressed checkpoint field"
+            );
+        }
+
+        let mut record =
+            CheckpointRecord::new(&checkpoint_id, &compressed_state, self.current_sequence);
+
+        if let Some(snapshots) = compressed_snapshots {
+            record = record.with_workflow_snapshots(&snapshots);
         }
 
         let saved = self.store.save_checkpoint(&record).await?;
 
-        // Prune old checkpoints
         let _ = self
             .store
             .prune_checkpoints(self.config.max_checkpoints)
@@ -124,22 +191,68 @@ impl CheckpointManager {
         Ok(saved)
     }
 
-    /// Get the latest checkpoint.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if no checkpoint exists or query fails.
-    pub async fn get_latest(&self) -> PersistenceResult<CheckpointRecord> {
-        self.store.get_latest_checkpoint().await
+    fn compress_data(&self, data: &str) -> PersistenceResult<(String, Option<CompressionStats>)> {
+        if self.config.enable_compression {
+            let (compressed, stats) = self.compressor.compress_string(data).map_err(|e| {
+                PersistenceError::serialization_error(format!("Compression failed: {e}"))
+            })?;
+            Ok((base64_encode(&compressed), Some(stats)))
+        } else {
+            Ok((data.to_string(), None))
+        }
     }
 
-    /// Get a checkpoint by its ID.
+    fn decompress_data(&self, data: &str) -> PersistenceResult<String> {
+        if self.config.enable_compression {
+            let bytes = base64_decode(data).map_err(|e| {
+                PersistenceError::serialization_error(format!("Base64 decode failed: {e}"))
+            })?;
+            self.compressor.decompress_to_string(&bytes).map_err(|e| {
+                PersistenceError::serialization_error(format!("Decompression failed: {e}"))
+            })
+        } else {
+            Ok(data.to_string())
+        }
+    }
+
+    /// Get the latest checkpoint (decompressed if necessary).
     ///
     /// # Errors
     ///
-    /// Returns an error if the checkpoint is not found.
+    /// Returns an error if no checkpoint exists or decompression fails.
+    pub async fn get_latest(&self) -> PersistenceResult<CheckpointRecord> {
+        let record = self.store.get_latest_checkpoint().await?;
+        self.decompress_record(record)
+    }
+
+    /// Get a checkpoint by its ID (decompressed if necessary).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the checkpoint is not found or decompression fails.
     pub async fn get_checkpoint(&self, checkpoint_id: &str) -> PersistenceResult<CheckpointRecord> {
-        self.store.get_checkpoint(checkpoint_id).await
+        let record = self.store.get_checkpoint(checkpoint_id).await?;
+        self.decompress_record(record)
+    }
+
+    fn decompress_record(&self, record: CheckpointRecord) -> PersistenceResult<CheckpointRecord> {
+        let decompressed_state = self.decompress_data(&record.scheduler_state)?;
+
+        let decompressed_snapshots = record
+            .workflow_snapshots
+            .as_ref()
+            .map(|s| self.decompress_data(s))
+            .transpose()?;
+
+        Ok(CheckpointRecord {
+            record_id: record.record_id,
+            checkpoint_id: record.checkpoint_id,
+            scheduler_state: decompressed_state,
+            event_sequence: record.event_sequence,
+            created_at: record.created_at,
+            workflow_snapshots: decompressed_snapshots,
+            metadata: record.metadata,
+        })
     }
 
     /// Increment the event sequence counter.
@@ -190,23 +303,41 @@ impl CheckpointManager {
     ) {
         let mut ticker = interval(config.interval);
         let mut sequence = 0u64;
+        let compressor = CheckpointCompressor::new(config.compression);
 
         loop {
             tokio::select! {
                 _ = ticker.tick() => {
                     let (scheduler_state, workflow_snapshots) = state_fn();
                     let checkpoint_id = format!("cp-{}-{}", Utc::now().timestamp_millis(), sequence);
-                    let mut record = CheckpointRecord::new(&checkpoint_id, scheduler_state, sequence);
 
-                    if let Some(ref snapshots) = workflow_snapshots {
-                        record = record.with_workflow_snapshots(snapshots);
+                    let compressed_state = if config.enable_compression {
+                        match compressor.compress_string(&scheduler_state) {
+                            Ok((bytes, _)) => base64_encode(&bytes),
+                            Err(_) => scheduler_state.clone(),
+                        }
+                    } else {
+                        scheduler_state.clone()
+                    };
+
+                    let compressed_snapshots = workflow_snapshots.as_ref().and_then(|s| {
+                        if config.enable_compression {
+                            compressor.compress_string(s).ok().map(|(bytes, _)| base64_encode(&bytes))
+                        } else {
+                            Some(s.clone())
+                        }
+                    });
+
+                    let mut record = CheckpointRecord::new(&checkpoint_id, &compressed_state, sequence);
+
+                    if let Some(snapshots) = compressed_snapshots {
+                        record = record.with_workflow_snapshots(&snapshots);
                     }
 
                     if let Err(e) = store.save_checkpoint(&record).await {
                         tracing::error!("Failed to create periodic checkpoint: {:?}", e);
                     } else {
                         tracing::info!("Created checkpoint {} at sequence {}", checkpoint_id, sequence);
-                        // Prune old checkpoints
                         let _ = store.prune_checkpoints(config.max_checkpoints).await;
                     }
 
@@ -220,20 +351,6 @@ impl CheckpointManager {
         }
     }
 
-    /// Helper function to deserialize JSON data with consistent error handling.
-    ///
-    /// # Type Parameters
-    ///
-    /// * `T` - The type to deserialize the JSON data into
-    ///
-    /// # Parameters
-    ///
-    /// * `json_str` - The JSON string to deserialize
-    /// * `field_name` - The name of the field being deserialized (for error messages)
-    ///
-    /// # Errors
-    ///
-    /// Returns a serialization error if deserialization fails.
     fn deserialize_json<T>(json_str: &str, field_name: &str) -> PersistenceResult<T>
     where
         T: DeserializeOwned,
@@ -246,19 +363,6 @@ impl CheckpointManager {
         })
     }
 
-    /// Helper function to restore scheduler state from a checkpoint.
-    ///
-    /// # Type Parameters
-    ///
-    /// * `T` - The type to deserialize the scheduler state into
-    ///
-    /// # Parameters
-    ///
-    /// * `checkpoint` - The checkpoint record to restore from
-    ///
-    /// # Errors
-    ///
-    /// Returns a serialization error if deserialization fails.
     fn restore_scheduler_state_from_checkpoint<T>(
         checkpoint: &CheckpointRecord,
     ) -> PersistenceResult<T>
@@ -268,39 +372,20 @@ impl CheckpointManager {
         Self::deserialize_json(&checkpoint.scheduler_state, "scheduler state")
     }
 
-    /// Helper function to restore workflow snapshots from a checkpoint.
-    ///
-    /// # Type Parameters
-    ///
-    /// * `T` - The type to deserialize the workflow snapshots into
-    ///
-    /// # Parameters
-    ///
-    /// * `checkpoint` - The checkpoint record to restore from
-    ///
-    /// # Errors
-    ///
-    /// Returns a serialization error if deserialization fails.
     fn restore_workflow_snapshots_from_checkpoint<T>(
         checkpoint: &CheckpointRecord,
     ) -> PersistenceResult<Option<T>>
     where
         T: DeserializeOwned,
     {
-        match &checkpoint.workflow_snapshots {
-            Some(snapshots_json) => {
-                let snapshots = Self::deserialize_json(snapshots_json, "workflow snapshots")?;
-                Ok(Some(snapshots))
-            }
-            None => Ok(None),
-        }
+        checkpoint
+            .workflow_snapshots
+            .as_ref()
+            .map(|s| Self::deserialize_json(s, "workflow snapshots"))
+            .transpose()
     }
 
     /// Restore scheduler state from the latest checkpoint.
-    ///
-    /// # Type Parameters
-    ///
-    /// * `T` - The type to deserialize the scheduler state into
     ///
     /// # Errors
     ///
@@ -318,10 +403,6 @@ impl CheckpointManager {
 
     /// Restore workflow snapshots from the latest checkpoint.
     ///
-    /// # Type Parameters
-    ///
-    /// * `T` - The type to deserialize the workflow snapshots into
-    ///
     /// # Errors
     ///
     /// Returns an error if:
@@ -337,10 +418,6 @@ impl CheckpointManager {
     }
 
     /// Restore scheduler state from a specific checkpoint by ID.
-    ///
-    /// # Type Parameters
-    ///
-    /// * `T` - The type to deserialize the scheduler state into
     ///
     /// # Errors
     ///
@@ -361,10 +438,6 @@ impl CheckpointManager {
 
     /// Restore workflow snapshots from a specific checkpoint by ID.
     ///
-    /// # Type Parameters
-    ///
-    /// * `T` - The type to deserialize the workflow snapshots into
-    ///
     /// # Errors
     ///
     /// Returns an error if:
@@ -384,10 +457,10 @@ impl CheckpointManager {
 }
 
 #[cfg(test)]
-mod checkpoint_attack_tests;
-
-#[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+    #![allow(clippy::expect_used)]
+
     use super::*;
     use crate::persistence::StoreConfig;
 
@@ -396,6 +469,16 @@ mod tests {
         let store = OrchestratorStore::connect(config).await.ok()?;
         let _ = store.initialize_schema().await;
         Some(CheckpointManager::new(store, CheckpointConfig::default()))
+    }
+
+    async fn setup_manager_no_compression() -> Option<CheckpointManager> {
+        let config = StoreConfig::in_memory();
+        let store = OrchestratorStore::connect(config).await.ok()?;
+        let _ = store.initialize_schema().await;
+        Some(CheckpointManager::new(
+            store,
+            CheckpointConfig::without_compression(),
+        ))
     }
 
     macro_rules! require_manager {
@@ -411,18 +494,54 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_create_checkpoint() {
+    async fn test_create_checkpoint_with_compression() {
         let mut manager = require_manager!(setup_manager().await);
 
         let result = manager
-            .create_checkpoint(r#"{"state":"active"}"#, None)
+            .create_checkpoint(r#"{"state":"active","workflows":[]}"#, None)
             .await;
 
         assert!(result.is_ok(), "checkpoint creation should succeed");
 
         if let Ok(cp) = result {
             assert_eq!(cp.event_sequence, 0);
+            assert!(cp.scheduler_state.contains("active"));
         }
+    }
+
+    #[tokio::test]
+    async fn test_create_checkpoint_without_compression() {
+        let mut manager = require_manager!(setup_manager_no_compression().await);
+
+        let result = manager
+            .create_checkpoint(r#"{"state":"active"}"#, None)
+            .await;
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_checkpoint_roundtrip_with_compression() {
+        let mut manager = require_manager!(setup_manager().await);
+
+        let original_state = r#"{"workflows":{"wf-1":{"status":"running","beads":["a","b","c"]}}}"#;
+        let original_snapshots = r#"{"wf-1":{"completed":["a"],"pending":["b","c"]}}"#;
+
+        let created = manager
+            .create_checkpoint(original_state, Some(original_snapshots))
+            .await
+            .expect("create should succeed");
+
+        let retrieved = manager
+            .get_checkpoint(&created.checkpoint_id)
+            .await
+            .expect("get should succeed");
+
+        assert_eq!(retrieved.scheduler_state, original_state);
+        assert_eq!(
+            retrieved.workflow_snapshots,
+            Some(original_snapshots.to_string())
+        );
     }
 
     #[tokio::test]
@@ -472,5 +591,38 @@ mod tests {
         if let Ok(cp) = latest {
             assert_eq!(cp.event_sequence, 200);
         }
+    }
+
+    #[tokio::test]
+    async fn test_compression_level_config() {
+        let level = CompressionLevel::new(19).expect("valid level");
+        let config = CheckpointConfig::with_compression_level(level);
+
+        assert!(config.enable_compression);
+        assert_eq!(config.compression.level.as_i32(), 19);
+    }
+
+    #[tokio::test]
+    async fn test_compression_disabled_config() {
+        let config = CheckpointConfig::without_compression();
+
+        assert!(!config.enable_compression);
+    }
+
+    #[tokio::test]
+    async fn test_large_state_compression() {
+        let mut manager = require_manager!(setup_manager().await);
+
+        let large_state = serde_json::to_string(&serde_json::json!({
+            "workflows": (0..100).map(|i| format!("workflow-{}", i)).collect::<Vec<_>>(),
+            "states": (0..100).map(|i| serde_json::json!({"id": i, "data": "x".repeat(100)})).collect::<Vec<_>>()
+        })).expect("serialize");
+
+        let result = manager.create_checkpoint(&large_state, None).await;
+
+        assert!(result.is_ok());
+
+        let retrieved = manager.get_latest().await.expect("get should succeed");
+        assert_eq!(retrieved.scheduler_state, large_state);
     }
 }
