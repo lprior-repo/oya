@@ -222,7 +222,7 @@ impl BeadStateMachine {
         };
 
         let idx = self.current_stage.as_index();
-        if self.stage_attempts[idx] > stage_limit {
+        if self.stage_attempts[idx] >= stage_limit {
             return Err(StateMachineError::StageRetriesExhausted);
         }
 

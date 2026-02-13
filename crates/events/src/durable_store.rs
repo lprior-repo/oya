@@ -298,11 +298,74 @@ pub struct DurableEventStore {
 
 impl DurableEventStore {
     pub async fn new(db: Arc<Surreal<Db>>) -> Result<Self> {
-        Ok(Self {
+        let store = Self {
             db,
             wal_dir: PathBuf::from(".wal"),
             wal_lock: tokio::sync::Mutex::new(()),
-        })
+        };
+        store.recover().await?;
+        Ok(store)
+    }
+
+    /// Recover events from WAL into the database.
+    pub async fn recover(&self) -> Result<()> {
+        let _guard = self.wal_lock.lock().await;
+        if !self.wal_dir.exists() {
+            return Ok(());
+        }
+
+        let mut entries = tokio::fs::read_dir(&self.wal_dir)
+            .await
+            .map_err(|e| crate::error::Error::Internal(e.to_string()))?;
+
+        while let Some(entry) = entries
+            .next_entry()
+            .await
+            .map_err(|e| crate::error::Error::Internal(e.to_string()))?
+        {
+            let path = entry.path();
+            if path.extension().is_some_and(|ext| ext == "wal") {
+                self.recover_file(&path).await?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn recover_file(&self, path: &std::path::Path) -> Result<()> {
+        let mut file = tokio::fs::File::open(path)
+            .await
+            .map_err(|e| crate::error::Error::Internal(e.to_string()))?;
+
+        loop {
+            let mut len_bytes = [0u8; 4];
+            let read_res = tokio::io::AsyncReadExt::read_exact(&mut file, &mut len_bytes).await;
+            match read_res {
+                Ok(_) => (),
+                Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+                Err(e) => return Err(crate::error::Error::Internal(e.to_string())),
+            };
+
+            let len = u32::from_be_bytes(len_bytes) as usize;
+            let mut data = vec![0u8; len];
+            if let Err(e) = tokio::io::AsyncReadExt::read_exact(&mut file, &mut data).await {
+                if e.kind() == std::io::ErrorKind::UnexpectedEof {
+                    break;
+                }
+                return Err(crate::error::Error::Internal(e.to_string()));
+            }
+
+            let serialized: SerializedEvent = bincode::deserialize(&data).map_err(|e| {
+                crate::error::Error::serialization(format!("wal corrupt at {}: {}", path.display(), e))
+            })?;
+
+            // Try to create in DB. Ignore duplicates (unique index will prevent them)
+            let _ = self
+                .db
+                .create::<Option<SerializedEvent>>(("state_transition", serialized.event_id.clone()))
+                .content(serialized)
+                .await;
+        }
+        Ok(())
     }
 
     pub fn with_wal_dir(mut self, wal_dir: impl Into<PathBuf>) -> Self {

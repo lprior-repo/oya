@@ -8,7 +8,15 @@
 //! - No orphaned assignments (via FK constraints if supported)
 
 use oya_events::db::{SurrealDbClient, SurrealDbConfig};
+use serde::{Deserialize, Serialize};
 use tempfile::tempdir;
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+struct WorkerAssignment {
+    assignment_id: String,
+    bead_id: String,
+    worker_id: String,
+}
 
 /// Helper to load and initialize the schema
 async fn init_test_db() -> Result<SurrealDbClient, String> {
@@ -41,12 +49,10 @@ async fn test_worker_assignment_table_exists() -> Result<(), String> {
     // Query table information - if it executes, table exists
     let _result = client
         .client()
-        .query("SELECT * FROM information WHERE name = 'worker_assignment'")
+        .query("SELECT * FROM worker_assignment LIMIT 0")
         .await
         .map_err(|e| format!("Query should execute: {}", e))?;
 
-    // If we get here without error, table exists
-    assert!(true);
     Ok(())
 }
 
@@ -68,8 +74,6 @@ async fn test_worker_assignment_create() -> Result<(), String> {
         .await
         .map_err(|e| format!("Query should execute: {e}"))?;
 
-    // If no error, creation succeeded
-    assert!(true);
     Ok(())
 }
 
@@ -93,18 +97,19 @@ async fn test_worker_assignment_query_by_bead_id() -> Result<(), String> {
     // Query by bead_id
     let mut result = client
         .client()
-        .query("SELECT * FROM worker_assignment WHERE bead_id = 'bead-456'")
+        .query("SELECT assignment_id, bead_id, worker_id FROM worker_assignment WHERE bead_id = 'bead-456'")
         .await
         .map_err(|e| format!("Query should execute: {e}"))?;
 
     // Check that we got results
-    let assignments: Vec<serde_json::Value> = result
+    let assignments: Vec<WorkerAssignment> = result
         .take(0)
-        .map_err(|_| "Should get result".to_string())?;
+        .map_err(|e| format!("Should get result: {e}"))?;
     assert!(
         !assignments.is_empty(),
         "Should find assignment for bead-456"
     );
+    assert_eq!(assignments[0].bead_id, "bead-456");
     Ok(())
 }
 
@@ -140,17 +145,17 @@ async fn test_worker_assignment_query_by_worker_id() -> Result<(), String> {
     // Query by worker_id
     let mut result = client
         .client()
-        .query("SELECT * FROM worker_assignment WHERE worker_id = 'worker-c'")
+        .query("SELECT assignment_id, bead_id, worker_id FROM worker_assignment WHERE worker_id = 'worker-c'")
         .await
         .map_err(|e| format!("Query should execute: {e}"))?;
 
     // Check that we got results
-    let assignments: Vec<serde_json::Value> = result
+    let assignments: Vec<WorkerAssignment> = result
         .take(0)
-        .map_err(|_| "Should get result".to_string())?;
+        .map_err(|e| format!("Should get result: {e}"))?;
     assert!(
-        !assignments.is_empty(),
-        "Should find assignments for worker-c"
+        assignments.len() >= 2,
+        "Should find at least 2 assignments for worker-c"
     );
     Ok(())
 }
@@ -173,21 +178,21 @@ async fn test_worker_assignment_uniqueness_per_bead() -> Result<(), String> {
         .map_err(|e| format!("First create should succeed: {e}"))?;
 
     // Try to create second assignment with same bead_id (should fail)
-    let result = client
+    let response = client
         .client()
         .query(
-            "CREATE worker_assignment CONTENT {
+            "INSERT INTO worker_assignment {
                 assignment_id: 'assign-5',
                 bead_id: 'bead-unique',
                 worker_id: 'worker-b'
             }",
         )
-        .await;
+        .await
+        .map_err(|e| e.to_string())?;
 
-    // The unique constraint should prevent duplicate bead_id
-    // SurrealDB will return an error for duplicate unique key
+    // The unique constraint on bead_id should prevent duplicate
     assert!(
-        result.is_err(),
+        response.check().is_err(),
         "Second assignment with same bead_id should fail due to unique constraint"
     );
     Ok(())
@@ -210,15 +215,14 @@ async fn test_worker_assignment_update() -> Result<(), String> {
         .await
         .map_err(|e| format!("Create should succeed: {e}"))?;
 
-    // Update worker_id
+    // Update worker_id using MERGE to avoid overwriting bead_id
     client
         .client()
         .query(
-            "UPDATE worker_assignment CONTENT {
-                assignment_id: 'assign-6',
+            "UPDATE worker_assignment MERGE {
                 worker_id: 'worker-e',
                 updated_at: time::now()
-            }",
+            } WHERE assignment_id = 'assign-6'",
         )
         .await
         .map_err(|e| format!("Update should execute: {e}"))?;
@@ -226,24 +230,16 @@ async fn test_worker_assignment_update() -> Result<(), String> {
     // Verify update
     let mut result = client
         .client()
-        .query("SELECT * FROM worker_assignment WHERE assignment_id = 'assign-6'")
+        .query("SELECT assignment_id, bead_id, worker_id FROM worker_assignment WHERE assignment_id = 'assign-6'")
         .await
         .map_err(|e| format!("Query should execute: {e}"))?;
 
-    let assignments: Vec<serde_json::Value> = result
+    let assignments: Vec<WorkerAssignment> = result
         .take(0)
-        .map_err(|_| "Should get result".to_string())?;
+        .map_err(|e| format!("Should get result: {e}"))?;
     assert_eq!(assignments.len(), 1, "Should find exactly one assignment");
-
-    let assignment = &assignments[0];
-    if let Some(worker_id) = assignment
-        .get("worker_id")
-        .and_then(|v: &serde_json::Value| v.as_str())
-    {
-        assert_eq!(worker_id, "worker-e", "Worker ID should be updated");
-    } else {
-        return Err("Worker ID field should exist".to_string());
-    }
+    assert_eq!(assignments[0].worker_id, "worker-e", "Worker ID should be updated");
+    
     Ok(())
 }
 
@@ -278,9 +274,9 @@ async fn test_worker_assignment_delete() -> Result<(), String> {
         .await
         .map_err(|e| format!("Query should execute: {e}"))?;
 
-    let assignments: Vec<serde_json::Value> = result
+    let assignments: Vec<WorkerAssignment> = result
         .take(0)
-        .map_err(|_| "Should get result".to_string())?;
+        .map_err(|e| format!("Should get result: {e}"))?;
     assert!(assignments.is_empty(), "Assignment should be deleted");
     Ok(())
 }
@@ -311,13 +307,13 @@ async fn test_worker_assignment_multiple_workers_distribution() -> Result<(), St
     // Query all assignments
     let mut result = client
         .client()
-        .query("SELECT * FROM worker_assignment")
+        .query("SELECT assignment_id, bead_id, worker_id FROM worker_assignment")
         .await
         .map_err(|e| format!("Query should execute: {e}"))?;
 
-    let assignments: Vec<serde_json::Value> = result
+    let assignments: Vec<WorkerAssignment> = result
         .take(0)
-        .map_err(|_| "Should get result".to_string())?;
+        .map_err(|e| format!("Should get result: {e}"))?;
     assert!(
         assignments.len() >= 3,
         "Should retrieve at least 3 worker assignments, got {}",
@@ -344,20 +340,21 @@ async fn test_worker_assignment_bead_id_unique_index() -> Result<(), String> {
         .map_err(|e| format!("First create should succeed: {e}"))?;
 
     // Try to create duplicate bead_id
-    let result = client
+    let response = client
         .client()
         .query(
-            "CREATE worker_assignment CONTENT {
+            "INSERT INTO worker_assignment {
                 assignment_id: 'assign-index-2',
                 bead_id: 'bead-index-test',
                 worker_id: 'worker-k'
             }",
         )
-        .await;
+        .await
+        .map_err(|e| e.to_string())?;
 
     // Should fail due to unique index on bead_id
     assert!(
-        result.is_err(),
+        response.check().is_err(),
         "Duplicate bead_id should violate unique constraint"
     );
     Ok(())

@@ -395,10 +395,10 @@ DEFINE INDEX worker_id_idx ON TABLE worker_assignment COLUMNS worker_id;
 -- ============================================================================
 
 -- depends_on: Bead A depends on Bead B (B must complete before A starts)
-DEFINE RELATION depends_on ON TABLE bead;
+DEFINE TABLE depends_on TYPE RELATION IN bead OUT bead;
 
 -- blocks: Bead A blocks Bead B (B cannot start while A is in progress)
-DEFINE RELATION blocks ON TABLE bead;
+DEFINE TABLE blocks TYPE RELATION IN bead OUT bead;
 
 -- ============================================================================
 -- CONFIGURATION NOTES
