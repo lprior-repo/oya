@@ -75,24 +75,25 @@ impl std::fmt::Display for PhaseId {
 }
 
 /// Phase definition in a workflow.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Phase {
     /// Unique phase identifier.
-    pub id: PhaseId,
+    id: PhaseId,
     /// Human-readable phase name.
     pub name: String,
     /// Maximum execution time.
-    pub timeout: Duration,
+    timeout: Duration,
     /// Number of retry attempts on failure.
-    pub retries: u32,
+    retries: u32,
     /// Optional description.
-    pub description: Option<String>,
+    description: Option<String>,
     /// Phase-specific configuration (JSON).
-    pub config: Option<serde_json::Value>,
+    config: Option<serde_json::Value>,
 }
 
 impl Phase {
     /// Create a new phase with the given name.
+    #[must_use]
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             id: PhaseId::new(),
@@ -104,25 +105,59 @@ impl Phase {
         }
     }
 
+    /// Get phase ID.
+    #[must_use]
+    pub const fn id(&self) -> PhaseId {
+        self.id
+    }
+
+    /// Get timeout.
+    #[must_use]
+    pub const fn timeout(&self) -> Duration {
+        self.timeout
+    }
+
+    /// Get retries.
+    #[must_use]
+    pub const fn retries(&self) -> u32 {
+        self.retries
+    }
+
+    /// Get description.
+    #[must_use]
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
+
+    /// Get config.
+    #[must_use]
+    pub const fn config(&self) -> Option<&serde_json::Value> {
+        self.config.as_ref()
+    }
+
     /// Set the timeout.
+    #[must_use]
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
         self
     }
 
     /// Set the number of retries.
+    #[must_use]
     pub fn with_retries(mut self, retries: u32) -> Self {
         self.retries = retries;
         self
     }
 
     /// Set the description.
+    #[must_use]
     pub fn with_description(mut self, desc: impl Into<String>) -> Self {
         self.description = Some(desc.into());
         self
     }
 
     /// Set phase-specific configuration.
+    #[must_use]
     pub fn with_config(mut self, config: serde_json::Value) -> Self {
         self.config = Some(config);
         self
@@ -148,12 +183,14 @@ pub enum WorkflowState {
 
 impl WorkflowState {
     /// Check if the workflow is in a terminal state.
-    pub fn is_terminal(&self) -> bool {
+    #[must_use]
+    pub const fn is_terminal(&self) -> bool {
         matches!(self, Self::Completed | Self::Failed | Self::Cancelled)
     }
 
     /// Check if the workflow can transition to the given state.
-    pub fn can_transition_to(&self, target: WorkflowState) -> bool {
+    #[must_use]
+    pub const fn can_transition_to(&self, target: Self) -> bool {
         use WorkflowState::*;
         matches!(
             (self, target),
@@ -164,6 +201,9 @@ impl WorkflowState {
                 | (Running, Cancelled)
                 | (Paused, Running)
                 | (Paused, Cancelled)
+                | (Completed, Completed) // Idempotent
+                | (Failed, Failed)       // Idempotent
+                | (Cancelled, Cancelled) // Idempotent
         )
     }
 }
@@ -190,9 +230,9 @@ pub struct Workflow {
     /// Human-readable name.
     pub name: String,
     /// Ordered list of phases.
-    pub phases: Vec<Phase>,
+    phases: Vec<Phase>,
     /// Current phase index (0-based).
-    pub current_phase: usize,
+    current_phase: usize,
     /// Workflow state.
     pub state: WorkflowState,
     /// Creation timestamp.
@@ -205,6 +245,7 @@ pub struct Workflow {
 
 impl Workflow {
     /// Create a new workflow with the given name.
+    #[must_use]
     pub fn new(name: impl Into<String>) -> Self {
         let now = Utc::now();
         Self {
@@ -219,30 +260,56 @@ impl Workflow {
         }
     }
 
+    /// Get phases.
+    #[must_use]
+    #[inline]
+    pub fn phases(&self) -> &[Phase] {
+        &self.phases
+    }
+
+    /// Get current phase index.
+    #[must_use]
+    #[inline]
+    pub const fn current_phase_index(&self) -> usize {
+        self.current_phase
+    }
+
+    /// Set current phase index (internal use or rewind).
+    #[inline]
+    pub fn set_current_phase_index(&mut self, index: usize) {
+        self.current_phase = index;
+        self.updated_at = Utc::now();
+    }
+
     /// Add a phase to the workflow.
+    #[must_use]
     pub fn add_phase(mut self, phase: Phase) -> Self {
         self.phases.push(phase);
         self
     }
 
     /// Add multiple phases.
+    #[must_use]
     pub fn with_phases(mut self, phases: impl IntoIterator<Item = Phase>) -> Self {
         self.phases.extend(phases);
         self
     }
 
     /// Set metadata.
+    #[must_use]
     pub fn with_metadata(mut self, metadata: serde_json::Value) -> Self {
         self.metadata = Some(metadata);
         self
     }
 
     /// Get the current phase, if any.
+    #[must_use]
     pub fn current_phase(&self) -> Option<&Phase> {
         self.phases.get(self.current_phase)
     }
 
     /// Check if all phases are complete.
+    #[must_use]
     pub fn is_complete(&self) -> bool {
         self.current_phase >= self.phases.len()
     }
@@ -255,7 +322,14 @@ impl Workflow {
         }
     }
 
+    /// Add a phase to the workflow (mutable version).
+    pub fn add_phase_mut(&mut self, phase: Phase) {
+        self.phases.push(phase);
+        self.updated_at = Utc::now();
+    }
+
     /// Get progress as a fraction (0.0 to 1.0).
+    #[must_use]
     pub fn progress(&self) -> f64 {
         if self.phases.is_empty() {
             return 1.0;
@@ -638,9 +712,9 @@ mod tests {
             .with_description("Build the project");
 
         assert_eq!(phase.name, "build");
-        assert_eq!(phase.timeout, Duration::from_secs(60));
-        assert_eq!(phase.retries, 5);
-        assert!(phase.description.is_some());
+        assert_eq!(phase.timeout(), Duration::from_secs(60));
+        assert_eq!(phase.retries(), 5);
+        assert!(phase.description().is_some());
     }
 
     #[test]
@@ -650,8 +724,8 @@ mod tests {
             .add_phase(Phase::new("phase2"));
 
         assert_eq!(workflow.name, "test-workflow");
-        assert_eq!(workflow.phases.len(), 2);
-        assert_eq!(workflow.current_phase, 0);
+        assert_eq!(workflow.phases().len(), 2);
+        assert_eq!(workflow.current_phase_index(), 0);
     }
 
     #[test]

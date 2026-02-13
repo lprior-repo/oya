@@ -12,7 +12,7 @@ debounce_ms = 100
 paths = [".beads/beads.db"]
 
 [hooks]
-post_create = []
+post_create = ["sh", "-c", "cargo clean 2>/dev/null || true; find . -type d -name target -exec rm -rf {} + 2>/dev/null || true"]
 pre_remove = []
 post_merge = []
 

@@ -157,6 +157,7 @@ pub fn memoized_hash_input(data: &[u8]) -> [u8; 32] {
 ///     data: Vec<u32>,
 /// }
 ///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let input = TaskInput {
 ///     id: "task-123".to_string(),
 ///     data: vec![1, 2, 3, 4, 5],
@@ -165,6 +166,8 @@ pub fn memoized_hash_input(data: &[u8]) -> [u8; 32] {
 /// let hash1 = memoized_hash_serializable(&input)?;
 /// let hash2 = memoized_hash_serializable(&input)?; // Much faster!
 /// assert_eq!(hash1, hash2);
+/// # Ok(())
+/// # }
 /// ```
 pub fn memoized_hash_serializable<T: Serialize>(
     value: &T,

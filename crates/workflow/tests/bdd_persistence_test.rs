@@ -70,28 +70,28 @@ async fn given_persistence_when_workflow_saved_then_retrievable() -> Result<(), 
         "Workflow name should match"
     );
     assert_eq!(
-        loaded_workflow.phases.len(),
-        original_workflow.phases.len(),
+        loaded_workflow.phases().len(),
+        original_workflow.phases().len(),
         "Number of phases should match"
     );
 
     // Verify all phase names match
     for (original_phase, loaded_phase) in original_workflow
-        .phases
+        .phases()
         .iter()
-        .zip(loaded_workflow.phases.iter())
+        .zip(loaded_workflow.phases().iter())
     {
         assert_eq!(
             original_phase.name, loaded_phase.name,
             "Phase name should match"
         );
         assert_eq!(
-            original_phase.timeout, loaded_phase.timeout,
+            original_phase.timeout(), loaded_phase.timeout(),
             "Phase timeout should match for phase: {}",
             original_phase.name
         );
         assert_eq!(
-            original_phase.retries, loaded_phase.retries,
+            original_phase.retries(), loaded_phase.retries(),
             "Phase retries should match for phase: {}",
             original_phase.name
         );
@@ -209,8 +209,7 @@ async fn given_persistence_when_workflow_updated_then_latest_version_retrievable
 
     // WHEN: Workflow is updated (modified and re-saved)
     workflow
-        .phases
-        .push(Phase::new("monitor").with_timeout(Duration::from_secs(60)));
+        .add_phase_mut(Phase::new("monitor").with_timeout(Duration::from_secs(60)));
     storage
         .save_workflow(&workflow)
         .await
@@ -224,13 +223,13 @@ async fn given_persistence_when_workflow_updated_then_latest_version_retrievable
         .ok_or_else(|| "Workflow not found after update".to_string())?;
 
     assert_eq!(
-        loaded.phases.len(),
+        loaded.phases().len(),
         4,
         "Updated workflow should have 4 phases (original 3 + 1 added)"
     );
 
     assert_eq!(
-        loaded.phases[3].name, "monitor",
+        loaded.phases()[3].name, "monitor",
         "Fourth phase should be 'monitor'"
     );
 

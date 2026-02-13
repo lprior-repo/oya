@@ -375,12 +375,9 @@ impl HandlerChain {
         }
 
         // All handlers failed
-        let fallback_names: Vec<String> = self
-            .fallbacks
-            .iter()
-            .map(|h| h.name().to_string())
-            .collect();
-        Err(Error::all_handlers_failed(&self.name, fallback_names))
+        let mut all_names = vec![self.primary.name().to_string()];
+        all_names.extend(self.fallbacks.iter().map(|h| h.name().to_string()));
+        Err(Error::all_handlers_failed(&self.name, all_names))
     }
 
     /// Rollback all handlers in the chain.

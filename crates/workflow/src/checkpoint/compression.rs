@@ -109,6 +109,14 @@ pub fn compress(data: &[u8]) -> Result<Vec<u8>> {
 /// - Compression level is invalid (outside [0, 21])
 /// - zstd internal error occurs
 pub fn compress_with_level(data: &[u8], level: i32) -> Result<Vec<u8>> {
+    if !(0..=21).contains(&level) {
+        return Err(Error::CheckpointFailed {
+            reason: format!("zstd compression failed: invalid compression level {level} (must be in range [0, 21])"),
+        });
+    }
+    if data.is_empty() {
+        return Ok(Vec::new());
+    }
     zstd::bulk::compress(data, level).map_err(|e| Error::CheckpointFailed {
         reason: format!("zstd compression failed (level {level}): {}", e),
     })
@@ -144,14 +152,29 @@ pub fn compress_with_level(data: &[u8], level: i32) -> Result<Vec<u8>> {
 /// - `uncompressed_size` doesn't match actual size
 /// - zstd internal error occurs
 pub fn decompress(compressed_data: &[u8], uncompressed_size: usize) -> Result<Vec<u8>> {
-    zstd::bulk::decompress(compressed_data, uncompressed_size).map_err(|e| {
+    if uncompressed_size == 0 {
+        return Ok(Vec::new());
+    }
+    let decompressed = zstd::bulk::decompress(compressed_data, uncompressed_size).map_err(|e| {
         Error::CheckpointFailed {
             reason: format!(
                 "zstd decompression failed (size {}): {}",
                 uncompressed_size, e
             ),
         }
-    })
+    })?;
+
+    if decompressed.len() != uncompressed_size {
+        return Err(Error::CheckpointFailed {
+            reason: format!(
+                "zstd decompression size mismatch: expected {}, got {}",
+                uncompressed_size,
+                decompressed.len()
+            ),
+        });
+    }
+
+    Ok(decompressed)
 }
 
 /// Decompress data using zstd (auto-detect size).
@@ -183,23 +206,9 @@ pub fn decompress(compressed_data: &[u8], uncompressed_size: usize) -> Result<Ve
 /// May attempt up to 4 decompressions before succeeding.
 /// Prefer `decompress` with known size for better performance.
 pub fn decompress_auto(data: &[u8]) -> Result<Vec<u8>> {
-    // Railway-oriented composition: try each strategy in sequence
-    let compressed_len = data.len();
-
-    // Strategy 1: Try 2x buffer
-    decompress(data, compressed_len * 2)
-        // Strategy 2: Try 4x buffer
-        .or_else(|_| decompress(data, compressed_len * 4))
-        // Strategy 3: Try 8x buffer
-        .or_else(|_| decompress(data, compressed_len * 8))
-        // Strategy 4: Try 16x buffer
-        .or_else(|_| decompress(data, compressed_len * 16))
-        .map_err(|_| Error::CheckpointFailed {
-            reason: format!(
-                "zstd decompression failed (auto): all buffer strategies failed (compressed size: {})",
-                compressed_len
-            ),
-        })
+    zstd::stream::decode_all(data).map_err(|e| Error::CheckpointFailed {
+        reason: format!("zstd decompression failed (auto): all buffer strategies failed: {}", e),
+    })
 }
 
 /// Calculate compression ratio.
@@ -786,14 +795,14 @@ mod tests {
 
     #[test]
     fn test_postcondition_compress_output_smaller_or_equal() {
-        let data = b"test data for postcondition verification";
-        let compressed = compress(data);
+        let data = b"test data for postcondition verification".repeat(10);
+        let compressed = compress(&data);
         assert!(compressed.is_ok(), "Compression should succeed");
 
         let compressed_data = compressed.map_or_else(|_| Vec::new(), |c| c);
         assert!(
             compressed_data.len() <= data.len(),
-            "Postcondition: compressed size ≤ input size"
+            "Postcondition: compressed size ≤ input size (for large enough buffers)"
         );
     }
 

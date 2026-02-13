@@ -85,7 +85,13 @@ impl CheckpointManager {
         let should = match self.state.strategy {
             CheckpointStrategy::Always => true,
             CheckpointStrategy::OnSuccess => phase_output.success,
-            CheckpointStrategy::Interval(n) => self.state.phases_since_last >= n,
+            CheckpointStrategy::Interval(n) => {
+                if n <= 1 {
+                    true
+                } else {
+                    self.state.phases_since_last >= n - 1
+                }
+            }
         };
 
         let new_state = if should {

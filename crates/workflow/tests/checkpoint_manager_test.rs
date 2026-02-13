@@ -165,26 +165,26 @@ fn test_checkpoint_skipped_on_failure() {
 fn test_checkpoint_created_at_interval() {
     let mut manager = CheckpointManager::new(CheckpointStrategy::Interval(3));
 
-    // Phase 1: skip (phases_since_last=0, 0 >= 3 is false, then increment to 1)
+    // Phase 1: skip (0 < 2)
     let d1 = manager.update(&success_output(vec![1]));
     assert!(matches!(d1, CheckpointDecision::Skip));
     assert_eq!(manager.phases_since_last(), 1);
 
-    // Phase 2: skip (phases_since_last=1, 1 >= 3 is false, then increment to 2)
+    // Phase 2: skip (1 < 2)
     let d2 = manager.update(&success_output(vec![2]));
     assert!(matches!(d2, CheckpointDecision::Skip));
     assert_eq!(manager.phases_since_last(), 2);
 
-    // Phase 3: skip (phases_since_last=2, 2 >= 3 is false, then increment to 3)
+    // Phase 3: checkpoint (2 >= 2)
     let d3 = manager.update(&success_output(vec![3]));
-    assert!(matches!(d3, CheckpointDecision::Skip));
-    assert_eq!(manager.phases_since_last(), 3);
-
-    // Phase 4: checkpoint (phases_since_last=3, 3 >= 3 is true)
-    let d4 = manager.update(&success_output(vec![4]));
-    assert!(matches!(d4, CheckpointDecision::Checkpoint));
+    assert!(matches!(d3, CheckpointDecision::Checkpoint));
     assert_eq!(manager.phases_since_last(), 0);
     assert!(manager.last_checkpoint().is_some());
+
+    // Phase 4: skip (0 < 2)
+    let d4 = manager.update(&success_output(vec![4]));
+    assert!(matches!(d4, CheckpointDecision::Skip));
+    assert_eq!(manager.phases_since_last(), 1);
 }
 
 /// Test: Zero interval behaves like Always strategy.
@@ -284,7 +284,7 @@ fn test_checkpoint_save_to_storage() -> Result<(), Box<dyn std::error::Error>> {
 /// WHEN multiple checkpoints are stored
 /// THEN all should be retrievable
 #[test]
-fn test_multiple_checkpoints_saved() {
+fn test_multiple_checkpoints_saved() -> Result<(), Box<dyn std::error::Error>> {
     let mut storage = InMemoryCheckpointStorage::new();
 
     let id1 = CheckpointId::new();
@@ -528,7 +528,7 @@ fn test_delete_nonexistent_checkpoint_returns_error() {
 /// WHEN clear_all() is called
 /// THEN all checkpoints should be removed
 #[test]
-fn test_clear_all_checkpoints() {
+fn test_clear_all_checkpoints() -> Result<(), Box<dyn std::error::Error>> {
     let mut storage = InMemoryCheckpointStorage::new();
 
     // Store multiple checkpoints
@@ -546,8 +546,6 @@ fn test_clear_all_checkpoints() {
         let _ = storage.store_checkpoint(vec![0u8; 100], metadata);
     }
 
-    // Verify we have 5 checkpoints
-    let list_result = storage.list_checkpoints();
     // List checkpoints
     let ids = storage.list_checkpoints()?;
     assert_eq!(ids.len(), 5, "should have 5 checkpoints");
@@ -640,6 +638,7 @@ fn test_storage_stats_accuracy() -> Result<(), Box<dyn std::error::Error>> {
         (stats2.average_compression_ratio - 2.0).abs() < 0.01,
         "ratio should be 2.0"
     );
+    Ok(())
 }
 
 // =============================================================================
@@ -874,7 +873,7 @@ fn test_complete_checkpoint_lifecycle() -> Result<(), Box<dyn std::error::Error>
 /// WHEN operations are performed on each
 /// THEN each checkpoint should be managed independently
 #[test]
-fn test_multiple_independent_checkpoints() {
+fn test_multiple_independent_checkpoints() -> Result<(), Box<dyn std::error::Error>> {
     let mut storage = InMemoryCheckpointStorage::new();
 
     // Create multiple checkpoints

@@ -54,7 +54,7 @@ pub async fn save_task_record(task: &Task, repo_root: &Path) -> Result<()> {
     let path = tasks_path(repo_root);
     let mut tasks = read_tasks(&path).await?;
 
-    if let Some(existing) = tasks.iter_mut().find(|existing| existing.slug == task.slug) {
+    if let Some(existing) = tasks.iter_mut().find(|existing| existing.slug() == task.slug()) {
         *existing = task.clone();
     } else {
         tasks.push(task.clone());
@@ -78,7 +78,7 @@ pub async fn update_task_status(
 
     let updated = tasks
         .iter()
-        .find(|task| task.slug == lookup)
+        .find(|task| task.slug() == &lookup)
         .cloned()
         .ok_or_else(|| Error::TaskNotFound(slug.to_string()))?
         .transition_to(status)?;
@@ -86,7 +86,7 @@ pub async fn update_task_status(
     tasks = tasks
         .into_iter()
         .map(|task| {
-            if task.slug == lookup {
+            if task.slug() == &lookup {
                 updated.clone()
             } else {
                 task
@@ -110,7 +110,7 @@ pub async fn load_task_record(slug: &str, repo_root: &Path) -> Result<Task> {
 
     tasks
         .into_iter()
-        .find(|task| task.slug == lookup)
+        .find(|task| task.slug() == &lookup)
         .ok_or_else(|| Error::TaskNotFound(slug.to_string()))
 }
 

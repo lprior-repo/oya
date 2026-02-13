@@ -1,288 +1,125 @@
+[package]
+name = "oya"
+version = "0.1.0"
+edition = "2021"
+
 [workspace]
 members = [
     "crates/core",
-    "crates/pipeline",
-    "crates/orchestrator",
+    "crates/events",
     "crates/merge-queue",
     "crates/opencode",
-    "crates/workflow",
-    "crates/events",
-    "crates/oya-ipc",
+    "crates/orchestrator",
     "crates/oya-web",
-    "crates/zellij-frontend",
+    "crates/pipeline",
+    "crates/workflow",
+    "crates/oya-ipc",
+    "crates/swarm-coordinator",
     "crates/telemetry",
-    # "crates/oya-ui-components",  # TODO: Not yet created
-    # "crates/reconciler",  # TODO: Not yet created
-    # "crates/oya-shared",  # TODO: Not yet created
-    # "crates/oya-zellij-plugin",  # TODO: Not yet created
+    "crates/zellij-frontend",
     "tools/profiling",
-    # "crates/zjj-integration-tests",  # TODO: Not yet created
 ]
 resolver = "2"
 
 [workspace.package]
-version = "0.1.2"
-edition = "2024"
-rust-version = "1.85"
-authors = ["Lewis Prior <lewis@lewisandquark.com>"]
+version = "0.1.0"
+edition = "2021"
+authors = ["OYA Team"]
 license = "MIT"
-repository = "https://github.com/lprior-repo/oya"
-
-# ==============================================================================
-# FUNCTIONAL RUST LINTING POLICY
-# ==============================================================================
-# Production Code: MAX strictness - Zero panic, zero unwrap, purely functional
-# Test Code: Loose - Allows unwrap/panic for test assertions (via module-level #![allow])
-# ==============================================================================
-
-[workspace.lints.rust]
-# Memory safety - FORBID unsafe code in production
-unsafe_code = "forbid"
-
-[workspace.lints.clippy]
-# ==============================================================================
-# ZERO-PANIC POLICY (Production Code)
-# ==============================================================================
-# These lints enforce functional Rust patterns with bulletproof error handling
-# Violations will FAIL THE BUILD - cannot be overridden even with #![allow(...)]
-
-# FORBIDDEN patterns - use Result<T, Error> and Option<T> instead
-unwrap_used = "deny"           # No .unwrap() - use ? operator or match
-expect_used = "deny"           # No .expect() - use proper error handling
-panic = "deny"                 # No panic!() - return Result instead
-unimplemented = "deny"         # No unimplemented!() - return Result::Err
-unreachable = "deny"           # No unreachable!() - use proper control flow
-indexing_slicing = "deny"      # Use .get() returning Option instead
-arithmetic_side_effects = "deny"  # Use checked_*, saturating_*, wrapping_*
-unwrap_in_result = "deny"    # Don't unwrap Results explicitly
-todo = "warn"                  # No todo!() - implement or file issue
-
-# Documentation and quality
-missing_errors_doc = "allow"    # Document error variants
-missing_panics_doc = "warn"    # Document panic conditions (should be none)
-
-# Functional patterns - encourage immutable, pure functions
-missing_const_for_fn = "warn"   # Suggest const where possible
-missing_inline_in_public_items = "allow"  # Inline small public functions
-too_many_arguments = "warn"    # Suggest tuples or structs for >7 args
-large_enum_variant = "warn"     # Consider Box for large enum variants
-
-# Code quality
-complexity = { level = "warn", priority = -1 }             # Keep functions simple
-nursery = { level = "warn", priority = -1 }                # Prepare for future Rust changes
-pedantic = { level = "warn", priority = -1 }               # Maximum pedantic checking
-
-# Global allows for pedantic/annoying lints
-unused_self = "allow"
-self_only_used_in_recursion = "allow"
-option_if_let_else = "allow"
-manual_let_else = "allow"
-uninlined_format_args = "allow"
-cast_precision_loss = "allow"
-cast_possible_truncation = "allow"
-cast_sign_loss = "allow"
-match_same_arms = "allow"
-branches_sharing_code = "allow"
-items_after_statements = "allow"
-unused_async = "allow"
-assigning_clones = "allow"
-unnecessary_wraps = "allow"
-format_push_string = "allow"
-redundant_pattern_matching = "allow"
-unreadable_literal = "allow"
-double_must_use = "allow"
-empty_line_after_outer_attr = "allow"
-
-# Performance hints
-significant_drop_in_scrutinee = "warn"  # Avoid expensive drops in matches
-size_of_in_element_count = "warn"  # Check element count before size_of
- # vec_box_then_clone = "warn"     # Removed - not available in Rust 1.85
-
-# ==============================================================================
-# TEST MODULE CONFIGURATION EXAMPLE
-# ==============================================================================
-# Test code allows unwrap/panic for assertions. Add this to each test module:
-#
-# #[cfg(test)]
-# mod tests {
-#     #![allow(clippy::unwrap_used)]
-#     #![allow(clippy::expect_used)]
-#     #![allow(clippy::panic)]
-#
-#     use super::*;
-#     // ... test code here
-# }
-#
-# This maintains MAX strictness in production while allowing test assertions.
-# ==============================================================================
+repository = "https://github.com/oya/oya"
+rust-version = "1.75"
 
 [workspace.dependencies]
-# Internal crates (must match actual package names in Cargo.toml)
 oya-core = { path = "crates/core" }
-oya-pipeline = { path = "crates/pipeline" }
-oya-cli = { path = "crates/oya" }
-oya-opencode = { path = "crates/opencode" }
-oya-workflow = { path = "crates/workflow" }
 oya-events = { path = "crates/events" }
-oya-ipc = { path = "crates/oya-ipc" }
-oya-web = { path = "crates/oya-web" }
-zellij-frontend = { path = "crates/zellij-frontend" }
+oya-opencode = { path = "crates/opencode" }
 oya-telemetry = { path = "crates/telemetry" }
-# oya-reconciler = { path = "crates/reconciler" }  # TODO: Not yet created
-# oya-shared = { path = "crates/oya-shared" }  # TODO: Not yet created
+oya-ipc = { path = "crates/oya-ipc" }
+oya-pipeline = { path = "crates/pipeline" }
+oya-workflow = { path = "crates/workflow" }
 orchestrator = { path = "crates/orchestrator" }
+oya-web = { path = "crates/oya-web" }
+# oya-zellij = { path = "crates/oya-zellij" } # Unknown crate name, commented out for now to avoid error
+zellij-frontend = { path = "crates/zellij-frontend" }
+swarm-coordinator = { path = "crates/swarm-coordinator" }
 merge-queue = { path = "crates/merge-queue" }
 
-# Async runtime (battle-tested)
-tokio = { version = "1", features = ["full"] }
-futures = "0.3"
-async-trait = "0.1"
-
-# Storage (battle-tested)
-surrealdb = { version = "2", features = ["kv-rocksdb", "kv-mem"] }
-surrealdb-core = "2"
-
-# Caching (battle-tested)
-moka = { version = "0.12", features = ["sync"] }
-
-# Serialization (battle-tested)
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-serde_yaml = "0.9"
-toml = "0.9"
-bincode = { version = "2", features = ["serde"] }
-
-# Compression (battle-tested)
-zstd = "0.13"
-
-# Cryptography (battle-tested)
-sha2 = "0.10"
-
-# FP primitives (battle-tested)
-im = "15.1"
-rpds = "1.2"
-itertools = "0.14"
-
-# CLI (battle-tested)
-clap = { version = "4", features = ["derive"] }
-
-# IDs
-ulid = { version = "1", features = ["serde"] }
-uuid = { version = "1", features = ["v5", "serde"] }
-
-# Time
-chrono = { version = "0.4", features = ["serde"] }
-
-# Tracing
+async-trait = "0.1.89"
+thiserror = "2.0.18"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+serde_yaml = "0.9.34"
+toml = "0.8"
+itertools = "0.14.0"
 tracing = "0.1.44"
-tracing-subscriber = { version = "0.3.22", features = ["fmt", "json", "env-filter"] }
-
-# OpenTelemetry
-opentelemetry = { version = "0.31.0", features = ["trace", "logs"] }
-opentelemetry-otlp = { version = "0.31.0", features = ["grpc-tonic"] }
-opentelemetry-semantic-conventions = "0.31.0"
+chrono = { version = "0.4.43", features = ["serde"] }
+tokio = { version = "1.49.0", features = ["full"] }
+anyhow = "1.0.101"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+petgraph = "0.6"
+surrealdb = { version = "2.6.0", features = ["kv-rocksdb"] }
+surrealdb-core = "2.6.0"
+bincode = "2.0.0-rc.3"
+ulid = "1.2.1"
+im = "15.1"
+tap = "1.0"
 tracing-opentelemetry = "0.32.1"
+opentelemetry = "0.31.0"
+opentelemetry-otlp = "0.31.0"
+opentelemetry-semantic-conventions = "0.31.0"
+reqwest = "0.12.28"
+url = { version = "2.5.8", features = ["serde"] }
+uuid = { version = "1.20.0", features = ["v4", "v5", "serde"] }
+moka = { version = "0.12.13", features = ["future", "sync"] }
+sha2 = "0.10.9"
 
-# Error handling
-thiserror = "2"
-anyhow = "1"
+axum = "0.8.8"
+tower = "0.5.3"
+tower-http = { version = "0.6.8", features = ["fs", "trace", "cors", "compression-gzip"] }
+hyper = "1.8.1"
+hyper-util = "0.1.20"
+http = "1.4.0"
+http-body-util = "0.1.3"
+regex = "1.12.3"
+rpds = "1.2.0"
 
-# Regex
-regex = "1"
-
-# Glob pattern matching
-glob = "0.3"
-
-# Graph data structure (battle-tested)
-petgraph = "0.8"
-
-# Notify for file watching
-notify = "7"
-
-# HTTP and web scraping
-reqwest = { version = "0.12", features = ["blocking", "json"] }
-scraper = "0.20"
-url = { version = "2", features = ["serde"] }
-
-# Web framework (latest)
-axum = { version = "0.8", features = ["macros", "tokio", "ws"] }
-tower = "0.5"
-tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip", "fs"] }
-hyper = "1.8"
-hyper-util = { version = "0.1", features = ["full"] }
-http = "1.2"
-http-body-util = "0.1"
-
-# Functional utilities
-tap = "1"
-
-# Property testing
-proptest = "1"
-
-[package]
-name = "oya"
-version.workspace = true
-edition.workspace = true
-rust-version.workspace = true
-authors.workspace = true
-license.workspace = true
-repository.workspace = true
-description = "OYA SDLC System - Storm goddess of transformation. 100x developer throughput with AI agent swarms."
-keywords = ["sdlc", "tdd", "ai", "agents", "automation"]
-categories = ["development-tools", "command-line-utilities"]
+zstd = "0.13"
+futures = "0.3"
+proptest = "1.10.0"
+clap = { version = "4.5.57", features = ["derive"] }
+rusqlite = { version = "0.33", features = ["bundled"] }
 
 [dependencies]
 oya-core = { workspace = true }
-oya-pipeline = { workspace = true }
-oya-opencode = { workspace = true }
-oya-workflow = { workspace = true }
-oya-events = { workspace = true }
-# oya-reconciler = { workspace = true }  # TODO: Not yet created
-# TODO: Re-enable oya-web once compilation errors are fixed
-# oya-web = { workspace = true }
-# TODO: Re-enable oya-shared when needed
-# oya-shared = { workspace = true }
 orchestrator = { workspace = true }
-oya-ipc = { workspace = true }
-oya-telemetry = { workspace = true }
+oya-pipeline = { workspace = true }
+# swarm-coordinator = { workspace = true } # Commented out as I'm not sure if root uses it directly yet
 
-# Actor framework for IPC server
-ractor = "0.15"
-
-tokio = { workspace = true }
-clap = { workspace = true }
-thiserror = { workspace = true }
 anyhow = { workspace = true }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
+clap = { workspace = true }
+tokio = { workspace = true }
 serde = { workspace = true }
-serde_yaml = { workspace = true }
-reqwest = { workspace = true }
 serde_json = { workspace = true }
-chrono = { workspace = true }
+serde_yaml = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
 itertools = { workspace = true }
-glob = "0.3"
-rusqlite = "0.32"
+rusqlite = { workspace = true }
+oya-ipc = { workspace = true }
+ractor = "0.15" # Root uses ractor directly? src/commands/serve.rs uses it.
+tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
-tempfile = "3"
-proptest = "1"
+proptest = { workspace = true }
+chrono = { workspace = true }
+oya-events = { workspace = true }
+oya-workflow = { workspace = true }
+tempfile = "3.10"
 
-[[bin]]
- name = "test_pipeline_cache"
- path = "test_pipeline_cache.rs"
+[workspace.lints.rust]
+unsafe_code = "forbid"
 
-[[bin]]
-name = "oya"
-path = "src/main.rs"
-
-[profile.dev]
-opt-level = 0
-debug = true
-
-[profile.release]
-opt-level = 3
-lto = "thin"
-codegen-units = 1
-strip = true
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"

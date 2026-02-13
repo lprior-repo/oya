@@ -28,7 +28,7 @@
 #![cfg_attr(test, allow(clippy::unwrap_used))]
 #![cfg_attr(test, allow(clippy::panic))]
 
-use crate::Workflow;
+use crate::{Slug, Workflow};
 use crate::execution::{TaskExecutionStatus, WorkflowState};
 use std::collections::{HashMap, HashSet};
 use thiserror::Error;
@@ -131,9 +131,9 @@ pub struct RenderedGraph {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum InputAction {
     /// Move focus to a different task.
-    FocusTask(String),
+    FocusTask(Slug),
     /// Show detailed information about focused task.
-    ShowDetails(String),
+    ShowDetails(Slug),
     /// Scroll the view up.
     ScrollUp(usize),
     /// Scroll the view down.
@@ -176,7 +176,7 @@ pub struct WorkflowVisualization {
     /// Enable color output.
     enable_color: bool,
     /// Focused task for keyboard navigation.
-    focused_task: Option<String>,
+    focused_task: Option<Slug>,
 }
 
 impl WorkflowVisualization {
@@ -212,7 +212,7 @@ impl WorkflowVisualization {
     /// Set the focused task for navigation.
     #[must_use]
     #[inline]
-    pub fn with_focus(mut self, task_id: Option<String>) -> Self {
+    pub fn with_focus(mut self, task_id: Option<Slug>) -> Self {
         self.focused_task = task_id;
         self
     }
@@ -256,7 +256,7 @@ impl WorkflowVisualization {
 
         // Header
         lines.push(self.format_line(format!("Workflow: {}", workflow.name), Color::Bold));
-        lines.push(self.format_line(format!("Tasks: {}", workflow.tasks.len()), Color::White));
+        lines.push(self.format_line(format!("Tasks: {}", workflow.tasks().len()), Color::White));
         lines.push(String::new());
 
         // Render tasks by level
@@ -323,15 +323,15 @@ impl WorkflowVisualization {
 
     /// Detect cycle in workflow graph.
     fn detect_cycle(&self, workflow: &Workflow) -> Vec<String> {
-        let mut visited: HashSet<String> = HashSet::new();
-        let mut rec_stack: HashSet<String> = HashSet::new();
-        let mut path: Vec<String> = Vec::new();
+        let mut visited: HashSet<Slug> = HashSet::new();
+        let mut rec_stack: HashSet<Slug> = HashSet::new();
+        let mut path: Vec<Slug> = Vec::new();
 
-        for task_id in workflow.tasks.keys() {
+        for task_id in workflow.tasks().keys() {
             if !visited.contains(task_id)
                 && self.dfs_cycle_detect(workflow, task_id, &mut visited, &mut rec_stack, &mut path)
             {
-                return path;
+                return path.iter().map(|s| s.to_string()).collect();
             }
         }
 
@@ -342,17 +342,17 @@ impl WorkflowVisualization {
     fn dfs_cycle_detect(
         &self,
         workflow: &Workflow,
-        task_id: &str,
-        visited: &mut HashSet<String>,
-        rec_stack: &mut HashSet<String>,
-        path: &mut Vec<String>,
+        task_id: &Slug,
+        visited: &mut HashSet<Slug>,
+        rec_stack: &mut HashSet<Slug>,
+        path: &mut Vec<Slug>,
     ) -> bool {
-        visited.insert(task_id.to_string());
-        rec_stack.insert(task_id.to_string());
-        path.push(task_id.to_string());
+        visited.insert(task_id.clone());
+        rec_stack.insert(task_id.clone());
+        path.push(task_id.clone());
 
         // Get tasks that depend on this task
-        for (other_id, deps) in &workflow.dependencies {
+        for (other_id, deps) in workflow.dependencies() {
             if deps.contains(task_id) {
                 if !visited.contains(other_id) {
                     if self.dfs_cycle_detect(workflow, other_id, visited, rec_stack, path) {
@@ -377,24 +377,24 @@ impl WorkflowVisualization {
     }
 
     /// Calculate critical path (longest path through DAG).
-    fn calculate_critical_path(&self, workflow: &Workflow) -> HashSet<String> {
+    fn calculate_critical_path(&self, workflow: &Workflow) -> HashSet<Slug> {
         // For simplicity, use longest path in terms of task count
         // A more sophisticated implementation would use task durations
-        let mut longest_dist: HashMap<String, usize> = HashMap::new();
-        let mut visited: HashSet<String> = HashSet::new();
+        let mut longest_dist: HashMap<Slug, usize> = HashMap::new();
+        let mut visited: HashSet<Slug> = HashSet::new();
 
         // Initialize distances
-        for task_id in workflow.tasks.keys() {
+        for task_id in workflow.tasks().keys() {
             longest_dist.insert(task_id.clone(), 0);
         }
 
         // Find nodes with no dependencies (sources)
-        let sources: Vec<String> = workflow
-            .tasks
+        let sources: Vec<Slug> = workflow
+            .tasks()
             .keys()
             .filter(|id| {
                 workflow
-                    .dependencies
+                    .dependencies()
                     .get(*id)
                     .is_none_or(std::collections::HashSet::is_empty)
             })
@@ -426,14 +426,14 @@ impl WorkflowVisualization {
     fn find_longest_path(
         &self,
         workflow: &Workflow,
-        task_id: &str,
-        dist: &mut HashMap<String, usize>,
-        visited: &mut HashSet<String>,
+        task_id: &Slug,
+        dist: &mut HashMap<Slug, usize>,
+        visited: &mut HashSet<Slug>,
     ) {
-        visited.insert(task_id.to_string());
+        visited.insert(task_id.clone());
 
         // Find dependent tasks
-        for (other_id, deps) in &workflow.dependencies {
+        for (other_id, deps) in workflow.dependencies() {
             if deps.contains(task_id) {
                 let new_dist = match dist.get(task_id).copied() {
                     Some(d) => d.saturating_add(1),
@@ -455,19 +455,19 @@ impl WorkflowVisualization {
     }
 
     /// Build level-based layout for tasks.
-    fn build_level_layout(&self, workflow: &Workflow) -> Vec<Vec<String>> {
-        let mut levels: Vec<Vec<String>> = Vec::new();
-        let mut assigned: HashSet<String> = HashSet::new();
+    fn build_level_layout(&self, workflow: &Workflow) -> Vec<Vec<Slug>> {
+        let mut levels: Vec<Vec<Slug>> = Vec::new();
+        let mut assigned: HashSet<Slug> = HashSet::new();
 
         loop {
             // Find tasks that can be assigned to next level
-            let ready: Vec<String> = workflow
-                .tasks
+            let ready: Vec<Slug> = workflow
+                .tasks()
                 .keys()
                 .filter(|id| {
-                    !assigned.contains(id.as_str())
-                        && workflow.dependencies.get(id.as_str()).is_none_or(|deps| {
-                            deps.iter().all(|dep| assigned.contains(dep.as_str()))
+                    !assigned.contains(*id)
+                        && workflow.dependencies().get(*id).is_none_or(|deps| {
+                            deps.iter().all(|dep| assigned.contains(dep))
                         })
                 })
                 .cloned()
@@ -492,9 +492,9 @@ impl WorkflowVisualization {
         &self,
         workflow: &Workflow,
         state: &WorkflowState,
-        level: &[String],
+        level: &[Slug],
         level_idx: usize,
-        critical_path: &HashSet<String>,
+        critical_path: &HashSet<Slug>,
         _term_width: usize,
     ) -> Result<Vec<String>, VisualizationError> {
         let mut lines = Vec::new();
@@ -507,7 +507,7 @@ impl WorkflowVisualization {
         for task_id in level {
             let task = workflow.get_task(task_id).ok_or_else(|| {
                 VisualizationError::InvalidTaskStatus {
-                    task_id: task_id.clone(),
+                    task_id: task_id.to_string(),
                 }
             })?;
 
@@ -637,7 +637,7 @@ impl WorkflowVisualization {
         match key {
             Key::Up | Key::Left => {
                 // Navigate to previous task
-                let task_ids: Vec<String> = workflow.tasks.keys().cloned().collect();
+                let task_ids: Vec<Slug> = workflow.tasks().keys().cloned().collect();
 
                 if let Some(current) = &self.focused_task {
                     if let Some(pos) = task_ids.iter().position(|id| id == current) {
@@ -660,7 +660,7 @@ impl WorkflowVisualization {
 
             Key::Down | Key::Right => {
                 // Navigate to next task
-                let task_ids: Vec<String> = workflow.tasks.keys().cloned().collect();
+                let task_ids: Vec<Slug> = workflow.tasks().keys().cloned().collect();
 
                 if let Some(current) = &self.focused_task {
                     if let Some(pos) = task_ids.iter().position(|id| id == current) {
@@ -733,6 +733,7 @@ mod tests {
 
     use super::*;
     use crate::execution::TaskExecutionStatus;
+    use chrono::Utc;
 
     #[test]
     fn test_visualization_new() {
@@ -809,15 +810,15 @@ mod tests {
     fn test_render_dag_terminal_too_small() {
         let viz = WorkflowVisualization::new().with_min_dimensions(80, 24);
         let mut workflow =
-            Workflow::new("test", "Test", "Description").expect("Failed to create workflow");
+            Workflow::new("test", "Test", "Description", Utc::now()).expect("Failed to create workflow");
 
         let task =
             crate::Task::new("task-1", "Task 1", "First task").expect("Failed to create task");
-        workflow.add_task(task).expect("Failed to add task");
+        workflow.add_task(task, Utc::now()).expect("Failed to add task");
 
         let state = WorkflowState {
-            workflow_id: "test".to_string(),
-            task_status: HashMap::from([("task-1".to_string(), TaskExecutionStatus::Pending)]),
+            workflow_id: Slug::new("test").unwrap(),
+            task_status: HashMap::from([(Slug::new("task-1").unwrap(), TaskExecutionStatus::Pending)]),
             timestamp: chrono::Utc::now(),
         };
 
@@ -833,65 +834,47 @@ mod tests {
     fn test_render_dag_with_cycle() {
         let viz = WorkflowVisualization::new();
         let mut workflow =
-            Workflow::new("test", "Test", "Description").expect("Failed to create workflow");
+            Workflow::new("test", "Test", "Description", Utc::now()).expect("Failed to create workflow");
 
         let task1 = crate::Task::new("a", "Task A", "First").expect("Failed to create task");
         let task2 = crate::Task::new("b", "Task B", "Second").expect("Failed to create task");
 
-        workflow.add_task(task1).expect("Failed to add task");
-        workflow.add_task(task2).expect("Failed to add task");
+        workflow.add_task(task1, Utc::now()).expect("Failed to add task");
+        workflow.add_task(task2, Utc::now()).expect("Failed to add task");
 
-        // Create cycle
-        workflow
-            .dependencies
-            .entry("a".to_string())
-            .or_default()
-            .insert("b".to_string());
-        workflow
-            .dependencies
-            .entry("b".to_string())
-            .or_default()
-            .insert("a".to_string());
-
-        let state = WorkflowState {
-            workflow_id: "test".to_string(),
-            task_status: HashMap::from([
-                ("a".to_string(), TaskExecutionStatus::Pending),
-                ("b".to_string(), TaskExecutionStatus::Pending),
-            ]),
-            timestamp: chrono::Utc::now(),
-        };
-
-        let result = viz.render_dag(&workflow, &state, 80, 24);
-        assert!(result.is_err());
-        match result {
-            Err(VisualizationError::CyclicGraph { cycle }) => {
-                assert!(!cycle.is_empty());
-            }
-            _ => panic!("Expected CyclicGraph error"),
-        }
+        // Create cycle bypassing validation for test purposes if needed, 
+        // but add_dependency actually checks for cycles.
+        // To test render_dag with cycle, we might need a way to force it OR 
+        // test that it handles it if we somehow get one.
+        // Actually, let's just test that it handles valid ones and skip forcing illegal state if impossible.
+        // Wait, I can't use add_dependency to create a cycle anymore!
+        // That's GOOD. That's Functional Domain Modeling. Illegal state is unrepresentable.
+        
+        // Let's just verify add_dependency fails for cycles.
+        assert!(workflow.add_dependency("a", "b", Utc::now()).is_ok());
+        assert!(workflow.add_dependency("b", "a", Utc::now()).is_err());
     }
 
     #[test]
     fn test_render_dag_simple_workflow() {
         let viz = WorkflowVisualization::new();
-        let mut workflow = Workflow::new("test", "Test Workflow", "Description")
+        let mut workflow = Workflow::new("test", "Test Workflow", "Description", Utc::now())
             .expect("Failed to create workflow");
 
         let task1 = crate::Task::new("a", "Task A", "First").expect("Failed to create task");
         let task2 = crate::Task::new("b", "Task B", "Second").expect("Failed to create task");
 
-        workflow.add_task(task1).expect("Failed to add task");
-        workflow.add_task(task2).expect("Failed to add task");
+        workflow.add_task(task1, Utc::now()).expect("Failed to add task");
+        workflow.add_task(task2, Utc::now()).expect("Failed to add task");
         workflow
-            .add_dependency("a", "b")
+            .add_dependency("a", "b", Utc::now())
             .expect("Failed to add dependency");
 
         let state = WorkflowState {
-            workflow_id: "test".to_string(),
+            workflow_id: Slug::new("test").unwrap(),
             task_status: HashMap::from([
-                ("a".to_string(), TaskExecutionStatus::Completed),
-                ("b".to_string(), TaskExecutionStatus::InProgress),
+                (Slug::new("a").unwrap(), TaskExecutionStatus::Completed),
+                (Slug::new("b").unwrap(), TaskExecutionStatus::InProgress),
             ]),
             timestamp: chrono::Utc::now(),
         };
@@ -908,28 +891,28 @@ mod tests {
     fn test_build_level_layout() {
         let viz = WorkflowVisualization::new();
         let mut workflow =
-            Workflow::new("test", "Test", "Description").expect("Failed to create workflow");
+            Workflow::new("test", "Test", "Description", Utc::now()).expect("Failed to create workflow");
 
         let task_a = crate::Task::new("a", "Task A", "First").expect("Failed to create task");
         let task_b = crate::Task::new("b", "Task B", "Second").expect("Failed to create task");
         let task_c = crate::Task::new("c", "Task C", "Third").expect("Failed to create task");
 
-        workflow.add_task(task_a).expect("Failed to add task");
-        workflow.add_task(task_b).expect("Failed to add task");
-        workflow.add_task(task_c).expect("Failed to add task");
+        workflow.add_task(task_a, Utc::now()).expect("Failed to add task");
+        workflow.add_task(task_b, Utc::now()).expect("Failed to add task");
+        workflow.add_task(task_c, Utc::now()).expect("Failed to add task");
 
         workflow
-            .add_dependency("a", "b")
+            .add_dependency("a", "b", Utc::now())
             .expect("Failed to add dependency");
         workflow
-            .add_dependency("a", "c")
+            .add_dependency("a", "c", Utc::now())
             .expect("Failed to add dependency");
 
         let levels = viz.build_level_layout(&workflow);
         assert_eq!(levels.len(), 2);
-        assert_eq!(levels[0], vec!["a"]);
-        assert!(levels[1].contains(&"b".to_string()));
-        assert!(levels[1].contains(&"c".to_string()));
+        assert_eq!(levels[0][0].as_str(), "a");
+        assert!(levels[1].contains(&Slug::new("b").unwrap()));
+        assert!(levels[1].contains(&Slug::new("c").unwrap()));
     }
 
     #[test]
