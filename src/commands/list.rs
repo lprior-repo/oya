@@ -47,7 +47,7 @@ pub async fn list_command(args: ListArgs) -> Result<ListOutput> {
         for task in &output.tasks {
             println!(
                 "  - {} [{}] {} (priority: {}, branch: {})",
-                task.slug, task.status, task.language, task.priority, task.branch
+                task.slug(), task.status, task.language(), task.priority(), task.branch()
             );
         }
     }
@@ -77,7 +77,7 @@ mod tests {
         let result = list_command(args).await?;
 
         assert_eq!(result.total, 1);
-        assert_eq!(result.tasks[0].slug.as_str(), "task-1");
+        assert_eq!(result.tasks[0].slug().as_str(), "task-1");
         Ok(())
     }
 }

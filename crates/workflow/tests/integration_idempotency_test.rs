@@ -89,6 +89,7 @@ struct IdempotentExecutor {
     cache: Cache,
     db: Database,
     execution_count: Arc<RwLock<HashMap<IdempotencyKey, u32>>>,
+    locks: Arc<RwLock<HashMap<IdempotencyKey, Arc<tokio::sync::Mutex<()>>>>>,
 }
 
 impl IdempotentExecutor {
@@ -97,7 +98,17 @@ impl IdempotentExecutor {
             cache,
             db,
             execution_count: Arc::new(RwLock::new(HashMap::new())),
+            locks: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+
+    /// Get or create a lock for a specific key
+    async fn get_lock(&self, key: &IdempotencyKey) -> Arc<tokio::sync::Mutex<()>> {
+        let mut locks = self.locks.write().await;
+        locks
+            .entry(*key)
+            .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
+            .clone()
     }
 
     /// Execute operation idempotently
@@ -105,7 +116,16 @@ impl IdempotentExecutor {
         // Generate idempotency key
         let key = IdempotencyKey::new(idempotency_key_from_bytes(bead_id, input.as_bytes()));
 
-        // Check cache first
+        // Check cache first (fast path)
+        if let Some(cached) = self.cache.get(&key).await {
+            return Ok(cached);
+        }
+
+        // Synchronize execution for this key
+        let lock_arc = self.get_lock(&key).await;
+        let _lock = lock_arc.lock().await;
+
+        // Re-check cache after acquiring lock
         if let Some(cached) = self.cache.get(&key).await {
             return Ok(cached);
         }

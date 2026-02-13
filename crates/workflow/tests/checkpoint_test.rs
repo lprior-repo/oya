@@ -109,7 +109,7 @@ async fn test_load_checkpoint_by_phase_id() {
         .add_phase(Phase::new("test"));
 
     let workflow_id = workflow.id;
-    let build_phase_id = workflow.phases[0].id;
+    let build_phase_id = workflow.phases()[0].id();
 
     let result = engine.run(workflow).await;
     assert!(result.is_ok());
@@ -129,7 +129,7 @@ async fn test_rewind_to_checkpoint() {
         .add_phase(Phase::new("deploy"));
 
     let workflow_id = workflow.id;
-    let build_phase_id = workflow.phases[0].id;
+    let build_phase_id = workflow.phases()[0].id();
 
     // Run workflow to completion
     let result = engine.run(workflow).await;
@@ -161,7 +161,7 @@ async fn test_resume_workflow() {
         .add_phase(Phase::new("test"));
 
     let workflow_id = workflow.id;
-    let build_phase_id = workflow.phases[0].id;
+    let build_phase_id = workflow.phases()[0].id();
 
     // Run workflow
     let result = engine.run(workflow).await;
@@ -216,7 +216,7 @@ async fn test_journal_records_rewind() {
         .add_phase(Phase::new("test"));
 
     let workflow_id = workflow.id;
-    let build_phase_id = workflow.phases[0].id;
+    let build_phase_id = workflow.phases()[0].id();
 
     // Run and rewind
     let _ = engine.run(workflow).await;
@@ -293,7 +293,7 @@ async fn test_checkpoint_contains_output_data() {
     let workflow = Workflow::new("checkpoint-output").add_phase(Phase::new("build"));
 
     let workflow_id = workflow.id;
-    let phase_id = workflow.phases[0].id;
+    let phase_id = workflow.phases()[0].id();
 
     let result = engine.run(workflow).await;
     assert!(result.is_ok());
@@ -317,7 +317,7 @@ async fn test_clear_checkpoints_after() {
         .add_phase(Phase::new("deploy"));
 
     let workflow_id = workflow.id;
-    let test_phase_id = workflow.phases[1].id;
+    let test_phase_id = workflow.phases()[1].id();
 
     // Run workflow
     let _ = engine.run(workflow).await;
@@ -344,7 +344,7 @@ async fn test_checkpoint_round_trip() {
     let workflow = Workflow::new("round-trip").add_phase(Phase::new("build"));
 
     let workflow_id = workflow.id;
-    let phase_id = workflow.phases[0].id;
+    let phase_id = workflow.phases()[0].id();
 
     // Run workflow
     let result = engine.run(workflow).await;
@@ -468,8 +468,8 @@ async fn test_checkpoint_state_snapshot_matches_current() -> Result<(), String> 
     let workflow_id = workflow.id;
     let initial_state = workflow.state;
     let created_at = workflow.created_at;
-    let build_phase_id = workflow.phases[0].id;
-    let test_phase_id = workflow.phases[1].id;
+    let build_phase_id = workflow.phases()[0].id();
+    let test_phase_id = workflow.phases()[1].id();
 
     // Run workflow to completion
     let result = engine.run(workflow).await;

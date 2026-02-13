@@ -336,26 +336,30 @@ mod tests {
     use crate::InMemoryStorage;
     use std::sync::atomic::Ordering;
 
-    /// Helper to create a counter-based state provider.
-    ///
-    /// Note: StateProvider is a function pointer, so we need to use a static
-    /// counter or refactor to use a different approach. For now, we'll use
-    /// a simple non-capturing function.
-    fn state_provider_limited() -> StateProvider {
-        // Use a static counter for the test
+    /// Helper to create a counter-based state provider for test_auto_checkpoint_creates_checkpoints.
+    fn state_provider_test1() -> Option<(PhaseId, Vec<u8>)> {
         static CALL_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        || {
-            let count = CALL_COUNT.fetch_add(1, Ordering::SeqCst);
-            if count < 3 {
-                Some((PhaseId::new(), vec![count as u8]))
-            } else {
-                None // Stop after 3 checkpoints
-            }
+        let count = CALL_COUNT.fetch_add(1, Ordering::SeqCst);
+        if count < 3 {
+            Some((PhaseId::new(), vec![count as u8]))
+        } else {
+            None
         }
     }
 
-    fn state_provider_infinite() -> StateProvider {
-        || Some((PhaseId::new(), vec![1, 2, 3]))
+    /// Helper to create a counter-based state provider for test_auto_checkpoint_handles_storage_errors.
+    fn state_provider_test2() -> Option<(PhaseId, Vec<u8>)> {
+        static CALL_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let count = CALL_COUNT.fetch_add(1, Ordering::SeqCst);
+        if count < 3 {
+            Some((PhaseId::new(), vec![count as u8]))
+        } else {
+            None
+        }
+    }
+
+    fn state_provider_infinite() -> Option<(PhaseId, Vec<u8>)> {
+        Some((PhaseId::new(), vec![1, 2, 3]))
     }
 
     #[tokio::test]
@@ -367,7 +371,7 @@ mod tests {
             storage.clone(),
             workflow_id,
             Duration::from_millis(100), // Fast interval for testing
-            state_provider_limited(),
+            state_provider_test1,
         );
 
         // Wait for completion
@@ -393,7 +397,7 @@ mod tests {
             storage.clone(),
             workflow_id,
             Duration::from_millis(100),
-            state_provider_infinite(),
+            state_provider_infinite,
         );
 
         // Let it run for a bit
@@ -495,7 +499,7 @@ mod tests {
             storage.clone(),
             workflow_id,
             Duration::from_millis(100),
-            state_provider_limited(),
+            state_provider_test2,
         );
 
         // Task should still complete successfully despite errors

@@ -126,7 +126,8 @@ proptest! {
         let serialized = serialized_result.map_err(|e| TestCaseError::fail(format!("{e}")))?;
         prop_assert!(!serialized.is_empty(), "serialized data should not be empty");
 
-        let decompressed_result = decompress(&serialized, serialized.len() * 10);
+        // Use decompress_auto since we don't know the exact uncompressed size here
+        let decompressed_result = oya_workflow::checkpoint::decompress_auto(&serialized);
         prop_assert!(decompressed_result.is_ok(), "decompression should succeed");
         let decompressed = decompressed_result.map_err(|e| TestCaseError::fail(format!("{e}")))?;
 
@@ -350,7 +351,7 @@ proptest! {
         prop_assert!(load_result.is_ok(), "load should succeed");
         let (loaded_compressed, _) = load_result.map_err(|e| TestCaseError::fail(format!("{e}")))?;
 
-        let decompressed_result = decompress(&loaded_compressed, compressed.len() * 10);
+        let decompressed_result = oya_workflow::checkpoint::decompress_auto(&loaded_compressed);
         prop_assert!(decompressed_result.is_ok(), "decompression should succeed");
         let decompressed = decompressed_result.map_err(|e| TestCaseError::fail(format!("{e}")))?;
 

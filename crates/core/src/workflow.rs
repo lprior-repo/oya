@@ -23,9 +23,9 @@ pub struct Workflow {
     /// Detailed description.
     pub description: String,
     /// Map of task IDs to tasks.
-    pub tasks: HashMap<String, Task>,
+    tasks: HashMap<Slug, Task>,
     /// Dependencies between tasks (`task_id` -> set of dependent `task_ids`).
-    pub dependencies: HashMap<String, HashSet<String>>,
+    dependencies: HashMap<Slug, HashSet<Slug>>,
     /// Creation timestamp.
     pub created_at: DateTime<Utc>,
     /// Last update timestamp.
@@ -42,9 +42,9 @@ impl Workflow {
         id: impl TryInto<Slug, Error = crate::OyaError>,
         name: impl Into<String>,
         description: impl Into<String>,
+        now: DateTime<Utc>,
     ) -> Result<Self, crate::OyaError> {
         let id = id.try_into()?;
-        let now = Utc::now();
         Ok(Self {
             id,
             name: name.into(),
@@ -56,13 +56,37 @@ impl Workflow {
         })
     }
 
+    /// Get all tasks in the workflow.
+    #[must_use]
+    #[inline]
+    pub const fn tasks(&self) -> &HashMap<Slug, Task> {
+        &self.tasks
+    }
+
+    /// Get all dependencies in the workflow.
+    #[must_use]
+    #[inline]
+    pub const fn dependencies(&self) -> &HashMap<Slug, HashSet<Slug>> {
+        &self.dependencies
+    }
+
+    /// Get a mutable reference to a task.
+    /// 
+    /// # Warning
+    /// Use this carefully as it allows direct mutation of task state.
+    #[must_use]
+    #[inline]
+    pub fn get_task_mut(&mut self, task_id: &Slug) -> Option<&mut Task> {
+        self.tasks.get_mut(task_id)
+    }
+
     /// Add a task to the workflow.
     ///
     /// # Errors
     /// Returns an error if a task with the same ID already exists.
     #[inline]
-    pub fn add_task(&mut self, task: Task) -> Result<(), crate::OyaError> {
-        let task_id = task.id.as_str().to_string();
+    pub fn add_task(&mut self, task: Task, now: DateTime<Utc>) -> Result<(), crate::OyaError> {
+        let task_id = task.id.clone();
         if self.tasks.contains_key(&task_id) {
             return Err(crate::OyaError::validation(
                 "workflow",
@@ -70,7 +94,7 @@ impl Workflow {
             ));
         }
         self.tasks.insert(task_id, task);
-        self.updated_at = Utc::now();
+        self.updated_at = now;
         Ok(())
     }
 
@@ -87,25 +111,26 @@ impl Workflow {
     #[inline]
     pub fn add_dependency(
         &mut self,
-        from_task_id: impl AsRef<str>,
-        to_task_id: impl AsRef<str>,
+        from_task_id: impl TryInto<Slug, Error = crate::OyaError>,
+        to_task_id: impl TryInto<Slug, Error = crate::OyaError>,
+        now: DateTime<Utc>,
     ) -> Result<(), crate::OyaError> {
-        let from = from_task_id.as_ref();
-        let to = to_task_id.as_ref();
+        let from = from_task_id.try_into()?;
+        let to = to_task_id.try_into()?;
 
         // Check both tasks exist
-        if !self.tasks.contains_key(from) {
-            return Err(crate::OyaError::not_found("task", from));
+        if !self.tasks.contains_key(&from) {
+            return Err(crate::OyaError::not_found("task", from.as_str()));
         }
-        if !self.tasks.contains_key(to) {
-            return Err(crate::OyaError::not_found("task", to));
+        if !self.tasks.contains_key(&to) {
+            return Err(crate::OyaError::not_found("task", to.as_str()));
         }
 
         // Check if dependency already exists (to depends on from)
         if self
             .dependencies
-            .get(to)
-            .is_some_and(|deps| deps.contains(from))
+            .get(&to)
+            .is_some_and(|deps| deps.contains(&from))
         {
             return Err(crate::OyaError::validation(
                 "workflow",
@@ -113,76 +138,45 @@ impl Workflow {
             ));
         }
 
+        // Check for cycles BEFORE mutation
+        if self.is_reachable(&from, &to) {
+             return Err(crate::OyaError::validation(
+                "workflow",
+                "cycle detected in task dependencies",
+            ));
+        }
+
         // Add dependency: to depends on from
         self.dependencies
-            .entry(to.to_string())
+            .entry(to)
             .or_default()
-            .insert(from.to_string());
+            .insert(from);
 
-        // Check for cycles
-        let cycle_check = self.check_cycles();
-
-        // Remove dependency if cycle detected
-        if cycle_check.is_err() {
-            if let Some(deps) = self.dependencies.get_mut(to) {
-                deps.remove(from);
-                if deps.is_empty() {
-                    self.dependencies.remove(to);
-                }
-            }
-            return cycle_check;
-        }
-
-        self.updated_at = Utc::now();
+        self.updated_at = now;
         Ok(())
     }
 
-    /// Check if the workflow has any cycles.
-    ///
-    /// # Errors
-    /// Returns an error if a cycle is detected.
-    fn check_cycles(&self) -> Result<(), crate::OyaError> {
+    /// Check if `target` is reachable from `start` by following dependencies.
+    /// (i.e. does `start` depend on `target`?)
+    fn is_reachable(&self, start: &Slug, target: &Slug) -> bool {
         let mut visited = HashSet::new();
-        let mut rec_stack = HashSet::new();
+        let mut stack = Vec::new();
+        stack.push(start);
 
-        for task_id in self.tasks.keys() {
-            if !visited.contains(task_id)
-                && self.dfs_check_cycle(task_id, &mut visited, &mut rec_stack)?
-            {
-                return Err(crate::OyaError::validation(
-                    "workflow",
-                    "cycle detected in task dependencies",
-                ));
+        while let Some(current) = stack.pop() {
+            if current == target {
+                return true;
             }
-        }
-
-        Ok(())
-    }
-
-    /// DFS helper for cycle detection.
-    fn dfs_check_cycle(
-        &self,
-        task_id: &str,
-        visited: &mut HashSet<String>,
-        rec_stack: &mut HashSet<String>,
-    ) -> Result<bool, crate::OyaError> {
-        visited.insert(task_id.to_string());
-        rec_stack.insert(task_id.to_string());
-
-        if let Some(deps) = self.dependencies.get(task_id) {
-            for dep_id in deps {
-                if !visited.contains(dep_id) {
-                    if self.dfs_check_cycle(dep_id, visited, rec_stack)? {
-                        return Ok(true);
-                    }
-                } else if rec_stack.contains(dep_id) {
-                    return Ok(true);
+            if !visited.insert(current) {
+                continue;
+            }
+            if let Some(parents) = self.dependencies.get(current) {
+                for parent in parents {
+                    stack.push(parent);
                 }
             }
         }
-
-        rec_stack.remove(task_id);
-        Ok(false)
+        false
     }
 
     /// Get tasks that are ready to execute (all dependencies satisfied).
@@ -199,7 +193,7 @@ impl Workflow {
     /// Check if a task is ready to execute.
     #[must_use]
     #[inline]
-    pub fn is_task_ready(&self, task_id: &str) -> bool {
+    pub fn is_task_ready(&self, task_id: &Slug) -> bool {
         let Some(task) = self.tasks.get(task_id) else {
             return false;
         };
@@ -241,15 +235,17 @@ impl Workflow {
     /// Get a task by ID.
     #[must_use]
     #[inline]
-    pub fn get_task(&self, task_id: &str) -> Option<&Task> {
-        self.tasks.get(task_id)
+    pub fn get_task(&self, task_id: impl AsRef<str>) -> Option<&Task> {
+        let slug = Slug::try_from(task_id.as_ref()).ok()?;
+        self.tasks.get(&slug)
     }
 
     /// Get dependencies for a task.
     #[must_use]
     #[inline]
-    pub fn get_dependencies(&self, task_id: &str) -> Option<&HashSet<String>> {
-        self.dependencies.get(task_id)
+    pub fn get_dependencies(&self, task_id: impl AsRef<str>) -> Option<&HashSet<Slug>> {
+        let slug = Slug::try_from(task_id.as_ref()).ok()?;
+        self.dependencies.get(&slug)
     }
 }
 
@@ -285,7 +281,12 @@ mod tests {
 
     #[test]
     fn test_workflow_new() -> Result<(), crate::OyaError> {
-        let workflow = Workflow::new("test-workflow", "Test Workflow", "A test workflow")?;
+        let workflow = Workflow::new(
+            "test-workflow",
+            "Test Workflow",
+            "A test workflow",
+            Utc::now(),
+        )?;
         assert_eq!(workflow.id.as_str(), "test-workflow");
         assert_eq!(workflow.name, "Test Workflow");
         assert!(workflow.is_empty());
@@ -294,97 +295,103 @@ mod tests {
 
     #[test]
     fn test_workflow_add_task() -> Result<(), crate::OyaError> {
-        let mut workflow = Workflow::new("test-workflow", "Test", "Description")?;
+        let mut workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
         let task = Task::new("task-1", "Task 1", "First task")?;
-        assert!(workflow.add_task(task).is_ok());
+        assert!(workflow.add_task(task, Utc::now()).is_ok());
         assert_eq!(workflow.len(), 1);
         Ok(())
     }
 
     #[test]
     fn test_workflow_add_duplicate_task() -> Result<(), crate::OyaError> {
-        let mut workflow = Workflow::new("test-workflow", "Test", "Description")?;
+        let mut workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
         let task1 = Task::new("task-1", "Task 1", "First task")?;
         let task2 = Task::new("task-1", "Task 1", "Duplicate")?;
 
-        assert!(workflow.add_task(task1).is_ok());
-        assert!(workflow.add_task(task2).is_err());
+        assert!(workflow.add_task(task1, Utc::now()).is_ok());
+        assert!(workflow.add_task(task2, Utc::now()).is_err());
         Ok(())
     }
 
     #[test]
     fn test_workflow_add_dependency() -> Result<(), crate::OyaError> {
-        let mut workflow = Workflow::new("test-workflow", "Test", "Description")?;
+        let mut workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
         let task1 = Task::new("task-1", "Task 1", "First task")?;
         let task2 = Task::new("task-2", "Task 2", "Second task")?;
 
-        workflow.add_task(task1)?;
-        workflow.add_task(task2)?;
+        workflow.add_task(task1, Utc::now())?;
+        workflow.add_task(task2, Utc::now())?;
 
-        assert!(workflow.add_dependency("task-1", "task-2").is_ok());
+        assert!(workflow
+            .add_dependency("task-1", "task-2", Utc::now())
+            .is_ok());
         Ok(())
     }
 
     #[test]
     fn test_workflow_add_dependency_nonexistent_task() -> Result<(), crate::OyaError> {
-        let mut workflow = Workflow::new("test-workflow", "Test", "Description")?;
+        let mut workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
         let task = Task::new("task-1", "Task 1", "First task")?;
-        workflow.add_task(task)?;
+        workflow.add_task(task, Utc::now())?;
 
-        let result = workflow.add_dependency("task-1", "task-nonexistent");
-        assert!(result.is_err());
+        let result = workflow.add_dependency("task-1", "task-nonexistent", Utc::now());
+        assert!(result.is_err()); // Slug parse error or not found error
         Ok(())
     }
 
     #[test]
     fn test_workflow_cycle_detection() -> Result<(), crate::OyaError> {
-        let mut workflow = Workflow::new("test-workflow", "Test", "Description")?;
+        let mut workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
         let task1 = Task::new("task-1", "Task 1", "First task")?;
         let task2 = Task::new("task-2", "Task 2", "Second task")?;
 
-        workflow.add_task(task1)?;
-        workflow.add_task(task2)?;
+        workflow.add_task(task1, Utc::now())?;
+        workflow.add_task(task2, Utc::now())?;
 
         // Create a cycle: task-1 -> task-2 -> task-1
-        assert!(workflow.add_dependency("task-1", "task-2").is_ok());
-        assert!(workflow.add_dependency("task-2", "task-1").is_err());
+        assert!(workflow
+            .add_dependency("task-1", "task-2", Utc::now())
+            .is_ok());
+        assert!(workflow
+            .add_dependency("task-2", "task-1", Utc::now())
+            .is_err());
         assert!(workflow.get_dependencies("task-1").is_none());
         Ok(())
     }
 
     #[test]
     fn test_workflow_empty_is_complete() -> Result<(), crate::OyaError> {
-        let workflow = Workflow::new("test-workflow", "Test", "Description")?;
+        let workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
         assert!(workflow.is_complete());
         Ok(())
     }
 
     #[test]
     fn test_workflow_is_task_ready() -> Result<(), crate::OyaError> {
-        let mut workflow = Workflow::new("test-workflow", "Test", "Description")?;
+        let mut workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
         let task1 = Task::new("task-1", "Task 1", "First task")?;
         let task2 = Task::new("task-2", "Task 2", "Second task")?;
 
-        workflow.add_task(task1)?;
-        workflow.add_task(task2)?;
-        workflow.add_dependency("task-1", "task-2")?;
+        workflow.add_task(task1, Utc::now())?;
+        workflow.add_task(task2, Utc::now())?;
+        workflow.add_dependency("task-1", "task-2", Utc::now())?;
 
         // task-2 depends on task-1, so it's not ready
-        assert!(!workflow.is_task_ready("task-2"));
+        assert!(!workflow.is_task_ready(&Slug::new("task-2")?));
         // task-1 has no dependencies, so it's ready
-        assert!(workflow.is_task_ready("task-1"));
+        assert!(workflow.is_task_ready(&Slug::new("task-1")?));
         Ok(())
     }
 
     #[test]
     fn test_workflow_get_ready_tasks() -> Result<(), crate::OyaError> {
-        let mut workflow = Workflow::new("test-workflow", "Test", "Description")?;
+        let mut workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
         let task1 = Task::new("task-1", "Task 1", "First task")?;
         let task2 = Task::new("task-2", "Task 2", "Second task")?;
 
-        workflow.add_task(task1)?;
-        workflow.add_task(task2)?;
-        workflow.add_dependency("task-1", "task-2")?;
+        workflow.add_task(task1, Utc::now())?;
+        workflow.add_task(task2, Utc::now())?;
+        workflow.add_dependency("task-1", "task-2", Utc::now())?;
 
         let ready = workflow.get_ready_tasks();
         assert_eq!(ready.len(), 1);
@@ -394,20 +401,21 @@ mod tests {
 
     #[test]
     fn test_workflow_is_task_ready_unknown_task() -> Result<(), crate::OyaError> {
-        let workflow = Workflow::new("test-workflow", "Test", "Description")?;
-        assert!(!workflow.is_task_ready("missing-task"));
+        let workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
+        assert!(!workflow.is_task_ready(&Slug::new("task-1")?));
         Ok(())
     }
 
     #[test]
     fn test_workflow_get_ready_tasks_excludes_completed() -> Result<(), crate::OyaError> {
-        let mut workflow = Workflow::new("test-workflow", "Test", "Description")?;
+        let mut workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
         let mut task = Task::new("task-1", "Task 1", "First task")?;
 
         // Mark task as completed
-        task.current_stage = crate::Stage::Completed;
+        task.transition_to(crate::Stage::InProgress).unwrap();
+        task.transition_to(crate::Stage::Completed).unwrap();
 
-        workflow.add_task(task)?;
+        workflow.add_task(task, Utc::now())?;
         let ready = workflow.get_ready_tasks();
         assert!(ready.is_empty());
         Ok(())
@@ -415,17 +423,24 @@ mod tests {
 
     #[test]
     fn test_workflow_stress_ready_progression_large_chain() -> Result<(), crate::OyaError> {
-        let mut workflow = Workflow::new("stress-workflow", "Stress", "Large chain")?;
+        let mut workflow = Workflow::new("stress-workflow", "Stress", "Large chain", Utc::now())?;
         let task_count = 64;
 
         for i in 0..task_count {
-            workflow.add_task(Task::new(
-                format!("task-{i}"),
-                format!("Task {i}"),
-                "stress task",
-            )?)?;
+            workflow.add_task(
+                Task::new(
+                    format!("task-{i}"),
+                    format!("Task {i}"),
+                    "stress task",
+                )?,
+                Utc::now(),
+            )?;
             if i > 0 {
-                workflow.add_dependency(format!("task-{}", i - 1), format!("task-{i}"))?;
+                workflow.add_dependency(
+                    format!("task-{}", i - 1),
+                    format!("task-{i}"),
+                    Utc::now(),
+                )?;
             }
         }
 
@@ -434,14 +449,14 @@ mod tests {
             assert_eq!(ready.len(), 1);
             assert_eq!(ready[0].id.as_str(), format!("task-{i}"));
 
-            let current = format!("task-{i}");
+            let current_id = Slug::new(format!("task-{i}"))?;
             let task = workflow
-                .tasks
-                .get_mut(&current)
-                .ok_or_else(|| crate::OyaError::not_found("task", current.clone()))?;
+                .get_task_mut(&current_id)
+                .ok_or_else(|| crate::OyaError::not_found("task", current_id.as_str()))?;
 
             // Mark task as completed
-            task.current_stage = crate::Stage::Completed;
+            task.transition_to(crate::Stage::InProgress).unwrap();
+            task.transition_to(crate::Stage::Completed).unwrap();
         }
 
         assert!(workflow.get_ready_tasks().is_empty());
@@ -451,22 +466,27 @@ mod tests {
 
     #[test]
     fn test_workflow_is_complete() -> Result<(), crate::OyaError> {
-        let mut workflow = Workflow::new("test-workflow", "Test", "Description")?;
+        let mut workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
         let mut task = Task::new("task-1", "Task 1", "First task")?;
 
-        workflow.add_task(task.clone())?;
+        workflow.add_task(task.clone(), Utc::now())?;
         assert!(!workflow.is_complete());
 
         // Mark task as completed
-        task.current_stage = crate::Stage::Completed;
-        workflow.tasks.insert(task.id.as_str().to_string(), task);
+        task.transition_to(crate::Stage::InProgress).unwrap();
+        task.transition_to(crate::Stage::Completed).unwrap();
+        
+        let task_id = task.id.clone();
+        let target = workflow.get_task_mut(&task_id).unwrap();
+        *target = task;
+        
         assert!(workflow.is_complete());
         Ok(())
     }
 
     #[test]
     fn test_workflow_display() -> Result<(), crate::OyaError> {
-        let workflow = Workflow::new("test-workflow", "Test Workflow", "Description")?;
+        let workflow = Workflow::new("test-workflow", "Test Workflow", "Description", Utc::now())?;
         let s = format!("{}", workflow);
         assert!(s.contains("test-workflow"));
         assert!(s.contains("Test Workflow"));

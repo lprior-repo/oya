@@ -28,7 +28,7 @@
 
 #[cfg(test)]
 use crate::Task;
-use crate::Workflow;
+use crate::{Slug, Workflow};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -38,9 +38,9 @@ use std::path::Path;
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkflowState {
     /// Workflow ID.
-    pub workflow_id: String,
+    pub workflow_id: Slug,
     /// Current status of each task.
-    pub task_status: HashMap<String, TaskExecutionStatus>,
+    pub task_status: HashMap<Slug, TaskExecutionStatus>,
     /// Timestamp of state creation.
     pub timestamp: DateTime<Utc>,
 }
@@ -67,15 +67,15 @@ pub enum TaskExecutionStatus {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkflowResult {
     /// Tasks that succeeded.
-    pub succeeded: Vec<String>,
+    pub succeeded: Vec<Slug>,
     /// Tasks that failed.
-    pub failed: Vec<String>,
+    pub failed: Vec<Slug>,
     /// Tasks that were rolled back.
-    pub rolled_back: Vec<String>,
+    pub rolled_back: Vec<Slug>,
     /// Tasks that timed out.
-    pub timed_out: Vec<String>,
+    pub timed_out: Vec<Slug>,
     /// Tasks where rollback failed.
-    pub rollback_failed: Vec<String>,
+    pub rollback_failed: Vec<Slug>,
 }
 
 /// Errors that can occur during workflow execution.
@@ -158,7 +158,7 @@ impl ExecutionEngine {
 
         // Initialize task status
         let task_status = workflow
-            .tasks
+            .tasks()
             .iter()
             .map(|(id, task)| {
                 (
@@ -173,7 +173,7 @@ impl ExecutionEngine {
             .collect();
 
         Ok(WorkflowState {
-            workflow_id: workflow.id.as_str().to_string(),
+            workflow_id: workflow.id.clone(),
             task_status,
             timestamp: Utc::now(),
         })
@@ -183,8 +183,8 @@ impl ExecutionEngine {
     fn validate_workflow(&self, workflow: &Workflow) -> Result<(), ExecutionError> {
         // Check all task IDs are unique (guaranteed by HashMap)
         // Check all dependencies reference valid tasks
-        for (task_id, deps) in &workflow.dependencies {
-            if !workflow.tasks.contains_key(task_id) {
+        for (task_id, deps) in workflow.dependencies() {
+            if !workflow.tasks().contains_key(task_id) {
                 return Err(ExecutionError::InvalidWorkflow(format!(
                     "Unknown dependency owner task {task_id}"
                 )));
@@ -197,7 +197,7 @@ impl ExecutionEngine {
                     )));
                 }
 
-                if !workflow.tasks.contains_key(dep_id) {
+                if !workflow.tasks().contains_key(dep_id) {
                     return Err(ExecutionError::InvalidWorkflow(format!(
                         "Task {task_id} depends on non-existent task {dep_id}"
                     )));
@@ -211,18 +211,18 @@ impl ExecutionEngine {
     ///
     /// # Errors
     /// Returns `ExecutionError::CyclicGraph` if a cycle is detected.
-    fn topological_sort(&self, workflow: &Workflow) -> Result<Vec<String>, ExecutionError> {
-        let mut in_degree: HashMap<String, usize> = HashMap::new();
-        let mut adj_list: HashMap<String, Vec<String>> = HashMap::new();
+    fn topological_sort(&self, workflow: &Workflow) -> Result<Vec<Slug>, ExecutionError> {
+        let mut in_degree: HashMap<Slug, usize> = HashMap::new();
+        let mut adj_list: HashMap<Slug, Vec<Slug>> = HashMap::new();
 
         // Initialize in-degrees and adjacency list
-        for task_id in workflow.tasks.keys() {
+        for task_id in workflow.tasks().keys() {
             in_degree.insert(task_id.clone(), 0);
             adj_list.insert(task_id.clone(), Vec::new());
         }
 
         // Build adjacency list and in-degrees
-        for (task_id, deps) in &workflow.dependencies {
+        for (task_id, deps) in workflow.dependencies() {
             for dep_id in deps {
                 // dep_id -> task_id (dep must complete before task)
                 adj_list
@@ -235,7 +235,7 @@ impl ExecutionEngine {
         }
 
         // Kahn's algorithm
-        let mut queue: Vec<String> = in_degree
+        let mut queue: Vec<Slug> = in_degree
             .iter()
             .filter(|(_, degree)| **degree == 0)
             .map(|(id, _)| id.clone())
@@ -259,7 +259,7 @@ impl ExecutionEngine {
         }
 
         // Check for cycle
-        if result.len() != workflow.tasks.len() {
+        if result.len() != workflow.tasks().len() {
             // Find cycle for better error message
             let cycle = self.detect_cycle(workflow)?;
             return Err(ExecutionError::CyclicGraph { cycle });
@@ -270,11 +270,11 @@ impl ExecutionEngine {
 
     /// Detect a cycle in the workflow graph.
     fn detect_cycle(&self, workflow: &Workflow) -> Result<Vec<String>, ExecutionError> {
-        let mut visited: HashSet<String> = HashSet::new();
-        let mut rec_stack: HashSet<String> = HashSet::new();
-        let mut path: Vec<String> = Vec::new();
+        let mut visited: HashSet<Slug> = HashSet::new();
+        let mut rec_stack: HashSet<Slug> = HashSet::new();
+        let mut path: Vec<Slug> = Vec::new();
 
-        for task_id in workflow.tasks.keys() {
+        for task_id in workflow.tasks().keys() {
             if !visited.contains(task_id)
                 && self.dfs_cycle_detect(
                     workflow,
@@ -284,7 +284,8 @@ impl ExecutionEngine {
                     &mut path,
                 )?
             {
-                return Ok(path);
+                // Convert path to strings for error message
+                return Ok(path.iter().map(|s| s.to_string()).collect());
             }
         }
 
@@ -296,17 +297,17 @@ impl ExecutionEngine {
     fn dfs_cycle_detect(
         &self,
         workflow: &Workflow,
-        task_id: &str,
-        visited: &mut HashSet<String>,
-        rec_stack: &mut HashSet<String>,
-        path: &mut Vec<String>,
+        task_id: &Slug,
+        visited: &mut HashSet<Slug>,
+        rec_stack: &mut HashSet<Slug>,
+        path: &mut Vec<Slug>,
     ) -> Result<bool, ExecutionError> {
-        visited.insert(task_id.to_string());
-        rec_stack.insert(task_id.to_string());
-        path.push(task_id.to_string());
+        visited.insert(task_id.clone());
+        rec_stack.insert(task_id.clone());
+        path.push(task_id.clone());
 
         // Get tasks that depend on this task (reverse dependencies)
-        for (other_id, deps) in &workflow.dependencies {
+        for (other_id, deps) in workflow.dependencies() {
             if deps.contains(task_id) {
                 if !visited.contains(other_id) {
                     if self.dfs_cycle_detect(workflow, other_id, visited, rec_stack, path)? {
@@ -340,14 +341,14 @@ impl ExecutionEngine {
             self.checkpoint_dir
                 .clone()
                 .ok_or_else(|| ExecutionError::CheckpointFailed {
-                    task_id: state.workflow_id.clone(),
+                    task_id: state.workflow_id.to_string(),
                     cause: "No checkpoint directory configured".to_string(),
                 })?;
 
         // Serialize state
         let json =
             serde_json::to_string_pretty(state).map_err(|e| ExecutionError::CheckpointFailed {
-                task_id: state.workflow_id.clone(),
+                task_id: state.workflow_id.to_string(),
                 cause: format!("Serialization failed: {e}"),
             })?;
 
@@ -356,7 +357,7 @@ impl ExecutionEngine {
         tokio::fs::write(&temp_path, json)
             .await
             .map_err(|e| ExecutionError::CheckpointFailed {
-                task_id: state.workflow_id.clone(),
+                task_id: state.workflow_id.to_string(),
                 cause: format!("Write failed: {e}"),
             })?;
 
@@ -365,7 +366,7 @@ impl ExecutionEngine {
         tokio::fs::rename(&temp_path, &final_path)
             .await
             .map_err(|e| ExecutionError::CheckpointFailed {
-                task_id: state.workflow_id.clone(),
+                task_id: state.workflow_id.to_string(),
                 cause: format!("Rename failed: {e}"),
             })?;
 
@@ -392,13 +393,13 @@ impl ExecutionEngine {
 
     /// Get tasks ready to execute based on current state.
     #[must_use]
-    pub fn get_ready_tasks(&self, workflow: &Workflow, state: &WorkflowState) -> Vec<String> {
-        if state.workflow_id != workflow.id.as_str() {
+    pub fn get_ready_tasks(&self, workflow: &Workflow, state: &WorkflowState) -> Vec<Slug> {
+        if state.workflow_id != workflow.id {
             return Vec::new();
         }
 
         workflow
-            .tasks
+            .tasks()
             .keys()
             .filter(|task_id| {
                 // Task must be pending
@@ -411,7 +412,7 @@ impl ExecutionEngine {
                 }
 
                 // All dependencies must be completed
-                workflow.dependencies.get(*task_id).is_none_or(|deps| {
+                workflow.dependencies().get(*task_id).is_none_or(|deps| {
                     deps.iter().all(|dep_id| {
                         state
                             .task_status
@@ -480,7 +481,7 @@ impl ExecutionEngine {
                     workflow
                         .get_task(&task_id)
                         .ok_or_else(|| ExecutionError::TaskFailed {
-                            task_id: task_id.clone(),
+                            task_id: task_id.to_string(),
                             error: "Task not found".to_string(),
                         })?;
 
@@ -510,12 +511,12 @@ impl ExecutionEngine {
     /// Returns `ExecutionError` if rollback fails.
     pub fn rollback_task(
         &self,
-        task_id: &str,
+        task_id: &Slug,
         workflow: &Workflow,
         state: &mut WorkflowState,
     ) -> Result<(), ExecutionError> {
         // Check if task exists
-        if !workflow.tasks.contains_key(task_id) {
+        if !workflow.tasks().contains_key(task_id) {
             return Err(ExecutionError::RollbackFailed {
                 task_id: task_id.to_string(),
                 cause: "Task not found".to_string(),
@@ -528,7 +529,7 @@ impl ExecutionEngine {
                 // Mark as rolled back
                 state
                     .task_status
-                    .insert(task_id.to_string(), TaskExecutionStatus::RolledBack);
+                    .insert(task_id.clone(), TaskExecutionStatus::RolledBack);
 
                 Ok(())
             }
@@ -560,20 +561,20 @@ impl ExecutionEngine {
         let state = self.load_checkpoint(path).await?;
 
         // Validate state consistency
-        if state.workflow_id != workflow.id.as_str() {
+        if state.workflow_id != workflow.id {
             return Err(ExecutionError::CheckpointCorrupted {
                 path: path.display().to_string(),
                 validation_errors: vec![format!(
                     "Workflow ID mismatch: checkpoint has {}, workflow has {}",
                     state.workflow_id,
-                    workflow.id.as_str()
+                    workflow.id
                 )],
             });
         }
 
         // Validate all tasks in state exist in workflow
         for task_id in state.task_status.keys() {
-            if !workflow.tasks.contains_key(task_id) {
+            if !workflow.tasks().contains_key(task_id) {
                 return Err(ExecutionError::CheckpointCorrupted {
                     path: path.display().to_string(),
                     validation_errors: vec![format!(
@@ -585,7 +586,7 @@ impl ExecutionEngine {
         }
 
         // Validate all workflow tasks are in state
-        for task_id in workflow.tasks.keys() {
+        for task_id in workflow.tasks().keys() {
             if !state.task_status.contains_key(task_id) {
                 return Err(ExecutionError::CheckpointCorrupted {
                     path: path.display().to_string(),
@@ -617,8 +618,8 @@ mod tests {
     #![allow(clippy::indexing_slicing)]
 
     use super::*;
-    use crate::Task;
-    use anyhow::{Result, anyhow};
+    use crate::{Task, Slug};
+    use chrono::Utc;
 
     #[test]
     fn test_execution_engine_new() {
@@ -635,47 +636,53 @@ mod tests {
     #[test]
     fn test_parse_valid_workflow() {
         let engine = ExecutionEngine::new();
-        let mut workflow = Workflow::new("test-workflow", "Test", "Description")
+        let mut workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())
             .expect("Failed to create workflow");
 
         let task1 = Task::new("task-1", "Task 1", "First task").expect("Failed to create task");
         let task2 = Task::new("task-2", "Task 2", "Second task").expect("Failed to create task");
 
-        workflow.add_task(task1).expect("Failed to add task");
-        workflow.add_task(task2).expect("Failed to add task");
+        workflow.add_task(task1, Utc::now()).expect("Failed to add task");
+        workflow.add_task(task2, Utc::now()).expect("Failed to add task");
         workflow
-            .add_dependency("task-1", "task-2")
+            .add_dependency("task-1", "task-2", Utc::now())
             .expect("Failed to add dependency");
 
         let state = engine
             .parse_workflow(&workflow)
             .expect("Failed to parse workflow");
-        assert_eq!(state.workflow_id, "test-workflow");
+        assert_eq!(state.workflow_id.as_str(), "test-workflow");
         assert_eq!(state.task_status.len(), 2);
         assert_eq!(
-            state.task_status.get("task-1"),
+            state.task_status.get(&Slug::new("task-1").unwrap()),
             Some(&TaskExecutionStatus::Pending)
         );
         assert_eq!(
-            state.task_status.get("task-2"),
+            state.task_status.get(&Slug::new("task-2").unwrap()),
             Some(&TaskExecutionStatus::Pending)
         );
     }
 
     #[test]
-    fn test_parse_workflow_with_invalid_dependency() {
+    fn test_parse_workflow_with_invalid_dependency() -> Result<(), Box<dyn std::error::Error>> {
         let engine = ExecutionEngine::new();
-        let mut workflow = Workflow::new("test-workflow", "Test", "Description")
-            .expect("Failed to create workflow");
+        let workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
 
-        let task1 = Task::new("task-1", "Task 1", "First task").expect("Failed to create task");
-        workflow.add_task(task1).expect("Failed to add task");
-
-        // Manually add invalid dependency
-        workflow.dependencies.insert(
-            "task-1".to_string(),
-            HashSet::from_iter(vec!["non-existent".to_string()]),
-        );
+        // Create an invalid workflow via JSON to bypass private field restrictions
+        let mut json = serde_json::to_value(&workflow)?;
+        json["dependencies"] = serde_json::json!({
+            "task-1": ["non-existent"]
+        });
+        json["tasks"] = serde_json::json!({
+            "task-1": {
+                "id": "task-1",
+                "name": "Task 1",
+                "description": "First task",
+                "current_stage": "pending"
+            }
+        });
+        
+        let workflow: Workflow = serde_json::from_value(json)?;
 
         let result = engine.parse_workflow(&workflow);
         assert!(result.is_err());
@@ -685,72 +692,91 @@ mod tests {
             }
             _ => panic!("Expected InvalidWorkflow error"),
         }
+        Ok(())
     }
 
     #[test]
-    fn test_parse_workflow_with_unknown_dependency_owner() {
+    fn test_parse_workflow_with_unknown_dependency_owner() -> Result<(), Box<dyn std::error::Error>> {
         let engine = ExecutionEngine::new();
-        let mut workflow = Workflow::new("test-workflow", "Test", "Description")
-            .expect("Failed to create workflow");
+        let workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
 
-        let task1 = Task::new("task-1", "Task 1", "First task").expect("Failed to create task");
-        workflow.add_task(task1).expect("Failed to add task");
-        workflow.dependencies.insert(
-            "ghost".to_string(),
-            HashSet::from_iter(vec!["task-1".to_string()]),
-        );
+        // Create an invalid workflow owner via JSON
+        let mut json = serde_json::to_value(&workflow)?;
+        json["dependencies"] = serde_json::json!({
+            "ghost": ["task-1"]
+        });
+        json["tasks"] = serde_json::json!({
+            "task-1": {
+                "id": "task-1",
+                "name": "Task 1",
+                "description": "First task",
+                "current_stage": "pending"
+            }
+        });
+
+        let workflow: Workflow = serde_json::from_value(json)?;
 
         let result = engine.parse_workflow(&workflow);
         assert!(matches!(result, Err(ExecutionError::InvalidWorkflow(_))));
+        Ok(())
     }
 
     #[test]
     fn test_parse_workflow_maps_completed_task_to_completed_state() {
         let engine = ExecutionEngine::new();
-        let mut workflow = Workflow::new("test-workflow", "Test", "Description")
+        let mut workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())
             .expect("Failed to create workflow");
 
         let mut completed_task =
             Task::new("task-1", "Task 1", "First task").expect("Failed to create task");
         // Mark task as completed
-        completed_task.current_stage = crate::Stage::Completed;
+        completed_task
+            .transition_to(crate::Stage::InProgress)
+            .expect("Failed to transition");
+        completed_task
+            .transition_to(crate::Stage::Completed)
+            .expect("Failed to transition");
 
         workflow
-            .add_task(completed_task)
+            .add_task(completed_task, Utc::now())
             .expect("Failed to add completed task");
         let state = engine
             .parse_workflow(&workflow)
             .expect("Failed to parse workflow");
 
         assert_eq!(
-            state.task_status.get("task-1"),
+            state.task_status.get(&Slug::new("task-1").unwrap()),
             Some(&TaskExecutionStatus::Completed)
         );
     }
 
     #[test]
-    fn test_parse_workflow_with_cycle() {
+    fn test_parse_workflow_with_cycle() -> Result<(), Box<dyn std::error::Error>> {
         let engine = ExecutionEngine::new();
-        let mut workflow = Workflow::new("test-workflow", "Test", "Description")
-            .expect("Failed to create workflow");
+        let workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
 
-        let task1 = Task::new("task-1", "Task 1", "First task").expect("Failed to create task");
-        let task2 = Task::new("task-2", "Task 2", "Second task").expect("Failed to create task");
+        // Create cycle via JSON
+        let mut json = serde_json::to_value(&workflow)?;
+        json["tasks"] = serde_json::json!({
+            "task-1": {
+                "id": "task-1",
+                "name": "Task 1",
+                "description": "First task",
+                "current_stage": "pending"
+            },
+            "task-2": {
+                "id": "task-2",
+                "name": "Task 2",
+                "description": "Second task",
+                "current_stage": "pending"
+            }
+        });
+        json["dependencies"] = serde_json::json!({
+            "task-1": ["task-2"],
+            "task-2": ["task-1"]
+        });
 
-        workflow.add_task(task1).expect("Failed to add task");
-        workflow.add_task(task2).expect("Failed to add task");
-
-        // Create cycle: task-1 -> task-2 -> task-1
-        workflow
-            .dependencies
-            .entry("task-2".to_string())
-            .or_default()
-            .insert("task-1".to_string());
-        workflow
-            .dependencies
-            .entry("task-1".to_string())
-            .or_default()
-            .insert("task-2".to_string());
+        let workflow: Workflow = serde_json::from_value(json)?;
 
         let result = engine.parse_workflow(&workflow);
         assert!(result.is_err());
@@ -760,36 +786,37 @@ mod tests {
             }
             _ => panic!("Expected CyclicGraph error"),
         }
+        Ok(())
     }
 
     #[test]
     fn test_topological_sort_linear() {
         let engine = ExecutionEngine::new();
-        let mut workflow = Workflow::new("test-workflow", "Test", "Description")
+        let mut workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())
             .expect("Failed to create workflow");
 
         let task1 = Task::new("task-1", "Task 1", "First task").expect("Failed to create task");
         let task2 = Task::new("task-2", "Task 2", "Second task").expect("Failed to create task");
         let task3 = Task::new("task-3", "Task 3", "Third task").expect("Failed to create task");
 
-        workflow.add_task(task1).expect("Failed to add task");
-        workflow.add_task(task2).expect("Failed to add task");
-        workflow.add_task(task3).expect("Failed to add task");
+        workflow.add_task(task1, Utc::now()).expect("Failed to add task");
+        workflow.add_task(task2, Utc::now()).expect("Failed to add task");
+        workflow.add_task(task3, Utc::now()).expect("Failed to add task");
 
         workflow
-            .add_dependency("task-1", "task-2")
+            .add_dependency("task-1", "task-2", Utc::now())
             .expect("Failed to add dependency");
         workflow
-            .add_dependency("task-2", "task-3")
+            .add_dependency("task-2", "task-3", Utc::now())
             .expect("Failed to add dependency");
 
         let sorted = engine.topological_sort(&workflow).expect("Failed to sort");
         assert_eq!(sorted.len(), 3);
 
         // task-1 must come before task-2, task-2 before task-3
-        let pos1 = sorted.iter().position(|id| id == "task-1").unwrap();
-        let pos2 = sorted.iter().position(|id| id == "task-2").unwrap();
-        let pos3 = sorted.iter().position(|id| id == "task-3").unwrap();
+        let pos1 = sorted.iter().position(|id| id.as_str() == "task-1").unwrap();
+        let pos2 = sorted.iter().position(|id| id.as_str() == "task-2").unwrap();
+        let pos3 = sorted.iter().position(|id| id.as_str() == "task-3").unwrap();
 
         assert!(pos1 < pos2);
         assert!(pos2 < pos3);
@@ -798,7 +825,7 @@ mod tests {
     #[test]
     fn test_topological_sort_diamond() {
         let engine = ExecutionEngine::new();
-        let mut workflow = Workflow::new("test-workflow", "Test", "Description")
+        let mut workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())
             .expect("Failed to create workflow");
 
         let task_a = Task::new("a", "Task A", "First").expect("Failed to create task");
@@ -806,33 +833,33 @@ mod tests {
         let task_c = Task::new("c", "Task C", "Third").expect("Failed to create task");
         let task_d = Task::new("d", "Task D", "Fourth").expect("Failed to create task");
 
-        workflow.add_task(task_a).expect("Failed to add task");
-        workflow.add_task(task_b).expect("Failed to add task");
-        workflow.add_task(task_c).expect("Failed to add task");
-        workflow.add_task(task_d).expect("Failed to add task");
+        workflow.add_task(task_a, Utc::now()).expect("Failed to add task");
+        workflow.add_task(task_b, Utc::now()).expect("Failed to add task");
+        workflow.add_task(task_c, Utc::now()).expect("Failed to add task");
+        workflow.add_task(task_d, Utc::now()).expect("Failed to add task");
 
         // A -> [B, C] -> D
         workflow
-            .add_dependency("a", "b")
+            .add_dependency("a", "b", Utc::now())
             .expect("Failed to add dependency");
         workflow
-            .add_dependency("a", "c")
+            .add_dependency("a", "c", Utc::now())
             .expect("Failed to add dependency");
         workflow
-            .add_dependency("b", "d")
+            .add_dependency("b", "d", Utc::now())
             .expect("Failed to add dependency");
         workflow
-            .add_dependency("c", "d")
+            .add_dependency("c", "d", Utc::now())
             .expect("Failed to add dependency");
 
         let sorted = engine.topological_sort(&workflow).expect("Failed to sort");
         assert_eq!(sorted.len(), 4);
 
         // A must come before both B and C
-        let pos_a = sorted.iter().position(|id| id == "a").unwrap();
-        let pos_b = sorted.iter().position(|id| id == "b").unwrap();
-        let pos_c = sorted.iter().position(|id| id == "c").unwrap();
-        let pos_d = sorted.iter().position(|id| id == "d").unwrap();
+        let pos_a = sorted.iter().position(|id| id.as_str() == "a").unwrap();
+        let pos_b = sorted.iter().position(|id| id.as_str() == "b").unwrap();
+        let pos_c = sorted.iter().position(|id| id.as_str() == "c").unwrap();
+        let pos_d = sorted.iter().position(|id| id.as_str() == "d").unwrap();
 
         assert!(pos_a < pos_b);
         assert!(pos_a < pos_c);
@@ -843,73 +870,67 @@ mod tests {
     #[test]
     fn test_get_ready_tasks_no_dependencies() {
         let engine = ExecutionEngine::new();
-        let mut workflow = Workflow::new("test-workflow", "Test", "Description")
+        let mut workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())
             .expect("Failed to create workflow");
 
         let task1 = Task::new("task-1", "Task 1", "First task").expect("Failed to create task");
-        workflow.add_task(task1).expect("Failed to add task");
+        workflow.add_task(task1, Utc::now()).expect("Failed to add task");
 
         let state = WorkflowState {
-            workflow_id: "test-workflow".to_string(),
-            task_status: HashMap::from([("task-1".to_string(), TaskExecutionStatus::Pending)]),
+            workflow_id: Slug::new("test-workflow").unwrap(),
+            task_status: HashMap::from([(Slug::new("task-1").unwrap(), TaskExecutionStatus::Pending)]),
             timestamp: Utc::now(),
         };
 
         let ready = engine.get_ready_tasks(&workflow, &state);
         assert_eq!(ready.len(), 1);
-        assert!(ready.contains(&"task-1".to_string()));
+        assert!(ready.contains(&Slug::new("task-1").unwrap()));
     }
 
     #[test]
-    fn test_get_ready_tasks_with_dependencies() -> Result<()> {
+    fn test_get_ready_tasks_with_dependencies() -> Result<(), Box<dyn std::error::Error>> {
         let engine = ExecutionEngine::new();
-        let mut workflow = Workflow::new("test-workflow", "Test", "Description")
-            .map_err(|e| anyhow!(e.to_string()))?;
+        let mut workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
 
-        let task1 = Task::new("task-1", "Task 1", "First task").map_err(|e| anyhow!(e.to_string()))?;
-        let task2 = Task::new("task-2", "Task 2", "Second task").map_err(|e| anyhow!(e.to_string()))?;
+        let task1 = Task::new("task-1", "Task 1", "First task")?;
+        let task2 = Task::new("task-2", "Task 2", "Second task")?;
 
-        workflow.add_task(task1).map_err(|e| anyhow!(e.to_string()))?;
-        workflow.add_task(task2).map_err(|e| anyhow!(e.to_string()))?;
-        workflow
-            .add_dependency("task-1", "task-2")
-            .map_err(|e| anyhow!(e.to_string()))?;
+        workflow.add_task(task1, Utc::now())?;
+        workflow.add_task(task2, Utc::now())?;
+        workflow.add_dependency("task-1", "task-2", Utc::now())?;
 
         let state = WorkflowState {
-            workflow_id: "test-workflow".to_string(),
+            workflow_id: Slug::new("test-workflow").unwrap(),
             task_status: HashMap::from([
-                ("task-1".to_string(), TaskExecutionStatus::Completed),
-                ("task-2".to_string(), TaskExecutionStatus::Pending),
+                (Slug::new("task-1").unwrap(), TaskExecutionStatus::Completed),
+                (Slug::new("task-2").unwrap(), TaskExecutionStatus::Pending),
             ]),
             timestamp: Utc::now(),
         };
 
         let ready = engine.get_ready_tasks(&workflow, &state);
         assert_eq!(ready.len(), 1);
-        assert!(ready.contains(&"task-2".to_string()));
+        assert!(ready.contains(&Slug::new("task-2").unwrap()));
         Ok(())
     }
 
     #[test]
-    fn test_get_ready_tasks_dependencies_not_complete() -> Result<()> {
+    fn test_get_ready_tasks_dependencies_not_complete() -> Result<(), Box<dyn std::error::Error>> {
         let engine = ExecutionEngine::new();
-        let mut workflow = Workflow::new("test-workflow", "Test", "Description")
-            .map_err(|e| anyhow!(e.to_string()))?;
+        let mut workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
 
-        let task1 = Task::new("task-1", "Task 1", "First task").map_err(|e| anyhow!(e.to_string()))?;
-        let task2 = Task::new("task-2", "Task 2", "Second task").map_err(|e| anyhow!(e.to_string()))?;
+        let task1 = Task::new("task-1", "Task 1", "First task")?;
+        let task2 = Task::new("task-2", "Task 2", "Second task")?;
 
-        workflow.add_task(task1).map_err(|e| anyhow!(e.to_string()))?;
-        workflow.add_task(task2).map_err(|e| anyhow!(e.to_string()))?;
-        workflow
-            .add_dependency("task-1", "task-2")
-            .map_err(|e| anyhow!(e.to_string()))?;
+        workflow.add_task(task1, Utc::now())?;
+        workflow.add_task(task2, Utc::now())?;
+        workflow.add_dependency("task-1", "task-2", Utc::now())?;
 
         let state = WorkflowState {
-            workflow_id: "test-workflow".to_string(),
+            workflow_id: Slug::new("test-workflow").unwrap(),
             task_status: HashMap::from([
-                ("task-1".to_string(), TaskExecutionStatus::InProgress),
-                ("task-2".to_string(), TaskExecutionStatus::Pending),
+                (Slug::new("task-1").unwrap(), TaskExecutionStatus::InProgress),
+                (Slug::new("task-2").unwrap(), TaskExecutionStatus::Pending),
             ]),
             timestamp: Utc::now(),
         };
@@ -920,17 +941,17 @@ mod tests {
     }
 
     #[test]
-    fn test_get_ready_tasks_returns_empty_for_workflow_id_mismatch() -> Result<()> {
+    fn test_get_ready_tasks_returns_empty_for_workflow_id_mismatch() -> Result<(), Box<dyn std::error::Error>> {
         let engine = ExecutionEngine::new();
         let mut workflow =
-            Workflow::new("wf-1", "Test", "Description").map_err(|e| anyhow!(e.to_string()))?;
+            Workflow::new("wf-1", "Test", "Description", Utc::now())?;
 
-        let task1 = Task::new("task-1", "Task 1", "First task").map_err(|e| anyhow!(e.to_string()))?;
-        workflow.add_task(task1).map_err(|e| anyhow!(e.to_string()))?;
+        let task1 = Task::new("task-1", "Task 1", "First task")?;
+        workflow.add_task(task1, Utc::now())?;
 
         let state = WorkflowState {
-            workflow_id: "wf-2".to_string(),
-            task_status: HashMap::from([("task-1".to_string(), TaskExecutionStatus::Pending)]),
+            workflow_id: Slug::new("wf-2").unwrap(),
+            task_status: HashMap::from([(Slug::new("task-1").unwrap(), TaskExecutionStatus::Pending)]),
             timestamp: Utc::now(),
         };
 
@@ -940,17 +961,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_save_and_load_checkpoint() -> Result<()> {
+    async fn test_save_and_load_checkpoint() -> Result<(), Box<dyn std::error::Error>> {
         let temp_dir = tempfile::tempdir()?;
-        let checkpoint_dir = temp_dir.path().to_str().ok_or_else(|| anyhow!("invalid path"))?;
+        let checkpoint_dir = temp_dir.path().to_str().ok_or("invalid path")?;
 
         let engine = ExecutionEngine::new().with_checkpoint_dir(checkpoint_dir);
 
         let state = WorkflowState {
-            workflow_id: "test-workflow".to_string(),
+            workflow_id: Slug::new("test-workflow").unwrap(),
             task_status: HashMap::from([
-                ("task-1".to_string(), TaskExecutionStatus::Completed),
-                ("task-2".to_string(), TaskExecutionStatus::Pending),
+                (Slug::new("task-1").unwrap(), TaskExecutionStatus::Completed),
+                (Slug::new("task-2").unwrap(), TaskExecutionStatus::Pending),
             ]),
             timestamp: Utc::now(),
         };
@@ -958,7 +979,7 @@ mod tests {
         let checkpoint_path = engine
             .save_checkpoint(&state)
             .await
-            .map_err(|e| anyhow!(e.to_string()))?;
+            .map_err(|e| e.to_string())?;
 
         assert!(checkpoint_path.contains("test-workflow.json"));
 
@@ -969,7 +990,7 @@ mod tests {
         let loaded_state = engine
             .load_checkpoint(Path::new(&checkpoint_path))
             .await
-            .map_err(|e| anyhow!(e.to_string()))?;
+            .map_err(|e| e.to_string())?;
 
         assert_eq!(loaded_state.workflow_id, state.workflow_id);
         assert_eq!(loaded_state.task_status, state.task_status);
@@ -981,7 +1002,7 @@ mod tests {
         let engine = ExecutionEngine::new();
 
         let state = WorkflowState {
-            workflow_id: "test-workflow".to_string(),
+            workflow_id: Slug::new("test-workflow").unwrap(),
             task_status: HashMap::new(),
             timestamp: Utc::now(),
         };
@@ -994,7 +1015,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_load_checkpoint_corrupted_json() -> Result<()> {
+    async fn test_load_checkpoint_corrupted_json() -> Result<(), Box<dyn std::error::Error>> {
         let temp_dir = tempfile::tempdir()?;
         let checkpoint_path = temp_dir.path().join("broken.json");
 
@@ -1013,52 +1034,52 @@ mod tests {
                 assert!(validation_errors[0].contains("Parse failed"));
                 Ok(())
             }
-            Ok(_) => Err(anyhow!("expected checkpoint corruption for invalid json")),
-            Err(other) => Err(anyhow!(format!(
+            Ok(_) => Err("expected checkpoint corruption for invalid json".into()),
+            Err(other) => Err(format!(
                 "expected CheckpointCorrupted error, got {other}"
-            ))),
+            ).into()),
         }
     }
 
     #[test]
-    fn test_topological_sort_stress_large_dag() -> Result<()> {
+    fn test_topological_sort_stress_large_dag() -> Result<(), Box<dyn std::error::Error>> {
         let engine = ExecutionEngine::new();
-        let mut workflow = Workflow::new("stress-dag", "Stress", "Large DAG")?;
+        let mut workflow = Workflow::new("stress-dag", "Stress", "Large DAG", Utc::now())?;
 
         let task_count = 128;
         for i in 0..task_count {
             let id = format!("task-{i}");
-            workflow.add_task(Task::new(id.clone(), format!("Task {i}"), "stress")?)?;
+            workflow.add_task(Task::new(id.clone(), format!("Task {i}"), "stress")?, Utc::now())?;
         }
 
         for i in 1..task_count {
-            workflow.add_dependency("task-0", format!("task-{i}"))?;
+            workflow.add_dependency("task-0", format!("task-{i}"), Utc::now())?;
         }
 
         for i in 2..task_count {
             if i % 2 == 0 {
-                workflow.add_dependency(format!("task-{}", i - 1), format!("task-{i}"))?;
+                workflow.add_dependency(format!("task-{}", i - 1), format!("task-{i}"), Utc::now())?;
             }
         }
 
         let sorted = engine
             .topological_sort(&workflow)
-            .map_err(|e| anyhow!(e.to_string()))?;
+            .map_err(|e| e.to_string())?;
         assert_eq!(sorted.len(), task_count);
 
-        let positions: HashMap<String, usize> = sorted
+        let positions: HashMap<Slug, usize> = sorted
             .iter()
             .enumerate()
             .map(|(idx, id)| (id.clone(), idx))
             .collect();
 
-        for (task_id, deps) in &workflow.dependencies {
+        for (task_id, deps) in workflow.dependencies() {
             let task_pos = positions
                 .get(task_id)
-                .ok_or_else(|| anyhow!(format!("missing task in sorted output: {task_id}")))?;
+                .ok_or_else(|| format!("missing task in sorted output: {task_id}"))?;
             for dep in deps {
                 let dep_pos = positions.get(dep).ok_or_else(|| {
-                    anyhow!(format!("missing dependency in sorted output: {dep}"))
+                    format!("missing dependency in sorted output: {dep}")
                 })?;
                 assert!(dep_pos < task_pos);
             }
@@ -1066,184 +1087,183 @@ mod tests {
 
         Ok(())
     }
-}
 
-#[test]
-fn test_execute_workflow_empty() -> Result<()> {
-    let engine = ExecutionEngine::new();
-    let workflow =
-        Workflow::new("test-workflow", "Test", "Description").map_err(|e| anyhow!(e.to_string()))?;
+    #[test]
+    fn test_execute_workflow_empty() -> Result<(), Box<dyn std::error::Error>> {
+        let engine = ExecutionEngine::new();
+        let workflow =
+            Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
 
-    let result = engine.execute_workflow(&workflow).map_err(|e| anyhow!(e.to_string()))?;
-    assert!(result.succeeded.is_empty());
-    assert!(result.failed.is_empty());
-    Ok(())
-}
+        let result = engine.execute_workflow(&workflow).map_err(|e| e.to_string())?;
+        assert!(result.succeeded.is_empty());
+        assert!(result.failed.is_empty());
+        Ok(())
+    }
 
-#[test]
-fn test_execute_workflow_linear() -> Result<()> {
-    let engine = ExecutionEngine::new();
-    let mut workflow =
-        Workflow::new("test-workflow", "Test", "Description").map_err(|e| anyhow!(e.to_string()))?;
+    #[test]
+    fn test_execute_workflow_linear() -> Result<(), Box<dyn std::error::Error>> {
+        let engine = ExecutionEngine::new();
+        let mut workflow =
+            Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
 
-    let task1 = Task::new("task-1", "Task 1", "First task").map_err(|e| anyhow!(e.to_string()))?;
-    let task2 = Task::new("task-2", "Task 2", "Second task").map_err(|e| anyhow!(e.to_string()))?;
+        let task1 = Task::new("task-1", "Task 1", "First task")?;
+        let task2 = Task::new("task-2", "Task 2", "Second task")?;
 
-    workflow.add_task(task1).map_err(|e| anyhow!(e.to_string()))?;
-    workflow.add_task(task2).map_err(|e| anyhow!(e.to_string()))?;
-    workflow
-        .add_dependency("task-1", "task-2")
-        .map_err(|e| anyhow!(e.to_string()))?;
+        workflow.add_task(task1, Utc::now())?;
+        workflow.add_task(task2, Utc::now())?;
+        workflow
+            .add_dependency("task-1", "task-2", Utc::now())?;
 
-    let result = engine.execute_workflow(&workflow).map_err(|e| anyhow!(e.to_string()))?;
-    assert_eq!(result.succeeded.len(), 2);
-    assert!(result.succeeded.contains(&"task-1".to_string()));
-    assert!(result.succeeded.contains(&"task-2".to_string()));
-    assert!(result.failed.is_empty());
-    Ok(())
-}
+        let result = engine.execute_workflow(&workflow).map_err(|e| e.to_string())?;
+        assert_eq!(result.succeeded.len(), 2);
+        assert!(result.succeeded.contains(&Slug::new("task-1").unwrap()));
+        assert!(result.succeeded.contains(&Slug::new("task-2").unwrap()));
+        assert!(result.failed.is_empty());
+        Ok(())
+    }
 
-#[test]
-fn test_rollback_task_completed() {
-    let engine = ExecutionEngine::new();
-    let mut workflow =
-        Workflow::new("test-workflow", "Test", "Description").expect("Failed to create workflow");
+    #[test]
+    fn test_rollback_task_completed() {
+        let engine = ExecutionEngine::new();
+        let mut workflow =
+            Workflow::new("test-workflow", "Test", "Description", Utc::now()).expect("Failed to create workflow");
 
-    let task1 = Task::new("task-1", "Task 1", "First task").expect("Failed to create task");
-    workflow.add_task(task1).expect("Failed to add task");
+        let task1 = Task::new("task-1", "Task 1", "First task").expect("Failed to create task");
+        workflow.add_task(task1, Utc::now()).expect("Failed to add task");
 
-    let mut state = WorkflowState {
-        workflow_id: "test-workflow".to_string(),
-        task_status: HashMap::from([("task-1".to_string(), TaskExecutionStatus::Completed)]),
-        timestamp: Utc::now(),
-    };
+        let mut state = WorkflowState {
+            workflow_id: Slug::new("test-workflow").unwrap(),
+            task_status: HashMap::from([(Slug::new("task-1").unwrap(), TaskExecutionStatus::Completed)]),
+            timestamp: Utc::now(),
+        };
 
-    let result = engine.rollback_task("task-1", &workflow, &mut state);
-    assert!(result.is_ok());
+        let result = engine.rollback_task(&Slug::new("task-1").unwrap(), &workflow, &mut state);
+        assert!(result.is_ok());
 
-    assert_eq!(
-        state.task_status.get("task-1"),
-        Some(&TaskExecutionStatus::RolledBack)
-    );
-}
+        assert_eq!(
+            state.task_status.get(&Slug::new("task-1").unwrap()),
+            Some(&TaskExecutionStatus::RolledBack)
+        );
+    }
 
-#[test]
-fn test_rollback_task_idempotent() {
-    let engine = ExecutionEngine::new();
-    let mut workflow =
-        Workflow::new("test-workflow", "Test", "Description").expect("Failed to create workflow");
+    #[test]
+    fn test_rollback_task_idempotent() {
+        let engine = ExecutionEngine::new();
+        let mut workflow =
+            Workflow::new("test-workflow", "Test", "Description", Utc::now()).expect("Failed to create workflow");
 
-    let task1 = Task::new("task-1", "Task 1", "First task").expect("Failed to create task");
-    workflow.add_task(task1).expect("Failed to add task");
+        let task1 = Task::new("task-1", "Task 1", "First task").expect("Failed to create task");
+        workflow.add_task(task1, Utc::now()).expect("Failed to add task");
 
-    let mut state = WorkflowState {
-        workflow_id: "test-workflow".to_string(),
-        task_status: HashMap::from([("task-1".to_string(), TaskExecutionStatus::RolledBack)]),
-        timestamp: Utc::now(),
-    };
+        let mut state = WorkflowState {
+            workflow_id: Slug::new("test-workflow").unwrap(),
+            task_status: HashMap::from([(Slug::new("task-1").unwrap(), TaskExecutionStatus::RolledBack)]),
+            timestamp: Utc::now(),
+        };
 
-    // First rollback
-    let result1 = engine.rollback_task("task-1", &workflow, &mut state);
-    assert!(result1.is_ok());
+        // First rollback
+        let result1 = engine.rollback_task(&Slug::new("task-1").unwrap(), &workflow, &mut state);
+        assert!(result1.is_ok());
 
-    // Second rollback (idempotent)
-    let result2 = engine.rollback_task("task-1", &workflow, &mut state);
-    assert!(result2.is_ok());
+        // Second rollback (idempotent)
+        let result2 = engine.rollback_task(&Slug::new("task-1").unwrap(), &workflow, &mut state);
+        assert!(result2.is_ok());
 
-    assert_eq!(
-        state.task_status.get("task-1"),
-        Some(&TaskExecutionStatus::RolledBack)
-    );
-}
+        assert_eq!(
+            state.task_status.get(&Slug::new("task-1").unwrap()),
+            Some(&TaskExecutionStatus::RolledBack)
+        );
+    }
 
-#[test]
-fn test_rollback_task_not_found() -> Result<()> {
-    let engine = ExecutionEngine::new();
-    let workflow =
-        Workflow::new("test-workflow", "Test", "Description").map_err(|e| anyhow!(e.to_string()))?;
+    #[test]
+    fn test_rollback_task_not_found() -> Result<(), Box<dyn std::error::Error>> {
+        let engine = ExecutionEngine::new();
+        let workflow =
+            Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
 
-    let mut state = WorkflowState {
-        workflow_id: "test-workflow".to_string(),
-        task_status: HashMap::new(),
-        timestamp: Utc::now(),
-    };
+        let mut state = WorkflowState {
+            workflow_id: Slug::new("test-workflow").unwrap(),
+            task_status: HashMap::new(),
+            timestamp: Utc::now(),
+        };
 
-    let result = engine.rollback_task("non-existent", &workflow, &mut state);
-    assert!(result.is_err());
-    assert!(matches!(result, Err(ExecutionError::RollbackFailed { .. })));
-    Ok(())
-}
+        let result = engine.rollback_task(&Slug::new("non-existent").unwrap(), &workflow, &mut state);
+        assert!(result.is_err());
+        assert!(matches!(result, Err(ExecutionError::RollbackFailed { .. })));
+        Ok(())
+    }
 
-#[tokio::test]
-async fn test_recover_from_checkpoint() -> Result<()> {
-    let temp_dir = tempfile::tempdir()?;
-    let checkpoint_dir = temp_dir.path().to_str().ok_or_else(|| anyhow!("invalid path"))?;
+    #[tokio::test]
+    async fn test_recover_from_checkpoint() -> Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = tempfile::tempdir()?;
+        let checkpoint_dir = temp_dir.path().to_str().ok_or("invalid path")?;
 
-    let engine = ExecutionEngine::new().with_checkpoint_dir(checkpoint_dir);
+        let engine = ExecutionEngine::new().with_checkpoint_dir(checkpoint_dir);
 
-    let mut workflow =
-        Workflow::new("test-workflow", "Test", "Description").map_err(|e| anyhow!(e.to_string()))?;
+        let mut workflow =
+            Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
 
-    let task1 = Task::new("task-1", "Task 1", "First task").map_err(|e| anyhow!(e.to_string()))?;
-    workflow.add_task(task1).map_err(|e| anyhow!(e.to_string()))?;
+        let task1 = Task::new("task-1", "Task 1", "First task")?;
+        workflow.add_task(task1, Utc::now())?;
 
-    let state = WorkflowState {
-        workflow_id: "test-workflow".to_string(),
-        task_status: HashMap::from([("task-1".to_string(), TaskExecutionStatus::Completed)]),
-        timestamp: Utc::now(),
-    };
+        let state = WorkflowState {
+            workflow_id: Slug::new("test-workflow").unwrap(),
+            task_status: HashMap::from([(Slug::new("task-1").unwrap(), TaskExecutionStatus::Completed)]),
+            timestamp: Utc::now(),
+        };
 
-    // Save checkpoint
-    let checkpoint_path = engine
-        .save_checkpoint(&state)
-        .await
-        .map_err(|e| anyhow!(e.to_string()))?;
+        // Save checkpoint
+        let checkpoint_path = engine
+            .save_checkpoint(&state)
+            .await
+            .map_err(|e| e.to_string())?;
 
-    // Recover from checkpoint
-    let recovered_state = engine
-        .recover_from_checkpoint(Path::new(&checkpoint_path), &workflow)
-        .await
-        .map_err(|e| anyhow!(e.to_string()))?;
+        // Recover from checkpoint
+        let recovered_state = engine
+            .recover_from_checkpoint(Path::new(&checkpoint_path), &workflow)
+            .await
+            .map_err(|e| e.to_string())?;
 
-    assert_eq!(recovered_state.workflow_id, state.workflow_id);
-    assert_eq!(recovered_state.task_status, state.task_status);
-    Ok(())
-}
+        assert_eq!(recovered_state.workflow_id, state.workflow_id);
+        assert_eq!(recovered_state.task_status, state.task_status);
+        Ok(())
+    }
 
-#[tokio::test]
-async fn test_recover_from_checkpoint_workflow_id_mismatch() -> Result<()> {
-    let temp_dir = tempfile::tempdir()?;
-    let checkpoint_dir = temp_dir.path().to_str().ok_or_else(|| anyhow!("invalid path"))?;
+    #[tokio::test]
+    async fn test_recover_from_checkpoint_workflow_id_mismatch() -> Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = tempfile::tempdir()?;
+        let checkpoint_dir = temp_dir.path().to_str().ok_or("invalid path")?;
 
-    let engine = ExecutionEngine::new().with_checkpoint_dir(checkpoint_dir);
+        let engine = ExecutionEngine::new().with_checkpoint_dir(checkpoint_dir);
 
-    let _workflow1 =
-        Workflow::new("workflow-1", "Test", "Description").map_err(|e| anyhow!(e.to_string()))?;
+        let _workflow1 =
+            Workflow::new("workflow-1", "Test", "Description", Utc::now())?;
 
-    let state = WorkflowState {
-        workflow_id: "workflow-1".to_string(),
-        task_status: HashMap::new(),
-        timestamp: Utc::now(),
-    };
+        let state = WorkflowState {
+            workflow_id: Slug::new("workflow-1").unwrap(),
+            task_status: HashMap::new(),
+            timestamp: Utc::now(),
+        };
 
-    // Save checkpoint
-    let checkpoint_path = engine
-        .save_checkpoint(&state)
-        .await
-        .map_err(|e| anyhow!(e.to_string()))?;
+        // Save checkpoint
+        let checkpoint_path = engine
+            .save_checkpoint(&state)
+            .await
+            .map_err(|e| e.to_string())?;
 
-    // Try to recover with different workflow
-    let workflow2 =
-        Workflow::new("workflow-2", "Test", "Description").map_err(|e| anyhow!(e.to_string()))?;
+        // Try to recover with different workflow
+        let workflow2 =
+            Workflow::new("workflow-2", "Test", "Description", Utc::now())?;
 
-    let result = engine
-        .recover_from_checkpoint(Path::new(&checkpoint_path), &workflow2)
-        .await;
+        let result = engine
+            .recover_from_checkpoint(Path::new(&checkpoint_path), &workflow2)
+            .await;
 
-    assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(ExecutionError::CheckpointCorrupted { .. })
-    ));
-    Ok(())
+        assert!(result.is_err());
+        assert!(matches!(
+            result,
+            Err(ExecutionError::CheckpointCorrupted { .. })
+        ));
+        Ok(())
+    }
 }

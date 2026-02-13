@@ -238,11 +238,11 @@ async fn test_multi_bead_workflow_fails_on_single_bead_exhaustion()
         .add_phase(Phase::new("phase-3").with_retries(2));
 
     workflow.state = WorkflowState::Running;
-    assert_eq!(workflow.current_phase, 0, "Should start at phase 0");
+    assert_eq!(workflow.current_phase_index(), 0, "Should start at phase 0");
 
     // WHEN: First phase succeeds
     workflow.advance();
-    assert_eq!(workflow.current_phase, 1, "Should advance to phase 1");
+    assert_eq!(workflow.current_phase_index(), 1, "Should advance to phase 1");
 
     // Second phase exhausts retries
     for _ in 1..=4 {
@@ -253,7 +253,7 @@ async fn test_multi_bead_workflow_fails_on_single_bead_exhaustion()
     workflow.state = WorkflowState::Failed;
 
     assert_eq!(workflow.state, WorkflowState::Failed);
-    assert_eq!(workflow.current_phase, 1, "Should stop at failing phase");
+    assert_eq!(workflow.current_phase_index(), 1, "Should stop at failing phase");
 
     // Progress should reflect partial completion
     let progress = workflow.progress();

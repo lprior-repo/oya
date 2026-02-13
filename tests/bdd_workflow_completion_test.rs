@@ -14,6 +14,7 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
+use chrono::Utc;
 use oya_core::{ExecutionEngine, Stage, Task, Workflow};
 
 /// BDD Test: Workflow completion when all tasks succeed
@@ -24,19 +25,24 @@ use oya_core::{ExecutionEngine, Stage, Task, Workflow};
 #[test]
 fn bdd_workflow_completion_all_tasks_succeed() -> Result<(), Box<dyn std::error::Error>> {
     // GIVEN: A workflow with multiple tasks
-    let mut workflow = Workflow::new("workflow-test", "Test Workflow", "BDD test workflow")?;
+    let mut workflow = Workflow::new(
+        "workflow-test",
+        "Test Workflow",
+        "BDD test workflow",
+        Utc::now(),
+    )?;
 
     let task1 = Task::new("task-1", "Task 1", "First task")?;
     let task2 = Task::new("task-2", "Task 2", "Second task")?;
     let task3 = Task::new("task-3", "Task 3", "Third task")?;
 
-    workflow.add_task(task1)?;
-    workflow.add_task(task2)?;
-    workflow.add_task(task3)?;
+    workflow.add_task(task1, Utc::now())?;
+    workflow.add_task(task2, Utc::now())?;
+    workflow.add_task(task3, Utc::now())?;
 
     // Add dependencies: task-1 -> task-2 -> task-3
-    workflow.add_dependency("task-1", "task-2")?;
-    workflow.add_dependency("task-2", "task-3")?;
+    workflow.add_dependency("task-1", "task-2", Utc::now())?;
+    workflow.add_dependency("task-2", "task-3", Utc::now())?;
 
     // Verify workflow is not complete initially
     assert!(
@@ -52,7 +58,13 @@ fn bdd_workflow_completion_all_tasks_succeed() -> Result<(), Box<dyn std::error:
         let mut task = task.clone();
         task.complete_current_stage(); // Pending -> InProgress
         task.complete_current_stage(); // InProgress -> Completed
-        workflow.tasks.insert(task_id.to_string(), task);
+        // We use add_task here to update, but add_task fails if exists.
+        // Actually, since it's a test, we can just replace it in the map if we want,
+        // but Workflow doesn't expose it.
+        // I'll add a replace_task method to Workflow or just use get_task_mut.
+        if let Some(t) = workflow.get_task_mut(&oya_core::Slug::new(task_id)?) {
+            *t = task;
+        }
     }
 
     // THEN: Workflow is marked as complete
@@ -76,15 +88,16 @@ fn bdd_workflow_completion_parallel_tasks() -> Result<(), Box<dyn std::error::Er
         "workflow-parallel",
         "Parallel Workflow",
         "Test parallel tasks",
+        Utc::now(),
     )?;
 
     let task1 = Task::new("task-a", "Task A", "Independent task A")?;
     let task2 = Task::new("task-b", "Task B", "Independent task B")?;
     let task3 = Task::new("task-c", "Task C", "Independent task C")?;
 
-    workflow.add_task(task1)?;
-    workflow.add_task(task2)?;
-    workflow.add_task(task3)?;
+    workflow.add_task(task1, Utc::now())?;
+    workflow.add_task(task2, Utc::now())?;
+    workflow.add_task(task3, Utc::now())?;
 
     // No dependencies - all tasks are independent
 
@@ -97,7 +110,9 @@ fn bdd_workflow_completion_parallel_tasks() -> Result<(), Box<dyn std::error::Er
         for _stage in Stage::all() {
             task.complete_current_stage();
         }
-        workflow.tasks.insert(task_id.to_string(), task);
+        if let Some(t) = workflow.get_task_mut(&oya_core::Slug::new(task_id)?) {
+            *t = task;
+        }
     }
 
     // THEN: Workflow is marked as complete
@@ -121,6 +136,7 @@ fn bdd_workflow_completion_diamond_graph() -> Result<(), Box<dyn std::error::Err
         "workflow-diamond",
         "Diamond Workflow",
         "Diamond dependency test",
+        Utc::now(),
     )?;
 
     let task_a = Task::new("task-a", "Task A", "Root task")?;
@@ -128,16 +144,16 @@ fn bdd_workflow_completion_diamond_graph() -> Result<(), Box<dyn std::error::Err
     let task_c = Task::new("task-c", "Task C", "Branch C")?;
     let task_d = Task::new("task-d", "Task D", "Final task")?;
 
-    workflow.add_task(task_a)?;
-    workflow.add_task(task_b)?;
-    workflow.add_task(task_c)?;
-    workflow.add_task(task_d)?;
+    workflow.add_task(task_a, Utc::now())?;
+    workflow.add_task(task_b, Utc::now())?;
+    workflow.add_task(task_c, Utc::now())?;
+    workflow.add_task(task_d, Utc::now())?;
 
     // Diamond: A -> [B, C] -> D
-    workflow.add_dependency("task-a", "task-b")?;
-    workflow.add_dependency("task-a", "task-c")?;
-    workflow.add_dependency("task-b", "task-d")?;
-    workflow.add_dependency("task-c", "task-d")?;
+    workflow.add_dependency("task-a", "task-b", Utc::now())?;
+    workflow.add_dependency("task-a", "task-c", Utc::now())?;
+    workflow.add_dependency("task-b", "task-d", Utc::now())?;
+    workflow.add_dependency("task-c", "task-d", Utc::now())?;
 
     // WHEN: All tasks complete successfully
     let task_ids = ["task-a", "task-b", "task-c", "task-d"];
@@ -148,7 +164,13 @@ fn bdd_workflow_completion_diamond_graph() -> Result<(), Box<dyn std::error::Err
         let mut task = task.clone();
         task.complete_current_stage(); // Pending -> InProgress
         task.complete_current_stage(); // InProgress -> Completed
-        workflow.tasks.insert(task_id.to_string(), task);
+        // We use add_task here to update, but add_task fails if exists.
+        // Actually, since it's a test, we can just replace it in the map if we want,
+        // but Workflow doesn't expose it.
+        // I'll add a replace_task method to Workflow or just use get_task_mut.
+        if let Some(t) = workflow.get_task_mut(&oya_core::Slug::new(task_id)?) {
+            *t = task;
+        }
     }
 
     // THEN: Workflow is marked as complete
@@ -168,19 +190,24 @@ fn bdd_workflow_completion_diamond_graph() -> Result<(), Box<dyn std::error::Err
 #[test]
 fn bdd_workflow_completion_via_execution_engine() -> Result<(), Box<dyn std::error::Error>> {
     // GIVEN: A workflow with tasks and dependencies
-    let mut workflow = Workflow::new("workflow-exec", "Execution Test", "Test execution engine")?;
+    let mut workflow = Workflow::new(
+        "workflow-exec",
+        "Execution Test",
+        "Test execution engine",
+        Utc::now(),
+    )?;
 
     let task1 = Task::new("task-1", "Task 1", "First task")?;
     let task2 = Task::new("task-2", "Task 2", "Second task")?;
     let task3 = Task::new("task-3", "Task 3", "Third task")?;
 
-    workflow.add_task(task1)?;
-    workflow.add_task(task2)?;
-    workflow.add_task(task3)?;
+    workflow.add_task(task1, Utc::now())?;
+    workflow.add_task(task2, Utc::now())?;
+    workflow.add_task(task3, Utc::now())?;
 
     // Linear dependency chain: task-1 -> task-2 -> task-3
-    workflow.add_dependency("task-1", "task-2")?;
-    workflow.add_dependency("task-2", "task-3")?;
+    workflow.add_dependency("task-1", "task-2", Utc::now())?;
+    workflow.add_dependency("task-2", "task-3", Utc::now())?;
 
     let engine = ExecutionEngine::new();
 
@@ -188,17 +215,19 @@ fn bdd_workflow_completion_via_execution_engine() -> Result<(), Box<dyn std::err
     let result = engine.execute_workflow(&workflow)?;
 
     // THEN: All tasks succeed
-    assert_eq!(result.succeeded.len(), 3, "All 3 tasks should succeed");
+    let succeeded_strs: Vec<String> = result.succeeded.iter().map(|s| s.to_string()).collect();
+    
+    assert_eq!(succeeded_strs.len(), 3, "All 3 tasks should succeed");
     assert!(
-        result.succeeded.contains(&"task-1".to_string()),
+        succeeded_strs.contains(&"task-1".to_string()),
         "task-1 should succeed"
     );
     assert!(
-        result.succeeded.contains(&"task-2".to_string()),
+        succeeded_strs.contains(&"task-2".to_string()),
         "task-2 should succeed"
     );
     assert!(
-        result.succeeded.contains(&"task-3".to_string()),
+        succeeded_strs.contains(&"task-3".to_string()),
         "task-3 should succeed"
     );
     assert!(result.failed.is_empty(), "No tasks should fail");
@@ -218,7 +247,12 @@ fn bdd_workflow_completion_via_execution_engine() -> Result<(), Box<dyn std::err
 #[test]
 fn bdd_workflow_completion_empty_workflow() -> Result<(), Box<dyn std::error::Error>> {
     // GIVEN: An empty workflow
-    let workflow = Workflow::new("workflow-empty", "Empty Workflow", "Empty workflow test")?;
+    let workflow = Workflow::new(
+        "workflow-empty",
+        "Empty Workflow",
+        "Empty workflow test",
+        Utc::now(),
+    )?;
 
     // WHEN: Checking workflow completion status
     let is_complete = workflow.is_complete();
@@ -248,18 +282,19 @@ fn bdd_linear_workflow_sequential_execution_order() -> Result<(), Box<dyn std::e
         "linear-sequential",
         "Linear Sequential Workflow",
         "Tests sequential execution order",
+        Utc::now(),
     )?;
 
     let task_a = Task::new("task-a", "Task A", "First task in chain")?;
     let task_b = Task::new("task-b", "Task B", "Second task in chain")?;
     let task_c = Task::new("task-c", "Task C", "Third task in chain")?;
 
-    workflow.add_task(task_a)?;
-    workflow.add_task(task_b)?;
-    workflow.add_task(task_c)?;
+    workflow.add_task(task_a, Utc::now())?;
+    workflow.add_task(task_b, Utc::now())?;
+    workflow.add_task(task_c, Utc::now())?;
 
-    workflow.add_dependency("task-a", "task-b")?;
-    workflow.add_dependency("task-b", "task-c")?;
+    workflow.add_dependency("task-a", "task-b", Utc::now())?;
+    workflow.add_dependency("task-b", "task-c", Utc::now())?;
 
     let engine = ExecutionEngine::new();
 
@@ -267,9 +302,11 @@ fn bdd_linear_workflow_sequential_execution_order() -> Result<(), Box<dyn std::e
     let result = engine.execute_workflow(&workflow)?;
 
     // THEN: Tasks complete in dependency order
-    assert_eq!(result.succeeded.len(), 3, "All 3 tasks should succeed");
+    let succeeded_strs: Vec<String> = result.succeeded.iter().map(|s| s.to_string()).collect();
+    
+    assert_eq!(succeeded_strs.len(), 3, "All 3 tasks should succeed");
     assert_eq!(
-        result.succeeded,
+        succeeded_strs,
         vec!["task-a", "task-b", "task-c"],
         "Tasks must complete in sequential dependency order"
     );
@@ -290,31 +327,33 @@ fn bdd_linear_workflow_dependency_blocks_downstream() -> Result<(), Box<dyn std:
         "linear-block-test",
         "Linear Block Test",
         "Tests that downstream tasks are blocked",
+        Utc::now(),
     )?;
 
     let task_a = Task::new("task-a", "Task A", "Upstream task")?;
     let task_b = Task::new("task-b", "Task B", "Downstream task")?;
 
-    workflow.add_task(task_a)?;
-    workflow.add_task(task_b)?;
+    workflow.add_task(task_a, Utc::now())?;
+    workflow.add_task(task_b, Utc::now())?;
 
-    workflow.add_dependency("task-a", "task-b")?;
+    workflow.add_dependency("task-a", "task-b", Utc::now())?;
 
     let engine = ExecutionEngine::new();
     let state = engine.parse_workflow(&workflow)?;
 
     // WHEN: Checking ready tasks before any execution
     let ready = engine.get_ready_tasks(&workflow, &state);
+    let ready_strs: Vec<String> = ready.iter().map(|s| s.to_string()).collect();
 
     // THEN: Only A is ready, B is blocked by dependency
-    assert_eq!(ready.len(), 1, "Only one task should be ready");
+    assert_eq!(ready_strs.len(), 1, "Only one task should be ready");
     assert_eq!(
-        ready.first(),
+        ready_strs.first(),
         Some(&"task-a".to_string()),
         "Only task-a (no dependencies) should be ready"
     );
     assert!(
-        !ready.contains(&"task-b".to_string()),
+        !ready_strs.contains(&"task-b".to_string()),
         "task-b should be blocked by dependency on task-a"
     );
 
@@ -333,6 +372,7 @@ fn bdd_linear_workflow_five_task_chain() -> Result<(), Box<dyn std::error::Error
         "linear-five-chain",
         "Linear Five Chain",
         "Tests 5-task linear chain execution",
+        Utc::now(),
     )?;
 
     let tasks = [
@@ -345,13 +385,13 @@ fn bdd_linear_workflow_five_task_chain() -> Result<(), Box<dyn std::error::Error
 
     for (id, name) in tasks {
         let task = Task::new(id, name, "Chain task")?;
-        workflow.add_task(task)?;
+        workflow.add_task(task, Utc::now())?;
     }
 
-    workflow.add_dependency("task-a", "task-b")?;
-    workflow.add_dependency("task-b", "task-c")?;
-    workflow.add_dependency("task-c", "task-d")?;
-    workflow.add_dependency("task-d", "task-e")?;
+    workflow.add_dependency("task-a", "task-b", Utc::now())?;
+    workflow.add_dependency("task-b", "task-c", Utc::now())?;
+    workflow.add_dependency("task-c", "task-d", Utc::now())?;
+    workflow.add_dependency("task-d", "task-e", Utc::now())?;
 
     let engine = ExecutionEngine::new();
 
@@ -359,9 +399,11 @@ fn bdd_linear_workflow_five_task_chain() -> Result<(), Box<dyn std::error::Error
     let result = engine.execute_workflow(&workflow)?;
 
     // THEN: All tasks complete in strict sequential order
-    assert_eq!(result.succeeded.len(), 5, "All 5 tasks should succeed");
+    let succeeded_strs: Vec<String> = result.succeeded.iter().map(|s| s.to_string()).collect();
+    
+    assert_eq!(succeeded_strs.len(), 5, "All 5 tasks should succeed");
     assert_eq!(
-        result.succeeded,
+        succeeded_strs,
         vec!["task-a", "task-b", "task-c", "task-d", "task-e"],
         "Tasks must complete in strict sequential order"
     );
@@ -379,50 +421,53 @@ fn bdd_linear_workflow_five_task_chain() -> Result<(), Box<dyn std::error::Error
 fn bdd_linear_workflow_partial_completion_unblocks_next() -> Result<(), Box<dyn std::error::Error>>
 {
     use oya_core::execution::{TaskExecutionStatus, WorkflowState};
+    use oya_core::Slug;
 
     // GIVEN: A linear workflow A → B → C
     let mut workflow = Workflow::new(
         "linear-partial",
         "Linear Partial",
         "Tests partial completion unblocks next",
+        Utc::now(),
     )?;
 
     let task_a = Task::new("task-a", "Task A", "First task")?;
     let task_b = Task::new("task-b", "Task B", "Second task")?;
     let task_c = Task::new("task-c", "Task C", "Third task")?;
 
-    workflow.add_task(task_a)?;
-    workflow.add_task(task_b)?;
-    workflow.add_task(task_c)?;
+    workflow.add_task(task_a, Utc::now())?;
+    workflow.add_task(task_b, Utc::now())?;
+    workflow.add_task(task_c, Utc::now())?;
 
-    workflow.add_dependency("task-a", "task-b")?;
-    workflow.add_dependency("task-b", "task-c")?;
+    workflow.add_dependency("task-a", "task-b", Utc::now())?;
+    workflow.add_dependency("task-b", "task-c", Utc::now())?;
 
     let engine = ExecutionEngine::new();
 
     // Simulate A completed
     let state = WorkflowState {
-        workflow_id: "linear-partial".to_string(),
+        workflow_id: Slug::new("linear-partial")?,
         task_status: std::collections::HashMap::from([
-            ("task-a".to_string(), TaskExecutionStatus::Completed),
-            ("task-b".to_string(), TaskExecutionStatus::Pending),
-            ("task-c".to_string(), TaskExecutionStatus::Pending),
+            (Slug::new("task-a")?, TaskExecutionStatus::Completed),
+            (Slug::new("task-b")?, TaskExecutionStatus::Pending),
+            (Slug::new("task-c")?, TaskExecutionStatus::Pending),
         ]),
         timestamp: chrono::Utc::now(),
     };
 
     // WHEN: Checking ready tasks after A completed
     let ready = engine.get_ready_tasks(&workflow, &state);
+    let ready_strs: Vec<String> = ready.iter().map(|s| s.to_string()).collect();
 
     // THEN: Only B is ready (C still blocked by B)
-    assert_eq!(ready.len(), 1, "Only one task should be ready");
+    assert_eq!(ready_strs.len(), 1, "Only one task should be ready");
     assert_eq!(
-        ready.first(),
+        ready_strs.first(),
         Some(&"task-b".to_string()),
         "Only task-b should be ready after task-a completes"
     );
     assert!(
-        !ready.contains(&"task-c".to_string()),
+        !ready_strs.contains(&"task-c".to_string()),
         "task-c should still be blocked by task-b"
     );
 
@@ -437,34 +482,36 @@ fn bdd_linear_workflow_partial_completion_unblocks_next() -> Result<(), Box<dyn 
 #[test]
 fn bdd_linear_workflow_blocked_start_blocks_all() -> Result<(), Box<dyn std::error::Error>> {
     use oya_core::execution::{TaskExecutionStatus, WorkflowState};
+    use oya_core::Slug;
 
     // GIVEN: A linear workflow A → B → C
     let mut workflow = Workflow::new(
         "linear-blocked-start",
         "Linear Blocked Start",
         "Tests blocked start blocks entire chain",
+        Utc::now(),
     )?;
 
     let task_a = Task::new("task-a", "Task A", "First task")?;
     let task_b = Task::new("task-b", "Task B", "Second task")?;
     let task_c = Task::new("task-c", "Task C", "Third task")?;
 
-    workflow.add_task(task_a)?;
-    workflow.add_task(task_b)?;
-    workflow.add_task(task_c)?;
+    workflow.add_task(task_a, Utc::now())?;
+    workflow.add_task(task_b, Utc::now())?;
+    workflow.add_task(task_c, Utc::now())?;
 
-    workflow.add_dependency("task-a", "task-b")?;
-    workflow.add_dependency("task-b", "task-c")?;
+    workflow.add_dependency("task-a", "task-b", Utc::now())?;
+    workflow.add_dependency("task-b", "task-c", Utc::now())?;
 
     let engine = ExecutionEngine::new();
 
     // Simulate A is in-progress (not completed, not pending)
     let state = WorkflowState {
-        workflow_id: "linear-blocked-start".to_string(),
+        workflow_id: Slug::new("linear-blocked-start")?,
         task_status: std::collections::HashMap::from([
-            ("task-a".to_string(), TaskExecutionStatus::InProgress),
-            ("task-b".to_string(), TaskExecutionStatus::Pending),
-            ("task-c".to_string(), TaskExecutionStatus::Pending),
+            (Slug::new("task-a")?, TaskExecutionStatus::InProgress),
+            (Slug::new("task-b")?, TaskExecutionStatus::Pending),
+            (Slug::new("task-c")?, TaskExecutionStatus::Pending),
         ]),
         timestamp: chrono::Utc::now(),
     };
@@ -503,6 +550,7 @@ mod property_tests {
                 "prop-workflow",
                 "Property Test Workflow",
                 "Tests all beads complete implies workflow complete",
+                Utc::now(),
             )
             .map_err(|e| proptest::test_runner::TestCaseError::fail(e.to_string()))?;
 
@@ -514,7 +562,7 @@ mod property_tests {
                 )
                 .map_err(|e| proptest::test_runner::TestCaseError::fail(e.to_string()))?;
                 workflow
-                    .add_task(task)
+                    .add_task(task, Utc::now())
                     .map_err(|e| proptest::test_runner::TestCaseError::fail(e.to_string()))?;
             }
 
@@ -526,8 +574,12 @@ mod property_tests {
                     "Workflow with pending tasks should not be complete"
                 );
 
-                for task in workflow.tasks.values_mut() {
-                    task.current_stage = Stage::Completed;
+                let task_ids: Vec<_> = workflow.tasks().keys().cloned().collect();
+                for task_id in task_ids {
+                    if let Some(task) = workflow.get_task_mut(&task_id) {
+                        task.transition_to(Stage::InProgress).unwrap();
+                        task.transition_to(Stage::Completed).unwrap();
+                    }
                 }
 
                 prop_assert!(
@@ -548,6 +600,7 @@ mod property_tests {
                 "prop-dag-workflow",
                 "DAG Property Test",
                 "Tests completion invariant across DAG shapes",
+                Utc::now(),
             )
             .map_err(|e| proptest::test_runner::TestCaseError::fail(e.to_string()))?;
 
@@ -559,7 +612,7 @@ mod property_tests {
                 )
                 .map_err(|e| proptest::test_runner::TestCaseError::fail(e.to_string()))?;
                 workflow
-                    .add_task(task)
+                    .add_task(task, Utc::now())
                     .map_err(|e| proptest::test_runner::TestCaseError::fail(e.to_string()))?;
             }
 
@@ -570,7 +623,7 @@ mod property_tests {
                         let from = format!("task-{i}");
                         let to = format!("task-{j}");
                         if added_edges.insert((from.clone(), to.clone())) {
-                            let _ = workflow.add_dependency(&from, &to);
+                            let _ = workflow.add_dependency(from.as_str(), to.as_str(), Utc::now());
                         }
                     }
                 }
@@ -581,8 +634,12 @@ mod property_tests {
                 "Workflow with pending tasks should not be complete"
             );
 
-            for task in workflow.tasks.values_mut() {
-                task.current_stage = Stage::Completed;
+            let task_ids: Vec<_> = workflow.tasks().keys().cloned().collect();
+            for task_id in task_ids {
+                if let Some(task) = workflow.get_task_mut(&task_id) {
+                    task.transition_to(Stage::InProgress).unwrap();
+                    task.transition_to(Stage::Completed).unwrap();
+                }
             }
 
             prop_assert!(

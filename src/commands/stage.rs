@@ -104,7 +104,7 @@ mod tests {
 
         let result = stage_command(args).await?;
 
-        assert_eq!(result.task.slug.as_str(), "task-1");
+        assert_eq!(result.task.slug().as_str(), "task-1");
         assert!(matches!(result.task.status, TaskStatus::InProgress { .. }));
         Ok(())
     }

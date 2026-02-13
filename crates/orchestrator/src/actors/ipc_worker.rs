@@ -1229,24 +1229,24 @@ fn map_pipeline_error(error: oya_pipeline::Error) -> ActorError {
 fn task_to_summary(task: oya_pipeline::domain::Task) -> TaskSummary {
     let (status, stage) = task_status_fields(&task.status);
     TaskSummary {
-        slug: task.slug.as_str().to_string(),
+        slug: task.slug().as_str().to_string(),
         status,
         stage,
-        priority: task.priority.to_string(),
-        language: task.language.to_string(),
-        branch: task.branch,
+        priority: task.priority().to_string(),
+        language: task.language().to_string(),
+        branch: task.branch().to_string(),
     }
 }
 
 fn task_to_detail(task: oya_pipeline::domain::Task) -> TaskDetail {
     let (status, stage) = task_status_fields(&task.status);
     TaskDetail {
-        slug: task.slug.as_str().to_string(),
+        slug: task.slug().as_str().to_string(),
         status,
         stage,
-        priority: task.priority.to_string(),
-        language: task.language.to_string(),
-        branch: task.branch,
+        priority: task.priority().to_string(),
+        language: task.language().to_string(),
+        branch: task.branch().to_string(),
     }
 }
 

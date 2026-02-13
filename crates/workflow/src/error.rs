@@ -93,7 +93,7 @@ impl fmt::Display for Error {
                 write!(f, "serialization error: {reason}")
             }
             Self::HandlerNotFound { phase_name } => {
-                write!(f, "handler not found for phase '{phase_name}'")
+                write!(f, "Handler not found for phase '{}'", phase_name)
             }
             Self::DuplicateHandler { handler_name } => {
                 write!(f, "duplicate handler registered: '{handler_name}'")

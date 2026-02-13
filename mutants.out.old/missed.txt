@@ -1,3 +1,0 @@
-crates/events/src/projection.rs:173:65: replace += with *= in <impl Projection for AllBeadsProjection>::apply
-crates/events/src/projection.rs:209:9: replace <impl Projection for AllBeadsProjection>::initial_state -> Self::State with Default::default()
-crates/events/src/projection.rs:250:9: replace ManagedProjection<P>::rebuild -> Result<()> with Ok(())

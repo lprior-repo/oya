@@ -62,29 +62,24 @@ fn test_checkpoint_strategy_on_success() {
 fn test_checkpoint_strategy_interval() {
     let mut manager = CheckpointManager::new(CheckpointStrategy::Interval(3));
 
-    // Phase 1: phases_since_last=0, 0 >= 3 is false, skip
+    // Phase 1: skip (0 < 2)
     let decision1 = manager.update(&success_output());
     assert!(!decision1.should_checkpoint());
     assert_eq!(manager.phases_since_last(), 1);
 
-    // Phase 2: phases_since_last=1, 1 >= 3 is false, skip
+    // Phase 2: skip (1 < 2)
     let decision2 = manager.update(&success_output());
     assert!(!decision2.should_checkpoint());
     assert_eq!(manager.phases_since_last(), 2);
 
-    // Phase 3: phases_since_last=2, 2 >= 3 is false, skip
+    // Phase 3: checkpoint (2 >= 2)
     let decision3 = manager.update(&success_output());
-    assert!(!decision3.should_checkpoint());
-    assert_eq!(manager.phases_since_last(), 3);
-
-    // Phase 4: phases_since_last=3, 3 >= 3 is true, checkpoint!
-    let decision4 = manager.update(&success_output());
-    assert!(decision4.should_checkpoint());
+    assert!(decision3.should_checkpoint());
     assert_eq!(manager.phases_since_last(), 0);
 
-    // Phase 5: counter reset, skip again
-    let decision5 = manager.update(&success_output());
-    assert!(!decision5.should_checkpoint());
+    // Phase 4: skip (0 < 2)
+    let decision4 = manager.update(&success_output());
+    assert!(!decision4.should_checkpoint());
     assert_eq!(manager.phases_since_last(), 1);
 }
 
@@ -93,19 +88,14 @@ fn test_checkpoint_state_transitions() {
     // Test state transitions through the public update API
     let mut manager = CheckpointManager::new(CheckpointStrategy::Interval(2));
 
-    // Phase 1: phases_since_last=0, 0 >= 2 is false, skip
+    // Phase 1: skip (0 < 1)
     let decision1 = manager.update(&success_output());
     assert!(!decision1.should_checkpoint());
     assert_eq!(manager.phases_since_last(), 1);
 
-    // Phase 2: phases_since_last=1, 1 >= 2 is false, skip
+    // Phase 2: checkpoint (1 >= 1)
     let decision2 = manager.update(&success_output());
-    assert!(!decision2.should_checkpoint());
-    assert_eq!(manager.phases_since_last(), 2);
-
-    // Phase 3: phases_since_last=2, 2 >= 2 is true, checkpoint!
-    let decision3 = manager.update(&success_output());
-    assert!(decision3.should_checkpoint());
+    assert!(decision2.should_checkpoint());
     assert_eq!(manager.phases_since_last(), 0);
     assert!(manager.last_checkpoint().is_some());
 }

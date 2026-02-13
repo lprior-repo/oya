@@ -44,11 +44,11 @@ pub async fn show_command(args: ShowArgs) -> Result<ShowOutput> {
         let json = serde_json::to_string_pretty(&output)?;
         println!("{}", json);
     } else {
-        println!("Task: {}", output.task.slug);
+        println!("Task: {}", output.task.slug());
         println!("  Status: {}", output.task.status);
-        println!("  Language: {}", output.task.language);
-        println!("  Priority: {}", output.task.priority);
-        println!("  Branch: {}", output.task.branch);
+        println!("  Language: {}", output.task.language());
+        println!("  Priority: {}", output.task.priority());
+        println!("  Branch: {}", output.task.branch());
     }
 
     Ok(output)
@@ -76,7 +76,7 @@ mod tests {
 
         let result = show_command(args).await?;
 
-        assert_eq!(result.task.slug.as_str(), "task-1");
+        assert_eq!(result.task.slug().as_str(), "task-1");
         assert_eq!(result.task.status, TaskStatus::Created);
         Ok(())
     }

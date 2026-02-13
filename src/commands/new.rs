@@ -137,9 +137,9 @@ mod tests {
 
         let result = new_command(args).await?;
 
-        assert_eq!(result.task.slug.as_str(), "test-task");
-        assert_eq!(result.task.language, Language::Rust);
-        assert_eq!(result.task.priority, Priority::P1);
+        assert_eq!(result.task.slug().as_str(), "test-task");
+        assert_eq!(result.task.language(), Language::Rust);
+        assert_eq!(result.task.priority(), Priority::P1);
         assert_eq!(result.task.status, TaskStatus::Created);
         Ok(())
     }

@@ -53,12 +53,12 @@ async fn run_command(oya: Oya) -> Result<()> {
         }
         Some(Commands::Show(args)) => {
             let result = show_command(args).await?;
-            info!("Showed task: {}", result.task.slug);
+            info!("Showed task: {}", result.task.slug());
             Ok(())
         }
         Some(Commands::New(args)) => {
             let result = new_command(args).await?;
-            info!("Created task: {}", result.task.slug);
+            info!("Created task: {}", result.task.slug());
             if let Some(workspace) = result.workspace_path {
                 info!("Workspace: {}", workspace);
             }
@@ -71,7 +71,7 @@ async fn run_command(oya: Oya) -> Result<()> {
         }
         Some(Commands::Approve(args)) => {
             let result = approve_command(args).await?;
-            info!("Approved task: {}", result.task.slug);
+            info!("Approved task: {}", result.task.slug());
             Ok(())
         }
         Some(Commands::Workspace(args)) => match args.command {

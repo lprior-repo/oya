@@ -252,11 +252,11 @@ impl fmt::Display for TaskStatus {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Task {
-    pub slug: Slug,
-    pub language: Language,
+    slug: Slug,
+    language: Language,
     pub status: TaskStatus,
-    pub priority: Priority,
-    pub branch: String,
+    priority: Priority,
+    branch: String,
 }
 
 impl Task {
@@ -270,6 +270,26 @@ impl Task {
             priority: Priority::P2,
             branch,
         }
+    }
+
+    #[must_use]
+    pub const fn slug(&self) -> &Slug {
+        &self.slug
+    }
+
+    #[must_use]
+    pub const fn language(&self) -> Language {
+        self.language
+    }
+
+    #[must_use]
+    pub const fn priority(&self) -> Priority {
+        self.priority
+    }
+
+    #[must_use]
+    pub fn branch(&self) -> &str {
+        &self.branch
     }
 
     #[must_use]
@@ -440,9 +460,9 @@ mod tests {
         let slug = Slug::new("task-1")?;
         let task = Task::new(slug, Language::Rust);
 
-        assert_eq!(task.priority, Priority::P2);
+        assert_eq!(task.priority(), Priority::P2);
         assert_eq!(task.status, TaskStatus::Created);
-        assert!(task.branch.starts_with("task/"));
+        assert!(task.branch().starts_with("task/"));
         Ok(())
     }
 
