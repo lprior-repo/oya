@@ -286,8 +286,8 @@ async fn test_worker_assignment_multiple_workers_distribution() -> Result<(), St
     let client = init_test_db().await?;
 
     // Create multiple assignments across different workers
-    let workers = vec!["worker-g", "worker-h", "worker-i"];
-    let bead_ids = vec!["bead-g1", "bead-h1", "bead-i1"];
+    let workers = ["worker-g", "worker-h", "worker-i"];
+    let bead_ids = ["bead-g1", "bead-h1", "bead-i1"];
 
     for (i, (worker, bead)) in workers.iter().zip(bead_ids.iter()).enumerate() {
         client

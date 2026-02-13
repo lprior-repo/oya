@@ -549,10 +549,10 @@ mod tests {
     }
 
     #[test]
-    fn test_poison_event_with_timestamp() {
+    fn test_poison_event_with_timestamp() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let timestamp = DateTime::parse_from_rfc3339("2024-01-01T00:00:00Z")
             .map(|dt| dt.with_timezone(&Utc))
-            .expect("valid timestamp");
+            .map_err(|e| format!("parse error: {e}"))?;
         let event = PoisonEvent::with_timestamp(
             "evt-789".to_string(),
             5,
@@ -565,13 +565,14 @@ mod tests {
         assert_eq!(event.error, "permanent error");
         assert_eq!(event.timestamp, timestamp);
         assert!(event.event_data.is_none());
+        Ok(())
     }
 
     #[test]
-    fn test_poison_event_increment_attempt() {
+    fn test_poison_event_increment_attempt() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let timestamp = DateTime::parse_from_rfc3339("2024-01-01T00:00:00Z")
             .map(|dt| dt.with_timezone(&Utc))
-            .expect("valid timestamp");
+            .map_err(|e| format!("parse error: {e}"))?;
         let event = PoisonEvent::with_timestamp(
             "evt-123".to_string(),
             2,
@@ -587,6 +588,7 @@ mod tests {
         assert_eq!(incremented.error, "error");
         // Timestamp should be updated to now
         assert!(incremented.timestamp > timestamp);
+        Ok(())
     }
 
     #[test]
@@ -720,11 +722,11 @@ mod tests {
         dlq.push_poison_event(PoisonEvent::new("evt-2", 2, "second", None))?;
         dlq.push_poison_event(PoisonEvent::new("evt-3", 3, "third", None))?;
 
-        let events = dlq.get_poison_events()?;
+        let retrieved_events = dlq.get_poison_events()?;
 
-        assert_eq!(events[0].event_id, "evt-1");
-        assert_eq!(events[1].event_id, "evt-2");
-        assert_eq!(events[2].event_id, "evt-3");
+        assert_eq!(retrieved_events[0].event_id, "evt-1");
+        assert_eq!(retrieved_events[1].event_id, "evt-2");
+        assert_eq!(retrieved_events[2].event_id, "evt-3");
         Ok(())
     }
 
@@ -808,7 +810,7 @@ mod tests {
         let dlq = InMemoryDeadLetterQueue::new();
         let event = PoisonEvent::new("evt-1", 1, "error", None);
 
-        dlq.push_poison_event(event.clone())?;
+        dlq.push_poison_event(event)?;
 
         let events1 = dlq.get_poison_events()?;
         let events2 = dlq.get_poison_events()?;
@@ -842,19 +844,19 @@ mod tests {
 
         for i in 0..100 {
             dlq.push_poison_event(PoisonEvent::new(
-                format!("evt-{}", i),
+                format!("evt-{i}"),
                 1,
-                format!("error {}", i),
+                format!("error {i}"),
                 None,
             ))?;
         }
 
         assert_eq!(dlq.count()?, 100);
 
-        let events = dlq.get_poison_events()?;
-        assert_eq!(events.len(), 100);
-        assert_eq!(events[0].event_id, "evt-0");
-        assert_eq!(events[99].event_id, "evt-99");
+        let retrieved_events = dlq.get_poison_events()?;
+        assert_eq!(retrieved_events.len(), 100);
+        assert_eq!(retrieved_events[0].event_id, "evt-0");
+        assert_eq!(retrieved_events[99].event_id, "evt-99");
         Ok(())
     }
 
@@ -1176,7 +1178,7 @@ mod tests {
     #[test]
     fn test_retry_policy_custom_config() {
         let config = RecoveryConfig::new().with_max_retries(5).with_dlq(false);
-        let policy = RetryPolicy::with_config(config.clone());
+        let policy = RetryPolicy::with_config(config);
 
         assert_eq!(policy.config().max_retries, 5);
         assert!(!policy.config().enable_dlq);
@@ -1194,8 +1196,7 @@ mod tests {
             }
             other => assert!(
                 matches!(other, RecoveryStrategy::Retry { .. }),
-                "Expected Retry strategy for transient error, got {:?}",
-                other
+                "Expected Retry strategy for transient error, got {other:?}",
             ),
         }
     }
@@ -1215,8 +1216,7 @@ mod tests {
             }
             other => assert!(
                 matches!(other, RecoveryStrategy::Retry { .. }),
-                "Expected Retry strategy for transient error, got {:?}",
-                other
+                "Expected Retry strategy for transient error, got {other:?}",
             ),
         }
     }
@@ -1240,8 +1240,7 @@ mod tests {
             }
             other => assert!(
                 matches!(other, RecoveryStrategy::Retry { .. }),
-                "Expected Retry strategy for transient error, got {:?}",
-                other
+                "Expected Retry strategy for transient error, got {other:?}",
             ),
         }
     }
@@ -1258,8 +1257,7 @@ mod tests {
             }
             other => assert!(
                 matches!(other, RecoveryStrategy::SkipToDlq),
-                "Expected SkipToDlq after max retries, got {:?}",
-                other
+                "Expected SkipToDlq after max retries, got {other:?}",
             ),
         }
     }
@@ -1277,8 +1275,7 @@ mod tests {
             }
             other => assert!(
                 matches!(other, RecoveryStrategy::Fail),
-                "Expected Fail when DLQ disabled after max retries, got {:?}",
-                other
+                "Expected Fail when DLQ disabled after max retries, got {other:?}",
             ),
         }
     }
@@ -1297,8 +1294,7 @@ mod tests {
             }
             other => assert!(
                 matches!(other, RecoveryStrategy::SkipToDlq),
-                "Expected SkipToDlq for permanent error with DLQ enabled, got {:?}",
-                other
+                "Expected SkipToDlq for permanent error with DLQ enabled, got {other:?}",
             ),
         }
     }
@@ -1318,8 +1314,7 @@ mod tests {
             }
             other => assert!(
                 matches!(other, RecoveryStrategy::Fail),
-                "Expected Fail for permanent error with DLQ disabled, got {:?}",
-                other
+                "Expected Fail for permanent error with DLQ disabled, got {other:?}",
             ),
         }
     }
@@ -1340,8 +1335,7 @@ mod tests {
             }
             other => assert!(
                 matches!(other, RecoveryStrategy::SkipToDlq),
-                "Expected SkipToDlq for permanent error, got {:?}",
-                other
+                "Expected SkipToDlq for permanent error, got {other:?}",
             ),
         }
     }

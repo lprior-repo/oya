@@ -229,7 +229,7 @@ impl CheckpointStoreImpl {
         db: &Arc<surrealdb::Surreal<surrealdb::engine::local::Db>>,
         checkpoint_id: &str,
     ) -> Result<Option<(CheckpointData, DateTime<Utc>)>, Error> {
-        let mut result = db
+        let result = db
             .query(
                 "SELECT timestamp, data, sequence_number FROM state_transition WHERE event_id = $checkpoint_id LIMIT 1",
             )
@@ -267,7 +267,7 @@ impl CheckpointStoreImpl {
         checkpoint_id: &str,
         checkpoint_timestamp: DateTime<Utc>,
     ) -> Result<bool, Error> {
-        let mut result = db
+        let result = db
             .query("SELECT timestamp FROM state_transition WHERE event_id = $checkpoint_id LIMIT 1")
             .bind(("checkpoint_id", checkpoint_id.to_string()))
             .await
@@ -340,7 +340,7 @@ impl EventLogImpl {
         db: &Arc<surrealdb::Surreal<surrealdb::engine::local::Db>>,
         timestamp: DateTime<Utc>,
     ) -> Result<Vec<EventMetadata>, Error> {
-        let mut result = db
+        let result = db
             .query(
                 "SELECT event_id, timestamp, sequence_number FROM state_transition WHERE timestamp > $timestamp ORDER BY timestamp ASC, event_id ASC",
             )
@@ -394,13 +394,15 @@ mod tests {
     use super::*;
     use chrono::TimeZone;
 
-    #[test]
-    fn test_event_sourcing_replay_creation() {
-        assert!(true);
+    #[tokio::test]
+    async fn test_event_sourcing_replay_creation() -> Result<(), Box<dyn std::error::Error>> {
+        let db = Arc::new(DurableEventStore::mock().await?);
+        let _replay = EventSourcingReplay::new(db);
+        Ok(())
     }
 
     #[test]
-    fn test_error_conversion_checkpoint_not_found() {
+    fn test_error_conversion_checkpoint_not_found() -> Result<(), Box<dyn std::error::Error>> {
         let resume_err = ResumeError::CheckpointNotFound {
             checkpoint_id: "test-123".to_string(),
         };
@@ -410,12 +412,13 @@ mod tests {
             ReplayResumeError::CheckpointNotFound(msg) => {
                 assert_eq!(msg, "test-123");
             }
-            _ => panic!("Unexpected error variant"),
+            _ => return Err("Unexpected error variant".into()),
         }
+        Ok(())
     }
 
     #[test]
-    fn test_error_conversion_invalid_checkpoint() {
+    fn test_error_conversion_invalid_checkpoint() -> Result<(), Box<dyn std::error::Error>> {
         let resume_err = ResumeError::InvalidCheckpoint {
             reason: "corrupted data".to_string(),
         };
@@ -425,12 +428,13 @@ mod tests {
             ReplayResumeError::CheckpointLoadFailed(msg) => {
                 assert_eq!(msg, "corrupted data");
             }
-            _ => panic!("Expected CheckpointLoadFailed variant"),
+            _ => return Err("Expected CheckpointLoadFailed variant".into()),
         }
+        Ok(())
     }
 
     #[test]
-    fn test_error_conversion_event_load_failed() {
+    fn test_error_conversion_event_load_failed() -> Result<(), Box<dyn std::error::Error>> {
         let resume_err = ResumeError::EventLoadFailed {
             reason: "connection timeout".to_string(),
         };
@@ -440,14 +444,15 @@ mod tests {
             ReplayResumeError::EventLoadFailed(msg) => {
                 assert_eq!(msg, "connection timeout");
             }
-            _ => panic!("Expected EventLoadFailed variant"),
+            _ => return Err("Expected EventLoadFailed variant".into()),
         }
+        Ok(())
     }
 
     #[test]
-    fn test_error_conversion_timestamp_mismatch() {
-        let ts1 = Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
-        let ts2 = Utc.with_ymd_and_hms(2024, 1, 1, 12, 1, 0).unwrap();
+    fn test_error_conversion_timestamp_mismatch() -> Result<(), Box<dyn std::error::Error>> {
+        let ts1 = Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).single().ok_or("invalid timestamp")?;
+        let ts2 = Utc.with_ymd_and_hms(2024, 1, 1, 12, 1, 0).single().ok_or("invalid timestamp")?;
 
         let resume_err = ResumeError::TimestampMismatch {
             checkpoint_id: "cp-456".to_string(),
@@ -461,8 +466,9 @@ mod tests {
                 assert!(msg.contains("cp-456"));
                 assert!(msg.contains("timestamp"));
             }
-            _ => panic!("Expected TimestampMismatch variant"),
+            _ => return Err("Expected TimestampMismatch variant".into()),
         }
+        Ok(())
     }
 
     #[test]
@@ -483,14 +489,18 @@ mod tests {
         assert!(msg.contains("db error"));
     }
 
-    #[test]
-    fn test_checkpoint_store_impl_new() {
-        assert!(true);
+    #[tokio::test]
+    async fn test_checkpoint_store_impl_new() -> Result<(), Box<dyn std::error::Error>> {
+        let db = Arc::new(DurableEventStore::mock().await?);
+        let _store = CheckpointStoreImpl::new(db);
+        Ok(())
     }
 
-    #[test]
-    fn test_event_log_impl_new() {
-        assert!(true);
+    #[tokio::test]
+    async fn test_event_log_impl_new() -> Result<(), Box<dyn std::error::Error>> {
+        let db = Arc::new(DurableEventStore::mock().await?);
+        let _log = EventLogImpl::new(db);
+        Ok(())
     }
 
     #[test]
@@ -505,7 +515,7 @@ mod tests {
     }
 
     #[test]
-    fn test_replay_result_error_propagation() {
+    fn test_replay_result_error_propagation() -> Result<(), Box<dyn std::error::Error>> {
         fn inner_fails() -> ReplayResult<String> {
             Err(ReplayResumeError::CheckpointNotFound("missing".to_string()))
         }
@@ -521,8 +531,9 @@ mod tests {
             Err(ReplayResumeError::CheckpointNotFound(id)) => {
                 assert_eq!(id, "missing");
             }
-            _ => panic!("Expected CheckpointNotFound error"),
+            _ => return Err("Expected CheckpointNotFound error".into()),
         }
+        Ok(())
     }
 
     #[test]
@@ -538,14 +549,17 @@ mod tests {
     }
 
     #[test]
-    fn test_replay_resume_error_is_clone() {
+    fn test_replay_resume_error_is_clone() -> Result<(), Box<dyn std::error::Error>> {
         let err = ReplayResumeError::CheckpointNotFound("test".to_string());
         let cloned = err.clone();
 
         match cloned {
-            ReplayResumeError::CheckpointNotFound(id) => assert_eq!(id, "test"),
-            _ => panic!("Clone failed"),
+            ReplayResumeError::CheckpointNotFound(id) => {
+                assert_eq!(id, "test");
+            }
+            _ => return Err("Clone failed or variant mismatch".into()),
         }
+        Ok(())
     }
 
     #[test]
