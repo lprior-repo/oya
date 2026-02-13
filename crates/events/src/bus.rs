@@ -745,7 +745,7 @@ mod tests {
         let (_handle, test_sub) = bus.subscribe_with_pattern(pattern).await;
         std::mem::drop(test_sub); // Drop to cause send failures
 
-        // First event - should be sent but fail, incrementing failure count
+        // First event - should be sent to 'sub' successfully, but fail for 'test_sub'
         let result1 = bus
             .publish(BeadEvent::state_changed(
                 bead_id,
@@ -758,7 +758,7 @@ mod tests {
             "Publish should succeed even with failing subscriber"
         );
 
-        // Second event - subscriber should be blocked
+        // Second event - 'test_sub' is now failing again
         let result2 = bus
             .publish(BeadEvent::state_changed(
                 bead_id,
@@ -774,14 +774,15 @@ mod tests {
         // Give time for delivery
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
-        // Only the first event should have been delivered (before circuit breaker opened)
+        // The healthy subscriber 'sub' should have received BOTH events
+        // because circuit breakers are isolated per subscriber.
         let received1 = sub.try_recv();
         assert!(received1.is_ok(), "Should receive first event");
 
         let received2 = sub.try_recv();
         assert!(
-            received2.is_err(),
-            "Should not receive second event due to circuit breaker"
+            received2.is_ok(),
+            "Healthy subscriber should NOT be blocked by other failing subscribers"
         );
 
         // Unsubscribe
@@ -882,7 +883,7 @@ mod tests {
         let (_handle, test_sub) = bus.subscribe_with_pattern(pattern).await;
         std::mem::drop(test_sub); // Drop to cause send failures
 
-        // First event - should fail and open circuit (threshold = 1)
+        // First event - should fail for 'test_sub' but 'sub' should still get it
         let result = bus
             .publish(BeadEvent::state_changed(
                 bead_id,
@@ -898,11 +899,11 @@ mod tests {
         // Give time for delivery
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
-        // Should not receive the event due to circuit breaker
+        // Should receive the event despite another subscriber's circuit breaker potentially opening
         let received = sub.try_recv();
         assert!(
-            received.is_err(),
-            "Should not receive event due to circuit breaker"
+            received.is_ok(),
+            "Healthy subscriber should receive event regardless of other failures"
         );
 
         // Unsubscribe

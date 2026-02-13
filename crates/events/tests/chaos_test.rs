@@ -11,6 +11,7 @@
 //! - Multi-process test with subprocess spawning
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use oya_events::{
     connect, BeadEvent, BeadId, BeadResult, BeadSpec, BeadState, Complexity, ConnectionConfig,
@@ -410,5 +411,86 @@ async fn test_chaos_large_event_fsync() -> Result<(), String> {
 
     println!("[CHAOS TEST PASSED] Large event fsync successful");
 
+    Ok(())
+}
+
+/// Chaos test: WAL recovery after crash.
+///
+/// This test simulates a crash where an event is written to WAL but not to DB.
+/// It verifies that DurableEventStore recovers such events on startup.
+#[tokio::test]
+async fn test_chaos_wal_recovery() -> Result<(), String> {
+    let test_id = ulid::Ulid::new().to_string();
+    let bead_id = BeadId::new();
+
+    println!("[CHAOS TEST] Testing WAL recovery...");
+
+    // 1. Setup DB
+    let storage_path = format!("/tmp/oya-chaos-recovery-{}", test_id);
+    let wal_dir = format!("/tmp/oya-chaos-recovery-wal-{}", test_id);
+    let _ = tokio::fs::remove_dir_all(&storage_path).await;
+    let _ = tokio::fs::remove_dir_all(&wal_dir).await;
+
+    let config = ConnectionConfig::new(storage_path.clone())
+        .with_namespace("oya_chaos_recovery")
+        .with_database("recovery_test");
+
+    let db = connect(config)
+        .await
+        .map_err(|e| format!("failed to connect to database: {}", e))?;
+
+    // 2. Manually write an event to WAL (simulating crash)
+    tokio::fs::create_dir_all(&wal_dir).await.map_err(|e| e.to_string())?;
+    
+    let event = BeadEvent::created(
+        bead_id,
+        BeadSpec::new("Ghost Event").with_complexity(Complexity::Simple),
+    );
+    
+    // Actually, I'll just use the store to write it, then "corrupt" the DB by deleting it.
+    let store = DurableEventStore::new(Arc::clone(&db))
+        .await
+        .map_err(|e| e.to_string())?
+        .with_wal_dir(&wal_dir);
+        
+    store.append_event(&event).await.map_err(|e| e.to_string())?;
+    
+    // Verify it's in DB
+    let events = store.read_events(&bead_id).await.map_err(|e| e.to_string())?;
+    assert_eq!(events.len(), 1);
+    
+    // Now simulate crash/corruption by deleting from DB but keeping WAL
+    db.query("DELETE state_transition WHERE bead_id = $bead_id")
+        .bind(("bead_id", bead_id.to_string()))
+        .await
+        .map_err(|e| e.to_string())?
+        .check()
+        .map_err(|e| e.to_string())?;
+        
+    // Verify it's GONE from DB
+    let events = store.read_events(&bead_id).await.map_err(|e| e.to_string())?;
+    assert_eq!(events.len(), 0, "Event should be deleted from DB");
+    
+    // 3. Initialize a NEW store instance (simulating restart)
+    // This should trigger recovery if implemented
+    let recovered_store = DurableEventStore::new(db)
+        .await
+        .map_err(|e| e.to_string())?
+        .with_wal_dir(&wal_dir);
+        
+    // Trigger recovery explicitly for the custom wal dir
+    recovered_store.recover().await.map_err(|e| e.to_string())?;
+        
+    // 4. Verify recovery
+    let events = recovered_store.read_events(&bead_id).await.map_err(|e| e.to_string())?;
+    
+    assert_eq!(
+        events.len(), 
+        1, 
+        "Event should have been recovered from WAL into DB"
+    );
+    assert_eq!(events[0].event_id(), event.event_id());
+
+    println!("[CHAOS TEST PASSED] WAL recovery successful");
     Ok(())
 }

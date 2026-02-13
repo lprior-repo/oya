@@ -239,7 +239,12 @@ impl CheckpointStoreImpl {
                 Error::store_failed("load_checkpoint", format!("failed to query checkpoint: {e}"))
             })?;
 
-        let records: Vec<CheckpointRecord> = result.take(0).map_err(|e| {
+        // Ensure the query actually succeeded
+        let mut result = result.check().map_err(|e| {
+            Error::store_failed("load_checkpoint", format!("query execution failed: {e}"))
+        })?;
+
+        let records: Vec<CheckpointRecord> = result.take(0usize).map_err(|e| {
             Error::store_failed("load_checkpoint", format!("failed to extract results: {e}"))
         })?;
 
@@ -273,12 +278,17 @@ impl CheckpointStoreImpl {
                 )
             })?;
 
+        // Ensure the query actually succeeded
+        let mut result = result.check().map_err(|e| {
+            Error::store_failed("validate_timestamp", format!("query execution failed: {e}"))
+        })?;
+
         #[derive(Debug, Deserialize)]
         struct TimestampRecord {
             timestamp: DateTime<Utc>,
         }
 
-        let records: Vec<TimestampRecord> = result.take(0).map_err(|e| {
+        let records: Vec<TimestampRecord> = result.take(0usize).map_err(|e| {
             Error::store_failed(
                 "validate_timestamp",
                 format!("failed to extract results: {e}"),
@@ -340,6 +350,11 @@ impl EventLogImpl {
                 Error::store_failed("load_events_after", format!("failed to query events: {e}"))
             })?;
 
+        // Ensure the query actually succeeded
+        let mut result = result.check().map_err(|e| {
+            Error::store_failed("load_events_after", format!("query execution failed: {e}"))
+        })?;
+
         #[derive(Debug, Deserialize)]
         struct EventRecord {
             event_id: String,
@@ -347,7 +362,7 @@ impl EventLogImpl {
             sequence_number: Option<u64>,
         }
 
-        let records: Vec<EventRecord> = result.take(0).map_err(|e| {
+        let records: Vec<EventRecord> = result.take(0usize).map_err(|e| {
             Error::store_failed(
                 "load_events_after",
                 format!("failed to extract results: {e}"),

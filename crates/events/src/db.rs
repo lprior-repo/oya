@@ -228,9 +228,9 @@ async fn execute_schema_queries(client: &Surreal<Db>, queries: &[&str]) -> Resul
         .then(|(idx, query): (usize, &&str)| async move {
             let trimmed = query.trim();
 
-            // Skip comments and empty queries using functional guards
-            if trimmed.starts_with("--") || trimmed.len() < 10 {
-                debug!("Skipping comment or short query at index {}", idx + 1);
+            // Skip truly empty queries
+            if trimmed.is_empty() {
+                debug!("Skipping empty query at index {}", idx + 1);
                 return Ok::<usize, DbError>(0);
             }
 
@@ -244,6 +244,7 @@ async fn execute_schema_queries(client: &Surreal<Db>, queries: &[&str]) -> Resul
             client
                 .query(trimmed)
                 .await
+                .and_then(|resp| resp.check())
                 .map(|_| {
                     debug!(idx = idx + 1, total, "Schema query succeeded");
                     1usize // Count successful query

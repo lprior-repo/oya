@@ -360,11 +360,19 @@ where
     events
         .iter()
         .try_fold(ReplaySummary::zero(), |summary, event| {
-            // Try to apply event with retries
-            let apply_result = (0..config.max_retries)
-                .try_fold((), |_attempt, _retry| apply_event(state, event, context));
+            // Try to apply event with retries using functional fold
+            let result = (0..config.max_retries).fold(
+                Err(ApplyError::Internal("No attempts configured".into())),
+                |acc, _| {
+                    if acc.is_ok() {
+                        acc
+                    } else {
+                        apply_event(state, event, context)
+                    }
+                },
+            );
 
-            match apply_result {
+            match result {
                 Ok(()) => Ok(summary.record_applied()),
                 Err(err) => {
                     // Event failed after all retries - send to DLQ if enabled
@@ -629,9 +637,16 @@ mod tests {
 
     #[test]
     fn should_apply_first_event_successfully() -> Result<(), Box<dyn std::error::Error>> {
-        // This test requires a mock EventSourcedState implementation
-        // For now, we just verify the signature compiles
-        // In a real test, we'd create a test state implementation
+        let mut state = MockState::new();
+        let mut context = ApplyContext::new();
+        let bead_id = BeadId::new();
+        let event = BeadEvent::created(bead_id, BeadSpec::new("Test"));
+
+        apply_event(&mut state, &event, &mut context)?;
+
+        assert_eq!(state.applied_events.len(), 1);
+        assert_eq!(state.applied_events[0], event.event_id().to_string());
+        assert!(context.last_events.contains_key(&bead_id));
         Ok(())
     }
 
@@ -641,22 +656,65 @@ mod tests {
 
     #[test]
     fn should_apply_empty_event_list() -> Result<(), Box<dyn std::error::Error>> {
-        // This test requires a mock EventSourcedState implementation
-        // For now, we just verify the signature compiles
+        let mut state = MockState::new();
+        let mut context = ApplyContext::new();
+        let events: Vec<BeadEvent> = vec![];
+
+        apply_events(&mut state, &events, &mut context)?;
+
+        assert!(state.applied_events.is_empty());
         Ok(())
     }
 
     #[test]
     fn should_apply_multiple_events_in_order() -> Result<(), Box<dyn std::error::Error>> {
-        // This test requires a mock EventSourcedState implementation
-        // For now, we just verify the signature compiles
+        let mut state = MockState::new();
+        let mut context = ApplyContext::new();
+        let bead_id = BeadId::new();
+
+        let event1 = BeadEvent::created(bead_id, BeadSpec::new("Test"));
+        // Ensure strictly increasing timestamp/ULID
+        std::thread::sleep(std::time::Duration::from_millis(1));
+        let event2 = BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Scheduled);
+
+        let events = vec![event1.clone(), event2.clone()];
+
+        apply_events(&mut state, &events, &mut context)?;
+
+        assert_eq!(state.applied_events.len(), 2);
+        assert_eq!(state.applied_events[0], event1.event_id().to_string());
+        assert_eq!(state.applied_events[1], event2.event_id().to_string());
+        
+        let last_meta = context.last_event(&bead_id).unwrap();
+        assert_eq!(last_meta.event_id, event2.event_id().to_string());
         Ok(())
     }
 
     #[test]
     fn should_stop_on_first_error() -> Result<(), Box<dyn std::error::Error>> {
-        // This test requires a mock EventSourcedState implementation
-        // For now, we just verify the signature compiles
+        let mut state = MockState::new();
+        let mut context = ApplyContext::new();
+        let bead_id = BeadId::new();
+
+        let event1 = BeadEvent::created(bead_id, BeadSpec::new("Test"));
+        let event2 = BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Scheduled);
+        let event3 = BeadEvent::completed(bead_id, crate::types::BeadResult::success(vec![], 0));
+
+        // Configure mock to fail on event2
+        state.mark_failure(event2.event_id().to_string());
+
+        let events = vec![event1.clone(), event2, event3];
+
+        let result = apply_events(&mut state, &events, &mut context);
+
+        assert!(result.is_err());
+        // Should have applied event1
+        assert_eq!(state.applied_events.len(), 1);
+        assert_eq!(state.applied_events[0], event1.event_id().to_string());
+        
+        // Context should point to event1
+        let last_meta = context.last_event(&bead_id).unwrap();
+        assert_eq!(last_meta.event_id, event1.event_id().to_string());
         Ok(())
     }
 
@@ -779,6 +837,11 @@ mod tests {
         }
     }
 
+    // Helper to ensure monotonic time/ULID
+    fn sleep_for_ordering() {
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+
     #[test]
     fn apply_events_with_recovery_applies_all_events_successfully(
     ) -> Result<(), Box<dyn std::error::Error>> {
@@ -789,6 +852,7 @@ mod tests {
 
         let bead_id = BeadId::new();
         let event1 = BeadEvent::created(bead_id, BeadSpec::new("Test 1"));
+        sleep_for_ordering();
         let event2 = BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Scheduled);
         let events = vec![event1, event2];
 
@@ -813,7 +877,9 @@ mod tests {
 
         let bead_id = BeadId::new();
         let event1 = BeadEvent::created(bead_id, BeadSpec::new("Test 1"));
+        sleep_for_ordering();
         let event2 = BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Scheduled);
+        sleep_for_ordering();
         let event3 = BeadEvent::completed(bead_id, crate::types::BeadResult::success(vec![], 0));
 
         // Mark event2 to fail
@@ -852,6 +918,7 @@ mod tests {
 
         let bead_id = BeadId::new();
         let event1 = BeadEvent::created(bead_id, BeadSpec::new("Test 1"));
+        sleep_for_ordering();
         let event2 = BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Scheduled);
 
         // Mark event1 to fail
@@ -877,7 +944,9 @@ mod tests {
 
         let bead_id = BeadId::new();
         let event1 = BeadEvent::created(bead_id, BeadSpec::new("Test 1"));
+        sleep_for_ordering();
         let event2 = BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Scheduled);
+        sleep_for_ordering();
         let event3 = BeadEvent::completed(bead_id, crate::types::BeadResult::success(vec![], 0));
 
         // Mark all events to fail
@@ -927,6 +996,7 @@ mod tests {
 
         let bead_id = BeadId::new();
         let event1 = BeadEvent::created(bead_id, BeadSpec::new("Test 1"));
+        sleep_for_ordering();
         let event2 = BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Scheduled);
 
         let events = vec![event1, event2.clone()];
@@ -951,9 +1021,13 @@ mod tests {
 
         let bead_id = BeadId::new();
         let event1 = BeadEvent::created(bead_id, BeadSpec::new("Test 1"));
+        sleep_for_ordering();
         let event2 = BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Scheduled);
+        sleep_for_ordering();
         let event3 = BeadEvent::completed(bead_id, crate::types::BeadResult::success(vec![], 0));
+        sleep_for_ordering();
         let event4 = BeadEvent::state_changed(bead_id, BeadState::Scheduled, BeadState::Running);
+        sleep_for_ordering();
         let event5 = BeadEvent::state_changed(bead_id, BeadState::Running, BeadState::Completed);
 
         // Fail events 2 and 4

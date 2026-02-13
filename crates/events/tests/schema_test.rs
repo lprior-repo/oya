@@ -58,13 +58,13 @@ async fn test_all_tables_defined() -> Result<(), String> {
 async fn test_graph_relations_defined() -> Result<(), String> {
     let schema = load_schema()?;
 
-    // Check for graph relation definitions
+    // Check for graph relation definitions using SurrealDB 2.0 syntax
     assert!(
-        schema.contains("DEFINE RELATION depends_on"),
+        schema.contains("DEFINE TABLE depends_on TYPE RELATION"),
         "depends_on relation should be defined"
     );
     assert!(
-        schema.contains("DEFINE RELATION blocks"),
+        schema.contains("DEFINE TABLE blocks TYPE RELATION"),
         "blocks relation should be defined"
     );
     Ok(())
