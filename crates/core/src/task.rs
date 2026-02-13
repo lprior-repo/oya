@@ -8,9 +8,7 @@
 #![warn(clippy::pedantic)]
 #![warn(clippy::nursery)]
 #![forbid(unsafe_code)]
-#![cfg_attr(test, allow(clippy::expect_used))]
-#![cfg_attr(test, allow(clippy::unwrap_used))]
-#![cfg_attr(test, allow(clippy::panic))]
+
 
 use crate::Slug;
 use serde::{Deserialize, Serialize};
@@ -167,34 +165,31 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_task_creation() {
-        let task = Task::new("task-1", "Test Task", "A test task");
-        assert!(task.is_ok());
-        let task = match task {
-            Ok(t) => t,
-            Err(e) => panic!("Task creation failed: {e}"),
-        };
+    fn test_task_creation() -> Result<(), Box<dyn std::error::Error>> {
+        let task = Task::new("task-1", "Test Task", "A test task")?;
         assert_eq!(task.id.as_str(), "task-1");
         assert_eq!(task.name, "Test Task");
         assert_eq!(task.description, "A test task");
         assert_eq!(task.current_stage, Stage::Pending);
+        Ok(())
     }
 
     #[test]
-    fn test_task_is_complete() {
-        let mut task = Task::new("task-1", "Test", "Test").unwrap();
+    fn test_task_is_complete() -> Result<(), Box<dyn std::error::Error>> {
+        let mut task = Task::new("task-1", "Test", "Test")?;
         assert!(!task.is_complete());
         
         // Use transition_to instead of direct assignment
-        task.transition_to(Stage::InProgress).unwrap();
-        task.transition_to(Stage::Completed).unwrap();
+        task.transition_to(Stage::InProgress)?;
+        task.transition_to(Stage::Completed)?;
         
         assert!(task.is_complete());
+        Ok(())
     }
 
     #[test]
-    fn test_task_complete_current_stage() {
-        let mut task = Task::new("task-1", "Test", "Test").unwrap();
+    fn test_task_complete_current_stage() -> Result<(), Box<dyn std::error::Error>> {
+        let mut task = Task::new("task-1", "Test", "Test")?;
         assert_eq!(task.current_stage, Stage::Pending);
 
         task.complete_current_stage();
@@ -205,11 +200,12 @@ mod tests {
 
         task.complete_current_stage();
         assert_eq!(task.current_stage, Stage::Completed);
+        Ok(())
     }
     
     #[test]
-    fn test_invalid_transitions() {
-        let mut task = Task::new("task-1", "Test", "Test").unwrap();
+    fn test_invalid_transitions() -> Result<(), Box<dyn std::error::Error>> {
+        let mut task = Task::new("task-1", "Test", "Test")?;
         
         // Pending -> Completed is invalid (must go through InProgress)
         assert!(task.transition_to(Stage::Completed).is_err());
@@ -217,11 +213,12 @@ mod tests {
         // Pending -> Failed is invalid
         assert!(task.transition_to(Stage::Failed).is_err());
         
-        task.transition_to(Stage::InProgress).unwrap();
-        task.transition_to(Stage::Completed).unwrap();
+        task.transition_to(Stage::InProgress)?;
+        task.transition_to(Stage::Completed)?;
         
         // Completed -> InProgress is invalid
         assert!(task.transition_to(Stage::InProgress).is_err());
+        Ok(())
     }
 
     #[test]

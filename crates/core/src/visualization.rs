@@ -24,9 +24,7 @@
 #![allow(clippy::option_if_let_else)]
 #![allow(clippy::explicit_iter_loop)]
 #![forbid(unsafe_code)]
-#![cfg_attr(test, allow(clippy::expect_used))]
-#![cfg_attr(test, allow(clippy::unwrap_used))]
-#![cfg_attr(test, allow(clippy::panic))]
+
 
 use crate::{Slug, Workflow};
 use crate::execution::{TaskExecutionStatus, WorkflowState};
@@ -807,18 +805,17 @@ mod tests {
     }
 
     #[test]
-    fn test_render_dag_terminal_too_small() {
+    fn test_render_dag_terminal_too_small() -> Result<(), Box<dyn std::error::Error>> {
         let viz = WorkflowVisualization::new().with_min_dimensions(80, 24);
-        let mut workflow =
-            Workflow::new("test", "Test", "Description", Utc::now()).expect("Failed to create workflow");
+        let mut workflow = Workflow::new("test", "Test", "Description", Utc::now())?;
 
         let task =
-            crate::Task::new("task-1", "Task 1", "First task").expect("Failed to create task");
-        workflow.add_task(task, Utc::now()).expect("Failed to add task");
+            crate::Task::new("task-1", "Task 1", "First task")?;
+        workflow.add_task(task, Utc::now())?;
 
         let state = WorkflowState {
-            workflow_id: Slug::new("test").unwrap(),
-            task_status: HashMap::from([(Slug::new("task-1").unwrap(), TaskExecutionStatus::Pending)]),
+            workflow_id: Slug::new("test")?,
+            task_status: HashMap::from([(Slug::new("task-1")?, TaskExecutionStatus::Pending)]),
             timestamp: chrono::Utc::now(),
         };
 
@@ -826,21 +823,21 @@ mod tests {
         assert!(result.is_err());
         match result {
             Err(VisualizationError::TerminalTooSmall { .. }) => {}
-            _ => panic!("Expected TerminalTooSmall error"),
+            _ => return Err("Expected TerminalTooSmall error".into()),
         }
+        Ok(())
     }
 
     #[test]
-    fn test_render_dag_with_cycle() {
+    fn test_render_dag_with_cycle() -> Result<(), Box<dyn std::error::Error>> {
         let viz = WorkflowVisualization::new();
-        let mut workflow =
-            Workflow::new("test", "Test", "Description", Utc::now()).expect("Failed to create workflow");
+        let mut workflow = Workflow::new("test", "Test", "Description", Utc::now())?;
 
-        let task1 = crate::Task::new("a", "Task A", "First").expect("Failed to create task");
-        let task2 = crate::Task::new("b", "Task B", "Second").expect("Failed to create task");
+        let task1 = crate::Task::new("a", "Task A", "First")?;
+        let task2 = crate::Task::new("b", "Task B", "Second")?;
 
-        workflow.add_task(task1, Utc::now()).expect("Failed to add task");
-        workflow.add_task(task2, Utc::now()).expect("Failed to add task");
+        workflow.add_task(task1, Utc::now())?;
+        workflow.add_task(task2, Utc::now())?;
 
         // Create cycle bypassing validation for test purposes if needed, 
         // but add_dependency actually checks for cycles.
@@ -853,28 +850,27 @@ mod tests {
         // Let's just verify add_dependency fails for cycles.
         assert!(workflow.add_dependency("a", "b", Utc::now()).is_ok());
         assert!(workflow.add_dependency("b", "a", Utc::now()).is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_render_dag_simple_workflow() {
+    fn test_render_dag_simple_workflow() -> Result<(), Box<dyn std::error::Error>> {
         let viz = WorkflowVisualization::new();
-        let mut workflow = Workflow::new("test", "Test Workflow", "Description", Utc::now())
-            .expect("Failed to create workflow");
+        let mut workflow = Workflow::new("test", "Test Workflow", "Description", Utc::now())?;
 
-        let task1 = crate::Task::new("a", "Task A", "First").expect("Failed to create task");
-        let task2 = crate::Task::new("b", "Task B", "Second").expect("Failed to create task");
+        let task1 = crate::Task::new("a", "Task A", "First")?;
+        let task2 = crate::Task::new("b", "Task B", "Second")?;
 
-        workflow.add_task(task1, Utc::now()).expect("Failed to add task");
-        workflow.add_task(task2, Utc::now()).expect("Failed to add task");
+        workflow.add_task(task1, Utc::now())?;
+        workflow.add_task(task2, Utc::now())?;
         workflow
-            .add_dependency("a", "b", Utc::now())
-            .expect("Failed to add dependency");
+            .add_dependency("a", "b", Utc::now())?;
 
         let state = WorkflowState {
-            workflow_id: Slug::new("test").unwrap(),
+            workflow_id: Slug::new("test")?,
             task_status: HashMap::from([
-                (Slug::new("a").unwrap(), TaskExecutionStatus::Completed),
-                (Slug::new("b").unwrap(), TaskExecutionStatus::InProgress),
+                (Slug::new("a")?, TaskExecutionStatus::Completed),
+                (Slug::new("b")?, TaskExecutionStatus::InProgress),
             ]),
             timestamp: chrono::Utc::now(),
         };
@@ -882,37 +878,36 @@ mod tests {
         let result = viz.render_dag(&workflow, &state, 80, 24);
         assert!(result.is_ok());
 
-        let graph = result.unwrap();
+        let graph = result?;
         assert!(!graph.lines.is_empty());
         assert!(graph.lines.iter().any(|l| l.contains("Test Workflow")));
+        Ok(())
     }
 
     #[test]
-    fn test_build_level_layout() {
+    fn test_build_level_layout() -> Result<(), Box<dyn std::error::Error>> {
         let viz = WorkflowVisualization::new();
-        let mut workflow =
-            Workflow::new("test", "Test", "Description", Utc::now()).expect("Failed to create workflow");
+        let mut workflow = Workflow::new("test", "Test", "Description", Utc::now())?;
 
-        let task_a = crate::Task::new("a", "Task A", "First").expect("Failed to create task");
-        let task_b = crate::Task::new("b", "Task B", "Second").expect("Failed to create task");
-        let task_c = crate::Task::new("c", "Task C", "Third").expect("Failed to create task");
+        let task_a = crate::Task::new("a", "Task A", "First")?;
+        let task_b = crate::Task::new("b", "Task B", "Second")?;
+        let task_c = crate::Task::new("c", "Task C", "Third")?;
 
-        workflow.add_task(task_a, Utc::now()).expect("Failed to add task");
-        workflow.add_task(task_b, Utc::now()).expect("Failed to add task");
-        workflow.add_task(task_c, Utc::now()).expect("Failed to add task");
+        workflow.add_task(task_a, Utc::now())?;
+        workflow.add_task(task_b, Utc::now())?;
+        workflow.add_task(task_c, Utc::now())?;
 
         workflow
-            .add_dependency("a", "b", Utc::now())
-            .expect("Failed to add dependency");
+            .add_dependency("a", "b", Utc::now())?;
         workflow
-            .add_dependency("a", "c", Utc::now())
-            .expect("Failed to add dependency");
+            .add_dependency("a", "c", Utc::now())?;
 
         let levels = viz.build_level_layout(&workflow);
         assert_eq!(levels.len(), 2);
         assert_eq!(levels[0][0].as_str(), "a");
-        assert!(levels[1].contains(&Slug::new("b").unwrap()));
-        assert!(levels[1].contains(&Slug::new("c").unwrap()));
+        assert!(levels[1].contains(&Slug::new("b")?));
+        assert!(levels[1].contains(&Slug::new("c")?));
+        Ok(())
     }
 
     #[test]
@@ -931,10 +926,9 @@ mod tests {
     }
 
     #[test]
-    fn test_render_task_box() {
+    fn test_render_task_box() -> Result<(), Box<dyn std::error::Error>> {
         let viz = WorkflowVisualization::new();
-        let task = crate::Task::new("test-task", "Test Task", "A test task")
-            .expect("Failed to create task");
+        let task = crate::Task::new("test-task", "Test Task", "A test task")?;
         let status = TaskExecutionStatus::Completed;
 
         let lines = viz.render_task_box(&task, &status, true, false);
@@ -942,5 +936,6 @@ mod tests {
         assert!(lines[0].contains("✓"));
         assert!(lines[0].contains("*")); // Critical marker
         assert!(lines[1].contains("████"));
+        Ok(())
     }
 }

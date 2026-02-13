@@ -22,9 +22,7 @@
 #![allow(clippy::unused_self)]
 #![allow(clippy::self_only_used_in_recursion)]
 #![forbid(unsafe_code)]
-#![cfg_attr(test, allow(clippy::expect_used))]
-#![cfg_attr(test, allow(clippy::unwrap_used))]
-#![cfg_attr(test, allow(clippy::panic))]
+
 
 #[cfg(test)]
 use crate::Task;
@@ -634,33 +632,31 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_valid_workflow() {
+    fn test_parse_valid_workflow() -> Result<(), Box<dyn std::error::Error>> {
         let engine = ExecutionEngine::new();
-        let mut workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())
-            .expect("Failed to create workflow");
+        let mut workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
 
-        let task1 = Task::new("task-1", "Task 1", "First task").expect("Failed to create task");
-        let task2 = Task::new("task-2", "Task 2", "Second task").expect("Failed to create task");
+        let task1 = Task::new("task-1", "Task 1", "First task")?;
+        let task2 = Task::new("task-2", "Task 2", "Second task")?;
 
-        workflow.add_task(task1, Utc::now()).expect("Failed to add task");
-        workflow.add_task(task2, Utc::now()).expect("Failed to add task");
+        workflow.add_task(task1, Utc::now())?;
+        workflow.add_task(task2, Utc::now())?;
         workflow
-            .add_dependency("task-1", "task-2", Utc::now())
-            .expect("Failed to add dependency");
+            .add_dependency("task-1", "task-2", Utc::now())?;
 
         let state = engine
-            .parse_workflow(&workflow)
-            .expect("Failed to parse workflow");
+            .parse_workflow(&workflow)?;
         assert_eq!(state.workflow_id.as_str(), "test-workflow");
         assert_eq!(state.task_status.len(), 2);
         assert_eq!(
-            state.task_status.get(&Slug::new("task-1").unwrap()),
+            state.task_status.get(&Slug::new("task-1")?),
             Some(&TaskExecutionStatus::Pending)
         );
         assert_eq!(
-            state.task_status.get(&Slug::new("task-2").unwrap()),
+            state.task_status.get(&Slug::new("task-2")?),
             Some(&TaskExecutionStatus::Pending)
         );
+        Ok(())
     }
 
     #[test]
@@ -690,7 +686,7 @@ mod tests {
             Err(ExecutionError::InvalidWorkflow(msg)) => {
                 assert!(msg.contains("non-existent"));
             }
-            _ => panic!("Expected InvalidWorkflow error"),
+            _ => return Err("Expected InvalidWorkflow error".into()),
         }
         Ok(())
     }
@@ -722,32 +718,28 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_workflow_maps_completed_task_to_completed_state() {
+    fn test_parse_workflow_maps_completed_task_to_completed_state() -> Result<(), Box<dyn std::error::Error>> {
         let engine = ExecutionEngine::new();
-        let mut workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())
-            .expect("Failed to create workflow");
+        let mut workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
 
         let mut completed_task =
-            Task::new("task-1", "Task 1", "First task").expect("Failed to create task");
+            Task::new("task-1", "Task 1", "First task")?;
         // Mark task as completed
         completed_task
-            .transition_to(crate::Stage::InProgress)
-            .expect("Failed to transition");
+            .transition_to(crate::Stage::InProgress)?;
         completed_task
-            .transition_to(crate::Stage::Completed)
-            .expect("Failed to transition");
+            .transition_to(crate::Stage::Completed)?;
 
         workflow
-            .add_task(completed_task, Utc::now())
-            .expect("Failed to add completed task");
+            .add_task(completed_task, Utc::now())?;
         let state = engine
-            .parse_workflow(&workflow)
-            .expect("Failed to parse workflow");
+            .parse_workflow(&workflow)?;
 
         assert_eq!(
-            state.task_status.get(&Slug::new("task-1").unwrap()),
+            state.task_status.get(&Slug::new("task-1")?),
             Some(&TaskExecutionStatus::Completed)
         );
+        Ok(())
     }
 
     #[test]
@@ -790,101 +782,95 @@ mod tests {
     }
 
     #[test]
-    fn test_topological_sort_linear() {
+    fn test_topological_sort_linear() -> Result<(), Box<dyn std::error::Error>> {
         let engine = ExecutionEngine::new();
-        let mut workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())
-            .expect("Failed to create workflow");
+        let mut workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
 
-        let task1 = Task::new("task-1", "Task 1", "First task").expect("Failed to create task");
-        let task2 = Task::new("task-2", "Task 2", "Second task").expect("Failed to create task");
-        let task3 = Task::new("task-3", "Task 3", "Third task").expect("Failed to create task");
+        let task1 = Task::new("task-1", "Task 1", "First task")?;
+        let task2 = Task::new("task-2", "Task 2", "Second task")?;
+        let task3 = Task::new("task-3", "Task 3", "Third task")?;
 
-        workflow.add_task(task1, Utc::now()).expect("Failed to add task");
-        workflow.add_task(task2, Utc::now()).expect("Failed to add task");
-        workflow.add_task(task3, Utc::now()).expect("Failed to add task");
+        workflow.add_task(task1, Utc::now())?;
+        workflow.add_task(task2, Utc::now())?;
+        workflow.add_task(task3, Utc::now())?;
 
         workflow
-            .add_dependency("task-1", "task-2", Utc::now())
-            .expect("Failed to add dependency");
+            .add_dependency("task-1", "task-2", Utc::now())?;
         workflow
-            .add_dependency("task-2", "task-3", Utc::now())
-            .expect("Failed to add dependency");
+            .add_dependency("task-2", "task-3", Utc::now())?;
 
-        let sorted = engine.topological_sort(&workflow).expect("Failed to sort");
+        let sorted = engine.topological_sort(&workflow)?;
         assert_eq!(sorted.len(), 3);
 
         // task-1 must come before task-2, task-2 before task-3
-        let pos1 = sorted.iter().position(|id| id.as_str() == "task-1").unwrap();
-        let pos2 = sorted.iter().position(|id| id.as_str() == "task-2").unwrap();
-        let pos3 = sorted.iter().position(|id| id.as_str() == "task-3").unwrap();
+        let pos1 = sorted.iter().position(|id| id.as_str() == "task-1").ok_or("task-1 not found")?;
+        let pos2 = sorted.iter().position(|id| id.as_str() == "task-2").ok_or("task-2 not found")?;
+        let pos3 = sorted.iter().position(|id| id.as_str() == "task-3").ok_or("task-3 not found")?;
 
         assert!(pos1 < pos2);
         assert!(pos2 < pos3);
+        Ok(())
     }
 
     #[test]
-    fn test_topological_sort_diamond() {
+    fn test_topological_sort_diamond() -> Result<(), Box<dyn std::error::Error>> {
         let engine = ExecutionEngine::new();
-        let mut workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())
-            .expect("Failed to create workflow");
+        let mut workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
 
-        let task_a = Task::new("a", "Task A", "First").expect("Failed to create task");
-        let task_b = Task::new("b", "Task B", "Second").expect("Failed to create task");
-        let task_c = Task::new("c", "Task C", "Third").expect("Failed to create task");
-        let task_d = Task::new("d", "Task D", "Fourth").expect("Failed to create task");
+        let task_a = Task::new("a", "Task A", "First")?;
+        let task_b = Task::new("b", "Task B", "Second")?;
+        let task_c = Task::new("c", "Task C", "Third")?;
+        let task_d = Task::new("d", "Task D", "Fourth")?;
 
-        workflow.add_task(task_a, Utc::now()).expect("Failed to add task");
-        workflow.add_task(task_b, Utc::now()).expect("Failed to add task");
-        workflow.add_task(task_c, Utc::now()).expect("Failed to add task");
-        workflow.add_task(task_d, Utc::now()).expect("Failed to add task");
+        workflow.add_task(task_a, Utc::now())?;
+        workflow.add_task(task_b, Utc::now())?;
+        workflow.add_task(task_c, Utc::now())?;
+        workflow.add_task(task_d, Utc::now())?;
 
         // A -> [B, C] -> D
         workflow
-            .add_dependency("a", "b", Utc::now())
-            .expect("Failed to add dependency");
+            .add_dependency("a", "b", Utc::now())?;
         workflow
-            .add_dependency("a", "c", Utc::now())
-            .expect("Failed to add dependency");
+            .add_dependency("a", "c", Utc::now())?;
         workflow
-            .add_dependency("b", "d", Utc::now())
-            .expect("Failed to add dependency");
+            .add_dependency("b", "d", Utc::now())?;
         workflow
-            .add_dependency("c", "d", Utc::now())
-            .expect("Failed to add dependency");
+            .add_dependency("c", "d", Utc::now())?;
 
-        let sorted = engine.topological_sort(&workflow).expect("Failed to sort");
+        let sorted = engine.topological_sort(&workflow)?;
         assert_eq!(sorted.len(), 4);
 
         // A must come before both B and C
-        let pos_a = sorted.iter().position(|id| id.as_str() == "a").unwrap();
-        let pos_b = sorted.iter().position(|id| id.as_str() == "b").unwrap();
-        let pos_c = sorted.iter().position(|id| id.as_str() == "c").unwrap();
-        let pos_d = sorted.iter().position(|id| id.as_str() == "d").unwrap();
+        let pos_a = sorted.iter().position(|id| id.as_str() == "a").ok_or("a not found")?;
+        let pos_b = sorted.iter().position(|id| id.as_str() == "b").ok_or("b not found")?;
+        let pos_c = sorted.iter().position(|id| id.as_str() == "c").ok_or("c not found")?;
+        let pos_d = sorted.iter().position(|id| id.as_str() == "d").ok_or("d not found")?;
 
         assert!(pos_a < pos_b);
         assert!(pos_a < pos_c);
         assert!(pos_b < pos_d);
         assert!(pos_c < pos_d);
+        Ok(())
     }
 
     #[test]
-    fn test_get_ready_tasks_no_dependencies() {
+    fn test_get_ready_tasks_no_dependencies() -> Result<(), Box<dyn std::error::Error>> {
         let engine = ExecutionEngine::new();
-        let mut workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())
-            .expect("Failed to create workflow");
+        let mut workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
 
-        let task1 = Task::new("task-1", "Task 1", "First task").expect("Failed to create task");
-        workflow.add_task(task1, Utc::now()).expect("Failed to add task");
+        let task1 = Task::new("task-1", "Task 1", "First task")?;
+        workflow.add_task(task1, Utc::now())?;
 
         let state = WorkflowState {
-            workflow_id: Slug::new("test-workflow").unwrap(),
-            task_status: HashMap::from([(Slug::new("task-1").unwrap(), TaskExecutionStatus::Pending)]),
+            workflow_id: Slug::new("test-workflow")?,
+            task_status: HashMap::from([(Slug::new("task-1")?, TaskExecutionStatus::Pending)]),
             timestamp: Utc::now(),
         };
 
         let ready = engine.get_ready_tasks(&workflow, &state);
         assert_eq!(ready.len(), 1);
-        assert!(ready.contains(&Slug::new("task-1").unwrap()));
+        assert!(ready.contains(&Slug::new("task-1")?));
+        Ok(())
     }
 
     #[test]
@@ -900,17 +886,17 @@ mod tests {
         workflow.add_dependency("task-1", "task-2", Utc::now())?;
 
         let state = WorkflowState {
-            workflow_id: Slug::new("test-workflow").unwrap(),
+            workflow_id: Slug::new("test-workflow")?,
             task_status: HashMap::from([
-                (Slug::new("task-1").unwrap(), TaskExecutionStatus::Completed),
-                (Slug::new("task-2").unwrap(), TaskExecutionStatus::Pending),
+                (Slug::new("task-1")?, TaskExecutionStatus::Completed),
+                (Slug::new("task-2")?, TaskExecutionStatus::Pending),
             ]),
             timestamp: Utc::now(),
         };
 
         let ready = engine.get_ready_tasks(&workflow, &state);
         assert_eq!(ready.len(), 1);
-        assert!(ready.contains(&Slug::new("task-2").unwrap()));
+        assert!(ready.contains(&Slug::new("task-2")?));
         Ok(())
     }
 
@@ -927,10 +913,10 @@ mod tests {
         workflow.add_dependency("task-1", "task-2", Utc::now())?;
 
         let state = WorkflowState {
-            workflow_id: Slug::new("test-workflow").unwrap(),
+            workflow_id: Slug::new("test-workflow")?,
             task_status: HashMap::from([
-                (Slug::new("task-1").unwrap(), TaskExecutionStatus::InProgress),
-                (Slug::new("task-2").unwrap(), TaskExecutionStatus::Pending),
+                (Slug::new("task-1")?, TaskExecutionStatus::InProgress),
+                (Slug::new("task-2")?, TaskExecutionStatus::Pending),
             ]),
             timestamp: Utc::now(),
         };
@@ -998,11 +984,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_save_checkpoint_no_directory() {
+    async fn test_save_checkpoint_no_directory() -> Result<(), Box<dyn std::error::Error>> {
         let engine = ExecutionEngine::new();
 
         let state = WorkflowState {
-            workflow_id: Slug::new("test-workflow").unwrap(),
+            workflow_id: Slug::new("test-workflow")?,
             task_status: HashMap::new(),
             timestamp: Utc::now(),
         };
@@ -1012,6 +998,7 @@ mod tests {
             result,
             Err(ExecutionError::CheckpointFailed { .. })
         ));
+        Ok(())
     }
 
     #[tokio::test]
@@ -1116,63 +1103,65 @@ mod tests {
 
         let result = engine.execute_workflow(&workflow).map_err(|e| e.to_string())?;
         assert_eq!(result.succeeded.len(), 2);
-        assert!(result.succeeded.contains(&Slug::new("task-1").unwrap()));
-        assert!(result.succeeded.contains(&Slug::new("task-2").unwrap()));
+        assert!(result.succeeded.contains(&Slug::new("task-1")?));
+        assert!(result.succeeded.contains(&Slug::new("task-2")?));
         assert!(result.failed.is_empty());
         Ok(())
     }
 
     #[test]
-    fn test_rollback_task_completed() {
+    fn test_rollback_task_completed() -> Result<(), Box<dyn std::error::Error>> {
         let engine = ExecutionEngine::new();
         let mut workflow =
-            Workflow::new("test-workflow", "Test", "Description", Utc::now()).expect("Failed to create workflow");
+            Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
 
-        let task1 = Task::new("task-1", "Task 1", "First task").expect("Failed to create task");
-        workflow.add_task(task1, Utc::now()).expect("Failed to add task");
+        let task1 = Task::new("task-1", "Task 1", "First task")?;
+        workflow.add_task(task1, Utc::now())?;
 
         let mut state = WorkflowState {
-            workflow_id: Slug::new("test-workflow").unwrap(),
-            task_status: HashMap::from([(Slug::new("task-1").unwrap(), TaskExecutionStatus::Completed)]),
+            workflow_id: Slug::new("test-workflow")?,
+            task_status: HashMap::from([(Slug::new("task-1")?, TaskExecutionStatus::Completed)]),
             timestamp: Utc::now(),
         };
 
-        let result = engine.rollback_task(&Slug::new("task-1").unwrap(), &workflow, &mut state);
+        let result = engine.rollback_task(&Slug::new("task-1")?, &workflow, &mut state);
         assert!(result.is_ok());
 
         assert_eq!(
-            state.task_status.get(&Slug::new("task-1").unwrap()),
+            state.task_status.get(&Slug::new("task-1")?),
             Some(&TaskExecutionStatus::RolledBack)
         );
+        Ok(())
     }
 
     #[test]
-    fn test_rollback_task_idempotent() {
+    fn test_rollback_task_idempotent() -> Result<(), Box<dyn std::error::Error>> {
         let engine = ExecutionEngine::new();
         let mut workflow =
-            Workflow::new("test-workflow", "Test", "Description", Utc::now()).expect("Failed to create workflow");
+            Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
 
-        let task1 = Task::new("task-1", "Task 1", "First task").expect("Failed to create task");
-        workflow.add_task(task1, Utc::now()).expect("Failed to add task");
+        let task1 = Task::new("task-1", "Task 1", "First task")?;
+        workflow.add_task(task1, Utc::now())?;
 
         let mut state = WorkflowState {
-            workflow_id: Slug::new("test-workflow").unwrap(),
-            task_status: HashMap::from([(Slug::new("task-1").unwrap(), TaskExecutionStatus::RolledBack)]),
+            workflow_id: Slug::new("test-workflow")?,
+            task_status: HashMap::from([(Slug::new("task-1")?, TaskExecutionStatus::RolledBack)]),
             timestamp: Utc::now(),
         };
 
         // First rollback
-        let result1 = engine.rollback_task(&Slug::new("task-1").unwrap(), &workflow, &mut state);
+        let result1 = engine.rollback_task(&Slug::new("task-1")?, &workflow, &mut state);
         assert!(result1.is_ok());
 
         // Second rollback (idempotent)
-        let result2 = engine.rollback_task(&Slug::new("task-1").unwrap(), &workflow, &mut state);
+        let result2 = engine.rollback_task(&Slug::new("task-1")?, &workflow, &mut state);
         assert!(result2.is_ok());
 
         assert_eq!(
-            state.task_status.get(&Slug::new("task-1").unwrap()),
+            state.task_status.get(&Slug::new("task-1")?),
             Some(&TaskExecutionStatus::RolledBack)
         );
+        Ok(())
     }
 
     #[test]
