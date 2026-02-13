@@ -360,17 +360,27 @@ where
     events
         .iter()
         .try_fold(ReplaySummary::zero(), |summary, event| {
-            // Try to apply event with retries using functional fold
-            let result = (0..config.max_retries).fold(
+            // Try to apply event with retries using functional try_fold
+            let result = (0..config.max_retries).try_fold(
                 Err(ApplyError::Internal("No attempts configured".into())),
                 |acc, _| {
                     if acc.is_ok() {
-                        acc
+                        Ok(acc)
                     } else {
-                        apply_event(state, event, context)
+                        match apply_event(state, event, context) {
+                            Ok(()) => Err(Ok(())), // Short-circuit on success
+                            Err(e) => Ok(Err(e)),  // Continue on error
+                        }
                     }
                 },
             );
+
+            // Handle the short-circuited result
+            let result = match result {
+                Ok(Err(e)) => Err(e),
+                Err(res) => res,
+                Ok(Ok(())) => unreachable!("Should have short-circuited"),
+            };
 
             match result {
                 Ok(()) => Ok(summary.record_applied()),
@@ -685,7 +695,7 @@ mod tests {
         assert_eq!(state.applied_events[0], event1.event_id().to_string());
         assert_eq!(state.applied_events[1], event2.event_id().to_string());
         
-        let last_meta = context.last_event(&bead_id).unwrap();
+        let last_meta = context.last_event(&bead_id).ok_or("last event not found")?;
         assert_eq!(last_meta.event_id, event2.event_id().to_string());
         Ok(())
     }
@@ -713,7 +723,7 @@ mod tests {
         assert_eq!(state.applied_events[0], event1.event_id().to_string());
         
         // Context should point to event1
-        let last_meta = context.last_event(&bead_id).unwrap();
+        let last_meta = context.last_event(&bead_id).ok_or("last event not found")?;
         assert_eq!(last_meta.event_id, event1.event_id().to_string());
         Ok(())
     }
@@ -859,7 +869,7 @@ mod tests {
         let result = apply_events_with_recovery(&mut state, &events, &mut context, &config, &dlq);
 
         assert!(result.is_ok(), "Should apply all events successfully");
-        let summary = result.unwrap();
+        let summary = result?;
         assert_eq!(summary.applied, 2, "Should apply 2 events");
         assert_eq!(summary.skipped, 0, "Should skip 0 events");
         assert!(summary.is_complete(), "Should be complete");
@@ -891,7 +901,7 @@ mod tests {
         let result = apply_events_with_recovery(&mut state, &events, &mut context, &config, &dlq);
 
         assert!(result.is_ok(), "Should complete with DLQ enabled");
-        let summary = result.unwrap();
+        let summary = result?;
         assert_eq!(summary.applied, 2, "Should apply 2 events (1 and 3)");
         assert_eq!(summary.skipped, 1, "Should skip 1 event (2)");
         assert!(!summary.is_complete(), "Should not be complete (has skips)");
@@ -959,7 +969,7 @@ mod tests {
         let result = apply_events_with_recovery(&mut state, &events, &mut context, &config, &dlq);
 
         assert!(result.is_ok(), "Should complete even when all events fail");
-        let summary = result.unwrap();
+        let summary = result?;
         assert_eq!(summary.applied, 0, "Should apply 0 events");
         assert_eq!(summary.skipped, 3, "Should skip all 3 events");
         assert_eq!(dlq.count()?, 3, "DLQ should have all 3 events");
@@ -979,7 +989,7 @@ mod tests {
         let result = apply_events_with_recovery(&mut state, &events, &mut context, &config, &dlq);
 
         assert!(result.is_ok(), "Should handle empty event list");
-        let summary = result.unwrap();
+        let summary = result?;
         assert_eq!(summary.applied, 0);
         assert_eq!(summary.skipped, 0);
         assert!(summary.is_complete());
@@ -1007,7 +1017,7 @@ mod tests {
         assert!(context.last_events.contains_key(&bead_id));
         let last_event = context.last_event(&bead_id);
         assert!(last_event.is_some());
-        assert_eq!(last_event.unwrap().event_id, event2.event_id().to_string());
+        assert_eq!(last_event.ok_or("last event not found")?.event_id, event2.event_id().to_string());
         Ok(())
     }
 
@@ -1039,7 +1049,7 @@ mod tests {
         let result = apply_events_with_recovery(&mut state, &events, &mut context, &config, &dlq);
 
         assert!(result.is_ok());
-        let summary = result.unwrap();
+        let summary = result?;
         assert_eq!(summary.applied, 3, "Should apply events 1, 3, 5");
         assert_eq!(summary.skipped, 2, "Should skip events 2, 4");
         assert_eq!(dlq.count()?, 2);

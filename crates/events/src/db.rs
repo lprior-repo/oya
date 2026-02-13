@@ -244,7 +244,7 @@ async fn execute_schema_queries(client: &Surreal<Db>, queries: &[&str]) -> Resul
             client
                 .query(trimmed)
                 .await
-                .and_then(|resp| resp.check())
+                .and_then(surrealdb::Response::check)
                 .map(|_| {
                     debug!(idx = idx + 1, total, "Schema query succeeded");
                     1usize // Count successful query

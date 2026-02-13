@@ -297,6 +297,15 @@ pub struct DurableEventStore {
 }
 
 impl DurableEventStore {
+    /// Create a mock DurableEventStore for testing.
+    /// 
+    /// # Errors
+    /// Returns an error if initialization fails.
+    pub async fn mock() -> Result<Self> {
+        let db = Arc::new(Surreal::init());
+        Self::new(db).await
+    }
+
     pub async fn new(db: Arc<Surreal<Db>>) -> Result<Self> {
         let store = Self {
             db,
