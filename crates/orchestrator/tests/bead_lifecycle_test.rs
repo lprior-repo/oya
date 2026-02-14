@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! Rigorous End-to-End Bead Lifecycle Integration Test
 //!
 //! This test validates the entire bead lifecycle using REAL components:
@@ -77,45 +78,29 @@ fn test_bead_lifecycle_with_dependencies() {
     let mut dag = WorkflowDAG::new();
 
     // Add all beads to the DAG
-    let result = dag.add_node("bead-a".to_string());
+    let result = dag.add_node("bead-a");
     assert!(result.is_ok(), "Failed to add bead-a: {:?}", result);
-    let result = dag.add_node("bead-b".to_string());
+    let result = dag.add_node("bead-b");
     assert!(result.is_ok(), "Failed to add bead-b: {:?}", result);
-    let result = dag.add_node("bead-c".to_string());
+    let result = dag.add_node("bead-c");
     assert!(result.is_ok(), "Failed to add bead-c: {:?}", result);
-    let result = dag.add_node("bead-d".to_string());
+    let result = dag.add_node("bead-d");
     assert!(result.is_ok(), "Failed to add bead-d: {:?}", result);
-    let result = dag.add_node("bead-e".to_string());
+    let result = dag.add_node("bead-e");
     assert!(result.is_ok(), "Failed to add bead-e: {:?}", result);
 
     // Add dependency edges: A → B → C
-    let result = dag.add_edge(
-        "bead-a".to_string(),
-        "bead-b".to_string(),
-        DependencyType::BlockingDependency,
-    );
+    let result = dag.add_edge("bead-a", "bead-b", DependencyType::BlockingDependency);
     assert!(result.is_ok(), "Failed to add edge A→B: {:?}", result);
 
-    let result = dag.add_edge(
-        "bead-b".to_string(),
-        "bead-c".to_string(),
-        DependencyType::BlockingDependency,
-    );
+    let result = dag.add_edge("bead-b", "bead-c", DependencyType::BlockingDependency);
     assert!(result.is_ok(), "Failed to add edge B→C: {:?}", result);
 
     // Add dependency edges: A → D → E
-    let result = dag.add_edge(
-        "bead-a".to_string(),
-        "bead-d".to_string(),
-        DependencyType::BlockingDependency,
-    );
+    let result = dag.add_edge("bead-a", "bead-d", DependencyType::BlockingDependency);
     assert!(result.is_ok(), "Failed to add edge A→D: {:?}", result);
 
-    let result = dag.add_edge(
-        "bead-d".to_string(),
-        "bead-e".to_string(),
-        DependencyType::BlockingDependency,
-    );
+    let result = dag.add_edge("bead-d", "bead-e", DependencyType::BlockingDependency);
     assert!(result.is_ok(), "Failed to add edge D→E: {:?}", result);
 
     // Verify DAG structure
@@ -355,39 +340,23 @@ fn test_complex_dag_diamond_dependency() {
     let mut dag = WorkflowDAG::new();
 
     // Add nodes
-    let result = dag.add_node("bead-a".to_string());
+    let result = dag.add_node("bead-a");
     assert!(result.is_ok(), "Failed to add A: {:?}", result);
-    let result = dag.add_node("bead-b".to_string());
+    let result = dag.add_node("bead-b");
     assert!(result.is_ok(), "Failed to add B: {:?}", result);
-    let result = dag.add_node("bead-c".to_string());
+    let result = dag.add_node("bead-c");
     assert!(result.is_ok(), "Failed to add C: {:?}", result);
-    let result = dag.add_node("bead-d".to_string());
+    let result = dag.add_node("bead-d");
     assert!(result.is_ok(), "Failed to add D: {:?}", result);
 
     // Add edges
-    let result = dag.add_edge(
-        "bead-a".to_string(),
-        "bead-b".to_string(),
-        DependencyType::BlockingDependency,
-    );
+    let result = dag.add_edge("bead-a", "bead-b", DependencyType::BlockingDependency);
     assert!(result.is_ok(), "Failed to add A→B: {:?}", result);
-    let result = dag.add_edge(
-        "bead-a".to_string(),
-        "bead-c".to_string(),
-        DependencyType::BlockingDependency,
-    );
+    let result = dag.add_edge("bead-a", "bead-c", DependencyType::BlockingDependency);
     assert!(result.is_ok(), "Failed to add A→C: {:?}", result);
-    let result = dag.add_edge(
-        "bead-b".to_string(),
-        "bead-d".to_string(),
-        DependencyType::BlockingDependency,
-    );
+    let result = dag.add_edge("bead-b", "bead-d", DependencyType::BlockingDependency);
     assert!(result.is_ok(), "Failed to add B→D: {:?}", result);
-    let result = dag.add_edge(
-        "bead-c".to_string(),
-        "bead-d".to_string(),
-        DependencyType::BlockingDependency,
-    );
+    let result = dag.add_edge("bead-c", "bead-d", DependencyType::BlockingDependency);
     assert!(result.is_ok(), "Failed to add C→D: {:?}", result);
 
     let mut tracker = ExecutionTracker::new();

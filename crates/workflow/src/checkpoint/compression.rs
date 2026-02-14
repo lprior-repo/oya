@@ -207,7 +207,10 @@ pub fn decompress(compressed_data: &[u8], uncompressed_size: usize) -> Result<Ve
 /// Prefer `decompress` with known size for better performance.
 pub fn decompress_auto(data: &[u8]) -> Result<Vec<u8>> {
     zstd::stream::decode_all(data).map_err(|e| Error::CheckpointFailed {
-        reason: format!("zstd decompression failed (auto): all buffer strategies failed: {}", e),
+        reason: format!(
+            "zstd decompression failed (auto): all buffer strategies failed: {}",
+            e
+        ),
     })
 }
 
@@ -289,6 +292,7 @@ pub const fn space_savings(uncompressed_size: u64, compressed_size: u64) -> u64 
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
 
@@ -919,12 +923,7 @@ mod tests {
 
         for (uncompressed, compressed) in cases {
             let saved = space_savings(uncompressed, compressed);
-            assert!(
-                saved >= 0,
-                "Invariant: savings ≥ 0 for ({}, {})",
-                uncompressed,
-                compressed
-            );
+            let _ = saved;
         }
     }
 

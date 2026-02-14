@@ -138,7 +138,7 @@ impl std::fmt::Display for PhaseId {
     }
 }
 
-/// 8-state lifecycle for beads.
+/// 10-state lifecycle for beads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BeadState {
     /// Waiting for dependencies.
@@ -155,22 +155,27 @@ pub enum BeadState {
     BackingOff,
     /// System pause (resource constraint).
     Paused,
-    /// Terminal: success or failure.
+    /// Terminal: success.
     Completed,
+    /// Terminal: failure.
+    Failed,
+    /// Terminal: cancelled.
+    Cancelled,
 }
 
 impl BeadState {
     /// Check if this is a terminal state.
     #[must_use]
     pub const fn is_terminal(&self) -> bool {
-        matches!(self, Self::Completed)
+        matches!(self, Self::Completed | Self::Failed | Self::Cancelled)
     }
 
     /// Check if transition to target state is valid.
     #[must_use]
     pub const fn can_transition_to(&self, target: Self) -> bool {
         use BeadState::{
-            BackingOff, Completed, Paused, Pending, Ready, Running, Scheduled, Suspended,
+            BackingOff, Cancelled, Completed, Failed, Paused, Pending, Ready, Running, Scheduled,
+            Suspended,
         };
         matches!(
             (self, target),
@@ -178,11 +183,12 @@ impl BeadState {
             (Pending | Ready, Scheduled)
                 | (
                     Pending | Scheduled | Ready | Running | Suspended | BackingOff | Paused,
-                    Completed
+                    Completed | Failed | Cancelled
                 )
                 | (Scheduled, Ready | Pending)
                 | (Ready | Suspended | BackingOff | Paused, Running)
                 | (Running, Suspended | BackingOff | Paused)
+                | (Failed, Ready)
         )
     }
 
@@ -190,17 +196,20 @@ impl BeadState {
     #[must_use]
     pub fn valid_transitions(&self) -> Vec<Self> {
         use BeadState::{
-            BackingOff, Completed, Paused, Pending, Ready, Running, Scheduled, Suspended,
+            BackingOff, Cancelled, Completed, Failed, Paused, Pending, Ready, Running, Scheduled,
+            Suspended,
         };
         match self {
-            Pending => vec![Scheduled, Completed],
-            Scheduled => vec![Ready, Pending, Completed],
-            Ready => vec![Running, Scheduled, Completed],
-            Running => vec![Suspended, BackingOff, Paused, Completed],
-            Suspended => vec![Running, Completed],
-            BackingOff => vec![Running, Completed],
-            Paused => vec![Running, Completed],
+            Pending => vec![Scheduled, Completed, Failed, Cancelled],
+            Scheduled => vec![Ready, Pending, Completed, Failed, Cancelled],
+            Ready => vec![Running, Scheduled, Completed, Failed, Cancelled],
+            Running => vec![Suspended, BackingOff, Paused, Completed, Failed, Cancelled],
+            Suspended => vec![Running, Completed, Failed, Cancelled],
+            BackingOff => vec![Running, Completed, Failed, Cancelled],
+            Paused => vec![Running, Completed, Failed, Cancelled],
             Completed => vec![],
+            Failed => vec![Ready],
+            Cancelled => vec![],
         }
     }
 }
@@ -216,6 +225,8 @@ impl std::fmt::Display for BeadState {
             Self::BackingOff => "backing_off",
             Self::Paused => "paused",
             Self::Completed => "completed",
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
         };
         write!(f, "{s}")
     }

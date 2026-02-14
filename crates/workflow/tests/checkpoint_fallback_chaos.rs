@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! Chaos tests for checkpoint corruption with fallback to previous checkpoint.
 //!
 //! Tests resilience to checkpoint corruption by:
@@ -7,9 +8,6 @@
 //! 4. Verifying system recovers with consistent state
 
 #![cfg(test)]
-#![deny(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-#![deny(clippy::panic)]
 #![warn(clippy::pedantic)]
 #![warn(clippy::nursery)]
 #![forbid(unsafe_code)]

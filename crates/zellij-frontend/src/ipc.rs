@@ -5,7 +5,7 @@
 
 #![forbid(unsafe_code)]
 #![forbid(clippy::unwrap_used)]
-#![forbid(clippy::expect_used)]
+#![deny(clippy::expect_used)]
 #![forbid(clippy::panic)]
 
 use crate::ipc_zellij::ZellijIpcClient;

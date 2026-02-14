@@ -58,7 +58,8 @@ fn test_render_bead_detail_metadata_with_empty_labels() -> Result<(), Box<dyn st
 }
 
 #[test]
-fn test_render_bead_detail_metadata_with_empty_dependencies() -> Result<(), Box<dyn std::error::Error>> {
+fn test_render_bead_detail_metadata_with_empty_dependencies(
+) -> Result<(), Box<dyn std::error::Error>> {
     let renderer = Renderer::new();
     let mut bead = create_test_bead_detail();
     bead.dependencies = vec![];
@@ -90,7 +91,8 @@ fn test_render_bead_detail_metadata_format_priority() -> Result<(), Box<dyn std:
 }
 
 #[test]
-fn test_render_bead_detail_metadata_truncates_long_description() -> Result<(), Box<dyn std::error::Error>> {
+fn test_render_bead_detail_metadata_truncates_long_description(
+) -> Result<(), Box<dyn std::error::Error>> {
     let renderer = Renderer::new();
     let mut bead = create_test_bead_detail();
     bead.description = "This is a very long description that should be truncated when rendered in a small pane to avoid overflow issues in the terminal display".to_string();
@@ -107,7 +109,8 @@ fn test_render_bead_detail_metadata_truncates_long_description() -> Result<(), B
 }
 
 #[test]
-fn test_render_bead_detail_metadata_handles_special_chars() -> Result<(), Box<dyn std::error::Error>> {
+fn test_render_bead_detail_metadata_handles_special_chars() -> Result<(), Box<dyn std::error::Error>>
+{
     let renderer = Renderer::new();
     let mut bead = create_test_bead_detail();
     bead.title = "Feature with \"quotes\" and <brackets>".to_string();

@@ -200,11 +200,7 @@ fn benchmark_cache_invalidation() {
         eprintln!("Failed to add node: {e}");
         return;
     }
-    if let Err(e) = dag.add_edge(
-        "node-19",
-        "new_node",
-        DependencyType::BlockingDependency,
-    ) {
+    if let Err(e) = dag.add_edge("node-19", "new_node", DependencyType::BlockingDependency) {
         eprintln!("Failed to add edge: {e}");
         return;
     }
@@ -332,7 +328,7 @@ mod tests {
 
 /// Performance analysis functions
 pub mod analysis {
-    use super::{MemoizedLayout, WorkflowDAG, create_test_dag_with_result};
+    use super::{create_test_dag_with_result, MemoizedLayout, WorkflowDAG};
 
     /// Analyze cache effectiveness
     #[allow(clippy::cast_precision_loss)]

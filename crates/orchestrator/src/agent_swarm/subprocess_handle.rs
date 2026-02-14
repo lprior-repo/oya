@@ -151,9 +151,12 @@ impl SubprocessHandle {
             .stdout
             .take()
             .ok_or(AgentSwarmError::StdoutUnavailable)?;
-        let mut stderr = child.stderr.take().ok_or_else(|| AgentSwarmError::SpawnFailed {
-            message: "stderr not captured".to_string(),
-        })?;
+        let mut stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| AgentSwarmError::SpawnFailed {
+                message: "stderr not captured".to_string(),
+            })?;
 
         // Race between process completion and timeout
         let sleep = tokio::time::sleep(timeout);

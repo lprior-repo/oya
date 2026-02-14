@@ -34,20 +34,20 @@ pub mod storm;
 pub mod workspace;
 
 // Re-export command implementations and types for convenience
-pub use approve::{ApproveArgs, approve_command};
-pub use doctor::{CheckStatus, DoctorArgs, doctor_command};
-pub use init::{InitArgs, init_command};
+pub use approve::{approve_command, ApproveArgs};
+pub use doctor::{doctor_command, CheckStatus, DoctorArgs};
+pub use init::{init_command, InitArgs};
 pub use install::install_command;
-pub use list::{ListArgs, list_command};
-pub use logs::{LogsArgs, logs_command};
-pub use new::{NewArgs, new_command};
+pub use list::{list_command, ListArgs};
+pub use logs::{logs_command, LogsArgs};
+pub use new::{new_command, NewArgs};
 pub use serve::serve_command;
-pub use show::{ShowArgs, show_command};
-pub use stage::{StageArgs, stage_command};
-pub use storm::{StormArgs, storm_command};
+pub use show::{show_command, ShowArgs};
+pub use stage::{stage_command, StageArgs};
+pub use storm::{storm_command, StormArgs};
 pub use workspace::{
-    AddArgs, DoneArgs, FocusArgs, RemoveArgs, SpawnArgs, StatusArgs, SyncArgs, WorkspaceArgs,
-    WorkspaceCommand, WorkspaceListArgs, workspace_add_command, workspace_done_command,
-    workspace_focus_command, workspace_list_command, workspace_remove_command,
-    workspace_spawn_command, workspace_status_command, workspace_sync_command,
+    workspace_add_command, workspace_done_command, workspace_focus_command, workspace_list_command,
+    workspace_remove_command, workspace_spawn_command, workspace_status_command,
+    workspace_sync_command, AddArgs, DoneArgs, FocusArgs, RemoveArgs, SpawnArgs, StatusArgs,
+    SyncArgs, WorkspaceArgs, WorkspaceCommand, WorkspaceListArgs,
 };

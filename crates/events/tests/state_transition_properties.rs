@@ -149,6 +149,8 @@ mod static_tests {
                 BeadState::BackingOff => 2,
                 BeadState::Paused => 2,
                 BeadState::Completed => 0,
+                BeadState::Failed => 0,
+                BeadState::Cancelled => 0,
             };
             assert_eq!(
                 valid.len(),

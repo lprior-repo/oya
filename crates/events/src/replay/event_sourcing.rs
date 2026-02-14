@@ -451,8 +451,14 @@ mod tests {
 
     #[test]
     fn test_error_conversion_timestamp_mismatch() -> Result<(), Box<dyn std::error::Error>> {
-        let ts1 = Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).single().ok_or("invalid timestamp")?;
-        let ts2 = Utc.with_ymd_and_hms(2024, 1, 1, 12, 1, 0).single().ok_or("invalid timestamp")?;
+        let ts1 = Utc
+            .with_ymd_and_hms(2024, 1, 1, 12, 0, 0)
+            .single()
+            .ok_or("invalid timestamp")?;
+        let ts2 = Utc
+            .with_ymd_and_hms(2024, 1, 1, 12, 1, 0)
+            .single()
+            .ok_or("invalid timestamp")?;
 
         let resume_err = ResumeError::TimestampMismatch {
             checkpoint_id: "cp-456".to_string(),

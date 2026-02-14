@@ -4,7 +4,7 @@
 
 use axum::{body::Body, http::StatusCode};
 use http_body_util::BodyExt;
-use oya_web::{Error, ServerConfig, create_router};
+use oya_web::{create_router, Error, ServerConfig};
 use serde_json::Value;
 use tower::ServiceExt;
 

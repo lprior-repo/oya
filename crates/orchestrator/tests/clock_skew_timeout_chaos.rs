@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! Chaos tests for clock skew handling in timeout detection.
 //!
 //! Tests the scenario where system clock skews (forward/backward) and
@@ -5,9 +6,7 @@
 //!
 //! **Bead:** src-wxtj
 //! **Phase 4 - Chaos Tests:** Clock skew -> timeout handling -> still correct
-#![allow(clippy::unwrap_used)]
-#![allow(clippy::expect_used)]
-#![deny(clippy::panic)]
+
 #![warn(clippy::pedantic)]
 #![warn(clippy::nursery)]
 #![forbid(unsafe_code)]
@@ -105,10 +104,11 @@ impl ClockSkewTestContext {
                 reason: format!("Agent {agent_id} not found"),
             })?;
 
-        let skew_chrono = chrono::Duration::from_std(skew_duration)
-            .map_err(|e| ClockSkewChaosError::SetupFailed {
+        let skew_chrono = chrono::Duration::from_std(skew_duration).map_err(|e| {
+            ClockSkewChaosError::SetupFailed {
                 reason: e.to_string(),
-            })?;
+            }
+        })?;
         let skewed_time = agent
             .last_heartbeat()
             .checked_sub_signed(skew_chrono)
@@ -117,8 +117,7 @@ impl ClockSkewTestContext {
             })?;
         agent.set_last_heartbeat_for_test(skewed_time);
         info!(
-            "Simulated forward clock skew for {}: last_heartbeat moved back by {:?}",
-            agent_id, skew_duration
+            "Simulated forward clock skew for {agent_id}: last_heartbeat moved back by {skew_duration:?}"
         );
         Ok(())
     }
@@ -135,10 +134,11 @@ impl ClockSkewTestContext {
                 reason: format!("Agent {agent_id} not found"),
             })?;
 
-        let skew_chrono = chrono::Duration::from_std(skew_duration)
-            .map_err(|e| ClockSkewChaosError::SetupFailed {
+        let skew_chrono = chrono::Duration::from_std(skew_duration).map_err(|e| {
+            ClockSkewChaosError::SetupFailed {
                 reason: e.to_string(),
-            })?;
+            }
+        })?;
         let skewed_time = agent
             .last_heartbeat()
             .checked_add_signed(skew_chrono)
@@ -147,8 +147,7 @@ impl ClockSkewTestContext {
             })?;
         agent.set_last_heartbeat_for_test(skewed_time);
         info!(
-            "Simulated backward clock skew for {}: last_heartbeat moved forward by {:?}",
-            agent_id, skew_duration
+            "Simulated backward clock skew for {agent_id}: last_heartbeat moved forward by {skew_duration:?}"
         );
         Ok(())
     }
@@ -190,9 +189,10 @@ impl ClockSkewTestContext {
 }
 
 #[tokio::test]
-async fn given_recent_heartbeat_when_clock_forward_skew_then_not_falsely_marked_unhealthy() {
+async fn given_recent_heartbeat_when_clock_forward_skew_then_not_falsely_marked_unhealthy(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = "clock_forward_no_false_positive";
-    info!("Starting test: {}", test_name);
+    info!("Starting test: {test_name}");
 
     let health_config = HealthConfig {
         check_interval: Duration::from_millis(50),
@@ -200,23 +200,16 @@ async fn given_recent_heartbeat_when_clock_forward_skew_then_not_falsely_marked_
         max_failures: 1,
     };
 
-    let ctx = ClockSkewTestContext::new(2, health_config)
-        .expect("Failed to setup test context");
+    let ctx = ClockSkewTestContext::new(2, health_config)?;
 
     let agent_id = "agent-0";
 
-    ctx.record_heartbeat(agent_id)
-        .await
-        .expect("heartbeat should succeed");
+    ctx.record_heartbeat(agent_id).await?;
 
     ctx.simulate_clock_forward_skew(agent_id, Duration::from_millis(200))
-        .await
-        .expect("clock skew should succeed");
+        .await?;
 
-    let result = ctx
-        .check_agent(agent_id)
-        .await
-        .expect("health check should succeed");
+    let result = ctx.check_agent(agent_id).await?;
 
     assert!(
         result.is_healthy,
@@ -227,13 +220,15 @@ async fn given_recent_heartbeat_when_clock_forward_skew_then_not_falsely_marked_
         "Time since heartbeat should be less than timeout after forward skew"
     );
 
-    info!("Test passed: {}", test_name);
+    info!("Test passed: {test_name}");
+    Ok(())
 }
 
 #[tokio::test]
-async fn given_timed_out_agent_when_clock_backward_skew_then_can_be_hidden() {
+async fn given_timed_out_agent_when_clock_backward_skew_then_can_be_hidden(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = "clock_backward_can_hide_timeout";
-    info!("Starting test: {}", test_name);
+    info!("Starting test: {test_name}");
 
     let health_config = HealthConfig {
         check_interval: Duration::from_millis(50),
@@ -241,54 +236,44 @@ async fn given_timed_out_agent_when_clock_backward_skew_then_can_be_hidden() {
         max_failures: 1,
     };
 
-    let ctx = ClockSkewTestContext::new(2, health_config)
-        .expect("Failed to setup test context");
+    let ctx = ClockSkewTestContext::new(2, health_config)?;
 
     let agent_id = "agent-0";
 
-    ctx.record_heartbeat(agent_id)
-        .await
-        .expect("heartbeat should succeed");
+    ctx.record_heartbeat(agent_id).await?;
 
     tokio::time::sleep(Duration::from_millis(150)).await;
 
-    let result_before_skew = ctx
-        .check_agent(agent_id)
-        .await
-        .expect("health check should succeed");
+    let result_before_skew = ctx.check_agent(agent_id).await?;
 
     assert!(
         !result_before_skew.is_healthy,
         "Agent should be unhealthy before backward skew (150ms > 100ms timeout)"
     );
 
-    ctx.record_heartbeat(agent_id)
-        .await
-        .expect("reset heartbeat");
+    ctx.record_heartbeat(agent_id).await?;
 
     tokio::time::sleep(Duration::from_millis(80)).await;
 
     ctx.simulate_clock_backward_skew(agent_id, Duration::from_millis(50))
-        .await
-        .expect("clock skew should succeed");
+        .await?;
 
-    let result_after_skew = ctx
-        .check_agent(agent_id)
-        .await
-        .expect("health check should succeed");
+    let result_after_skew = ctx.check_agent(agent_id).await?;
 
     assert!(
         result_after_skew.time_since_heartbeat < Duration::from_millis(80),
         "Backward skew should make heartbeat appear more recent (reducing apparent age)"
     );
 
-    info!("Test passed: {}", test_name);
+    info!("Test passed: {test_name}");
+    Ok(())
 }
 
 #[tokio::test]
-async fn given_multiple_agents_when_mixed_clock_skew_then_correct_agents_unhealthy() {
+async fn given_multiple_agents_when_mixed_clock_skew_then_correct_agents_unhealthy(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = "mixed_clock_skew_selective_timeout";
-    info!("Starting test: {}", test_name);
+    info!("Starting test: {test_name}");
 
     let health_config = HealthConfig {
         check_interval: Duration::from_millis(50),
@@ -296,38 +281,26 @@ async fn given_multiple_agents_when_mixed_clock_skew_then_correct_agents_unhealt
         max_failures: 1,
     };
 
-    let ctx = ClockSkewTestContext::new(4, health_config)
-        .expect("Failed to setup test context");
+    let ctx = ClockSkewTestContext::new(4, health_config)?;
 
-    ctx.record_heartbeat("agent-0")
-        .await
-        .expect("heartbeat should succeed");
-    ctx.record_heartbeat("agent-1")
-        .await
-        .expect("heartbeat should succeed");
-    ctx.record_heartbeat("agent-2")
-        .await
-        .expect("heartbeat should succeed");
-    ctx.record_heartbeat("agent-3")
-        .await
-        .expect("heartbeat should succeed");
+    ctx.record_heartbeat("agent-0").await?;
+    ctx.record_heartbeat("agent-1").await?;
+    ctx.record_heartbeat("agent-2").await?;
+    ctx.record_heartbeat("agent-3").await?;
 
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     ctx.simulate_clock_forward_skew("agent-0", Duration::from_millis(500))
-        .await
-        .expect("clock skew should succeed");
+        .await?;
     ctx.simulate_clock_backward_skew("agent-1", Duration::from_millis(100))
-        .await
-        .expect("clock skew should succeed");
+        .await?;
     ctx.simulate_clock_forward_skew("agent-2", Duration::from_millis(100))
-        .await
-        .expect("clock skew should succeed");
+        .await?;
 
-    let result0 = ctx.check_agent("agent-0").await.expect("check should succeed");
-    let result1 = ctx.check_agent("agent-1").await.expect("check should succeed");
-    let result2 = ctx.check_agent("agent-2").await.expect("check should succeed");
-    let result3 = ctx.check_agent("agent-3").await.expect("check should succeed");
+    let result0 = ctx.check_agent("agent-0").await?;
+    let result1 = ctx.check_agent("agent-1").await?;
+    let result2 = ctx.check_agent("agent-2").await?;
+    let result3 = ctx.check_agent("agent-3").await?;
 
     assert!(
         !result0.is_healthy,
@@ -346,13 +319,15 @@ async fn given_multiple_agents_when_mixed_clock_skew_then_correct_agents_unhealt
         "agent-3 should be healthy (no skew, recent heartbeat)"
     );
 
-    info!("Test passed: {}", test_name);
+    info!("Test passed: {test_name}");
+    Ok(())
 }
 
 #[tokio::test]
-async fn given_agent_with_bead_when_clock_skew_then_bead_remains_assigned() {
+async fn given_agent_with_bead_when_clock_skew_then_bead_remains_assigned(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = "clock_skew_bead_retention";
-    info!("Starting test: {}", test_name);
+    info!("Starting test: {test_name}");
 
     let health_config = HealthConfig {
         check_interval: Duration::from_millis(50),
@@ -360,44 +335,37 @@ async fn given_agent_with_bead_when_clock_skew_then_bead_remains_assigned() {
         max_failures: 1,
     };
 
-    let ctx = ClockSkewTestContext::new(2, health_config)
-        .expect("Failed to setup test context");
+    let ctx = ClockSkewTestContext::new(2, health_config)?;
 
     let agent_id = "agent-0";
     let bead_id = "bead-critical-001";
 
-    ctx.assign_bead(agent_id, bead_id)
-        .await
-        .expect("assign should succeed");
+    ctx.assign_bead(agent_id, bead_id).await?;
 
-    let state = ctx.get_agent_state(agent_id).await.expect("state check");
+    let state = ctx.get_agent_state(agent_id).await?;
     assert_eq!(state, AgentStateLegacy::Working, "Agent should be working");
 
-    ctx.record_heartbeat(agent_id)
-        .await
-        .expect("heartbeat should succeed");
+    ctx.record_heartbeat(agent_id).await?;
 
     ctx.simulate_clock_forward_skew(agent_id, Duration::from_millis(300))
-        .await
-        .expect("clock skew should succeed");
+        .await?;
 
-    let result = ctx
-        .check_agent(agent_id)
-        .await
-        .expect("health check should succeed");
+    let result = ctx.check_agent(agent_id).await?;
 
     assert!(
         !result.is_healthy,
         "Agent should be unhealthy after clock skew creates apparent timeout"
     );
 
-    info!("Test passed: {}", test_name);
+    info!("Test passed: {test_name}");
+    Ok(())
 }
 
 #[tokio::test]
-async fn given_ongoing_clock_skew_when_heartbeat_restored_then_recovered() {
+async fn given_ongoing_clock_skew_when_heartbeat_restored_then_recovered(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = "clock_skew_recovery";
-    info!("Starting test: {}", test_name);
+    info!("Starting test: {test_name}");
 
     let health_config = HealthConfig {
         check_interval: Duration::from_millis(50),
@@ -405,45 +373,40 @@ async fn given_ongoing_clock_skew_when_heartbeat_restored_then_recovered() {
         max_failures: 1,
     };
 
-    let ctx = ClockSkewTestContext::new(2, health_config)
-        .expect("Failed to setup test context");
+    let ctx = ClockSkewTestContext::new(2, health_config)?;
 
     let agent_id = "agent-0";
 
-    ctx.record_heartbeat(agent_id)
-        .await
-        .expect("heartbeat should succeed");
+    ctx.record_heartbeat(agent_id).await?;
 
     ctx.simulate_clock_forward_skew(agent_id, Duration::from_millis(200))
-        .await
-        .expect("clock skew should succeed");
+        .await?;
 
-    let result = ctx.check_agent(agent_id).await.expect("check should succeed");
+    let result = ctx.check_agent(agent_id).await?;
     assert!(
         !result.is_healthy,
         "Agent should be unhealthy due to clock skew"
     );
 
-    ctx.record_heartbeat(agent_id)
-        .await
-        .expect("restored heartbeat should succeed");
+    ctx.record_heartbeat(agent_id).await?;
 
     tokio::time::sleep(Duration::from_millis(20)).await;
 
-    let recovered = ctx.get_agent_state(agent_id).await.expect("state check");
+    let recovered = ctx.get_agent_state(agent_id).await?;
     assert!(
         recovered == AgentStateLegacy::Idle || recovered == AgentStateLegacy::Working,
-        "Agent should recover to healthy state after heartbeat (got {:?})",
-        recovered
+        "Agent should recover to healthy state after heartbeat (got {recovered:?})",
     );
 
-    info!("Test passed: {}", test_name);
+    info!("Test passed: {test_name}");
+    Ok(())
 }
 
 #[tokio::test]
-async fn given_extreme_clock_forward_skew_then_timeout_detected_immediately() {
+async fn given_extreme_clock_forward_skew_then_timeout_detected_immediately(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = "extreme_forward_skew_immediate_timeout";
-    info!("Starting test: {}", test_name);
+    info!("Starting test: {test_name}");
 
     let health_config = HealthConfig {
         check_interval: Duration::from_millis(50),
@@ -451,23 +414,16 @@ async fn given_extreme_clock_forward_skew_then_timeout_detected_immediately() {
         max_failures: 1,
     };
 
-    let ctx = ClockSkewTestContext::new(2, health_config)
-        .expect("Failed to setup test context");
+    let ctx = ClockSkewTestContext::new(2, health_config)?;
 
     let agent_id = "agent-0";
 
-    ctx.record_heartbeat(agent_id)
-        .await
-        .expect("heartbeat should succeed");
+    ctx.record_heartbeat(agent_id).await?;
 
     ctx.simulate_clock_forward_skew(agent_id, Duration::from_secs(3600))
-        .await
-        .expect("clock skew should succeed");
+        .await?;
 
-    let result = ctx
-        .check_agent(agent_id)
-        .await
-        .expect("health check should succeed");
+    let result = ctx.check_agent(agent_id).await?;
 
     assert!(
         !result.is_healthy,
@@ -478,13 +434,15 @@ async fn given_extreme_clock_forward_skew_then_timeout_detected_immediately() {
         "Time since heartbeat should be approximately 1 hour"
     );
 
-    info!("Test passed: {}", test_name);
+    info!("Test passed: {test_name}");
+    Ok(())
 }
 
 #[tokio::test]
-async fn given_rapid_clock_fluctuations_then_health_state_stable() {
+async fn given_rapid_clock_fluctuations_then_health_state_stable(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = "rapid_clock_fluctuations";
-    info!("Starting test: {}", test_name);
+    info!("Starting test: {test_name}");
 
     let health_config = HealthConfig {
         check_interval: Duration::from_millis(20),
@@ -492,52 +450,46 @@ async fn given_rapid_clock_fluctuations_then_health_state_stable() {
         max_failures: 3,
     };
 
-    let ctx = ClockSkewTestContext::new(2, health_config)
-        .expect("Failed to setup test context");
+    let ctx = ClockSkewTestContext::new(2, health_config)?;
 
     let agent_id = "agent-0";
 
-    ctx.record_heartbeat(agent_id)
-        .await
-        .expect("heartbeat should succeed");
+    ctx.record_heartbeat(agent_id).await?;
 
     let handle = ctx.start_background_check();
 
     for i in 0..5 {
         if i % 2 == 0 {
             ctx.simulate_clock_forward_skew(agent_id, Duration::from_millis(100))
-                .await
-                .expect("forward skew should succeed");
+                .await?;
         } else {
             ctx.simulate_clock_backward_skew(agent_id, Duration::from_millis(50))
-                .await
-                .expect("backward skew should succeed");
+                .await?;
         }
 
         tokio::time::sleep(Duration::from_millis(30)).await;
 
-        ctx.record_heartbeat(agent_id)
-            .await
-            .expect("heartbeat should succeed");
+        ctx.record_heartbeat(agent_id).await?;
     }
 
-    let state = ctx.get_agent_state(agent_id).await.expect("state check");
+    let state = ctx.get_agent_state(agent_id).await?;
     assert!(
         state == AgentStateLegacy::Idle,
-        "Agent should remain healthy despite clock fluctuations (state: {:?})",
-        state
+        "Agent should remain healthy despite clock fluctuations (state: {state:?})",
     );
 
     ctx.stop_background_check().await;
     handle.abort();
 
-    info!("Test passed: {}", test_name);
+    info!("Test passed: {test_name}");
+    Ok(())
 }
 
 #[tokio::test]
-async fn given_all_agents_clock_skewed_when_one_recovers_then_available_for_work() {
+async fn given_all_agents_clock_skewed_when_one_recovers_then_available_for_work(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = "partial_recovery_from_clock_skew";
-    info!("Starting test: {}", test_name);
+    info!("Starting test: {test_name}");
 
     let health_config = HealthConfig {
         check_interval: Duration::from_millis(50),
@@ -545,33 +497,21 @@ async fn given_all_agents_clock_skewed_when_one_recovers_then_available_for_work
         max_failures: 1,
     };
 
-    let ctx = ClockSkewTestContext::new(3, health_config)
-        .await
-        .expect("Failed to setup test context");
+    let ctx = ClockSkewTestContext::new(3, health_config)?;
 
-    ctx.record_heartbeat("agent-0")
-        .await
-        .expect("heartbeat should succeed");
-    ctx.record_heartbeat("agent-1")
-        .await
-        .expect("heartbeat should succeed");
-    ctx.record_heartbeat("agent-2")
-        .await
-        .expect("heartbeat should succeed");
+    ctx.record_heartbeat("agent-0").await?;
+    ctx.record_heartbeat("agent-1").await?;
+    ctx.record_heartbeat("agent-2").await?;
 
     ctx.simulate_clock_forward_skew("agent-0", Duration::from_millis(500))
-        .await
-        .expect("clock skew should succeed");
+        .await?;
     ctx.simulate_clock_forward_skew("agent-1", Duration::from_millis(500))
-        .await
-        .expect("clock skew should succeed");
+        .await?;
 
     let _ = ctx.check_agent("agent-0").await;
     let _ = ctx.check_agent("agent-1").await;
 
-    ctx.record_heartbeat("agent-2")
-        .await
-        .expect("recovery heartbeat should succeed");
+    ctx.record_heartbeat("agent-2").await?;
 
     let available = ctx.get_available_agents().await;
     assert!(
@@ -589,13 +529,15 @@ async fn given_all_agents_clock_skewed_when_one_recovers_then_available_for_work
         "agent-1 should be unhealthy"
     );
 
-    info!("Test passed: {}", test_name);
+    info!("Test passed: {test_name}");
+    Ok(())
 }
 
 #[tokio::test]
-async fn given_clock_skew_invariant_health_failures_bounded() {
+async fn given_clock_skew_invariant_health_failures_bounded(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = "health_failures_bounded";
-    info!("Starting test: {}", test_name);
+    info!("Starting test: {test_name}");
 
     let health_config = HealthConfig {
         check_interval: Duration::from_millis(20),
@@ -603,40 +545,35 @@ async fn given_clock_skew_invariant_health_failures_bounded() {
         max_failures: 3,
     };
 
-    let ctx = ClockSkewTestContext::new(2, health_config)
-        .expect("Failed to setup test context");
+    let ctx = ClockSkewTestContext::new(2, health_config)?;
 
     let agent_id = "agent-0";
 
-    ctx.record_heartbeat(agent_id)
-        .await
-        .expect("heartbeat should succeed");
+    ctx.record_heartbeat(agent_id).await?;
 
     ctx.simulate_clock_forward_skew(agent_id, Duration::from_millis(100))
-        .await
-        .expect("clock skew should succeed");
+        .await?;
 
     for _ in 0..10 {
         let _ = ctx.check_agent(agent_id).await;
     }
 
-    let state = ctx.get_agent_state(agent_id).await.expect("state check");
+    let state = ctx.get_agent_state(agent_id).await?;
     assert_eq!(
         state,
         AgentStateLegacy::Unhealthy,
         "Agent should be unhealthy after max_failures"
     );
 
-    ctx.record_heartbeat(agent_id)
-        .await
-        .expect("recovery heartbeat should succeed");
+    ctx.record_heartbeat(agent_id).await?;
 
-    let recovered_state = ctx.get_agent_state(agent_id).await.expect("state check");
+    let recovered_state = ctx.get_agent_state(agent_id).await?;
     assert_eq!(
         recovered_state,
         AgentStateLegacy::Idle,
         "Agent should recover to Idle after heartbeat"
     );
 
-    info!("Test passed: {}", test_name);
+    info!("Test passed: {test_name}");
+    Ok(())
 }

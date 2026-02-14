@@ -329,7 +329,7 @@ mod tests {
 
         // Add all edges
         for (from, to) in edges {
-            let _ = dag.add_edge(from.clone(), to.clone(), DependencyType::BlockingDependency);
+            let _ = dag.add_edge(from, to, DependencyType::BlockingDependency);
         }
 
         dag

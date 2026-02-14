@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! BDD test: Scheduler graceful shutdown signal handling.
 //!
 //! This test verifies that the scheduler responds correctly to shutdown signals
@@ -25,8 +26,8 @@ fn unique_scheduler_name() -> String {
 }
 
 /// Helper to spawn a scheduler with shutdown coordinator for testing.
-async fn setup_scheduler_with_shutdown()
--> Result<(ActorRef<SchedulerMessage>, tokio::task::JoinHandle<()>), Box<dyn std::error::Error>> {
+async fn setup_scheduler_with_shutdown(
+) -> Result<(ActorRef<SchedulerMessage>, tokio::task::JoinHandle<()>), Box<dyn std::error::Error>> {
     let coordinator = std::sync::Arc::new(ShutdownCoordinator::new());
     let args = SchedulerArguments::new().with_shutdown_coordinator(coordinator.clone());
     let name = unique_scheduler_name();
@@ -40,8 +41,8 @@ async fn setup_scheduler_with_shutdown()
 }
 
 #[tokio::test]
-async fn given_scheduler_when_shutdown_signal_then_graceful_stop()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_scheduler_when_shutdown_signal_then_graceful_stop(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A running scheduler actor with shutdown coordinator
     let (scheduler, actor_handle) = setup_scheduler_with_shutdown().await?;
 
@@ -99,8 +100,8 @@ async fn given_scheduler_when_shutdown_signal_then_graceful_stop()
 }
 
 #[tokio::test]
-async fn given_scheduler_with_coordinator_when_sigterm_then_checkpoint_saved()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_scheduler_with_coordinator_when_sigterm_then_checkpoint_saved(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A scheduler with shutdown coordinator
     let coordinator = std::sync::Arc::new(ShutdownCoordinator::new());
     let args = SchedulerArguments::new().with_shutdown_coordinator(coordinator.clone());
@@ -153,8 +154,8 @@ async fn given_scheduler_with_coordinator_when_sigterm_then_checkpoint_saved()
 }
 
 #[tokio::test]
-async fn given_scheduler_when_multiple_shutdown_signals_then_first_wins()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_scheduler_when_multiple_shutdown_signals_then_first_wins(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A scheduler with shutdown coordinator
     let coordinator = std::sync::Arc::new(ShutdownCoordinator::new());
     let args = SchedulerArguments::new().with_shutdown_coordinator(coordinator.clone());
@@ -184,8 +185,8 @@ async fn given_scheduler_when_multiple_shutdown_signals_then_first_wins()
 }
 
 #[tokio::test]
-async fn given_scheduler_when_shutdown_then_post_stop_called()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_scheduler_when_shutdown_then_post_stop_called(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A scheduler with shutdown coordinator
     let coordinator = std::sync::Arc::new(ShutdownCoordinator::new());
     let args = SchedulerArguments::new().with_shutdown_coordinator(coordinator.clone());

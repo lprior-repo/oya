@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! BDD Integration Test: Persistence bead state update.
 //!
 //! This test validates the bead state persistence lifecycle:
@@ -11,10 +12,6 @@
 //! - **Zero panics**: No `panic!`, `unwrap()`, or `expect()` calls
 //! - **BDD Style**: GIVEN-WHEN-THEN structure
 //! - **Railway-Oriented Programming**: Proper error propagation throughout
-
-#![deny(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-#![deny(clippy::panic)]
 
 use orchestrator::persistence::{BeadRecord, BeadState, OrchestratorStore, StoreConfig};
 

@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use surrealdb::sql::{Datetime as SurrealDatetime, Thing};
 
 use super::client::OrchestratorStore;
-use super::error::{PersistenceError, PersistenceResult, from_surrealdb_error};
+use super::error::{from_surrealdb_error, PersistenceError, PersistenceResult};
 
 /// Dependency relationship types between beads
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

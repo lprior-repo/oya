@@ -471,8 +471,7 @@ mod tests {
 
     #[test]
     fn test_sticky_assignment_reassign() -> Result<()> {
-        let mut assignment =
-            StickyAssignment::create("bead-1", "worker-a")?;
+        let mut assignment = StickyAssignment::create("bead-1", "worker-a")?;
 
         let old_updated = assignment.updated_at;
         std::thread::sleep(std::time::Duration::from_millis(10));
@@ -486,8 +485,7 @@ mod tests {
 
     #[test]
     fn test_sticky_assignment_reassign_empty() -> Result<()> {
-        let mut assignment =
-            StickyAssignment::create("bead-1", "worker-a")?;
+        let mut assignment = StickyAssignment::create("bead-1", "worker-a")?;
 
         let result = assignment.reassign("");
         assert!(result.is_err());

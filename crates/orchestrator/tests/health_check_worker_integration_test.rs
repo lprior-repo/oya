@@ -1,25 +1,24 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 use std::sync::Arc;
 use std::time::Duration;
 
-use ractor::{Actor, ActorProcessingErr, ActorRef};
-use tokio::sync::watch;
-use tracing::debug;
+use ractor::{Actor, ActorRef};
 
-use oya_events::{BeadEvent, EventBus};
+use oya_events::{EventBus, InMemoryEventStore};
 
-use crate::actors::health_check_worker::{
-    HealthCheckConfig, HealthCheckMessage, HealthCheckWorkerDef, HealthCheckWorkerState,
-    HealthStatus,
+use orchestrator::actors::health_check_worker::{
+    HealthCheckConfig, HealthCheckMessage, HealthCheckWorkerDef,
 };
 
 #[tokio::test]
 async fn test_health_check_worker_integration() -> Result<(), Box<dyn std::error::Error>> {
     // Setup test environment
     let config = HealthCheckConfig::for_testing();
-    let event_bus = Some(Arc::new(EventBus::new()));
+    let event_bus = Some(Arc::new(EventBus::new(Arc::new(InMemoryEventStore::new()))));
 
     // Start the worker
-    let (worker, handle) = Actor::spawn(None, HealthCheckWorkerDef, (config, event_bus)).await?;
+    let (worker, handle): (ActorRef<HealthCheckMessage>, _) =
+        Actor::spawn(None, HealthCheckWorkerDef, (config, event_bus)).await?;
 
     // Send a health check message
     worker.send_message(HealthCheckMessage::PerformCheck)?;

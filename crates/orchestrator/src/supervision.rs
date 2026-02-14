@@ -3,7 +3,6 @@
 use ractor::ActorRef;
 use std::fmt::Debug;
 
-use crate::actors::ActorError;
 use crate::actors::queue::QueueActorDef;
 use crate::actors::reconciler::ReconcilerActorDef;
 use crate::actors::storage::StateManagerActorDef;
@@ -11,6 +10,7 @@ use crate::actors::supervisor::{
     SupervisorActorDef, SupervisorArguments, SupervisorConfig, SupervisorMessage,
 };
 use crate::actors::workflow::WorkflowActorDef;
+use crate::actors::ActorError;
 
 /// Tier-1 supervisor kinds managed by the `UniverseSupervisor`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

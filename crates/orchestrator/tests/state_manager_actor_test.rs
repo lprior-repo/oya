@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! Unit tests for StateManagerActor using tokio::test.
 //!
 //! These tests verify all StateManagerActor message handlers with zero unwraps/panics.
@@ -8,8 +9,8 @@
 //! - Queries: Request-response messages (LoadState, StateExists, GetStateVersion, ListKeys)
 //! - Resilience: Actor remains responsive after errors
 
-use orchestrator::actors::ActorError;
 use orchestrator::actors::storage::{DatabaseConfig, StateManagerActorDef, StateManagerMessage};
+use orchestrator::actors::ActorError;
 use ractor::{Actor, ActorRef, RpcReplyPort};
 use std::time::Duration;
 
@@ -50,7 +51,7 @@ fn verify_actor_running(actor: &ActorRef<StateManagerMessage>) -> Result<(), Str
     let status = actor.get_status();
     match status {
         ActorStatus::Starting | ActorStatus::Running | ActorStatus::Upgrading => Ok(()),
-        _ => Err(format!("Actor not running, status: {:?}", status)),
+        _ => Err(format!("Actor not running, status: {status:?}")),
     }
 }
 
@@ -92,7 +93,7 @@ async fn test_spawn_state_manager_with_default_config() -> Result<(), Box<dyn st
 
     // THEN: Actor should spawn successfully
     let (actor, _handle) = result?;
-    verify_actor_running(&actor)?;
+    verify_actor_running(&actor).map_err(|e| e.to_string())?;
 
     // Cleanup
     actor.stop(Some("test complete".to_string()));
@@ -117,7 +118,7 @@ async fn test_spawn_state_manager_with_custom_config() -> Result<(), Box<dyn std
 
     // THEN: Actor should spawn successfully
     let (actor, _handle) = result?;
-    verify_actor_running(&actor)?;
+    verify_actor_running(&actor).map_err(|e| e.to_string())?;
 
     // Cleanup
     actor.stop(Some("test complete".to_string()));
@@ -170,7 +171,7 @@ async fn test_save_state_does_not_crash() -> Result<(), Box<dyn std::error::Erro
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     // Verify actor is still running (didn't crash)
-    verify_actor_running(&actor)?;
+    verify_actor_running(&actor).map_err(|e| e.to_string())?;
 
     // Cleanup
     actor.stop(Some("test complete".to_string()));
@@ -195,7 +196,7 @@ async fn test_delete_state_does_not_crash() -> Result<(), Box<dyn std::error::Er
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     // Verify actor is still running
-    verify_actor_running(&actor)?;
+    verify_actor_running(&actor).map_err(|e| e.to_string())?;
 
     // Cleanup
     actor.stop(Some("test complete".to_string()));
@@ -218,7 +219,7 @@ async fn test_clear_all_does_not_crash() -> Result<(), Box<dyn std::error::Error
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     // Verify actor is still running
-    verify_actor_running(&actor)?;
+    verify_actor_running(&actor).map_err(|e| e.to_string())?;
 
     // Cleanup
     actor.stop(Some("test complete".to_string()));
@@ -252,7 +253,7 @@ async fn test_multiple_commands_sequentially() -> Result<(), Box<dyn std::error:
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     // THEN: Actor should still be running
-    verify_actor_running(&actor)?;
+    verify_actor_running(&actor).map_err(|e| e.to_string())?;
 
     // Cleanup
     actor.stop(Some("test complete".to_string()));
@@ -265,8 +266,8 @@ async fn test_multiple_commands_sequentially() -> Result<(), Box<dyn std::error:
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn test_load_state_returns_not_found_for_missing_key()
--> Result<(), Box<dyn std::error::Error>> {
+async fn test_load_state_returns_not_found_for_missing_key(
+) -> Result<(), Box<dyn std::error::Error>> {
     // GIVEN: A running StateManagerActor
     let actor = spawn_state_manager().await?;
 
@@ -288,14 +289,14 @@ async fn test_load_state_returns_not_found_for_missing_key()
         "LoadState should return error for missing key"
     );
 
-    let actor_error = load_result.unwrap_err();
+    let actor_error = load_result.err().ok_or("Expected Err but got Ok")?;
     assert!(
         matches!(actor_error, ActorError::BeadNotFound(_)),
         "LoadState should return BeadNotFound for missing key"
     );
 
     // Verify actor is still running after error
-    verify_actor_running(&actor)?;
+    verify_actor_running(&actor).map_err(|e| e.to_string())?;
 
     // Cleanup
     actor.stop(Some("test complete".to_string()));
@@ -324,11 +325,11 @@ async fn test_state_exists_returns_false_for_missing_key() -> Result<(), Box<dyn
     let exists_result = result?;
     assert!(exists_result.is_ok(), "StateExists should return Ok(bool)");
 
-    let exists = exists_result.unwrap();
+    let exists = exists_result.map_err(|e| format!("{e:?}"))?;
     assert!(!exists, "StateExists should return false for missing key");
 
     // Verify actor is still running
-    verify_actor_running(&actor)?;
+    verify_actor_running(&actor).map_err(|e| e.to_string())?;
 
     // Cleanup
     actor.stop(Some("test complete".to_string()));
@@ -337,8 +338,8 @@ async fn test_state_exists_returns_false_for_missing_key() -> Result<(), Box<dyn
 }
 
 #[tokio::test]
-async fn test_get_state_version_returns_not_found_for_missing_key()
--> Result<(), Box<dyn std::error::Error>> {
+async fn test_get_state_version_returns_not_found_for_missing_key(
+) -> Result<(), Box<dyn std::error::Error>> {
     // GIVEN: A running StateManagerActor
     let actor = spawn_state_manager().await?;
 
@@ -360,14 +361,14 @@ async fn test_get_state_version_returns_not_found_for_missing_key()
         "GetStateVersion should return error for missing key"
     );
 
-    let actor_error = version_result.unwrap_err();
+    let actor_error = version_result.err().ok_or("Expected Err but got Ok")?;
     assert!(
         matches!(actor_error, ActorError::BeadNotFound(_)),
         "GetStateVersion should return BeadNotFound for missing key"
     );
 
     // Verify actor is still running
-    verify_actor_running(&actor)?;
+    verify_actor_running(&actor).map_err(|e| e.to_string())?;
 
     // Cleanup
     actor.stop(Some("test complete".to_string()));
@@ -399,14 +400,14 @@ async fn test_list_keys_returns_empty_list_when_no_keys() -> Result<(), Box<dyn 
         "ListKeys should return Ok(Vec<String>)"
     );
 
-    let keys = keys_result.unwrap();
+    let keys = keys_result.map_err(|e| format!("{e:?}"))?;
     assert!(
         keys.is_empty(),
         "ListKeys should return empty list when no keys match prefix"
     );
 
     // Verify actor is still running
-    verify_actor_running(&actor)?;
+    verify_actor_running(&actor).map_err(|e| e.to_string())?;
 
     // Cleanup
     actor.stop(Some("test complete".to_string()));
@@ -438,14 +439,14 @@ async fn test_list_keys_with_no_prefix_returns_empty_list() -> Result<(), Box<dy
         "ListKeys should return Ok(Vec<String>)"
     );
 
-    let keys = keys_result.unwrap();
+    let keys = keys_result.map_err(|e| format!("{e:?}"))?;
     assert!(
         keys.is_empty(),
         "ListKeys should return empty list when no keys"
     );
 
     // Verify actor is still running
-    verify_actor_running(&actor)?;
+    verify_actor_running(&actor).map_err(|e| e.to_string())?;
 
     // Cleanup
     actor.stop(Some("test complete".to_string()));
@@ -493,7 +494,7 @@ async fn test_queries_dont_crash_actor() -> Result<(), Box<dyn std::error::Error
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     // THEN: Actor should still be running
-    verify_actor_running(&actor)?;
+    verify_actor_running(&actor).map_err(|e| e.to_string())?;
 
     // Cleanup
     actor.stop(Some("test complete".to_string()));
@@ -548,7 +549,7 @@ async fn test_mixed_commands_and_queries() -> Result<(), Box<dyn std::error::Err
     .await;
 
     // THEN: Actor should remain responsive
-    verify_actor_running(&actor)?;
+    verify_actor_running(&actor).map_err(|e| e.to_string())?;
 
     // Cleanup
     actor.stop(Some("test complete".to_string()));
@@ -564,7 +565,7 @@ async fn test_rapid_messages() -> Result<(), Box<dyn std::error::Error>> {
     // WHEN: Sending 50 messages rapidly
     for i in 0..50 {
         actor.send_message(StateManagerMessage::SaveState {
-            key: format!("key-{}", i),
+            key: format!("key-{i}"),
             data: vec![i as u8; 10],
             version: Some(i as u64),
         })?;
@@ -574,7 +575,7 @@ async fn test_rapid_messages() -> Result<(), Box<dyn std::error::Error>> {
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     // THEN: Actor should still be running
-    verify_actor_running(&actor)?;
+    verify_actor_running(&actor).map_err(|e| e.to_string())?;
 
     // Cleanup
     actor.stop(Some("test complete".to_string()));
@@ -613,7 +614,7 @@ async fn test_actor_after_error_queries() -> Result<(), Box<dyn std::error::Erro
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     // THEN: Actor should still be functional
-    verify_actor_running(&actor)?;
+    verify_actor_running(&actor).map_err(|e| e.to_string())?;
 
     // Cleanup
     actor.stop(Some("test complete".to_string()));

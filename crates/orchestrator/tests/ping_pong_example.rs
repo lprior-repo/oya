@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! Ping/Pong Actor Example
 //!
 //! This test demonstrates a simple ping/pong actor system using ractor.
@@ -14,8 +15,8 @@
 // Only compile these tests when the "examples" feature is enabled
 #![cfg(feature = "examples")]
 
-use orchestrator::actors::examples::{PingMessage, PongMessage, ping_pong::PingPongExample};
-use ractor::{Actor, ActorProcessingErr, call};
+use orchestrator::actors::examples::{ping_pong::PingPongExample, PingMessage, PongMessage};
+use ractor::{call, Actor, ActorProcessingErr};
 
 /// Test the complete ping/pong flow
 ///

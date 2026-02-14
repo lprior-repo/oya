@@ -10,8 +10,8 @@
 //! This test verifies that when all tasks (beads) in a workflow complete
 //! successfully, the workflow status transitions to Complete.
 
-#![deny(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
+#![forbid(clippy::unwrap_used)]
+#![forbid(clippy::expect_used)]
 #![deny(clippy::panic)]
 
 use chrono::Utc;
@@ -58,10 +58,7 @@ fn bdd_workflow_completion_all_tasks_succeed() -> Result<(), Box<dyn std::error:
         let mut task = task.clone();
         task.complete_current_stage(); // Pending -> InProgress
         task.complete_current_stage(); // InProgress -> Completed
-        // We use add_task here to update, but add_task fails if exists.
-        // Actually, since it's a test, we can just replace it in the map if we want,
-        // but Workflow doesn't expose it.
-        // I'll add a replace_task method to Workflow or just use get_task_mut.
+
         if let Some(t) = workflow.get_task_mut(&oya_core::Slug::new(task_id)?) {
             *t = task;
         }
@@ -164,10 +161,7 @@ fn bdd_workflow_completion_diamond_graph() -> Result<(), Box<dyn std::error::Err
         let mut task = task.clone();
         task.complete_current_stage(); // Pending -> InProgress
         task.complete_current_stage(); // InProgress -> Completed
-        // We use add_task here to update, but add_task fails if exists.
-        // Actually, since it's a test, we can just replace it in the map if we want,
-        // but Workflow doesn't expose it.
-        // I'll add a replace_task method to Workflow or just use get_task_mut.
+
         if let Some(t) = workflow.get_task_mut(&oya_core::Slug::new(task_id)?) {
             *t = task;
         }
@@ -216,7 +210,7 @@ fn bdd_workflow_completion_via_execution_engine() -> Result<(), Box<dyn std::err
 
     // THEN: All tasks succeed
     let succeeded_strs: Vec<String> = result.succeeded.iter().map(|s| s.to_string()).collect();
-    
+
     assert_eq!(succeeded_strs.len(), 3, "All 3 tasks should succeed");
     assert!(
         succeeded_strs.contains(&"task-1".to_string()),
@@ -303,7 +297,7 @@ fn bdd_linear_workflow_sequential_execution_order() -> Result<(), Box<dyn std::e
 
     // THEN: Tasks complete in dependency order
     let succeeded_strs: Vec<String> = result.succeeded.iter().map(|s| s.to_string()).collect();
-    
+
     assert_eq!(succeeded_strs.len(), 3, "All 3 tasks should succeed");
     assert_eq!(
         succeeded_strs,
@@ -400,7 +394,7 @@ fn bdd_linear_workflow_five_task_chain() -> Result<(), Box<dyn std::error::Error
 
     // THEN: All tasks complete in strict sequential order
     let succeeded_strs: Vec<String> = result.succeeded.iter().map(|s| s.to_string()).collect();
-    
+
     assert_eq!(succeeded_strs.len(), 5, "All 5 tasks should succeed");
     assert_eq!(
         succeeded_strs,
@@ -577,8 +571,8 @@ mod property_tests {
                 let task_ids: Vec<_> = workflow.tasks().keys().cloned().collect();
                 for task_id in task_ids {
                     if let Some(task) = workflow.get_task_mut(&task_id) {
-                        task.transition_to(Stage::InProgress).unwrap();
-                        task.transition_to(Stage::Completed).unwrap();
+                        task.transition_to(Stage::InProgress).map_err(|e| TestCaseError::fail(format!("{e:?}")))?;
+                        task.transition_to(Stage::Completed).map_err(|e| TestCaseError::fail(format!("{e:?}")))?;
                     }
                 }
 
@@ -619,7 +613,7 @@ mod property_tests {
             let mut added_edges: HashSet<(String, String)> = HashSet::new();
             for i in 0..task_count {
                 for j in (i + 1)..task_count {
-                    if (j as f64 * edge_probability) as usize > (j - 1) as usize {
+                    if (j as f64 * edge_probability) as usize > (j - 1) {
                         let from = format!("task-{i}");
                         let to = format!("task-{j}");
                         if added_edges.insert((from.clone(), to.clone())) {
@@ -637,8 +631,8 @@ mod property_tests {
             let task_ids: Vec<_> = workflow.tasks().keys().cloned().collect();
             for task_id in task_ids {
                 if let Some(task) = workflow.get_task_mut(&task_id) {
-                    task.transition_to(Stage::InProgress).unwrap();
-                    task.transition_to(Stage::Completed).unwrap();
+                    task.transition_to(Stage::InProgress).map_err(|e| TestCaseError::fail(format!("{e:?}")))?;
+                    task.transition_to(Stage::Completed).map_err(|e| TestCaseError::fail(format!("{e:?}")))?;
                 }
             }
 

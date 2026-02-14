@@ -9,9 +9,9 @@ use std::time::Duration;
 
 use orchestrator::scheduler::{QueueActorRef, QueueType, SchedulerActor};
 use orchestrator::shutdown::{
-    CheckpointResult, ShutdownCoordinator, ShutdownSignal, install_signal_handlers,
+    install_signal_handlers, CheckpointResult, ShutdownCoordinator, ShutdownSignal,
 };
-use tracing::{Level, info};
+use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
 #[tokio::main]

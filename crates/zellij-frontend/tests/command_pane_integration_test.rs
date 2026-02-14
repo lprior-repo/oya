@@ -304,7 +304,8 @@ fn test_open_command_pane_with_invalid_directory_fails() -> Result<(), Box<dyn s
 }
 
 #[test]
-fn test_open_command_pane_with_nonexistent_command_fails() -> Result<(), Box<dyn std::error::Error>> {
+fn test_open_command_pane_with_nonexistent_command_fails() -> Result<(), Box<dyn std::error::Error>>
+{
     let mut fixture = CommandPaneTestFixture::new()?;
 
     let context = create_test_context_with_command(

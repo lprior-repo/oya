@@ -93,6 +93,7 @@ fn base64_decode(s: &str) -> Result<Vec<u8>, base64::DecodeError> {
 }
 
 /// Manages periodic checkpointing of orchestrator state with zstd compression.
+#[derive(Clone)]
 pub struct CheckpointManager {
     store: OrchestratorStore,
     config: CheckpointConfig,
@@ -628,7 +629,10 @@ mod tests {
 
         assert!(result.is_ok());
 
-        let retrieved = manager.get_latest().await.map_err(|e| format!("Get failed: {e}"))?;
+        let retrieved = manager
+            .get_latest()
+            .await
+            .map_err(|e| format!("Get failed: {e}"))?;
         assert_eq!(retrieved.scheduler_state, large_state);
         Ok(())
     }
@@ -748,7 +752,8 @@ mod tests {
 
     /// BDD: GIVEN a checkpoint without workflow snapshots WHEN restore_workflow_snapshots is called THEN None is returned.
     #[tokio::test]
-    async fn test_restore_workflow_snapshots_none_when_not_stored() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_restore_workflow_snapshots_none_when_not_stored(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut manager = setup_manager().await.ok_or("setup failed")?;
 
         let scheduler_state = r#"{"phase":"running"}"#;
@@ -948,7 +953,6 @@ mod tests {
 
     /// BDD: GIVEN checkpoint without compression WHEN resume is called THEN data is returned directly.
     #[tokio::test]
-    #[tokio::test]
     async fn test_resume_without_compression() -> Result<(), Box<dyn std::error::Error>> {
         let mut manager = setup_manager_no_compression().await.ok_or("setup failed")?;
 
@@ -975,7 +979,8 @@ mod tests {
 
     /// BDD: GIVEN workflow snapshots with snapshots WHEN restore_workflow_snapshots_by_id is called THEN correct snapshots are returned.
     #[tokio::test]
-    async fn test_restore_workflow_snapshots_by_id_succeeds() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_restore_workflow_snapshots_by_id_succeeds(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut manager = setup_manager().await.ok_or("setup failed")?;
 
         let snapshots_v1 = TestWorkflowSnapshots {
@@ -989,18 +994,12 @@ mod tests {
         };
 
         let checkpoint_v1 = manager
-            .create_checkpoint(
-                "{}",
-                Some(&serde_json::to_string(&snapshots_v1)?),
-            )
+            .create_checkpoint("{}", Some(&serde_json::to_string(&snapshots_v1)?))
             .await
             .map_err(|e| format!("Create failed: {e}"))?;
 
         let checkpoint_v2 = manager
-            .create_checkpoint(
-                "{}",
-                Some(&serde_json::to_string(&snapshots_v2)?),
-            )
+            .create_checkpoint("{}", Some(&serde_json::to_string(&snapshots_v2)?))
             .await
             .map_err(|e| format!("Create failed: {e}"))?;
 
@@ -1009,10 +1008,7 @@ mod tests {
             .await
             .map_err(|e| format!("Restore failed: {e}"))?;
         let restored_v1 = restored_v1_opt.ok_or("v1 snapshots missing")?;
-        assert_eq!(
-            restored_v1.snapshots.get("wf-1"),
-            Some(&"v1".to_string())
-        );
+        assert_eq!(restored_v1.snapshots.get("wf-1"), Some(&"v1".to_string()));
 
         let restored_v2_opt: Option<TestWorkflowSnapshots> = manager
             .restore_workflow_snapshots_by_id(&checkpoint_v2.checkpoint_id)
@@ -1026,7 +1022,8 @@ mod tests {
 
     /// BDD: GIVEN invalid snapshot JSON WHEN restore_workflow_snapshots is called THEN error is returned.
     #[tokio::test]
-    async fn test_restore_invalid_snapshot_json_returns_error() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_restore_invalid_snapshot_json_returns_error(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut manager = setup_manager().await.ok_or("setup failed")?;
 
         let invalid_json = r#"{not: valid json}"#;
@@ -1047,7 +1044,8 @@ mod tests {
 
     /// BDD: GIVEN checkpoint created and manager sequence updated WHEN new checkpoint is created THEN sequence is correct.
     #[tokio::test]
-    async fn test_checkpoint_sequence_tracking_across_resume() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_checkpoint_sequence_tracking_across_resume(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut manager = setup_manager().await.ok_or("setup failed")?;
 
         assert_eq!(manager.current_sequence(), 0);
@@ -1058,7 +1056,10 @@ mod tests {
             .await
             .map_err(|e| format!("Create failed: {e}"))?;
 
-        let cp1 = manager.get_latest().await.map_err(|e| format!("Get failed: {e}"))?;
+        let cp1 = manager
+            .get_latest()
+            .await
+            .map_err(|e| format!("Get failed: {e}"))?;
         assert_eq!(cp1.event_sequence, 50);
 
         manager.set_sequence(100);
@@ -1067,14 +1068,18 @@ mod tests {
             .await
             .map_err(|e| format!("Create failed: {e}"))?;
 
-        let cp2 = manager.get_latest().await.map_err(|e| format!("Get failed: {e}"))?;
+        let cp2 = manager
+            .get_latest()
+            .await
+            .map_err(|e| format!("Get failed: {e}"))?;
         assert_eq!(cp2.event_sequence, 100);
         Ok(())
     }
 
     /// BDD: GIVEN checkpoint without snapshots WHEN restore_workflow_snapshots_by_id is called THEN None is returned.
     #[tokio::test]
-    async fn test_restore_snapshots_by_id_returns_none_when_not_stored() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_restore_snapshots_by_id_returns_none_when_not_stored(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut manager = setup_manager().await.ok_or("setup failed")?;
 
         let checkpoint = manager

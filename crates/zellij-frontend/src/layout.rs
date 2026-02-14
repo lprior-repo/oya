@@ -222,7 +222,7 @@ impl Layout {
         let left_width = cols.saturating_mul(40).saturating_div(100);
         // Right panes: 60% width
         let right_width = cols.saturating_sub(left_width).saturating_sub(3); // -3 for borders
-        // Top panes: 60% height
+                                                                             // Top panes: 60% height
         let top_height = rows.saturating_mul(60).saturating_div(100);
         // Bottom pane: 40% height
         let bottom_height = rows.saturating_sub(top_height).saturating_sub(3); // -3 for borders
@@ -329,7 +329,12 @@ mod tests {
         let layout = Layout::new_3_pane();
         let bead_list = layout.get_pane(PaneType::BeadList);
         assert!(bead_list.is_some());
-        assert_eq!(bead_list.ok_or_else(|| LayoutError::PaneNotFound("BeadList".to_string()))?.pane_type, PaneType::BeadList);
+        assert_eq!(
+            bead_list
+                .ok_or_else(|| LayoutError::PaneNotFound("BeadList".to_string()))?
+                .pane_type,
+            PaneType::BeadList
+        );
         Ok(())
     }
 

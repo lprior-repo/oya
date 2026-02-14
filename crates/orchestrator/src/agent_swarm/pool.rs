@@ -30,7 +30,10 @@ impl AgentPool {
 
     /// Register an agent in the pool.
     pub async fn register_agent(&self, agent: AgentHandle) -> AgentSwarmResult<()> {
-        self.agents.write().await.insert(agent.id().to_string(), agent);
+        self.agents
+            .write()
+            .await
+            .insert(agent.id().to_string(), agent);
         Ok(())
     }
 

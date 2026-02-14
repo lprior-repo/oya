@@ -3,7 +3,7 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
-use crate::stages::{Stage, validate_stage_sequence};
+use crate::stages::{validate_stage_sequence, Stage};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Slug(String);
@@ -17,20 +17,45 @@ impl Slug {
     /// Create a slug from user input.
     ///
     /// # Errors
-    /// Returns an error when the slug is empty or contains invalid characters.
+    /// Returns an error when the slug is empty, contains invalid characters,
+    /// starts or ends with a dash, has consecutive dashes, or exceeds max length.
     pub fn new(input: impl AsRef<str>) -> Result<Self> {
+        const MAX_SLUG_LENGTH: usize = 128;
+
         let raw = input.as_ref().trim();
         if raw.is_empty() {
             return Err(Error::InvalidSlug("be empty".to_string()));
         }
 
-        let invalid = raw
+        if raw.len() > MAX_SLUG_LENGTH {
+            return Err(Error::InvalidSlug(format!(
+                "exceed maximum length of {} characters",
+                MAX_SLUG_LENGTH
+            )));
+        }
+
+        let invalid_chars = raw
             .chars()
             .any(|ch| !ch.is_ascii_lowercase() && !ch.is_ascii_digit() && ch != '-');
 
-        if invalid {
+        if invalid_chars {
             return Err(Error::InvalidSlug(
-                "contain path separators or traversal sequences".to_string(),
+                "contain invalid characters (only lowercase letters, digits, and hyphens allowed)"
+                    .to_string(),
+            ));
+        }
+
+        if raw.starts_with('-') {
+            return Err(Error::InvalidSlug("start with a hyphen".to_string()));
+        }
+
+        if raw.ends_with('-') {
+            return Err(Error::InvalidSlug("end with a hyphen".to_string()));
+        }
+
+        if raw.contains("--") {
+            return Err(Error::InvalidSlug(
+                "contain consecutive hyphens".to_string(),
             ));
         }
 
@@ -399,6 +424,39 @@ mod tests {
     }
 
     #[test]
+    fn slug_rejects_leading_hyphen() {
+        let result = Slug::new("-bad-slug");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn slug_rejects_trailing_hyphen() {
+        let result = Slug::new("bad-slug-");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn slug_rejects_consecutive_hyphens() {
+        let result = Slug::new("bad--slug");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn slug_rejects_excessive_length() {
+        let long_slug = "a".repeat(200);
+        let result = Slug::new(long_slug);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn slug_accepts_max_length() -> Result<()> {
+        let max_slug = "a".repeat(128);
+        let slug = Slug::new(max_slug)?;
+        assert_eq!(slug.as_str().len(), 128);
+        Ok(())
+    }
+
+    #[test]
     fn slug_accepts_lowercase_and_dashes() -> Result<()> {
         let slug = Slug::new("good-slug-1")?;
         assert_eq!(slug.as_str(), "good-slug-1");
@@ -448,8 +506,7 @@ mod tests {
 
     #[test]
     fn failed_accepts_valid_inputs() -> Result<()> {
-        let status =
-            TaskStatus::failed("lint", "error")?;
+        let status = TaskStatus::failed("lint", "error")?;
         assert!(status.is_failed());
         assert_eq!(status.to_filter_status(), "failed");
         Ok(())
@@ -478,14 +535,11 @@ mod tests {
     #[test]
     fn task_transition_allows_retry_after_failure() -> Result<()> {
         let slug = Slug::new("task-3")?;
-        let task = Task::new(slug, Language::Rust)
-            .start_stage(Stage::Implement)?;
+        let task = Task::new(slug, Language::Rust).start_stage(Stage::Implement)?;
 
-        let failed = task
-            .fail_stage(Stage::Implement, "failure")?;
+        let failed = task.fail_stage(Stage::Implement, "failure")?;
 
-        let retried = failed
-            .start_stage(Stage::Implement)?;
+        let retried = failed.start_stage(Stage::Implement)?;
 
         assert!(matches!(retried.status, TaskStatus::InProgress { .. }));
         Ok(())
@@ -494,11 +548,9 @@ mod tests {
     #[test]
     fn task_transition_allows_stage_to_stage_progression() -> Result<()> {
         let slug = Slug::new("task-5")?;
-        let task = Task::new(slug, Language::Rust)
-            .start_stage(Stage::Implement)?;
+        let task = Task::new(slug, Language::Rust).start_stage(Stage::Implement)?;
 
-        let advanced = task
-            .start_stage(Stage::UnitTest)?;
+        let advanced = task.start_stage(Stage::UnitTest)?;
 
         assert_eq!(
             advanced.status,
@@ -512,8 +564,7 @@ mod tests {
     #[test]
     fn task_transition_rejects_regressing_stage() -> Result<()> {
         let slug = Slug::new("task-6")?;
-        let task = Task::new(slug, Language::Rust)
-            .start_stage(Stage::UnitTest)?;
+        let task = Task::new(slug, Language::Rust).start_stage(Stage::UnitTest)?;
 
         let result = task.start_stage(Stage::Implement);
         assert!(matches!(result, Err(Error::InvalidTransition { .. })));
@@ -523,8 +574,7 @@ mod tests {
     #[test]
     fn task_pass_and_integrate_follow_order() -> Result<()> {
         let slug = Slug::new("task-4")?;
-        let task = Task::new(slug, Language::Rust)
-            .start_stage(Stage::Implement)?;
+        let task = Task::new(slug, Language::Rust).start_stage(Stage::Implement)?;
 
         let passed = task.pass_pipeline()?;
         let integrated = passed.integrate()?;

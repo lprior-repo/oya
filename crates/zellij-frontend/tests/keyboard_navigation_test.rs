@@ -7,7 +7,7 @@ use zellij_frontend::layout::PaneType;
 use zellij_frontend::plugin::{
     InputMode, KeyModifiers, OyaPlugin, PluginEvent, PluginInfo, PluginState, Size, TaskRow,
 };
-use zellij_frontend::state::{STATE_VERSION, StateSnapshot};
+use zellij_frontend::state::{StateSnapshot, STATE_VERSION};
 
 fn start_plugin(plugin: &mut OyaPlugin) -> Result<(), Box<dyn std::error::Error>> {
     let _ = plugin.handle_event(PluginEvent::Start {
@@ -446,11 +446,9 @@ fn command_mode_unknown_command_reports_error() -> Result<(), Box<dyn std::error
     });
 
     assert_eq!(plugin.input_mode(), InputMode::Normal);
-    assert!(
-        plugin
-            .status_message()
-            .is_some_and(|msg| msg.contains("Command error"))
-    );
+    assert!(plugin
+        .status_message()
+        .is_some_and(|msg| msg.contains("Command error")));
     Ok(())
 }
 
@@ -480,11 +478,9 @@ fn search_reports_no_matches() -> Result<(), Box<dyn std::error::Error>> {
         modifiers: make_mods(false, false),
     });
 
-    assert!(
-        plugin
-            .status_message()
-            .is_some_and(|msg| msg.contains("No matches found"))
-    );
+    assert!(plugin
+        .status_message()
+        .is_some_and(|msg| msg.contains("No matches found")));
     Ok(())
 }
 
@@ -498,11 +494,9 @@ fn n_without_active_pattern_reports_status() -> Result<(), Box<dyn std::error::E
         modifiers: make_mods(false, false),
     });
 
-    assert!(
-        plugin
-            .status_message()
-            .is_some_and(|msg| msg.contains("No active search pattern"))
-    );
+    assert!(plugin
+        .status_message()
+        .is_some_and(|msg| msg.contains("No active search pattern")));
     Ok(())
 }
 
@@ -749,11 +743,9 @@ fn h_and_l_scroll_horizontally_in_bead_detail() -> Result<(), Box<dyn std::error
         modifiers: make_mods(false, false),
     });
     assert_eq!(plugin.focused_pane(), PaneType::BeadDetail);
-    assert!(
-        plugin
-            .status_message()
-            .is_some_and(|msg| msg.contains("right"))
-    );
+    assert!(plugin
+        .status_message()
+        .is_some_and(|msg| msg.contains("right")));
 
     // h should scroll back left
     let _ = plugin.handle_event(PluginEvent::Key {
@@ -761,11 +753,9 @@ fn h_and_l_scroll_horizontally_in_bead_detail() -> Result<(), Box<dyn std::error
         modifiers: make_mods(false, false),
     });
     assert_eq!(plugin.focused_pane(), PaneType::BeadDetail);
-    assert!(
-        plugin
-            .status_message()
-            .is_some_and(|msg| msg.contains("left") || msg.contains("edge"))
-    );
+    assert!(plugin
+        .status_message()
+        .is_some_and(|msg| msg.contains("left") || msg.contains("edge")));
 
     Ok(())
 }
@@ -788,11 +778,9 @@ fn h_and_l_scroll_horizontally_in_pipeline_view() -> Result<(), Box<dyn std::err
         modifiers: make_mods(false, false),
     });
     assert_eq!(plugin.focused_pane(), PaneType::PipelineView);
-    assert!(
-        plugin
-            .status_message()
-            .is_some_and(|msg| msg.contains("right"))
-    );
+    assert!(plugin
+        .status_message()
+        .is_some_and(|msg| msg.contains("right")));
 
     // h should scroll back left
     let _ = plugin.handle_event(PluginEvent::Key {
@@ -822,11 +810,9 @@ fn h_and_l_scroll_horizontally_in_workflow_graph() -> Result<(), Box<dyn std::er
         modifiers: make_mods(false, false),
     });
     assert_eq!(plugin.focused_pane(), PaneType::WorkflowGraph);
-    assert!(
-        plugin
-            .status_message()
-            .is_some_and(|msg| msg.contains("right"))
-    );
+    assert!(plugin
+        .status_message()
+        .is_some_and(|msg| msg.contains("right")));
 
     // h should scroll back left
     let _ = plugin.handle_event(PluginEvent::Key {
@@ -856,11 +842,9 @@ fn h_at_left_edge_shows_status() -> Result<(), Box<dyn std::error::Error>> {
         modifiers: make_mods(false, false),
     });
     assert_eq!(plugin.focused_pane(), PaneType::BeadDetail);
-    assert!(
-        plugin
-            .status_message()
-            .is_some_and(|msg| msg.contains("edge"))
-    );
+    assert!(plugin
+        .status_message()
+        .is_some_and(|msg| msg.contains("edge")));
 
     Ok(())
 }

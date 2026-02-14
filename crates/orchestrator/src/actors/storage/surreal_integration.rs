@@ -14,8 +14,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use surrealdb::Surreal;
 use surrealdb::engine::local::{Db, RocksDb};
+use surrealdb::Surreal;
 use thiserror::Error;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use tracing::{debug, error, info, warn};
@@ -298,8 +298,11 @@ impl SurrealConnectionManager {
         loop {
             attempt = attempt.saturating_add(1);
 
-            let timeout_result =
-                tokio::time::timeout(self.config.query_timeout, operation(self.get_connection().await?)).await;
+            let timeout_result = tokio::time::timeout(
+                self.config.query_timeout,
+                operation(self.get_connection().await?),
+            )
+            .await;
 
             match timeout_result {
                 Ok(Ok(result)) => return Ok(result),
@@ -351,6 +354,7 @@ impl SurrealConnectionManager {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
 

@@ -145,8 +145,8 @@ async fn test_bead_failure_with_retry_exhaustion() -> Result<(), Box<dyn std::er
 ///
 /// This is a higher-level workflow state test.
 #[tokio::test]
-async fn test_workflow_state_failed_after_bead_retry_exhaustion()
--> Result<(), Box<dyn std::error::Error>> {
+async fn test_workflow_state_failed_after_bead_retry_exhaustion(
+) -> Result<(), Box<dyn std::error::Error>> {
     use oya_workflow::{Phase, Workflow, WorkflowState};
 
     // GIVEN: A workflow with a single phase that will fail
@@ -227,8 +227,8 @@ async fn test_retry_exhaustion_error_message() -> Result<(), Box<dyn std::error:
 
 /// Test that workflow with multiple beads fails when one bead exhausts retries.
 #[tokio::test]
-async fn test_multi_bead_workflow_fails_on_single_bead_exhaustion()
--> Result<(), Box<dyn std::error::Error>> {
+async fn test_multi_bead_workflow_fails_on_single_bead_exhaustion(
+) -> Result<(), Box<dyn std::error::Error>> {
     use oya_workflow::{Phase, Workflow, WorkflowState};
 
     // GIVEN: A workflow with multiple phases
@@ -242,7 +242,11 @@ async fn test_multi_bead_workflow_fails_on_single_bead_exhaustion()
 
     // WHEN: First phase succeeds
     workflow.advance();
-    assert_eq!(workflow.current_phase_index(), 1, "Should advance to phase 1");
+    assert_eq!(
+        workflow.current_phase_index(),
+        1,
+        "Should advance to phase 1"
+    );
 
     // Second phase exhausts retries
     for _ in 1..=4 {
@@ -253,7 +257,11 @@ async fn test_multi_bead_workflow_fails_on_single_bead_exhaustion()
     workflow.state = WorkflowState::Failed;
 
     assert_eq!(workflow.state, WorkflowState::Failed);
-    assert_eq!(workflow.current_phase_index(), 1, "Should stop at failing phase");
+    assert_eq!(
+        workflow.current_phase_index(),
+        1,
+        "Should stop at failing phase"
+    );
 
     // Progress should reflect partial completion
     let progress = workflow.progress();

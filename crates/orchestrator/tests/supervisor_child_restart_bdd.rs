@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! BDD test: Supervisor child restart on failure.
 //!
 //! This test verifies that the supervisor correctly restarts child actors
@@ -14,15 +15,15 @@ use ractor::{ActorRef, ActorStatus};
 use orchestrator::actors::messages::SchedulerMessage;
 use orchestrator::actors::scheduler::{SchedulerActorDef, SchedulerArguments};
 use orchestrator::actors::supervisor::{
-    MeltdownStatus, SupervisorArguments, SupervisorConfig, SupervisorMessage, SupervisorState,
-    spawn_supervisor_with_name,
+    spawn_supervisor_with_name, MeltdownStatus, SupervisorArguments, SupervisorConfig,
+    SupervisorMessage, SupervisorState,
 };
 
 static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 fn unique_name(prefix: &str) -> String {
     let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
-    format!("{}-{}", prefix, id)
+    format!("{prefix}-{id}")
 }
 
 async fn await_scheduler_status(
@@ -34,8 +35,7 @@ async fn await_scheduler_status(
     loop {
         if tokio::time::Instant::now() > deadline {
             return Err(format!(
-                "Timeout waiting for actor status {:?}, got {:?}",
-                expected,
+                "Timeout waiting for actor status {expected:?}, got {:?}",
                 actor.get_status()
             ));
         }
@@ -55,8 +55,7 @@ async fn await_supervisor_status(
     loop {
         if tokio::time::Instant::now() > deadline {
             return Err(format!(
-                "Timeout waiting for supervisor status {:?}, got {:?}",
-                expected,
+                "Timeout waiting for supervisor status {expected:?}, got {:?}",
                 actor.get_status()
             ));
         }
@@ -73,7 +72,7 @@ async fn get_supervisor_status(
     let (tx, rx) = tokio::sync::oneshot::channel();
     let _ = supervisor.send_message(SupervisorMessage::GetStatus { reply: tx });
     rx.await
-        .unwrap_or_else(|_| orchestrator::actors::supervisor::SupervisorStatus {
+        .unwrap_or(orchestrator::actors::supervisor::SupervisorStatus {
             state: SupervisorState::Stopped,
             meltdown_status: MeltdownStatus::Normal,
             active_children: 0,
@@ -83,8 +82,8 @@ async fn get_supervisor_status(
 }
 
 #[tokio::test]
-async fn given_supervisor_with_child_when_child_fails_then_restarted()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_supervisor_with_child_when_child_fails_then_restarted(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = unique_name("sup-child-restart");
 
     let args = SupervisorArguments::new().with_config(SupervisorConfig::for_testing());
@@ -135,11 +134,7 @@ async fn given_supervisor_with_child_when_child_fails_then_restarted()
 
     let restarted_ref = get_rx2.await?;
 
-    assert!(
-        restarted_ref.is_some(),
-        "Child should be restarted after failure"
-    );
-    let restarted_ref = restarted_ref.unwrap();
+    let restarted_ref = restarted_ref.ok_or("Child should be restarted after failure")?;
 
     await_scheduler_status(&restarted_ref, ActorStatus::Running, 2000)
         .await
@@ -157,8 +152,8 @@ async fn given_supervisor_with_child_when_child_fails_then_restarted()
 }
 
 #[tokio::test]
-async fn given_supervisor_when_child_fails_multiple_times_then_restarts_each_time()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_supervisor_when_child_fails_multiple_times_then_restarts_each_time(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = unique_name("sup-multi-restart");
 
     let args = SupervisorArguments::new().with_config(SupervisorConfig::for_testing());
@@ -222,8 +217,8 @@ async fn given_supervisor_when_child_fails_multiple_times_then_restarts_each_tim
 }
 
 #[tokio::test]
-async fn given_supervisor_with_max_restarts_when_exceeded_then_no_restart()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_supervisor_with_max_restarts_when_exceeded_then_no_restart(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = unique_name("sup-max-restarts");
 
     let config = SupervisorConfig {
@@ -252,7 +247,7 @@ async fn given_supervisor_with_max_restarts_when_exceeded_then_no_restart()
         name: child_name.clone(),
         reply: get_tx1,
     })?;
-    let child_ref = get_rx1.await?.unwrap();
+    let child_ref = get_rx1.await?.ok_or("Child not found 1")?;
     child_ref.stop(Some("Failure 1".to_string()));
 
     tokio::time::sleep(Duration::from_millis(300)).await;
@@ -262,7 +257,7 @@ async fn given_supervisor_with_max_restarts_when_exceeded_then_no_restart()
         name: child_name.clone(),
         reply: get_tx2,
     })?;
-    let restarted_ref = get_rx2.await?.unwrap();
+    let restarted_ref = get_rx2.await?.ok_or("Child not found 2")?;
     restarted_ref.stop(Some("Failure 2".to_string()));
 
     tokio::time::sleep(Duration::from_millis(300)).await;
@@ -290,8 +285,8 @@ async fn given_supervisor_with_max_restarts_when_exceeded_then_no_restart()
 }
 
 #[tokio::test]
-async fn given_supervisor_when_child_restarted_then_supervisor_remains_running()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_supervisor_when_child_restarted_then_supervisor_remains_running(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = unique_name("sup-invariant");
 
     let args = SupervisorArguments::new().with_config(SupervisorConfig::for_testing());
@@ -316,7 +311,7 @@ async fn given_supervisor_when_child_restarted_then_supervisor_remains_running()
         name: child_name.clone(),
         reply: get_tx,
     })?;
-    let child_ref = get_rx.await?.unwrap();
+    let child_ref = get_rx.await?.ok_or("Child not found")?;
 
     child_ref.stop(Some("Failure".to_string()));
 

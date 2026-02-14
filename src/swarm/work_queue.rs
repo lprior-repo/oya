@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{RwLock, Semaphore, mpsc};
+use tokio::sync::{mpsc, RwLock, Semaphore};
 use tracing::{debug, info};
 
 use crate::swarm::error::{BeadWorkState, SwarmError, SwarmResult};
@@ -380,13 +380,9 @@ mod tests {
     async fn test_work_queue_add_and_claim() -> SwarmResult<()> {
         let queue = WorkQueue::new();
 
-        queue
-            .add_bead("test-123".to_string())
-            .await?;
+        queue.add_bead("test-123".to_string()).await?;
 
-        let bead = queue
-            .claim_next("agent-1".to_string())
-            .await?;
+        let bead = queue.claim_next("agent-1".to_string()).await?;
 
         assert_eq!(bead.bead_id, "test-123");
         assert_eq!(bead.state, BeadWorkState::Pending);
@@ -397,12 +393,8 @@ mod tests {
     async fn test_work_queue_stats() -> SwarmResult<()> {
         let queue = WorkQueue::new();
 
-        queue
-            .add_bead("test-1".to_string())
-            .await?;
-        queue
-            .add_bead("test-2".to_string())
-            .await?;
+        queue.add_bead("test-1".to_string()).await?;
+        queue.add_bead("test-2".to_string()).await?;
 
         let stats = queue.stats().await;
         assert_eq!(stats.pending, 2);

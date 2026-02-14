@@ -29,8 +29,8 @@ use crate::persistence::PersistenceError;
 use crate::replay::CheckpointManager;
 use crate::shutdown::CheckpointResult;
 
-use super::GenericSupervisableActor;
 use super::supervisor_actor::{SupervisorActorState, SupervisorConfig, SupervisorState};
+use super::GenericSupervisableActor;
 
 /// Errors that can occur during supervisor checkpoint operations.
 #[derive(Debug, Error)]
@@ -407,7 +407,10 @@ where
                 let elapsed = i.elapsed().as_secs().saturating_sub(1);
                 std::time::SystemTime::now()
                     .checked_sub(Duration::from_secs(elapsed))
-                    .map_or_else(|| DateTime::from(std::time::SystemTime::UNIX_EPOCH), DateTime::from)
+                    .map_or_else(
+                        || DateTime::from(std::time::SystemTime::UNIX_EPOCH),
+                        DateTime::from,
+                    )
             }),
             args: format!("{:?}", child.args), // Debug format for args
         })
@@ -431,6 +434,7 @@ async fn report_checkpoint_result(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
     use crate::actors::scheduler::SchedulerActorDef;
@@ -479,14 +483,14 @@ mod tests {
             total_restarts: 0,
             child_id_counter: 0,
             shutdown_coordinator: None,
-            _shutdown_rx: None,
-            _periodic_checkpoint_shutdown_tx: None,
+            shutdown_rx: None,
+            periodic_checkpoint_shutdown_tx: None,
             restart_strategy: Box::new(OneForOne::new()),
             checkpoint_manager: None,
             replay_engine: None,
         };
 
-        let result = serialize_supervisor_state(&state).await;
+        let result = serialize_supervisor_state::<SchedulerActorDef>(&state);
         assert!(result.is_ok());
 
         if let Ok(json) = result {
@@ -592,8 +596,8 @@ mod tests {
             total_restarts: 0,
             child_id_counter: 0,
             shutdown_coordinator: None,
-            _shutdown_rx: None,
-            _periodic_checkpoint_shutdown_tx: None,
+            shutdown_rx: None,
+            periodic_checkpoint_shutdown_tx: None,
             restart_strategy: Box::new(OneForOne::new()),
             checkpoint_manager: None,
             replay_engine: None,

@@ -17,7 +17,6 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
-
 pub mod bus;
 pub mod db;
 pub mod durable_store;

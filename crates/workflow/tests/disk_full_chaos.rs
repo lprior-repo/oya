@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! Chaos tests for disk full scenarios with graceful failure and retry.
 //!
 //! Tests resilience to disk full errors by:
@@ -10,9 +11,6 @@
 //! **Phase 4 - Chaos Tests:** Disk full -> fail gracefully -> retry after space available
 
 #![cfg(test)]
-#![deny(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-#![deny(clippy::panic)]
 #![warn(clippy::pedantic)]
 #![warn(clippy::nursery)]
 #![forbid(unsafe_code)]
@@ -202,7 +200,10 @@ impl CheckpointStorage for DiskFullSimulatingStorage {
 
         if self.is_disk_full() {
             self.failed_writes.fetch_add(1, Ordering::SeqCst);
-            info!("Write rejected: disk full (attempt {})", self.write_attempts());
+            info!(
+                "Write rejected: disk full (attempt {})",
+                self.write_attempts()
+            );
             return Err(StorageError::StorageFailed {
                 reason: "disk full: no space left on device".to_string(),
             });
@@ -212,14 +213,18 @@ impl CheckpointStorage for DiskFullSimulatingStorage {
         let data_size = data.len() as u64;
 
         self.checkpoints = self.checkpoints.update(id, (data, metadata));
-        self.current_usage_bytes.fetch_add(data_size, Ordering::SeqCst);
+        self.current_usage_bytes
+            .fetch_add(data_size, Ordering::SeqCst);
         self.successful_writes.fetch_add(1, Ordering::SeqCst);
 
         debug!("Checkpoint stored: {} ({} bytes)", id, data_size);
         Ok(id)
     }
 
-    fn load_checkpoint(&self, id: &CheckpointId) -> Result<(Vec<u8>, CheckpointMetadata), StorageError> {
+    fn load_checkpoint(
+        &self,
+        id: &CheckpointId,
+    ) -> Result<(Vec<u8>, CheckpointMetadata), StorageError> {
         self.checkpoints
             .get(id)
             .map(|(data, meta)| (data.clone(), meta.clone()))
@@ -249,12 +254,15 @@ impl CheckpointStorage for DiskFullSimulatingStorage {
     fn get_stats(&self) -> Result<StorageStats, StorageError> {
         let total_checkpoints = self.checkpoints.len();
         let (total_compressed, total_uncompressed, ratio_sum) =
-            self.checkpoints.values().fold(
-                (0u64, 0u64, 0.0),
-                |(c, u, r), (_, meta)| {
-                    (c + meta.compressed_size as u64, u + meta.uncompressed_size as u64, r + meta.compression_ratio)
-                },
-            );
+            self.checkpoints
+                .values()
+                .fold((0u64, 0u64, 0.0), |(c, u, r), (_, meta)| {
+                    (
+                        c + meta.compressed_size as u64,
+                        u + meta.uncompressed_size as u64,
+                        r + meta.compression_ratio,
+                    )
+                });
 
         Ok(StorageStats {
             total_checkpoints,
@@ -314,7 +322,9 @@ impl RetryConfig {
     #[must_use]
     pub fn delay_for_attempt(&self, attempt: u32) -> u64 {
         let delay = self.base_delay_ms as f64
-            * self.backoff_multiplier.powi(i32::try_from(attempt).unwrap_or(0).saturating_sub(1));
+            * self
+                .backoff_multiplier
+                .powi(i32::try_from(attempt).unwrap_or(0).saturating_sub(1));
         delay.min(self.max_delay_ms as f64) as u64
     }
 }
@@ -361,9 +371,10 @@ fn store_with_retry(
 /// Create checkpoint metadata for test state.
 fn create_metadata(state: &TestState) -> ChaosTestResult<(CheckpointMetadata, Vec<u8>)> {
     let checkpoint_id = CheckpointId::new();
-    let serialized = serialize_state(state).map_err(|e| ChaosTestError::CheckpointCreationFailed {
-        reason: format!("serialization failed: {e}"),
-    })?;
+    let serialized =
+        serialize_state(state).map_err(|e| ChaosTestError::CheckpointCreationFailed {
+            reason: format!("serialization failed: {e}"),
+        })?;
 
     let metadata = CheckpointMetadata {
         id: checkpoint_id,
@@ -395,10 +406,7 @@ async fn given_disk_full_when_store_checkpoint_then_fails_gracefully() {
 
     let result = storage.store_checkpoint(data, metadata);
 
-    assert!(
-        result.is_err(),
-        "Store should fail when disk is full"
-    );
+    assert!(result.is_err(), "Store should fail when disk is full");
 
     match result {
         Err(StorageError::StorageFailed { reason }) => {
@@ -418,7 +426,11 @@ async fn given_disk_full_when_store_checkpoint_then_fails_gracefully() {
     }
 
     assert_eq!(storage.failed_writes(), 1, "Should have one failed write");
-    assert_eq!(storage.successful_writes(), 0, "Should have no successful writes");
+    assert_eq!(
+        storage.successful_writes(),
+        0,
+        "Should have no successful writes"
+    );
 
     info!("Test passed: {}", test_name);
 }
@@ -438,7 +450,10 @@ async fn given_disk_full_when_freed_then_retry_succeeds() {
     assert!(result.is_err(), "First write should fail");
 
     storage.set_disk_full(false);
-    assert!(!storage.is_disk_full(), "Storage should not be full after freeing");
+    assert!(
+        !storage.is_disk_full(),
+        "Storage should not be full after freeing"
+    );
 
     let result = storage.store_checkpoint(data, metadata);
     assert!(result.is_ok(), "Retry should succeed after space freed");
@@ -490,7 +505,10 @@ async fn given_disk_full_when_store_with_retry_then_eventually_succeeds() {
                     return Ok(id);
                 }
                 Err(StorageError::StorageFailed { reason }) if reason.contains("disk full") => {
-                    warn!("Disk full on attempt {}/{}", attempts, retry_config.max_attempts);
+                    warn!(
+                        "Disk full on attempt {}/{}",
+                        attempts, retry_config.max_attempts
+                    );
                     if attempts >= retry_config.max_attempts {
                         return Err(ChaosTestError::RetryLimitExceeded { attempts });
                     }
@@ -508,7 +526,11 @@ async fn given_disk_full_when_store_with_retry_then_eventually_succeeds() {
 
     free_handle.await.expect("Free task panicked");
     let result = result.await.expect("Retry task panicked");
-    assert!(result.is_ok(), "Should eventually succeed after space freed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Should eventually succeed after space freed: {:?}",
+        result.err()
+    );
 
     info!("Test passed: {}", test_name);
 }
@@ -522,11 +544,17 @@ async fn given_capacity_limit_when_exceeded_then_fails_gracefully() {
     let state = TestState::new(1, 100);
     let (metadata, data) = create_metadata(&state).expect("Failed to create metadata");
 
-    assert!(!storage.is_disk_full(), "Storage should not be full initially");
+    assert!(
+        !storage.is_disk_full(),
+        "Storage should not be full initially"
+    );
 
     if data.len() > 50 {
         let result = storage.store_checkpoint(data, metadata);
-        assert!(result.is_err(), "Store should fail when data exceeds capacity");
+        assert!(
+            result.is_err(),
+            "Store should fail when data exceeds capacity"
+        );
 
         match result {
             Err(StorageError::StorageFailed { reason }) => {
@@ -557,11 +585,15 @@ async fn given_multiple_checkpoints_when_disk_full_then_preserves_existing() {
 
     let state1 = TestState::new(1, 100);
     let (metadata1, data1) = create_metadata(&state1).expect("Failed to create metadata");
-    let id1 = storage.store_checkpoint(data1, metadata1).expect("First store should succeed");
+    let id1 = storage
+        .store_checkpoint(data1, metadata1)
+        .expect("First store should succeed");
 
     let state2 = TestState::new(2, 200);
     let (metadata2, data2) = create_metadata(&state2).expect("Failed to create metadata");
-    let id2 = storage.store_checkpoint(data2, metadata2).expect("Second store should succeed");
+    let id2 = storage
+        .store_checkpoint(data2, metadata2)
+        .expect("Second store should succeed");
 
     storage.set_disk_full(true);
 
@@ -570,10 +602,10 @@ async fn given_multiple_checkpoints_when_disk_full_then_preserves_existing() {
     let result = storage.store_checkpoint(data3, metadata3);
     assert!(result.is_err(), "Third store should fail with disk full");
 
-    let restored1: TestState = restore_checkpoint(&id1, &storage)
-        .expect("Existing checkpoint 1 should be restorable");
-    let restored2: TestState = restore_checkpoint(&id2, &storage)
-        .expect("Existing checkpoint 2 should be restorable");
+    let restored1: TestState =
+        restore_checkpoint(&id1, &storage).expect("Existing checkpoint 1 should be restorable");
+    let restored2: TestState =
+        restore_checkpoint(&id2, &storage).expect("Existing checkpoint 2 should be restorable");
 
     assert_eq!(restored1.version, 1, "State 1 version should be preserved");
     assert_eq!(restored2.version, 2, "State 2 version should be preserved");
@@ -600,7 +632,10 @@ async fn given_disk_full_retry_loop_when_all_fail_then_returns_retry_error() {
     match result {
         Err(ChaosTestError::RetryLimitExceeded { attempts }) => {
             assert!(attempts >= 3, "Should have made at least 3 attempts");
-            info!("Correctly returned retry limit exceeded after {} attempts", attempts);
+            info!(
+                "Correctly returned retry limit exceeded after {} attempts",
+                attempts
+            );
         }
         Err(e) => {
             panic!("Unexpected error type: {}", e);
@@ -623,13 +658,19 @@ async fn given_free_space_when_disk_full_then_reduces_usage() {
     let state = TestState::new(1, 100);
     let (metadata, data) = create_metadata(&state).expect("Failed to create metadata");
 
-    storage.store_checkpoint(data, metadata).expect("First store should succeed");
+    storage
+        .store_checkpoint(data, metadata)
+        .expect("First store should succeed");
     let usage_before = storage.current_usage();
     assert!(usage_before > 0, "Usage should be positive after store");
 
     let freed = storage.free_space();
     assert_eq!(freed, usage_before, "Should report freed bytes");
-    assert_eq!(storage.current_usage(), 0, "Usage should be zero after free");
+    assert_eq!(
+        storage.current_usage(),
+        0,
+        "Usage should be zero after free"
+    );
     assert!(!storage.is_disk_full(), "Should not be full after free");
 
     info!("Test passed: {}", test_name);
@@ -665,8 +706,8 @@ async fn test_invariant_no_data_loss_on_disk_full() {
     }
 
     for (id, expected_state) in stored_ids.iter().zip(stored_states.iter()) {
-        let restored: TestState = restore_checkpoint(id, &storage)
-            .expect("Should restore stored checkpoint");
+        let restored: TestState =
+            restore_checkpoint(id, &storage).expect("Should restore stored checkpoint");
 
         assert_eq!(
             restored, *expected_state,
@@ -710,11 +751,13 @@ async fn test_postcondition_successful_write_after_free() {
     assert!(result.is_ok(), "Should succeed after free space");
 
     let id = result.expect("Should have id");
-    let restored: TestState = restore_checkpoint(&id, &storage)
-        .expect("Should restore after free");
+    let restored: TestState = restore_checkpoint(&id, &storage).expect("Should restore after free");
 
     assert_eq!(restored.version, 2, "Restored state should have version 2");
-    assert_eq!(restored.counter, 200, "Restored state should have counter 200");
+    assert_eq!(
+        restored.counter, 200,
+        "Restored state should have counter 200"
+    );
 
     info!("Test passed: {}", test_name);
 }
@@ -729,12 +772,14 @@ async fn given_restore_when_disk_full_then_read_still_works() {
     let state = TestState::new(1, 100);
     let (metadata, data) = create_metadata(&state).expect("Failed to create metadata");
 
-    let id = storage.store_checkpoint(data, metadata).expect("Store should succeed");
+    let id = storage
+        .store_checkpoint(data, metadata)
+        .expect("Store should succeed");
 
     storage.set_disk_full(true);
 
-    let restored: TestState = restore_checkpoint(&id, &storage)
-        .expect("Read should work even when disk is full");
+    let restored: TestState =
+        restore_checkpoint(&id, &storage).expect("Read should work even when disk is full");
 
     assert_eq!(restored, state, "Read state should match original");
 
@@ -765,14 +810,19 @@ async fn test_scenario_checkpoint_workflow_with_disk_full_recovery() {
 
                 if !checkpoints.is_empty() {
                     let (oldest_id, _) = checkpoints.remove(0);
-                    storage.delete_checkpoint(&oldest_id).expect("Delete should work");
+                    storage
+                        .delete_checkpoint(&oldest_id)
+                        .expect("Delete should work");
                     info!("Deleted oldest checkpoint to free space");
                 }
 
                 let (metadata, data) = create_metadata(&state).expect("Failed to create metadata");
                 match storage.store_checkpoint(data, metadata) {
                     Ok(id) => {
-                        info!("Checkpoint created for stage '{}' after cleanup: {}", stage, id);
+                        info!(
+                            "Checkpoint created for stage '{}' after cleanup: {}",
+                            stage, id
+                        );
                         checkpoints.push((id, state));
                     }
                     Err(e) => {
@@ -787,8 +837,8 @@ async fn test_scenario_checkpoint_workflow_with_disk_full_recovery() {
     }
 
     for (id, expected_state) in &checkpoints {
-        let restored: TestState = restore_checkpoint(id, &storage)
-            .expect("Should restore checkpoint");
+        let restored: TestState =
+            restore_checkpoint(id, &storage).expect("Should restore checkpoint");
 
         assert_eq!(
             &restored, expected_state,
@@ -813,7 +863,9 @@ async fn given_delete_when_disk_full_then_frees_space_for_new_writes() {
 
     let state1 = TestState::new(1, 100);
     let (metadata1, data1) = create_metadata(&state1).expect("Failed to create metadata");
-    let id1 = storage.store_checkpoint(data1, metadata1).expect("First store should succeed");
+    let id1 = storage
+        .store_checkpoint(data1, metadata1)
+        .expect("First store should succeed");
 
     storage.set_disk_full(true);
 
@@ -823,11 +875,17 @@ async fn given_delete_when_disk_full_then_frees_space_for_new_writes() {
     let result = storage.store_checkpoint(data2.clone(), metadata2.clone());
     assert!(result.is_err(), "Should fail - disk full");
 
-    storage.delete_checkpoint(&id1).expect("Delete should succeed");
+    storage
+        .delete_checkpoint(&id1)
+        .expect("Delete should succeed");
     storage.set_disk_full(false);
 
     let result = storage.store_checkpoint(data2, metadata2);
-    assert!(result.is_ok(), "Should succeed after delete freed space: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Should succeed after delete freed space: {:?}",
+        result.err()
+    );
 
     info!("Test passed: {}", test_name);
 }

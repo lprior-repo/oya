@@ -463,8 +463,7 @@ mod tests {
     fn test_recv_with_zero_length_returns_error() -> Result<(), Box<dyn std::error::Error>> {
         // Write invalid length prefix = 0
         let (mut writer, reader) = duplex_pair();
-        writer
-            .write_all(&0u32.to_be_bytes())?;
+        writer.write_all(&0u32.to_be_bytes())?;
         writer.flush()?;
 
         let mut transport = IpcTransport::new(reader, writer);

@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! BDD integration tests for FIFO strategy.
 //!
 //! This module tests the behavior described in bead src-3m3t:

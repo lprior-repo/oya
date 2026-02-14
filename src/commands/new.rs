@@ -4,8 +4,8 @@
 
 use anyhow::Result;
 use clap::Parser;
+use oya_pipeline::{save_task_record, Slug, Task};
 use oya_pipeline::{Language, Priority, TaskStatus};
-use oya_pipeline::{Slug, Task, save_task_record};
 use std::path::PathBuf;
 
 /// Arguments for the new command

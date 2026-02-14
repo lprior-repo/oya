@@ -1,12 +1,12 @@
 #![forbid(unsafe_code)]
-#![forbid(clippy::unwrap_used)]
-#![forbid(clippy::panic)]
-#![forbid(clippy::expect_used)]
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::panic)]
+#![deny(clippy::expect_used)]
 
-use anyhow::{Result, anyhow};
-use axum::{Router, body::Body, http::StatusCode};
+use anyhow::{anyhow, Result};
+use axum::{body::Body, http::StatusCode, Router};
 use http_body_util::BodyExt;
-use oya_web::{ServerConfig, create_router};
+use oya_web::{create_router, ServerConfig};
 use serde_json::Value;
 use tower::ServiceExt;
 
@@ -34,7 +34,8 @@ async fn get_json(path: &str) -> Result<(StatusCode, Value)> {
         .map_err(|e| anyhow!("Failed to collect body: {e}"))?
         .to_bytes();
 
-    let json: Value = serde_json::from_slice(&body_bytes).map_err(|e| anyhow!("Failed to parse JSON: {e}"))?;
+    let json: Value =
+        serde_json::from_slice(&body_bytes).map_err(|e| anyhow!("Failed to parse JSON: {e}"))?;
 
     Ok((status, json))
 }
@@ -284,7 +285,8 @@ async fn test_graph_response_matches_schema() -> Result<()> {
         edges: vec![],
     };
 
-    let json = serde_json::to_string(&response).map_err(|e| anyhow!("Serialization failed: {e}"))?;
+    let json =
+        serde_json::to_string(&response).map_err(|e| anyhow!("Serialization failed: {e}"))?;
 
     // Then: All top-level fields should be present
     assert!(json.contains("nodes"), "Should contain nodes field");

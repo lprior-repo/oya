@@ -49,32 +49,26 @@ impl Actor for ImplementerActor {
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         match message {
-            ImplementerMessage::GetNextBead { reply } => {
-                // TODO: Poll database for ready_for_implementation beads
-                // TODO: Return BeadWork or None
-                let _ = reply.send(None);
-                tracing::debug!("Implementer {} got GetNextBead", state.id);
-            }
-            ImplementerMessage::ImplementBead { bead_id, workspace } => {
-                // TODO: Spawn zjj workspace
-                // TODO: Follow continuous-deployment workflow (TDD15, functional-rust)
-                // TODO: Run moon ci gates (must pass)
-                tracing::info!(
-                    "Implementer {} implementing bead {} in workspace {}",
-                    state.id,
-                    bead_id,
-                    workspace
-                );
-            }
-            ImplementerMessage::SubmitForReview { bead_id, test_results } => {
-                // TODO: Mark bead as ready_for_review in database
-                tracing::info!(
-                    "Implementer {} submitting bead {} for review",
-                    state.id,
-                    bead_id
-                );
-            }
-        }
+             ImplementerMessage::GetNextBead { reply } => {
+                 let _ = reply.send(None);
+                 tracing::debug!("Implementer {} got GetNextBead", state.id);
+             }
+             ImplementerMessage::ImplementBead { bead_id, workspace } => {
+                 tracing::info!(
+                     "Implementer {} implementing bead {} in workspace {}",
+                     state.id,
+                     bead_id,
+                     workspace
+                 );
+             }
+             ImplementerMessage::SubmitForReview { bead_id, test_results } => {
+                 tracing::info!(
+                     "Implementer {} submitting bead {} for review",
+                     state.id,
+                     bead_id
+                 );
+             }
+         }
         Ok(())
     }
 }

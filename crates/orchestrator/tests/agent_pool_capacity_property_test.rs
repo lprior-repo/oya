@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! Property test: Assigned beads never exceed agent count
 //!
 //! Invariant: ∀ agent pool operations, assigned_beads <= num_agents

@@ -25,9 +25,8 @@
 #![allow(clippy::explicit_iter_loop)]
 #![forbid(unsafe_code)]
 
-
-use crate::{Slug, Workflow};
 use crate::execution::{TaskExecutionStatus, WorkflowState};
+use crate::{Slug, Workflow};
 use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 
@@ -329,7 +328,7 @@ impl WorkflowVisualization {
             if !visited.contains(task_id)
                 && self.dfs_cycle_detect(workflow, task_id, &mut visited, &mut rec_stack, &mut path)
             {
-                return path.iter().map(|s| s.to_string()).collect();
+                return path.iter().map(std::string::ToString::to_string).collect();
             }
         }
 
@@ -464,9 +463,10 @@ impl WorkflowVisualization {
                 .keys()
                 .filter(|id| {
                     !assigned.contains(*id)
-                        && workflow.dependencies().get(*id).is_none_or(|deps| {
-                            deps.iter().all(|dep| assigned.contains(dep))
-                        })
+                        && workflow
+                            .dependencies()
+                            .get(*id)
+                            .is_none_or(|deps| deps.iter().all(|dep| assigned.contains(dep)))
                 })
                 .cloned()
                 .collect();
@@ -809,8 +809,7 @@ mod tests {
         let viz = WorkflowVisualization::new().with_min_dimensions(80, 24);
         let mut workflow = Workflow::new("test", "Test", "Description", Utc::now())?;
 
-        let task =
-            crate::Task::new("task-1", "Task 1", "First task")?;
+        let task = crate::Task::new("task-1", "Task 1", "First task")?;
         workflow.add_task(task, Utc::now())?;
 
         let state = WorkflowState {
@@ -839,14 +838,14 @@ mod tests {
         workflow.add_task(task1, Utc::now())?;
         workflow.add_task(task2, Utc::now())?;
 
-        // Create cycle bypassing validation for test purposes if needed, 
+        // Create cycle bypassing validation for test purposes if needed,
         // but add_dependency actually checks for cycles.
-        // To test render_dag with cycle, we might need a way to force it OR 
+        // To test render_dag with cycle, we might need a way to force it OR
         // test that it handles it if we somehow get one.
         // Actually, let's just test that it handles valid ones and skip forcing illegal state if impossible.
         // Wait, I can't use add_dependency to create a cycle anymore!
         // That's GOOD. That's Functional Domain Modeling. Illegal state is unrepresentable.
-        
+
         // Let's just verify add_dependency fails for cycles.
         assert!(workflow.add_dependency("a", "b", Utc::now()).is_ok());
         assert!(workflow.add_dependency("b", "a", Utc::now()).is_err());
@@ -863,8 +862,7 @@ mod tests {
 
         workflow.add_task(task1, Utc::now())?;
         workflow.add_task(task2, Utc::now())?;
-        workflow
-            .add_dependency("a", "b", Utc::now())?;
+        workflow.add_dependency("a", "b", Utc::now())?;
 
         let state = WorkflowState {
             workflow_id: Slug::new("test")?,
@@ -897,10 +895,8 @@ mod tests {
         workflow.add_task(task_b, Utc::now())?;
         workflow.add_task(task_c, Utc::now())?;
 
-        workflow
-            .add_dependency("a", "b", Utc::now())?;
-        workflow
-            .add_dependency("a", "c", Utc::now())?;
+        workflow.add_dependency("a", "b", Utc::now())?;
+        workflow.add_dependency("a", "c", Utc::now())?;
 
         let levels = viz.build_level_layout(&workflow);
         assert_eq!(levels.len(), 2);

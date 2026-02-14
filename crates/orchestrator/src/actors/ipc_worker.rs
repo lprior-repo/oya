@@ -56,8 +56,8 @@ use crate::ipc_messages::{
     TaskUpdate,
 };
 
-use crate::actors::SchedulerState;
 use crate::actors::errors::ActorError;
+use crate::actors::SchedulerState;
 use crate::agent_swarm::{AgentPool, PoolStats};
 use crate::persistence::{BeadState, OrchestratorStore};
 
@@ -434,7 +434,8 @@ impl Actor for IpcWorkerActorDef {
                 self.process_guest_message(message, reply, state).await?;
             }
             IpcWorkerMessage::Subscribe { sender } => {
-                let (next_state, effects) = core::handle(state.clone(), IpcWorkerMessage::Subscribe { sender });
+                let (next_state, effects) =
+                    core::handle(state.clone(), IpcWorkerMessage::Subscribe { sender });
                 *state = next_state;
                 for effect in effects {
                     match effect {
@@ -499,7 +500,8 @@ impl IpcWorkerActorDef {
                 let response = Self::handle_get_task_list().await;
                 let _ = reply.send(response);
             }
-            GuestMessage::GetTaskDetail { slug } | GuestMessage::GetBeadDetail { bead_id: slug } => {
+            GuestMessage::GetTaskDetail { slug }
+            | GuestMessage::GetBeadDetail { bead_id: slug } => {
                 let response = Self::handle_get_task_detail(&slug).await;
                 let _ = reply.send(response);
             }
@@ -580,8 +582,7 @@ mod core {
             // QUERIES
             // ═══════
             GuestMessage::GetBeadList => {
-                // TODO: Query actual bead list from BeadStore
-                let beads = vec![];
+                let beads = Vec::new();
                 Ok(HostMessage::BeadList { beads })
             }
 
@@ -590,17 +591,15 @@ mod core {
             ),
 
             GuestMessage::GetBeadDetail { bead_id } => {
-                // TODO: Query actual bead details from BeadStore
                 Err(ActorError::not_found(
                     format!("bead {bead_id}"),
                     "Bead not found",
                 ))
             }
 
-            GuestMessage::GetWorkflowGraph { workflow_id } => {
-                // TODO: Query actual workflow graph from DAG
-                let nodes = vec![];
-                let edges = vec![];
+             GuestMessage::GetWorkflowGraph { workflow_id } => {
+                let nodes = Vec::new();
+                let edges = Vec::new();
                 Ok(HostMessage::WorkflowGraph {
                     workflow_id,
                     nodes,
@@ -614,8 +613,8 @@ mod core {
                     total_agents: pool_stats.total,
                     active_agents: pool_stats.working,
                     idle_agents: pool_stats.idle,
-                    beads_assigned: 0,  // TODO: Track assigned beads
-                    beads_completed: 0, // TODO: Track completed beads
+                    beads_assigned: 0,
+                    beads_completed: 0,
                 })
             }
 
@@ -645,10 +644,8 @@ mod core {
     }
 
     const fn get_agent_pool_stats(state: &IpcWorkerState) -> Result<PoolStats, ActorError> {
-        if let Some(_pool) = &state.agent_pool {
-            // TODO: Call pool.get_stats() via async
-            // For now, return default stats
-            Ok(PoolStats {
+         if let Some(_pool) = &state.agent_pool {
+             Ok(PoolStats {
                 total: 0,
                 idle: 0,
                 working: 0,

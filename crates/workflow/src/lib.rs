@@ -55,11 +55,10 @@
 //! }
 //! ```
 
-#![deny(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 #![cfg_attr(
-    test,
-    allow(clippy::expect_used, clippy::panic, clippy::absurd_extreme_comparisons)
+    not(test),
+    deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)
 )]
 
 pub mod checkpoint;

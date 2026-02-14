@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use surrealdb::sql::Datetime as SurrealDatetime;
 
-use oya_events::replay::resume::{CheckpointId, ReplayState, ResumeError, resume_from_checkpoint};
+use oya_events::replay::resume::{resume_from_checkpoint, CheckpointId, ReplayState, ResumeError};
 
 use super::events::{EventRecord, OrchestratorEvent};
 use super::projection::OrchestratorProjection;
@@ -345,7 +345,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_recover_records_resume_state() -> Result<(), Box<dyn std::error::Error>> {
         let (mut engine, store) = setup_engine_with_store().await.ok_or("Failed setup")?;
 

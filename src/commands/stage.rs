@@ -5,7 +5,7 @@
 use anyhow::Result;
 use clap::Parser;
 use oya_pipeline::resolve_stage_range;
-use oya_pipeline::{Slug, load_task_record, save_task_record};
+use oya_pipeline::{load_task_record, save_task_record, Slug};
 use std::path::PathBuf;
 
 /// Arguments for the stage command
@@ -90,8 +90,7 @@ mod tests {
         let slug = oya_pipeline::Slug::new("task-1")?;
         let task = Task::new(slug, Language::Rust);
 
-        oya_pipeline::save_task_record(&task, temp_dir.path())
-            .await?;
+        oya_pipeline::save_task_record(&task, temp_dir.path()).await?;
 
         let args = StageArgs {
             slug: "task-1".to_string(),
@@ -115,8 +114,7 @@ mod tests {
         let slug = oya_pipeline::Slug::new("task-1")?;
         let task = Task::new(slug, Language::Rust);
 
-        oya_pipeline::save_task_record(&task, temp_dir.path())
-            .await?;
+        oya_pipeline::save_task_record(&task, temp_dir.path()).await?;
 
         let args = StageArgs {
             slug: "task-1".to_string(),

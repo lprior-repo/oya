@@ -9,7 +9,6 @@
 #![warn(clippy::nursery)]
 #![forbid(unsafe_code)]
 
-
 use crate::Slug;
 use serde::{Deserialize, Serialize};
 
@@ -103,37 +102,22 @@ impl Task {
         match (&self.current_stage, &new_stage) {
             // Identity transition is always allowed (no-op)
             (s1, s2) if s1 == s2 => Ok(()),
-            
+
             // Pending -> InProgress
-            (Stage::Pending, Stage::InProgress) => {
+            (Stage::Pending, Stage::InProgress)
+            | (Stage::InProgress, Stage::Completed | Stage::Failed | Stage::RolledBack)
+            | (Stage::Failed, Stage::Pending | Stage::RolledBack)
+            | (Stage::RolledBack, Stage::Pending) => {
                 self.current_stage = new_stage;
                 Ok(())
             }
-            
-            // InProgress -> Completed | Failed | RolledBack
-            (Stage::InProgress, Stage::Completed | Stage::Failed | Stage::RolledBack) => {
-                self.current_stage = new_stage;
-                Ok(())
-            }
-            
-            // Failed -> Pending (Retry) | RolledBack
-            (Stage::Failed, Stage::Pending | Stage::RolledBack) => {
-                self.current_stage = new_stage;
-                Ok(())
-            }
-            
-            // RolledBack -> Pending (Retry)
-            (Stage::RolledBack, Stage::Pending) => {
-                self.current_stage = new_stage;
-                Ok(())
-            }
-            
+
             // Completed tasks are final (unless we explicitly allow re-opening, which we don't for now)
             (Stage::Completed, _) => Err(crate::Error::validation(
                 "task_transition",
                 format!("cannot transition from Completed to {new_stage:?}"),
             )),
-            
+
             // Any other transition is invalid
             (from, to) => Err(crate::Error::validation(
                 "task_transition",
@@ -150,7 +134,7 @@ impl Task {
         let next = match self.current_stage {
             Stage::Pending => Stage::InProgress,
             Stage::InProgress | Stage::Completed => Stage::Completed,
-            Stage::Failed => Stage::Failed, // Stuck state
+            Stage::Failed => Stage::Failed,         // Stuck state
             Stage::RolledBack => Stage::RolledBack, // Stuck state
         };
         // We ignore the error here because complete_current_stage is "forceful" or legacy,
@@ -178,11 +162,11 @@ mod tests {
     fn test_task_is_complete() -> Result<(), Box<dyn std::error::Error>> {
         let mut task = Task::new("task-1", "Test", "Test")?;
         assert!(!task.is_complete());
-        
+
         // Use transition_to instead of direct assignment
         task.transition_to(Stage::InProgress)?;
         task.transition_to(Stage::Completed)?;
-        
+
         assert!(task.is_complete());
         Ok(())
     }
@@ -202,20 +186,20 @@ mod tests {
         assert_eq!(task.current_stage, Stage::Completed);
         Ok(())
     }
-    
+
     #[test]
     fn test_invalid_transitions() -> Result<(), Box<dyn std::error::Error>> {
         let mut task = Task::new("task-1", "Test", "Test")?;
-        
+
         // Pending -> Completed is invalid (must go through InProgress)
         assert!(task.transition_to(Stage::Completed).is_err());
-        
+
         // Pending -> Failed is invalid
         assert!(task.transition_to(Stage::Failed).is_err());
-        
+
         task.transition_to(Stage::InProgress)?;
         task.transition_to(Stage::Completed)?;
-        
+
         // Completed -> InProgress is invalid
         assert!(task.transition_to(Stage::InProgress).is_err());
         Ok(())

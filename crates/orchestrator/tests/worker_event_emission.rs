@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! Tests for worker BeadEvent emission on state transitions.
 //!
 //! These tests verify that worker actors emit BeadEvents when state transitions occur.
@@ -80,8 +81,8 @@ async fn wait_for_event(bus: &EventBus, timeout_ms: u64) -> Result<BeadEvent, St
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_worker_when_start_bead_then_emits_state_changed_event()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_worker_when_start_bead_then_emits_state_changed_event(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A worker actor with event bus
     let (worker, bus, _store) = setup_worker_with_event_bus().await?;
 
@@ -118,8 +119,8 @@ async fn given_worker_when_start_bead_then_emits_state_changed_event()
 }
 
 #[tokio::test]
-async fn given_worker_when_complete_bead_then_emits_state_changed_and_completed()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_worker_when_complete_bead_then_emits_state_changed_and_completed(
+) -> Result<(), Box<dyn std::error::Error>> {
     let (worker, bus, _store) = setup_worker_with_event_bus().await?;
 
     let bead_id = BeadId::new();
@@ -171,8 +172,8 @@ async fn given_worker_when_complete_bead_then_emits_state_changed_and_completed(
 }
 
 #[tokio::test]
-async fn given_worker_when_fail_bead_then_emits_failed_event()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_worker_when_fail_bead_then_emits_failed_event(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A worker actor with event bus and an active bead
     let (worker, bus, _store) = setup_worker_with_event_bus().await?;
 
@@ -216,8 +217,8 @@ async fn given_worker_when_fail_bead_then_emits_failed_event()
 }
 
 #[tokio::test]
-async fn given_worker_when_multiple_transitions_then_emits_events_for_each()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_worker_when_multiple_transitions_then_emits_events_for_each(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A worker actor with event bus
     let (worker, bus, _store) = setup_worker_with_event_bus().await?;
 
@@ -251,8 +252,8 @@ async fn given_worker_when_multiple_transitions_then_emits_events_for_each()
 }
 
 #[tokio::test]
-async fn given_worker_when_no_event_bus_then_continues_normally()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_worker_when_no_event_bus_then_continues_normally(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A worker actor WITHOUT event bus
     let config = WorkerConfig {
         checkpoint_interval: Duration::from_secs(60),
@@ -285,8 +286,8 @@ async fn given_worker_when_no_event_bus_then_continues_normally()
 }
 
 #[tokio::test]
-async fn given_worker_when_event_bus_publish_fails_then_state_transition_continues()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_worker_when_event_bus_publish_fails_then_state_transition_continues(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A worker actor with event bus
     // Note: This test verifies that event emission failures don't block state transitions
     // Since EventBus.publish() returns Result, the actor should log and continue
@@ -315,8 +316,8 @@ async fn given_worker_when_event_bus_publish_fails_then_state_transition_continu
 }
 
 #[tokio::test]
-async fn given_worker_when_state_changes_with_custom_from_state_then_emits_correct_transition()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_worker_when_state_changes_with_custom_from_state_then_emits_correct_transition(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A worker actor with event bus
     let (worker, bus, _store) = setup_worker_with_event_bus().await?;
 
@@ -350,8 +351,8 @@ async fn given_worker_when_state_changes_with_custom_from_state_then_emits_corre
 }
 
 #[tokio::test]
-async fn given_worker_when_stop_then_no_state_event_emitted()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_worker_when_stop_then_no_state_event_emitted(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A worker actor with event bus
     let (worker, bus, _store) = setup_worker_with_event_bus().await?;
 
@@ -371,8 +372,8 @@ async fn given_worker_when_stop_then_no_state_event_emitted()
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_worker_when_health_check_fails_then_emits_worker_unhealthy_event()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_worker_when_health_check_fails_then_emits_worker_unhealthy_event(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A worker actor with event bus
     let (worker, bus, _store) = setup_worker_with_event_bus().await?;
 
@@ -410,8 +411,8 @@ async fn given_worker_when_health_check_fails_then_emits_worker_unhealthy_event(
 }
 
 #[tokio::test]
-async fn given_worker_with_active_bead_when_health_check_fails_then_emits_unhealthy_and_fails_bead()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_worker_with_active_bead_when_health_check_fails_then_emits_unhealthy_and_fails_bead(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A worker actor with event bus and an active bead
     let (worker, bus, _store) = setup_worker_with_event_bus().await?;
 
@@ -476,8 +477,8 @@ async fn given_worker_with_active_bead_when_health_check_fails_then_emits_unheal
 }
 
 #[tokio::test]
-async fn given_worker_when_no_event_bus_then_health_check_fails_continues_normally()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_worker_when_no_event_bus_then_health_check_fails_continues_normally(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A worker actor WITHOUT event bus
     let config = WorkerConfig {
         checkpoint_interval: Duration::from_secs(60),

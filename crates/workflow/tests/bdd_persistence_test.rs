@@ -12,10 +12,6 @@
 //! - **BDD Style**: GIVEN-WHEN-THEN structure
 //! - **Railway-Oriented Programming**: Proper error propagation throughout
 
-#![deny(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-#![deny(clippy::panic)]
-
 use oya_workflow::{storage::InMemoryStorage, storage::WorkflowStorage, types::Phase, Workflow};
 use std::time::Duration;
 
@@ -86,12 +82,14 @@ async fn given_persistence_when_workflow_saved_then_retrievable() -> Result<(), 
             "Phase name should match"
         );
         assert_eq!(
-            original_phase.timeout(), loaded_phase.timeout(),
+            original_phase.timeout(),
+            loaded_phase.timeout(),
             "Phase timeout should match for phase: {}",
             original_phase.name
         );
         assert_eq!(
-            original_phase.retries(), loaded_phase.retries(),
+            original_phase.retries(),
+            loaded_phase.retries(),
             "Phase retries should match for phase: {}",
             original_phase.name
         );
@@ -208,8 +206,7 @@ async fn given_persistence_when_workflow_updated_then_latest_version_retrievable
         .map_err(|e| format!("Failed to save initial workflow: {}", e))?;
 
     // WHEN: Workflow is updated (modified and re-saved)
-    workflow
-        .add_phase_mut(Phase::new("monitor").with_timeout(Duration::from_secs(60)));
+    workflow.add_phase_mut(Phase::new("monitor").with_timeout(Duration::from_secs(60)));
     storage
         .save_workflow(&workflow)
         .await
@@ -229,7 +226,8 @@ async fn given_persistence_when_workflow_updated_then_latest_version_retrievable
     );
 
     assert_eq!(
-        loaded.phases()[3].name, "monitor",
+        loaded.phases()[3].name,
+        "monitor",
         "Fourth phase should be 'monitor'"
     );
 

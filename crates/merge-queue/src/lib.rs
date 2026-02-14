@@ -100,7 +100,7 @@ pub mod queue {
 }
 
 /// Conflict resolution module
-pub use conflict::{ConflictDetection, RebaseResult, attempt_rebase, detect};
+pub use conflict::{attempt_rebase, detect, ConflictDetection, RebaseResult};
 
 /// Queue management module exports
 pub use queue::{MergeTask, Queue};

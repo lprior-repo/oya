@@ -502,25 +502,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_guest_message_serialization() {
+    fn test_guest_message_serialization() -> Result<(), Box<dyn std::error::Error>> {
         let msg = GuestMessage::GetBeadDetail {
             bead_id: "bead-123".to_string(),
         };
 
-        let json = serde_json::to_string(&msg).expect("serialization should succeed");
+        let json = serde_json::to_string(&msg)?;
         assert!(json.contains("get_bead_detail"));
         assert!(json.contains("bead-123"));
 
-        let decoded: GuestMessage =
-            serde_json::from_str(&json).expect("deserialization should succeed");
+        let decoded: GuestMessage = serde_json::from_str(&json)?;
         assert!(matches!(
             decoded,
             GuestMessage::GetBeadDetail { bead_id } if bead_id == "bead-123"
         ));
+        Ok(())
     }
 
     #[test]
-    fn test_host_message_serialization() {
+    fn test_host_message_serialization() -> Result<(), Box<dyn std::error::Error>> {
         let msg = HostMessage::BeadStateChanged {
             bead_id: "bead-123".to_string(),
             from_state: "pending".to_string(),
@@ -528,19 +528,19 @@ mod tests {
             timestamp: 1234567890,
         };
 
-        let json = serde_json::to_string(&msg).expect("serialization should succeed");
+        let json = serde_json::to_string(&msg)?;
         assert!(json.contains("bead_state_changed"));
 
-        let decoded: HostMessage =
-            serde_json::from_str(&json).expect("deserialization should succeed");
+        let decoded: HostMessage = serde_json::from_str(&json)?;
         assert!(matches!(
             decoded,
             HostMessage::BeadStateChanged { bead_id, .. } if bead_id == "bead-123"
         ));
+        Ok(())
     }
 
     #[test]
-    fn test_bead_summary_serialization() {
+    fn test_bead_summary_serialization() -> Result<(), Box<dyn std::error::Error>> {
         let summary = BeadSummary {
             id: "bead-123".to_string(),
             title: "Test bead".to_string(),
@@ -549,38 +549,38 @@ mod tests {
             created_at: 1234567890,
         };
 
-        let json = serde_json::to_string(&summary).expect("serialization should succeed");
-        let decoded: BeadSummary =
-            serde_json::from_str(&json).expect("deserialization should succeed");
+        let json = serde_json::to_string(&summary)?;
+        let decoded: BeadSummary = serde_json::from_str(&json)?;
 
         assert_eq!(decoded.id, "bead-123");
         assert_eq!(decoded.title, "Test bead");
+        Ok(())
     }
 
     #[test]
-    fn test_health_status_serialization() {
+    fn test_health_status_serialization() -> Result<(), Box<dyn std::error::Error>> {
         let status = HealthStatus::Healthy;
-        let json = serde_json::to_string(&status).expect("serialization should succeed");
+        let json = serde_json::to_string(&status)?;
         assert!(json.contains("healthy"));
 
-        let decoded: HealthStatus =
-            serde_json::from_str(&json).expect("deserialization should succeed");
+        let decoded: HealthStatus = serde_json::from_str(&json)?;
         assert!(matches!(decoded, HealthStatus::Healthy));
+        Ok(())
     }
 
     #[test]
-    fn test_alert_level_serialization() {
+    fn test_alert_level_serialization() -> Result<(), Box<dyn std::error::Error>> {
         let level = AlertLevel::Critical;
-        let json = serde_json::to_string(&level).expect("serialization should succeed");
+        let json = serde_json::to_string(&level)?;
         assert!(json.contains("critical"));
 
-        let decoded: AlertLevel =
-            serde_json::from_str(&json).expect("deserialization should succeed");
+        let decoded: AlertLevel = serde_json::from_str(&json)?;
         assert!(matches!(decoded, AlertLevel::Critical));
+        Ok(())
     }
 
     #[test]
-    fn test_stage_started_serialization() {
+    fn test_stage_started_serialization() -> Result<(), Box<dyn std::error::Error>> {
         let msg = HostMessage::StageStarted {
             bead_id: "bead-123".to_string(),
             stage: "implement".to_string(),
@@ -588,20 +588,20 @@ mod tests {
             timestamp: 1234567890,
         };
 
-        let json = serde_json::to_string(&msg).expect("serialization should succeed");
+        let json = serde_json::to_string(&msg)?;
         assert!(json.contains("stage_started"));
         assert!(json.contains("implement"));
 
-        let decoded: HostMessage =
-            serde_json::from_str(&json).expect("deserialization should succeed");
+        let decoded: HostMessage = serde_json::from_str(&json)?;
         assert!(matches!(
             decoded,
             HostMessage::StageStarted { stage, .. } if stage == "implement"
         ));
+        Ok(())
     }
 
     #[test]
-    fn test_stage_completed_serialization() {
+    fn test_stage_completed_serialization() -> Result<(), Box<dyn std::error::Error>> {
         let msg = HostMessage::StageCompleted {
             bead_id: "bead-456".to_string(),
             stage: "validate".to_string(),
@@ -609,19 +609,19 @@ mod tests {
             timestamp: 1234567890,
         };
 
-        let json = serde_json::to_string(&msg).expect("serialization should succeed");
+        let json = serde_json::to_string(&msg)?;
         assert!(json.contains("stage_completed"));
 
-        let decoded: HostMessage =
-            serde_json::from_str(&json).expect("deserialization should succeed");
+        let decoded: HostMessage = serde_json::from_str(&json)?;
         assert!(matches!(
             decoded,
             HostMessage::StageCompleted { artifact_ref, .. } if artifact_ref.as_deref() == Some("artifacts/test.txt")
         ));
+        Ok(())
     }
 
     #[test]
-    fn test_stage_failed_serialization() {
+    fn test_stage_failed_serialization() -> Result<(), Box<dyn std::error::Error>> {
         let msg = HostMessage::StageFailed {
             bead_id: "bead-789".to_string(),
             stage: "review".to_string(),
@@ -630,19 +630,19 @@ mod tests {
             timestamp: 1234567890,
         };
 
-        let json = serde_json::to_string(&msg).expect("serialization should succeed");
+        let json = serde_json::to_string(&msg)?;
         assert!(json.contains("stage_failed"));
 
-        let decoded: HostMessage =
-            serde_json::from_str(&json).expect("deserialization should succeed");
+        let decoded: HostMessage = serde_json::from_str(&json)?;
         assert!(matches!(
             decoded,
             HostMessage::StageFailed { severity, .. } if severity == "major"
         ));
+        Ok(())
     }
 
     #[test]
-    fn test_stage_reentry_serialization() {
+    fn test_stage_reentry_serialization() -> Result<(), Box<dyn std::error::Error>> {
         let msg = HostMessage::StageReentry {
             bead_id: "bead-101".to_string(),
             from_stage: "review".to_string(),
@@ -652,19 +652,19 @@ mod tests {
             timestamp: 1234567890,
         };
 
-        let json = serde_json::to_string(&msg).expect("serialization should succeed");
+        let json = serde_json::to_string(&msg)?;
         assert!(json.contains("stage_reentry"));
 
-        let decoded: HostMessage =
-            serde_json::from_str(&json).expect("deserialization should succeed");
+        let decoded: HostMessage = serde_json::from_str(&json)?;
         assert!(matches!(
             decoded,
             HostMessage::StageReentry { to_stage, .. } if to_stage == "plan"
         ));
+        Ok(())
     }
 
     #[test]
-    fn test_validation_ran_serialization() {
+    fn test_validation_ran_serialization() -> Result<(), Box<dyn std::error::Error>> {
         let msg = HostMessage::ValidationRan {
             bead_id: "bead-202".to_string(),
             passed: false,
@@ -674,19 +674,19 @@ mod tests {
             timestamp: 1234567890,
         };
 
-        let json = serde_json::to_string(&msg).expect("serialization should succeed");
+        let json = serde_json::to_string(&msg)?;
         assert!(json.contains("validation_ran"));
 
-        let decoded: HostMessage =
-            serde_json::from_str(&json).expect("deserialization should succeed");
+        let decoded: HostMessage = serde_json::from_str(&json)?;
         assert!(matches!(
             decoded,
             HostMessage::ValidationRan { passed, .. } if !passed
         ));
+        Ok(())
     }
 
     #[test]
-    fn test_recursion_exhausted_serialization() {
+    fn test_recursion_exhausted_serialization() -> Result<(), Box<dyn std::error::Error>> {
         let msg = HostMessage::RecursionExhausted {
             bead_id: "bead-303".to_string(),
             total_attempts: 15,
@@ -694,19 +694,20 @@ mod tests {
             timestamp: 1234567890,
         };
 
-        let json = serde_json::to_string(&msg).expect("serialization should succeed");
+        let json = serde_json::to_string(&msg)?;
         assert!(json.contains("recursion_exhausted"));
 
-        let decoded: HostMessage =
-            serde_json::from_str(&json).expect("deserialization should succeed");
+        let decoded: HostMessage = serde_json::from_str(&json)?;
         assert!(matches!(
             decoded,
             HostMessage::RecursionExhausted { total_attempts, .. } if total_attempts == 15
         ));
+        Ok(())
     }
 
     #[test]
-    fn test_stage_failed_feedback_truncated_at_256_chars() {
+    fn test_stage_failed_feedback_truncated_at_256_chars() -> Result<(), Box<dyn std::error::Error>>
+    {
         let long_feedback = "x".repeat(300);
         let msg = HostMessage::StageFailed {
             bead_id: "bead-404".to_string(),
@@ -716,15 +717,15 @@ mod tests {
             timestamp: 1234567890,
         };
 
-        let json = serde_json::to_string(&msg).expect("serialization should succeed");
-        let decoded: HostMessage =
-            serde_json::from_str(&json).expect("deserialization should succeed");
+        let json = serde_json::to_string(&msg)?;
+        let decoded: HostMessage = serde_json::from_str(&json)?;
 
         match decoded {
             HostMessage::StageFailed { feedback, .. } => {
                 assert_eq!(feedback.len(), long_feedback.len());
             }
-            _ => panic!("Expected StageFailed"),
+            other => return Err(format!("Expected StageFailed, got {other:?}").into()),
         }
+        Ok(())
     }
 }

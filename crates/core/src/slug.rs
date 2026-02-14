@@ -1,9 +1,5 @@
 //! Slug type for task identifiers.
 
-#![cfg_attr(test, allow(clippy::expect_used))]
-#![cfg_attr(test, allow(clippy::unwrap_used))]
-#![cfg_attr(test, allow(clippy::panic))]
-
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -160,184 +156,137 @@ impl AsRef<str> for Slug {
 
 #[cfg(test)]
 mod tests {
-
-    #![allow(clippy::uninlined_format_args)]
-    #![allow(clippy::manual_let_else)]
-    #![allow(clippy::missing_panics_doc)]
-    #![allow(clippy::struct_field_names)]
-    #![allow(clippy::should_implement_trait)]
-    #![allow(clippy::if_then_some_else_none)]
-    #![allow(clippy::redundant_clone)]
-    #![allow(clippy::missing_docs_in_private_items)]
-
     use super::*;
 
     #[test]
-    fn test_slug_valid() {
+    fn test_slug_valid() -> Result<(), Box<dyn std::error::Error>> {
         assert!(Slug::new("valid-slug").is_ok());
         assert!(Slug::new("my-task-123").is_ok());
         assert!(Slug::new("abc").is_ok());
+        Ok(())
     }
 
     #[test]
-    fn test_slug_empty() {
+    fn test_slug_empty() -> Result<(), Box<dyn std::error::Error>> {
         let result = Slug::new("");
         assert!(result.is_err());
-        let err = match result {
-            Err(e) => e,
-            Ok(_) => {
-                panic!("Expected error for empty slug");
-            }
-        };
+        let err = result.err().ok_or("Expected error for empty slug")?;
         assert!(err.to_string().contains("cannot be empty"));
+        Ok(())
     }
 
     #[test]
-    fn test_slug_too_long() {
+    fn test_slug_too_long() -> Result<(), Box<dyn std::error::Error>> {
         let long_slug = "a".repeat(Slug::MAX_LENGTH + 1);
         let result = Slug::new(long_slug);
         assert!(result.is_err());
-        let err = match result {
-            Err(e) => e,
-            Ok(_) => {
-                panic!("Expected error for too long slug");
-            }
-        };
+        let err = result.err().ok_or("Expected error for too long slug")?;
         assert!(err.to_string().contains("exceeds maximum length"));
+        Ok(())
     }
 
     #[test]
-    fn test_slug_non_ascii() {
+    fn test_slug_non_ascii() -> Result<(), Box<dyn std::error::Error>> {
         let result = Slug::new("invalid-日本語");
         assert!(result.is_err());
-        let err = match result {
-            Err(e) => e,
-            Ok(_) => {
-                panic!("Expected error for non-ASCII slug");
-            }
-        };
+        let err = result.err().ok_or("Expected error for non-ASCII slug")?;
         assert!(err.to_string().contains("ASCII"));
+        Ok(())
     }
 
     #[test]
-    fn test_slug_uppercase_rejected() {
+    fn test_slug_uppercase_rejected() -> Result<(), Box<dyn std::error::Error>> {
         let result = Slug::new("Invalid-Slug");
         assert!(result.is_err());
-        let err = match result {
-            Err(e) => e,
-            Ok(_) => {
-                panic!("Expected error for uppercase slug");
-            }
-        };
+        let err = result.err().ok_or("Expected error for uppercase slug")?;
         assert!(err.to_string().contains("lowercase"));
+        Ok(())
     }
 
     #[test]
-    fn test_slug_invalid_characters() {
+    fn test_slug_invalid_characters() -> Result<(), Box<dyn std::error::Error>> {
         let result = Slug::new("invalid_slug");
         assert!(result.is_err());
-        let err = match result {
-            Err(e) => e,
-            Ok(_) => {
-                panic!("Expected error for invalid characters");
-            }
-        };
+        let err = result
+            .err()
+            .ok_or("Expected error for invalid characters")?;
         assert!(err.to_string().contains("alphanumeric"));
+        Ok(())
     }
 
     #[test]
-    fn test_slug_consecutive_hyphens() {
+    fn test_slug_consecutive_hyphens() -> Result<(), Box<dyn std::error::Error>> {
         let result = Slug::new("invalid--slug");
         assert!(result.is_err());
-        let err = match result {
-            Err(e) => e,
-            Ok(_) => {
-                panic!("Expected error for consecutive hyphens");
-            }
-        };
+        let err = result
+            .err()
+            .ok_or("Expected error for consecutive hyphens")?;
         assert!(err.to_string().contains("consecutive"));
+        Ok(())
     }
 
     #[test]
-    fn test_slug_starts_with_hyphen() {
+    fn test_slug_starts_with_hyphen() -> Result<(), Box<dyn std::error::Error>> {
         let result = Slug::new("-invalid");
         assert!(result.is_err());
-        let err = match result {
-            Err(e) => e,
-            Ok(_) => {
-                panic!("Expected error for slug starting with hyphen");
-            }
-        };
+        let err = result
+            .err()
+            .ok_or("Expected error for slug starting with hyphen")?;
         assert!(err.to_string().contains("start"));
+        Ok(())
     }
 
     #[test]
-    fn test_slug_ends_with_hyphen() {
+    fn test_slug_ends_with_hyphen() -> Result<(), Box<dyn std::error::Error>> {
         let result = Slug::new("invalid-");
         assert!(result.is_err());
-        let err = match result {
-            Err(e) => e,
-            Ok(_) => {
-                panic!("Expected error for slug ending with hyphen");
-            }
-        };
+        let err = result
+            .err()
+            .ok_or("Expected error for slug ending with hyphen")?;
         assert!(err.to_string().contains("end"));
+        Ok(())
     }
 
     #[test]
-    fn test_slug_as_str() {
-        let slug = match Slug::new("test-slug") {
-            Ok(s) => s,
-            Err(e) => {
-                panic!("Failed to create slug: {e}");
-            }
-        };
+    fn test_slug_as_str() -> Result<(), Box<dyn std::error::Error>> {
+        let slug = Slug::new("test-slug")?;
         assert_eq!(slug.as_str(), "test-slug");
+        Ok(())
     }
 
     #[test]
-    fn test_slug_into_inner() {
-        let slug = match Slug::new("test-slug") {
-            Ok(s) => s,
-            Err(e) => {
-                panic!("Failed to create slug: {e}");
-            }
-        };
+    fn test_slug_into_inner() -> Result<(), Box<dyn std::error::Error>> {
+        let slug = Slug::new("test-slug")?;
         assert_eq!(slug.into_inner(), "test-slug");
+        Ok(())
     }
 
     #[test]
-    fn test_slug_display() {
-        let slug = match Slug::new("test-slug") {
-            Ok(s) => s,
-            Err(e) => {
-                panic!("Failed to create slug: {e}");
-            }
-        };
-        assert_eq!(format!("{}", slug), "test-slug");
+    fn test_slug_display() -> Result<(), Box<dyn std::error::Error>> {
+        let slug = Slug::new("test-slug")?;
+        assert_eq!(format!("{slug}"), "test-slug");
+        Ok(())
     }
 
     #[test]
-    fn test_slug_try_from_string() {
+    fn test_slug_try_from_string() -> Result<(), Box<dyn std::error::Error>> {
         let slug = Slug::try_from("test-slug".to_string());
         assert!(slug.is_ok());
+        Ok(())
     }
 
     #[test]
-    fn test_slug_try_from_str() {
+    fn test_slug_try_from_str() -> Result<(), Box<dyn std::error::Error>> {
         let slug = Slug::try_from("test-slug");
         assert!(slug.is_ok());
+        Ok(())
     }
 
     #[test]
-    fn test_slug_from_into_string() {
-        let slug = match Slug::new("test-slug") {
-            Ok(s) => s,
-            Err(e) => {
-                panic!("Failed to create slug: {e}");
-            }
-        };
+    fn test_slug_from_into_string() -> Result<(), Box<dyn std::error::Error>> {
+        let slug = Slug::new("test-slug")?;
         let s: String = slug.into();
         assert_eq!(s, "test-slug");
+        Ok(())
     }
 }

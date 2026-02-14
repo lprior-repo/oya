@@ -4,7 +4,7 @@
 
 use anyhow::Result;
 use clap::Parser;
-use oya_pipeline::{Slug, approve_task, load_task_record};
+use oya_pipeline::{approve_task, load_task_record, Slug};
 use std::path::PathBuf;
 
 /// Arguments for the approve command

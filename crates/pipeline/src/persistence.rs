@@ -54,7 +54,10 @@ pub async fn save_task_record(task: &Task, repo_root: &Path) -> Result<()> {
     let path = tasks_path(repo_root);
     let mut tasks = read_tasks(&path).await?;
 
-    if let Some(existing) = tasks.iter_mut().find(|existing| existing.slug() == task.slug()) {
+    if let Some(existing) = tasks
+        .iter_mut()
+        .find(|existing| existing.slug() == task.slug())
+    {
         *existing = task.clone();
     } else {
         tasks.push(task.clone());
@@ -131,7 +134,10 @@ mod tests {
 
     #[tokio::test]
     async fn save_and_load_round_trip() -> Result<()> {
-        let temp_dir = tempfile::tempdir().map_err(|e| Error::ReadFailure { path: PathBuf::new(), source: e })?;
+        let temp_dir = tempfile::tempdir().map_err(|e| Error::ReadFailure {
+            path: PathBuf::new(),
+            source: e,
+        })?;
         let slug = Slug::new("task-1")?;
         let task = Task::new(slug, Language::Rust)
             .with_priority(Priority::P1)
@@ -147,7 +153,10 @@ mod tests {
 
     #[tokio::test]
     async fn list_all_tasks_returns_empty_when_missing() -> Result<()> {
-        let temp_dir = tempfile::tempdir().map_err(|e| Error::ReadFailure { path: PathBuf::new(), source: e })?;
+        let temp_dir = tempfile::tempdir().map_err(|e| Error::ReadFailure {
+            path: PathBuf::new(),
+            source: e,
+        })?;
         let tasks = list_all_tasks(temp_dir.path()).await?;
 
         assert!(tasks.is_empty());
@@ -156,7 +165,10 @@ mod tests {
 
     #[tokio::test]
     async fn save_overwrites_existing_task() -> Result<()> {
-        let temp_dir = tempfile::tempdir().map_err(|e| Error::ReadFailure { path: PathBuf::new(), source: e })?;
+        let temp_dir = tempfile::tempdir().map_err(|e| Error::ReadFailure {
+            path: PathBuf::new(),
+            source: e,
+        })?;
         let slug = Slug::new("task-2")?;
         let task = Task::new(slug.clone(), Language::Rust);
 
@@ -174,7 +186,10 @@ mod tests {
 
     #[tokio::test]
     async fn load_returns_not_found_for_missing_task() -> Result<()> {
-        let temp_dir = tempfile::tempdir().map_err(|e| Error::ReadFailure { path: PathBuf::new(), source: e })?;
+        let temp_dir = tempfile::tempdir().map_err(|e| Error::ReadFailure {
+            path: PathBuf::new(),
+            source: e,
+        })?;
         let result = load_task_record("missing-task", temp_dir.path()).await;
 
         assert!(matches!(result, Err(Error::TaskNotFound(_))));
@@ -183,7 +198,10 @@ mod tests {
 
     #[tokio::test]
     async fn update_task_status_applies_transition_rules() -> Result<()> {
-        let temp_dir = tempfile::tempdir().map_err(|e| Error::ReadFailure { path: PathBuf::new(), source: e })?;
+        let temp_dir = tempfile::tempdir().map_err(|e| Error::ReadFailure {
+            path: PathBuf::new(),
+            source: e,
+        })?;
         let slug = Slug::new("task-3")?;
         let task = Task::new(slug.clone(), Language::Rust);
 

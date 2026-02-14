@@ -569,7 +569,8 @@ mod tests {
     }
 
     #[test]
-    fn test_poison_event_increment_attempt() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    fn test_poison_event_increment_attempt() -> std::result::Result<(), Box<dyn std::error::Error>>
+    {
         let timestamp = DateTime::parse_from_rfc3339("2024-01-01T00:00:00Z")
             .map(|dt| dt.with_timezone(&Utc))
             .map_err(|e| format!("parse error: {e}"))?;

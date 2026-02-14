@@ -381,15 +381,13 @@ impl AgentSlotActorDef {
     ) -> Result<(), SlotError> {
         match decision {
             GateDecision::Proceed { next_stage } => {
-                info!(
-                    "Stage succeeded, proceeding to {:?}",
-                    next_stage
-                );
+                info!("Stage succeeded, proceeding to {:?}", next_stage);
 
                 // Store artifact for this stage
-                state
-                    .artifacts
-                    .insert(state.current_stage.unwrap_or(StageKind::Research), "artifact-placeholder".to_string());
+                state.artifacts.insert(
+                    state.current_stage.unwrap_or(StageKind::Research),
+                    "artifact-placeholder".to_string(),
+                );
 
                 // Advance state machine
                 let mut machine_clone = state_machine;
@@ -402,7 +400,11 @@ impl AgentSlotActorDef {
                 self.emit_transition_event(state, &transition);
 
                 // Check if complete
-                if state.state_machine.as_ref().is_some_and(|m| m.current_stage() == StageKind::Accept) {
+                if state
+                    .state_machine
+                    .as_ref()
+                    .is_some_and(|m| m.current_stage() == StageKind::Accept)
+                {
                     self.complete_bead(state, &BeadCompletion::Accepted);
                 }
             }

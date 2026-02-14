@@ -16,7 +16,7 @@ use oya_events::{BeadResult, BeadState, EventBus};
 // TODO: Re-enable when opencode is integrated
 // use oya_opencode::{OpencodeClient, OpencodeConfig};
 
-use crate::actors::supervisor::{GenericSupervisableActor, calculate_backoff};
+use crate::actors::supervisor::{calculate_backoff, GenericSupervisableActor};
 
 /// Configuration for worker retry behavior.
 #[derive(Debug, Clone)]

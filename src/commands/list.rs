@@ -4,7 +4,7 @@
 
 use anyhow::Result;
 use clap::Parser;
-use oya_pipeline::{Task, list_all_tasks};
+use oya_pipeline::{list_all_tasks, Task};
 use std::path::PathBuf;
 
 /// Arguments for the list command
@@ -47,7 +47,11 @@ pub async fn list_command(args: ListArgs) -> Result<ListOutput> {
         for task in &output.tasks {
             println!(
                 "  - {} [{}] {} (priority: {}, branch: {})",
-                task.slug(), task.status, task.language(), task.priority(), task.branch()
+                task.slug(),
+                task.status,
+                task.language(),
+                task.priority(),
+                task.branch()
             );
         }
     }
@@ -66,8 +70,7 @@ mod tests {
         let slug = oya_pipeline::Slug::new("task-1")?;
         let task = Task::new(slug, Language::Rust);
 
-        oya_pipeline::save_task_record(&task, temp_dir.path())
-            .await?;
+        oya_pipeline::save_task_record(&task, temp_dir.path()).await?;
 
         let args = ListArgs {
             json: false,

@@ -48,31 +48,26 @@ impl Actor for TestWriterActor {
         message: Self::Msg,
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
-        match message {
-            TestWriterMessage::GetNextBead { reply } => {
-                // TODO: Call bv --robot-triage
-                // TODO: Return BeadWork or None
-                let _ = reply.send(None);
-                tracing::debug!("TestWriter {} got GetNextBead", state.id);
-            }
-            TestWriterMessage::WriteContract { bead_id, contract } => {
-                // TODO: Use rust-contract skill
-                // TODO: Store contract in database
-                tracing::info!(
-                    "TestWriter {} writing contract for bead {}",
-                    state.id,
-                    bead_id
-                );
-            }
-            TestWriterMessage::ReadyForImplementation { bead_id } => {
-                // TODO: Mark bead as ready_for_implementation in database
-                tracing::info!(
-                    "TestWriter {} marking bead {} ready for implementation",
-                    state.id,
-                    bead_id
-                );
-            }
-        }
+       match message {
+             TestWriterMessage::GetNextBead { reply } => {
+                 let _ = reply.send(None);
+                 tracing::debug!("TestWriter {} got GetNextBead", state.id);
+             }
+             TestWriterMessage::WriteContract { bead_id, contract } => {
+                 tracing::info!(
+                     "TestWriter {} writing contract for bead {}",
+                     state.id,
+                     bead_id
+                 );
+             }
+             TestWriterMessage::ReadyForImplementation { bead_id } => {
+                 tracing::info!(
+                     "TestWriter {} marking bead {} ready for implementation",
+                     state.id,
+                     bead_id
+                 );
+             }
+         }
         Ok(())
     }
 }

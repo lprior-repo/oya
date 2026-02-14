@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! BDD Test: Diamond DAG Join Ready Detection
 //!
 //! Tests that a join node in a diamond-shaped DAG becomes ready
@@ -16,10 +17,6 @@
 //! D is the "join node" with two incoming edges (B→D, C→D).
 //! D should only become ready when BOTH B AND C are complete.
 
-#![deny(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-#![deny(clippy::panic)]
-
 use im::HashSet;
 use orchestrator::dag::{DependencyType, WorkflowDAG};
 
@@ -37,31 +34,15 @@ fn bdd_diamond_dag_join_ready_all_deps_required() -> Result<(), Box<dyn std::err
     //    \ /
     //     D
     let mut dag = WorkflowDAG::new();
-    dag.add_node("bead-a".to_string())?;
-    dag.add_node("bead-b".to_string())?;
-    dag.add_node("bead-c".to_string())?;
-    dag.add_node("bead-d".to_string())?;
+    dag.add_node("bead-a")?;
+    dag.add_node("bead-b")?;
+    dag.add_node("bead-c")?;
+    dag.add_node("bead-d")?;
 
-    dag.add_edge(
-        "bead-a".to_string(),
-        "bead-b".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "bead-a".to_string(),
-        "bead-c".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "bead-b".to_string(),
-        "bead-d".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "bead-c".to_string(),
-        "bead-d".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
+    dag.add_edge("bead-a", "bead-b", DependencyType::BlockingDependency)?;
+    dag.add_edge("bead-a", "bead-c", DependencyType::BlockingDependency)?;
+    dag.add_edge("bead-b", "bead-d", DependencyType::BlockingDependency)?;
+    dag.add_edge("bead-c", "bead-d", DependencyType::BlockingDependency)?;
 
     // Initial state: nothing completed
     let completed = HashSet::new();
@@ -71,7 +52,7 @@ fn bdd_diamond_dag_join_ready_all_deps_required() -> Result<(), Box<dyn std::err
     assert_eq!(ready, vec!["bead-a".to_string()]);
 
     // Verify D is NOT ready initially
-    assert!(!dag.is_ready(&"bead-d".to_string(), &completed)?);
+    assert!(!dag.is_ready("bead-d", &completed)?);
 
     Ok(())
 }
@@ -85,31 +66,15 @@ fn bdd_diamond_dag_join_ready_all_deps_required() -> Result<(), Box<dyn std::err
 fn bdd_diamond_dag_join_blocked_by_incomplete_branch() -> Result<(), Box<dyn std::error::Error>> {
     // GIVEN: Diamond DAG
     let mut dag = WorkflowDAG::new();
-    dag.add_node("bead-a".to_string())?;
-    dag.add_node("bead-b".to_string())?;
-    dag.add_node("bead-c".to_string())?;
-    dag.add_node("bead-d".to_string())?;
+    dag.add_node("bead-a")?;
+    dag.add_node("bead-b")?;
+    dag.add_node("bead-c")?;
+    dag.add_node("bead-d")?;
 
-    dag.add_edge(
-        "bead-a".to_string(),
-        "bead-b".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "bead-a".to_string(),
-        "bead-c".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "bead-b".to_string(),
-        "bead-d".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "bead-c".to_string(),
-        "bead-d".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
+    dag.add_edge("bead-a", "bead-b", DependencyType::BlockingDependency)?;
+    dag.add_edge("bead-a", "bead-c", DependencyType::BlockingDependency)?;
+    dag.add_edge("bead-b", "bead-d", DependencyType::BlockingDependency)?;
+    dag.add_edge("bead-c", "bead-d", DependencyType::BlockingDependency)?;
 
     // WHEN: A and B are complete, but C is not
     let mut completed = HashSet::new();
@@ -123,7 +88,7 @@ fn bdd_diamond_dag_join_blocked_by_incomplete_branch() -> Result<(), Box<dyn std
     assert!(!ready.contains(&"bead-d".to_string()));
 
     // Verify D is explicitly blocked
-    assert!(!dag.is_ready(&"bead-d".to_string(), &completed)?);
+    assert!(!dag.is_ready("bead-d", &completed)?);
 
     Ok(())
 }
@@ -138,31 +103,15 @@ fn bdd_diamond_dag_join_ready_when_all_branches_complete() -> Result<(), Box<dyn
 {
     // GIVEN: Diamond DAG
     let mut dag = WorkflowDAG::new();
-    dag.add_node("bead-a".to_string())?;
-    dag.add_node("bead-b".to_string())?;
-    dag.add_node("bead-c".to_string())?;
-    dag.add_node("bead-d".to_string())?;
+    dag.add_node("bead-a")?;
+    dag.add_node("bead-b")?;
+    dag.add_node("bead-c")?;
+    dag.add_node("bead-d")?;
 
-    dag.add_edge(
-        "bead-a".to_string(),
-        "bead-b".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "bead-a".to_string(),
-        "bead-c".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "bead-b".to_string(),
-        "bead-d".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "bead-c".to_string(),
-        "bead-d".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
+    dag.add_edge("bead-a", "bead-b", DependencyType::BlockingDependency)?;
+    dag.add_edge("bead-a", "bead-c", DependencyType::BlockingDependency)?;
+    dag.add_edge("bead-b", "bead-d", DependencyType::BlockingDependency)?;
+    dag.add_edge("bead-c", "bead-d", DependencyType::BlockingDependency)?;
 
     // WHEN: A, B, and C are all complete
     let mut completed = HashSet::new();
@@ -174,7 +123,7 @@ fn bdd_diamond_dag_join_ready_when_all_branches_complete() -> Result<(), Box<dyn
 
     // THEN: D is now ready
     assert_eq!(ready, vec!["bead-d".to_string()]);
-    assert!(dag.is_ready(&"bead-d".to_string(), &completed)?);
+    assert!(dag.is_ready("bead-d", &completed)?);
 
     Ok(())
 }
@@ -188,37 +137,21 @@ fn bdd_diamond_dag_join_ready_when_all_branches_complete() -> Result<(), Box<dyn
 fn bdd_diamond_dag_progressive_join_readiness() -> Result<(), Box<dyn std::error::Error>> {
     // GIVEN: Diamond DAG
     let mut dag = WorkflowDAG::new();
-    dag.add_node("bead-a".to_string())?;
-    dag.add_node("bead-b".to_string())?;
-    dag.add_node("bead-c".to_string())?;
-    dag.add_node("bead-d".to_string())?;
+    dag.add_node("bead-a")?;
+    dag.add_node("bead-b")?;
+    dag.add_node("bead-c")?;
+    dag.add_node("bead-d")?;
 
-    dag.add_edge(
-        "bead-a".to_string(),
-        "bead-b".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "bead-a".to_string(),
-        "bead-c".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "bead-b".to_string(),
-        "bead-d".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "bead-c".to_string(),
-        "bead-d".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
+    dag.add_edge("bead-a", "bead-b", DependencyType::BlockingDependency)?;
+    dag.add_edge("bead-a", "bead-c", DependencyType::BlockingDependency)?;
+    dag.add_edge("bead-b", "bead-d", DependencyType::BlockingDependency)?;
+    dag.add_edge("bead-c", "bead-d", DependencyType::BlockingDependency)?;
 
     // Step 0: Nothing complete
     let completed = HashSet::new();
     let ready = dag.get_ready_beads(&completed);
     assert_eq!(ready, vec!["bead-a".to_string()]);
-    assert!(!dag.is_ready(&"bead-d".to_string(), &completed)?);
+    assert!(!dag.is_ready("bead-d", &completed)?);
 
     // Step 1: A complete
     let mut completed = HashSet::new();
@@ -227,20 +160,20 @@ fn bdd_diamond_dag_progressive_join_readiness() -> Result<(), Box<dyn std::error
     assert!(ready.contains(&"bead-b".to_string()));
     assert!(ready.contains(&"bead-c".to_string()));
     assert!(!ready.contains(&"bead-d".to_string()));
-    assert!(!dag.is_ready(&"bead-d".to_string(), &completed)?);
+    assert!(!dag.is_ready("bead-d", &completed)?);
 
     // Step 2: B complete (but not C)
     completed.insert("bead-b".to_string());
     let ready = dag.get_ready_beads(&completed);
     assert!(ready.contains(&"bead-c".to_string()));
     assert!(!ready.contains(&"bead-d".to_string()));
-    assert!(!dag.is_ready(&"bead-d".to_string(), &completed)?);
+    assert!(!dag.is_ready("bead-d", &completed)?);
 
     // Step 3: C complete (both branches now done)
     completed.insert("bead-c".to_string());
     let ready = dag.get_ready_beads(&completed);
     assert_eq!(ready, vec!["bead-d".to_string()]);
-    assert!(dag.is_ready(&"bead-d".to_string(), &completed)?);
+    assert!(dag.is_ready("bead-d", &completed)?);
 
     // Step 4: D complete (workflow done)
     completed.insert("bead-d".to_string());
@@ -259,31 +192,15 @@ fn bdd_diamond_dag_progressive_join_readiness() -> Result<(), Box<dyn std::error
 fn bdd_diamond_dag_asymmetric_completion_order() -> Result<(), Box<dyn std::error::Error>> {
     // GIVEN: Diamond DAG
     let mut dag = WorkflowDAG::new();
-    dag.add_node("bead-a".to_string())?;
-    dag.add_node("bead-b".to_string())?;
-    dag.add_node("bead-c".to_string())?;
-    dag.add_node("bead-d".to_string())?;
+    dag.add_node("bead-a")?;
+    dag.add_node("bead-b")?;
+    dag.add_node("bead-c")?;
+    dag.add_node("bead-d")?;
 
-    dag.add_edge(
-        "bead-a".to_string(),
-        "bead-b".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "bead-a".to_string(),
-        "bead-c".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "bead-b".to_string(),
-        "bead-d".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "bead-c".to_string(),
-        "bead-d".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
+    dag.add_edge("bead-a", "bead-b", DependencyType::BlockingDependency)?;
+    dag.add_edge("bead-a", "bead-c", DependencyType::BlockingDependency)?;
+    dag.add_edge("bead-b", "bead-d", DependencyType::BlockingDependency)?;
+    dag.add_edge("bead-c", "bead-d", DependencyType::BlockingDependency)?;
 
     // Complete A first
     let mut completed = HashSet::new();
@@ -296,7 +213,7 @@ fn bdd_diamond_dag_asymmetric_completion_order() -> Result<(), Box<dyn std::erro
     // THEN: B is still ready, but D is NOT ready (B incomplete)
     assert!(ready.contains(&"bead-b".to_string()));
     assert!(!ready.contains(&"bead-d".to_string()));
-    assert!(!dag.is_ready(&"bead-d".to_string(), &completed)?);
+    assert!(!dag.is_ready("bead-d", &completed)?);
 
     // Complete B now
     completed.insert("bead-b".to_string());
@@ -304,7 +221,7 @@ fn bdd_diamond_dag_asymmetric_completion_order() -> Result<(), Box<dyn std::erro
 
     // THEN: D becomes ready
     assert_eq!(ready, vec!["bead-d".to_string()]);
-    assert!(dag.is_ready(&"bead-d".to_string(), &completed)?);
+    assert!(dag.is_ready("bead-d", &completed)?);
 
     Ok(())
 }
@@ -318,31 +235,15 @@ fn bdd_diamond_dag_asymmetric_completion_order() -> Result<(), Box<dyn std::erro
 fn bdd_diamond_dag_join_in_blocked_list() -> Result<(), Box<dyn std::error::Error>> {
     // GIVEN: Diamond DAG
     let mut dag = WorkflowDAG::new();
-    dag.add_node("bead-a".to_string())?;
-    dag.add_node("bead-b".to_string())?;
-    dag.add_node("bead-c".to_string())?;
-    dag.add_node("bead-d".to_string())?;
+    dag.add_node("bead-a")?;
+    dag.add_node("bead-b")?;
+    dag.add_node("bead-c")?;
+    dag.add_node("bead-d")?;
 
-    dag.add_edge(
-        "bead-a".to_string(),
-        "bead-b".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "bead-a".to_string(),
-        "bead-c".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "bead-b".to_string(),
-        "bead-d".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "bead-c".to_string(),
-        "bead-d".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
+    dag.add_edge("bead-a", "bead-b", DependencyType::BlockingDependency)?;
+    dag.add_edge("bead-a", "bead-c", DependencyType::BlockingDependency)?;
+    dag.add_edge("bead-b", "bead-d", DependencyType::BlockingDependency)?;
+    dag.add_edge("bead-c", "bead-d", DependencyType::BlockingDependency)?;
 
     // WHEN: A and B complete, C incomplete
     let mut completed = HashSet::new();
@@ -372,42 +273,18 @@ fn bdd_diamond_dag_multi_way_join() -> Result<(), Box<dyn std::error::Error>> {
     //   \ | /
     //     E
     let mut dag = WorkflowDAG::new();
-    dag.add_node("bead-a".to_string())?;
-    dag.add_node("bead-b".to_string())?;
-    dag.add_node("bead-c".to_string())?;
-    dag.add_node("bead-d".to_string())?;
-    dag.add_node("bead-e".to_string())?;
+    dag.add_node("bead-a")?;
+    dag.add_node("bead-b")?;
+    dag.add_node("bead-c")?;
+    dag.add_node("bead-d")?;
+    dag.add_node("bead-e")?;
 
-    dag.add_edge(
-        "bead-a".to_string(),
-        "bead-b".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "bead-a".to_string(),
-        "bead-c".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "bead-a".to_string(),
-        "bead-d".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "bead-b".to_string(),
-        "bead-e".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "bead-c".to_string(),
-        "bead-e".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "bead-d".to_string(),
-        "bead-e".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
+    dag.add_edge("bead-a", "bead-b", DependencyType::BlockingDependency)?;
+    dag.add_edge("bead-a", "bead-c", DependencyType::BlockingDependency)?;
+    dag.add_edge("bead-a", "bead-d", DependencyType::BlockingDependency)?;
+    dag.add_edge("bead-b", "bead-e", DependencyType::BlockingDependency)?;
+    dag.add_edge("bead-c", "bead-e", DependencyType::BlockingDependency)?;
+    dag.add_edge("bead-d", "bead-e", DependencyType::BlockingDependency)?;
 
     // Complete A, B, C (D incomplete)
     let mut completed = HashSet::new();
@@ -416,7 +293,7 @@ fn bdd_diamond_dag_multi_way_join() -> Result<(), Box<dyn std::error::Error>> {
     completed.insert("bead-c".to_string());
 
     // THEN: E is NOT ready (D incomplete)
-    assert!(!dag.is_ready(&"bead-e".to_string(), &completed)?);
+    assert!(!dag.is_ready("bead-e", &completed)?);
     let blocked = dag.get_blocked_nodes(&completed);
     assert!(blocked.contains(&"bead-e".to_string()));
 
@@ -424,7 +301,7 @@ fn bdd_diamond_dag_multi_way_join() -> Result<(), Box<dyn std::error::Error>> {
     completed.insert("bead-d".to_string());
 
     // THEN: E is now ready
-    assert!(dag.is_ready(&"bead-e".to_string(), &completed)?);
+    assert!(dag.is_ready("bead-e", &completed)?);
     let ready = dag.get_ready_beads(&completed);
     assert_eq!(ready, vec!["bead-e".to_string()]);
 
@@ -444,31 +321,15 @@ fn bdd_diamond_dag_preferred_order_not_blocking() -> Result<(), Box<dyn std::err
     //     B --blocking--> D
     //     C --preferred-> D
     let mut dag = WorkflowDAG::new();
-    dag.add_node("bead-a".to_string())?;
-    dag.add_node("bead-b".to_string())?;
-    dag.add_node("bead-c".to_string())?;
-    dag.add_node("bead-d".to_string())?;
+    dag.add_node("bead-a")?;
+    dag.add_node("bead-b")?;
+    dag.add_node("bead-c")?;
+    dag.add_node("bead-d")?;
 
-    dag.add_edge(
-        "bead-a".to_string(),
-        "bead-b".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "bead-a".to_string(),
-        "bead-c".to_string(),
-        DependencyType::PreferredOrder,
-    )?;
-    dag.add_edge(
-        "bead-b".to_string(),
-        "bead-d".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "bead-c".to_string(),
-        "bead-d".to_string(),
-        DependencyType::PreferredOrder,
-    )?;
+    dag.add_edge("bead-a", "bead-b", DependencyType::BlockingDependency)?;
+    dag.add_edge("bead-a", "bead-c", DependencyType::PreferredOrder)?;
+    dag.add_edge("bead-b", "bead-d", DependencyType::BlockingDependency)?;
+    dag.add_edge("bead-c", "bead-d", DependencyType::PreferredOrder)?;
 
     // WHEN: A and B complete (C incomplete, but C→D is PreferredOrder)
     let mut completed = HashSet::new();
@@ -476,7 +337,7 @@ fn bdd_diamond_dag_preferred_order_not_blocking() -> Result<(), Box<dyn std::err
     completed.insert("bead-b".to_string());
 
     // THEN: D IS ready (only blocking dep is B, which is complete)
-    assert!(dag.is_ready(&"bead-d".to_string(), &completed)?);
+    assert!(dag.is_ready("bead-d", &completed)?);
 
     let ready = dag.get_ready_beads(&completed);
     assert!(ready.contains(&"bead-d".to_string()));

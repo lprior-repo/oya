@@ -65,6 +65,7 @@ async fn create_test_bead(
 }
 
 /// Create a test bead with specific retry count.
+#[allow(dead_code)]
 async fn create_test_bead_with_retry_count(
     store: &Arc<OrchestratorStore>,
     bead_id: &str,
@@ -80,38 +81,40 @@ async fn create_test_bead_with_retry_count(
 }
 
 /// Assert that a result is an Ack message.
-fn assert_ack_message(result: &Result<HostMessage, ActorError>) {
+fn assert_ack_message(result: &Result<HostMessage, ActorError>) -> Result<(), String> {
     match result {
-        Ok(HostMessage::Ack { .. }) => (),
-        other => panic!("Expected Ack, got {:?}", other),
+        Ok(HostMessage::Ack { .. }) => Ok(()),
+        other => Err(format!("Expected Ack, got {other:?}")),
     }
 }
 
 /// Assert that a result is a BeadNotFound error.
-fn assert_bead_not_found_error(result: &Result<HostMessage, ActorError>, bead_id: &str) {
+fn assert_bead_not_found_error(result: &Result<HostMessage, ActorError>, bead_id: &str) -> Result<(), String> {
     match result {
         Err(ActorError::BeadNotFound(id)) => {
             if id != bead_id {
-                panic!("Expected BeadNotFound({}), got BeadNotFound({})", bead_id, id);
+                Err(format!("Expected BeadNotFound({bead_id}), got BeadNotFound({id})"))
+            } else {
+                Ok(())
             }
         }
-        other => panic!("Expected BeadNotFound({}), got {:?}", bead_id, other),
+        other => Err(format!("Expected BeadNotFound({bead_id}), got {other:?}")),
     }
 }
 
 /// Assert that a result is an InvalidStateTransition error.
-fn assert_invalid_state_error(result: &Result<HostMessage, ActorError>) {
+fn assert_invalid_state_error(result: &Result<HostMessage, ActorError>) -> Result<(), String> {
     match result {
-        Err(ActorError::InvalidStateTransition(_)) => (),
-        other => panic!("Expected InvalidStateTransition, got {:?}", other),
+        Err(ActorError::InvalidStateTransition(_)) => Ok(()),
+        other => Err(format!("Expected InvalidStateTransition, got {other:?}")),
     }
 }
 
 /// Assert that a result is an Internal error.
-fn assert_internal_error(result: &Result<HostMessage, ActorError>) {
+fn assert_internal_error(result: &Result<HostMessage, ActorError>) -> Result<(), String> {
     match result {
-        Err(ActorError::Internal(_)) => (),
-        other => panic!("Expected Internal error, got {:?}", other),
+        Err(ActorError::Internal(_)) => Ok(()),
+        other => Err(format!("Expected Internal error, got {other:?}")),
     }
 }
 
@@ -120,167 +123,97 @@ fn assert_internal_error(result: &Result<HostMessage, ActorError>) {
 // =========================================================================
 
 #[tokio::test]
-async fn test_start_bead_succeeds_when_bead_in_pending_state() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_start_bead_succeeds_when_bead_in_pending_state() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let bead_id = "test-pending-bead";
     let workflow_id = "test-workflow";
-    match create_test_bead(&setup.store, bead_id, workflow_id, BeadState::Pending).await {
-        Some(_) => (),
-        None => {
-            return;
-        }
-    }
+    create_test_bead(&setup.store, bead_id, workflow_id, BeadState::Pending).await.ok_or("Create bead failed")?;
 
     let result = IpcWorkerActorDef::handle_start_bead(&setup.state, bead_id).await;
 
-    assert_ack_message(&result);
+    assert_ack_message(&result).map_err(|e| format!("{e}"))?;
 
-    let bead = match setup.store.get_bead(bead_id).await {
-        Ok(b) => b,
-        Err(_) => panic!("Bead should exist after start"),
-    };
+    let bead = setup.store.get_bead(bead_id).await?;
     assert_eq!(bead.state, BeadState::Running);
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_start_bead_succeeds_when_bead_in_ready_state() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_start_bead_succeeds_when_bead_in_ready_state() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let bead_id = "test-ready-bead";
-    match create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Ready).await {
-        Some(_) => (),
-        None => {
-            return;
-        }
-    }
+    create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Ready).await.ok_or("Create bead failed")?;
 
     let result = IpcWorkerActorDef::handle_start_bead(&setup.state, bead_id).await;
 
-    assert_ack_message(&result);
+    assert_ack_message(&result).map_err(|e| format!("{e}"))?;
 
-    let bead = match setup.store.get_bead(bead_id).await {
-        Ok(b) => b,
-        Err(_) => panic!("Bead should exist after start"),
-    };
+    let bead = setup.store.get_bead(bead_id).await?;
     assert_eq!(bead.state, BeadState::Running);
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_start_bead_succeeds_when_bead_in_dispatched_state() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_start_bead_succeeds_when_bead_in_dispatched_state() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let bead_id = "test-dispatched-bead";
-    match create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Dispatched).await {
-        Some(_) => (),
-        None => {
-            return;
-        }
-    }
+    create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Dispatched).await.ok_or("Create bead failed")?;
 
     let result = IpcWorkerActorDef::handle_start_bead(&setup.state, bead_id).await;
 
-    assert_ack_message(&result);
+    assert_ack_message(&result).map_err(|e| format!("{e}"))?;
 
-    let bead = match setup.store.get_bead(bead_id).await {
-        Ok(b) => b,
-        Err(_) => panic!("Bead should exist after start"),
-    };
+    let bead = setup.store.get_bead(bead_id).await?;
     assert_eq!(bead.state, BeadState::Running);
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_start_bead_succeeds_when_bead_in_assigned_state() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_start_bead_succeeds_when_bead_in_assigned_state() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let bead_id = "test-assigned-bead";
-    match create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Assigned).await {
-        Some(_) => (),
-        None => {
-            return;
-        }
-    }
+    create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Assigned).await.ok_or("Create bead failed")?;
 
     let result = IpcWorkerActorDef::handle_start_bead(&setup.state, bead_id).await;
 
-    assert_ack_message(&result);
+    assert_ack_message(&result).map_err(|e| format!("{e}"))?;
 
-    let bead = match setup.store.get_bead(bead_id).await {
-        Ok(b) => b,
-        Err(_) => panic!("Bead should exist after start"),
-    };
+    let bead = setup.store.get_bead(bead_id).await?;
     assert_eq!(bead.state, BeadState::Running);
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_start_bead_is_idempotent_when_bead_already_running() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_start_bead_is_idempotent_when_bead_already_running() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let bead_id = "test-running-bead";
-    match create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Running).await {
-        Some(_) => (),
-        None => {
-            return;
-        }
-    }
+    create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Running).await.ok_or("Create bead failed")?;
 
     // First call should succeed
     let result1 = IpcWorkerActorDef::handle_start_bead(&setup.state, bead_id).await;
-    assert_ack_message(&result1);
+    assert_ack_message(&result1).map_err(|e| format!("{e}"))?;
 
     // Second call should also succeed (idempotent)
     let result2 = IpcWorkerActorDef::handle_start_bead(&setup.state, bead_id).await;
-    assert_ack_message(&result2);
+    assert_ack_message(&result2).map_err(|e| format!("{e}"))?;
 
     // State should remain Running
-    let bead = match setup.store.get_bead(bead_id).await {
-        Ok(b) => b,
-        Err(_) => panic!("Bead should exist"),
-    };
+    let bead = setup.store.get_bead(bead_id).await?;
     assert_eq!(bead.state, BeadState::Running);
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_start_bead_returns_ack_message_on_success() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_start_bead_returns_ack_message_on_success() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let bead_id = "test-ack-bead";
-    match create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Pending).await {
-        Some(_) => (),
-        None => {
-            return;
-        }
-    }
+    create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Pending).await.ok_or("Create bead failed")?;
 
     let result = IpcWorkerActorDef::handle_start_bead(&setup.state, bead_id).await;
 
@@ -289,8 +222,9 @@ async fn test_start_bead_returns_ack_message_on_success() {
             assert_eq!(command, "StartBead");
             assert!(message.contains("started successfully"));
         }
-        other => panic!("Expected Ack, got {:?}", other),
+        other => return Err(format!("Expected Ack, got {other:?}").into()),
     }
+    Ok(())
 }
 
 // =========================================================================
@@ -298,109 +232,63 @@ async fn test_start_bead_returns_ack_message_on_success() {
 // =========================================================================
 
 #[tokio::test]
-async fn test_cancel_bead_succeeds_when_bead_is_running() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_cancel_bead_succeeds_when_bead_is_running() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let bead_id = "test-running-cancel";
-    match create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Running).await {
-        Some(_) => (),
-        None => {
-            return;
-        }
-    }
+    create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Running).await.ok_or("Create bead failed")?;
 
     let result = IpcWorkerActorDef::handle_cancel_bead(&setup.state, bead_id).await;
 
-    assert_ack_message(&result);
+    assert_ack_message(&result).map_err(|e| format!("{e}"))?;
 
-    let bead = match setup.store.get_bead(bead_id).await {
-        Ok(b) => b,
-        Err(_) => panic!("Bead should exist after cancel"),
-    };
+    let bead = setup.store.get_bead(bead_id).await?;
     assert_eq!(bead.state, BeadState::Cancelled);
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_cancel_bead_succeeds_when_bead_is_pending() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_cancel_bead_succeeds_when_bead_is_pending() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let bead_id = "test-pending-cancel";
-    match create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Pending).await {
-        Some(_) => (),
-        None => {
-            return;
-        }
-    }
+    create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Pending).await.ok_or("Create bead failed")?;
 
     let result = IpcWorkerActorDef::handle_cancel_bead(&setup.state, bead_id).await;
 
-    assert_ack_message(&result);
+    assert_ack_message(&result).map_err(|e| format!("{e}"))?;
 
-    let bead = match setup.store.get_bead(bead_id).await {
-        Ok(b) => b,
-        Err(_) => panic!("Bead should exist after cancel"),
-    };
+    let bead = setup.store.get_bead(bead_id).await?;
     assert_eq!(bead.state, BeadState::Cancelled);
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_cancel_bead_is_idempotent_when_bead_already_cancelled() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_cancel_bead_is_idempotent_when_bead_already_cancelled() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let bead_id = "test-cancelled-bead";
-    match create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Cancelled).await {
-        Some(_) => (),
-        None => {
-            return;
-        }
-    }
+    create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Cancelled).await.ok_or("Create bead failed")?;
 
     // First call should succeed
     let result1 = IpcWorkerActorDef::handle_cancel_bead(&setup.state, bead_id).await;
-    assert_ack_message(&result1);
+    assert_ack_message(&result1).map_err(|e| format!("{e}"))?;
 
     // Second call should also succeed (idempotent)
     let result2 = IpcWorkerActorDef::handle_cancel_bead(&setup.state, bead_id).await;
-    assert_ack_message(&result2);
+    assert_ack_message(&result2).map_err(|e| format!("{e}"))?;
 
-    let bead = match setup.store.get_bead(bead_id).await {
-        Ok(b) => b,
-        Err(_) => panic!("Bead should exist"),
-    };
+    let bead = setup.store.get_bead(bead_id).await?;
     assert_eq!(bead.state, BeadState::Cancelled);
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_cancel_bead_returns_ack_message_on_success() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_cancel_bead_returns_ack_message_on_success() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let bead_id = "test-cancel-ack";
-    match create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Running).await {
-        Some(_) => (),
-        None => {
-            return;
-        }
-    }
+    create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Running).await.ok_or("Create bead failed")?;
 
     let result = IpcWorkerActorDef::handle_cancel_bead(&setup.state, bead_id).await;
 
@@ -409,8 +297,9 @@ async fn test_cancel_bead_returns_ack_message_on_success() {
             assert_eq!(command, "CancelBead");
             assert!(message.contains("cancelled"));
         }
-        other => panic!("Expected Ack, got {:?}", other),
+        other => return Err(format!("Expected Ack, got {other:?}").into()),
     }
+    Ok(())
 }
 
 // =========================================================================
@@ -418,78 +307,44 @@ async fn test_cancel_bead_returns_ack_message_on_success() {
 // =========================================================================
 
 #[tokio::test]
-async fn test_retry_bead_succeeds_when_bead_in_failed_state() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_retry_bead_succeeds_when_bead_in_failed_state() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let bead_id = "test-failed-bead";
-    match create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Failed).await {
-        Some(_) => (),
-        None => {
-            return;
-        }
-    }
+    create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Failed).await.ok_or("Create bead failed")?;
 
     let result = IpcWorkerActorDef::handle_retry_bead(&setup.state, bead_id).await;
 
-    assert_ack_message(&result);
+    assert_ack_message(&result).map_err(|e| format!("{e}"))?;
 
-    let bead = match setup.store.get_bead(bead_id).await {
-        Ok(b) => b,
-        Err(_) => panic!("Bead should exist after retry"),
-    };
+    let bead = setup.store.get_bead(bead_id).await?;
     assert_eq!(bead.state, BeadState::Ready);
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_retry_bead_increments_retry_count() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_retry_bead_increments_retry_count() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let bead_id = "test-retry-count";
-    match create_test_bead_with_retry_count(&setup.store, bead_id, "test-workflow", BeadState::Failed, 2).await {
-        Some(_) => (),
-        None => {
-            return;
-        }
-    }
+    create_test_bead_with_retry_count(&setup.store, bead_id, "test-workflow", BeadState::Failed, 2).await.ok_or("Create bead failed")?;
 
     let _result = IpcWorkerActorDef::handle_retry_bead(&setup.state, bead_id).await;
 
-    let updated_bead = match setup.store.get_bead(bead_id).await {
-        Ok(b) => b,
-        Err(_) => panic!("Bead should exist"),
-    };
+    let updated_bead = setup.store.get_bead(bead_id).await?;
 
     // Note: The handler calculates retry_count but doesn't persist it
     // This test documents the current behavior
     assert_eq!(updated_bead.state, BeadState::Ready);
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_retry_bead_returns_ack_message_on_success() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_retry_bead_returns_ack_message_on_success() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let bead_id = "test-retry-ack";
-    match create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Failed).await {
-        Some(_) => (),
-        None => {
-            return;
-        }
-    }
+    create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Failed).await.ok_or("Create bead failed")?;
 
     let result = IpcWorkerActorDef::handle_retry_bead(&setup.state, bead_id).await;
 
@@ -498,8 +353,9 @@ async fn test_retry_bead_returns_ack_message_on_success() {
             assert_eq!(command, "RetryBead");
             assert!(message.contains("reset for retry"));
         }
-        other => panic!("Expected Ack, got {:?}", other),
+        other => return Err(format!("Expected Ack, got {other:?}").into()),
     }
+    Ok(())
 }
 
 // =========================================================================
@@ -507,126 +363,83 @@ async fn test_retry_bead_returns_ack_message_on_success() {
 // =========================================================================
 
 #[tokio::test]
-async fn test_start_bead_returns_not_found_when_bead_does_not_exist() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_start_bead_returns_not_found_when_bead_does_not_exist() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let bead_id = "non-existent-bead";
     let result = IpcWorkerActorDef::handle_start_bead(&setup.state, bead_id).await;
 
-    assert_bead_not_found_error(&result, bead_id);
+    assert_bead_not_found_error(&result, bead_id).map_err(|e| format!("{e}"))?;
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_start_bead_returns_invalid_state_when_bead_completed() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_start_bead_returns_invalid_state_when_bead_completed() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let bead_id = "test-completed-bead";
-    match create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Completed).await {
-        Some(_) => (),
-        None => {
-            return;
-        }
-    }
+    create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Completed).await.ok_or("Create bead failed")?;
 
     let result = IpcWorkerActorDef::handle_start_bead(&setup.state, bead_id).await;
 
-    assert_invalid_state_error(&result);
+    assert_invalid_state_error(&result).map_err(|e| format!("{e}"))?;
 
-    let bead = match setup.store.get_bead(bead_id).await {
-        Ok(b) => b,
-        Err(_) => panic!("Bead should exist"),
-    };
+    let bead = setup.store.get_bead(bead_id).await?;
     assert_eq!(bead.state, BeadState::Completed);
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_start_bead_returns_invalid_state_when_bead_failed() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_start_bead_returns_invalid_state_when_bead_failed() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let bead_id = "test-failed-start";
-    match create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Failed).await {
-        Some(_) => (),
-        None => {
-            return;
-        }
-    }
+    create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Failed).await.ok_or("Create bead failed")?;
 
     let result = IpcWorkerActorDef::handle_start_bead(&setup.state, bead_id).await;
 
-    assert_invalid_state_error(&result);
+    assert_invalid_state_error(&result).map_err(|e| format!("{e}"))?;
 
-    let bead = match setup.store.get_bead(bead_id).await {
-        Ok(b) => b,
-        Err(_) => panic!("Bead should exist"),
-    };
+    let bead = setup.store.get_bead(bead_id).await?;
     assert_eq!(bead.state, BeadState::Failed);
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_start_bead_returns_invalid_state_when_bead_cancelled() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_start_bead_returns_invalid_state_when_bead_cancelled() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let bead_id = "test-cancelled-start";
-    match create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Cancelled).await {
-        Some(_) => (),
-        None => {
-            return;
-        }
-    }
+    create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Cancelled).await.ok_or("Create bead failed")?;
 
     let result = IpcWorkerActorDef::handle_start_bead(&setup.state, bead_id).await;
 
-    assert_invalid_state_error(&result);
+    assert_invalid_state_error(&result).map_err(|e| format!("{e}"))?;
 
-    let bead = match setup.store.get_bead(bead_id).await {
-        Ok(b) => b,
-        Err(_) => panic!("Bead should exist"),
-    };
+    let bead = setup.store.get_bead(bead_id).await?;
     assert_eq!(bead.state, BeadState::Cancelled);
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_start_bead_rejects_empty_bead_id() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_start_bead_rejects_empty_bead_id() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let result = IpcWorkerActorDef::handle_start_bead(&setup.state, "").await;
 
-    assert_internal_error(&result);
+    assert_internal_error(&result).map_err(|e| format!("{e}"))?;
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_start_bead_returns_internal_error_when_store_not_initialized() {
+async fn test_start_bead_returns_internal_error_when_store_not_initialized() -> Result<(), Box<dyn std::error::Error>> {
     let state = IpcWorkerState::new();
     let bead_id = "test-bead";
 
     let result = IpcWorkerActorDef::handle_start_bead(&state, bead_id).await;
 
-    assert_internal_error(&result);
+    assert_internal_error(&result).map_err(|e| format!("{e}"))?;
+    Ok(())
 }
 
 // =========================================================================
@@ -634,98 +447,67 @@ async fn test_start_bead_returns_internal_error_when_store_not_initialized() {
 // =========================================================================
 
 #[tokio::test]
-async fn test_cancel_bead_returns_not_found_when_bead_does_not_exist() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_cancel_bead_returns_not_found_when_bead_does_not_exist() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let bead_id = "non-existent-bead";
     let result = IpcWorkerActorDef::handle_cancel_bead(&setup.state, bead_id).await;
 
-    assert_bead_not_found_error(&result, bead_id);
+    assert_bead_not_found_error(&result, bead_id).map_err(|e| format!("{e}"))?;
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_cancel_bead_returns_invalid_state_when_bead_already_completed() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_cancel_bead_returns_invalid_state_when_bead_already_completed() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let bead_id = "test-completed-cancel";
-    match create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Completed).await {
-        Some(_) => (),
-        None => {
-            return;
-        }
-    }
+    create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Completed).await.ok_or("Create bead failed")?;
 
     let result = IpcWorkerActorDef::handle_cancel_bead(&setup.state, bead_id).await;
 
-    assert_invalid_state_error(&result);
+    assert_invalid_state_error(&result).map_err(|e| format!("{e}"))?;
 
-    let bead = match setup.store.get_bead(bead_id).await {
-        Ok(b) => b,
-        Err(_) => panic!("Bead should exist"),
-    };
+    let bead = setup.store.get_bead(bead_id).await?;
     assert_eq!(bead.state, BeadState::Completed);
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_cancel_bead_returns_invalid_state_when_bead_already_failed() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_cancel_bead_returns_invalid_state_when_bead_already_failed() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let bead_id = "test-failed-cancel";
-    match create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Failed).await {
-        Some(_) => (),
-        None => {
-            return;
-        }
-    }
+    create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Failed).await.ok_or("Create bead failed")?;
 
     let result = IpcWorkerActorDef::handle_cancel_bead(&setup.state, bead_id).await;
 
-    assert_invalid_state_error(&result);
+    assert_invalid_state_error(&result).map_err(|e| format!("{e}"))?;
 
-    let bead = match setup.store.get_bead(bead_id).await {
-        Ok(b) => b,
-        Err(_) => panic!("Bead should exist"),
-    };
+    let bead = setup.store.get_bead(bead_id).await?;
     assert_eq!(bead.state, BeadState::Failed);
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_cancel_bead_rejects_empty_bead_id() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_cancel_bead_rejects_empty_bead_id() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let result = IpcWorkerActorDef::handle_cancel_bead(&setup.state, "").await;
 
-    assert_internal_error(&result);
+    assert_internal_error(&result).map_err(|e| format!("{e}"))?;
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_cancel_bead_returns_internal_error_when_store_not_initialized() {
+async fn test_cancel_bead_returns_internal_error_when_store_not_initialized() -> Result<(), Box<dyn std::error::Error>> {
     let state = IpcWorkerState::new();
     let bead_id = "test-bead";
 
     let result = IpcWorkerActorDef::handle_cancel_bead(&state, bead_id).await;
 
-    assert_internal_error(&result);
+    assert_internal_error(&result).map_err(|e| format!("{e}"))?;
+    Ok(())
 }
 
 // =========================================================================
@@ -733,154 +515,99 @@ async fn test_cancel_bead_returns_internal_error_when_store_not_initialized() {
 // =========================================================================
 
 #[tokio::test]
-async fn test_retry_bead_returns_not_found_when_bead_does_not_exist() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_retry_bead_returns_not_found_when_bead_does_not_exist() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let bead_id = "non-existent-bead";
     let result = IpcWorkerActorDef::handle_retry_bead(&setup.state, bead_id).await;
 
-    assert_bead_not_found_error(&result, bead_id);
+    assert_bead_not_found_error(&result, bead_id).map_err(|e| format!("{e}"))?;
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_retry_bead_returns_invalid_state_when_bead_is_pending() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_retry_bead_returns_invalid_state_when_bead_is_pending() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let bead_id = "test-pending-retry";
-    match create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Pending).await {
-        Some(_) => (),
-        None => {
-            return;
-        }
-    }
+    create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Pending).await.ok_or("Create bead failed")?;
 
     let result = IpcWorkerActorDef::handle_retry_bead(&setup.state, bead_id).await;
 
-    assert_invalid_state_error(&result);
+    assert_invalid_state_error(&result).map_err(|e| format!("{e}"))?;
 
-    let bead = match setup.store.get_bead(bead_id).await {
-        Ok(b) => b,
-        Err(_) => panic!("Bead should exist"),
-    };
+    let bead = setup.store.get_bead(bead_id).await?;
     assert_eq!(bead.state, BeadState::Pending);
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_retry_bead_returns_invalid_state_when_bead_is_running() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_retry_bead_returns_invalid_state_when_bead_is_running() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let bead_id = "test-running-retry";
-    match create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Running).await {
-        Some(_) => (),
-        None => {
-            return;
-        }
-    }
+    create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Running).await.ok_or("Create bead failed")?;
 
     let result = IpcWorkerActorDef::handle_retry_bead(&setup.state, bead_id).await;
 
-    assert_invalid_state_error(&result);
+    assert_invalid_state_error(&result).map_err(|e| format!("{e}"))?;
 
-    let bead = match setup.store.get_bead(bead_id).await {
-        Ok(b) => b,
-        Err(_) => panic!("Bead should exist"),
-    };
+    let bead = setup.store.get_bead(bead_id).await?;
     assert_eq!(bead.state, BeadState::Running);
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_retry_bead_returns_invalid_state_when_bead_is_completed() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_retry_bead_returns_invalid_state_when_bead_is_completed() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let bead_id = "test-completed-retry";
-    match create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Completed).await {
-        Some(_) => (),
-        None => {
-            return;
-        }
-    }
+    create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Completed).await.ok_or("Create bead failed")?;
 
     let result = IpcWorkerActorDef::handle_retry_bead(&setup.state, bead_id).await;
 
-    assert_invalid_state_error(&result);
+    assert_invalid_state_error(&result).map_err(|e| format!("{e}"))?;
 
-    let bead = match setup.store.get_bead(bead_id).await {
-        Ok(b) => b,
-        Err(_) => panic!("Bead should exist"),
-    };
+    let bead = setup.store.get_bead(bead_id).await?;
     assert_eq!(bead.state, BeadState::Completed);
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_retry_bead_returns_invalid_state_when_bead_is_cancelled() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_retry_bead_returns_invalid_state_when_bead_is_cancelled() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let bead_id = "test-cancelled-retry";
-    match create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Cancelled).await {
-        Some(_) => (),
-        None => {
-            return;
-        }
-    }
+    create_test_bead(&setup.store, bead_id, "test-workflow", BeadState::Cancelled).await.ok_or("Create bead failed")?;
 
     let result = IpcWorkerActorDef::handle_retry_bead(&setup.state, bead_id).await;
 
-    assert_invalid_state_error(&result);
+    assert_invalid_state_error(&result).map_err(|e| format!("{e}"))?;
 
-    let bead = match setup.store.get_bead(bead_id).await {
-        Ok(b) => b,
-        Err(_) => panic!("Bead should exist"),
-    };
+    let bead = setup.store.get_bead(bead_id).await?;
     assert_eq!(bead.state, BeadState::Cancelled);
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_retry_bead_rejects_empty_bead_id() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_retry_bead_rejects_empty_bead_id() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let result = IpcWorkerActorDef::handle_retry_bead(&setup.state, "").await;
 
-    assert_internal_error(&result);
+    assert_internal_error(&result).map_err(|e| format!("{e}"))?;
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_retry_bead_returns_internal_error_when_store_not_initialized() {
+async fn test_retry_bead_returns_internal_error_when_store_not_initialized() -> Result<(), Box<dyn std::error::Error>> {
     let state = IpcWorkerState::new();
     let bead_id = "test-bead";
 
     let result = IpcWorkerActorDef::handle_retry_bead(&state, bead_id).await;
 
-    assert_internal_error(&result);
+    assert_internal_error(&result).map_err(|e| format!("{e}"))?;
+    Ok(())
 }
 
 // =========================================================================
@@ -888,13 +615,8 @@ async fn test_retry_bead_returns_internal_error_when_store_not_initialized() {
 // =========================================================================
 
 #[tokio::test]
-async fn test_all_non_terminal_states_can_transition_to_running() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_all_non_terminal_states_can_transition_to_running() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let non_terminal_states = [
         BeadState::Pending,
@@ -904,33 +626,21 @@ async fn test_all_non_terminal_states_can_transition_to_running() {
     ];
 
     for (i, state) in non_terminal_states.iter().enumerate() {
-        let bead_id = &format!("test-non-terminal-{}", i);
-        match create_test_bead(&setup.store, bead_id, "test-workflow", *state).await {
-            Some(_) => (),
-            None => {
-            return;
-        }
-        }
+        let bead_id = &format!("test-non-terminal-{i}");
+        create_test_bead(&setup.store, bead_id, "test-workflow", *state).await.ok_or("Create bead failed")?;
 
         let result = IpcWorkerActorDef::handle_start_bead(&setup.state, bead_id).await;
-        assert_ack_message(&result);
+        assert_ack_message(&result).map_err(|e| format!("{e}"))?;
 
-        let bead = match setup.store.get_bead(bead_id).await {
-            Ok(b) => b,
-            Err(_) => panic!("Bead should exist"),
-        };
+        let bead = setup.store.get_bead(bead_id).await?;
         assert_eq!(bead.state, BeadState::Running);
     }
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_all_non_terminal_states_can_transition_to_cancelled() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_all_non_terminal_states_can_transition_to_cancelled() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let non_terminal_states = [
         BeadState::Pending,
@@ -941,33 +651,21 @@ async fn test_all_non_terminal_states_can_transition_to_cancelled() {
     ];
 
     for (i, state) in non_terminal_states.iter().enumerate() {
-        let bead_id = &format!("test-cancel-non-terminal-{}", i);
-        match create_test_bead(&setup.store, bead_id, "test-workflow", *state).await {
-            Some(_) => (),
-            None => {
-            return;
-        }
-        }
+        let bead_id = &format!("test-cancel-non-terminal-{i}");
+        create_test_bead(&setup.store, bead_id, "test-workflow", *state).await.ok_or("Create bead failed")?;
 
         let result = IpcWorkerActorDef::handle_cancel_bead(&setup.state, bead_id).await;
-        assert_ack_message(&result);
+        assert_ack_message(&result).map_err(|e| format!("{e}"))?;
 
-        let bead = match setup.store.get_bead(bead_id).await {
-            Ok(b) => b,
-            Err(_) => panic!("Bead should exist"),
-        };
+        let bead = setup.store.get_bead(bead_id).await?;
         assert_eq!(bead.state, BeadState::Cancelled);
     }
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_only_failed_state_can_transition_to_ready_via_retry() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_only_failed_state_can_transition_to_ready_via_retry() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let other_states = [
         BeadState::Pending,
@@ -980,33 +678,21 @@ async fn test_only_failed_state_can_transition_to_ready_via_retry() {
     ];
 
     for (i, state) in other_states.iter().enumerate() {
-        let bead_id = &format!("test-invalid-retry-{}", i);
-        match create_test_bead(&setup.store, bead_id, "test-workflow", *state).await {
-            Some(_) => (),
-            None => {
-            return;
-        }
-        }
+        let bead_id = &format!("test-invalid-retry-{i}");
+        create_test_bead(&setup.store, bead_id, "test-workflow", *state).await.ok_or("Create bead failed")?;
 
         let result = IpcWorkerActorDef::handle_retry_bead(&setup.state, bead_id).await;
-        assert_invalid_state_error(&result);
+        assert_invalid_state_error(&result).map_err(|e| format!("{e}"))?;
 
-        let bead = match setup.store.get_bead(bead_id).await {
-            Ok(b) => b,
-            Err(_) => panic!("Bead should exist"),
-        };
+        let bead = setup.store.get_bead(bead_id).await?;
         assert_eq!(bead.state, *state, "State should not change");
     }
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_terminal_states_block_running_transition() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_terminal_states_block_running_transition() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let terminal_states = [
         BeadState::Completed,
@@ -1015,40 +701,27 @@ async fn test_terminal_states_block_running_transition() {
     ];
 
     for (i, state) in terminal_states.iter().enumerate() {
-        let bead_id = &format!("test-terminal-running-{}", i);
-        match create_test_bead(&setup.store, bead_id, "test-workflow", *state).await {
-            Some(_) => (),
-            None => {
-            return;
-        }
-        }
+        let bead_id = &format!("test-terminal-running-{i}");
+        create_test_bead(&setup.store, bead_id, "test-workflow", *state).await.ok_or("Create bead failed")?;
 
         let result = IpcWorkerActorDef::handle_start_bead(&setup.state, bead_id).await;
-        assert_invalid_state_error(&result);
+        assert_invalid_state_error(&result).map_err(|e| format!("{e}"))?;
     }
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_terminal_states_block_cancel_transition() {
-    let setup = match setup_test_state().await {
-        Some(s) => s,
-        None => {
-            return;
-        }
-    };
+async fn test_terminal_states_block_cancel_transition() -> Result<(), Box<dyn std::error::Error>> {
+    let setup = setup_test_state().await.ok_or("Setup failed")?;
 
     let terminal_states = [BeadState::Completed, BeadState::Failed];
 
     for (i, state) in terminal_states.iter().enumerate() {
-        let bead_id = &format!("test-terminal-cancel-{}", i);
-        match create_test_bead(&setup.store, bead_id, "test-workflow", *state).await {
-            Some(_) => (),
-            None => {
-            return;
-        }
-        }
+        let bead_id = &format!("test-terminal-cancel-{i}");
+        create_test_bead(&setup.store, bead_id, "test-workflow", *state).await.ok_or("Create bead failed")?;
 
         let result = IpcWorkerActorDef::handle_cancel_bead(&setup.state, bead_id).await;
-        assert_invalid_state_error(&result);
+        assert_invalid_state_error(&result).map_err(|e| format!("{e}"))?;
     }
+    Ok(())
 }
