@@ -27,7 +27,7 @@ edition = "2021"
 authors = ["OYA Team"]
 license = "MIT"
 repository = "https://github.com/oya/oya"
-rust-version = "1.75"
+rust-version = "1.82"
 
 [workspace.dependencies]
 oya-core = { path = "crates/core" }
@@ -57,7 +57,7 @@ tokio = { version = "1.49.0", features = ["full"] }
 anyhow = "1.0.101"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 petgraph = "0.6"
-surrealdb = { version = "2.6.0", features = ["kv-rocksdb"] }
+surrealdb = { version = "2.6.0", features = ["kv-rocksdb", "kv-mem"] }
 surrealdb-core = "2.6.0"
 bincode = "2.0.0-rc.3"
 ulid = "1.2.1"
