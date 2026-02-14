@@ -7,9 +7,9 @@ use oya_events::{BeadEvent, BeadId, EventBus, StageKind};
 use tokio::process::Command;
 
 use super::{
-    AgentSwarmError, AgentSwarmResult,
     config::AgentConfig,
     subprocess_handle::{AgentOutput, SubprocessHandle},
+    AgentSwarmError, AgentSwarmResult,
 };
 
 /// High-level executor for orchestrating agent subprocess execution.

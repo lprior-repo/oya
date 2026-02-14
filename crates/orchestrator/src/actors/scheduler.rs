@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort};
-use tokio::sync::{Mutex, broadcast, mpsc};
+use tokio::sync::{broadcast, mpsc, Mutex};
 use tracing::info;
 
 use oya_events::{BeadEvent, EventBus, EventPattern, EventSubscription};
@@ -372,15 +372,15 @@ pub mod core {
             SchedulerMessage::UnregisterWorkflow { workflow_id } => {
                 next_state.workflows.remove(&workflow_id);
                 let workflow_id_clone = workflow_id.clone();
-                next_state.pending_beads.retain(|_, bead| {
-                    bead.workflow_id != workflow_id_clone
-                });
-                next_state.ready_beads.retain(|bead_id| {
-                    next_state.pending_beads.contains_key(bead_id)
-                });
-                next_state.worker_assignments.retain(|bead_id, _| {
-                    next_state.pending_beads.contains_key(bead_id)
-                });
+                next_state
+                    .pending_beads
+                    .retain(|_, bead| bead.workflow_id != workflow_id_clone);
+                next_state
+                    .ready_beads
+                    .retain(|bead_id| next_state.pending_beads.contains_key(bead_id));
+                next_state
+                    .worker_assignments
+                    .retain(|bead_id, _| next_state.pending_beads.contains_key(bead_id));
             }
             SchedulerMessage::ScheduleBead {
                 workflow_id,
@@ -475,7 +475,10 @@ pub mod core {
             }
             SchedulerMessage::GetStats { reply } => {
                 let scheduler_stats = build_stats(&next_state);
-                effects.push(SchedulerEffect::ReplyStats { reply, stats: scheduler_stats });
+                effects.push(SchedulerEffect::ReplyStats {
+                    reply,
+                    stats: scheduler_stats,
+                });
             }
             SchedulerMessage::IsBeadReady {
                 workflow_id,
@@ -530,9 +533,9 @@ pub mod core {
             SchedulerMessage::UnregisterAgent { agent_id } => {
                 next_state.agents.remove(&agent_id);
                 let agent_id_clone = agent_id.clone();
-                next_state.worker_assignments.retain(|_, assigned_agent| {
-                    assigned_agent != &agent_id_clone
-                });
+                next_state
+                    .worker_assignments
+                    .retain(|_, assigned_agent| assigned_agent != &agent_id_clone);
                 effects.push(SchedulerEffect::RecordEvent {
                     event: OrchestratorEvent::AgentUnregistered { agent_id },
                 });
@@ -809,7 +812,7 @@ mod tests {
         state
             .workflows
             .insert(workflow_id.clone(), WorkflowState::new(workflow_id.clone()));
-        
+
         if let Some(ws) = state.workflows.get_mut(&workflow_id) {
             let _ = ws.add_bead("bead-1".to_string());
         }
@@ -822,7 +825,8 @@ mod tests {
     }
 
     #[test]
-    fn test_schedule_bead_produces_bead_scheduled_event() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_schedule_bead_produces_bead_scheduled_event() -> Result<(), Box<dyn std::error::Error>>
+    {
         let state = setup_state_with_workflow_and_bead();
         let msg = SchedulerMessage::ScheduleBead {
             workflow_id: "wf-1".to_string(),
@@ -853,7 +857,8 @@ mod tests {
     }
 
     #[test]
-    fn test_on_bead_completed_produces_bead_completed_event() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_on_bead_completed_produces_bead_completed_event(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let state = setup_state_with_workflow_and_bead();
         let msg = SchedulerMessage::OnBeadCompleted {
             workflow_id: "wf-1".to_string(),
@@ -883,7 +888,8 @@ mod tests {
     }
 
     #[test]
-    fn test_on_state_changed_to_completed_produces_bead_completed_event() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_on_state_changed_to_completed_produces_bead_completed_event(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let state = setup_state_with_workflow_and_bead();
         let msg = SchedulerMessage::OnStateChanged {
             bead_id: "bead-1".to_string(),
@@ -910,7 +916,8 @@ mod tests {
     }
 
     #[test]
-    fn test_on_state_changed_to_failed_produces_bead_failed_event() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_on_state_changed_to_failed_produces_bead_failed_event(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let state = setup_state_with_workflow_and_bead();
         let msg = SchedulerMessage::OnStateChanged {
             bead_id: "bead-1".to_string(),

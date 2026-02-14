@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! Tests for workspace path integration with OpenCode execution.
 //!
 //! This test suite ensures that when beads are executed in isolated workspaces,

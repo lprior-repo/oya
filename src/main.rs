@@ -7,11 +7,11 @@ use clap::{Parser, Subcommand};
 use tracing::info;
 
 use oya::commands::{
-    ApproveArgs, ListArgs, NewArgs, ShowArgs, StageArgs, WorkspaceArgs, WorkspaceCommand,
     approve_command, list_command, new_command, show_command, stage_command, workspace_add_command,
     workspace_done_command, workspace_focus_command, workspace_list_command,
     workspace_remove_command, workspace_spawn_command, workspace_status_command,
-    workspace_sync_command,
+    workspace_sync_command, ApproveArgs, ListArgs, NewArgs, ShowArgs, StageArgs, WorkspaceArgs,
+    WorkspaceCommand,
 };
 
 use std::process::ExitCode;
@@ -26,7 +26,7 @@ async fn main() -> ExitCode {
         Ok(_) => ExitCode::SUCCESS,
         Err(err) => {
             eprintln!("Error: {}", err);
-            
+
             // Check for specific error types to determine exit code
             if let Some(pipeline_err) = err.downcast_ref::<oya_pipeline::Error>() {
                 match pipeline_err {
@@ -38,7 +38,7 @@ async fn main() -> ExitCode {
                     _ => return ExitCode::from(1),
                 }
             }
-            
+
             ExitCode::from(1)
         }
     }

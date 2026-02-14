@@ -288,8 +288,7 @@ mod tests {
     #[test]
     fn test_check_zjj_exit_code_success() -> Result<(), Box<dyn std::error::Error>> {
         // Mock successful exit using a real command
-        let output = std::process::Command::new("true")
-            .output()?;
+        let output = std::process::Command::new("true").output()?;
 
         assert!(check_zjj_exit_code(&output).is_ok());
         Ok(())
@@ -298,8 +297,7 @@ mod tests {
     #[test]
     fn test_check_zjj_exit_code_failure() -> Result<(), Box<dyn std::error::Error>> {
         // Mock failed exit using a real command
-        let output = std::process::Command::new("false")
-            .output()?;
+        let output = std::process::Command::new("false").output()?;
 
         let result = check_zjj_exit_code(&output);
         assert!(matches!(

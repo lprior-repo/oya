@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! BDD integration tests for agent assignment when beads become ready.
 //!
 //! This module tests the behavior described in bead src-1k71:
@@ -12,8 +13,6 @@
 //! When: Distribution runs
 //! Then: Bead is assigned to agent
 
-// Integration tests allow unwrap/panic for assertions
-
 use orchestrator::agent_swarm::{AgentHandle, AgentPool, PoolConfig};
 
 /// BDD Test: Registered agent is assigned a ready bead
@@ -22,14 +21,13 @@ use orchestrator::agent_swarm::{AgentHandle, AgentPool, PoolConfig};
 /// **When** a bead becomes ready for assignment
 /// **Then** the bead is assigned to the registered agent
 #[tokio::test]
-async fn given_registered_agent_when_bead_ready_then_assigned() {
+async fn given_registered_agent_when_bead_ready_then_assigned(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: An agent pool with one registered agent
     let pool = AgentPool::new(PoolConfig::for_testing());
 
     let agent = AgentHandle::new("agent-1");
-    pool.register_agent(agent)
-        .await
-        .expect("agent-1 registration should succeed");
+    pool.register_agent(agent).await?;
 
     // Verify agent is registered and idle
     let agent_state = pool.get_agent("agent-1").await;
@@ -38,7 +36,7 @@ async fn given_registered_agent_when_bead_ready_then_assigned() {
         "agent-1 should be registered in the pool"
     );
 
-    let agent = agent_state.expect("agent-1 exists");
+    let agent = agent_state.ok_or("agent-1 exists")?;
     assert_eq!(
         agent.state(),
         orchestrator::agent_swarm::AgentStateLegacy::Idle,
@@ -55,7 +53,7 @@ async fn given_registered_agent_when_bead_ready_then_assigned() {
         "Bead assignment should succeed when agent is available"
     );
 
-    let assigned_agent = assignment_result.expect("bead should be assigned");
+    let assigned_agent = assignment_result.map_err(|e| format!("bead assigned failed: {e:?}"))?;
     assert_eq!(
         assigned_agent, "agent-1",
         "Bead should be assigned to agent-1"
@@ -63,7 +61,7 @@ async fn given_registered_agent_when_bead_ready_then_assigned() {
 
     // Verify the agent is now working
     let agent_state = pool.get_agent("agent-1").await;
-    let agent = agent_state.expect("agent-1 should still exist");
+    let agent = agent_state.ok_or("agent-1 should still exist")?;
     assert_eq!(
         agent.state(),
         orchestrator::agent_swarm::AgentStateLegacy::Working,
@@ -75,6 +73,7 @@ async fn given_registered_agent_when_bead_ready_then_assigned() {
     assert_eq!(stats.idle, 0, "No idle agents should remain");
     assert_eq!(stats.working, 1, "One agent should be working");
     assert_eq!(stats.total, 1, "Total agent count should be 1");
+    Ok(())
 }
 
 /// BDD Test: Multiple agents with round-robin assignment
@@ -83,7 +82,8 @@ async fn given_registered_agent_when_bead_ready_then_assigned() {
 /// **When** multiple beads become ready
 /// **Then** beads are distributed among available agents
 #[tokio::test]
-async fn given_multiple_agents_when_multiple_beads_then_distributed() {
+async fn given_multiple_agents_when_multiple_beads_then_distributed(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: An agent pool with three registered agents
     let pool = AgentPool::new(PoolConfig::for_testing());
 
@@ -91,15 +91,9 @@ async fn given_multiple_agents_when_multiple_beads_then_distributed() {
     let agent_2 = AgentHandle::new("agent-b");
     let agent_3 = AgentHandle::new("agent-c");
 
-    pool.register_agent(agent_1)
-        .await
-        .expect("agent-a registration");
-    pool.register_agent(agent_2)
-        .await
-        .expect("agent-b registration");
-    pool.register_agent(agent_3)
-        .await
-        .expect("agent-c registration");
+    pool.register_agent(agent_1).await?;
+    pool.register_agent(agent_2).await?;
+    pool.register_agent(agent_3).await?;
 
     // Verify all agents are registered
     let stats = pool.stats().await;
@@ -125,12 +119,12 @@ async fn given_multiple_agents_when_multiple_beads_then_distributed() {
         "Third bead assignment should succeed"
     );
 
-    let agent_1 = bead_1_result.expect("bead-1 assigned");
-    let agent_2 = bead_2_result.expect("bead-2 assigned");
-    let agent_3 = bead_3_result.expect("bead-3 assigned");
+    let agent_1 = bead_1_result.map_err(|e| format!("bead-1 assigned failed: {e:?}"))?;
+    let agent_2 = bead_2_result.map_err(|e| format!("bead-2 assigned failed: {e:?}"))?;
+    let agent_3 = bead_3_result.map_err(|e| format!("bead-3 assigned failed: {e:?}"))?;
 
     // All three agents should have been assigned
-    let assigned_agents = vec![agent_1, agent_2, agent_3];
+    let assigned_agents = [agent_1, agent_2, agent_3];
     assert!(
         assigned_agents.contains(&"agent-a".to_string()),
         "agent-a should have been assigned a bead"
@@ -148,6 +142,7 @@ async fn given_multiple_agents_when_multiple_beads_then_distributed() {
     let stats = pool.stats().await;
     assert_eq!(stats.working, 3, "All three agents should be working");
     assert_eq!(stats.idle, 0, "No idle agents should remain");
+    Ok(())
 }
 
 /// BDD Test: Bead ready when no agents available returns error
@@ -156,7 +151,8 @@ async fn given_multiple_agents_when_multiple_beads_then_distributed() {
 /// **When** a bead becomes ready for assignment
 /// **Then** assignment fails with an appropriate error
 #[tokio::test]
-async fn given_no_agents_when_bead_ready_then_assignment_fails() {
+async fn given_no_agents_when_bead_ready_then_assignment_fails(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: An empty agent pool
     let pool = AgentPool::new(PoolConfig::for_testing());
 
@@ -173,15 +169,18 @@ async fn given_no_agents_when_bead_ready_then_assignment_fails() {
         "Bead assignment should fail when no agents are available"
     );
 
-    let error = assignment_result.expect_err("should return error");
+    let error = assignment_result
+        .map_err(|e| format!("should return error: {e:?}"))
+        .err()
+        .ok_or("Expected Err but got Ok")?;
     let error_msg = error.to_string();
     assert!(
         error_msg.contains("no agents")
             || error_msg.contains("available")
             || error_msg.contains("empty"),
-        "Error should indicate no agents available: {}",
-        error_msg
+        "Error should indicate no agents available: {error_msg}",
     );
+    Ok(())
 }
 
 /// BDD Test: Bead assignment when all agents are working
@@ -190,23 +189,20 @@ async fn given_no_agents_when_bead_ready_then_assignment_fails() {
 /// **When** a new bead becomes ready
 /// **Then** assignment fails or queues the bead
 #[tokio::test]
-async fn given_all_agents_working_when_new_bead_then_no_assignment() {
+async fn given_all_agents_working_when_new_bead_then_no_assignment(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: An agent pool with one agent that's already working
     let pool = AgentPool::new(PoolConfig::for_testing());
 
     let agent = AgentHandle::new("agent-busy");
-    pool.register_agent(agent)
-        .await
-        .expect("agent registration");
+    pool.register_agent(agent).await?;
 
     // Manually assign first bead to make agent working
-    pool.assign_bead_to_agent("bead-1", "agent-busy")
-        .await
-        .expect("first assignment");
+    pool.assign_bead_to_agent("bead-1", "agent-busy").await?;
 
     // Verify agent is working
     let agent_state = pool.get_agent("agent-busy").await;
-    let agent = agent_state.expect("agent should exist");
+    let agent = agent_state.ok_or("agent should exist")?;
     assert_eq!(
         agent.state(),
         orchestrator::agent_swarm::AgentStateLegacy::Working,
@@ -222,6 +218,7 @@ async fn given_all_agents_working_when_new_bead_then_no_assignment() {
         assignment_result.is_err(),
         "Assignment should fail when all agents are working"
     );
+    Ok(())
 }
 
 /// BDD Test: Agent completes bead and becomes available again
@@ -230,27 +227,24 @@ async fn given_all_agents_working_when_new_bead_then_no_assignment() {
 /// **When** the agent completes the bead
 /// **Then** the agent becomes available for new assignments
 #[tokio::test]
-async fn given_agent_completes_bead_when_bead_ready_then_reassigned() {
+async fn given_agent_completes_bead_when_bead_ready_then_reassigned(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: An agent pool with one working agent
     let pool = AgentPool::new(PoolConfig::for_testing());
 
     let agent = AgentHandle::new("agent-reuse");
-    pool.register_agent(agent)
-        .await
-        .expect("agent registration");
+    pool.register_agent(agent).await?;
 
     // Assign first bead
     let first_assignment = pool.assign_bead("bead-1").await;
     assert!(first_assignment.is_ok(), "First assignment should succeed");
 
     // When: Agent completes the bead
-    pool.complete_bead("agent-reuse")
-        .await
-        .expect("bead completion should succeed");
+    pool.complete_bead("agent-reuse").await?;
 
     // Verify agent is back to idle
     let agent_state = pool.get_agent("agent-reuse").await;
-    let agent = agent_state.expect("agent should exist");
+    let agent = agent_state.ok_or("agent should exist")?;
     assert_eq!(
         agent.state(),
         orchestrator::agent_swarm::AgentStateLegacy::Idle,
@@ -266,9 +260,10 @@ async fn given_agent_completes_bead_when_bead_ready_then_reassigned() {
         "Second assignment should succeed"
     );
 
-    let assigned_agent = second_assignment.expect("second bead assigned");
+    let assigned_agent = second_assignment.map_err(|e| format!("second bead assigned: {e:?}"))?;
     assert_eq!(
         assigned_agent, "agent-reuse",
         "Same agent should be assigned new bead"
     );
+    Ok(())
 }

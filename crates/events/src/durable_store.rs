@@ -298,7 +298,7 @@ pub struct DurableEventStore {
 
 impl DurableEventStore {
     /// Create a mock DurableEventStore for testing.
-    /// 
+    ///
     /// # Errors
     /// Returns an error if initialization fails.
     pub async fn mock() -> Result<Self> {
@@ -364,13 +364,20 @@ impl DurableEventStore {
             }
 
             let serialized: SerializedEvent = bincode::deserialize(&data).map_err(|e| {
-                crate::error::Error::serialization(format!("wal corrupt at {}: {}", path.display(), e))
+                crate::error::Error::serialization(format!(
+                    "wal corrupt at {}: {}",
+                    path.display(),
+                    e
+                ))
             })?;
 
             // Try to create in DB. Ignore duplicates (unique index will prevent them)
             let _ = self
                 .db
-                .create::<Option<SerializedEvent>>(("state_transition", serialized.event_id.clone()))
+                .create::<Option<SerializedEvent>>((
+                    "state_transition",
+                    serialized.event_id.clone(),
+                ))
                 .content(serialized)
                 .await;
         }

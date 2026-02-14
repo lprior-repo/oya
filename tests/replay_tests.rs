@@ -20,9 +20,10 @@
 #![deny(clippy::panic)]
 
 use oya_events::{
+    connect,
+    replay::{apply_event, apply_events, ApplyContext, EventSourcedState},
     BeadEvent, BeadId, BeadResult, BeadSpec, BeadState, Complexity, ConnectionConfig,
-    DurableEventStore, PhaseId, PhaseOutput, connect,
-    replay::{ApplyContext, EventSourcedState, apply_event, apply_events},
+    DurableEventStore, PhaseId, PhaseOutput,
 };
 use std::collections::HashMap;
 use tempfile::TempDir;
@@ -129,8 +130,8 @@ impl ReplayTestContext {
 }
 
 #[tokio::test]
-async fn given_recorded_events_when_replayed_then_state_matches_original()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_recorded_events_when_replayed_then_state_matches_original(
+) -> Result<(), Box<dyn std::error::Error>> {
     // ==========================================================================
     // GIVEN: A sequence of recorded events
     // ==========================================================================
@@ -238,56 +239,80 @@ async fn given_recorded_events_when_replayed_then_state_matches_original()
 }
 
 #[tokio::test]
-async fn given_multiple_beads_when_replayed_then_all_states_match()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_multiple_beads_when_replayed_then_all_states_match(
+) -> Result<(), Box<dyn std::error::Error>> {
     // GIVEN: Multiple beads with recorded events
     let context = ReplayTestContext::new().await?;
 
     // Bead 1: Simple lifecycle
     let bead1_id = BeadId::new();
-    let bead1_events = vec![
-        BeadEvent::created(
-            bead1_id,
-            BeadSpec::new("Bead 1").with_complexity(Complexity::Simple),
-        ),
-    ];
+    let bead1_events = vec![BeadEvent::created(
+        bead1_id,
+        BeadSpec::new("Bead 1").with_complexity(Complexity::Simple),
+    )];
     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     let mut bead1_events = bead1_events;
-    bead1_events.push(BeadEvent::state_changed(bead1_id, BeadState::Pending, BeadState::Scheduled));
+    bead1_events.push(BeadEvent::state_changed(
+        bead1_id,
+        BeadState::Pending,
+        BeadState::Scheduled,
+    ));
     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-    bead1_events.push(BeadEvent::completed(bead1_id, BeadResult::success(vec![1], 100)));
+    bead1_events.push(BeadEvent::completed(
+        bead1_id,
+        BeadResult::success(vec![1], 100),
+    ));
 
     // Bead 2: Full lifecycle
     let bead2_id = BeadId::new();
-    let mut bead2_events = vec![
-        BeadEvent::created(
-            bead2_id,
-            BeadSpec::new("Bead 2").with_complexity(Complexity::Medium),
-        ),
-    ];
+    let mut bead2_events = vec![BeadEvent::created(
+        bead2_id,
+        BeadSpec::new("Bead 2").with_complexity(Complexity::Medium),
+    )];
     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-    bead2_events.push(BeadEvent::state_changed(bead2_id, BeadState::Pending, BeadState::Scheduled));
+    bead2_events.push(BeadEvent::state_changed(
+        bead2_id,
+        BeadState::Pending,
+        BeadState::Scheduled,
+    ));
     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-    bead2_events.push(BeadEvent::state_changed(bead2_id, BeadState::Scheduled, BeadState::Ready));
+    bead2_events.push(BeadEvent::state_changed(
+        bead2_id,
+        BeadState::Scheduled,
+        BeadState::Ready,
+    ));
     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     bead2_events.push(BeadEvent::claimed(bead2_id, "agent-1"));
     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-    bead2_events.push(BeadEvent::state_changed(bead2_id, BeadState::Ready, BeadState::Running));
+    bead2_events.push(BeadEvent::state_changed(
+        bead2_id,
+        BeadState::Ready,
+        BeadState::Running,
+    ));
     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-    bead2_events.push(BeadEvent::completed(bead2_id, BeadResult::success(vec![1, 2], 200)));
+    bead2_events.push(BeadEvent::completed(
+        bead2_id,
+        BeadResult::success(vec![1, 2], 200),
+    ));
 
     // Bead 3: Failed lifecycle
     let bead3_id = BeadId::new();
-    let mut bead3_events = vec![
-        BeadEvent::created(
-            bead3_id,
-            BeadSpec::new("Bead 3").with_complexity(Complexity::Complex),
-        ),
-    ];
+    let mut bead3_events = vec![BeadEvent::created(
+        bead3_id,
+        BeadSpec::new("Bead 3").with_complexity(Complexity::Complex),
+    )];
     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-    bead3_events.push(BeadEvent::state_changed(bead3_id, BeadState::Pending, BeadState::Scheduled));
+    bead3_events.push(BeadEvent::state_changed(
+        bead3_id,
+        BeadState::Pending,
+        BeadState::Scheduled,
+    ));
     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-    bead3_events.push(BeadEvent::state_changed(bead3_id, BeadState::Scheduled, BeadState::Ready));
+    bead3_events.push(BeadEvent::state_changed(
+        bead3_id,
+        BeadState::Scheduled,
+        BeadState::Ready,
+    ));
     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     bead3_events.push(BeadEvent::claimed(bead3_id, "agent-2"));
     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
@@ -370,8 +395,8 @@ async fn given_multiple_beads_when_replayed_then_all_states_match()
 }
 
 #[tokio::test]
-async fn given_empty_event_log_when_replayed_then_state_remains_empty()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_empty_event_log_when_replayed_then_state_remains_empty(
+) -> Result<(), Box<dyn std::error::Error>> {
     // GIVEN: Empty event log
     let context = ReplayTestContext::new().await?;
     let bead_id = BeadId::new();
@@ -394,23 +419,29 @@ async fn given_empty_event_log_when_replayed_then_state_remains_empty()
 }
 
 #[tokio::test]
-async fn given_partial_event_sequence_when_replayed_then_state_is_partially_restored()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_partial_event_sequence_when_replayed_then_state_is_partially_restored(
+) -> Result<(), Box<dyn std::error::Error>> {
     // GIVEN: Partial event sequence (not completed)
     let context = ReplayTestContext::new().await?;
 
     let bead_id = BeadId::new();
 
-    let mut events = vec![
-        BeadEvent::created(
-            bead_id,
-            BeadSpec::new("Partial Bead").with_complexity(Complexity::Medium),
-        ),
-    ];
+    let mut events = vec![BeadEvent::created(
+        bead_id,
+        BeadSpec::new("Partial Bead").with_complexity(Complexity::Medium),
+    )];
     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-    events.push(BeadEvent::state_changed(bead_id, BeadState::Pending, BeadState::Scheduled));
+    events.push(BeadEvent::state_changed(
+        bead_id,
+        BeadState::Pending,
+        BeadState::Scheduled,
+    ));
     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-    events.push(BeadEvent::state_changed(bead_id, BeadState::Scheduled, BeadState::Ready));
+    events.push(BeadEvent::state_changed(
+        bead_id,
+        BeadState::Scheduled,
+        BeadState::Ready,
+    ));
 
     for event in &events {
         context.store.append_event(event).await?;

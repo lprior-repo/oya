@@ -8,10 +8,6 @@
 //! - Test with concurrent execution (tokio::spawn)
 //! - Verify cache + DB consistency
 
-#![deny(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-#![deny(clippy::panic)]
-
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;

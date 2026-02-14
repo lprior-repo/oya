@@ -529,7 +529,8 @@ mod tests {
     }
 
     #[test]
-    fn test_guest_message_subscribe_events_serialization() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_guest_message_subscribe_events_serialization() -> Result<(), Box<dyn std::error::Error>>
+    {
         let msg = GuestMessage::SubscribeEvents {
             event_types: vec!["build".to_string(), "deploy".to_string()],
         };
@@ -548,7 +549,8 @@ mod tests {
     }
 
     #[test]
-    fn test_guest_message_unsubscribe_events_serialization() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_guest_message_unsubscribe_events_serialization()
+    -> Result<(), Box<dyn std::error::Error>> {
         let msg = GuestMessage::UnsubscribeEvents;
 
         let json = serde_json::to_string(&msg)?;

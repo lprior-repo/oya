@@ -58,21 +58,39 @@ impl AffinityStrategy {
     /// Set the capability weight.
     #[must_use]
     pub const fn with_capability_weight(mut self, weight: f64) -> Self {
-        self.capability_weight = weight.clamp(0.0, 1.0);
+        self.capability_weight = if weight < 0.0 {
+            0.0
+        } else if weight > 1.0 {
+            1.0
+        } else {
+            weight
+        };
         self
     }
 
     /// Set the preference weight.
     #[must_use]
     pub const fn with_preference_weight(mut self, weight: f64) -> Self {
-        self.preference_weight = weight.clamp(0.0, 1.0);
+        self.preference_weight = if weight < 0.0 {
+            0.0
+        } else if weight > 1.0 {
+            1.0
+        } else {
+            weight
+        };
         self
     }
 
     /// Set the load weight.
     #[must_use]
     pub const fn with_load_weight(mut self, weight: f64) -> Self {
-        self.load_weight = weight.clamp(0.0, 1.0);
+        self.load_weight = if weight < 0.0 {
+            0.0
+        } else if weight > 1.0 {
+            1.0
+        } else {
+            weight
+        };
         self
     }
 

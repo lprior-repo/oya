@@ -535,10 +535,7 @@ mod tests {
         let result = parse_command(":filter");
         assert!(result.is_err());
         if let Err(e) = result {
-            assert_eq!(
-                e,
-                ParseError::MissingArgument("filter".to_string())
-            );
+            assert_eq!(e, ParseError::MissingArgument("filter".to_string()));
         }
     }
 
@@ -548,10 +545,7 @@ mod tests {
         assert!(result.is_err());
         // Should return MissingArgument since split_whitespace() removes all spaces
         if let Err(e) = result {
-            assert_eq!(
-                e,
-                ParseError::MissingArgument("filter".to_string())
-            );
+            assert_eq!(e, ParseError::MissingArgument("filter".to_string()));
         }
     }
 
@@ -562,10 +556,7 @@ mod tests {
         let result = parse_command(":filter");
         assert!(result.is_err());
         if let Err(e) = result {
-            assert_eq!(
-                e,
-                ParseError::MissingArgument("filter".to_string())
-            );
+            assert_eq!(e, ParseError::MissingArgument("filter".to_string()));
         }
     }
 
@@ -827,10 +818,7 @@ mod tests {
         let result = parse_command(":export");
         assert!(result.is_err());
         if let Err(e) = result {
-            assert_eq!(
-                e,
-                ParseError::MissingArgument("export".to_string())
-            );
+            assert_eq!(e, ParseError::MissingArgument("export".to_string()));
         }
     }
 
@@ -839,10 +827,7 @@ mod tests {
         let result = parse_command(":export    ");
         assert!(result.is_err());
         if let Err(e) = result {
-            assert_eq!(
-                e,
-                ParseError::MissingArgument("export".to_string())
-            );
+            assert_eq!(e, ParseError::MissingArgument("export".to_string()));
         }
     }
 
@@ -979,10 +964,7 @@ mod tests {
         let result = parse_command(":sort");
         assert!(result.is_err());
         if let Err(e) = result {
-            assert_eq!(
-                e,
-                ParseError::MissingArgument("sort".to_string())
-            );
+            assert_eq!(e, ParseError::MissingArgument("sort".to_string()));
         }
     }
 
@@ -1100,10 +1082,7 @@ mod tests {
         let result = parse_command(":goto");
         assert!(result.is_err());
         if let Err(e) = result {
-            assert_eq!(
-                e,
-                ParseError::MissingArgument("goto".to_string())
-            );
+            assert_eq!(e, ParseError::MissingArgument("goto".to_string()));
         }
     }
 
@@ -1112,10 +1091,7 @@ mod tests {
         let result = parse_command(":goto    ");
         assert!(result.is_err());
         if let Err(e) = result {
-            assert_eq!(
-                e,
-                ParseError::MissingArgument("goto".to_string())
-            );
+            assert_eq!(e, ParseError::MissingArgument("goto".to_string()));
         }
     }
 

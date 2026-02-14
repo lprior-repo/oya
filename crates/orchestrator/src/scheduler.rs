@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::dag::{DagError, DependencyType, WorkflowDAG};
 use crate::{Error, Result};
-use oya_pipeline::{Stage, pipeline_stage_edges};
+use oya_pipeline::{pipeline_stage_edges, Stage};
 
 // Re-export types from DAG module
 pub use crate::dag::BeadId;
@@ -73,7 +73,9 @@ impl WorkflowState {
     /// - The DAG structure becomes invalid due to the addition
     /// - Internal graph operations fail
     pub fn add_bead(&mut self, bead_id: BeadId) -> Result<()> {
-        self.dag.add_node(bead_id).map_err(|e| dag_error_to_error(&e))
+        self.dag
+            .add_node(bead_id)
+            .map_err(|e| dag_error_to_error(&e))
     }
 
     /// Add a dependency between beads
@@ -1378,11 +1380,7 @@ mod tests {
         state.add_bead(bead_b.clone()).ok();
 
         // WHEN: Adding a dependency from bead_a to bead_b
-        let result = state.add_dependency(
-            bead_a.clone(),
-            bead_b.clone(),
-            DependencyType::BlockingDependency,
-        );
+        let result = state.add_dependency(&bead_a, &bead_b, DependencyType::BlockingDependency);
 
         // THEN: The dependency should be tracked in the DAG
         assert!(result.is_ok(), "add_dependency should succeed");
@@ -1545,18 +1543,10 @@ mod tests {
         state.add_bead(root_2.clone()).ok();
         state.add_bead(child.clone()).ok();
         state
-            .add_dependency(
-                root_1.clone(),
-                child.clone(),
-                DependencyType::BlockingDependency,
-            )
+            .add_dependency(&root_1, &child, DependencyType::BlockingDependency)
             .ok();
         state
-            .add_dependency(
-                root_2.clone(),
-                child.clone(),
-                DependencyType::BlockingDependency,
-            )
+            .add_dependency(&root_2, &child, DependencyType::BlockingDependency)
             .ok();
 
         // WHEN: Getting ready beads with nothing completed
@@ -1582,18 +1572,10 @@ mod tests {
         state.add_bead(bead_b.clone()).ok();
         state.add_bead(bead_c.clone()).ok();
         state
-            .add_dependency(
-                bead_a.clone(),
-                bead_b.clone(),
-                DependencyType::BlockingDependency,
-            )
+            .add_dependency(&bead_a, &bead_b, DependencyType::BlockingDependency)
             .ok();
         state
-            .add_dependency(
-                bead_b.clone(),
-                bead_c.clone(),
-                DependencyType::BlockingDependency,
-            )
+            .add_dependency(&bead_b, &bead_c, DependencyType::BlockingDependency)
             .ok();
 
         // Initially only a is ready
@@ -1642,11 +1624,7 @@ mod tests {
         state.add_bead(root.clone()).ok();
         state.add_bead(dependent.clone()).ok();
         state
-            .add_dependency(
-                root.clone(),
-                dependent.clone(),
-                DependencyType::BlockingDependency,
-            )
+            .add_dependency(&root, &dependent, DependencyType::BlockingDependency)
             .ok();
 
         // Root is ready immediately
@@ -1679,11 +1657,7 @@ mod tests {
         state.add_bead(blocker.clone()).ok();
         state.add_bead(blocked.clone()).ok();
         state
-            .add_dependency(
-                blocker.clone(),
-                blocked.clone(),
-                DependencyType::BlockingDependency,
-            )
+            .add_dependency(&blocker, &blocked, DependencyType::BlockingDependency)
             .ok();
 
         // WHEN: Checking if the blocked bead is ready (blocker not completed)
@@ -1713,12 +1687,9 @@ mod tests {
         let bead_id = "bead-456".to_string();
         let worker_id = "worker-789".to_string();
 
-        scheduler
-            .register_workflow(workflow_id)?;
-        scheduler
-            .schedule_bead("workflow-123".to_string(), bead_id.clone())?;
-        scheduler
-            .assign_to_worker(&bead_id, worker_id)?;
+        scheduler.register_workflow(workflow_id)?;
+        scheduler.schedule_bead("workflow-123".to_string(), bead_id.clone())?;
+        scheduler.assign_to_worker(&bead_id, worker_id)?;
 
         assert_eq!(
             scheduler.stats().assigned_count,
@@ -1750,12 +1721,9 @@ mod tests {
         let workflow_id = "workflow-123".to_string();
         let bead_id = "bead-456".to_string();
 
-        scheduler
-            .register_workflow(workflow_id)?;
-        scheduler
-            .schedule_bead("workflow-123".to_string(), bead_id.clone())?;
-        scheduler
-            .handle_bead_completed(&bead_id)?;
+        scheduler.register_workflow(workflow_id)?;
+        scheduler.schedule_bead("workflow-123".to_string(), bead_id.clone())?;
+        scheduler.handle_bead_completed(&bead_id)?;
 
         assert_eq!(
             scheduler.stats().assigned_count,
@@ -1781,12 +1749,9 @@ mod tests {
         let workflow_id = "workflow-123".to_string();
         let bead_id = "bead-456".to_string();
 
-        scheduler
-            .register_workflow(workflow_id)?;
-        scheduler
-            .schedule_bead("workflow-123".to_string(), bead_id.clone())?;
-        scheduler
-            .mark_ready(&bead_id)?;
+        scheduler.register_workflow(workflow_id)?;
+        scheduler.schedule_bead("workflow-123".to_string(), bead_id.clone())?;
+        scheduler.mark_ready(&bead_id)?;
 
         assert_eq!(scheduler.ready_count(), 1, "should have 1 ready bead");
         assert_eq!(
@@ -1813,10 +1778,8 @@ mod tests {
         let workflow_id = "workflow-123".to_string();
         let bead_id = "bead-456".to_string();
 
-        scheduler
-            .register_workflow(workflow_id)?;
-        scheduler
-            .schedule_bead("workflow-123".to_string(), bead_id.clone())?;
+        scheduler.register_workflow(workflow_id)?;
+        scheduler.schedule_bead("workflow-123".to_string(), bead_id.clone())?;
 
         assert_eq!(scheduler.pending_count(), 1, "should have 1 pending bead");
         assert_eq!(

@@ -5,10 +5,6 @@
 //! - Concurrent execution → only one executes, others get cached result
 //! - Execute-once guarantee under load
 
-#![deny(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-#![deny(clippy::panic)]
-
 use proptest::prelude::*;
 use std::collections::HashMap;
 use std::sync::Arc;

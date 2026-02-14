@@ -10,7 +10,7 @@
 #![cfg_attr(test, allow(clippy::unwrap_used))]
 #![cfg_attr(test, allow(clippy::panic))]
 
-use axum::{Json, Router, http::Method, routing::get};
+use axum::{http::Method, routing::get, Json, Router};
 use serde::{Deserialize, Serialize};
 use tower::ServiceBuilder;
 use tower_http::{

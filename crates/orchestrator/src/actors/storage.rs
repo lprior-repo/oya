@@ -12,8 +12,8 @@
 pub mod surreal_integration;
 
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort};
-use surrealdb::Surreal;
 use surrealdb::engine::local::{Db, RocksDb};
+use surrealdb::Surreal;
 use tracing::{error, info};
 
 use crate::actors::errors::ActorError;
@@ -21,8 +21,8 @@ use crate::actors::supervisor::GenericSupervisableActor;
 
 // Re-export event types for convenience
 pub use oya_events::{
-    BeadEvent, BeadId, BeadResult, BeadSpec, BeadState, Complexity, PhaseId, PhaseOutput,
-    durable_store::DurableEventStore,
+    durable_store::DurableEventStore, BeadEvent, BeadId, BeadResult, BeadSpec, BeadState,
+    Complexity, PhaseId, PhaseOutput,
 };
 
 /// State record stored in `SurrealDB`.
@@ -586,12 +586,11 @@ mod tests {
         let data = vec![1, 2, 3, 4, 5];
 
         // Test SaveState (fire-and-forget)
-        actor
-            .send_message(StateManagerMessage::SaveState {
-                key: key.clone(),
-                data: data.clone(),
-                version: None,
-            })?;
+        actor.send_message(StateManagerMessage::SaveState {
+            key: key.clone(),
+            data: data.clone(),
+            version: None,
+        })?;
 
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
@@ -608,11 +607,7 @@ mod tests {
         assert!(loaded.is_ok(), "LoadState should succeed");
         let loaded_data = loaded.map_err(|e| format!("Outer failed: {e}"))?;
         let final_data = loaded_data.map_err(|e| format!("Inner failed: {e}"))?;
-        assert_eq!(
-            final_data,
-            data,
-            "Loaded data should match saved data"
-        );
+        assert_eq!(final_data, data, "Loaded data should match saved data");
 
         actor.stop(None);
         handle.await?;
@@ -639,17 +634,15 @@ mod tests {
         let data = vec![10, 20, 30];
 
         // Save then delete
-        actor
-            .send_message(StateManagerMessage::SaveState {
-                key: key.clone(),
-                data,
-                version: None,
-            })?;
+        actor.send_message(StateManagerMessage::SaveState {
+            key: key.clone(),
+            data,
+            version: None,
+        })?;
 
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-        actor
-            .send_message(StateManagerMessage::DeleteState { key: key.clone() })?;
+        actor.send_message(StateManagerMessage::DeleteState { key: key.clone() })?;
 
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
@@ -706,12 +699,11 @@ mod tests {
         assert!(!result, "key should not exist initially");
 
         // Save key
-        actor
-            .send_message(StateManagerMessage::SaveState {
-                key: key.clone(),
-                data: vec![1, 2, 3],
-                version: None,
-            })?;
+        actor.send_message(StateManagerMessage::SaveState {
+            key: key.clone(),
+            data: vec![1, 2, 3],
+            version: None,
+        })?;
 
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
@@ -753,21 +745,19 @@ mod tests {
 
         // Save multiple keys with different prefixes
         for i in 1..=3 {
-            actor
-                .send_message(StateManagerMessage::SaveState {
-                    key: format!("workflow:{}", i),
-                    data: vec![i as u8],
-                    version: None,
-                })?;
+            actor.send_message(StateManagerMessage::SaveState {
+                key: format!("workflow:{}", i),
+                data: vec![i as u8],
+                version: None,
+            })?;
         }
 
         for i in 1..=2 {
-            actor
-                .send_message(StateManagerMessage::SaveState {
-                    key: format!("checkpoint:{}", i),
-                    data: vec![i as u8],
-                    version: None,
-                })?;
+            actor.send_message(StateManagerMessage::SaveState {
+                key: format!("checkpoint:{}", i),
+                data: vec![i as u8],
+                version: None,
+            })?;
         }
 
         tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
@@ -828,12 +818,11 @@ mod tests {
         let key = "versioned_key".to_string();
 
         // Save with version
-        actor
-            .send_message(StateManagerMessage::SaveState {
-                key: key.clone(),
-                data: vec![1, 2, 3],
-                version: Some(5),
-            })?;
+        actor.send_message(StateManagerMessage::SaveState {
+            key: key.clone(),
+            data: vec![1, 2, 3],
+            version: Some(5),
+        })?;
 
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
@@ -905,7 +894,10 @@ mod tests {
 
         assert!(append_result.is_ok(), "AppendEvent should succeed");
         let inner_result = append_result.map_err(|e| format!("Outer failed: {e}"))?;
-        assert!(inner_result.is_ok(), "AppendEvent inner result should be Ok");
+        assert!(
+            inner_result.is_ok(),
+            "AppendEvent inner result should be Ok"
+        );
 
         // Read events
         let events = ractor::call_t!(
@@ -917,11 +909,7 @@ mod tests {
         assert!(events.is_ok(), "ReadEvents should succeed");
         let event_list_res = events.map_err(|e| format!("Outer failed: {e}"))?;
         let event_list = event_list_res.map_err(|e| format!("Inner failed: {e}"))?;
-        assert_eq!(
-            event_list.len(),
-            1,
-            "Should have one event"
-        );
+        assert_eq!(event_list.len(), 1, "Should have one event");
 
         actor.stop(None);
         handle.await?;

@@ -238,8 +238,11 @@ async fn test_worker_assignment_update() -> Result<(), String> {
         .take(0)
         .map_err(|e| format!("Should get result: {e}"))?;
     assert_eq!(assignments.len(), 1, "Should find exactly one assignment");
-    assert_eq!(assignments[0].worker_id, "worker-e", "Worker ID should be updated");
-    
+    assert_eq!(
+        assignments[0].worker_id, "worker-e",
+        "Worker ID should be updated"
+    );
+
     Ok(())
 }
 

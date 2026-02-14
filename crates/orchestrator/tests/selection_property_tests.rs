@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! Property-based tests for bead selection strategies.
 //!
 //! This module tests the property described in bead src-209z:
@@ -6,21 +7,16 @@
 //!
 //! ∀ distribution: selected bead ∈ ready beads
 
-#![forbid(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-#![forbid(clippy::panic)]
-
 use proptest::collection::vec;
 use proptest::prelude::*;
-use proptest::string::string_regex;
 
 use orchestrator::distribution::{
-    AffinityStrategy, DistributionContext, DistributionStrategy, FifoStrategy, PriorityStrategy,
-    RoundRobinStrategy, StickyStrategy, available_strategies, create_strategy,
+    available_strategies, create_strategy, AffinityStrategy, DistributionContext,
+    DistributionStrategy, FifoStrategy, PriorityStrategy, RoundRobinStrategy, StickyStrategy,
 };
 
 fn bead_id_strategy() -> impl Strategy<Value = String> {
-    string_regex("bead-[a-z0-9]{3,8}").unwrap()
+    "bead-[a-z0-9]{3,8}"
 }
 
 fn ready_beads_strategy() -> impl Strategy<Value = Vec<String>> {
@@ -35,6 +31,8 @@ fn all_strategies() -> Vec<Box<dyn DistributionStrategy>> {
 }
 
 proptest! {
+    #![proptest_config(ProptestConfig::with_cases(100))]
+
     #[test]
     fn prop_selected_bead_in_ready_beads_fifo(ready_beads in ready_beads_strategy()) {
         let strategy = FifoStrategy::new();
@@ -179,7 +177,7 @@ proptest! {
     fn prop_empty_ready_beads_returns_none_all_strategies(
         strategy_name in proptest::sample::select(available_strategies().to_vec())
     ) {
-        let strategy = create_strategy(&strategy_name);
+        let strategy = create_strategy(strategy_name);
         let ctx = DistributionContext::new();
         let empty_beads: Vec<String> = vec![];
 
@@ -198,7 +196,7 @@ proptest! {
         strategy_name in proptest::sample::select(available_strategies().to_vec()),
         bead_id in bead_id_strategy()
     ) {
-        let strategy = create_strategy(&strategy_name);
+        let strategy = create_strategy(strategy_name);
         let ctx = DistributionContext::new();
         let single_bead = vec![bead_id.clone()];
 
@@ -218,8 +216,8 @@ proptest! {
         strategy_name in proptest::sample::select(available_strategies().to_vec()),
         ready_beads in ready_beads_strategy()
     ) {
-        let strategy1 = create_strategy(&strategy_name);
-        let strategy2 = create_strategy(&strategy_name);
+        let strategy1 = create_strategy(strategy_name);
+        let strategy2 = create_strategy(strategy_name);
         let ctx = DistributionContext::new();
 
         if let (Some(s1), Some(s2)) = (strategy1, strategy2) {

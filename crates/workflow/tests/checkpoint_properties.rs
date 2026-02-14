@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! Property-based tests for checkpoint/resume cycle.
 //!
 //! Uses proptest to exhaustively test checkpoint operations with randomly generated data.
@@ -7,10 +8,6 @@
 //! - Round-trip: Any serializable state can be checkpointed and restored exactly
 //! - Compression: Compressible data achieves size reduction
 //! - Storage integrity: Checkpoint ID is preserved across store/load operations
-
-#![forbid(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-#![forbid(clippy::panic)]
 
 use std::collections::HashMap;
 
@@ -45,7 +42,7 @@ struct BeadState {
 }
 
 fn workflow_id_strategy() -> impl Strategy<Value = String> {
-    string_regex("(wf|workflow|job)-[a-z0-9]{1,8}").unwrap()
+    "(wf|workflow|job)-[a-z0-9]{1,8}"
 }
 
 fn phase_strategy() -> impl Strategy<Value = String> {
@@ -54,21 +51,17 @@ fn phase_strategy() -> impl Strategy<Value = String> {
         Just("test".to_string()),
         Just("review".to_string()),
         Just("deploy".to_string()),
-        string_regex("[a-z_]{3,12}").unwrap(),
+        "[a-z_]{3,12}",
     ]
 }
 
 fn metadata_strategy() -> impl Strategy<Value = HashMap<String, String>> {
-    hash_map(
-        string_regex("[a-z_]{2,8}").unwrap(),
-        string_regex("[a-z0-9]{2,16}").unwrap(),
-        0..5,
-    )
+    hash_map("[a-z_]{2,8}", "[a-z0-9]{2,16}", 0..5)
 }
 
 fn bead_state_strategy() -> impl Strategy<Value = BeadState> {
     (
-        string_regex("bead-[a-z0-9]{4}").unwrap(),
+        "bead-[a-z0-9]{4}",
         prop_oneof![
             Just("pending".to_string()),
             Just("running".to_string()),
@@ -76,7 +69,7 @@ fn bead_state_strategy() -> impl Strategy<Value = BeadState> {
             Just("failed".to_string()),
         ],
         0..10u32,
-        proptest::option::of(string_regex("[a-z ]{5,30}").unwrap()),
+        proptest::option::of("[a-z ]{5,30}"),
     )
         .prop_map(|(bead_id, status, attempts, last_error)| BeadState {
             bead_id,

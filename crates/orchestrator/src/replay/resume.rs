@@ -9,12 +9,12 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use surrealdb::sql::Datetime as SurrealDatetime;
-use tokio::runtime::Runtime;
+use tokio::runtime::{Handle, Runtime};
 
-use oya_events::Error as OyaError;
 use oya_events::replay::resume::{
     CheckpointData, CheckpointId, CheckpointStore, EventLog, EventMetadata,
 };
+use oya_events::Error as OyaError;
 
 use crate::persistence::OrchestratorStore;
 
@@ -30,10 +30,18 @@ impl OrchestratorCheckpointStore {
     pub const fn new(store: Arc<OrchestratorStore>) -> Self {
         Self { store }
     }
+}
 
-    fn new_runtime() -> Result<Runtime, OyaError> {
+fn run_async<F, T>(future: F) -> Result<T, OyaError>
+where
+    F: std::future::Future<Output = T>,
+{
+    if let Ok(handle) = Handle::try_current() {
+        Ok(tokio::task::block_in_place(|| handle.block_on(future)))
+    } else {
         Runtime::new()
             .map_err(|err| OyaError::Internal(format!("tokio runtime creation failed: {err}")))
+            .map(|rt| rt.block_on(future))
     }
 }
 
@@ -42,18 +50,18 @@ impl CheckpointStore for OrchestratorCheckpointStore {
         &self,
         checkpoint_id: &CheckpointId,
     ) -> Result<Option<(CheckpointData, DateTime<Utc>)>, OyaError> {
-        let runtime = Self::new_runtime()?;
-        runtime
-            .block_on(self.store.get_checkpoint(checkpoint_id.as_str()))
-            .map_err(|e| OyaError::Internal(format!("checkpoint load failed: {e}")))
-            .map(|record| {
-                let checkpoint_data = CheckpointData {
-                    state: record.scheduler_state.into_bytes(),
-                    sequence_number: record.event_sequence,
-                    compressed: false,
-                };
-                Some((checkpoint_data, record.created_at))
-            })
+        let store = self.store.clone();
+        let id = checkpoint_id.as_str().to_string();
+        let record = run_async(async move { store.get_checkpoint(&id).await })
+            .map_err(|e| OyaError::Internal(format!("checkpoint load failed: {e}")))?
+            .map_err(|e| OyaError::Internal(format!("checkpoint fetch failed: {e}")))?;
+        
+        let checkpoint_data = CheckpointData {
+            state: record.scheduler_state.into_bytes(),
+            sequence_number: record.event_sequence,
+            compressed: false,
+        };
+        Ok(Some((checkpoint_data, record.created_at)))
     }
 
     fn validate_timestamp(
@@ -61,11 +69,12 @@ impl CheckpointStore for OrchestratorCheckpointStore {
         checkpoint_id: &CheckpointId,
         checkpoint_timestamp: DateTime<Utc>,
     ) -> Result<bool, OyaError> {
-        let runtime = Self::new_runtime()?;
-        runtime
-            .block_on(self.store.get_checkpoint(checkpoint_id.as_str()))
-            .map_err(|e| OyaError::Internal(format!("checkpoint validation failed: {e}")))
-            .map(|record| record.created_at == checkpoint_timestamp)
+        let store = self.store.clone();
+        let id = checkpoint_id.as_str().to_string();
+        let record = run_async(async move { store.get_checkpoint(&id).await })
+            .map_err(|e| OyaError::Internal(format!("checkpoint validation failed: {e}")))?
+            .map_err(|e| OyaError::Internal(format!("checkpoint fetch failed: {e}")))?;
+        Ok(record.created_at == checkpoint_timestamp)
     }
 }
 
@@ -81,11 +90,6 @@ impl OrchestratorEventLog {
     pub const fn new(store: Arc<OrchestratorStore>) -> Self {
         Self { store }
     }
-
-    fn new_runtime() -> Result<Runtime, OyaError> {
-        Runtime::new()
-            .map_err(|err| OyaError::Internal(format!("tokio runtime creation failed: {err}")))
-    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -97,15 +101,16 @@ struct EventRow {
 
 impl EventLog for OrchestratorEventLog {
     fn load_events_after(&self, timestamp: DateTime<Utc>) -> Result<Vec<EventMetadata>, OyaError> {
-        let runtime = Self::new_runtime()?;
         let surreal_timestamp = SurrealDatetime::from(timestamp);
-        let mut response = runtime.block_on(async {
-            self.store
+        let store = self.store.clone();
+        let mut response = run_async(async move {
+            store
                 .db()
                 .query("SELECT event_id, sequence, timestamp FROM orchestrator_event WHERE timestamp > $timestamp ORDER BY timestamp ASC, sequence ASC")
                 .bind(("timestamp", surreal_timestamp))
                 .await
         })
+        .map_err(|e| OyaError::Internal(format!("async execution failed: {e}")))?
         .map_err(|e| OyaError::Internal(format!("query execution failed: {e}")))?;
 
         let rows: Vec<EventRow> = response

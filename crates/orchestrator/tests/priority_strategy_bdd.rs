@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! BDD integration tests for priority strategy.
 //!
 //! This module tests the behavior described in bead src-8a7n:

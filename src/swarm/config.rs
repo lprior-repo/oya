@@ -222,8 +222,8 @@ mod tests {
         assert_eq!(config.test_writers, 4);
         assert_eq!(config.implementers, 4);
         assert_eq!(config.reviewers, 4);
-        assert_eq!(config.planner, true);
-        assert_eq!(config.continuous_deployment, true);
+        assert!(config.planner);
+        assert!(config.continuous_deployment);
         assert_eq!(config.total_agents(), 13);
     }
 
@@ -235,18 +235,24 @@ mod tests {
 
     #[test]
     fn test_config_validate_zero_target() {
-        let mut config = SwarmConfig::default();
-        config.target_beads = 0;
+        let config = SwarmConfig {
+            target_beads: 0,
+            ..SwarmConfig::default()
+        };
         assert!(config.validate().is_err());
     }
 
     #[test]
     fn test_config_validate_continuous_deployment_required() {
-        let mut config = SwarmConfig::default();
-        config.continuous_deployment = false;
+        let config = SwarmConfig {
+            continuous_deployment: false,
+            ..SwarmConfig::default()
+        };
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("CANNOT be disabled"));
+        if let Err(e) = result {
+            assert!(e.contains("CANNOT be disabled"));
+        }
     }
 
     #[test]

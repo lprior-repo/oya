@@ -1,11 +1,12 @@
 //! Workflow execution engine.
 
+#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::time::Instant;
 
 use chrono::Utc;
-use itertools::Itertools;
 use std::env;
 
 use tracing::{debug, error, info, warn};
@@ -99,7 +100,7 @@ impl WorkflowEngine {
                 // have the same name but are NOT the same thing.
                 // Given the current implementation of register_fallback_chain,
                 // it's always the same name.
-                
+
                 // Let's just ensure we don't have any name used in both maps
                 // that wasn't intended.
                 // For now, simpler: just don't count it as a duplicate if it's in both.
@@ -341,8 +342,8 @@ impl WorkflowEngine {
         phase: &crate::types::Phase,
         output: &PhaseOutput,
     ) -> Result<()> {
-        let checkpoint =
-            Checkpoint::new(phase.id(), Vec::new(), Vec::new()).with_outputs((*output.data).clone());
+        let checkpoint = Checkpoint::new(phase.id(), Vec::new(), Vec::new())
+            .with_outputs((*output.data).clone());
 
         self.storage
             .save_checkpoint(workflow.id, &checkpoint)
@@ -624,15 +625,18 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_missing_handler() {
+    async fn test_missing_handler() -> Result<()> {
         let (engine, _) = setup_engine();
         let workflow = Workflow::new("unknown").add_phase(Phase::new("unknown_phase"));
 
-        let result = engine.run(workflow).await;
-        assert!(result.is_ok());
-        let result = result.unwrap();
+        let result = engine.run(workflow).await?;
         assert_eq!(result.state, WorkflowState::Failed);
-        assert!(result.error.unwrap().contains("Handler not found"));
+        assert!(result
+            .error
+            .as_ref()
+            .map(|e| e.contains("Handler not found"))
+            .unwrap_or(false));
+        Ok(())
     }
 
     #[tokio::test]
@@ -695,7 +699,8 @@ mod tests {
             if let Some(error) = workflow_result.error {
                 assert!(
                     error.contains("all handlers"),
-                    "Error should mention all handlers failed, got: {}", error
+                    "Error should mention all handlers failed, got: {}",
+                    error
                 );
             }
         }
@@ -970,7 +975,12 @@ mod tests {
         assert!(rewound.is_ok());
 
         // Current phase should be set to index 2 (next phase after test)
-        assert_eq!(rewound.map(|w| w.current_phase_index()).map_or(999, |idx| idx), 2);
+        assert_eq!(
+            rewound
+                .map(|w| w.current_phase_index())
+                .map_or(999, |idx| idx),
+            2
+        );
     }
 
     #[tokio::test]

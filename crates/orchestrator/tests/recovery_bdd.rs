@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! BDD Integration Tests: Checkpoint Recovery After Crash
 //!
 //! This module tests the checkpoint recovery functionality for the scheduler:
@@ -15,9 +16,6 @@
 //! Then: State is restored from checkpoint
 
 // Integration tests allow unwrap/panic for assertions
-#![allow(clippy::unwrap_used)]
-#![allow(clippy::expect_used)]
-#![allow(clippy::panic)]
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -64,8 +62,8 @@ struct PendingBeadCheckpoint {
 // =============================================================================
 
 /// Create a scheduler actor with shutdown coordinator.
-async fn setup_scheduler_with_checkpoint()
--> Result<(ActorRef<SchedulerMessage>, Arc<ShutdownCoordinator>), Box<dyn std::error::Error>> {
+async fn setup_scheduler_with_checkpoint(
+) -> Result<(ActorRef<SchedulerMessage>, Arc<ShutdownCoordinator>), Box<dyn std::error::Error>> {
     let coordinator = Arc::new(ShutdownCoordinator::new());
     let args = SchedulerArguments::new().with_shutdown_coordinator(coordinator.clone());
 
@@ -157,8 +155,8 @@ async fn verify_workflow_restored(
 /// **When:** Scheduler restarts and loads the checkpoint
 /// **Then:** State is restored from checkpoint with all workflow data intact
 #[tokio::test]
-async fn given_checkpoint_created_when_scheduler_crashes_then_recovers_state()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_checkpoint_created_when_scheduler_crashes_then_recovers_state(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Step 1: Setup checkpoint store with workflow state
     let workflow_id = "test-workflow-1".to_string();
     let bead_ids = vec![
@@ -218,8 +216,8 @@ async fn given_checkpoint_created_when_scheduler_crashes_then_recovers_state()
 /// **When:** Scheduler restarts
 /// **Then:** All workflows are restored with correct state
 #[tokio::test]
-async fn given_checkpoint_with_multiple_workflows_when_crashes_then_restores_all()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_checkpoint_with_multiple_workflows_when_crashes_then_restores_all(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Create checkpoint with multiple workflows
     let workflow1_state = WorkflowCheckpoint {
         workflow_id: "wf-1".to_string(),
@@ -269,8 +267,8 @@ async fn given_checkpoint_with_multiple_workflows_when_crashes_then_restores_all
 /// **When:** A checkpoint is created
 /// **Then:** The checkpoint contains all scheduler state
 #[tokio::test]
-async fn given_scheduler_with_workflows_when_checkpoint_then_state_persisted()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_scheduler_with_workflows_when_checkpoint_then_state_persisted(
+) -> Result<(), Box<dyn std::error::Error>> {
     let (scheduler, coordinator) = setup_scheduler_with_checkpoint().await?;
 
     // Register a workflow and add beads
@@ -345,8 +343,8 @@ async fn given_scheduler_with_workflows_when_checkpoint_then_state_persisted()
 /// **When:** Scheduler starts
 /// **Then:** Scheduler starts with empty state (no error)
 #[tokio::test]
-async fn given_empty_checkpoint_when_scheduler_starts_then_empty_state()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_empty_checkpoint_when_scheduler_starts_then_empty_state(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Scheduler can start without checkpoint
     let (scheduler, _coordinator) = setup_scheduler_with_checkpoint().await?;
 

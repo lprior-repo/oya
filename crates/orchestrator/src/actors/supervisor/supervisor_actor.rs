@@ -893,7 +893,8 @@ mod tests {
     }
 
     #[test]
-    fn test_supervisor_arguments_with_checkpoint_config() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_supervisor_arguments_with_checkpoint_config() -> Result<(), Box<dyn std::error::Error>>
+    {
         let checkpoint_config = CheckpointConfig {
             interval: Duration::from_secs(60),
             max_checkpoints: 5,
@@ -903,7 +904,10 @@ mod tests {
         let args = SupervisorArguments::new().with_checkpoint_config(checkpoint_config);
 
         assert!(args.checkpoint_config.is_some());
-        let config = args.checkpoint_config.as_ref().ok_or("checkpoint_config missing")?;
+        let config = args
+            .checkpoint_config
+            .as_ref()
+            .ok_or("checkpoint_config missing")?;
         assert_eq!(config.interval, Duration::from_secs(60));
         assert_eq!(config.max_checkpoints, 5);
         Ok(())

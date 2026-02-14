@@ -121,7 +121,9 @@ async fn check_workspace(path: &std::path::Path) -> Result<bool, DoctorError> {
     let cargo_toml = path.join("Cargo.toml");
 
     if !cargo_toml.exists() {
-        return Err(DoctorError::NotWorkspace { path: path.to_path_buf() });
+        return Err(DoctorError::NotWorkspace {
+            path: path.to_path_buf(),
+        });
     }
 
     // Check if it's a workspace
@@ -129,7 +131,11 @@ async fn check_workspace(path: &std::path::Path) -> Result<bool, DoctorError> {
 
     let content: String = match content_result {
         Ok(c) => c,
-        Err(_) => return Err(DoctorError::NotWorkspace { path: path.to_path_buf() }),
+        Err(_) => {
+            return Err(DoctorError::NotWorkspace {
+                path: path.to_path_buf(),
+            })
+        }
     };
 
     Ok(content.contains("[workspace]"))
@@ -428,7 +434,10 @@ pub async fn doctor_command(args: DoctorArgs) -> Result<DoctorOutput, DoctorErro
     check_workspace(&current_dir).await?;
 
     // Determine which checks to run
-    let checks_to_run = args.check.as_ref().map_or_else(get_all_checks, |check| vec![check.clone()]);
+    let checks_to_run = args
+        .check
+        .as_ref()
+        .map_or_else(get_all_checks, |check| vec![check.clone()]);
 
     // Run checks
     let mut checks = Vec::new();

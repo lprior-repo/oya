@@ -14,10 +14,6 @@
 //! - **Zero panics**: No `panic!`, `unwrap()`, or `expect()` calls
 //! - **Railway-Oriented Programming**: Proper error propagation throughout
 
-#![deny(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-#![deny(clippy::panic)]
-
 use oya_events::BeadEvent;
 use oya_workflow::checkpoint::{
     compression::{compress, compression_ratio, decompress},

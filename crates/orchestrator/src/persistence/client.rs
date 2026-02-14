@@ -4,11 +4,11 @@
 
 use std::sync::Arc;
 
-use surrealdb::Surreal;
 use surrealdb::engine::any::Any;
 use surrealdb::opt::auth::Root;
+use surrealdb::Surreal;
 
-use super::error::{PersistenceResult, from_surrealdb_error};
+use super::error::{from_surrealdb_error, PersistenceResult};
 
 /// Configuration for the orchestrator store.
 #[derive(Debug, Clone)]

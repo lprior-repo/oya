@@ -4,11 +4,11 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use surrealdb::RecordId;
 use surrealdb::sql::Datetime as SurrealDatetime;
+use surrealdb::RecordId;
 
 use super::client::OrchestratorStore;
-use super::error::{PersistenceError, PersistenceResult, from_surrealdb_error};
+use super::error::{from_surrealdb_error, PersistenceError, PersistenceResult};
 
 /// Bead state in the database.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]

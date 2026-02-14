@@ -113,6 +113,7 @@ mod types {
     }
 }
 
+#[derive(Clone)]
 pub struct CheckpointCompressor {
     config: CompressionConfig,
 }

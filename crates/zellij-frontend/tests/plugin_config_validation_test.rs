@@ -8,8 +8,8 @@
 
 use serde_json::json;
 use zellij_frontend::config_validation::{
-    ConfigValidationError, ValidatedConfig, validate_auto_save_interval, validate_config,
-    validate_size,
+    validate_auto_save_interval, validate_config, validate_size, ConfigValidationError,
+    ValidatedConfig,
 };
 use zellij_frontend::plugin::Size;
 
@@ -88,7 +88,8 @@ fn test_config_validation_rejects_empty_ipc_address() {
 }
 
 #[test]
-fn test_config_validation_rejects_negative_auto_save_interval() -> Result<(), ConfigValidationError> {
+fn test_config_validation_rejects_negative_auto_save_interval() -> Result<(), ConfigValidationError>
+{
     let result = validate_auto_save_interval(0);
     assert!(result.is_err());
     let err = result.map_err(|e| e).unwrap_err();
@@ -114,7 +115,8 @@ fn test_config_validation_accepts_valid_auto_save_interval() -> Result<(), Confi
 }
 
 #[test]
-fn test_config_validation_uses_defaults_for_missing_optional_fields() -> Result<(), ConfigValidationError> {
+fn test_config_validation_uses_defaults_for_missing_optional_fields(
+) -> Result<(), ConfigValidationError> {
     let config = json!({});
     let result = validate_config(&config);
     assert!(result.is_ok());

@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! BDD-style behavioral tests for the actor system.
 //!
 //! These tests verify actor behavior through message passing, following
@@ -49,8 +50,8 @@ async fn call_with_timeout<T: Send + 'static>(
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_scheduler_when_register_workflow_via_cast_then_workflow_tracked()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_scheduler_when_register_workflow_via_cast_then_workflow_tracked(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A running scheduler actor
     let scheduler = setup_scheduler().await?;
 
@@ -83,8 +84,8 @@ async fn given_scheduler_when_register_workflow_via_cast_then_workflow_tracked()
 }
 
 #[tokio::test]
-async fn given_scheduler_when_register_duplicate_workflow_then_idempotent()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_scheduler_when_register_duplicate_workflow_then_idempotent(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A scheduler with an existing workflow
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
@@ -115,8 +116,8 @@ async fn given_scheduler_when_register_duplicate_workflow_then_idempotent()
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_workflow_when_query_ready_beads_via_call_then_returns_result()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_workflow_when_query_ready_beads_via_call_then_returns_result(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A scheduler with a workflow containing a bead
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
@@ -156,8 +157,8 @@ async fn given_workflow_when_query_ready_beads_via_call_then_returns_result()
 }
 
 #[tokio::test]
-async fn given_invalid_workflow_when_query_then_returns_error_not_panic()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_invalid_workflow_when_query_then_returns_error_not_panic(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A running scheduler with no workflows
     let scheduler = setup_scheduler().await?;
 
@@ -190,8 +191,8 @@ async fn given_invalid_workflow_when_query_then_returns_error_not_panic()
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_workflow_when_schedule_bead_then_bead_tracked()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_workflow_when_schedule_bead_then_bead_tracked(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A scheduler with a registered workflow
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
@@ -226,8 +227,8 @@ async fn given_workflow_when_schedule_bead_then_bead_tracked()
 }
 
 #[tokio::test]
-async fn given_beads_with_dependency_when_query_ready_then_only_root_ready()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_beads_with_dependency_when_query_ready_then_only_root_ready(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A workflow with A -> B dependency
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
@@ -288,8 +289,8 @@ async fn given_beads_with_dependency_when_query_ready_then_only_root_ready()
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_dependency_when_upstream_completes_then_downstream_becomes_ready()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_dependency_when_upstream_completes_then_downstream_becomes_ready(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A workflow with A -> B dependency
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
@@ -353,8 +354,8 @@ async fn given_dependency_when_upstream_completes_then_downstream_becomes_ready(
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_ready_bead_when_claimed_then_not_in_all_ready()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_ready_bead_when_claimed_then_not_in_all_ready(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A workflow with a ready bead
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
@@ -409,8 +410,8 @@ async fn given_ready_bead_when_claimed_then_not_in_all_ready()
 }
 
 #[tokio::test]
-async fn given_claimed_bead_when_released_then_appears_in_ready()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_claimed_bead_when_released_then_appears_in_ready(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A workflow with a claimed bead
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
@@ -479,8 +480,8 @@ async fn given_claimed_bead_when_released_then_appears_in_ready()
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_running_scheduler_when_shutdown_then_stops_cleanly()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_running_scheduler_when_shutdown_then_stops_cleanly(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A running scheduler
     let scheduler = setup_scheduler().await?;
 
@@ -510,8 +511,8 @@ async fn given_running_scheduler_when_shutdown_then_stops_cleanly()
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_scheduler_with_data_when_get_stats_then_accurate_counts()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_scheduler_with_data_when_get_stats_then_accurate_counts(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A scheduler with workflows and beads
     let scheduler = setup_scheduler().await?;
 
@@ -579,8 +580,8 @@ async fn given_scheduler_with_data_when_get_stats_then_accurate_counts()
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_complete_workflow_when_get_status_then_shows_complete()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_complete_workflow_when_get_status_then_shows_complete(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A workflow where all beads are completed
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
@@ -641,8 +642,8 @@ async fn given_complete_workflow_when_get_status_then_shows_complete()
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_no_workflow_when_schedule_bead_then_error_logged_not_panic()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_no_workflow_when_schedule_bead_then_error_logged_not_panic(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A scheduler with no workflows
     let scheduler = setup_scheduler().await?;
 
@@ -668,8 +669,8 @@ async fn given_no_workflow_when_schedule_bead_then_error_logged_not_panic()
 }
 
 #[tokio::test]
-async fn given_no_bead_when_claim_then_error_logged_not_panic()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_no_bead_when_claim_then_error_logged_not_panic(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A scheduler with a workflow but no beads
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
@@ -709,8 +710,8 @@ async fn given_no_bead_when_claim_then_error_logged_not_panic()
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_diamond_dag_when_partial_complete_then_join_not_ready()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_diamond_dag_when_partial_complete_then_join_not_ready(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A diamond DAG: A -> B, A -> C, B -> D, C -> D
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
@@ -832,8 +833,8 @@ async fn given_diamond_dag_when_partial_complete_then_join_not_ready()
 }
 
 #[tokio::test]
-async fn given_diamond_dag_when_all_parents_complete_then_join_ready()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_diamond_dag_when_all_parents_complete_then_join_ready(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: Same diamond DAG
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
@@ -948,8 +949,8 @@ async fn given_diamond_dag_when_all_parents_complete_then_join_ready()
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_multiple_workflows_when_query_all_ready_then_returns_from_all()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_multiple_workflows_when_query_all_ready_then_returns_from_all(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: Multiple workflows with ready beads
     let scheduler = setup_scheduler().await?;
 
@@ -1019,8 +1020,8 @@ async fn given_multiple_workflows_when_query_all_ready_then_returns_from_all()
 }
 
 #[tokio::test]
-async fn given_multiple_workflows_when_unregister_one_then_other_unaffected()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_multiple_workflows_when_unregister_one_then_other_unaffected(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: Two workflows
     let scheduler = setup_scheduler().await?;
 
@@ -1155,8 +1156,8 @@ async fn given_root_bead_when_is_ready_query_then_true() -> Result<(), Box<dyn s
 }
 
 #[tokio::test]
-async fn given_blocked_bead_when_is_ready_query_then_false()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_blocked_bead_when_is_ready_query_then_false(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A workflow with dependency A -> B
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
@@ -1224,8 +1225,8 @@ async fn given_blocked_bead_when_is_ready_query_then_false()
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_empty_workflow_when_query_ready_beads_then_empty_list()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_empty_workflow_when_query_ready_beads_then_empty_list(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A workflow with no beads
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
@@ -1257,8 +1258,8 @@ async fn given_empty_workflow_when_query_ready_beads_then_empty_list()
 }
 
 #[tokio::test]
-async fn given_many_beads_when_query_all_ready_then_returns_all()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_many_beads_when_query_all_ready_then_returns_all(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A workflow with 50 independent beads
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
@@ -1305,8 +1306,8 @@ async fn given_many_beads_when_query_all_ready_then_returns_all()
 }
 
 #[tokio::test]
-async fn given_long_chain_when_complete_sequentially_then_unlocks_one_at_a_time()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_long_chain_when_complete_sequentially_then_unlocks_one_at_a_time(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A linear chain A -> B -> C -> D -> E
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
@@ -1397,8 +1398,8 @@ async fn given_long_chain_when_complete_sequentially_then_unlocks_one_at_a_time(
 }
 
 #[tokio::test]
-async fn given_completed_bead_when_complete_again_then_idempotent()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_completed_bead_when_complete_again_then_idempotent(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A workflow with a completed bead
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
@@ -1464,8 +1465,8 @@ async fn given_completed_bead_when_complete_again_then_idempotent()
 }
 
 #[tokio::test]
-async fn given_nonexistent_bead_when_complete_then_no_crash()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_nonexistent_bead_when_complete_then_no_crash(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A workflow with no beads
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
@@ -1504,8 +1505,8 @@ async fn given_nonexistent_bead_when_complete_then_no_crash()
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_wide_fan_out_when_root_completes_then_all_children_ready()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_wide_fan_out_when_root_completes_then_all_children_ready(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A fan-out DAG: ROOT -> [A, B, C, D, E]
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
@@ -1594,8 +1595,8 @@ async fn given_wide_fan_out_when_root_completes_then_all_children_ready()
 }
 
 #[tokio::test]
-async fn given_wide_fan_in_when_all_parents_complete_then_sink_ready()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_wide_fan_in_when_all_parents_complete_then_sink_ready(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A fan-in DAG: [A, B, C, D, E] -> SINK
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
@@ -1711,8 +1712,8 @@ async fn given_wide_fan_in_when_all_parents_complete_then_sink_ready()
 }
 
 #[tokio::test]
-async fn given_w_dag_when_complete_in_order_then_correct_unlocks()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_w_dag_when_complete_in_order_then_correct_unlocks(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A W-shaped DAG
     // A -> B -> E
     //   \     /
@@ -1845,8 +1846,8 @@ async fn given_w_dag_when_complete_in_order_then_correct_unlocks()
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_bead_when_claimed_twice_then_second_claim_fails_or_idempotent()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_bead_when_claimed_twice_then_second_claim_fails_or_idempotent(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A workflow with a ready bead
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
@@ -1911,8 +1912,8 @@ async fn given_bead_when_claimed_twice_then_second_claim_fails_or_idempotent()
 }
 
 #[tokio::test]
-async fn given_multiple_beads_when_claim_different_then_all_claimed()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_multiple_beads_when_claim_different_then_all_claimed(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A workflow with multiple ready beads
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
@@ -2019,8 +2020,8 @@ async fn given_invalid_dependency_when_add_then_no_crash() -> Result<(), Box<dyn
 }
 
 #[tokio::test]
-async fn given_rapid_messages_when_sent_then_all_processed()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_rapid_messages_when_sent_then_all_processed(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A scheduler
     let scheduler = setup_scheduler().await?;
 
@@ -2054,8 +2055,8 @@ async fn given_rapid_messages_when_sent_then_all_processed()
 }
 
 #[tokio::test]
-async fn given_workflow_unregistered_when_query_status_then_returns_none()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_workflow_unregistered_when_query_status_then_returns_none(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A registered then unregistered workflow
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
@@ -2100,8 +2101,8 @@ async fn given_workflow_unregistered_when_query_status_then_returns_none()
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_workflow_when_beads_completed_then_status_reflects_progress()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_workflow_when_beads_completed_then_status_reflects_progress(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A workflow with 5 beads
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
@@ -2200,8 +2201,8 @@ async fn given_workflow_when_beads_completed_then_status_reflects_progress()
 }
 
 #[tokio::test]
-async fn given_bead_claimed_and_completed_when_check_stats_then_consistent()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_bead_claimed_and_completed_when_check_stats_then_consistent(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A workflow with beads
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {
@@ -2270,8 +2271,8 @@ async fn given_bead_claimed_and_completed_when_check_stats_then_consistent()
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn given_workflows_when_query_one_then_no_cross_contamination()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_workflows_when_query_one_then_no_cross_contamination(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: Two workflows with different beads
     let scheduler = setup_scheduler().await?;
 
@@ -2355,8 +2356,8 @@ async fn given_workflows_when_query_one_then_no_cross_contamination()
 }
 
 #[tokio::test]
-async fn given_workflow_with_self_dependency_when_query_then_blocked()
--> Result<(), Box<dyn std::error::Error>> {
+async fn given_workflow_with_self_dependency_when_query_then_blocked(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: A workflow where a bead depends on itself (edge case)
     let scheduler = setup_scheduler().await?;
     let result = scheduler.send_message(SchedulerMessage::RegisterWorkflow {

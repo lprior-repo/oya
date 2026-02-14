@@ -8,12 +8,9 @@
 #![deny(clippy::panic)]
 
 use std::fs;
-use std::path::PathBuf;
 use tempfile::TempDir;
 
-use crate::swarm::contract_processor::{
-    ContractProcessor, ContractProcessorError,
-};
+use crate::swarm::contract_processor::{ContractProcessor, ContractProcessorError};
 
 /// Test: Creates contract file when handoff is valid
 ///
@@ -154,7 +151,8 @@ fn test_enumerates_all_error_variants_in_contract() -> Result<(), Box<dyn std::e
 /// When: The processor generates the test plan
 /// Then: All test names follow the pattern test_{verb}_{outcome}_when_{condition}
 #[test]
-fn test_generates_expressive_test_names_following_fowler_conventions() -> Result<(), Box<dyn std::error::Error>> {
+fn test_generates_expressive_test_names_following_fowler_conventions(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given
     let temp_dir = TempDir::new()?;
     let handoff_dir = temp_dir.path();
@@ -293,7 +291,8 @@ fn test_includes_break_analysis_for_all_failure_modes() -> Result<(), Box<dyn st
 /// When: The processor completes processing
 /// Then: System returns contract path for notification
 #[test]
-fn test_returns_contract_path_for_notification_on_success() -> Result<(), Box<dyn std::error::Error>> {
+fn test_returns_contract_path_for_notification_on_success() -> Result<(), Box<dyn std::error::Error>>
+{
     // Given
     let temp_dir = TempDir::new()?;
     let handoff_dir = temp_dir.path();
@@ -359,7 +358,8 @@ fn test_handles_missing_handoff_file_gracefully() -> Result<(), Box<dyn std::err
 /// When: The processor attempts to read and parse the file
 /// Then: Processor detects invalid JSON and returns InvalidHandoffFormat error
 #[test]
-fn test_validates_handoff_json_structure_before_processing() -> Result<(), Box<dyn std::error::Error>> {
+fn test_validates_handoff_json_structure_before_processing(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given
     let temp_dir = TempDir::new()?;
     let handoff_dir = temp_dir.path();
@@ -388,7 +388,8 @@ fn test_validates_handoff_json_structure_before_processing() -> Result<(), Box<d
 /// When: The processor generates the test plan
 /// Then: Every test has given, when, then, and covers fields populated
 #[test]
-fn test_ensures_all_tests_use_given_when_then_structure() -> Result<(), Box<dyn std::error::Error>> {
+fn test_ensures_all_tests_use_given_when_then_structure() -> Result<(), Box<dyn std::error::Error>>
+{
     // Given
     let temp_dir = TempDir::new()?;
     let handoff_dir = temp_dir.path();

@@ -2,10 +2,6 @@
 //!
 //! Tests concurrent execution scenarios with property-based testing.
 
-#![deny(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-#![deny(clippy::panic)]
-
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;

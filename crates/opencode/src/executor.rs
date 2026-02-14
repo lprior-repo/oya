@@ -412,11 +412,9 @@ mod tests {
         assert!(prompt.is_ok());
         let prompt = prompt.ok();
         assert!(prompt.as_ref().is_some_and(|p| p.contains("implement")));
-        assert!(
-            prompt
-                .as_ref()
-                .is_some_and(|p| p.contains("No unsafe code"))
-        );
+        assert!(prompt
+            .as_ref()
+            .is_some_and(|p| p.contains("No unsafe code")));
     }
 
     #[test]

@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! Chaos tests for scheduler kill recovery.
 //!
 //! Tests scheduler crash recovery by killing the scheduler actor mid-execution
@@ -5,16 +6,13 @@
 //!
 //! **Bead:** src-3066
 //! **Phase 4 - Chaos Tests:** Random actor kills -> supervisor restart -> system recovers
-#![allow(clippy::unwrap_used)]
-#![allow(clippy::expect_used)]
-#![deny(clippy::panic)]
 #![warn(clippy::pedantic)]
 #![warn(clippy::nursery)]
 #![forbid(unsafe_code)]
 
 use std::collections::HashSet;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use im::{HashMap, HashSet as ImHashSet};
@@ -26,8 +24,8 @@ use tracing::{info, warn};
 use orchestrator::actors::messages::{SchedulerMessage, WorkflowStatus};
 use orchestrator::actors::scheduler::{SchedulerActorDef, SchedulerArguments};
 use orchestrator::actors::supervisor::{
-    SupervisorArguments, SupervisorConfig, SupervisorMessage, SupervisorState,
-    spawn_supervisor_with_name,
+    spawn_supervisor_with_name, SupervisorArguments, SupervisorConfig, SupervisorMessage,
+    SupervisorState,
 };
 
 // =============================================================================
@@ -453,36 +451,26 @@ async fn await_scheduler_recovery(
 // =============================================================================
 
 #[tokio::test]
-async fn given_scheduler_with_active_workflows_when_killed_gracefully_then_supervisor_restarts_it()
-{
+async fn given_scheduler_with_active_workflows_when_killed_gracefully_then_supervisor_restarts_it(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = "graceful_kill_recovery";
     info!("Starting test: {}", test_name);
 
     // Setup
-    let mut ctx = setup_chaos_test(test_name)
-        .await
-        .expect("Failed to setup test context");
+    let mut ctx = setup_chaos_test(test_name).await?;
 
-    register_test_workflows(&mut ctx)
-        .await
-        .expect("Failed to register workflows");
+    register_test_workflows(&mut ctx).await?;
 
     // Capture pre-kill state
-    let pre_kill_state = capture_scheduler_state(&ctx.scheduler, &ctx.workflow_ids)
-        .await
-        .expect("Failed to capture pre-kill state");
+    let pre_kill_state = capture_scheduler_state(&ctx.scheduler, &ctx.workflow_ids).await?;
 
     ctx.pre_kill_state = Some(pre_kill_state.clone());
 
     // Kill scheduler
-    kill_scheduler(&ctx, test_name)
-        .await
-        .expect("Failed to kill scheduler");
+    kill_scheduler(&ctx, test_name).await?;
 
     // Wait for recovery
-    await_scheduler_recovery(&mut ctx, test_name, 5000)
-        .await
-        .expect("Scheduler did not recover in time");
+    await_scheduler_recovery(&mut ctx, test_name, 5000).await?;
 
     // Verify supervisor is still running
     assert_eq!(
@@ -503,37 +491,29 @@ async fn given_scheduler_with_active_workflows_when_killed_gracefully_then_super
     // State persistence is tested separately with event sourcing enabled.
 
     info!("Test passed: {}", test_name);
+    Ok(())
 }
 
 #[tokio::test]
-async fn given_scheduler_with_zero_workflows_when_killed_then_recovers_with_empty_state() {
+async fn given_scheduler_with_zero_workflows_when_killed_then_recovers_with_empty_state(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = "empty_state_recovery";
     info!("Starting test: {}", test_name);
 
     // Setup with no workflows
-    let mut ctx = setup_chaos_test(test_name)
-        .await
-        .expect("Failed to setup test context");
+    let mut ctx = setup_chaos_test(test_name).await?;
 
     // Capture pre-kill state (empty)
-    let pre_kill_state = capture_scheduler_state(&ctx.scheduler, &ctx.workflow_ids)
-        .await
-        .expect("Failed to capture pre-kill state");
+    let pre_kill_state = capture_scheduler_state(&ctx.scheduler, &ctx.workflow_ids).await?;
 
     // Kill scheduler
-    kill_scheduler(&ctx, test_name)
-        .await
-        .expect("Failed to kill scheduler");
+    kill_scheduler(&ctx, test_name).await?;
 
     // Wait for recovery
-    await_scheduler_recovery(&mut ctx, test_name, 5000)
-        .await
-        .expect("Scheduler did not recover in time");
+    await_scheduler_recovery(&mut ctx, test_name, 5000).await?;
 
     // Capture post-recovery state
-    let post_recovery_state = capture_scheduler_state(&ctx.scheduler, &ctx.workflow_ids)
-        .await
-        .expect("Failed to capture post-recovery state");
+    let post_recovery_state = capture_scheduler_state(&ctx.scheduler, &ctx.workflow_ids).await?;
 
     // Verify still empty
     assert_eq!(
@@ -543,10 +523,12 @@ async fn given_scheduler_with_zero_workflows_when_killed_then_recovers_with_empt
     );
 
     info!("Test passed: {}", test_name);
+    Ok(())
 }
 
 #[tokio::test]
-async fn given_supervisor_with_max_restarts_0_when_scheduler_killed_then_does_not_restart() {
+async fn given_supervisor_with_max_restarts_0_when_scheduler_killed_then_does_not_restart(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = "no_restart_test";
     info!("Starting test: {}", test_name);
 
@@ -559,8 +541,7 @@ async fn given_supervisor_with_max_restarts_0_when_scheduler_killed_then_does_no
     let args = SupervisorArguments::new().with_config(config);
     let supervisor =
         spawn_supervisor_with_name::<SchedulerActorDef>(args, &format!("supervisor-{test_name}"))
-            .await
-            .expect("Failed to spawn supervisor");
+            .await?;
 
     // Spawn scheduler child
     let (spawn_tx, spawn_rx) = tokio::sync::oneshot::channel();
@@ -571,12 +552,11 @@ async fn given_supervisor_with_max_restarts_0_when_scheduler_killed_then_does_no
     });
 
     spawn_rx
-        .await
-        .expect("Failed to receive spawn reply")
-        .expect("Failed to spawn scheduler");
+        .await?
+        .map_err(|e| format!("Failed to spawn scheduler: {e:?}"))?;
 
     // Kill scheduler
-    supervisor.send_message(SupervisorMessage::<SchedulerActorDef>::StopChild {
+    let _ = supervisor.send_message(SupervisorMessage::<SchedulerActorDef>::StopChild {
         name: format!("scheduler-{test_name}"),
     });
 
@@ -587,7 +567,7 @@ async fn given_supervisor_with_max_restarts_0_when_scheduler_killed_then_does_no
     let (status_tx, status_rx) = tokio::sync::oneshot::channel();
     let _ = supervisor.send_message(SupervisorMessage::GetStatus { reply: status_tx });
 
-    let status = status_rx.await.expect("Failed to get supervisor status");
+    let status = status_rx.await?;
 
     assert_eq!(
         status.active_children, 0,
@@ -595,20 +575,18 @@ async fn given_supervisor_with_max_restarts_0_when_scheduler_killed_then_does_no
     );
 
     info!("Test passed: {}", test_name);
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_invariant_supervisor_remains_running_after_scheduler_restart() {
+async fn test_invariant_supervisor_remains_running_after_scheduler_restart(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = "workflow_count_invariant";
     info!("Starting test: {}", test_name);
 
-    let mut ctx = setup_chaos_test(test_name)
-        .await
-        .expect("Failed to setup test context");
+    let mut ctx = setup_chaos_test(test_name).await?;
 
-    register_test_workflows(&mut ctx)
-        .await
-        .expect("Failed to register workflows");
+    register_test_workflows(&mut ctx).await?;
 
     // Verify initial state
     assert_eq!(
@@ -617,13 +595,9 @@ async fn test_invariant_supervisor_remains_running_after_scheduler_restart() {
         "Supervisor should be running initially"
     );
 
-    kill_scheduler(&ctx, test_name)
-        .await
-        .expect("Failed to kill scheduler");
+    kill_scheduler(&ctx, test_name).await?;
 
-    await_scheduler_recovery(&mut ctx, test_name, 5000)
-        .await
-        .expect("Scheduler did not recover");
+    await_scheduler_recovery(&mut ctx, test_name, 5000).await?;
 
     // Verify supervisor remains running after scheduler restart
     assert_eq!(
@@ -640,16 +614,16 @@ async fn test_invariant_supervisor_remains_running_after_scheduler_restart() {
     );
 
     info!("Test passed: {}", test_name);
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_postcondition_scheduler_running_after_recovery() {
+async fn test_postcondition_scheduler_running_after_recovery(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = "running_after_recovery";
     info!("Starting test: {}", test_name);
 
-    let mut ctx = setup_chaos_test(test_name)
-        .await
-        .expect("Failed to setup test context");
+    let mut ctx = setup_chaos_test(test_name).await?;
 
     // Verify initial state
     assert_eq!(
@@ -658,14 +632,10 @@ async fn test_postcondition_scheduler_running_after_recovery() {
         "Supervisor should be running initially"
     );
 
-    kill_scheduler(&ctx, test_name)
-        .await
-        .expect("Failed to kill scheduler");
+    kill_scheduler(&ctx, test_name).await?;
 
     // Wait for recovery
-    await_scheduler_recovery(&mut ctx, test_name, 5000)
-        .await
-        .expect("Scheduler did not recover");
+    await_scheduler_recovery(&mut ctx, test_name, 5000).await?;
 
     // Verify supervisor still running
     assert_eq!(
@@ -675,6 +645,7 @@ async fn test_postcondition_scheduler_running_after_recovery() {
     );
 
     info!("Test passed: {}", test_name);
+    Ok(())
 }
 
 // =============================================================================
@@ -682,26 +653,21 @@ async fn test_postcondition_scheduler_running_after_recovery() {
 // =============================================================================
 
 #[tokio::test]
-async fn test_given_100_bead_workflow_when_killed_then_recovers_within_10_seconds() {
+async fn test_given_100_bead_workflow_when_killed_then_recovers_within_10_seconds(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = "large_workflow_recovery";
     info!("Starting test: {}", test_name);
 
-    let mut ctx = setup_chaos_test(test_name)
-        .await
-        .expect("Failed to setup test context");
+    let mut ctx = setup_chaos_test(test_name).await?;
 
     // In a full implementation, we'd register a 100-bead workflow here
     // For this skeleton test, we just verify the timing framework works
 
     let start = Instant::now();
 
-    kill_scheduler(&ctx, test_name)
-        .await
-        .expect("Failed to kill scheduler");
+    kill_scheduler(&ctx, test_name).await?;
 
-    await_scheduler_recovery(&mut ctx, test_name, 10000)
-        .await
-        .expect("Scheduler did not recover within 10s");
+    await_scheduler_recovery(&mut ctx, test_name, 10000).await?;
 
     let recovery_time_ms = start.elapsed().as_millis();
 
@@ -715,6 +681,7 @@ async fn test_given_100_bead_workflow_when_killed_then_recovers_within_10_second
         "Test passed: {} (recovery: {}ms)",
         test_name, recovery_time_ms
     );
+    Ok(())
 }
 
 // =============================================================================
@@ -798,7 +765,8 @@ async fn ensure_scheduler_running(
 }
 
 #[tokio::test]
-async fn given_scheduler_when_randomly_killed_multiple_times_then_recovers_each_time() {
+async fn given_scheduler_when_randomly_killed_multiple_times_then_recovers_each_time(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = "random_kill_recovery";
     let seed = 42u64;
     let num_kills = 3;
@@ -808,13 +776,9 @@ async fn given_scheduler_when_randomly_killed_multiple_times_then_recovers_each_
         test_name, seed, num_kills
     );
 
-    let mut ctx = setup_chaos_test(test_name)
-        .await
-        .expect("Failed to setup test context");
+    let mut ctx = setup_chaos_test(test_name).await?;
 
-    register_test_workflows(&mut ctx)
-        .await
-        .expect("Failed to register workflows");
+    register_test_workflows(&mut ctx).await?;
 
     let kill_patterns = generate_kill_patterns(seed, num_kills);
     let successful_recoveries = Arc::new(AtomicU32::new(0));
@@ -822,30 +786,24 @@ async fn given_scheduler_when_randomly_killed_multiple_times_then_recovers_each_
     for (idx, pattern) in kill_patterns.into_iter().enumerate() {
         info!("Kill iteration {} with delay {}ms", idx, pattern.delay_ms);
 
-        ensure_scheduler_running(&mut ctx, test_name, 5000)
-            .await
-            .expect("Scheduler must be running before kill");
+        ensure_scheduler_running(&mut ctx, test_name, 5000).await?;
 
         let _ = kill_scheduler(&ctx, test_name).await;
 
         tokio::time::sleep(Duration::from_millis(pattern.delay_ms)).await;
 
-        await_scheduler_recovery(&mut ctx, test_name, 10000)
-            .await
-            .expect(&format!("Recovery failed at iteration {}", idx));
+        await_scheduler_recovery(&mut ctx, test_name, 10000).await?;
 
         assert_eq!(
             ctx.supervisor.get_status(),
             ActorStatus::Running,
-            "Supervisor must remain running after kill {}",
-            idx
+            "Supervisor must remain running after kill {idx}",
         );
 
         assert_eq!(
             ctx.scheduler.get_status(),
             ActorStatus::Running,
-            "Scheduler must be running after recovery {}",
-            idx
+            "Scheduler must be running after recovery {idx}",
         );
 
         successful_recoveries.fetch_add(1, Ordering::SeqCst);
@@ -854,76 +812,65 @@ async fn given_scheduler_when_randomly_killed_multiple_times_then_recovers_each_
     let final_count = successful_recoveries.load(Ordering::SeqCst);
     assert_eq!(
         final_count, num_kills,
-        "All {} kills should have recovered",
-        num_kills
+        "All {num_kills} kills should have recovered",
     );
 
     info!(
         "Test passed: {} ({} successful recoveries)",
         test_name, final_count
     );
+    Ok(())
 }
 
 #[tokio::test]
-async fn given_scheduler_when_killed_at_random_intervals_then_system_stays_consistent() {
+async fn given_scheduler_when_killed_at_random_intervals_then_system_stays_consistent(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = "random_interval_consistency";
     let seed = 12345u64;
 
     info!("Starting test: {}", test_name);
 
-    let mut ctx = setup_chaos_test(test_name)
-        .await
-        .expect("Failed to setup test context");
+    let mut ctx = setup_chaos_test(test_name).await?;
 
-    register_test_workflows(&mut ctx)
-        .await
-        .expect("Failed to register workflows");
+    register_test_workflows(&mut ctx).await?;
 
     let mut rng = SeededRng::new(seed);
     let num_kills = 3;
 
     for kill_num in 0..num_kills {
         let interval_ms = 100 + rng.next_u64() % 400;
-        info!("Kill {} waiting {}ms before kill", kill_num, interval_ms);
+        info!("Kill {kill_num} waiting {interval_ms}ms before kill");
 
-        ensure_scheduler_running(&mut ctx, test_name, 5000)
-            .await
-            .expect("Scheduler must be running");
+        ensure_scheduler_running(&mut ctx, test_name, 5000).await?;
 
         tokio::time::sleep(Duration::from_millis(interval_ms)).await;
 
         let _ = kill_scheduler(&ctx, test_name).await;
 
-        await_scheduler_recovery(&mut ctx, test_name, 10000)
-            .await
-            .expect(&format!("Recovery failed at kill {}", kill_num));
+        await_scheduler_recovery(&mut ctx, test_name, 10000).await?;
 
         assert_eq!(
             ctx.supervisor.get_status(),
             ActorStatus::Running,
-            "Supervisor consistency check failed at kill {}",
-            kill_num
+            "Supervisor consistency check failed at kill {kill_num}",
         );
     }
 
     info!("Test passed: {}", test_name);
+    Ok(())
 }
 
 #[tokio::test]
-async fn given_supervisor_when_scheduler_killed_randomly_then_invariant_supervisor_remains_running()
-{
+async fn given_supervisor_when_scheduler_killed_randomly_then_invariant_supervisor_remains_running(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = "invariant_supervisor_random";
     let seed = 999u64;
 
     info!("Starting test: {}", test_name);
 
-    let mut ctx = setup_chaos_test(test_name)
-        .await
-        .expect("Failed to setup test context");
+    let mut ctx = setup_chaos_test(test_name).await?;
 
-    register_test_workflows(&mut ctx)
-        .await
-        .expect("Failed to register workflows");
+    register_test_workflows(&mut ctx).await?;
 
     let mut rng = SeededRng::new(seed);
 
@@ -931,66 +878,57 @@ async fn given_supervisor_when_scheduler_killed_randomly_then_invariant_supervis
         let should_kill = rng.next_bool();
 
         if should_kill {
-            info!("Iteration {}: killing scheduler", i);
+            info!("Iteration {i}: killing scheduler");
             let _ = kill_scheduler(&ctx, test_name).await;
 
-            await_scheduler_recovery(&mut ctx, test_name, 10000)
-                .await
-                .expect(&format!("Recovery failed at iteration {}", i));
+            await_scheduler_recovery(&mut ctx, test_name, 10000).await?;
         } else {
-            info!("Iteration {}: skipping kill (random)", i);
+            info!("Iteration {i}: skipping kill (random)");
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
 
         assert_eq!(
             ctx.supervisor.get_status(),
             ActorStatus::Running,
-            "INVARIANT VIOLATION: Supervisor stopped at iteration {}",
-            i
+            "INVARIANT VIOLATION: Supervisor stopped at iteration {i}",
         );
     }
 
     info!("Test passed: {}", test_name);
+    Ok(())
 }
 
 #[tokio::test]
-async fn given_scheduler_when_rapid_random_kills_then_supervisor_handles_gracefully() {
+async fn given_scheduler_when_rapid_random_kills_then_supervisor_handles_gracefully(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = "rapid_random_kills";
     let seed = 777u64;
 
     info!("Starting test: {}", test_name);
 
-    let mut ctx = setup_chaos_test(test_name)
-        .await
-        .expect("Failed to setup test context");
+    let mut ctx = setup_chaos_test(test_name).await?;
 
-    register_test_workflows(&mut ctx)
-        .await
-        .expect("Failed to register workflows");
+    register_test_workflows(&mut ctx).await?;
 
     let mut rng = SeededRng::new(seed);
     let rapid_kills = 2;
     let mut total_restarts = 0u32;
 
     for i in 0..rapid_kills {
-        ensure_scheduler_running(&mut ctx, test_name, 5000)
-            .await
-            .expect("Scheduler must be running");
+        ensure_scheduler_running(&mut ctx, test_name, 5000).await?;
 
         let short_delay = 50 + rng.next_u64() % 100;
-        info!("Rapid kill {} with {}ms delay", i, short_delay);
+        info!("Rapid kill {i} with {short_delay}ms delay");
 
         let _ = kill_scheduler(&ctx, test_name).await;
 
         tokio::time::sleep(Duration::from_millis(short_delay)).await;
 
         let recovery_start = Instant::now();
-        await_scheduler_recovery(&mut ctx, test_name, 10000)
-            .await
-            .expect(&format!("Rapid recovery failed at iteration {}", i));
+        await_scheduler_recovery(&mut ctx, test_name, 10000).await?;
 
         let recovery_ms = recovery_start.elapsed().as_millis();
-        info!("Rapid recovery {} took {}ms", i, recovery_ms);
+        info!("Rapid recovery {i} took {recovery_ms}ms");
 
         total_restarts += 1;
     }
@@ -1017,14 +955,13 @@ async fn given_scheduler_when_rapid_random_kills_then_supervisor_handles_gracefu
     );
 
     info!("Test passed: {}", test_name);
+    Ok(())
 }
 
 #[tokio::test]
-async fn given_multiple_random_kill_scenarios_then_all_scenarios_pass() {
-    let scenarios: Vec<(&str, u64, u32)> = vec![
-        ("scenario_a", 111, 2),
-        ("scenario_b", 222, 2),
-    ];
+async fn given_multiple_random_kill_scenarios_then_all_scenarios_pass(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let scenarios: Vec<(&str, u64, u32)> = vec![("scenario_a", 111, 2), ("scenario_b", 222, 2)];
 
     let mut all_passed = true;
 
@@ -1034,7 +971,7 @@ async fn given_multiple_random_kill_scenarios_then_all_scenarios_pass() {
             scenario_name, seed, num_kills
         );
 
-        let test_name = format!("multi-{}", scenario_name);
+        let test_name = format!("multi-{scenario_name}");
         let mut ctx = match setup_chaos_test(&test_name).await {
             Ok(ctx) => ctx,
             Err(e) => {
@@ -1089,4 +1026,5 @@ async fn given_multiple_random_kill_scenarios_then_all_scenarios_pass() {
 
     assert!(all_passed, "All scenarios must pass");
     info!("Test passed: multi-scenario chaos test");
+    Ok(())
 }

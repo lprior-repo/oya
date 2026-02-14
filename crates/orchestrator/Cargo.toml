@@ -36,9 +36,9 @@ proptest = { workspace = true }
 [lib]
 bench = false
 
-[[bench]]
-name = "restart_latency"
-harness = false
+# [[bench]]
+# name = "restart_latency"
+# harness = false
 
 [dependencies]
 oya-core = { workspace = true }

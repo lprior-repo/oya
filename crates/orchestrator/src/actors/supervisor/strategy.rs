@@ -243,10 +243,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::actors::ActorError;
     use crate::actors::messages::SchedulerMessage;
     use crate::actors::scheduler::{SchedulerActorDef, SchedulerArguments};
     use crate::actors::supervisor::{SupervisorConfig, SupervisorState};
+    use crate::actors::ActorError;
     use std::time::Instant;
 
     fn create_test_state() -> SupervisorActorState<SchedulerActorDef> {
@@ -258,11 +258,11 @@ mod tests {
             total_restarts: 0,
             child_id_counter: 0,
             shutdown_coordinator: None,
-            _shutdown_rx: None,
+            shutdown_rx: None,
             restart_strategy: Box::new(OneForOne::new()),
             checkpoint_manager: None,
             replay_engine: None,
-            _periodic_checkpoint_shutdown_tx: None,
+            periodic_checkpoint_shutdown_tx: None,
         }
     }
 

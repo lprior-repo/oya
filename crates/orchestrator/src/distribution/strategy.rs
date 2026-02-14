@@ -162,7 +162,13 @@ impl AgentMetadata {
     /// Set load.
     #[must_use]
     pub const fn with_load(mut self, load: f64) -> Self {
-        self.load = load.clamp(0.0, 1.0);
+        self.load = if load < 0.0 {
+            0.0
+        } else if load > 1.0 {
+            1.0
+        } else {
+            load
+        };
         self
     }
 

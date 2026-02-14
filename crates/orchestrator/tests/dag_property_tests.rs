@@ -1,234 +1,70 @@
-//! Property-based tests for DAG topological sort.
-//!
-//! This module tests the property described in bead src-as6n:
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+//! Property-based tests for DAG invariants.
 //!
 //! ## Phase 5 - Property Tests
 //!
 //! ∀ dag: toposort(dag) -> all edges respect order
+//! ∀ bead: ready state -> no incomplete blocking deps
 
-#![forbid(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-#![forbid(clippy::panic)]
-
+use im::HashSet;
 use proptest::prelude::*;
 use proptest::string::string_regex;
 
 use orchestrator::dag::{DependencyType, WorkflowDAG};
 
 fn bead_id_strategy() -> impl Strategy<Value = String> {
-    string_regex("bead-[a-z0-9]{3,8}").unwrap()
+    "bead-[a-z0-9]{3,8}"
 }
 
-fn ready_beads_strategy() -> impl Strategy<Value = Vec<String>> {
-    vec(bead_id_strategy(), 1..20)
-}
-
-fn all_strategies() -> Vec<Box<dyn DistributionStrategy>> {
-    available_strategies()
-        .iter()
-        .filter_map(|name| create_strategy(name))
-        .collect()
+fn build_linear_dag(size: usize) -> Result<WorkflowDAG, String> {
+    let mut dag = WorkflowDAG::new();
+    for i in 0..size {
+        dag.add_node(format!("node-{i}"))
+            .map_err(|e| format!("{e:?}"))?;
+    }
+    for i in 0..size.saturating_sub(1) {
+        dag.add_edge(
+            &format!("node-{i}"),
+            &format!("node-{}", i + 1),
+            DependencyType::BlockingDependency,
+        )
+        .map_err(|e| format!("{e:?}"))?;
+    }
+    Ok(dag)
 }
 
 proptest! {
     #[test]
-    fn prop_selected_bead_in_ready_beads_fifo(ready_beads in ready_beads_strategy()) {
-        let strategy = FifoStrategy::new();
-        let ctx = DistributionContext::new();
+    fn prop_toposort_respects_edge_order(size in 2usize..20) {
+        let dag = build_linear_dag(size).map_err(|e| TestCaseError::fail(e))?;
+        let sorted = dag.topological_sort()
+            .map_err(|e| TestCaseError::fail(format!("{e:?}")))?;
 
-        let selected = strategy.select_bead(&ready_beads, &ctx);
+        prop_assert_eq!(sorted.len(), size);
 
-        if let Some(ref bead) = selected {
-            prop_assert!(
-                ready_beads.contains(bead),
-                "FIFO selected bead '{}' must be in ready beads {:?}",
-                bead,
-                ready_beads
-            );
-        } else {
-            prop_assert!(ready_beads.is_empty(), "FIFO should only return None for empty input");
+        for i in 0..size.saturating_sub(1) {
+            let pos_curr = sorted.iter().position(|id| id == &format!("node-{i}")).ok_or_else(|| TestCaseError::fail("node missing"))?;
+            let pos_next = sorted.iter().position(|id| id == &format!("node-{}", i+1)).ok_or_else(|| TestCaseError::fail("node missing"))?;
+            prop_assert!(pos_curr < pos_next);
         }
     }
 
     #[test]
-    fn prop_selected_bead_in_ready_beads_priority(ready_beads in ready_beads_strategy()) {
-        let strategy = PriorityStrategy::new();
-        let ctx = DistributionContext::new();
+    fn prop_ready_beads_have_no_blocking_deps(size in 1usize..10, completed_count in 0usize..10) {
+        let dag = build_linear_dag(size).map_err(|e| TestCaseError::fail(e))?;
+        let completed: HashSet<String> = (0..completed_count.min(size))
+            .map(|i| format!("node-{i}"))
+            .collect();
 
-        let selected = strategy.select_bead(&ready_beads, &ctx);
+        let ready = dag.get_ready_beads(&completed);
 
-        if let Some(ref bead) = selected {
-            prop_assert!(
-                ready_beads.contains(bead),
-                "Priority selected bead '{}' must be in ready beads {:?}",
-                bead,
-                ready_beads
-            );
-        } else {
-            prop_assert!(ready_beads.is_empty(), "Priority should only return None for empty input");
-        }
-    }
+        for bead_id in ready {
+            let deps = dag.get_dependencies(&bead_id)
+                .map_err(|e| TestCaseError::fail(format!("{e:?}")))?;
 
-    #[test]
-    fn prop_selected_bead_in_ready_beads_round_robin(ready_beads in ready_beads_strategy()) {
-        let strategy = RoundRobinStrategy::new();
-        let ctx = DistributionContext::new();
-
-        let selected = strategy.select_bead(&ready_beads, &ctx);
-
-        if let Some(ref bead) = selected {
-            prop_assert!(
-                ready_beads.contains(bead),
-                "RoundRobin selected bead '{}' must be in ready beads {:?}",
-                bead,
-                ready_beads
-            );
-        } else {
-            prop_assert!(ready_beads.is_empty(), "RoundRobin should only return None for empty input");
-        }
-    }
-
-    #[test]
-    fn prop_selected_bead_in_ready_beads_affinity_soft(ready_beads in ready_beads_strategy()) {
-        let strategy = AffinityStrategy::soft();
-        let ctx = DistributionContext::new();
-
-        let selected = strategy.select_bead(&ready_beads, &ctx);
-
-        if let Some(ref bead) = selected {
-            prop_assert!(
-                ready_beads.contains(bead),
-                "AffinitySoft selected bead '{}' must be in ready beads {:?}",
-                bead,
-                ready_beads
-            );
-        } else {
-            prop_assert!(ready_beads.is_empty(), "AffinitySoft should only return None for empty input");
-        }
-    }
-
-    #[test]
-    fn prop_selected_bead_in_ready_beads_affinity_hard(ready_beads in ready_beads_strategy()) {
-        let strategy = AffinityStrategy::hard();
-        let ctx = DistributionContext::new();
-
-        let selected = strategy.select_bead(&ready_beads, &ctx);
-
-        if let Some(ref bead) = selected {
-            prop_assert!(
-                ready_beads.contains(bead),
-                "AffinityHard selected bead '{}' must be in ready beads {:?}",
-                bead,
-                ready_beads
-            );
-        } else {
-            prop_assert!(ready_beads.is_empty(), "AffinityHard should only return None for empty input");
-        }
-    }
-
-    #[test]
-    fn prop_selected_bead_in_ready_beads_sticky(ready_beads in ready_beads_strategy()) {
-        let strategy = StickyStrategy::new();
-        let ctx = DistributionContext::new();
-
-        let selected = strategy.select_bead(&ready_beads, &ctx);
-
-        if let Some(ref bead) = selected {
-            prop_assert!(
-                ready_beads.contains(bead),
-                "Sticky selected bead '{}' must be in ready beads {:?}",
-                bead,
-                ready_beads
-            );
-        } else {
-            prop_assert!(ready_beads.is_empty(), "Sticky should only return None for empty input");
-        }
-    }
-
-    #[test]
-    fn prop_selected_bead_in_ready_beads_all_strategies(ready_beads in ready_beads_strategy()) {
-        let strategies = all_strategies();
-        let ctx = DistributionContext::new();
-
-        for strategy in &strategies {
-            let selected = strategy.select_bead(&ready_beads, &ctx);
-
-            if let Some(ref bead) = selected {
-                prop_assert!(
-                    ready_beads.contains(bead),
-                    "Strategy '{}' selected bead '{}' must be in ready beads {:?}",
-                    strategy.name(),
-                    bead,
-                    ready_beads
-                );
-            } else {
-                prop_assert!(
-                    ready_beads.is_empty(),
-                    "Strategy '{}' should only return None for empty input",
-                    strategy.name()
-                );
+            for dep in deps {
+                prop_assert!(completed.contains(&dep), "Ready bead {bead_id} has incomplete dep {dep}");
             }
-        }
-    }
-
-    #[test]
-    fn prop_empty_ready_beads_returns_none_all_strategies(
-        strategy_name in proptest::sample::select(available_strategies().to_vec())
-    ) {
-        let strategy = create_strategy(&strategy_name);
-        let ctx = DistributionContext::new();
-        let empty_beads: Vec<String> = vec![];
-
-        if let Some(s) = strategy {
-            let selected = s.select_bead(&empty_beads, &ctx);
-            prop_assert!(
-                selected.is_none(),
-                "Strategy '{}' should return None for empty ready beads",
-                s.name()
-            );
-        }
-    }
-
-    #[test]
-    fn prop_single_bead_always_selected(
-        strategy_name in proptest::sample::select(available_strategies().to_vec()),
-        bead_id in bead_id_strategy()
-    ) {
-        let strategy = create_strategy(&strategy_name);
-        let ctx = DistributionContext::new();
-        let single_bead = vec![bead_id.clone()];
-
-        if let Some(s) = strategy {
-            let selected = s.select_bead(&single_bead, &ctx);
-            prop_assert_eq!(
-                selected,
-                Some(bead_id),
-                "Strategy '{}' should select the single available bead",
-                s.name()
-            );
-        }
-    }
-
-    #[test]
-    fn prop_deterministic_selection_same_input(
-        strategy_name in proptest::sample::select(available_strategies().to_vec()),
-        ready_beads in ready_beads_strategy()
-    ) {
-        let strategy1 = create_strategy(&strategy_name);
-        let strategy2 = create_strategy(&strategy_name);
-        let ctx = DistributionContext::new();
-
-        if let (Some(s1), Some(s2)) = (strategy1, strategy2) {
-            let selected1 = s1.select_bead(&ready_beads, &ctx);
-            let selected2 = s2.select_bead(&ready_beads, &ctx);
-
-            prop_assert_eq!(
-                selected1.clone(), selected2.clone(),
-                "Strategy '{}' should be deterministic: got {:?} then {:?}",
-                s1.name(),
-                selected1,
-                selected2
-            );
         }
     }
 }

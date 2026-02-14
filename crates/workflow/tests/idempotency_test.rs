@@ -7,9 +7,6 @@
 //! - No collisions across large input spaces
 //! - Distribution properties
 
-#![deny(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-#![deny(clippy::panic)]
 #![warn(clippy::pedantic)]
 
 use oya_workflow::idempotent::{

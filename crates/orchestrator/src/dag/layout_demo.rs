@@ -39,16 +39,8 @@ fn demo_basic_usage() -> Result<(), Box<dyn std::error::Error>> {
     dag.add_node("build".to_string())?;
     dag.add_node("test".to_string())?;
     dag.add_node("deploy".to_string())?;
-    dag.add_dependency(
-        "build",
-        "test",
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_dependency(
-        "test",
-        "deploy",
-        DependencyType::BlockingDependency,
-    )?;
+    dag.add_dependency("build", "test", DependencyType::BlockingDependency)?;
+    dag.add_dependency("test", "deploy", DependencyType::BlockingDependency)?;
 
     // Create memoized layout
     let layout = dag.create_memoized_layout(0.1, 100.0)?;
@@ -154,11 +146,7 @@ fn demo_cache_behavior() -> Result<(), Box<dyn std::error::Error>> {
 
     // Add a new node to the DAG
     dag.add_node("new-node".to_string())?;
-    dag.add_dependency(
-        "node-19",
-        "new-node",
-        DependencyType::BlockingDependency,
-    )?;
+    dag.add_dependency("node-19", "new-node", DependencyType::BlockingDependency)?;
 
     // Create new layout with updated DAG
     let layout = dag.create_memoized_layout(0.1, 100.0)?;
@@ -290,11 +278,7 @@ fn create_ci_cd_workflow() -> Result<WorkflowDAG, Box<dyn std::error::Error>> {
     ];
 
     for (from, to) in dependencies {
-        dag.add_dependency(
-            from,
-            to,
-            DependencyType::BlockingDependency,
-        )?;
+        dag.add_dependency(from, to, DependencyType::BlockingDependency)?;
     }
 
     Ok(dag)

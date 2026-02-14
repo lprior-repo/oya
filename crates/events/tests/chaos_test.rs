@@ -440,25 +440,33 @@ async fn test_chaos_wal_recovery() -> Result<(), String> {
         .map_err(|e| format!("failed to connect to database: {}", e))?;
 
     // 2. Manually write an event to WAL (simulating crash)
-    tokio::fs::create_dir_all(&wal_dir).await.map_err(|e| e.to_string())?;
-    
+    tokio::fs::create_dir_all(&wal_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+
     let event = BeadEvent::created(
         bead_id,
         BeadSpec::new("Ghost Event").with_complexity(Complexity::Simple),
     );
-    
+
     // Actually, I'll just use the store to write it, then "corrupt" the DB by deleting it.
     let store = DurableEventStore::new(Arc::clone(&db))
         .await
         .map_err(|e| e.to_string())?
         .with_wal_dir(&wal_dir);
-        
-    store.append_event(&event).await.map_err(|e| e.to_string())?;
-    
+
+    store
+        .append_event(&event)
+        .await
+        .map_err(|e| e.to_string())?;
+
     // Verify it's in DB
-    let events = store.read_events(&bead_id).await.map_err(|e| e.to_string())?;
+    let events = store
+        .read_events(&bead_id)
+        .await
+        .map_err(|e| e.to_string())?;
     assert_eq!(events.len(), 1);
-    
+
     // Now simulate crash/corruption by deleting from DB but keeping WAL
     db.query("DELETE state_transition WHERE bead_id = $bead_id")
         .bind(("bead_id", bead_id.to_string()))
@@ -466,27 +474,33 @@ async fn test_chaos_wal_recovery() -> Result<(), String> {
         .map_err(|e| e.to_string())?
         .check()
         .map_err(|e| e.to_string())?;
-        
+
     // Verify it's GONE from DB
-    let events = store.read_events(&bead_id).await.map_err(|e| e.to_string())?;
+    let events = store
+        .read_events(&bead_id)
+        .await
+        .map_err(|e| e.to_string())?;
     assert_eq!(events.len(), 0, "Event should be deleted from DB");
-    
+
     // 3. Initialize a NEW store instance (simulating restart)
     // This should trigger recovery if implemented
     let recovered_store = DurableEventStore::new(db)
         .await
         .map_err(|e| e.to_string())?
         .with_wal_dir(&wal_dir);
-        
+
     // Trigger recovery explicitly for the custom wal dir
     recovered_store.recover().await.map_err(|e| e.to_string())?;
-        
+
     // 4. Verify recovery
-    let events = recovered_store.read_events(&bead_id).await.map_err(|e| e.to_string())?;
-    
+    let events = recovered_store
+        .read_events(&bead_id)
+        .await
+        .map_err(|e| e.to_string())?;
+
     assert_eq!(
-        events.len(), 
-        1, 
+        events.len(),
+        1,
         "Event should have been recovered from WAL into DB"
     );
     assert_eq!(events[0].event_id(), event.event_id());

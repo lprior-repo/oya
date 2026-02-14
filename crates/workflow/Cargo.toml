@@ -68,9 +68,9 @@ criterion = "0.5"
 rand = "0.8"
 
 [lints.clippy]
-unwrap_used = "forbid"
+unwrap_used = "deny"
 expect_used = "deny"
-panic = "forbid"
+panic = "deny"
 
 [[bench]]
 name = "loop_vs_iterator"

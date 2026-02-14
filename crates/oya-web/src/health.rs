@@ -12,7 +12,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
-use tokio::time::{Duration, timeout};
+use tokio::time::{timeout, Duration};
 
 /// Overall health status of the system.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

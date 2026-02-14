@@ -1,7 +1,5 @@
 //! Workflow type for representing DAG-based task execution.
 
-
-
 use crate::{Slug, Task};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -69,7 +67,7 @@ impl Workflow {
     }
 
     /// Get a mutable reference to a task.
-    /// 
+    ///
     /// # Warning
     /// Use this carefully as it allows direct mutation of task state.
     #[must_use]
@@ -138,17 +136,14 @@ impl Workflow {
 
         // Check for cycles BEFORE mutation
         if self.is_reachable(&from, &to) {
-             return Err(crate::OyaError::validation(
+            return Err(crate::OyaError::validation(
                 "workflow",
                 "cycle detected in task dependencies",
             ));
         }
 
         // Add dependency: to depends on from
-        self.dependencies
-            .entry(to)
-            .or_default()
-            .insert(from);
+        self.dependencies.entry(to).or_default().insert(from);
 
         self.updated_at = now;
         Ok(())
@@ -426,11 +421,7 @@ mod tests {
 
         for i in 0..task_count {
             workflow.add_task(
-                Task::new(
-                    format!("task-{i}"),
-                    format!("Task {i}"),
-                    "stress task",
-                )?,
+                Task::new(format!("task-{i}"), format!("Task {i}"), "stress task")?,
                 Utc::now(),
             )?;
             if i > 0 {
@@ -445,7 +436,7 @@ mod tests {
         for i in 0..task_count {
             // Note: In a real execution engine, we would check readiness before marking complete.
             // But here we just want to verify we can mutate and traverse.
-            
+
             let current_id = Slug::new(format!("task-{i}"))?;
             let task = workflow
                 .get_task_mut(&current_id)
@@ -472,11 +463,13 @@ mod tests {
         // Mark task as completed
         task.transition_to(crate::Stage::InProgress)?;
         task.transition_to(crate::Stage::Completed)?;
-        
+
         let task_id = task.id.clone();
-        let target = workflow.get_task_mut(&task_id).ok_or_else(|| crate::OyaError::not_found("task", task_id.as_str()))?;
+        let target = workflow
+            .get_task_mut(&task_id)
+            .ok_or_else(|| crate::OyaError::not_found("task", task_id.as_str()))?;
         *target = task;
-        
+
         assert!(workflow.is_complete());
         Ok(())
     }

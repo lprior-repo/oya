@@ -7,8 +7,8 @@
 
 use std::io::{BufRead, Read, Write};
 use std::process::{Command, Stdio};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::thread;
 use zellij_frontend::{ZellijIpcClient, ZellijStdin, ZellijStdout};
 

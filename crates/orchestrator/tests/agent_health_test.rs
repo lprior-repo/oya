@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! BDD integration tests for agent health and assignment.
 //!
 //! This module tests the behavior described in bead src-1lg7:
@@ -12,8 +13,6 @@
 //! When: New beads become ready
 //! Then: Unhealthy agent is skipped
 
-// Integration tests allow unwrap/panic for assertions
-
 use orchestrator::agent_swarm::AgentStateLegacy as AgentState;
 use orchestrator::agent_swarm::{AgentHandle, AgentPool, PoolConfig};
 use std::time::Duration;
@@ -24,7 +23,8 @@ use std::time::Duration;
 /// **When** new beads become ready for assignment
 /// **Then** the unhealthy agent is skipped and only healthy agents receive assignments
 #[tokio::test]
-async fn given_unhealthy_agent_when_beads_ready_then_not_assigned() {
+async fn given_unhealthy_agent_when_beads_ready_then_not_assigned(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: An agent pool with three agents
     let pool = AgentPool::new(PoolConfig::for_testing());
 
@@ -33,15 +33,9 @@ async fn given_unhealthy_agent_when_beads_ready_then_not_assigned() {
     let agent_2 = AgentHandle::new("agent-2").with_max_health_failures(2);
     let agent_3 = AgentHandle::new("agent-3").with_max_health_failures(2);
 
-    pool.register_agent(agent_1)
-        .await
-        .expect("agent-1 registration");
-    pool.register_agent(agent_2)
-        .await
-        .expect("agent-2 registration");
-    pool.register_agent(agent_3)
-        .await
-        .expect("agent-3 registration");
+    pool.register_agent(agent_1).await?;
+    pool.register_agent(agent_2).await?;
+    pool.register_agent(agent_3).await?;
 
     // Given: agent-2 becomes unhealthy due to missed heartbeats
     {
@@ -49,19 +43,15 @@ async fn given_unhealthy_agent_when_beads_ready_then_not_assigned() {
         let mut unhealthy_agent = agents
             .into_iter()
             .find(|a| a.id() == "agent-2")
-            .expect("agent-2 should exist");
+            .ok_or("agent-2 should exist")?;
 
         // Simulate missed heartbeats by recording health failures
         unhealthy_agent.record_health_failure();
         unhealthy_agent.record_health_failure();
 
         // Update the pool with the unhealthy agent
-        pool.unregister_agent("agent-2")
-            .await
-            .expect("unregister agent-2");
-        pool.register_agent(unhealthy_agent)
-            .await
-            .expect("re-register unhealthy agent-2");
+        pool.unregister_agent("agent-2").await?;
+        pool.register_agent(unhealthy_agent).await?;
     }
 
     // Verify agent-2 is now unhealthy
@@ -71,7 +61,7 @@ async fn given_unhealthy_agent_when_beads_ready_then_not_assigned() {
         "agent-2 should still be in the pool"
     );
 
-    let agent_2 = agent_2_state.expect("agent-2 exists");
+    let agent_2 = agent_2_state.ok_or("agent-2 exists")?;
     assert_eq!(
         agent_2.state(),
         AgentState::Unhealthy,
@@ -88,7 +78,7 @@ async fn given_unhealthy_agent_when_beads_ready_then_not_assigned() {
         "First bead assignment should succeed"
     );
 
-    let assigned_agent_1 = bead_1_result.expect("bead-1 assigned");
+    let assigned_agent_1 = bead_1_result.map_err(|e| format!("bead-1 assignment failed: {e:?}"))?;
     assert!(
         assigned_agent_1 != "agent-2",
         "agent-2 (unhealthy) should not be assigned bead-1"
@@ -99,14 +89,14 @@ async fn given_unhealthy_agent_when_beads_ready_then_not_assigned() {
         "Second bead assignment should succeed"
     );
 
-    let assigned_agent_2 = bead_2_result.expect("bead-2 assigned");
+    let assigned_agent_2 = bead_2_result.map_err(|e| format!("bead-2 assignment failed: {e:?}"))?;
     assert!(
         assigned_agent_2 != "agent-2",
         "agent-2 (unhealthy) should not be assigned bead-2"
     );
 
     // Verify that both healthy agents got work
-    let assigned_agents = vec![assigned_agent_1, assigned_agent_2];
+    let assigned_agents = [assigned_agent_1, assigned_agent_2];
     assert!(
         assigned_agents.contains(&"agent-1".to_string()),
         "agent-1 should have been assigned a bead"
@@ -125,6 +115,7 @@ async fn given_unhealthy_agent_when_beads_ready_then_not_assigned() {
     assert_eq!(stats.working, 2, "Two agents should be working");
     assert_eq!(stats.unhealthy, 1, "One agent should be unhealthy");
     assert_eq!(stats.idle, 0, "No idle agents should remain");
+    Ok(())
 }
 
 /// BDD Test: All agents unhealthy results in no assignment
@@ -133,19 +124,16 @@ async fn given_unhealthy_agent_when_beads_ready_then_not_assigned() {
 /// **When** a bead becomes ready for assignment
 /// **Then** no agent is assigned the bead and an error is returned
 #[tokio::test]
-async fn given_all_unhealthy_when_bead_ready_then_no_assignment() {
+async fn given_all_unhealthy_when_bead_ready_then_no_assignment(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: An agent pool with two agents
     let pool = AgentPool::new(PoolConfig::for_testing());
 
     let agent_1 = AgentHandle::new("agent-1").with_max_health_failures(1);
     let agent_2 = AgentHandle::new("agent-2").with_max_health_failures(1);
 
-    pool.register_agent(agent_1)
-        .await
-        .expect("agent-1 registration");
-    pool.register_agent(agent_2)
-        .await
-        .expect("agent-2 registration");
+    pool.register_agent(agent_1).await?;
+    pool.register_agent(agent_2).await?;
 
     // Given: Both agents become unhealthy
     for agent_id in &["agent-1", "agent-2"] {
@@ -153,16 +141,16 @@ async fn given_all_unhealthy_when_bead_ready_then_no_assignment() {
         let mut agent = agents
             .into_iter()
             .find(|a| a.id() == *agent_id)
-            .unwrap_or_else(|| panic!("{} should exist", agent_id));
+            .ok_or_else(|| format!("{agent_id} should exist"))?;
 
         agent.record_health_failure();
 
         pool.unregister_agent(agent_id)
             .await
-            .unwrap_or_else(|e| panic!("unregister {}: {:?}", agent_id, e));
+            .map_err(|e| format!("unregister {agent_id}: {e:?}"))?;
         pool.register_agent(agent)
             .await
-            .unwrap_or_else(|e| panic!("re-register unhealthy {}: {:?}", agent_id, e));
+            .map_err(|e| format!("re-register unhealthy {agent_id}: {e:?}"))?;
     }
 
     // Verify both are unhealthy
@@ -177,6 +165,7 @@ async fn given_all_unhealthy_when_bead_ready_then_no_assignment() {
         result.is_err(),
         "Assignment should fail when all agents are unhealthy"
     );
+    Ok(())
 }
 
 /// BDD Test: Unhealthy agent recovers and can receive assignments
@@ -185,19 +174,16 @@ async fn given_all_unhealthy_when_bead_ready_then_no_assignment() {
 /// **When** new beads become ready for assignment
 /// **Then** the recovered agent can be assigned beads
 #[tokio::test]
-async fn given_recovered_agent_when_beads_ready_then_assigned() {
+async fn given_recovered_agent_when_beads_ready_then_assigned(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: An agent pool with one unhealthy and one healthy agent
     let pool = AgentPool::new(PoolConfig::for_testing());
 
     let agent_1 = AgentHandle::new("agent-1").with_max_health_failures(2);
     let agent_2 = AgentHandle::new("agent-2").with_max_health_failures(2);
 
-    pool.register_agent(agent_1)
-        .await
-        .expect("agent-1 registration");
-    pool.register_agent(agent_2)
-        .await
-        .expect("agent-2 registration");
+    pool.register_agent(agent_1).await?;
+    pool.register_agent(agent_2).await?;
 
     // Make agent-1 unhealthy
     {
@@ -205,27 +191,21 @@ async fn given_recovered_agent_when_beads_ready_then_assigned() {
         let mut unhealthy_agent = agents
             .into_iter()
             .find(|a| a.id() == "agent-1")
-            .expect("agent-1 should exist");
+            .ok_or("agent-1 should exist")?;
 
         unhealthy_agent.record_health_failure();
         unhealthy_agent.record_health_failure();
 
-        pool.unregister_agent("agent-1")
-            .await
-            .expect("unregister agent-1");
-        pool.register_agent(unhealthy_agent)
-            .await
-            .expect("re-register unhealthy agent-1");
+        pool.unregister_agent("agent-1").await?;
+        pool.register_agent(unhealthy_agent).await?;
     }
 
     // Given: agent-1 recovers (heartbeat received)
-    pool.record_heartbeat("agent-1")
-        .await
-        .expect("record heartbeat for agent-1");
+    pool.record_heartbeat("agent-1").await?;
 
     // Verify agent-1 is now healthy (Idle)
     let agent_1_state = pool.get_agent("agent-1").await;
-    let agent_1 = agent_1_state.expect("agent-1 exists");
+    let agent_1 = agent_1_state.ok_or("agent-1 exists")?;
     assert_eq!(
         agent_1.state(),
         AgentState::Idle,
@@ -240,6 +220,7 @@ async fn given_recovered_agent_when_beads_ready_then_assigned() {
         result.is_ok(),
         "Recovered agent-1 should accept a direct assignment"
     );
+    Ok(())
 }
 
 /// BDD Test: Agent becomes unhealthy while working on a bead
@@ -248,24 +229,19 @@ async fn given_recovered_agent_when_beads_ready_then_assigned() {
 /// **When** checking available agents for new assignments
 /// **Then** the unhealthy working agent is not considered available
 #[tokio::test]
-async fn given_working_becomes_unhealthy_when_new_bead_then_not_assigned() {
+async fn given_working_becomes_unhealthy_when_new_bead_then_not_assigned(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: An agent pool with two agents, one working
     let pool = AgentPool::new(PoolConfig::for_testing());
 
     let agent_1 = AgentHandle::new("agent-1").with_max_health_failures(2);
     let agent_2 = AgentHandle::new("agent-2").with_max_health_failures(2);
 
-    pool.register_agent(agent_1)
-        .await
-        .expect("agent-1 registration");
-    pool.register_agent(agent_2)
-        .await
-        .expect("agent-2 registration");
+    pool.register_agent(agent_1).await?;
+    pool.register_agent(agent_2).await?;
 
     // Assign bead-1 to agent-1 (making it Working)
-    pool.assign_bead_to_agent("bead-1", "agent-1")
-        .await
-        .expect("assign bead-1 to agent-1");
+    pool.assign_bead_to_agent("bead-1", "agent-1").await?;
 
     // Given: agent-1 becomes unhealthy while working
     {
@@ -273,22 +249,18 @@ async fn given_working_becomes_unhealthy_when_new_bead_then_not_assigned() {
         let mut unhealthy_agent = agents
             .into_iter()
             .find(|a| a.id() == "agent-1")
-            .expect("agent-1 should exist");
+            .ok_or("agent-1 should exist")?;
 
         unhealthy_agent.record_health_failure();
         unhealthy_agent.record_health_failure();
 
-        pool.unregister_agent("agent-1")
-            .await
-            .expect("unregister agent-1");
-        pool.register_agent(unhealthy_agent)
-            .await
-            .expect("re-register unhealthy agent-1");
+        pool.unregister_agent("agent-1").await?;
+        pool.register_agent(unhealthy_agent).await?;
     }
 
     // Verify agent-1 is unhealthy
     let agent_1_state = pool.get_agent("agent-1").await;
-    let agent_1 = agent_1_state.expect("agent-1 exists");
+    let agent_1 = agent_1_state.ok_or("agent-1 exists")?;
     assert_eq!(
         agent_1.state(),
         AgentState::Unhealthy,
@@ -301,26 +273,27 @@ async fn given_working_becomes_unhealthy_when_new_bead_then_not_assigned() {
     // Then: agent-2 (the only available agent) gets the assignment
     assert!(result.is_ok(), "Assignment should succeed");
 
-    let assigned_agent = result.expect("bead-2 assigned");
+    let assigned_agent = result.map_err(|e| format!("bead-2 assignment failed: {e:?}"))?;
     assert_eq!(
         assigned_agent, "agent-2",
         "Only agent-2 should be assigned (agent-1 is unhealthy)"
     );
+    Ok(())
 }
 
 /// Helper test: Verify heartbeat timeout detection
 ///
 /// This test validates that the heartbeat timeout mechanism works correctly.
 #[tokio::test]
-async fn test_heartbeat_timeout_detection() {
+async fn test_heartbeat_timeout_detection() -> Result<(), Box<dyn std::error::Error>> {
     let pool = AgentPool::new(PoolConfig::for_testing());
 
     let agent = AgentHandle::new("agent-timeout-test");
-    pool.register_agent(agent).await.expect("registration");
+    pool.register_agent(agent).await?;
 
     // Agent should initially be healthy
     let agent_state = pool.get_agent("agent-timeout-test").await;
-    let agent = agent_state.expect("agent exists");
+    let agent = agent_state.ok_or("agent exists")?;
 
     assert_eq!(agent.state(), AgentState::Idle, "New agent should be Idle");
 
@@ -335,9 +308,10 @@ async fn test_heartbeat_timeout_detection() {
 
     assert!(health_result.is_ok(), "Health check should succeed");
 
-    let result = health_result.expect("health check result");
+    let result = health_result.map_err(|e| format!("health check failed: {e:?}"))?;
     assert!(
         result.time_since_heartbeat > Duration::from_millis(500),
         "Should detect heartbeat timeout"
     );
+    Ok(())
 }

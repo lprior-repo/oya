@@ -174,12 +174,7 @@ impl IpcBridge {
                 timestamp,
                 event_id: _,
             } => Self::convert_validation_ran(
-                bead_id,
-                *passed,
-                output,
-                command,
-                *exit_code,
-                timestamp,
+                bead_id, *passed, output, command, *exit_code, timestamp,
             ),
 
             BeadEvent::RecursionExhausted {
@@ -188,7 +183,9 @@ impl IpcBridge {
                 last_stage,
                 timestamp,
                 event_id: _,
-            } => Self::convert_recursion_exhausted(bead_id, *total_attempts, *last_stage, timestamp),
+            } => {
+                Self::convert_recursion_exhausted(bead_id, *total_attempts, *last_stage, timestamp)
+            }
 
             // Non-stage events are not supported
             _ => Err(IpcBridgeError::UnsupportedEventType {
@@ -802,7 +799,7 @@ mod tests {
         };
 
         // WHEN: Converting to timestamp
-        let result = bridge.datetime_to_timestamp(&dt);
+        let result = IpcBridge::datetime_to_timestamp(&dt);
 
         // THEN: Should return correct timestamp
         assert!(result.is_ok());

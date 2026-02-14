@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! Property-based tests for DAG ready state invariant (src-yaw2).
 //!
 //! ## Phase 5 - Property Tests
@@ -7,10 +8,6 @@
 //! Invariant: If a bead is in "ready" state, it must have no incomplete
 //! blocking dependencies. This means all blocking dependencies must be
 //! in the completed set.
-
-#![forbid(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-#![forbid(clippy::panic)]
 
 use im::HashSet;
 use orchestrator::dag::{BeadId, DependencyType, WorkflowDAG};
@@ -23,8 +20,8 @@ fn build_linear_dag(size: usize) -> Result<WorkflowDAG, String> {
     }
     for i in 0..size.saturating_sub(1) {
         dag.add_edge(
-            format!("bead-{}", i),
-            format!("bead-{}", i + 1),
+            &format!("bead-{}", i),
+            &format!("bead-{}", i + 1),
             DependencyType::BlockingDependency,
         )
         .map_err(|e| e.to_string())?;
@@ -34,39 +31,19 @@ fn build_linear_dag(size: usize) -> Result<WorkflowDAG, String> {
 
 fn build_diamond_dag() -> Result<WorkflowDAG, String> {
     let mut dag = WorkflowDAG::new();
-    dag.add_node("bead-a".to_string())
-        .map_err(|e| e.to_string())?;
-    dag.add_node("bead-b".to_string())
-        .map_err(|e| e.to_string())?;
-    dag.add_node("bead-c".to_string())
-        .map_err(|e| e.to_string())?;
-    dag.add_node("bead-d".to_string())
-        .map_err(|e| e.to_string())?;
+    dag.add_node("bead-a").map_err(|e| e.to_string())?;
+    dag.add_node("bead-b").map_err(|e| e.to_string())?;
+    dag.add_node("bead-c").map_err(|e| e.to_string())?;
+    dag.add_node("bead-d").map_err(|e| e.to_string())?;
 
-    dag.add_edge(
-        "bead-a".to_string(),
-        "bead-b".to_string(),
-        DependencyType::BlockingDependency,
-    )
-    .map_err(|e| e.to_string())?;
-    dag.add_edge(
-        "bead-a".to_string(),
-        "bead-c".to_string(),
-        DependencyType::BlockingDependency,
-    )
-    .map_err(|e| e.to_string())?;
-    dag.add_edge(
-        "bead-b".to_string(),
-        "bead-d".to_string(),
-        DependencyType::BlockingDependency,
-    )
-    .map_err(|e| e.to_string())?;
-    dag.add_edge(
-        "bead-c".to_string(),
-        "bead-d".to_string(),
-        DependencyType::BlockingDependency,
-    )
-    .map_err(|e| e.to_string())?;
+    dag.add_edge("bead-a", "bead-b", DependencyType::BlockingDependency)
+        .map_err(|e| e.to_string())?;
+    dag.add_edge("bead-a", "bead-c", DependencyType::BlockingDependency)
+        .map_err(|e| e.to_string())?;
+    dag.add_edge("bead-b", "bead-d", DependencyType::BlockingDependency)
+        .map_err(|e| e.to_string())?;
+    dag.add_edge("bead-c", "bead-d", DependencyType::BlockingDependency)
+        .map_err(|e| e.to_string())?;
 
     Ok(dag)
 }
@@ -74,13 +51,13 @@ fn build_diamond_dag() -> Result<WorkflowDAG, String> {
 #[test]
 fn prop_single_bead_no_deps_is_ready() -> Result<(), Box<dyn std::error::Error>> {
     let mut dag = WorkflowDAG::new();
-    dag.add_node("bead-1".to_string())?;
+    dag.add_node("bead-1")?;
 
     let completed = HashSet::new();
     let ready = dag.get_ready_beads(&completed);
 
     assert_eq!(ready, vec!["bead-1".to_string()]);
-    assert!(dag.is_ready(&"bead-1".to_string(), &completed)?);
+    assert!(dag.is_ready("bead-1", &completed)?);
 
     Ok(())
 }
@@ -88,13 +65,9 @@ fn prop_single_bead_no_deps_is_ready() -> Result<(), Box<dyn std::error::Error>>
 #[test]
 fn prop_bead_with_complete_dep_is_ready() -> Result<(), Box<dyn std::error::Error>> {
     let mut dag = WorkflowDAG::new();
-    dag.add_node("bead-a".to_string())?;
-    dag.add_node("bead-b".to_string())?;
-    dag.add_edge(
-        "bead-a".to_string(),
-        "bead-b".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
+    dag.add_node("bead-a")?;
+    dag.add_node("bead-b")?;
+    dag.add_edge("bead-a", "bead-b", DependencyType::BlockingDependency)?;
 
     let mut completed = HashSet::new();
     completed.insert("bead-a".to_string());
@@ -102,9 +75,9 @@ fn prop_bead_with_complete_dep_is_ready() -> Result<(), Box<dyn std::error::Erro
     let ready = dag.get_ready_beads(&completed);
 
     assert!(ready.contains(&"bead-b".to_string()));
-    assert!(dag.is_ready(&"bead-b".to_string(), &completed)?);
+    assert!(dag.is_ready("bead-b", &completed)?);
 
-    let deps = dag.get_dependencies(&"bead-b".to_string())?;
+    let deps = dag.get_dependencies("bead-b")?;
     for dep_id in deps {
         assert!(
             completed.contains(&dep_id),
@@ -119,19 +92,15 @@ fn prop_bead_with_complete_dep_is_ready() -> Result<(), Box<dyn std::error::Erro
 #[test]
 fn prop_bead_with_incomplete_dep_is_not_ready() -> Result<(), Box<dyn std::error::Error>> {
     let mut dag = WorkflowDAG::new();
-    dag.add_node("bead-a".to_string())?;
-    dag.add_node("bead-b".to_string())?;
-    dag.add_edge(
-        "bead-a".to_string(),
-        "bead-b".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
+    dag.add_node("bead-a")?;
+    dag.add_node("bead-b")?;
+    dag.add_edge("bead-a", "bead-b", DependencyType::BlockingDependency)?;
 
     let completed = HashSet::new();
     let ready = dag.get_ready_beads(&completed);
 
     assert!(!ready.contains(&"bead-b".to_string()));
-    assert!(!dag.is_ready(&"bead-b".to_string(), &completed)?);
+    assert!(!dag.is_ready("bead-b", &completed)?);
 
     Ok(())
 }

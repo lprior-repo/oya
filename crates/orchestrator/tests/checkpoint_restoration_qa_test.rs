@@ -1,13 +1,10 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! Phase 11 QA: Basic checkpoint restoration testing.
 //!
 //! This test suite validates:
 //! - Unit test validation for restoration methods
 //! - Integration testing of checkpoint restoration workflow
 //! - Edge case testing of error conditions
-
-#![forbid(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-#![forbid(clippy::panic)]
 
 use std::time::Instant;
 
@@ -16,8 +13,8 @@ use serde::{Deserialize, Serialize};
 use orchestrator::persistence::{
     OrchestratorStore, PersistenceError, PersistenceResult, StoreConfig,
 };
-use orchestrator::replay::CheckpointManager;
 use orchestrator::replay::checkpoint::CheckpointConfig;
+use orchestrator::replay::CheckpointManager;
 
 /// Test workflow state for serialization/deserialization.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -124,10 +121,10 @@ async fn test_restore_scheduler_state_by_id() -> Result<(), Box<dyn std::error::
 
 /// Test: Error when restoring from non-existent checkpoint.
 #[tokio::test]
-async fn test_restore_nonexistent_checkpoint_error() {
+async fn test_restore_nonexistent_checkpoint_error() -> Result<(), Box<dyn std::error::Error>> {
     let config = StoreConfig::in_memory();
     let manager = CheckpointManager::new(
-        OrchestratorStore::connect(config).await.unwrap(),
+        OrchestratorStore::connect(config).await?,
         CheckpointConfig::default(),
     );
 
@@ -140,19 +137,21 @@ async fn test_restore_nonexistent_checkpoint_error() {
         result.is_err(),
         "Should return error for non-existent checkpoint"
     );
-    match result.unwrap_err() {
-        PersistenceError::NotFound { .. } => {
+    match result {
+        Err(PersistenceError::NotFound { .. }) => {
             // Expected error type
         }
-        e => panic!("Expected NotFound error, got: {:?}", e),
+        Err(e) => return Err(format!("Expected NotFound error, got: {e:?}").into()),
+        Ok(_) => return Err("Expected error, got Ok".into()),
     }
+    Ok(())
 }
 
 /// Test: Restore when no checkpoints exist.
 #[tokio::test]
-async fn test_restore_when_no_checkpoints() {
+async fn test_restore_when_no_checkpoints() -> Result<(), Box<dyn std::error::Error>> {
     let config = StoreConfig::in_memory();
-    let store = OrchestratorStore::connect(config).await.unwrap();
+    let store = OrchestratorStore::connect(config).await?;
     let manager = CheckpointManager::new(store, CheckpointConfig::default());
 
     // Try to restore latest when none exist
@@ -161,6 +160,7 @@ async fn test_restore_when_no_checkpoints() {
         result.is_err(),
         "Should return error when no checkpoints exist"
     );
+    Ok(())
 }
 
 /// Test: Performance benchmark for restoration operations.
@@ -177,9 +177,7 @@ async fn test_restoration_performance_benchmark() -> Result<(), Box<dyn std::err
         let complexity = i * 100; // 100 to 500 workflows
         let state = TestSchedulerState {
             version: i,
-            active_workflows: (1..=complexity)
-                .map(|j| format!("workflow-{}", j))
-                .collect(),
+            active_workflows: (1..=complexity).map(|j| format!("workflow-{j}")).collect(),
             last_event_id: format!("event-{}", i * 1000),
             metrics: TestMetrics {
                 total_processed: (i * 100000) as u64,
@@ -221,12 +219,11 @@ async fn test_restoration_performance_benchmark() -> Result<(), Box<dyn std::err
     // Calculate average restoration time
     let total_duration: std::time::Duration = durations.iter().sum();
     let average_duration = total_duration / durations.len() as u32;
-    println!("Average restoration time: {:?}", average_duration);
+    println!("Average restoration time: {average_duration:?}");
 
     assert!(
         average_duration < std::time::Duration::from_millis(200),
-        "Average restoration time should be reasonable: {:?}",
-        average_duration
+        "Average restoration time should be reasonable: {average_duration:?}",
     );
 
     Ok(())
@@ -238,9 +235,9 @@ async fn test_restoration_performance_benchmark() -> Result<(), Box<dyn std::err
 /// WHEN error messages are generated
 /// THEN they follow consistent lowercase format with context
 #[tokio::test]
-async fn test_error_message_consistency() {
+async fn test_error_message_consistency() -> Result<(), Box<dyn std::error::Error>> {
     let config = StoreConfig::in_memory();
-    let store = OrchestratorStore::connect(config).await.unwrap();
+    let store = OrchestratorStore::connect(config).await?;
     let _ = store.initialize_schema().await;
     let mut manager = CheckpointManager::new(store, CheckpointConfig::default());
 
@@ -256,18 +253,17 @@ async fn test_error_message_consistency() {
             // Verify lowercase format: "failed to deserialize <field>: <reason>"
             assert!(
                 reason.to_lowercase().starts_with("failed to deserialize"),
-                "Error message should start with lowercase 'failed to deserialize', got: {}",
-                reason
+                "Error message should start with lowercase 'failed to deserialize', got: {reason}",
             );
             assert!(
                 reason.contains("scheduler state"),
-                "Error message should include field context 'scheduler state', got: {}",
-                reason
+                "Error message should include field context 'scheduler state', got: {reason}",
             );
         }
-        Err(e) => panic!("Expected SerializationError, got: {:?}", e),
-        Ok(_) => panic!("Expected error when deserializing invalid JSON"),
+        Err(e) => return Err(format!("Expected SerializationError, got: {e:?}").into()),
+        Ok(_) => return Err("Expected error when deserializing invalid JSON".into()),
     }
+    Ok(())
 }
 
 /// Generate a QA report after all tests run.

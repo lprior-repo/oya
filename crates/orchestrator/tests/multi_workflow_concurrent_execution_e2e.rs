@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! End-to-End test for multi-workflow concurrent execution.
 //!
 //! This test validates the scenario: 3 workflows execute concurrently.
@@ -196,21 +197,21 @@ fn create_linear_chain_workflow() -> Result<(WorkflowDAG, Vec<String>), String> 
 
     // Add all beads
     for bead_id in &bead_ids {
-        dag.add_node(bead_id.clone())
+        dag.add_node(bead_id)
             .map_err(|e| format!("Failed to add bead {}: {:?}", bead_id, e))?;
     }
 
     // Add dependencies: A → B → C
     dag.add_edge(
-        bead_ids[0].clone(),
-        bead_ids[1].clone(),
+        &bead_ids[0],
+        &bead_ids[1],
         DependencyType::BlockingDependency,
     )
     .map_err(|e| format!("Failed to add edge A→B: {:?}", e))?;
 
     dag.add_edge(
-        bead_ids[1].clone(),
-        bead_ids[2].clone(),
+        &bead_ids[1],
+        &bead_ids[2],
         DependencyType::BlockingDependency,
     )
     .map_err(|e| format!("Failed to add edge B→C: {:?}", e))?;
@@ -230,35 +231,35 @@ fn create_diamond_workflow() -> Result<(WorkflowDAG, Vec<String>), String> {
 
     // Add all beads
     for bead_id in &bead_ids {
-        dag.add_node(bead_id.clone())
+        dag.add_node(bead_id)
             .map_err(|e| format!("Failed to add bead {}: {:?}", bead_id, e))?;
     }
 
     // Add diamond dependencies: A → B, A → C, B → D, C → D
     dag.add_edge(
-        bead_ids[0].clone(),
-        bead_ids[1].clone(),
+        &bead_ids[0],
+        &bead_ids[1],
         DependencyType::BlockingDependency,
     )
     .map_err(|e| format!("Failed to add edge A→B: {:?}", e))?;
 
     dag.add_edge(
-        bead_ids[0].clone(),
-        bead_ids[2].clone(),
+        &bead_ids[0],
+        &bead_ids[2],
         DependencyType::BlockingDependency,
     )
     .map_err(|e| format!("Failed to add edge A→C: {:?}", e))?;
 
     dag.add_edge(
-        bead_ids[1].clone(),
-        bead_ids[3].clone(),
+        &bead_ids[1],
+        &bead_ids[3],
         DependencyType::BlockingDependency,
     )
     .map_err(|e| format!("Failed to add edge B→D: {:?}", e))?;
 
     dag.add_edge(
-        bead_ids[2].clone(),
-        bead_ids[3].clone(),
+        &bead_ids[2],
+        &bead_ids[3],
         DependencyType::BlockingDependency,
     )
     .map_err(|e| format!("Failed to add edge C→D: {:?}", e))?;
@@ -273,14 +274,14 @@ fn create_simple_pair_workflow() -> Result<(WorkflowDAG, Vec<String>), String> {
 
     // Add all beads
     for bead_id in &bead_ids {
-        dag.add_node(bead_id.clone())
+        dag.add_node(bead_id)
             .map_err(|e| format!("Failed to add bead {}: {:?}", bead_id, e))?;
     }
 
     // Add dependency: A → B
     dag.add_edge(
-        bead_ids[0].clone(),
-        bead_ids[1].clone(),
+        &bead_ids[0],
+        &bead_ids[1],
         DependencyType::BlockingDependency,
     )
     .map_err(|e| format!("Failed to add edge A→B: {:?}", e))?;

@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! Comprehensive unit tests for CheckpointManager checkpoint/resume cycle.
 //!
 //! This test suite covers:
@@ -15,10 +16,6 @@
 //! - Railway-Oriented Programming for error paths
 //! - Functional patterns where applicable
 //! - BDD-style test documentation
-
-#![forbid(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-#![forbid(clippy::panic)]
 
 use std::sync::Arc;
 
@@ -226,13 +223,12 @@ fn test_checkpoint_compression() -> Result<(), Box<dyn std::error::Error>> {
     let ratio = compression_ratio(uncompressed.len() as u64, compressed.len() as u64);
     assert!(
         ratio > 1.0,
-        "compression ratio should be > 1.0, got {}",
-        ratio
+        "compression ratio should be > 1.0, got {ratio}",
     );
 
     // Verify space savings
     let saved = space_savings(uncompressed.len() as u64, compressed.len() as u64);
-    assert!(saved > 0, "should save space: {} bytes", saved);
+    assert!(saved > 0, "should save space: {saved} bytes");
     Ok(())
 }
 
@@ -301,14 +297,9 @@ fn test_multiple_checkpoints_saved() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // Store three checkpoints
-    let r1 = storage.store_checkpoint(vec![1; 100], metadata(id1));
-    let r2 = storage.store_checkpoint(vec![2; 100], metadata(id2));
-    let r3 = storage.store_checkpoint(vec![3; 100], metadata(id3));
-
-    assert!(
-        r1.is_ok() && r2.is_ok() && r3.is_ok(),
-        "all stores should succeed"
-    );
+    let _ = storage.store_checkpoint(vec![1; 100], metadata(id1))?;
+    let _ = storage.store_checkpoint(vec![2; 100], metadata(id2))?;
+    let _ = storage.store_checkpoint(vec![3; 100], metadata(id3))?;
 
     // List checkpoints
     let ids = storage.list_checkpoints()?;
@@ -363,7 +354,7 @@ fn test_checkpoint_load_from_storage() -> Result<(), Box<dyn std::error::Error>>
     };
 
     // Store checkpoint
-    let _ = storage.store_checkpoint(data.clone(), metadata.clone());
+    let _ = storage.store_checkpoint(data.clone(), metadata.clone())?;
 
     // Load checkpoint
     let (loaded_data, loaded_metadata) = storage.load_checkpoint(&checkpoint_id)?;
@@ -378,7 +369,7 @@ fn test_checkpoint_load_from_storage() -> Result<(), Box<dyn std::error::Error>>
 /// WHEN load_checkpoint() is called with non-existent ID
 /// THEN NotFound error should be returned
 #[test]
-fn test_load_nonexistent_checkpoint_returns_error() {
+fn test_load_nonexistent_checkpoint_returns_error() -> Result<(), Box<dyn std::error::Error>> {
     let storage = InMemoryCheckpointStorage::new();
     let fake_id = CheckpointId::new();
 
@@ -389,10 +380,10 @@ fn test_load_nonexistent_checkpoint_returns_error() {
         Err(StorageError::NotFound { .. }) => {
             // Expected error type
         }
-        _ => {
-            panic!("expected NotFound error, got: {:?}", load_result);
-        }
+        Err(e) => return Err(format!("expected NotFound error, got: {e:?}").into()),
+        Ok(_) => return Err("Expected Err but got Ok".into()),
     }
+    Ok(())
 }
 
 /// Test: BDD - Checkpoint round-trip preserves data.
@@ -441,7 +432,7 @@ fn test_workflow_state_restore_from_checkpoint() -> RestoreResult<()> {
 
     // Serialize state
     let serialized = serialize_state(&original_state)
-        .map_err(|e| RestoreError::invalid_data(format!("serialization failed: {}", e)))?;
+        .map_err(|e| RestoreError::invalid_data(format!("serialization failed: {e}")))?;
 
     // Note: restore_checkpoint requires storage integration, which is not available
     // in this test environment. This test verifies the serialization step works.
@@ -463,7 +454,7 @@ fn test_workflow_state_restore_from_checkpoint() -> RestoreResult<()> {
 /// WHEN delete_checkpoint() is called
 /// THEN the checkpoint should be removed
 #[test]
-fn test_checkpoint_deletion() {
+fn test_checkpoint_deletion() -> Result<(), Box<dyn std::error::Error>> {
     let mut storage = InMemoryCheckpointStorage::new();
     let checkpoint_id = CheckpointId::new();
     let data = vec![1, 2, 3];
@@ -478,7 +469,7 @@ fn test_checkpoint_deletion() {
     };
 
     // Store checkpoint
-    let _ = storage.store_checkpoint(data, metadata);
+    let _ = storage.store_checkpoint(data, metadata)?;
 
     // Verify it exists
     let load_result = storage.load_checkpoint(&checkpoint_id);
@@ -497,6 +488,7 @@ fn test_checkpoint_deletion() {
         load_result2.is_err(),
         "checkpoint should not exist after deletion"
     );
+    Ok(())
 }
 
 /// Test: BDD - Deleting non-existent checkpoint returns error.
@@ -505,7 +497,7 @@ fn test_checkpoint_deletion() {
 /// WHEN delete_checkpoint() is called with non-existent ID
 /// THEN NotFound error should be returned
 #[test]
-fn test_delete_nonexistent_checkpoint_returns_error() {
+fn test_delete_nonexistent_checkpoint_returns_error() -> Result<(), Box<dyn std::error::Error>> {
     let mut storage = InMemoryCheckpointStorage::new();
     let fake_id = CheckpointId::new();
 
@@ -516,10 +508,10 @@ fn test_delete_nonexistent_checkpoint_returns_error() {
         Err(StorageError::NotFound { .. }) => {
             // Expected error type
         }
-        _ => {
-            panic!("expected NotFound error, got: {:?}", delete_result);
-        }
+        Err(e) => return Err(format!("expected NotFound error, got: {e:?}").into()),
+        Ok(_) => return Err("Expected Err but got Ok".into()),
     }
+    Ok(())
 }
 
 /// Test: BDD - All checkpoints can be cleared.
@@ -543,7 +535,7 @@ fn test_clear_all_checkpoints() -> Result<(), Box<dyn std::error::Error>> {
             compression_ratio: 2.0,
         };
 
-        let _ = storage.store_checkpoint(vec![0u8; 100], metadata);
+        let _ = storage.store_checkpoint(vec![0u8; 100], metadata)?;
     }
 
     // List checkpoints
@@ -579,7 +571,7 @@ fn test_orphan_checkpoint_detection() -> Result<(), Box<dyn std::error::Error>> 
         compression_ratio: 2.0,
     };
 
-    let _ = storage.store_checkpoint(vec![1u8; 100], metadata1);
+    let _ = storage.store_checkpoint(vec![1u8; 100], metadata1)?;
 
     // In a real system, orphans would be checkpoints whose workflow IDs
     // no longer exist in the workflows table. For this test, we verify
@@ -621,7 +613,7 @@ fn test_storage_stats_accuracy() -> Result<(), Box<dyn std::error::Error>> {
         compression_ratio: 2.0,
     };
 
-    let _ = storage.store_checkpoint(vec![0u8; 1000], metadata1);
+    let _ = storage.store_checkpoint(vec![0u8; 1000], metadata1)?;
 
     // Check stats after one checkpoint
     let stats2 = storage.get_stats()?;
@@ -647,7 +639,7 @@ fn test_storage_stats_accuracy() -> Result<(), Box<dyn std::error::Error>> {
 
 /// Test: Decompression of invalid data returns error.
 #[test]
-fn test_decompress_invalid_data_returns_error() {
+fn test_decompress_invalid_data_returns_error() -> Result<(), Box<dyn std::error::Error>> {
     let invalid_data = vec![0xFF, 0xFE, 0xFD]; // Not valid zstd data
 
     let result = decompress(&invalid_data, 100);
@@ -657,10 +649,10 @@ fn test_decompress_invalid_data_returns_error() {
         Err(Error::CheckpointFailed { .. }) => {
             // Expected error type
         }
-        _ => {
-            panic!("expected CheckpointFailed error, got: {:?}", result);
-        }
+        Err(e) => return Err(format!("expected CheckpointFailed error, got: {e:?}").into()),
+        Ok(_) => return Err("Expected Err but got Ok".into()),
     }
+    Ok(())
 }
 
 /// Test: Compression error is propagated without panic.
@@ -688,7 +680,7 @@ fn test_compression_error_propagation() {
 
 /// Test: Storage operations return Result without panic.
 #[test]
-fn test_storage_error_handling_no_panic() {
+fn test_storage_error_handling_no_panic() -> Result<(), Box<dyn std::error::Error>> {
     let storage = InMemoryCheckpointStorage::new();
     let fake_id = CheckpointId::new();
 
@@ -702,7 +694,7 @@ fn test_storage_error_handling_no_panic() {
     assert!(delete_result.is_err(), "should return error");
 
     // Verify no panic occurred
-    assert!(true, "test completed without panic");
+    Ok(())
 }
 
 /// Test: Manager handles edge cases without panic.
@@ -730,7 +722,7 @@ fn test_manager_handles_edge_cases() {
 
 /// Test: Multiple concurrent checkpoint operations are safe.
 #[test]
-fn test_concurrent_checkpoint_operations() {
+fn test_concurrent_checkpoint_operations() -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::{Arc, Mutex};
 
     let storage = Arc::new(Mutex::new(InMemoryCheckpointStorage::new()));
@@ -740,7 +732,9 @@ fn test_concurrent_checkpoint_operations() {
     for i in 0..10 {
         let storage_clone = Arc::clone(&storage);
         let handle = std::thread::spawn(move || {
-            let mut storage = storage_clone.lock().unwrap();
+            let mut storage = storage_clone
+                .lock()
+                .map_err(|e| format!("mutex poisoned: {e}"))?;
 
             let id = CheckpointId::new();
             let metadata = CheckpointMetadata {
@@ -753,7 +747,10 @@ fn test_concurrent_checkpoint_operations() {
             };
 
             let data = vec![i as u8; 100];
-            let _ = storage.store_checkpoint(data, metadata);
+            storage
+                .store_checkpoint(data, metadata)
+                .map_err(|e| format!("{e:?}"))?;
+            Ok::<(), String>(())
         });
         handles.push(handle);
     }
@@ -764,12 +761,13 @@ fn test_concurrent_checkpoint_operations() {
     }
 
     // Verify all checkpoints were stored
-    let storage = storage.lock().unwrap();
+    let storage = storage.lock().map_err(|e| format!("mutex poisoned: {e}"))?;
     let list_result = storage.list_checkpoints();
     assert!(list_result.is_ok(), "list should succeed");
 
-    let ids = list_result.ok().unwrap();
+    let ids = list_result.map_err(|e| format!("{e:?}"))?;
     assert_eq!(ids.len(), 10, "should have 10 checkpoints");
+    Ok(())
 }
 
 /// Test: Storage stats are thread-safe.
@@ -784,7 +782,9 @@ fn test_storage_stats_thread_safety() {
     for _ in 0..5 {
         let storage_clone = Arc::clone(&storage);
         let handle = std::thread::spawn(move || {
-            let mut storage = storage_clone.lock().unwrap();
+            let mut storage = storage_clone
+                .lock()
+                .map_err(|e| format!("mutex poisoned: {e}"))?;
 
             // Get stats (read-only operation)
             let _ = storage.get_stats();
@@ -801,6 +801,7 @@ fn test_storage_stats_thread_safety() {
             };
 
             let _ = storage.store_checkpoint(vec![1u8; 100], metadata);
+            Ok::<(), String>(())
         });
         handles.push(handle);
     }
@@ -894,7 +895,7 @@ fn test_multiple_independent_checkpoints() -> Result<(), Box<dyn std::error::Err
         };
 
         let data = vec![i as u8; 100 * (i + 1)];
-        let _ = storage.store_checkpoint(data, metadata);
+        let _ = storage.store_checkpoint(data, metadata)?;
     }
 
     // Load each independently

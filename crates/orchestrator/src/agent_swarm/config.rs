@@ -151,6 +151,7 @@ impl AgentConfigBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent_swarm::AgentSwarmResult;
 
     #[test]
     fn test_agent_config_new() {
@@ -172,7 +173,7 @@ mod tests {
     }
 
     #[test]
-    fn test_agent_config_builder_complete() -> super::AgentSwarmResult<()> {
+    fn test_agent_config_builder_complete() -> AgentSwarmResult<()> {
         let result = AgentConfigBuilder::new()
             .executable(PathBuf::from("/usr/bin/env"))
             .working_dir(PathBuf::from("/project"))
@@ -212,7 +213,7 @@ mod tests {
     }
 
     #[test]
-    fn test_agent_config_builder_multiple_env_vars() -> super::AgentSwarmResult<()> {
+    fn test_agent_config_builder_multiple_env_vars() -> AgentSwarmResult<()> {
         let result = AgentConfigBuilder::new()
             .executable(PathBuf::from("/usr/bin/env"))
             .working_dir(PathBuf::from("/project"))

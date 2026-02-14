@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! Chaos test: Database slow -> async continues -> eventual consistency.
 //!
 //! This test validates that when the database becomes slow (high latency):
@@ -6,22 +7,19 @@
 //! - No events are lost during the slow period
 
 #![cfg(any())]
-#![deny(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-#![deny(clippy::panic)]
 #![warn(clippy::pedantic)]
 #![warn(clippy::nursery)]
 #![forbid(unsafe_code)]
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use orchestrator::actors::storage::{
-    DatabaseConfig,
     surreal_integration::{
         ConnectionManagerConfig, RetryPolicy, SurrealConnectionManager, SurrealError,
     },
+    DatabaseConfig,
 };
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::timeout;

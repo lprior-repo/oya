@@ -210,39 +210,31 @@ mod tests {
 
     #[test]
     fn test_response_is_success() {
-        assert!(
-            AgentResponse::BeadCompleted {
-                bead_id: "b".to_string(),
-                result: None
-            }
-            .is_success()
-        );
+        assert!(AgentResponse::BeadCompleted {
+            bead_id: "b".to_string(),
+            result: None
+        }
+        .is_success());
 
-        assert!(
-            !AgentResponse::BeadFailed {
-                bead_id: "b".to_string(),
-                error: "err".to_string()
-            }
-            .is_success()
-        );
+        assert!(!AgentResponse::BeadFailed {
+            bead_id: "b".to_string(),
+            error: "err".to_string()
+        }
+        .is_success());
     }
 
     #[test]
     fn test_response_is_error() {
-        assert!(
-            AgentResponse::BeadFailed {
-                bead_id: "b".to_string(),
-                error: "err".to_string()
-            }
-            .is_error()
-        );
+        assert!(AgentResponse::BeadFailed {
+            bead_id: "b".to_string(),
+            error: "err".to_string()
+        }
+        .is_error());
 
-        assert!(
-            !AgentResponse::BeadCompleted {
-                bead_id: "b".to_string(),
-                result: None
-            }
-            .is_error()
-        );
+        assert!(!AgentResponse::BeadCompleted {
+            bead_id: "b".to_string(),
+            result: None
+        }
+        .is_error());
     }
 }

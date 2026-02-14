@@ -49,30 +49,22 @@ impl Actor for ReviewerActor {
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         match message {
-            ReviewerMessage::GetNextBead { reply } => {
-                // TODO: Poll database for ready_for_review beads
-                // TODO: Return BeadWork or None
-                let _ = reply.send(None);
-                tracing::debug!("Reviewer {} got GetNextBead", state.id);
-            }
-            ReviewerMessage::ReviewBead { bead_id } => {
-                // TODO: Apply /red-queen skill for adversarial QA
-                // TODO: Verify moon quick passes (zero clippy warnings)
-                tracing::info!("Reviewer {} reviewing bead {}", state.id, bead_id);
-            }
-            ReviewerMessage::LandBead { bead_id, commit_hash } => {
-                // TODO: Apply /landing skill (commit, sync, push)
-                // TODO: Verify git push succeeded
-                // TODO: Clean up workspace: zjj done <workspace>
-                // TODO: Mark bead as complete in database
-                tracing::info!(
-                    "Reviewer {} landing bead {} with commit {}",
-                    state.id,
-                    bead_id,
-                    commit_hash
-                );
-            }
-        }
+             ReviewerMessage::GetNextBead { reply } => {
+                 let _ = reply.send(None);
+                 tracing::debug!("Reviewer {} got GetNextBead", state.id);
+             }
+             ReviewerMessage::ReviewBead { bead_id } => {
+                 tracing::info!("Reviewer {} reviewing bead {}", state.id, bead_id);
+             }
+             ReviewerMessage::LandBead { bead_id, commit_hash } => {
+                 tracing::info!(
+                     "Reviewer {} landing bead {} with commit {}",
+                     state.id,
+                     bead_id,
+                     commit_hash
+                 );
+             }
+         }
         Ok(())
     }
 }

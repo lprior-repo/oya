@@ -1,21 +1,21 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! Chaos tests for SurrealDB connection management.
 
 use orchestrator::actors::storage::{
-    DatabaseConfig,
     surreal_integration::{
         ConnectionManagerConfig, RetryPolicy, SurrealConnectionManager, SurrealError,
     },
+    DatabaseConfig,
 };
 use std::time::{Duration, Instant};
 use tokio::time::timeout;
-use tracing::debug;
 
 fn test_config(name: &str) -> ConnectionManagerConfig {
-    let storage_path = format!("/tmp/test_surreal_chaos_{}", name);
+    let storage_path = format!("/tmp/test_surreal_chaos_{name}");
     ConnectionManagerConfig::new(DatabaseConfig {
         storage_path,
         namespace: "chaos_ns".to_string(),
-        database: format!("chaos_db_{}", name),
+        database: format!("chaos_db_{name}"),
     })
     .with_max_connections(3)
     .with_retry_policy(RetryPolicy::new(4, 50, 300).without_jitter())
@@ -23,35 +23,28 @@ fn test_config(name: &str) -> ConnectionManagerConfig {
 }
 
 #[tokio::test]
-async fn chaos_test_basic_connection() {
-    let manager = SurrealConnectionManager::new(test_config("basic"))
-        .await
-        .expect("Failed to create manager");
+async fn chaos_test_basic_connection() -> Result<(), Box<dyn std::error::Error>> {
+    let manager = SurrealConnectionManager::new(test_config("basic")).await?;
 
-    let conn = manager
-        .get_connection()
+    let conn = manager.get_connection().await?;
+    assert!(conn
+        .client()
+        .use_ns("chaos_ns")
+        .use_db("chaos_db_basic")
         .await
-        .expect("Failed to get connection");
-    assert!(
-        conn.client()
-            .use_ns("chaos_ns")
-            .use_db("chaos_db_basic")
-            .await
-            .is_ok()
-    );
+        .is_ok());
     drop(conn);
+    Ok(())
 }
 
 #[tokio::test]
-async fn chaos_test_pool_exhaustion() {
+async fn chaos_test_pool_exhaustion() -> Result<(), Box<dyn std::error::Error>> {
     let config = test_config("pool_exhaustion");
-    let manager = SurrealConnectionManager::new(config)
-        .await
-        .expect("Failed to create manager");
+    let manager = SurrealConnectionManager::new(config).await?;
 
-    let conn1 = manager.get_connection().await.expect("Failed to get conn1");
-    let conn2 = manager.get_connection().await.expect("Failed to get conn2");
-    let conn3 = manager.get_connection().await.expect("Failed to get conn3");
+    let conn1 = manager.get_connection().await?;
+    let _conn2 = manager.get_connection().await?;
+    let _conn3 = manager.get_connection().await?;
 
     let start = Instant::now();
     let _result: Result<Result<_, SurrealError>, _> =
@@ -61,17 +54,13 @@ async fn chaos_test_pool_exhaustion() {
     assert!(elapsed >= Duration::from_millis(150));
 
     drop(conn1);
-    let _conn4 = manager
-        .get_connection()
-        .await
-        .expect("Should get connection after drop");
+    let _conn4 = manager.get_connection().await?;
+    Ok(())
 }
 
 #[tokio::test]
-async fn chaos_test_retry_logic() {
-    let manager = SurrealConnectionManager::new(test_config("retry"))
-        .await
-        .expect("Failed to create manager");
+async fn chaos_test_retry_logic() -> Result<(), Box<dyn std::error::Error>> {
+    let manager = SurrealConnectionManager::new(test_config("retry")).await?;
 
     // Use a counter with Arc<Mutex<>> to track attempts across retries
     use std::sync::{Arc, Mutex};
@@ -80,7 +69,9 @@ async fn chaos_test_retry_logic() {
         .execute_with_retry(|_conn| {
             let counter = attempt_count.clone();
             async move {
-                let mut count = counter.lock().unwrap();
+                let mut count = counter
+                    .lock()
+                    .map_err(|e| SurrealError::QueryFailed(format!("mutex poisoned: {e}")))?;
                 *count = count.saturating_add(1);
                 if *count < 3 {
                     Err(SurrealError::QueryFailed("Simulated failure".to_string()))
@@ -92,22 +83,23 @@ async fn chaos_test_retry_logic() {
         .await;
 
     assert!(result.is_ok());
-    assert_eq!(result.expect("Should be Ok"), "success");
+    assert_eq!(result.map_err(|e| format!("{e:?}"))?, "success");
 
     // Verify retries occurred
-    let final_count = *attempt_count.lock().unwrap();
+    let final_count = *attempt_count
+        .lock()
+        .map_err(|e| format!("mutex poisoned: {e}"))?;
     assert_eq!(final_count, 3);
+    Ok(())
 }
 
 #[tokio::test]
-async fn chaos_test_connection_cleanup() {
+async fn chaos_test_connection_cleanup() -> Result<(), Box<dyn std::error::Error>> {
     let config = test_config("cleanup").with_max_connections(2);
-    let manager = SurrealConnectionManager::new(config)
-        .await
-        .expect("Failed to create manager");
+    let manager = SurrealConnectionManager::new(config).await?;
 
-    let conn1 = manager.get_connection().await.expect("Failed to get conn1");
-    let conn2 = manager.get_connection().await.expect("Failed to get conn2");
+    let conn1 = manager.get_connection().await?;
+    let conn2 = manager.get_connection().await?;
 
     let start = Instant::now();
     let _result: Result<Result<_, SurrealError>, _> =
@@ -120,18 +112,15 @@ async fn chaos_test_connection_cleanup() {
 
     tokio::time::sleep(Duration::from_millis(50)).await;
 
-    let _conn3 = manager
-        .get_connection()
-        .await
-        .expect("Should acquire after cleanup");
+    let _conn3 = manager.get_connection().await?;
+    Ok(())
 }
 
 #[tokio::test]
-async fn chaos_test_health_check() {
-    let manager = SurrealConnectionManager::new(test_config("health_check"))
-        .await
-        .expect("Failed to create manager");
+async fn chaos_test_health_check() -> Result<(), Box<dyn std::error::Error>> {
+    let manager = SurrealConnectionManager::new(test_config("health_check")).await?;
 
     let result = manager.health_check().await;
     assert!(result.is_ok(), "Health check should succeed");
+    Ok(())
 }

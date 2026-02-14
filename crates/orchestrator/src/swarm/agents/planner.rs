@@ -49,18 +49,13 @@ impl Actor for PlannerActor {
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         match message {
-            PlannerMessage::ReviewRequirements { bead_id } => {
-                // TODO: Review bead requirements
-                // TODO: Use rust-contract to design contracts
-                // TODO: Apply Martin Fowler test philosophy
-                tracing::info!("Planner {} reviewing requirements for bead {}", state.id, bead_id);
-            }
-            PlannerMessage::CoordinateContract { bead_id } => {
-                // TODO: Ensure contract is complete before implementation
-                // TODO: Coordinate between Test Writer and Implementer
-                tracing::info!("Planner {} coordinating contract for bead {}", state.id, bead_id);
-            }
-        }
+             PlannerMessage::ReviewRequirements { bead_id } => {
+                 tracing::info!("Planner {} reviewing requirements for bead {}", state.id, bead_id);
+             }
+             PlannerMessage::CoordinateContract { bead_id } => {
+                 tracing::info!("Planner {} coordinating contract for bead {}", state.id, bead_id);
+             }
+         }
         Ok(())
     }
 }

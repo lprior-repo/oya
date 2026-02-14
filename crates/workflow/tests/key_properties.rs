@@ -6,10 +6,6 @@
 //! - UUID format validity for all inputs
 //! - Collision resistance
 
-#![deny(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-#![deny(clippy::panic)]
-
 use oya_workflow::idempotent::keys::idempotency_key;
 use proptest::prelude::*;
 use serde::Serialize;

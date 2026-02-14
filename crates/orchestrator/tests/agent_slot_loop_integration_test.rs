@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! BDD integration tests for AgentSlotActor recursive stage loop.
 //!
 //! This module tests the recursive stage execution behavior described in bead bd-3a0a.6:
@@ -16,14 +17,11 @@
 //! 4. Artifact tracking across stages
 //! 5. Feedback propagation on reentry
 
-// Integration tests allow unwrap/panic for assertions
-
 use orchestrator::actors::agent_slot::{
     AgentSlotActorDef, AgentSlotMessage, AgentSlotState, BeadCompletion, SlotError, SlotState,
 };
 use oya_events::{BeadId, RecursionPolicy, StageKind};
 use std::path::PathBuf;
-use std::time::Duration;
 use tokio::sync::oneshot;
 
 /// Test 1: Successful bead completion through all stages
@@ -32,12 +30,11 @@ use tokio::sync::oneshot;
 /// **When** all stages succeed consecutively
 /// **Then** the bead completes with Accepted status
 #[tokio::test]
-async fn given_bead_at_research_when_all_stages_succeed_then_bead_accepted() {
+async fn given_bead_at_research_when_all_stages_succeed_then_bead_accepted(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: An agent slot with a bead starting execution
     let project_root = PathBuf::from("/tmp/test-oya");
-    let actor = AgentSlotActorDef::spawn(project_root, None)
-        .await
-        .expect("actor spawn should succeed");
+    let actor = AgentSlotActorDef::spawn(project_root, None).await?;
 
     let bead_id = BeadId::new();
     let spec = "Implement feature X".to_string();
@@ -46,32 +43,28 @@ async fn given_bead_at_research_when_all_stages_succeed_then_bead_accepted() {
 
     // When: Starting bead execution
     let (reply_tx, reply_rx) = oneshot::channel::<Result<BeadCompletion, SlotError>>();
-    actor
-        .send_message(AgentSlotMessage::StartBead {
-            bead_id: bead_id.clone(),
-            spec,
-            relevant_files,
-            upstream_artifacts,
-            reply: reply_tx,
-        })
-        .expect("send_message should succeed");
+    actor.send_message(AgentSlotMessage::StartBead {
+        bead_id: bead_id.clone(),
+        spec,
+        relevant_files,
+        upstream_artifacts,
+        reply: reply_tx,
+    })?;
 
     let result = reply_rx
-        .await
-        .expect("reply should be received")
-        .expect("start_bead should succeed");
+        .await?
+        .map_err(|e| format!("start_bead failed: {e:?}"))?;
 
     // Then: Bead starts successfully (will complete through execution)
     assert_eq!(result, BeadCompletion::Accepted);
 
     // Verify initial state
     let (reply_tx, reply_rx) = oneshot::channel::<SlotState>();
-    actor
-        .send_message(AgentSlotMessage::GetState { reply: reply_tx })
-        .expect("send_message should succeed");
+    actor.send_message(AgentSlotMessage::GetState { reply: reply_tx })?;
 
-    let state = reply_rx.await.expect("reply should be received");
+    let state = reply_rx.await?;
     assert!(matches!(state, SlotState::Executing { .. }));
+    Ok(())
 }
 
 /// Test 2: Reentry flow from Review → Plan with feedback
@@ -80,7 +73,8 @@ async fn given_bead_at_research_when_all_stages_succeed_then_bead_accepted() {
 /// **When** gate decides to reenter Plan stage with feedback
 /// **Then** state machine transitions back to Plan and stores feedback
 #[tokio::test]
-async fn given_review_fails_when_gate_reenters_plan_then_feedback_stored() {
+async fn given_review_fails_when_gate_reenters_plan_then_feedback_stored(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: Agent slot state with bead in Review
     let mut state = AgentSlotState::new(PathBuf::from("/tmp"));
     let bead_id = BeadId::new();
@@ -96,6 +90,7 @@ async fn given_review_fails_when_gate_reenters_plan_then_feedback_stored() {
     // Then: Feedback is stored for next execution
     assert_eq!(state.pending_feedback, Some(feedback));
     assert_eq!(state.current_stage, Some(StageKind::Review));
+    Ok(())
 }
 
 /// Test 3: Failure flow after max retries exhausted
@@ -104,7 +99,8 @@ async fn given_review_fails_when_gate_reenters_plan_then_feedback_stored() {
 /// **When** another retry is attempted
 /// **Then** bead is marked as Parked with exhaustion reason
 #[tokio::test]
-async fn given_retries_exhausted_when_another_attempt_then_bead_parked() {
+async fn given_retries_exhausted_when_another_attempt_then_bead_parked(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: State machine with strict retry policy
     let bead_id = BeadId::new();
     let strict_policy = RecursionPolicy {
@@ -139,6 +135,7 @@ async fn given_retries_exhausted_when_another_attempt_then_bead_parked() {
         Err(oya_events::StateMachineError::TotalAttemptsExhausted)
     );
     assert!(exhausted, "should be exhausted after max total attempts");
+    Ok(())
 }
 
 /// Test 4: Artifact tracking across stages
@@ -147,7 +144,8 @@ async fn given_retries_exhausted_when_another_attempt_then_bead_parked() {
 /// **When** each stage produces an artifact
 /// **Then** artifacts are tracked in the slot state
 #[tokio::test]
-async fn given_bead_executing_when_stages_produce_artifacts_then_tracked() {
+async fn given_bead_executing_when_stages_produce_artifacts_then_tracked(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: Agent slot state
     let mut state = AgentSlotState::new(PathBuf::from("/tmp"));
     let bead_id = BeadId::new();
@@ -156,13 +154,13 @@ async fn given_bead_executing_when_stages_produce_artifacts_then_tracked() {
     state.current_stage = Some(StageKind::Research);
 
     // When: Stages produce artifacts
-    state
+    let _ = state
         .artifacts
         .insert(StageKind::Research, "research artifact".to_string());
-    state
+    let _ = state
         .artifacts
         .insert(StageKind::Plan, "plan artifact".to_string());
-    state
+    let _ = state
         .artifacts
         .insert(StageKind::Implement, "code artifact".to_string());
 
@@ -180,6 +178,7 @@ async fn given_bead_executing_when_stages_produce_artifacts_then_tracked() {
         state.artifacts.get(&StageKind::Implement),
         Some(&"code artifact".to_string())
     );
+    Ok(())
 }
 
 /// Test 5: Feedback propagation on reentry
@@ -188,7 +187,8 @@ async fn given_bead_executing_when_stages_produce_artifacts_then_tracked() {
 /// **When** reentering Plan stage
 /// **Then** feedback is propagated to the new stage execution
 #[tokio::test]
-async fn given_review_fails_with_feedback_when_reentering_plan_then_feedback_propagated() {
+async fn given_review_fails_with_feedback_when_reentering_plan_then_feedback_propagated(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: Agent slot with feedback from failed Review
     let mut state = AgentSlotState::new(PathBuf::from("/tmp"));
     let bead_id = BeadId::new();
@@ -208,6 +208,7 @@ async fn given_review_fails_with_feedback_when_reentering_plan_then_feedback_pro
     // After Plan stage executes, feedback should be cleared
     state.pending_feedback = None;
     assert!(state.pending_feedback.is_none());
+    Ok(())
 }
 
 /// Test 6: Stage progression through the lifecycle
@@ -216,7 +217,8 @@ async fn given_review_fails_with_feedback_when_reentering_plan_then_feedback_pro
 /// **When** stages advance successfully
 /// **Then** each stage transitions to the next in sequence
 #[tokio::test]
-async fn given_bead_at_research_when_stages_advance_then_correct_sequence() {
+async fn given_bead_at_research_when_stages_advance_then_correct_sequence(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: State machine at Research
     let bead_id = BeadId::new();
     let mut state_machine = oya_events::BeadStateMachine::new(bead_id);
@@ -227,7 +229,7 @@ async fn given_bead_at_research_when_stages_advance_then_correct_sequence() {
     let _ = state_machine.enter_stage();
     let transition1 = state_machine
         .advance()
-        .expect("advance to Plan should succeed");
+        .map_err(|e| format!("advance to Plan should succeed: {e:?}"))?;
 
     assert_eq!(transition1.from, StageKind::Research);
     assert_eq!(transition1.to, StageKind::Plan);
@@ -235,13 +237,14 @@ async fn given_bead_at_research_when_stages_advance_then_correct_sequence() {
     let _ = state_machine.enter_stage();
     let transition2 = state_machine
         .advance()
-        .expect("advance to Implement should succeed");
+        .map_err(|e| format!("advance to Implement should succeed: {e:?}"))?;
 
     assert_eq!(transition2.from, StageKind::Plan);
     assert_eq!(transition2.to, StageKind::Implement);
 
     // Then: Correct stage progression
     assert_eq!(state_machine.current_stage(), StageKind::Implement);
+    Ok(())
 }
 
 /// Test 7: Complete bead lifecycle from start to finish
@@ -250,48 +253,41 @@ async fn given_bead_at_research_when_stages_advance_then_correct_sequence() {
 /// **When** starting and executing a bead through all stages
 /// **Then** slot transitions from Idle → Executing → Completed
 #[tokio::test]
-async fn given_idle_slot_when_bead_completes_then_slot_idle_again() {
+async fn given_idle_slot_when_bead_completes_then_slot_idle_again(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: Idle agent slot
     let project_root = PathBuf::from("/tmp/test-oya-complete");
-    let actor = AgentSlotActorDef::spawn(project_root, None)
-        .await
-        .expect("actor spawn should succeed");
+    let actor = AgentSlotActorDef::spawn(project_root, None).await?;
 
     // Verify initial idle state
     let (reply_tx, reply_rx) = oneshot::channel::<SlotState>();
-    actor
-        .send_message(AgentSlotMessage::GetState { reply: reply_tx })
-        .expect("send_message should succeed");
+    actor.send_message(AgentSlotMessage::GetState { reply: reply_tx })?;
 
-    let initial_state = reply_rx.await.expect("reply should be received");
+    let initial_state = reply_rx.await?;
     assert!(matches!(initial_state, SlotState::Idle));
 
     // When: Starting bead
     let bead_id = BeadId::new();
     let (reply_tx, reply_rx) = oneshot::channel::<Result<BeadCompletion, SlotError>>();
-    actor
-        .send_message(AgentSlotMessage::StartBead {
-            bead_id,
-            spec: "Test bead".to_string(),
-            relevant_files: vec![],
-            upstream_artifacts: vec![],
-            reply: reply_tx,
-        })
-        .expect("send_message should succeed");
+    actor.send_message(AgentSlotMessage::StartBead {
+        bead_id,
+        spec: "Test bead".to_string(),
+        relevant_files: vec![],
+        upstream_artifacts: vec![],
+        reply: reply_tx,
+    })?;
 
     let _result = reply_rx
-        .await
-        .expect("reply should be received")
-        .expect("start_bead should succeed");
+        .await?
+        .map_err(|e| format!("start_bead failed: {e:?}"))?;
 
     // Then: Slot is executing
     let (reply_tx, reply_rx) = oneshot::channel::<SlotState>();
-    actor
-        .send_message(AgentSlotMessage::GetState { reply: reply_tx })
-        .expect("send_message should succeed");
+    actor.send_message(AgentSlotMessage::GetState { reply: reply_tx })?;
 
-    let executing_state = reply_rx.await.expect("reply should be received");
+    let executing_state = reply_rx.await?;
     assert!(matches!(executing_state, SlotState::Executing { .. }));
+    Ok(())
 }
 
 /// Test 8: Error handling when bead ID is missing
@@ -300,7 +296,8 @@ async fn given_idle_slot_when_bead_completes_then_slot_idle_again() {
 /// **When** trying to complete the bead
 /// **Then** operation fails gracefully with BeadIdNotAvailable error
 #[tokio::test]
-async fn given_slot_without_bead_when_completing_then_returns_error() {
+async fn given_slot_without_bead_when_completing_then_returns_error(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: Slot state without bead ID
     let state = AgentSlotState::new(PathBuf::from("/tmp"));
 
@@ -309,6 +306,7 @@ async fn given_slot_without_bead_when_completing_then_returns_error() {
 
     // Then: Returns BeadIdNotAvailable error
     assert!(matches!(result, Err(SlotError::BeadIdNotAvailable)));
+    Ok(())
 }
 
 /// Test 9: Multiple stage retries before exhaustion
@@ -317,7 +315,8 @@ async fn given_slot_without_bead_when_completing_then_returns_error() {
 /// **When** stage fails and retries 3 times
 /// **Then** bead is exhausted on the 4th attempt
 #[tokio::test]
-async fn given_stage_with_3_retries_when_4_attempts_then_exhausted() {
+async fn given_stage_with_3_retries_when_4_attempts_then_exhausted(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: State machine with 3 retries allowed
     let bead_id = BeadId::new();
     let policy = RecursionPolicy {
@@ -358,6 +357,7 @@ async fn given_stage_with_3_retries_when_4_attempts_then_exhausted() {
         result6,
         Err(oya_events::StateMachineError::StageRetriesExhausted)
     ));
+    Ok(())
 }
 
 /// Test 10: Artifact accumulation across full lifecycle
@@ -366,7 +366,8 @@ async fn given_stage_with_3_retries_when_4_attempts_then_exhausted() {
 /// **When** all stages produce artifacts
 /// **Then** all 6 stages have artifacts tracked
 #[tokio::test]
-async fn given_full_lifecycle_when_all_stages_complete_then_6_artifacts_tracked() {
+async fn given_full_lifecycle_when_all_stages_complete_then_6_artifacts_tracked(
+) -> Result<(), Box<dyn std::error::Error>> {
     // Given: Agent slot state
     let mut state = AgentSlotState::new(PathBuf::from("/tmp"));
     state.bead_id = Some(BeadId::new());
@@ -382,9 +383,7 @@ async fn given_full_lifecycle_when_all_stages_complete_then_6_artifacts_tracked(
     ];
 
     for stage in stages {
-        state
-            .artifacts
-            .insert(stage, format!("{:?} artifact", stage));
+        let _ = state.artifacts.insert(stage, format!("{stage:?} artifact"));
     }
 
     // Then: All 6 artifacts tracked
@@ -395,4 +394,5 @@ async fn given_full_lifecycle_when_all_stages_complete_then_6_artifacts_tracked(
     assert!(state.artifacts.contains_key(&StageKind::Review));
     assert!(state.artifacts.contains_key(&StageKind::Validate));
     assert!(state.artifacts.contains_key(&StageKind::Accept));
+    Ok(())
 }

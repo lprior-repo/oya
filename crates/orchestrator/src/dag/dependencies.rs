@@ -25,22 +25,17 @@ use super::{DagError, DagResult, DependencyType, WorkflowDAG};
 fn given_two_nodes_when_add_dependency_then_success() -> DagResult<()> {
     // GIVEN: Two independent nodes
     let mut dag = WorkflowDAG::new();
-    dag.add_node("task-a".to_string())?;
-    dag.add_node("task-b".to_string())?;
+    dag.add_node("task-a")?;
+    dag.add_node("task-b")?;
 
     // WHEN: Adding a dependency from a to b
-    let result = dag.add_dependency(
-        "task-a".to_string(),
-        "task-b".to_string(),
-        DependencyType::BlockingDependency,
-    );
+    dag.add_dependency("task-a", "task-b", DependencyType::BlockingDependency)?;
 
     // THEN: Dependency is created successfully
-    assert!(result.is_ok(), "Adding dependency should succeed");
     assert_eq!(dag.edge_count(), 1, "Should have exactly one edge");
 
     // Verify the edge is queryable
-    let deps = dag.get_dependencies(&"task-b".to_string())?;
+    let deps = dag.get_dependencies("task-b")?;
     assert_eq!(deps, vec!["task-a".to_string()]);
 
     Ok(())
@@ -51,14 +46,10 @@ fn given_two_nodes_when_add_dependency_then_success() -> DagResult<()> {
 fn given_node_when_add_dependency_to_self_then_self_loop_error() -> DagResult<()> {
     // GIVEN: A single node
     let mut dag = WorkflowDAG::new();
-    dag.add_node("task-a".to_string())?;
+    dag.add_node("task-a")?;
 
     // WHEN: Attempting to add a self-loop
-    let result = dag.add_dependency(
-        "task-a".to_string(),
-        "task-a".to_string(),
-        DependencyType::BlockingDependency,
-    );
+    let result = dag.add_dependency("task-a", "task-a", DependencyType::BlockingDependency);
 
     // THEN: Self-loop error is returned
     assert!(result.is_err(), "Self-loop should be rejected");
@@ -67,7 +58,11 @@ fn given_node_when_add_dependency_to_self_then_self_loop_error() -> DagResult<()
         Err(DagError::SelfLoopDetected(node)) => {
             assert_eq!(node, "task-a", "Error should contain the node ID");
         }
-        _ => panic!("Expected SelfLoopDetected error, got {:?}", result),
+        other => {
+            return Err(DagError::invalid_operation(format!(
+                "Expected SelfLoopDetected error, got {other:?}"
+            )))
+        }
     }
 
     // Verify no edge was created
@@ -81,12 +76,12 @@ fn given_node_when_add_dependency_to_self_then_self_loop_error() -> DagResult<()
 fn given_dag_when_add_dependency_with_missing_source_then_node_not_found() -> DagResult<()> {
     // GIVEN: A DAG with one node
     let mut dag = WorkflowDAG::new();
-    dag.add_node("task-b".to_string())?;
+    dag.add_node("task-b")?;
 
     // WHEN: Attempting to add dependency from non-existent source
     let result = dag.add_dependency(
-        "missing-source".to_string(),
-        "task-b".to_string(),
+        "missing-source",
+        "task-b",
         DependencyType::BlockingDependency,
     );
 
@@ -97,7 +92,11 @@ fn given_dag_when_add_dependency_with_missing_source_then_node_not_found() -> Da
         Err(DagError::NodeNotFound(node)) => {
             assert_eq!(node, "missing-source", "Error should contain source ID");
         }
-        _ => panic!("Expected NodeNotFound error, got {:?}", result),
+        other => {
+            return Err(DagError::invalid_operation(format!(
+                "Expected NodeNotFound error, got {other:?}"
+            )))
+        }
     }
 
     Ok(())
@@ -108,12 +107,12 @@ fn given_dag_when_add_dependency_with_missing_source_then_node_not_found() -> Da
 fn given_dag_when_add_dependency_with_missing_target_then_node_not_found() -> DagResult<()> {
     // GIVEN: A DAG with one node
     let mut dag = WorkflowDAG::new();
-    dag.add_node("task-a".to_string())?;
+    dag.add_node("task-a")?;
 
     // WHEN: Attempting to add dependency to non-existent target
     let result = dag.add_dependency(
-        "task-a".to_string(),
-        "missing-target".to_string(),
+        "task-a",
+        "missing-target",
         DependencyType::BlockingDependency,
     );
 
@@ -124,7 +123,11 @@ fn given_dag_when_add_dependency_with_missing_target_then_node_not_found() -> Da
         Err(DagError::NodeNotFound(node)) => {
             assert_eq!(node, "missing-target", "Error should contain target ID");
         }
-        _ => panic!("Expected NodeNotFound error, got {:?}", result),
+        other => {
+            return Err(DagError::invalid_operation(format!(
+                "Expected NodeNotFound error, got {other:?}"
+            )))
+        }
     }
 
     Ok(())
@@ -135,20 +138,12 @@ fn given_dag_when_add_dependency_with_missing_target_then_node_not_found() -> Da
 fn given_edge_when_add_duplicate_dependency_then_edge_already_exists() -> DagResult<()> {
     // GIVEN: A DAG with an existing edge
     let mut dag = WorkflowDAG::new();
-    dag.add_node("task-a".to_string())?;
-    dag.add_node("task-b".to_string())?;
-    dag.add_dependency(
-        "task-a".to_string(),
-        "task-b".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
+    dag.add_node("task-a")?;
+    dag.add_node("task-b")?;
+    dag.add_dependency("task-a", "task-b", DependencyType::BlockingDependency)?;
 
     // WHEN: Attempting to add the same dependency again
-    let result = dag.add_dependency(
-        "task-a".to_string(),
-        "task-b".to_string(),
-        DependencyType::BlockingDependency,
-    );
+    let result = dag.add_dependency("task-a", "task-b", DependencyType::BlockingDependency);
 
     // THEN: EdgeAlreadyExists error is returned
     assert!(result.is_err(), "Duplicate edge should be rejected");
@@ -158,7 +153,11 @@ fn given_edge_when_add_duplicate_dependency_then_edge_already_exists() -> DagRes
             assert_eq!(from, "task-a", "Error should contain source ID");
             assert_eq!(to, "task-b", "Error should contain target ID");
         }
-        _ => panic!("Expected EdgeAlreadyExists error, got {:?}", result),
+        other => {
+            return Err(DagError::invalid_operation(format!(
+                "Expected EdgeAlreadyExists error, got {other:?}"
+            )))
+        }
     }
 
     // Verify only one edge exists
@@ -172,20 +171,12 @@ fn given_edge_when_add_duplicate_dependency_then_edge_already_exists() -> DagRes
 fn given_edge_when_add_reverse_creating_cycle_then_cycle_detected() -> DagResult<()> {
     // GIVEN: A DAG with edge a -> b
     let mut dag = WorkflowDAG::new();
-    dag.add_node("task-a".to_string())?;
-    dag.add_node("task-b".to_string())?;
-    dag.add_dependency(
-        "task-a".to_string(),
-        "task-b".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
+    dag.add_node("task-a")?;
+    dag.add_node("task-b")?;
+    dag.add_dependency("task-a", "task-b", DependencyType::BlockingDependency)?;
 
     // WHEN: Attempting to add edge b -> a (creating a cycle)
-    let result = dag.add_dependency(
-        "task-b".to_string(),
-        "task-a".to_string(),
-        DependencyType::BlockingDependency,
-    );
+    let result = dag.add_dependency("task-b", "task-a", DependencyType::BlockingDependency);
 
     // THEN: CycleDetected error is returned
     assert!(result.is_err(), "Cycle should be detected");
@@ -201,7 +192,11 @@ fn given_edge_when_add_reverse_creating_cycle_then_cycle_detected() -> DagResult
                 "Cycle should contain task-b"
             );
         }
-        _ => panic!("Expected CycleDetected error, got {:?}", result),
+        other => {
+            return Err(DagError::invalid_operation(format!(
+                "Expected CycleDetected error, got {other:?}"
+            )))
+        }
     }
 
     // Verify only one edge exists (the second was not added)
@@ -215,26 +210,14 @@ fn given_edge_when_add_reverse_creating_cycle_then_cycle_detected() -> DagResult
 fn given_chain_when_add_edge_creating_three_node_cycle_then_cycle_detected() -> DagResult<()> {
     // GIVEN: A DAG with chain a -> b -> c
     let mut dag = WorkflowDAG::new();
-    dag.add_node("task-a".to_string())?;
-    dag.add_node("task-b".to_string())?;
-    dag.add_node("task-c".to_string())?;
-    dag.add_dependency(
-        "task-a".to_string(),
-        "task-b".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_dependency(
-        "task-b".to_string(),
-        "task-c".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
+    dag.add_node("task-a")?;
+    dag.add_node("task-b")?;
+    dag.add_node("task-c")?;
+    dag.add_dependency("task-a", "task-b", DependencyType::BlockingDependency)?;
+    dag.add_dependency("task-b", "task-c", DependencyType::BlockingDependency)?;
 
     // WHEN: Attempting to add edge c -> a (creating a cycle)
-    let result = dag.add_dependency(
-        "task-c".to_string(),
-        "task-a".to_string(),
-        DependencyType::BlockingDependency,
-    );
+    let result = dag.add_dependency("task-c", "task-a", DependencyType::BlockingDependency);
 
     // THEN: CycleDetected error is returned
     assert!(result.is_err(), "Cycle should be detected");
@@ -255,7 +238,11 @@ fn given_chain_when_add_edge_creating_three_node_cycle_then_cycle_detected() -> 
                 "Cycle should contain task-c"
             );
         }
-        _ => panic!("Expected CycleDetected error, got {:?}", result),
+        other => {
+            return Err(DagError::invalid_operation(format!(
+                "Expected CycleDetected error, got {other:?}"
+            )))
+        }
     }
 
     Ok(())
@@ -271,38 +258,18 @@ fn given_diamond_when_add_edge_closing_loop_then_cycle_detected() -> DagResult<(
     //    \ /
     //     d
     let mut dag = WorkflowDAG::new();
-    dag.add_node("task-a".to_string())?;
-    dag.add_node("task-b".to_string())?;
-    dag.add_node("task-c".to_string())?;
-    dag.add_node("task-d".to_string())?;
+    dag.add_node("task-a")?;
+    dag.add_node("task-b")?;
+    dag.add_node("task-c")?;
+    dag.add_node("task-d")?;
 
-    dag.add_dependency(
-        "task-a".to_string(),
-        "task-b".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_dependency(
-        "task-a".to_string(),
-        "task-c".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_dependency(
-        "task-b".to_string(),
-        "task-d".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_dependency(
-        "task-c".to_string(),
-        "task-d".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
+    dag.add_dependency("task-a", "task-b", DependencyType::BlockingDependency)?;
+    dag.add_dependency("task-a", "task-c", DependencyType::BlockingDependency)?;
+    dag.add_dependency("task-b", "task-d", DependencyType::BlockingDependency)?;
+    dag.add_dependency("task-c", "task-d", DependencyType::BlockingDependency)?;
 
     // WHEN: Attempting to add edge d -> a (creating a cycle)
-    let result = dag.add_dependency(
-        "task-d".to_string(),
-        "task-a".to_string(),
-        DependencyType::BlockingDependency,
-    );
+    let result = dag.add_dependency("task-d", "task-a", DependencyType::BlockingDependency);
 
     // THEN: CycleDetected error is returned
     assert!(result.is_err(), "Cycle should be detected");
@@ -311,7 +278,11 @@ fn given_diamond_when_add_edge_closing_loop_then_cycle_detected() -> DagResult<(
         Err(DagError::CycleDetected(_)) => {
             // Cycle detected - success
         }
-        _ => panic!("Expected CycleDetected error, got {:?}", result),
+        other => {
+            return Err(DagError::invalid_operation(format!(
+                "Expected CycleDetected error, got {other:?}"
+            )))
+        }
     }
 
     Ok(())
@@ -322,38 +293,25 @@ fn given_diamond_when_add_edge_closing_loop_then_cycle_detected() -> DagResult<(
 fn given_complex_dag_when_add_valid_dependency_then_success() -> DagResult<()> {
     // GIVEN: A complex DAG with multiple independent chains
     let mut dag = WorkflowDAG::new();
-    dag.add_node("task-a".to_string())?;
-    dag.add_node("task-b".to_string())?;
-    dag.add_node("task-c".to_string())?;
-    dag.add_node("task-d".to_string())?;
+    dag.add_node("task-a")?;
+    dag.add_node("task-b")?;
+    dag.add_node("task-c")?;
+    dag.add_node("task-d")?;
 
-    dag.add_dependency(
-        "task-a".to_string(),
-        "task-b".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_dependency(
-        "task-c".to_string(),
-        "task-d".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
+    dag.add_dependency("task-a", "task-b", DependencyType::BlockingDependency)?;
+    dag.add_dependency("task-c", "task-d", DependencyType::BlockingDependency)?;
 
     // WHEN: Adding a valid cross-edge (b -> c)
-    let result = dag.add_dependency(
-        "task-b".to_string(),
-        "task-c".to_string(),
-        DependencyType::BlockingDependency,
-    );
+    dag.add_dependency("task-b", "task-c", DependencyType::BlockingDependency)?;
 
     // THEN: Dependency is created successfully
-    assert!(result.is_ok(), "Valid cross-edge should succeed");
     assert_eq!(dag.edge_count(), 3, "Should have three edges");
 
     // Verify the chain a -> b -> c -> d
-    let deps_b = dag.get_dependencies(&"task-b".to_string())?;
+    let deps_b = dag.get_dependencies("task-b")?;
     assert_eq!(deps_b, vec!["task-a".to_string()]);
 
-    let deps_c = dag.get_dependencies(&"task-c".to_string())?;
+    let deps_c = dag.get_dependencies("task-c")?;
     assert_eq!(deps_c, vec!["task-b".to_string()]);
 
     Ok(())
@@ -364,19 +322,13 @@ fn given_complex_dag_when_add_valid_dependency_then_success() -> DagResult<()> {
 fn given_nodes_when_add_preferred_order_dependency_then_type_preserved() -> DagResult<()> {
     // GIVEN: Two nodes
     let mut dag = WorkflowDAG::new();
-    dag.add_node("task-a".to_string())?;
-    dag.add_node("task-b".to_string())?;
+    dag.add_node("task-a")?;
+    dag.add_node("task-b")?;
 
     // WHEN: Adding a PreferredOrder dependency
-    let result = dag.add_dependency(
-        "task-a".to_string(),
-        "task-b".to_string(),
-        DependencyType::PreferredOrder,
-    );
+    dag.add_dependency("task-a", "task-b", DependencyType::PreferredOrder)?;
 
     // THEN: Dependency is created with correct type
-    assert!(result.is_ok(), "Adding PreferredOrder should succeed");
-
     let edges: Vec<_> = dag.edges().collect();
     assert_eq!(edges.len(), 1);
     assert_eq!(*edges[0].2, DependencyType::PreferredOrder);
@@ -389,21 +341,13 @@ fn given_nodes_when_add_preferred_order_dependency_then_type_preserved() -> DagR
 fn given_node_when_add_multiple_dependencies_then_all_created() -> DagResult<()> {
     // GIVEN: A DAG with one source node and two target nodes
     let mut dag = WorkflowDAG::new();
-    dag.add_node("task-a".to_string())?;
-    dag.add_node("task-b".to_string())?;
-    dag.add_node("task-c".to_string())?;
+    dag.add_node("task-a")?;
+    dag.add_node("task-b")?;
+    dag.add_node("task-c")?;
 
     // WHEN: Adding multiple dependencies from the same source
-    dag.add_dependency(
-        "task-a".to_string(),
-        "task-b".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_dependency(
-        "task-a".to_string(),
-        "task-c".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
+    dag.add_dependency("task-a", "task-b", DependencyType::BlockingDependency)?;
+    dag.add_dependency("task-a", "task-c", DependencyType::BlockingDependency)?;
 
     // THEN: Both dependencies are created
     assert_eq!(dag.edge_count(), 2);
@@ -428,38 +372,18 @@ fn given_dag_when_add_valid_edges_then_still_acyclic() -> DagResult<()> {
     //     a  b  c
     //     |  |
     //     d  e
-    dag.add_node("root".to_string())?;
-    dag.add_node("task-a".to_string())?;
-    dag.add_node("task-b".to_string())?;
-    dag.add_node("task-c".to_string())?;
-    dag.add_node("task-d".to_string())?;
-    dag.add_node("task-e".to_string())?;
+    dag.add_node("root")?;
+    dag.add_node("task-a")?;
+    dag.add_node("task-b")?;
+    dag.add_node("task-c")?;
+    dag.add_node("task-d")?;
+    dag.add_node("task-e")?;
 
-    dag.add_dependency(
-        "root".to_string(),
-        "task-a".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_dependency(
-        "root".to_string(),
-        "task-b".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_dependency(
-        "root".to_string(),
-        "task-c".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_dependency(
-        "task-a".to_string(),
-        "task-d".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_dependency(
-        "task-b".to_string(),
-        "task-e".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
+    dag.add_dependency("root", "task-a", DependencyType::BlockingDependency)?;
+    dag.add_dependency("root", "task-b", DependencyType::BlockingDependency)?;
+    dag.add_dependency("root", "task-c", DependencyType::BlockingDependency)?;
+    dag.add_dependency("task-a", "task-d", DependencyType::BlockingDependency)?;
+    dag.add_dependency("task-b", "task-e", DependencyType::BlockingDependency)?;
 
     // THEN: DAG should remain acyclic
     assert!(!dag.has_cycle(), "Valid tree structure should be acyclic");
@@ -478,36 +402,16 @@ fn given_long_chain_when_add_edge_creating_cycle_then_cycle_detected() -> DagRes
     // a -> b -> c -> d -> e
     let mut dag = WorkflowDAG::new();
     for name in &["a", "b", "c", "d", "e"] {
-        dag.add_node(name.to_string())?;
+        dag.add_node(*name)?;
     }
 
-    dag.add_dependency(
-        "a".to_string(),
-        "b".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_dependency(
-        "b".to_string(),
-        "c".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_dependency(
-        "c".to_string(),
-        "d".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_dependency(
-        "d".to_string(),
-        "e".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
+    dag.add_dependency("a", "b", DependencyType::BlockingDependency)?;
+    dag.add_dependency("b", "c", DependencyType::BlockingDependency)?;
+    dag.add_dependency("c", "d", DependencyType::BlockingDependency)?;
+    dag.add_dependency("d", "e", DependencyType::BlockingDependency)?;
 
     // WHEN: Attempting to add edge e -> a (creating a cycle)
-    let result = dag.add_dependency(
-        "e".to_string(),
-        "a".to_string(),
-        DependencyType::BlockingDependency,
-    );
+    let result = dag.add_dependency("e", "a", DependencyType::BlockingDependency);
 
     // THEN: Cycle is detected
     assert!(result.is_err(), "Cycle should be detected");
@@ -516,7 +420,11 @@ fn given_long_chain_when_add_edge_creating_cycle_then_cycle_detected() -> DagRes
         Err(DagError::CycleDetected(nodes)) => {
             assert_eq!(nodes.len(), 5, "All five nodes should be in cycle");
         }
-        _ => panic!("Expected CycleDetected error, got {:?}", result),
+        other => {
+            return Err(DagError::invalid_operation(format!(
+                "Expected CycleDetected error, got {other:?}"
+            )))
+        }
     }
 
     Ok(())
@@ -532,31 +440,15 @@ fn given_dag_when_add_dependency_creating_transitive_cycle_then_cycle_detected()
     //      d
     let mut dag = WorkflowDAG::new();
     for name in &["a", "b", "c", "d"] {
-        dag.add_node(name.to_string())?;
+        dag.add_node(*name)?;
     }
 
-    dag.add_dependency(
-        "a".to_string(),
-        "b".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_dependency(
-        "b".to_string(),
-        "c".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_dependency(
-        "b".to_string(),
-        "d".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
+    dag.add_dependency("a", "b", DependencyType::BlockingDependency)?;
+    dag.add_dependency("b", "c", DependencyType::BlockingDependency)?;
+    dag.add_dependency("b", "d", DependencyType::BlockingDependency)?;
 
     // WHEN: Adding edge d -> a (creating transitive cycle through b)
-    let result = dag.add_dependency(
-        "d".to_string(),
-        "a".to_string(),
-        DependencyType::BlockingDependency,
-    );
+    let result = dag.add_dependency("d", "a", DependencyType::BlockingDependency);
 
     // THEN: Cycle is detected
     assert!(result.is_err(), "Transitive cycle should be detected");
@@ -565,7 +457,11 @@ fn given_dag_when_add_dependency_creating_transitive_cycle_then_cycle_detected()
         Err(DagError::CycleDetected(_)) => {
             // Success - cycle detected
         }
-        _ => panic!("Expected CycleDetected error, got {:?}", result),
+        other => {
+            return Err(DagError::invalid_operation(format!(
+                "Expected CycleDetected error, got {other:?}"
+            )))
+        }
     }
 
     Ok(())
@@ -573,7 +469,7 @@ fn given_dag_when_add_dependency_creating_transitive_cycle_then_cycle_detected()
 
 /// Test zero-panic property: all errors are returned, never panic
 #[test]
-fn given_various_invalid_inputs_when_add_dependency_then_never_panics() {
+fn given_various_invalid_inputs_when_add_dependency_then_never_panics() -> DagResult<()> {
     let test_cases = vec![
         // Self-loop cases
         ("self-loop", "self-loop", "self-loop"),
@@ -587,59 +483,45 @@ fn given_various_invalid_inputs_when_add_dependency_then_never_panics() {
         let mut dag = WorkflowDAG::new();
 
         // Add nodes that "exist"
-        let _ = dag.add_node("exists-a".to_string());
-        let _ = dag.add_node("exists-b".to_string());
+        let _ = dag.add_node("exists-a");
+        let _ = dag.add_node("exists-b");
 
         // Attempt invalid operation - should never panic
-        let result = dag.add_dependency(
-            source.to_string(),
-            target.to_string(),
-            DependencyType::BlockingDependency,
-        );
+        let result = dag.add_dependency(source, target, DependencyType::BlockingDependency);
 
         // Should always return an error, never panic
-        assert!(result.is_err(), "Test case '{}' should return error", desc);
+        assert!(result.is_err(), "Test case '{desc}' should return error");
     }
+    Ok(())
 }
 
 /// Test that error messages are descriptive
 #[test]
 fn given_invalid_dependency_when_error_then_message_is_descriptive() -> DagResult<()> {
     let mut dag = WorkflowDAG::new();
-    dag.add_node("task-a".to_string())?;
+    dag.add_node("task-a")?;
 
     // Test self-loop error message
-    let result = dag.add_dependency(
-        "task-a".to_string(),
-        "task-a".to_string(),
-        DependencyType::BlockingDependency,
-    );
+    let result = dag.add_dependency("task-a", "task-a", DependencyType::BlockingDependency);
     if let Err(e) = result {
-        let msg = format!("{}", e);
+        let msg = format!("{e}");
         assert!(
             msg.contains("task-a"),
-            "Error message should contain node ID: {}",
-            msg
+            "Error message should contain node ID: {msg}",
         );
         assert!(
             msg.contains("self-loop") || msg.contains("Self-loop"),
-            "Error message should mention self-loop: {}",
-            msg
+            "Error message should mention self-loop: {msg}",
         );
     }
 
     // Test missing node error message
-    let result = dag.add_dependency(
-        "missing".to_string(),
-        "task-a".to_string(),
-        DependencyType::BlockingDependency,
-    );
+    let result = dag.add_dependency("missing", "task-a", DependencyType::BlockingDependency);
     if let Err(e) = result {
-        let msg = format!("{}", e);
+        let msg = format!("{e}");
         assert!(
             msg.contains("missing") || msg.contains("not found"),
-            "Error message should mention missing node: {}",
-            msg
+            "Error message should mention missing node: {msg}",
         );
     }
 

@@ -31,10 +31,10 @@
 
 #[cfg(test)]
 mod tests {
+    use crate::agent_swarm::config::{AgentConfig, AgentConfigBuilder};
+    use oya_events::StageKind;
     use std::path::PathBuf;
     use std::time::Duration;
-    use oya_events::StageKind;
-    use crate::agent_swarm::config::{AgentConfig, AgentConfigBuilder};
 
     #[test]
     fn test_agent_config_creation() {
@@ -74,7 +74,8 @@ mod tests {
     #[test]
     fn test_agent_error_executable_not_found() {
         let path = PathBuf::from("/nonexistent/path");
-        let err = crate::agent_swarm::error::AgentSwarmError::ExecutableNotFound { path: path.clone() };
+        let err =
+            crate::agent_swarm::error::AgentSwarmError::ExecutableNotFound { path: path.clone() };
         assert!(err.to_string().contains("nonexistent"));
     }
 
@@ -82,6 +83,9 @@ mod tests {
     fn test_agent_error_io_conversion() {
         let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "test");
         let agent_err: crate::agent_swarm::error::AgentSwarmError = io_err.into();
-        assert!(matches!(agent_err, crate::agent_swarm::error::AgentSwarmError::Io(_)));
+        assert!(matches!(
+            agent_err,
+            crate::agent_swarm::error::AgentSwarmError::Io(_)
+        ));
     }
 }

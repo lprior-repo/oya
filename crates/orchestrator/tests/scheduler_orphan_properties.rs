@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! Property-based tests for scheduler orphan bead invariants.
 //!
 //! ## Bead src-pnkk: No Orphaned Beads After Operations
@@ -10,13 +11,8 @@
 //! 3. A worker assignment for a bead that doesn't exist in `pending_beads`
 //! 4. A worker assignment to an agent that doesn't exist in `agents`
 
-#![forbid(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-#![forbid(clippy::panic)]
-
 use proptest::collection::vec;
 use proptest::prelude::*;
-use proptest::string::string_regex;
 
 use orchestrator::actors::messages::SchedulerMessage;
 use orchestrator::actors::scheduler::core;
@@ -25,15 +21,15 @@ use orchestrator::actors::scheduler::CoreSchedulerState;
 type DynStrat = BoxedStrategy<String>;
 
 fn workflow_id_strategy() -> DynStrat {
-    string_regex("wf-[a-z0-9]{3,6}").unwrap().boxed()
+    "wf-[a-z0-9]{3,6}".boxed()
 }
 
 fn bead_id_strategy() -> DynStrat {
-    string_regex("bead-[a-z0-9]{3,6}").unwrap().boxed()
+    "bead-[a-z0-9]{3,6}".boxed()
 }
 
 fn agent_id_strategy() -> DynStrat {
-    string_regex("agent-[a-z0-9]{2,4}").unwrap().boxed()
+    "agent-[a-z0-9]{2,4}".boxed()
 }
 
 #[derive(Debug, Clone)]

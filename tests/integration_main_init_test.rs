@@ -12,7 +12,7 @@
 
 use std::sync::Arc;
 use std::time::Instant;
-use tokio::time::{Duration, timeout};
+use tokio::time::{timeout, Duration};
 
 /// Test that the full stack starts cleanly.
 ///

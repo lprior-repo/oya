@@ -23,12 +23,10 @@
 //! - **Timers**: Durable scheduled task execution
 
 #![forbid(unsafe_code)]
-#![deny(clippy::unwrap_used)]
-#![deny(clippy::panic)]
-#![deny(clippy::expect_used)]
-#![cfg_attr(test, allow(clippy::expect_used))]
-#![cfg_attr(test, allow(clippy::unwrap_used))]
-#![cfg_attr(test, allow(clippy::panic))]
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::panic, clippy::expect_used))]
+#![cfg_attr(not(test), deny(clippy::unwrap_used))]
+#![cfg_attr(not(test), deny(clippy::panic))]
+#![cfg_attr(not(test), deny(clippy::expect_used))]
 
 pub use oya_core::{Error, Result};
 

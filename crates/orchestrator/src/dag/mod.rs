@@ -26,10 +26,10 @@
 
 use im::{HashMap, HashSet};
 use itertools::Itertools;
-use petgraph::Direction;
 use petgraph::algo::{is_cyclic_directed, tarjan_scc as petgraph_scc, toposort};
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::{Bfs, Dfs, EdgeRef, Reversed};
+use petgraph::Direction;
 use std::collections::VecDeque;
 use std::time::Duration;
 
@@ -107,7 +107,8 @@ impl WorkflowDAG {
     /// let result = dag.add_node("bead-001".to_string());
     /// assert!(result.is_ok());
     /// ```
-    pub fn add_node(&mut self, bead_id: BeadId) -> DagResult<()> {
+    pub fn add_node(&mut self, bead_id: impl Into<BeadId>) -> DagResult<()> {
+        let bead_id = bead_id.into();
         if self.node_map.contains_key(&bead_id) {
             return Err(DagError::node_already_exists(bead_id));
         }
@@ -170,7 +171,10 @@ impl WorkflowDAG {
             .ok_or_else(|| DagError::node_not_found(to_bead.to_string()))?;
 
         if self.graph.find_edge(*from_index, *to_index).is_some() {
-            return Err(DagError::edge_already_exists(from_bead.to_string(), to_bead.to_string()));
+            return Err(DagError::edge_already_exists(
+                from_bead.to_string(),
+                to_bead.to_string(),
+            ));
         }
 
         self.graph.add_edge(*from_index, *to_index, dep_type);
@@ -414,14 +418,14 @@ impl WorkflowDAG {
     /// let mut dag = WorkflowDAG::new();
     /// dag.add_node("a".to_string())?;
     /// dag.add_node("b".to_string())?;
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
+    /// dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
     ///
     /// let deps = dag.get_dependencies(&"b".to_string())?;
     /// assert_eq!(deps, vec!["a".to_string()]);
     /// # Ok(())
     /// # }
     /// ```
-    pub fn get_dependencies(&self, bead_id: &BeadId) -> DagResult<Vec<BeadId>> {
+    pub fn get_dependencies(&self, bead_id: &str) -> DagResult<Vec<BeadId>> {
         let node_index = self.get_node_index(bead_id)?;
 
         let mut deps: Vec<BeadId> = self
@@ -457,7 +461,7 @@ impl WorkflowDAG {
     /// let mut dag = WorkflowDAG::new();
     /// dag.add_node("a".to_string())?;
     /// dag.add_node("b".to_string())?;
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
+    /// dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
     ///
     /// let dependents = dag.get_dependents(&"a".to_string())?;
     /// assert_eq!(dependents, vec!["b".to_string()]);
@@ -501,8 +505,8 @@ impl WorkflowDAG {
     /// dag.add_node("a".to_string())?;
     /// dag.add_node("b".to_string())?;
     /// dag.add_node("c".to_string())?;
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
-    /// dag.add_edge("b".to_string(), "c".to_string(), DependencyType::BlockingDependency)?;
+    /// dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
+    /// dag.add_edge("b", "c", DependencyType::BlockingDependency)?;
     ///
     /// let ancestors = dag.get_all_ancestors(&"c".to_string())?;
     /// assert!(ancestors.contains(&"a".to_string()));
@@ -552,8 +556,8 @@ impl WorkflowDAG {
     /// dag.add_node("a".to_string())?;
     /// dag.add_node("b".to_string())?;
     /// dag.add_node("c".to_string())?;
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
-    /// dag.add_edge("b".to_string(), "c".to_string(), DependencyType::BlockingDependency)?;
+    /// dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
+    /// dag.add_edge("b", "c", DependencyType::BlockingDependency)?;
     ///
     /// let descendants = dag.get_all_descendants(&"a".to_string())?;
     /// assert!(descendants.contains(&"b".to_string()));
@@ -596,7 +600,7 @@ impl WorkflowDAG {
     /// let mut dag = WorkflowDAG::new();
     /// dag.add_node("a".to_string())?;
     /// dag.add_node("b".to_string())?;
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
+    /// dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
     ///
     /// let roots = dag.get_roots();
     /// assert_eq!(roots, vec!["a".to_string()]);
@@ -635,7 +639,7 @@ impl WorkflowDAG {
     /// let mut dag = WorkflowDAG::new();
     /// dag.add_node("a".to_string())?;
     /// dag.add_node("b".to_string())?;
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
+    /// dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
     ///
     /// let leaves = dag.get_leaves();
     /// assert_eq!(leaves, vec!["b".to_string()]);
@@ -681,7 +685,7 @@ impl WorkflowDAG {
     /// let mut dag = WorkflowDAG::new();
     /// dag.add_node("a".to_string())?;
     /// dag.add_node("b".to_string())?;
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
+    /// dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
     ///
     /// let completed = HashSet::new();
     /// let ready = dag.get_ready_nodes(&completed);
@@ -753,7 +757,7 @@ impl WorkflowDAG {
     /// let mut dag = WorkflowDAG::new();
     /// dag.add_node("a".to_string())?;
     /// dag.add_node("b".to_string())?;
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
+    /// dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
     ///
     /// let completed = HashSet::new();
     /// let ready = dag.get_ready_beads(&completed);
@@ -789,7 +793,7 @@ impl WorkflowDAG {
     /// let mut dag = WorkflowDAG::new();
     /// dag.add_node("a".to_string())?;
     /// dag.add_node("b".to_string())?;
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
+    /// dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
     ///
     /// let completed = HashSet::new();
     /// let blocked = dag.get_blocked_nodes(&completed);
@@ -852,7 +856,7 @@ impl WorkflowDAG {
     /// let mut dag = WorkflowDAG::new();
     /// dag.add_node("a".to_string())?;
     /// dag.add_node("b".to_string())?;
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
+    /// dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
     ///
     /// let completed = HashSet::new();
     /// assert!(dag.is_ready(&"a".to_string(), &completed)?);
@@ -860,7 +864,7 @@ impl WorkflowDAG {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn is_ready(&self, bead_id: &BeadId, completed: &HashSet<BeadId>) -> DagResult<bool> {
+    pub fn is_ready(&self, bead_id: &str, completed: &HashSet<BeadId>) -> DagResult<bool> {
         let node_index = self.get_node_index(bead_id)?;
 
         let all_blocking_deps_complete = self
@@ -897,8 +901,8 @@ impl WorkflowDAG {
     /// dag.add_node("a".to_string())?;
     /// dag.add_node("b".to_string())?;
     /// dag.add_node("c".to_string())?;
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
-    /// dag.add_edge("b".to_string(), "c".to_string(), DependencyType::BlockingDependency)?;
+    /// dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
+    /// dag.add_edge("b", "c", DependencyType::BlockingDependency)?;
     ///
     /// let sorted = dag.topological_sort()?;
     /// // a must come before b, b must come before c
@@ -947,7 +951,7 @@ impl WorkflowDAG {
     /// let mut dag = WorkflowDAG::new();
     /// dag.add_node("a".to_string())?;
     /// dag.add_node("b".to_string())?;
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
+    /// dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
     ///
     /// let sorted = dag.topological_sort_kahn()?;
     /// assert_eq!(sorted[0], "a");
@@ -1031,8 +1035,8 @@ impl WorkflowDAG {
     /// dag.add_node("a".to_string())?;
     /// dag.add_node("b".to_string())?;
     /// dag.add_node("c".to_string())?;
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
-    /// dag.add_edge("a".to_string(), "c".to_string(), DependencyType::BlockingDependency)?;
+    /// dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
+    /// dag.add_edge("a", "c", DependencyType::BlockingDependency)?;
     ///
     /// let mut weights = HashMap::new();
     /// weights.insert("a".to_string(), Duration::from_secs(1));
@@ -1137,7 +1141,7 @@ impl WorkflowDAG {
     /// let mut dag = WorkflowDAG::new();
     /// dag.add_node("a".to_string())?;
     /// dag.add_node("b".to_string())?;
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
+    /// dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
     ///
     /// assert!(!dag.has_cycle());
     /// # Ok(())
@@ -1247,7 +1251,7 @@ impl WorkflowDAG {
     /// let mut dag = WorkflowDAG::new();
     /// dag.add_node("a".to_string())?;
     /// dag.add_node("b".to_string())?;
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
+    /// dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
     ///
     /// assert!(dag.is_connected());
     /// # Ok(())
@@ -1352,7 +1356,7 @@ impl WorkflowDAG {
     /// let mut dag = WorkflowDAG::new();
     /// dag.add_node("a".to_string())?;
     /// dag.add_node("b".to_string())?;
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
+    /// dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
     /// assert_eq!(dag.edge_count(), 1);
     ///
     /// dag.remove_edge(&"a".to_string(), &"b".to_string())?;
@@ -1397,8 +1401,8 @@ impl WorkflowDAG {
     /// dag.add_node("a".to_string())?;
     /// dag.add_node("b".to_string())?;
     /// dag.add_node("c".to_string())?;
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
-    /// dag.add_edge("b".to_string(), "c".to_string(), DependencyType::BlockingDependency)?;
+    /// dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
+    /// dag.add_edge("b", "c", DependencyType::BlockingDependency)?;
     ///
     /// let subgraph = dag.subgraph(&["a".to_string(), "b".to_string()])?;
     /// assert_eq!(subgraph.node_count(), 2);
@@ -1462,8 +1466,8 @@ impl WorkflowDAG {
     /// dag.add_node("b".to_string())?;
     /// dag.add_node("c".to_string())?;
     /// dag.add_node("d".to_string())?; // disconnected
-    /// dag.add_edge("a".to_string(), "b".to_string(), DependencyType::BlockingDependency)?;
-    /// dag.add_edge("b".to_string(), "c".to_string(), DependencyType::BlockingDependency)?;
+    /// dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
+    /// dag.add_edge("b", "c", DependencyType::BlockingDependency)?;
     ///
     /// let induced = dag.induced_subgraph(&"b".to_string())?;
     /// assert_eq!(induced.node_count(), 3); // a, b, c (not d)
@@ -1494,11 +1498,11 @@ impl WorkflowDAG {
     // ==================== Helper Methods ====================
 
     /// Get the `NodeIndex` for a `BeadId`, or return an error if not found.
-    fn get_node_index(&self, bead_id: &BeadId) -> DagResult<NodeIndex> {
+    fn get_node_index(&self, bead_id: &str) -> DagResult<NodeIndex> {
         self.node_map
             .get(bead_id)
             .copied()
-            .ok_or_else(|| DagError::node_not_found(bead_id.clone()))
+            .ok_or_else(|| DagError::node_not_found(bead_id.to_string()))
     }
 
     /// Rebuild the `node_map` after a node removal.
@@ -1760,11 +1764,7 @@ mod tests {
         dag.add_node("bead-001".to_string())?;
         dag.add_node("bead-002".to_string())?;
 
-        let result = dag.add_edge(
-            "bead-001",
-            "bead-002",
-            DependencyType::BlockingDependency,
-        );
+        let result = dag.add_edge("bead-001", "bead-002", DependencyType::BlockingDependency);
         assert!(result.is_ok());
         assert_eq!(dag.edge_count(), 1);
         Ok(())
@@ -1775,11 +1775,7 @@ mod tests {
         let mut dag = WorkflowDAG::new();
         dag.add_node("bead-002".to_string())?;
 
-        let result = dag.add_edge(
-            "bead-001".to_string(),
-            "bead-002".to_string(),
-            DependencyType::BlockingDependency,
-        );
+        let result = dag.add_edge("bead-001", "bead-002", DependencyType::BlockingDependency);
         assert!(result.is_err());
         Ok(())
     }
@@ -1789,11 +1785,7 @@ mod tests {
         let mut dag = WorkflowDAG::new();
         dag.add_node("bead-001".to_string())?;
 
-        let result = dag.add_edge(
-            "bead-001".to_string(),
-            "bead-002".to_string(),
-            DependencyType::BlockingDependency,
-        );
+        let result = dag.add_edge("bead-001", "bead-002", DependencyType::BlockingDependency);
         assert!(result.is_err());
         Ok(())
     }
@@ -1816,11 +1808,7 @@ mod tests {
         let mut dag = WorkflowDAG::new();
         dag.add_node("bead-001".to_string())?;
         dag.add_node("bead-002".to_string())?;
-        dag.add_edge(
-            "bead-001".to_string(),
-            "bead-002".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
+        dag.add_edge("bead-001", "bead-002", DependencyType::BlockingDependency)?;
 
         let edges: Vec<_> = dag.edges().collect();
         assert_eq!(edges.len(), 1);
@@ -1837,17 +1825,9 @@ mod tests {
         dag.add_node("bead-002".to_string())?;
         dag.add_node("bead-003".to_string())?;
 
-        dag.add_edge(
-            "bead-001".to_string(),
-            "bead-002".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
+        dag.add_edge("bead-001", "bead-002", DependencyType::BlockingDependency)?;
 
-        dag.add_edge(
-            "bead-001".to_string(),
-            "bead-003".to_string(),
-            DependencyType::PreferredOrder,
-        )?;
+        dag.add_edge("bead-001", "bead-003", DependencyType::PreferredOrder)?;
 
         assert_eq!(dag.edge_count(), 2);
         Ok(())
@@ -1861,16 +1841,8 @@ mod tests {
         dag.add_node("a".to_string())?;
         dag.add_node("b".to_string())?;
         dag.add_node("c".to_string())?;
-        dag.add_edge(
-            "a".to_string(),
-            "c".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
-        dag.add_edge(
-            "b".to_string(),
-            "c".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
+        dag.add_edge("a", "c", DependencyType::BlockingDependency)?;
+        dag.add_edge("b", "c", DependencyType::BlockingDependency)?;
 
         let deps = dag.get_dependencies(&"c".to_string())?;
         assert_eq!(deps.len(), 2);
@@ -1885,16 +1857,8 @@ mod tests {
         dag.add_node("a".to_string())?;
         dag.add_node("b".to_string())?;
         dag.add_node("c".to_string())?;
-        dag.add_edge(
-            "a".to_string(),
-            "b".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
-        dag.add_edge(
-            "a".to_string(),
-            "c".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
+        dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
+        dag.add_edge("a", "c", DependencyType::BlockingDependency)?;
 
         let dependents = dag.get_dependents(&"a".to_string())?;
         assert_eq!(dependents.len(), 2);
@@ -1910,21 +1874,9 @@ mod tests {
         dag.add_node("b".to_string())?;
         dag.add_node("c".to_string())?;
         dag.add_node("d".to_string())?;
-        dag.add_edge(
-            "a".to_string(),
-            "b".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
-        dag.add_edge(
-            "b".to_string(),
-            "c".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
-        dag.add_edge(
-            "c".to_string(),
-            "d".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
+        dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
+        dag.add_edge("b", "c", DependencyType::BlockingDependency)?;
+        dag.add_edge("c", "d", DependencyType::BlockingDependency)?;
 
         let ancestors = dag.get_all_ancestors(&"d".to_string())?;
         assert_eq!(ancestors.len(), 3);
@@ -1940,16 +1892,8 @@ mod tests {
         dag.add_node("a".to_string())?;
         dag.add_node("b".to_string())?;
         dag.add_node("c".to_string())?;
-        dag.add_edge(
-            "a".to_string(),
-            "b".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
-        dag.add_edge(
-            "b".to_string(),
-            "c".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
+        dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
+        dag.add_edge("b", "c", DependencyType::BlockingDependency)?;
 
         let descendants = dag.get_all_descendants(&"a".to_string())?;
         assert_eq!(descendants.len(), 2);
@@ -1964,16 +1908,8 @@ mod tests {
         dag.add_node("a".to_string())?;
         dag.add_node("b".to_string())?;
         dag.add_node("c".to_string())?;
-        dag.add_edge(
-            "a".to_string(),
-            "c".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
-        dag.add_edge(
-            "b".to_string(),
-            "c".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
+        dag.add_edge("a", "c", DependencyType::BlockingDependency)?;
+        dag.add_edge("b", "c", DependencyType::BlockingDependency)?;
 
         let roots = dag.get_roots();
         assert_eq!(roots.len(), 2);
@@ -1988,16 +1924,8 @@ mod tests {
         dag.add_node("a".to_string())?;
         dag.add_node("b".to_string())?;
         dag.add_node("c".to_string())?;
-        dag.add_edge(
-            "a".to_string(),
-            "b".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
-        dag.add_edge(
-            "a".to_string(),
-            "c".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
+        dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
+        dag.add_edge("a", "c", DependencyType::BlockingDependency)?;
 
         let leaves = dag.get_leaves();
         assert_eq!(leaves.len(), 2);
@@ -2014,16 +1942,8 @@ mod tests {
         dag.add_node("a".to_string())?;
         dag.add_node("b".to_string())?;
         dag.add_node("c".to_string())?;
-        dag.add_edge(
-            "a".to_string(),
-            "b".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
-        dag.add_edge(
-            "b".to_string(),
-            "c".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
+        dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
+        dag.add_edge("b", "c", DependencyType::BlockingDependency)?;
 
         // Initially only a is ready
         let completed = HashSet::new();
@@ -2043,11 +1963,7 @@ mod tests {
         let mut dag = WorkflowDAG::new();
         dag.add_node("a".to_string())?;
         dag.add_node("b".to_string())?;
-        dag.add_edge(
-            "a".to_string(),
-            "b".to_string(),
-            DependencyType::PreferredOrder,
-        )?;
+        dag.add_edge("a", "b", DependencyType::PreferredOrder)?;
 
         // b should be ready even without a completing (PreferredOrder is non-blocking)
         let completed = HashSet::new();
@@ -2062,11 +1978,7 @@ mod tests {
         let mut dag = WorkflowDAG::new();
         dag.add_node("a".to_string())?;
         dag.add_node("b".to_string())?;
-        dag.add_edge(
-            "a".to_string(),
-            "b".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
+        dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
 
         let completed = HashSet::new();
         let blocked = dag.get_blocked_nodes(&completed);
@@ -2079,11 +1991,7 @@ mod tests {
         let mut dag = WorkflowDAG::new();
         dag.add_node("a".to_string())?;
         dag.add_node("b".to_string())?;
-        dag.add_edge(
-            "a".to_string(),
-            "b".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
+        dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
 
         let completed = HashSet::new();
         assert!(dag.is_ready(&"a".to_string(), &completed)?);
@@ -2099,16 +2007,8 @@ mod tests {
         dag.add_node("a".to_string())?;
         dag.add_node("b".to_string())?;
         dag.add_node("c".to_string())?;
-        dag.add_edge(
-            "a".to_string(),
-            "b".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
-        dag.add_edge(
-            "b".to_string(),
-            "c".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
+        dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
+        dag.add_edge("b", "c", DependencyType::BlockingDependency)?;
 
         let sorted = dag.topological_sort()?;
         let pos_a = sorted.iter().position(|x| x == "a").ok_or("find a")?;
@@ -2125,16 +2025,8 @@ mod tests {
         dag.add_node("a".to_string())?;
         dag.add_node("b".to_string())?;
         dag.add_node("c".to_string())?;
-        dag.add_edge(
-            "a".to_string(),
-            "b".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
-        dag.add_edge(
-            "b".to_string(),
-            "c".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
+        dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
+        dag.add_edge("b", "c", DependencyType::BlockingDependency)?;
 
         let sorted = dag.topological_sort_kahn()?;
         assert_eq!(sorted[0], "a");
@@ -2149,16 +2041,8 @@ mod tests {
         dag.add_node("a".to_string())?;
         dag.add_node("b".to_string())?;
         dag.add_node("c".to_string())?;
-        dag.add_edge(
-            "a".to_string(),
-            "b".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
-        dag.add_edge(
-            "a".to_string(),
-            "c".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
+        dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
+        dag.add_edge("a", "c", DependencyType::BlockingDependency)?;
 
         let mut weights = HashMap::new();
         weights.insert("a".to_string(), Duration::from_secs(1));
@@ -2179,11 +2063,7 @@ mod tests {
         let mut dag = WorkflowDAG::new();
         dag.add_node("a".to_string())?;
         dag.add_node("b".to_string())?;
-        dag.add_edge(
-            "a".to_string(),
-            "b".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
+        dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
 
         assert!(!dag.has_cycle());
         Ok(())
@@ -2194,11 +2074,7 @@ mod tests {
         let mut dag = WorkflowDAG::new();
         dag.add_node("a".to_string())?;
         dag.add_node("b".to_string())?;
-        dag.add_edge(
-            "a".to_string(),
-            "b".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
+        dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
 
         let cycles = dag.find_cycles();
         assert!(cycles.is_empty());
@@ -2216,11 +2092,7 @@ mod tests {
         let mut dag = WorkflowDAG::new();
         dag.add_node("a".to_string())?;
         dag.add_node("b".to_string())?;
-        dag.add_edge(
-            "a".to_string(),
-            "b".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
+        dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
 
         assert!(dag.is_connected());
         Ok(())
@@ -2244,11 +2116,7 @@ mod tests {
         let mut dag = WorkflowDAG::new();
         dag.add_node("a".to_string())?;
         dag.add_node("b".to_string())?;
-        dag.add_edge(
-            "a".to_string(),
-            "b".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
+        dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
 
         assert_eq!(dag.node_count(), 2);
         assert_eq!(dag.edge_count(), 1);
@@ -2264,11 +2132,7 @@ mod tests {
         let mut dag = WorkflowDAG::new();
         dag.add_node("a".to_string())?;
         dag.add_node("b".to_string())?;
-        dag.add_edge(
-            "a".to_string(),
-            "b".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
+        dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
 
         assert_eq!(dag.edge_count(), 1);
         dag.remove_edge(&"a".to_string(), &"b".to_string())?;
@@ -2284,16 +2148,8 @@ mod tests {
         dag.add_node("a".to_string())?;
         dag.add_node("b".to_string())?;
         dag.add_node("c".to_string())?;
-        dag.add_edge(
-            "a".to_string(),
-            "b".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
-        dag.add_edge(
-            "b".to_string(),
-            "c".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
+        dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
+        dag.add_edge("b", "c", DependencyType::BlockingDependency)?;
 
         let subgraph = dag.subgraph(&["a".to_string(), "b".to_string()])?;
         assert_eq!(subgraph.node_count(), 2);
@@ -2311,16 +2167,8 @@ mod tests {
         dag.add_node("b".to_string())?;
         dag.add_node("c".to_string())?;
         dag.add_node("d".to_string())?; // disconnected
-        dag.add_edge(
-            "a".to_string(),
-            "b".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
-        dag.add_edge(
-            "b".to_string(),
-            "c".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
+        dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
+        dag.add_edge("b", "c", DependencyType::BlockingDependency)?;
 
         let induced = dag.induced_subgraph(&"b".to_string())?;
         assert_eq!(induced.node_count(), 3); // a, b, c (not d)
@@ -2349,11 +2197,7 @@ mod tests {
         dag.add_node("task-a".to_string())?;
         dag.add_node("task-b".to_string())?;
 
-        let result = dag.add_dependency(
-            "task-a".to_string(),
-            "task-b".to_string(),
-            DependencyType::BlockingDependency,
-        );
+        let result = dag.add_edge("task-a", "task-b", DependencyType::BlockingDependency);
         assert!(result.is_ok());
         assert_eq!(dag.edge_count(), 1);
         Ok(())
@@ -2365,11 +2209,7 @@ mod tests {
         dag.add_node("task-a".to_string())?;
         dag.add_node("task-b".to_string())?;
 
-        let result = dag.add_dependency(
-            "task-a".to_string(),
-            "task-b".to_string(),
-            DependencyType::PreferredOrder,
-        );
+        let result = dag.add_edge("task-a", "task-b", DependencyType::PreferredOrder);
         assert!(result.is_ok());
         assert_eq!(dag.edge_count(), 1);
         Ok(())
@@ -2380,11 +2220,7 @@ mod tests {
         let mut dag = WorkflowDAG::new();
         dag.add_node("task-a".to_string())?;
 
-        let result = dag.add_dependency(
-            "task-a".to_string(),
-            "task-a".to_string(),
-            DependencyType::BlockingDependency,
-        );
+        let result = dag.add_edge("task-a", "task-a", DependencyType::BlockingDependency);
         assert!(result.is_err());
         assert!(matches!(result, Err(DagError::SelfLoopDetected(_))));
         Ok(())
@@ -2395,11 +2231,7 @@ mod tests {
         let mut dag = WorkflowDAG::new();
         dag.add_node("task-b".to_string())?;
 
-        let result = dag.add_dependency(
-            "task-a".to_string(),
-            "task-b".to_string(),
-            DependencyType::BlockingDependency,
-        );
+        let result = dag.add_edge("task-a", "task-b", DependencyType::BlockingDependency);
         assert!(result.is_err());
         assert!(matches!(result, Err(DagError::NodeNotFound(_))));
         Ok(())
@@ -2410,11 +2242,7 @@ mod tests {
         let mut dag = WorkflowDAG::new();
         dag.add_node("task-a".to_string())?;
 
-        let result = dag.add_dependency(
-            "task-a".to_string(),
-            "task-b".to_string(),
-            DependencyType::BlockingDependency,
-        );
+        let result = dag.add_edge("task-a", "task-b", DependencyType::BlockingDependency);
         assert!(result.is_err());
         assert!(matches!(result, Err(DagError::NodeNotFound(_))));
         Ok(())
@@ -2427,18 +2255,10 @@ mod tests {
         dag.add_node("task-b".to_string())?;
 
         // Add first dependency
-        dag.add_dependency(
-            "task-a".to_string(),
-            "task-b".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
+        dag.add_edge("task-a", "task-b", DependencyType::BlockingDependency)?;
 
         // Try to add duplicate
-        let result = dag.add_dependency(
-            "task-a".to_string(),
-            "task-b".to_string(),
-            DependencyType::BlockingDependency,
-        );
+        let result = dag.add_edge("task-a", "task-b", DependencyType::BlockingDependency);
         assert!(result.is_err());
         assert!(matches!(result, Err(DagError::EdgeAlreadyExists(_, _))));
         Ok(())
@@ -2450,11 +2270,7 @@ mod tests {
         dag.add_node("task-a".to_string())?;
         dag.add_node("task-b".to_string())?;
 
-        dag.add_dependency(
-            "task-a".to_string(),
-            "task-b".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
+        dag.add_edge("task-a", "task-b", DependencyType::BlockingDependency)?;
 
         // Verify the edge type was preserved
         let edges: Vec<_> = dag.edges().collect();
@@ -2471,16 +2287,8 @@ mod tests {
         dag.add_node("task-c".to_string())?;
 
         // Add multiple dependencies from the same source
-        dag.add_dependency(
-            "task-a".to_string(),
-            "task-b".to_string(),
-            DependencyType::BlockingDependency,
-        )?;
-        dag.add_dependency(
-            "task-a".to_string(),
-            "task-c".to_string(),
-            DependencyType::PreferredOrder,
-        )?;
+        dag.add_edge("task-a", "task-b", DependencyType::BlockingDependency)?;
+        dag.add_dependency("task-a", "task-c", DependencyType::PreferredOrder)?;
 
         assert_eq!(dag.edge_count(), 2);
         Ok(())
@@ -2498,21 +2306,9 @@ fn test_get_dependencies_deterministic_ordering() -> DagResult<()> {
     dag.add_node("d".to_string())?;
 
     // Add dependencies in non-alphabetical order
-    dag.add_edge(
-        "c".to_string(),
-        "d".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "a".to_string(),
-        "d".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "b".to_string(),
-        "d".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
+    dag.add_edge("c", "d", DependencyType::BlockingDependency)?;
+    dag.add_edge("a", "d", DependencyType::BlockingDependency)?;
+    dag.add_edge("b", "d", DependencyType::BlockingDependency)?;
 
     let deps = dag.get_dependencies(&"d".to_string())?;
 
@@ -2538,21 +2334,9 @@ fn test_get_dependents_deterministic_ordering() -> DagResult<()> {
     dag.add_node("b".to_string())?;
 
     // Add dependents in non-alphabetical order
-    dag.add_edge(
-        "a".to_string(),
-        "c".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "a".to_string(),
-        "d".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "a".to_string(),
-        "b".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
+    dag.add_edge("a", "c", DependencyType::BlockingDependency)?;
+    dag.add_edge("a", "d", DependencyType::BlockingDependency)?;
+    dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
 
     let dependents = dag.get_dependents(&"a".to_string())?;
 
@@ -2575,16 +2359,8 @@ fn test_get_ready_beads_basic() -> DagResult<()> {
     dag.add_node("a".to_string())?;
     dag.add_node("b".to_string())?;
     dag.add_node("c".to_string())?;
-    dag.add_edge(
-        "a".to_string(),
-        "b".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "b".to_string(),
-        "c".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
+    dag.add_edge("a", "b", DependencyType::BlockingDependency)?;
+    dag.add_edge("b", "c", DependencyType::BlockingDependency)?;
 
     // Initially only a is ready (in-degree=0)
     let completed = HashSet::new();
@@ -2611,21 +2387,9 @@ fn test_get_ready_nodes_multiple_roots_sorted() -> DagResult<()> {
     dag.add_node("d".to_string())?;
 
     // Add edges to create multiple roots
-    dag.add_edge(
-        "a".to_string(),
-        "d".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "b".to_string(),
-        "d".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
-    dag.add_edge(
-        "c".to_string(),
-        "d".to_string(),
-        DependencyType::BlockingDependency,
-    )?;
+    dag.add_edge("a", "d", DependencyType::BlockingDependency)?;
+    dag.add_edge("b", "d", DependencyType::BlockingDependency)?;
+    dag.add_edge("c", "d", DependencyType::BlockingDependency)?;
 
     // All three roots should be ready, sorted
     let completed = HashSet::new();
@@ -2653,8 +2417,8 @@ fn test_query_performance_100_nodes() -> DagResult<()> {
     // Create some dependencies
     for i in 0..90 {
         dag.add_edge(
-            format!("bead-{:03}", i),
-            format!("bead-{:03}", i + 1),
+            &format!("bead-{:03}", i),
+            &format!("bead-{:03}", i + 1),
             DependencyType::BlockingDependency,
         )?;
     }

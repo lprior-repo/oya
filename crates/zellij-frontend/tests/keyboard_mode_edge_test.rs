@@ -7,7 +7,7 @@ use zellij_frontend::layout::PaneType;
 use zellij_frontend::plugin::{
     InputMode, KeyModifiers, OyaPlugin, PluginEvent, PluginInfo, PluginState, Size, TaskRow,
 };
-use zellij_frontend::state::{STATE_VERSION, StateSnapshot};
+use zellij_frontend::state::{StateSnapshot, STATE_VERSION};
 
 fn start_plugin(plugin: &mut OyaPlugin) -> Result<(), Box<dyn std::error::Error>> {
     let _ = plugin.handle_event(PluginEvent::Start {

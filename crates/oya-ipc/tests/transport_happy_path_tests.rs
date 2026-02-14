@@ -83,7 +83,8 @@ fn test_length_prefix_encoded_as_big_endian() -> Result<(), Box<dyn std::error::
 
     transport.send(&msg)?;
 
-    let written = transport.split().1.into_inner().ok_or("failed to get writer")?.buffer;
+    let (reader, writer) = transport.split();
+    let written = writer.into_inner().map_err(|e| format!("{e:?}"))?.buffer;
     assert!(written.len() >= 4);
 
     let length_prefix = u32::from_be_bytes([written[0], written[1], written[2], written[3]]);
@@ -135,8 +136,7 @@ fn test_multiple_messages_are_independently_framed() -> Result<(), Box<dyn std::
     let (mut client, mut server) = IpcTransport::pair();
 
     client.send(&HostMessage::BeadList(vec![]))?;
-    client
-        .send(&HostMessage::Error("test".to_string()))?;
+    client.send(&HostMessage::Error("test".to_string()))?;
     client.send(&HostMessage::BeadDetail(None))?;
 
     let msg1 = server.recv::<HostMessage>()?;

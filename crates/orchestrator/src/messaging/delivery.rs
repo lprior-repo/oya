@@ -427,12 +427,10 @@ mod tests {
         assert!(!DeliveryStatus::Pending.is_terminal());
         assert!(!DeliveryStatus::Sent.is_terminal());
         assert!(DeliveryStatus::Delivered.is_terminal());
-        assert!(
-            DeliveryStatus::Failed {
-                error: "test".into()
-            }
-            .is_terminal()
-        );
+        assert!(DeliveryStatus::Failed {
+            error: "test".into()
+        }
+        .is_terminal());
         assert!(DeliveryStatus::Expired.is_terminal());
         assert!(DeliveryStatus::Deduplicated.is_terminal());
     }
@@ -441,12 +439,10 @@ mod tests {
     fn test_delivery_status_success() {
         assert!(DeliveryStatus::Delivered.is_success());
         assert!(DeliveryStatus::Deduplicated.is_success());
-        assert!(
-            !DeliveryStatus::Failed {
-                error: "err".into()
-            }
-            .is_success()
-        );
+        assert!(!DeliveryStatus::Failed {
+            error: "err".into()
+        }
+        .is_success());
     }
 
     #[test]

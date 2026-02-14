@@ -6,7 +6,7 @@ use tracing::info;
 
 use crate::actors::supervisor::SupervisorConfig;
 use crate::shutdown::ShutdownCoordinator;
-use crate::supervision::{Tier1Supervisors, spawn_tier1_supervisors};
+use crate::supervision::{spawn_tier1_supervisors, Tier1Supervisors};
 
 pub struct UniverseSupervisorDef;
 

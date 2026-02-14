@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! Chaos tests for slow agent timeout and bead reassignment.
 //!
 //! Tests the scenario where an agent takes too long (slow/stuck),
@@ -5,9 +6,7 @@
 //!
 //! **Bead:** src-v5ep
 //! **Phase 4 - Chaos Tests:** Slow agent -> timeout -> reassign bead
-#![allow(clippy::unwrap_used)]
-#![allow(clippy::expect_used)]
-#![deny(clippy::panic)]
+
 #![warn(clippy::pedantic)]
 #![warn(clippy::nursery)]
 #![forbid(unsafe_code)]
@@ -67,8 +66,8 @@ impl SlowAgentTestContext {
         let mut agent_ids = Vec::with_capacity(num_agents);
         for i in 0..num_agents {
             let agent_id = format!("agent-{i}");
-            let agent = AgentHandle::new(&agent_id)
-                .with_max_health_failures(health_config.max_failures);
+            let agent =
+                AgentHandle::new(&agent_id).with_max_health_failures(health_config.max_failures);
             pool.register_agent(agent)
                 .await
                 .map_err(|e| SlowAgentChaosError::SetupFailed {
@@ -114,7 +113,12 @@ async fn wait_for_agent_state(
     })
 }
 
-async fn simulate_slow_agent(ctx: &SlowAgentTestContext, agent_id: &str, bead_id: &str) -> ChaosResult<()> {
+#[allow(dead_code)]
+async fn simulate_slow_agent(
+    ctx: &SlowAgentTestContext,
+    agent_id: &str,
+    bead_id: &str,
+) -> ChaosResult<()> {
     ctx.pool
         .assign_bead_to_agent(bead_id, agent_id)
         .await
@@ -129,10 +133,14 @@ async fn simulate_slow_agent(ctx: &SlowAgentTestContext, agent_id: &str, bead_id
             reason: e.to_string(),
         })?;
 
-    info!("Simulated slow agent {} assigned to bead {}", agent_id, bead_id);
+    info!(
+        "Simulated slow agent {} assigned to bead {}",
+        agent_id, bead_id
+    );
     Ok(())
 }
 
+#[allow(dead_code)]
 async fn get_available_agent(ctx: &SlowAgentTestContext) -> ChaosResult<String> {
     let available = ctx.health_monitor.get_available_agents().await;
     available
@@ -146,9 +154,10 @@ async fn get_available_agent(ctx: &SlowAgentTestContext) -> ChaosResult<String> 
 // =============================================================================
 
 #[tokio::test]
-async fn given_agent_with_bead_when_slow_timeout_then_bead_reassigned() {
+async fn given_agent_with_bead_when_slow_timeout_then_bead_reassigned(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = "slow_agent_reassign";
-    info!("Starting test: {}", test_name);
+    info!("Starting test: {test_name}");
 
     let health_config = HealthConfig {
         check_interval: Duration::from_millis(50),
@@ -156,17 +165,12 @@ async fn given_agent_with_bead_when_slow_timeout_then_bead_reassigned() {
         max_failures: 1,
     };
 
-    let ctx = SlowAgentTestContext::new(3, health_config)
-        .await
-        .expect("Failed to setup test context");
+    let ctx = SlowAgentTestContext::new(3, health_config).await?;
 
     let slow_agent = "agent-0";
     let bead_id = "bead-slow-001";
 
-    ctx.pool
-        .assign_bead_to_agent(bead_id, slow_agent)
-        .await
-        .expect("assign should succeed");
+    ctx.pool.assign_bead_to_agent(bead_id, slow_agent).await?;
 
     let _handle = ctx.health_monitor.start_background_check();
 
@@ -181,20 +185,22 @@ async fn given_agent_with_bead_when_slow_timeout_then_bead_reassigned() {
         .health_monitor
         .check_agent(slow_agent)
         .await
-        .expect("health check should succeed");
+        .map_err(|e| format!("health check failed: {e:?}"))?;
 
     assert!(
         !health_result.is_healthy || health_result.state == AgentStateLegacy::Unhealthy,
         "Slow agent should become unhealthy after heartbeat timeout"
     );
 
-    info!("Test passed: {}", test_name);
+    info!("Test passed: {test_name}");
+    Ok(())
 }
 
 #[tokio::test]
-async fn given_multiple_agents_when_one_times_out_then_others_available() {
+async fn given_multiple_agents_when_one_times_out_then_others_available(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = "fallback_agent_available";
-    info!("Starting test: {}", test_name);
+    info!("Starting test: {test_name}");
 
     let health_config = HealthConfig {
         check_interval: Duration::from_millis(50),
@@ -202,34 +208,29 @@ async fn given_multiple_agents_when_one_times_out_then_others_available() {
         max_failures: 1,
     };
 
-    let ctx = SlowAgentTestContext::new(3, health_config)
-        .await
-        .expect("Failed to setup test context");
+    let ctx = SlowAgentTestContext::new(3, health_config).await?;
 
     let slow_agent = "agent-0";
     let healthy_agent = "agent-1";
 
     ctx.pool
         .assign_bead_to_agent("bead-001", slow_agent)
-        .await
-        .expect("assign should succeed");
+        .await?;
 
     tokio::time::sleep(Duration::from_millis(50)).await;
 
-    ctx.pool
-        .record_heartbeat(healthy_agent)
-        .await
-        .expect("heartbeat should succeed");
-    ctx.pool
-        .record_heartbeat("agent-2")
-        .await
-        .expect("heartbeat should succeed");
+    ctx.pool.record_heartbeat(healthy_agent).await?;
+    ctx.pool.record_heartbeat("agent-2").await?;
 
     tokio::time::sleep(Duration::from_millis(250)).await;
 
     let _ = ctx.pool.health_monitor().check_agent(slow_agent).await;
 
-    let healthy = ctx.pool.get_agent(healthy_agent).await.expect("agent exists");
+    let healthy = ctx
+        .pool
+        .get_agent(healthy_agent)
+        .await
+        .ok_or("agent exists")?;
     assert!(
         healthy.state() != AgentStateLegacy::Unhealthy,
         "Other agents should not be unhealthy"
@@ -245,13 +246,15 @@ async fn given_multiple_agents_when_one_times_out_then_others_available() {
         "Slow agent should not be in available list"
     );
 
-    info!("Test passed: {}", test_name);
+    info!("Test passed: {test_name}");
+    Ok(())
 }
 
 #[tokio::test]
-async fn given_unhealthy_agent_when_heartbeat_restored_then_becomes_healthy() {
+async fn given_unhealthy_agent_when_heartbeat_restored_then_becomes_healthy(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = "agent_recovery";
-    info!("Starting test: {}", test_name);
+    info!("Starting test: {test_name}");
 
     let health_config = HealthConfig {
         check_interval: Duration::from_millis(50),
@@ -259,9 +262,7 @@ async fn given_unhealthy_agent_when_heartbeat_restored_then_becomes_healthy() {
         max_failures: 1,
     };
 
-    let ctx = SlowAgentTestContext::new(2, health_config)
-        .await
-        .expect("Failed to setup test context");
+    let ctx = SlowAgentTestContext::new(2, health_config).await?;
 
     let agent_id = "agent-0";
 
@@ -271,10 +272,7 @@ async fn given_unhealthy_agent_when_heartbeat_restored_then_becomes_healthy() {
 
     let _ = ctx.health_monitor.check_agent(agent_id).await;
 
-    let result = ctx
-        .pool
-        .record_heartbeat(agent_id)
-        .await;
+    let result = ctx.pool.record_heartbeat(agent_id).await;
     assert!(result.is_ok(), "Recording heartbeat should succeed");
 
     tokio::time::sleep(Duration::from_millis(50)).await;
@@ -283,20 +281,22 @@ async fn given_unhealthy_agent_when_heartbeat_restored_then_becomes_healthy() {
         .health_monitor
         .check_agent(agent_id)
         .await
-        .expect("health check should succeed");
+        .map_err(|e| format!("health check failed: {e:?}"))?;
 
     assert!(
         health_result.is_healthy,
         "Agent should become healthy after heartbeat"
     );
 
-    info!("Test passed: {}", test_name);
+    info!("Test passed: {test_name}");
+    Ok(())
 }
 
 #[tokio::test]
-async fn given_working_agent_when_times_out_then_marked_unhealthy_with_bead() {
+async fn given_working_agent_when_times_out_then_marked_unhealthy_with_bead(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = "working_agent_timeout";
-    info!("Starting test: {}", test_name);
+    info!("Starting test: {test_name}");
 
     let health_config = HealthConfig {
         check_interval: Duration::from_millis(50),
@@ -304,32 +304,25 @@ async fn given_working_agent_when_times_out_then_marked_unhealthy_with_bead() {
         max_failures: 1,
     };
 
-    let ctx = SlowAgentTestContext::new(2, health_config)
-        .await
-        .expect("Failed to setup test context");
+    let ctx = SlowAgentTestContext::new(2, health_config).await?;
 
     let agent_id = "agent-0";
     let bead_id = "bead-critical-001";
 
-    ctx.pool
-        .assign_bead_to_agent(bead_id, agent_id)
-        .await
-        .expect("assign should succeed");
+    ctx.pool.assign_bead_to_agent(bead_id, agent_id).await?;
 
-    let agent = ctx.pool.get_agent(agent_id).await.expect("agent exists");
+    let agent = ctx.pool.get_agent(agent_id).await.ok_or("agent exists")?;
     assert_eq!(agent.state(), AgentStateLegacy::Working);
     assert_eq!(agent.current_bead(), Some(bead_id));
     drop(agent);
 
     tokio::time::sleep(Duration::from_millis(200)).await;
 
-    let agent = ctx.pool.get_agent(agent_id).await.expect("agent exists");
+    let agent = ctx.pool.get_agent(agent_id).await.ok_or("agent exists")?;
     let is_timeout = agent.is_heartbeat_timeout(Duration::from_millis(50));
     let time_since = agent.time_since_heartbeat();
     eprintln!(
-        "DEBUG: is_timeout={}, time_since_heartbeat={:?}ms, state={:?}",
-        is_timeout,
-        time_since,
+        "DEBUG: is_timeout={is_timeout}, time_since_heartbeat={time_since:?}ms, state={:?}",
         agent.state()
     );
     drop(agent);
@@ -339,13 +332,11 @@ async fn given_working_agent_when_times_out_then_marked_unhealthy_with_bead() {
         .health_monitor()
         .check_agent(agent_id)
         .await
-        .expect("health check should succeed");
+        .map_err(|e| format!("health check failed: {e:?}"))?;
 
     eprintln!(
         "DEBUG: health_result.is_healthy={}, state={:?}, time_since_heartbeat={:?}ms",
-        health_result.is_healthy,
-        health_result.state,
-        health_result.time_since_heartbeat
+        health_result.is_healthy, health_result.state, health_result.time_since_heartbeat
     );
 
     assert!(
@@ -353,7 +344,7 @@ async fn given_working_agent_when_times_out_then_marked_unhealthy_with_bead() {
         "Agent should become unhealthy after heartbeat timeout (timeout was 50ms, waited 200ms)"
     );
 
-    let agent = ctx.pool.get_agent(agent_id).await.expect("agent exists");
+    let agent = ctx.pool.get_agent(agent_id).await.ok_or("agent exists")?;
     assert!(
         agent.state() == AgentStateLegacy::Unhealthy,
         "Working agent should be marked unhealthy"
@@ -364,13 +355,15 @@ async fn given_working_agent_when_times_out_then_marked_unhealthy_with_bead() {
         "Bead should still be assigned to unhealthy agent"
     );
 
-    info!("Test passed: {}", test_name);
+    info!("Test passed: {test_name}");
+    Ok(())
 }
 
 #[tokio::test]
-async fn given_pool_with_all_working_agents_when_timeout_then_some_become_unhealthy() {
+async fn given_pool_with_all_working_agents_when_timeout_then_some_become_unhealthy(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = "multiple_timeouts";
-    info!("Starting test: {}", test_name);
+    info!("Starting test: {test_name}");
 
     let health_config = HealthConfig {
         check_interval: Duration::from_millis(50),
@@ -378,26 +371,15 @@ async fn given_pool_with_all_working_agents_when_timeout_then_some_become_unheal
         max_failures: 1,
     };
 
-    let ctx = SlowAgentTestContext::new(4, health_config)
-        .await
-        .expect("Failed to setup test context");
+    let ctx = SlowAgentTestContext::new(4, health_config).await?;
 
     for (i, agent_id) in ctx.agent_ids.iter().enumerate() {
-        let bead_id = format!("bead-{:03}", i);
-        ctx.pool
-            .assign_bead_to_agent(&bead_id, agent_id)
-            .await
-            .expect("assign should succeed");
+        let bead_id = format!("bead-{i:03}");
+        ctx.pool.assign_bead_to_agent(&bead_id, agent_id).await?;
     }
 
-    ctx.pool
-        .record_heartbeat("agent-1")
-        .await
-        .expect("heartbeat should succeed");
-    ctx.pool
-        .record_heartbeat("agent-3")
-        .await
-        .expect("heartbeat should succeed");
+    ctx.pool.record_heartbeat("agent-1").await?;
+    ctx.pool.record_heartbeat("agent-3").await?;
 
     tokio::time::sleep(Duration::from_millis(200)).await;
 
@@ -425,13 +407,15 @@ async fn given_pool_with_all_working_agents_when_timeout_then_some_become_unheal
         "Agent-3 should be healthy (has heartbeat)"
     );
 
-    info!("Test passed: {}", test_name);
+    info!("Test passed: {test_name}");
+    Ok(())
 }
 
 #[tokio::test]
-async fn given_agent_timeout_when_reassign_attempted_then_succeeds() {
+async fn given_agent_timeout_when_reassign_attempted_then_succeeds(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = "reassign_after_timeout";
-    info!("Starting test: {}", test_name);
+    info!("Starting test: {test_name}");
 
     let health_config = HealthConfig {
         check_interval: Duration::from_millis(50),
@@ -439,34 +423,23 @@ async fn given_agent_timeout_when_reassign_attempted_then_succeeds() {
         max_failures: 1,
     };
 
-    let ctx = SlowAgentTestContext::new(3, health_config)
-        .await
-        .expect("Failed to setup test context");
+    let ctx = SlowAgentTestContext::new(3, health_config).await?;
 
     let slow_agent = "agent-0";
     let bead_id = "bead-reassign-001";
 
-    ctx.pool
-        .assign_bead_to_agent(bead_id, slow_agent)
-        .await
-        .expect("assign should succeed");
+    ctx.pool.assign_bead_to_agent(bead_id, slow_agent).await?;
 
     tokio::time::sleep(Duration::from_millis(50)).await;
-    
-    ctx.pool
-        .record_heartbeat("agent-1")
-        .await
-        .expect("heartbeat should succeed");
-    ctx.pool
-        .record_heartbeat("agent-2")
-        .await
-        .expect("heartbeat should succeed");
+
+    ctx.pool.record_heartbeat("agent-1").await?;
+    ctx.pool.record_heartbeat("agent-2").await?;
 
     tokio::time::sleep(Duration::from_millis(250)).await;
 
     let _ = ctx.pool.health_monitor().check_agent(slow_agent).await;
 
-    let slow_agent_handle = ctx.pool.get_agent(slow_agent).await.expect("agent exists");
+    let slow_agent_handle = ctx.pool.get_agent(slow_agent).await.ok_or("agent exists")?;
     let was_working = slow_agent_handle.state() == AgentStateLegacy::Working
         || slow_agent_handle.state() == AgentStateLegacy::Unhealthy;
     assert!(was_working, "Agent should be working or unhealthy");
@@ -478,22 +451,28 @@ async fn given_agent_timeout_when_reassign_attempted_then_succeeds() {
         "Reassignment should succeed to a healthy agent"
     );
 
-    let new_agent_id = new_agent_result.expect("should have agent id");
+    let new_agent_id = new_agent_result.map_err(|e| format!("assign bead failed: {e:?}"))?;
     assert_ne!(
         new_agent_id, slow_agent,
         "Bead should be assigned to a different agent"
     );
 
-    let new_agent = ctx.pool.get_agent(&new_agent_id).await.expect("agent exists");
+    let new_agent = ctx
+        .pool
+        .get_agent(&new_agent_id)
+        .await
+        .ok_or("agent exists")?;
     assert_eq!(new_agent.state(), AgentStateLegacy::Working);
 
-    info!("Test passed: {} (reassigned to {})", test_name, new_agent_id);
+    info!("Test passed: {test_name} (reassigned to {new_agent_id})");
+    Ok(())
 }
 
 #[tokio::test]
-async fn given_slow_agent_during_high_load_when_timeout_then_pool_remains_stable() {
+async fn given_slow_agent_during_high_load_when_timeout_then_pool_remains_stable(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = "high_load_stability";
-    info!("Starting test: {}", test_name);
+    info!("Starting test: {test_name}");
 
     let health_config = HealthConfig {
         check_interval: Duration::from_millis(50),
@@ -501,16 +480,11 @@ async fn given_slow_agent_during_high_load_when_timeout_then_pool_remains_stable
         max_failures: 2,
     };
 
-    let ctx = SlowAgentTestContext::new(5, health_config)
-        .await
-        .expect("Failed to setup test context");
+    let ctx = SlowAgentTestContext::new(5, health_config).await?;
 
     for (i, agent_id) in ctx.agent_ids.iter().enumerate() {
-        let bead_id = format!("bead-{:03}", i);
-        ctx.pool
-            .assign_bead_to_agent(&bead_id, agent_id)
-            .await
-            .expect("assign should succeed");
+        let bead_id = format!("bead-{i:03}");
+        ctx.pool.assign_bead_to_agent(&bead_id, agent_id).await?;
     }
 
     let _handle = ctx.health_monitor.start_background_check();
@@ -518,14 +492,8 @@ async fn given_slow_agent_during_high_load_when_timeout_then_pool_remains_stable
     for _ in 0..3 {
         tokio::time::sleep(Duration::from_millis(100)).await;
 
-        ctx.pool
-            .record_heartbeat("agent-2")
-            .await
-            .expect("heartbeat should succeed");
-        ctx.pool
-            .record_heartbeat("agent-4")
-            .await
-            .expect("heartbeat should succeed");
+        ctx.pool.record_heartbeat("agent-2").await?;
+        ctx.pool.record_heartbeat("agent-4").await?;
     }
 
     let stats = ctx.pool.stats().await;
@@ -538,17 +506,18 @@ async fn given_slow_agent_during_high_load_when_timeout_then_pool_remains_stable
     );
 
     info!(
-        "Test passed: {} (unhealthy: {}/{}",
-        test_name,
+        "Test passed: {test_name} (unhealthy: {}/{}",
         unhealthy.len(),
         stats.total
     );
+    Ok(())
 }
 
 #[tokio::test]
-async fn given_background_monitor_when_stopped_then_no_more_health_checks() {
+async fn given_background_monitor_when_stopped_then_no_more_health_checks(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = "monitor_stop";
-    info!("Starting test: {}", test_name);
+    info!("Starting test: {test_name}");
 
     let health_config = HealthConfig {
         check_interval: Duration::from_millis(50),
@@ -556,9 +525,7 @@ async fn given_background_monitor_when_stopped_then_no_more_health_checks() {
         max_failures: 1,
     };
 
-    let ctx = SlowAgentTestContext::new(2, health_config)
-        .await
-        .expect("Failed to setup test context");
+    let ctx = SlowAgentTestContext::new(2, health_config).await?;
 
     let handle = ctx.health_monitor.start_background_check();
     assert!(ctx.health_monitor.is_active().await);
@@ -573,24 +540,24 @@ async fn given_background_monitor_when_stopped_then_no_more_health_checks() {
 
     handle.abort();
 
-    info!("Test passed: {}", test_name);
+    info!("Test passed: {test_name}");
+    Ok(())
 }
 
 #[tokio::test]
-async fn given_agent_pool_invariant_all_registered_agents_exist() {
+async fn given_agent_pool_invariant_all_registered_agents_exist(
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_name = "pool_invariant";
-    info!("Starting test: {}", test_name);
+    info!("Starting test: {test_name}");
 
-    let ctx = SlowAgentTestContext::new(4, HealthConfig::for_testing())
-        .await
-        .expect("Failed to setup test context");
+    let ctx = SlowAgentTestContext::new(4, HealthConfig::for_testing()).await?;
 
     for expected_id in &["agent-0", "agent-1", "agent-2", "agent-3"] {
         let agent = ctx
             .pool
             .get_agent(expected_id)
             .await
-            .expect("agent should exist");
+            .ok_or("agent should exist")?;
         assert_eq!(agent.id(), *expected_id);
     }
 
@@ -600,5 +567,6 @@ async fn given_agent_pool_invariant_all_registered_agents_exist() {
     let stats = ctx.pool.stats().await;
     assert_eq!(stats.total, 4);
 
-    info!("Test passed: {}", test_name);
+    info!("Test passed: {test_name}");
+    Ok(())
 }

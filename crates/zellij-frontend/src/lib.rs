@@ -56,7 +56,7 @@ pub use render::{EdgeKind, GraphEdge, Renderer, WorkflowGraph, WorkflowGraphErro
 
 // Re-exports for convenience - UI components
 pub use agent_info::{AgentCapability, AgentInfo, AgentInfoError, AgentState, AgentSummary};
-pub use correlation::{CorrelationContext, RequestId, keys};
+pub use correlation::{keys, CorrelationContext, RequestId};
 pub use health::{
     ComponentHealth, HealthError, ResourceUsage, SystemHealthSnapshot, SystemStatus,
     ThroughputMetrics,
@@ -68,8 +68,8 @@ pub use integration_test_worker::{
 pub use ipc_zellij::{ZellijIpcClient, ZellijStdin, ZellijStdout};
 pub use log::{LogAggregator, LogEntry, LogLevel, LogSource};
 pub use metrics::{AgentMetrics, MetricsSnapshot, PoolMetrics, PoolStats};
-pub use sparkline::{SparklineBuilder, SparklineConfig, SparklineError, render_sparkline};
-pub use state::{STATE_VERSION, StateError, StateManager, StateSnapshot};
+pub use sparkline::{render_sparkline, SparklineBuilder, SparklineConfig, SparklineError};
+pub use state::{StateError, StateManager, StateSnapshot, STATE_VERSION};
 pub use timer::{RefreshTimer, TimerConfig, TimerError, TimerEvent, TimerState};
 
 // Web client is not available in WASM builds

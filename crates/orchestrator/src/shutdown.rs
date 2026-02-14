@@ -7,12 +7,12 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use tokio::sync::{RwLock, broadcast, mpsc};
+use tokio::sync::{broadcast, mpsc, RwLock};
 use tokio::time::timeout;
 use tracing::{debug, error, info, warn};
 
@@ -357,7 +357,7 @@ pub async fn install_signal_handlers(
     let handle = tokio::spawn(async move {
         #[cfg(unix)]
         {
-            use tokio::signal::unix::{SignalKind, signal};
+            use tokio::signal::unix::{signal, SignalKind};
 
             // Install SIGTERM handler
             let mut sigterm = match signal(SignalKind::terminate()) {

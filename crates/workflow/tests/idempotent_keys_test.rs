@@ -6,10 +6,6 @@
 //! - Serialization order doesn't matter
 //! - UUID format is valid
 
-#![deny(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-#![deny(clippy::panic)]
-
 use oya_workflow::idempotent::keys::idempotency_key;
 use serde::Serialize;
 use uuid::Uuid;

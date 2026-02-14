@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! End-to-end crash recovery tests for the orchestrator.
 //!
 //! This module tests the crash recovery pipeline for the orchestrator:
@@ -21,8 +22,6 @@
 //! - **Railway-oriented**: Compose with and_then, map, ?
 //! - **Deterministic**: Each test is isolated and repeatable
 
-// Integration tests allow unwrap/panic for assertions
-
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -33,8 +32,8 @@ use tokio::time::timeout;
 use tracing::info;
 
 use orchestrator::actors::supervisor::{
-    SupervisorArguments, SupervisorConfig, SupervisorMessage, SupervisorState,
-    spawn_supervisor_with_name,
+    spawn_supervisor_with_name, SupervisorArguments, SupervisorConfig, SupervisorMessage,
+    SupervisorState,
 };
 use orchestrator::actors::worker::{
     WorkerActorDef, WorkerConfig, WorkerMessage, WorkerRetryPolicy,
@@ -132,7 +131,7 @@ async fn wait_for_event(bus: &EventBus, timeout_ms: u64) -> Result<oya_events::B
             Ok(Err(e)) => {
                 attempt += 1;
                 if attempt >= max_attempts {
-                    return Err(format!("Failed to receive event: {:?}", e));
+                    return Err(format!("Failed to receive event: {e:?}"));
                 }
                 // Small delay before retry
                 tokio::time::sleep(Duration::from_millis(100)).await;
@@ -141,8 +140,7 @@ async fn wait_for_event(bus: &EventBus, timeout_ms: u64) -> Result<oya_events::B
                 attempt += 1;
                 if attempt >= max_attempts {
                     return Err(format!(
-                        "Timeout waiting for event after {} attempts",
-                        max_attempts
+                        "Timeout waiting for event after {max_attempts} attempts"
                     ));
                 }
                 // Small delay before retry
@@ -164,29 +162,26 @@ async fn wait_for_event(bus: &EventBus, timeout_ms: u64) -> Result<oya_events::B
 /// **When** the worker crashes and restarts
 /// **Then** the worker can start a new bead execution successfully
 #[tokio::test]
-async fn given_worker_with_active_bead_when_crashes_then_can_restart_successfully() {
+async fn given_worker_with_active_bead_when_crashes_then_can_restart_successfully(
+) -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting worker crash recovery test");
 
     // Given: A worker actor with event bus
-    let (worker, bus, _store) = setup_worker_with_event_bus()
-        .await
-        .expect("Failed to setup worker");
+    let (worker, bus, _store) = setup_worker_with_event_bus().await?;
 
     // Start a bead
     let bead_id = BeadId::new();
     let bead_id_str = bead_id.to_string();
 
-    worker
-        .send_message(WorkerMessage::StartBead {
-            bead_id: bead_id_str.clone(),
-            from_state: Some(BeadState::Ready),
-        })
-        .expect("Failed to send StartBead");
+    worker.send_message(WorkerMessage::StartBead {
+        bead_id: bead_id_str.clone(),
+        from_state: Some(BeadState::Ready),
+    })?;
 
     // Wait for state changed event
     let event = wait_for_event(&bus, 1000)
         .await
-        .expect("Failed to receive state changed event");
+        .map_err(|e| format!("Wait for event failed: {e}"))?;
 
     assert_eq!(event.event_type(), "state_changed");
     assert_eq!(event.bead_id(), bead_id);
@@ -205,9 +200,7 @@ async fn given_worker_with_active_bead_when_crashes_then_can_restart_successfull
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     // Then: Worker can be restarted
-    let (worker2, _bus2, _store2) = setup_worker_with_event_bus()
-        .await
-        .expect("Failed to restart worker");
+    let (worker2, _bus2, _store2) = setup_worker_with_event_bus().await?;
 
     // Verify restarted worker is running
     assert_eq!(
@@ -220,12 +213,10 @@ async fn given_worker_with_active_bead_when_crashes_then_can_restart_successfull
     let bead_id_2 = BeadId::new();
     let bead_id_2_str = bead_id_2.to_string();
 
-    worker2
-        .send_message(WorkerMessage::StartBead {
-            bead_id: bead_id_2_str.clone(),
-            from_state: Some(BeadState::Ready),
-        })
-        .expect("Failed to send StartBead to restarted worker");
+    worker2.send_message(WorkerMessage::StartBead {
+        bead_id: bead_id_2_str.clone(),
+        from_state: Some(BeadState::Ready),
+    })?;
 
     // Allow time for message processing
     tokio::time::sleep(Duration::from_millis(50)).await;
@@ -241,6 +232,7 @@ async fn given_worker_with_active_bead_when_crashes_then_can_restart_successfull
     worker2.stop(Some("test complete".to_string()));
 
     info!("Test passed: worker crash recovery");
+    Ok(())
 }
 
 /// Test: Supervisor restarts worker after crash.
@@ -249,15 +241,15 @@ async fn given_worker_with_active_bead_when_crashes_then_can_restart_successfull
 /// **When** the worker actor crashes
 /// **Then** the supervisor restarts it with consistent state
 #[tokio::test]
-async fn given_supervised_worker_when_crashes_then_supervisor_restarts() {
+async fn given_supervised_worker_when_crashes_then_supervisor_restarts(
+) -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting supervisor restart test");
 
     // Given: A supervised worker actor
     let args = SupervisorArguments::new().with_config(test_supervisor_config());
     let supervisor =
         spawn_supervisor_with_name::<WorkerActorDef>(args, "supervisor-worker-restart-test")
-            .await
-            .expect("Failed to spawn supervisor");
+            .await?;
 
     // Wait for supervisor to be running
     tokio::time::sleep(Duration::from_millis(100)).await;
@@ -280,9 +272,8 @@ async fn given_supervised_worker_when_crashes_then_supervisor_restarts() {
     });
 
     spawn_rx
-        .await
-        .expect("Failed to receive spawn reply")
-        .expect("Failed to spawn worker actor");
+        .await?
+        .map_err(|e| format!("Failed to spawn worker actor: {e:?}"))?;
 
     // Wait for worker to start
     tokio::time::sleep(Duration::from_millis(100)).await;
@@ -291,14 +282,14 @@ async fn given_supervised_worker_when_crashes_then_supervisor_restarts() {
     let (status_tx, status_rx) = tokio::sync::oneshot::channel();
     let _ = supervisor.send_message(SupervisorMessage::GetStatus { reply: status_tx });
 
-    let status = status_rx.await.expect("Failed to get supervisor status");
+    let status = status_rx.await?;
     assert_eq!(
         status.active_children, 1,
         "Supervisor should have 1 active child"
     );
 
     // When: Stop the worker actor (simulating crash)
-    supervisor.send_message(SupervisorMessage::<WorkerActorDef>::StopChild {
+    let _ = supervisor.send_message(SupervisorMessage::<WorkerActorDef>::StopChild {
         name: "worker-restart-test".to_string(),
     });
 
@@ -316,6 +307,7 @@ async fn given_supervised_worker_when_crashes_then_supervisor_restarts() {
     supervisor.stop(Some("test complete".to_string()));
 
     info!("Test passed: supervisor restart");
+    Ok(())
 }
 
 /// Test: Worker health check after crash recovery.
@@ -324,29 +316,26 @@ async fn given_supervised_worker_when_crashes_then_supervisor_restarts() {
 /// **When** the worker is restarted
 /// **Then** health checks pass on the restarted worker
 #[tokio::test]
-async fn given_worker_crash_when_restarted_then_health_checks_pass() {
+async fn given_worker_crash_when_restarted_then_health_checks_pass(
+) -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting worker health check recovery test");
 
     // Given: A worker with event bus
-    let (worker, bus, _store) = setup_worker_with_event_bus()
-        .await
-        .expect("Failed to setup worker");
+    let (worker, bus, _store) = setup_worker_with_event_bus().await?;
 
     // Start a bead
     let bead_id = BeadId::new();
     let bead_id_str = bead_id.to_string();
 
-    worker
-        .send_message(WorkerMessage::StartBead {
-            bead_id: bead_id_str.clone(),
-            from_state: Some(BeadState::Ready),
-        })
-        .expect("Failed to send StartBead");
+    worker.send_message(WorkerMessage::StartBead {
+        bead_id: bead_id_str.clone(),
+        from_state: Some(BeadState::Ready),
+    })?;
 
     // Wait for state changed event
     let _event = wait_for_event(&bus, 1000)
         .await
-        .expect("Failed to receive event");
+        .map_err(|e| format!("Wait for event failed: {e}"))?;
 
     // When: Worker crashes
     worker.stop(Some("simulated crash".to_string()));
@@ -355,9 +344,7 @@ async fn given_worker_crash_when_restarted_then_health_checks_pass() {
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     // Then: Restarted worker can handle health checks
-    let (worker2, _bus2, _store2) = setup_worker_with_event_bus()
-        .await
-        .expect("Failed to restart worker");
+    let (worker2, _bus2, _store2) = setup_worker_with_event_bus().await?;
 
     // Verify restarted worker is running
     assert_eq!(
@@ -380,6 +367,7 @@ async fn given_worker_crash_when_restarted_then_health_checks_pass() {
     worker2.stop(Some("test complete".to_string()));
 
     info!("Test passed: worker health check recovery");
+    Ok(())
 }
 
 /// Test: Multiple crash recovery cycles.
@@ -388,50 +376,47 @@ async fn given_worker_crash_when_restarted_then_health_checks_pass() {
 /// **When** the worker crashes, restarts, and crashes again
 /// **Then** the worker correctly restarts after each crash
 #[tokio::test]
-async fn given_multiple_worker_crashes_when_restarted_then_worker_recovers_successfully() {
+async fn given_multiple_worker_crashes_when_restarted_then_worker_recovers_successfully(
+) -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting multiple crash recovery test");
 
     // Given: A worker actor
     for cycle in 1..=3 {
-        info!("Starting crash cycle {}", cycle);
+        info!("Starting crash cycle {cycle}");
 
-        let (worker, _bus, _store) = setup_worker_with_event_bus()
-            .await
-            .expect("Failed to setup worker");
+        let (worker, _bus, _store) = setup_worker_with_event_bus().await?;
 
         // Verify worker is running
         assert_eq!(
             worker.get_status(),
             ractor::ActorStatus::Running,
-            "Worker should be running in cycle {}",
-            cycle
+            "Worker should be running in cycle {cycle}",
         );
 
         // Start a bead
         let bead_id = BeadId::new();
         let bead_id_str = bead_id.to_string();
 
-        worker
-            .send_message(WorkerMessage::StartBead {
-                bead_id: bead_id_str,
-                from_state: Some(BeadState::Ready),
-            })
-            .expect("Failed to send StartBead");
+        worker.send_message(WorkerMessage::StartBead {
+            bead_id: bead_id_str,
+            from_state: Some(BeadState::Ready),
+        })?;
 
         // Allow time for message processing
         tokio::time::sleep(Duration::from_millis(50)).await;
 
         // When: Worker crashes
-        worker.stop(Some(format!("crash cycle {}", cycle)));
+        worker.stop(Some(format!("crash cycle {cycle}")));
 
         // Wait for stop to complete
         tokio::time::sleep(Duration::from_millis(100)).await;
 
         // Then: Worker successfully stopped and will be recreated in next iteration
-        info!("Completed crash cycle {}", cycle);
+        info!("Completed crash cycle {cycle}");
     }
 
     info!("Test passed: multiple crash recovery cycles");
+    Ok(())
 }
 
 /// Test: Event emission continues after worker restart.
@@ -440,28 +425,25 @@ async fn given_multiple_worker_crashes_when_restarted_then_worker_recovers_succe
 /// **When** the worker crashes and restarts
 /// **Then** events are emitted correctly after restart
 #[tokio::test]
-async fn given_worker_emitting_events_when_crashes_then_events_emitted_after_restart() {
+async fn given_worker_emitting_events_when_crashes_then_events_emitted_after_restart(
+) -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting event emission recovery test");
 
     // Given: A worker with event bus
-    let (worker, bus, _store) = setup_worker_with_event_bus()
-        .await
-        .expect("Failed to setup worker");
+    let (worker, bus, _store) = setup_worker_with_event_bus().await?;
 
     // Start a bead and wait for event
     let bead_id_1 = BeadId::new();
     let bead_id_1_str = bead_id_1.to_string();
 
-    worker
-        .send_message(WorkerMessage::StartBead {
-            bead_id: bead_id_1_str.clone(),
-            from_state: Some(BeadState::Ready),
-        })
-        .expect("Failed to send StartBead");
+    worker.send_message(WorkerMessage::StartBead {
+        bead_id: bead_id_1_str.clone(),
+        from_state: Some(BeadState::Ready),
+    })?;
 
     let event_1 = wait_for_event(&bus, 1000)
         .await
-        .expect("Failed to receive first event");
+        .map_err(|e| format!("Wait for event 1 failed: {e}"))?;
 
     assert_eq!(event_1.event_type(), "state_changed");
 
@@ -469,24 +451,20 @@ async fn given_worker_emitting_events_when_crashes_then_events_emitted_after_res
     worker.stop(Some("simulated crash".to_string()));
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    let (worker2, bus2, _store2) = setup_worker_with_event_bus()
-        .await
-        .expect("Failed to restart worker");
+    let (worker2, bus2, _store2) = setup_worker_with_event_bus().await?;
 
     // Then: Events are emitted after restart
     let bead_id_2 = BeadId::new();
     let bead_id_2_str = bead_id_2.to_string();
 
-    worker2
-        .send_message(WorkerMessage::StartBead {
-            bead_id: bead_id_2_str.clone(),
-            from_state: Some(BeadState::Ready),
-        })
-        .expect("Failed to send StartBead to restarted worker");
+    worker2.send_message(WorkerMessage::StartBead {
+        bead_id: bead_id_2_str.clone(),
+        from_state: Some(BeadState::Ready),
+    })?;
 
     let event_2 = wait_for_event(&bus2, 1000)
         .await
-        .expect("Failed to receive event after restart");
+        .map_err(|e| format!("Wait for event 2 failed: {e}"))?;
 
     assert_eq!(event_2.event_type(), "state_changed");
     assert_eq!(event_2.bead_id(), bead_id_2);
@@ -495,6 +473,7 @@ async fn given_worker_emitting_events_when_crashes_then_events_emitted_after_res
     worker2.stop(Some("test complete".to_string()));
 
     info!("Test passed: event emission recovery");
+    Ok(())
 }
 
 /// Test: Supervisor meltdown detection and handling.
@@ -503,7 +482,8 @@ async fn given_worker_emitting_events_when_crashes_then_events_emitted_after_res
 /// **When** the crash count exceeds max_restarts
 /// **Then** the supervisor stops restarting and reports meltdown
 #[tokio::test]
-async fn given_repeated_crashes_when_exceeds_max_restarts_then_supervisor_limits_restarts() {
+async fn given_repeated_crashes_when_exceeds_max_restarts_then_supervisor_limits_restarts(
+) -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting supervisor meltdown test");
 
     // Given: Supervisor with max_restarts = 2
@@ -514,9 +494,8 @@ async fn given_repeated_crashes_when_exceeds_max_restarts_then_supervisor_limits
     };
 
     let args = SupervisorArguments::new().with_config(config);
-    let supervisor = spawn_supervisor_with_name::<WorkerActorDef>(args, "supervisor-meltdown-test")
-        .await
-        .expect("Failed to spawn supervisor");
+    let supervisor =
+        spawn_supervisor_with_name::<WorkerActorDef>(args, "supervisor-meltdown-test").await?;
 
     // Spawn initial child
     let (spawn_tx, spawn_rx) = tokio::sync::oneshot::channel();
@@ -531,17 +510,16 @@ async fn given_repeated_crashes_when_exceeds_max_restarts_then_supervisor_limits
     });
 
     spawn_rx
-        .await
-        .expect("Failed to receive spawn reply")
-        .expect("Failed to spawn worker");
+        .await?
+        .map_err(|e| format!("Failed to spawn worker: {e:?}"))?;
 
     // When: Crash worker 3 times (exceeds max_restarts = 2)
     for i in 1..=3 {
-        supervisor.send_message(SupervisorMessage::<WorkerActorDef>::StopChild {
+        let _ = supervisor.send_message(SupervisorMessage::<WorkerActorDef>::StopChild {
             name: "meltdown-test-worker".to_string(),
         });
 
-        info!("Crash iteration {}", i);
+        info!("Crash iteration {i}");
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
 
@@ -549,7 +527,7 @@ async fn given_repeated_crashes_when_exceeds_max_restarts_then_supervisor_limits
     let (status_tx, status_rx) = tokio::sync::oneshot::channel();
     let _ = supervisor.send_message(SupervisorMessage::GetStatus { reply: status_tx });
 
-    let status = status_rx.await.expect("Failed to get status");
+    let status = status_rx.await?;
     assert_eq!(status.state, SupervisorState::Running);
 
     // After exceeding max_restarts, child should not be restarted
@@ -558,7 +536,7 @@ async fn given_repeated_crashes_when_exceeds_max_restarts_then_supervisor_limits
     let (status_tx2, status_rx2) = tokio::sync::oneshot::channel();
     let _ = supervisor.send_message(SupervisorMessage::GetStatus { reply: status_tx2 });
 
-    let status2 = status_rx2.await.expect("Failed to get status");
+    let status2 = status_rx2.await?;
     // Supervisor may have 0 or 1 children depending on timing
     // The key assertion is that supervisor itself is still running
     assert_eq!(status2.state, SupervisorState::Running);
@@ -567,6 +545,7 @@ async fn given_repeated_crashes_when_exceeds_max_restarts_then_supervisor_limits
     supervisor.stop(Some("test complete".to_string()));
 
     info!("Test passed: supervisor meltdown detection");
+    Ok(())
 }
 
 /// Test: Recovery time within SLA.
@@ -575,13 +554,12 @@ async fn given_repeated_crashes_when_exceeds_max_restarts_then_supervisor_limits
 /// **When** the worker is restarted
 /// **Then** the recovery time is within acceptable SLA (< 2 seconds for worker restart)
 #[tokio::test]
-async fn given_worker_crash_when_restarted_then_recovery_time_within_sla() {
+async fn given_worker_crash_when_restarted_then_recovery_time_within_sla(
+) -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting recovery time SLA test");
 
     // Given: A worker with event bus
-    let (worker, _bus, _store) = setup_worker_with_event_bus()
-        .await
-        .expect("Failed to setup worker");
+    let (worker, _bus, _store) = setup_worker_with_event_bus().await?;
 
     // Verify initial state
     assert_eq!(
@@ -596,17 +574,14 @@ async fn given_worker_crash_when_restarted_then_recovery_time_within_sla() {
     worker.stop(Some("simulated crash".to_string()));
     tokio::time::sleep(Duration::from_millis(50)).await;
 
-    let (worker2, _bus2, _store2) = setup_worker_with_event_bus()
-        .await
-        .expect("Failed to restart worker");
+    let (worker2, _bus2, _store2) = setup_worker_with_event_bus().await?;
 
     let recovery_time_ms = start.elapsed().as_millis();
 
     // Then: Recovery should complete within SLA
     assert!(
         recovery_time_ms < 2000,
-        "Recovery time {}ms exceeds SLA of 2000ms",
-        recovery_time_ms
+        "Recovery time {recovery_time_ms}ms exceeds SLA of 2000ms",
     );
 
     // Verify restarted worker is running
@@ -619,5 +594,6 @@ async fn given_worker_crash_when_restarted_then_recovery_time_within_sla() {
     // Cleanup
     worker2.stop(Some("test complete".to_string()));
 
-    info!("Test passed: recovery time SLA ({}ms)", recovery_time_ms);
+    info!("Test passed: recovery time SLA ({recovery_time_ms}ms)");
+    Ok(())
 }

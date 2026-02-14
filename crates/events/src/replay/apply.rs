@@ -694,7 +694,7 @@ mod tests {
         assert_eq!(state.applied_events.len(), 2);
         assert_eq!(state.applied_events[0], event1.event_id().to_string());
         assert_eq!(state.applied_events[1], event2.event_id().to_string());
-        
+
         let last_meta = context.last_event(&bead_id).ok_or("last event not found")?;
         assert_eq!(last_meta.event_id, event2.event_id().to_string());
         Ok(())
@@ -721,7 +721,7 @@ mod tests {
         // Should have applied event1
         assert_eq!(state.applied_events.len(), 1);
         assert_eq!(state.applied_events[0], event1.event_id().to_string());
-        
+
         // Context should point to event1
         let last_meta = context.last_event(&bead_id).ok_or("last event not found")?;
         assert_eq!(last_meta.event_id, event1.event_id().to_string());
@@ -1017,7 +1017,10 @@ mod tests {
         assert!(context.last_events.contains_key(&bead_id));
         let last_event = context.last_event(&bead_id);
         assert!(last_event.is_some());
-        assert_eq!(last_event.ok_or("last event not found")?.event_id, event2.event_id().to_string());
+        assert_eq!(
+            last_event.ok_or("last event not found")?.event_id,
+            event2.event_id().to_string()
+        );
         Ok(())
     }
 

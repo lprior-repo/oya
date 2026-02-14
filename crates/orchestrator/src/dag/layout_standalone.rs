@@ -676,11 +676,7 @@ mod tests {
         assert!(result_a.is_ok(), "Failed to add node a");
         assert!(result_b.is_ok(), "Failed to add node b");
 
-        let result_edge = dag.add_edge(
-            "a".to_string(),
-            "b".to_string(),
-            DependencyType::BlockingDependency,
-        );
+        let result_edge = dag.add_edge("a", "b", DependencyType::BlockingDependency);
         assert!(result_edge.is_ok(), "Failed to add edge");
 
         let layout = MemoizedLayout::new(dag, 0.1, 50.0).unwrap_or_else(|e| {
@@ -763,11 +759,7 @@ mod tests {
         assert!(result_a.is_ok(), "Failed to add node a");
         assert!(result_b.is_ok(), "Failed to add node b");
 
-        let result_edge = dag.add_edge(
-            "a".to_string(),
-            "b".to_string(),
-            DependencyType::BlockingDependency,
-        );
+        let result_edge = dag.add_edge("a", "b", DependencyType::BlockingDependency);
         assert!(result_edge.is_ok(), "Failed to add edge");
 
         let layout = MemoizedLayout::new(dag, 0.1, 50.0).unwrap_or_else(|e| {
@@ -792,16 +784,8 @@ mod tests {
         assert!(result_b.is_ok(), "Failed to add node b");
         assert!(result_c.is_ok(), "Failed to add node c");
 
-        let result_edge_ab = dag.add_edge(
-            "a".to_string(),
-            "b".to_string(),
-            DependencyType::BlockingDependency,
-        );
-        let result_edge_bc = dag.add_edge(
-            "b".to_string(),
-            "c".to_string(),
-            DependencyType::BlockingDependency,
-        );
+        let result_edge_ab = dag.add_edge("a", "b", DependencyType::BlockingDependency);
+        let result_edge_bc = dag.add_edge("b", "c", DependencyType::BlockingDependency);
         assert!(result_edge_ab.is_ok(), "Failed to add edge a->b");
         assert!(result_edge_bc.is_ok(), "Failed to add edge b->c");
 
@@ -876,11 +860,7 @@ mod tests {
         assert!(dag1_a.is_ok(), "Failed to add node a to dag1");
         assert!(dag1_b.is_ok(), "Failed to add node b to dag1");
 
-        let dag1_edge = dag1.add_edge(
-            "a".to_string(),
-            "b".to_string(),
-            DependencyType::BlockingDependency,
-        );
+        let dag1_edge = dag1.add_edge("a", "b", DependencyType::BlockingDependency);
         assert!(dag1_edge.is_ok(), "Failed to add edge to dag1");
 
         let mut dag2 = WorkflowDAG::new();
@@ -889,11 +869,7 @@ mod tests {
         assert!(dag2_a.is_ok(), "Failed to add node a to dag2");
         assert!(dag2_b.is_ok(), "Failed to add node b to dag2");
 
-        let dag2_edge = dag2.add_edge(
-            "a".to_string(),
-            "b".to_string(),
-            DependencyType::BlockingDependency,
-        );
+        let dag2_edge = dag2.add_edge("a", "b", DependencyType::BlockingDependency);
         assert!(dag2_edge.is_ok(), "Failed to add edge to dag2");
 
         let key1 = MemoizedLayout::create_cache_key(&dag1);
