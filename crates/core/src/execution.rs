@@ -23,7 +23,6 @@
 #![allow(clippy::self_only_used_in_recursion)]
 #![forbid(unsafe_code)]
 
-
 #[cfg(test)]
 use crate::Task;
 use crate::{Slug, Workflow};
@@ -283,7 +282,7 @@ impl ExecutionEngine {
                 )?
             {
                 // Convert path to strings for error message
-                return Ok(path.iter().map(|s| s.to_string()).collect());
+                return Ok(path.iter().map(std::string::ToString::to_string).collect());
             }
         }
 
@@ -564,8 +563,7 @@ impl ExecutionEngine {
                 path: path.display().to_string(),
                 validation_errors: vec![format!(
                     "Workflow ID mismatch: checkpoint has {}, workflow has {}",
-                    state.workflow_id,
-                    workflow.id
+                    state.workflow_id, workflow.id
                 )],
             });
         }
@@ -616,7 +614,7 @@ mod tests {
     #![allow(clippy::indexing_slicing)]
 
     use super::*;
-    use crate::{Task, Slug};
+    use crate::{Slug, Task};
     use chrono::Utc;
 
     #[test]
@@ -641,11 +639,9 @@ mod tests {
 
         workflow.add_task(task1, Utc::now())?;
         workflow.add_task(task2, Utc::now())?;
-        workflow
-            .add_dependency("task-1", "task-2", Utc::now())?;
+        workflow.add_dependency("task-1", "task-2", Utc::now())?;
 
-        let state = engine
-            .parse_workflow(&workflow)?;
+        let state = engine.parse_workflow(&workflow)?;
         assert_eq!(state.workflow_id.as_str(), "test-workflow");
         assert_eq!(state.task_status.len(), 2);
         assert_eq!(
@@ -677,7 +673,7 @@ mod tests {
                 "current_stage": "pending"
             }
         });
-        
+
         let workflow: Workflow = serde_json::from_value(json)?;
 
         let result = engine.parse_workflow(&workflow);
@@ -692,7 +688,8 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_workflow_with_unknown_dependency_owner() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_parse_workflow_with_unknown_dependency_owner() -> Result<(), Box<dyn std::error::Error>>
+    {
         let engine = ExecutionEngine::new();
         let workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
 
@@ -718,22 +715,18 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_workflow_maps_completed_task_to_completed_state() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_parse_workflow_maps_completed_task_to_completed_state(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let engine = ExecutionEngine::new();
         let mut workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
 
-        let mut completed_task =
-            Task::new("task-1", "Task 1", "First task")?;
+        let mut completed_task = Task::new("task-1", "Task 1", "First task")?;
         // Mark task as completed
-        completed_task
-            .transition_to(crate::Stage::InProgress)?;
-        completed_task
-            .transition_to(crate::Stage::Completed)?;
+        completed_task.transition_to(crate::Stage::InProgress)?;
+        completed_task.transition_to(crate::Stage::Completed)?;
 
-        workflow
-            .add_task(completed_task, Utc::now())?;
-        let state = engine
-            .parse_workflow(&workflow)?;
+        workflow.add_task(completed_task, Utc::now())?;
+        let state = engine.parse_workflow(&workflow)?;
 
         assert_eq!(
             state.task_status.get(&Slug::new("task-1")?),
@@ -776,7 +769,7 @@ mod tests {
             Err(ExecutionError::CyclicGraph { cycle }) => {
                 assert!(!cycle.is_empty());
             }
-            _ => panic!("Expected CyclicGraph error"),
+            other => return Err(format!("Expected CyclicGraph error, got {other:?}").into()),
         }
         Ok(())
     }
@@ -794,18 +787,25 @@ mod tests {
         workflow.add_task(task2, Utc::now())?;
         workflow.add_task(task3, Utc::now())?;
 
-        workflow
-            .add_dependency("task-1", "task-2", Utc::now())?;
-        workflow
-            .add_dependency("task-2", "task-3", Utc::now())?;
+        workflow.add_dependency("task-1", "task-2", Utc::now())?;
+        workflow.add_dependency("task-2", "task-3", Utc::now())?;
 
         let sorted = engine.topological_sort(&workflow)?;
         assert_eq!(sorted.len(), 3);
 
         // task-1 must come before task-2, task-2 before task-3
-        let pos1 = sorted.iter().position(|id| id.as_str() == "task-1").ok_or("task-1 not found")?;
-        let pos2 = sorted.iter().position(|id| id.as_str() == "task-2").ok_or("task-2 not found")?;
-        let pos3 = sorted.iter().position(|id| id.as_str() == "task-3").ok_or("task-3 not found")?;
+        let pos1 = sorted
+            .iter()
+            .position(|id| id.as_str() == "task-1")
+            .ok_or("task-1 not found")?;
+        let pos2 = sorted
+            .iter()
+            .position(|id| id.as_str() == "task-2")
+            .ok_or("task-2 not found")?;
+        let pos3 = sorted
+            .iter()
+            .position(|id| id.as_str() == "task-3")
+            .ok_or("task-3 not found")?;
 
         assert!(pos1 < pos2);
         assert!(pos2 < pos3);
@@ -828,23 +828,31 @@ mod tests {
         workflow.add_task(task_d, Utc::now())?;
 
         // A -> [B, C] -> D
-        workflow
-            .add_dependency("a", "b", Utc::now())?;
-        workflow
-            .add_dependency("a", "c", Utc::now())?;
-        workflow
-            .add_dependency("b", "d", Utc::now())?;
-        workflow
-            .add_dependency("c", "d", Utc::now())?;
+        workflow.add_dependency("a", "b", Utc::now())?;
+        workflow.add_dependency("a", "c", Utc::now())?;
+        workflow.add_dependency("b", "d", Utc::now())?;
+        workflow.add_dependency("c", "d", Utc::now())?;
 
         let sorted = engine.topological_sort(&workflow)?;
         assert_eq!(sorted.len(), 4);
 
         // A must come before both B and C
-        let pos_a = sorted.iter().position(|id| id.as_str() == "a").ok_or("a not found")?;
-        let pos_b = sorted.iter().position(|id| id.as_str() == "b").ok_or("b not found")?;
-        let pos_c = sorted.iter().position(|id| id.as_str() == "c").ok_or("c not found")?;
-        let pos_d = sorted.iter().position(|id| id.as_str() == "d").ok_or("d not found")?;
+        let pos_a = sorted
+            .iter()
+            .position(|id| id.as_str() == "a")
+            .ok_or("a not found")?;
+        let pos_b = sorted
+            .iter()
+            .position(|id| id.as_str() == "b")
+            .ok_or("b not found")?;
+        let pos_c = sorted
+            .iter()
+            .position(|id| id.as_str() == "c")
+            .ok_or("c not found")?;
+        let pos_d = sorted
+            .iter()
+            .position(|id| id.as_str() == "d")
+            .ok_or("d not found")?;
 
         assert!(pos_a < pos_b);
         assert!(pos_a < pos_c);
@@ -927,17 +935,20 @@ mod tests {
     }
 
     #[test]
-    fn test_get_ready_tasks_returns_empty_for_workflow_id_mismatch() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_get_ready_tasks_returns_empty_for_workflow_id_mismatch(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let engine = ExecutionEngine::new();
-        let mut workflow =
-            Workflow::new("wf-1", "Test", "Description", Utc::now())?;
+        let mut workflow = Workflow::new("wf-1", "Test", "Description", Utc::now())?;
 
         let task1 = Task::new("task-1", "Task 1", "First task")?;
         workflow.add_task(task1, Utc::now())?;
 
         let state = WorkflowState {
             workflow_id: Slug::new("wf-2").unwrap(),
-            task_status: HashMap::from([(Slug::new("task-1").unwrap(), TaskExecutionStatus::Pending)]),
+            task_status: HashMap::from([(
+                Slug::new("task-1").unwrap(),
+                TaskExecutionStatus::Pending,
+            )]),
             timestamp: Utc::now(),
         };
 
@@ -1022,9 +1033,7 @@ mod tests {
                 Ok(())
             }
             Ok(_) => Err("expected checkpoint corruption for invalid json".into()),
-            Err(other) => Err(format!(
-                "expected CheckpointCorrupted error, got {other}"
-            ).into()),
+            Err(other) => Err(format!("expected CheckpointCorrupted error, got {other}").into()),
         }
     }
 
@@ -1036,7 +1045,10 @@ mod tests {
         let task_count = 128;
         for i in 0..task_count {
             let id = format!("task-{i}");
-            workflow.add_task(Task::new(id.clone(), format!("Task {i}"), "stress")?, Utc::now())?;
+            workflow.add_task(
+                Task::new(id.clone(), format!("Task {i}"), "stress")?,
+                Utc::now(),
+            )?;
         }
 
         for i in 1..task_count {
@@ -1045,7 +1057,11 @@ mod tests {
 
         for i in 2..task_count {
             if i % 2 == 0 {
-                workflow.add_dependency(format!("task-{}", i - 1), format!("task-{i}"), Utc::now())?;
+                workflow.add_dependency(
+                    format!("task-{}", i - 1),
+                    format!("task-{i}"),
+                    Utc::now(),
+                )?;
             }
         }
 
@@ -1065,9 +1081,9 @@ mod tests {
                 .get(task_id)
                 .ok_or_else(|| format!("missing task in sorted output: {task_id}"))?;
             for dep in deps {
-                let dep_pos = positions.get(dep).ok_or_else(|| {
-                    format!("missing dependency in sorted output: {dep}")
-                })?;
+                let dep_pos = positions
+                    .get(dep)
+                    .ok_or_else(|| format!("missing dependency in sorted output: {dep}"))?;
                 assert!(dep_pos < task_pos);
             }
         }
@@ -1078,10 +1094,11 @@ mod tests {
     #[test]
     fn test_execute_workflow_empty() -> Result<(), Box<dyn std::error::Error>> {
         let engine = ExecutionEngine::new();
-        let workflow =
-            Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
+        let workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
 
-        let result = engine.execute_workflow(&workflow).map_err(|e| e.to_string())?;
+        let result = engine
+            .execute_workflow(&workflow)
+            .map_err(|e| e.to_string())?;
         assert!(result.succeeded.is_empty());
         assert!(result.failed.is_empty());
         Ok(())
@@ -1090,18 +1107,18 @@ mod tests {
     #[test]
     fn test_execute_workflow_linear() -> Result<(), Box<dyn std::error::Error>> {
         let engine = ExecutionEngine::new();
-        let mut workflow =
-            Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
+        let mut workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
 
         let task1 = Task::new("task-1", "Task 1", "First task")?;
         let task2 = Task::new("task-2", "Task 2", "Second task")?;
 
         workflow.add_task(task1, Utc::now())?;
         workflow.add_task(task2, Utc::now())?;
-        workflow
-            .add_dependency("task-1", "task-2", Utc::now())?;
+        workflow.add_dependency("task-1", "task-2", Utc::now())?;
 
-        let result = engine.execute_workflow(&workflow).map_err(|e| e.to_string())?;
+        let result = engine
+            .execute_workflow(&workflow)
+            .map_err(|e| e.to_string())?;
         assert_eq!(result.succeeded.len(), 2);
         assert!(result.succeeded.contains(&Slug::new("task-1")?));
         assert!(result.succeeded.contains(&Slug::new("task-2")?));
@@ -1112,8 +1129,7 @@ mod tests {
     #[test]
     fn test_rollback_task_completed() -> Result<(), Box<dyn std::error::Error>> {
         let engine = ExecutionEngine::new();
-        let mut workflow =
-            Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
+        let mut workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
 
         let task1 = Task::new("task-1", "Task 1", "First task")?;
         workflow.add_task(task1, Utc::now())?;
@@ -1137,8 +1153,7 @@ mod tests {
     #[test]
     fn test_rollback_task_idempotent() -> Result<(), Box<dyn std::error::Error>> {
         let engine = ExecutionEngine::new();
-        let mut workflow =
-            Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
+        let mut workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
 
         let task1 = Task::new("task-1", "Task 1", "First task")?;
         workflow.add_task(task1, Utc::now())?;
@@ -1167,8 +1182,7 @@ mod tests {
     #[test]
     fn test_rollback_task_not_found() -> Result<(), Box<dyn std::error::Error>> {
         let engine = ExecutionEngine::new();
-        let workflow =
-            Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
+        let workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
 
         let mut state = WorkflowState {
             workflow_id: Slug::new("test-workflow").unwrap(),
@@ -1176,7 +1190,8 @@ mod tests {
             timestamp: Utc::now(),
         };
 
-        let result = engine.rollback_task(&Slug::new("non-existent").unwrap(), &workflow, &mut state);
+        let result =
+            engine.rollback_task(&Slug::new("non-existent").unwrap(), &workflow, &mut state);
         assert!(result.is_err());
         assert!(matches!(result, Err(ExecutionError::RollbackFailed { .. })));
         Ok(())
@@ -1189,15 +1204,17 @@ mod tests {
 
         let engine = ExecutionEngine::new().with_checkpoint_dir(checkpoint_dir);
 
-        let mut workflow =
-            Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
+        let mut workflow = Workflow::new("test-workflow", "Test", "Description", Utc::now())?;
 
         let task1 = Task::new("task-1", "Task 1", "First task")?;
         workflow.add_task(task1, Utc::now())?;
 
         let state = WorkflowState {
             workflow_id: Slug::new("test-workflow").unwrap(),
-            task_status: HashMap::from([(Slug::new("task-1").unwrap(), TaskExecutionStatus::Completed)]),
+            task_status: HashMap::from([(
+                Slug::new("task-1").unwrap(),
+                TaskExecutionStatus::Completed,
+            )]),
             timestamp: Utc::now(),
         };
 
@@ -1219,14 +1236,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_recover_from_checkpoint_workflow_id_mismatch() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_recover_from_checkpoint_workflow_id_mismatch(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let temp_dir = tempfile::tempdir()?;
         let checkpoint_dir = temp_dir.path().to_str().ok_or("invalid path")?;
 
         let engine = ExecutionEngine::new().with_checkpoint_dir(checkpoint_dir);
 
-        let _workflow1 =
-            Workflow::new("workflow-1", "Test", "Description", Utc::now())?;
+        let _workflow1 = Workflow::new("workflow-1", "Test", "Description", Utc::now())?;
 
         let state = WorkflowState {
             workflow_id: Slug::new("workflow-1").unwrap(),
@@ -1241,8 +1258,7 @@ mod tests {
             .map_err(|e| e.to_string())?;
 
         // Try to recover with different workflow
-        let workflow2 =
-            Workflow::new("workflow-2", "Test", "Description", Utc::now())?;
+        let workflow2 = Workflow::new("workflow-2", "Test", "Description", Utc::now())?;
 
         let result = engine
             .recover_from_checkpoint(Path::new(&checkpoint_path), &workflow2)
