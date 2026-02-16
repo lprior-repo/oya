@@ -2,146 +2,81 @@
 
 ## Overview
 
-The oya system integrates with OpenCode AI for AI-powered stage execution. This allows you to delegate implementation, testing, refactoring, and other coding tasks to AI while maintaining full pipeline control.
+OYA uses OpenCode as a CLI subprocess adapter to get AI outputs for governed stage execution.
 
-## Supported Stages
+- Restate is the orchestration authority.
+- OYA owns stage transitions, retry policy, typed failures, and terminal decisions.
+- OpenCode executes prompts and returns structured outputs.
 
-The following stages can be executed with AI assistance:
+Related deep-dive:
 
-- `implement` - AI-powered code generation
-- `unit-test` - AI-generated unit tests
-- `integration` - AI-generated integration tests
-- `review` - AI code review
-- `refactor` - AI-driven refactoring
-- `document` - AI documentation generation
+- `docs/OPENCODE_AUTOMATION_LEARNINGS.md`
 
-## Usage
+## Canonical Stage DAG
 
-### Basic AI Stage Execution
+The only supported stage flow is:
 
-```bash
-# Create a task
-oya new -s my-feature
+1. `contract`
+2. `tdd15`
+3. `qa`
+4. `red_queen`
+5. `gpt_review`
+6. `ship_gate`
 
-# Execute a stage with AI
-oya ai-stage -s my-feature --stage implement
+Default retry lane:
 
-# With custom prompt
-oya ai-stage -s my-feature --stage implement -p "Create a CLI parser using clap"
+- `qa`, `red_queen`, or `gpt_review` failures route back to `tdd15`.
 
-# With file context
-oya ai-stage -s my-feature --stage test -f src/lib.rs -f src/main.rs
+## Execution Model
+
+Each stage attempt is orchestrated by Restate and executed by OpenCode via subprocess.
+
+```text
+Bead run request
+  -> Restate workflow (run_id, stage, attempt)
+  -> Build context packet
+  -> Invoke opencode CLI subprocess
+  -> Parse structured output
+  -> Persist artifacts + gate evidence
+  -> Transition next stage or failure state
 ```
 
-### Programmatic Usage
+## Subprocess Contract
 
-```rust
-use oya_oya::{AIStageExecutor, Task, Stage};
-use oya_opencode::PhaseInput;
+- OpenCode is invoked per stage attempt.
+- Stage boundary means fresh execution context by default.
+- All outputs must parse into the stage response contract.
+- Non-parseable output is `output_parse_failure`.
 
-// Create the AI executor
-let executor = AIStageExecutor::new()?;
+## Request/Response Expectations
 
-// Check if OpenCode is available
-if !executor.is_available().await {
-    eprintln!("OpenCode not installed");
-    return;
-}
-
-// Execute a stage
-let task = /* load task */;
-let stage = Stage::new("implement", "none", 1);
-let input = PhaseInput::text("Create a hello world function");
-
-let result = executor.execute_stage(&task, &stage, Some(input)).await?;
-
-if result.passed {
-    println!("✓ Stage passed: {}", result.stage_name);
-} else {
-    eprintln!("✗ Stage failed: {:?}", result.error);
-}
-```
-
-## Architecture
-
-### Stage-to-Phase Mapping
-
-OYA stages are mapped to OpenCode phases via `StagePhaseMapping`:
-
-| OYA Stage | OpenCode Phase |
-|--------------|----------------|
-| implement    | implement      |
-| unit-test    | test           |
-| integration  | test           |
-| review       | review         |
-| refactor     | refactor       |
-| document     | document       |
-
-### Context Building
-
-The `OYAPhaseContextBuilder` converts oya tasks into OpenCode `PhaseContext`:
-
-1. Maps stage name to phase name
-2. Generates phase description based on task and language
-3. Adds language-specific constraints:
-   - Rust: Railway-Oriented Programming, no unwrap/panic
-   - Gleam: Functional patterns, pipelines
-   - Go: Explicit error handling
-   - Python: PEP 8, type hints
-   - JavaScript: ES6+ features
-
-### Execution Flow
-
-```
-Task + Stage
-    ↓
-OYAPhaseContextBuilder
-    ↓
-PhaseContext (constraints, description, input)
-    ↓
-AIExecutor → OpencodeClient → opencode CLI
-    ↓
-PhaseOutput
-    ↓
-StageExecution
-```
+- Use strict structured prompts with explicit acceptance criteria.
+- Require evidence payloads where applicable (`qa`, `red_queen`, `gpt_review`, `ship_gate`).
+- Reject placeholder evidence (`todo`, `n/a`, `not run`).
 
 ## Requirements
 
-- OpenCode CLI must be installed and available in PATH
-- For remote execution, set `OPENCODE_BASE_URL` environment variable
+- `opencode` CLI installed and available in `PATH`.
+- Restate service available for workflow execution.
+- Sled available for local persistence.
 
-## Error Handling
+## CI/CD and Gates
 
-All operations use Result types with Railway-Oriented Programming:
+Moon is the CI/CD wrapper command surface for this repo.
 
-```rust
-// No unwrap or expect - all errors are explicit
-match executor.execute_stage(&task, &stage, None).await {
-    Ok(result) if result.passed => {
-        // Success case
-    }
-    Ok(result) => {
-        // Stage failed but execution succeeded
-        handle_stage_failure(&result);
-    }
-    Err(e) => {
-        // Execution error (OpenCode not available, etc.)
-        handle_execution_error(&e);
-    }
-}
-```
+- Use `moon run :quick` for fast local checks.
+- Use `moon run :ci` for full quality gates.
+- Use `moon run :ci --force` for uncached confidence runs.
 
-## Testing
+Do not document direct cargo commands as operator-facing gate commands.
 
-Run the integration test suite:
+## Workspace Isolation
 
-```bash
-moon run oya:test
-```
+- zjj remains the isolation and merge-flow primitive.
+- No stream is active to replace or remove zjj.
 
-Unit tests verify:
-- Stage-to-phase mapping
-- Context building for all languages
-- PhaseOutput → StageExecution conversion
-- Custom mapping registration
+## Scope and Non-Goals (Current)
+
+- No UI/frontend stream is in scope.
+- No desktop/web operator console work is in scope.
+- Focus is governance correctness, deterministic transitions, and reliable gate evidence.

@@ -143,19 +143,21 @@ OYA is associated with the number **9**:
 - Nine aspects
 - The ninth day ceremonies
 
-The architecture reflects this:
+The current architecture reflects this:
 
 ```
-1. oya-core       - The heart (types, errors, state)
-2. oya-workflow   - The breath (phase execution)
-3. oya-events     - The voice (pub/sub, coordination)
-4. oya-reconciler - The eyes (desired vs actual state)
-5. oya-tdd15      - The discipline (15-phase TDD)
-6. oya-intent     - The mind (requirement decomposition)
-7. oya-zjj        - The hands (workspace isolation)
-8. oya-docs       - The memory (documentation)
-9. oya-cli        - The mouth (command interface)
+1. oya-core         - The heart (types, errors, state)
+2. restate-runtime  - The pulse (orchestration and retries)
+3. stage-engine     - The rhythm (contract -> tdd15 -> qa -> red_queen -> gpt_review -> ship_gate)
+4. opencode-adapter - The voice (AI execution via CLI subprocess)
+5. sled-store       - The memory (durable run and evidence state)
+6. gate-runner      - The judgment (Moon quality gates)
+7. workspace-plane  - The hands (zjj isolation and merge flow)
+8. evidence-plane   - The witness (artifacts and rationale)
+9. oya-cli          - The mouth (operator command interface)
 ```
+
+Current scope note: no UI/frontend stream is active in this architecture phase.
 
 ---
 

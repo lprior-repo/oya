@@ -99,18 +99,18 @@ OYA's cycle: destruction → rebirth → transformation.
 
 ### The Nine (Architecture)
 
-OYA is associated with the number 9. The architecture:
+OYA is associated with the number 9. Current architecture maps to nine execution components:
 
 ```
-1. oya-core       - Foundation types, errors, state machine
-2. oya-workflow   - Intra-bead workflow engine
-3. oya-events     - Inter-bead event sourcing
-4. oya-reconciler - K8s-style reconciliation
-5. oya-tdd15      - TDD15 phase definitions
-6. oya-intent     - EARS/KIRK requirement decomposition
-7. oya-zjj        - Workspace isolation
-8. oya-docs       - Documentation indexing
-9. oya-cli        - Unified command interface
+1. oya-core         - Domain types, errors, and state contracts
+2. restate-runtime  - Workflow orchestration authority
+3. stage-engine     - Canonical DAG transitions and retry policy
+4. opencode-adapter - CLI subprocess bridge for AI outputs
+5. event-store      - Sled-backed run/attempt/event persistence
+6. gate-runner      - Moon wrapper for quality gate execution
+7. workspace-plane  - zjj isolation and merge-flow lifecycle
+8. evidence-plane   - Artifacts, gate results, and ship rationale
+9. oya-cli          - Operator command surface
 ```
 
 ---
@@ -200,11 +200,17 @@ oya build
 ## Technical Specifications
 
 - **Language**: 100% Rust
+- **Orchestration**: Restate
+- **AI execution path**: OpenCode CLI subprocess adapter
+- **Persistence baseline**: Sled
+- **Workspace isolation**: zjj
 - **Panics**: Zero (forbidden at compile time)
 - **Concurrency**: Parallel agent swarms
 - **Philosophy**: oya - no unnecessary abstraction
 - **Testing**: TDD15 - 15-phase discipline
 - **Quality**: Railway-oriented programming, Result<T,E> everywhere
+- **CI/CD wrapper**: Moon (`moon run :quick`, `moon run :ci`, `moon run :ci --force`)
+- **UI scope**: No UI/frontend stream in current plan
 
 ---
 

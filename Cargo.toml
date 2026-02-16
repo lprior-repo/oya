@@ -3,123 +3,23 @@ name = "oya"
 version = "0.1.0"
 edition = "2021"
 
-[workspace]
-members = [
-    "crates/core",
-    "crates/events",
-    "crates/merge-queue",
-    "crates/opencode",
-    "crates/orchestrator",
-    "crates/oya-web",
-    "crates/pipeline",
-    "crates/workflow",
-    "crates/oya-ipc",
-    "crates/swarm-coordinator",
-    "crates/telemetry",
-    "crates/zellij-frontend",
-    "tools/profiling",
-]
-resolver = "2"
-
-[workspace.package]
-version = "0.1.0"
-edition = "2021"
-authors = ["OYA Team"]
-license = "MIT"
-repository = "https://github.com/oya/oya"
-rust-version = "1.82"
-
-[workspace.dependencies]
-oya-core = { path = "crates/core" }
-oya-events = { path = "crates/events" }
-oya-opencode = { path = "crates/opencode" }
-oya-telemetry = { path = "crates/telemetry" }
-oya-ipc = { path = "crates/oya-ipc" }
-oya-pipeline = { path = "crates/pipeline" }
-oya-workflow = { path = "crates/workflow" }
-orchestrator = { path = "crates/orchestrator" }
-oya-web = { path = "crates/oya-web" }
-# oya-zellij = { path = "crates/oya-zellij" } # Unknown crate name, commented out for now to avoid error
-zellij-frontend = { path = "crates/zellij-frontend" }
-swarm-coordinator = { path = "crates/swarm-coordinator" }
-merge-queue = { path = "crates/merge-queue" }
-
-async-trait = "0.1.89"
-thiserror = "2.0.18"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.149"
-serde_yaml = "0.9.34"
-toml = "0.8"
-itertools = "0.14.0"
-tracing = "0.1.44"
-chrono = { version = "0.4.43", features = ["serde"] }
-tokio = { version = "1.49.0", features = ["full"] }
-anyhow = "1.0.101"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-petgraph = "0.6"
-surrealdb = { version = "2.6.0", features = ["kv-rocksdb", "kv-mem"] }
-surrealdb-core = "2.6.0"
-bincode = "2.0.0-rc.3"
-ulid = "1.2.1"
-im = "15.1"
-tap = "1.0"
-tracing-opentelemetry = "0.32.1"
-opentelemetry = "0.31.0"
-opentelemetry-otlp = "0.31.0"
-opentelemetry-semantic-conventions = "0.31.0"
-reqwest = "0.12.28"
-url = { version = "2.5.8", features = ["serde"] }
-uuid = { version = "1.20.0", features = ["v4", "v5", "serde"] }
-moka = { version = "0.12.13", features = ["future", "sync"] }
-sha2 = "0.10.9"
-
-axum = "0.8.8"
-tower = "0.5.3"
-tower-http = { version = "0.6.8", features = ["fs", "trace", "cors", "compression-gzip"] }
-hyper = "1.8.1"
-hyper-util = "0.1.20"
-http = "1.4.0"
-http-body-util = "0.1.3"
-regex = "1.12.3"
-rpds = "1.2.0"
-
-zstd = "0.13"
-futures = "0.3"
-proptest = "1.10.0"
-clap = { version = "4.5.57", features = ["derive"] }
-rusqlite = { version = "0.33", features = ["bundled"] }
-
 [dependencies]
-oya-core = { workspace = true }
-orchestrator = { workspace = true }
-oya-pipeline = { workspace = true }
-# swarm-coordinator = { workspace = true } # Commented out as I'm not sure if root uses it directly yet
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sled = "0.34"
+thiserror = "2"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+ulid = "1"
+restate-sdk = "0.8"
+reqwest = { version = "0.12", features = ["json"] }
 
-anyhow = { workspace = true }
-clap = { workspace = true }
-tokio = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-serde_yaml = { workspace = true }
-thiserror = { workspace = true }
-tracing = { workspace = true }
-itertools = { workspace = true }
-rusqlite = { workspace = true }
-oya-ipc = { workspace = true }
-ractor = "0.15" # Root uses ractor directly? src/commands/serve.rs uses it.
-tracing-subscriber = { workspace = true }
-
-[dev-dependencies]
-proptest = { workspace = true }
-chrono = { workspace = true }
-oya-events = { workspace = true }
-oya-workflow = { workspace = true }
-tempfile = "3.10"
-
-[workspace.lints.rust]
+[lints.rust]
 unsafe_code = "forbid"
 
-[workspace.lints.clippy]
+[lints.clippy]
 unwrap_used = "deny"
 expect_used = "deny"
 panic = "deny"

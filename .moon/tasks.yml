@@ -12,7 +12,8 @@ tasks:
     command: "cargo fmt --all --check"
     description: "Check code formatting (rustfmt)"
     inputs:
-      - "crates/**/*.rs"
+      - "src/**/*.rs"
+      - "tests/**/*.rs"
       - "Cargo.toml"
       - "rustfmt.toml"
     options:
@@ -22,16 +23,17 @@ tasks:
     command: "cargo fmt --all"
     description: "Auto-fix code formatting"
     inputs:
-      - "crates/**/*.rs"
+      - "src/**/*.rs"
+      - "tests/**/*.rs"
       - "Cargo.toml"
     options:
       cache: false  # Never cache - always format
 
   clippy:
-    command: "cargo clippy --workspace --all-targets --all-features"
-    description: "Lint with Clippy"
+    command: "cargo clippy --workspace --all-features --lib --bins --examples -- -D warnings -D clippy::unwrap_used -D clippy::expect_used -D clippy::panic -D clippy::todo -D clippy::unimplemented -D clippy::dbg_macro -D clippy::print_stdout -D clippy::print_stderr"
+    description: "Strict source linting with Clippy (tests excluded)"
     inputs:
-      - "crates/**/*.rs"
+      - "src/**/*.rs"
       - "Cargo.toml"
       - "/Cargo.lock"
       - ".clippy.toml"
@@ -46,7 +48,8 @@ tasks:
     command: "cargo test --workspace --all-features"
     description: "Run all tests"
     inputs:
-      - "crates/**/*.rs"
+      - "src/**/*.rs"
+      - "tests/**/*.rs"
       - "Cargo.toml"
       - "/Cargo.lock"
     options:
@@ -59,7 +62,7 @@ tasks:
     command: "cargo test --doc --workspace"
     description: "Run documentation tests"
     inputs:
-      - "crates/**/*.rs"
+      - "src/**/*.rs"
       - "Cargo.toml"
       - "/Cargo.lock"
     options:
@@ -69,7 +72,8 @@ tasks:
     command: "cargo tarpaulin --workspace --all-features --out Html --out Lcov --output-dir target/coverage -- --test-threads=1"
     description: "Generate test coverage report (HTML + LCOV)"
     inputs:
-      - "crates/**/*.rs"
+      - "src/**/*.rs"
+      - "tests/**/*.rs"
       - "Cargo.toml"
       - "/Cargo.lock"
     outputs:
@@ -88,7 +92,7 @@ tasks:
     command: "cargo build --release --workspace"
     description: "Build release binaries"
     inputs:
-      - "crates/**/*.rs"
+      - "src/**/*.rs"
       - "Cargo.toml"
       - "/Cargo.lock"
     outputs:
@@ -102,7 +106,7 @@ tasks:
     command: "cargo doc --no-deps --document-private-items"
     description: "Generate Rust documentation"
     inputs:
-      - "crates/**/*.rs"
+      - "src/**/*.rs"
       - "Cargo.toml"
       - "/Cargo.lock"
     options:
@@ -164,7 +168,7 @@ tasks:
     command: "cargo check --workspace --all-features"
     description: "Fast type check without building"
     inputs:
-      - "crates/**/*.rs"
+      - "src/**/*.rs"
       - "Cargo.toml"
       - "/Cargo.lock"
     options:
@@ -383,7 +387,6 @@ tasks:
     command: "cargo build --release --bin oya"
     description: "Build oya binary (contains everything)"
     inputs:
-      - "crates/**/*.rs"
       - "src/**/*.rs"
       - "Cargo.toml"
       - "/Cargo.lock"

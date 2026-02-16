@@ -13,6 +13,8 @@
 | **Gate** | Quality check at end of each Stage | lint, compile, test |
 | **Attempt** | One try at passing a Stage | max 3 per Stage |
 | **Shipped** | Bead merged to main, passed ALL gates | - |
+| **OpenCode Adapter** | CLI subprocess path for AI stage execution | `opencode run ...` |
+| **Orchestrator** | Restate workflow runtime governing state transitions | Restate service |
 
 ## Pipeline Stages (in order)
 
@@ -106,3 +108,5 @@ Each Stage has specific Gates:
 - Steve Yegge's Beads (task tracking)
 - Restate (stateful orchestration)
 - Sled (embedded DB)
+- OpenCode CLI (AI subprocess execution)
+- zjj (workspace isolation + merge flow)
