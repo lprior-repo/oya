@@ -1,9 +1,21 @@
+//! Domain Entities - Pure Functional State Transitions
+//!
+//! This module implements the core domain entities using functional Rust patterns:
+//! - Zero `mut` in production code
+//! - `im::Vector` for persistent data structures with structural sharing
+//! - Pure state transitions: `state -> new_state`
+
 use super::types::{
     AgentId, AgentStatus, ApproverMode, ArtifactType, BeadId, DomainError, FailureCategory, RunId,
     StageName,
 };
 use chrono::{DateTime, Utc};
+use im::Vector;
 use serde::{Deserialize, Serialize};
+
+// =============================================================================
+//  Agent State
+// =============================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentState {
@@ -69,7 +81,7 @@ impl AgentState {
 }
 
 // =============================================================================
-//  Run Aggregate
+//  Run Aggregate - Pure Functional State Transitions
 // =============================================================================
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -83,6 +95,28 @@ pub enum RunState {
     Aborted { reason: String, aborted_at: DateTime<Utc> },
 }
 
+/// Custom serde module for im::Vector serialization
+mod im_vector_serde {
+    use im::Vector;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<S, T>(vec: &Vector<T>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+        T: Serialize + Clone,
+    {
+        vec.iter().collect::<Vec<_>>().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D, T>(deserializer: D) -> Result<Vector<T>, D::Error>
+    where
+        D: Deserializer<'de>,
+        T: Deserialize<'de> + Clone,
+    {
+        Vec::<T>::deserialize(deserializer).map(Vector::from)
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Run {
     pub id: RunId,
@@ -90,11 +124,13 @@ pub struct Run {
     pub state: RunState,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    // History of stage executions
-    pub history: Vec<StageAttempt>,
+    /// History of stage executions - persistent vector for structural sharing
+    #[serde(with = "im_vector_serde")]
+    pub history: Vector<StageAttempt>,
 }
 
 impl Run {
+    /// Create a new Run in Pending state with empty history
     pub fn new(bead_id: BeadId) -> Self {
         let now = Utc::now();
         Self {
@@ -103,24 +139,27 @@ impl Run {
             state: RunState::Pending,
             created_at: now,
             updated_at: now,
-            history: Vec::new(),
+            history: Vector::new(),
         }
     }
 
+    /// Transition from Pending to Running (Contract stage)
+    /// Pure functional: returns new state, does not mutate
     pub fn start(&self) -> Result<Self, DomainError> {
         match &self.state {
-            RunState::Pending => {
-                let mut next = self.clone();
-                next.state = RunState::Running { current_stage: StageName::Contract }; // Initial stage
-                next.updated_at = Utc::now();
-                Ok(next)
-            }
+            RunState::Pending => Ok(Self {
+                state: RunState::Running { current_stage: StageName::Contract },
+                updated_at: Utc::now(),
+                ..self.clone()
+            }),
             s => {
                 Err(DomainError::InvalidStateTransition(format!("{:?}", s), "Running".to_string()))
             }
         }
     }
 
+    /// Complete a stage and transition to next stage or Shipped
+    /// Pure functional: returns new state with updated history
     pub fn complete_stage(
         &self,
         stage: StageName,
@@ -128,17 +167,12 @@ impl Run {
     ) -> Result<Self, DomainError> {
         match &self.state {
             RunState::Running { current_stage } if *current_stage == stage => {
-                let mut next = self.clone();
-                // Transition logic: determine next stage or finish
-                let next_stage = stage.next();
+                let next_state = stage.next().map_or_else(
+                    || RunState::Shipped { completed_at: Utc::now() },
+                    |ns| RunState::Running { current_stage: ns },
+                );
 
-                if let Some(ns) = next_stage {
-                    next.state = RunState::Running { current_stage: ns };
-                } else {
-                    next.state = RunState::Shipped { completed_at: Utc::now() };
-                }
-                next.updated_at = Utc::now();
-                Ok(next)
+                Ok(Self { state: next_state, updated_at: Utc::now(), ..self.clone() })
             }
             s => Err(DomainError::InvalidStateTransition(
                 format!("{:?}", s),
@@ -147,11 +181,22 @@ impl Run {
         }
     }
 
+    /// Transition to Failed state
+    /// Pure functional: returns new state
     pub fn fail(&self, reason: String) -> Self {
-        let mut next = self.clone();
-        next.state = RunState::Failed { reason, failed_at: Utc::now() };
-        next.updated_at = Utc::now();
-        next
+        Self {
+            state: RunState::Failed { reason, failed_at: Utc::now() },
+            updated_at: Utc::now(),
+            ..self.clone()
+        }
+    }
+
+    /// Append a stage attempt to history
+    /// Pure functional: returns new state with appended history
+    pub fn with_attempt(&self, attempt: StageAttempt) -> Self {
+        let mut history = self.history.clone();
+        history.push_back(attempt);
+        Self { history, updated_at: Utc::now(), ..self.clone() }
     }
 }
 
@@ -222,8 +267,7 @@ pub struct GateResult {
 const PLACEHOLDERS: &[&str] = &["todo", "placeholder", "not implemented", "tbd", "tbc"];
 
 fn contains_placeholder(value: &str) -> bool {
-    let value_lower = value.to_lowercase();
-    PLACEHOLDERS.iter().any(|p| value_lower.contains(p))
+    PLACEHOLDERS.iter().any(|p| value.to_lowercase().contains(p))
 }
 
 fn validate_field_no_placeholder(field_name: &str, value: &str) -> Result<(), ValidationError> {

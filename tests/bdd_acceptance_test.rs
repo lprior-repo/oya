@@ -992,7 +992,7 @@ fn scenario_run_history_accumulation() {
         started_at: chrono::Utc::now(),
         completed_at: Some(chrono::Utc::now()),
     };
-    run.history.push(attempt1);
+    run.history.push_back(attempt1);
 
     let attempt2 = StageAttempt {
         run_id: "test-run".to_string(),
@@ -1003,7 +1003,7 @@ fn scenario_run_history_accumulation() {
         started_at: chrono::Utc::now(),
         completed_at: Some(chrono::Utc::now()),
     };
-    run.history.push(attempt2);
+    run.history.push_back(attempt2);
 
     assert_eq!(run.history.len(), 2, "Should have 2 attempts");
     assert_eq!(run.history[0].stage, Stage::Contract, "First should be Contract");

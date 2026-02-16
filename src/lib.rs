@@ -32,3 +32,80 @@ pub mod infrastructure;
 pub fn hello_world() -> String {
     "hello world".to_string()
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpencodeParseError {
+    message: String,
+}
+
+impl OpencodeParseError {
+    pub fn new(message: impl Into<String>) -> Self {
+        Self { message: message.into() }
+    }
+}
+
+impl std::fmt::Display for OpencodeParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl std::error::Error for OpencodeParseError {}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpencodeRunOutput {
+    pub stdout: String,
+}
+
+pub fn parse_opencode_output(raw: &str) -> Result<OpencodeRunOutput, OpencodeParseError> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err(OpencodeParseError::new("opencode output empty"));
+    }
+
+    let value: serde_json::Value = serde_json::from_str(trimmed)
+        .map_err(|e| OpencodeParseError::new(format!("invalid opencode json: {}", e)))?;
+
+    match value.get("stdout") {
+        Some(serde_json::Value::String(stdout)) => {
+            Ok(OpencodeRunOutput { stdout: stdout.to_string() })
+        }
+        Some(_) => Err(OpencodeParseError::new("opencode json stdout is not a string")),
+        None => Err(OpencodeParseError::new("opencode json missing stdout field")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_opencode_output_rejects_empty() {
+        let result = parse_opencode_output("  \n\t ");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_opencode_output_rejects_invalid_json() {
+        let result = parse_opencode_output("not json");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_opencode_output_requires_stdout_field() {
+        let result = parse_opencode_output("{\"status\":\"ok\"}");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_opencode_output_requires_stdout_string() {
+        let result = parse_opencode_output("{\"stdout\":123}");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_opencode_output_accepts_stdout_string() {
+        let result = parse_opencode_output("{\"stdout\":\"ok\"}");
+        assert_eq!(result, Ok(OpencodeRunOutput { stdout: "ok".to_string() }));
+    }
+}

@@ -2,6 +2,7 @@ use crate::domain::{
     AgentId, AgentState, AgentStatus, Artifact, ArtifactType, BeadId, GateResult, Run as BeadRun,
     RunId, RunState, ShipDecision, StageAttempt, StageName as Stage, StageResult, StageState,
 };
+use im::Vector;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sled::Db;
 use std::sync::Arc;
@@ -196,7 +197,8 @@ impl OyaDb {
             .map_err(|e: chrono::ParseError| OyaDbError::Serialization(e.to_string()))?;
 
         // Load history for replayability
-        let history = self.get_stage_attempts_sync(run_id)?;
+        let history: Vector<StageAttempt> =
+            self.get_stage_attempts_sync(run_id)?.into_iter().collect();
 
         Ok(BeadRun {
             id: RunId(record.run_id),
@@ -640,7 +642,7 @@ impl OyaDb {
                     state,
                     created_at,
                     updated_at,
-                    history: Vec::new(),
+                    history: Vector::new(),
                 }))
             }
             None => Ok(None),
@@ -921,7 +923,7 @@ mod tests {
             state: RunState::Pending,
             created_at: Utc::now(),
             updated_at: Utc::now(),
-            history: Vec::new(),
+            history: Vector::new(),
         }
     }
 

@@ -3,6 +3,7 @@
 //
 // FUNCTIONAL RUST: Zero unwrap/panic/expect, Result<T,E> throughout
 
+use im::Vector;
 use oya::domain::{
     AgentId, AgentState, AgentStatus, BeadId, FailureCategory, Run, RunId, RunState, StageName,
     StageResult,
@@ -392,7 +393,7 @@ fn test_run_state_serialization() {
             state: state.clone(),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
-            history: vec![],
+            history: Vector::new(),
         };
 
         let serialized = serde_json::to_string(&run);
