@@ -295,15 +295,16 @@ pub mod restate_handlers {
         };
 
         // Persist to Sled (side effect in shell)
-        let db = ctx.run(|| async {
-            OyaDb::connect_sync("oya-db")
-                .map_err(|e| WorkflowError::Persistence(e.to_string()))
-        }).await?;
+        let db = ctx
+            .run(|| async {
+                OyaDb::connect_sync("oya-db").map_err(|e| WorkflowError::Persistence(e.to_string()))
+            })
+            .await?;
 
         ctx.run(|| async {
-            db.insert_run_sync(&run)
-                .map_err(|e| WorkflowError::Persistence(e.to_string()))
-        }).await?;
+            db.insert_run_sync(&run).map_err(|e| WorkflowError::Persistence(e.to_string()))
+        })
+        .await?;
 
         Ok(run_id.as_str().to_string())
     }
@@ -319,18 +320,20 @@ pub mod restate_handlers {
         stage_result: StageResult,
     ) -> Result<Option<String>, WorkflowError> {
         // Load current run state
-        let db = ctx.run(|| async {
-            OyaDb::connect_sync("oya-db")
-                .map_err(|e| WorkflowError::Persistence(e.to_string()))
-        }).await?;
+        let db = ctx
+            .run(|| async {
+                OyaDb::connect_sync("oya-db").map_err(|e| WorkflowError::Persistence(e.to_string()))
+            })
+            .await?;
 
-        let run = ctx.run(|| async {
-            db.get_run_sync(run_id.as_str())
-                .map_err(|e| match e {
+        let run = ctx
+            .run(|| async {
+                db.get_run_sync(run_id.as_str()).map_err(|e| match e {
                     OyaDbError::NotFound(id) => WorkflowError::RunNotFound(id),
                     _ => WorkflowError::Persistence(e.to_string()),
                 })
-        }).await?;
+            })
+            .await?;
 
         // Validate transition (pure core)
         let next_stage = get_next_canonical_stage(completed_stage);
@@ -343,7 +346,8 @@ pub mod restate_handlers {
             ctx.run(|| async {
                 db.update_run_state_sync(run_id.as_str(), &new_state)
                     .map_err(|e| WorkflowError::Persistence(e.to_string()))
-            }).await?;
+            })
+            .await?;
 
             Ok(Some(next.as_str().to_string()))
         } else {
@@ -373,33 +377,37 @@ pub mod restate_handlers {
                 ctx.sleep(*backoff_duration).await;
 
                 // Route to retry lane (Tdd15)
-                let db = ctx.run(|| async {
-                    OyaDb::connect_sync("oya-db")
-                        .map_err(|e| WorkflowError::Persistence(e.to_string()))
-                }).await?;
+                let db = ctx
+                    .run(|| async {
+                        OyaDb::connect_sync("oya-db")
+                            .map_err(|e| WorkflowError::Persistence(e.to_string()))
+                    })
+                    .await?;
 
                 let new_state = RunState::Running { current_stage: *next_stage };
                 ctx.run(|| async {
                     db.update_run_state_sync(run_id.as_str(), &new_state)
                         .map_err(|e| WorkflowError::Persistence(e.to_string()))
-                }).await?;
+                })
+                .await?;
             }
             RetryAction::TerminalFailure { reason } => {
                 // Transition to Failed state
-                let db = ctx.run(|| async {
-                    OyaDb::connect_sync("oya-db")
-                        .map_err(|e| WorkflowError::Persistence(e.to_string()))
-                }).await?;
+                let db = ctx
+                    .run(|| async {
+                        OyaDb::connect_sync("oya-db")
+                            .map_err(|e| WorkflowError::Persistence(e.to_string()))
+                    })
+                    .await?;
 
-                let failed_state = RunState::Failed {
-                    reason: reason.clone(),
-                    failed_at: chrono::Utc::now(),
-                };
+                let failed_state =
+                    RunState::Failed { reason: reason.clone(), failed_at: chrono::Utc::now() };
 
                 ctx.run(|| async {
                     db.update_run_state_sync(run_id.as_str(), &failed_state)
                         .map_err(|e| WorkflowError::Persistence(e.to_string()))
-                }).await?;
+                })
+                .await?;
             }
         }
 
@@ -414,15 +422,14 @@ pub mod restate_handlers {
         terminal_state: TerminalState,
         rationale: Option<String>,
     ) -> Result<(), WorkflowError> {
-        let db = ctx.run(|| async {
-            OyaDb::connect_sync("oya-db")
-                .map_err(|e| WorkflowError::Persistence(e.to_string()))
-        }).await?;
+        let db = ctx
+            .run(|| async {
+                OyaDb::connect_sync("oya-db").map_err(|e| WorkflowError::Persistence(e.to_string()))
+            })
+            .await?;
 
         let final_state = match terminal_state {
-            TerminalState::Shipped => RunState::Shipped {
-                completed_at: chrono::Utc::now(),
-            },
+            TerminalState::Shipped => RunState::Shipped { completed_at: chrono::Utc::now() },
             TerminalState::Failed => RunState::Failed {
                 reason: rationale.map_or_else(String::new, std::convert::identity),
                 failed_at: chrono::Utc::now(),
@@ -436,7 +443,8 @@ pub mod restate_handlers {
         ctx.run(|| async {
             db.update_run_state_sync(run_id.as_str(), &final_state)
                 .map_err(|e| WorkflowError::Persistence(e.to_string()))
-        }).await?;
+        })
+        .await?;
 
         Ok(())
     }
@@ -449,18 +457,19 @@ pub mod restate_handlers {
         ctx: WorkflowContext,
         run_id: RunId,
     ) -> Result<Run, WorkflowError> {
-        let db = ctx.run(|| async {
-            OyaDb::connect_sync("oya-db")
-                .map_err(|e| WorkflowError::Persistence(e.to_string()))
-        }).await?;
+        let db = ctx
+            .run(|| async {
+                OyaDb::connect_sync("oya-db").map_err(|e| WorkflowError::Persistence(e.to_string()))
+            })
+            .await?;
 
         ctx.run(|| async {
-            db.get_run_sync(run_id.as_str())
-                .map_err(|e| match e {
-                    OyaDbError::NotFound(id) => WorkflowError::RunNotFound(id),
-                    _ => WorkflowError::Persistence(e.to_string()),
-                })
-        }).await
+            db.get_run_sync(run_id.as_str()).map_err(|e| match e {
+                OyaDbError::NotFound(id) => WorkflowError::RunNotFound(id),
+                _ => WorkflowError::Persistence(e.to_string()),
+            })
+        })
+        .await
     }
 }
 
