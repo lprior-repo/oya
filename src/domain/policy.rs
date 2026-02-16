@@ -108,7 +108,7 @@ impl CircuitBreaker {
         self.success_count = 0;
         self.updated_at = Utc::now();
 
-        if self.should_open() {
+        if matches!(self.state, CircuitState::HalfOpen) || self.should_open() {
             self.state = CircuitState::Open;
             self.opened_at = Some(Utc::now());
         }

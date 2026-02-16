@@ -889,63 +889,70 @@ fn scenario_pending_only_transitions_to_contract() {
 fn scenario_circuit_breaker_invalid_state_transitions() {
     let config = CircuitConfig::new(3, 2, 60);
 
-    let cb = CircuitBreaker::new(config.clone());
+    let cb = CircuitBreaker::new("scope", config);
     assert_eq!(cb.state, CircuitState::Closed, "Should start closed");
 
-    let mut cb = CircuitBreaker::new(config.clone());
+    let mut cb = CircuitBreaker::new("scope", config);
     cb.state = CircuitState::HalfOpen;
-    cb.record_success();
-    assert_eq!(cb.state, CircuitState::Closed, "HalfOpen + success -> Closed");
+    cb = cb.record_success().record_success();
+    assert_eq!(cb.state, CircuitState::Closed, "HalfOpen + 2 successes -> Closed");
 
-    let mut cb = CircuitBreaker::new(config);
+    let mut cb = CircuitBreaker::new("scope", config);
     cb.state = CircuitState::HalfOpen;
-    cb.record_failure();
+    cb = cb.record_failure();
     assert_eq!(cb.state, CircuitState::Open, "HalfOpen + failure -> Open");
 
-    let mut cb = CircuitBreaker::new(CircuitConfig::new(3, 2, 60));
-    cb.record_success();
+    let mut cb = CircuitBreaker::new("scope", config);
+    cb = cb.record_success();
     assert_eq!(cb.state, CircuitState::Closed, "Closed + success -> Closed");
 }
 
 #[test]
 fn scenario_health_metrics_extreme_values() {
     let hm = HealthMetrics::default();
-    assert_eq!(hm.success_rate(), 100.0, "Zero ops should return 100% success rate");
+    assert_eq!(hm.success_rate(), 100, "Zero ops should return 100% success rate");
 
     let mut hm = HealthMetrics::default();
     for _ in 0..10 {
-        hm = hm.record_operation(false);
+        hm = hm.record_failure();
     }
-    assert_eq!(hm.success_rate(), 0.0, "All failures should return 0% success rate");
+    assert_eq!(hm.success_rate(), 0, "All failures should return 0% success rate");
 
     let mut hm = HealthMetrics::default();
     for _ in 0..10 {
-        hm = hm.record_operation(true);
+        hm = hm.record_success();
     }
-    assert_eq!(hm.success_rate(), 100.0, "All successes should return 100% success rate");
+    assert_eq!(hm.success_rate(), 100, "All successes should return 100% success rate");
 
     let mut hm = HealthMetrics::default();
     for i in 0..10 {
-        hm = hm.record_operation(i < 6);
+        if i < 6 {
+            hm = hm.record_success();
+        } else {
+            hm = hm.record_failure();
+        }
     }
-    assert_eq!(hm.success_rate(), 60.0, "6/10 should return 60% success rate");
+    assert_eq!(hm.success_rate(), 60, "6/10 should return 60% success rate");
 }
 
 #[test]
 fn scenario_behavioral_fingerprint_edge_cases() {
-    let fp = BehavioralFingerprint::default();
-    assert_eq!(fp.consecutive_failures, 0, "Default should have 0 consecutive failures");
-    assert_eq!(fp.total_operations, 0, "Default should have 0 total operations");
+    // Test healthy fingerprint
+    let fp = BehavioralFingerprint::new("agent-1", None, "contract", 0, 0, 0);
+    assert_eq!(fp.consecutive_failures, 0, "Initial should have 0 consecutive failures");
+    assert_eq!(fp.health_status(), AgentHealthStatus::Healthy, "Should be healthy");
 
-    let fp = BehavioralFingerprint::default();
-    let fp2 = fp.record_failure();
-    assert_ne!(fp.consecutive_failures, fp2.consecutive_failures, "Original should be unchanged");
+    // Test stuck fingerprint (too idle)
+    let fp = BehavioralFingerprint::new("agent-1", None, "contract", 0, 400, 0);
+    assert_eq!(fp.health_status(), AgentHealthStatus::Stuck, "Should be stuck due to idle");
 
-    let mut fp = BehavioralFingerprint::default();
-    for _ in 0..15 {
-        fp = fp.record_failure();
-    }
-    assert!(fp.consecutive_failures >= 10, "Should have many consecutive failures");
+    // Test retry loop
+    let fp = BehavioralFingerprint::new("agent-1", None, "contract", 0, 0, 15);
+    assert_eq!(fp.health_status(), AgentHealthStatus::RetryLoop, "Should be in retry loop");
+
+    // Test degraded (has failures but not stuck)
+    let fp = BehavioralFingerprint::new("agent-1", None, "contract", 3, 50, 5);
+    assert_eq!(fp.health_status(), AgentHealthStatus::Degraded, "Should be degraded");
 }
 
 #[test]
