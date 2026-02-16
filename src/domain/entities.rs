@@ -201,13 +201,85 @@ pub struct ShipDecision {
     pub timestamp: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ValidationError {
+    MissingField(String),
+    PlaceholderValue(String, String),
+    InvalidExitCode(i32),
+    InconsistentEvidence(String),
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GateResult {
     pub run_id: String,
     pub gate_name: String,
+    pub command: Option<String>,
     pub passed: bool,
     pub exit_code: i32,
     pub log_ref: Option<String>,
+}
+
+const PLACEHOLDERS: &[&str] = &["todo", "placeholder", "not implemented", "tbd", "tbc"];
+
+fn contains_placeholder(value: &str) -> bool {
+    let value_lower = value.to_lowercase();
+    PLACEHOLDERS.iter().any(|p| value_lower.contains(p))
+}
+
+fn validate_field_no_placeholder(field_name: &str, value: &str) -> Result<(), ValidationError> {
+    if contains_placeholder(value) {
+        return Err(ValidationError::PlaceholderValue(field_name.to_string(), value.to_string()));
+    }
+    Ok(())
+}
+
+impl GateResult {
+    pub fn validate(&self) -> Result<(), ValidationError> {
+        // Check non-empty required fields
+        if self.run_id.is_empty() {
+            return Err(ValidationError::MissingField("run_id".to_string()));
+        }
+        if self.gate_name.is_empty() {
+            return Err(ValidationError::MissingField("gate_name".to_string()));
+        }
+
+        // Validate command field (required)
+        match &self.command {
+            None => return Err(ValidationError::MissingField("command".to_string())),
+            Some(command) => {
+                if command.is_empty() {
+                    return Err(ValidationError::MissingField("command".to_string()));
+                }
+                validate_field_no_placeholder("command", command)?;
+            }
+        }
+
+        // Validate gate_name has no placeholders
+        validate_field_no_placeholder("gate_name", &self.gate_name)?;
+
+        // Validate log_ref has no placeholders (if present)
+        if let Some(ref log) = self.log_ref {
+            validate_field_no_placeholder("log_ref", log)?;
+        }
+
+        // Validate exit code range (0-255)
+        if self.exit_code < 0 || self.exit_code > 255 {
+            return Err(ValidationError::InvalidExitCode(self.exit_code));
+        }
+
+        // Check consistency between passed and exit_code
+        let exit_matches_passed = (self.exit_code == 0) == self.passed;
+        if !exit_matches_passed {
+            let description = if self.passed {
+                "passed=true but exit_code≠0".to_string()
+            } else {
+                "passed=false but exit_code=0".to_string()
+            };
+            return Err(ValidationError::InconsistentEvidence(description));
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -55,6 +55,7 @@ async fn gate_results_do_not_overwrite_across_attempts_when_namespaced() {
     let first = GateResult {
         run_id: "run-2".to_string(),
         gate_name: "contract:001:moon_ci".to_string(),
+        command: Some("moon run :ci".to_string()),
         passed: true,
         exit_code: 0,
         log_ref: None,
@@ -62,6 +63,7 @@ async fn gate_results_do_not_overwrite_across_attempts_when_namespaced() {
     let second = GateResult {
         run_id: "run-2".to_string(),
         gate_name: "contract:002:moon_ci".to_string(),
+        command: Some("moon run :ci".to_string()),
         passed: false,
         exit_code: 1,
         log_ref: None,

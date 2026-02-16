@@ -138,6 +138,7 @@ impl OyaOrchestrator for OyaOrchestratorImpl {
 
             db.insert_stage_result(&stage_result).await?;
             for gate in current_stage.gates() {
+                let command = Some(format!("moon gate:{}", gate.as_str()));
                 let gate_result = GateResult {
                     run_id: run_id.clone(),
                     gate_name: format!(
@@ -146,10 +147,14 @@ impl OyaOrchestrator for OyaOrchestratorImpl {
                         attempt,
                         gate.as_str()
                     ),
+                    command,
                     passed: stage_result.passed,
                     exit_code: if stage_result.passed { 0 } else { 1 },
                     log_ref: None,
                 };
+                gate_result
+                    .validate()
+                    .map_err(|e| OyaError(format!("Invalid gate evidence: {:?}", e)))?;
                 db.insert_gate_result(&gate_result).await?;
             }
 
