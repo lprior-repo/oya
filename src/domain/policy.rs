@@ -47,7 +47,7 @@ impl TryFrom<&str> for CircuitState {
 pub struct CircuitConfig {
     pub failure_threshold: u32,
     pub success_threshold: u32,
-    pub reset_timeout_secs: u64,
+    pub reset_timeout_ms: u64,
 }
 
 impl CircuitConfig {
@@ -55,15 +55,15 @@ impl CircuitConfig {
     pub const fn new(
         failure_threshold: u32,
         success_threshold: u32,
-        reset_timeout_secs: u64,
+        reset_timeout_ms: u64,
     ) -> Self {
-        Self { failure_threshold, success_threshold, reset_timeout_secs }
+        Self { failure_threshold, success_threshold, reset_timeout_ms }
     }
 }
 
 impl Default for CircuitConfig {
     fn default() -> Self {
-        Self::new(5, 3, 60)
+        Self::new(5, 3, 60_000)
     }
 }
 
@@ -130,8 +130,8 @@ impl CircuitBreaker {
     pub fn try_half_open(mut self) -> Self {
         if self.state == CircuitState::Open {
             if let Some(opened_at) = self.opened_at {
-                let elapsed = (Utc::now() - opened_at).num_seconds() as u64;
-                if elapsed >= self.config.reset_timeout_secs {
+                let elapsed = (Utc::now() - opened_at).num_milliseconds() as u64;
+                if elapsed >= self.config.reset_timeout_ms {
                     self.state = CircuitState::HalfOpen;
                     self.success_count = 0;
                     self.updated_at = Utc::now();

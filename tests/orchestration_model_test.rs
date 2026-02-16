@@ -2,7 +2,7 @@ use oya::domain::*;
 
 #[test]
 fn given_closed_circuit_when_failure_threshold_reached_then_circuit_opens() {
-    let config = CircuitConfig::new(3, 2, 60);
+    let config = CircuitConfig::new(3, 2, 60_000);
     let cb = CircuitBreaker::new("test-scope", config);
 
     let cb = cb.record_failure().record_failure().record_failure();
@@ -13,10 +13,12 @@ fn given_closed_circuit_when_failure_threshold_reached_then_circuit_opens() {
 
 #[test]
 fn given_open_circuit_when_reset_timeout_elapsed_then_circuit_half_opens() {
-    let config = CircuitConfig::new(2, 2, 0);
+    let config = CircuitConfig::new(2, 2, 1);
     let cb = CircuitBreaker::new("test-scope", config).record_failure().record_failure();
 
     assert_eq!(cb.state, CircuitState::Open);
+
+    std::thread::sleep(std::time::Duration::from_millis(2));
 
     let cb = cb.try_half_open();
     assert_eq!(cb.state, CircuitState::HalfOpen);
@@ -24,7 +26,7 @@ fn given_open_circuit_when_reset_timeout_elapsed_then_circuit_half_opens() {
 
 #[test]
 fn given_half_open_circuit_when_success_threshold_reached_then_circuit_closes() {
-    let config = CircuitConfig::new(2, 2, 0);
+    let config = CircuitConfig::new(2, 2, 1);
     let mut cb = CircuitBreaker::new("test-scope", config).record_failure().record_failure();
 
     cb.state = CircuitState::HalfOpen;

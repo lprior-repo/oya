@@ -42,3 +42,4 @@ timer
 
 # Profiling cache
 profiling/
+bin/
