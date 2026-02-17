@@ -46,3 +46,9 @@ bin/
 
 # Codanna index and cache artifacts
 .codanna/
+
+# Local runtime and generated scratch artifacts
+oya-db/
+restate-data/
+crates/
+PLAN_docker-fix-bead3.md
