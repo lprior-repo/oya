@@ -43,3 +43,6 @@ timer
 # Profiling cache
 profiling/
 bin/
+
+# Codanna index and cache artifacts
+.codanna/
