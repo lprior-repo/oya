@@ -589,9 +589,9 @@ struct StageExecution {
 
 #[derive(Clone)]
 enum StageCheck {
-    MoonCheck { failure: FailureCategory, next_stage: Stage },
-    MoonTest { failure: FailureCategory, next_stage: Stage },
-    MoonQuick { failure: FailureCategory, next_stage: Stage },
+    Check { failure: FailureCategory, next_stage: Stage },
+    Test { failure: FailureCategory, next_stage: Stage },
+    Quick { failure: FailureCategory, next_stage: Stage },
 }
 
 fn execute_prompt_stage(
@@ -618,7 +618,7 @@ fn execute_prompt_stage(
         }
 
         let next = match check {
-            StageCheck::MoonCheck { failure, next_stage } => {
+            StageCheck::Check { failure, next_stage } => {
                 let (ok, output) = run_moon_check()?;
                 if ok {
                     None
@@ -626,7 +626,7 @@ fn execute_prompt_stage(
                     Some((failure.clone(), output, next_stage.clone()))
                 }
             }
-            StageCheck::MoonTest { failure, next_stage } => {
+            StageCheck::Test { failure, next_stage } => {
                 let (ok, output) = run_moon_test()?;
                 if ok {
                     None
@@ -634,7 +634,7 @@ fn execute_prompt_stage(
                     Some((failure.clone(), output, next_stage.clone()))
                 }
             }
-            StageCheck::MoonQuick { failure, next_stage } => {
+            StageCheck::Quick { failure, next_stage } => {
                 let (ok, output) = run_moon_quick()?;
                 if ok {
                     None
@@ -1001,39 +1001,36 @@ fn stage_success(stage: &Stage) -> (&'static str, Option<Stage>) {
 
 fn stage_checks(stage: &Stage) -> Vec<StageCheck> {
     match stage {
-        Stage::Research => vec![StageCheck::MoonCheck {
+        Stage::Research => vec![StageCheck::Check {
             failure: FailureCategory::CompileFailed,
             next_stage: Stage::Research,
         }],
-        Stage::Plan => vec![StageCheck::MoonCheck {
+        Stage::Plan => vec![StageCheck::Check {
             failure: FailureCategory::CompileFailed,
             next_stage: Stage::Plan,
         }],
-        Stage::Contract => vec![StageCheck::MoonCheck {
+        Stage::Contract => vec![StageCheck::Check {
             failure: FailureCategory::CompileFailed,
             next_stage: Stage::Contract,
         }],
         Stage::Tdd15 => vec![
-            StageCheck::MoonCheck {
-                failure: FailureCategory::CompileFailed,
-                next_stage: Stage::Tdd15,
-            },
-            StageCheck::MoonTest { failure: FailureCategory::TestFailed, next_stage: Stage::Tdd15 },
+            StageCheck::Check { failure: FailureCategory::CompileFailed, next_stage: Stage::Tdd15 },
+            StageCheck::Test { failure: FailureCategory::TestFailed, next_stage: Stage::Tdd15 },
         ],
-        Stage::Qa => vec![StageCheck::MoonTest {
+        Stage::Qa => vec![StageCheck::Test {
             failure: FailureCategory::TestFailed,
             next_stage: Stage::Tdd15,
         }],
-        Stage::RedQueen => vec![StageCheck::MoonTest {
+        Stage::RedQueen => vec![StageCheck::Test {
             failure: FailureCategory::TestFailed,
             next_stage: Stage::Tdd15,
         }],
         Stage::GptReview => vec![
-            StageCheck::MoonQuick {
+            StageCheck::Quick {
                 failure: FailureCategory::LintFailed,
                 next_stage: Stage::GptReview,
             },
-            StageCheck::MoonTest { failure: FailureCategory::TestFailed, next_stage: Stage::Tdd15 },
+            StageCheck::Test { failure: FailureCategory::TestFailed, next_stage: Stage::Tdd15 },
         ],
         Stage::ShipGate => Vec::new(),
     }

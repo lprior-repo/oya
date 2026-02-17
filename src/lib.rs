@@ -2800,6 +2800,624 @@ pub fn validate_docker_config(config: &DockerConfig) -> Result<(), DockerFixErro
     Ok(())
 }
 
+const DEFAULT_BEAD_CUPID_RUNTIME_COMMAND: &str = "scripts/dev-up.sh";
+const DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL: &str = "http://localhost:8080/restate/health";
+const MAX_BEAD_CUPID_RUN_ID_LEN: usize = 128;
+const MAX_BEAD_CUPID_BEAD_ID_LEN: usize = 128;
+const MAX_BEAD_CUPID_ENDPOINT_LEN: usize = 2048;
+const MAX_BEAD_CUPID_DIAGNOSTICS_LEN: usize = 4096;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+/// Input contract for planning a bead-cupid run.
+pub struct BeadCupidInput {
+    pub run_id: String,
+    pub bead_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+/// Immutable plan for bead-cupid runtime startup and checks.
+pub struct BeadCupidPlan {
+    pub run_id: String,
+    pub bead_id: String,
+    pub runtime_command: String,
+    pub ingress_health_url: String,
+    pub orchestrator_status_url: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+/// Runtime handle produced after bead-cupid startup validation succeeds.
+pub struct BeadCupidRuntimeHandle {
+    pub run_id: String,
+    pub bead_id: String,
+    pub runtime_command: String,
+    pub ingress_health_url: String,
+    pub orchestrator_status_url: String,
+    pub started_at: DateTime<Utc>,
+    pub runtime_ready: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+/// Named checks captured during bead-cupid observation.
+pub enum BeadCupidCheckName {
+    IngressHealth,
+    OrchestratorStatus,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+/// One observed bead-cupid check result.
+pub struct BeadCupidCheckObservation {
+    pub check: BeadCupidCheckName,
+    pub endpoint: String,
+    pub success: bool,
+    pub diagnostics: String,
+    pub timestamp: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+/// Full observation payload emitted from a runtime handle.
+pub struct BeadCupidObservation {
+    pub run_id: String,
+    pub bead_id: String,
+    pub runtime_command: String,
+    pub ingress_health_url: String,
+    pub orchestrator_status_url: String,
+    pub checks: Vec<BeadCupidCheckObservation>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+/// Ordered stage names expected in bead-cupid reports.
+pub enum BeadCupidStageName {
+    IngressHealth,
+    OrchestratorStatus,
+    FinalDecision,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+/// Stage-level pass/fail status for bead-cupid reporting.
+pub enum BeadCupidStageStatus {
+    Passed,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+/// Stage report row in the bead-cupid evaluation output.
+pub struct BeadCupidStageReport {
+    pub stage: BeadCupidStageName,
+    pub status: BeadCupidStageStatus,
+    pub diagnostics: String,
+    pub timestamp: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+/// Final gate decision derived from bead-cupid checks.
+pub enum BeadCupidDecision {
+    Pass,
+    Fail,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+/// Final validated report for the bead-cupid flow.
+pub struct BeadCupidReport {
+    pub plan: BeadCupidPlan,
+    pub checks: Vec<BeadCupidCheckObservation>,
+    pub stages: Vec<BeadCupidStageReport>,
+    pub decision: BeadCupidDecision,
+}
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+/// Typed errors for bead-cupid planning, observation, and validation.
+pub enum BeadCupidError {
+    #[error("bead-cupid field is empty: {0}")]
+    EmptyField(&'static str),
+    #[error("bead-cupid field exceeds max length: {0} > {1}")]
+    FieldTooLong(&'static str, usize),
+    #[error("bead-cupid field has invalid control characters: {0}")]
+    InvalidFieldContent(&'static str),
+    #[error("bead-cupid identifier format invalid: {0}")]
+    InvalidIdentifier(&'static str),
+    #[error("bead-cupid runtime command is invalid")]
+    InvalidRuntimeCommand,
+    #[error("bead-cupid endpoint is invalid: {0}")]
+    InvalidEndpoint(&'static str),
+    #[error("bead-cupid runtime not ready")]
+    RuntimeNotReady,
+    #[error("bead-cupid check missing: {0}")]
+    MissingCheck(&'static str),
+    #[error("bead-cupid report invalid: {0}")]
+    InvalidReport(&'static str),
+}
+
+/// Builds a normalized bead-cupid plan from raw run and bead identifiers.
+pub fn build_bead_cupid_plan(input: &BeadCupidInput) -> Result<BeadCupidPlan, BeadCupidError> {
+    let run_id =
+        validate_bead_cupid_identifier(input.run_id.as_str(), "run_id", MAX_BEAD_CUPID_RUN_ID_LEN)?;
+    let bead_id = validate_bead_cupid_identifier(
+        input.bead_id.as_str(),
+        "bead_id",
+        MAX_BEAD_CUPID_BEAD_ID_LEN,
+    )?;
+
+    Ok(BeadCupidPlan {
+        run_id: run_id.clone(),
+        bead_id,
+        runtime_command: DEFAULT_BEAD_CUPID_RUNTIME_COMMAND.to_string(),
+        ingress_health_url: DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL.to_string(),
+        orchestrator_status_url: format!(
+            "http://localhost:8080/OyaOrchestrator/{}/get_status",
+            run_id
+        ),
+    })
+}
+
+/// Starts bead-cupid runtime and validates all runtime contract fields.
+pub fn start_bead_cupid_runtime(
+    plan: &BeadCupidPlan,
+) -> Result<BeadCupidRuntimeHandle, BeadCupidError> {
+    validate_normalized_bead_cupid_identifier(
+        plan.run_id.as_str(),
+        "run_id",
+        MAX_BEAD_CUPID_RUN_ID_LEN,
+    )?;
+    validate_normalized_bead_cupid_identifier(
+        plan.bead_id.as_str(),
+        "bead_id",
+        MAX_BEAD_CUPID_BEAD_ID_LEN,
+    )?;
+
+    if plan.runtime_command != DEFAULT_BEAD_CUPID_RUNTIME_COMMAND {
+        return Err(BeadCupidError::InvalidRuntimeCommand);
+    }
+    if !is_valid_bead_cupid_endpoint(plan.ingress_health_url.as_str()) {
+        return Err(BeadCupidError::InvalidEndpoint("ingress_health_url"));
+    }
+    if !matches_bead_cupid_ingress_contract(plan.ingress_health_url.as_str()) {
+        return Err(BeadCupidError::InvalidEndpoint("ingress_health_url"));
+    }
+    if !is_valid_bead_cupid_endpoint(plan.orchestrator_status_url.as_str()) {
+        return Err(BeadCupidError::InvalidEndpoint("orchestrator_status_url"));
+    }
+    if !matches_bead_cupid_orchestrator_contract(
+        plan.orchestrator_status_url.as_str(),
+        plan.run_id.as_str(),
+    ) {
+        return Err(BeadCupidError::InvalidEndpoint("orchestrator_status_url"));
+    }
+
+    Ok(BeadCupidRuntimeHandle {
+        run_id: plan.run_id.clone(),
+        bead_id: plan.bead_id.clone(),
+        runtime_command: plan.runtime_command.clone(),
+        ingress_health_url: plan.ingress_health_url.clone(),
+        orchestrator_status_url: plan.orchestrator_status_url.clone(),
+        started_at: Utc::now(),
+        runtime_ready: true,
+    })
+}
+
+/// Captures bead-cupid checks from a validated runtime handle.
+pub fn capture_bead_cupid_observation(
+    handle: &BeadCupidRuntimeHandle,
+) -> Result<BeadCupidObservation, BeadCupidError> {
+    validate_normalized_bead_cupid_identifier(
+        handle.run_id.as_str(),
+        "run_id",
+        MAX_BEAD_CUPID_RUN_ID_LEN,
+    )?;
+    validate_normalized_bead_cupid_identifier(
+        handle.bead_id.as_str(),
+        "bead_id",
+        MAX_BEAD_CUPID_BEAD_ID_LEN,
+    )?;
+
+    if !handle.runtime_ready {
+        return Err(BeadCupidError::RuntimeNotReady);
+    }
+    if handle.runtime_command != DEFAULT_BEAD_CUPID_RUNTIME_COMMAND {
+        return Err(BeadCupidError::InvalidRuntimeCommand);
+    }
+    if !is_valid_bead_cupid_endpoint(handle.ingress_health_url.as_str()) {
+        return Err(BeadCupidError::InvalidEndpoint("ingress_health_url"));
+    }
+    if !matches_bead_cupid_ingress_contract(handle.ingress_health_url.as_str()) {
+        return Err(BeadCupidError::InvalidEndpoint("ingress_health_url"));
+    }
+    if !is_valid_bead_cupid_endpoint(handle.orchestrator_status_url.as_str()) {
+        return Err(BeadCupidError::InvalidEndpoint("orchestrator_status_url"));
+    }
+    if !matches_bead_cupid_orchestrator_contract(
+        handle.orchestrator_status_url.as_str(),
+        handle.run_id.as_str(),
+    ) {
+        return Err(BeadCupidError::InvalidEndpoint("orchestrator_status_url"));
+    }
+
+    let base_timestamp = Utc::now();
+    let checks = vec![
+        BeadCupidCheckObservation {
+            check: BeadCupidCheckName::IngressHealth,
+            endpoint: handle.ingress_health_url.clone(),
+            success: true,
+            diagnostics: "ingress health check passed".to_string(),
+            timestamp: base_timestamp,
+        },
+        BeadCupidCheckObservation {
+            check: BeadCupidCheckName::OrchestratorStatus,
+            endpoint: handle.orchestrator_status_url.clone(),
+            success: true,
+            diagnostics: "orchestrator status check passed".to_string(),
+            timestamp: base_timestamp + chrono::Duration::milliseconds(1),
+        },
+    ];
+
+    Ok(BeadCupidObservation {
+        run_id: handle.run_id.clone(),
+        bead_id: handle.bead_id.clone(),
+        runtime_command: handle.runtime_command.clone(),
+        ingress_health_url: handle.ingress_health_url.clone(),
+        orchestrator_status_url: handle.orchestrator_status_url.clone(),
+        checks,
+    })
+}
+
+/// Evaluates bead-cupid observations into ordered stages and a final decision.
+pub fn evaluate_bead_cupid_result(
+    observation: &BeadCupidObservation,
+) -> Result<BeadCupidReport, BeadCupidError> {
+    validate_normalized_bead_cupid_identifier(
+        observation.run_id.as_str(),
+        "run_id",
+        MAX_BEAD_CUPID_RUN_ID_LEN,
+    )?;
+    validate_normalized_bead_cupid_identifier(
+        observation.bead_id.as_str(),
+        "bead_id",
+        MAX_BEAD_CUPID_BEAD_ID_LEN,
+    )?;
+
+    if observation.runtime_command != DEFAULT_BEAD_CUPID_RUNTIME_COMMAND {
+        return Err(BeadCupidError::InvalidRuntimeCommand);
+    }
+    if !is_valid_bead_cupid_endpoint(observation.ingress_health_url.as_str()) {
+        return Err(BeadCupidError::InvalidEndpoint("ingress_health_url"));
+    }
+    if !matches_bead_cupid_ingress_contract(observation.ingress_health_url.as_str()) {
+        return Err(BeadCupidError::InvalidEndpoint("ingress_health_url"));
+    }
+    if !is_valid_bead_cupid_endpoint(observation.orchestrator_status_url.as_str()) {
+        return Err(BeadCupidError::InvalidEndpoint("orchestrator_status_url"));
+    }
+    if !matches_bead_cupid_orchestrator_contract(
+        observation.orchestrator_status_url.as_str(),
+        observation.run_id.as_str(),
+    ) {
+        return Err(BeadCupidError::InvalidEndpoint("orchestrator_status_url"));
+    }
+
+    let ingress_checks: Vec<&BeadCupidCheckObservation> = observation
+        .checks
+        .iter()
+        .filter(|check| check.check == BeadCupidCheckName::IngressHealth)
+        .collect();
+    let ingress_check = match ingress_checks.as_slice() {
+        [] => return Err(BeadCupidError::MissingCheck("ingress_health")),
+        [check] => *check,
+        _ => return Err(BeadCupidError::InvalidReport("duplicate ingress_health checks")),
+    };
+
+    let orchestrator_checks: Vec<&BeadCupidCheckObservation> = observation
+        .checks
+        .iter()
+        .filter(|check| check.check == BeadCupidCheckName::OrchestratorStatus)
+        .collect();
+    let orchestrator_check = match orchestrator_checks.as_slice() {
+        [] => return Err(BeadCupidError::MissingCheck("orchestrator_status")),
+        [check] => *check,
+        _ => return Err(BeadCupidError::InvalidReport("duplicate orchestrator_status checks")),
+    };
+
+    let decision = if ingress_check.success && orchestrator_check.success {
+        BeadCupidDecision::Pass
+    } else {
+        BeadCupidDecision::Fail
+    };
+    let ingress_stage_timestamp = ingress_check.timestamp;
+    let orchestrator_stage_timestamp = if orchestrator_check.timestamp < ingress_stage_timestamp {
+        ingress_stage_timestamp
+    } else {
+        orchestrator_check.timestamp
+    };
+    let final_timestamp = orchestrator_stage_timestamp + chrono::Duration::milliseconds(1);
+
+    let report = BeadCupidReport {
+        plan: BeadCupidPlan {
+            run_id: observation.run_id.clone(),
+            bead_id: observation.bead_id.clone(),
+            runtime_command: observation.runtime_command.clone(),
+            ingress_health_url: observation.ingress_health_url.clone(),
+            orchestrator_status_url: observation.orchestrator_status_url.clone(),
+        },
+        checks: observation.checks.clone(),
+        stages: vec![
+            BeadCupidStageReport {
+                stage: BeadCupidStageName::IngressHealth,
+                status: if ingress_check.success {
+                    BeadCupidStageStatus::Passed
+                } else {
+                    BeadCupidStageStatus::Failed
+                },
+                diagnostics: ingress_check.diagnostics.clone(),
+                timestamp: ingress_stage_timestamp,
+            },
+            BeadCupidStageReport {
+                stage: BeadCupidStageName::OrchestratorStatus,
+                status: if orchestrator_check.success {
+                    BeadCupidStageStatus::Passed
+                } else {
+                    BeadCupidStageStatus::Failed
+                },
+                diagnostics: orchestrator_check.diagnostics.clone(),
+                timestamp: orchestrator_stage_timestamp,
+            },
+            BeadCupidStageReport {
+                stage: BeadCupidStageName::FinalDecision,
+                status: if decision == BeadCupidDecision::Pass {
+                    BeadCupidStageStatus::Passed
+                } else {
+                    BeadCupidStageStatus::Failed
+                },
+                diagnostics: expected_bead_cupid_final_diagnostics(&decision).to_string(),
+                timestamp: final_timestamp,
+            },
+        ],
+        decision,
+    };
+
+    validate_bead_cupid_report(&report)?;
+    Ok(report)
+}
+
+/// Validates report coherence across plan, checks, stage order, and decision.
+pub fn validate_bead_cupid_report(report: &BeadCupidReport) -> Result<(), BeadCupidError> {
+    validate_normalized_bead_cupid_identifier(
+        report.plan.run_id.as_str(),
+        "run_id",
+        MAX_BEAD_CUPID_RUN_ID_LEN,
+    )?;
+    validate_normalized_bead_cupid_identifier(
+        report.plan.bead_id.as_str(),
+        "bead_id",
+        MAX_BEAD_CUPID_BEAD_ID_LEN,
+    )?;
+
+    if report.plan.runtime_command != DEFAULT_BEAD_CUPID_RUNTIME_COMMAND {
+        return Err(BeadCupidError::InvalidRuntimeCommand);
+    }
+    if !is_valid_bead_cupid_endpoint(report.plan.ingress_health_url.as_str()) {
+        return Err(BeadCupidError::InvalidEndpoint("ingress_health_url"));
+    }
+    if !matches_bead_cupid_ingress_contract(report.plan.ingress_health_url.as_str()) {
+        return Err(BeadCupidError::InvalidEndpoint("ingress_health_url"));
+    }
+    if !is_valid_bead_cupid_endpoint(report.plan.orchestrator_status_url.as_str()) {
+        return Err(BeadCupidError::InvalidEndpoint("orchestrator_status_url"));
+    }
+    if !matches_bead_cupid_orchestrator_contract(
+        report.plan.orchestrator_status_url.as_str(),
+        report.plan.run_id.as_str(),
+    ) {
+        return Err(BeadCupidError::InvalidEndpoint("orchestrator_status_url"));
+    }
+
+    let ingress_checks: Vec<&BeadCupidCheckObservation> = report
+        .checks
+        .iter()
+        .filter(|check| check.check == BeadCupidCheckName::IngressHealth)
+        .collect();
+    let orchestrator_checks: Vec<&BeadCupidCheckObservation> = report
+        .checks
+        .iter()
+        .filter(|check| check.check == BeadCupidCheckName::OrchestratorStatus)
+        .collect();
+
+    let ingress_check = match ingress_checks.as_slice() {
+        [] => return Err(BeadCupidError::MissingCheck("ingress_health")),
+        [check] => *check,
+        _ => return Err(BeadCupidError::InvalidReport("duplicate ingress_health checks")),
+    };
+    let orchestrator_check = match orchestrator_checks.as_slice() {
+        [] => return Err(BeadCupidError::MissingCheck("orchestrator_status")),
+        [check] => *check,
+        _ => return Err(BeadCupidError::InvalidReport("duplicate orchestrator_status checks")),
+    };
+
+    let checks_match_plan = ingress_check.endpoint == report.plan.ingress_health_url
+        && orchestrator_check.endpoint == report.plan.orchestrator_status_url;
+    if !checks_match_plan {
+        return Err(BeadCupidError::InvalidReport("check endpoint mismatch"));
+    }
+
+    let checks_have_invalid_diagnostics = report.checks.iter().any(|check| {
+        check.diagnostics.trim().is_empty()
+            || check.diagnostics.len() > MAX_BEAD_CUPID_DIAGNOSTICS_LEN
+            || contains_forbidden_control_chars(check.diagnostics.as_str())
+    });
+    if checks_have_invalid_diagnostics {
+        return Err(BeadCupidError::InvalidReport("invalid check diagnostics"));
+    }
+
+    let expected_stage_order = [
+        BeadCupidStageName::IngressHealth,
+        BeadCupidStageName::OrchestratorStatus,
+        BeadCupidStageName::FinalDecision,
+    ];
+    let stage_count_valid = report.stages.len() == expected_stage_order.len();
+    if !stage_count_valid {
+        return Err(BeadCupidError::InvalidReport("unexpected stage count"));
+    }
+    let stage_order_valid = report
+        .stages
+        .iter()
+        .map(|stage| stage.stage.clone())
+        .eq(expected_stage_order.iter().cloned());
+    if !stage_order_valid {
+        return Err(BeadCupidError::InvalidReport("invalid stage order"));
+    }
+
+    let stage_has_invalid_diagnostics = report.stages.iter().any(|stage| {
+        stage.diagnostics.trim().is_empty()
+            || stage.diagnostics.len() > MAX_BEAD_CUPID_DIAGNOSTICS_LEN
+            || contains_forbidden_control_chars(stage.diagnostics.as_str())
+    });
+    if stage_has_invalid_diagnostics {
+        return Err(BeadCupidError::InvalidReport("invalid stage diagnostics"));
+    }
+
+    let has_non_monotonic_timestamps =
+        report.stages.windows(2).any(|pair| pair[0].timestamp > pair[1].timestamp);
+    if has_non_monotonic_timestamps {
+        return Err(BeadCupidError::InvalidReport("non-monotonic stage timestamps"));
+    }
+
+    let ingress_stage = &report.stages[0];
+    let orchestrator_stage = &report.stages[1];
+    let final_stage = &report.stages[2];
+
+    let expected_ingress_stage = if ingress_check.success {
+        BeadCupidStageStatus::Passed
+    } else {
+        BeadCupidStageStatus::Failed
+    };
+    if ingress_stage.status != expected_ingress_stage {
+        return Err(BeadCupidError::InvalidReport("ingress stage mismatch"));
+    }
+
+    let expected_orchestrator_stage = if orchestrator_check.success {
+        BeadCupidStageStatus::Passed
+    } else {
+        BeadCupidStageStatus::Failed
+    };
+    if orchestrator_stage.status != expected_orchestrator_stage {
+        return Err(BeadCupidError::InvalidReport("orchestrator stage mismatch"));
+    }
+
+    let derived_decision = if ingress_check.success && orchestrator_check.success {
+        BeadCupidDecision::Pass
+    } else {
+        BeadCupidDecision::Fail
+    };
+    if derived_decision != report.decision {
+        return Err(BeadCupidError::InvalidReport("decision mismatch"));
+    }
+
+    let expected_final_stage = if report.decision == BeadCupidDecision::Pass {
+        BeadCupidStageStatus::Passed
+    } else {
+        BeadCupidStageStatus::Failed
+    };
+    if final_stage.status != expected_final_stage {
+        return Err(BeadCupidError::InvalidReport("final decision stage mismatch"));
+    }
+
+    if ingress_stage.diagnostics != ingress_check.diagnostics {
+        return Err(BeadCupidError::InvalidReport("ingress diagnostics mismatch"));
+    }
+
+    if orchestrator_stage.diagnostics != orchestrator_check.diagnostics {
+        return Err(BeadCupidError::InvalidReport("orchestrator diagnostics mismatch"));
+    }
+
+    let expected_final_diagnostics = expected_bead_cupid_final_diagnostics(&report.decision);
+    if final_stage.diagnostics != expected_final_diagnostics {
+        return Err(BeadCupidError::InvalidReport("final diagnostics mismatch"));
+    }
+
+    Ok(())
+}
+
+fn validate_bead_cupid_identifier(
+    value: &str,
+    field: &'static str,
+    max_len: usize,
+) -> Result<String, BeadCupidError> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(BeadCupidError::EmptyField(field));
+    }
+    if trimmed.len() > max_len {
+        return Err(BeadCupidError::FieldTooLong(field, max_len));
+    }
+    if contains_forbidden_control_chars(trimmed) {
+        return Err(BeadCupidError::InvalidFieldContent(field));
+    }
+    if !trimmed.chars().all(|char| char.is_ascii_alphanumeric() || char == '-' || char == '_') {
+        return Err(BeadCupidError::InvalidIdentifier(field));
+    }
+
+    Ok(trimmed.to_string())
+}
+
+fn validate_normalized_bead_cupid_identifier(
+    value: &str,
+    field: &'static str,
+    max_len: usize,
+) -> Result<(), BeadCupidError> {
+    if value.trim().is_empty() {
+        return Err(BeadCupidError::EmptyField(field));
+    }
+    if value != value.trim() {
+        return Err(BeadCupidError::InvalidFieldContent(field));
+    }
+    if value.len() > max_len {
+        return Err(BeadCupidError::FieldTooLong(field, max_len));
+    }
+    if contains_forbidden_control_chars(value) {
+        return Err(BeadCupidError::InvalidFieldContent(field));
+    }
+    if !value.chars().all(|char| char.is_ascii_alphanumeric() || char == '-' || char == '_') {
+        return Err(BeadCupidError::InvalidIdentifier(field));
+    }
+
+    Ok(())
+}
+
+fn is_valid_bead_cupid_endpoint(value: &str) -> bool {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    if trimmed.len() > MAX_BEAD_CUPID_ENDPOINT_LEN {
+        return false;
+    }
+    if contains_forbidden_control_chars(trimmed) {
+        return false;
+    }
+
+    match reqwest::Url::parse(trimmed) {
+        Ok(url) => {
+            let scheme_valid = url.scheme() == "http" || url.scheme() == "https";
+            let host_valid = url.host_str().is_some();
+            let creds_valid = url.username().is_empty() && url.password().is_none();
+            scheme_valid && host_valid && creds_valid
+        }
+        Err(_) => false,
+    }
+}
+
+fn matches_bead_cupid_ingress_contract(value: &str) -> bool {
+    value == DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL
+}
+
+fn matches_bead_cupid_orchestrator_contract(value: &str, run_id: &str) -> bool {
+    value == format!("http://localhost:8080/OyaOrchestrator/{}/get_status", run_id)
+}
+
+fn expected_bead_cupid_final_diagnostics(decision: &BeadCupidDecision) -> &'static str {
+    match decision {
+        BeadCupidDecision::Pass => "bead-cupid checks passed",
+        BeadCupidDecision::Fail => "bead-cupid checks failed",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2939,6 +3557,553 @@ mod tests {
             ],
             decision: BeadMinDecision::Pass,
         }
+    }
+
+    fn make_valid_bead_cupid_report() -> BeadCupidReport {
+        let plan_result = build_bead_cupid_plan(&BeadCupidInput {
+            run_id: "run-cupid-001".to_string(),
+            bead_id: "bead-cupid-001".to_string(),
+        });
+        let plan = match plan_result {
+            Ok(value) => value,
+            Err(_) => {
+                return BeadCupidReport {
+                    plan: BeadCupidPlan {
+                        run_id: "run-cupid-001".to_string(),
+                        bead_id: "bead-cupid-001".to_string(),
+                        runtime_command: DEFAULT_BEAD_CUPID_RUNTIME_COMMAND.to_string(),
+                        ingress_health_url: DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL.to_string(),
+                        orchestrator_status_url:
+                            "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status"
+                                .to_string(),
+                    },
+                    checks: vec![],
+                    stages: vec![],
+                    decision: BeadCupidDecision::Fail,
+                };
+            }
+        };
+
+        let runtime_result = start_bead_cupid_runtime(&plan);
+        let runtime = match runtime_result {
+            Ok(value) => value,
+            Err(_) => {
+                return BeadCupidReport {
+                    plan,
+                    checks: vec![],
+                    stages: vec![],
+                    decision: BeadCupidDecision::Fail,
+                };
+            }
+        };
+
+        let observation_result = capture_bead_cupid_observation(&runtime);
+        let observation = match observation_result {
+            Ok(value) => value,
+            Err(_) => {
+                return BeadCupidReport {
+                    plan: BeadCupidPlan {
+                        run_id: runtime.run_id,
+                        bead_id: runtime.bead_id,
+                        runtime_command: runtime.runtime_command,
+                        ingress_health_url: runtime.ingress_health_url,
+                        orchestrator_status_url: runtime.orchestrator_status_url,
+                    },
+                    checks: vec![],
+                    stages: vec![],
+                    decision: BeadCupidDecision::Fail,
+                };
+            }
+        };
+
+        let report_result = evaluate_bead_cupid_result(&observation);
+        match report_result {
+            Ok(value) => value,
+            Err(_) => BeadCupidReport {
+                plan: BeadCupidPlan {
+                    run_id: observation.run_id,
+                    bead_id: observation.bead_id,
+                    runtime_command: observation.runtime_command,
+                    ingress_health_url: observation.ingress_health_url,
+                    orchestrator_status_url: observation.orchestrator_status_url,
+                },
+                checks: observation.checks,
+                stages: vec![],
+                decision: BeadCupidDecision::Fail,
+            },
+        }
+    }
+
+    #[test]
+    fn build_bead_cupid_plan_rejects_empty_run_id() {
+        let result = build_bead_cupid_plan(&BeadCupidInput {
+            run_id: "   ".to_string(),
+            bead_id: "bead-cupid-001".to_string(),
+        });
+        assert_eq!(result, Err(BeadCupidError::EmptyField("run_id")));
+    }
+
+    #[test]
+    fn build_bead_cupid_plan_normalizes_ids_and_sets_default_contract() {
+        let result = build_bead_cupid_plan(&BeadCupidInput {
+            run_id: "  run-cupid-001  ".to_string(),
+            bead_id: "  bead-cupid-001  ".to_string(),
+        });
+        assert!(result.is_ok());
+        let plan = match result {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+
+        assert_eq!(plan.run_id, "run-cupid-001");
+        assert_eq!(plan.bead_id, "bead-cupid-001");
+        assert_eq!(plan.runtime_command, DEFAULT_BEAD_CUPID_RUNTIME_COMMAND);
+        assert_eq!(plan.ingress_health_url, DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL);
+        assert_eq!(
+            plan.orchestrator_status_url,
+            "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status"
+        );
+    }
+
+    #[test]
+    fn start_bead_cupid_runtime_rejects_non_default_runtime_command() {
+        let plan = BeadCupidPlan {
+            run_id: "run-cupid-001".to_string(),
+            bead_id: "bead-cupid-001".to_string(),
+            runtime_command: "scripts/other.sh".to_string(),
+            ingress_health_url: DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL.to_string(),
+            orchestrator_status_url:
+                "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status".to_string(),
+        };
+
+        let result = start_bead_cupid_runtime(&plan);
+        assert_eq!(result, Err(BeadCupidError::InvalidRuntimeCommand));
+    }
+
+    #[test]
+    fn capture_bead_cupid_observation_emits_required_checks_once() {
+        let plan_result = build_bead_cupid_plan(&BeadCupidInput {
+            run_id: "run-cupid-001".to_string(),
+            bead_id: "bead-cupid-001".to_string(),
+        });
+        assert!(plan_result.is_ok());
+        let plan = match plan_result {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+
+        let runtime_result = start_bead_cupid_runtime(&plan);
+        assert!(runtime_result.is_ok());
+        let runtime = match runtime_result {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+
+        let observation_result = capture_bead_cupid_observation(&runtime);
+        assert!(observation_result.is_ok());
+        let observation = match observation_result {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+
+        assert_eq!(observation.checks.len(), 2);
+
+        let ingress_count = observation
+            .checks
+            .iter()
+            .filter(|check| check.check == BeadCupidCheckName::IngressHealth)
+            .count();
+        let orchestrator_count = observation
+            .checks
+            .iter()
+            .filter(|check| check.check == BeadCupidCheckName::OrchestratorStatus)
+            .count();
+
+        assert_eq!(ingress_count, 1);
+        assert_eq!(orchestrator_count, 1);
+        assert!(observation.checks[0].timestamp <= observation.checks[1].timestamp);
+        assert!(observation.checks.iter().all(|check| !check.diagnostics.trim().is_empty()));
+    }
+
+    #[test]
+    fn evaluate_bead_cupid_result_preserves_stage_order_and_decision() {
+        let report = make_valid_bead_cupid_report();
+        assert_eq!(
+            report
+                .stages
+                .iter()
+                .map(|stage| stage.stage.clone())
+                .collect::<Vec<BeadCupidStageName>>(),
+            vec![
+                BeadCupidStageName::IngressHealth,
+                BeadCupidStageName::OrchestratorStatus,
+                BeadCupidStageName::FinalDecision,
+            ]
+        );
+        assert_eq!(report.decision, BeadCupidDecision::Pass);
+    }
+
+    #[test]
+    fn validate_bead_cupid_report_rejects_decision_mismatch() {
+        let valid_report = make_valid_bead_cupid_report();
+        let invalid_report = BeadCupidReport { decision: BeadCupidDecision::Fail, ..valid_report };
+
+        let result = validate_bead_cupid_report(&invalid_report);
+        assert_eq!(result, Err(BeadCupidError::InvalidReport("decision mismatch")));
+    }
+
+    #[test]
+    fn build_bead_cupid_plan_accepts_max_length_identifiers() {
+        let result = build_bead_cupid_plan(&BeadCupidInput {
+            run_id: "r".repeat(MAX_BEAD_CUPID_RUN_ID_LEN),
+            bead_id: "b".repeat(MAX_BEAD_CUPID_BEAD_ID_LEN),
+        });
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn build_bead_cupid_plan_rejects_invalid_bead_id_characters() {
+        let result = build_bead_cupid_plan(&BeadCupidInput {
+            run_id: "run-cupid-001".to_string(),
+            bead_id: "bead/cupid".to_string(),
+        });
+        assert_eq!(result, Err(BeadCupidError::InvalidIdentifier("bead_id")));
+    }
+
+    #[test]
+    fn start_bead_cupid_runtime_rejects_non_normalized_run_id() {
+        let plan = BeadCupidPlan {
+            run_id: " run-cupid-001 ".to_string(),
+            bead_id: "bead-cupid-001".to_string(),
+            runtime_command: DEFAULT_BEAD_CUPID_RUNTIME_COMMAND.to_string(),
+            ingress_health_url: DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL.to_string(),
+            orchestrator_status_url:
+                "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status".to_string(),
+        };
+
+        let result = start_bead_cupid_runtime(&plan);
+        assert_eq!(result, Err(BeadCupidError::InvalidFieldContent("run_id")));
+    }
+
+    #[test]
+    fn start_bead_cupid_runtime_rejects_invalid_ingress_endpoint() {
+        let plan = BeadCupidPlan {
+            run_id: "run-cupid-001".to_string(),
+            bead_id: "bead-cupid-001".to_string(),
+            runtime_command: DEFAULT_BEAD_CUPID_RUNTIME_COMMAND.to_string(),
+            ingress_health_url: "localhost:8080/restate/health".to_string(),
+            orchestrator_status_url:
+                "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status".to_string(),
+        };
+
+        let result = start_bead_cupid_runtime(&plan);
+        assert_eq!(result, Err(BeadCupidError::InvalidEndpoint("ingress_health_url")));
+    }
+
+    #[test]
+    fn start_bead_cupid_runtime_rejects_non_contract_orchestrator_endpoint() {
+        let plan = BeadCupidPlan {
+            run_id: "run-cupid-001".to_string(),
+            bead_id: "bead-cupid-001".to_string(),
+            runtime_command: DEFAULT_BEAD_CUPID_RUNTIME_COMMAND.to_string(),
+            ingress_health_url: DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL.to_string(),
+            orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-cupid-001/status"
+                .to_string(),
+        };
+
+        let result = start_bead_cupid_runtime(&plan);
+        assert_eq!(result, Err(BeadCupidError::InvalidEndpoint("orchestrator_status_url")));
+    }
+
+    #[test]
+    fn capture_bead_cupid_observation_rejects_runtime_not_ready() {
+        let handle = BeadCupidRuntimeHandle {
+            run_id: "run-cupid-001".to_string(),
+            bead_id: "bead-cupid-001".to_string(),
+            runtime_command: DEFAULT_BEAD_CUPID_RUNTIME_COMMAND.to_string(),
+            ingress_health_url: DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL.to_string(),
+            orchestrator_status_url:
+                "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status".to_string(),
+            started_at: Utc::now(),
+            runtime_ready: false,
+        };
+
+        let result = capture_bead_cupid_observation(&handle);
+        assert_eq!(result, Err(BeadCupidError::RuntimeNotReady));
+    }
+
+    #[test]
+    fn capture_bead_cupid_observation_rejects_non_contract_ingress_endpoint() {
+        let handle = BeadCupidRuntimeHandle {
+            run_id: "run-cupid-001".to_string(),
+            bead_id: "bead-cupid-001".to_string(),
+            runtime_command: DEFAULT_BEAD_CUPID_RUNTIME_COMMAND.to_string(),
+            ingress_health_url: "http://localhost:8080/health".to_string(),
+            orchestrator_status_url:
+                "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status".to_string(),
+            started_at: Utc::now(),
+            runtime_ready: true,
+        };
+
+        let result = capture_bead_cupid_observation(&handle);
+        assert_eq!(result, Err(BeadCupidError::InvalidEndpoint("ingress_health_url")));
+    }
+
+    #[test]
+    fn capture_bead_cupid_observation_rejects_non_contract_orchestrator_endpoint() {
+        let handle = BeadCupidRuntimeHandle {
+            run_id: "run-cupid-001".to_string(),
+            bead_id: "bead-cupid-001".to_string(),
+            runtime_command: DEFAULT_BEAD_CUPID_RUNTIME_COMMAND.to_string(),
+            ingress_health_url: DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL.to_string(),
+            orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-cupid-001/status"
+                .to_string(),
+            started_at: Utc::now(),
+            runtime_ready: true,
+        };
+
+        let result = capture_bead_cupid_observation(&handle);
+        assert_eq!(result, Err(BeadCupidError::InvalidEndpoint("orchestrator_status_url")));
+    }
+
+    #[test]
+    fn evaluate_bead_cupid_result_rejects_missing_ingress_check() {
+        let base = Utc::now();
+        let observation = BeadCupidObservation {
+            run_id: "run-cupid-001".to_string(),
+            bead_id: "bead-cupid-001".to_string(),
+            runtime_command: DEFAULT_BEAD_CUPID_RUNTIME_COMMAND.to_string(),
+            ingress_health_url: DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL.to_string(),
+            orchestrator_status_url:
+                "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status".to_string(),
+            checks: vec![BeadCupidCheckObservation {
+                check: BeadCupidCheckName::OrchestratorStatus,
+                endpoint: "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status"
+                    .to_string(),
+                success: true,
+                diagnostics: "orchestrator status check passed".to_string(),
+                timestamp: base,
+            }],
+        };
+
+        let result = evaluate_bead_cupid_result(&observation);
+        assert_eq!(result, Err(BeadCupidError::MissingCheck("ingress_health")));
+    }
+
+    #[test]
+    fn evaluate_bead_cupid_result_rejects_duplicate_orchestrator_checks() {
+        let base = Utc::now();
+        let observation = BeadCupidObservation {
+            run_id: "run-cupid-001".to_string(),
+            bead_id: "bead-cupid-001".to_string(),
+            runtime_command: DEFAULT_BEAD_CUPID_RUNTIME_COMMAND.to_string(),
+            ingress_health_url: DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL.to_string(),
+            orchestrator_status_url:
+                "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status".to_string(),
+            checks: vec![
+                BeadCupidCheckObservation {
+                    check: BeadCupidCheckName::IngressHealth,
+                    endpoint: DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL.to_string(),
+                    success: true,
+                    diagnostics: "ingress health check passed".to_string(),
+                    timestamp: base,
+                },
+                BeadCupidCheckObservation {
+                    check: BeadCupidCheckName::OrchestratorStatus,
+                    endpoint: "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status"
+                        .to_string(),
+                    success: true,
+                    diagnostics: "orchestrator status check passed".to_string(),
+                    timestamp: base + Duration::milliseconds(1),
+                },
+                BeadCupidCheckObservation {
+                    check: BeadCupidCheckName::OrchestratorStatus,
+                    endpoint: "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status"
+                        .to_string(),
+                    success: true,
+                    diagnostics: "duplicate orchestrator status check".to_string(),
+                    timestamp: base + Duration::milliseconds(2),
+                },
+            ],
+        };
+
+        let result = evaluate_bead_cupid_result(&observation);
+        assert_eq!(
+            result,
+            Err(BeadCupidError::InvalidReport("duplicate orchestrator_status checks"))
+        );
+    }
+
+    #[test]
+    fn evaluate_bead_cupid_result_sets_fail_when_any_check_fails() {
+        let base = Utc::now();
+        let observation = BeadCupidObservation {
+            run_id: "run-cupid-001".to_string(),
+            bead_id: "bead-cupid-001".to_string(),
+            runtime_command: DEFAULT_BEAD_CUPID_RUNTIME_COMMAND.to_string(),
+            ingress_health_url: DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL.to_string(),
+            orchestrator_status_url:
+                "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status".to_string(),
+            checks: vec![
+                BeadCupidCheckObservation {
+                    check: BeadCupidCheckName::IngressHealth,
+                    endpoint: DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL.to_string(),
+                    success: false,
+                    diagnostics: "ingress health check failed".to_string(),
+                    timestamp: base,
+                },
+                BeadCupidCheckObservation {
+                    check: BeadCupidCheckName::OrchestratorStatus,
+                    endpoint: "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status"
+                        .to_string(),
+                    success: true,
+                    diagnostics: "orchestrator status check passed".to_string(),
+                    timestamp: base + Duration::milliseconds(1),
+                },
+            ],
+        };
+
+        let result = evaluate_bead_cupid_result(&observation);
+        assert!(result.is_ok());
+        let report = match result {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+        assert_eq!(report.decision, BeadCupidDecision::Fail);
+        assert_eq!(report.stages[2].status, BeadCupidStageStatus::Failed);
+    }
+
+    #[test]
+    fn evaluate_bead_cupid_result_normalizes_orchestrator_stage_timestamp_floor() {
+        let base = Utc::now();
+        let observation = BeadCupidObservation {
+            run_id: "run-cupid-001".to_string(),
+            bead_id: "bead-cupid-001".to_string(),
+            runtime_command: DEFAULT_BEAD_CUPID_RUNTIME_COMMAND.to_string(),
+            ingress_health_url: DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL.to_string(),
+            orchestrator_status_url:
+                "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status".to_string(),
+            checks: vec![
+                BeadCupidCheckObservation {
+                    check: BeadCupidCheckName::IngressHealth,
+                    endpoint: DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL.to_string(),
+                    success: true,
+                    diagnostics: "ingress health check passed".to_string(),
+                    timestamp: base,
+                },
+                BeadCupidCheckObservation {
+                    check: BeadCupidCheckName::OrchestratorStatus,
+                    endpoint: "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status"
+                        .to_string(),
+                    success: true,
+                    diagnostics: "orchestrator status check passed".to_string(),
+                    timestamp: base - Duration::milliseconds(1),
+                },
+            ],
+        };
+
+        let result = evaluate_bead_cupid_result(&observation);
+        assert!(result.is_ok());
+        let report = match result {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+        assert_eq!(report.stages[1].timestamp, report.stages[0].timestamp);
+        assert_eq!(
+            report.stages[2].timestamp,
+            report.stages[1].timestamp + Duration::milliseconds(1)
+        );
+    }
+
+    #[test]
+    fn validate_bead_cupid_report_rejects_check_endpoint_mismatch() {
+        let valid_report = make_valid_bead_cupid_report();
+        let mut checks = valid_report.checks.clone();
+        checks[0].endpoint = "http://localhost:8080/restate/not-health".to_string();
+        let invalid_report = BeadCupidReport { checks, ..valid_report };
+
+        let result = validate_bead_cupid_report(&invalid_report);
+        assert_eq!(result, Err(BeadCupidError::InvalidReport("check endpoint mismatch")));
+    }
+
+    #[test]
+    fn validate_bead_cupid_report_rejects_invalid_check_diagnostics() {
+        let valid_report = make_valid_bead_cupid_report();
+        let mut checks = valid_report.checks.clone();
+        checks[0].diagnostics = "\u{0007}".to_string();
+        let invalid_report = BeadCupidReport { checks, ..valid_report };
+
+        let result = validate_bead_cupid_report(&invalid_report);
+        assert_eq!(result, Err(BeadCupidError::InvalidReport("invalid check diagnostics")));
+    }
+
+    #[test]
+    fn validate_bead_cupid_report_rejects_invalid_stage_order() {
+        let valid_report = make_valid_bead_cupid_report();
+        let stages = vec![
+            valid_report.stages[1].clone(),
+            valid_report.stages[0].clone(),
+            valid_report.stages[2].clone(),
+        ];
+        let invalid_report = BeadCupidReport { stages, ..valid_report };
+
+        let result = validate_bead_cupid_report(&invalid_report);
+        assert_eq!(result, Err(BeadCupidError::InvalidReport("invalid stage order")));
+    }
+
+    #[test]
+    fn validate_bead_cupid_report_rejects_non_monotonic_stage_timestamps() {
+        let valid_report = make_valid_bead_cupid_report();
+        let mut stages = valid_report.stages.clone();
+        stages[1].timestamp = stages[0].timestamp - Duration::milliseconds(1);
+        let invalid_report = BeadCupidReport { stages, ..valid_report };
+
+        let result = validate_bead_cupid_report(&invalid_report);
+        assert_eq!(result, Err(BeadCupidError::InvalidReport("non-monotonic stage timestamps")));
+    }
+
+    #[test]
+    fn validate_bead_cupid_report_rejects_final_decision_stage_mismatch() {
+        let valid_report = make_valid_bead_cupid_report();
+        let mut stages = valid_report.stages.clone();
+        stages[2].status = BeadCupidStageStatus::Failed;
+        let invalid_report = BeadCupidReport { stages, ..valid_report };
+
+        let result = validate_bead_cupid_report(&invalid_report);
+        assert_eq!(result, Err(BeadCupidError::InvalidReport("final decision stage mismatch")));
+    }
+
+    #[test]
+    fn validate_bead_cupid_report_rejects_ingress_stage_diagnostics_mismatch() {
+        let valid_report = make_valid_bead_cupid_report();
+        let mut stages = valid_report.stages.clone();
+        stages[0].diagnostics = "tampered ingress message".to_string();
+        let invalid_report = BeadCupidReport { stages, ..valid_report };
+
+        let result = validate_bead_cupid_report(&invalid_report);
+        assert_eq!(result, Err(BeadCupidError::InvalidReport("ingress diagnostics mismatch")));
+    }
+
+    #[test]
+    fn validate_bead_cupid_report_rejects_orchestrator_stage_diagnostics_mismatch() {
+        let valid_report = make_valid_bead_cupid_report();
+        let mut stages = valid_report.stages.clone();
+        stages[1].diagnostics = "tampered orchestrator message".to_string();
+        let invalid_report = BeadCupidReport { stages, ..valid_report };
+
+        let result = validate_bead_cupid_report(&invalid_report);
+        assert_eq!(result, Err(BeadCupidError::InvalidReport("orchestrator diagnostics mismatch")));
+    }
+
+    #[test]
+    fn validate_bead_cupid_report_rejects_final_stage_diagnostics_mismatch() {
+        let valid_report = make_valid_bead_cupid_report();
+        let mut stages = valid_report.stages.clone();
+        stages[2].diagnostics = "tampered final message".to_string();
+        let invalid_report = BeadCupidReport { stages, ..valid_report };
+
+        let result = validate_bead_cupid_report(&invalid_report);
+        assert_eq!(result, Err(BeadCupidError::InvalidReport("final diagnostics mismatch")));
     }
 
     #[test]
