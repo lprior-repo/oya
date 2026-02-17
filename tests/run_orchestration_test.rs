@@ -23,27 +23,27 @@ fn test_transitions_run_to_next_stage_on_success() {
     run = run.start().expect("Should start");
 
     if let RunState::Running { current_stage } = &run.state {
-        assert_eq!(*current_stage, StageName::Contract);
+        assert_eq!(*current_stage, StageName::Research);
     } else {
         panic!("Run should be running");
     }
 
     let stage_result = StageResult {
         run_id: run.id.as_str().to_string(),
-        stage: StageName::Contract,
+        stage: StageName::Research,
         attempt: 1,
         passed: true,
         output: serde_json::json!({}),
         failure_category: None,
-        next_stage: Some(StageName::Tdd15),
+        next_stage: Some(StageName::Plan),
     };
 
-    run = run.complete_stage(StageName::Contract, stage_result).expect("Should complete stage");
+    run = run.complete_stage(StageName::Research, stage_result).expect("Should complete stage");
 
     if let RunState::Running { current_stage } = &run.state {
-        assert_eq!(*current_stage, StageName::Tdd15);
+        assert_eq!(*current_stage, StageName::Plan);
     } else {
-        panic!("Run should be running in Tdd15");
+        panic!("Run should be running in Plan");
     }
 }
 

@@ -60,6 +60,8 @@ impl BeadId {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum StageName {
+    Research,
+    Plan,
     Contract,
     Tdd15,
     Qa,
@@ -71,6 +73,8 @@ pub enum StageName {
 impl StageName {
     pub fn as_str(&self) -> &'static str {
         match self {
+            Self::Research => "research",
+            Self::Plan => "plan",
             Self::Contract => "contract",
             Self::Tdd15 => "tdd15",
             Self::Qa => "qa",
@@ -82,6 +86,8 @@ impl StageName {
 
     pub fn next(&self) -> Option<Self> {
         match self {
+            Self::Research => Some(Self::Plan),
+            Self::Plan => Some(Self::Contract),
             Self::Contract => Some(Self::Tdd15),
             Self::Tdd15 => Some(Self::Qa),
             Self::Qa => Some(Self::RedQueen),
@@ -93,6 +99,8 @@ impl StageName {
 
     pub fn model_for_stage(&self) -> ModelTier {
         match self {
+            Self::Research => ModelTier::Fast,
+            Self::Plan => ModelTier::Balanced,
             Self::Contract => ModelTier::Fast,
             Self::Tdd15 => ModelTier::Balanced,
             Self::Qa => ModelTier::Balanced,
@@ -108,6 +116,8 @@ impl StageName {
 
     pub fn gates(&self) -> Vec<Gate> {
         match self {
+            Self::Research => vec![Gate::Compiles],
+            Self::Plan => vec![Gate::Compiles],
             Self::Contract => vec![Gate::Compiles],
             Self::Tdd15 => vec![Gate::Compiles, Gate::TestsPass],
             Self::Qa => vec![Gate::TestsPass, Gate::EdgeCases],
@@ -169,6 +179,8 @@ impl TryFrom<&str> for StageName {
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         match s {
+            "research" => Ok(Self::Research),
+            "plan" => Ok(Self::Plan),
             "contract" => Ok(Self::Contract),
             "tdd15" => Ok(Self::Tdd15),
             "qa" => Ok(Self::Qa),

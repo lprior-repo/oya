@@ -147,8 +147,8 @@ pub fn validate_transition(
 ) -> Result<(), WorkflowError> {
     match current_state {
         RunState::Pending => {
-            // Pending can only transition to Running(Contract)
-            if next_stage == Stage::Contract {
+            // Pending can only transition to Running(Research)
+            if next_stage == Stage::Research {
                 Ok(())
             } else {
                 Err(WorkflowError::InvalidTransition {
@@ -280,12 +280,13 @@ pub mod restate_handlers {
 // =============================================================================
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_get_next_canonical_stage_returns_correct_sequence() {
+        assert_eq!(get_next_canonical_stage(Stage::Research), Some(Stage::Plan));
+        assert_eq!(get_next_canonical_stage(Stage::Plan), Some(Stage::Contract));
         assert_eq!(get_next_canonical_stage(Stage::Contract), Some(Stage::Tdd15));
         assert_eq!(get_next_canonical_stage(Stage::Tdd15), Some(Stage::Qa));
         assert_eq!(get_next_canonical_stage(Stage::Qa), Some(Stage::RedQueen));
@@ -296,9 +297,11 @@ mod tests {
 
     #[test]
     fn test_is_canonical_transition_validates_stage_sequence() {
+        assert!(is_canonical_transition(Stage::Research, Stage::Plan));
+        assert!(is_canonical_transition(Stage::Plan, Stage::Contract));
         assert!(is_canonical_transition(Stage::Contract, Stage::Tdd15));
         assert!(is_canonical_transition(Stage::Tdd15, Stage::Qa));
-        assert!(!is_canonical_transition(Stage::Contract, Stage::Qa)); // Skips Tdd15
+        assert!(!is_canonical_transition(Stage::Plan, Stage::Tdd15)); // Skips Contract
         assert!(!is_canonical_transition(Stage::ShipGate, Stage::Contract)); // Backwards
     }
 
@@ -332,7 +335,7 @@ mod tests {
 
     #[test]
     fn test_validate_transition_allows_valid_transitions() {
-        assert!(validate_transition(&RunState::Pending, Stage::Contract).is_ok());
+        assert!(validate_transition(&RunState::Pending, Stage::Research).is_ok());
 
         let running_contract = RunState::Running { current_stage: Stage::Contract };
         assert!(validate_transition(&running_contract, Stage::Tdd15).is_ok());
@@ -340,6 +343,9 @@ mod tests {
 
     #[test]
     fn test_validate_transition_blocks_invalid_transitions() {
+        // Pending can't skip to Plan
+        assert!(validate_transition(&RunState::Pending, Stage::Plan).is_err());
+
         // Pending can't skip to Tdd15
         assert!(validate_transition(&RunState::Pending, Stage::Tdd15).is_err());
 
@@ -357,12 +363,10 @@ mod tests {
         let result =
             determine_retry_action(Stage::Qa, 1, &FailureCategory::TestFailed, "Test X failed");
 
-        match result {
-            Ok(RetryAction::Scheduled { backoff_duration, next_stage }) => {
-                assert_eq!(backoff_duration, Duration::from_secs(2));
-                assert_eq!(next_stage, Stage::Tdd15);
-            }
-            _ => panic!("Expected Scheduled retry action"),
+        assert!(matches!(&result, Ok(RetryAction::Scheduled { .. })));
+        if let Ok(RetryAction::Scheduled { backoff_duration, next_stage }) = result {
+            assert_eq!(backoff_duration, Duration::from_secs(2));
+            assert_eq!(next_stage, Stage::Tdd15);
         }
     }
 
@@ -375,11 +379,9 @@ mod tests {
             "Invalid credentials",
         );
 
-        match result {
-            Ok(RetryAction::TerminalFailure { reason }) => {
-                assert!(reason.contains("Non-retryable failure"));
-            }
-            _ => panic!("Expected TerminalFailure"),
+        assert!(matches!(&result, Ok(RetryAction::TerminalFailure { .. })));
+        if let Ok(RetryAction::TerminalFailure { reason }) = result {
+            assert!(reason.contains("Non-retryable failure"));
         }
     }
 

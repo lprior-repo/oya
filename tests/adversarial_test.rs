@@ -257,27 +257,27 @@ fn test_run_stage_progression() {
     assert!(run.is_ok(), "Run should start successfully");
     let run = run.unwrap();
 
-    // Complete Contract stage
+    // Complete Research stage
     let contract_result = StageResult {
         run_id: run.id.as_str().to_string(),
-        stage: StageName::Contract,
+        stage: StageName::Research,
         attempt: 1,
         passed: true,
         output: serde_json::json!({"tests": 5}),
         failure_category: None,
-        next_stage: Some(StageName::Tdd15),
+        next_stage: Some(StageName::Plan),
     };
-    let run = run.complete_stage(StageName::Contract, contract_result);
+    let run = run.complete_stage(StageName::Research, contract_result);
 
-    assert!(run.is_ok(), "Should complete Contract stage");
+    assert!(run.is_ok(), "Should complete Research stage");
     let run = run.unwrap();
 
-    // Verify we moved to Tdd15
+    // Verify we moved to Plan
     match &run.state {
         RunState::Running { current_stage } => {
-            assert_eq!(*current_stage, StageName::Tdd15);
+            assert_eq!(*current_stage, StageName::Plan);
         }
-        _ => panic!("Should be running Tdd15 stage"),
+        _ => panic!("Should be running Plan stage"),
     }
 }
 

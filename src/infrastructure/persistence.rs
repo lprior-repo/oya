@@ -20,6 +20,8 @@ pub enum OyaDbError {
     Io(#[from] std::io::Error),
     #[error("Run not found: {0}")]
     RunNotFound(String),
+    #[error("Duplicate run key: {0}")]
+    DuplicateRunKey(String),
     #[error("Attempt limit exceeded for stage '{stage}': attempt {attempt} exceeds max {max}")]
     AttemptLimitExceeded { stage: String, attempt: u32, max: u32 },
     #[error("Invalid state transition: from '{from}' to '{to}'")]
@@ -85,6 +87,7 @@ struct ArtifactRecord {
 struct GateResultRecord {
     run_id: String,
     gate_name: String,
+    command: Option<String>,
     passed: bool,
     exit_code: i32,
     log_ref: Option<String>,
@@ -171,6 +174,37 @@ impl OyaDb {
         tree.insert(key, value)?;
         tree.flush()?;
         Ok(())
+    }
+
+    /// Insert a Run only if absent (atomic compare-and-set)
+    ///
+    /// Preconditions: run.id must be unique ULID, run.state must be valid
+    /// Postconditions: Run persisted if key was absent; duplicate key returns OyaDbError::DuplicateRunKey
+    pub fn insert_run_if_absent_sync(&self, run: &BeadRun) -> Result<(), OyaDbError> {
+        let record = BeadRunRecord {
+            run_id: run.id.0.clone(),
+            bead_id: run.bead_id.0.clone(),
+            state: serde_json::to_string(&run.state)
+                .map_err(|e| OyaDbError::Serialization(e.to_string()))?,
+            created_at: run.created_at.to_rfc3339(),
+            updated_at: run.updated_at.to_rfc3339(),
+        };
+
+        let tree = self.db.open_tree("bead_runs")?;
+        let key = run.id.0.as_bytes();
+        let value =
+            serde_json::to_vec(&record).map_err(|e| OyaDbError::Serialization(e.to_string()))?;
+
+        let insert_result =
+            tree.compare_and_swap(key, Option::<&[u8]>::None, Some(value.as_slice()))?;
+
+        match insert_result {
+            Ok(()) => {
+                tree.flush()?;
+                Ok(())
+            }
+            Err(_existing) => Err(OyaDbError::DuplicateRunKey(run.id.0.clone())),
+        }
     }
 
     /// Get a Run by ID with full history (replayability)
@@ -482,7 +516,6 @@ impl OyaDb {
         Ok(result)
     }
 
-    #[allow(dead_code)]
     async fn get_records_by_prefix<T: DeserializeOwned + Send + 'static>(
         &self,
         tree_name: &str,
@@ -530,7 +563,6 @@ impl OyaDb {
         self.insert_record("agent_states", state.agent_id.as_str().as_bytes(), &record).await
     }
 
-    #[allow(dead_code)]
     pub async fn get_agent_state(&self, agent_id: &str) -> Result<Option<AgentState>, OyaDbError> {
         let record: Option<AgentStateRecord> =
             self.get_record("agent_states", agent_id.as_bytes()).await?;
@@ -588,6 +620,41 @@ impl OyaDb {
         };
 
         self.insert_record("bead_runs", run.id.0.as_bytes(), &record).await
+    }
+
+    pub async fn insert_bead_run_if_absent(&self, run: &BeadRun) -> Result<(), OyaDbError> {
+        let run_id = run.id.0.clone();
+        let record = BeadRunRecord {
+            run_id: run.id.0.clone(),
+            bead_id: run.bead_id.0.clone(),
+            state: serde_json::to_string(&run.state)
+                .map_err(|e| OyaDbError::Serialization(e.to_string()))?,
+            created_at: run.created_at.to_rfc3339(),
+            updated_at: run.updated_at.to_rfc3339(),
+        };
+
+        let db = Arc::clone(&self.db);
+        let value =
+            serde_json::to_vec(&record).map_err(|e| OyaDbError::Serialization(e.to_string()))?;
+
+        tokio::task::spawn_blocking(move || {
+            let tree = db.open_tree("bead_runs")?;
+            let key = run_id.as_bytes();
+            let insert_result =
+                tree.compare_and_swap(key, Option::<&[u8]>::None, Some(value.as_slice()))?;
+
+            match insert_result {
+                Ok(()) => {
+                    tree.flush()?;
+                    Ok::<_, OyaDbError>(())
+                }
+                Err(_existing) => Err(OyaDbError::DuplicateRunKey(run_id)),
+            }
+        })
+        .await
+        .map_err(|e| OyaDbError::Serialization(e.to_string()))??;
+
+        Ok(())
     }
 
     pub async fn update_run_state(&self, run_id: &str, state: &RunState) -> Result<(), OyaDbError> {
@@ -667,7 +734,6 @@ impl OyaDb {
         self.insert_record("stage_attempts", key.as_bytes(), &record).await
     }
 
-    #[allow(dead_code)]
     pub async fn update_stage_attempt_state(
         &self,
         run_id: &str,
@@ -788,7 +854,6 @@ impl OyaDb {
         Ok(stage_results)
     }
 
-    #[allow(dead_code)]
     pub async fn insert_artifact(&self, artifact: &Artifact) -> Result<(), OyaDbError> {
         let record = ArtifactRecord {
             id: artifact.id.clone(),
@@ -804,11 +869,11 @@ impl OyaDb {
         self.insert_record("artifacts", key.as_bytes(), &record).await
     }
 
-    #[allow(dead_code)]
     pub async fn insert_gate_result(&self, gate: &GateResult) -> Result<(), OyaDbError> {
         let record = GateResultRecord {
             run_id: gate.run_id.clone(),
             gate_name: gate.gate_name.clone(),
+            command: gate.command.clone(),
             passed: gate.passed,
             exit_code: gate.exit_code,
             log_ref: gate.log_ref.clone(),
@@ -834,12 +899,14 @@ impl OyaDb {
 
 fn stage_order(stage: &Stage) -> u8 {
     match stage {
-        Stage::Contract => 0,
-        Stage::Tdd15 => 1,
-        Stage::Qa => 2,
-        Stage::RedQueen => 3,
-        Stage::GptReview => 4,
-        Stage::ShipGate => 5,
+        Stage::Research => 0,
+        Stage::Plan => 1,
+        Stage::Contract => 2,
+        Stage::Tdd15 => 3,
+        Stage::Qa => 4,
+        Stage::RedQueen => 5,
+        Stage::GptReview => 6,
+        Stage::ShipGate => 7,
     }
 }
 
@@ -906,14 +973,13 @@ fn is_valid_transition(from: &RunState, to: &RunState) -> bool {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::domain::{ArtifactType, StageState};
     use chrono::Utc;
 
-    fn create_test_db() -> OyaDb {
-        OyaDb::connect_sync("memory://").unwrap()
+    fn create_test_db() -> Result<OyaDb, OyaDbError> {
+        OyaDb::connect_sync("memory://")
     }
 
     fn create_test_run() -> BeadRun {
@@ -928,45 +994,41 @@ mod tests {
     }
 
     #[test]
-    fn test_insert_new_run_persists_all_fields() {
-        let db = create_test_db();
+    fn test_insert_new_run_persists_all_fields() -> Result<(), OyaDbError> {
+        let db = create_test_db()?;
         let run = create_test_run();
-
-        let result = db.insert_run_sync(&run);
-
-        assert!(result.is_ok(), "insert_run_sync should succeed");
+        db.insert_run_sync(&run)
     }
 
     #[test]
-    fn test_get_run_retrieves_complete_run() {
-        let db = create_test_db();
+    fn test_get_run_retrieves_complete_run() -> Result<(), OyaDbError> {
+        let db = create_test_db()?;
         let run = create_test_run();
         let run_id = run.id.as_str().to_string();
 
-        db.insert_run_sync(&run).unwrap();
-
-        let retrieved = db.get_run_sync(&run_id).unwrap();
+        db.insert_run_sync(&run)?;
+        let retrieved = db.get_run_sync(&run_id)?;
 
         assert_eq!(retrieved.id.0, run.id.0);
         assert_eq!(retrieved.bead_id.0, run.bead_id.0);
         assert_eq!(retrieved.state, RunState::Pending);
         assert_eq!(retrieved.history.len(), 0);
+        Ok(())
     }
 
     #[test]
-    fn test_get_run_returns_error_when_run_does_not_exist() {
-        let db = create_test_db();
-
+    fn test_get_run_returns_error_when_run_does_not_exist() -> Result<(), OyaDbError> {
+        let db = create_test_db()?;
         let result = db.get_run_sync("nonexistent-run");
-
         assert!(matches!(result, Err(OyaDbError::NotFound(_))));
+        Ok(())
     }
 
     #[test]
-    fn test_insert_stage_attempt_persists_attempt_details() {
-        let db = create_test_db();
+    fn test_insert_stage_attempt_persists_attempt_details() -> Result<(), OyaDbError> {
+        let db = create_test_db()?;
         let run = create_test_run();
-        db.insert_run_sync(&run).unwrap();
+        db.insert_run_sync(&run)?;
 
         let attempt = StageAttempt {
             run_id: run.id.0.clone(),
@@ -978,15 +1040,12 @@ mod tests {
             completed_at: None,
         };
 
-        let result = db.insert_stage_attempt_sync(&attempt);
-
-        assert!(result.is_ok());
+        db.insert_stage_attempt_sync(&attempt)
     }
 
     #[test]
-    fn test_insert_stage_attempt_returns_error_when_run_not_found() {
-        let db = create_test_db();
-
+    fn test_insert_stage_attempt_returns_error_when_run_not_found() -> Result<(), OyaDbError> {
+        let db = create_test_db()?;
         let attempt = StageAttempt {
             run_id: "ghost-run".to_string(),
             stage: Stage::Contract,
@@ -998,20 +1057,20 @@ mod tests {
         };
 
         let result = db.insert_stage_attempt_sync(&attempt);
-
         assert!(matches!(result, Err(OyaDbError::RunNotFound(_))));
+        Ok(())
     }
 
     #[test]
-    fn test_insert_stage_attempt_enforces_max_attempts() {
-        let db = create_test_db();
+    fn test_insert_stage_attempt_enforces_max_attempts() -> Result<(), OyaDbError> {
+        let db = create_test_db()?;
         let run = create_test_run();
-        db.insert_run_sync(&run).unwrap();
+        db.insert_run_sync(&run)?;
 
         let attempt = StageAttempt {
             run_id: run.id.0.clone(),
             stage: Stage::Contract,
-            attempt: 4, // Exceeds max_attempts() of 3
+            attempt: 4,
             session_id: None,
             state: StageState::Pending,
             started_at: Utc::now(),
@@ -1019,20 +1078,19 @@ mod tests {
         };
 
         let result = db.insert_stage_attempt_sync(&attempt);
-
         assert!(matches!(
             result,
             Err(OyaDbError::AttemptLimitExceeded { stage: _, attempt: 4, max: 3 })
         ));
+        Ok(())
     }
 
     #[test]
-    fn test_get_stage_attempts_returns_ordered_attempts() {
-        let db = create_test_db();
+    fn test_get_stage_attempts_returns_ordered_attempts() -> Result<(), OyaDbError> {
+        let db = create_test_db()?;
         let run = create_test_run();
-        db.insert_run_sync(&run).unwrap();
+        db.insert_run_sync(&run)?;
 
-        // Insert attempts out of order to test sorting
         let attempt2 = StageAttempt {
             run_id: run.id.0.clone(),
             stage: Stage::Contract,
@@ -1053,21 +1111,21 @@ mod tests {
             completed_at: None,
         };
 
-        db.insert_stage_attempt_sync(&attempt2).unwrap();
-        db.insert_stage_attempt_sync(&attempt1).unwrap();
+        db.insert_stage_attempt_sync(&attempt2)?;
+        db.insert_stage_attempt_sync(&attempt1)?;
 
-        let attempts = db.get_stage_attempts_sync(&run.id.0).unwrap();
-
+        let attempts = db.get_stage_attempts_sync(&run.id.0)?;
         assert_eq!(attempts.len(), 2);
         assert_eq!(attempts[0].attempt, 1);
         assert_eq!(attempts[1].attempt, 2);
+        Ok(())
     }
 
     #[test]
-    fn test_insert_artifact_persists_with_checksum() {
-        let db = create_test_db();
+    fn test_insert_artifact_persists_with_checksum() -> Result<(), OyaDbError> {
+        let db = create_test_db()?;
         let run = create_test_run();
-        db.insert_run_sync(&run).unwrap();
+        db.insert_run_sync(&run)?;
 
         let artifact = Artifact {
             id: "artifact-001".to_string(),
@@ -1078,14 +1136,12 @@ mod tests {
             produced_by_stage: Stage::Contract,
         };
 
-        let result = db.insert_artifact_sync(&artifact);
-
-        assert!(result.is_ok());
+        db.insert_artifact_sync(&artifact)
     }
 
     #[test]
-    fn test_insert_artifact_returns_error_when_run_not_found() {
-        let db = create_test_db();
+    fn test_insert_artifact_returns_error_when_run_not_found() -> Result<(), OyaDbError> {
+        let db = create_test_db()?;
 
         let artifact = Artifact {
             id: "orphan-artifact".to_string(),
@@ -1097,15 +1153,15 @@ mod tests {
         };
 
         let result = db.insert_artifact_sync(&artifact);
-
         assert!(matches!(result, Err(OyaDbError::OrphanedArtifact { .. })));
+        Ok(())
     }
 
     #[test]
-    fn test_get_artifacts_filters_by_stage() {
-        let db = create_test_db();
+    fn test_get_artifacts_filters_by_stage() -> Result<(), OyaDbError> {
+        let db = create_test_db()?;
         let run = create_test_run();
-        db.insert_run_sync(&run).unwrap();
+        db.insert_run_sync(&run)?;
 
         let artifact1 = Artifact {
             id: "artifact-001".to_string(),
@@ -1125,80 +1181,74 @@ mod tests {
             produced_by_stage: Stage::Tdd15,
         };
 
-        db.insert_artifact_sync(&artifact1).unwrap();
-        db.insert_artifact_sync(&artifact2).unwrap();
+        db.insert_artifact_sync(&artifact1)?;
+        db.insert_artifact_sync(&artifact2)?;
 
-        let contract_artifacts = db.get_artifacts_sync(&run.id.0, Some(Stage::Contract)).unwrap();
-
+        let contract_artifacts = db.get_artifacts_sync(&run.id.0, Some(Stage::Contract))?;
         assert_eq!(contract_artifacts.len(), 1);
         assert_eq!(contract_artifacts[0].artifact_type, ArtifactType::ContractDocument);
 
-        let all_artifacts = db.get_artifacts_sync(&run.id.0, None).unwrap();
+        let all_artifacts = db.get_artifacts_sync(&run.id.0, None)?;
         assert_eq!(all_artifacts.len(), 2);
+        Ok(())
     }
 
     #[test]
-    fn test_update_run_state_transitions_from_pending_to_running() {
-        let db = create_test_db();
+    fn test_update_run_state_transitions_from_pending_to_running() -> Result<(), OyaDbError> {
+        let db = create_test_db()?;
         let run = create_test_run();
-        db.insert_run_sync(&run).unwrap();
+        db.insert_run_sync(&run)?;
 
         let new_state = RunState::Running { current_stage: Stage::Contract };
+        db.update_run_state_sync(&run.id.0, &new_state)?;
 
-        let result = db.update_run_state_sync(&run.id.0, &new_state);
-
-        assert!(result.is_ok());
-
-        let updated = db.get_run_sync(&run.id.0).unwrap();
+        let updated = db.get_run_sync(&run.id.0)?;
         assert!(matches!(updated.state, RunState::Running { .. }));
+        Ok(())
     }
 
     #[test]
-    fn test_update_run_state_returns_error_on_invalid_transition() {
-        let db = create_test_db();
+    fn test_update_run_state_returns_error_on_invalid_transition() -> Result<(), OyaDbError> {
+        let db = create_test_db()?;
         let run = create_test_run();
 
-        // Create run in Shipped state
         let shipped_run =
             BeadRun { state: RunState::Shipped { completed_at: Utc::now() }, ..run.clone() };
-        db.insert_run_sync(&shipped_run).unwrap();
+        db.insert_run_sync(&shipped_run)?;
 
-        // Try to transition from Shipped to Running (invalid)
         let new_state = RunState::Running { current_stage: Stage::Contract };
-
         let result = db.update_run_state_sync(&run.id.0, &new_state);
-
         assert!(matches!(result, Err(OyaDbError::InvalidStateTransition { .. })));
+        Ok(())
     }
 
     #[test]
-    fn test_insert_run_is_idempotent() {
-        let db = create_test_db();
+    fn test_insert_run_if_absent_fails_on_duplicate_key() -> Result<(), OyaDbError> {
+        let db = create_test_db()?;
         let run = create_test_run();
-        let run_id = run.id.0.clone();
 
-        // First insert
-        db.insert_run_sync(&run).unwrap();
+        db.insert_run_if_absent_sync(&run)?;
 
-        // Modify and insert again with same ID
         let modified_run = BeadRun { bead_id: BeadId::new("different-bead"), ..run.clone() };
-        db.insert_run_sync(&modified_run).unwrap();
+        let second_insert = db.insert_run_if_absent_sync(&modified_run);
+        assert!(matches!(
+            second_insert,
+            Err(OyaDbError::DuplicateRunKey(duplicate_id)) if duplicate_id == run.id.0
+        ));
 
-        // Should retrieve the latest version (upsert semantics)
-        let retrieved = db.get_run_sync(&run_id).unwrap();
-        assert_eq!(retrieved.bead_id.0, "different-bead");
+        let retrieved = db.get_run_sync(&run.id.0)?;
+        assert_eq!(retrieved.bead_id.0, run.bead_id.0);
+        Ok(())
     }
 
     #[test]
-    fn test_replayability_restores_run_with_history() {
-        let db = create_test_db();
+    fn test_replayability_restores_run_with_history() -> Result<(), OyaDbError> {
+        let db = create_test_db()?;
         let run = create_test_run();
         let run_id = run.id.0.clone();
 
-        // Insert run
-        db.insert_run_sync(&run).unwrap();
+        db.insert_run_sync(&run)?;
 
-        // Insert attempts
         for attempt_num in 1..=2 {
             let attempt = StageAttempt {
                 run_id: run_id.clone(),
@@ -1209,10 +1259,9 @@ mod tests {
                 started_at: Utc::now(),
                 completed_at: Some(Utc::now()),
             };
-            db.insert_stage_attempt_sync(&attempt).unwrap();
+            db.insert_stage_attempt_sync(&attempt)?;
         }
 
-        // Insert artifact
         let artifact = Artifact {
             id: "artifact-001".to_string(),
             run_id: run_id.clone(),
@@ -1221,15 +1270,14 @@ mod tests {
             checksum: None,
             produced_by_stage: Stage::Contract,
         };
-        db.insert_artifact_sync(&artifact).unwrap();
+        db.insert_artifact_sync(&artifact)?;
 
-        // Replay: get run should restore full state
-        let restored = db.get_run_sync(&run_id).unwrap();
-
+        let restored = db.get_run_sync(&run_id)?;
         assert_eq!(restored.id.0, run_id);
         assert_eq!(restored.history.len(), 2);
 
-        let artifacts = db.get_artifacts_sync(&run_id, None).unwrap();
+        let artifacts = db.get_artifacts_sync(&run_id, None)?;
         assert_eq!(artifacts.len(), 1);
+        Ok(())
     }
 }

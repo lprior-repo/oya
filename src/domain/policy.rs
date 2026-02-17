@@ -383,6 +383,14 @@ pub fn determine_transition(
 #[must_use]
 pub fn passed_stage_transition(stage: StageName) -> TransitionDecision {
     match stage {
+        StageName::Research => TransitionDecision::new(
+            StageTransition::Advance(StageName::Plan),
+            TransitionReason::StagePassedAdvance,
+        ),
+        StageName::Plan => TransitionDecision::new(
+            StageTransition::Advance(StageName::Contract),
+            TransitionReason::StagePassedAdvance,
+        ),
         StageName::Contract => TransitionDecision::new(
             StageTransition::Advance(StageName::Tdd15),
             TransitionReason::StagePassedAdvance,

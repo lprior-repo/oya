@@ -11,6 +11,7 @@ OYA uses OpenCode as a CLI subprocess adapter to get AI outputs for governed sta
 Related deep-dive:
 
 - `docs/OPENCODE_AUTOMATION_LEARNINGS.md`
+- `docs/QA_RESTATE_VALIDATION.md`
 
 ## Canonical Stage DAG
 
@@ -59,6 +60,9 @@ Bead run request
 - `opencode` CLI installed and available in `PATH`.
 - Restate service available for workflow execution.
 - Sled available for local persistence.
+
+For live QA validation workflow details (including ingress handler checks and deployment staleness
+troubleshooting), see `docs/QA_RESTATE_VALIDATION.md`.
 
 ## CI/CD and Gates
 

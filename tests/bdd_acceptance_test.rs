@@ -42,13 +42,13 @@ fn scenario_bead_run_completes_all_stages_successfully() {
         }
     };
 
-    // Then it should be Running at Contract stage
+    // Then it should be Running at Research stage
     match &run.state {
         RunState::Running { current_stage } => {
-            assert_eq!(*current_stage, Stage::Contract);
+            assert_eq!(*current_stage, Stage::Research);
         }
         _ => {
-            assert!(false, "Expected Running state at Contract stage");
+            assert!(false, "Expected Running state at Research stage");
         }
     }
 }
@@ -57,6 +57,8 @@ fn scenario_bead_run_completes_all_stages_successfully() {
 fn scenario_stage_progresses_through_canonical_dag() {
     // Given the canonical stage DAG
     let stages = [
+        (Stage::Research, Some(Stage::Plan)),
+        (Stage::Plan, Some(Stage::Contract)),
         (Stage::Contract, Some(Stage::Tdd15)),
         (Stage::Tdd15, Some(Stage::Qa)),
         (Stage::Qa, Some(Stage::RedQueen)),
@@ -798,7 +800,7 @@ fn scenario_concurrent_transition_validation() {
     use std::sync::mpsc;
     use std::thread;
 
-    // Given a run in Running state at Contract stage
+    // Given a run in Running state at Research stage
     let run = Run::new(BeadId::new("concurrent-test"));
     let run = run.start().expect("Should start");
     let run_state = run.state.clone();
@@ -811,7 +813,7 @@ fn scenario_concurrent_transition_validation() {
             let tx = tx.clone();
             let state = run_state.clone();
             thread::spawn(move || {
-                let result = validate_transition(&state, Stage::Tdd15);
+                let result = validate_transition(&state, Stage::Plan);
                 let _ = tx.send(result);
             })
         })
@@ -880,9 +882,9 @@ fn scenario_pending_only_transitions_to_contract() {
     let result = validate_transition(&run.state, Stage::ShipGate);
     assert!(result.is_err(), "Pending should not transition to ShipGate");
 
-    // When trying to transition to Contract
-    let result = validate_transition(&run.state, Stage::Contract);
-    assert!(result.is_ok(), "Pending should transition to Contract");
+    // When trying to transition to Research
+    let result = validate_transition(&run.state, Stage::Research);
+    assert!(result.is_ok(), "Pending should transition to Research");
 }
 
 #[test]
@@ -1037,6 +1039,8 @@ fn scenario_deterministic_stage_next_is_consistent() {
     // Then it should always return the same result
 
     for _ in 0..100 {
+        assert_eq!(Stage::Research.next(), Some(Stage::Plan));
+        assert_eq!(Stage::Plan.next(), Some(Stage::Contract));
         assert_eq!(Stage::Contract.next(), Some(Stage::Tdd15));
         assert_eq!(Stage::Tdd15.next(), Some(Stage::Qa));
         assert_eq!(Stage::Qa.next(), Some(Stage::RedQueen));

@@ -22,7 +22,30 @@ fn test_complete_successful_workflow() {
     // Start the run
     run = run.start().expect("Run should start");
 
-    // Complete Contract stage
+    // Complete Research stage
+    let contract_result = StageResult {
+        run_id: run.id.as_str().to_string(),
+        stage: StageName::Research,
+        attempt: 1,
+        passed: true,
+        output: serde_json::json!({"research": "complete"}),
+        failure_category: None,
+        next_stage: Some(StageName::Plan),
+    };
+    run =
+        run.complete_stage(StageName::Research, contract_result).expect("Should complete Research");
+
+    let plan_result = StageResult {
+        run_id: run.id.as_str().to_string(),
+        stage: StageName::Plan,
+        attempt: 1,
+        passed: true,
+        output: serde_json::json!({"plan": "ready"}),
+        failure_category: None,
+        next_stage: Some(StageName::Contract),
+    };
+    run = run.complete_stage(StageName::Plan, plan_result).expect("Should complete Plan");
+
     let contract_result = StageResult {
         run_id: run.id.as_str().to_string(),
         stage: StageName::Contract,
@@ -68,10 +91,10 @@ fn test_workflow_with_retries() {
 
     let run = run.start().expect("Run should start");
 
-    // Simulate a failed first attempt at Contract
+    // Simulate a failed first attempt at Research
     let failed_result = StageResult {
         run_id: run.id.as_str().to_string(),
-        stage: StageName::Contract,
+        stage: StageName::Research,
         attempt: 1,
         passed: false,
         output: serde_json::json!({"error": "Syntax error"}),
@@ -79,7 +102,7 @@ fn test_workflow_with_retries() {
         next_stage: None,
     };
 
-    let result = run.complete_stage(StageName::Contract, failed_result);
+    let result = run.complete_stage(StageName::Research, failed_result);
 
     // Should either fail the run or allow retry
     assert!(result.is_ok() || result.is_err(), "Should handle failure gracefully");
@@ -120,6 +143,8 @@ fn test_full_stage_progression() {
     run = run.start().expect("Should start");
 
     let stages = vec![
+        StageName::Research,
+        StageName::Plan,
         StageName::Contract,
         StageName::Tdd15,
         StageName::Qa,
@@ -128,13 +153,9 @@ fn test_full_stage_progression() {
         StageName::ShipGate,
     ];
 
-    let mut current_stage = StageName::Contract;
+    let mut current_stage = StageName::Research;
 
-    for (i, stage) in stages.iter().enumerate() {
-        if i == 0 {
-            continue; // Already started at Contract
-        }
-
+    for stage in stages.iter().skip(1) {
         let result = StageResult {
             run_id: run.id.as_str().to_string(),
             stage: current_stage.clone(),
@@ -142,12 +163,12 @@ fn test_full_stage_progression() {
             passed: true,
             output: serde_json::json!({"stage": format!("{:?}", stage)}),
             failure_category: None,
-            next_stage: if i < stages.len() { Some(stages[i].clone()) } else { None },
+            next_stage: Some(stage.clone()),
         };
 
         run = run.complete_stage(current_stage.clone(), result).expect("Should complete stage");
 
-        current_stage = stages[i].clone();
+        current_stage = stage.clone();
     }
 
     // Verify we progressed through all stages
@@ -170,15 +191,15 @@ fn test_run_cannot_complete_stage_before_start() {
 
     let result = StageResult {
         run_id: run.id.as_str().to_string(),
-        stage: StageName::Contract,
+        stage: StageName::Research,
         attempt: 1,
         passed: true,
         output: serde_json::json!({}),
         failure_category: None,
-        next_stage: Some(StageName::Tdd15),
+        next_stage: Some(StageName::Plan),
     };
 
-    let result = run.complete_stage(StageName::Contract, result);
+    let result = run.complete_stage(StageName::Research, result);
     assert!(result.is_err(), "Should not complete stage before starting");
 }
 

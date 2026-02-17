@@ -40,15 +40,15 @@ fn test_invalid_state_transitions_rejected() {
     let result = serde_json::json!({"output": "test"});
     let stage_result = oya::domain::StageResult {
         run_id: run.id.as_str().to_string(),
-        stage: StageName::Contract,
+        stage: StageName::Research,
         attempt: 1,
         passed: true,
         output: result,
         failure_category: None,
-        next_stage: Some(StageName::Tdd15),
+        next_stage: Some(StageName::Plan),
     };
 
-    let result = run.complete_stage(StageName::Contract, stage_result);
+    let result = run.complete_stage(StageName::Research, stage_result);
     assert!(result.is_err(), "Should not complete stage before starting");
 }
 
@@ -176,6 +176,8 @@ fn test_run_history_tracking() {
 fn test_stage_progression_follows_canonical_path() {
     // Stages should progress in the defined canonical order
     let stages = vec![
+        StageName::Research,
+        StageName::Plan,
         StageName::Contract,
         StageName::Tdd15,
         StageName::Qa,
@@ -199,9 +201,9 @@ fn test_stage_progression_follows_canonical_path() {
 
 #[test]
 fn test_all_stages_are_reachable() {
-    // All defined stages should be reachable from Contract
-    let mut current_stage = StageName::Contract;
-    let mut visited_stages = vec![StageName::Contract];
+    // All defined stages should be reachable from Research
+    let mut current_stage = StageName::Research;
+    let mut visited_stages = vec![StageName::Research];
 
     while let Some(next) = current_stage.next() {
         visited_stages.push(next.clone());
@@ -209,7 +211,7 @@ fn test_all_stages_are_reachable() {
     }
 
     // We should visit all canonical stages
-    assert!(visited_stages.len() >= 6, "Should visit all 6 stages in canonical path");
+    assert!(visited_stages.len() >= 8, "Should visit all 8 stages in canonical path");
 }
 
 // =============================================================================
