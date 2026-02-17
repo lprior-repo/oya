@@ -64,6 +64,8 @@ impl BeadId {
 #[serde(rename_all = "snake_case")]
 pub enum StageName {
     Contract,
+    DesignDag,
+    Implement,
     Tdd15,
     Qa,
     RedQueen,
@@ -75,6 +77,8 @@ impl StageName {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Contract => "contract",
+            Self::DesignDag => "design_dag",
+            Self::Implement => "implement",
             Self::Tdd15 => "tdd15",
             Self::Qa => "qa",
             Self::RedQueen => "red_queen",
@@ -85,7 +89,9 @@ impl StageName {
 
     pub fn next(&self) -> Option<Self> {
         match self {
-            Self::Contract => Some(Self::Tdd15),
+            Self::Contract => Some(Self::DesignDag),
+            Self::DesignDag => Some(Self::Implement),
+            Self::Implement => Some(Self::Tdd15),
             Self::Tdd15 => Some(Self::Qa),
             Self::Qa => Some(Self::RedQueen),
             Self::RedQueen => Some(Self::GptReview),
@@ -97,6 +103,8 @@ impl StageName {
     pub fn model_for_stage(&self) -> ModelTier {
         match self {
             Self::Contract => ModelTier::Fast,
+            Self::DesignDag => ModelTier::Balanced,
+            Self::Implement => ModelTier::Balanced,
             Self::Tdd15 => ModelTier::Balanced,
             Self::Qa => ModelTier::Balanced,
             Self::RedQueen => ModelTier::Capable,
@@ -112,6 +120,8 @@ impl StageName {
     pub fn gates(&self) -> Vec<Gate> {
         match self {
             Self::Contract => vec![Gate::Compiles],
+            Self::DesignDag => vec![Gate::Compiles],
+            Self::Implement => vec![Gate::Compiles],
             Self::Tdd15 => vec![Gate::Compiles, Gate::TestsPass],
             Self::Qa => vec![Gate::TestsPass, Gate::EdgeCases],
             Self::RedQueen => vec![Gate::NoVulnerabilities],
@@ -173,6 +183,8 @@ impl TryFrom<&str> for StageName {
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         match s {
             "contract" => Ok(Self::Contract),
+            "design_dag" => Ok(Self::DesignDag),
+            "implement" => Ok(Self::Implement),
             "tdd15" => Ok(Self::Tdd15),
             "qa" => Ok(Self::Qa),
             "red_queen" => Ok(Self::RedQueen),
@@ -412,7 +424,9 @@ impl Run {
                 let mut next = self.clone();
                 // Transition logic: determine next stage or finish
                 let next_stage = match stage {
-                    StageName::Contract => Some(StageName::Tdd15),
+                    StageName::Contract => Some(StageName::DesignDag),
+                    StageName::DesignDag => Some(StageName::Implement),
+                    StageName::Implement => Some(StageName::Tdd15),
                     StageName::Tdd15 => Some(StageName::Qa),
                     StageName::Qa => Some(StageName::RedQueen),
                     StageName::RedQueen => Some(StageName::GptReview),
@@ -1028,6 +1042,14 @@ pub fn determine_transition(
 pub fn passed_stage_transition(stage: StageName) -> TransitionDecision {
     match stage {
         StageName::Contract => TransitionDecision::new(
+            StageTransition::Advance(StageName::DesignDag),
+            TransitionReason::StagePassedAdvance,
+        ),
+        StageName::DesignDag => TransitionDecision::new(
+            StageTransition::Advance(StageName::Implement),
+            TransitionReason::StagePassedAdvance,
+        ),
+        StageName::Implement => TransitionDecision::new(
             StageTransition::Advance(StageName::Tdd15),
             TransitionReason::StagePassedAdvance,
         ),
@@ -1040,8 +1062,8 @@ pub fn passed_stage_transition(stage: StageName) -> TransitionDecision {
             TransitionReason::StagePassedAdvance,
         ),
         StageName::RedQueen => TransitionDecision::new(
-            StageTransition::Complete,
-            TransitionReason::RedQueenPassedComplete,
+            StageTransition::Advance(StageName::GptReview),
+            TransitionReason::StagePassedAdvance,
         ),
         StageName::GptReview => TransitionDecision::new(
             StageTransition::Advance(StageName::ShipGate),
@@ -1242,30 +1264,33 @@ mod transition_decision_tests {
     use super::*;
 
     #[test]
-    fn given_contract_stage_when_stage_passes_then_advances_to_tdd15() {
+    fn given_contract_stage_when_stage_passes_then_advances_to_design_dag() {
         let decision = determine_transition(StageName::Contract, true, false);
 
         assert_eq!(
             decision.transition(),
-            StageTransition::Advance(StageName::Tdd15)
+            StageTransition::Advance(StageName::DesignDag)
         );
     }
 
     #[test]
-    fn given_tdd15_stage_when_stage_passes_then_advances_to_qa() {
-        let decision = determine_transition(StageName::Tdd15, true, false);
+    fn given_design_dag_stage_when_stage_passes_then_advances_to_implement() {
+        let decision = determine_transition(StageName::DesignDag, true, false);
 
         assert_eq!(
             decision.transition(),
-            StageTransition::Advance(StageName::Qa)
+            StageTransition::Advance(StageName::Implement)
         );
     }
 
     #[test]
-    fn given_red_queen_stage_when_stage_passes_then_completes() {
+    fn given_red_queen_stage_when_stage_passes_then_advances_to_gpt_review() {
         let decision = determine_transition(StageName::RedQueen, true, false);
 
-        assert_eq!(decision.transition(), StageTransition::Complete);
+        assert_eq!(
+            decision.transition(),
+            StageTransition::Advance(StageName::GptReview)
+        );
     }
 
     #[test]
@@ -1296,7 +1321,9 @@ mod pipeline_stage_tests {
 
     #[test]
     fn given_stage_when_getting_next_stage_then_returns_correct_next() {
-        assert_eq!(StageName::Contract.next(), Some(StageName::Tdd15));
+        assert_eq!(StageName::Contract.next(), Some(StageName::DesignDag));
+        assert_eq!(StageName::DesignDag.next(), Some(StageName::Implement));
+        assert_eq!(StageName::Implement.next(), Some(StageName::Tdd15));
         assert_eq!(StageName::Tdd15.next(), Some(StageName::Qa));
         assert_eq!(StageName::Qa.next(), Some(StageName::RedQueen));
         assert_eq!(StageName::RedQueen.next(), Some(StageName::GptReview));
@@ -1307,6 +1334,8 @@ mod pipeline_stage_tests {
     #[test]
     fn given_stage_when_getting_model_tier_then_returns_efficient_tier() {
         assert_eq!(StageName::Contract.model_for_stage(), ModelTier::Fast);
+        assert_eq!(StageName::DesignDag.model_for_stage(), ModelTier::Balanced);
+        assert_eq!(StageName::Implement.model_for_stage(), ModelTier::Balanced);
         assert_eq!(StageName::Tdd15.model_for_stage(), ModelTier::Balanced);
         assert_eq!(StageName::Qa.model_for_stage(), ModelTier::Balanced);
         assert_eq!(StageName::RedQueen.model_for_stage(), ModelTier::Capable);
@@ -1317,6 +1346,8 @@ mod pipeline_stage_tests {
     #[test]
     fn given_stage_when_getting_max_attempts_then_returns_three() {
         assert_eq!(StageName::Contract.max_attempts(), 3);
+        assert_eq!(StageName::DesignDag.max_attempts(), 3);
+        assert_eq!(StageName::Implement.max_attempts(), 3);
         assert_eq!(StageName::Tdd15.max_attempts(), 3);
         assert_eq!(StageName::Qa.max_attempts(), 3);
     }
@@ -1324,6 +1355,8 @@ mod pipeline_stage_tests {
     #[test]
     fn given_stage_when_getting_gates_then_returns_appropriate_gates() {
         assert_eq!(StageName::Contract.gates(), vec![Gate::Compiles]);
+        assert_eq!(StageName::DesignDag.gates(), vec![Gate::Compiles]);
+        assert_eq!(StageName::Implement.gates(), vec![Gate::Compiles]);
         assert_eq!(
             StageName::Tdd15.gates(),
             vec![Gate::Compiles, Gate::TestsPass]
@@ -1338,6 +1371,8 @@ mod pipeline_stage_tests {
     fn given_stage_name_roundtrip_then_preserves_value() {
         let stages = [
             "contract",
+            "design_dag",
+            "implement",
             "tdd15",
             "qa",
             "red_queen",
@@ -1345,8 +1380,9 @@ mod pipeline_stage_tests {
             "ship_gate",
         ];
         for s in stages {
-            let parsed = StageName::try_from(s).expect("should parse");
-            assert_eq!(parsed.as_str(), s);
+            let parsed = StageName::try_from(s);
+            assert!(parsed.is_ok());
+            assert_eq!(parsed.map(|stage| stage.as_str()), Ok(s));
         }
     }
 }
@@ -1359,8 +1395,9 @@ mod model_tier_tests {
     fn given_model_tier_roundtrip_then_preserves_value() {
         let tiers = ["fast", "balanced", "capable", "best"];
         for t in tiers {
-            let parsed = ModelTier::try_from(t).expect("should parse");
-            assert_eq!(parsed.as_str(), t);
+            let parsed = ModelTier::try_from(t);
+            assert!(parsed.is_ok());
+            assert_eq!(parsed.map(|tier| tier.as_str()), Ok(t));
         }
     }
 }
@@ -1382,8 +1419,9 @@ mod gate_tests {
             "zjj_merge_queue",
         ];
         for g in gates {
-            let parsed = Gate::try_from(g).expect("should parse");
-            assert_eq!(parsed.as_str(), g);
+            let parsed = Gate::try_from(g);
+            assert!(parsed.is_ok());
+            assert_eq!(parsed.map(|gate| gate.as_str()), Ok(g));
         }
     }
 }

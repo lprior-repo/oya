@@ -17,6 +17,7 @@
 //! - Function has no side effects
 //! - Function is publicly accessible
 
+pub mod application;
 pub mod orchestration;
 pub mod persistence;
 
@@ -131,9 +132,7 @@ mod tests {
     #[test]
     fn test_hello_world_thread_safety() {
         use std::thread;
-        let handles: Vec<_> = (0..10)
-            .map(|_| thread::spawn(hello_world))
-            .collect();
+        let handles: Vec<_> = (0..10).map(|_| thread::spawn(hello_world)).collect();
         for handle in handles {
             assert_eq!(handle.join().expect("thread panicked"), "hello world");
         }
@@ -335,7 +334,10 @@ mod tests {
     fn test_error_handling_into_bytes() {
         let result = hello_world();
         let bytes: Vec<u8> = result.into_bytes();
-        assert_eq!(bytes, vec![104, 101, 108, 108, 111, 32, 119, 111, 114, 108, 100]);
+        assert_eq!(
+            bytes,
+            vec![104, 101, 108, 108, 111, 32, 119, 111, 114, 108, 100]
+        );
     }
 
     #[test]

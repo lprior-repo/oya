@@ -1,4 +1,7 @@
-use crate::orchestration::{Artifact, Run as BeadRun, GateResult, ShipDecision, StageName as Stage, StageAttempt, StageResult, RunState, BeadId, RunId, AgentState, AgentId, AgentStatus};
+use crate::orchestration::{
+    AgentId, AgentState, AgentStatus, Artifact, BeadId, GateResult, Run as BeadRun, RunId,
+    RunState, ShipDecision, StageAttempt, StageName as Stage, StageResult,
+};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sled::Db;
 use std::sync::Arc;
@@ -196,7 +199,8 @@ impl OyaDb {
     }
 
     pub async fn insert_agent_state(&self, state: &AgentState) -> Result<(), OyaDbError> {
-        let current_stage_str = state.current_stage
+        let current_stage_str = state
+            .current_stage
             .as_ref()
             .map(|s| serde_json::to_string(s).map_err(|e| OyaDbError::Serialization(e.to_string())))
             .transpose()?;
@@ -218,22 +222,33 @@ impl OyaDb {
 
     #[allow(dead_code)]
     pub async fn get_agent_state(&self, agent_id: &str) -> Result<Option<AgentState>, OyaDbError> {
-        let record: Option<AgentStateRecord> = self.get_record("agent_states", agent_id.as_bytes()).await?;
+        let record: Option<AgentStateRecord> =
+            self.get_record("agent_states", agent_id.as_bytes()).await?;
 
         match record {
             Some(r) => {
-                let current_stage: Option<Stage> = r.current_stage
-                    .map(|s| serde_json::from_str(&s).map_err(|e| OyaDbError::Serialization(e.to_string())))
-                    .transpose()?;
-                
-                let status = AgentStatus::try_from(r.status.as_str())
-                    .map_err(|e| OyaDbError::Serialization(e))?;
-
-                let stage_started_at = r.stage_started_at
-                    .map(|t| t.parse().map_err(|e: chrono::ParseError| OyaDbError::Serialization(e.to_string())))
+                let current_stage: Option<Stage> = r
+                    .current_stage
+                    .map(|s| {
+                        serde_json::from_str(&s)
+                            .map_err(|e| OyaDbError::Serialization(e.to_string()))
+                    })
                     .transpose()?;
 
-                let last_update = r.last_update
+                let status =
+                    AgentStatus::try_from(r.status.as_str()).map_err(OyaDbError::Serialization)?;
+
+                let stage_started_at = r
+                    .stage_started_at
+                    .map(|t| {
+                        t.parse().map_err(|e: chrono::ParseError| {
+                            OyaDbError::Serialization(e.to_string())
+                        })
+                    })
+                    .transpose()?;
+
+                let last_update = r
+                    .last_update
                     .parse()
                     .map_err(|e: chrono::ParseError| OyaDbError::Serialization(e.to_string()))?;
 
@@ -266,14 +281,10 @@ impl OyaDb {
             .await
     }
 
-    pub async fn update_run_state(
-        &self,
-        run_id: &str,
-        state: &RunState,
-    ) -> Result<(), OyaDbError> {
+    pub async fn update_run_state(&self, run_id: &str, state: &RunState) -> Result<(), OyaDbError> {
         let run_id_owned = run_id.to_string();
-        let state_owned = serde_json::to_string(state)
-            .map_err(|e| OyaDbError::Serialization(e.to_string()))?;
+        let state_owned =
+            serde_json::to_string(state).map_err(|e| OyaDbError::Serialization(e.to_string()))?;
         let db = Arc::clone(&self.db);
 
         tokio::task::spawn_blocking(move || {
@@ -390,20 +401,26 @@ impl OyaDb {
     pub async fn insert_stage_result(&self, result: &StageResult) -> Result<(), OyaDbError> {
         let stage_str = serde_json::to_string(&result.stage)
             .map_err(|e| OyaDbError::Serialization(e.to_string()))?;
+        let failure_category = result
+            .failure_category
+            .as_ref()
+            .map(|f| serde_json::to_string(f).map_err(|e| OyaDbError::Serialization(e.to_string())))
+            .transpose()?;
+
+        let next_stage = result
+            .next_stage
+            .as_ref()
+            .map(|s| serde_json::to_string(s).map_err(|e| OyaDbError::Serialization(e.to_string())))
+            .transpose()?;
+
         let record = StageResultRecord {
             run_id: result.run_id.clone(),
             stage: stage_str.clone(),
             attempt: result.attempt,
             passed: result.passed,
             output: Some(result.output.to_string()),
-            failure_category: result
-                .failure_category
-                .as_ref()
-                .map(|f| serde_json::to_string(f).unwrap_or_default()),
-            next_stage: result
-                .next_stage
-                .as_ref()
-                .map(|s| serde_json::to_string(s).unwrap_or_default()),
+            failure_category,
+            next_stage,
         };
 
         let key = format!("{}:{}:{:03}", result.run_id, stage_str, result.attempt);
