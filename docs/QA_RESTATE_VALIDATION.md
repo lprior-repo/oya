@@ -11,12 +11,12 @@ This document captures what we validated in live QA against Restate and how to r
 - A lightweight object handler is required for deterministic liveness checks during QA.
 - The orchestrator now includes `ping` for that purpose.
 
-## Live Validation Flow
+## Live Validation Flow (Docker-First Default)
 
-1. Start the OYA endpoint:
+1. Start runtime with Docker Restate + local OYA service:
 
 ```bash
-OYA_BIND_ADDR=127.0.0.1:9080 moon run :run
+scripts/dev-up.sh
 ```
 
 2. Validate Restate admin health:
@@ -31,22 +31,23 @@ Expected:
 - `200 OK` from `/health`
 - `200 OK` from `/services` and an `OyaOrchestrator` entry
 
-3. Validate object-level liveness through ingress:
+3. Validate ingress liveness:
 
 ```bash
-curl -sS -i -X POST http://127.0.0.1:8080/OyaOrchestrator/qa-ping/ping
+curl -sS -i http://127.0.0.1:8080/restate/health
 ```
 
-Expected body shape:
+Expected:
 
-```json
-"{\"status\":\"ok\",\"service\":\"OyaOrchestrator\"}"
+- `200 OK`
+
+4. Start one pipeline run:
+
+```bash
+scripts/pipeline-run.sh qa-run-001 qa-bead-001 "qa validation"
 ```
 
-If you receive handler-not-found for `ping`, the active Restate deployment is stale and still
-serving an older revision. Redeploy/re-register the endpoint before continuing validation.
-
-4. Validate input contract failure path:
+5. Validate input contract failure path:
 
 ```bash
 curl -sS -i -X POST http://127.0.0.1:8080/OyaOrchestrator/qa-invalid-json/start \
@@ -61,12 +62,29 @@ Expected: `400 Bad Request` with decode error details.
 - External command execution in orchestrator stages now has explicit timeout boundaries.
 - Timeout failures return actionable output instead of stalling the stage indefinitely.
 
-## Current Environment Observation
+## Runtime Commands
 
-During QA, Restate registry still exposed only `start` and `get_status` for
-`OyaOrchestrator` (revision `2`), so `ping` was not yet routable via ingress. The binary starts
-locally on `127.0.0.1:9080`, but ingress behavior is pinned to currently active deployment
-metadata.
+- Start: `scripts/dev-up.sh`
+- Stop: `scripts/dev-down.sh`
+- Full reset (including Restate local data volume): `scripts/dev-reset.sh`
+
+Local Docker runtime sets `OYA_SKIP_ZJJ_GATE=1` by default, so ship-gate does not require being
+inside a zjj workspace during pipeline validation.
+
+## Replay Safety Note
+
+If workflow code changes while old invocations are still replaying, Restate can raise replay
+mismatch errors (for example: previous journal recorded `clear state` but current code emits
+`set state`).
+
+In local development, when this happens:
+
+```bash
+scripts/dev-reset.sh
+scripts/dev-up.sh
+```
+
+This clears stale invocation/journal state so the new workflow revision can run deterministically.
 
 ## Recommended QA Gate Set
 

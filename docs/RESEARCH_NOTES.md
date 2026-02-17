@@ -1,27 +1,11 @@
-# manual-e2e-bead: string payload accepted
+# bead-cupid
 
-## Start payload contract (`src/main.rs`)
-- `start` accepts `Json<serde_json::Value>` and parser supports only two shapes: JSON object or JSON string containing a JSON object.
-- Object path uses `serde_json::from_value`; string path uses `serde_json::from_str` into `StartRequestPayload`.
-- Payload model is `StartRequestPayload { bead_id: Option<String>, context: Option<String> }`.
-- Non-object/non-string payloads (`number/array/bool/null`) fail with `expected object or JSON string`.
-
-## Runtime behavior after parse
-- `bead_id` defaults to `"unknown"` when missing; `context` defaults to `""` when missing.
-- `run_id` is always `ctx.key()` and is returned immediately after `tokio::spawn`.
-- `start` does not surface async pipeline failures in response; failures are logged from background execution.
-
-## Idempotency and status constraints
-- `start_or_resume_pipeline` sets `run.id = ctx.key()` and inserts via `insert_bead_run_if_absent`.
-- Duplicate `run_id` is treated as success (`DuplicateRunKey` short-circuits with no-op).
-- `get_status` requires persisted run; otherwise returns `Run not found`.
-
-## Stage and gate constraints relevant to manual e2e
-- Canonical stage sequence is fixed: `research -> plan -> contract -> tdd15 -> qa -> red_queen -> gpt_review -> ship_gate`.
-- Per-stage max attempts are fixed at `3`.
-- Retryability is fixed by `FailureCategory`: `OutputParseFailure` is terminal; `CompileFailed/TestFailed/LintFailed/MergeConflict` are retryable.
-- Quality gates execute fixed commands: `moon run :check|:test|:quick|:ci` and `zjj done --dry-run`.
-
-## Existing test coverage proving requirement
-- `parse_start_request_accepts_json_string_payload` verifies acceptance of string body `{"bead_id":"manual-e2e-bead","context":"string payload"}`.
-- Companion tests verify object-body acceptance and non-object/non-string rejection.
+## Implementation constraints
+- Keep crate safety attributes unchanged in `src/lib.rs` and `src/main.rs`: deny `unwrap_used`, `expect_used`, `panic`; forbid `unsafe_code`.
+- Preserve the canonical stage sequence and transition model in `src/types.rs`: `research -> plan -> contract -> tdd15 -> qa -> red_queen -> gpt_review -> ship_gate`, with `max_attempts = 3`.
+- Keep stage gate contracts stable (`StageName::gates` + runtime gate execution): `moon run :check`, `moon run :test`, `moon run :quick`, `moon run :ci`, `zjj done --dry-run`.
+- Keep failure/retry behavior stable in orchestrator loop (`src/main.rs`): retry only `TestFailed`, `LintFailed`, `OutputParseFailure`; block on non-retryable failures or max attempts.
+- Preserve orchestrator state/event schema and key conventions (`state`, `run_request`, `timeline`, `event_seq`, `event_####`, and per-stage `{stage}_{attempt}_{input|result|skill_output|gate_*|event}`).
+- Preserve execution timeouts and shell contract in `src/main.rs`: OpenCode 300s, moon 900s, zjj 60s; commands execute via `timeout` from repo root.
+- For functional-core additions in `src/lib.rs`, follow existing pattern: normalize input (`trim`), enforce length/charset/url constraints, return typed `Result` errors (no panic path), derive decisions only from observed checks, enforce fixed stage order, non-empty diagnostics, and monotonic timestamps.
+- Keep runtime endpoint defaults and validation contracts unchanged for smoke-style flows: `scripts/dev-up.sh`, `http://localhost:8080/restate/health`, `http://localhost:8080/OyaOrchestrator/{run_id}/get_status`.

@@ -17,3 +17,5 @@
 {"kind":"ref","moon":"/home/lewis/src/oya/.moon/tasks.yml"}
 {"kind":"ref","rust":"/home/lewis/src/oya/docs/FUNCTIONAL_RUST.md"}
 {"kind":"ref","beads":"/home/lewis/src/oya/docs/BEADS.md"}
+{"kind":"restate","ui":"http://localhost:9070","ingress":"http://localhost:8080","service":"http://localhost:9080","default_runtime":"scripts/dev-up.sh"}
+{"kind":"cmd","tool":"restate","list":["scripts/dev-up.sh (start Docker-first runtime)","scripts/dev-down.sh (stop runtime)","scripts/dev-reset.sh (reset Restate state)","scripts/pipeline-run.sh <run_id> <bead_id> [context] (run + observe pipeline)","http://localhost:9070 (Admin/UI)","http://localhost:8080 (Ingress API)","http://localhost:8080/restate/health (Health)","http://localhost:8080/OyaOrchestrator/<id>/start/send (Start pipeline async)"]}
