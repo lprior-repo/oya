@@ -8,28 +8,28 @@
 //! This crate provides the Oya orchestrator for managing development workflows
 //! with Restate durable execution, quality gates, and bead tracking.
 //!
-//! # Design Contract: `src-1ew`
+//! # Design Contract: `test-trace-final`
 //!
 //! ## Purpose and goals
-//! - Provide a deterministic `src-1ew` pipeline contract for planning, runtime checks,
-//!   observation capture, and final gate evaluation.
-//! - Enforce strict input validation and stable outputs so repeated runs with the same
-//!   inputs produce equivalent results.
-//! - Keep execution safe and auditable through explicit stage reports and derived decisions.
+//! - Define a deterministic final-stage trace contract for planning, trace collection,
+//!   report evaluation, and final gate validation.
+//! - Guarantee reproducible outcomes for identical inputs by enforcing strict validation,
+//!   stable stage ordering, and explicit decision derivation.
+//! - Preserve auditability through structured diagnostics and monotonic event timestamps.
 //!
 //! ## Key functions to implement
-//! - `build_src_1ew_plan(input: &Src1ewInput) -> Result<Src1ewPlan, Src1ewError>`
-//! - `start_src_1ew_runtime(plan: &Src1ewPlan) -> Result<Src1ewRuntimeHandle, Src1ewError>`
-//! - `capture_src_1ew_observation(handle: &Src1ewRuntimeHandle) -> Result<Src1ewObservation, Src1ewError>`
-//! - `evaluate_src_1ew_observation(observation: &Src1ewObservation) -> Result<Src1ewReport, Src1ewError>`
-//! - `validate_src_1ew_report(report: &Src1ewReport) -> Result<(), Src1ewError>`
+//! - `build_test_trace_final_plan(input: &TestTraceFinalInput) -> Result<TestTraceFinalPlan, TestTraceFinalError>`
+//! - `collect_test_trace_final_observation(plan: &TestTraceFinalPlan) -> Result<TestTraceFinalObservation, TestTraceFinalError>`
+//! - `evaluate_test_trace_final_report(observation: &TestTraceFinalObservation) -> Result<TestTraceFinalReport, TestTraceFinalError>`
+//! - `derive_test_trace_final_decision(report: &TestTraceFinalReport) -> TestTraceFinalDecision`
+//! - `validate_test_trace_final_report(report: &TestTraceFinalReport) -> Result<(), TestTraceFinalError>`
 //!
 //! ## Acceptance criteria
-//! - Plan building rejects empty, oversized, or control-character-contaminated fields.
-//! - Runtime start validates required contract fields and fails on contract mismatches.
-//! - Observation capture emits ordered checks with non-empty diagnostics and valid timestamps.
-//! - Report validation enforces stage order, monotonic timestamps, and decision consistency.
-//! - The final decision is derived only from stage/check outcomes and is reproducible.
+//! - Plan creation rejects empty fields, over-limit inputs, and invalid control characters.
+//! - Observation collection emits ordered checks with non-empty diagnostics and valid timestamps.
+//! - Report evaluation preserves contract stage order and enforces monotonic timestamps.
+//! - Final decision is derived only from trace/check outcomes and matches validation results.
+//! - Re-running with equivalent inputs yields equivalent report structure and decisions.
 
 pub mod orchestrator;
 pub mod telemetry;
@@ -4659,6 +4659,368 @@ fn derive_src_1ew_decision(checks: &[Src1ewCheckObservation]) -> Src1ewDecision 
         Src1ewDecision::Pass
     } else {
         Src1ewDecision::Fail
+    }
+}
+
+const MAX_TEST_TRACE_FINAL_WORKFLOW_ID_LEN: usize = 128;
+const MAX_TEST_TRACE_FINAL_TRACE_ID_LEN: usize = 128;
+const MAX_TEST_TRACE_FINAL_STAGE_NAME_LEN: usize = 64;
+const MAX_TEST_TRACE_FINAL_DIAGNOSTICS_LEN: usize = 4096;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TestTraceFinalInput {
+    pub workflow_id: String,
+    pub trace_id: String,
+    pub stage_name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TestTraceFinalPlan {
+    pub workflow_id: String,
+    pub trace_id: String,
+    pub stage_name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TestTraceFinalCheckName {
+    PlanContract,
+    TraceCollection,
+    FinalGateSignal,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TestTraceFinalCheckObservation {
+    pub check: TestTraceFinalCheckName,
+    pub success: bool,
+    pub diagnostics: String,
+    pub timestamp: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TestTraceFinalObservation {
+    pub plan: TestTraceFinalPlan,
+    pub checks: Vec<TestTraceFinalCheckObservation>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TestTraceFinalDecision {
+    Pass,
+    Fail,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TestTraceFinalStageName {
+    PlanContract,
+    TraceCollection,
+    FinalDecision,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TestTraceFinalStageStatus {
+    Passed,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TestTraceFinalStageReport {
+    pub stage: TestTraceFinalStageName,
+    pub status: TestTraceFinalStageStatus,
+    pub diagnostics: String,
+    pub timestamp: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TestTraceFinalReport {
+    pub plan: TestTraceFinalPlan,
+    pub checks: Vec<TestTraceFinalCheckObservation>,
+    pub stages: Vec<TestTraceFinalStageReport>,
+    pub decision: TestTraceFinalDecision,
+}
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum TestTraceFinalError {
+    #[error("test-trace-final field is empty: {0}")]
+    EmptyField(&'static str),
+    #[error("test-trace-final field exceeds max length: {0} > {1}")]
+    FieldTooLong(&'static str, usize),
+    #[error("test-trace-final field has invalid control characters: {0}")]
+    InvalidFieldContent(&'static str),
+    #[error("test-trace-final report invalid: {0}")]
+    InvalidReport(&'static str),
+}
+
+pub fn build_test_trace_final_plan(
+    input: &TestTraceFinalInput,
+) -> Result<TestTraceFinalPlan, TestTraceFinalError> {
+    let workflow_id = validate_test_trace_final_field(
+        input.workflow_id.as_str(),
+        "workflow_id",
+        MAX_TEST_TRACE_FINAL_WORKFLOW_ID_LEN,
+    )?;
+    let trace_id = validate_test_trace_final_field(
+        input.trace_id.as_str(),
+        "trace_id",
+        MAX_TEST_TRACE_FINAL_TRACE_ID_LEN,
+    )?;
+    let stage_name = validate_test_trace_final_field(
+        input.stage_name.as_str(),
+        "stage_name",
+        MAX_TEST_TRACE_FINAL_STAGE_NAME_LEN,
+    )?;
+
+    Ok(TestTraceFinalPlan { workflow_id, trace_id, stage_name })
+}
+
+pub fn collect_test_trace_final_observation(
+    plan: &TestTraceFinalPlan,
+) -> Result<TestTraceFinalObservation, TestTraceFinalError> {
+    let workflow_id = validate_test_trace_final_field(
+        plan.workflow_id.as_str(),
+        "workflow_id",
+        MAX_TEST_TRACE_FINAL_WORKFLOW_ID_LEN,
+    )?;
+    let trace_id = validate_test_trace_final_field(
+        plan.trace_id.as_str(),
+        "trace_id",
+        MAX_TEST_TRACE_FINAL_TRACE_ID_LEN,
+    )?;
+    let stage_name = validate_test_trace_final_field(
+        plan.stage_name.as_str(),
+        "stage_name",
+        MAX_TEST_TRACE_FINAL_STAGE_NAME_LEN,
+    )?;
+
+    let gate_signal = !stage_name.to_ascii_lowercase().contains("fail");
+    let base = Utc::now();
+    let checks = vec![
+        TestTraceFinalCheckObservation {
+            check: TestTraceFinalCheckName::PlanContract,
+            success: true,
+            diagnostics: "plan contract verified".to_string(),
+            timestamp: base,
+        },
+        TestTraceFinalCheckObservation {
+            check: TestTraceFinalCheckName::TraceCollection,
+            success: true,
+            diagnostics: format!("trace {} collected", trace_id),
+            timestamp: base + chrono::Duration::milliseconds(1),
+        },
+        TestTraceFinalCheckObservation {
+            check: TestTraceFinalCheckName::FinalGateSignal,
+            success: gate_signal,
+            diagnostics: if gate_signal {
+                "final gate signal pass".to_string()
+            } else {
+                "final gate signal fail".to_string()
+            },
+            timestamp: base + chrono::Duration::milliseconds(2),
+        },
+    ];
+
+    Ok(TestTraceFinalObservation {
+        plan: TestTraceFinalPlan { workflow_id, trace_id, stage_name },
+        checks,
+    })
+}
+
+pub fn evaluate_test_trace_final_report(
+    observation: &TestTraceFinalObservation,
+) -> Result<TestTraceFinalReport, TestTraceFinalError> {
+    validate_test_trace_final_checks(observation.checks.as_slice())?;
+
+    let stages = observation
+        .checks
+        .iter()
+        .map(|check| TestTraceFinalStageReport {
+            stage: map_test_trace_final_stage_name(&check.check),
+            status: if check.success {
+                TestTraceFinalStageStatus::Passed
+            } else {
+                TestTraceFinalStageStatus::Failed
+            },
+            diagnostics: check.diagnostics.clone(),
+            timestamp: check.timestamp,
+        })
+        .collect::<Vec<_>>();
+
+    let mut report = TestTraceFinalReport {
+        plan: observation.plan.clone(),
+        checks: observation.checks.clone(),
+        stages,
+        decision: TestTraceFinalDecision::Fail,
+    };
+    report.decision = derive_test_trace_final_decision(&report);
+
+    validate_test_trace_final_report(&report)?;
+    Ok(report)
+}
+
+pub fn derive_test_trace_final_decision(report: &TestTraceFinalReport) -> TestTraceFinalDecision {
+    if report.checks.iter().all(|check| check.success) {
+        TestTraceFinalDecision::Pass
+    } else {
+        TestTraceFinalDecision::Fail
+    }
+}
+
+pub fn validate_test_trace_final_report(
+    report: &TestTraceFinalReport,
+) -> Result<(), TestTraceFinalError> {
+    validate_test_trace_final_field(
+        report.plan.workflow_id.as_str(),
+        "workflow_id",
+        MAX_TEST_TRACE_FINAL_WORKFLOW_ID_LEN,
+    )?;
+    validate_test_trace_final_field(
+        report.plan.trace_id.as_str(),
+        "trace_id",
+        MAX_TEST_TRACE_FINAL_TRACE_ID_LEN,
+    )?;
+    validate_test_trace_final_field(
+        report.plan.stage_name.as_str(),
+        "stage_name",
+        MAX_TEST_TRACE_FINAL_STAGE_NAME_LEN,
+    )?;
+    validate_test_trace_final_checks(report.checks.as_slice())?;
+
+    let expected_stage_order = [
+        TestTraceFinalStageName::PlanContract,
+        TestTraceFinalStageName::TraceCollection,
+        TestTraceFinalStageName::FinalDecision,
+    ];
+    if report.stages.len() != expected_stage_order.len() {
+        return Err(TestTraceFinalError::InvalidReport("unexpected stage count"));
+    }
+
+    let stage_order_valid = report
+        .stages
+        .iter()
+        .map(|stage| stage.stage.clone())
+        .eq(expected_stage_order.iter().cloned());
+    if !stage_order_valid {
+        return Err(TestTraceFinalError::InvalidReport("invalid stage order"));
+    }
+
+    let has_empty_stage_diagnostics =
+        report.stages.iter().any(|stage| stage.diagnostics.trim().is_empty());
+    if has_empty_stage_diagnostics {
+        return Err(TestTraceFinalError::InvalidReport("empty stage diagnostics"));
+    }
+
+    let has_oversized_stage_diagnostics = report
+        .stages
+        .iter()
+        .any(|stage| stage.diagnostics.len() > MAX_TEST_TRACE_FINAL_DIAGNOSTICS_LEN);
+    if has_oversized_stage_diagnostics {
+        return Err(TestTraceFinalError::InvalidReport("stage diagnostics exceed max length"));
+    }
+
+    let has_invalid_stage_diagnostics = report
+        .stages
+        .iter()
+        .any(|stage| contains_forbidden_control_chars(stage.diagnostics.as_str()));
+    if has_invalid_stage_diagnostics {
+        return Err(TestTraceFinalError::InvalidReport(
+            "stage diagnostics contain invalid control characters",
+        ));
+    }
+
+    let non_monotonic_stage_timestamps =
+        report.stages.windows(2).any(|pair| pair[0].timestamp > pair[1].timestamp);
+    if non_monotonic_stage_timestamps {
+        return Err(TestTraceFinalError::InvalidReport("non-monotonic stage timestamps"));
+    }
+
+    let stage_status_mismatch =
+        report.stages.iter().zip(report.checks.iter()).any(|(stage, check)| {
+            let expected = if check.success {
+                TestTraceFinalStageStatus::Passed
+            } else {
+                TestTraceFinalStageStatus::Failed
+            };
+            stage.status != expected
+        });
+    if stage_status_mismatch {
+        return Err(TestTraceFinalError::InvalidReport("stage status mismatch"));
+    }
+
+    let derived = derive_test_trace_final_decision(report);
+    if derived != report.decision {
+        return Err(TestTraceFinalError::InvalidReport("decision mismatch"));
+    }
+
+    Ok(())
+}
+
+fn validate_test_trace_final_field(
+    value: &str,
+    field: &'static str,
+    max_len: usize,
+) -> Result<String, TestTraceFinalError> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(TestTraceFinalError::EmptyField(field));
+    }
+    if trimmed.len() > max_len {
+        return Err(TestTraceFinalError::FieldTooLong(field, max_len));
+    }
+    if contains_forbidden_control_chars(trimmed) {
+        return Err(TestTraceFinalError::InvalidFieldContent(field));
+    }
+
+    Ok(trimmed.to_string())
+}
+
+fn validate_test_trace_final_checks(
+    checks: &[TestTraceFinalCheckObservation],
+) -> Result<(), TestTraceFinalError> {
+    if checks.len() != 3 {
+        return Err(TestTraceFinalError::InvalidReport("invalid check count"));
+    }
+
+    let expected_order = [
+        TestTraceFinalCheckName::PlanContract,
+        TestTraceFinalCheckName::TraceCollection,
+        TestTraceFinalCheckName::FinalGateSignal,
+    ];
+    let order_valid = checks.iter().map(|check| check.check.clone()).eq(expected_order);
+    if !order_valid {
+        return Err(TestTraceFinalError::InvalidReport("invalid check order"));
+    }
+
+    let has_empty_diagnostics = checks.iter().any(|check| check.diagnostics.trim().is_empty());
+    if has_empty_diagnostics {
+        return Err(TestTraceFinalError::InvalidReport("empty check diagnostics"));
+    }
+
+    let has_oversized_diagnostics =
+        checks.iter().any(|check| check.diagnostics.len() > MAX_TEST_TRACE_FINAL_DIAGNOSTICS_LEN);
+    if has_oversized_diagnostics {
+        return Err(TestTraceFinalError::InvalidReport("check diagnostics exceed max length"));
+    }
+
+    let has_invalid_diagnostics =
+        checks.iter().any(|check| contains_forbidden_control_chars(check.diagnostics.as_str()));
+    if has_invalid_diagnostics {
+        return Err(TestTraceFinalError::InvalidReport(
+            "check diagnostics contain invalid control characters",
+        ));
+    }
+
+    let non_monotonic_check_timestamps =
+        checks.windows(2).any(|pair| pair[0].timestamp > pair[1].timestamp);
+    if non_monotonic_check_timestamps {
+        return Err(TestTraceFinalError::InvalidReport("non-monotonic check timestamps"));
+    }
+
+    Ok(())
+}
+
+fn map_test_trace_final_stage_name(check: &TestTraceFinalCheckName) -> TestTraceFinalStageName {
+    match check {
+        TestTraceFinalCheckName::PlanContract => TestTraceFinalStageName::PlanContract,
+        TestTraceFinalCheckName::TraceCollection => TestTraceFinalStageName::TraceCollection,
+        TestTraceFinalCheckName::FinalGateSignal => TestTraceFinalStageName::FinalDecision,
     }
 }
 
@@ -10527,5 +10889,133 @@ mod tests {
         report.decision = SrcKesDecision::Fail;
 
         assert_eq!(validate_src_kes_report(&report), Ok(()));
+    }
+
+    #[test]
+    fn build_test_trace_final_plan_rejects_empty_fields() {
+        let result = build_test_trace_final_plan(&TestTraceFinalInput {
+            workflow_id: "   ".to_string(),
+            trace_id: "trace-001".to_string(),
+            stage_name: "final".to_string(),
+        });
+
+        assert_eq!(result, Err(TestTraceFinalError::EmptyField("workflow_id")));
+    }
+
+    #[test]
+    fn build_test_trace_final_plan_rejects_oversized_inputs() {
+        let result = build_test_trace_final_plan(&TestTraceFinalInput {
+            workflow_id: "w".repeat(MAX_TEST_TRACE_FINAL_WORKFLOW_ID_LEN + 1),
+            trace_id: "trace-001".to_string(),
+            stage_name: "final".to_string(),
+        });
+
+        assert_eq!(
+            result,
+            Err(TestTraceFinalError::FieldTooLong(
+                "workflow_id",
+                MAX_TEST_TRACE_FINAL_WORKFLOW_ID_LEN,
+            ))
+        );
+    }
+
+    #[test]
+    fn build_test_trace_final_plan_rejects_invalid_control_characters() {
+        let result = build_test_trace_final_plan(&TestTraceFinalInput {
+            workflow_id: "wf-001".to_string(),
+            trace_id: "trace\u{0007}-001".to_string(),
+            stage_name: "final".to_string(),
+        });
+
+        assert_eq!(result, Err(TestTraceFinalError::InvalidFieldContent("trace_id")));
+    }
+
+    #[test]
+    fn collect_test_trace_final_observation_emits_ordered_checks_and_monotonic_timestamps() {
+        let plan_result = build_test_trace_final_plan(&TestTraceFinalInput {
+            workflow_id: "wf-001".to_string(),
+            trace_id: "trace-001".to_string(),
+            stage_name: "final".to_string(),
+        });
+        assert!(plan_result.is_ok());
+        let Ok(plan) = plan_result else {
+            return;
+        };
+
+        let observation_result = collect_test_trace_final_observation(&plan);
+        assert!(observation_result.is_ok());
+        let Ok(observation) = observation_result else {
+            return;
+        };
+
+        assert_eq!(observation.checks.len(), 3);
+        assert_eq!(observation.checks[0].check, TestTraceFinalCheckName::PlanContract);
+        assert_eq!(observation.checks[1].check, TestTraceFinalCheckName::TraceCollection);
+        assert_eq!(observation.checks[2].check, TestTraceFinalCheckName::FinalGateSignal);
+        assert!(observation.checks.iter().all(|check| !check.diagnostics.trim().is_empty()));
+        assert!(observation.checks.windows(2).all(|pair| pair[0].timestamp <= pair[1].timestamp));
+    }
+
+    #[test]
+    fn evaluate_test_trace_final_report_preserves_stage_order_and_validates_timestamps() {
+        let plan_result = build_test_trace_final_plan(&TestTraceFinalInput {
+            workflow_id: "wf-002".to_string(),
+            trace_id: "trace-002".to_string(),
+            stage_name: "final".to_string(),
+        });
+        assert!(plan_result.is_ok());
+        let Ok(plan) = plan_result else {
+            return;
+        };
+
+        let observation_result = collect_test_trace_final_observation(&plan);
+        assert!(observation_result.is_ok());
+        let Ok(observation) = observation_result else {
+            return;
+        };
+
+        let report_result = evaluate_test_trace_final_report(&observation);
+        assert!(report_result.is_ok());
+        let Ok(report) = report_result else {
+            return;
+        };
+
+        assert_eq!(report.stages.len(), 3);
+        assert_eq!(report.stages[0].stage, TestTraceFinalStageName::PlanContract);
+        assert_eq!(report.stages[1].stage, TestTraceFinalStageName::TraceCollection);
+        assert_eq!(report.stages[2].stage, TestTraceFinalStageName::FinalDecision);
+        assert!(report.stages.windows(2).all(|pair| pair[0].timestamp <= pair[1].timestamp));
+        assert_eq!(validate_test_trace_final_report(&report), Ok(()));
+    }
+
+    #[test]
+    fn validate_test_trace_final_report_rejects_decision_mismatch() {
+        let plan_result = build_test_trace_final_plan(&TestTraceFinalInput {
+            workflow_id: "wf-003".to_string(),
+            trace_id: "trace-003".to_string(),
+            stage_name: "final".to_string(),
+        });
+        assert!(plan_result.is_ok());
+        let Ok(plan) = plan_result else {
+            return;
+        };
+
+        let observation_result = collect_test_trace_final_observation(&plan);
+        assert!(observation_result.is_ok());
+        let Ok(observation) = observation_result else {
+            return;
+        };
+
+        let report_result = evaluate_test_trace_final_report(&observation);
+        assert!(report_result.is_ok());
+        let Ok(mut report) = report_result else {
+            return;
+        };
+        report.decision = TestTraceFinalDecision::Fail;
+
+        assert_eq!(
+            validate_test_trace_final_report(&report),
+            Err(TestTraceFinalError::InvalidReport("decision mismatch"))
+        );
     }
 }

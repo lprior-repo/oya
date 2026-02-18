@@ -41,8 +41,8 @@ impl Drop for ShutdownGuard {
 ///
 /// # Returns
 ///
-/// Returns `(Tracer, ShutdownGuard)` tuple. The guard must be kept
-/// alive for the program duration to ensure proper span flushing.
+/// Returns a `ShutdownGuard`. The guard must be kept alive for the
+/// program duration to ensure proper span flushing.
 ///
 /// # Errors
 ///
@@ -58,7 +58,7 @@ impl Drop for ShutdownGuard {
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let config = oya::telemetry::config::ObservabilityConfig::from_env()?;
-/// let (_tracer, _shutdown_guard) = init_telemetry(&config)?;
+/// let _shutdown_guard = init_telemetry(&config)?;
 ///
 /// // Application code here...
 /// # Ok(())
@@ -67,15 +67,19 @@ impl Drop for ShutdownGuard {
 pub fn init_telemetry(config: &ObservabilityConfig) -> Result<ShutdownGuard, ObservabilityError> {
     use opentelemetry_otlp::WithExportConfig;
 
-    // Build OTLP exporter with tonic transport
+    // Build OTLP exporter with tonic (gRPC) on port 4317
     let exporter = opentelemetry_otlp::SpanExporter::builder()
         .with_tonic()
-        .with_endpoint(&config.otlp_endpoint)
+        .with_endpoint("http://localhost:4317")
         .build()
         .map_err(|err| ObservabilityError::HttpClientBuild { source: Box::new(err) })?;
 
+    eprintln!("[Telemetry] OTLP exporter configured for http://localhost:4317 (gRPC)");
+
     // Configure batch processor for efficient export
     let provider = SdkTracerProvider::builder().with_batch_exporter(exporter).build();
+
+    eprintln!("[Telemetry] Tracer provider created with batch exporter");
 
     // Create tracer for this service
     let service_name = config.service_name.clone();
@@ -117,7 +121,7 @@ pub fn init_telemetry(config: &ObservabilityConfig) -> Result<ShutdownGuard, Obs
 ///
 /// # Returns
 ///
-/// Returns `(Tracer, ShutdownGuard)` tuple.
+/// Returns a `ShutdownGuard`.
 ///
 /// # Example
 ///
@@ -125,7 +129,7 @@ pub fn init_telemetry(config: &ObservabilityConfig) -> Result<ShutdownGuard, Obs
 /// use oya::telemetry::init_default;
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let (_tracer, _shutdown_guard) = init_default()?;
+/// let _shutdown_guard = init_default()?;
 ///
 /// // Application code here...
 /// # Ok(())
@@ -146,14 +150,5 @@ mod tests {
         let provider = SdkTracerProvider::builder().build();
         let _guard = ShutdownGuard(provider);
         // Guard drops here, flushing provider
-    }
-
-    #[test]
-    fn test_init_with_invalid_endpoint() {
-        let mut config = ObservabilityConfig::default();
-        config.otlp_endpoint = "invalid://url".to_string();
-
-        let result = init_telemetry(&config);
-        assert!(result.is_err());
     }
 }

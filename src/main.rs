@@ -1212,12 +1212,13 @@ fn prepare_stage_workspace(
         .map_err(|error| OyaError(format!("Invalid workspace name for stage prep: {}", error)))?;
 
     let queue_command = format!("zjj queue --add {} --bead {}", workspace, bead_id);
-    let (queue_passed, queue_stdout, queue_stderr, queue_exit_code) = run_command_with_timeout_with_exit(
-        "zjj",
-        &["queue", "--add", workspace.as_str(), "--bead", bead_id],
-        ZJJ_TIMEOUT_SECONDS,
-        repo_root,
-    )?;
+    let (queue_passed, queue_stdout, queue_stderr, queue_exit_code) =
+        run_command_with_timeout_with_exit(
+            "zjj",
+            &["queue", "--add", workspace.as_str(), "--bead", bead_id],
+            ZJJ_TIMEOUT_SECONDS,
+            repo_root,
+        )?;
     let queue_output = format!("{}\n{}", queue_stdout, queue_stderr);
     if !queue_passed {
         return Err(OyaError(format!(
@@ -1582,6 +1583,382 @@ enum CliCommand {
     Serve,
     #[command(about = "Continuously poll OpenCode status and stream to stdout")]
     OpsPoll,
+    #[command(about = "Run a bead through the TDD15 pipeline via Restate")]
+    Run(RunArgs),
+}
+
+#[derive(Parser, Debug, Clone, PartialEq)]
+struct RunArgs {
+    #[arg(help = "Bead ID to process (e.g., src-abc123)")]
+    bead_id: String,
+    #[arg(long, default_value = "http://127.0.0.1:8080", help = "Restate ingress URL")]
+    restate_url: String,
+    #[arg(long, default_value = "local docker validation", help = "Context string for workflow")]
+    context: String,
+    #[arg(long, default_value = "3600", help = "Timeout in seconds for workflow completion")]
+    timeout: u64,
+    #[arg(long, help = "Poll interval in seconds for status checks")]
+    poll_interval: Option<u64>,
+}
+
+#[derive(Debug, Clone)]
+struct WorkflowConfig {
+    bead_id: String,
+    run_id: String,
+    restate_ingress: String,
+    restate_admin: String,
+    context: String,
+    timeout_secs: u64,
+    poll_interval_secs: u64,
+    repo_root: PathBuf,
+    stages: &'static [&'static str],
+}
+
+impl WorkflowConfig {
+    fn from_args(args: RunArgs, repo_root: PathBuf) -> Self {
+        let restate_ingress = args.restate_url.trim_end_matches('/').to_string();
+        let restate_admin = restate_ingress.replace(":8080", ":9070");
+        Self {
+            run_id: args.bead_id.clone(),
+            bead_id: args.bead_id,
+            restate_ingress,
+            restate_admin,
+            context: args.context,
+            timeout_secs: args.timeout,
+            poll_interval_secs: args.poll_interval.unwrap_or(5),
+            repo_root,
+            stages: &[
+                "research",
+                "plan",
+                "contract",
+                "tdd15",
+                "qa",
+                "red_queen",
+                "gpt_review",
+                "ship_gate",
+            ],
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct WorkflowStatus {
+    status: String,
+    stage: String,
+    attempt: u32,
+    orchestration_status: String,
+    last_failure: String,
+}
+
+#[derive(Debug, Clone)]
+struct WorkflowResult {
+    bead_id: String,
+    run_id: String,
+    status: String,
+    final_stage: String,
+    error: Option<String>,
+    repo_root: PathBuf,
+}
+
+impl WorkflowStatus {
+    fn from_query_response(body: &str) -> Option<Self> {
+        let rows: Vec<serde_json::Value> = serde_json::from_str(body).ok()?;
+        let row = rows.first()?;
+        let status = row.get("status").and_then(|s| s.as_str())?.to_string();
+        let state_json = row.get("state").and_then(|s| s.as_str()).unwrap_or("{}");
+        let state: serde_json::Value = serde_json::from_str(state_json).ok()?;
+
+        Some(Self {
+            status,
+            stage: state.get("stage").and_then(|s| s.as_str()).unwrap_or("unknown").to_string(),
+            attempt: state.get("attempt").and_then(|a| a.as_u64()).unwrap_or(0) as u32,
+            orchestration_status: state
+                .get("status")
+                .and_then(|s| s.as_str())
+                .unwrap_or("unknown")
+                .to_string(),
+            last_failure: state
+                .get("last_failure")
+                .and_then(|s| s.as_str())
+                .unwrap_or("")
+                .to_string(),
+        })
+    }
+
+    fn is_complete(&self) -> bool {
+        self.status == "completed"
+    }
+
+    fn is_failed(&self) -> bool {
+        self.status == "failed"
+    }
+}
+
+fn find_repo_root() -> Result<PathBuf, String> {
+    let current =
+        std::env::current_dir().map_err(|e| format!("Failed to get current directory: {}", e))?;
+
+    std::iter::successors(Some(current.as_path()), |p| p.parent())
+        .find(|p| p.join(".beads").exists())
+        .map(PathBuf::from)
+        .ok_or_else(|| {
+            format!("No .beads/ directory found in {} or any parent directory", current.display())
+        })
+}
+
+fn validate_bead_exists(bead_id: &str, repo_root: &PathBuf) -> Result<bool, String> {
+    let output = Command::new("br")
+        .args(["show", bead_id, "--json"])
+        .current_dir(repo_root)
+        .output()
+        .map_err(|e| format!("Failed to run 'br show {}': {}", bead_id, e))?;
+
+    Ok(output.status.success())
+}
+
+async fn run_workflow(args: RunArgs) -> Result<(), Box<dyn std::error::Error>> {
+    let repo_root = find_repo_root()
+        .map_err(|e| format!("Failed to find repo root (no .beads/ directory found): {}", e))?;
+
+    if !validate_bead_exists(&args.bead_id, &repo_root)? {
+        return Err(format!(
+            "Bead '{}' not found. Run 'br list' to see available beads.",
+            args.bead_id
+        )
+        .into());
+    }
+
+    let config = WorkflowConfig::from_args(args, repo_root);
+    execute_workflow(config).await
+}
+
+async fn execute_workflow(config: WorkflowConfig) -> Result<(), Box<dyn std::error::Error>> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
+
+    eprintln!(
+        "{}",
+        serde_json::json!({
+            "type": "workflow_starting",
+            "bead_id": config.bead_id,
+            "run_id": config.run_id,
+            "context": config.context,
+            "repo_root": config.repo_root.display().to_string(),
+            "restate_ingress": config.restate_ingress,
+            "restate_admin": config.restate_admin,
+            "timeout_seconds": config.timeout_secs,
+            "poll_interval_seconds": config.poll_interval_secs,
+            "pipeline_stages": config.stages,
+            "tool": "oya",
+            "action": "run"
+        })
+        .to_string()
+    );
+
+    start_workflow(&client, &config).await?;
+
+    eprintln!(
+        "{}",
+        serde_json::json!({
+            "type": "workflow_submitted",
+            "bead_id": config.bead_id,
+            "run_id": config.run_id,
+            "timeout_seconds": config.timeout_secs,
+            "poll_interval_seconds": config.poll_interval_secs,
+            "message": "Workflow submitted to Restate, polling for completion"
+        })
+        .to_string()
+    );
+
+    let final_status = poll_until_complete(&client, &config).await?;
+
+    let result = WorkflowResult {
+        bead_id: config.bead_id.clone(),
+        run_id: config.run_id.clone(),
+        status: final_status.orchestration_status.clone(),
+        final_stage: final_status.stage.clone(),
+        error: if final_status.last_failure.is_empty() {
+            None
+        } else {
+            Some(final_status.last_failure.clone())
+        },
+        repo_root: config.repo_root.clone(),
+    };
+
+    output_result(&result, &config)?;
+
+    if result.status == "shipped" {
+        Ok(())
+    } else {
+        Err(format!("Workflow ended with status: {}", result.status).into())
+    }
+}
+
+fn start_workflow<'a>(
+    client: &'a reqwest::Client,
+    config: &'a WorkflowConfig,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), Box<dyn std::error::Error>>> + 'a>>
+{
+    let start_url =
+        format!("{}/OyaOrchestrator/{}/start/send", config.restate_ingress, config.run_id);
+    let payload = serde_json::json!({
+        "bead_id": config.bead_id,
+        "context": config.context
+    });
+
+    Box::pin(async move {
+        let response = client
+            .post(&start_url)
+            .header("content-type", "application/json")
+            .json(&payload)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to start workflow: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_else(|_| "<no body>".to_string());
+            return Err(format!("Failed to start workflow (HTTP {}): {}", status, body).into());
+        }
+
+        Ok(())
+    })
+}
+
+fn poll_until_complete<'a>(
+    client: &'a reqwest::Client,
+    config: &'a WorkflowConfig,
+) -> std::pin::Pin<
+    Box<dyn std::future::Future<Output = Result<WorkflowStatus, Box<dyn std::error::Error>>> + 'a>,
+> {
+    let start_time = std::time::Instant::now();
+    let timeout_duration = std::time::Duration::from_secs(config.timeout_secs);
+    let poll_interval = std::time::Duration::from_secs(config.poll_interval_secs);
+
+    Box::pin(poll_iteration(client, config, start_time, timeout_duration, poll_interval, None))
+}
+
+fn poll_iteration<'a>(
+    client: &'a reqwest::Client,
+    config: &'a WorkflowConfig,
+    start_time: std::time::Instant,
+    timeout_duration: std::time::Duration,
+    poll_interval: std::time::Duration,
+    last_status: Option<WorkflowStatus>,
+) -> std::pin::Pin<
+    Box<dyn std::future::Future<Output = Result<WorkflowStatus, Box<dyn std::error::Error>>> + 'a>,
+> {
+    Box::pin(async move {
+        if start_time.elapsed() > timeout_duration {
+            return Err(format!("Workflow timed out after {} seconds", config.timeout_secs).into());
+        }
+
+        let status = fetch_workflow_status(client, config).await?;
+
+        let status_changed = last_status.as_ref().map_or(true, |last| {
+            last.status != status.status
+                || last.stage != status.stage
+                || last.attempt != status.attempt
+        });
+
+        if status_changed {
+            let elapsed_secs = start_time.elapsed().as_secs();
+            eprintln!("{}", serde_json::json!({
+                "type": "stage_progress",
+                "bead_id": config.bead_id,
+                "run_id": config.run_id,
+                "invocation_status": status.status,
+                "orchestration_status": status.orchestration_status,
+                "current_stage": status.stage,
+                "attempt": status.attempt,
+                "elapsed_seconds": elapsed_secs,
+                "remaining_seconds": config.timeout_secs.saturating_sub(elapsed_secs),
+                "last_failure": if status.last_failure.is_empty() { serde_json::Value::Null } else { serde_json::json!(status.last_failure) },
+                "pipeline_stages": config.stages,
+                "repo_root": config.repo_root.display().to_string()
+            }).to_string());
+        }
+
+        if status.is_complete() {
+            return Ok(status);
+        }
+
+        if status.is_failed() {
+            return Err(format!("Workflow failed: {}", status.last_failure).into());
+        }
+
+        tokio::time::sleep(poll_interval).await;
+
+        poll_iteration(client, config, start_time, timeout_duration, poll_interval, Some(status))
+            .await
+    })
+}
+
+fn fetch_workflow_status<'a>(
+    client: &'a reqwest::Client,
+    config: &'a WorkflowConfig,
+) -> std::pin::Pin<
+    Box<dyn std::future::Future<Output = Result<WorkflowStatus, Box<dyn std::error::Error>>> + 'a>,
+> {
+    let query_payload = serde_json::json!({
+        "query": format!(
+            "select id, status, state, modified_at from sys_invocation \
+             where target_service_name = 'OyaOrchestrator' \
+             and target_service_key = '{}' \
+             and target_handler_name = 'start' \
+             order by modified_at desc limit 1;",
+            config.run_id
+        )
+    });
+    let restate_admin = config.restate_admin.clone();
+
+    Box::pin(async move {
+        let response = client
+            .post(&format!("{}/query", restate_admin))
+            .header("content-type", "application/json")
+            .json(&query_payload)
+            .send()
+            .await
+            .map_err(|e| format!("Query request failed: {}", e))?;
+
+        let body = response.text().await.unwrap_or_else(|_| "[]".to_string());
+
+        WorkflowStatus::from_query_response(&body).ok_or_else(|| "No workflow status found".into())
+    })
+}
+
+fn output_result(
+    result: &WorkflowResult,
+    config: &WorkflowConfig,
+) -> Result<(), Box<dyn std::error::Error>> {
+    println!("{}", serde_json::json!({
+        "type": "workflow_result",
+        "bead_id": result.bead_id,
+        "run_id": result.run_id,
+        "status": result.status,
+        "final_stage": result.final_stage,
+        "error": result.error,
+        "repo_root": result.repo_root.display().to_string(),
+        "pipeline_stages": config.stages,
+        "is_success": result.status == "shipped",
+        "next_steps": if result.status == "shipped" {
+            serde_json::json!([
+                {"action": "review_code", "path": format!("{}/src/", result.repo_root.display()), "description": "Review generated source code"},
+                {"action": "run_ci", "command": "moon run :ci", "description": "Run CI quality gates"},
+                {"action": "merge_workspace", "command": "zjj done", "description": "Merge zjj workspace to main"},
+                {"action": "close_bead", "command": format!("br close {}", result.bead_id), "description": "Close the bead issue"}
+            ])
+        } else {
+            serde_json::json!([
+                {"action": "review_error", "description": "Review the error output above to understand the failure"},
+                {"action": "fix_issue", "path": format!("{}/src/", result.repo_root.display()), "description": "Fix the underlying issue in the source code"},
+                {"action": "rerun", "command": format!("oya run {}", result.bead_id), "description": "Re-run the workflow after fixing"}
+            ])
+        }
+    }).to_string());
+    Ok(())
 }
 
 fn parse_cli_mode() -> CliMode {
@@ -1589,13 +1966,15 @@ fn parse_cli_mode() -> CliMode {
     match cli.command {
         None | Some(CliCommand::Serve) => CliMode::Serve,
         Some(CliCommand::OpsPoll) => CliMode::OpsPoll,
+        Some(CliCommand::Run(args)) => CliMode::Run(args),
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 enum CliMode {
     Serve,
     OpsPoll,
+    Run(RunArgs),
 }
 
 #[tokio::main]
@@ -1605,6 +1984,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match mode {
         CliMode::OpsPoll => run_ops_poller().await,
         CliMode::Serve => run_server().await,
+        CliMode::Run(args) => run_workflow(args).await,
     }
 }
 
