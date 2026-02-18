@@ -376,6 +376,8 @@ pub enum DomainError {
     GateCheckFailed(String),
     #[error("Stale data: expected version {0}, got {1}")]
     StaleData(u64, u64),
+    #[error("Parse error: {0}")]
+    ParseError(String),
 }
 // =============================================================================
 //  Domain Entities
@@ -413,30 +415,38 @@ impl AgentState {
         }
     }
 
-    pub fn validate_invariants(&self) -> Result<(), String> {
+    pub fn validate_invariants(&self) -> Result<(), ValidationError> {
         match self.status {
             AgentStatus::Working => {
                 if self.bead_id.is_none() {
-                    return Err("Agent with Working status must have a bead".to_string());
+                    return Err(ValidationError::InvalidState(
+                        "Agent with Working status must have a bead".to_string(),
+                    ));
                 }
                 if self.current_stage.is_none() {
-                    return Err("Agent with Working status must have a current_stage".to_string());
+                    return Err(ValidationError::InvalidState(
+                        "Agent with Working status must have a current_stage".to_string(),
+                    ));
                 }
             }
             AgentStatus::Done => {
                 if self.bead_id.is_some() {
-                    return Err("Agent with Done status must not have a bead".to_string());
+                    return Err(ValidationError::InvalidState(
+                        "Agent with Done status must not have a bead".to_string(),
+                    ));
                 }
                 if self.current_stage.is_some() {
-                    return Err("Agent with Done status must have no active stage".to_string());
+                    return Err(ValidationError::InvalidState(
+                        "Agent with Done status must have no active stage".to_string(),
+                    ));
                 }
             }
             AgentStatus::Idle | AgentStatus::Waiting | AgentStatus::Error => {
                 if self.bead_id.is_some() {
-                    return Err(format!(
+                    return Err(ValidationError::InvalidState(format!(
                         "Agent with {:?} status must not have a bead",
                         self.status
-                    ));
+                    )));
                 }
             }
         }
@@ -610,12 +620,18 @@ pub struct ShipDecision {
     pub timestamp: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum ValidationError {
+    #[error("Missing required field: {0}")]
     MissingField(String),
+    #[error("Placeholder value in {0}: {1}")]
     PlaceholderValue(String, String),
+    #[error("Invalid exit code: {0}")]
     InvalidExitCode(i32),
+    #[error("Inconsistent evidence: {0}")]
     InconsistentEvidence(String),
+    #[error("Invalid state: {0}")]
+    InvalidState(String),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -751,14 +767,14 @@ impl CircuitState {
 }
 
 impl TryFrom<&str> for CircuitState {
-    type Error = String;
+    type Error = DomainError;
 
-    fn try_from(value: &str) -> Result<Self, String> {
+    fn try_from(value: &str) -> Result<Self, DomainError> {
         match value {
             "closed" => Ok(Self::Closed),
             "open" => Ok(Self::Open),
             "half_open" | "half-open" => Ok(Self::HalfOpen),
-            _ => Err(format!("Unknown circuit state: {value}")),
+            _ => Err(DomainError::ParseError(format!("Unknown circuit state: {value}"))),
         }
     }
 }

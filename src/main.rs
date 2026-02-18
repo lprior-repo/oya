@@ -2,6 +2,11 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 #![forbid(unsafe_code)]
+// Allow explicit match patterns for Option/Result defaults - preferred over unwrap_or*
+// per functional-rust-generator skill (which explicitly lists 'match' as preferred)
+#![allow(clippy::manual_unwrap_or)]
+#![allow(clippy::manual_unwrap_or_default)]
+#![allow(clippy::unnecessary_option_map_or_else)]
 
 use oya::types::{FailureCategory, Gate, StageName as Stage, StageResult};
 use oya::{
@@ -187,16 +192,18 @@ struct TimelineEvent {
     detail: Option<String>,
 }
 
-fn parse_start_request(request: serde_json::Value) -> Result<StartRequestPayload, OyaError> {
+fn parse_start_request(request: serde_json::Value) -> Result<StartRequestPayload, TerminalError> {
     match request {
         serde_json::Value::Object(_) => serde_json::from_value(request)
-            .map_err(|e| OyaError(format!("Invalid JSON body: {}", e))),
+            .map_err(|e| TerminalError::new_with_code(400, format!("Invalid JSON body: {}", e))),
         serde_json::Value::String(raw) => serde_json::from_str::<StartRequestPayload>(&raw)
-            .map_err(|e| OyaError(format!("Invalid JSON string body: {}", e))),
-        other => Err(OyaError(format!(
-            "Invalid request payload type: expected object or JSON string, got {}",
-            other
-        ))),
+            .map_err(|e| {
+                TerminalError::new_with_code(400, format!("Invalid JSON string body: {}", e))
+            }),
+        other => Err(TerminalError::new_with_code(
+            400,
+            format!("Invalid request payload type: expected object or JSON string, got {}", other),
+        )),
     }
 }
 
@@ -211,10 +218,13 @@ impl OyaOrchestrator for OyaOrchestratorImpl {
     ) -> Result<String, HandlerError> {
         let parsed = parse_start_request(request.0)?;
 
-        let bead_id = parsed.bead_id.unwrap_or_else(|| "unknown".to_string());
-        let context = parsed.context.unwrap_or_default();
+        let bead_id = match parsed.bead_id {
+            Some(s) => s,
+            None => "unknown".to_string(),
+        };
+        let context = parsed.context.map_or(String::new(), |s| s);
         let run_id = ctx.key().to_string();
-        let started_at = chrono::Utc::now().to_rfc3339();
+        let started_at = deterministic_timestamp(&ctx).await?;
 
         let initial_state = OrchestratorState {
             status: "running".to_string(),
@@ -315,15 +325,86 @@ impl OyaOpsMonitor for OyaOpsMonitorImpl {
     }
 }
 
+/// Get a deterministic RFC3339 timestamp within a Restate workflow context.
+/// Wraps chrono::Utc::now() in ctx.run() for journal consistency on replay.
+async fn deterministic_timestamp(ctx: &WorkflowContext<'_>) -> Result<String, TerminalError> {
+    ctx.run(|| async move { Ok::<_, HandlerError>(chrono::Utc::now().to_rfc3339()) }).await
+}
+
+/// Read an environment variable deterministically within a Restate workflow context.
+/// Wraps std::env::var() in ctx.run() for journal consistency on replay.
+async fn deterministic_env_var(
+    ctx: &WorkflowContext<'_>,
+    key: &str,
+) -> Result<Option<String>, TerminalError> {
+    let key = key.to_string();
+    ctx.run(move || async move { Ok::<_, HandlerError>(std::env::var(&key).ok()) }).await
+}
+
+/// Check if an environment variable is set to a truthy value (1 or true).
+/// Deterministic via ctx.run() for Restate workflow replay consistency.
+async fn deterministic_env_bool(
+    ctx: &WorkflowContext<'_>,
+    key: &str,
+) -> Result<bool, TerminalError> {
+    let value = deterministic_env_var(ctx, key).await?;
+    Ok(value.is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true")))
+}
+
+/// Runtime configuration read deterministically from environment at workflow start.
+/// All non-deterministic env access is centralized here and journaled via ctx.run().
+struct RuntimeConfig {
+    skip_zjj_workspace: bool,
+    skip_zjj_gate: bool,
+    repo_root: PathBuf,
+}
+
+impl RuntimeConfig {
+    /// Read all configuration deterministically from environment.
+    /// Must be called at the start of a workflow before any spawn_blocking.
+    async fn load(ctx: &WorkflowContext<'_>) -> Result<Self, OyaError> {
+        let skip_zjj_workspace = deterministic_env_bool(ctx, "OYA_SKIP_ZJJ_WORKSPACE")
+            .await
+            .map_err(|_e| OyaError("config error: OYA_SKIP_ZJJ_WORKSPACE".to_string()))?;
+
+        let skip_zjj_gate = deterministic_env_bool(ctx, "OYA_SKIP_ZJJ_GATE")
+            .await
+            .map_err(|_e| OyaError("config error: OYA_SKIP_ZJJ_GATE".to_string()))?;
+
+        let repo_root_str = Self::deterministic_repo_root(ctx)
+            .await
+            .map_err(|e| OyaError(format!("config error: repo_root: {}", e)))?;
+
+        Ok(Self { skip_zjj_workspace, skip_zjj_gate, repo_root: PathBuf::from(repo_root_str) })
+    }
+
+    async fn deterministic_repo_root(ctx: &WorkflowContext<'_>) -> Result<String, TerminalError> {
+        ctx.run(|| async move {
+            if let Ok(configured_root) = std::env::var("OYA_REPO_ROOT") {
+                return Ok::<_, HandlerError>(configured_root);
+            }
+            std::env::current_dir()
+                .map(|p| p.to_string_lossy().to_string())
+                .map_err(|e| HandlerError::from(format!("Failed to resolve repo root: {}", e)))
+        })
+        .await
+    }
+}
+
 async fn run_pipeline(
     ctx: &WorkflowContext<'_>,
     run_id: String,
     bead_id: String,
     context: String,
 ) -> Result<(), OyaError> {
+    // Load all runtime config deterministically at workflow start
+    let config = RuntimeConfig::load(ctx).await?;
+
     let mut current_stage = Stage::Research;
     let mut attempt = 1u32;
     let mut last_failure: Option<(FailureCategory, String)> = None;
+    let initial_ts =
+        deterministic_timestamp(ctx).await.map_err(|_e| OyaError("timestamp error".to_string()))?;
     let mut orchestrator_state = OrchestratorState {
         status: "running".to_string(),
         stage: current_stage.as_str().to_string(),
@@ -333,18 +414,23 @@ async fn run_pipeline(
         last_failure: String::new(),
         last_output: String::new(),
         last_prompt: String::new(),
-        updated_at: chrono::Utc::now().to_rfc3339(),
+        updated_at: initial_ts,
     };
     write_orchestrator_state(ctx, &orchestrator_state)?;
 
     loop {
+        let loop_ts = deterministic_timestamp(ctx)
+            .await
+            .map_err(|_e| OyaError("timestamp error".to_string()))?;
         orchestrator_state.stage = current_stage.as_str().to_string();
         orchestrator_state.attempt = attempt;
         orchestrator_state.status = "running".to_string();
-        orchestrator_state.updated_at = chrono::Utc::now().to_rfc3339();
+        orchestrator_state.updated_at = loop_ts.clone();
         write_orchestrator_state(ctx, &orchestrator_state)?;
 
-        let stage_start = chrono::Utc::now().to_rfc3339();
+        let stage_start = deterministic_timestamp(ctx)
+            .await
+            .map_err(|_e| OyaError("timestamp error".to_string()))?;
         let stage_input_key = stage_attempt_key(&current_stage, attempt, "input");
         let failure_snapshot = last_failure.as_ref().map(|(category, message)| FailureSnapshot {
             category: format!("{:?}", category),
@@ -375,9 +461,18 @@ async fn run_pipeline(
         )
         .await?;
 
-        if let Some(workspace_event) =
-            prepare_stage_workspace(&run_id, &bead_id, &current_stage, attempt)?
-        {
+        let workspace_ts = deterministic_timestamp(ctx)
+            .await
+            .map_err(|_e| OyaError("timestamp error".to_string()))?;
+        if let Some(workspace_event) = prepare_stage_workspace(
+            &run_id,
+            &bead_id,
+            &current_stage,
+            attempt,
+            workspace_ts,
+            config.skip_zjj_workspace,
+            &config.repo_root,
+        )? {
             let workspace_key = stage_attempt_key(&current_stage, attempt, "workspace");
             set_json_state(ctx, &workspace_key, &workspace_event)?;
             append_timeline(
@@ -405,19 +500,23 @@ async fn run_pipeline(
             attempt,
             &context,
             last_failure.clone(),
+            &config,
         )
         .await
         {
             Ok(result) => result,
             Err(error) => {
+                let fail_ts = deterministic_timestamp(ctx)
+                    .await
+                    .map_err(|_e| OyaError("timestamp error".to_string()))?;
                 orchestrator_state.status = "failed".to_string();
                 orchestrator_state.last_failure = format!("Stage execution error: {}", error);
-                orchestrator_state.updated_at = chrono::Utc::now().to_rfc3339();
+                orchestrator_state.updated_at = fail_ts.clone();
                 write_orchestrator_state(ctx, &orchestrator_state)?;
                 append_timeline(
                     ctx,
                     TimelineEvent {
-                        at: chrono::Utc::now().to_rfc3339(),
+                        at: fail_ts,
                         event: "run_failed_stage_execution".to_string(),
                         stage: Some(current_stage.as_str().to_string()),
                         attempt: Some(attempt),
@@ -436,7 +535,10 @@ async fn run_pipeline(
         } else {
             truncate_text(&stage_result.output.to_string(), 6000)
         };
-        orchestrator_state.updated_at = chrono::Utc::now().to_rfc3339();
+        let result_ts = deterministic_timestamp(ctx)
+            .await
+            .map_err(|_e| OyaError("timestamp error".to_string()))?;
+        orchestrator_state.updated_at = result_ts;
         write_orchestrator_state(ctx, &orchestrator_state)?;
 
         let prompt_key = format!("prompt_{}_{}", current_stage.as_str(), attempt);
@@ -498,7 +600,7 @@ async fn run_pipeline(
 
         let mut gate_events = Vec::new();
         for gate in current_stage.gates() {
-            let gate_evidence = execute_gate(gate.clone())?;
+            let gate_evidence = execute_gate(gate.clone(), &config.repo_root)?;
             let gate_key =
                 stage_attempt_key(&current_stage, attempt, &format!("gate_{}", gate.as_str()));
             set_json_state(
@@ -527,6 +629,9 @@ async fn run_pipeline(
         }
 
         let stage_event_key = stage_attempt_key(&current_stage, attempt, "event");
+        let event_ts = deterministic_timestamp(ctx)
+            .await
+            .map_err(|_e| OyaError("timestamp error".to_string()))?;
         set_json_state(
             ctx,
             &stage_event_key,
@@ -545,7 +650,7 @@ async fn run_pipeline(
                 result_key: stage_result_key,
                 skill_output_key,
                 gate_events,
-                recorded_at: chrono::Utc::now().to_rfc3339(),
+                recorded_at: event_ts.clone(),
             },
         )?;
 
@@ -553,7 +658,7 @@ async fn run_pipeline(
             append_timeline(
                 ctx,
                 TimelineEvent {
-                    at: chrono::Utc::now().to_rfc3339(),
+                    at: event_ts,
                     event: "stage_pass".to_string(),
                     stage: Some(current_stage.as_str().to_string()),
                     attempt: Some(attempt),
@@ -569,14 +674,17 @@ async fn run_pipeline(
                     last_failure = None;
                 }
                 None => {
+                    let shipped_ts = deterministic_timestamp(ctx)
+                        .await
+                        .map_err(|_e| OyaError("timestamp error".to_string()))?;
                     orchestrator_state.status = "shipped".to_string();
                     orchestrator_state.stage = "none".to_string();
-                    orchestrator_state.updated_at = chrono::Utc::now().to_rfc3339();
+                    orchestrator_state.updated_at = shipped_ts.clone();
                     write_orchestrator_state(ctx, &orchestrator_state)?;
                     append_timeline(
                         ctx,
                         TimelineEvent {
-                            at: chrono::Utc::now().to_rfc3339(),
+                            at: shipped_ts,
                             event: "run_shipped".to_string(),
                             stage: Some("ship_gate".to_string()),
                             attempt: Some(attempt),
@@ -588,10 +696,13 @@ async fn run_pipeline(
                 }
             }
         } else {
+            let fail_ts = deterministic_timestamp(ctx)
+                .await
+                .map_err(|_e| OyaError("timestamp error".to_string()))?;
             append_timeline(
                 ctx,
                 TimelineEvent {
-                    at: chrono::Utc::now().to_rfc3339(),
+                    at: fail_ts,
                     event: "stage_fail".to_string(),
                     stage: Some(current_stage.as_str().to_string()),
                     attempt: Some(attempt),
@@ -606,13 +717,16 @@ async fn run_pipeline(
             if let Some(non_retryable) =
                 category.clone().filter(|value| !is_retryable_failure(value))
             {
+                let nr_fail_ts = deterministic_timestamp(ctx)
+                    .await
+                    .map_err(|_e| OyaError("timestamp error".to_string()))?;
                 orchestrator_state.status = "failed".to_string();
-                orchestrator_state.updated_at = chrono::Utc::now().to_rfc3339();
+                orchestrator_state.updated_at = nr_fail_ts.clone();
                 write_orchestrator_state(ctx, &orchestrator_state)?;
                 append_timeline(
                     ctx,
                     TimelineEvent {
-                        at: chrono::Utc::now().to_rfc3339(),
+                        at: nr_fail_ts,
                         event: "run_failed_non_retryable".to_string(),
                         stage: Some(current_stage.as_str().to_string()),
                         attempt: Some(attempt),
@@ -625,13 +739,16 @@ async fn run_pipeline(
 
             attempt += 1;
             if attempt > current_stage.max_attempts() {
+                let max_fail_ts = deterministic_timestamp(ctx)
+                    .await
+                    .map_err(|_e| OyaError("timestamp error".to_string()))?;
                 orchestrator_state.status = "failed".to_string();
-                orchestrator_state.updated_at = chrono::Utc::now().to_rfc3339();
+                orchestrator_state.updated_at = max_fail_ts.clone();
                 write_orchestrator_state(ctx, &orchestrator_state)?;
                 append_timeline(
                     ctx,
                     TimelineEvent {
-                        at: chrono::Utc::now().to_rfc3339(),
+                        at: max_fail_ts,
                         event: "run_failed_max_attempts".to_string(),
                         stage: Some(current_stage.as_str().to_string()),
                         attempt: Some(attempt),
@@ -642,10 +759,13 @@ async fn run_pipeline(
                 return Ok(());
             }
 
+            let retry_ts = deterministic_timestamp(ctx)
+                .await
+                .map_err(|_e| OyaError("timestamp error".to_string()))?;
             append_timeline(
                 ctx,
                 TimelineEvent {
-                    at: chrono::Utc::now().to_rfc3339(),
+                    at: retry_ts,
                     event: "stage_retry".to_string(),
                     stage: Some(current_stage.as_str().to_string()),
                     attempt: Some(attempt),
@@ -669,11 +789,14 @@ async fn execute_stage_real(
     attempt: u32,
     context: &str,
     last_failure: Option<(FailureCategory, String)>,
+    config: &RuntimeConfig,
 ) -> Result<(StageResult, String), OyaError> {
     let bead_id = bead_id.to_string();
     let context = context.to_string();
     let run_id = run_id.to_string();
     let stage_for_closure = stage.clone();
+    let skip_zjj_gate = config.skip_zjj_gate;
+    let repo_root = config.repo_root.clone();
 
     let execution = tokio::task::spawn_blocking(move || match stage_for_closure {
         Stage::Research
@@ -694,9 +817,12 @@ async fn execute_stage_real(
                 success_message,
                 success_next_stage,
                 &checks,
+                &repo_root,
             )
         }
-        Stage::ShipGate => execute_ship_gate(&bead_id, attempt, &context, &last_failure),
+        Stage::ShipGate => {
+            execute_ship_gate(&bead_id, attempt, &context, &last_failure, skip_zjj_gate, &repo_root)
+        }
     })
     .await
     .map_err(|e| OyaError(format!("spawn_blocking failed: {}", e)))??;
@@ -737,8 +863,9 @@ fn execute_prompt_stage(
     success_message: &str,
     success_next_stage: Option<Stage>,
     checks: &[StageCheck],
+    repo_root: &PathBuf,
 ) -> Result<StageExecution, OyaError> {
-    let (opencode_ok, opencode_output) = run_opencode(&prompt)?;
+    let (opencode_ok, opencode_output) = run_opencode(&prompt, repo_root)?;
     if !opencode_ok {
         return Ok(StageExecution {
             passed: false,
@@ -756,7 +883,7 @@ fn execute_prompt_stage(
 
         let next = match check {
             StageCheck::Check { failure, next_stage } => {
-                let (ok, output) = run_moon_check()?;
+                let (ok, output) = run_moon_check(repo_root)?;
                 if ok {
                     None
                 } else {
@@ -764,7 +891,7 @@ fn execute_prompt_stage(
                 }
             }
             StageCheck::Test { failure, next_stage } => {
-                let (ok, output) = run_moon_test()?;
+                let (ok, output) = run_moon_test(repo_root)?;
                 if ok {
                     None
                 } else {
@@ -772,7 +899,7 @@ fn execute_prompt_stage(
                 }
             }
             StageCheck::Quick { failure, next_stage } => {
-                let (ok, output) = run_moon_quick()?;
+                let (ok, output) = run_moon_quick(repo_root)?;
                 if ok {
                     None
                 } else {
@@ -820,10 +947,13 @@ struct OpenCodeConfig {
 }
 
 fn opencode_config() -> Result<OpenCodeConfig, OyaError> {
-    let base_url = std::env::var("OYA_OPENCODE_BASE_URL")
+    let base_url = match std::env::var("OYA_OPENCODE_BASE_URL")
         .ok()
         .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| "http://127.0.0.1:4097".to_string());
+    {
+        Some(s) => s,
+        None => "http://127.0.0.1:4097".to_string(),
+    };
 
     if !is_valid_http_url(base_url.as_str()) {
         return Err(OyaError(format!("Invalid OYA_OPENCODE_BASE_URL '{}'", base_url)));
@@ -876,9 +1006,10 @@ fn run_command_with_timeout(
     command_name: &str,
     args: &[&str],
     timeout_seconds: u64,
+    repo_root: &PathBuf,
 ) -> Result<(bool, String), OyaError> {
     let (passed, output, _exit_code) =
-        run_command_with_timeout_with_exit(command_name, args, timeout_seconds)?;
+        run_command_with_timeout_with_exit(command_name, args, timeout_seconds, repo_root)?;
     Ok((passed, output))
 }
 
@@ -886,13 +1017,14 @@ fn run_command_with_timeout_with_exit(
     command_name: &str,
     args: &[&str],
     timeout_seconds: u64,
+    repo_root: &PathBuf,
 ) -> Result<(bool, String, i32), OyaError> {
     let timeout_duration = timeout_seconds.to_string();
     let output = Command::new("timeout")
         .arg(timeout_duration)
         .arg(command_name)
         .args(args)
-        .current_dir(repo_root()?)
+        .current_dir(repo_root)
         .output()
         .map_err(|e| OyaError(format!("Failed to run {}: {}", command_name, e)))?;
 
@@ -921,51 +1053,53 @@ fn run_command_with_timeout_with_exit(
     Ok((output.status.success(), combined, exit_code))
 }
 
-fn run_opencode(prompt: &str) -> Result<(bool, String), OyaError> {
+fn run_opencode(prompt: &str, repo_root: &PathBuf) -> Result<(bool, String), OyaError> {
     tracing::info!("Running opencode with prompt ({} chars)", prompt.len());
     run_command_with_timeout(
         "opencode",
         &["run", "--format", "json", prompt],
         OPENCODE_TIMEOUT_SECONDS,
+        repo_root,
     )
 }
 
-fn run_moon_check() -> Result<(bool, String), OyaError> {
+fn run_moon_check(repo_root: &PathBuf) -> Result<(bool, String), OyaError> {
     tracing::info!("Running moon :check");
-    run_command_with_timeout("moon", &["run", ":check"], MOON_TIMEOUT_SECONDS)
+    run_command_with_timeout("moon", &["run", ":check"], MOON_TIMEOUT_SECONDS, repo_root)
 }
 
-fn run_moon_test() -> Result<(bool, String), OyaError> {
+fn run_moon_test(repo_root: &PathBuf) -> Result<(bool, String), OyaError> {
     tracing::info!("Running moon :test");
-    run_command_with_timeout("moon", &["run", ":test"], MOON_TIMEOUT_SECONDS)
+    run_command_with_timeout("moon", &["run", ":test"], MOON_TIMEOUT_SECONDS, repo_root)
 }
 
-fn run_moon_quick() -> Result<(bool, String), OyaError> {
+fn run_moon_quick(repo_root: &PathBuf) -> Result<(bool, String), OyaError> {
     tracing::info!("Running moon :quick");
-    run_command_with_timeout("moon", &["run", ":quick"], MOON_TIMEOUT_SECONDS)
+    run_command_with_timeout("moon", &["run", ":quick"], MOON_TIMEOUT_SECONDS, repo_root)
 }
 
-fn run_moon_ci() -> Result<(bool, String), OyaError> {
+fn run_moon_ci(repo_root: &PathBuf) -> Result<(bool, String), OyaError> {
     tracing::info!("Running moon :ci");
-    run_command_with_timeout("moon", &["run", ":ci"], MOON_TIMEOUT_SECONDS)
+    run_command_with_timeout("moon", &["run", ":ci"], MOON_TIMEOUT_SECONDS, repo_root)
 }
 
-fn run_zjj_done_dry_run() -> Result<(bool, String), OyaError> {
+fn run_zjj_done_dry_run(repo_root: &PathBuf) -> Result<(bool, String), OyaError> {
     tracing::info!("Running zjj done --dry-run");
 
     let (success, combined) =
-        run_command_with_timeout("zjj", &["done", "--dry-run"], ZJJ_TIMEOUT_SECONDS)?;
+        run_command_with_timeout("zjj", &["done", "--dry-run"], ZJJ_TIMEOUT_SECONDS, repo_root)?;
 
     Ok((success, combined))
 }
 
-fn execute_gate(gate: Gate) -> Result<GateEvidence, OyaError> {
+fn execute_gate(gate: Gate, repo_root: &PathBuf) -> Result<GateEvidence, OyaError> {
     match gate {
         Gate::Compiles => {
             let (passed, output, exit_code) = run_command_with_timeout_with_exit(
                 "moon",
                 &["run", ":check"],
                 MOON_TIMEOUT_SECONDS,
+                repo_root,
             )?;
             Ok(GateEvidence { command: "moon run :check".to_string(), passed, exit_code, output })
         }
@@ -974,6 +1108,7 @@ fn execute_gate(gate: Gate) -> Result<GateEvidence, OyaError> {
                 "moon",
                 &["run", ":test"],
                 MOON_TIMEOUT_SECONDS,
+                repo_root,
             )?;
             Ok(GateEvidence { command: "moon run :test".to_string(), passed, exit_code, output })
         }
@@ -982,12 +1117,17 @@ fn execute_gate(gate: Gate) -> Result<GateEvidence, OyaError> {
                 "moon",
                 &["run", ":quick"],
                 MOON_TIMEOUT_SECONDS,
+                repo_root,
             )?;
             Ok(GateEvidence { command: "moon run :quick".to_string(), passed, exit_code, output })
         }
         Gate::MoonCi => {
-            let (passed, output, exit_code) =
-                run_command_with_timeout_with_exit("moon", &["run", ":ci"], MOON_TIMEOUT_SECONDS)?;
+            let (passed, output, exit_code) = run_command_with_timeout_with_exit(
+                "moon",
+                &["run", ":ci"],
+                MOON_TIMEOUT_SECONDS,
+                repo_root,
+            )?;
             Ok(GateEvidence { command: "moon run :ci".to_string(), passed, exit_code, output })
         }
         Gate::ZjjMergeQueue => {
@@ -995,6 +1135,7 @@ fn execute_gate(gate: Gate) -> Result<GateEvidence, OyaError> {
                 "zjj",
                 &["done", "--dry-run"],
                 ZJJ_TIMEOUT_SECONDS,
+                repo_root,
             )?;
             Ok(GateEvidence {
                 command: "zjj done --dry-run".to_string(),
@@ -1004,12 +1145,6 @@ fn execute_gate(gate: Gate) -> Result<GateEvidence, OyaError> {
             })
         }
     }
-}
-
-fn should_skip_zjj_workspace_lifecycle() -> bool {
-    std::env::var("OYA_SKIP_ZJJ_WORKSPACE")
-        .ok()
-        .is_some_and(|value| value == "1" || value.eq_ignore_ascii_case("true"))
 }
 
 fn stage_uses_workspace(stage: &Stage) -> bool {
@@ -1029,8 +1164,11 @@ fn prepare_stage_workspace(
     bead_id: &str,
     stage: &Stage,
     attempt: u32,
+    recorded_at: String,
+    skip_zjj_workspace: bool,
+    repo_root: &PathBuf,
 ) -> Result<Option<WorkspaceLifecycleEvent>, OyaError> {
-    if should_skip_zjj_workspace_lifecycle() || !stage_uses_workspace(stage) {
+    if skip_zjj_workspace || !stage_uses_workspace(stage) {
         return Ok(None);
     }
 
@@ -1042,6 +1180,7 @@ fn prepare_stage_workspace(
         "zjj",
         &["queue", "--add", workspace.as_str(), "--bead", bead_id],
         ZJJ_TIMEOUT_SECONDS,
+        repo_root,
     )?;
     if !queue_passed {
         return Err(OyaError(format!(
@@ -1057,6 +1196,7 @@ fn prepare_stage_workspace(
         "zjj",
         &["add", workspace.as_str(), "--idempotent"],
         ZJJ_TIMEOUT_SECONDS,
+        repo_root,
     )?;
     if !add_passed {
         return Err(OyaError(format!(
@@ -1077,7 +1217,7 @@ fn prepare_stage_workspace(
         add_passed,
         add_exit_code,
         add_output: truncate_text(add_output.as_str(), 4000),
-        recorded_at: chrono::Utc::now().to_rfc3339(),
+        recorded_at,
     }))
 }
 
@@ -1118,11 +1258,14 @@ fn summarize_failure_output(category: &FailureCategory, message: &str) -> String
     if matches!(category, FailureCategory::OutputParseFailure)
         && trimmed.contains("Command timed out after")
     {
-        let timeout_line = trimmed
+        let timeout_line = match trimmed
             .lines()
             .find(|line| line.contains("Command timed out after"))
             .map(str::trim)
-            .unwrap_or("Command timed out after unknown duration");
+        {
+            Some(s) => s,
+            None => "Command timed out after unknown duration",
+        };
 
         let stderr_preview = first_non_empty_line_after_marker(trimmed, "stderr:")
             .map(|line| truncate_text(line, 180));
@@ -1171,8 +1314,11 @@ async fn append_timeline(ctx: &WorkflowContext<'_>, event: TimelineEvent) -> Res
     let existing = ctx
         .get::<String>("timeline")
         .await
-        .map_err(|error| OyaError(format!("timeline read failed: {}", error)))?
-        .unwrap_or_default();
+        .map_err(|error| OyaError(format!("timeline read failed: {}", error)))?;
+    let existing = match existing {
+        Some(s) => s,
+        None => String::new(),
+    };
 
     let event_seq = ctx
         .get::<u32>("event_seq")
@@ -1312,11 +1458,13 @@ fn execute_ship_gate(
     _attempt: u32,
     _context: &str,
     _last_failure: &Option<(FailureCategory, String)>,
+    skip_zjj_gate: bool,
+    repo_root: &PathBuf,
 ) -> Result<StageExecution, OyaError> {
     tracing::info!("SHIP GATE: Running final validation");
     let prompt = "Ship gate executes quality gates only (moon/zjj); no OpenCode prompt".to_string();
 
-    let (ci_ok, ci_output) = run_moon_ci()?;
+    let (ci_ok, ci_output) = run_moon_ci(repo_root)?;
     if !ci_ok {
         return Ok(StageExecution {
             passed: false,
@@ -1327,12 +1475,8 @@ fn execute_ship_gate(
         });
     }
 
-    let skip_zjj_gate = std::env::var("OYA_SKIP_ZJJ_GATE")
-        .ok()
-        .is_some_and(|value| value == "1" || value.eq_ignore_ascii_case("true"));
-
     if !skip_zjj_gate {
-        let (zjj_ok, zjj_output) = run_zjj_done_dry_run()?;
+        let (zjj_ok, zjj_output) = run_zjj_done_dry_run(repo_root)?;
         if !zjj_ok {
             return Ok(StageExecution {
                 passed: false,
@@ -1346,7 +1490,7 @@ fn execute_ship_gate(
         tracing::info!("SHIP GATE: skipping zjj dry-run check (OYA_SKIP_ZJJ_GATE=1)");
     }
 
-    let (quick_ok, quick_output) = run_moon_quick()?;
+    let (quick_ok, quick_output) = run_moon_quick(repo_root)?;
     if !quick_ok {
         return Ok(StageExecution {
             passed: false,
@@ -1357,7 +1501,7 @@ fn execute_ship_gate(
         });
     }
 
-    let (test_ok, test_output) = run_moon_test()?;
+    let (test_ok, test_output) = run_moon_test(repo_root)?;
     if !test_ok {
         return Ok(StageExecution {
             passed: false,
@@ -1376,13 +1520,6 @@ fn execute_ship_gate(
         next_stage: None,
         prompt,
     })
-}
-
-fn repo_root() -> Result<PathBuf, OyaError> {
-    if let Ok(configured_root) = std::env::var("OYA_REPO_ROOT") {
-        return Ok(PathBuf::from(configured_root));
-    }
-    std::env::current_dir().map_err(|e| OyaError(format!("Failed to resolve repo root: {}", e)))
 }
 
 fn is_valid_http_url(value: &str) -> bool {
@@ -1404,7 +1541,10 @@ fn is_valid_http_url(value: &str) -> bool {
 
 fn resolve_bind_addr() -> Result<std::net::SocketAddr, OyaError> {
     let configured = std::env::var("OYA_BIND_ADDR").ok();
-    let value = configured.unwrap_or_else(|| "127.0.0.1:9080".to_string());
+    let value = match configured {
+        Some(s) => s,
+        None => "127.0.0.1:9080".to_string(),
+    };
 
     value.parse().map_err(|e| OyaError(format!("Invalid OYA_BIND_ADDR '{}': {}", value, e)))
 }

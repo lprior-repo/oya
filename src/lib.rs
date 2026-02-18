@@ -3,32 +3,10 @@
 #![deny(clippy::panic)]
 #![forbid(unsafe_code)]
 
-//! Design contract for `src-kes`.
+//! Oya - Workflow orchestration and testing framework
 //!
-//! # Purpose and goals
-//! Define a deterministic `src-kes` CRUD service contract for observability test runs, including
-//! route completeness, typed validation, explicit failures, and stage-based decision reporting.
-//!
-//! # Key functions to implement
-//! - `build_src_kes_plan(input: &SrcKesInput) -> Result<SrcKesPlan, SrcKesError>`
-//! - `start_src_kes_server(plan: &SrcKesPlan) -> Result<SrcKesRuntimeHandle, SrcKesError>`
-//! - `register_user_routes() -> Vec<SrcKesRouteContract>`
-//! - `run_user_create(state: &SrcKesServiceState, request: &UserCreateRequest) -> Result<(SrcKesServiceState, UserRecord), SrcKesError>`
-//! - `run_user_read(state: &SrcKesServiceState, user_id: &str) -> Result<UserRecord, SrcKesError>`
-//! - `run_user_update(state: &SrcKesServiceState, user_id: &str, request: &UserUpdateRequest) -> Result<(SrcKesServiceState, UserRecord), SrcKesError>`
-//! - `run_user_delete(state: &SrcKesServiceState, user_id: &str) -> Result<SrcKesServiceState, SrcKesError>`
-//! - `validate_src_kes_report(report: &SrcKesReport) -> Result<(), SrcKesError>`
-//!
-//! # Acceptance criteria
-//! - Route contract includes exactly `POST /users` (`201`), `GET /users/:id` (`200`),
-//!   `PUT /users/:id` (`200`), and `DELETE /users/:id` (`204`).
-//! - Service and user inputs reject empty, malformed, overlong, or control-character content with
-//!   explicit `SrcKesError` variants.
-//! - User lifecycle is deterministic: create enforces unique normalized IDs, read/update/delete
-//!   fail with `UserNotFound` for missing IDs, and update/delete preserve map consistency.
-//! - Report validation enforces framework/resource invariants, required stage order, monotonic
-//!   timestamps, non-empty diagnostics, and decision derivation from stage outcomes.
-//! - Identical valid inputs produce equivalent plans, route contracts, and gate decisions.
+//! This crate provides the Oya orchestrator for managing development workflows
+//! with Restate durable execution, quality gates, and bead tracking.
 
 pub mod orchestrator;
 pub mod types;
@@ -594,11 +572,14 @@ const MAX_SRC_KES_EMAIL_LEN: usize = 256;
 const MAX_SRC_KES_USER_ID_LEN: usize = 96;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Input for building a `src-kes` service plan.
 pub struct SrcKesInput {
+    /// Logical service name used by the runtime contract.
     pub service_name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+/// Allowed HTTP methods for `src-kes` route contracts.
 pub enum SrcKesRouteMethod {
     Post,
     Get,
@@ -607,54 +588,81 @@ pub enum SrcKesRouteMethod {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+/// Immutable route contract entry for the `src-kes` CRUD surface.
 pub struct SrcKesRouteContract {
+    /// HTTP method used by the route.
     pub method: SrcKesRouteMethod,
+    /// Path template exposed by the service.
     pub path: String,
+    /// Successful status code expected from this route.
     pub success_status: u16,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Deterministic service plan for `src-kes` execution and validation.
 pub struct SrcKesPlan {
+    /// Normalized service name.
     pub service_name: String,
+    /// Framework identifier required by contract (`scotty`).
     pub framework: String,
+    /// Primary resource name required by contract (`user`).
     pub resource: String,
+    /// Full CRUD route contract.
     pub routes: Vec<SrcKesRouteContract>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Runtime handle returned after successful server start checks.
 pub struct SrcKesRuntimeHandle {
+    /// Service name for the running handle.
     pub service_name: String,
+    /// Framework used by the running handle.
     pub framework: String,
+    /// Indicates whether runtime startup checks passed.
     pub running: bool,
 }
 
+/// Stable identifier used for `src-kes` users.
 pub type UserId = String;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Input payload for creating a user.
 pub struct UserCreateRequest {
+    /// Display name for the new user.
     pub name: String,
+    /// User email address used for normalization and ID derivation.
     pub email: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Input payload for updating an existing user.
 pub struct UserUpdateRequest {
+    /// Updated display name.
     pub name: String,
+    /// Updated email address.
     pub email: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Canonical user record stored in service state.
 pub struct UserRecord {
+    /// Normalized user ID.
     pub id: UserId,
+    /// User display name.
     pub name: String,
+    /// Normalized lowercase email address.
     pub email: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
+/// In-memory deterministic state for `src-kes` user CRUD operations.
 pub struct SrcKesServiceState {
+    /// User table keyed by normalized user ID.
     pub users: std::collections::BTreeMap<UserId, UserRecord>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Validation stages used in `SrcKesReport`.
 pub enum SrcKesStageName {
     PlanBuild,
     RuntimeStart,
@@ -664,35 +672,49 @@ pub enum SrcKesStageName {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Stage-level pass/fail status for `src-kes` verification.
 pub enum SrcKesStageStatus {
     Passed,
     Failed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Stage report entry with diagnostics and timestamp.
 pub struct SrcKesStageReport {
+    /// Stage identifier.
     pub stage: SrcKesStageName,
+    /// Stage status.
     pub status: SrcKesStageStatus,
+    /// Human-readable diagnostics for this stage.
     pub diagnostics: String,
+    /// Event timestamp for monotonic-order checks.
     pub timestamp: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Final decision for `src-kes` report validation.
 pub enum SrcKesDecision {
     Pass,
     Fail,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// End-to-end execution report for `src-kes` observability runs.
 pub struct SrcKesReport {
+    /// Plan used for the run.
     pub plan: SrcKesPlan,
+    /// Indicates runtime startup succeeded.
     pub runtime_started: bool,
+    /// Indicates deterministic behavior constraints were met.
     pub deterministic_behavior: bool,
+    /// Ordered stage reports.
     pub stages: Vec<SrcKesStageReport>,
+    /// Derived final decision.
     pub decision: SrcKesDecision,
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
+/// Error type for `src-kes` planning, runtime checks, CRUD, and report validation.
 pub enum SrcKesError {
     #[error("src-kes field is empty: {0}")]
     EmptyField(&'static str),
@@ -712,6 +734,7 @@ pub enum SrcKesError {
     InvalidReport(&'static str),
 }
 
+/// Build a normalized `src-kes` service plan and verify the route contract.
 pub fn build_src_kes_plan(input: &SrcKesInput) -> Result<SrcKesPlan, SrcKesError> {
     let service_name = validate_src_kes_text_field(
         input.service_name.as_str(),
@@ -729,6 +752,7 @@ pub fn build_src_kes_plan(input: &SrcKesInput) -> Result<SrcKesPlan, SrcKesError
     })
 }
 
+/// Validate plan invariants and return a running `src-kes` runtime handle.
 pub fn start_src_kes_server(plan: &SrcKesPlan) -> Result<SrcKesRuntimeHandle, SrcKesError> {
     if plan.framework != "scotty" {
         return Err(SrcKesError::InvalidFieldFormat("framework"));
@@ -750,6 +774,7 @@ pub fn start_src_kes_server(plan: &SrcKesPlan) -> Result<SrcKesRuntimeHandle, Sr
     })
 }
 
+/// Return the exact CRUD route contract required by `src-kes`.
 pub fn register_user_routes() -> Vec<SrcKesRouteContract> {
     vec![
         SrcKesRouteContract {
@@ -775,6 +800,7 @@ pub fn register_user_routes() -> Vec<SrcKesRouteContract> {
     ]
 }
 
+/// Create a user and return updated immutable service state with the created record.
 pub fn run_user_create(
     state: &SrcKesServiceState,
     request: &UserCreateRequest,
@@ -799,11 +825,13 @@ pub fn run_user_create(
     Ok((SrcKesServiceState { users }, record))
 }
 
+/// Read a user record by normalized user ID.
 pub fn run_user_read(state: &SrcKesServiceState, user_id: &str) -> Result<UserRecord, SrcKesError> {
     let normalized_id = validate_src_kes_user_id(user_id)?;
     state.users.get(normalized_id.as_str()).cloned().ok_or(SrcKesError::UserNotFound(normalized_id))
 }
 
+/// Update an existing user and return updated immutable state with the new record.
 pub fn run_user_update(
     state: &SrcKesServiceState,
     user_id: &str,
@@ -836,6 +864,7 @@ pub fn run_user_update(
     Ok((SrcKesServiceState { users }, next_record))
 }
 
+/// Delete a user and return updated immutable service state.
 pub fn run_user_delete(
     state: &SrcKesServiceState,
     user_id: &str,
@@ -855,6 +884,7 @@ pub fn run_user_delete(
     Ok(SrcKesServiceState { users })
 }
 
+/// Validate a `src-kes` report against contract, stage order, and decision rules.
 pub fn validate_src_kes_report(report: &SrcKesReport) -> Result<(), SrcKesError> {
     validate_src_kes_route_contract(report.plan.routes.as_slice())?;
     if report.plan.framework != "scotty" {
@@ -961,7 +991,7 @@ fn validate_src_kes_text_field(
     if trimmed.len() > max_len {
         return Err(SrcKesError::FieldTooLong(field, max_len));
     }
-    if contains_forbidden_control_chars(trimmed) {
+    if trimmed.chars().any(char::is_control) {
         return Err(SrcKesError::InvalidFieldContent(field));
     }
     Ok(trimmed.to_string())
@@ -984,11 +1014,22 @@ fn normalize_src_kes_email(value: &str) -> Result<String, SrcKesError> {
     let no_extra_segments = segments.len() == 2;
     if local.is_empty()
         || domain.is_empty()
+        || local.starts_with('.')
+        || local.ends_with('.')
+        || local.contains("..")
+        || domain.contains("..")
         || !domain.contains('.')
         || domain.starts_with('.')
         || domain.ends_with('.')
         || !no_extra_segments
     {
+        return Err(SrcKesError::InvalidFieldFormat("email"));
+    }
+
+    let invalid_domain_label = domain
+        .split('.')
+        .any(|label| label.is_empty() || label.starts_with('-') || label.ends_with('-'));
+    if invalid_domain_label {
         return Err(SrcKesError::InvalidFieldFormat("email"));
     }
 
@@ -9021,6 +9062,14 @@ mod tests {
             build_src_kes_plan(&SrcKesInput { service_name: invalid_content }),
             Err(SrcKesError::InvalidFieldContent("service_name"))
         );
+
+        assert_eq!(
+            build_src_kes_plan(&SrcKesInput { service_name: "src-kes\napi".to_string() }),
+            Err(SrcKesError::InvalidFieldContent("service_name"))
+        );
+
+        let boundary_name = "a".repeat(64);
+        assert!(build_src_kes_plan(&SrcKesInput { service_name: boundary_name }).is_ok());
     }
 
     #[test]
@@ -9116,6 +9165,93 @@ mod tests {
                 },
             ),
             Err(SrcKesError::InvalidFieldFormat("email"))
+        );
+    }
+
+    #[test]
+    fn run_user_create_rejects_malformed_email_shapes() {
+        let initial = SrcKesServiceState::default();
+
+        assert_eq!(
+            run_user_create(
+                &initial,
+                &UserCreateRequest {
+                    name: "Ada".to_string(),
+                    email: "a..da@example.com".to_string()
+                },
+            ),
+            Err(SrcKesError::InvalidFieldFormat("email"))
+        );
+
+        assert_eq!(
+            run_user_create(
+                &initial,
+                &UserCreateRequest {
+                    name: "Ada".to_string(),
+                    email: "ada@example..com".to_string()
+                },
+            ),
+            Err(SrcKesError::InvalidFieldFormat("email"))
+        );
+
+        assert_eq!(
+            run_user_create(
+                &initial,
+                &UserCreateRequest {
+                    name: "Ada".to_string(),
+                    email: "ada@-example.com".to_string()
+                },
+            ),
+            Err(SrcKesError::InvalidFieldFormat("email"))
+        );
+    }
+
+    #[test]
+    fn run_user_create_rejects_control_character_injection() {
+        let initial = SrcKesServiceState::default();
+
+        assert_eq!(
+            run_user_create(
+                &initial,
+                &UserCreateRequest {
+                    name: "Ada\nLovelace".to_string(),
+                    email: "ada@example.com".to_string()
+                },
+            ),
+            Err(SrcKesError::InvalidFieldContent("name"))
+        );
+
+        assert_eq!(
+            run_user_create(
+                &initial,
+                &UserCreateRequest {
+                    name: "Ada".to_string(),
+                    email: "ada\t@example.com".to_string()
+                },
+            ),
+            Err(SrcKesError::InvalidFieldContent("email"))
+        );
+    }
+
+    #[test]
+    fn run_user_create_enforces_user_id_length_boundary() {
+        let initial = SrcKesServiceState::default();
+        let max_local = "a".repeat(86);
+        let max_email = format!("{}@x.io", max_local);
+        let max_create = run_user_create(
+            &initial,
+            &UserCreateRequest { name: "Ada".to_string(), email: max_email },
+        );
+        assert!(max_create.is_ok());
+
+        let overflow_local = "a".repeat(87);
+        let overflow_email = format!("{}@x.io", overflow_local);
+        assert_eq!(
+            run_user_create(
+                &initial,
+                &UserCreateRequest { name: "Ada".to_string(), email: overflow_email },
+            ),
+            Err(SrcKesError::FieldTooLong("user_id", 96))
         );
     }
 
