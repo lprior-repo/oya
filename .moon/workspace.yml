@@ -16,7 +16,7 @@ versionConstraint: ">=2.0.0-alpha.0"
 # HYPER-FAST LOCAL CACHE CONFIGURATION
 # Remote cache runs locally on this machine for zero network latency
 remote:
-  host: 'grpcs://127.0.0.1:9092'
+  host: 'grpc://127.0.0.1:9092'
   cache:
     compression: 'zstd'
     verifyIntegrity: false  # Trusted local cache
