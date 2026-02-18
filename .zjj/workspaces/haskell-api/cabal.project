@@ -1,6 +1,0 @@
-packages: .
-
-with-compiler: ghc
-
-package haskell-api
-    tests: True
