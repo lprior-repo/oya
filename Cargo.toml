@@ -8,7 +8,9 @@ restate = []
 
 [dependencies]
 anyhow = "1"
+async-trait = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4", features = ["derive"] }
 im = "15.1"
 itertools = "0.14"
 reqwest = { version = "0.12", features = ["json"] }
@@ -31,3 +33,13 @@ unsafe_code = "forbid"
 unwrap_used = "deny"
 expect_used = "deny"
 panic = "deny"
+
+[dev-dependencies]
+restate-sdk-testcontainers = "0.8"
+wiremock = "0.6"
+proptest = "1.5"
+insta = { version = "1.40", features = ["yaml"] }
+tempfile = "3.12"
+pretty_assertions = "1.4"
+async-trait = "0.1"
+tokio-test = "0.4"

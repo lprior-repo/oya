@@ -1,4 +1,5 @@
 {"kind":"meta","version":"1.0","updated":"2026-02","project":"oya"}
+{"kind":"mandate","id":"moon-only","text":"MANDATORY: Use ONLY moon for ALL build/test/lint tasks. NEVER use cargo directly. Violation is a workflow failure."}
 {"kind":"skill","load":"/zjj","when":"first","purpose":"workspace isolation + queue"}
 {"kind":"skill","load":"/tdd15","when":"implementing","purpose":"TDD workflow"}
 {"kind":"skill","load":"/functional-rust-generator","when":"coding","purpose":"zero-panic rust"}

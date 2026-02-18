@@ -87,6 +87,48 @@ Do not document direct cargo commands as operator-facing gate commands.
 - zjj remains the isolation and merge-flow primitive.
 - No stream is active to replace or remove zjj.
 
+## Phase 2: zjj + OpenCode Polling
+
+OYA now ties stage execution to zjj workspace lifecycle for implementation stages and exposes a
+small ops-monitor service for OpenCode observability.
+
+### zjj workspace lifecycle
+
+- For `contract`, `tdd15`, `qa`, `red_queen`, `gpt_review`, and `ship_gate`, OYA runs:
+  1. `zjj queue --add <workspace> --bead <bead_id>`
+  2. `zjj add <workspace> --idempotent`
+- Workspace name is deterministic: `oya-<run_id>-<stage>-a<attempt>` (normalized and validated).
+- OYA persists workspace command evidence in stage state and timeline.
+- Set `OYA_SKIP_ZJJ_WORKSPACE=1` to disable workspace setup in local/dev scenarios.
+
+### OpenCode monitor endpoints
+
+`OyaOpsMonitor` service exposes:
+
+- `poll_status`: snapshots OpenCode `/session/status`, `/permission`, and `/question`.
+- `poll_events`: long-poll proxy for OpenCode `/event`, returns bounded parsed event payloads.
+
+Environment variables:
+
+- `OYA_OPENCODE_BASE_URL` (default: `http://127.0.0.1:4097`)
+- `OYA_OPENCODE_PASSWORD` (optional; used as basic auth password for user `opencode`)
+
+### CLI ops-poll command
+
+Run a continuous terminal poller against OpenCode:
+
+```bash
+oya ops-poll
+```
+
+Environment variables:
+
+- `OYA_OPENCODE_BASE_URL` (default: `http://127.0.0.1:4097`)
+- `OYA_OPENCODE_PASSWORD` (optional)
+- `OYA_POLL_INTERVAL_MS` (default: 2000, clamped to 500-30000)
+
+Output format: `HH:MM:SS.mmm | <busy_sessions> | <pending_permissions> | <pending_questions>`
+
 ## Scope and Non-Goals (Current)
 
 - No UI/frontend stream is in scope.

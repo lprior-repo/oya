@@ -4,12 +4,18 @@
 #![forbid(unsafe_code)]
 
 use oya::types::{FailureCategory, Gate, StageName as Stage, StageResult};
+use oya::{
+    build_opencode_poll_snapshot, build_zjj_workspace_name, is_retryable_failure,
+    parse_opencode_sse_events,
+};
 use restate_sdk::endpoint::Endpoint;
 use restate_sdk::http_server::HttpServer;
 use restate_sdk::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::process::Command;
+
+use clap::{Parser, Subcommand};
 
 #[derive(Debug)]
 pub struct OyaError(String);
@@ -27,10 +33,62 @@ pub trait OyaOrchestrator {
     async fn start(request: Json<serde_json::Value>) -> Result<String, HandlerError>;
 }
 
+#[restate_sdk::service]
+pub trait OyaOpsMonitor {
+    async fn poll_status() -> Result<Json<OpsMonitorPollResponse>, HandlerError>;
+    async fn poll_events(
+        request: Json<OpsMonitorEventRequest>,
+    ) -> Result<Json<OpsMonitorEventResponse>, HandlerError>;
+}
+
 #[derive(Debug, Deserialize)]
 struct StartRequestPayload {
     bead_id: Option<String>,
     context: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct OpsMonitorEventRequest {
+    max_events: Option<usize>,
+    timeout_seconds: Option<u64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct OpsMonitorPollResponse {
+    source: String,
+    observed_at: String,
+    busy_sessions: Vec<String>,
+    pending_permissions: usize,
+    pending_questions: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct OpsMonitorEventEnvelope {
+    raw: String,
+    parsed: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct OpsMonitorEventResponse {
+    source: String,
+    observed_at: String,
+    events: Vec<OpsMonitorEventEnvelope>,
+    count: usize,
+    timeout_seconds: u64,
+}
+
+#[derive(Debug, Serialize)]
+struct WorkspaceLifecycleEvent {
+    workspace: String,
+    queue_command: String,
+    queue_passed: bool,
+    queue_exit_code: i32,
+    queue_output: String,
+    add_command: String,
+    add_passed: bool,
+    add_exit_code: i32,
+    add_output: String,
+    recorded_at: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -138,6 +196,7 @@ fn parse_start_request(request: serde_json::Value) -> Result<StartRequestPayload
 }
 
 pub struct OyaOrchestratorImpl;
+pub struct OyaOpsMonitorImpl;
 
 impl OyaOrchestrator for OyaOrchestratorImpl {
     async fn start(
@@ -192,6 +251,62 @@ impl OyaOrchestrator for OyaOrchestratorImpl {
         run_pipeline(&ctx, run_id.clone(), bead_id, context).await?;
 
         Ok(run_id)
+    }
+}
+
+impl OyaOpsMonitor for OyaOpsMonitorImpl {
+    async fn poll_status(
+        &self,
+        _ctx: Context<'_>,
+    ) -> Result<Json<OpsMonitorPollResponse>, HandlerError> {
+        let config = opencode_config()?;
+        let session_status = fetch_opencode_text(&config, "/session/status", 10).await?;
+        let permission = fetch_opencode_text(&config, "/permission", 10).await?;
+        let question = fetch_opencode_text(&config, "/question", 10).await?;
+
+        let snapshot = build_opencode_poll_snapshot(
+            session_status.as_str(),
+            permission.as_str(),
+            question.as_str(),
+        )
+        .map_err(|error| OyaError(format!("OpenCode snapshot parse failed: {}", error)))?;
+
+        Ok(Json(OpsMonitorPollResponse {
+            source: config.base_url,
+            observed_at: chrono::Utc::now().to_rfc3339(),
+            busy_sessions: snapshot.busy_sessions,
+            pending_permissions: snapshot.pending_permissions,
+            pending_questions: snapshot.pending_questions,
+        }))
+    }
+
+    async fn poll_events(
+        &self,
+        _ctx: Context<'_>,
+        request: Json<OpsMonitorEventRequest>,
+    ) -> Result<Json<OpsMonitorEventResponse>, HandlerError> {
+        let config = opencode_config()?;
+        let max_events = request.0.max_events.map_or(20, |value| value.clamp(1, 200));
+        let timeout_seconds = request.0.timeout_seconds.map_or(15, |value| value.clamp(1, 30));
+        let raw = fetch_opencode_text(&config, "/event", timeout_seconds).await?;
+        let payloads = parse_opencode_sse_events(raw.as_str(), max_events)
+            .map_err(|error| OyaError(format!("OpenCode event parse failed: {}", error)))?;
+
+        let events = payloads
+            .iter()
+            .map(|payload| OpsMonitorEventEnvelope {
+                raw: payload.clone(),
+                parsed: serde_json::from_str::<serde_json::Value>(payload.as_str()).ok(),
+            })
+            .collect::<Vec<_>>();
+
+        Ok(Json(OpsMonitorEventResponse {
+            source: config.base_url,
+            observed_at: chrono::Utc::now().to_rfc3339(),
+            count: events.len(),
+            events,
+            timeout_seconds,
+        }))
     }
 }
 
@@ -254,6 +369,29 @@ async fn run_pipeline(
             },
         )
         .await?;
+
+        if let Some(workspace_event) =
+            prepare_stage_workspace(&run_id, &bead_id, &current_stage, attempt)?
+        {
+            let workspace_key = stage_attempt_key(&current_stage, attempt, "workspace");
+            set_json_state(ctx, &workspace_key, &workspace_event)?;
+            append_timeline(
+                ctx,
+                TimelineEvent {
+                    at: workspace_event.recorded_at.clone(),
+                    event: "stage_workspace_ready".to_string(),
+                    stage: Some(current_stage.as_str().to_string()),
+                    attempt: Some(attempt),
+                    detail: Some(format!(
+                        "workspace={} queue_exit={} add_exit={}",
+                        workspace_event.workspace,
+                        workspace_event.queue_exit_code,
+                        workspace_event.add_exit_code
+                    )),
+                },
+            )
+            .await?;
+        }
 
         let (stage_result, stage_prompt) = match execute_stage_real(
             &run_id,
@@ -516,14 +654,8 @@ async fn run_pipeline(
     }
 }
 
-fn is_retryable_failure(category: &FailureCategory) -> bool {
-    matches!(
-        category,
-        FailureCategory::TestFailed
-            | FailureCategory::LintFailed
-            | FailureCategory::OutputParseFailure
-    )
-}
+// Re-export from lib for backwards compatibility
+// is_retryable_failure imported from oya lib above
 
 async fn execute_stage_real(
     run_id: &str,
@@ -676,6 +808,65 @@ struct GateEvidence {
     output: String,
 }
 
+#[derive(Debug, Clone)]
+struct OpenCodeConfig {
+    base_url: String,
+    password: Option<String>,
+}
+
+fn opencode_config() -> Result<OpenCodeConfig, OyaError> {
+    let base_url = std::env::var("OYA_OPENCODE_BASE_URL")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "http://127.0.0.1:4097".to_string());
+
+    if !is_valid_http_url(base_url.as_str()) {
+        return Err(OyaError(format!("Invalid OYA_OPENCODE_BASE_URL '{}'", base_url)));
+    }
+
+    let password =
+        std::env::var("OYA_OPENCODE_PASSWORD").ok().filter(|value| !value.trim().is_empty());
+
+    Ok(OpenCodeConfig { base_url, password })
+}
+
+async fn fetch_opencode_text(
+    config: &OpenCodeConfig,
+    path: &str,
+    timeout_seconds: u64,
+) -> Result<String, OyaError> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(timeout_seconds))
+        .build()
+        .map_err(|error| OyaError(format!("OpenCode HTTP client build failed: {}", error)))?;
+
+    let url = format!("{}{}", config.base_url.trim_end_matches('/'), path);
+    let request = config.password.as_ref().map_or_else(
+        || client.get(url.clone()),
+        |password| client.get(url.clone()).basic_auth("opencode", Some(password)),
+    );
+
+    let response = request
+        .send()
+        .await
+        .map_err(|error| OyaError(format!("OpenCode request failed for {}: {}", path, error)))?;
+    let status = response.status();
+    let text = response.text().await.map_err(|error| {
+        OyaError(format!("OpenCode response read failed for {}: {}", path, error))
+    })?;
+
+    if !status.is_success() {
+        return Err(OyaError(format!(
+            "OpenCode request failed for {} with status {}: {}",
+            path,
+            status.as_u16(),
+            truncate_text(text.as_str(), 4000)
+        )));
+    }
+
+    Ok(text)
+}
+
 fn run_command_with_timeout(
     command_name: &str,
     args: &[&str],
@@ -808,6 +999,81 @@ fn execute_gate(gate: Gate) -> Result<GateEvidence, OyaError> {
             })
         }
     }
+}
+
+fn should_skip_zjj_workspace_lifecycle() -> bool {
+    std::env::var("OYA_SKIP_ZJJ_WORKSPACE")
+        .ok()
+        .is_some_and(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+}
+
+fn stage_uses_workspace(stage: &Stage) -> bool {
+    matches!(
+        stage,
+        Stage::Contract
+            | Stage::Tdd15
+            | Stage::Qa
+            | Stage::RedQueen
+            | Stage::GptReview
+            | Stage::ShipGate
+    )
+}
+
+fn prepare_stage_workspace(
+    run_id: &str,
+    bead_id: &str,
+    stage: &Stage,
+    attempt: u32,
+) -> Result<Option<WorkspaceLifecycleEvent>, OyaError> {
+    if should_skip_zjj_workspace_lifecycle() || !stage_uses_workspace(stage) {
+        return Ok(None);
+    }
+
+    let workspace = build_zjj_workspace_name(run_id, stage.as_str(), attempt)
+        .map_err(|error| OyaError(format!("Invalid workspace name for stage prep: {}", error)))?;
+
+    let queue_command = format!("zjj queue --add {} --bead {}", workspace, bead_id);
+    let (queue_passed, queue_output, queue_exit_code) = run_command_with_timeout_with_exit(
+        "zjj",
+        &["queue", "--add", workspace.as_str(), "--bead", bead_id],
+        ZJJ_TIMEOUT_SECONDS,
+    )?;
+    if !queue_passed {
+        return Err(OyaError(format!(
+            "zjj queue failed for workspace {} (exit={}): {}",
+            workspace,
+            queue_exit_code,
+            truncate_text(queue_output.as_str(), 2000)
+        )));
+    }
+
+    let add_command = format!("zjj add {} --idempotent", workspace);
+    let (add_passed, add_output, add_exit_code) = run_command_with_timeout_with_exit(
+        "zjj",
+        &["add", workspace.as_str(), "--idempotent"],
+        ZJJ_TIMEOUT_SECONDS,
+    )?;
+    if !add_passed {
+        return Err(OyaError(format!(
+            "zjj add failed for workspace {} (exit={}): {}",
+            workspace,
+            add_exit_code,
+            truncate_text(add_output.as_str(), 2000)
+        )));
+    }
+
+    Ok(Some(WorkspaceLifecycleEvent {
+        workspace,
+        queue_command,
+        queue_passed,
+        queue_exit_code,
+        queue_output: truncate_text(queue_output.as_str(), 4000),
+        add_command,
+        add_passed,
+        add_exit_code,
+        add_output: truncate_text(add_output.as_str(), 4000),
+        recorded_at: chrono::Utc::now().to_rfc3339(),
+    }))
 }
 
 fn truncate_text(input: &str, max_chars: usize) -> String {
@@ -1114,6 +1380,23 @@ fn repo_root() -> Result<PathBuf, OyaError> {
     std::env::current_dir().map_err(|e| OyaError(format!("Failed to resolve repo root: {}", e)))
 }
 
+fn is_valid_http_url(value: &str) -> bool {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+
+    match reqwest::Url::parse(trimmed) {
+        Ok(url) => {
+            let scheme_valid = url.scheme() == "http" || url.scheme() == "https";
+            let host_valid = url.host_str().is_some();
+            let creds_valid = url.username().is_empty() && url.password().is_none();
+            scheme_valid && host_valid && creds_valid
+        }
+        Err(_) => false,
+    }
+}
+
 fn resolve_bind_addr() -> Result<std::net::SocketAddr, OyaError> {
     let configured = std::env::var("OYA_BIND_ADDR").ok();
     let value = configured.unwrap_or_else(|| "127.0.0.1:9080".to_string());
@@ -1121,21 +1404,163 @@ fn resolve_bind_addr() -> Result<std::net::SocketAddr, OyaError> {
     value.parse().map_err(|e| OyaError(format!("Invalid OYA_BIND_ADDR '{}': {}", value, e)))
 }
 
+#[derive(Parser, Debug)]
+#[command(name = "oya", about = "OYA Orchestrator - AI governance runtime")]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<CliCommand>,
+}
+
+#[derive(Subcommand, Debug)]
+enum CliCommand {
+    #[command(about = "Run the Restate orchestrator server (default)")]
+    Serve,
+    #[command(about = "Continuously poll OpenCode status and stream to stdout")]
+    OpsPoll,
+}
+
+fn parse_cli_mode() -> CliMode {
+    let cli = Cli::parse();
+    match cli.command {
+        None | Some(CliCommand::Serve) => CliMode::Serve,
+        Some(CliCommand::OpsPoll) => CliMode::OpsPoll,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CliMode {
+    Serve,
+    OpsPoll,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mode = parse_cli_mode();
+
+    match mode {
+        CliMode::OpsPoll => run_ops_poller().await,
+        CliMode::Serve => run_server().await,
+    }
+}
+
+async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt().with_max_level(tracing::Level::INFO).init();
 
     tracing::info!("OYA Orchestrator starting on port 9080");
     tracing::info!("Using REAL execution: opencode CLI + moon/zjj quality gates");
 
-    let service = OyaOrchestratorImpl.serve();
-    let service_options = restate_sdk::endpoint::ServiceOptions::new()
+    let workflow_service = OyaOrchestratorImpl.serve();
+    let monitor_service = OyaOpsMonitorImpl.serve();
+    let workflow_service_options = restate_sdk::endpoint::ServiceOptions::new()
         .inactivity_timeout(std::time::Duration::from_secs(30 * 60))
         .abort_timeout(std::time::Duration::from_secs(5 * 60));
-    let endpoint = Endpoint::builder().bind_with_options(service, service_options).build();
+    let monitor_service_options = restate_sdk::endpoint::ServiceOptions::new()
+        .inactivity_timeout(std::time::Duration::from_secs(30 * 60))
+        .abort_timeout(std::time::Duration::from_secs(5 * 60));
+    let endpoint = Endpoint::builder()
+        .bind_with_options(workflow_service, workflow_service_options)
+        .bind_with_options(monitor_service, monitor_service_options)
+        .build();
 
     let bind_addr = resolve_bind_addr()?;
     HttpServer::new(endpoint).listen_and_serve(bind_addr).await;
 
     Ok(())
+}
+
+async fn run_ops_poller() -> Result<(), Box<dyn std::error::Error>> {
+    let config = opencode_config()?;
+    let interval_ms: u64 = std::env::var("OYA_POLL_INTERVAL_MS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .map_or(2000, |value: u64| value.clamp(500, 30000));
+
+    #[allow(clippy::print_stderr)]
+    {
+        eprintln!("[oya:ops-poll] source={} interval_ms={}", config.base_url, interval_ms);
+        eprintln!("[oya:ops-poll] columns: ts | busy | perm | quest | event_preview");
+    }
+
+    let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(10)).build()?;
+
+    loop {
+        match poll_opencode_status(&client, &config).await {
+            Ok(status_line) => {
+                #[allow(clippy::print_stdout)]
+                {
+                    println!("{}", status_line);
+                }
+            }
+            Err(error) => {
+                #[allow(clippy::print_stderr)]
+                {
+                    eprintln!("[oya:ops-poll] error: {}", error);
+                }
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(interval_ms)).await;
+    }
+}
+
+async fn poll_opencode_status(
+    client: &reqwest::Client,
+    config: &OpenCodeConfig,
+) -> Result<String, OyaError> {
+    let status_url = format!("{}/session/status", config.base_url.trim_end_matches('/'));
+    let perm_url = format!("{}/permission", config.base_url.trim_end_matches('/'));
+    let question_url = format!("{}/question", config.base_url.trim_end_matches('/'));
+
+    let status_raw =
+        fetch_text_with_client(client, &status_url, config.password.as_deref()).await?;
+    let perm_raw = fetch_text_with_client(client, &perm_url, config.password.as_deref()).await?;
+    let question_raw =
+        fetch_text_with_client(client, &question_url, config.password.as_deref()).await?;
+
+    let snapshot = build_opencode_poll_snapshot(&status_raw, &perm_raw, &question_raw)
+        .map_err(|error| OyaError(format!("Parse failed: {}", error)))?;
+
+    let busy_preview = if snapshot.busy_sessions.is_empty() {
+        "-".to_string()
+    } else if snapshot.busy_sessions.len() <= 3 {
+        snapshot.busy_sessions.join(",")
+    } else {
+        format!("{},...+{}", snapshot.busy_sessions[0], snapshot.busy_sessions.len() - 1)
+    };
+
+    let ts = chrono::Utc::now().format("%H:%M:%S%.3f");
+    Ok(format!(
+        "{} | {} | {} | {}",
+        ts, busy_preview, snapshot.pending_permissions, snapshot.pending_questions
+    ))
+}
+
+async fn fetch_text_with_client(
+    client: &reqwest::Client,
+    url: &str,
+    password: Option<&str>,
+) -> Result<String, OyaError> {
+    let request = password
+        .map_or_else(|| client.get(url), |pwd| client.get(url).basic_auth("opencode", Some(pwd)));
+
+    let response = request
+        .send()
+        .await
+        .map_err(|error| OyaError(format!("Request failed for {}: {}", url, error)))?;
+
+    let status = response.status();
+    let text = response
+        .text()
+        .await
+        .map_err(|error| OyaError(format!("Read failed for {}: {}", url, error)))?;
+
+    if !status.is_success() {
+        return Err(OyaError(format!(
+            "Status {} for {}: {}",
+            status.as_u16(),
+            url,
+            truncate_text(&text, 200)
+        )));
+    }
+
+    Ok(text)
 }

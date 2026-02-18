@@ -29,11 +29,23 @@
 //! - Report validation enforces invariant coherence across plan, checks, stages, and decision so
 //!   any mismatch is rejected as `BeadCupidError`.
 
+pub mod orchestrator;
 pub mod types;
 
 use chrono::{DateTime, Utc};
 use std::path::PathBuf;
 use thiserror::Error;
+use types::FailureCategory;
+
+/// Determine if a failure category is retryable
+pub fn is_retryable_failure(category: &FailureCategory) -> bool {
+    matches!(
+        category,
+        FailureCategory::TestFailed
+            | FailureCategory::LintFailed
+            | FailureCategory::OutputParseFailure
+    )
+}
 
 const MAX_MANUAL_E2E_SCENARIO_LEN: usize = 128;
 const MAX_MANUAL_E2E_COMMAND_LEN: usize = 1024;
@@ -43,6 +55,9 @@ const MAX_SMOKE_RUN_ID_LEN: usize = 128;
 const MAX_OPENCODE_OUTPUT_JSON_LEN: usize = 256 * 1024;
 const MAX_OPENCODE_STDOUT_LEN: usize = 128 * 1024;
 const MAX_MOON_TASK_NAME_LEN: usize = 128;
+const MAX_ZJJ_WORKSPACE_NAME_LEN: usize = 64;
+const MAX_OPENCODE_SSE_RAW_CHUNK_LEN: usize = 256 * 1024;
+const MAX_OPENCODE_SSE_EVENT_PAYLOAD_LEN: usize = 16 * 1024;
 
 /// Returns the string "hello world".
 ///
@@ -78,6 +93,187 @@ impl std::error::Error for OpencodeParseError {}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OpencodeRunOutput {
     pub stdout: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpencodePollSnapshot {
+    pub busy_sessions: Vec<String>,
+    pub pending_permissions: usize,
+    pub pending_questions: usize,
+}
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum OpsMonitorError {
+    #[error("ops monitor field is empty: {0}")]
+    EmptyField(&'static str),
+    #[error("ops monitor field exceeds max length: {0} > {1}")]
+    FieldTooLong(&'static str, usize),
+    #[error("ops monitor field has invalid control characters: {0}")]
+    InvalidFieldContent(&'static str),
+    #[error("ops monitor field has invalid format: {0}")]
+    InvalidFieldFormat(&'static str),
+    #[error("ops monitor json parse failed: {0}")]
+    InvalidJson(String),
+}
+
+pub fn build_zjj_workspace_name(
+    run_id: &str,
+    stage: &str,
+    attempt: u32,
+) -> Result<String, OpsMonitorError> {
+    let normalized_run_id = normalize_workspace_segment(run_id, "run_id")?;
+    let normalized_stage = normalize_workspace_segment(stage, "stage")?;
+    if attempt == 0 {
+        return Err(OpsMonitorError::InvalidFieldFormat("attempt"));
+    }
+
+    let workspace = format!("oya-{}-{}-a{}", normalized_run_id, normalized_stage, attempt);
+    if workspace.len() > MAX_ZJJ_WORKSPACE_NAME_LEN {
+        return Err(OpsMonitorError::FieldTooLong("workspace", MAX_ZJJ_WORKSPACE_NAME_LEN));
+    }
+
+    Ok(workspace)
+}
+
+pub fn parse_opencode_busy_sessions(raw: &str) -> Result<Vec<String>, OpsMonitorError> {
+    if raw.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let value: serde_json::Value = serde_json::from_str(raw)
+        .map_err(|error| OpsMonitorError::InvalidJson(error.to_string()))?;
+    let object = value.as_object().ok_or(OpsMonitorError::InvalidFieldFormat("session_status"))?;
+
+    Ok(object
+        .iter()
+        .filter(|(_, value)| value.get("type").and_then(serde_json::Value::as_str) == Some("busy"))
+        .map(|(session_id, _)| session_id.to_string())
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect())
+}
+
+pub fn parse_opencode_pending_count(
+    raw: &str,
+    field: &'static str,
+) -> Result<usize, OpsMonitorError> {
+    if raw.trim().is_empty() {
+        return Ok(0);
+    }
+
+    let value: serde_json::Value = serde_json::from_str(raw)
+        .map_err(|error| OpsMonitorError::InvalidJson(error.to_string()))?;
+
+    match value {
+        serde_json::Value::Null => Ok(0),
+        serde_json::Value::Array(items) => Ok(items.len()),
+        serde_json::Value::Object(object) => object
+            .get("items")
+            .and_then(serde_json::Value::as_array)
+            .map(std::vec::Vec::len)
+            .or_else(|| {
+                object.get("requests").and_then(serde_json::Value::as_array).map(std::vec::Vec::len)
+            })
+            .or_else(|| {
+                object.get("rows").and_then(serde_json::Value::as_array).map(std::vec::Vec::len)
+            })
+            .map_or_else(|| Ok(object.len()), Ok),
+        _ => Err(OpsMonitorError::InvalidFieldFormat(field)),
+    }
+}
+
+pub fn parse_opencode_sse_events(
+    raw_chunk: &str,
+    max_events: usize,
+) -> Result<Vec<String>, OpsMonitorError> {
+    if raw_chunk.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    if raw_chunk.len() > MAX_OPENCODE_SSE_RAW_CHUNK_LEN {
+        return Err(OpsMonitorError::FieldTooLong("event_chunk", MAX_OPENCODE_SSE_RAW_CHUNK_LEN));
+    }
+    if contains_forbidden_control_chars(raw_chunk) {
+        return Err(OpsMonitorError::InvalidFieldContent("event_chunk"));
+    }
+
+    let normalized = raw_chunk.replace("\r\n", "\n");
+
+    normalized
+        .split("\n\n")
+        .map(parse_sse_payload_block)
+        .filter(|payload| !payload.trim().is_empty())
+        .take(max_events)
+        .map(|payload| {
+            if payload.len() > MAX_OPENCODE_SSE_EVENT_PAYLOAD_LEN {
+                Err(OpsMonitorError::FieldTooLong(
+                    "event_payload",
+                    MAX_OPENCODE_SSE_EVENT_PAYLOAD_LEN,
+                ))
+            } else if contains_forbidden_control_chars(payload.as_str()) {
+                Err(OpsMonitorError::InvalidFieldContent("event_payload"))
+            } else {
+                Ok(payload)
+            }
+        })
+        .collect()
+}
+
+pub fn build_opencode_poll_snapshot(
+    session_status_json: &str,
+    permission_json: &str,
+    question_json: &str,
+) -> Result<OpencodePollSnapshot, OpsMonitorError> {
+    Ok(OpencodePollSnapshot {
+        busy_sessions: parse_opencode_busy_sessions(session_status_json)?,
+        pending_permissions: parse_opencode_pending_count(permission_json, "permission")?,
+        pending_questions: parse_opencode_pending_count(question_json, "question")?,
+    })
+}
+
+fn normalize_workspace_segment(
+    value: &str,
+    field: &'static str,
+) -> Result<String, OpsMonitorError> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(OpsMonitorError::EmptyField(field));
+    }
+    if contains_forbidden_control_chars(trimmed) {
+        return Err(OpsMonitorError::InvalidFieldContent(field));
+    }
+
+    let normalized =
+        trimmed
+            .to_ascii_lowercase()
+            .chars()
+            .map(|char| {
+                if char.is_ascii_alphanumeric() || char == '-' || char == '_' {
+                    char
+                } else {
+                    '-'
+                }
+            })
+            .collect::<String>()
+            .split('-')
+            .filter(|segment| !segment.is_empty())
+            .collect::<Vec<_>>()
+            .join("-");
+
+    if normalized.is_empty() {
+        return Err(OpsMonitorError::InvalidFieldFormat(field));
+    }
+
+    Ok(normalized)
+}
+
+fn parse_sse_payload_block(block: &str) -> String {
+    block
+        .lines()
+        .filter_map(|line| {
+            line.strip_prefix("data:").map(str::trim_start).filter(|payload| !payload.is_empty())
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 pub fn parse_opencode_output(raw: &str) -> Result<OpencodeRunOutput, OpencodeParseError> {
@@ -6251,6 +6447,398 @@ mod tests {
     fn opencode_parse_error_display_returns_message() {
         let error = OpencodeParseError::new("boom");
         assert_eq!(error.to_string(), "boom");
+    }
+
+    #[test]
+    fn opencode_poll_snapshot_is_debug_clone_and_eq() {
+        let snapshot = OpencodePollSnapshot {
+            busy_sessions: vec!["ses_1".to_string()],
+            pending_permissions: 1,
+            pending_questions: 2,
+        };
+        let cloned = snapshot.clone();
+        assert_eq!(snapshot, cloned);
+        let debug_str = format!("{:?}", snapshot);
+        assert!(debug_str.contains("busy_sessions"));
+        assert!(debug_str.contains("pending_permissions"));
+        assert!(debug_str.contains("pending_questions"));
+    }
+
+    #[test]
+    fn ops_monitor_error_display_formats_correctly() {
+        assert_eq!(
+            OpsMonitorError::EmptyField("test").to_string(),
+            "ops monitor field is empty: test"
+        );
+        assert_eq!(
+            OpsMonitorError::FieldTooLong("test", 100).to_string(),
+            "ops monitor field exceeds max length: test > 100"
+        );
+        assert_eq!(
+            OpsMonitorError::InvalidFieldContent("test").to_string(),
+            "ops monitor field has invalid control characters: test"
+        );
+        assert_eq!(
+            OpsMonitorError::InvalidFieldFormat("test").to_string(),
+            "ops monitor field has invalid format: test"
+        );
+        assert_eq!(
+            OpsMonitorError::InvalidJson("parse error".to_string()).to_string(),
+            "ops monitor json parse failed: parse error"
+        );
+    }
+
+    #[test]
+    fn zjj_workspace_given_valid_inputs_when_build_then_returns_normalized_name() {
+        let result = build_zjj_workspace_name(" Run_ABC ", "Tdd15", 2);
+        assert_eq!(result, Ok("oya-run_abc-tdd15-a2".to_string()));
+    }
+
+    #[test]
+    fn zjj_workspace_given_attempt_zero_when_build_then_returns_invalid_attempt_error() {
+        let result = build_zjj_workspace_name("run-1", "qa", 0);
+        assert_eq!(result, Err(OpsMonitorError::InvalidFieldFormat("attempt")));
+    }
+
+    #[test]
+    fn zjj_workspace_given_minimal_valid_input_when_build_then_returns_prefixed_name() {
+        let result = build_zjj_workspace_name("run", "qa", 1);
+        assert_eq!(result, Ok("oya-run-qa-a1".to_string()));
+    }
+
+    #[test]
+    fn zjj_workspace_given_uppercase_input_when_build_then_normalizes_to_lowercase() {
+        let result = build_zjj_workspace_name("RUN-ID", "TDD15", 3);
+        assert_eq!(result, Ok("oya-run-id-tdd15-a3".to_string()));
+    }
+
+    #[test]
+    fn zjj_workspace_given_special_characters_when_build_then_converts_to_dashes() {
+        let result = build_zjj_workspace_name("run@id#test", "qa", 1);
+        assert_eq!(result, Ok("oya-run-id-test-qa-a1".to_string()));
+    }
+
+    #[test]
+    fn zjj_workspace_given_consecutive_special_chars_when_build_then_collapses_to_single_dash() {
+        let result = build_zjj_workspace_name("run---id", "qa", 1);
+        assert_eq!(result, Ok("oya-run-id-qa-a1".to_string()));
+    }
+
+    #[test]
+    fn zjj_workspace_given_underscores_when_build_then_preserves_them() {
+        let result = build_zjj_workspace_name("run_id_test", "stage", 1);
+        assert_eq!(result, Ok("oya-run_id_test-stage-a1".to_string()));
+    }
+
+    #[test]
+    fn zjj_workspace_given_whitespace_padding_when_build_then_trims_it() {
+        let result = build_zjj_workspace_name("  run-id  ", "  qa  ", 1);
+        assert_eq!(result, Ok("oya-run-id-qa-a1".to_string()));
+    }
+
+    #[test]
+    fn zjj_workspace_given_empty_run_id_when_build_then_returns_empty_field_error() {
+        let result = build_zjj_workspace_name("", "qa", 1);
+        assert_eq!(result, Err(OpsMonitorError::EmptyField("run_id")));
+    }
+
+    #[test]
+    fn zjj_workspace_given_whitespace_only_run_id_when_build_then_returns_empty_field_error() {
+        let result = build_zjj_workspace_name("   ", "qa", 1);
+        assert_eq!(result, Err(OpsMonitorError::EmptyField("run_id")));
+    }
+
+    #[test]
+    fn zjj_workspace_given_empty_stage_when_build_then_returns_empty_field_error() {
+        let result = build_zjj_workspace_name("run", "", 1);
+        assert_eq!(result, Err(OpsMonitorError::EmptyField("stage")));
+    }
+
+    #[test]
+    fn zjj_workspace_given_control_char_in_run_id_when_build_then_returns_invalid_content_error() {
+        let result = build_zjj_workspace_name("run\u{0000}id", "qa", 1);
+        assert_eq!(result, Err(OpsMonitorError::InvalidFieldContent("run_id")));
+    }
+
+    #[test]
+    fn zjj_workspace_given_oversized_inputs_when_build_then_returns_field_too_long_error() {
+        let long_run_id = "x".repeat(50);
+        let long_stage = "y".repeat(20);
+        let result = build_zjj_workspace_name(&long_run_id, &long_stage, 999);
+        assert_eq!(
+            result,
+            Err(OpsMonitorError::FieldTooLong("workspace", MAX_ZJJ_WORKSPACE_NAME_LEN))
+        );
+    }
+
+    #[test]
+    fn zjj_workspace_given_only_special_chars_when_build_then_returns_invalid_format_error() {
+        let result = build_zjj_workspace_name("@@@", "qa", 1);
+        assert_eq!(result, Err(OpsMonitorError::InvalidFieldFormat("run_id")));
+    }
+
+    #[test]
+    fn opencode_status_given_empty_json_when_parse_then_returns_empty_list() {
+        let result = parse_opencode_busy_sessions("");
+        assert_eq!(result, Ok(Vec::<String>::new()));
+    }
+
+    #[test]
+    fn opencode_status_given_whitespace_when_parse_then_returns_empty_list() {
+        let result = parse_opencode_busy_sessions("   ");
+        assert_eq!(result, Ok(Vec::<String>::new()));
+    }
+
+    #[test]
+    fn opencode_status_given_only_idle_sessions_when_parse_then_returns_empty_list() {
+        let result = parse_opencode_busy_sessions("{\"ses_a\":{\"type\":\"idle\"}}");
+        assert_eq!(result, Ok(Vec::<String>::new()));
+    }
+
+    #[test]
+    fn opencode_status_given_mixed_sessions_when_parse_then_returns_only_busy_sorted() {
+        let result = parse_opencode_busy_sessions(
+            "{\"ses_c\":{\"type\":\"busy\"},\"ses_a\":{\"type\":\"busy\"}}",
+        );
+        assert_eq!(result, Ok(vec!["ses_a".to_string(), "ses_c".to_string()]));
+    }
+
+    #[test]
+    fn opencode_status_given_unknown_type_when_parse_then_ignores_it() {
+        let result = parse_opencode_busy_sessions(
+            "{\"ses_a\":{\"type\":\"busy\"},\"ses_b\":{\"type\":\"unknown\"}}",
+        );
+        assert_eq!(result, Ok(vec!["ses_a".to_string()]));
+    }
+
+    #[test]
+    fn opencode_status_given_missing_type_field_when_parse_then_ignores_session() {
+        let result = parse_opencode_busy_sessions("{\"ses_a\":{}}");
+        assert_eq!(result, Ok(Vec::<String>::new()));
+    }
+
+    #[test]
+    fn opencode_status_given_invalid_json_when_parse_then_returns_invalid_json_error() {
+        let result = parse_opencode_busy_sessions("not json");
+        let Err(OpsMonitorError::InvalidJson(msg)) = result else {
+            panic!("Expected InvalidJson error");
+        };
+        assert!(msg.contains("expected"));
+    }
+
+    #[test]
+    fn opencode_status_given_array_root_when_parse_then_returns_invalid_format_error() {
+        let result = parse_opencode_busy_sessions("[{\"type\":\"busy\"}]");
+        assert_eq!(result, Err(OpsMonitorError::InvalidFieldFormat("session_status")));
+    }
+
+    #[test]
+    fn opencode_pending_given_empty_string_when_parse_then_returns_zero() {
+        let result = parse_opencode_pending_count("", "test");
+        assert_eq!(result, Ok(0));
+    }
+
+    #[test]
+    fn opencode_pending_given_null_when_parse_then_returns_zero() {
+        let result = parse_opencode_pending_count("null", "test");
+        assert_eq!(result, Ok(0));
+    }
+
+    #[test]
+    fn opencode_pending_given_json_array_when_parse_then_returns_length() {
+        let result = parse_opencode_pending_count("[1,2,3,4,5]", "test");
+        assert_eq!(result, Ok(5));
+    }
+
+    #[test]
+    fn opencode_pending_given_items_array_when_parse_then_returns_its_length() {
+        let result = parse_opencode_pending_count("{\"items\":[1,2,3]}", "test");
+        assert_eq!(result, Ok(3));
+    }
+
+    #[test]
+    fn opencode_pending_given_requests_array_when_parse_then_returns_its_length() {
+        let result = parse_opencode_pending_count("{\"requests\":[1,2]}", "test");
+        assert_eq!(result, Ok(2));
+    }
+
+    #[test]
+    fn opencode_pending_given_rows_array_when_parse_then_returns_its_length() {
+        let result = parse_opencode_pending_count("{\"rows\":[1]}", "test");
+        assert_eq!(result, Ok(1));
+    }
+
+    #[test]
+    fn opencode_pending_given_object_without_known_array_when_parse_then_returns_key_count() {
+        let result = parse_opencode_pending_count("{\"a\":1,\"b\":2,\"c\":3}", "test");
+        assert_eq!(result, Ok(3));
+    }
+
+    #[test]
+    fn opencode_pending_given_object_with_items_and_extras_when_parse_then_uses_items_count() {
+        let result = parse_opencode_pending_count("{\"items\":[1,2],\"extra\":3}", "test");
+        assert_eq!(result, Ok(2));
+    }
+
+    #[test]
+    fn opencode_pending_given_string_value_when_parse_then_returns_invalid_format_error() {
+        let result = parse_opencode_pending_count("\"string\"", "test");
+        assert_eq!(result, Err(OpsMonitorError::InvalidFieldFormat("test")));
+    }
+
+    #[test]
+    fn opencode_pending_given_invalid_json_when_parse_then_returns_invalid_json_error() {
+        let result = parse_opencode_pending_count("not json", "test");
+        let Err(OpsMonitorError::InvalidJson(msg)) = result else {
+            panic!("Expected InvalidJson error");
+        };
+        assert!(msg.contains("expected"));
+    }
+
+    #[test]
+    fn opencode_sse_given_empty_string_when_parse_then_returns_empty_list() {
+        let result = parse_opencode_sse_events("", 10);
+        assert_eq!(result, Ok(Vec::<String>::new()));
+    }
+
+    #[test]
+    fn opencode_sse_given_whitespace_when_parse_then_returns_empty_list() {
+        let result = parse_opencode_sse_events("   ", 10);
+        assert_eq!(result, Ok(Vec::<String>::new()));
+    }
+
+    #[test]
+    fn opencode_sse_given_single_data_line_when_parse_then_extracts_payload() {
+        let result = parse_opencode_sse_events("data: hello\n\n", 10);
+        assert_eq!(result, Ok(vec!["hello".to_string()]));
+    }
+
+    #[test]
+    fn opencode_sse_given_multiple_data_lines_in_event_when_parse_then_joins_with_newline() {
+        let result = parse_opencode_sse_events("data: line1\ndata: line2\n\n", 10);
+        assert_eq!(result, Ok(vec!["line1\nline2".to_string()]));
+    }
+
+    #[test]
+    fn opencode_sse_given_event_type_line_when_parse_then_ignores_it() {
+        let result = parse_opencode_sse_events("event: ping\ndata: hello\n\n", 10);
+        assert_eq!(result, Ok(vec!["hello".to_string()]));
+    }
+
+    #[test]
+    fn opencode_sse_given_max_events_limit_when_parse_then_truncates_to_limit() {
+        let result = parse_opencode_sse_events("data: a\n\ndata: b\n\ndata: c\n\n", 2);
+        assert_eq!(result, Ok(vec!["a".to_string(), "b".to_string()]));
+    }
+
+    #[test]
+    fn opencode_sse_given_crlf_line_endings_when_parse_then_normalizes_to_lf() {
+        let result = parse_opencode_sse_events("data: hello\r\n\r\n", 10);
+        assert_eq!(result, Ok(vec!["hello".to_string()]));
+    }
+
+    #[test]
+    fn opencode_sse_given_oversized_chunk_when_parse_then_returns_field_too_long_error() {
+        let oversized = "data: x\n\n".repeat(MAX_OPENCODE_SSE_RAW_CHUNK_LEN / 8 + 1);
+        let result = parse_opencode_sse_events(&oversized, 10);
+        assert_eq!(
+            result,
+            Err(OpsMonitorError::FieldTooLong("event_chunk", MAX_OPENCODE_SSE_RAW_CHUNK_LEN))
+        );
+    }
+
+    #[test]
+    fn opencode_sse_given_control_char_in_chunk_when_parse_then_returns_invalid_content_error() {
+        let result = parse_opencode_sse_events("data: hello\u{0000}world\n\n", 10);
+        assert_eq!(result, Err(OpsMonitorError::InvalidFieldContent("event_chunk")));
+    }
+
+    #[test]
+    fn opencode_sse_given_oversized_payload_when_parse_then_returns_field_too_long_error() {
+        let long_data = "x".repeat(MAX_OPENCODE_SSE_EVENT_PAYLOAD_LEN + 1);
+        let chunk = format!("data: {}\n\n", long_data);
+        let result = parse_opencode_sse_events(&chunk, 10);
+        assert_eq!(
+            result,
+            Err(OpsMonitorError::FieldTooLong("event_payload", MAX_OPENCODE_SSE_EVENT_PAYLOAD_LEN))
+        );
+    }
+
+    #[test]
+    fn opencode_sse_given_empty_data_line_when_parse_then_ignores_it() {
+        let result = parse_opencode_sse_events("data: \n\ndata: hello\n\n", 10);
+        assert_eq!(result, Ok(vec!["hello".to_string()]));
+    }
+
+    #[test]
+    fn opencode_sse_given_json_payload_when_parse_then_extracts_intact() {
+        let raw =
+            "event: session.status\ndata: {\"session\":\"ses_1\",\"type\":\"busy\"}\n\nevent: session.idle\ndata: {\"session\":\"ses_1\"}\n\n";
+        let result = parse_opencode_sse_events(raw, 10);
+        assert_eq!(
+            result,
+            Ok(vec![
+                "{\"session\":\"ses_1\",\"type\":\"busy\"}".to_string(),
+                "{\"session\":\"ses_1\"}".to_string()
+            ])
+        );
+    }
+
+    #[test]
+    fn opencode_poll_given_all_empty_when_build_then_returns_zeros() {
+        let result = build_opencode_poll_snapshot("", "", "");
+        assert_eq!(
+            result,
+            Ok(OpencodePollSnapshot {
+                busy_sessions: vec![],
+                pending_permissions: 0,
+                pending_questions: 0,
+            })
+        );
+    }
+
+    #[test]
+    fn opencode_poll_given_valid_inputs_when_build_then_combines_all_sources() {
+        let result = build_opencode_poll_snapshot(
+            "{\"a\":{\"type\":\"busy\"},\"b\":{\"type\":\"idle\"}}",
+            "[1,2,3]",
+            "{\"items\":[1,2,3,4]}",
+        );
+        assert_eq!(
+            result,
+            Ok(OpencodePollSnapshot {
+                busy_sessions: vec!["a".to_string()],
+                pending_permissions: 3,
+                pending_questions: 4,
+            })
+        );
+    }
+
+    #[test]
+    fn opencode_poll_given_invalid_status_json_when_build_then_propagates_error() {
+        let result = build_opencode_poll_snapshot("invalid", "[]", "[]");
+        let Err(OpsMonitorError::InvalidJson(msg)) = result else {
+            panic!("Expected InvalidJson error");
+        };
+        assert!(msg.contains("expected"));
+    }
+
+    #[test]
+    fn opencode_poll_given_invalid_permission_json_when_build_then_propagates_error() {
+        let result = build_opencode_poll_snapshot("{}", "invalid", "[]");
+        let Err(OpsMonitorError::InvalidJson(msg)) = result else {
+            panic!("Expected InvalidJson error");
+        };
+        assert!(msg.contains("expected"));
+    }
+
+    #[test]
+    fn opencode_poll_given_invalid_question_json_when_build_then_propagates_error() {
+        let result = build_opencode_poll_snapshot("{}", "[]", "invalid");
+        let Err(OpsMonitorError::InvalidJson(msg)) = result else {
+            panic!("Expected InvalidJson error");
+        };
+        assert!(msg.contains("expected"));
     }
 
     #[test]
