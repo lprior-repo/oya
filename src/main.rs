@@ -219,7 +219,7 @@ impl OyaOrchestrator for OyaOrchestratorImpl {
 
         let initial_state = OrchestratorState {
             status: "running".to_string(),
-            stage: "research".to_string(),
+            stage: "plan".to_string(),
             attempt: 1,
             bead_id: bead_id.clone(),
             context: context.clone(),
@@ -348,6 +348,7 @@ struct RuntimeConfig {
     skip_zjj_workspace: bool,
     skip_zjj_gate: bool,
     repo_root: PathBuf,
+    opencode_model: String,
 }
 
 impl RuntimeConfig {
@@ -366,7 +367,16 @@ impl RuntimeConfig {
             .await
             .map_err(|e| OyaError(format!("config error: repo_root: {}", e)))?;
 
-        Ok(Self { skip_zjj_workspace, skip_zjj_gate, repo_root: PathBuf::from(repo_root_str) })
+        let opencode_model = Self::deterministic_opencode_model(ctx)
+            .await
+            .map_err(|e| OyaError(format!("config error: opencode_model: {}", e)))?;
+
+        Ok(Self {
+            skip_zjj_workspace,
+            skip_zjj_gate,
+            repo_root: PathBuf::from(repo_root_str),
+            opencode_model,
+        })
     }
 
     async fn deterministic_repo_root(ctx: &WorkflowContext<'_>) -> Result<String, TerminalError> {
@@ -377,6 +387,18 @@ impl RuntimeConfig {
             std::env::current_dir()
                 .map(|p| p.to_string_lossy().to_string())
                 .map_err(|e| HandlerError::from(format!("Failed to resolve repo root: {}", e)))
+        })
+        .await
+    }
+
+    async fn deterministic_opencode_model(
+        ctx: &WorkflowContext<'_>,
+    ) -> Result<String, TerminalError> {
+        ctx.run(|| async move {
+            if let Ok(model) = std::env::var("OYA_OPENCODE_MODEL") {
+                return Ok::<_, HandlerError>(model);
+            }
+            Ok("opencode/big-pickle".to_string())
         })
         .await
     }
@@ -391,7 +413,7 @@ async fn run_pipeline(
     // Load all runtime config deterministically at workflow start
     let config = RuntimeConfig::load(ctx).await?;
 
-    let mut current_stage = Stage::Research;
+    let mut current_stage = Stage::Plan;
     let mut attempt = 1u32;
     let mut last_failure: Option<(FailureCategory, String)> = None;
     let initial_ts =
@@ -814,10 +836,10 @@ async fn execute_stage_real(
     let stage_for_closure = stage.clone();
     let skip_zjj_gate = config.skip_zjj_gate;
     let repo_root = config.repo_root.clone();
+    let model = config.opencode_model.clone();
 
     let execution = tokio::task::spawn_blocking(move || match stage_for_closure {
-        Stage::Research
-        | Stage::Plan
+        Stage::Plan
         | Stage::Contract
         | Stage::Tdd15
         | Stage::Qa
@@ -835,6 +857,7 @@ async fn execute_stage_real(
                 success_next_stage,
                 &checks,
                 &repo_root,
+                &model,
             )
         }
         Stage::ShipGate => {
@@ -881,8 +904,9 @@ fn execute_prompt_stage(
     success_next_stage: Option<Stage>,
     checks: &[StageCheck],
     repo_root: &PathBuf,
+    model: &str,
 ) -> Result<StageExecution, OyaError> {
-    let (opencode_ok, opencode_output) = run_opencode(&prompt, repo_root)?;
+    let (opencode_ok, opencode_output) = run_opencode(&prompt, repo_root, model)?;
     if !opencode_ok {
         return Ok(StageExecution {
             passed: false,
@@ -1084,11 +1108,15 @@ fn run_command_with_timeout_with_exit(
     Ok((success, stdout, stderr, exit_code))
 }
 
-fn run_opencode(prompt: &str, repo_root: &PathBuf) -> Result<(bool, String), OyaError> {
-    tracing::info!("Running opencode with prompt ({} chars)", prompt.len());
+fn run_opencode(
+    prompt: &str,
+    repo_root: &PathBuf,
+    model: &str,
+) -> Result<(bool, String), OyaError> {
+    tracing::info!("Running opencode with prompt ({} chars) model={}", prompt.len(), model);
     run_command_with_timeout(
         "opencode",
-        &["run", "--format", "json", prompt],
+        &["run", "--format", "json", "--model", model, prompt],
         OPENCODE_TIMEOUT_SECONDS,
         repo_root,
     )
@@ -1400,9 +1428,6 @@ fn stage_prompt(
     );
 
     let body = match stage {
-        Stage::Research => {
-            "TASK:\n1. Read existing source in src/\n2. Summarize implementation constraints in docs/RESEARCH_NOTES.md\n3. Keep output concise and implementation-ready\n\nJust write files. Do not explain."
-        }
         Stage::Plan => {
             "TASK:\n1. Create/update PLAN.md with exact implementation steps\n2. Include test strategy and quality gates\n3. Keep plan aligned to current codebase\n\nJust write files. Do not explain."
         }
@@ -1429,7 +1454,6 @@ fn stage_prompt(
 
 fn stage_success(stage: &Stage) -> (&'static str, Option<Stage>) {
     match stage {
-        Stage::Research => ("Research completed", Some(Stage::Plan)),
         Stage::Plan => ("Planning completed", Some(Stage::Contract)),
         Stage::Contract => ("Contract written and compiles", Some(Stage::Tdd15)),
         Stage::Tdd15 => ("Tests written and passing", Some(Stage::Qa)),
@@ -1442,10 +1466,6 @@ fn stage_success(stage: &Stage) -> (&'static str, Option<Stage>) {
 
 fn stage_checks(stage: &Stage) -> Vec<StageCheck> {
     match stage {
-        Stage::Research => vec![StageCheck::Check {
-            failure: FailureCategory::CompileFailed,
-            next_stage: Stage::Research,
-        }],
         Stage::Plan => vec![StageCheck::Check {
             failure: FailureCategory::CompileFailed,
             next_stage: Stage::Plan,
@@ -1627,16 +1647,7 @@ impl WorkflowConfig {
             timeout_secs: args.timeout,
             poll_interval_secs: args.poll_interval.unwrap_or(5),
             repo_root,
-            stages: &[
-                "research",
-                "plan",
-                "contract",
-                "tdd15",
-                "qa",
-                "red_queen",
-                "gpt_review",
-                "ship_gate",
-            ],
+            stages: &["plan", "contract", "tdd15", "qa", "red_queen", "gpt_review", "ship_gate"],
         }
     }
 }
@@ -2017,10 +2028,14 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
     let monitor_service = OyaOpsMonitorImpl.serve();
     let workflow_service_options = restate_sdk::endpoint::ServiceOptions::new()
         .inactivity_timeout(std::time::Duration::from_secs(30 * 60))
-        .abort_timeout(std::time::Duration::from_secs(5 * 60));
+        .abort_timeout(std::time::Duration::from_secs(5 * 60))
+        .retry_policy_max_attempts(2)
+        .retry_policy_kill_on_max_attempts();
     let monitor_service_options = restate_sdk::endpoint::ServiceOptions::new()
         .inactivity_timeout(std::time::Duration::from_secs(30 * 60))
-        .abort_timeout(std::time::Duration::from_secs(5 * 60));
+        .abort_timeout(std::time::Duration::from_secs(5 * 60))
+        .retry_policy_max_attempts(2)
+        .retry_policy_kill_on_max_attempts();
     let endpoint = Endpoint::builder()
         .bind_with_options(workflow_service, workflow_service_options)
         .bind_with_options(monitor_service, monitor_service_options)

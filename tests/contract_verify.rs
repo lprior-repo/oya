@@ -90,14 +90,14 @@ fn contract_workspace_name_format() {
     use oya::build_zjj_workspace_name;
 
     // Valid inputs should produce names matching pattern
-    let name = build_zjj_workspace_name("run-123", "research", 1).unwrap();
+    let name = build_zjj_workspace_name("run-123", "plan", 1).unwrap();
 
     // Should start with 'oya-'
     assert!(name.starts_with("oya-"));
 
     // Should contain run_id, stage, attempt
     assert!(name.contains("run-123"));
-    assert!(name.contains("research"));
+    assert!(name.contains("plan"));
     assert!(name.contains("a1"));
 }
 
@@ -107,7 +107,6 @@ fn contract_stage_ordering() {
     use oya::types::StageName;
 
     let expected_order = vec![
-        StageName::Research,
         StageName::Plan,
         StageName::Contract,
         StageName::Tdd15,
@@ -140,8 +139,8 @@ fn contract_stage_ordering() {
 fn contract_gate_definitions() {
     use oya::types::{Gate, StageName};
 
-    // Research, Plan, Contract only need to compile
-    for stage in [StageName::Research, StageName::Plan, StageName::Contract] {
+    // Plan, Contract only need to compile
+    for stage in [StageName::Plan, StageName::Contract] {
         let gates = stage.gates();
         assert_eq!(gates.len(), 1, "{:?} should have 1 gate", stage);
         assert_eq!(gates[0], Gate::Compiles);
@@ -194,7 +193,6 @@ fn contract_max_attempts() {
     use oya::types::StageName;
 
     for stage in [
-        StageName::Research,
         StageName::Plan,
         StageName::Contract,
         StageName::Tdd15,
@@ -203,6 +201,6 @@ fn contract_max_attempts() {
         StageName::GptReview,
         StageName::ShipGate,
     ] {
-        assert_eq!(stage.max_attempts(), 3, "{:?} should have 3 max attempts", stage);
+        assert_eq!(stage.max_attempts(), 2, "{:?} should have 2 max attempts", stage);
     }
 }

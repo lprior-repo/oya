@@ -17,17 +17,16 @@ mod util;
 async fn test_stage_success_advances() {
     let orch = util::passing_orchestrator();
 
-    let result = orch.run_stage(StageName::Research, 1, "bead-001", "context", None).await.unwrap();
+    let result = orch.run_stage(StageName::Plan, 1, "bead-001", "context", None).await.unwrap();
 
     assert!(result.passed);
-    assert_eq!(result.next_stage, Some(StageName::Plan));
+    assert_eq!(result.next_stage, Some(StageName::Contract));
 }
 
 /// Test all stage transitions in the happy path
 #[tokio::test]
 async fn test_all_stage_transitions() {
     let test_cases = vec![
-        (StageName::Research, Some(StageName::Plan)),
         (StageName::Plan, Some(StageName::Contract)),
         (StageName::Contract, Some(StageName::Tdd15)),
         (StageName::Tdd15, Some(StageName::Qa)),
@@ -150,7 +149,6 @@ async fn test_merge_conflict_fails_after_max_attempts() {
 async fn test_complete_pipeline_simulation() {
     let orch = util::passing_orchestrator();
     let stages = vec![
-        StageName::Research,
         StageName::Plan,
         StageName::Contract,
         StageName::Tdd15,
@@ -168,7 +166,7 @@ async fn test_complete_pipeline_simulation() {
 
     // Verify all stages were called
     let all_calls = orch.calls();
-    assert_eq!(all_calls.len(), 8);
+    assert_eq!(all_calls.len(), 7);
 }
 
 /// Test that stage failure context is passed correctly

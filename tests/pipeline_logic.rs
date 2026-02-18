@@ -59,11 +59,10 @@ fn given_merge_conflict_when_checking_retryable_then_should_not_retry() {
 // STAGE TRANSITION LOGIC
 // =============================================================================
 
-/// Verify all stages have max 3 attempts
+/// Verify all stages have max 2 attempts
 #[test]
-fn given_any_stage_when_checking_max_attempts_then_is_always_three() {
+fn given_any_stage_when_checking_max_attempts_then_is_always_two() {
     let stages = vec![
-        StageName::Research,
         StageName::Plan,
         StageName::Contract,
         StageName::Tdd15,
@@ -74,14 +73,13 @@ fn given_any_stage_when_checking_max_attempts_then_is_always_three() {
     ];
 
     for stage in stages {
-        assert_eq!(stage.max_attempts(), 3, "{:?} should have 3 max attempts", stage);
+        assert_eq!(stage.max_attempts(), 2, "{:?} should have 2 max attempts", stage);
     }
 }
 
 /// Verify stage ordering is consistent
 #[test]
 fn given_stage_order_when_verifying_then_follows_pipeline_flow() {
-    assert_eq!(StageName::Research.next(), Some(StageName::Plan));
     assert_eq!(StageName::Plan.next(), Some(StageName::Contract));
     assert_eq!(StageName::Contract.next(), Some(StageName::Tdd15));
     assert_eq!(StageName::Tdd15.next(), Some(StageName::Qa));
@@ -91,13 +89,13 @@ fn given_stage_order_when_verifying_then_follows_pipeline_flow() {
     assert_eq!(StageName::ShipGate.next(), None);
 }
 
-/// Verify Research is the starting stage
+/// Verify Plan is the starting stage
 #[test]
-fn given_pipeline_start_when_checking_first_stage_then_is_research() {
-    // Research is typically the first stage in any pipeline
-    let research = StageName::Research;
-    assert_eq!(research.as_str(), "research");
-    assert_eq!(research.next(), Some(StageName::Plan));
+fn given_pipeline_start_when_checking_first_stage_then_is_plan() {
+    // Plan is the first stage in any pipeline
+    let plan = StageName::Plan;
+    assert_eq!(plan.as_str(), "plan");
+    assert_eq!(plan.next(), Some(StageName::Contract));
 }
 
 /// Verify ShipGate is terminal
@@ -111,8 +109,8 @@ fn given_shipgate_when_checking_next_stage_then_is_none() {
 // =============================================================================
 
 #[test]
-fn given_research_stage_when_checking_model_tier_then_is_fast() {
-    assert_eq!(StageName::Research.model_for_stage().as_str(), "fast");
+fn given_plan_stage_when_checking_model_tier_then_is_balanced() {
+    assert_eq!(StageName::Plan.model_for_stage().as_str(), "balanced");
 }
 
 #[test]

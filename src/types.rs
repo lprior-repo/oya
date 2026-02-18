@@ -64,7 +64,6 @@ impl BeadId {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum StageName {
-    Research,
     Plan,
     Contract,
     Tdd15,
@@ -77,7 +76,6 @@ pub enum StageName {
 impl StageName {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Self::Research => "research",
             Self::Plan => "plan",
             Self::Contract => "contract",
             Self::Tdd15 => "tdd15",
@@ -90,7 +88,6 @@ impl StageName {
 
     pub fn next(&self) -> Option<Self> {
         match self {
-            Self::Research => Some(Self::Plan),
             Self::Plan => Some(Self::Contract),
             Self::Contract => Some(Self::Tdd15),
             Self::Tdd15 => Some(Self::Qa),
@@ -103,7 +100,6 @@ impl StageName {
 
     pub fn model_for_stage(&self) -> ModelTier {
         match self {
-            Self::Research => ModelTier::Fast,
             Self::Plan => ModelTier::Balanced,
             Self::Contract => ModelTier::Fast,
             Self::Tdd15 => ModelTier::Balanced,
@@ -115,12 +111,11 @@ impl StageName {
     }
 
     pub fn max_attempts(&self) -> u32 {
-        3
+        2
     }
 
     pub fn gates(&self) -> Vec<Gate> {
         match self {
-            Self::Research => vec![Gate::Compiles],
             Self::Plan => vec![Gate::Compiles],
             Self::Contract => vec![Gate::Compiles],
             Self::Tdd15 => vec![Gate::Compiles, Gate::TestsPass],
@@ -183,7 +178,6 @@ impl TryFrom<&str> for StageName {
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         match s {
-            "research" => Ok(Self::Research),
             "plan" => Ok(Self::Plan),
             "contract" => Ok(Self::Contract),
             "tdd15" => Ok(Self::Tdd15),
@@ -517,12 +511,12 @@ impl Run {
         }
     }
 
-    /// Transition from Pending to Running (Research stage)
+    /// Transition from Pending to Running (Plan stage)
     /// Pure functional: returns new state, does not mutate
     pub fn start(&self) -> Result<Self, DomainError> {
         match &self.state {
             RunState::Pending => Ok(Self {
-                state: RunState::Running { current_stage: StageName::Research },
+                state: RunState::Running { current_stage: StageName::Plan },
                 updated_at: Utc::now(),
                 ..self.clone()
             }),
@@ -1119,10 +1113,6 @@ pub fn determine_transition(
 #[must_use]
 pub fn passed_stage_transition(stage: StageName) -> TransitionDecision {
     match stage {
-        StageName::Research => TransitionDecision::new(
-            StageTransition::Advance(StageName::Plan),
-            TransitionReason::StagePassedAdvance,
-        ),
         StageName::Plan => TransitionDecision::new(
             StageTransition::Advance(StageName::Contract),
             TransitionReason::StagePassedAdvance,

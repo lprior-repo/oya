@@ -61,14 +61,14 @@ async fn given_gate_configured_to_fail_when_it_runs_then_reports_failure() {
     assert_eq!(result.exit_code, 1);
 }
 
-/// Given: Research stage
+/// Given: Plan stage
 /// When: Gates run
 /// Then: Should only run Compiles gate
 #[tokio::test]
-async fn given_research_stage_when_gates_run_then_only_compiles_required() {
+async fn given_plan_stage_when_gates_run_then_only_compiles_required() {
     use oya::types::StageName;
 
-    let gates = StageName::Research.gates();
+    let gates = StageName::Plan.gates();
 
     assert_eq!(gates.len(), 1);
     assert_eq!(gates[0], Gate::Compiles);
@@ -102,7 +102,7 @@ async fn given_tdd15_when_gates_run_then_runs_compile_and_test() {
     assert!(gates.contains(&Gate::TestsPass));
 }
 
-/// Given: All 8 stages
+/// Given: All 7 stages
 /// When: Gates are checked
 /// Then: Each stage should have appropriate gates
 #[tokio::test]
@@ -110,7 +110,7 @@ async fn given_all_stages_when_gates_checked_then_appropriate_for_stage() {
     use oya::types::StageName;
 
     // Early stages: Just compile
-    for stage in [StageName::Research, StageName::Plan, StageName::Contract] {
+    for stage in [StageName::Plan, StageName::Contract] {
         let gates = stage.gates();
         assert_eq!(gates.len(), 1, "{:?} should have 1 gate", stage);
         assert_eq!(gates[0], Gate::Compiles);

@@ -24,12 +24,11 @@ mod util;
 
 /// Given: All stages pass on first attempt
 /// When: Pipeline runs
-/// Then: Status should be "shipped" after completing all 8 stages
+/// Then: Status should be "shipped" after completing all 7 stages
 #[tokio::test]
 async fn given_all_stages_pass_when_pipeline_runs_then_status_is_shipped() {
     let orch = util::passing_orchestrator();
     let stages = vec![
-        StageName::Research,
         StageName::Plan,
         StageName::Contract,
         StageName::Tdd15,
@@ -44,9 +43,9 @@ async fn given_all_stages_pass_when_pipeline_runs_then_status_is_shipped() {
         assert!(result.passed, "Stage {:?} should pass", stage);
     }
 
-    // Verify all 8 stages were executed (the behavior we care about)
+    // Verify all 7 stages were executed (the behavior we care about)
     let calls = orch.calls();
-    assert_eq!(calls.len(), 8, "All 8 stages should execute exactly once");
+    assert_eq!(calls.len(), 7, "All 7 stages should execute exactly once");
 }
 
 /// Given: Stage succeeds
@@ -56,10 +55,10 @@ async fn given_all_stages_pass_when_pipeline_runs_then_status_is_shipped() {
 async fn given_stage_succeeds_when_it_completes_then_advances_to_next() {
     let orch = util::passing_orchestrator();
 
-    let result = orch.run_stage(StageName::Research, 1, "bead", "ctx", None).await.unwrap();
+    let result = orch.run_stage(StageName::Plan, 1, "bead", "ctx", None).await.unwrap();
 
     assert!(result.passed);
-    assert_eq!(result.next_stage, Some(StageName::Plan), "Research should advance to Plan");
+    assert_eq!(result.next_stage, Some(StageName::Contract), "Plan should advance to Contract");
 }
 
 // =============================================================================
@@ -178,7 +177,7 @@ async fn given_stage_fails_then_succeeds_on_retry_when_retry_passes_then_advance
 async fn given_non_retryable_failure_when_it_occurs_then_fails_immediately() {
     let mut config = FakeOrchestratorConfig::default();
     config.stage_results.insert(
-        (StageName::Research, 1),
+        (StageName::Plan, 1),
         StageExecutionResult {
             passed: false,
             output: json!({"error": "auth failed"}),
@@ -190,7 +189,7 @@ async fn given_non_retryable_failure_when_it_occurs_then_fails_immediately() {
 
     let orch = FakeOrchestrator::new(config, "run".to_string(), "bead".to_string());
 
-    let result = orch.run_stage(StageName::Research, 1, "bead", "ctx", None).await.unwrap();
+    let result = orch.run_stage(StageName::Plan, 1, "bead", "ctx", None).await.unwrap();
 
     // Behavior: Fails immediately, no retry
     assert!(!result.passed);
@@ -201,25 +200,25 @@ async fn given_non_retryable_failure_when_it_occurs_then_fails_immediately() {
     );
 
     // Only 1 attempt made (no retries)
-    let calls = orch.stage_calls(StageName::Research);
+    let calls = orch.stage_calls(StageName::Plan);
     assert_eq!(calls.len(), 1, "Should not retry non-retryable failures");
 }
 
 // =============================================================================
-// STAGE PROGRESSION: The 8-stage pipeline
+// STAGE PROGRESSION: The 7-stage pipeline
 // =============================================================================
 
 /// Given: Pipeline starts
-/// When: Research completes successfully
-/// Then: It should move to Plan stage
+/// When: Plan completes successfully
+/// Then: It should move to Contract stage
 #[tokio::test]
-async fn given_research_completes_when_successful_then_moves_to_plan() {
+async fn given_plan_completes_when_successful_then_moves_to_contract() {
     let orch = util::passing_orchestrator();
 
-    let result = orch.run_stage(StageName::Research, 1, "bead", "ctx", None).await.unwrap();
+    let result = orch.run_stage(StageName::Plan, 1, "bead", "ctx", None).await.unwrap();
 
     assert!(result.passed);
-    assert_eq!(result.next_stage, Some(StageName::Plan));
+    assert_eq!(result.next_stage, Some(StageName::Contract));
 }
 
 /// Given: Pipeline reaches ShipGate
@@ -241,7 +240,6 @@ async fn given_shipgate_passes_when_successful_then_pipeline_completes() {
 #[tokio::test]
 async fn given_any_stage_when_successful_then_transitions_to_correct_next() {
     let test_cases = vec![
-        (StageName::Research, StageName::Plan),
         (StageName::Plan, StageName::Contract),
         (StageName::Contract, StageName::Tdd15),
         (StageName::Tdd15, StageName::Qa),

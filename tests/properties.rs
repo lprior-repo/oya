@@ -21,7 +21,7 @@ proptest! {
         // Max stage = "gpt_review" (10 chars), max attempt = "10" (2 chars)
         // So run_id max = 64 - 4 - 1 - 10 - 2 - 2 = 45 chars (use 40 for safety)
         run_id in "[a-zA-Z0-9_-]{1,40}",
-        stage in "(research|plan|contract|tdd15|qa|red_queen|gpt_review|ship_gate)",
+        stage in "(plan|contract|tdd15|qa|red_queen|gpt_review|ship_gate)",
         attempt in 1u32..10,
     ) {
         // Skip inputs that would normalize to empty (e.g., just "-")
@@ -86,7 +86,6 @@ proptest! {
     #[test]
     fn prop_stage_ordering(
         stage in prop::sample::select(vec![
-            StageName::Research,
             StageName::Plan,
             StageName::Contract,
             StageName::Tdd15,
@@ -98,7 +97,6 @@ proptest! {
     ) {
         // Property: Each stage has correct next stage
         match stage {
-            StageName::Research => assert_eq!(stage.next(), Some(StageName::Plan)),
             StageName::Plan => assert_eq!(stage.next(), Some(StageName::Contract)),
             StageName::Contract => assert_eq!(stage.next(), Some(StageName::Tdd15)),
             StageName::Tdd15 => assert_eq!(stage.next(), Some(StageName::Qa)),
@@ -115,12 +113,11 @@ proptest! {
     }
 }
 
-/// Property: Max attempts is always 3
+/// Property: Max attempts is always 2
 proptest! {
     #[test]
-    fn prop_max_attempts_is_three(
+    fn prop_max_attempts_is_two(
         stage in prop::sample::select(vec![
-            StageName::Research,
             StageName::Plan,
             StageName::Contract,
             StageName::Tdd15,
@@ -130,8 +127,8 @@ proptest! {
             StageName::ShipGate,
         ]),
     ) {
-        // Property: Every stage allows exactly 3 attempts
-        prop_assert_eq!(stage.max_attempts(), 3);
+        // Property: Every stage allows exactly 2 attempts
+        prop_assert_eq!(stage.max_attempts(), 2);
     }
 }
 
@@ -140,7 +137,6 @@ proptest! {
     #[test]
     fn prop_stages_have_gates(
         stage in prop::sample::select(vec![
-            StageName::Research,
             StageName::Plan,
             StageName::Contract,
             StageName::Tdd15,

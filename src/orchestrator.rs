@@ -16,7 +16,7 @@
 //!
 //! async fn test_happy_path<T: Orchestrator>(orch: T) {
 //!     let result = orch.run_stage(
-//!         StageName::Research,
+//!         StageName::Plan,
 //!         1,
 //!         "bead-001",
 //!         "test context",
@@ -269,23 +269,21 @@ mod tests {
     #[tokio::test]
     async fn fake_orch_returns_default_success() {
         let orch = fake_orch();
-        let result = orch
-            .run_stage(StageName::Research, 1, "test-bead", "test context", None)
-            .await
-            .unwrap();
+        let result =
+            orch.run_stage(StageName::Plan, 1, "test-bead", "test context", None).await.unwrap();
 
         assert!(result.passed);
-        assert_eq!(result.next_stage, Some(StageName::Plan));
+        assert_eq!(result.next_stage, Some(StageName::Contract));
     }
 
     #[tokio::test]
     async fn fake_orch_records_calls() {
         let orch = fake_orch();
 
-        orch.run_stage(StageName::Research, 1, "b", "c", None).await.unwrap();
-        orch.run_stage(StageName::Research, 2, "b", "c", None).await.unwrap();
+        orch.run_stage(StageName::Plan, 1, "b", "c", None).await.unwrap();
+        orch.run_stage(StageName::Plan, 2, "b", "c", None).await.unwrap();
 
-        let calls = orch.stage_calls(StageName::Research);
+        let calls = orch.stage_calls(StageName::Plan);
         assert_eq!(calls.len(), 2);
         assert_eq!(calls[0].attempt, Some(1));
         assert_eq!(calls[1].attempt, Some(2));
