@@ -1662,11 +1662,15 @@ struct WorkflowResult {
 
 impl WorkflowStatus {
     fn from_query_response(body: &str) -> Option<Self> {
-        let rows: Vec<serde_json::Value> = serde_json::from_str(body).ok()?;
+        let response: serde_json::Value = serde_json::from_str(body).ok()?;
+        let rows = response.get("rows")?.as_array()?;
         let row = rows.first()?;
         let status = row.get("status").and_then(|s| s.as_str())?.to_string();
-        let state_json = row.get("state").and_then(|s| s.as_str()).unwrap_or("{}");
-        let state: serde_json::Value = serde_json::from_str(state_json).ok()?;
+
+        let state_json_str = row.get("state_json").and_then(|s| s.as_str()).unwrap_or("{}");
+        let state_outer: serde_json::Value = serde_json::from_str(state_json_str).ok()?;
+        let state_str = state_outer.as_str().unwrap_or("{}");
+        let state: serde_json::Value = serde_json::from_str(state_str).ok()?;
 
         Some(Self {
             status,
@@ -1754,7 +1758,6 @@ async fn execute_workflow(config: WorkflowConfig) -> Result<(), Box<dyn std::err
             "tool": "oya",
             "action": "run"
         })
-        .to_string()
     );
 
     start_workflow(&client, &config).await?;
@@ -1769,7 +1772,6 @@ async fn execute_workflow(config: WorkflowConfig) -> Result<(), Box<dyn std::err
             "poll_interval_seconds": config.poll_interval_secs,
             "message": "Workflow submitted to Restate, polling for completion"
         })
-        .to_string()
     );
 
     let final_status = poll_until_complete(&client, &config).await?;
@@ -1857,7 +1859,7 @@ fn poll_iteration<'a>(
 
         let status = fetch_workflow_status(client, config).await?;
 
-        let status_changed = last_status.as_ref().map_or(true, |last| {
+        let status_changed = last_status.as_ref().is_none_or(|last| {
             last.status != status.status
                 || last.stage != status.stage
                 || last.attempt != status.attempt
@@ -1865,20 +1867,23 @@ fn poll_iteration<'a>(
 
         if status_changed {
             let elapsed_secs = start_time.elapsed().as_secs();
-            eprintln!("{}", serde_json::json!({
-                "type": "stage_progress",
-                "bead_id": config.bead_id,
-                "run_id": config.run_id,
-                "invocation_status": status.status,
-                "orchestration_status": status.orchestration_status,
-                "current_stage": status.stage,
-                "attempt": status.attempt,
-                "elapsed_seconds": elapsed_secs,
-                "remaining_seconds": config.timeout_secs.saturating_sub(elapsed_secs),
-                "last_failure": if status.last_failure.is_empty() { serde_json::Value::Null } else { serde_json::json!(status.last_failure) },
-                "pipeline_stages": config.stages,
-                "repo_root": config.repo_root.display().to_string()
-            }).to_string());
+            eprintln!(
+                "{}",
+                serde_json::json!({
+                    "type": "stage_progress",
+                    "bead_id": config.bead_id,
+                    "run_id": config.run_id,
+                    "invocation_status": status.status,
+                    "orchestration_status": status.orchestration_status,
+                    "current_stage": status.stage,
+                    "attempt": status.attempt,
+                    "elapsed_seconds": elapsed_secs,
+                    "remaining_seconds": config.timeout_secs.saturating_sub(elapsed_secs),
+                    "last_failure": if status.last_failure.is_empty() { serde_json::Value::Null } else { serde_json::json!(status.last_failure) },
+                    "pipeline_stages": config.stages,
+                    "repo_root": config.repo_root.display().to_string()
+                })
+            );
         }
 
         if status.is_complete() {
@@ -1904,11 +1909,13 @@ fn fetch_workflow_status<'a>(
 > {
     let query_payload = serde_json::json!({
         "query": format!(
-            "select id, status, state, modified_at from sys_invocation \
-             where target_service_name = 'OyaOrchestrator' \
-             and target_service_key = '{}' \
-             and target_handler_name = 'start' \
-             order by modified_at desc limit 1;",
+            "select i.status, s.value_utf8 as state_json from sys_invocation i \
+             left join state s on s.service_name = i.target_service_name \
+             and s.service_key = i.target_service_key and s.key = 'state' \
+             where i.target_service_name = 'OyaOrchestrator' \
+             and i.target_service_key = '{}' \
+             and i.target_handler_name = 'start' \
+             order by i.modified_at desc limit 1",
             config.run_id
         )
     });
@@ -1916,14 +1923,15 @@ fn fetch_workflow_status<'a>(
 
     Box::pin(async move {
         let response = client
-            .post(&format!("{}/query", restate_admin))
+            .post(format!("{}/query", restate_admin))
             .header("content-type", "application/json")
+            .header("accept", "application/json")
             .json(&query_payload)
             .send()
             .await
             .map_err(|e| format!("Query request failed: {}", e))?;
 
-        let body = response.text().await.unwrap_or_else(|_| "[]".to_string());
+        let body = response.text().await.unwrap_or_else(|_| "{}".to_string());
 
         WorkflowStatus::from_query_response(&body).ok_or_else(|| "No workflow status found".into())
     })
@@ -1933,31 +1941,34 @@ fn output_result(
     result: &WorkflowResult,
     config: &WorkflowConfig,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    println!("{}", serde_json::json!({
-        "type": "workflow_result",
-        "bead_id": result.bead_id,
-        "run_id": result.run_id,
-        "status": result.status,
-        "final_stage": result.final_stage,
-        "error": result.error,
-        "repo_root": result.repo_root.display().to_string(),
-        "pipeline_stages": config.stages,
-        "is_success": result.status == "shipped",
-        "next_steps": if result.status == "shipped" {
-            serde_json::json!([
-                {"action": "review_code", "path": format!("{}/src/", result.repo_root.display()), "description": "Review generated source code"},
-                {"action": "run_ci", "command": "moon run :ci", "description": "Run CI quality gates"},
-                {"action": "merge_workspace", "command": "zjj done", "description": "Merge zjj workspace to main"},
-                {"action": "close_bead", "command": format!("br close {}", result.bead_id), "description": "Close the bead issue"}
-            ])
-        } else {
-            serde_json::json!([
-                {"action": "review_error", "description": "Review the error output above to understand the failure"},
-                {"action": "fix_issue", "path": format!("{}/src/", result.repo_root.display()), "description": "Fix the underlying issue in the source code"},
-                {"action": "rerun", "command": format!("oya run {}", result.bead_id), "description": "Re-run the workflow after fixing"}
-            ])
-        }
-    }).to_string());
+    println!(
+        "{}",
+        serde_json::json!({
+            "type": "workflow_result",
+            "bead_id": result.bead_id,
+            "run_id": result.run_id,
+            "status": result.status,
+            "final_stage": result.final_stage,
+            "error": result.error,
+            "repo_root": result.repo_root.display().to_string(),
+            "pipeline_stages": config.stages,
+            "is_success": result.status == "shipped",
+            "next_steps": if result.status == "shipped" {
+                serde_json::json!([
+                    {"action": "review_code", "path": format!("{}/src/", result.repo_root.display()), "description": "Review generated source code"},
+                    {"action": "run_ci", "command": "moon run :ci", "description": "Run CI quality gates"},
+                    {"action": "merge_workspace", "command": "zjj done", "description": "Merge zjj workspace to main"},
+                    {"action": "close_bead", "command": format!("br close {}", result.bead_id), "description": "Close the bead issue"}
+                ])
+            } else {
+                serde_json::json!([
+                    {"action": "review_error", "description": "Review the error output above to understand the failure"},
+                    {"action": "fix_issue", "path": format!("{}/src/", result.repo_root.display()), "description": "Fix the underlying issue in the source code"},
+                    {"action": "rerun", "command": format!("oya run {}", result.bead_id), "description": "Re-run the workflow after fixing"}
+                ])
+            }
+        })
+    );
     Ok(())
 }
 

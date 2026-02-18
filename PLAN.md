@@ -1,93 +1,72 @@
-# OYA Implementation Plan: src-1ew
+# OYA Implementation Plan: auth-test
 
-Request context: implement Pokemon CLI tool with REST API client
+Request context: testing
 Attempt: 1
 
 ## Objective
 
-Implement a Rust Pokemon CLI in this existing `oya` binary with deterministic contracts, typed error handling, and test-first coverage for `get-pokemon`, `list-pokemon`, and `search` commands backed by PokeAPI via `reqwest`.
+Add deterministic authentication-focused test coverage for Oya orchestration so auth failure handling, OpenCode basic-auth behavior, and auth-related pipeline contracts are validated without relying on external services in default test runs.
 
 ## Codebase Alignment Snapshot
 
-- Keep implementation inside existing crate boundaries: domain and validation logic in `src/lib.rs`, CLI wiring in `src/main.rs`, and integration-level checks in `tests/`.
-- Follow established typed workflow pattern already present in `src/lib.rs`: `Input -> Plan -> RuntimeHandle -> Observation -> Report` plus explicit `CheckName`, `StageName`, `StageStatus`, `Decision`, and `Error` enums.
-- Preserve safety constraints already enforced across crate: no `unwrap`, no `expect`, no `panic`, no `unsafe`.
-- Reuse existing URL validation posture (http/https only, host required, no embedded credentials) used in current endpoint helpers.
-- Keep moon-only quality gate workflow (`moon run ...`) and avoid direct `cargo` execution during verification.
+- Retry policy logic is defined by `is_retryable_failure` in `src/lib.rs`; `FailureCategory::AuthFailed` is currently non-retryable.
+- Failure category and stage/gate contracts live in `src/types.rs` (`FailureCategory`, `StageName`, `Gate`).
+- Existing auth behavior coverage is partial in `tests/pipeline_logic.rs` and `tests/behavior.rs` (non-retryable auth-failure assertions).
+- OpenCode auth wiring is implemented in `src/main.rs` (`opencode_config`, `fetch_opencode_text`, `fetch_text_with_client`) via optional `OYA_OPENCODE_PASSWORD` basic auth.
+- Integration coverage in `tests/integration.rs` currently focuses on JSON/SSE parsing and poll snapshots, with no explicit auth status contract tests.
+- Contract/docs files (`tests/contract_verify.rs`, `docs/TEST_SUITE.md`, `docs/BEHAVIOR_TESTS.md`) still include cargo-based invocation text that is not moon-only aligned.
 
 ## Exact Implementation Steps
 
-1. Add failing contract tests first in `src/lib.rs` for new `src-1ew` domain types and flow.
-   - Add red tests for normalized input validation (`query`, `limit`, `offset`, command mode), max-length enforcement, and control-char rejection.
-   - Add red tests for exact stage order, monotonic timestamps, non-empty diagnostics, and decision derivation consistency.
-   - Add red tests for endpoint contract validation: only PokeAPI base URL allowed by default, valid http/https URL shape, no credentials.
+1. Update crate-level design contract for this bead in `src/lib.rs`.
+   - Replace the top-level contract block with `auth-test` scope.
+   - Define acceptance bullets for auth classification determinism, credential handling, status-to-decision mapping, and no-panic parsing behavior.
+   - Keep constraints explicit: deterministic outputs for equivalent inputs, monotonic report semantics where applicable, and no panic-style APIs.
 
-2. Introduce `src-1ew` typed contracts in `src/lib.rs`.
-   - Add constants for bounds/defaults (query length, list page size, diagnostics size, request timeout).
-   - Add enums/structs following existing style: `Src1ewInput`, `Src1ewPlan`, `Src1ewRuntimeHandle`, `Src1ewCheckName`, `Src1ewObservation`, `Src1ewStageName`, `Src1ewStageStatus`, `Src1ewDecision`, `Src1ewReport`, `Src1ewError`.
-   - Add pure validators/normalizers for command arguments and query text.
+2. Add an auth-focused pure contract surface in `src/lib.rs` following existing contract patterns.
+   - Introduce minimal auth-test domain types/functions for deterministic auth check planning/evaluation (input, check, report, decision, error).
+   - Reuse existing validation patterns already used across this file (trim, non-empty checks, max lengths, invalid control-character rejection).
+   - Add explicit mapping rules for auth-related failure signals (invalid credentials, unauthorized/forbidden responses, missing credential input).
 
-3. Implement deterministic contract functions in `src/lib.rs`.
-   - `build_src_1ew_plan(&Src1ewInput) -> Result<Src1ewPlan, Src1ewError>`
-   - `start_src_1ew_runtime(&Src1ewPlan) -> Result<Src1ewRuntimeHandle, Src1ewError>`
-   - `capture_src_1ew_observation(&Src1ewRuntimeHandle) -> Result<Src1ewObservation, Src1ewError>`
-   - `evaluate_src_1ew_result(&Src1ewObservation) -> Result<Src1ewReport, Src1ewError>`
-   - `validate_src_1ew_report(&Src1ewReport) -> Result<(), Src1ewError>`
+3. Refactor auth decision points in `src/main.rs` behind testable pure helpers.
+   - Extract status and error-string classification logic into pure functions (or `src/lib.rs` helpers) used by `fetch_opencode_text` and `fetch_text_with_client` paths.
+   - Ensure 401/403 and credential-missing paths map deterministically to auth-failure semantics used by stage execution.
+   - Preserve existing runtime behavior and env defaults (`OYA_OPENCODE_BASE_URL`, optional `OYA_OPENCODE_PASSWORD`) while making auth expectations explicit.
 
-4. Add HTTP client adapter and response mapping in `src/lib.rs` behind typed boundaries.
-   - Add request builders for `/pokemon/{name_or_id}` and `/pokemon?limit={limit}&offset={offset}`.
-   - Add deterministic DTOs for required PokeAPI fields only (minimal serde structs).
-   - Add `search` behavior as explicit contract: normalize query, fetch bounded list pages, filter by case-insensitive name contains, preserve stable output order.
-   - Classify failures into typed variants (transport, non-2xx status, decode failure, empty result, invalid input).
+4. Expand auth-first unit tests in `src/lib.rs` (RED-GREEN-REFACTOR).
+   - Add failing tests first for empty/oversized/invalid auth inputs, 401/403 classification, malformed auth diagnostics, and decision mismatch detection.
+   - Add determinism checks asserting equivalent auth inputs produce equivalent reports/decisions.
+   - Keep test implementations pure and local (no network or external process dependency).
 
-5. Add CLI surface in `src/main.rs` without breaking existing modes.
-   - Extend `CliCommand` with `Pokemon` command and nested subcommands: `GetPokemon`, `ListPokemon`, `Search`.
-   - Keep existing `Serve` and `OpsPoll` behavior unchanged as defaults.
-   - Add output formatter that prints deterministic, parseable text rows for each command.
+5. Extend behavioral and pipeline tests for auth outcomes.
+   - In `tests/pipeline_logic.rs`, add table-style auth cases confirming retry policy boundaries between `AuthFailed`, retryable categories, and terminal decisions.
+   - In `tests/behavior.rs`, add Given-When-Then scenarios for auth failure at early and mid-pipeline stages, verifying no retry loops and consistent failure propagation.
+   - Ensure assertions are explicit on next-stage behavior and attempt counts.
 
-6. Add command execution wiring in `src/main.rs`.
-   - Route parsed CLI args into `src-1ew` flow builder/evaluator functions.
-   - Ensure exit behavior is typed and consistent: success returns `Ok(())`, failures return clear `OyaError` messages without panics.
-   - Apply timeout and base URL configuration through validated environment-backed options where needed.
+6. Add auth integration and contract coverage.
+   - In `tests/integration.rs`, add hermetic auth-response scenarios (401/403 payload shapes, unauthorized body truncation handling, auth-required SSE/poll endpoints).
+   - In `tests/contract_verify.rs`, add contract checks that auth failure remains non-retryable and stage/gate contracts are unchanged by auth-test additions.
+   - Replace panic-style test helpers in touched auth tests (`unwrap`/`expect`) with assertion-based handling to stay clippy-clean.
 
-7. Add unit tests for adapter and parser logic in `src/lib.rs`.
-   - Validate JSON decoding for get/list/search fixtures.
-   - Validate bounded diagnostics and stable ordering for repeated identical inputs.
-   - Validate that duplicate/malformed entries do not violate report invariants.
+7. Align test documentation and command guidance.
+   - Update `docs/TEST_SUITE.md` and `docs/BEHAVIOR_TESTS.md` auth-test coverage sections and expected execution layers.
+   - Replace cargo invocations in touched docs/comments with moon-only equivalents.
+   - Document which auth tests run in default `:test` vs ignored/manual contexts.
 
-8. Add CLI and integration tests in `tests/integration.rs` (or dedicated `tests/pokemon_cli.rs`).
-   - Use `wiremock` to simulate PokeAPI success/failure payloads and status codes.
-   - Verify command parsing and output for `get-pokemon`, `list-pokemon`, and `search`.
-   - Verify error-path behavior for timeout, 404, invalid JSON, and empty search results.
-
-9. Refactor for clarity without changing contracts.
-   - Keep functional core/imperative shell separation: pure normalization and report validation isolated from network side effects.
-   - Deduplicate shared validation helpers where it reduces repetition and preserves existing behavior.
-
-10. Run required moon gates and finalize artifacts.
-    - Execute mandatory checks in order defined below.
-    - Keep plan and tests synchronized with any implementation adjustments before completion.
+8. Run moon quality gates and resolve regressions in touched files.
+   - Execute mandatory gates listed below in order and fix failures in code/tests (not lint configuration).
+   - Preserve deny/forbid policy expectations (`unwrap`, `expect`, `panic`, `unsafe`) for production paths.
 
 ## Test Strategy
 
-- Unit tests (`src/lib.rs`):
-  - Contract invariants for full `src-1ew` flow (stage order, diagnostics bounds, monotonic time, decision derivation).
-  - Input normalization/validation for command parameters (`name_or_id`, `limit`, `offset`, `query`).
-  - URL and endpoint contract validation for PokeAPI client configuration.
-
-- Adapter tests (`src/lib.rs`):
-  - Serde decode tests for minimal Pokemon payloads.
-  - Error mapping tests for transport/status/deserialize failures.
-  - Deterministic search filtering and ordering tests.
-
-- Integration tests (`tests/`):
-  - `wiremock`-backed end-to-end command flows for get/list/search.
-  - CLI output contract tests for both success and failure cases.
-  - Regression checks that existing `serve` and `ops-poll` commands still parse and route correctly.
-
-- Regression guardrails:
-  - No behavior drift in existing orchestrator stage flow and gate-related tests.
-  - No lint/safety regressions against crate-level deny/forbid rules.
+- Contract-first unit tests:
+  - Drive auth contract API in `src/lib.rs` via RED-GREEN-REFACTOR for validation, mapping, report ordering, and decision invariants.
+- Pipeline behavior tests:
+  - Expand `tests/pipeline_logic.rs` and `tests/behavior.rs` to verify non-retryable auth behavior across attempts and stages.
+- Integration boundary tests:
+  - Extend `tests/integration.rs` with mocked unauthorized/forbidden responses and auth-protected endpoint payload edge cases.
+- Regression confidence:
+  - Keep `tests/state_machine.rs`, `tests/gates.rs`, and `tests/properties.rs` green to prevent drift in core orchestration contracts.
 
 ## Quality Gates
 
@@ -97,19 +76,18 @@ Implement a Rust Pokemon CLI in this existing `oya` binary with deterministic co
   - `moon run :quick`
   - `moon run :ci`
 
-- Additional quality checks before done:
-  - New tests cover command contracts and error typing for all three Pokemon commands.
-  - Existing tests remain green with no orchestrator behavior regressions.
-  - Public-facing CLI text output is deterministic for identical inputs.
+- Additional confidence gates:
+  - `moon run :coverage`
+  - `moon run :mutants-quick`
 
 - Release blockers:
-  - Any direct `cargo` invocation for verification instead of `moon run` tasks.
-  - Any panic/unwrap/expect usage introduced in new code paths.
-  - Any nondeterministic output/order in report or CLI output for identical fixtures.
-  - Any failing mandatory moon quality gate.
+  - Any failure in mandatory moon gates.
+  - Any direct cargo command introduced in touched docs/comments/workflow examples.
+  - Any panic-style additions (`unwrap`, `expect`, `panic`, `unsafe`) in production auth paths.
+  - Any auth test path in default `:test` that requires external OpenCode/ReState/OpenObserve availability.
 
 ## Acceptance Criteria
 
-- `PLAN.md` contains actionable, file-specific implementation steps for `src-1ew`.
-- Plan includes explicit test-first strategy for unit, adapter, and integration layers.
-- Plan includes moon-only quality gates and clear release blockers aligned to current repository rules.
+- `PLAN.md` is scoped to `auth-test` with request context `testing` and attempt `1`.
+- Plan lists exact file-level implementation steps for auth contract logic, runtime wiring alignment, tests, and docs.
+- Plan includes explicit TDD-oriented test strategy plus moon-only quality gates and release blockers.
