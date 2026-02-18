@@ -3,31 +3,32 @@
 #![deny(clippy::panic)]
 #![forbid(unsafe_code)]
 
-//! Design contract for `bead-cupid`.
+//! Design contract for `src-kes`.
 //!
 //! # Purpose and goals
-//! Implement a deterministic, functional-core `bead-cupid` flow that converts validated input
-//! into an immutable execution plan, captures typed observations, and derives a consistent final
-//! decision without side-effect-driven branching.
+//! Define a deterministic `src-kes` CRUD service contract for observability test runs, including
+//! route completeness, typed validation, explicit failures, and stage-based decision reporting.
 //!
 //! # Key functions to implement
-//! - `build_bead_cupid_plan(input: &BeadCupidInput) -> Result<BeadCupidPlan, BeadCupidError>`
-//! - `start_bead_cupid_runtime(plan: &BeadCupidPlan) -> Result<BeadCupidRuntimeHandle, BeadCupidError>`
-//! - `capture_bead_cupid_observation(handle: &BeadCupidRuntimeHandle) -> Result<BeadCupidObservation, BeadCupidError>`
-//! - `evaluate_bead_cupid_result(observation: &BeadCupidObservation) -> Result<BeadCupidReport, BeadCupidError>`
-//! - `validate_bead_cupid_report(report: &BeadCupidReport) -> Result<(), BeadCupidError>`
+//! - `build_src_kes_plan(input: &SrcKesInput) -> Result<SrcKesPlan, SrcKesError>`
+//! - `start_src_kes_server(plan: &SrcKesPlan) -> Result<SrcKesRuntimeHandle, SrcKesError>`
+//! - `register_user_routes() -> Vec<SrcKesRouteContract>`
+//! - `run_user_create(state: &SrcKesServiceState, request: &UserCreateRequest) -> Result<(SrcKesServiceState, UserRecord), SrcKesError>`
+//! - `run_user_read(state: &SrcKesServiceState, user_id: &str) -> Result<UserRecord, SrcKesError>`
+//! - `run_user_update(state: &SrcKesServiceState, user_id: &str, request: &UserUpdateRequest) -> Result<(SrcKesServiceState, UserRecord), SrcKesError>`
+//! - `run_user_delete(state: &SrcKesServiceState, user_id: &str) -> Result<SrcKesServiceState, SrcKesError>`
+//! - `validate_src_kes_report(report: &SrcKesReport) -> Result<(), SrcKesError>`
 //!
 //! # Acceptance criteria
-//! - Planning validates and normalizes all identifiers/URLs, rejects invalid or oversized values,
-//!   and returns only typed `Result` errors.
-//! - Runtime startup accepts only contract-approved runtime command and endpoints, producing a
-//!   ready handle or a typed failure, with zero `panic!`, `unwrap`, or `expect`.
-//! - Observation capture emits the required checks exactly once, with non-empty diagnostics,
-//!   valid endpoints, and monotonic timestamps.
-//! - Evaluation derives stage statuses and final decision strictly from observation data and
-//!   preserves stage order `IngressHealth -> OrchestratorStatus -> FinalDecision`.
-//! - Report validation enforces invariant coherence across plan, checks, stages, and decision so
-//!   any mismatch is rejected as `BeadCupidError`.
+//! - Route contract includes exactly `POST /users` (`201`), `GET /users/:id` (`200`),
+//!   `PUT /users/:id` (`200`), and `DELETE /users/:id` (`204`).
+//! - Service and user inputs reject empty, malformed, overlong, or control-character content with
+//!   explicit `SrcKesError` variants.
+//! - User lifecycle is deterministic: create enforces unique normalized IDs, read/update/delete
+//!   fail with `UserNotFound` for missing IDs, and update/delete preserve map consistency.
+//! - Report validation enforces framework/resource invariants, required stage order, monotonic
+//!   timestamps, non-empty diagnostics, and decision derivation from stage outcomes.
+//! - Identical valid inputs produce equivalent plans, route contracts, and gate decisions.
 
 pub mod orchestrator;
 pub mod types;
@@ -585,6 +586,450 @@ fn stage_report(
 
 fn contains_forbidden_control_chars(value: &str) -> bool {
     value.chars().any(|char| char.is_control() && char != '\n' && char != '\r' && char != '\t')
+}
+
+const MAX_SRC_KES_SERVICE_NAME_LEN: usize = 64;
+const MAX_SRC_KES_USER_NAME_LEN: usize = 128;
+const MAX_SRC_KES_EMAIL_LEN: usize = 256;
+const MAX_SRC_KES_USER_ID_LEN: usize = 96;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SrcKesInput {
+    pub service_name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum SrcKesRouteMethod {
+    Post,
+    Get,
+    Put,
+    Delete,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct SrcKesRouteContract {
+    pub method: SrcKesRouteMethod,
+    pub path: String,
+    pub success_status: u16,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SrcKesPlan {
+    pub service_name: String,
+    pub framework: String,
+    pub resource: String,
+    pub routes: Vec<SrcKesRouteContract>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SrcKesRuntimeHandle {
+    pub service_name: String,
+    pub framework: String,
+    pub running: bool,
+}
+
+pub type UserId = String;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UserCreateRequest {
+    pub name: String,
+    pub email: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UserUpdateRequest {
+    pub name: String,
+    pub email: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UserRecord {
+    pub id: UserId,
+    pub name: String,
+    pub email: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SrcKesServiceState {
+    pub users: std::collections::BTreeMap<UserId, UserRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SrcKesStageName {
+    PlanBuild,
+    RuntimeStart,
+    RouteContract,
+    CrudContract,
+    FinalDecision,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SrcKesStageStatus {
+    Passed,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SrcKesStageReport {
+    pub stage: SrcKesStageName,
+    pub status: SrcKesStageStatus,
+    pub diagnostics: String,
+    pub timestamp: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SrcKesDecision {
+    Pass,
+    Fail,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SrcKesReport {
+    pub plan: SrcKesPlan,
+    pub runtime_started: bool,
+    pub deterministic_behavior: bool,
+    pub stages: Vec<SrcKesStageReport>,
+    pub decision: SrcKesDecision,
+}
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum SrcKesError {
+    #[error("src-kes field is empty: {0}")]
+    EmptyField(&'static str),
+    #[error("src-kes field exceeds max length: {0} > {1}")]
+    FieldTooLong(&'static str, usize),
+    #[error("src-kes field contains invalid control characters: {0}")]
+    InvalidFieldContent(&'static str),
+    #[error("src-kes field has invalid format: {0}")]
+    InvalidFieldFormat(&'static str),
+    #[error("src-kes route contract invalid")]
+    InvalidRouteContract,
+    #[error("src-kes user already exists: {0}")]
+    DuplicateUserId(String),
+    #[error("src-kes user not found: {0}")]
+    UserNotFound(String),
+    #[error("src-kes report invalid: {0}")]
+    InvalidReport(&'static str),
+}
+
+pub fn build_src_kes_plan(input: &SrcKesInput) -> Result<SrcKesPlan, SrcKesError> {
+    let service_name = validate_src_kes_text_field(
+        input.service_name.as_str(),
+        "service_name",
+        MAX_SRC_KES_SERVICE_NAME_LEN,
+    )?;
+    let routes = register_user_routes();
+    validate_src_kes_route_contract(routes.as_slice())?;
+
+    Ok(SrcKesPlan {
+        service_name,
+        framework: "scotty".to_string(),
+        resource: "user".to_string(),
+        routes,
+    })
+}
+
+pub fn start_src_kes_server(plan: &SrcKesPlan) -> Result<SrcKesRuntimeHandle, SrcKesError> {
+    if plan.framework != "scotty" {
+        return Err(SrcKesError::InvalidFieldFormat("framework"));
+    }
+    if plan.resource != "user" {
+        return Err(SrcKesError::InvalidFieldFormat("resource"));
+    }
+    validate_src_kes_text_field(
+        plan.service_name.as_str(),
+        "service_name",
+        MAX_SRC_KES_SERVICE_NAME_LEN,
+    )?;
+    validate_src_kes_route_contract(plan.routes.as_slice())?;
+
+    Ok(SrcKesRuntimeHandle {
+        service_name: plan.service_name.clone(),
+        framework: plan.framework.clone(),
+        running: true,
+    })
+}
+
+pub fn register_user_routes() -> Vec<SrcKesRouteContract> {
+    vec![
+        SrcKesRouteContract {
+            method: SrcKesRouteMethod::Post,
+            path: "/users".to_string(),
+            success_status: 201,
+        },
+        SrcKesRouteContract {
+            method: SrcKesRouteMethod::Get,
+            path: "/users/:id".to_string(),
+            success_status: 200,
+        },
+        SrcKesRouteContract {
+            method: SrcKesRouteMethod::Put,
+            path: "/users/:id".to_string(),
+            success_status: 200,
+        },
+        SrcKesRouteContract {
+            method: SrcKesRouteMethod::Delete,
+            path: "/users/:id".to_string(),
+            success_status: 204,
+        },
+    ]
+}
+
+pub fn run_user_create(
+    state: &SrcKesServiceState,
+    request: &UserCreateRequest,
+) -> Result<(SrcKesServiceState, UserRecord), SrcKesError> {
+    let name =
+        validate_src_kes_text_field(request.name.as_str(), "name", MAX_SRC_KES_USER_NAME_LEN)?;
+    let email = normalize_src_kes_email(request.email.as_str())?;
+    let user_id = build_src_kes_user_id(email.as_str())?;
+
+    if state.users.contains_key(user_id.as_str()) {
+        return Err(SrcKesError::DuplicateUserId(user_id));
+    }
+
+    let record = UserRecord { id: user_id.clone(), name, email };
+    let users = state
+        .users
+        .iter()
+        .map(|(existing_id, existing_record)| (existing_id.clone(), existing_record.clone()))
+        .chain(std::iter::once((user_id, record.clone())))
+        .collect::<std::collections::BTreeMap<_, _>>();
+
+    Ok((SrcKesServiceState { users }, record))
+}
+
+pub fn run_user_read(state: &SrcKesServiceState, user_id: &str) -> Result<UserRecord, SrcKesError> {
+    let normalized_id = validate_src_kes_user_id(user_id)?;
+    state.users.get(normalized_id.as_str()).cloned().ok_or(SrcKesError::UserNotFound(normalized_id))
+}
+
+pub fn run_user_update(
+    state: &SrcKesServiceState,
+    user_id: &str,
+    request: &UserUpdateRequest,
+) -> Result<(SrcKesServiceState, UserRecord), SrcKesError> {
+    let normalized_id = validate_src_kes_user_id(user_id)?;
+    let existing = state
+        .users
+        .get(normalized_id.as_str())
+        .cloned()
+        .ok_or(SrcKesError::UserNotFound(normalized_id.clone()))?;
+
+    let name =
+        validate_src_kes_text_field(request.name.as_str(), "name", MAX_SRC_KES_USER_NAME_LEN)?;
+    let email = normalize_src_kes_email(request.email.as_str())?;
+    let next_record = UserRecord { id: existing.id, name, email };
+
+    let users = state
+        .users
+        .iter()
+        .map(|(existing_id, existing_record)| {
+            if existing_id == &normalized_id {
+                (existing_id.clone(), next_record.clone())
+            } else {
+                (existing_id.clone(), existing_record.clone())
+            }
+        })
+        .collect::<std::collections::BTreeMap<_, _>>();
+
+    Ok((SrcKesServiceState { users }, next_record))
+}
+
+pub fn run_user_delete(
+    state: &SrcKesServiceState,
+    user_id: &str,
+) -> Result<SrcKesServiceState, SrcKesError> {
+    let normalized_id = validate_src_kes_user_id(user_id)?;
+    if !state.users.contains_key(normalized_id.as_str()) {
+        return Err(SrcKesError::UserNotFound(normalized_id));
+    }
+
+    let users = state
+        .users
+        .iter()
+        .filter(|(existing_id, _)| *existing_id != &normalized_id)
+        .map(|(existing_id, existing_record)| (existing_id.clone(), existing_record.clone()))
+        .collect::<std::collections::BTreeMap<_, _>>();
+
+    Ok(SrcKesServiceState { users })
+}
+
+pub fn validate_src_kes_report(report: &SrcKesReport) -> Result<(), SrcKesError> {
+    validate_src_kes_route_contract(report.plan.routes.as_slice())?;
+    if report.plan.framework != "scotty" {
+        return Err(SrcKesError::InvalidReport("framework must be scotty"));
+    }
+    if report.plan.resource != "user" {
+        return Err(SrcKesError::InvalidReport("resource must be user"));
+    }
+    if !report.runtime_started {
+        return Err(SrcKesError::InvalidReport("runtime not started"));
+    }
+    if !report.deterministic_behavior {
+        return Err(SrcKesError::InvalidReport("deterministic behavior violated"));
+    }
+
+    let expected_stage_order = [
+        SrcKesStageName::PlanBuild,
+        SrcKesStageName::RuntimeStart,
+        SrcKesStageName::RouteContract,
+        SrcKesStageName::CrudContract,
+        SrcKesStageName::FinalDecision,
+    ];
+
+    if report.stages.len() != expected_stage_order.len() {
+        return Err(SrcKesError::InvalidReport("unexpected stage count"));
+    }
+
+    let valid_order = report
+        .stages
+        .iter()
+        .map(|stage| stage.stage.clone())
+        .eq(expected_stage_order.iter().cloned());
+    if !valid_order {
+        return Err(SrcKesError::InvalidReport("invalid stage order"));
+    }
+
+    let has_empty_diagnostics =
+        report.stages.iter().any(|stage| stage.diagnostics.trim().is_empty());
+    if has_empty_diagnostics {
+        return Err(SrcKesError::InvalidReport("empty stage diagnostics"));
+    }
+
+    let has_non_monotonic_timestamps =
+        report.stages.windows(2).any(|pair| pair[0].timestamp > pair[1].timestamp);
+    if has_non_monotonic_timestamps {
+        return Err(SrcKesError::InvalidReport("non-monotonic stage timestamps"));
+    }
+
+    let has_failed_stage =
+        report.stages.iter().any(|stage| stage.status == SrcKesStageStatus::Failed);
+    let derived_decision =
+        if has_failed_stage { SrcKesDecision::Fail } else { SrcKesDecision::Pass };
+    if derived_decision != report.decision {
+        return Err(SrcKesError::InvalidReport("decision mismatch"));
+    }
+
+    Ok(())
+}
+
+fn validate_src_kes_route_contract(routes: &[SrcKesRouteContract]) -> Result<(), SrcKesError> {
+    let expected = vec![
+        SrcKesRouteContract {
+            method: SrcKesRouteMethod::Post,
+            path: "/users".to_string(),
+            success_status: 201,
+        },
+        SrcKesRouteContract {
+            method: SrcKesRouteMethod::Get,
+            path: "/users/:id".to_string(),
+            success_status: 200,
+        },
+        SrcKesRouteContract {
+            method: SrcKesRouteMethod::Put,
+            path: "/users/:id".to_string(),
+            success_status: 200,
+        },
+        SrcKesRouteContract {
+            method: SrcKesRouteMethod::Delete,
+            path: "/users/:id".to_string(),
+            success_status: 204,
+        },
+    ]
+    .into_iter()
+    .collect::<std::collections::BTreeSet<_>>();
+
+    let actual = routes.iter().cloned().collect::<std::collections::BTreeSet<_>>();
+
+    if actual != expected {
+        return Err(SrcKesError::InvalidRouteContract);
+    }
+
+    Ok(())
+}
+
+fn validate_src_kes_text_field(
+    value: &str,
+    field: &'static str,
+    max_len: usize,
+) -> Result<String, SrcKesError> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(SrcKesError::EmptyField(field));
+    }
+    if trimmed.len() > max_len {
+        return Err(SrcKesError::FieldTooLong(field, max_len));
+    }
+    if contains_forbidden_control_chars(trimmed) {
+        return Err(SrcKesError::InvalidFieldContent(field));
+    }
+    Ok(trimmed.to_string())
+}
+
+fn normalize_src_kes_email(value: &str) -> Result<String, SrcKesError> {
+    let lowered =
+        validate_src_kes_text_field(value, "email", MAX_SRC_KES_EMAIL_LEN)?.to_ascii_lowercase();
+
+    let valid_chars = lowered
+        .chars()
+        .all(|char| char.is_ascii_alphanumeric() || matches!(char, '@' | '.' | '_' | '-' | '+'));
+    if !valid_chars {
+        return Err(SrcKesError::InvalidFieldFormat("email"));
+    }
+
+    let segments = lowered.split('@').collect::<Vec<_>>();
+    let local = if segments.is_empty() { "" } else { segments[0] };
+    let domain = if segments.len() < 2 { "" } else { segments[1] };
+    let no_extra_segments = segments.len() == 2;
+    if local.is_empty()
+        || domain.is_empty()
+        || !domain.contains('.')
+        || domain.starts_with('.')
+        || domain.ends_with('.')
+        || !no_extra_segments
+    {
+        return Err(SrcKesError::InvalidFieldFormat("email"));
+    }
+
+    Ok(lowered)
+}
+
+fn build_src_kes_user_id(email: &str) -> Result<String, SrcKesError> {
+    let normalized = email
+        .chars()
+        .map(|char| if char.is_ascii_alphanumeric() { char } else { '-' })
+        .collect::<String>()
+        .split('-')
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>()
+        .join("-");
+
+    if normalized.is_empty() {
+        return Err(SrcKesError::InvalidFieldFormat("user_id"));
+    }
+
+    let user_id = format!("user-{}", normalized);
+    if user_id.len() > MAX_SRC_KES_USER_ID_LEN {
+        return Err(SrcKesError::FieldTooLong("user_id", MAX_SRC_KES_USER_ID_LEN));
+    }
+    if !is_valid_src_kes_user_id(user_id.as_str()) {
+        return Err(SrcKesError::InvalidFieldFormat("user_id"));
+    }
+
+    Ok(user_id)
+}
+
+fn validate_src_kes_user_id(value: &str) -> Result<String, SrcKesError> {
+    let normalized = validate_src_kes_text_field(value, "user_id", MAX_SRC_KES_USER_ID_LEN)?;
+    if !is_valid_src_kes_user_id(normalized.as_str()) {
+        return Err(SrcKesError::InvalidFieldFormat("user_id"));
+    }
+    Ok(normalized)
+}
+
+fn is_valid_src_kes_user_id(value: &str) -> bool {
+    value.chars().all(|char| char.is_ascii_alphanumeric() || char == '-')
 }
 
 const MAX_ONEWF_WORKFLOW_ID_LEN: usize = 128;
@@ -8315,5 +8760,430 @@ mod tests {
             validate_onewf_bead_quick_report(&report),
             Err(OnewfBeadQuickError::InvalidReport("decision mismatch"))
         );
+    }
+
+    fn make_valid_src_kes_report() -> SrcKesReport {
+        let plan_result =
+            build_src_kes_plan(&SrcKesInput { service_name: "src-kes-api".to_string() });
+        let plan = match plan_result {
+            Ok(value) => value,
+            Err(_) => SrcKesPlan {
+                service_name: "src-kes-api".to_string(),
+                framework: "scotty".to_string(),
+                resource: "user".to_string(),
+                routes: register_user_routes(),
+            },
+        };
+        let base = Utc::now();
+
+        SrcKesReport {
+            plan,
+            runtime_started: true,
+            deterministic_behavior: true,
+            stages: vec![
+                SrcKesStageReport {
+                    stage: SrcKesStageName::PlanBuild,
+                    status: SrcKesStageStatus::Passed,
+                    diagnostics: "plan built".to_string(),
+                    timestamp: base,
+                },
+                SrcKesStageReport {
+                    stage: SrcKesStageName::RuntimeStart,
+                    status: SrcKesStageStatus::Passed,
+                    diagnostics: "runtime started".to_string(),
+                    timestamp: base + Duration::milliseconds(1),
+                },
+                SrcKesStageReport {
+                    stage: SrcKesStageName::RouteContract,
+                    status: SrcKesStageStatus::Passed,
+                    diagnostics: "routes registered".to_string(),
+                    timestamp: base + Duration::milliseconds(2),
+                },
+                SrcKesStageReport {
+                    stage: SrcKesStageName::CrudContract,
+                    status: SrcKesStageStatus::Passed,
+                    diagnostics: "crud behavior valid".to_string(),
+                    timestamp: base + Duration::milliseconds(3),
+                },
+                SrcKesStageReport {
+                    stage: SrcKesStageName::FinalDecision,
+                    status: SrcKesStageStatus::Passed,
+                    diagnostics: "contract passed".to_string(),
+                    timestamp: base + Duration::milliseconds(4),
+                },
+            ],
+            decision: SrcKesDecision::Pass,
+        }
+    }
+
+    #[test]
+    fn build_src_kes_plan_sets_scotty_contract() {
+        let result =
+            build_src_kes_plan(&SrcKesInput { service_name: "  src-kes-api  ".to_string() });
+        assert!(result.is_ok());
+        let Ok(plan) = result else { return };
+
+        assert_eq!(plan.service_name, "src-kes-api");
+        assert_eq!(plan.framework, "scotty");
+        assert_eq!(plan.resource, "user");
+        assert_eq!(plan.routes, register_user_routes());
+    }
+
+    #[test]
+    fn src_kes_plan_and_route_contract_are_deterministic_for_same_input() {
+        let input = SrcKesInput { service_name: "src-kes-api".to_string() };
+
+        let first_result = build_src_kes_plan(&input);
+        let second_result = build_src_kes_plan(&input);
+        assert!(first_result.is_ok());
+        assert!(second_result.is_ok());
+
+        let Ok(first_plan) = first_result else { return };
+        let Ok(second_plan) = second_result else { return };
+
+        assert_eq!(first_plan, second_plan);
+        assert_eq!(first_plan.routes, register_user_routes());
+    }
+
+    #[test]
+    fn register_user_routes_includes_exact_crud_contract() {
+        let routes = register_user_routes();
+
+        assert_eq!(
+            routes,
+            vec![
+                SrcKesRouteContract {
+                    method: SrcKesRouteMethod::Post,
+                    path: "/users".to_string(),
+                    success_status: 201,
+                },
+                SrcKesRouteContract {
+                    method: SrcKesRouteMethod::Get,
+                    path: "/users/:id".to_string(),
+                    success_status: 200,
+                },
+                SrcKesRouteContract {
+                    method: SrcKesRouteMethod::Put,
+                    path: "/users/:id".to_string(),
+                    success_status: 200,
+                },
+                SrcKesRouteContract {
+                    method: SrcKesRouteMethod::Delete,
+                    path: "/users/:id".to_string(),
+                    success_status: 204,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn start_src_kes_server_rejects_resource_contract_mismatch() {
+        let plan_result =
+            build_src_kes_plan(&SrcKesInput { service_name: "src-kes-api".to_string() });
+        assert!(plan_result.is_ok());
+        let Ok(mut plan) = plan_result else { return };
+        plan.resource = "account".to_string();
+
+        assert_eq!(start_src_kes_server(&plan), Err(SrcKesError::InvalidFieldFormat("resource")));
+    }
+
+    #[test]
+    fn src_kes_user_crud_operations_report_user_not_found_for_missing_ids() {
+        let state = SrcKesServiceState::default();
+
+        assert_eq!(
+            run_user_read(&state, "user-missing"),
+            Err(SrcKesError::UserNotFound("user-missing".to_string()))
+        );
+        assert_eq!(
+            run_user_update(
+                &state,
+                "user-missing",
+                &UserUpdateRequest {
+                    name: "Ada".to_string(),
+                    email: "ada@example.com".to_string(),
+                },
+            ),
+            Err(SrcKesError::UserNotFound("user-missing".to_string()))
+        );
+        assert_eq!(
+            run_user_delete(&state, "user-missing"),
+            Err(SrcKesError::UserNotFound("user-missing".to_string()))
+        );
+    }
+
+    #[test]
+    fn src_kes_user_crud_flow_is_deterministic() {
+        let initial = SrcKesServiceState::default();
+
+        let create_result = run_user_create(
+            &initial,
+            &UserCreateRequest { name: "Ada".to_string(), email: "ADA@Example.com".to_string() },
+        );
+        assert!(create_result.is_ok());
+        let Ok((created_state, created_user)) = create_result else {
+            return;
+        };
+        assert_eq!(created_user.id, "user-ada-example-com");
+
+        let read_result = run_user_read(&created_state, "user-ada-example-com");
+        assert_eq!(read_result, Ok(created_user.clone()));
+
+        let update_result = run_user_update(
+            &created_state,
+            "user-ada-example-com",
+            &UserUpdateRequest {
+                name: "Ada Lovelace".to_string(),
+                email: "ada.lovelace@example.com".to_string(),
+            },
+        );
+        assert!(update_result.is_ok());
+        let Ok((updated_state, updated_user)) = update_result else {
+            return;
+        };
+        assert_eq!(updated_user.id, "user-ada-example-com");
+        assert_eq!(updated_user.email, "ada.lovelace@example.com");
+
+        let delete_result = run_user_delete(&updated_state, "user-ada-example-com");
+        assert!(delete_result.is_ok());
+        let Ok(deleted_state) = delete_result else { return };
+        assert_eq!(deleted_state.users.len(), 0);
+        assert_eq!(
+            run_user_read(&deleted_state, "user-ada-example-com"),
+            Err(SrcKesError::UserNotFound("user-ada-example-com".to_string()))
+        );
+    }
+
+    #[test]
+    fn run_user_create_rejects_invalid_payload_and_duplicate_user() {
+        let initial = SrcKesServiceState::default();
+        let invalid_result = run_user_create(
+            &initial,
+            &UserCreateRequest { name: "Ada".to_string(), email: "not-an-email".to_string() },
+        );
+        assert_eq!(invalid_result, Err(SrcKesError::InvalidFieldFormat("email")));
+
+        let first_create_result = run_user_create(
+            &initial,
+            &UserCreateRequest { name: "Ada".to_string(), email: "ada@example.com".to_string() },
+        );
+        assert!(first_create_result.is_ok());
+        let Ok((created_state, _)) = first_create_result else {
+            return;
+        };
+
+        let duplicate_result = run_user_create(
+            &created_state,
+            &UserCreateRequest { name: "Ada 2".to_string(), email: "ADA@example.com".to_string() },
+        );
+        assert_eq!(
+            duplicate_result,
+            Err(SrcKesError::DuplicateUserId("user-ada-example-com".to_string()))
+        );
+    }
+
+    #[test]
+    fn validate_src_kes_report_rejects_decision_mismatch() {
+        let mut report = make_valid_src_kes_report();
+        report.decision = SrcKesDecision::Fail;
+
+        assert_eq!(
+            validate_src_kes_report(&report),
+            Err(SrcKesError::InvalidReport("decision mismatch"))
+        );
+    }
+
+    #[test]
+    fn validate_src_kes_report_rejects_non_monotonic_timestamps() {
+        let mut report = make_valid_src_kes_report();
+        report.stages[2].timestamp = report.stages[1].timestamp - Duration::milliseconds(1);
+
+        assert_eq!(
+            validate_src_kes_report(&report),
+            Err(SrcKesError::InvalidReport("non-monotonic stage timestamps"))
+        );
+    }
+
+    #[test]
+    fn build_src_kes_plan_rejects_invalid_service_name_inputs() {
+        assert_eq!(
+            build_src_kes_plan(&SrcKesInput { service_name: "   ".to_string() }),
+            Err(SrcKesError::EmptyField("service_name"))
+        );
+
+        assert_eq!(
+            build_src_kes_plan(&SrcKesInput { service_name: "a".repeat(65) }),
+            Err(SrcKesError::FieldTooLong("service_name", 64))
+        );
+
+        let invalid_content = format!("src{}kes-api", '\u{0007}');
+        assert_eq!(
+            build_src_kes_plan(&SrcKesInput { service_name: invalid_content }),
+            Err(SrcKesError::InvalidFieldContent("service_name"))
+        );
+    }
+
+    #[test]
+    fn start_src_kes_server_rejects_framework_and_route_contract_mismatch() {
+        let plan_result =
+            build_src_kes_plan(&SrcKesInput { service_name: "src-kes-api".to_string() });
+        assert!(plan_result.is_ok());
+        let Ok(plan) = plan_result else { return };
+
+        let mut bad_framework = plan.clone();
+        bad_framework.framework = "axum".to_string();
+        assert_eq!(
+            start_src_kes_server(&bad_framework),
+            Err(SrcKesError::InvalidFieldFormat("framework"))
+        );
+
+        let mut bad_routes = plan;
+        bad_routes.routes = vec![];
+        assert_eq!(start_src_kes_server(&bad_routes), Err(SrcKesError::InvalidRouteContract));
+    }
+
+    #[test]
+    fn run_user_crud_rejects_invalid_user_id_format() {
+        let state = SrcKesServiceState::default();
+
+        assert_eq!(
+            run_user_read(&state, "user invalid"),
+            Err(SrcKesError::InvalidFieldFormat("user_id"))
+        );
+        assert_eq!(
+            run_user_update(
+                &state,
+                "user invalid",
+                &UserUpdateRequest {
+                    name: "Ada".to_string(),
+                    email: "ada@example.com".to_string()
+                },
+            ),
+            Err(SrcKesError::InvalidFieldFormat("user_id"))
+        );
+        assert_eq!(
+            run_user_delete(&state, "user invalid"),
+            Err(SrcKesError::InvalidFieldFormat("user_id"))
+        );
+    }
+
+    #[test]
+    fn run_user_create_and_update_reject_invalid_payload_edges() {
+        let initial = SrcKesServiceState::default();
+        let invalid_name = format!("Ada{}Lovelace", '\u{0007}');
+        assert_eq!(
+            run_user_create(
+                &initial,
+                &UserCreateRequest { name: invalid_name, email: "ada@example.com".to_string() },
+            ),
+            Err(SrcKesError::InvalidFieldContent("name"))
+        );
+
+        let long_local = "a".repeat(100);
+        let long_email = format!("{}@x.io", long_local);
+        assert_eq!(
+            run_user_create(
+                &initial,
+                &UserCreateRequest { name: "Ada".to_string(), email: long_email },
+            ),
+            Err(SrcKesError::FieldTooLong("user_id", 96))
+        );
+
+        let created_result = run_user_create(
+            &initial,
+            &UserCreateRequest { name: "Ada".to_string(), email: "ada@example.com".to_string() },
+        );
+        assert!(created_result.is_ok());
+        let Ok((created_state, _)) = created_result else {
+            return;
+        };
+
+        assert_eq!(
+            run_user_update(
+                &created_state,
+                "user-ada-example-com",
+                &UserUpdateRequest { name: " ".to_string(), email: "ada@example.com".to_string() },
+            ),
+            Err(SrcKesError::EmptyField("name"))
+        );
+        assert_eq!(
+            run_user_update(
+                &created_state,
+                "user-ada-example-com",
+                &UserUpdateRequest {
+                    name: "Ada".to_string(),
+                    email: "ada@@example.com".to_string()
+                },
+            ),
+            Err(SrcKesError::InvalidFieldFormat("email"))
+        );
+    }
+
+    #[test]
+    fn validate_src_kes_report_rejects_runtime_and_determinism_flags() {
+        let mut runtime_missing = make_valid_src_kes_report();
+        runtime_missing.runtime_started = false;
+        assert_eq!(
+            validate_src_kes_report(&runtime_missing),
+            Err(SrcKesError::InvalidReport("runtime not started"))
+        );
+
+        let mut non_deterministic = make_valid_src_kes_report();
+        non_deterministic.deterministic_behavior = false;
+        assert_eq!(
+            validate_src_kes_report(&non_deterministic),
+            Err(SrcKesError::InvalidReport("deterministic behavior violated"))
+        );
+    }
+
+    #[test]
+    fn validate_src_kes_report_rejects_plan_and_stage_contract_errors() {
+        let mut bad_framework = make_valid_src_kes_report();
+        bad_framework.plan.framework = "axum".to_string();
+        assert_eq!(
+            validate_src_kes_report(&bad_framework),
+            Err(SrcKesError::InvalidReport("framework must be scotty"))
+        );
+
+        let mut bad_resource = make_valid_src_kes_report();
+        bad_resource.plan.resource = "account".to_string();
+        assert_eq!(
+            validate_src_kes_report(&bad_resource),
+            Err(SrcKesError::InvalidReport("resource must be user"))
+        );
+
+        let mut bad_routes = make_valid_src_kes_report();
+        bad_routes.plan.routes = vec![];
+        assert_eq!(validate_src_kes_report(&bad_routes), Err(SrcKesError::InvalidRouteContract));
+
+        let mut bad_stage_count = make_valid_src_kes_report();
+        let _ = bad_stage_count.stages.pop();
+        assert_eq!(
+            validate_src_kes_report(&bad_stage_count),
+            Err(SrcKesError::InvalidReport("unexpected stage count"))
+        );
+
+        let mut bad_stage_order = make_valid_src_kes_report();
+        bad_stage_order.stages.swap(0, 1);
+        assert_eq!(
+            validate_src_kes_report(&bad_stage_order),
+            Err(SrcKesError::InvalidReport("invalid stage order"))
+        );
+
+        let mut empty_diagnostics = make_valid_src_kes_report();
+        empty_diagnostics.stages[1].diagnostics = "   ".to_string();
+        assert_eq!(
+            validate_src_kes_report(&empty_diagnostics),
+            Err(SrcKesError::InvalidReport("empty stage diagnostics"))
+        );
+    }
+
+    #[test]
+    fn validate_src_kes_report_accepts_fail_decision_when_stage_fails() {
+        let mut report = make_valid_src_kes_report();
+        report.stages[3].status = SrcKesStageStatus::Failed;
+        report.decision = SrcKesDecision::Fail;
+
+        assert_eq!(validate_src_kes_report(&report), Ok(()));
     }
 }

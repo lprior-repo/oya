@@ -12,6 +12,7 @@ use restate_sdk::endpoint::Endpoint;
 use restate_sdk::http_server::HttpServer;
 use restate_sdk::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -48,12 +49,14 @@ struct StartRequestPayload {
 }
 
 #[derive(Debug, Deserialize)]
+/// Request body for polling OpenCode event stream snapshots.
 pub struct OpsMonitorEventRequest {
     max_events: Option<usize>,
     timeout_seconds: Option<u64>,
 }
 
 #[derive(Debug, Serialize)]
+/// Aggregated OpenCode status counters at one observation timestamp.
 pub struct OpsMonitorPollResponse {
     source: String,
     observed_at: String,
@@ -63,12 +66,14 @@ pub struct OpsMonitorPollResponse {
 }
 
 #[derive(Debug, Serialize)]
+/// One raw OpenCode SSE event plus optional parsed JSON payload.
 pub struct OpsMonitorEventEnvelope {
     raw: String,
     parsed: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize)]
+/// Event polling response with bounded event payloads and timing metadata.
 pub struct OpsMonitorEventResponse {
     source: String,
     observed_at: String,
@@ -1475,27 +1480,27 @@ async fn run_ops_poller() -> Result<(), Box<dyn std::error::Error>> {
         .and_then(|value| value.parse::<u64>().ok())
         .map_or(2000, |value: u64| value.clamp(500, 30000));
 
-    #[allow(clippy::print_stderr)]
-    {
-        eprintln!("[oya:ops-poll] source={} interval_ms={}", config.base_url, interval_ms);
-        eprintln!("[oya:ops-poll] columns: ts | busy | perm | quest | event_preview");
-    }
+    let mut stderr = std::io::stderr().lock();
+    writeln!(stderr, "[oya:ops-poll] source={} interval_ms={}", config.base_url, interval_ms)
+        .map_err(|error| OyaError(format!("Failed to write poller banner: {}", error)))?;
+    writeln!(stderr, "[oya:ops-poll] columns: ts | busy | perm | quest | event_preview")
+        .map_err(|error| OyaError(format!("Failed to write poller banner: {}", error)))?;
 
     let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(10)).build()?;
 
     loop {
         match poll_opencode_status(&client, &config).await {
             Ok(status_line) => {
-                #[allow(clippy::print_stdout)]
-                {
-                    println!("{}", status_line);
-                }
+                let mut stdout = std::io::stdout().lock();
+                writeln!(stdout, "{}", status_line).map_err(|error| {
+                    OyaError(format!("Failed to write poll status line: {}", error))
+                })?;
             }
             Err(error) => {
-                #[allow(clippy::print_stderr)]
-                {
-                    eprintln!("[oya:ops-poll] error: {}", error);
-                }
+                let mut stderr = std::io::stderr().lock();
+                writeln!(stderr, "[oya:ops-poll] error: {}", error).map_err(|io_error| {
+                    OyaError(format!("Failed to write poll error: {}", io_error))
+                })?;
             }
         }
         tokio::time::sleep(std::time::Duration::from_millis(interval_ms)).await;

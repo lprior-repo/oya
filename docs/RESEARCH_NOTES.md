@@ -1,11 +1,11 @@
-# bead-cupid
+# src-kes
 
 ## Implementation constraints
-- Keep crate safety attributes unchanged in `src/lib.rs` and `src/main.rs`: deny `unwrap_used`, `expect_used`, `panic`; forbid `unsafe_code`.
-- Preserve the canonical stage sequence and transition model in `src/types.rs`: `research -> plan -> contract -> tdd15 -> qa -> red_queen -> gpt_review -> ship_gate`, with `max_attempts = 3`.
-- Keep stage gate contracts stable (`StageName::gates` + runtime gate execution): `moon run :check`, `moon run :test`, `moon run :quick`, `moon run :ci`, `zjj done --dry-run`.
-- Keep failure/retry behavior stable in orchestrator loop (`src/main.rs`): retry only `TestFailed`, `LintFailed`, `OutputParseFailure`; block on non-retryable failures or max attempts.
-- Preserve orchestrator state/event schema and key conventions (`state`, `run_request`, `timeline`, `event_seq`, `event_####`, and per-stage `{stage}_{attempt}_{input|result|skill_output|gate_*|event}`).
-- Preserve execution timeouts and shell contract in `src/main.rs`: OpenCode 300s, moon 900s, zjj 60s; commands execute via `timeout` from repo root.
-- For functional-core additions in `src/lib.rs`, follow existing pattern: normalize input (`trim`), enforce length/charset/url constraints, return typed `Result` errors (no panic path), derive decisions only from observed checks, enforce fixed stage order, non-empty diagnostics, and monotonic timestamps.
-- Keep runtime endpoint defaults and validation contracts unchanged for smoke-style flows: `scripts/dev-up.sh`, `http://localhost:8080/restate/health`, `http://localhost:8080/OyaOrchestrator/{run_id}/get_status`.
+- `src-kes` already exists as a Rust typed contract in `src/lib.rs`; build on existing `build_src_kes_plan`, `start_src_kes_server`, `register_user_routes`, CRUD functions, and `validate_src_kes_report` instead of introducing a parallel model.
+- Preserve hard lint/safety invariants at crate boundaries: `#![deny(clippy::unwrap_used)]`, `#![deny(clippy::expect_used)]`, `#![deny(clippy::panic)]`, `#![forbid(unsafe_code)]`.
+- Keep route contract exact and deterministic: `POST /users -> 201`, `GET /users/:id -> 200`, `PUT /users/:id -> 200`, `DELETE /users/:id -> 204`; contract comparison is set-based and strict.
+- Maintain strict input normalization/validation behavior: trimmed non-empty fields, max-length enforcement, control-char rejection, lowercase email normalization, explicit email format checks, and derived user IDs constrained to ASCII alnum/hyphen.
+- Preserve explicit error taxonomy and semantics in `SrcKesError` (`EmptyField`, `FieldTooLong`, `InvalidFieldContent`, `InvalidFieldFormat`, `InvalidRouteContract`, `DuplicateUserId`, `UserNotFound`, `InvalidReport`).
+- Keep service logic pure/typed over `SrcKesServiceState` (no hidden side effects): create/update/delete return new state snapshots and deterministic records.
+- Preserve report validation invariants: required stage order (`PlanBuild`, `RuntimeStart`, `RouteContract`, `CrudContract`, `FinalDecision`), non-empty diagnostics, monotonic timestamps, and decision derived from stage statuses.
+- Do not break orchestrator/runtime contracts used by observability runs in `src/main.rs`: stage pipeline order, retryability (`TestFailed`, `LintFailed`, `OutputParseFailure` only), workspace lifecycle (`zjj queue` before `zjj add`), and moon-only quality gates.
