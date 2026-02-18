@@ -1,88 +1,115 @@
-# OYA Implementation Plan: src-kes
+# OYA Implementation Plan: src-1ew
 
-Request context: observability test run
+Request context: implement Pokemon CLI tool with REST API client
 Attempt: 1
 
 ## Objective
 
-Strengthen observability test coverage for the existing Rust `src-kes` contract and orchestrator run path so stage execution, workspace lifecycle, and ops-monitor telemetry remain deterministic and regression-resistant.
+Implement a Rust Pokemon CLI in this existing `oya` binary with deterministic contracts, typed error handling, and test-first coverage for `get-pokemon`, `list-pokemon`, and `search` commands backed by PokeAPI via `reqwest`.
 
 ## Codebase Alignment Snapshot
 
-- `src-kes` already exists in `src/lib.rs`; extend current contracts (`build_src_kes_plan`, CRUD functions, `validate_src_kes_report`) instead of introducing a parallel implementation.
-- Orchestrator stage flow and quality-gate execution live in `src/main.rs`; preserve stage order, retry semantics, and moon/zjj command boundaries.
-- Pipeline domain behavior is already tested across `tests/pipeline_logic.rs`, `tests/state_machine.rs`, `tests/gates.rs`, and `tests/behavior.rs`; add observability-focused assertions where gaps exist.
-- Ops-monitor parsing and normalization logic is already in `src/lib.rs` (`build_zjj_workspace_name`, `parse_opencode_*`, `build_opencode_poll_snapshot`); coverage should expand without changing public contracts unnecessarily.
+- Keep implementation inside existing crate boundaries: domain and validation logic in `src/lib.rs`, CLI wiring in `src/main.rs`, and integration-level checks in `tests/`.
+- Follow established typed workflow pattern already present in `src/lib.rs`: `Input -> Plan -> RuntimeHandle -> Observation -> Report` plus explicit `CheckName`, `StageName`, `StageStatus`, `Decision`, and `Error` enums.
+- Preserve safety constraints already enforced across crate: no `unwrap`, no `expect`, no `panic`, no `unsafe`.
+- Reuse existing URL validation posture (http/https only, host required, no embedded credentials) used in current endpoint helpers.
+- Keep moon-only quality gate workflow (`moon run ...`) and avoid direct `cargo` execution during verification.
 
 ## Exact Implementation Steps
 
-1. Baseline existing observability surfaces and lock invariants in tests first.
-   - Identify current guarantees for timeline events, stage transitions, gate command mapping, and workspace lifecycle (`zjj queue --add` before `zjj add`).
-   - Convert those guarantees into explicit failing tests before implementation changes.
+1. Add failing contract tests first in `src/lib.rs` for new `src-1ew` domain types and flow.
+   - Add red tests for normalized input validation (`query`, `limit`, `offset`, command mode), max-length enforcement, and control-char rejection.
+   - Add red tests for exact stage order, monotonic timestamps, non-empty diagnostics, and decision derivation consistency.
+   - Add red tests for endpoint contract validation: only PokeAPI base URL allowed by default, valid http/https URL shape, no credentials.
 
-2. Expand `src-kes` report observability contract tests in `src/lib.rs`.
-   - Add tests for strict stage ordering: `PlanBuild -> RuntimeStart -> RouteContract -> CrudContract -> FinalDecision`.
-   - Add tests for diagnostics non-emptiness and monotonic timestamps across every stage.
-   - Add tests for decision derivation mismatches and partial-stage failure observability.
+2. Introduce `src-1ew` typed contracts in `src/lib.rs`.
+   - Add constants for bounds/defaults (query length, list page size, diagnostics size, request timeout).
+   - Add enums/structs following existing style: `Src1ewInput`, `Src1ewPlan`, `Src1ewRuntimeHandle`, `Src1ewCheckName`, `Src1ewObservation`, `Src1ewStageName`, `Src1ewStageStatus`, `Src1ewDecision`, `Src1ewReport`, `Src1ewError`.
+   - Add pure validators/normalizers for command arguments and query text.
 
-3. Add orchestrator observability behavior tests for stage execution and failure context.
-   - Extend stage-level tests to assert retryable failure categories remain exactly `TestFailed`, `LintFailed`, and `OutputParseFailure`.
-   - Add assertions that stage prompt/failure context rendering includes actionable output summaries for timeout and parse failures.
-   - Verify ShipGate behavior remains `moon :ci` then `zjj done --dry-run` then `moon :quick` and `moon :test`.
+3. Implement deterministic contract functions in `src/lib.rs`.
+   - `build_src_1ew_plan(&Src1ewInput) -> Result<Src1ewPlan, Src1ewError>`
+   - `start_src_1ew_runtime(&Src1ewPlan) -> Result<Src1ewRuntimeHandle, Src1ewError>`
+   - `capture_src_1ew_observation(&Src1ewRuntimeHandle) -> Result<Src1ewObservation, Src1ewError>`
+   - `evaluate_src_1ew_result(&Src1ewObservation) -> Result<Src1ewReport, Src1ewError>`
+   - `validate_src_1ew_report(&Src1ewReport) -> Result<(), Src1ewError>`
 
-4. Add workspace lifecycle observability tests around queue/add sequencing.
-   - Add/extend tests to assert workspace preparation emits queue and add events in order and captures command/exit metadata.
-   - Add negative-path tests for queue failure and add failure to ensure emitted diagnostics are truncated, deterministic, and actionable.
-   - Verify skip flags (`OYA_SKIP_ZJJ_WORKSPACE`, `OYA_SKIP_ZJJ_GATE`) preserve expected event/report behavior.
+4. Add HTTP client adapter and response mapping in `src/lib.rs` behind typed boundaries.
+   - Add request builders for `/pokemon/{name_or_id}` and `/pokemon?limit={limit}&offset={offset}`.
+   - Add deterministic DTOs for required PokeAPI fields only (minimal serde structs).
+   - Add `search` behavior as explicit contract: normalize query, fetch bounded list pages, filter by case-insensitive name contains, preserve stable output order.
+   - Classify failures into typed variants (transport, non-2xx status, decode failure, empty result, invalid input).
 
-5. Expand ops-monitor parser test matrix for run-time telemetry inputs.
-   - Add SSE parsing edge cases (multi-event chunks, payload length boundaries, control-char rejection, max-event truncation).
-   - Add poll snapshot aggregation tests with mixed busy/idle sessions and mixed permission/question JSON envelope shapes.
-   - Keep parser outputs stable and sorted/deterministic for repeated identical inputs.
+5. Add CLI surface in `src/main.rs` without breaking existing modes.
+   - Extend `CliCommand` with `Pokemon` command and nested subcommands: `GetPokemon`, `ListPokemon`, `Search`.
+   - Keep existing `Serve` and `OpsPoll` behavior unchanged as defaults.
+   - Add output formatter that prints deterministic, parseable text rows for each command.
 
-6. Keep boundaries strict while implementing.
-   - Do not alter route/status contract for `src-kes` CRUD endpoints.
-   - Do not weaken lint safety attributes or introduce unwrap/expect/panic.
-   - Do not change production stage sequencing or gate command intent beyond what tests require.
+6. Add command execution wiring in `src/main.rs`.
+   - Route parsed CLI args into `src-1ew` flow builder/evaluator functions.
+   - Ensure exit behavior is typed and consistent: success returns `Ok(())`, failures return clear `OyaError` messages without panics.
+   - Apply timeout and base URL configuration through validated environment-backed options where needed.
+
+7. Add unit tests for adapter and parser logic in `src/lib.rs`.
+   - Validate JSON decoding for get/list/search fixtures.
+   - Validate bounded diagnostics and stable ordering for repeated identical inputs.
+   - Validate that duplicate/malformed entries do not violate report invariants.
+
+8. Add CLI and integration tests in `tests/integration.rs` (or dedicated `tests/pokemon_cli.rs`).
+   - Use `wiremock` to simulate PokeAPI success/failure payloads and status codes.
+   - Verify command parsing and output for `get-pokemon`, `list-pokemon`, and `search`.
+   - Verify error-path behavior for timeout, 404, invalid JSON, and empty search results.
+
+9. Refactor for clarity without changing contracts.
+   - Keep functional core/imperative shell separation: pure normalization and report validation isolated from network side effects.
+   - Deduplicate shared validation helpers where it reduces repetition and preserves existing behavior.
+
+10. Run required moon gates and finalize artifacts.
+    - Execute mandatory checks in order defined below.
+    - Keep plan and tests synchronized with any implementation adjustments before completion.
 
 ## Test Strategy
 
 - Unit tests (`src/lib.rs`):
-  - `src-kes` report invariants: stage order, timestamp monotonicity, diagnostics presence, and decision consistency.
-  - ops-monitor parsing/normalization: workspace name, busy session extraction, pending counts, SSE payload parsing.
+  - Contract invariants for full `src-1ew` flow (stage order, diagnostics bounds, monotonic time, decision derivation).
+  - Input normalization/validation for command parameters (`name_or_id`, `limit`, `offset`, `query`).
+  - URL and endpoint contract validation for PokeAPI client configuration.
 
-- Pipeline behavior tests (`tests/`):
-  - stage transition + retry policy correctness for observability-relevant failures.
-  - gate mapping and execution ordering assertions, including ShipGate command sequence expectations.
-  - workspace lifecycle observability assertions for queue/add and dry-run merge checks.
+- Adapter tests (`src/lib.rs`):
+  - Serde decode tests for minimal Pokemon payloads.
+  - Error mapping tests for transport/status/deserialize failures.
+  - Deterministic search filtering and ordering tests.
 
-- Regression tests:
-  - preserve existing `src-kes` deterministic CRUD flow tests.
-  - preserve existing orchestrator happy-path/failure-path state-machine behavior.
+- Integration tests (`tests/`):
+  - `wiremock`-backed end-to-end command flows for get/list/search.
+  - CLI output contract tests for both success and failure cases.
+  - Regression checks that existing `serve` and `ops-poll` commands still parse and route correctly.
 
-- Optional stress verification (if needed during implementation):
-  - repeat selected parser tests with larger payload fixtures to validate deterministic truncation and bounded outputs.
+- Regression guardrails:
+  - No behavior drift in existing orchestrator stage flow and gate-related tests.
+  - No lint/safety regressions against crate-level deny/forbid rules.
 
 ## Quality Gates
 
-- Mandatory gates (moon-only invocation):
+- Mandatory moon-only gates:
   - `moon run :check`
   - `moon run :test`
   - `moon run :quick`
   - `moon run :ci`
 
-- Definition of done:
-  - observability-focused tests pass and prove deterministic behavior for report validation, parser outputs, and stage/gate sequencing.
-  - no regression in existing `src-kes` contract behavior or orchestrator stage transitions.
-  - no new lint violations, safety invariant violations, or workflow contract drift.
+- Additional quality checks before done:
+  - New tests cover command contracts and error typing for all three Pokemon commands.
+  - Existing tests remain green with no orchestrator behavior regressions.
+  - Public-facing CLI text output is deterministic for identical inputs.
 
 - Release blockers:
-  - any nondeterministic timeline/report/parser behavior under identical inputs.
-  - any change that weakens retry policy boundaries or workspace lifecycle ordering.
-  - any failure in mandatory moon quality gates.
+  - Any direct `cargo` invocation for verification instead of `moon run` tasks.
+  - Any panic/unwrap/expect usage introduced in new code paths.
+  - Any nondeterministic output/order in report or CLI output for identical fixtures.
+  - Any failing mandatory moon quality gate.
 
 ## Acceptance Criteria
 
-- `PLAN.md` reflects the current Rust-based `src-kes` implementation and observability constraints.
-- Test coverage explicitly validates observability contracts for `src-kes`, orchestrator stages, and ops-monitor parsing.
-- Mandatory moon gates complete successfully with no contract regressions.
+- `PLAN.md` contains actionable, file-specific implementation steps for `src-1ew`.
+- Plan includes explicit test-first strategy for unit, adapter, and integration layers.
+- Plan includes moon-only quality gates and clear release blockers aligned to current repository rules.

@@ -6,21 +6,32 @@ projects:
 
 # VCS configuration
 vcs:
-  manager: "git"
+  client: "git"
+  provider: "github"
   defaultBranch: "main"
 
 # Version constraint
-versionConstraint: ">=1.20.0"
+versionConstraint: ">=2.0.0-alpha.0"
 
 # HYPER-FAST LOCAL CACHE CONFIGURATION
 # Remote cache runs locally on this machine for zero network latency
-unstable_remote:
-  host: 'grpc://localhost:9092'
+remote:
+  host: 'grpcs://127.0.0.1:9092'
   cache:
     compression: 'zstd'
+    verifyIntegrity: false  # Trusted local cache
+    localReadOnly: false  # Allow uploads from local dev
+
+# Pipeline configuration
+pipeline:
+  installDependencies: true
+  syncWorkspace: true
 
 # Hasher performance optimization
 hasher:
   optimization: 'performance'
+  walkStrategy: 'vcs'
+
+telemetry: false
 
 # Limit concurrent heavy builds (system has 32 threads, 123GB RAM)

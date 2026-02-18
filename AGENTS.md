@@ -20,3 +20,8 @@
 {"kind":"ref","beads":"/home/lewis/src/oya/docs/BEADS.md"}
 {"kind":"restate","ui":"http://localhost:9070","ingress":"http://localhost:8080","service":"http://localhost:9080","default_runtime":"scripts/dev-up.sh"}
 {"kind":"cmd","tool":"restate","list":["scripts/dev-up.sh (start Docker-first runtime)","scripts/dev-down.sh (stop runtime)","scripts/dev-reset.sh (reset Restate state)","scripts/pipeline-run.sh <run_id> <bead_id> [context] (run + observe pipeline)","http://localhost:9070 (Admin/UI)","http://localhost:8080 (Ingress API)","http://localhost:8080/restate/health (Health)","http://localhost:8080/OyaOrchestrator/<id>/start/send (Start pipeline async)"]}
+{"kind":"observability","name":"OpenObserve","ui":"http://localhost:5080","otlp_grpc":"localhost:4317","otlp_http":"http://localhost:4318","credentials":"~/.local/share/observability/.env"}
+{"kind":"cmd","tool":"observability","list":["systemctl --user start observability.service (start stack)","systemctl --user stop observability.service (stop stack)","systemctl --user status observability.service (check status)","~/.local/share/observability/observability.sh start (alt start)","~/.local/share/observability/observability.sh stop (alt stop)","~/.local/share/observability/observability.sh logs [service] (view logs)","~/.local/share/observability/observability.sh ui (open browser)","~/.local/share/observability/observability.sh creds (show credentials)"]}
+{"kind":"env","name":"OTEL_EXPORTER_OTLP_ENDPOINT","value":"http://localhost:4318","purpose":"OTLP exporter endpoint for traces/metrics/logs"}
+{"kind":"env","name":"OTEL_SERVICE_NAME","value":"oya-orchestrator","purpose":"Service name in OpenObserve"}
+{"kind":"ref","observability":"~/.local/share/observability/README.md"}

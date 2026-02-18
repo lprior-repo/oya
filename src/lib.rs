@@ -7,8 +7,32 @@
 //!
 //! This crate provides the Oya orchestrator for managing development workflows
 //! with Restate durable execution, quality gates, and bead tracking.
+//!
+//! # Design Contract: `src-1ew`
+//!
+//! ## Purpose and goals
+//! - Provide a deterministic `src-1ew` pipeline contract for planning, runtime checks,
+//!   observation capture, and final gate evaluation.
+//! - Enforce strict input validation and stable outputs so repeated runs with the same
+//!   inputs produce equivalent results.
+//! - Keep execution safe and auditable through explicit stage reports and derived decisions.
+//!
+//! ## Key functions to implement
+//! - `build_src_1ew_plan(input: &Src1ewInput) -> Result<Src1ewPlan, Src1ewError>`
+//! - `start_src_1ew_runtime(plan: &Src1ewPlan) -> Result<Src1ewRuntimeHandle, Src1ewError>`
+//! - `capture_src_1ew_observation(handle: &Src1ewRuntimeHandle) -> Result<Src1ewObservation, Src1ewError>`
+//! - `evaluate_src_1ew_observation(observation: &Src1ewObservation) -> Result<Src1ewReport, Src1ewError>`
+//! - `validate_src_1ew_report(report: &Src1ewReport) -> Result<(), Src1ewError>`
+//!
+//! ## Acceptance criteria
+//! - Plan building rejects empty, oversized, or control-character-contaminated fields.
+//! - Runtime start validates required contract fields and fails on contract mismatches.
+//! - Observation capture emits ordered checks with non-empty diagnostics and valid timestamps.
+//! - Report validation enforces stage order, monotonic timestamps, and decision consistency.
+//! - The final decision is derived only from stage/check outcomes and is reproducible.
 
 pub mod orchestrator;
+pub mod telemetry;
 pub mod types;
 
 use chrono::{DateTime, Utc};
@@ -4100,6 +4124,544 @@ fn expected_bead_cupid_final_diagnostics(decision: &BeadCupidDecision) -> &'stat
     }
 }
 
+const DEFAULT_SRC_1EW_BASE_URL: &str = "https://pokeapi.co/api/v2";
+const MAX_SRC_1EW_QUERY_LEN: usize = 256;
+const MAX_SRC_1EW_LIMIT: usize = 200;
+const MAX_SRC_1EW_OFFSET: usize = 10_000;
+const MAX_SRC_1EW_DIAGNOSTICS_LEN: usize = 4096;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Src1ewInput {
+    pub command_mode: String,
+    pub query: String,
+    pub limit: usize,
+    pub offset: usize,
+    pub base_url: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Src1ewCommandMode {
+    GetPokemon,
+    ListPokemon,
+    Search,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Src1ewPlan {
+    pub mode: Src1ewCommandMode,
+    pub query: Option<String>,
+    pub limit: usize,
+    pub offset: usize,
+    pub base_url: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Src1ewRuntimeHandle {
+    pub mode: Src1ewCommandMode,
+    pub query: Option<String>,
+    pub limit: usize,
+    pub offset: usize,
+    pub base_url: String,
+    pub started_at: DateTime<Utc>,
+    pub runtime_ready: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Src1ewCheckName {
+    EndpointContract,
+    InputContract,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Src1ewCheckObservation {
+    pub check: Src1ewCheckName,
+    pub success: bool,
+    pub diagnostics: String,
+    pub timestamp: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Src1ewObservation {
+    pub plan: Src1ewPlan,
+    pub checks: Vec<Src1ewCheckObservation>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Src1ewStageName {
+    PlanBuild,
+    RuntimeStart,
+    ObservationCapture,
+    FinalDecision,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Src1ewStageStatus {
+    Passed,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Src1ewStageReport {
+    pub stage: Src1ewStageName,
+    pub status: Src1ewStageStatus,
+    pub diagnostics: String,
+    pub timestamp: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Src1ewDecision {
+    Pass,
+    Fail,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Src1ewReport {
+    pub plan: Src1ewPlan,
+    pub checks: Vec<Src1ewCheckObservation>,
+    pub stages: Vec<Src1ewStageReport>,
+    pub decision: Src1ewDecision,
+}
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum Src1ewError {
+    #[error("src-1ew field is empty: {0}")]
+    EmptyField(&'static str),
+    #[error("src-1ew field exceeds max length: {0} > {1}")]
+    FieldTooLong(&'static str, usize),
+    #[error("src-1ew field has invalid control characters: {0}")]
+    InvalidFieldContent(&'static str),
+    #[error("src-1ew field format invalid: {0}")]
+    InvalidFieldFormat(&'static str),
+    #[error("src-1ew endpoint invalid: {0}")]
+    InvalidEndpoint(&'static str),
+    #[error("src-1ew check missing: {0}")]
+    MissingCheck(&'static str),
+    #[error("src-1ew runtime not ready")]
+    RuntimeNotReady,
+    #[error("src-1ew report invalid: {0}")]
+    InvalidReport(&'static str),
+}
+
+pub fn build_src_1ew_plan(input: &Src1ewInput) -> Result<Src1ewPlan, Src1ewError> {
+    let mode = normalize_src_1ew_mode(input.command_mode.as_str())?;
+    let query = normalize_src_1ew_query(&mode, input.query.as_str())?;
+    let limit = validate_src_1ew_limit(input.limit)?;
+    let offset = validate_src_1ew_offset(input.offset)?;
+    let base_url = validate_src_1ew_base_url(input.base_url.as_str(), "base_url")?;
+
+    Ok(Src1ewPlan { mode, query, limit, offset, base_url })
+}
+
+pub fn start_src_1ew_runtime(plan: &Src1ewPlan) -> Result<Src1ewRuntimeHandle, Src1ewError> {
+    validate_src_1ew_base_url(plan.base_url.as_str(), "base_url")?;
+    if plan.base_url != DEFAULT_SRC_1EW_BASE_URL {
+        return Err(Src1ewError::InvalidEndpoint("base_url_contract"));
+    }
+    validate_src_1ew_mode_query_contract(&plan.mode, &plan.query)?;
+    validate_src_1ew_limit(plan.limit)?;
+    validate_src_1ew_offset(plan.offset)?;
+
+    Ok(Src1ewRuntimeHandle {
+        mode: plan.mode.clone(),
+        query: plan.query.clone(),
+        limit: plan.limit,
+        offset: plan.offset,
+        base_url: plan.base_url.clone(),
+        started_at: Utc::now(),
+        runtime_ready: true,
+    })
+}
+
+pub fn capture_src_1ew_observation(
+    handle: &Src1ewRuntimeHandle,
+) -> Result<Src1ewObservation, Src1ewError> {
+    if !handle.runtime_ready {
+        return Err(Src1ewError::RuntimeNotReady);
+    }
+
+    let endpoint_contract_ok = handle.base_url == DEFAULT_SRC_1EW_BASE_URL;
+    let input_contract_ok = validate_src_1ew_mode_query_contract(&handle.mode, &handle.query)
+        .is_ok()
+        && validate_src_1ew_limit(handle.limit).is_ok()
+        && validate_src_1ew_offset(handle.offset).is_ok();
+    let timestamp = Utc::now();
+
+    Ok(Src1ewObservation {
+        plan: Src1ewPlan {
+            mode: handle.mode.clone(),
+            query: handle.query.clone(),
+            limit: handle.limit,
+            offset: handle.offset,
+            base_url: handle.base_url.clone(),
+        },
+        checks: vec![
+            Src1ewCheckObservation {
+                check: Src1ewCheckName::EndpointContract,
+                success: endpoint_contract_ok,
+                diagnostics: if endpoint_contract_ok {
+                    "pokeapi endpoint contract satisfied".to_string()
+                } else {
+                    "pokeapi endpoint contract violated".to_string()
+                },
+                timestamp,
+            },
+            Src1ewCheckObservation {
+                check: Src1ewCheckName::InputContract,
+                success: input_contract_ok,
+                diagnostics: if input_contract_ok {
+                    "input contract satisfied".to_string()
+                } else {
+                    "input contract violated".to_string()
+                },
+                timestamp: timestamp + chrono::Duration::milliseconds(1),
+            },
+        ],
+    })
+}
+
+pub fn evaluate_src_1ew_observation(
+    observation: &Src1ewObservation,
+) -> Result<Src1ewReport, Src1ewError> {
+    validate_src_1ew_checks(observation.checks.as_slice())?;
+    let decision = derive_src_1ew_decision(observation.checks.as_slice());
+    let observation_status = if decision == Src1ewDecision::Pass {
+        Src1ewStageStatus::Passed
+    } else {
+        Src1ewStageStatus::Failed
+    };
+    let decision_status = observation_status.clone();
+
+    let timestamp = Utc::now();
+    let report = Src1ewReport {
+        plan: observation.plan.clone(),
+        checks: observation.checks.clone(),
+        stages: vec![
+            Src1ewStageReport {
+                stage: Src1ewStageName::PlanBuild,
+                status: Src1ewStageStatus::Passed,
+                diagnostics: "src-1ew plan built".to_string(),
+                timestamp,
+            },
+            Src1ewStageReport {
+                stage: Src1ewStageName::RuntimeStart,
+                status: Src1ewStageStatus::Passed,
+                diagnostics: "src-1ew runtime started".to_string(),
+                timestamp: timestamp + chrono::Duration::milliseconds(1),
+            },
+            Src1ewStageReport {
+                stage: Src1ewStageName::ObservationCapture,
+                status: observation_status,
+                diagnostics: "src-1ew observation captured".to_string(),
+                timestamp: timestamp + chrono::Duration::milliseconds(2),
+            },
+            Src1ewStageReport {
+                stage: Src1ewStageName::FinalDecision,
+                status: decision_status,
+                diagnostics: if decision == Src1ewDecision::Pass {
+                    "src-1ew gate passed".to_string()
+                } else {
+                    "src-1ew gate failed".to_string()
+                },
+                timestamp: timestamp + chrono::Duration::milliseconds(3),
+            },
+        ],
+        decision,
+    };
+
+    validate_src_1ew_report(&report)?;
+    Ok(report)
+}
+
+pub fn evaluate_src_1ew_result(
+    observation: &Src1ewObservation,
+) -> Result<Src1ewReport, Src1ewError> {
+    evaluate_src_1ew_observation(observation)
+}
+
+pub fn validate_src_1ew_report(report: &Src1ewReport) -> Result<(), Src1ewError> {
+    validate_src_1ew_base_url(report.plan.base_url.as_str(), "base_url")?;
+    if report.plan.base_url != DEFAULT_SRC_1EW_BASE_URL {
+        return Err(Src1ewError::InvalidEndpoint("base_url_contract"));
+    }
+    validate_src_1ew_mode_query_contract(&report.plan.mode, &report.plan.query)?;
+    validate_src_1ew_limit(report.plan.limit)?;
+    validate_src_1ew_offset(report.plan.offset)?;
+    validate_src_1ew_checks(report.checks.as_slice())?;
+
+    let expected_stage_order = [
+        Src1ewStageName::PlanBuild,
+        Src1ewStageName::RuntimeStart,
+        Src1ewStageName::ObservationCapture,
+        Src1ewStageName::FinalDecision,
+    ];
+
+    if report.stages.len() != expected_stage_order.len() {
+        return Err(Src1ewError::InvalidReport("unexpected stage count"));
+    }
+
+    let stage_order_valid = report
+        .stages
+        .iter()
+        .map(|stage| stage.stage.clone())
+        .eq(expected_stage_order.iter().cloned());
+    if !stage_order_valid {
+        return Err(Src1ewError::InvalidReport("invalid stage order"));
+    }
+
+    let has_empty_stage_diagnostics =
+        report.stages.iter().any(|stage| stage.diagnostics.trim().is_empty());
+    if has_empty_stage_diagnostics {
+        return Err(Src1ewError::InvalidReport("empty stage diagnostics"));
+    }
+
+    let has_oversized_stage_diagnostics =
+        report.stages.iter().any(|stage| stage.diagnostics.len() > MAX_SRC_1EW_DIAGNOSTICS_LEN);
+    if has_oversized_stage_diagnostics {
+        return Err(Src1ewError::InvalidReport("stage diagnostics exceed max length"));
+    }
+
+    let has_invalid_stage_diagnostics = report
+        .stages
+        .iter()
+        .any(|stage| contains_forbidden_control_chars(stage.diagnostics.as_str()));
+    if has_invalid_stage_diagnostics {
+        return Err(Src1ewError::InvalidReport(
+            "stage diagnostics contain invalid control characters",
+        ));
+    }
+
+    let non_monotonic_stage_timestamps =
+        report.stages.windows(2).any(|pair| pair[0].timestamp > pair[1].timestamp);
+    if non_monotonic_stage_timestamps {
+        return Err(Src1ewError::InvalidReport("non-monotonic stage timestamps"));
+    }
+
+    let derived_decision = derive_src_1ew_decision(report.checks.as_slice());
+    if derived_decision != report.decision {
+        return Err(Src1ewError::InvalidReport("decision mismatch"));
+    }
+
+    let final_stage = report
+        .stages
+        .iter()
+        .find(|stage| stage.stage == Src1ewStageName::FinalDecision)
+        .ok_or(Src1ewError::InvalidReport("missing final decision stage"))?;
+    let expected_final_status = if report.decision == Src1ewDecision::Pass {
+        Src1ewStageStatus::Passed
+    } else {
+        Src1ewStageStatus::Failed
+    };
+    if final_stage.status != expected_final_status {
+        return Err(Src1ewError::InvalidReport("final decision stage mismatch"));
+    }
+
+    Ok(())
+}
+
+fn normalize_src_1ew_mode(value: &str) -> Result<Src1ewCommandMode, Src1ewError> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(Src1ewError::EmptyField("command_mode"));
+    }
+    if contains_forbidden_control_chars(trimmed) {
+        return Err(Src1ewError::InvalidFieldContent("command_mode"));
+    }
+
+    match trimmed.to_ascii_lowercase().as_str() {
+        "get-pokemon" | "get" => Ok(Src1ewCommandMode::GetPokemon),
+        "list-pokemon" | "list" => Ok(Src1ewCommandMode::ListPokemon),
+        "search" => Ok(Src1ewCommandMode::Search),
+        _ => Err(Src1ewError::InvalidFieldFormat("command_mode")),
+    }
+}
+
+fn normalize_src_1ew_query(
+    mode: &Src1ewCommandMode,
+    query: &str,
+) -> Result<Option<String>, Src1ewError> {
+    let trimmed = query.trim();
+    if contains_forbidden_control_chars(trimmed) {
+        return Err(Src1ewError::InvalidFieldContent("query"));
+    }
+
+    match mode {
+        Src1ewCommandMode::ListPokemon => {
+            if trimmed.is_empty() {
+                Ok(None)
+            } else {
+                Err(Src1ewError::InvalidFieldFormat("query"))
+            }
+        }
+        Src1ewCommandMode::GetPokemon | Src1ewCommandMode::Search => {
+            if trimmed.is_empty() {
+                return Err(Src1ewError::EmptyField("query"));
+            }
+            if trimmed.len() > MAX_SRC_1EW_QUERY_LEN {
+                return Err(Src1ewError::FieldTooLong("query", MAX_SRC_1EW_QUERY_LEN));
+            }
+
+            let normalized = if mode == &Src1ewCommandMode::Search {
+                trimmed.split_whitespace().collect::<Vec<_>>().join(" ").to_ascii_lowercase()
+            } else {
+                trimmed.to_ascii_lowercase()
+            };
+
+            if normalized.trim().is_empty() {
+                return Err(Src1ewError::EmptyField("query"));
+            }
+
+            let invalid_get_identifier = mode == &Src1ewCommandMode::GetPokemon
+                && !normalized.chars().all(|char| char.is_ascii_alphanumeric() || char == '-');
+            if invalid_get_identifier {
+                return Err(Src1ewError::InvalidFieldFormat("query"));
+            }
+
+            Ok(Some(normalized))
+        }
+    }
+}
+
+fn validate_src_1ew_mode_query_contract(
+    mode: &Src1ewCommandMode,
+    query: &Option<String>,
+) -> Result<(), Src1ewError> {
+    match mode {
+        Src1ewCommandMode::ListPokemon => {
+            if query.is_some() {
+                Err(Src1ewError::InvalidFieldFormat("query"))
+            } else {
+                Ok(())
+            }
+        }
+        Src1ewCommandMode::GetPokemon | Src1ewCommandMode::Search => match query {
+            None => Err(Src1ewError::EmptyField("query")),
+            Some(value) => validate_src_1ew_contract_query_value(mode, value.as_str()),
+        },
+    }
+}
+
+fn validate_src_1ew_contract_query_value(
+    mode: &Src1ewCommandMode,
+    query: &str,
+) -> Result<(), Src1ewError> {
+    if query.trim().is_empty() {
+        return Err(Src1ewError::EmptyField("query"));
+    }
+    if query.len() > MAX_SRC_1EW_QUERY_LEN {
+        return Err(Src1ewError::FieldTooLong("query", MAX_SRC_1EW_QUERY_LEN));
+    }
+    if contains_forbidden_control_chars(query) {
+        return Err(Src1ewError::InvalidFieldContent("query"));
+    }
+
+    match mode {
+        Src1ewCommandMode::ListPokemon => Err(Src1ewError::InvalidFieldFormat("query")),
+        Src1ewCommandMode::GetPokemon => {
+            let canonical = query.to_ascii_lowercase();
+            let valid_identifier =
+                canonical.chars().all(|char| char.is_ascii_alphanumeric() || char == '-');
+            if !valid_identifier || canonical != query {
+                return Err(Src1ewError::InvalidFieldFormat("query"));
+            }
+            Ok(())
+        }
+        Src1ewCommandMode::Search => {
+            let canonical =
+                query.split_whitespace().collect::<Vec<_>>().join(" ").to_ascii_lowercase();
+            if canonical.is_empty() || canonical != query {
+                return Err(Src1ewError::InvalidFieldFormat("query"));
+            }
+            Ok(())
+        }
+    }
+}
+
+fn validate_src_1ew_limit(value: usize) -> Result<usize, Src1ewError> {
+    if value == 0 || value > MAX_SRC_1EW_LIMIT {
+        return Err(Src1ewError::InvalidFieldFormat("limit"));
+    }
+    Ok(value)
+}
+
+fn validate_src_1ew_offset(value: usize) -> Result<usize, Src1ewError> {
+    if value > MAX_SRC_1EW_OFFSET {
+        return Err(Src1ewError::InvalidFieldFormat("offset"));
+    }
+    Ok(value)
+}
+
+fn validate_src_1ew_base_url(value: &str, field: &'static str) -> Result<String, Src1ewError> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(Src1ewError::EmptyField(field));
+    }
+    if contains_forbidden_control_chars(trimmed) {
+        return Err(Src1ewError::InvalidFieldContent(field));
+    }
+
+    let parsed = reqwest::Url::parse(trimmed).map_err(|_| Src1ewError::InvalidEndpoint(field))?;
+    let scheme_valid = parsed.scheme() == "http" || parsed.scheme() == "https";
+    let host_valid = parsed.host_str().is_some();
+    let creds_valid = parsed.username().is_empty() && parsed.password().is_none();
+    if !scheme_valid || !host_valid || !creds_valid {
+        return Err(Src1ewError::InvalidEndpoint(field));
+    }
+
+    Ok(trimmed.to_string())
+}
+
+fn validate_src_1ew_checks(checks: &[Src1ewCheckObservation]) -> Result<(), Src1ewError> {
+    if checks.len() != 2 {
+        return Err(Src1ewError::InvalidReport("invalid check count"));
+    }
+
+    let endpoint_count =
+        checks.iter().filter(|check| check.check == Src1ewCheckName::EndpointContract).count();
+    let input_count =
+        checks.iter().filter(|check| check.check == Src1ewCheckName::InputContract).count();
+    if endpoint_count != 1 {
+        return Err(Src1ewError::MissingCheck("endpoint_contract"));
+    }
+    if input_count != 1 {
+        return Err(Src1ewError::MissingCheck("input_contract"));
+    }
+
+    let has_empty_diagnostics = checks.iter().any(|check| check.diagnostics.trim().is_empty());
+    if has_empty_diagnostics {
+        return Err(Src1ewError::InvalidReport("empty check diagnostics"));
+    }
+
+    let has_oversized_diagnostics =
+        checks.iter().any(|check| check.diagnostics.len() > MAX_SRC_1EW_DIAGNOSTICS_LEN);
+    if has_oversized_diagnostics {
+        return Err(Src1ewError::InvalidReport("check diagnostics exceed max length"));
+    }
+
+    let has_invalid_diagnostics =
+        checks.iter().any(|check| contains_forbidden_control_chars(check.diagnostics.as_str()));
+    if has_invalid_diagnostics {
+        return Err(Src1ewError::InvalidReport(
+            "check diagnostics contain invalid control characters",
+        ));
+    }
+
+    let non_monotonic_timestamps =
+        checks.windows(2).any(|pair| pair[0].timestamp > pair[1].timestamp);
+    if non_monotonic_timestamps {
+        return Err(Src1ewError::InvalidReport("non-monotonic check timestamps"));
+    }
+
+    Ok(())
+}
+
+fn derive_src_1ew_decision(checks: &[Src1ewCheckObservation]) -> Src1ewDecision {
+    if checks.iter().all(|check| check.success) {
+        Src1ewDecision::Pass
+    } else {
+        Src1ewDecision::Fail
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4314,6 +4876,650 @@ mod tests {
                 decision: BeadCupidDecision::Fail,
             },
         }
+    }
+
+    fn make_valid_src_1ew_report() -> Src1ewReport {
+        let plan_result = build_src_1ew_plan(&Src1ewInput {
+            command_mode: "get-pokemon".to_string(),
+            query: "pikachu".to_string(),
+            limit: 20,
+            offset: 0,
+            base_url: DEFAULT_SRC_1EW_BASE_URL.to_string(),
+        });
+        let plan = match plan_result {
+            Ok(value) => value,
+            Err(_) => {
+                return Src1ewReport {
+                    plan: Src1ewPlan {
+                        mode: Src1ewCommandMode::GetPokemon,
+                        query: Some("pikachu".to_string()),
+                        limit: 20,
+                        offset: 0,
+                        base_url: DEFAULT_SRC_1EW_BASE_URL.to_string(),
+                    },
+                    checks: vec![],
+                    stages: vec![],
+                    decision: Src1ewDecision::Fail,
+                };
+            }
+        };
+
+        let runtime_result = start_src_1ew_runtime(&plan);
+        let runtime = match runtime_result {
+            Ok(value) => value,
+            Err(_) => {
+                return Src1ewReport {
+                    plan,
+                    checks: vec![],
+                    stages: vec![],
+                    decision: Src1ewDecision::Fail,
+                };
+            }
+        };
+
+        let observation_result = capture_src_1ew_observation(&runtime);
+        let observation = match observation_result {
+            Ok(value) => value,
+            Err(_) => {
+                return Src1ewReport {
+                    plan: Src1ewPlan {
+                        mode: runtime.mode,
+                        query: runtime.query,
+                        limit: runtime.limit,
+                        offset: runtime.offset,
+                        base_url: runtime.base_url,
+                    },
+                    checks: vec![],
+                    stages: vec![],
+                    decision: Src1ewDecision::Fail,
+                };
+            }
+        };
+
+        match evaluate_src_1ew_observation(&observation) {
+            Ok(value) => value,
+            Err(_) => Src1ewReport {
+                plan: observation.plan,
+                checks: observation.checks,
+                stages: vec![],
+                decision: Src1ewDecision::Fail,
+            },
+        }
+    }
+
+    fn make_valid_src_1ew_observation() -> Src1ewObservation {
+        let now = Utc::now();
+        Src1ewObservation {
+            plan: Src1ewPlan {
+                mode: Src1ewCommandMode::Search,
+                query: Some("pikachu".to_string()),
+                limit: 20,
+                offset: 0,
+                base_url: DEFAULT_SRC_1EW_BASE_URL.to_string(),
+            },
+            checks: vec![
+                Src1ewCheckObservation {
+                    check: Src1ewCheckName::EndpointContract,
+                    success: true,
+                    diagnostics: "endpoint ok".to_string(),
+                    timestamp: now,
+                },
+                Src1ewCheckObservation {
+                    check: Src1ewCheckName::InputContract,
+                    success: true,
+                    diagnostics: "input ok".to_string(),
+                    timestamp: now + Duration::milliseconds(1),
+                },
+            ],
+        }
+    }
+
+    #[test]
+    fn build_src_1ew_plan_rejects_empty_query_for_get() {
+        let result = build_src_1ew_plan(&Src1ewInput {
+            command_mode: "get-pokemon".to_string(),
+            query: "   ".to_string(),
+            limit: 20,
+            offset: 0,
+            base_url: DEFAULT_SRC_1EW_BASE_URL.to_string(),
+        });
+
+        assert_eq!(result, Err(Src1ewError::EmptyField("query")));
+    }
+
+    #[test]
+    fn build_src_1ew_plan_rejects_oversized_query() {
+        let result = build_src_1ew_plan(&Src1ewInput {
+            command_mode: "search".to_string(),
+            query: "q".repeat(MAX_SRC_1EW_QUERY_LEN + 1),
+            limit: 20,
+            offset: 0,
+            base_url: DEFAULT_SRC_1EW_BASE_URL.to_string(),
+        });
+
+        assert_eq!(result, Err(Src1ewError::FieldTooLong("query", MAX_SRC_1EW_QUERY_LEN)));
+    }
+
+    #[test]
+    fn build_src_1ew_plan_rejects_control_characters() {
+        let result = build_src_1ew_plan(&Src1ewInput {
+            command_mode: "search".to_string(),
+            query: "pik\u{0007}achu".to_string(),
+            limit: 20,
+            offset: 0,
+            base_url: DEFAULT_SRC_1EW_BASE_URL.to_string(),
+        });
+
+        assert_eq!(result, Err(Src1ewError::InvalidFieldContent("query")));
+    }
+
+    #[test]
+    fn start_src_1ew_runtime_rejects_non_contract_base_url() {
+        let plan_result = build_src_1ew_plan(&Src1ewInput {
+            command_mode: "get-pokemon".to_string(),
+            query: "pikachu".to_string(),
+            limit: 20,
+            offset: 0,
+            base_url: "https://example.com/api/v2".to_string(),
+        });
+        assert!(plan_result.is_ok());
+        let plan = match plan_result {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+
+        let result = start_src_1ew_runtime(&plan);
+        assert_eq!(result, Err(Src1ewError::InvalidEndpoint("base_url_contract")));
+    }
+
+    #[test]
+    fn capture_src_1ew_observation_emits_ordered_checks_and_timestamps() {
+        let plan_result = build_src_1ew_plan(&Src1ewInput {
+            command_mode: "search".to_string(),
+            query: "pika chu".to_string(),
+            limit: 20,
+            offset: 0,
+            base_url: DEFAULT_SRC_1EW_BASE_URL.to_string(),
+        });
+        assert!(plan_result.is_ok());
+        let plan = match plan_result {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+
+        let runtime_result = start_src_1ew_runtime(&plan);
+        assert!(runtime_result.is_ok());
+        let runtime = match runtime_result {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+
+        let observation_result = capture_src_1ew_observation(&runtime);
+        assert!(observation_result.is_ok());
+        let observation = match observation_result {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+
+        assert_eq!(observation.checks.len(), 2);
+        assert_eq!(observation.checks[0].check, Src1ewCheckName::EndpointContract);
+        assert_eq!(observation.checks[1].check, Src1ewCheckName::InputContract);
+        assert!(observation.checks[0].timestamp <= observation.checks[1].timestamp);
+        assert!(observation.checks.iter().all(|check| !check.diagnostics.trim().is_empty()));
+    }
+
+    #[test]
+    fn validate_src_1ew_report_rejects_invalid_stage_order() {
+        let mut report = make_valid_src_1ew_report();
+        assert_eq!(report.stages.len(), 4);
+        report.stages.swap(0, 1);
+
+        let result = validate_src_1ew_report(&report);
+        assert_eq!(result, Err(Src1ewError::InvalidReport("invalid stage order")));
+    }
+
+    #[test]
+    fn validate_src_1ew_report_rejects_non_monotonic_stage_timestamps() {
+        let mut report = make_valid_src_1ew_report();
+        assert_eq!(report.stages.len(), 4);
+        let first_timestamp = report.stages[0].timestamp;
+        report.stages[1].timestamp = first_timestamp - Duration::milliseconds(1);
+
+        let result = validate_src_1ew_report(&report);
+        assert_eq!(result, Err(Src1ewError::InvalidReport("non-monotonic stage timestamps")));
+    }
+
+    #[test]
+    fn evaluate_src_1ew_observation_derives_fail_when_any_check_fails() {
+        let observation = Src1ewObservation {
+            plan: Src1ewPlan {
+                mode: Src1ewCommandMode::Search,
+                query: Some("pika".to_string()),
+                limit: 20,
+                offset: 0,
+                base_url: DEFAULT_SRC_1EW_BASE_URL.to_string(),
+            },
+            checks: vec![
+                Src1ewCheckObservation {
+                    check: Src1ewCheckName::EndpointContract,
+                    success: true,
+                    diagnostics: "endpoint ok".to_string(),
+                    timestamp: Utc::now(),
+                },
+                Src1ewCheckObservation {
+                    check: Src1ewCheckName::InputContract,
+                    success: false,
+                    diagnostics: "input bad".to_string(),
+                    timestamp: Utc::now() + Duration::milliseconds(1),
+                },
+            ],
+        };
+
+        let result = evaluate_src_1ew_observation(&observation);
+        assert!(result.is_ok());
+        let report = match result {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+
+        assert_eq!(report.decision, Src1ewDecision::Fail);
+    }
+
+    #[test]
+    fn build_src_1ew_plan_supports_mode_aliases_and_query_normalization() {
+        let get_result = build_src_1ew_plan(&Src1ewInput {
+            command_mode: "get".to_string(),
+            query: "  PIKACHU  ".to_string(),
+            limit: 1,
+            offset: 0,
+            base_url: DEFAULT_SRC_1EW_BASE_URL.to_string(),
+        });
+        assert!(get_result.is_ok());
+        let get_plan = match get_result {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+        assert_eq!(get_plan.mode, Src1ewCommandMode::GetPokemon);
+        assert_eq!(get_plan.query, Some("pikachu".to_string()));
+
+        let list_result = build_src_1ew_plan(&Src1ewInput {
+            command_mode: "list".to_string(),
+            query: "   ".to_string(),
+            limit: MAX_SRC_1EW_LIMIT,
+            offset: MAX_SRC_1EW_OFFSET,
+            base_url: DEFAULT_SRC_1EW_BASE_URL.to_string(),
+        });
+        assert!(list_result.is_ok());
+        let list_plan = match list_result {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+        assert_eq!(list_plan.mode, Src1ewCommandMode::ListPokemon);
+        assert_eq!(list_plan.query, None);
+
+        let search_result = build_src_1ew_plan(&Src1ewInput {
+            command_mode: "search".to_string(),
+            query: "  Pika    Chu  ".to_string(),
+            limit: 20,
+            offset: 0,
+            base_url: DEFAULT_SRC_1EW_BASE_URL.to_string(),
+        });
+        assert!(search_result.is_ok());
+        let search_plan = match search_result {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+        assert_eq!(search_plan.query, Some("pika chu".to_string()));
+    }
+
+    #[test]
+    fn build_src_1ew_plan_rejects_invalid_modes_and_list_query() {
+        let invalid_mode_result = build_src_1ew_plan(&Src1ewInput {
+            command_mode: "unknown".to_string(),
+            query: "pikachu".to_string(),
+            limit: 20,
+            offset: 0,
+            base_url: DEFAULT_SRC_1EW_BASE_URL.to_string(),
+        });
+        assert_eq!(invalid_mode_result, Err(Src1ewError::InvalidFieldFormat("command_mode")));
+
+        let list_query_result = build_src_1ew_plan(&Src1ewInput {
+            command_mode: "list-pokemon".to_string(),
+            query: "pikachu".to_string(),
+            limit: 20,
+            offset: 0,
+            base_url: DEFAULT_SRC_1EW_BASE_URL.to_string(),
+        });
+        assert_eq!(list_query_result, Err(Src1ewError::InvalidFieldFormat("query")));
+    }
+
+    #[test]
+    fn build_src_1ew_plan_rejects_limit_offset_and_base_url_errors() {
+        let limit_zero_result = build_src_1ew_plan(&Src1ewInput {
+            command_mode: "search".to_string(),
+            query: "pika".to_string(),
+            limit: 0,
+            offset: 0,
+            base_url: DEFAULT_SRC_1EW_BASE_URL.to_string(),
+        });
+        assert_eq!(limit_zero_result, Err(Src1ewError::InvalidFieldFormat("limit")));
+
+        let limit_oversized_result = build_src_1ew_plan(&Src1ewInput {
+            command_mode: "search".to_string(),
+            query: "pika".to_string(),
+            limit: MAX_SRC_1EW_LIMIT + 1,
+            offset: 0,
+            base_url: DEFAULT_SRC_1EW_BASE_URL.to_string(),
+        });
+        assert_eq!(limit_oversized_result, Err(Src1ewError::InvalidFieldFormat("limit")));
+
+        let offset_oversized_result = build_src_1ew_plan(&Src1ewInput {
+            command_mode: "search".to_string(),
+            query: "pika".to_string(),
+            limit: 20,
+            offset: MAX_SRC_1EW_OFFSET + 1,
+            base_url: DEFAULT_SRC_1EW_BASE_URL.to_string(),
+        });
+        assert_eq!(offset_oversized_result, Err(Src1ewError::InvalidFieldFormat("offset")));
+
+        let empty_base_url_result = build_src_1ew_plan(&Src1ewInput {
+            command_mode: "search".to_string(),
+            query: "pika".to_string(),
+            limit: 20,
+            offset: 0,
+            base_url: "   ".to_string(),
+        });
+        assert_eq!(empty_base_url_result, Err(Src1ewError::EmptyField("base_url")));
+
+        let control_char_base_url_result = build_src_1ew_plan(&Src1ewInput {
+            command_mode: "search".to_string(),
+            query: "pika".to_string(),
+            limit: 20,
+            offset: 0,
+            base_url: "https://pokeapi.co/api/v2\u{0007}".to_string(),
+        });
+        assert_eq!(control_char_base_url_result, Err(Src1ewError::InvalidFieldContent("base_url")));
+
+        let invalid_scheme_result = build_src_1ew_plan(&Src1ewInput {
+            command_mode: "search".to_string(),
+            query: "pika".to_string(),
+            limit: 20,
+            offset: 0,
+            base_url: "ftp://pokeapi.co/api/v2".to_string(),
+        });
+        assert_eq!(invalid_scheme_result, Err(Src1ewError::InvalidEndpoint("base_url")));
+
+        let credentialed_url_result = build_src_1ew_plan(&Src1ewInput {
+            command_mode: "search".to_string(),
+            query: "pika".to_string(),
+            limit: 20,
+            offset: 0,
+            base_url: "https://user:secret@pokeapi.co/api/v2".to_string(),
+        });
+        assert_eq!(credentialed_url_result, Err(Src1ewError::InvalidEndpoint("base_url")));
+    }
+
+    #[test]
+    fn start_src_1ew_runtime_rejects_query_contract_violations() {
+        let list_with_query = Src1ewPlan {
+            mode: Src1ewCommandMode::ListPokemon,
+            query: Some("pikachu".to_string()),
+            limit: 20,
+            offset: 0,
+            base_url: DEFAULT_SRC_1EW_BASE_URL.to_string(),
+        };
+        assert_eq!(
+            start_src_1ew_runtime(&list_with_query),
+            Err(Src1ewError::InvalidFieldFormat("query"))
+        );
+
+        let search_without_query = Src1ewPlan {
+            mode: Src1ewCommandMode::Search,
+            query: None,
+            limit: 20,
+            offset: 0,
+            base_url: DEFAULT_SRC_1EW_BASE_URL.to_string(),
+        };
+        assert_eq!(
+            start_src_1ew_runtime(&search_without_query),
+            Err(Src1ewError::EmptyField("query"))
+        );
+
+        let get_with_unsafe_identifier = Src1ewPlan {
+            mode: Src1ewCommandMode::GetPokemon,
+            query: Some("../../etc/passwd".to_string()),
+            limit: 20,
+            offset: 0,
+            base_url: DEFAULT_SRC_1EW_BASE_URL.to_string(),
+        };
+        assert_eq!(
+            start_src_1ew_runtime(&get_with_unsafe_identifier),
+            Err(Src1ewError::InvalidFieldFormat("query"))
+        );
+
+        let search_with_non_canonical_query = Src1ewPlan {
+            mode: Src1ewCommandMode::Search,
+            query: Some("  Pika    Chu  ".to_string()),
+            limit: 20,
+            offset: 0,
+            base_url: DEFAULT_SRC_1EW_BASE_URL.to_string(),
+        };
+        assert_eq!(
+            start_src_1ew_runtime(&search_with_non_canonical_query),
+            Err(Src1ewError::InvalidFieldFormat("query"))
+        );
+    }
+
+    #[test]
+    fn validate_src_1ew_report_rejects_non_contract_base_url() {
+        let mut report = make_valid_src_1ew_report();
+        report.plan.base_url = "https://example.com/api/v2".to_string();
+
+        let result = validate_src_1ew_report(&report);
+        assert_eq!(result, Err(Src1ewError::InvalidEndpoint("base_url_contract")));
+    }
+
+    #[test]
+    fn validate_src_1ew_report_rejects_non_canonical_query_in_plan() {
+        let mut report = make_valid_src_1ew_report();
+        report.plan.mode = Src1ewCommandMode::Search;
+        report.plan.query = Some("Pika    Chu".to_string());
+
+        let result = validate_src_1ew_report(&report);
+        assert_eq!(result, Err(Src1ewError::InvalidFieldFormat("query")));
+    }
+
+    #[test]
+    fn capture_src_1ew_observation_rejects_unready_runtime() {
+        let handle = Src1ewRuntimeHandle {
+            mode: Src1ewCommandMode::Search,
+            query: Some("pikachu".to_string()),
+            limit: 20,
+            offset: 0,
+            base_url: DEFAULT_SRC_1EW_BASE_URL.to_string(),
+            started_at: Utc::now(),
+            runtime_ready: false,
+        };
+
+        assert_eq!(capture_src_1ew_observation(&handle), Err(Src1ewError::RuntimeNotReady));
+    }
+
+    #[test]
+    fn evaluate_src_1ew_observation_rejects_invalid_check_shapes() {
+        let now = Utc::now();
+        let missing_input = Src1ewObservation {
+            plan: Src1ewPlan {
+                mode: Src1ewCommandMode::GetPokemon,
+                query: Some("pikachu".to_string()),
+                limit: 20,
+                offset: 0,
+                base_url: DEFAULT_SRC_1EW_BASE_URL.to_string(),
+            },
+            checks: vec![Src1ewCheckObservation {
+                check: Src1ewCheckName::EndpointContract,
+                success: true,
+                diagnostics: "ok".to_string(),
+                timestamp: now,
+            }],
+        };
+        assert_eq!(
+            evaluate_src_1ew_observation(&missing_input),
+            Err(Src1ewError::InvalidReport("invalid check count"))
+        );
+
+        let duplicate_input = Src1ewObservation {
+            plan: Src1ewPlan {
+                mode: Src1ewCommandMode::GetPokemon,
+                query: Some("pikachu".to_string()),
+                limit: 20,
+                offset: 0,
+                base_url: DEFAULT_SRC_1EW_BASE_URL.to_string(),
+            },
+            checks: vec![
+                Src1ewCheckObservation {
+                    check: Src1ewCheckName::EndpointContract,
+                    success: true,
+                    diagnostics: "ok".to_string(),
+                    timestamp: now,
+                },
+                Src1ewCheckObservation {
+                    check: Src1ewCheckName::EndpointContract,
+                    success: true,
+                    diagnostics: "ok".to_string(),
+                    timestamp: now + Duration::milliseconds(1),
+                },
+            ],
+        };
+        assert_eq!(
+            evaluate_src_1ew_observation(&duplicate_input),
+            Err(Src1ewError::MissingCheck("endpoint_contract"))
+        );
+    }
+
+    #[test]
+    fn evaluate_src_1ew_result_matches_observation_evaluation() {
+        let observation = make_valid_src_1ew_observation();
+
+        let via_alias = evaluate_src_1ew_result(&observation);
+        let direct = evaluate_src_1ew_observation(&observation);
+
+        assert!(via_alias.is_ok());
+        assert!(direct.is_ok());
+
+        let via_alias_report = match via_alias {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+        let direct_report = match direct {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+
+        assert_eq!(via_alias_report.plan, direct_report.plan);
+        assert_eq!(via_alias_report.checks, direct_report.checks);
+        assert_eq!(via_alias_report.decision, direct_report.decision);
+        assert_eq!(via_alias_report.stages.len(), direct_report.stages.len());
+
+        let via_alias_stage_shape = via_alias_report
+            .stages
+            .iter()
+            .map(|stage| (stage.stage.clone(), stage.status.clone(), stage.diagnostics.clone()))
+            .collect::<Vec<_>>();
+        let direct_stage_shape = direct_report
+            .stages
+            .iter()
+            .map(|stage| (stage.stage.clone(), stage.status.clone(), stage.diagnostics.clone()))
+            .collect::<Vec<_>>();
+        assert_eq!(via_alias_stage_shape, direct_stage_shape);
+    }
+
+    #[test]
+    fn validate_src_1ew_report_rejects_check_and_stage_diagnostics_errors() {
+        let mut empty_check_diagnostics_report = make_valid_src_1ew_report();
+        empty_check_diagnostics_report.checks[0].diagnostics = "  ".to_string();
+        assert_eq!(
+            validate_src_1ew_report(&empty_check_diagnostics_report),
+            Err(Src1ewError::InvalidReport("empty check diagnostics"))
+        );
+
+        let mut oversized_check_diagnostics_report = make_valid_src_1ew_report();
+        oversized_check_diagnostics_report.checks[0].diagnostics =
+            "d".repeat(MAX_SRC_1EW_DIAGNOSTICS_LEN + 1);
+        assert_eq!(
+            validate_src_1ew_report(&oversized_check_diagnostics_report),
+            Err(Src1ewError::InvalidReport("check diagnostics exceed max length"))
+        );
+
+        let mut invalid_check_diagnostics_report = make_valid_src_1ew_report();
+        invalid_check_diagnostics_report.checks[0].diagnostics = "ok\u{0007}".to_string();
+        assert_eq!(
+            validate_src_1ew_report(&invalid_check_diagnostics_report),
+            Err(Src1ewError::InvalidReport("check diagnostics contain invalid control characters"))
+        );
+
+        let mut empty_stage_diagnostics_report = make_valid_src_1ew_report();
+        empty_stage_diagnostics_report.stages[1].diagnostics = "  ".to_string();
+        assert_eq!(
+            validate_src_1ew_report(&empty_stage_diagnostics_report),
+            Err(Src1ewError::InvalidReport("empty stage diagnostics"))
+        );
+
+        let mut oversized_stage_diagnostics_report = make_valid_src_1ew_report();
+        oversized_stage_diagnostics_report.stages[1].diagnostics =
+            "d".repeat(MAX_SRC_1EW_DIAGNOSTICS_LEN + 1);
+        assert_eq!(
+            validate_src_1ew_report(&oversized_stage_diagnostics_report),
+            Err(Src1ewError::InvalidReport("stage diagnostics exceed max length"))
+        );
+
+        let mut invalid_stage_diagnostics_report = make_valid_src_1ew_report();
+        invalid_stage_diagnostics_report.stages[1].diagnostics = "ok\u{0007}".to_string();
+        assert_eq!(
+            validate_src_1ew_report(&invalid_stage_diagnostics_report),
+            Err(Src1ewError::InvalidReport("stage diagnostics contain invalid control characters"))
+        );
+    }
+
+    #[test]
+    fn validate_src_1ew_report_rejects_check_timestamps_and_decision_mismatches() {
+        let mut non_monotonic_checks = make_valid_src_1ew_report();
+        non_monotonic_checks.checks[1].timestamp =
+            non_monotonic_checks.checks[0].timestamp - Duration::milliseconds(1);
+        assert_eq!(
+            validate_src_1ew_report(&non_monotonic_checks),
+            Err(Src1ewError::InvalidReport("non-monotonic check timestamps"))
+        );
+
+        let mut decision_mismatch = make_valid_src_1ew_report();
+        decision_mismatch.decision = Src1ewDecision::Fail;
+        assert_eq!(
+            validate_src_1ew_report(&decision_mismatch),
+            Err(Src1ewError::InvalidReport("decision mismatch"))
+        );
+
+        let mut final_stage_status_mismatch = make_valid_src_1ew_report();
+        final_stage_status_mismatch.stages[3].status = Src1ewStageStatus::Failed;
+        assert_eq!(
+            validate_src_1ew_report(&final_stage_status_mismatch),
+            Err(Src1ewError::InvalidReport("final decision stage mismatch"))
+        );
+    }
+
+    #[test]
+    fn validate_src_1ew_report_rejects_invalid_check_and_stage_counts() {
+        let mut invalid_checks = make_valid_src_1ew_report();
+        invalid_checks.checks.remove(0);
+        assert_eq!(
+            validate_src_1ew_report(&invalid_checks),
+            Err(Src1ewError::InvalidReport("invalid check count"))
+        );
+
+        let mut invalid_stages = make_valid_src_1ew_report();
+        invalid_stages.stages.pop();
+        assert_eq!(
+            validate_src_1ew_report(&invalid_stages),
+            Err(Src1ewError::InvalidReport("unexpected stage count"))
+        );
     }
 
     #[test]

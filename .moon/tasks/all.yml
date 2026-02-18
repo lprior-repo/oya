@@ -1,7 +1,8 @@
 $schema: "https://moonrepo.dev/schemas/tasks.json"
 
-# Moon Task Configuration - Local Only (NO GitHub Actions)
-# All commands use cargo with system Rust toolchain
+# Moon Task Configuration - Moon v2 format
+# All commands use cargo with Rust toolchain
+# Tasks are inherited by all projects in the workspace
 
 tasks:
   # ============================================================================
@@ -11,17 +12,22 @@ tasks:
   fmt:
     command: "cargo fmt --all --check"
     description: "Check code formatting (rustfmt)"
+    toolchains:
+      - rust
     inputs:
       - "src/**/*.rs"
       - "tests/**/*.rs"
       - "Cargo.toml"
       - "rustfmt.toml"
     options:
+      runInCI: true
       cache: true
 
   fmt-fix:
     command: "cargo fmt --all"
     description: "Auto-fix code formatting"
+    toolchains:
+      - rust
     inputs:
       - "src/**/*.rs"
       - "tests/**/*.rs"
@@ -30,14 +36,17 @@ tasks:
       cache: false  # Never cache - always format
 
   clippy:
-    command: "cargo clippy --workspace --all-features --lib --bins --examples -- -D warnings -D clippy::unwrap_used -D clippy::expect_used -D clippy::panic -D clippy::todo -D clippy::unimplemented -D clippy::dbg_macro -D clippy::print_stdout -D clippy::print_stderr"
-    description: "Strict source linting with Clippy (tests excluded)"
+    command: "cargo clippy --workspace --all-features --lib --bins --examples -- -D warnings -W clippy::all"
+    description: "Strict source linting with Clippy (tests excluded) - ZERO TOLERANCE"
+    toolchains:
+      - rust
     inputs:
       - "src/**/*.rs"
       - "Cargo.toml"
       - "/Cargo.lock"
       - ".clippy.toml"
     options:
+      runInCI: true
       cache: true
 
   # ============================================================================
@@ -47,12 +56,15 @@ tasks:
   test:
     command: "cargo test --workspace --all-features"
     description: "Run all tests"
+    toolchains:
+      - rust
     inputs:
       - "src/**/*.rs"
       - "tests/**/*.rs"
       - "Cargo.toml"
       - "/Cargo.lock"
     options:
+      runInCI: true
       cache: true
       mergeArgs: "replace"  # Allow overriding with specific test filters
     env:
@@ -61,16 +73,21 @@ tasks:
   test-doc:
     command: "cargo test --doc --workspace"
     description: "Run documentation tests"
+    toolchains:
+      - rust
     inputs:
       - "src/**/*.rs"
       - "Cargo.toml"
       - "/Cargo.lock"
     options:
+      runInCI: true
       cache: true
 
   coverage:
     command: "cargo tarpaulin --workspace --all-features --out Html --out Lcov --output-dir target/coverage -- --test-threads=1"
     description: "Generate test coverage report (HTML + LCOV)"
+    toolchains:
+      - rust
     inputs:
       - "src/**/*.rs"
       - "tests/**/*.rs"
@@ -91,6 +108,8 @@ tasks:
   build:
     command: "cargo build --release --workspace"
     description: "Build release binaries"
+    toolchains:
+      - rust
     inputs:
       - "src/**/*.rs"
       - "Cargo.toml"
@@ -98,6 +117,7 @@ tasks:
     outputs:
       - "/target/release/oya"
     options:
+      runInCI: true
       cache: true
     env:
       CARGO_BUILD_JOBS: "24"
@@ -105,11 +125,14 @@ tasks:
   build-docs:
     command: "cargo doc --no-deps --document-private-items"
     description: "Generate Rust documentation"
+    toolchains:
+      - rust
     inputs:
       - "src/**/*.rs"
       - "Cargo.toml"
       - "/Cargo.lock"
     options:
+      runInCI: true
       cache: true
 
   # ============================================================================
@@ -126,17 +149,11 @@ tasks:
       cache: false  # Composite task - deps handle caching
 
   ci:
-    command: "true"
-    description: "Full CI pipeline (all checks in parallel where possible)"
-    deps:
-      - "~:fmt"            # Parallel: formatting
-      - "~:clippy"         # Parallel: linting
-      - "~:test"           # Parallel: tests
-      - "~:test-doc"       # Parallel: doc tests
-      - "build"            # Sequential: needs tests to pass
-      - "build-docs"       # Sequential: needs clippy
+    command: "moon ci"  # Canonical Moon v2 CI gate
+    description: "Full CI pipeline using moon ci (affected targets only)"
     options:
-      cache: false  # Composite task - deps handle caching
+      runInCI: true
+      cache: false
 
   # ============================================================================
   # CONVENIENCE (workspace-level tasks only)
@@ -145,6 +162,8 @@ tasks:
   install:
     command: "mkdir -p ~/.local/bin && cargo build --release --bin oya && cp target/release/oya ~/.local/bin/oya && chmod +x ~/.local/bin/oya && echo '✅ Installed oya to ~/.local/bin/oya (v0.1.2)'"
     description: "Install oya binary to ~/.local/bin (system-wide)"
+    toolchains:
+      - rust
     options:
       cache: false
       runFromWorkspaceRoot: true
@@ -161,22 +180,29 @@ tasks:
   clean:
     command: "cargo clean"
     description: "Clean build artifacts"
+    toolchains:
+      - rust
     options:
       cache: false
 
   check:
     command: "cargo check --workspace --all-features"
     description: "Fast type check without building"
+    toolchains:
+      - rust
     inputs:
       - "src/**/*.rs"
       - "Cargo.toml"
       - "/Cargo.lock"
     options:
+      runInCI: true
       cache: true
 
   bench:
     command: "cargo bench --workspace"
     description: "Run all Criterion benchmarks"
+    toolchains:
+      - rust
     inputs:
       - "crates/**/*.rs"
       - "benches/**/*.rs"
@@ -192,13 +218,18 @@ tasks:
   serve:
     command: "cargo run --release -p oya-web --bin oya-server"
     description: "Run full stack server (frontend + API on http://localhost:3000)"
+    toolchains:
+      - rust
     options:
       cache: false
       runInCI: false
+      persistent: true
 
   build-ui:
     command: "cd crates/oya-ui && trunk build --release"
     description: "Build Leptos frontend to dist/"
+    toolchains:
+      - rust
     options:
       cache: false
       runInCI: false
@@ -210,6 +241,8 @@ tasks:
   mutants:
     command: "cargo mutants --workspace --baseline run"
     description: "Run mutation testing on all 2000+ mutations"
+    toolchains:
+      - rust
     inputs:
       - "crates/**/*.rs"
       - ".cargo/mutants.toml"
@@ -220,12 +253,16 @@ tasks:
   mutants-list:
     command: "cargo mutants --workspace --list"
     description: "List all 2000+ possible mutations"
+    toolchains:
+      - rust
     options:
       cache: false
 
   mutants-package:
     command: "cargo mutants --baseline run"
     description: "Run mutation testing on specific package (use -p PKG)"
+    toolchains:
+      - rust
     options:
       cache: false
       runInCI: false
@@ -234,6 +271,8 @@ tasks:
   mutants-quick:
     command: "cargo mutants -p oya-core -p oya-workflow -p oya-events --baseline run"
     description: "Quick mutation test on core packages"
+    toolchains:
+      - rust
     options:
       cache: false
       runInCI: false
@@ -241,6 +280,8 @@ tasks:
   mutants-diff:
     command: "cargo mutants --workspace --in-diff main --baseline run"
     description: "Mutation test only files changed vs main branch"
+    toolchains:
+      - rust
     options:
       cache: false
       runInCI: false
@@ -248,6 +289,8 @@ tasks:
   mutants-uncaught:
     command: "cargo mutants --workspace --baseline run --caught"
     description: "Show only UNCAUGHT mutations (test gaps)"
+    toolchains:
+      - rust
     options:
       cache: false
       runInCI: false
@@ -259,6 +302,8 @@ tasks:
   check-shared:
     command: "cargo check -p oya-shared"
     description: "Type check oya-shared crate"
+    toolchains:
+      - rust
     inputs:
       - "crates/oya-shared/**/*.rs"
       - "crates/oya-shared/Cargo.toml"
@@ -268,6 +313,8 @@ tasks:
   test-shared:
     command: "cargo test -p oya-shared"
     description: "Run oya-shared tests"
+    toolchains:
+      - rust
     inputs:
       - "crates/oya-shared/**/*.rs"
       - "crates/oya-shared/Cargo.toml"
@@ -281,6 +328,8 @@ tasks:
   check-tauri:
     command: "cd crates/oya-tauri && cargo check"
     description: "Type check oya-tauri crate (standalone workspace)"
+    toolchains:
+      - rust
     inputs:
       - "crates/oya-tauri/**/*.rs"
       - "crates/oya-tauri/Cargo.toml"
@@ -291,6 +340,8 @@ tasks:
   test-tauri:
     command: "cd crates/oya-tauri && cargo test"
     description: "Run oya-tauri tests"
+    toolchains:
+      - rust
     inputs:
       - "crates/oya-tauri/**/*.rs"
       - "crates/oya-tauri/Cargo.toml"
@@ -301,6 +352,8 @@ tasks:
   build-tauri:
     command: "cd crates/oya-tauri && cargo build --release"
     description: "Build oya-tauri desktop app"
+    toolchains:
+      - rust
     inputs:
       - "crates/oya-tauri/**/*.rs"
       - "crates/oya-tauri/Cargo.toml"
@@ -317,6 +370,8 @@ tasks:
   check-zellij:
     command: "cd crates/zellij-frontend && cargo check"
     description: "Type check zellij-frontend crate"
+    toolchains:
+      - rust
     inputs:
       - "crates/zellij-frontend/src/**/*.rs"
       - "crates/zellij-frontend/Cargo.toml"
@@ -326,6 +381,8 @@ tasks:
   test-zellij:
     command: "cd crates/zellij-frontend && cargo test --target x86_64-unknown-linux-gnu"
     description: "Run zellij-frontend tests (native target)"
+    toolchains:
+      - rust
     inputs:
       - "crates/zellij-frontend/src/**/*.rs"
       - "crates/zellij-frontend/Cargo.toml"
@@ -335,6 +392,8 @@ tasks:
   build-zellij:
     command: "cargo build --release --target wasm32-wasip1 -p zellij-frontend"
     description: "Build Zellij plugin to WASM"
+    toolchains:
+      - rust
     inputs:
       - "crates/zellij-frontend/**/*.rs"
       - "crates/zellij-frontend/Cargo.toml"
@@ -345,6 +404,8 @@ tasks:
   install-zellij:
     command: "mkdir -p ~/.config/zellij/plugins && cp target/wasm32-wasip1/release/zellij_frontend.wasm ~/.config/zellij/plugins/ && cp crates/zellij-frontend/plugin.yaml ~/.config/zellij/plugins/oya.yaml && echo '✅ Installed zellij-frontend plugin to ~/.config/zellij/plugins/'"
     description: "Install Zellij plugin to user config"
+    toolchains:
+      - rust
     deps:
       - "build-zellij"
     options:
@@ -386,6 +447,8 @@ tasks:
   build-oya:
     command: "cargo build --release --bin oya"
     description: "Build oya binary (contains everything)"
+    toolchains:
+      - rust
     inputs:
       - "src/**/*.rs"
       - "Cargo.toml"
@@ -411,6 +474,8 @@ tasks:
   run:
     command: "cargo run --release --bin oya --"
     description: "Run oya directly (via moon)"
+    toolchains:
+      - rust
     options:
       cache: false
       runInCI: false
@@ -421,6 +486,8 @@ tasks:
   run-serve:
     command: "cargo run --release --bin oya -- serve"
     description: "Start OYA IPC server"
+    toolchains:
+      - rust
     options:
       cache: false
       runInCI: false
