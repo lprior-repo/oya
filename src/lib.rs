@@ -1,6 +1,8 @@
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
+#![deny(clippy::too_many_lines)]
+#![deny(clippy::too_many_arguments)]
 #![forbid(unsafe_code)]
 
 //! Oya - Workflow orchestration and testing framework
@@ -31,6 +33,7 @@
 //! - Final decision is derived only from trace/check outcomes and matches validation results.
 //! - Re-running with equivalent inputs yields equivalent report structure and decisions.
 
+pub mod beads;
 pub mod config;
 pub mod orchestrator;
 pub mod telemetry;
@@ -52,6 +55,7 @@ pub fn is_retryable_failure(category: &FailureCategory) -> bool {
         FailureCategory::TestFailed
             | FailureCategory::LintFailed
             | FailureCategory::OutputParseFailure
+            | FailureCategory::CompileFailed
     )
 }
 
@@ -214,11 +218,13 @@ pub fn parse_opencode_sse_events(
     if raw_chunk.len() > MAX_OPENCODE_SSE_RAW_CHUNK_LEN {
         return Err(OpsMonitorError::FieldTooLong("event_chunk", MAX_OPENCODE_SSE_RAW_CHUNK_LEN));
     }
-    if contains_forbidden_control_chars(raw_chunk) {
+
+    // Normalize line endings first for consistent validation
+    let normalized = raw_chunk.replace("\r\n", "\n");
+
+    if contains_forbidden_control_chars(&normalized) {
         return Err(OpsMonitorError::InvalidFieldContent("event_chunk"));
     }
-
-    let normalized = raw_chunk.replace("\r\n", "\n");
 
     normalized
         .split("\n\n")
@@ -527,17 +533,21 @@ pub fn run_manual_e2e_pipeline(plan: &ManualE2ePlan) -> Result<ManualE2eReport, 
 }
 
 pub fn validate_manual_e2e_report(report: &ManualE2eReport) -> Result<(), ManualE2eError> {
+    validate_manual_e2e_stage_contract(report)?;
+    validate_manual_e2e_stage_diagnostics(report)?;
+    validate_manual_e2e_timestamps_and_decision(report)
+}
+
+fn validate_manual_e2e_stage_contract(report: &ManualE2eReport) -> Result<(), ManualE2eError> {
     let expected_stage_order = [
         ManualE2eStageName::ScenarioSetup,
         ManualE2eStageName::CommandInvocation,
         ManualE2eStageName::OutputParsing,
         ManualE2eStageName::GateEvaluation,
     ];
-
     if report.stages.len() != expected_stage_order.len() {
         return Err(ManualE2eError::InvalidReport("unexpected stage count"));
     }
-
     let stage_order_valid = report
         .stages
         .iter()
@@ -547,18 +557,20 @@ pub fn validate_manual_e2e_report(report: &ManualE2eReport) -> Result<(), Manual
         return Err(ManualE2eError::InvalidReport("invalid stage order"));
     }
 
+    Ok(())
+}
+
+fn validate_manual_e2e_stage_diagnostics(report: &ManualE2eReport) -> Result<(), ManualE2eError> {
     let has_empty_diagnostics =
         report.stages.iter().any(|stage| stage.diagnostics.trim().is_empty());
     if has_empty_diagnostics {
         return Err(ManualE2eError::InvalidReport("empty stage diagnostics"));
     }
-
     let has_oversized_diagnostics =
         report.stages.iter().any(|stage| stage.diagnostics.len() > MAX_MANUAL_E2E_DIAGNOSTICS_LEN);
     if has_oversized_diagnostics {
         return Err(ManualE2eError::InvalidReport("stage diagnostics exceed max length"));
     }
-
     let has_invalid_diagnostics_content =
         report.stages.iter().any(|stage| contains_forbidden_control_chars(&stage.diagnostics));
     if has_invalid_diagnostics_content {
@@ -567,12 +579,17 @@ pub fn validate_manual_e2e_report(report: &ManualE2eReport) -> Result<(), Manual
         ));
     }
 
+    Ok(())
+}
+
+fn validate_manual_e2e_timestamps_and_decision(
+    report: &ManualE2eReport,
+) -> Result<(), ManualE2eError> {
     let has_non_monotonic_timestamps =
         report.stages.windows(2).any(|pair| pair[0].timestamp > pair[1].timestamp);
     if has_non_monotonic_timestamps {
         return Err(ManualE2eError::InvalidReport("non-monotonic stage timestamps"));
     }
-
     let derived_decision = derive_manual_e2e_gate(report);
     if derived_decision != report.decision {
         return Err(ManualE2eError::InvalidReport("decision mismatch"));
@@ -929,6 +946,12 @@ pub fn run_user_delete(
 
 /// Validate a `src-kes` report against contract, stage order, and decision rules.
 pub fn validate_src_kes_report(report: &SrcKesReport) -> Result<(), SrcKesError> {
+    validate_src_kes_report_plan(report)?;
+    validate_src_kes_report_stages(report)?;
+    validate_src_kes_report_decision(report)
+}
+
+fn validate_src_kes_report_plan(report: &SrcKesReport) -> Result<(), SrcKesError> {
     validate_src_kes_route_contract(report.plan.routes.as_slice())?;
     if report.plan.framework != "scotty" {
         return Err(SrcKesError::InvalidReport("framework must be scotty"));
@@ -943,6 +966,10 @@ pub fn validate_src_kes_report(report: &SrcKesReport) -> Result<(), SrcKesError>
         return Err(SrcKesError::InvalidReport("deterministic behavior violated"));
     }
 
+    Ok(())
+}
+
+fn validate_src_kes_report_stages(report: &SrcKesReport) -> Result<(), SrcKesError> {
     let expected_stage_order = [
         SrcKesStageName::PlanBuild,
         SrcKesStageName::RuntimeStart,
@@ -950,11 +977,9 @@ pub fn validate_src_kes_report(report: &SrcKesReport) -> Result<(), SrcKesError>
         SrcKesStageName::CrudContract,
         SrcKesStageName::FinalDecision,
     ];
-
     if report.stages.len() != expected_stage_order.len() {
         return Err(SrcKesError::InvalidReport("unexpected stage count"));
     }
-
     let valid_order = report
         .stages
         .iter()
@@ -963,19 +988,21 @@ pub fn validate_src_kes_report(report: &SrcKesReport) -> Result<(), SrcKesError>
     if !valid_order {
         return Err(SrcKesError::InvalidReport("invalid stage order"));
     }
-
     let has_empty_diagnostics =
         report.stages.iter().any(|stage| stage.diagnostics.trim().is_empty());
     if has_empty_diagnostics {
         return Err(SrcKesError::InvalidReport("empty stage diagnostics"));
     }
-
     let has_non_monotonic_timestamps =
         report.stages.windows(2).any(|pair| pair[0].timestamp > pair[1].timestamp);
     if has_non_monotonic_timestamps {
         return Err(SrcKesError::InvalidReport("non-monotonic stage timestamps"));
     }
 
+    Ok(())
+}
+
+fn validate_src_kes_report_decision(report: &SrcKesReport) -> Result<(), SrcKesError> {
     let has_failed_stage =
         report.stages.iter().any(|stage| stage.status == SrcKesStageStatus::Failed);
     let derived_decision =

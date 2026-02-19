@@ -84,7 +84,7 @@ async fn given_retryable_failure_when_exhausted_2_attempts_then_fails_permanentl
     assert_eq!(result2.next_stage, Some(StageName::Tdd15)); // Retry
 
     // Behavior: Exactly 2 attempts were made
-    let calls = orch.stage_calls(StageName::Tdd15);
+    let calls = orch.stage_calls(&StageName::Tdd15);
     assert_eq!(calls.len(), 2, "Should make exactly 2 attempts before giving up");
 }
 
@@ -168,7 +168,7 @@ async fn given_non_retryable_failure_when_it_occurs_then_fails_immediately() {
     );
 
     // Only 1 attempt made (no retries)
-    let calls = orch.stage_calls(StageName::Plan);
+    let calls = orch.stage_calls(&StageName::Plan);
     assert_eq!(calls.len(), 1, "Should not retry non-retryable failures");
 }
 
@@ -257,7 +257,7 @@ async fn given_stage_fails_when_retry_attempted_then_failure_context_available()
     .unwrap();
 
     // Behavior: Both attempts were made (context was passed)
-    let calls = orch.stage_calls(StageName::Tdd15);
+    let calls = orch.stage_calls(&StageName::Tdd15);
     assert_eq!(calls.len(), 2, "Retry should have been attempted with context");
 }
 
@@ -302,7 +302,7 @@ async fn given_tdd15_fails_once_then_succeeds_when_pipeline_continues_then_compl
     }
 
     // Behavior: Exactly 2 attempts on Tdd15
-    let tdd15_calls = orch.stage_calls(StageName::Tdd15);
+    let tdd15_calls = orch.stage_calls(&StageName::Tdd15);
     assert_eq!(tdd15_calls.len(), 2);
 }
 
@@ -362,6 +362,6 @@ async fn given_intermittent_failures_when_within_retry_limits_then_completes() {
     }
 
     // Verify retry counts
-    assert_eq!(orch.stage_calls(StageName::Contract).len(), 2);
-    assert_eq!(orch.stage_calls(StageName::Tdd15).len(), 2);
+    assert_eq!(orch.stage_calls(&StageName::Contract).len(), 2);
+    assert_eq!(orch.stage_calls(&StageName::Tdd15).len(), 2);
 }

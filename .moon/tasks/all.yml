@@ -36,7 +36,7 @@ tasks:
       cache: false  # Never cache - always format
 
   clippy:
-    command: "cargo clippy --workspace --all-features --lib --bins --examples -- -D warnings -W clippy::all"
+    command: "cargo clippy --workspace --all-features --lib --bins --examples -- -D warnings -W clippy::all -D clippy::too_many_lines -D clippy::too_many_arguments"
     description: "Strict source linting with Clippy (tests excluded) - ZERO TOLERANCE"
     toolchains:
       - rust
@@ -48,6 +48,22 @@ tasks:
     options:
       runInCI: true
       cache: true
+
+  max-lines:
+    command: "bash scripts/max-lines.sh 300"
+    description: "List files exceeding 300 lines"
+
+  security:
+    command: "cargo audit"
+    description: "Audit dependencies for known vulnerabilities"
+    toolchains:
+      - rust
+    inputs:
+      - "Cargo.toml"
+      - "/Cargo.lock"
+    options:
+      runInCI: true
+      cache: false
 
   # ============================================================================
   # STAGE 2: TESTING

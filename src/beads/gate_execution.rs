@@ -41,7 +41,7 @@ mod tests {
 
     #[test]
     fn execute_gate_success() {
-        let result = execute_gate("compiles", "cargo check");
+        let result = execute_gate("compiles", "moon run :check");
         assert!(result.passed);
         assert_eq!(result.exit_code, 0);
         assert_eq!(result.gate_name, "compiles");
@@ -49,8 +49,43 @@ mod tests {
 
     #[test]
     fn execute_gate_failure() {
-        let result = execute_gate("clippy", "cargo clippy");
-        // In pure function, we model what the result would be
+        // In pure function, execute_gate always returns passed=true
+        // This tests the pure function behavior (models success)
+        let result = execute_gate("clippy", "moon run :clippy");
         assert!(result.passed);
+        assert_eq!(result.exit_code, 0);
+        assert_eq!(result.gate_name, "clippy");
+    }
+
+    #[test]
+    fn execute_gate_deterministic() {
+        // Same inputs should always produce same output
+        let result1 = execute_gate("compiles", "moon run :check");
+        let result2 = execute_gate("compiles", "moon run :check");
+        assert_eq!(result1, result2);
+    }
+
+    #[test]
+    fn execute_gate_preserves_gate_name() {
+        // Gate name should be preserved exactly as passed
+        let gate_names = ["compiles", "tests_pass", "clippy_clean", "moon_ci"];
+        for gate_name in gate_names {
+            let result = execute_gate(gate_name, "command");
+            assert_eq!(result.gate_name, gate_name);
+        }
+    }
+
+    #[test]
+    fn execute_gate_result_cloneable() {
+        let result = execute_gate("compiles", "moon run :check");
+        let cloned = result.clone();
+        assert_eq!(result, cloned);
+    }
+
+    #[test]
+    fn execute_gate_result_eq_comparable() {
+        let result1 = execute_gate("compiles", "moon run :check");
+        let result2 = execute_gate("compiles", "moon run :check");
+        assert_eq!(result1, result2);
     }
 }

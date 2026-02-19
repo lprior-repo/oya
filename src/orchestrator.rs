@@ -5,8 +5,8 @@
 //! # Testing Strategy
 //!
 //! 1. **Unit tests** - Test state transitions directly
-//! 2. **FakeOrchestrator** - In-memory implementation for integration tests
-//! 3. **RealOrchestrator** - Production implementation in main.rs
+//! 2. **`FakeOrchestrator`** - In-memory implementation for integration tests
+//! 3. **`RealOrchestrator`** - Production implementation in main.rs
 //!
 //! # Example
 //!
@@ -15,13 +15,13 @@
 //! use oya::types::{StageName, FailureCategory};
 //!
 //! async fn test_happy_path<T: Orchestrator>(orch: T) {
-//!     let result = orch.run_stage(
-//!         StageName::Plan,
-//!         1,
-//!         "bead-001",
-//!         "test context",
-//!         None::<(FailureCategory, String)>
-//!     ).await.unwrap();
+//!     let result = orch.run_stage(StageRequest {
+//!         stage: StageName::Plan,
+//!         attempt: 1,
+//!         bead_id: "bead-001".to_string(),
+//!         context: "test context".to_string(),
+//!         last_failure: None::<(FailureCategory, String)>,
+//!     }).await.unwrap();
 //!     assert!(result.passed);
 //! }
 //! ```
@@ -29,6 +29,15 @@
 use crate::types::{FailureCategory, StageName};
 use serde_json::Value;
 use thiserror::Error;
+
+#[derive(Debug, Clone)]
+pub struct StageRequest {
+    pub stage: StageName,
+    pub attempt: u32,
+    pub bead_id: String,
+    pub context: String,
+    pub last_failure: Option<(FailureCategory, String)>,
+}
 
 /// Result of executing a stage
 #[derive(Debug, Clone)]
@@ -76,17 +85,21 @@ pub trait Orchestrator: Send + Sync {
     /// Execute a single stage
     async fn run_stage(
         &self,
-        stage: StageName,
-        attempt: u32,
-        bead_id: &str,
-        context: &str,
-        last_failure: Option<(FailureCategory, String)>,
+        request: StageRequest,
     ) -> Result<StageExecutionResult, OrchestratorError>;
 
     /// Execute a quality gate
+    ///
+    /// # Errors
+    ///
+    /// Returns `OrchestratorError::GateExecution` if the gate fails to execute.
     fn run_gate(&self, gate: crate::types::Gate) -> Result<GateResult, OrchestratorError>;
 
     /// Prepare workspace for a stage
+    ///
+    /// # Errors
+    ///
+    /// Returns `OrchestratorError::WorkspacePrep` if workspace preparation fails.
     fn prepare_workspace(
         &self,
         run_id: &str,
@@ -111,7 +124,7 @@ pub struct FakeOrchestratorConfig {
     /// Default result if not in map
     pub default_result: StageExecutionResult,
 
-    /// Gate results (gate_name -> result)
+    /// Gate results (`gate_name` -> result)
     pub gate_results: std::collections::HashMap<String, GateResult>,
 
     /// Simulate delays (milliseconds)
@@ -162,6 +175,7 @@ pub struct CallRecord {
 }
 
 impl FakeOrchestrator {
+    #[must_use]
     pub fn new(config: FakeOrchestratorConfig, run_id: String, bead_id: String) -> Self {
         Self {
             config,
@@ -171,11 +185,13 @@ impl FakeOrchestrator {
         }
     }
 
+    #[must_use]
     pub fn calls(&self) -> Vec<CallRecord> {
-        self.calls.lock().map(|guard| guard.clone()).unwrap_or_else(|_| Vec::new())
+        self.calls.lock().map_or_else(|_| Vec::new(), |guard| guard.clone())
     }
 
-    pub fn stage_calls(&self, stage: StageName) -> Vec<CallRecord> {
+    #[must_use]
+    pub fn stage_calls(&self, stage: &StageName) -> Vec<CallRecord> {
         self.calls().into_iter().filter(|c| c.stage == Some(stage.clone())).collect()
     }
 
@@ -197,12 +213,10 @@ impl FakeOrchestrator {
 impl Orchestrator for FakeOrchestrator {
     async fn run_stage(
         &self,
-        stage: StageName,
-        attempt: u32,
-        _bead_id: &str,
-        _context: &str,
-        _last_failure: Option<(FailureCategory, String)>,
+        request: StageRequest,
     ) -> Result<StageExecutionResult, OrchestratorError> {
+        let stage = request.stage;
+        let attempt = request.attempt;
         self.record_call("run_stage", Some(stage.clone()), Some(attempt));
 
         if self.config.delay_ms > 0 {
@@ -223,15 +237,18 @@ impl Orchestrator for FakeOrchestrator {
         self.record_call("run_gate", None, None);
 
         let gate_name = gate.as_str().to_string();
-        self.config.gate_results.get(&gate_name).cloned().map(Ok).unwrap_or_else(|| {
-            Ok(GateResult {
-                gate_name: gate_name.clone(),
-                command: format!("mock-{}", gate_name),
-                passed: true,
-                exit_code: 0,
-                output: "mock gate passed".to_string(),
-            })
-        })
+        self.config.gate_results.get(&gate_name).cloned().map_or_else(
+            || {
+                Ok(GateResult {
+                    gate_name: gate_name.clone(),
+                    command: format!("mock-{gate_name}"),
+                    passed: true,
+                    exit_code: 0,
+                    output: "mock gate passed".to_string(),
+                })
+            },
+            Ok,
+        )
     }
 
     fn prepare_workspace(
@@ -269,8 +286,16 @@ mod tests {
     #[tokio::test]
     async fn fake_orch_returns_default_success() {
         let orch = fake_orch();
-        let result =
-            orch.run_stage(StageName::Plan, 1, "test-bead", "test context", None).await.unwrap();
+        let result = orch
+            .run_stage(StageRequest {
+                stage: StageName::Plan,
+                attempt: 1,
+                bead_id: "test-bead".to_string(),
+                context: "test context".to_string(),
+                last_failure: None,
+            })
+            .await
+            .unwrap();
 
         assert!(result.passed);
         assert_eq!(result.next_stage, Some(StageName::Contract));
@@ -280,10 +305,26 @@ mod tests {
     async fn fake_orch_records_calls() {
         let orch = fake_orch();
 
-        orch.run_stage(StageName::Plan, 1, "b", "c", None).await.unwrap();
-        orch.run_stage(StageName::Plan, 2, "b", "c", None).await.unwrap();
+        orch.run_stage(StageRequest {
+            stage: StageName::Plan,
+            attempt: 1,
+            bead_id: "b".to_string(),
+            context: "c".to_string(),
+            last_failure: None,
+        })
+        .await
+        .unwrap();
+        orch.run_stage(StageRequest {
+            stage: StageName::Plan,
+            attempt: 2,
+            bead_id: "b".to_string(),
+            context: "c".to_string(),
+            last_failure: None,
+        })
+        .await
+        .unwrap();
 
-        let calls = orch.stage_calls(StageName::Plan);
+        let calls = orch.stage_calls(&StageName::Plan);
         assert_eq!(calls.len(), 2);
         assert_eq!(calls[0].attempt, Some(1));
         assert_eq!(calls[1].attempt, Some(2));
@@ -305,7 +346,16 @@ mod tests {
 
         let orch = FakeOrchestrator::new(config, "run-001".to_string(), "bead-001".to_string());
 
-        let result = orch.run_stage(StageName::Tdd15, 1, "b", "c", None).await.unwrap();
+        let result = orch
+            .run_stage(StageRequest {
+                stage: StageName::Tdd15,
+                attempt: 1,
+                bead_id: "b".to_string(),
+                context: "c".to_string(),
+                last_failure: None,
+            })
+            .await
+            .unwrap();
 
         assert!(!result.passed);
         assert_eq!(result.failure_category, Some(FailureCategory::TestFailed));

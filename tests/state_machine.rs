@@ -75,7 +75,7 @@ async fn test_max_attempts_exceeded() {
     }
 
     // Verify we made exactly 2 calls
-    let calls = orch.stage_calls(StageName::Tdd15);
+    let calls = orch.stage_calls(&StageName::Tdd15);
     assert_eq!(calls.len(), 2);
 }
 
@@ -171,6 +171,6 @@ async fn test_failure_context_propagation() {
     .unwrap();
 
     // Verify second attempt was made
-    let calls = orch.stage_calls(StageName::Tdd15);
+    let calls = orch.stage_calls(&StageName::Tdd15);
     assert_eq!(calls.len(), 2);
 }

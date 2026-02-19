@@ -1,12 +1,2 @@
-msrv = "1.85.0"
-avoid-breaking-exported-api = false
-
-too-many-arguments-threshold = 10
-too-many-lines-threshold = 220
-type-complexity-threshold = 400
-cognitive-complexity-threshold = 30
-
-disallowed-methods = [
-  { path = "std::option::Option::unwrap", reason = "Use match/map_or_else for explicit source error handling." },
-  { path = "std::option::Option::expect", reason = "Use explicit branching in source code." },
-]
+too-many-lines-threshold = 40
+too-many-arguments-threshold = 5

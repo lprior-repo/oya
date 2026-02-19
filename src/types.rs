@@ -976,19 +976,31 @@ pub struct BehavioralFingerprint {
     pub computed_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BehavioralContext {
+    pub current_bead_id: Option<String>,
+    pub current_stage: String,
+}
+
+impl BehavioralContext {
+    #[must_use]
+    pub fn new(current_bead_id: Option<String>, current_stage: impl Into<String>) -> Self {
+        Self { current_bead_id, current_stage: current_stage.into() }
+    }
+}
+
 impl BehavioralFingerprint {
     pub fn new(
         agent_id: impl Into<String>,
-        current_bead_id: Option<String>,
-        current_stage: impl Into<String>,
+        context: BehavioralContext,
         consecutive_failures: u32,
         secs_since_progress: u64,
         retry_count: u32,
     ) -> Self {
         Self {
             agent_id: agent_id.into(),
-            current_bead_id,
-            current_stage: current_stage.into(),
+            current_bead_id: context.current_bead_id,
+            current_stage: context.current_stage,
             consecutive_failures,
             secs_since_progress,
             retry_count,
@@ -1373,7 +1385,16 @@ pub fn strip_ansi_codes(input: &str) -> String {
 }
 
 /// Truncate text to max chars, appending truncation marker if needed
+///
+/// # Edge Cases
+/// - If max_chars is 0, returns empty string
+/// - If input is shorter than max_chars, returns input unchanged (without ANSI codes)
 pub fn truncate_clean(input: &str, max_chars: usize) -> String {
+    // Handle edge case: max_chars of 0 should return empty string
+    if max_chars == 0 {
+        return String::new();
+    }
+
     let stripped = strip_ansi_codes(input);
     let chars: Vec<char> = stripped.chars().take(max_chars).collect();
     if stripped.chars().count() > max_chars {

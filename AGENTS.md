@@ -12,8 +12,10 @@
 {"kind":"rule","id":"panic","text":"Zero unwrap/panic/expect. Result<T,E> + ?"}
 {"kind":"rule","id":"tdd","text":"Tests FIRST. RED-GREEN-REFACTOR."}
 {"kind":"rule","id":"clippy","text":"Fix code, never lint config."}
+{"kind":"rule","id":"fn-lines","text":"Source functions must be <= 40 lines (clippy::too_many_lines)."}
+{"kind":"rule","id":"fn-args","text":"Source functions must take <= 5 inputs (clippy::too_many_arguments)."}
 {"kind":"rule","id":"queue","text":"zjj queue --add BEFORE zjj add."}
-{"kind":"lint","rust":"#![deny(clippy::unwrap_used)] #![deny(clippy::expect_used)] #![deny(clippy::panic)] #![forbid(unsafe_code)]"}
+{"kind":"lint","rust":"#![deny(clippy::unwrap_used)] #![deny(clippy::expect_used)] #![deny(clippy::panic)] #![deny(clippy::too_many_lines)] #![deny(clippy::too_many_arguments)] #![forbid(unsafe_code)]"}
 {"kind":"land","steps":["moon run :ci","zjj sync","zjj done","br close <id>","br sync --flush-only","git add .beads/","git commit"]}
 {"kind":"ref","moon":"/home/lewis/src/oya/.moon/tasks.yml"}
 {"kind":"ref","rust":"/home/lewis/src/oya/docs/FUNCTIONAL_RUST.md"}

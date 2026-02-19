@@ -16,7 +16,8 @@ fn verify_moon_check_exit_codes() {
         Command::new("moon").args(["run", ":check"]).output().expect("moon should be installed");
 
     // Just verify exit code is 0 or 1 (not something unexpected)
-    let exit_code = output.status.code().unwrap_or(-1);
+    // Use 128 as fallback for signal-terminated processes (Unix convention)
+    let exit_code = output.status.code().unwrap_or(128);
     assert!(exit_code == 0 || exit_code == 1, "moon check should return 0 or 1, got {}", exit_code);
 
     // Verify output contains expected text
@@ -41,7 +42,7 @@ fn verify_moon_test_exit_codes() {
     let output =
         Command::new("moon").args(["run", ":test"]).output().expect("moon should be installed");
 
-    let exit_code = output.status.code().unwrap_or(-1);
+    let exit_code = output.status.code().unwrap_or(128);
     assert!(exit_code == 0 || exit_code == 1, "moon test should return 0 or 1, got {}", exit_code);
 }
 
@@ -53,7 +54,7 @@ fn verify_zjj_exit_codes() {
     let output = Command::new("zjj").arg("status").output();
 
     if let Ok(output) = output {
-        let exit_code = output.status.code().unwrap_or(-1);
+        let exit_code = output.status.code().unwrap_or(128);
         assert!(
             exit_code == 0 || exit_code == 1,
             "zjj status should return 0 or 1, got {}",
@@ -164,22 +165,26 @@ fn contract_failure_category_retryability() {
     use oya::is_retryable_failure;
     use oya::types::FailureCategory;
 
-    // Retryable failures
+    // Retryable failures (code-level issues AI can fix)
     let retryable = vec![
         FailureCategory::TestFailed,
         FailureCategory::LintFailed,
         FailureCategory::OutputParseFailure,
+        FailureCategory::CompileFailed,
     ];
 
     for category in retryable {
         assert!(is_retryable_failure(&category), "{:?} should be retryable", category);
     }
 
-    // Non-retryable failures (examples)
+    // Non-retryable failures (infrastructure/external issues)
     let non_retryable = vec![
         FailureCategory::AuthFailed,
         FailureCategory::ProviderUnavailable,
         FailureCategory::ContextOverflow,
+        FailureCategory::RateLimited,
+        FailureCategory::MergeConflict,
+        FailureCategory::MaxAttemptsExceeded,
     ];
 
     for category in non_retryable {

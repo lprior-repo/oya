@@ -10,6 +10,7 @@
 #![forbid(unsafe_code)]
 
 use crate::types::StageName;
+use im::Vector;
 use thiserror::Error;
 
 // Import other bead modules
@@ -18,6 +19,7 @@ use crate::beads::gate_decision;
 use crate::beads::gate_execution;
 use crate::beads::gate_report;
 use crate::beads::gate_selection;
+use crate::beads::moon_command;
 
 /// Error types for pipeline orchestration
 #[derive(Debug, Error)]
@@ -44,29 +46,30 @@ pub struct PipelineResult {
 /// Pure function: composes all bead functions in sequence
 /// # Errors
 /// Returns [`QualityGatePipelineError`] if aggregation fails
-#[must_use]
 pub fn run_quality_gate_pipeline(
     stage: StageName,
 ) -> Result<PipelineResult, QualityGatePipelineError> {
-    // Step 1: Select gates for stage
-    let gate_names = gate_selection::select_gates(&stage);
+    // Step 1: Select typed gates for stage
+    let gates = gate_selection::select_gates(&stage);
 
-    // Step 2: Execute each gate (in real implementation, would run commands)
-    let gate_results: Vec<_> = gate_names
+    // Step 3: Execute each gate using generated moon command
+    let gate_results: Vec<_> = gates
         .iter()
-        .map(|gate_name| {
-            gate_execution::execute_gate(gate_name, &format!("command for {gate_name}"))
+        .map(|gate| {
+            let command = moon_command::generate_moon_command(gate);
+            gate_execution::execute_gate(gate.as_str(), &command.command)
         })
         .collect();
 
-    // Step 3: Aggregate results
-    let aggregated = gate_aggregation::aggregate_gate_results(stage.clone(), &gate_results.into())
+    // Step 4: Aggregate results
+    let gate_results_vector: Vector<_> = gate_results.into();
+    let aggregated = gate_aggregation::aggregate_gate_results(stage.clone(), &gate_results_vector)
         .map_err(|e| QualityGatePipelineError::Aggregation(e.to_string()))?;
 
-    // Step 4: Build report
+    // Step 5: Build report
     let report = gate_report::build_gate_report(stage.clone(), &aggregated);
 
-    // Step 5: Make decision
+    // Step 6: Make decision
     let decision = gate_decision::make_gate_decision(&report);
 
     Ok(PipelineResult {
@@ -91,9 +94,41 @@ mod tests {
     }
 
     #[test]
+    fn pipeline_contract_stage() {
+        let result = run_quality_gate_pipeline(StageName::Contract).unwrap();
+        assert!(result.passed);
+        assert_eq!(result.total_gates, 1);
+        assert_eq!(result.passed_gates, 1);
+    }
+
+    #[test]
     fn pipeline_tdd15_stage() {
         let result = run_quality_gate_pipeline(StageName::Tdd15).unwrap();
         assert!(result.passed); // In pure function, defaults to success
+        assert_eq!(result.total_gates, 2);
+        assert_eq!(result.passed_gates, 2);
+    }
+
+    #[test]
+    fn pipeline_qa_stage() {
+        let result = run_quality_gate_pipeline(StageName::Qa).unwrap();
+        assert!(result.passed);
+        assert_eq!(result.total_gates, 2);
+        assert_eq!(result.passed_gates, 2);
+    }
+
+    #[test]
+    fn pipeline_red_queen_stage() {
+        let result = run_quality_gate_pipeline(StageName::RedQueen).unwrap();
+        assert!(result.passed);
+        assert_eq!(result.total_gates, 1);
+        assert_eq!(result.passed_gates, 1);
+    }
+
+    #[test]
+    fn pipeline_gpt_review_stage() {
+        let result = run_quality_gate_pipeline(StageName::GptReview).unwrap();
+        assert!(result.passed);
         assert_eq!(result.total_gates, 2);
         assert_eq!(result.passed_gates, 2);
     }
@@ -104,5 +139,36 @@ mod tests {
         assert!(result.passed);
         assert_eq!(result.total_gates, 2);
         assert_eq!(result.passed_gates, 2);
+    }
+
+    #[test]
+    fn pipeline_preserves_stage() {
+        let result = run_quality_gate_pipeline(StageName::Qa).unwrap();
+        assert_eq!(result.stage, StageName::Qa);
+    }
+
+    #[test]
+    fn pipeline_deterministic() {
+        let result1 = run_quality_gate_pipeline(StageName::Tdd15).unwrap();
+        let result2 = run_quality_gate_pipeline(StageName::Tdd15).unwrap();
+        assert_eq!(result1, result2);
+    }
+
+    #[test]
+    fn pipeline_all_stages_pass() {
+        let stages = vec![
+            StageName::Plan,
+            StageName::Contract,
+            StageName::Tdd15,
+            StageName::Qa,
+            StageName::RedQueen,
+            StageName::GptReview,
+            StageName::ShipGate,
+        ];
+
+        for stage in stages {
+            let result = run_quality_gate_pipeline(stage.clone()).unwrap();
+            assert!(result.passed, "Stage {:?} should pass", stage);
+        }
     }
 }

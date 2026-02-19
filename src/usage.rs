@@ -127,7 +127,6 @@ impl OyaUsageTracker for OyaUsageTrackerImpl {
         });
 
         if request.success {
-            // Reset health on success
             health.is_rate_limited = false;
             health.consecutive_failures = 0;
             health.cooldown_until = None;
@@ -137,26 +136,7 @@ impl OyaUsageTracker for OyaUsageTrackerImpl {
             if request.is_rate_limit {
                 health.is_rate_limited = true;
                 health.cooldown_until = Some(now + Duration::seconds(DEFAULT_COOLDOWN_SECONDS));
-
-                // Trigger rotation for all tiers containing this model
-                // Note: efficient lookup would be inverted map, but list is small
-                for tier in ["fast", "balanced", "capable", "best"] {
-                    let list = get_models_for_tier(tier);
-                    if let Some(idx) = list.iter().position(|m| m == &model) {
-                        let current = *state.active_indices.get(tier).unwrap_or(&0);
-                        if current == idx {
-                            // Rotate to next
-                            let next = (current + 1) % list.len();
-                            state.active_indices.insert(tier.to_string(), next);
-                            tracing::info!(
-                                "Rate limit detected for {}. Rotating tier '{}' to model {}",
-                                model,
-                                tier,
-                                list[next]
-                            );
-                        }
-                    }
-                }
+                rotate_tiers_on_rate_limit(&mut state, &model);
             }
         }
 
@@ -195,6 +175,25 @@ impl OyaUsageTracker for OyaUsageTrackerImpl {
 }
 
 // --- Helper Functions ---
+
+fn rotate_tiers_on_rate_limit(state: &mut TrackerState, model: &str) {
+    for tier in ["fast", "balanced", "capable", "best"] {
+        let list = get_models_for_tier(tier);
+        if let Some(idx) = list.iter().position(|m| m == model) {
+            let current = *state.active_indices.get(tier).unwrap_or(&0);
+            if current == idx {
+                let next = (current + 1) % list.len();
+                state.active_indices.insert(tier.to_string(), next);
+                tracing::info!(
+                    "Rate limit detected for {}. Rotating tier '{}' to model {}",
+                    model,
+                    tier,
+                    list[next]
+                );
+            }
+        }
+    }
+}
 
 fn is_model_healthy(state: &TrackerState, model_id: &str) -> bool {
     if let Some(health) = state.model_health.get(model_id) {

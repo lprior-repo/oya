@@ -5,13 +5,13 @@
 //!
 //! # Quality Gates Workflow
 //!
-//! 1. [`GateSelection`] - Select gates for a stage
-//! 2. [`GateExecution`] - Execute a single gate
-//! 3. [`GateResultAggregation`] - Aggregate gate results
-//! 4. [`QualityGateReport`] - Build quality gate report
-//! 5. [`QualityGateDecision`] - Make pass/fail decision
-//! 6. [`MoonCommandGeneration`] - Generate moon command from gate
-//! 7. [`QualityGatePipeline`] - Orchestrate full quality gate run
+//! 1. [`gate_selection::select_gates`] - Select gates for a stage
+//! 2. [`gate_execution::execute_gate`] - Execute a single gate
+//! 3. [`gate_aggregation::aggregate_gate_results`] - Aggregate gate results
+//! 4. [`gate_report::build_gate_report`] - Build quality gate report
+//! 5. [`gate_decision::make_gate_decision`] - Make pass/fail decision
+//! 6. [`moon_command::generate_moon_command`] - Generate moon command from gate
+//! 7. [`quality_gate_pipeline::run_quality_gate_pipeline`] - Orchestrate full quality gate run
 //!
 //! # Design Contract
 //!

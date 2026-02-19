@@ -103,4 +103,95 @@ mod tests {
         assert_eq!(report.passed_gates, 1);
         assert!(report.failure_category.is_some());
     }
+
+    #[test]
+    fn build_report_all_passed() {
+        let aggregated = AggregatedGateResult {
+            stage: StageName::Tdd15,
+            passed: true,
+            passed_count: 2,
+            total_count: 2,
+            gate_results: Vector::from(vec!["compiles".to_string(), "tests_pass".to_string()]),
+        };
+
+        let report = build_gate_report(StageName::Tdd15, &aggregated);
+        assert!(report.passed);
+        assert_eq!(report.passed_gates, 2);
+        assert_eq!(report.total_gates, 2);
+        assert!(report.failure_category.is_none());
+    }
+
+    #[test]
+    fn build_report_all_failed() {
+        let aggregated = AggregatedGateResult {
+            stage: StageName::Tdd15,
+            passed: false,
+            passed_count: 0,
+            total_count: 2,
+            gate_results: Vector::from(vec!["compiles".to_string(), "tests_pass".to_string()]),
+        };
+
+        let report = build_gate_report(StageName::Tdd15, &aggregated);
+        assert!(!report.passed);
+        assert_eq!(report.passed_gates, 0);
+        assert_eq!(report.total_gates, 2);
+        assert!(report.failure_category.is_some());
+    }
+
+    #[test]
+    fn build_report_preserves_stage() {
+        let aggregated = AggregatedGateResult {
+            stage: StageName::Qa,
+            passed: true,
+            passed_count: 2,
+            total_count: 2,
+            gate_results: Vector::from(vec!["tests_pass".to_string(), "edge_cases".to_string()]),
+        };
+
+        let report = build_gate_report(StageName::Qa, &aggregated);
+        assert_eq!(report.stage, StageName::Qa);
+    }
+
+    #[test]
+    fn build_report_failure_category_set_when_failed() {
+        let aggregated = AggregatedGateResult {
+            stage: StageName::Tdd15,
+            passed: false,
+            passed_count: 1,
+            total_count: 2,
+            gate_results: Vector::from(vec!["compiles".to_string(), "tests_pass".to_string()]),
+        };
+
+        let report = build_gate_report(StageName::Tdd15, &aggregated);
+        assert!(report.failure_category.is_some());
+    }
+
+    #[test]
+    fn build_report_failure_category_none_when_passed() {
+        let aggregated = AggregatedGateResult {
+            stage: StageName::Plan,
+            passed: true,
+            passed_count: 1,
+            total_count: 1,
+            gate_results: Vector::from(vec!["compiles".to_string()]),
+        };
+
+        let report = build_gate_report(StageName::Plan, &aggregated);
+        assert!(report.failure_category.is_none());
+    }
+
+    #[test]
+    fn build_report_deterministic() {
+        let aggregated = AggregatedGateResult {
+            stage: StageName::Tdd15,
+            passed: false,
+            passed_count: 1,
+            total_count: 2,
+            gate_results: Vector::from(vec!["compiles".to_string(), "tests_pass".to_string()]),
+        };
+
+        let report1 = build_gate_report(StageName::Tdd15, &aggregated);
+        let report2 = build_gate_report(StageName::Tdd15, &aggregated);
+        assert_eq!(report1, report2);
+    }
 }

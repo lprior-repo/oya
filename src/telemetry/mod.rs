@@ -1,11 +1,11 @@
 //! OpenTelemetry observability initialization
 //!
 //! Provides dual-layer output:
-//! 1. JSON logs to stdout (for OpenObserve log stream ingestion)
-//! 2. OTLP traces to OpenObserve trace backend
+//! 1. JSON logs to stdout (for `OpenObserve` log stream ingestion)
+//! 2. OTLP traces to `OpenObserve` trace backend
 //!
 //! Both layers share the same tracing Registry, ensuring consistent
-//! trace_id/span_id correlation across logs and traces.
+//! `trace_id`/`span_id` correlation across logs and traces.
 
 pub mod config;
 pub mod error;
@@ -67,14 +67,15 @@ impl Drop for ShutdownGuard {
 pub fn init_telemetry(config: &ObservabilityConfig) -> Result<ShutdownGuard, ObservabilityError> {
     use opentelemetry_otlp::WithExportConfig;
 
-    // Build OTLP exporter with tonic (gRPC) on port 4317
+    // Build OTLP exporter with tonic (gRPC)
+    let endpoint = config.otlp_endpoint.clone();
     let exporter = opentelemetry_otlp::SpanExporter::builder()
         .with_tonic()
-        .with_endpoint("http://localhost:4317")
+        .with_endpoint(&endpoint)
         .build()
         .map_err(|err| ObservabilityError::HttpClientBuild { source: Box::new(err) })?;
 
-    eprintln!("[Telemetry] OTLP exporter configured for http://localhost:4317 (gRPC)");
+    eprintln!("[Telemetry] OTLP exporter configured for {} (gRPC)", endpoint);
 
     // Configure batch processor for efficient export
     let provider = SdkTracerProvider::builder().with_batch_exporter(exporter).build();

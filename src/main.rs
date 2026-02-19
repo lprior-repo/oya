@@ -1,8 +1,11 @@
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
+#![deny(clippy::too_many_lines)]
+#![deny(clippy::too_many_arguments)]
 #![forbid(unsafe_code)]
 
+use oya::beads::moon_command::generate_moon_command;
 use oya::types::{
     truncate_clean, FailureCategory, Gate, GateSummary, StageName as Stage, StageResult,
     TimelineEntry,
@@ -840,6 +843,9 @@ async fn execute_stage_real(
     last_failure: Option<(FailureCategory, String)>,
     config: &RuntimeConfig,
 ) -> Result<(StageResult, String), OyaError> {
+    if attempt == 0 {
+        return Err(OyaError("attempt must be greater than 0".to_string()));
+    }
     let bead_id = bead_id.to_string();
     let context = context.to_string();
     let model = model.to_string();
@@ -849,6 +855,10 @@ async fn execute_stage_real(
     let repo_root = config.repo_root.clone();
     let model_for_closure = model.clone();
 
+    // Execute stage in spawn_blocking (CPU-intensive work)
+    // Note: For full determinism, this should be wrapped in ctx.run(), but
+    // StageExecution needs to implement restate_sdk::serde traits.
+    // TODO: Make StageExecution serializable for Restate journaling
     let execution = tokio::task::spawn_blocking(move || match stage_for_closure {
         Stage::Plan
         | Stage::Contract
@@ -860,13 +870,11 @@ async fn execute_stage_real(
             let prompt =
                 stage_prompt(&stage_for_closure, &bead_id, &context, attempt, &failure_context);
             let (success_message, success_next_stage) = stage_success(&stage_for_closure);
-            let checks = stage_checks(&stage_for_closure);
             execute_prompt_stage(
                 prompt,
                 stage_for_closure.clone(),
                 success_message,
                 success_next_stage,
-                &checks,
                 &repo_root,
                 &model_for_closure,
             )
@@ -901,19 +909,11 @@ struct StageExecution {
     prompt: String,
 }
 
-#[derive(Clone)]
-enum StageCheck {
-    Check { failure: FailureCategory, next_stage: Stage },
-    Test { failure: FailureCategory, next_stage: Stage },
-    Quick { failure: FailureCategory, next_stage: Stage },
-}
-
 fn execute_prompt_stage(
     prompt: String,
     opencode_fail_stage: Stage,
     success_message: &str,
     success_next_stage: Option<Stage>,
-    checks: &[StageCheck],
     repo_root: &PathBuf,
     model: &str,
 ) -> Result<StageExecution, OyaError> {
@@ -931,57 +931,32 @@ fn execute_prompt_stage(
         });
     }
 
-    let failed_check = checks.iter().try_fold(None, |found, check| {
-        if found.is_some() {
-            return Ok(found);
+    let stage_gates = opencode_fail_stage.gates();
+
+    for gate in stage_gates {
+        let gate_evidence = execute_gate(gate.clone(), repo_root)?;
+        if !gate_evidence.passed {
+            let (failure, next_stage) = gate_failure_outcome(&opencode_fail_stage, &gate);
+            return Ok(StageExecution {
+                passed: false,
+                output: format!(
+                    "command={} exit_code={}\n{}",
+                    gate_evidence.command, gate_evidence.exit_code, gate_evidence.output
+                ),
+                failure_category: Some(failure),
+                next_stage: Some(next_stage),
+                prompt,
+            });
         }
-
-        let next = match check {
-            StageCheck::Check { failure, next_stage } => {
-                let (ok, output) = run_moon_check(repo_root)?;
-                if ok {
-                    None
-                } else {
-                    Some((failure.clone(), output, next_stage.clone()))
-                }
-            }
-            StageCheck::Test { failure, next_stage } => {
-                let (ok, output) = run_moon_test(repo_root)?;
-                if ok {
-                    None
-                } else {
-                    Some((failure.clone(), output, next_stage.clone()))
-                }
-            }
-            StageCheck::Quick { failure, next_stage } => {
-                let (ok, output) = run_moon_quick(repo_root)?;
-                if ok {
-                    None
-                } else {
-                    Some((failure.clone(), output, next_stage.clone()))
-                }
-            }
-        };
-
-        Ok(next)
-    })?;
-
-    match failed_check {
-        Some((failure, output, next_stage)) => Ok(StageExecution {
-            passed: false,
-            output,
-            failure_category: Some(failure),
-            next_stage: Some(next_stage),
-            prompt,
-        }),
-        None => Ok(StageExecution {
-            passed: true,
-            output: success_message.to_string(),
-            failure_category: None,
-            next_stage: success_next_stage,
-            prompt,
-        }),
     }
+
+    Ok(StageExecution {
+        passed: true,
+        output: success_message.to_string(),
+        failure_category: None,
+        next_stage: success_next_stage,
+        prompt,
+    })
 }
 
 const OPENCODE_TIMEOUT_SECONDS: u64 = 300;
@@ -1024,6 +999,10 @@ async fn fetch_opencode_text(
 ) -> Result<String, OyaError> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(timeout_seconds))
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .pool_max_idle_per_host(10)
+        .pool_idle_timeout(std::time::Duration::from_secs(60))
+        .tcp_keepalive(std::time::Duration::from_secs(60))
         .build()
         .map_err(|error| OyaError(format!("OpenCode HTTP client build failed: {}", error)))?;
 
@@ -1083,17 +1062,99 @@ fn run_command_with_timeout_with_exit(
 ) -> Result<(bool, String, String, i32), OyaError> {
     let start = std::time::Instant::now();
     let timeout_duration = timeout_seconds.to_string();
-    let output = Command::new("timeout")
-        .arg(&timeout_duration)
-        .arg(command_name)
-        .args(args)
-        .current_dir(repo_root)
+
+    // Check if `timeout` command is available (Linux/GNU coreutils)
+    // On macOS and other systems without timeout, we use a fallback
+    let has_timeout = Command::new("which")
+        .arg("timeout")
         .output()
-        .map_err(|e| OyaError(format!("Failed to run {}: {}", command_name, e)))?;
+        .map(|output| output.status.success())
+        .unwrap_or(false);
+
+    let output = if has_timeout {
+        // Use GNU timeout when available
+        Command::new("timeout")
+            .arg(&timeout_duration)
+            .arg(command_name)
+            .args(args)
+            .current_dir(repo_root)
+            .output()
+            .map_err(|e| OyaError(format!("Failed to run {} with timeout: {}", command_name, e)))?
+    } else {
+        // Cross-platform fallback: spawn with stdout/stderr capture and wait with timeout
+        let mut child = Command::new(command_name)
+            .args(args)
+            .current_dir(repo_root)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    OyaError(format!(
+                        "Command '{}' not found. Please ensure it is installed and in PATH.",
+                        command_name
+                    ))
+                } else {
+                    OyaError(format!("Failed to spawn {}: {}", command_name, e))
+                }
+            })?;
+
+        // Wait with timeout using thread sleep and try_wait
+        let timeout = std::time::Duration::from_secs(timeout_seconds);
+        let start_wait = std::time::Instant::now();
+
+        loop {
+            if start_wait.elapsed() > timeout {
+                // Timeout reached, kill the process
+                let _ = child.kill();
+                let _ = child.wait();
+                return Ok((
+                    false,
+                    String::new(),
+                    format!("Command timed out after {} seconds", timeout_seconds),
+                    124,
+                ));
+            }
+
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    let exit_code = status.code().unwrap_or(128);
+                    // Read stdout/stderr from the captured pipes
+                    let stdout = child
+                        .stdout
+                        .take()
+                        .map(|mut pipe| {
+                            let mut buf = String::new();
+                            let _ = std::io::Read::read_to_string(&mut pipe, &mut buf);
+                            buf
+                        })
+                        .unwrap_or_default();
+                    let stderr = child
+                        .stderr
+                        .take()
+                        .map(|mut pipe| {
+                            let mut buf = String::new();
+                            let _ = std::io::Read::read_to_string(&mut pipe, &mut buf);
+                            buf
+                        })
+                        .unwrap_or_default();
+                    return Ok((status.success(), stdout, stderr, exit_code));
+                }
+                Ok(None) => {
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                }
+                Err(e) => {
+                    return Err(OyaError(format!("Failed to wait for {}: {}", command_name, e)));
+                }
+            }
+        }
+    };
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-    let exit_code = output.status.code().map_or(-1, |code| code);
+    // Map signal termination (None) to exit code 128 (standard shell convention)
+    // This ensures exit_code is always in valid range 0-255 for GateResult validation
+    let exit_code = output.status.code().unwrap_or(128);
     let timed_out = output.status.code() == Some(124);
     let success = output.status.success();
     let duration_ms = start.elapsed().as_millis();
@@ -1136,92 +1197,59 @@ fn run_opencode(
     )
 }
 
-fn run_moon_check(repo_root: &PathBuf) -> Result<(bool, String), OyaError> {
-    tracing::info!("Running moon :check");
-    run_command_with_timeout("moon", &["run", ":check"], MOON_TIMEOUT_SECONDS, repo_root)
-}
-
-fn run_moon_test(repo_root: &PathBuf) -> Result<(bool, String), OyaError> {
-    tracing::info!("Running moon :test");
-    run_command_with_timeout("moon", &["run", ":test"], MOON_TIMEOUT_SECONDS, repo_root)
-}
-
-fn run_moon_quick(repo_root: &PathBuf) -> Result<(bool, String), OyaError> {
-    tracing::info!("Running moon :quick");
-    run_command_with_timeout("moon", &["run", ":quick"], MOON_TIMEOUT_SECONDS, repo_root)
-}
-
-fn run_moon_ci(repo_root: &PathBuf) -> Result<(bool, String), OyaError> {
-    tracing::info!("Running moon :ci");
-    run_command_with_timeout("moon", &["run", ":ci"], MOON_TIMEOUT_SECONDS, repo_root)
-}
-
-fn run_zjj_done_dry_run(repo_root: &PathBuf) -> Result<(bool, String), OyaError> {
-    tracing::info!("Running zjj done --dry-run");
-
-    let (success, combined) =
-        run_command_with_timeout("zjj", &["done", "--dry-run"], ZJJ_TIMEOUT_SECONDS, repo_root)?;
-
-    Ok((success, combined))
-}
-
 fn execute_gate(gate: Gate, repo_root: &PathBuf) -> Result<GateEvidence, OyaError> {
-    match gate {
-        Gate::Compiles => {
-            let (passed, stdout, stderr, exit_code) = run_command_with_timeout_with_exit(
-                "moon",
-                &["run", ":check"],
-                MOON_TIMEOUT_SECONDS,
-                repo_root,
-            )?;
-            let output = format!("{}\n{}", stdout, stderr);
-            Ok(GateEvidence { command: "moon run :check".to_string(), passed, exit_code, output })
+    let command = generate_moon_command(&gate).command;
+    let timeout_seconds = match gate {
+        Gate::ZjjMergeQueue => ZJJ_TIMEOUT_SECONDS,
+        _ => MOON_TIMEOUT_SECONDS,
+    };
+
+    let (program, args) = parse_command_parts(command.as_str())?;
+    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+
+    let (passed, stdout, stderr, exit_code) = run_command_with_timeout_with_exit(
+        program.as_str(),
+        &arg_refs,
+        timeout_seconds,
+        repo_root,
+    )?;
+    let output = format!("{}\n{}", stdout, stderr);
+
+    Ok(GateEvidence { command, passed, exit_code, output })
+}
+
+fn parse_command_parts(command: &str) -> Result<(String, Vec<String>), OyaError> {
+    let parts: Vec<String> = command.split_whitespace().map(str::to_string).collect();
+    if parts.is_empty() {
+        return Err(OyaError("gate command cannot be empty".to_string()));
+    }
+
+    let program = parts
+        .first()
+        .cloned()
+        .ok_or_else(|| OyaError("gate command program missing".to_string()))?;
+    let args = parts.iter().skip(1).cloned().collect();
+
+    Ok((program, args))
+}
+
+fn gate_failure_outcome(stage: &Stage, gate: &Gate) -> (FailureCategory, Stage) {
+    match (stage, gate) {
+        (Stage::Plan, Gate::Compiles) => (FailureCategory::CompileFailed, Stage::Plan),
+        (Stage::Contract, Gate::Compiles) => (FailureCategory::CompileFailed, Stage::Contract),
+        (Stage::Tdd15, Gate::Compiles) => (FailureCategory::CompileFailed, Stage::Tdd15),
+        (Stage::Tdd15, Gate::TestsPass) => (FailureCategory::TestFailed, Stage::Tdd15),
+        (Stage::Qa, Gate::TestsPass | Gate::EdgeCases) => {
+            (FailureCategory::TestFailed, Stage::Tdd15)
         }
-        Gate::TestsPass | Gate::EdgeCases | Gate::NoVulnerabilities => {
-            let (passed, stdout, stderr, exit_code) = run_command_with_timeout_with_exit(
-                "moon",
-                &["run", ":test"],
-                MOON_TIMEOUT_SECONDS,
-                repo_root,
-            )?;
-            let output = format!("{}\n{}", stdout, stderr);
-            Ok(GateEvidence { command: "moon run :test".to_string(), passed, exit_code, output })
+        (Stage::RedQueen, Gate::NoVulnerabilities) => (FailureCategory::TestFailed, Stage::Tdd15),
+        (Stage::GptReview, Gate::ClippyClean) => (FailureCategory::LintFailed, Stage::GptReview),
+        (Stage::GptReview, Gate::Security) => (FailureCategory::TestFailed, Stage::Tdd15),
+        (Stage::ShipGate, Gate::MoonCi) => (FailureCategory::TestFailed, Stage::Tdd15),
+        (Stage::ShipGate, Gate::ZjjMergeQueue) => {
+            (FailureCategory::MergeConflict, Stage::GptReview)
         }
-        Gate::ClippyClean | Gate::Security => {
-            let (passed, stdout, stderr, exit_code) = run_command_with_timeout_with_exit(
-                "moon",
-                &["run", ":quick"],
-                MOON_TIMEOUT_SECONDS,
-                repo_root,
-            )?;
-            let output = format!("{}\n{}", stdout, stderr);
-            Ok(GateEvidence { command: "moon run :quick".to_string(), passed, exit_code, output })
-        }
-        Gate::MoonCi => {
-            let (passed, stdout, stderr, exit_code) = run_command_with_timeout_with_exit(
-                "moon",
-                &["run", ":ci"],
-                MOON_TIMEOUT_SECONDS,
-                repo_root,
-            )?;
-            let output = format!("{}\n{}", stdout, stderr);
-            Ok(GateEvidence { command: "moon run :ci".to_string(), passed, exit_code, output })
-        }
-        Gate::ZjjMergeQueue => {
-            let (passed, stdout, stderr, exit_code) = run_command_with_timeout_with_exit(
-                "zjj",
-                &["done", "--dry-run"],
-                ZJJ_TIMEOUT_SECONDS,
-                repo_root,
-            )?;
-            let output = format!("{}\n{}", stdout, stderr);
-            Ok(GateEvidence {
-                command: "zjj done --dry-run".to_string(),
-                passed,
-                exit_code,
-                output,
-            })
-        }
+        (_, _) => (FailureCategory::TestFailed, stage.clone()),
     }
 }
 
@@ -1478,96 +1506,50 @@ fn stage_success(stage: &Stage) -> (&'static str, Option<Stage>) {
     }
 }
 
-fn stage_checks(stage: &Stage) -> Vec<StageCheck> {
-    match stage {
-        Stage::Plan => vec![StageCheck::Check {
-            failure: FailureCategory::CompileFailed,
-            next_stage: Stage::Plan,
-        }],
-        Stage::Contract => vec![StageCheck::Check {
-            failure: FailureCategory::CompileFailed,
-            next_stage: Stage::Contract,
-        }],
-        Stage::Tdd15 => vec![
-            StageCheck::Check { failure: FailureCategory::CompileFailed, next_stage: Stage::Tdd15 },
-            StageCheck::Test { failure: FailureCategory::TestFailed, next_stage: Stage::Tdd15 },
-        ],
-        Stage::Qa => vec![StageCheck::Test {
-            failure: FailureCategory::TestFailed,
-            next_stage: Stage::Tdd15,
-        }],
-        Stage::RedQueen => vec![StageCheck::Test {
-            failure: FailureCategory::TestFailed,
-            next_stage: Stage::Tdd15,
-        }],
-        Stage::GptReview => vec![
-            StageCheck::Quick {
-                failure: FailureCategory::LintFailed,
-                next_stage: Stage::GptReview,
-            },
-            StageCheck::Test { failure: FailureCategory::TestFailed, next_stage: Stage::Tdd15 },
-        ],
-        Stage::ShipGate => Vec::new(),
-    }
-}
-
 fn execute_ship_gate(
     _bead_id: &str,
-    _attempt: u32,
+    attempt: u32,
     _context: &str,
     _last_failure: &Option<(FailureCategory, String)>,
     skip_zjj_gate: bool,
     repo_root: &PathBuf,
 ) -> Result<StageExecution, OyaError> {
+    if attempt == 0 {
+        return Err(OyaError("attempt must be greater than 0".to_string()));
+    }
+    execute_ship_gate_with_gate_runner(skip_zjj_gate, |gate| execute_gate(gate, repo_root))
+}
+
+fn execute_ship_gate_with_gate_runner<F>(
+    skip_zjj_gate: bool,
+    run_gate: F,
+) -> Result<StageExecution, OyaError>
+where
+    F: Fn(Gate) -> Result<GateEvidence, OyaError>,
+{
     tracing::info!("SHIP GATE: Running final validation");
     let prompt = "Ship gate executes quality gates only (moon/zjj); no OpenCode prompt".to_string();
 
-    let (ci_ok, ci_output) = run_moon_ci(repo_root)?;
-    if !ci_ok {
-        return Ok(StageExecution {
-            passed: false,
-            output: ci_output,
-            failure_category: Some(FailureCategory::CompileFailed),
-            next_stage: Some(Stage::Tdd15),
-            prompt,
-        });
-    }
+    for gate in Stage::ShipGate.gates() {
+        if skip_zjj_gate && gate == Gate::ZjjMergeQueue {
+            tracing::info!("SHIP GATE: skipping zjj merge queue check (OYA_SKIP_ZJJ_GATE=1)");
+            continue;
+        }
 
-    if !skip_zjj_gate {
-        let (zjj_ok, zjj_output) = run_zjj_done_dry_run(repo_root)?;
-        if !zjj_ok {
+        let gate_evidence = run_gate(gate.clone())?;
+        if !gate_evidence.passed {
+            let (failure, next_stage) = gate_failure_outcome(&Stage::ShipGate, &gate);
             return Ok(StageExecution {
                 passed: false,
-                output: zjj_output,
-                failure_category: Some(FailureCategory::MergeConflict),
-                next_stage: Some(Stage::GptReview),
+                output: format!(
+                    "command={} exit_code={}\n{}",
+                    gate_evidence.command, gate_evidence.exit_code, gate_evidence.output
+                ),
+                failure_category: Some(failure),
+                next_stage: Some(next_stage),
                 prompt,
             });
         }
-    } else {
-        tracing::info!("SHIP GATE: skipping zjj dry-run check (OYA_SKIP_ZJJ_GATE=1)");
-    }
-
-    let (quick_ok, quick_output) = run_moon_quick(repo_root)?;
-    if !quick_ok {
-        return Ok(StageExecution {
-            passed: false,
-            output: quick_output,
-            failure_category: Some(FailureCategory::LintFailed),
-            next_stage: Some(Stage::GptReview),
-            prompt,
-        });
-    }
-
-    let (test_ok, test_output) = run_moon_test(repo_root)?;
-    if !test_ok {
-        return Ok(StageExecution {
-            passed: false,
-            output: test_output,
-            failure_category: Some(FailureCategory::TestFailed),
-            next_stage: Some(Stage::Tdd15),
-            prompt,
-        });
     }
 
     tracing::info!("SHIP GATE: ALL CHECKS PASSED");
@@ -1591,7 +1573,11 @@ fn is_valid_http_url(value: &str) -> bool {
             let scheme_valid = url.scheme() == "http" || url.scheme() == "https";
             let host_valid = url.host_str().is_some();
             let creds_valid = url.username().is_empty() && url.password().is_none();
-            scheme_valid && host_valid && creds_valid
+            // Ensure URL has no path, query, or fragment (should be base URL)
+            let path_valid = url.path() == "/" || url.path().is_empty();
+            let no_query = url.query().is_none();
+            let no_fragment = url.fragment().is_none();
+            scheme_valid && host_valid && creds_valid && path_valid && no_query && no_fragment
         }
         Err(_) => false,
     }
@@ -1690,18 +1676,29 @@ struct WorkflowResult {
 }
 
 impl WorkflowStatus {
-    fn from_query_response(body: &str) -> Option<Self> {
-        let response: serde_json::Value = serde_json::from_str(body).ok()?;
-        let rows = response.get("rows")?.as_array()?;
-        let row = rows.first()?;
-        let status = row.get("status").and_then(|s| s.as_str())?.to_string();
+    fn from_query_response(body: &str) -> Result<Self, String> {
+        let response: serde_json::Value =
+            serde_json::from_str(body).map_err(|e| format!("Invalid JSON response: {}", e))?;
+        let rows = response
+            .get("rows")
+            .ok_or("Missing 'rows' field in response")?
+            .as_array()
+            .ok_or("'rows' field is not an array")?;
+        let row = rows.first().ok_or("No rows in response")?;
+        let status = row
+            .get("status")
+            .and_then(|s| s.as_str())
+            .ok_or("Missing or invalid 'status' field")?
+            .to_string();
 
         let state_json_str = row.get("state_json").and_then(|s| s.as_str()).unwrap_or("{}");
-        let state_outer: serde_json::Value = serde_json::from_str(state_json_str).ok()?;
+        let state_outer: serde_json::Value = serde_json::from_str(state_json_str)
+            .map_err(|e| format!("Invalid state_json: {}", e))?;
         let state_str = state_outer.as_str().unwrap_or("{}");
-        let state: serde_json::Value = serde_json::from_str(state_str).ok()?;
+        let state: serde_json::Value =
+            serde_json::from_str(state_str).map_err(|e| format!("Invalid state string: {}", e))?;
 
-        Some(Self {
+        Ok(Self {
             status,
             stage: state.get("stage").and_then(|s| s.as_str()).unwrap_or("unknown").to_string(),
             attempt: state.get("attempt").and_then(|a| a.as_u64()).unwrap_or(0) as u32,
@@ -1740,11 +1737,30 @@ fn find_repo_root() -> Result<PathBuf, String> {
 }
 
 fn validate_bead_exists(bead_id: &str, repo_root: &PathBuf) -> Result<bool, String> {
+    // Check if `br` command is available
+    let br_available = Command::new("which")
+        .arg("br")
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false);
+
+    if !br_available {
+        return Err(
+            "The 'br' command is not found. Please install it first: https://github.com/your-org/br".to_string(),
+        );
+    }
+
     let output = Command::new("br")
         .args(["show", bead_id, "--json"])
         .current_dir(repo_root)
         .output()
-        .map_err(|e| format!("Failed to run 'br show {}': {}", bead_id, e))?;
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                "The 'br' command is not found. Please install it first.".to_string()
+            } else {
+                format!("Failed to run 'br show {}': {}", bead_id, e)
+            }
+        })?;
 
     Ok(output.status.success())
 }
@@ -1768,6 +1784,10 @@ async fn run_workflow(args: RunArgs) -> Result<(), Box<dyn std::error::Error>> {
 async fn execute_workflow(config: WorkflowConfig) -> Result<(), Box<dyn std::error::Error>> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .pool_max_idle_per_host(10)
+        .pool_idle_timeout(std::time::Duration::from_secs(60))
+        .tcp_keepalive(std::time::Duration::from_secs(60))
         .build()
         .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
 
@@ -1964,7 +1984,8 @@ fn fetch_workflow_status<'a>(
 
         let body = response.text().await.unwrap_or_else(|_| "{}".to_string());
 
-        WorkflowStatus::from_query_response(&body).ok_or_else(|| "No workflow status found".into())
+        WorkflowStatus::from_query_response(&body)
+            .map_err(|e| -> Box<dyn std::error::Error> { e.into() })
     })
 }
 
@@ -2070,10 +2091,29 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
 
 async fn run_ops_poller() -> Result<(), Box<dyn std::error::Error>> {
     let config = opencode_config()?;
-    let interval_ms: u64 = std::env::var("OYA_POLL_INTERVAL_MS")
-        .ok()
-        .and_then(|value| value.parse::<u64>().ok())
-        .map_or(2000, |value: u64| value.clamp(500, 30000));
+    let interval_ms: u64 = match std::env::var("OYA_POLL_INTERVAL_MS") {
+        Ok(value) => match value.parse::<u64>() {
+            Ok(parsed) => {
+                let clamped = parsed.clamp(500, 30000);
+                if clamped != parsed {
+                    tracing::warn!(
+                        "OYA_POLL_INTERVAL_MS={} out of range, clamped to {}",
+                        parsed,
+                        clamped
+                    );
+                }
+                clamped
+            }
+            Err(_) => {
+                tracing::warn!(
+                    "OYA_POLL_INTERVAL_MS='{}' is not a valid number, using default 2000",
+                    value
+                );
+                2000
+            }
+        },
+        Err(_) => 2000,
+    };
 
     let mut stderr = std::io::stderr().lock();
     writeln!(stderr, "[oya:ops-poll] source={} interval_ms={}", config.base_url, interval_ms)
@@ -2081,7 +2121,12 @@ async fn run_ops_poller() -> Result<(), Box<dyn std::error::Error>> {
     writeln!(stderr, "[oya:ops-poll] columns: ts | busy | perm | quest | event_preview")
         .map_err(|error| OyaError(format!("Failed to write poller banner: {}", error)))?;
 
-    let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(10)).build()?;
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .connect_timeout(std::time::Duration::from_secs(5))
+        .pool_max_idle_per_host(5)
+        .pool_idle_timeout(std::time::Duration::from_secs(30))
+        .build()?;
 
     loop {
         match poll_opencode_status(&client, &config).await {
@@ -2208,5 +2253,86 @@ mod tests {
         let result2 = parse_rfc3339_deterministic("garbage");
         assert_eq!(result1, result2);
         assert_eq!(result1, chrono::DateTime::UNIX_EPOCH);
+    }
+
+    #[test]
+    fn test_parse_command_parts_moon_command() {
+        let parsed = parse_command_parts("moon run :check");
+        assert!(parsed.is_ok());
+
+        let (program, args) = parsed.map_or_else(|_| (String::new(), Vec::new()), |value| value);
+        assert_eq!(program, "moon");
+        assert_eq!(args, vec!["run".to_string(), ":check".to_string()]);
+    }
+
+    #[test]
+    fn test_parse_command_parts_rejects_empty_command() {
+        let parsed = parse_command_parts("   ");
+        assert!(parsed.is_err());
+    }
+
+    #[test]
+    fn test_gate_failure_outcome_gpt_review_clippy_stays_on_review() {
+        let outcome = gate_failure_outcome(&Stage::GptReview, &Gate::ClippyClean);
+        assert_eq!(outcome, (FailureCategory::LintFailed, Stage::GptReview));
+    }
+
+    #[test]
+    fn test_gate_failure_outcome_shipgate_merge_conflict_routes_to_review() {
+        let outcome = gate_failure_outcome(&Stage::ShipGate, &Gate::ZjjMergeQueue);
+        assert_eq!(outcome, (FailureCategory::MergeConflict, Stage::GptReview));
+    }
+
+    #[test]
+    fn test_execute_ship_gate_skip_zjj_gate() {
+        let result = execute_ship_gate_with_gate_runner(true, |gate| {
+            assert_eq!(gate, Gate::MoonCi);
+            Ok(GateEvidence {
+                command: "moon run :ci".to_string(),
+                passed: true,
+                exit_code: 0,
+                output: "ci ok".to_string(),
+            })
+        })
+        .expect("ship gate should pass when moon ci passes and zjj is skipped");
+
+        assert!(result.passed);
+        assert_eq!(result.next_stage, None);
+    }
+
+    #[test]
+    fn test_execute_ship_gate_zjj_failure_routes_to_review() {
+        use std::cell::RefCell;
+
+        let seen = RefCell::new(Vec::new());
+        let result = execute_ship_gate_with_gate_runner(false, |gate| {
+            seen.borrow_mut().push(gate.clone());
+            match gate {
+                Gate::MoonCi => Ok(GateEvidence {
+                    command: "moon run :ci".to_string(),
+                    passed: true,
+                    exit_code: 0,
+                    output: "ci ok".to_string(),
+                }),
+                Gate::ZjjMergeQueue => Ok(GateEvidence {
+                    command: "zjj sync --status".to_string(),
+                    passed: false,
+                    exit_code: 1,
+                    output: "queue blocked".to_string(),
+                }),
+                _ => Ok(GateEvidence {
+                    command: "unexpected".to_string(),
+                    passed: false,
+                    exit_code: 1,
+                    output: "unexpected".to_string(),
+                }),
+            }
+        })
+        .expect("ship gate execution should return a stage result");
+
+        assert_eq!(seen.into_inner(), vec![Gate::MoonCi, Gate::ZjjMergeQueue]);
+        assert!(!result.passed);
+        assert_eq!(result.failure_category, Some(FailureCategory::MergeConflict));
+        assert_eq!(result.next_stage, Some(Stage::GptReview));
     }
 }

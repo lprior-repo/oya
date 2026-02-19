@@ -8,12 +8,12 @@ use std::env;
 /// Observability configuration from environment variables
 ///
 /// Uses standard OpenTelemetry environment variables:
-/// - OTEL_SERVICE_NAME: Service identifier (default: "oya-orchestrator")
-/// - OTEL_EXPORTER_OTLP_ENDPOINT: OTLP collector endpoint (default: "http://localhost:4318")
-/// - OTEL_RESOURCE_ATTRIBUTES: Additional resource attributes (optional)
-/// - OTEL_TRACES_SAMPLER: Sampling strategy (default: "parentbased_always_on")
-/// - OTEL_TRACES_SAMPLER_ARG: Sampling ratio 0.0-1.0 (default: "1.0")
-/// - RUST_LOG: Log level filter (default: "oya=info")
+/// - `OTEL_SERVICE_NAME`: Service identifier (default: `oya-orchestrator`)
+/// - `OTEL_EXPORTER_OTLP_ENDPOINT`: OTLP collector endpoint (default: <http://localhost:4318>)
+/// - `OTEL_RESOURCE_ATTRIBUTES`: Additional resource attributes (optional)
+/// - `OTEL_TRACES_SAMPLER`: Sampling strategy (default: `parentbased_always_on`)
+/// - `OTEL_TRACES_SAMPLER_ARG`: Sampling ratio 0.0-1.0 (default: `1.0`)
+/// - `RUST_LOG`: Log level filter (default: `oya=info`)
 #[derive(Debug, Clone)]
 pub struct ObservabilityConfig {
     /// Service name for tracing

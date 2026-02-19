@@ -13,11 +13,11 @@ fn given_testfailed_error_when_checking_retryable_then_should_retry() {
 }
 
 #[test]
-fn given_compilefailed_error_when_checking_retryable_then_should_not_retry() {
+fn given_compilefailed_error_when_checking_retryable_then_should_retry() {
     use oya::is_retryable_failure;
 
-    // CompileFailed is NOT retryable - you need to fix the code
-    assert!(!is_retryable_failure(&FailureCategory::CompileFailed));
+    // CompileFailed IS retryable - AI can fix compilation errors
+    assert!(is_retryable_failure(&FailureCategory::CompileFailed));
 }
 
 #[test]
