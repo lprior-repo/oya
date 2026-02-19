@@ -3,7 +3,7 @@
 //! These tests verify that the orchestrator correctly transitions through
 //! all stages and handles failures appropriately.
 
-use oya::orchestrator::{Orchestrator, StageExecutionResult};
+use oya::orchestrator::{Orchestrator, StageExecutionResult, StageRequest};
 use oya::types::{FailureCategory, StageName};
 use serde_json::json;
 
@@ -14,7 +14,16 @@ mod util;
 async fn test_stage_success_advances() {
     let orch = util::passing_orchestrator();
 
-    let result = orch.run_stage(StageName::Plan, 1, "bead-001", "context", None).await.unwrap();
+    let result = orch
+        .run_stage(StageRequest {
+            stage: StageName::Plan,
+            attempt: 1 as u32,
+            bead_id: "bead-001".to_string(),
+            context: "context".to_string(),
+            last_failure: None,
+        })
+        .await
+        .unwrap();
 
     assert!(result.passed);
     assert_eq!(result.next_stage, Some(StageName::Contract));
@@ -35,7 +44,16 @@ async fn test_all_stage_transitions() {
 
     for (current, expected_next) in test_cases {
         let orch = util::passing_orchestrator();
-        let result = orch.run_stage(current.clone(), 1, "bead", "ctx", None).await.unwrap();
+        let result = orch
+            .run_stage(StageRequest {
+                stage: current.clone(),
+                attempt: 1 as u32,
+                bead_id: "bead".to_string(),
+                context: "ctx".to_string(),
+                last_failure: None,
+            })
+            .await
+            .unwrap();
 
         assert!(result.passed, "Stage {:?} should pass", current);
         assert_eq!(
@@ -51,7 +69,16 @@ async fn test_all_stage_transitions() {
 async fn test_test_failed_retries() {
     let orch = util::failing_orchestrator(vec![(StageName::Tdd15, 1, FailureCategory::TestFailed)]);
 
-    let result = orch.run_stage(StageName::Tdd15, 1, "bead", "ctx", None).await.unwrap();
+    let result = orch
+        .run_stage(StageRequest {
+            stage: StageName::Tdd15,
+            attempt: 1 as u32,
+            bead_id: "bead".to_string(),
+            context: "ctx".to_string(),
+            last_failure: None,
+        })
+        .await
+        .unwrap();
 
     assert!(!result.passed);
     assert_eq!(result.failure_category, Some(FailureCategory::TestFailed));
@@ -68,7 +95,16 @@ async fn test_max_attempts_exceeded() {
 
     // Simulate 2 failed attempts
     for attempt in 1..=2 {
-        let result = orch.run_stage(StageName::Tdd15, attempt, "bead", "ctx", None).await.unwrap();
+        let result = orch
+            .run_stage(StageRequest {
+                stage: StageName::Tdd15,
+                attempt: attempt as u32,
+                bead_id: "bead".to_string(),
+                context: "ctx".to_string(),
+                last_failure: None,
+            })
+            .await
+            .unwrap();
 
         assert!(!result.passed);
         assert_eq!(result.failure_category, Some(FailureCategory::TestFailed));
@@ -84,7 +120,16 @@ async fn test_max_attempts_exceeded() {
 async fn test_compile_failed_is_retryable() {
     let orch =
         util::failing_orchestrator(vec![(StageName::Tdd15, 1, FailureCategory::CompileFailed)]);
-    let result = orch.run_stage(StageName::Tdd15, 1, "b", "c", None).await.unwrap();
+    let result = orch
+        .run_stage(StageRequest {
+            stage: StageName::Tdd15,
+            attempt: 1 as u32,
+            bead_id: "b".to_string(),
+            context: "c".to_string(),
+            last_failure: None,
+        })
+        .await
+        .unwrap();
 
     assert!(!result.passed);
     assert_eq!(result.next_stage, Some(StageName::Tdd15)); // Can retry
@@ -118,7 +163,16 @@ async fn test_merge_conflict_fails_after_max_attempts() {
 
     // All configured attempts should fail
     for attempt in 1..=2 {
-        let result = orch.run_stage(StageName::ShipGate, attempt, "b", "c", None).await.unwrap();
+        let result = orch
+            .run_stage(StageRequest {
+                stage: StageName::ShipGate,
+                attempt: attempt as u32,
+                bead_id: "b".to_string(),
+                context: "c".to_string(),
+                last_failure: None,
+            })
+            .await
+            .unwrap();
         if attempt < 2 {
             assert_eq!(result.next_stage, Some(StageName::GptReview));
         }
@@ -140,7 +194,16 @@ async fn test_complete_pipeline_simulation() {
     ];
 
     for stage in stages {
-        let result = orch.run_stage(stage.clone(), 1, "bead", "ctx", None).await.unwrap();
+        let result = orch
+            .run_stage(StageRequest {
+                stage: stage.clone(),
+                attempt: 1 as u32,
+                bead_id: "bead".to_string(),
+                context: "ctx".to_string(),
+                last_failure: None,
+            })
+            .await
+            .unwrap();
         assert!(result.passed, "Stage {:?} should pass in happy path", stage);
     }
 
@@ -155,18 +218,27 @@ async fn test_failure_context_propagation() {
     let orch = util::failing_orchestrator(vec![(StageName::Tdd15, 1, FailureCategory::TestFailed)]);
 
     // First attempt fails
-    let result1 = orch.run_stage(StageName::Tdd15, 1, "bead", "ctx", None).await.unwrap();
+    let result1 = orch
+        .run_stage(StageRequest {
+            stage: StageName::Tdd15,
+            attempt: 1 as u32,
+            bead_id: "bead".to_string(),
+            context: "ctx".to_string(),
+            last_failure: None,
+        })
+        .await
+        .unwrap();
 
     assert!(!result1.passed);
 
     // Second attempt should receive failure context
-    orch.run_stage(
-        StageName::Tdd15,
-        2,
-        "bead",
-        "ctx",
-        Some((FailureCategory::TestFailed, "previous error".to_string())),
-    )
+    orch.run_stage(StageRequest {
+        stage: StageName::Tdd15,
+        attempt: 2 as u32,
+        bead_id: "bead".to_string(),
+        context: "ctx".to_string(),
+        last_failure: Some((FailureCategory::TestFailed, "previous error".to_string())),
+    })
     .await
     .unwrap();
 

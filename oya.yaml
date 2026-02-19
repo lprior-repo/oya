@@ -1,1 +1,6 @@
+# Oya configuration consumed by `oya run`.
+#
+# Fields:
+#   model: Optional OpenCode model reference. CLI `--model` overrides this value,
+#   and the built-in default is used only when neither CLI nor config supply a model.
 model: zai-coding-plan/glm-5

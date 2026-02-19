@@ -65,46 +65,21 @@ impl OyaUsageTracker for OyaUsageTrackerImpl {
         ctx: ObjectContext<'_>,
         tier: String,
     ) -> Result<Json<String>, HandlerError> {
-        let mut state =
-            ctx.get::<Json<TrackerState>>("state").await?.map(|j| j.0).unwrap_or_default();
-        let model_list = get_models_for_tier(&tier);
-
-        if model_list.is_empty() {
-            return Err(HandlerError::from(format!("No models configured for tier '{}'", tier)));
-        }
-
-        // Get current index, defaulting to 0
-        let current_index = *state.active_indices.get(&tier).unwrap_or(&0);
-
-        // Check if current model is healthy
-        let mut selected_index = current_index;
-        let mut found_healthy = false;
-
-        // Try to find a healthy model, starting from current
-        for i in 0..model_list.len() {
-            let idx = (current_index + i) % model_list.len();
-            let model_id = &model_list[idx];
-
-            if is_model_healthy(&state, model_id) {
-                selected_index = idx;
-                found_healthy = true;
-                break;
-            }
-        }
-
-        // If no healthy models found, we might need to trip circuit or just pick the "least bad" (current)
-        // For now, we'll log a warning and return the current one, but the orchestrator handles retries.
-        if !found_healthy {
-            tracing::warn!("All models in tier '{}' are unhealthy. Using current index.", tier);
-        }
-
-        // If we switched indices, update state
-        if selected_index != current_index {
-            state.active_indices.insert(tier.clone(), selected_index);
-            state.last_updated = Utc::now();
-            ctx.set("state", Json(state));
-        }
-
+        let mut state = tracker_state_from_ctx(&ctx).await?;
+        let model_list = models_for_tier_or_error(&tier)?;
+        let current_index = active_index_for_tier(&state, &tier);
+        let selected_index = selected_healthy_index(&state, &model_list, current_index)
+            .map_or_else(
+                || {
+                    tracing::warn!(
+                        "All models in tier '{}' are unhealthy. Using current index.",
+                        tier
+                    );
+                    current_index
+                },
+                std::convert::identity,
+            );
+        persist_index_change(&ctx, &mut state, &tier, current_index, selected_index);
         Ok(Json(model_list[selected_index].clone()))
     }
 
@@ -175,6 +150,48 @@ impl OyaUsageTracker for OyaUsageTrackerImpl {
 }
 
 // --- Helper Functions ---
+
+async fn tracker_state_from_ctx(ctx: &ObjectContext<'_>) -> Result<TrackerState, HandlerError> {
+    let value = ctx.get::<Json<TrackerState>>("state").await?;
+    Ok(value.map_or_else(TrackerState::default, |json| json.0))
+}
+
+fn models_for_tier_or_error(tier: &str) -> Result<Vec<String>, HandlerError> {
+    let model_list = get_models_for_tier(tier);
+    if model_list.is_empty() {
+        return Err(HandlerError::from(format!("No models configured for tier '{}'", tier)));
+    }
+    Ok(model_list)
+}
+
+fn active_index_for_tier(state: &TrackerState, tier: &str) -> usize {
+    *state.active_indices.get(tier).unwrap_or(&0)
+}
+
+fn selected_healthy_index(
+    state: &TrackerState,
+    model_list: &[String],
+    current_index: usize,
+) -> Option<usize> {
+    (0..model_list.len()).find_map(|offset| {
+        let idx = (current_index + offset) % model_list.len();
+        is_model_healthy(state, &model_list[idx]).then_some(idx)
+    })
+}
+
+fn persist_index_change(
+    ctx: &ObjectContext<'_>,
+    state: &mut TrackerState,
+    tier: &str,
+    current_index: usize,
+    selected_index: usize,
+) {
+    if selected_index != current_index {
+        state.active_indices.insert(tier.to_string(), selected_index);
+        state.last_updated = Utc::now();
+        ctx.set("state", Json(state.clone()));
+    }
+}
 
 fn rotate_tiers_on_rate_limit(state: &mut TrackerState, model: &str) {
     for tier in ["fast", "balanced", "capable", "best"] {
@@ -250,417 +267,4 @@ pub fn tier_for_stage(stage: &crate::types::StageName) -> &'static str {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::types::{FailureCategory, StageName};
-
-    // === Contract Tests for Helper Functions ===
-
-    #[test]
-    fn test_is_rate_limit_failure_returns_true_for_rate_limited() {
-        let category = FailureCategory::RateLimited;
-        assert!(is_rate_limit_failure(&category));
-    }
-
-    #[test]
-    fn test_is_rate_limit_failure_returns_false_for_other_failures() {
-        let categories = [
-            FailureCategory::TestFailed,
-            FailureCategory::CompileFailed,
-            FailureCategory::LintFailed,
-            FailureCategory::AuthFailed,
-            FailureCategory::ProviderUnavailable,
-            FailureCategory::ContextOverflow,
-            FailureCategory::OutputParseFailure,
-            FailureCategory::MaxAttemptsExceeded,
-            FailureCategory::TestInfraFailed,
-            FailureCategory::MergeConflict,
-        ];
-        for category in categories {
-            assert!(!is_rate_limit_failure(&category), "{:?} should not be rate limit", category);
-        }
-    }
-
-    #[test]
-    fn test_tier_for_stage_maps_correctly() {
-        assert_eq!(tier_for_stage(&StageName::Plan), "balanced");
-        assert_eq!(tier_for_stage(&StageName::Contract), "fast");
-        assert_eq!(tier_for_stage(&StageName::Tdd15), "balanced");
-        assert_eq!(tier_for_stage(&StageName::Qa), "balanced");
-        assert_eq!(tier_for_stage(&StageName::RedQueen), "capable");
-        assert_eq!(tier_for_stage(&StageName::GptReview), "capable");
-        assert_eq!(tier_for_stage(&StageName::ShipGate), "best");
-    }
-
-    #[test]
-    fn test_get_models_for_tier_returns_defaults() {
-        let fast = get_models_for_tier("fast");
-        assert!(!fast.is_empty());
-        assert!(fast.iter().any(|m| m.contains("gpt-3.5") || m.contains("haiku")));
-
-        let balanced = get_models_for_tier("balanced");
-        assert!(!balanced.is_empty());
-
-        let capable = get_models_for_tier("capable");
-        assert!(!capable.is_empty());
-
-        let best = get_models_for_tier("best");
-        assert!(!best.is_empty());
-    }
-
-    #[test]
-    fn test_get_models_for_tier_returns_empty_for_unknown() {
-        let unknown = get_models_for_tier("unknown_tier");
-        assert!(unknown.is_empty());
-    }
-
-    #[test]
-    fn test_parse_model_list_handles_empty_string() {
-        std::env::set_var("OYA_TEST_EMPTY", "");
-        let result = parse_model_list("OYA_TEST_EMPTY", vec!["default"]);
-        // Empty string should return one empty element
-        assert_eq!(result, vec![""]);
-        std::env::remove_var("OYA_TEST_EMPTY");
-    }
-
-    #[test]
-    fn test_parse_model_list_uses_default_when_not_set() {
-        let result = parse_model_list("OYA_NONEXISTENT_VAR_12345", vec!["model-a", "model-b"]);
-        assert_eq!(result, vec!["model-a", "model-b"]);
-    }
-
-    #[test]
-    fn test_parse_model_list_parses_csv() {
-        std::env::set_var("OYA_TEST_MODELS", "model1, model2 ,model3");
-        let result = parse_model_list("OYA_TEST_MODELS", vec!["default"]);
-        assert_eq!(result, vec!["model1", "model2", "model3"]);
-        std::env::remove_var("OYA_TEST_MODELS");
-    }
-
-    // === TrackerState Health Logic Tests ===
-
-    #[test]
-    fn test_is_model_healthy_returns_true_for_unknown_model() {
-        let state = TrackerState::default();
-        assert!(is_model_healthy(&state, "unknown-model"));
-    }
-
-    #[test]
-    fn test_is_model_healthy_returns_true_when_not_in_cooldown() {
-        let mut state = TrackerState::default();
-        state.model_health.insert(
-            "test-model".to_string(),
-            ModelHealth {
-                model_id: "test-model".to_string(),
-                is_rate_limited: true,
-                consecutive_failures: 1,
-                cooldown_until: Some(Utc::now() - Duration::seconds(100)), // expired
-            },
-        );
-        assert!(is_model_healthy(&state, "test-model"));
-    }
-
-    #[test]
-    fn test_is_model_healthy_returns_false_when_in_cooldown() {
-        let mut state = TrackerState::default();
-        state.model_health.insert(
-            "test-model".to_string(),
-            ModelHealth {
-                model_id: "test-model".to_string(),
-                is_rate_limited: true,
-                consecutive_failures: 3,
-                cooldown_until: Some(Utc::now() + Duration::seconds(100)), // future
-            },
-        );
-        assert!(!is_model_healthy(&state, "test-model"));
-    }
-
-    // === ReportOutcome Consecutive Failure Tests ===
-
-    #[test]
-    fn test_report_outcome_records_failure_and_increments_counter() {
-        let mut state = TrackerState::default();
-        let model = "test-model".to_string();
-
-        state.model_health.insert(
-            model.clone(),
-            ModelHealth {
-                model_id: model.clone(),
-                is_rate_limited: false,
-                consecutive_failures: 0,
-                cooldown_until: None,
-            },
-        );
-
-        // Simulate failure
-        if let Some(health) = state.model_health.get_mut(&model) {
-            health.consecutive_failures += 1;
-        }
-
-        assert_eq!(state.model_health.get(&model).unwrap().consecutive_failures, 1);
-
-        // Second failure
-        if let Some(health) = state.model_health.get_mut(&model) {
-            health.consecutive_failures += 1;
-        }
-
-        assert_eq!(state.model_health.get(&model).unwrap().consecutive_failures, 2);
-    }
-
-    #[test]
-    fn test_report_outcome_resets_counter_on_success() {
-        let mut state = TrackerState::default();
-        let model = "test-model".to_string();
-
-        state.model_health.insert(
-            model.clone(),
-            ModelHealth {
-                model_id: model.clone(),
-                is_rate_limited: false,
-                consecutive_failures: 5,
-                cooldown_until: None,
-            },
-        );
-
-        // Simulate success
-        if let Some(health) = state.model_health.get_mut(&model) {
-            health.consecutive_failures = 0;
-        }
-
-        assert_eq!(state.model_health.get(&model).unwrap().consecutive_failures, 0);
-    }
-
-    #[test]
-    fn test_report_outcome_sets_rate_limit_flag() {
-        let mut state = TrackerState::default();
-        let model = "test-model".to_string();
-        let now = Utc::now();
-
-        state.model_health.insert(
-            model.clone(),
-            ModelHealth {
-                model_id: model.clone(),
-                is_rate_limited: false,
-                consecutive_failures: 0,
-                cooldown_until: None,
-            },
-        );
-
-        // Simulate rate limit
-        if let Some(health) = state.model_health.get_mut(&model) {
-            health.is_rate_limited = true;
-            health.cooldown_until = Some(now + Duration::seconds(300));
-        }
-
-        assert!(state.model_health.get(&model).unwrap().is_rate_limited);
-        assert!(state.model_health.get(&model).unwrap().cooldown_until.is_some());
-    }
-
-    #[test]
-    fn test_tier_rotation_selects_next_healthy_model() {
-        let mut state = TrackerState::default();
-        let tier = "fast".to_string();
-
-        let models = get_models_for_tier(&tier);
-        assert!(models.len() >= 2, "Need at least 2 models for rotation test");
-
-        state.model_health.insert(
-            models[0].clone(),
-            ModelHealth {
-                model_id: models[0].clone(),
-                is_rate_limited: true,
-                consecutive_failures: 3,
-                cooldown_until: Some(Utc::now() + Duration::seconds(300)),
-            },
-        );
-
-        state.active_indices.insert(tier.clone(), 0);
-
-        assert!(!is_model_healthy(&state, &models[0]));
-        assert!(is_model_healthy(&state, &models[1]));
-    }
-
-    #[test]
-    fn test_tier_rotation_with_all_models_unhealthy() {
-        let mut state = TrackerState::default();
-        let tier = "fast".to_string();
-
-        let models = get_models_for_tier(&tier);
-        if models.is_empty() {
-            return;
-        }
-
-        for model in &models {
-            state.model_health.insert(
-                model.clone(),
-                ModelHealth {
-                    model_id: model.clone(),
-                    is_rate_limited: true,
-                    consecutive_failures: 10,
-                    cooldown_until: Some(Utc::now() + Duration::seconds(300)),
-                },
-            );
-        }
-
-        for model in &models {
-            assert!(!is_model_healthy(&state, model));
-        }
-    }
-
-    #[test]
-    fn test_circuit_breaker_state_transitions() {
-        use crate::types::CircuitState;
-
-        let mut state = CircuitState::Closed;
-        assert_eq!(state, CircuitState::Closed);
-
-        state = CircuitState::Open;
-        assert_eq!(state, CircuitState::Open);
-
-        state = CircuitState::HalfOpen;
-        assert_eq!(state, CircuitState::HalfOpen);
-
-        state = CircuitState::Closed;
-        assert_eq!(state, CircuitState::Closed);
-    }
-
-    #[test]
-    fn test_circuit_breaker_allows_operations_when_closed() {
-        use crate::types::CircuitState;
-
-        assert!(CircuitState::Closed.allows_operations());
-        assert!(CircuitState::HalfOpen.allows_operations());
-        assert!(!CircuitState::Open.allows_operations());
-    }
-
-    #[test]
-    fn test_full_failure_workflow() {
-        let mut state = TrackerState::default();
-        let tier = "fast".to_string();
-        let model = "test-model".to_string();
-
-        assert!(is_model_healthy(&state, &model));
-
-        state.model_health.insert(
-            model.clone(),
-            ModelHealth {
-                model_id: model.clone(),
-                is_rate_limited: false,
-                consecutive_failures: 1,
-                cooldown_until: None,
-            },
-        );
-
-        assert!(is_model_healthy(&state, &model));
-
-        if let Some(health) = state.model_health.get_mut(&model) {
-            health.is_rate_limited = true;
-            health.cooldown_until = Some(Utc::now() + Duration::seconds(300));
-        }
-
-        assert!(!is_model_healthy(&state, &model));
-
-        let models = get_models_for_tier(&tier);
-        if models.len() > 1 {
-            let current_index = *state.active_indices.get(&tier).unwrap_or(&0);
-            let next_index = (current_index + 1) % models.len();
-            assert_ne!(current_index, next_index, "Should rotate to different model");
-        }
-    }
-
-    #[test]
-    fn test_multiple_tiers_with_different_states() {
-        let mut state = TrackerState::default();
-
-        state.model_health.insert(
-            "openai/gpt-3.5-turbo".to_string(),
-            ModelHealth {
-                model_id: "openai/gpt-3.5-turbo".to_string(),
-                is_rate_limited: true,
-                consecutive_failures: 5,
-                cooldown_until: Some(Utc::now() + Duration::seconds(300)),
-            },
-        );
-        state.active_indices.insert("fast".to_string(), 0);
-
-        state.active_indices.insert("balanced".to_string(), 0);
-
-        assert!(!is_model_healthy(&state, "openai/gpt-3.5-turbo"));
-
-        let balanced_models = get_models_for_tier("balanced");
-        for model in &balanced_models {
-            assert!(is_model_healthy(&state, model));
-        }
-    }
-
-    #[test]
-    fn test_consecutive_failures_accumulate() {
-        let mut state = TrackerState::default();
-        let model = "test-model".to_string();
-
-        state.model_health.insert(
-            model.clone(),
-            ModelHealth {
-                model_id: model.clone(),
-                is_rate_limited: false,
-                consecutive_failures: 0,
-                cooldown_until: None,
-            },
-        );
-
-        for i in 1..=5 {
-            if let Some(health) = state.model_health.get_mut(&model) {
-                health.consecutive_failures = i;
-            }
-            assert_eq!(state.model_health.get(&model).unwrap().consecutive_failures, i);
-        }
-    }
-
-    #[test]
-    fn test_cooldown_expiration_allows_model_recovery() {
-        let mut state = TrackerState::default();
-        let model = "test-model".to_string();
-
-        state.model_health.insert(
-            model.clone(),
-            ModelHealth {
-                model_id: model.clone(),
-                is_rate_limited: true,
-                consecutive_failures: 10,
-                cooldown_until: Some(Utc::now() - Duration::seconds(100)),
-            },
-        );
-
-        assert!(is_model_healthy(&state, &model));
-    }
-
-    #[test]
-    fn test_tier_rotation_on_rate_limit() {
-        let mut state = TrackerState::default();
-        let tier = "fast".to_string();
-
-        let models = get_models_for_tier(&tier);
-        if models.len() < 2 {
-            return;
-        }
-
-        state.active_indices.insert(tier.clone(), 0);
-
-        state.model_health.insert(
-            models[0].clone(),
-            ModelHealth {
-                model_id: models[0].clone(),
-                is_rate_limited: true,
-                consecutive_failures: 1,
-                cooldown_until: Some(Utc::now() + Duration::seconds(300)),
-            },
-        );
-
-        let current = *state.active_indices.get(&tier).unwrap_or(&0);
-        let next = (current + 1) % models.len();
-        state.active_indices.insert(tier.clone(), next);
-
-        assert_eq!(next, 1);
-        assert_eq!(*state.active_indices.get(&tier).unwrap(), 1);
-    }
-}
+mod tests;

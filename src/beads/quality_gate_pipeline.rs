@@ -72,12 +72,13 @@ pub fn run_quality_gate_pipeline(
     // Step 6: Make decision
     let decision = gate_decision::make_gate_decision(&report);
 
+    let stats = report.stats();
     Ok(PipelineResult {
         stage,
-        passed: decision.passed,
+        passed: decision.is_passed(),
         decisions: vec![decision],
-        total_gates: report.total_gates,
-        passed_gates: report.passed_gates,
+        total_gates: stats.total,
+        passed_gates: stats.passed,
     })
 }
 

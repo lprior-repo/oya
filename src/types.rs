@@ -653,51 +653,61 @@ fn validate_field_no_placeholder(field_name: &str, value: &str) -> Result<(), Va
 
 impl GateResult {
     pub fn validate(&self) -> Result<(), ValidationError> {
-        // Check non-empty required fields
-        if self.run_id.is_empty() {
-            return Err(ValidationError::MissingField("run_id".to_string()));
-        }
-        if self.gate_name.is_empty() {
-            return Err(ValidationError::MissingField("gate_name".to_string()));
-        }
-
-        // Validate command field (required)
-        match &self.command {
-            None => return Err(ValidationError::MissingField("command".to_string())),
-            Some(command) => {
-                if command.is_empty() {
-                    return Err(ValidationError::MissingField("command".to_string()));
-                }
-                validate_field_no_placeholder("command", command)?;
-            }
-        }
-
-        // Validate gate_name has no placeholders
+        validate_required_gate_fields(self)?;
+        validate_command_field(self.command.as_ref())?;
         validate_field_no_placeholder("gate_name", &self.gate_name)?;
-
-        // Validate log_ref has no placeholders (if present)
-        if let Some(ref log) = self.log_ref {
-            validate_field_no_placeholder("log_ref", log)?;
-        }
-
-        // Validate exit code range (0-255)
-        if self.exit_code < 0 || self.exit_code > 255 {
-            return Err(ValidationError::InvalidExitCode(self.exit_code));
-        }
-
-        // Check consistency between passed and exit_code
-        let exit_matches_passed = (self.exit_code == 0) == self.passed;
-        if !exit_matches_passed {
-            let description = if self.passed {
-                "passed=true but exit_code≠0".to_string()
-            } else {
-                "passed=false but exit_code=0".to_string()
-            };
-            return Err(ValidationError::InconsistentEvidence(description));
-        }
-
+        validate_optional_log_ref(self.log_ref.as_deref())?;
+        validate_exit_code_range(self.exit_code)?;
+        validate_passed_exit_code_consistency(self.passed, self.exit_code)?;
         Ok(())
     }
+}
+
+fn validate_required_gate_fields(gate: &GateResult) -> Result<(), ValidationError> {
+    if gate.run_id.is_empty() {
+        return Err(ValidationError::MissingField("run_id".to_string()));
+    }
+    if gate.gate_name.is_empty() {
+        return Err(ValidationError::MissingField("gate_name".to_string()));
+    }
+    Ok(())
+}
+
+fn validate_command_field(command: Option<&String>) -> Result<(), ValidationError> {
+    let command = command.ok_or_else(|| ValidationError::MissingField("command".to_string()))?;
+    if command.is_empty() {
+        return Err(ValidationError::MissingField("command".to_string()));
+    }
+    validate_field_no_placeholder("command", command)
+}
+
+fn validate_optional_log_ref(log_ref: Option<&str>) -> Result<(), ValidationError> {
+    if let Some(log) = log_ref {
+        validate_field_no_placeholder("log_ref", log)?;
+    }
+    Ok(())
+}
+
+fn validate_exit_code_range(exit_code: i32) -> Result<(), ValidationError> {
+    if !(0..=255).contains(&exit_code) {
+        return Err(ValidationError::InvalidExitCode(exit_code));
+    }
+    Ok(())
+}
+
+fn validate_passed_exit_code_consistency(
+    passed: bool,
+    exit_code: i32,
+) -> Result<(), ValidationError> {
+    if (exit_code == 0) == passed {
+        return Ok(());
+    }
+    let description = if passed {
+        "passed=true but exit_code≠0".to_string()
+    } else {
+        "passed=false but exit_code=0".to_string()
+    };
+    Err(ValidationError::InconsistentEvidence(description))
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

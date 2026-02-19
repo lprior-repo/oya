@@ -220,7 +220,7 @@ pub fn parse_opencode_sse_events(
     }
 
     // Normalize line endings first for consistent validation
-    let normalized = raw_chunk.replace("\r\n", "\n");
+    let normalized = raw_chunk.replace("\r\n", "\n").replace('\r', "\n");
 
     if contains_forbidden_control_chars(&normalized) {
         return Err(OpsMonitorError::InvalidFieldContent("event_chunk"));
@@ -1286,29 +1286,45 @@ pub fn evaluate_onewf_bead_quick_result(
     let bead_id =
         validate_onewf_identifier(observation.bead_id.as_str(), "bead_id", MAX_ONEWF_BEAD_ID_LEN)?;
 
-    let checks = match observation.checks.as_slice() {
-        [] => return Err(OnewfBeadQuickError::MissingCheck),
-        [check] => vec![check.clone()],
-        _ => return Err(OnewfBeadQuickError::InvalidReport("invalid check count")),
-    };
+    let check = extract_single_check(observation.checks.as_slice())?;
 
-    let check = checks[0].clone();
-    let check_visible = check.visible;
-    let check_success = check.success;
-    let check_timestamp = check.timestamp;
+    let (decision, visibility_diagnostics, probe_diagnostics, _decision_diagnostics) =
+        compute_onewf_diagnostics(&check);
 
-    let decision = if check_visible && check_success {
+    let stages = build_onewf_stages(&check, &decision, &visibility_diagnostics, &probe_diagnostics);
+
+    let report =
+        OnewfBeadQuickReport { workflow_id, bead_id, checks: vec![check], stages, decision };
+
+    validate_onewf_bead_quick_report(&report)?;
+    Ok(report)
+}
+
+fn extract_single_check(
+    checks: &[OnewfBeadQuickCheck],
+) -> Result<OnewfBeadQuickCheck, OnewfBeadQuickError> {
+    match checks {
+        [] => Err(OnewfBeadQuickError::MissingCheck),
+        [check] => Ok(check.clone()),
+        _ => Err(OnewfBeadQuickError::InvalidReport("invalid check count")),
+    }
+}
+
+fn compute_onewf_diagnostics(
+    check: &OnewfBeadQuickCheck,
+) -> (OnewfBeadQuickDecision, String, String, String) {
+    let decision = if check.visible && check.success {
         OnewfBeadQuickDecision::Pass
     } else {
         OnewfBeadQuickDecision::Fail
     };
 
-    let visibility_diagnostics = if check_visible {
+    let visibility_diagnostics = if check.visible {
         "one endpoint visible".to_string()
     } else {
         "endpoint not visible".to_string()
     };
-    let probe_diagnostics = if check_success {
+    let probe_diagnostics = if check.success {
         "endpoint probe passed".to_string()
     } else {
         "endpoint probe failed".to_string()
@@ -1319,47 +1335,56 @@ pub fn evaluate_onewf_bead_quick_result(
         "onewf-bead-quick gate failed".to_string()
     };
 
-    let report = OnewfBeadQuickReport {
-        workflow_id,
-        bead_id,
-        checks,
-        stages: vec![
-            OnewfBeadQuickStageReport {
-                stage: OnewfBeadQuickStageName::EndpointVisibility,
-                status: if check_visible {
-                    OnewfBeadQuickStageStatus::Passed
-                } else {
-                    OnewfBeadQuickStageStatus::Failed
-                },
-                diagnostics: visibility_diagnostics,
-                timestamp: check_timestamp,
-            },
-            OnewfBeadQuickStageReport {
-                stage: OnewfBeadQuickStageName::EndpointProbe,
-                status: if check_success {
-                    OnewfBeadQuickStageStatus::Passed
-                } else {
-                    OnewfBeadQuickStageStatus::Failed
-                },
-                diagnostics: probe_diagnostics,
-                timestamp: check_timestamp + chrono::Duration::milliseconds(1),
-            },
-            OnewfBeadQuickStageReport {
-                stage: OnewfBeadQuickStageName::FinalDecision,
-                status: if decision == OnewfBeadQuickDecision::Pass {
-                    OnewfBeadQuickStageStatus::Passed
-                } else {
-                    OnewfBeadQuickStageStatus::Failed
-                },
-                diagnostics: decision_diagnostics,
-                timestamp: check_timestamp + chrono::Duration::milliseconds(2),
-            },
-        ],
-        decision,
+    (decision, visibility_diagnostics, probe_diagnostics, decision_diagnostics)
+}
+
+fn build_onewf_stages(
+    check: &OnewfBeadQuickCheck,
+    decision: &OnewfBeadQuickDecision,
+    visibility_diagnostics: &str,
+    probe_diagnostics: &str,
+) -> Vec<OnewfBeadQuickStageReport> {
+    let timestamp = check.timestamp;
+    let visibility_status = if check.visible {
+        OnewfBeadQuickStageStatus::Passed
+    } else {
+        OnewfBeadQuickStageStatus::Failed
+    };
+    let probe_status = if check.success {
+        OnewfBeadQuickStageStatus::Passed
+    } else {
+        OnewfBeadQuickStageStatus::Failed
+    };
+    let decision_status = if decision == &OnewfBeadQuickDecision::Pass {
+        OnewfBeadQuickStageStatus::Passed
+    } else {
+        OnewfBeadQuickStageStatus::Failed
     };
 
-    validate_onewf_bead_quick_report(&report)?;
-    Ok(report)
+    vec![
+        OnewfBeadQuickStageReport {
+            stage: OnewfBeadQuickStageName::EndpointVisibility,
+            status: visibility_status,
+            diagnostics: visibility_diagnostics.to_string(),
+            timestamp,
+        },
+        OnewfBeadQuickStageReport {
+            stage: OnewfBeadQuickStageName::EndpointProbe,
+            status: probe_status,
+            diagnostics: probe_diagnostics.to_string(),
+            timestamp: timestamp + chrono::Duration::milliseconds(1),
+        },
+        OnewfBeadQuickStageReport {
+            stage: OnewfBeadQuickStageName::FinalDecision,
+            status: decision_status,
+            diagnostics: if decision == &OnewfBeadQuickDecision::Pass {
+                "onewf-bead-quick gate passed".to_string()
+            } else {
+                "onewf-bead-quick gate failed".to_string()
+            },
+            timestamp: timestamp + chrono::Duration::milliseconds(2),
+        },
+    ]
 }
 
 pub fn validate_onewf_bead_quick_report(
@@ -1372,26 +1397,10 @@ pub fn validate_onewf_bead_quick_report(
     )?;
     validate_onewf_identifier(report.bead_id.as_str(), "bead_id", MAX_ONEWF_BEAD_ID_LEN)?;
 
-    let checks = match report.checks.as_slice() {
-        [] => return Err(OnewfBeadQuickError::MissingCheck),
-        [check] => [check],
-        _ => return Err(OnewfBeadQuickError::InvalidReport("invalid check count")),
-    };
-
-    let check = checks[0];
+    let check = extract_single_check(report.checks.as_slice())?;
     validate_onewf_endpoint(check.endpoint.as_str())?;
 
-    if check.diagnostics.trim().is_empty() {
-        return Err(OnewfBeadQuickError::InvalidReport("empty check diagnostics"));
-    }
-    if check.diagnostics.len() > MAX_ONEWF_DIAGNOSTICS_LEN {
-        return Err(OnewfBeadQuickError::InvalidReport("check diagnostics exceed max length"));
-    }
-    if contains_forbidden_control_chars(check.diagnostics.as_str()) {
-        return Err(OnewfBeadQuickError::InvalidReport(
-            "check diagnostics contain invalid control characters",
-        ));
-    }
+    validate_onewf_check_diagnostics(check.diagnostics.as_str())?;
 
     let visible_checks = report.checks.iter().filter(|item| item.visible).count();
     if visible_checks != 1 {
@@ -1400,84 +1409,130 @@ pub fn validate_onewf_bead_quick_report(
         ));
     }
 
+    validate_onewf_stage_order(report.stages.as_slice())?;
+    validate_onewf_stage_diagnostics(report.stages.as_slice())?;
+    validate_onewf_timestamps(report.stages.as_slice())?;
+
+    let visibility_stage = &report.stages[0];
+    let probe_stage = &report.stages[1];
+    let decision_stage = &report.stages[2];
+
+    validate_onewf_stage_status(visibility_stage, check.visible)?;
+    validate_onewf_stage_status(probe_stage, check.success)?;
+    validate_onewf_decision(&report.decision, check.visible, check.success, decision_stage)?;
+
+    Ok(())
+}
+
+fn validate_onewf_check_diagnostics(diagnostics: &str) -> Result<(), OnewfBeadQuickError> {
+    if diagnostics.trim().is_empty() {
+        return Err(OnewfBeadQuickError::InvalidReport("empty check diagnostics"));
+    }
+    if diagnostics.len() > MAX_ONEWF_DIAGNOSTICS_LEN {
+        return Err(OnewfBeadQuickError::InvalidReport("check diagnostics exceed max length"));
+    }
+    if contains_forbidden_control_chars(diagnostics) {
+        return Err(OnewfBeadQuickError::InvalidReport(
+            "check diagnostics contain invalid control characters",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_onewf_stage_order(
+    stages: &[OnewfBeadQuickStageReport],
+) -> Result<(), OnewfBeadQuickError> {
     let expected_stage_order = [
         OnewfBeadQuickStageName::EndpointVisibility,
         OnewfBeadQuickStageName::EndpointProbe,
         OnewfBeadQuickStageName::FinalDecision,
     ];
-    if report.stages.len() != expected_stage_order.len() {
+    if stages.len() != expected_stage_order.len() {
         return Err(OnewfBeadQuickError::InvalidReport("unexpected stage count"));
     }
 
-    let stage_order_valid = report
-        .stages
-        .iter()
-        .map(|stage| stage.stage.clone())
-        .eq(expected_stage_order.iter().cloned());
+    let stage_order_valid =
+        stages.iter().map(|stage| stage.stage.clone()).eq(expected_stage_order.iter().cloned());
     if !stage_order_valid {
         return Err(OnewfBeadQuickError::InvalidReport("invalid stage order"));
     }
 
+    Ok(())
+}
+
+fn validate_onewf_stage_diagnostics(
+    stages: &[OnewfBeadQuickStageReport],
+) -> Result<(), OnewfBeadQuickError> {
     let has_empty_stage_diagnostics =
-        report.stages.iter().any(|stage| stage.diagnostics.trim().is_empty());
+        stages.iter().any(|stage| stage.diagnostics.trim().is_empty());
     if has_empty_stage_diagnostics {
         return Err(OnewfBeadQuickError::InvalidReport("empty stage diagnostics"));
     }
 
     let has_oversized_stage_diagnostics =
-        report.stages.iter().any(|stage| stage.diagnostics.len() > MAX_ONEWF_DIAGNOSTICS_LEN);
+        stages.iter().any(|stage| stage.diagnostics.len() > MAX_ONEWF_DIAGNOSTICS_LEN);
     if has_oversized_stage_diagnostics {
         return Err(OnewfBeadQuickError::InvalidReport("stage diagnostics exceed max length"));
     }
 
-    let has_invalid_stage_diagnostics = report
-        .stages
-        .iter()
-        .any(|stage| contains_forbidden_control_chars(stage.diagnostics.as_str()));
+    let has_invalid_stage_diagnostics =
+        stages.iter().any(|stage| contains_forbidden_control_chars(stage.diagnostics.as_str()));
     if has_invalid_stage_diagnostics {
         return Err(OnewfBeadQuickError::InvalidReport(
             "stage diagnostics contain invalid control characters",
         ));
     }
 
-    let has_non_monotonic_timestamps =
-        report.stages.windows(2).any(|pair| pair[0].timestamp > pair[1].timestamp);
+    Ok(())
+}
+
+fn validate_onewf_timestamps(
+    stages: &[OnewfBeadQuickStageReport],
+) -> Result<(), OnewfBeadQuickError> {
+    let has_non_monotonic_timestamps = stages.windows(2).any(|pair| {
+        let first = &pair[0].timestamp;
+        let second = &pair[1].timestamp;
+        first > second
+    });
     if has_non_monotonic_timestamps {
         return Err(OnewfBeadQuickError::InvalidReport("non-monotonic stage timestamps"));
     }
 
-    let visibility_stage = &report.stages[0];
-    let probe_stage = &report.stages[1];
-    let decision_stage = &report.stages[2];
+    Ok(())
+}
 
-    let expected_visibility_stage = if check.visible {
+fn validate_onewf_stage_status(
+    stage: &OnewfBeadQuickStageReport,
+    expected_success: bool,
+) -> Result<(), OnewfBeadQuickError> {
+    let expected_status = if expected_success {
         OnewfBeadQuickStageStatus::Passed
     } else {
         OnewfBeadQuickStageStatus::Failed
     };
-    if visibility_stage.status != expected_visibility_stage {
-        return Err(OnewfBeadQuickError::InvalidReport("visibility stage mismatch"));
+    if stage.status != expected_status {
+        return Err(OnewfBeadQuickError::InvalidReport("stage status mismatch"));
     }
+    Ok(())
+}
 
-    let expected_probe_stage = if check.success {
-        OnewfBeadQuickStageStatus::Passed
-    } else {
-        OnewfBeadQuickStageStatus::Failed
-    };
-    if probe_stage.status != expected_probe_stage {
-        return Err(OnewfBeadQuickError::InvalidReport("probe stage mismatch"));
-    }
-
-    let derived_decision = if check.visible && check.success {
+fn validate_onewf_decision(
+    decision: &OnewfBeadQuickDecision,
+    visible: bool,
+    success: bool,
+    decision_stage: &OnewfBeadQuickStageReport,
+) -> Result<(), OnewfBeadQuickError> {
+    let derived_decision = if visible && success {
         OnewfBeadQuickDecision::Pass
     } else {
         OnewfBeadQuickDecision::Fail
     };
-    if derived_decision != report.decision {
+
+    if &derived_decision != decision {
         return Err(OnewfBeadQuickError::InvalidReport("decision mismatch"));
     }
 
-    let expected_decision_stage = if report.decision == OnewfBeadQuickDecision::Pass {
+    let expected_decision_stage = if decision == &OnewfBeadQuickDecision::Pass {
         OnewfBeadQuickStageStatus::Passed
     } else {
         OnewfBeadQuickStageStatus::Failed
@@ -1736,73 +1791,27 @@ pub fn run_default_smoke_checks(handle: &RuntimeHandle) -> Result<SmokeObservati
 }
 
 pub fn evaluate_smoke_result(observation: &SmokeObservation) -> Result<SmokeReport, SmokeError> {
-    let ingress_checks: Vec<&SmokeCheckObservation> = observation
-        .checks
-        .iter()
-        .filter(|check| check.check == SmokeCheckName::IngressHealth)
-        .collect();
-    let ingress_check = match ingress_checks.as_slice() {
-        [] => return Err(SmokeError::MissingCheck("ingress_health")),
-        [check] => *check,
-        _ => return Err(SmokeError::InvalidReport("duplicate ingress_health checks")),
-    };
+    let ingress_check = extract_single_check_by_name(
+        &observation.checks,
+        SmokeCheckName::IngressHealth,
+        "ingress_health",
+        "duplicate ingress_health checks",
+    )?;
+    let orchestrator_check = extract_single_check_by_name(
+        &observation.checks,
+        SmokeCheckName::OrchestratorStatus,
+        "orchestrator_status",
+        "duplicate orchestrator_status checks",
+    )?;
 
-    let orchestrator_checks: Vec<&SmokeCheckObservation> = observation
-        .checks
-        .iter()
-        .filter(|check| check.check == SmokeCheckName::OrchestratorStatus)
-        .collect();
-    let orchestrator_check = match orchestrator_checks.as_slice() {
-        [] => return Err(SmokeError::MissingCheck("orchestrator_status")),
-        [check] => *check,
-        _ => return Err(SmokeError::InvalidReport("duplicate orchestrator_status checks")),
-    };
+    let decision = compute_smoke_decision(ingress_check, orchestrator_check);
 
-    let decision = if ingress_check.success && orchestrator_check.success {
-        SmokeDecision::Pass
-    } else {
-        SmokeDecision::Fail
-    };
+    let stages = build_smoke_stages(ingress_check, orchestrator_check, &decision);
 
     let report = SmokeReport {
         run_id: observation.run_id.clone(),
         checks: observation.checks.clone(),
-        stages: vec![
-            SmokeStageReport {
-                stage: SmokeStageName::IngressHealth,
-                status: if ingress_check.success {
-                    SmokeStageStatus::Passed
-                } else {
-                    SmokeStageStatus::Failed
-                },
-                diagnostics: ingress_check.diagnostics.clone(),
-                timestamp: ingress_check.timestamp,
-            },
-            SmokeStageReport {
-                stage: SmokeStageName::OrchestratorStatus,
-                status: if orchestrator_check.success {
-                    SmokeStageStatus::Passed
-                } else {
-                    SmokeStageStatus::Failed
-                },
-                diagnostics: orchestrator_check.diagnostics.clone(),
-                timestamp: orchestrator_check.timestamp,
-            },
-            SmokeStageReport {
-                stage: SmokeStageName::FinalDecision,
-                status: if decision == SmokeDecision::Pass {
-                    SmokeStageStatus::Passed
-                } else {
-                    SmokeStageStatus::Failed
-                },
-                diagnostics: if decision == SmokeDecision::Pass {
-                    "smoke checks passed".to_string()
-                } else {
-                    "smoke checks failed".to_string()
-                },
-                timestamp: Utc::now(),
-            },
-        ],
+        stages,
         decision,
     };
 
@@ -1810,73 +1819,165 @@ pub fn evaluate_smoke_result(observation: &SmokeObservation) -> Result<SmokeRepo
     Ok(report)
 }
 
+fn extract_single_check_by_name<'a>(
+    checks: &'a [SmokeCheckObservation],
+    expected: SmokeCheckName,
+    name: &'static str,
+    duplicate: &'static str,
+) -> Result<&'a SmokeCheckObservation, SmokeError> {
+    let matching: Vec<&SmokeCheckObservation> =
+        checks.iter().filter(|check| check.check == expected).collect();
+
+    match matching.as_slice() {
+        [] => Err(SmokeError::MissingCheck(name)),
+        [check] => Ok(*check),
+        _ => Err(SmokeError::InvalidReport(duplicate)),
+    }
+}
+
+fn compute_smoke_decision(
+    ingress: &SmokeCheckObservation,
+    orchestrator: &SmokeCheckObservation,
+) -> SmokeDecision {
+    if ingress.success && orchestrator.success {
+        SmokeDecision::Pass
+    } else {
+        SmokeDecision::Fail
+    }
+}
+
+fn build_smoke_stages(
+    ingress: &SmokeCheckObservation,
+    orchestrator: &SmokeCheckObservation,
+    decision: &SmokeDecision,
+) -> Vec<SmokeStageReport> {
+    let ingress_status =
+        if ingress.success { SmokeStageStatus::Passed } else { SmokeStageStatus::Failed };
+    let orchestrator_status =
+        if orchestrator.success { SmokeStageStatus::Passed } else { SmokeStageStatus::Failed };
+    let decision_status = if decision == &SmokeDecision::Pass {
+        SmokeStageStatus::Passed
+    } else {
+        SmokeStageStatus::Failed
+    };
+
+    vec![
+        SmokeStageReport {
+            stage: SmokeStageName::IngressHealth,
+            status: ingress_status,
+            diagnostics: ingress.diagnostics.clone(),
+            timestamp: ingress.timestamp,
+        },
+        SmokeStageReport {
+            stage: SmokeStageName::OrchestratorStatus,
+            status: orchestrator_status,
+            diagnostics: orchestrator.diagnostics.clone(),
+            timestamp: orchestrator.timestamp,
+        },
+        SmokeStageReport {
+            stage: SmokeStageName::FinalDecision,
+            status: decision_status,
+            diagnostics: if decision == &SmokeDecision::Pass {
+                "smoke checks passed".to_string()
+            } else {
+                "smoke checks failed".to_string()
+            },
+            timestamp: Utc::now(),
+        },
+    ]
+}
+
 pub fn validate_smoke_report(report: &SmokeReport) -> Result<(), SmokeError> {
     validate_normalized_smoke_run_id(&report.run_id)?;
 
-    let ingress_checks: Vec<&SmokeCheckObservation> =
-        report.checks.iter().filter(|check| check.check == SmokeCheckName::IngressHealth).collect();
-    let orchestrator_checks: Vec<&SmokeCheckObservation> = report
-        .checks
-        .iter()
-        .filter(|check| check.check == SmokeCheckName::OrchestratorStatus)
-        .collect();
+    let ingress_check = extract_single_check_by_name(
+        &report.checks,
+        SmokeCheckName::IngressHealth,
+        "ingress_health",
+        "invalid ingress check count",
+    )?;
+    let orchestrator_check = extract_single_check_by_name(
+        &report.checks,
+        SmokeCheckName::OrchestratorStatus,
+        "orchestrator_status",
+        "invalid orchestrator check count",
+    )?;
 
-    if ingress_checks.len() != 1 {
-        return Err(SmokeError::InvalidReport("invalid ingress check count"));
-    }
-    if orchestrator_checks.len() != 1 {
-        return Err(SmokeError::InvalidReport("invalid orchestrator check count"));
-    }
+    validate_smoke_check(ingress_check)?;
+    validate_orchestrator_check(orchestrator_check, &report.run_id)?;
 
-    let ingress_check = ingress_checks[0];
-    if ingress_check.diagnostics.trim().is_empty() {
+    validate_smoke_stage_order(report.stages.as_slice())?;
+    validate_smoke_stage_diagnostics(report.stages.as_slice())?;
+    validate_smoke_timestamps(report.stages.as_slice())?;
+    validate_smoke_decision(report)?;
+
+    Ok(())
+}
+
+fn validate_smoke_check(check: &SmokeCheckObservation) -> Result<(), SmokeError> {
+    if check.diagnostics.trim().is_empty() {
         return Err(SmokeError::InvalidReport("empty check diagnostics"));
     }
-    if contains_forbidden_control_chars(&ingress_check.diagnostics) {
+    if contains_forbidden_control_chars(&check.diagnostics) {
         return Err(SmokeError::InvalidReport(
             "check diagnostics contain invalid control characters",
         ));
     }
-    if ingress_check.endpoint != DEFAULT_SMOKE_INGRESS_HEALTH_URL {
+    if check.endpoint != DEFAULT_SMOKE_INGRESS_HEALTH_URL {
         return Err(SmokeError::InvalidReport("invalid ingress check endpoint"));
     }
+    Ok(())
+}
 
-    let orchestrator_check = orchestrator_checks[0];
-    if orchestrator_check.diagnostics.trim().is_empty() {
+fn validate_orchestrator_check(
+    check: &SmokeCheckObservation,
+    run_id: &str,
+) -> Result<(), SmokeError> {
+    if check.diagnostics.trim().is_empty() {
         return Err(SmokeError::InvalidReport("empty check diagnostics"));
     }
-    if contains_forbidden_control_chars(&orchestrator_check.diagnostics) {
+    if contains_forbidden_control_chars(&check.diagnostics) {
         return Err(SmokeError::InvalidReport(
             "check diagnostics contain invalid control characters",
         ));
     }
-    if !matches_orchestrator_status_contract(&orchestrator_check.endpoint, &report.run_id) {
+    if !matches_orchestrator_status_contract(&check.endpoint, run_id) {
         return Err(SmokeError::InvalidReport("invalid orchestrator check endpoint"));
     }
+    Ok(())
+}
 
+fn validate_smoke_stage_order(stages: &[SmokeStageReport]) -> Result<(), SmokeError> {
     let expected_order = [
         SmokeStageName::IngressHealth,
         SmokeStageName::OrchestratorStatus,
         SmokeStageName::FinalDecision,
     ];
 
-    if report.stages.len() != expected_order.len() {
+    if stages.len() != expected_order.len() {
         return Err(SmokeError::InvalidReport("unexpected stage count"));
     }
 
     let order_is_valid =
-        report.stages.iter().map(|stage| stage.stage.clone()).eq(expected_order.iter().cloned());
+        stages.iter().map(|stage| stage.stage.clone()).eq(expected_order.iter().cloned());
     if !order_is_valid {
         return Err(SmokeError::InvalidReport("invalid stage order"));
     }
 
-    let has_empty_diagnostics =
-        report.stages.iter().any(|stage| stage.diagnostics.trim().is_empty());
+    Ok(())
+}
+
+fn validate_smoke_stage_diagnostics(stages: &[SmokeStageReport]) -> Result<(), SmokeError> {
+    let has_empty_diagnostics = stages.iter().any(|stage| stage.diagnostics.trim().is_empty());
     if has_empty_diagnostics {
         return Err(SmokeError::InvalidReport("empty stage diagnostics"));
     }
 
-    let has_non_monotonic_timestamps = report.stages.windows(2).any(|pair| {
+    Ok(())
+}
+
+fn validate_smoke_timestamps(stages: &[SmokeStageReport]) -> Result<(), SmokeError> {
+    let has_non_monotonic_timestamps = stages.windows(2).any(|pair| {
         let first = &pair[0].timestamp;
         let second = &pair[1].timestamp;
         first > second
@@ -1885,6 +1986,10 @@ pub fn validate_smoke_report(report: &SmokeReport) -> Result<(), SmokeError> {
         return Err(SmokeError::InvalidReport("non-monotonic stage timestamps"));
     }
 
+    Ok(())
+}
+
+fn validate_smoke_decision(report: &SmokeReport) -> Result<(), SmokeError> {
     let has_failed_stage =
         report.stages.iter().any(|stage| stage.status == SmokeStageStatus::Failed);
     let derived_decision = if has_failed_stage { SmokeDecision::Fail } else { SmokeDecision::Pass };
@@ -2127,49 +2232,11 @@ pub fn capture_smoke_bead_observation(
     handle: &SmokeBeadRuntimeHandle,
 ) -> Result<SmokeBeadObservation, SmokeBeadError> {
     validate_normalized_smoke_bead_run_id(handle.run_id.as_str())?;
-
-    if !handle.runtime_ready {
-        return Err(SmokeBeadError::RuntimeNotReady);
-    }
-    if handle.runtime_command != DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND {
-        return Err(SmokeBeadError::InvalidRuntimeCommand);
-    }
-    if !is_valid_http_url(handle.ingress_health_url.as_str()) {
-        return Err(SmokeBeadError::InvalidEndpoint("ingress_health_url"));
-    }
-    if !matches_smoke_bead_ingress_health_contract(handle.ingress_health_url.as_str()) {
-        return Err(SmokeBeadError::InvalidEndpoint("ingress_health_url"));
-    }
-    if !is_valid_http_url(handle.orchestrator_status_url.as_str()) {
-        return Err(SmokeBeadError::InvalidEndpoint("orchestrator_status_url"));
-    }
-    if !matches_smoke_bead_orchestrator_status_contract(
-        handle.orchestrator_status_url.as_str(),
-        handle.run_id.as_str(),
-    ) {
-        return Err(SmokeBeadError::InvalidEndpoint("orchestrator_status_url"));
-    }
-
-    let base_timestamp = Utc::now();
+    validate_smoke_bead_runtime_handle(handle)?;
 
     Ok(SmokeBeadObservation {
         run_id: handle.run_id.clone(),
-        checks: vec![
-            SmokeBeadCheckObservation {
-                check: SmokeBeadCheckName::IngressHealth,
-                endpoint: handle.ingress_health_url.clone(),
-                success: true,
-                diagnostics: "ingress health check passed".to_string(),
-                timestamp: base_timestamp,
-            },
-            SmokeBeadCheckObservation {
-                check: SmokeBeadCheckName::OrchestratorStatus,
-                endpoint: handle.orchestrator_status_url.clone(),
-                success: true,
-                diagnostics: "orchestrator status check passed".to_string(),
-                timestamp: base_timestamp + chrono::Duration::milliseconds(1),
-            },
-        ],
+        checks: build_smoke_bead_checks(handle, Utc::now()),
     })
 }
 
@@ -2178,77 +2245,24 @@ pub fn evaluate_smoke_bead_result(
     observation: &SmokeBeadObservation,
 ) -> Result<SmokeBeadReport, SmokeBeadError> {
     validate_normalized_smoke_bead_run_id(observation.run_id.as_str())?;
-
-    let ingress_checks: Vec<&SmokeBeadCheckObservation> = observation
-        .checks
-        .iter()
-        .filter(|check| check.check == SmokeBeadCheckName::IngressHealth)
-        .collect();
-    let ingress_check = match ingress_checks.as_slice() {
-        [] => return Err(SmokeBeadError::MissingCheck("ingress_health")),
-        [check] => *check,
-        _ => return Err(SmokeBeadError::InvalidReport("duplicate ingress_health checks")),
-    };
-
-    let orchestrator_checks: Vec<&SmokeBeadCheckObservation> = observation
-        .checks
-        .iter()
-        .filter(|check| check.check == SmokeBeadCheckName::OrchestratorStatus)
-        .collect();
-    let orchestrator_check = match orchestrator_checks.as_slice() {
-        [] => return Err(SmokeBeadError::MissingCheck("orchestrator_status")),
-        [check] => *check,
-        _ => return Err(SmokeBeadError::InvalidReport("duplicate orchestrator_status checks")),
-    };
-
-    let decision = if ingress_check.success && orchestrator_check.success {
-        SmokeBeadDecision::Pass
-    } else {
-        SmokeBeadDecision::Fail
-    };
-    let ingress_stage_timestamp = ingress_check.timestamp;
-    let orchestrator_stage_timestamp = if orchestrator_check.timestamp < ingress_stage_timestamp {
-        ingress_stage_timestamp
-    } else {
-        orchestrator_check.timestamp
-    };
-    let final_timestamp = orchestrator_stage_timestamp + chrono::Duration::milliseconds(1);
+    let ingress_check = find_smoke_bead_check(
+        observation.checks.as_slice(),
+        SmokeBeadCheckName::IngressHealth,
+        "ingress_health",
+        "duplicate ingress_health checks",
+    )?;
+    let orchestrator_check = find_smoke_bead_check(
+        observation.checks.as_slice(),
+        SmokeBeadCheckName::OrchestratorStatus,
+        "orchestrator_status",
+        "duplicate orchestrator_status checks",
+    )?;
+    let decision = derive_smoke_bead_decision(ingress_check, orchestrator_check);
 
     let report = SmokeBeadReport {
         run_id: observation.run_id.clone(),
         checks: observation.checks.clone(),
-        stages: vec![
-            SmokeBeadStageReport {
-                stage: SmokeBeadStageName::IngressHealth,
-                status: if ingress_check.success {
-                    SmokeBeadStageStatus::Passed
-                } else {
-                    SmokeBeadStageStatus::Failed
-                },
-                diagnostics: ingress_check.diagnostics.clone(),
-                timestamp: ingress_stage_timestamp,
-            },
-            SmokeBeadStageReport {
-                stage: SmokeBeadStageName::OrchestratorStatus,
-                status: if orchestrator_check.success {
-                    SmokeBeadStageStatus::Passed
-                } else {
-                    SmokeBeadStageStatus::Failed
-                },
-                diagnostics: orchestrator_check.diagnostics.clone(),
-                timestamp: orchestrator_stage_timestamp,
-            },
-            SmokeBeadStageReport {
-                stage: SmokeBeadStageName::FinalDecision,
-                status: if decision == SmokeBeadDecision::Pass {
-                    SmokeBeadStageStatus::Passed
-                } else {
-                    SmokeBeadStageStatus::Failed
-                },
-                diagnostics: expected_smoke_bead_final_diagnostics(&decision).to_string(),
-                timestamp: final_timestamp,
-            },
-        ],
+        stages: build_smoke_bead_stages(ingress_check, orchestrator_check, &decision),
         decision,
     };
 
@@ -2260,72 +2274,212 @@ pub fn evaluate_smoke_bead_result(
 pub fn validate_smoke_bead_report(report: &SmokeBeadReport) -> Result<(), SmokeBeadError> {
     validate_normalized_smoke_bead_run_id(report.run_id.as_str())?;
 
-    let ingress_checks: Vec<&SmokeBeadCheckObservation> = report
-        .checks
-        .iter()
-        .filter(|check| check.check == SmokeBeadCheckName::IngressHealth)
-        .collect();
-    let ingress_check = match ingress_checks.as_slice() {
-        [] => return Err(SmokeBeadError::MissingCheck("ingress_health")),
-        [check] => *check,
-        _ => return Err(SmokeBeadError::InvalidReport("invalid ingress check count")),
-    };
-
-    let orchestrator_checks: Vec<&SmokeBeadCheckObservation> = report
-        .checks
-        .iter()
-        .filter(|check| check.check == SmokeBeadCheckName::OrchestratorStatus)
-        .collect();
-    let orchestrator_check = match orchestrator_checks.as_slice() {
-        [] => return Err(SmokeBeadError::MissingCheck("orchestrator_status")),
-        [check] => *check,
-        _ => return Err(SmokeBeadError::InvalidReport("invalid orchestrator check count")),
-    };
+    let ingress_check = find_smoke_bead_check(
+        report.checks.as_slice(),
+        SmokeBeadCheckName::IngressHealth,
+        "ingress_health",
+        "invalid ingress check count",
+    )?;
+    let orchestrator_check = find_smoke_bead_check(
+        report.checks.as_slice(),
+        SmokeBeadCheckName::OrchestratorStatus,
+        "orchestrator_status",
+        "invalid orchestrator check count",
+    )?;
 
     validate_smoke_bead_check(ingress_check, report.run_id.as_str())?;
     validate_smoke_bead_check(orchestrator_check, report.run_id.as_str())?;
 
+    validate_smoke_bead_stage_order(report.stages.as_slice())?;
+    validate_smoke_bead_stage_diagnostics(report.stages.as_slice())?;
+    validate_smoke_bead_timestamps(report.stages.as_slice())?;
+
+    validate_smoke_bead_stage_status(&report.stages[0], ingress_check)?;
+    validate_smoke_bead_stage_status(&report.stages[1], orchestrator_check)?;
+    validate_smoke_bead_decision(report, ingress_check, orchestrator_check)?;
+    validate_smoke_bead_final_stage(&report.stages[2], &report.decision)?;
+
+    Ok(())
+}
+
+fn validate_smoke_bead_runtime_handle(
+    handle: &SmokeBeadRuntimeHandle,
+) -> Result<(), SmokeBeadError> {
+    if !handle.runtime_ready {
+        return Err(SmokeBeadError::RuntimeNotReady);
+    }
+    if handle.runtime_command != DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND {
+        return Err(SmokeBeadError::InvalidRuntimeCommand);
+    }
+    if !is_valid_http_url(handle.ingress_health_url.as_str())
+        || !matches_smoke_bead_ingress_health_contract(handle.ingress_health_url.as_str())
+    {
+        return Err(SmokeBeadError::InvalidEndpoint("ingress_health_url"));
+    }
+    if !is_valid_http_url(handle.orchestrator_status_url.as_str())
+        || !matches_smoke_bead_orchestrator_status_contract(
+            handle.orchestrator_status_url.as_str(),
+            handle.run_id.as_str(),
+        )
+    {
+        return Err(SmokeBeadError::InvalidEndpoint("orchestrator_status_url"));
+    }
+    Ok(())
+}
+
+fn build_smoke_bead_checks(
+    handle: &SmokeBeadRuntimeHandle,
+    base_timestamp: DateTime<Utc>,
+) -> Vec<SmokeBeadCheckObservation> {
+    vec![
+        SmokeBeadCheckObservation {
+            check: SmokeBeadCheckName::IngressHealth,
+            endpoint: handle.ingress_health_url.clone(),
+            success: true,
+            diagnostics: "ingress health check passed".to_string(),
+            timestamp: base_timestamp,
+        },
+        SmokeBeadCheckObservation {
+            check: SmokeBeadCheckName::OrchestratorStatus,
+            endpoint: handle.orchestrator_status_url.clone(),
+            success: true,
+            diagnostics: "orchestrator status check passed".to_string(),
+            timestamp: base_timestamp + chrono::Duration::milliseconds(1),
+        },
+    ]
+}
+
+fn find_smoke_bead_check<'a>(
+    checks: &'a [SmokeBeadCheckObservation],
+    target: SmokeBeadCheckName,
+    missing: &'static str,
+    duplicate: &'static str,
+) -> Result<&'a SmokeBeadCheckObservation, SmokeBeadError> {
+    let matches: Vec<&SmokeBeadCheckObservation> =
+        checks.iter().filter(|check| check.check == target).collect();
+    match matches.as_slice() {
+        [] => Err(SmokeBeadError::MissingCheck(missing)),
+        [check] => Ok(*check),
+        _ => Err(SmokeBeadError::InvalidReport(duplicate)),
+    }
+}
+
+fn derive_smoke_bead_decision(
+    ingress_check: &SmokeBeadCheckObservation,
+    orchestrator_check: &SmokeBeadCheckObservation,
+) -> SmokeBeadDecision {
+    if ingress_check.success && orchestrator_check.success {
+        SmokeBeadDecision::Pass
+    } else {
+        SmokeBeadDecision::Fail
+    }
+}
+
+fn build_smoke_bead_stages(
+    ingress_check: &SmokeBeadCheckObservation,
+    orchestrator_check: &SmokeBeadCheckObservation,
+    decision: &SmokeBeadDecision,
+) -> Vec<SmokeBeadStageReport> {
+    let ingress_time = ingress_check.timestamp;
+    let orchestrator_time = if orchestrator_check.timestamp < ingress_time {
+        ingress_time
+    } else {
+        orchestrator_check.timestamp
+    };
+    let final_time = orchestrator_time + chrono::Duration::milliseconds(1);
+    vec![
+        SmokeBeadStageReport {
+            stage: SmokeBeadStageName::IngressHealth,
+            status: if ingress_check.success {
+                SmokeBeadStageStatus::Passed
+            } else {
+                SmokeBeadStageStatus::Failed
+            },
+            diagnostics: ingress_check.diagnostics.clone(),
+            timestamp: ingress_time,
+        },
+        SmokeBeadStageReport {
+            stage: SmokeBeadStageName::OrchestratorStatus,
+            status: if orchestrator_check.success {
+                SmokeBeadStageStatus::Passed
+            } else {
+                SmokeBeadStageStatus::Failed
+            },
+            diagnostics: orchestrator_check.diagnostics.clone(),
+            timestamp: orchestrator_time,
+        },
+        SmokeBeadStageReport {
+            stage: SmokeBeadStageName::FinalDecision,
+            status: if decision == &SmokeBeadDecision::Pass {
+                SmokeBeadStageStatus::Passed
+            } else {
+                SmokeBeadStageStatus::Failed
+            },
+            diagnostics: expected_smoke_bead_final_diagnostics(decision).to_string(),
+            timestamp: final_time,
+        },
+    ]
+}
+
+fn validate_smoke_bead_decision(
+    report: &SmokeBeadReport,
+    ingress_check: &SmokeBeadCheckObservation,
+    orchestrator_check: &SmokeBeadCheckObservation,
+) -> Result<(), SmokeBeadError> {
+    let derived = derive_smoke_bead_decision(ingress_check, orchestrator_check);
+    if report.decision != derived {
+        return Err(SmokeBeadError::InvalidReport("decision mismatch"));
+    }
+    Ok(())
+}
+
+fn validate_smoke_bead_stage_order(stages: &[SmokeBeadStageReport]) -> Result<(), SmokeBeadError> {
     let expected_stage_order = [
         SmokeBeadStageName::IngressHealth,
         SmokeBeadStageName::OrchestratorStatus,
         SmokeBeadStageName::FinalDecision,
     ];
-    if report.stages.len() != expected_stage_order.len() {
+    if stages.len() != expected_stage_order.len() {
         return Err(SmokeBeadError::InvalidReport("unexpected stage count"));
     }
 
-    let stage_order_valid = report
-        .stages
-        .iter()
-        .map(|stage| stage.stage.clone())
-        .eq(expected_stage_order.iter().cloned());
+    let stage_order_valid =
+        stages.iter().map(|stage| stage.stage.clone()).eq(expected_stage_order.iter().cloned());
     if !stage_order_valid {
         return Err(SmokeBeadError::InvalidReport("invalid stage order"));
     }
 
+    Ok(())
+}
+
+fn validate_smoke_bead_stage_diagnostics(
+    stages: &[SmokeBeadStageReport],
+) -> Result<(), SmokeBeadError> {
     let has_empty_stage_diagnostics =
-        report.stages.iter().any(|stage| stage.diagnostics.trim().is_empty());
+        stages.iter().any(|stage| stage.diagnostics.trim().is_empty());
     if has_empty_stage_diagnostics {
         return Err(SmokeBeadError::InvalidReport("empty stage diagnostics"));
     }
 
     let has_oversized_stage_diagnostics =
-        report.stages.iter().any(|stage| stage.diagnostics.len() > MAX_SMOKE_BEAD_DIAGNOSTICS_LEN);
+        stages.iter().any(|stage| stage.diagnostics.len() > MAX_SMOKE_BEAD_DIAGNOSTICS_LEN);
     if has_oversized_stage_diagnostics {
         return Err(SmokeBeadError::InvalidReport("stage diagnostics exceed max length"));
     }
 
-    let has_invalid_stage_diagnostics = report
-        .stages
-        .iter()
-        .any(|stage| contains_forbidden_control_chars(stage.diagnostics.as_str()));
+    let has_invalid_stage_diagnostics =
+        stages.iter().any(|stage| contains_forbidden_control_chars(stage.diagnostics.as_str()));
     if has_invalid_stage_diagnostics {
         return Err(SmokeBeadError::InvalidReport(
             "stage diagnostics contain invalid control characters",
         ));
     }
 
-    let has_non_monotonic_timestamps = report.stages.windows(2).any(|pair| {
+    Ok(())
+}
+
+fn validate_smoke_bead_timestamps(stages: &[SmokeBeadStageReport]) -> Result<(), SmokeBeadError> {
+    let has_non_monotonic_timestamps = stages.windows(2).any(|pair| {
         let first = &pair[0].timestamp;
         let second = &pair[1].timestamp;
         first > second
@@ -2334,57 +2488,45 @@ pub fn validate_smoke_bead_report(report: &SmokeBeadReport) -> Result<(), SmokeB
         return Err(SmokeBeadError::InvalidReport("non-monotonic stage timestamps"));
     }
 
-    let expected_ingress_status = if ingress_check.success {
+    Ok(())
+}
+
+fn validate_smoke_bead_stage_status(
+    stage: &SmokeBeadStageReport,
+    check: &SmokeBeadCheckObservation,
+) -> Result<(), SmokeBeadError> {
+    let expected_status =
+        if check.success { SmokeBeadStageStatus::Passed } else { SmokeBeadStageStatus::Failed };
+    if stage.status != expected_status {
+        return Err(SmokeBeadError::InvalidReport("stage status mismatch"));
+    }
+    if stage.diagnostics != check.diagnostics {
+        return Err(SmokeBeadError::InvalidReport("stage diagnostics mismatch"));
+    }
+    if stage.timestamp < check.timestamp {
+        return Err(SmokeBeadError::InvalidReport("stage timestamp precedes check"));
+    }
+    Ok(())
+}
+
+fn validate_smoke_bead_final_stage(
+    final_stage: &SmokeBeadStageReport,
+    decision: &SmokeBeadDecision,
+) -> Result<(), SmokeBeadError> {
+    let expected_final_stage = if decision == &SmokeBeadDecision::Pass {
         SmokeBeadStageStatus::Passed
     } else {
         SmokeBeadStageStatus::Failed
     };
-    if report.stages[0].status != expected_ingress_status {
-        return Err(SmokeBeadError::InvalidReport("ingress stage mismatch"));
-    }
-    if report.stages[0].diagnostics != ingress_check.diagnostics {
-        return Err(SmokeBeadError::InvalidReport("ingress stage diagnostics mismatch"));
-    }
-    if report.stages[0].timestamp < ingress_check.timestamp {
-        return Err(SmokeBeadError::InvalidReport("ingress stage timestamp precedes check"));
-    }
-
-    let expected_orchestrator_status = if orchestrator_check.success {
-        SmokeBeadStageStatus::Passed
-    } else {
-        SmokeBeadStageStatus::Failed
-    };
-    if report.stages[1].status != expected_orchestrator_status {
-        return Err(SmokeBeadError::InvalidReport("orchestrator stage mismatch"));
-    }
-    if report.stages[1].diagnostics != orchestrator_check.diagnostics {
-        return Err(SmokeBeadError::InvalidReport("orchestrator stage diagnostics mismatch"));
-    }
-    if report.stages[1].timestamp < orchestrator_check.timestamp {
-        return Err(SmokeBeadError::InvalidReport("orchestrator stage timestamp precedes check"));
-    }
-
-    let derived_decision = if ingress_check.success && orchestrator_check.success {
-        SmokeBeadDecision::Pass
-    } else {
-        SmokeBeadDecision::Fail
-    };
-    if report.decision != derived_decision {
-        return Err(SmokeBeadError::InvalidReport("decision mismatch"));
-    }
-
-    let expected_final_stage = if derived_decision == SmokeBeadDecision::Pass {
-        SmokeBeadStageStatus::Passed
-    } else {
-        SmokeBeadStageStatus::Failed
-    };
-    if report.stages[2].status != expected_final_stage {
+    if final_stage.status != expected_final_stage {
         return Err(SmokeBeadError::InvalidReport("final decision stage mismatch"));
     }
-    let expected_final_diagnostics = expected_smoke_bead_final_diagnostics(&derived_decision);
-    if report.stages[2].diagnostics != expected_final_diagnostics {
+
+    let expected_final_diagnostics = expected_smoke_bead_final_diagnostics(decision);
+    if final_stage.diagnostics != expected_final_diagnostics {
         return Err(SmokeBeadError::InvalidReport("final decision diagnostics mismatch"));
     }
+
     Ok(())
 }
 
@@ -2622,48 +2764,10 @@ pub fn capture_lean_bead_observation(
     handle: &LeanBeadRuntimeHandle,
 ) -> Result<LeanBeadObservation, LeanBeadError> {
     validate_normalized_lean_bead_run_id(handle.run_id.as_str())?;
-
-    if !handle.runtime_ready {
-        return Err(LeanBeadError::RuntimeNotReady);
-    }
-    if handle.runtime_command != DEFAULT_LEAN_BEAD_RUNTIME_COMMAND {
-        return Err(LeanBeadError::InvalidRuntimeCommand);
-    }
-    if !is_valid_http_url(handle.ingress_health_url.as_str()) {
-        return Err(LeanBeadError::InvalidEndpoint("ingress_health_url"));
-    }
-    if !matches_lean_bead_ingress_health_contract(handle.ingress_health_url.as_str()) {
-        return Err(LeanBeadError::InvalidEndpoint("ingress_health_url"));
-    }
-    if !is_valid_http_url(handle.orchestrator_status_url.as_str()) {
-        return Err(LeanBeadError::InvalidEndpoint("orchestrator_status_url"));
-    }
-    if !matches_lean_bead_orchestrator_status_contract(
-        handle.orchestrator_status_url.as_str(),
-        handle.run_id.as_str(),
-    ) {
-        return Err(LeanBeadError::InvalidEndpoint("orchestrator_status_url"));
-    }
-
-    let base_timestamp = Utc::now();
+    validate_lean_bead_runtime_handle(handle)?;
     Ok(LeanBeadObservation {
         run_id: handle.run_id.clone(),
-        checks: vec![
-            LeanBeadCheckObservation {
-                check: LeanBeadCheckName::IngressHealth,
-                endpoint: handle.ingress_health_url.clone(),
-                success: true,
-                diagnostics: "ingress health check passed".to_string(),
-                timestamp: base_timestamp,
-            },
-            LeanBeadCheckObservation {
-                check: LeanBeadCheckName::OrchestratorStatus,
-                endpoint: handle.orchestrator_status_url.clone(),
-                success: true,
-                diagnostics: "orchestrator status check passed".to_string(),
-                timestamp: base_timestamp + chrono::Duration::milliseconds(1),
-            },
-        ],
+        checks: build_lean_bead_checks(handle, Utc::now()),
     })
 }
 
@@ -2671,78 +2775,24 @@ pub fn evaluate_lean_bead_result(
     observation: &LeanBeadObservation,
 ) -> Result<LeanBeadReport, LeanBeadError> {
     validate_normalized_lean_bead_run_id(observation.run_id.as_str())?;
-
-    let ingress_checks: Vec<&LeanBeadCheckObservation> = observation
-        .checks
-        .iter()
-        .filter(|check| check.check == LeanBeadCheckName::IngressHealth)
-        .collect();
-    let ingress_check = match ingress_checks.as_slice() {
-        [] => return Err(LeanBeadError::MissingCheck("ingress_health")),
-        [check] => *check,
-        _ => return Err(LeanBeadError::InvalidReport("duplicate ingress_health checks")),
-    };
-
-    let orchestrator_checks: Vec<&LeanBeadCheckObservation> = observation
-        .checks
-        .iter()
-        .filter(|check| check.check == LeanBeadCheckName::OrchestratorStatus)
-        .collect();
-    let orchestrator_check = match orchestrator_checks.as_slice() {
-        [] => return Err(LeanBeadError::MissingCheck("orchestrator_status")),
-        [check] => *check,
-        _ => return Err(LeanBeadError::InvalidReport("duplicate orchestrator_status checks")),
-    };
-
-    let decision = if ingress_check.success && orchestrator_check.success {
-        LeanBeadDecision::Pass
-    } else {
-        LeanBeadDecision::Fail
-    };
-
-    let ingress_stage_timestamp = ingress_check.timestamp;
-    let orchestrator_stage_timestamp = if orchestrator_check.timestamp < ingress_stage_timestamp {
-        ingress_stage_timestamp
-    } else {
-        orchestrator_check.timestamp
-    };
-    let final_timestamp = orchestrator_stage_timestamp + chrono::Duration::milliseconds(1);
+    let ingress_check = find_lean_bead_check(
+        observation.checks.as_slice(),
+        LeanBeadCheckName::IngressHealth,
+        "ingress_health",
+        "duplicate ingress_health checks",
+    )?;
+    let orchestrator_check = find_lean_bead_check(
+        observation.checks.as_slice(),
+        LeanBeadCheckName::OrchestratorStatus,
+        "orchestrator_status",
+        "duplicate orchestrator_status checks",
+    )?;
+    let decision = derive_lean_bead_decision(ingress_check, orchestrator_check);
 
     let report = LeanBeadReport {
         run_id: observation.run_id.clone(),
         checks: observation.checks.clone(),
-        stages: vec![
-            LeanBeadStageReport {
-                stage: LeanBeadStageName::IngressHealth,
-                status: if ingress_check.success {
-                    LeanBeadStageStatus::Passed
-                } else {
-                    LeanBeadStageStatus::Failed
-                },
-                diagnostics: ingress_check.diagnostics.clone(),
-                timestamp: ingress_stage_timestamp,
-            },
-            LeanBeadStageReport {
-                stage: LeanBeadStageName::OrchestratorStatus,
-                status: if orchestrator_check.success {
-                    LeanBeadStageStatus::Passed
-                } else {
-                    LeanBeadStageStatus::Failed
-                },
-                diagnostics: orchestrator_check.diagnostics.clone(),
-                timestamp: orchestrator_stage_timestamp,
-            },
-            LeanBeadStageReport {
-                stage: LeanBeadStageName::FinalDecision,
-                status: if decision == LeanBeadDecision::Pass {
-                    LeanBeadStageStatus::Passed
-                } else {
-                    LeanBeadStageStatus::Failed
-                },
-                diagnostics: expected_lean_bead_final_diagnostics(&decision).to_string(),
-                timestamp: final_timestamp,
-            },
-        ],
+        stages: build_lean_bead_stages(ingress_check, orchestrator_check, &decision),
         decision,
     };
 
@@ -2752,133 +2802,222 @@ pub fn evaluate_lean_bead_result(
 
 pub fn validate_lean_bead_report(report: &LeanBeadReport) -> Result<(), LeanBeadError> {
     validate_normalized_lean_bead_run_id(report.run_id.as_str())?;
-
-    let ingress_checks: Vec<&LeanBeadCheckObservation> = report
-        .checks
-        .iter()
-        .filter(|check| check.check == LeanBeadCheckName::IngressHealth)
-        .collect();
-    let ingress_check = match ingress_checks.as_slice() {
-        [] => return Err(LeanBeadError::MissingCheck("ingress_health")),
-        [check] => *check,
-        _ => return Err(LeanBeadError::InvalidReport("invalid ingress check count")),
-    };
-
-    let orchestrator_checks: Vec<&LeanBeadCheckObservation> = report
-        .checks
-        .iter()
-        .filter(|check| check.check == LeanBeadCheckName::OrchestratorStatus)
-        .collect();
-    let orchestrator_check = match orchestrator_checks.as_slice() {
-        [] => return Err(LeanBeadError::MissingCheck("orchestrator_status")),
-        [check] => *check,
-        _ => return Err(LeanBeadError::InvalidReport("invalid orchestrator check count")),
-    };
-
+    let ingress_check = find_lean_bead_check(
+        report.checks.as_slice(),
+        LeanBeadCheckName::IngressHealth,
+        "ingress_health",
+        "invalid ingress check count",
+    )?;
+    let orchestrator_check = find_lean_bead_check(
+        report.checks.as_slice(),
+        LeanBeadCheckName::OrchestratorStatus,
+        "orchestrator_status",
+        "invalid orchestrator check count",
+    )?;
     validate_lean_bead_check(ingress_check, report.run_id.as_str())?;
     validate_lean_bead_check(orchestrator_check, report.run_id.as_str())?;
+    validate_lean_bead_stage_contract(report.stages.as_slice())?;
+    validate_lean_bead_stage_semantics(report, ingress_check, orchestrator_check)
+}
 
-    let expected_stage_order = [
+fn validate_lean_bead_runtime_handle(handle: &LeanBeadRuntimeHandle) -> Result<(), LeanBeadError> {
+    if !handle.runtime_ready {
+        return Err(LeanBeadError::RuntimeNotReady);
+    }
+    if handle.runtime_command != DEFAULT_LEAN_BEAD_RUNTIME_COMMAND {
+        return Err(LeanBeadError::InvalidRuntimeCommand);
+    }
+    if !is_valid_http_url(handle.ingress_health_url.as_str())
+        || !matches_lean_bead_ingress_health_contract(handle.ingress_health_url.as_str())
+    {
+        return Err(LeanBeadError::InvalidEndpoint("ingress_health_url"));
+    }
+    if !is_valid_http_url(handle.orchestrator_status_url.as_str())
+        || !matches_lean_bead_orchestrator_status_contract(
+            handle.orchestrator_status_url.as_str(),
+            handle.run_id.as_str(),
+        )
+    {
+        return Err(LeanBeadError::InvalidEndpoint("orchestrator_status_url"));
+    }
+    Ok(())
+}
+
+fn build_lean_bead_checks(
+    handle: &LeanBeadRuntimeHandle,
+    base_timestamp: DateTime<Utc>,
+) -> Vec<LeanBeadCheckObservation> {
+    vec![
+        LeanBeadCheckObservation {
+            check: LeanBeadCheckName::IngressHealth,
+            endpoint: handle.ingress_health_url.clone(),
+            success: true,
+            diagnostics: "ingress health check passed".to_string(),
+            timestamp: base_timestamp,
+        },
+        LeanBeadCheckObservation {
+            check: LeanBeadCheckName::OrchestratorStatus,
+            endpoint: handle.orchestrator_status_url.clone(),
+            success: true,
+            diagnostics: "orchestrator status check passed".to_string(),
+            timestamp: base_timestamp + chrono::Duration::milliseconds(1),
+        },
+    ]
+}
+
+fn find_lean_bead_check<'a>(
+    checks: &'a [LeanBeadCheckObservation],
+    target: LeanBeadCheckName,
+    missing: &'static str,
+    duplicate: &'static str,
+) -> Result<&'a LeanBeadCheckObservation, LeanBeadError> {
+    let matches: Vec<&LeanBeadCheckObservation> =
+        checks.iter().filter(|check| check.check == target).collect();
+    match matches.as_slice() {
+        [] => Err(LeanBeadError::MissingCheck(missing)),
+        [check] => Ok(*check),
+        _ => Err(LeanBeadError::InvalidReport(duplicate)),
+    }
+}
+
+fn derive_lean_bead_decision(
+    ingress_check: &LeanBeadCheckObservation,
+    orchestrator_check: &LeanBeadCheckObservation,
+) -> LeanBeadDecision {
+    if ingress_check.success && orchestrator_check.success {
+        LeanBeadDecision::Pass
+    } else {
+        LeanBeadDecision::Fail
+    }
+}
+
+fn build_lean_bead_stages(
+    ingress_check: &LeanBeadCheckObservation,
+    orchestrator_check: &LeanBeadCheckObservation,
+    decision: &LeanBeadDecision,
+) -> Vec<LeanBeadStageReport> {
+    let ingress_time = ingress_check.timestamp;
+    let orchestrator_time = if orchestrator_check.timestamp < ingress_time {
+        ingress_time
+    } else {
+        orchestrator_check.timestamp
+    };
+    let final_time = orchestrator_time + chrono::Duration::milliseconds(1);
+    vec![
+        LeanBeadStageReport {
+            stage: LeanBeadStageName::IngressHealth,
+            status: if ingress_check.success {
+                LeanBeadStageStatus::Passed
+            } else {
+                LeanBeadStageStatus::Failed
+            },
+            diagnostics: ingress_check.diagnostics.clone(),
+            timestamp: ingress_time,
+        },
+        LeanBeadStageReport {
+            stage: LeanBeadStageName::OrchestratorStatus,
+            status: if orchestrator_check.success {
+                LeanBeadStageStatus::Passed
+            } else {
+                LeanBeadStageStatus::Failed
+            },
+            diagnostics: orchestrator_check.diagnostics.clone(),
+            timestamp: orchestrator_time,
+        },
+        LeanBeadStageReport {
+            stage: LeanBeadStageName::FinalDecision,
+            status: if decision == &LeanBeadDecision::Pass {
+                LeanBeadStageStatus::Passed
+            } else {
+                LeanBeadStageStatus::Failed
+            },
+            diagnostics: expected_lean_bead_final_diagnostics(decision).to_string(),
+            timestamp: final_time,
+        },
+    ]
+}
+
+fn validate_lean_bead_stage_contract(stages: &[LeanBeadStageReport]) -> Result<(), LeanBeadError> {
+    let expected = [
         LeanBeadStageName::IngressHealth,
         LeanBeadStageName::OrchestratorStatus,
         LeanBeadStageName::FinalDecision,
     ];
-    if report.stages.len() != expected_stage_order.len() {
+    if stages.len() != expected.len() {
         return Err(LeanBeadError::InvalidReport("unexpected stage count"));
     }
-
-    let stage_order_valid = report
-        .stages
-        .iter()
-        .map(|stage| stage.stage.clone())
-        .eq(expected_stage_order.iter().cloned());
-    if !stage_order_valid {
+    if !stages.iter().map(|stage| stage.stage.clone()).eq(expected.iter().cloned()) {
         return Err(LeanBeadError::InvalidReport("invalid stage order"));
     }
-
-    let has_empty_stage_diagnostics =
-        report.stages.iter().any(|stage| stage.diagnostics.trim().is_empty());
-    if has_empty_stage_diagnostics {
+    if stages.iter().any(|stage| stage.diagnostics.trim().is_empty()) {
         return Err(LeanBeadError::InvalidReport("empty stage diagnostics"));
     }
-
-    let has_oversized_stage_diagnostics =
-        report.stages.iter().any(|stage| stage.diagnostics.len() > MAX_LEAN_BEAD_DIAGNOSTICS_LEN);
-    if has_oversized_stage_diagnostics {
+    if stages.iter().any(|stage| stage.diagnostics.len() > MAX_LEAN_BEAD_DIAGNOSTICS_LEN) {
         return Err(LeanBeadError::InvalidReport("stage diagnostics exceed max length"));
     }
-
-    let has_invalid_stage_diagnostics = report
-        .stages
-        .iter()
-        .any(|stage| contains_forbidden_control_chars(stage.diagnostics.as_str()));
-    if has_invalid_stage_diagnostics {
+    if stages.iter().any(|stage| contains_forbidden_control_chars(stage.diagnostics.as_str())) {
         return Err(LeanBeadError::InvalidReport(
             "stage diagnostics contain invalid control characters",
         ));
     }
-
-    let has_non_monotonic_timestamps = report.stages.windows(2).any(|pair| {
-        let first = &pair[0].timestamp;
-        let second = &pair[1].timestamp;
-        first > second
-    });
-    if has_non_monotonic_timestamps {
+    if stages.windows(2).any(|pair| pair[0].timestamp > pair[1].timestamp) {
         return Err(LeanBeadError::InvalidReport("non-monotonic stage timestamps"));
     }
+    Ok(())
+}
 
-    let expected_ingress_status = if ingress_check.success {
+fn validate_lean_bead_stage_semantics(
+    report: &LeanBeadReport,
+    ingress_check: &LeanBeadCheckObservation,
+    orchestrator_check: &LeanBeadCheckObservation,
+) -> Result<(), LeanBeadError> {
+    let ingress_status = if ingress_check.success {
         LeanBeadStageStatus::Passed
     } else {
         LeanBeadStageStatus::Failed
     };
-    if report.stages[0].status != expected_ingress_status {
+    let orchestrator_status = if orchestrator_check.success {
+        LeanBeadStageStatus::Passed
+    } else {
+        LeanBeadStageStatus::Failed
+    };
+    if report.stages[0].status != ingress_status
+        || report.stages[0].diagnostics != ingress_check.diagnostics
+    {
         return Err(LeanBeadError::InvalidReport("ingress stage mismatch"));
     }
-    if report.stages[0].diagnostics != ingress_check.diagnostics {
-        return Err(LeanBeadError::InvalidReport("ingress stage diagnostics mismatch"));
-    }
-    if report.stages[0].timestamp < ingress_check.timestamp {
-        return Err(LeanBeadError::InvalidReport("ingress stage timestamp precedes check"));
-    }
-
-    let expected_orchestrator_status = if orchestrator_check.success {
-        LeanBeadStageStatus::Passed
-    } else {
-        LeanBeadStageStatus::Failed
-    };
-    if report.stages[1].status != expected_orchestrator_status {
+    if report.stages[1].status != orchestrator_status
+        || report.stages[1].diagnostics != orchestrator_check.diagnostics
+    {
         return Err(LeanBeadError::InvalidReport("orchestrator stage mismatch"));
     }
-    if report.stages[1].diagnostics != orchestrator_check.diagnostics {
-        return Err(LeanBeadError::InvalidReport("orchestrator stage diagnostics mismatch"));
+    if report.stages[0].timestamp < ingress_check.timestamp
+        || report.stages[1].timestamp < orchestrator_check.timestamp
+    {
+        return Err(LeanBeadError::InvalidReport("stage timestamp precedes check"));
     }
-    if report.stages[1].timestamp < orchestrator_check.timestamp {
-        return Err(LeanBeadError::InvalidReport("orchestrator stage timestamp precedes check"));
-    }
-
-    let derived_decision = if ingress_check.success && orchestrator_check.success {
-        LeanBeadDecision::Pass
-    } else {
-        LeanBeadDecision::Fail
-    };
-    if report.decision != derived_decision {
+    let derived = derive_lean_bead_decision(ingress_check, orchestrator_check);
+    if report.decision != derived {
         return Err(LeanBeadError::InvalidReport("decision mismatch"));
     }
+    validate_lean_bead_final_stage(&report.stages[2], &derived)
+}
 
-    let expected_final_stage = if derived_decision == LeanBeadDecision::Pass {
+fn validate_lean_bead_final_stage(
+    stage: &LeanBeadStageReport,
+    decision: &LeanBeadDecision,
+) -> Result<(), LeanBeadError> {
+    let expected = if decision == &LeanBeadDecision::Pass {
         LeanBeadStageStatus::Passed
     } else {
         LeanBeadStageStatus::Failed
     };
-    if report.stages[2].status != expected_final_stage {
+    if stage.status != expected {
         return Err(LeanBeadError::InvalidReport("final decision stage mismatch"));
     }
-    let expected_final_diagnostics = expected_lean_bead_final_diagnostics(&derived_decision);
-    if report.stages[2].diagnostics != expected_final_diagnostics {
+    if stage.diagnostics != expected_lean_bead_final_diagnostics(decision) {
         return Err(LeanBeadError::InvalidReport("final decision diagnostics mismatch"));
     }
-
     Ok(())
 }
 
@@ -3114,49 +3253,11 @@ pub fn capture_bead_min_observation(
     handle: &BeadMinRuntimeHandle,
 ) -> Result<BeadMinObservation, BeadMinError> {
     validate_normalized_bead_min_run_id(handle.run_id.as_str())?;
-
-    if !handle.runtime_ready {
-        return Err(BeadMinError::RuntimeNotReady);
-    }
-    if handle.runtime_command != DEFAULT_BEAD_MIN_RUNTIME_COMMAND {
-        return Err(BeadMinError::InvalidRuntimeCommand);
-    }
-    if !is_valid_http_url(handle.ingress_health_url.as_str()) {
-        return Err(BeadMinError::InvalidEndpoint("ingress_health_url"));
-    }
-    if !matches_bead_min_ingress_health_contract(handle.ingress_health_url.as_str()) {
-        return Err(BeadMinError::InvalidEndpoint("ingress_health_url"));
-    }
-    if !is_valid_http_url(handle.orchestrator_status_url.as_str()) {
-        return Err(BeadMinError::InvalidEndpoint("orchestrator_status_url"));
-    }
-    if !matches_bead_min_orchestrator_status_contract(
-        handle.orchestrator_status_url.as_str(),
-        handle.run_id.as_str(),
-    ) {
-        return Err(BeadMinError::InvalidEndpoint("orchestrator_status_url"));
-    }
-
-    let base_timestamp = Utc::now();
+    validate_bead_min_runtime_handle(handle)?;
 
     Ok(BeadMinObservation {
         run_id: handle.run_id.clone(),
-        checks: vec![
-            BeadMinCheckObservation {
-                check: BeadMinCheckName::IngressHealth,
-                endpoint: handle.ingress_health_url.clone(),
-                success: true,
-                diagnostics: "ingress health check passed".to_string(),
-                timestamp: base_timestamp,
-            },
-            BeadMinCheckObservation {
-                check: BeadMinCheckName::OrchestratorStatus,
-                endpoint: handle.orchestrator_status_url.clone(),
-                success: true,
-                diagnostics: "orchestrator status check passed".to_string(),
-                timestamp: base_timestamp + chrono::Duration::milliseconds(1),
-            },
-        ],
+        checks: build_bead_min_checks(handle, Utc::now()),
     })
 }
 
@@ -3164,78 +3265,24 @@ pub fn evaluate_bead_min_result(
     observation: &BeadMinObservation,
 ) -> Result<BeadMinReport, BeadMinError> {
     validate_normalized_bead_min_run_id(observation.run_id.as_str())?;
-
-    let ingress_checks: Vec<&BeadMinCheckObservation> = observation
-        .checks
-        .iter()
-        .filter(|check| check.check == BeadMinCheckName::IngressHealth)
-        .collect();
-    let ingress_check = match ingress_checks.as_slice() {
-        [] => return Err(BeadMinError::MissingCheck("ingress_health")),
-        [check] => *check,
-        _ => return Err(BeadMinError::InvalidReport("duplicate ingress_health checks")),
-    };
-
-    let orchestrator_checks: Vec<&BeadMinCheckObservation> = observation
-        .checks
-        .iter()
-        .filter(|check| check.check == BeadMinCheckName::OrchestratorStatus)
-        .collect();
-    let orchestrator_check = match orchestrator_checks.as_slice() {
-        [] => return Err(BeadMinError::MissingCheck("orchestrator_status")),
-        [check] => *check,
-        _ => return Err(BeadMinError::InvalidReport("duplicate orchestrator_status checks")),
-    };
-
-    let decision = if ingress_check.success && orchestrator_check.success {
-        BeadMinDecision::Pass
-    } else {
-        BeadMinDecision::Fail
-    };
-
-    let ingress_stage_timestamp = ingress_check.timestamp;
-    let orchestrator_stage_timestamp = if orchestrator_check.timestamp < ingress_stage_timestamp {
-        ingress_stage_timestamp
-    } else {
-        orchestrator_check.timestamp
-    };
-    let final_timestamp = orchestrator_stage_timestamp + chrono::Duration::milliseconds(1);
+    let ingress_check = find_bead_min_check(
+        observation.checks.as_slice(),
+        BeadMinCheckName::IngressHealth,
+        "ingress_health",
+        "duplicate ingress_health checks",
+    )?;
+    let orchestrator_check = find_bead_min_check(
+        observation.checks.as_slice(),
+        BeadMinCheckName::OrchestratorStatus,
+        "orchestrator_status",
+        "duplicate orchestrator_status checks",
+    )?;
+    let decision = derive_bead_min_decision(ingress_check, orchestrator_check);
 
     let report = BeadMinReport {
         run_id: observation.run_id.clone(),
         checks: observation.checks.clone(),
-        stages: vec![
-            BeadMinStageReport {
-                stage: BeadMinStageName::IngressHealth,
-                status: if ingress_check.success {
-                    BeadMinStageStatus::Passed
-                } else {
-                    BeadMinStageStatus::Failed
-                },
-                diagnostics: ingress_check.diagnostics.clone(),
-                timestamp: ingress_stage_timestamp,
-            },
-            BeadMinStageReport {
-                stage: BeadMinStageName::OrchestratorStatus,
-                status: if orchestrator_check.success {
-                    BeadMinStageStatus::Passed
-                } else {
-                    BeadMinStageStatus::Failed
-                },
-                diagnostics: orchestrator_check.diagnostics.clone(),
-                timestamp: orchestrator_stage_timestamp,
-            },
-            BeadMinStageReport {
-                stage: BeadMinStageName::FinalDecision,
-                status: if decision == BeadMinDecision::Pass {
-                    BeadMinStageStatus::Passed
-                } else {
-                    BeadMinStageStatus::Failed
-                },
-                diagnostics: expected_bead_min_final_diagnostics(&decision).to_string(),
-                timestamp: final_timestamp,
-            },
-        ],
+        stages: build_bead_min_stages(ingress_check, orchestrator_check, &decision),
         decision,
     };
 
@@ -3245,128 +3292,213 @@ pub fn evaluate_bead_min_result(
 
 pub fn validate_bead_min_report(report: &BeadMinReport) -> Result<(), BeadMinError> {
     validate_normalized_bead_min_run_id(report.run_id.as_str())?;
-
-    let ingress_checks: Vec<&BeadMinCheckObservation> = report
-        .checks
-        .iter()
-        .filter(|check| check.check == BeadMinCheckName::IngressHealth)
-        .collect();
-    let ingress_check = match ingress_checks.as_slice() {
-        [] => return Err(BeadMinError::MissingCheck("ingress_health")),
-        [check] => *check,
-        _ => return Err(BeadMinError::InvalidReport("invalid ingress check count")),
-    };
-
-    let orchestrator_checks: Vec<&BeadMinCheckObservation> = report
-        .checks
-        .iter()
-        .filter(|check| check.check == BeadMinCheckName::OrchestratorStatus)
-        .collect();
-    let orchestrator_check = match orchestrator_checks.as_slice() {
-        [] => return Err(BeadMinError::MissingCheck("orchestrator_status")),
-        [check] => *check,
-        _ => return Err(BeadMinError::InvalidReport("invalid orchestrator check count")),
-    };
-
+    let ingress_check = find_bead_min_check(
+        report.checks.as_slice(),
+        BeadMinCheckName::IngressHealth,
+        "ingress_health",
+        "invalid ingress check count",
+    )?;
+    let orchestrator_check = find_bead_min_check(
+        report.checks.as_slice(),
+        BeadMinCheckName::OrchestratorStatus,
+        "orchestrator_status",
+        "invalid orchestrator check count",
+    )?;
     validate_bead_min_check(ingress_check, report.run_id.as_str())?;
     validate_bead_min_check(orchestrator_check, report.run_id.as_str())?;
+    validate_bead_min_stage_contract(report.stages.as_slice())?;
+    validate_bead_min_stage_semantics(report, ingress_check, orchestrator_check)
+}
 
-    let expected_stage_order = [
+fn validate_bead_min_runtime_handle(handle: &BeadMinRuntimeHandle) -> Result<(), BeadMinError> {
+    if !handle.runtime_ready {
+        return Err(BeadMinError::RuntimeNotReady);
+    }
+    if handle.runtime_command != DEFAULT_BEAD_MIN_RUNTIME_COMMAND {
+        return Err(BeadMinError::InvalidRuntimeCommand);
+    }
+    if !is_valid_http_url(handle.ingress_health_url.as_str())
+        || !matches_bead_min_ingress_health_contract(handle.ingress_health_url.as_str())
+    {
+        return Err(BeadMinError::InvalidEndpoint("ingress_health_url"));
+    }
+    if !is_valid_http_url(handle.orchestrator_status_url.as_str())
+        || !matches_bead_min_orchestrator_status_contract(
+            handle.orchestrator_status_url.as_str(),
+            handle.run_id.as_str(),
+        )
+    {
+        return Err(BeadMinError::InvalidEndpoint("orchestrator_status_url"));
+    }
+    Ok(())
+}
+
+fn build_bead_min_checks(
+    handle: &BeadMinRuntimeHandle,
+    base_timestamp: DateTime<Utc>,
+) -> Vec<BeadMinCheckObservation> {
+    vec![
+        BeadMinCheckObservation {
+            check: BeadMinCheckName::IngressHealth,
+            endpoint: handle.ingress_health_url.clone(),
+            success: true,
+            diagnostics: "ingress health check passed".to_string(),
+            timestamp: base_timestamp,
+        },
+        BeadMinCheckObservation {
+            check: BeadMinCheckName::OrchestratorStatus,
+            endpoint: handle.orchestrator_status_url.clone(),
+            success: true,
+            diagnostics: "orchestrator status check passed".to_string(),
+            timestamp: base_timestamp + chrono::Duration::milliseconds(1),
+        },
+    ]
+}
+
+fn find_bead_min_check<'a>(
+    checks: &'a [BeadMinCheckObservation],
+    target: BeadMinCheckName,
+    missing: &'static str,
+    duplicate: &'static str,
+) -> Result<&'a BeadMinCheckObservation, BeadMinError> {
+    let matches: Vec<&BeadMinCheckObservation> =
+        checks.iter().filter(|check| check.check == target).collect();
+    match matches.as_slice() {
+        [] => Err(BeadMinError::MissingCheck(missing)),
+        [check] => Ok(*check),
+        _ => Err(BeadMinError::InvalidReport(duplicate)),
+    }
+}
+
+fn derive_bead_min_decision(
+    ingress_check: &BeadMinCheckObservation,
+    orchestrator_check: &BeadMinCheckObservation,
+) -> BeadMinDecision {
+    if ingress_check.success && orchestrator_check.success {
+        BeadMinDecision::Pass
+    } else {
+        BeadMinDecision::Fail
+    }
+}
+
+fn build_bead_min_stages(
+    ingress_check: &BeadMinCheckObservation,
+    orchestrator_check: &BeadMinCheckObservation,
+    decision: &BeadMinDecision,
+) -> Vec<BeadMinStageReport> {
+    let ingress_time = ingress_check.timestamp;
+    let orchestrator_time = if orchestrator_check.timestamp < ingress_time {
+        ingress_time
+    } else {
+        orchestrator_check.timestamp
+    };
+    let final_time = orchestrator_time + chrono::Duration::milliseconds(1);
+    vec![
+        BeadMinStageReport {
+            stage: BeadMinStageName::IngressHealth,
+            status: if ingress_check.success {
+                BeadMinStageStatus::Passed
+            } else {
+                BeadMinStageStatus::Failed
+            },
+            diagnostics: ingress_check.diagnostics.clone(),
+            timestamp: ingress_time,
+        },
+        BeadMinStageReport {
+            stage: BeadMinStageName::OrchestratorStatus,
+            status: if orchestrator_check.success {
+                BeadMinStageStatus::Passed
+            } else {
+                BeadMinStageStatus::Failed
+            },
+            diagnostics: orchestrator_check.diagnostics.clone(),
+            timestamp: orchestrator_time,
+        },
+        BeadMinStageReport {
+            stage: BeadMinStageName::FinalDecision,
+            status: if decision == &BeadMinDecision::Pass {
+                BeadMinStageStatus::Passed
+            } else {
+                BeadMinStageStatus::Failed
+            },
+            diagnostics: expected_bead_min_final_diagnostics(decision).to_string(),
+            timestamp: final_time,
+        },
+    ]
+}
+
+fn validate_bead_min_stage_contract(stages: &[BeadMinStageReport]) -> Result<(), BeadMinError> {
+    let expected = [
         BeadMinStageName::IngressHealth,
         BeadMinStageName::OrchestratorStatus,
         BeadMinStageName::FinalDecision,
     ];
-    if report.stages.len() != expected_stage_order.len() {
+    if stages.len() != expected.len() {
         return Err(BeadMinError::InvalidReport("unexpected stage count"));
     }
-
-    let stage_order_valid = report
-        .stages
-        .iter()
-        .map(|stage| stage.stage.clone())
-        .eq(expected_stage_order.iter().cloned());
-    if !stage_order_valid {
+    if !stages.iter().map(|stage| stage.stage.clone()).eq(expected.iter().cloned()) {
         return Err(BeadMinError::InvalidReport("invalid stage order"));
     }
-
-    let has_empty_stage_diagnostics =
-        report.stages.iter().any(|stage| stage.diagnostics.trim().is_empty());
-    if has_empty_stage_diagnostics {
+    if stages.iter().any(|stage| stage.diagnostics.trim().is_empty()) {
         return Err(BeadMinError::InvalidReport("empty stage diagnostics"));
     }
-
-    let has_oversized_stage_diagnostics =
-        report.stages.iter().any(|stage| stage.diagnostics.len() > MAX_BEAD_MIN_DIAGNOSTICS_LEN);
-    if has_oversized_stage_diagnostics {
+    if stages.iter().any(|stage| stage.diagnostics.len() > MAX_BEAD_MIN_DIAGNOSTICS_LEN) {
         return Err(BeadMinError::InvalidReport("stage diagnostics exceed max length"));
     }
-
-    let has_invalid_stage_diagnostics = report
-        .stages
-        .iter()
-        .any(|stage| contains_forbidden_control_chars(stage.diagnostics.as_str()));
-    if has_invalid_stage_diagnostics {
+    if stages.iter().any(|stage| contains_forbidden_control_chars(stage.diagnostics.as_str())) {
         return Err(BeadMinError::InvalidReport(
             "stage diagnostics contain invalid control characters",
         ));
     }
-
-    let has_non_monotonic_timestamps =
-        report.stages.windows(2).any(|pair| pair[0].timestamp > pair[1].timestamp);
-    if has_non_monotonic_timestamps {
+    if stages.windows(2).any(|pair| pair[0].timestamp > pair[1].timestamp) {
         return Err(BeadMinError::InvalidReport("non-monotonic stage timestamps"));
     }
+    Ok(())
+}
 
-    let expected_ingress_status =
+fn validate_bead_min_stage_semantics(
+    report: &BeadMinReport,
+    ingress_check: &BeadMinCheckObservation,
+    orchestrator_check: &BeadMinCheckObservation,
+) -> Result<(), BeadMinError> {
+    let ingress_status =
         if ingress_check.success { BeadMinStageStatus::Passed } else { BeadMinStageStatus::Failed };
-    if report.stages[0].status != expected_ingress_status {
+    let orchestrator_status = if orchestrator_check.success {
+        BeadMinStageStatus::Passed
+    } else {
+        BeadMinStageStatus::Failed
+    };
+    if report.stages[0].status != ingress_status
+        || report.stages[0].diagnostics != ingress_check.diagnostics
+    {
         return Err(BeadMinError::InvalidReport("ingress stage mismatch"));
     }
-    if report.stages[0].diagnostics != ingress_check.diagnostics {
-        return Err(BeadMinError::InvalidReport("ingress stage diagnostics mismatch"));
-    }
-    if report.stages[0].timestamp < ingress_check.timestamp {
-        return Err(BeadMinError::InvalidReport("ingress stage timestamp precedes check"));
-    }
-
-    let expected_orchestrator_status = if orchestrator_check.success {
-        BeadMinStageStatus::Passed
-    } else {
-        BeadMinStageStatus::Failed
-    };
-    if report.stages[1].status != expected_orchestrator_status {
+    if report.stages[1].status != orchestrator_status
+        || report.stages[1].diagnostics != orchestrator_check.diagnostics
+    {
         return Err(BeadMinError::InvalidReport("orchestrator stage mismatch"));
     }
-    if report.stages[1].diagnostics != orchestrator_check.diagnostics {
-        return Err(BeadMinError::InvalidReport("orchestrator stage diagnostics mismatch"));
+    if report.stages[0].timestamp < ingress_check.timestamp
+        || report.stages[1].timestamp < orchestrator_check.timestamp
+    {
+        return Err(BeadMinError::InvalidReport("stage timestamp precedes check"));
     }
-    if report.stages[1].timestamp < orchestrator_check.timestamp {
-        return Err(BeadMinError::InvalidReport("orchestrator stage timestamp precedes check"));
-    }
-
-    let derived_decision = if ingress_check.success && orchestrator_check.success {
-        BeadMinDecision::Pass
-    } else {
-        BeadMinDecision::Fail
-    };
-    if report.decision != derived_decision {
+    let derived = derive_bead_min_decision(ingress_check, orchestrator_check);
+    if report.decision != derived {
         return Err(BeadMinError::InvalidReport("decision mismatch"));
     }
-
-    let expected_final_stage = if derived_decision == BeadMinDecision::Pass {
-        BeadMinStageStatus::Passed
-    } else {
-        BeadMinStageStatus::Failed
-    };
-    if report.stages[2].status != expected_final_stage {
+    if report.stages[2].status
+        != if derived == BeadMinDecision::Pass {
+            BeadMinStageStatus::Passed
+        } else {
+            BeadMinStageStatus::Failed
+        }
+    {
         return Err(BeadMinError::InvalidReport("final decision stage mismatch"));
     }
-
-    let expected_final_diagnostics = expected_bead_min_final_diagnostics(&derived_decision);
-    if report.stages[2].diagnostics != expected_final_diagnostics {
+    if report.stages[2].diagnostics != expected_bead_min_final_diagnostics(&derived) {
         return Err(BeadMinError::InvalidReport("final decision diagnostics mismatch"));
     }
-
     Ok(())
 }
 
@@ -3764,42 +3896,13 @@ pub fn capture_bead_cupid_observation(
     if !handle.runtime_ready {
         return Err(BeadCupidError::RuntimeNotReady);
     }
-    if handle.runtime_command != DEFAULT_BEAD_CUPID_RUNTIME_COMMAND {
-        return Err(BeadCupidError::InvalidRuntimeCommand);
-    }
-    if !is_valid_bead_cupid_endpoint(handle.ingress_health_url.as_str()) {
-        return Err(BeadCupidError::InvalidEndpoint("ingress_health_url"));
-    }
-    if !matches_bead_cupid_ingress_contract(handle.ingress_health_url.as_str()) {
-        return Err(BeadCupidError::InvalidEndpoint("ingress_health_url"));
-    }
-    if !is_valid_bead_cupid_endpoint(handle.orchestrator_status_url.as_str()) {
-        return Err(BeadCupidError::InvalidEndpoint("orchestrator_status_url"));
-    }
-    if !matches_bead_cupid_orchestrator_contract(
-        handle.orchestrator_status_url.as_str(),
+    validate_bead_cupid_runtime_contract(
         handle.run_id.as_str(),
-    ) {
-        return Err(BeadCupidError::InvalidEndpoint("orchestrator_status_url"));
-    }
-
-    let base_timestamp = Utc::now();
-    let checks = vec![
-        BeadCupidCheckObservation {
-            check: BeadCupidCheckName::IngressHealth,
-            endpoint: handle.ingress_health_url.clone(),
-            success: true,
-            diagnostics: "ingress health check passed".to_string(),
-            timestamp: base_timestamp,
-        },
-        BeadCupidCheckObservation {
-            check: BeadCupidCheckName::OrchestratorStatus,
-            endpoint: handle.orchestrator_status_url.clone(),
-            success: true,
-            diagnostics: "orchestrator status check passed".to_string(),
-            timestamp: base_timestamp + chrono::Duration::milliseconds(1),
-        },
-    ];
+        handle.runtime_command.as_str(),
+        handle.ingress_health_url.as_str(),
+        handle.orchestrator_status_url.as_str(),
+    )?;
+    let checks = build_bead_cupid_checks(handle, Utc::now());
 
     Ok(BeadCupidObservation {
         run_id: handle.run_id.clone(),
@@ -3826,101 +3929,30 @@ pub fn evaluate_bead_cupid_result(
         MAX_BEAD_CUPID_BEAD_ID_LEN,
     )?;
 
-    if observation.runtime_command != DEFAULT_BEAD_CUPID_RUNTIME_COMMAND {
-        return Err(BeadCupidError::InvalidRuntimeCommand);
-    }
-    if !is_valid_bead_cupid_endpoint(observation.ingress_health_url.as_str()) {
-        return Err(BeadCupidError::InvalidEndpoint("ingress_health_url"));
-    }
-    if !matches_bead_cupid_ingress_contract(observation.ingress_health_url.as_str()) {
-        return Err(BeadCupidError::InvalidEndpoint("ingress_health_url"));
-    }
-    if !is_valid_bead_cupid_endpoint(observation.orchestrator_status_url.as_str()) {
-        return Err(BeadCupidError::InvalidEndpoint("orchestrator_status_url"));
-    }
-    if !matches_bead_cupid_orchestrator_contract(
-        observation.orchestrator_status_url.as_str(),
+    validate_bead_cupid_runtime_contract(
         observation.run_id.as_str(),
-    ) {
-        return Err(BeadCupidError::InvalidEndpoint("orchestrator_status_url"));
-    }
-
-    let ingress_checks: Vec<&BeadCupidCheckObservation> = observation
-        .checks
-        .iter()
-        .filter(|check| check.check == BeadCupidCheckName::IngressHealth)
-        .collect();
-    let ingress_check = match ingress_checks.as_slice() {
-        [] => return Err(BeadCupidError::MissingCheck("ingress_health")),
-        [check] => *check,
-        _ => return Err(BeadCupidError::InvalidReport("duplicate ingress_health checks")),
-    };
-
-    let orchestrator_checks: Vec<&BeadCupidCheckObservation> = observation
-        .checks
-        .iter()
-        .filter(|check| check.check == BeadCupidCheckName::OrchestratorStatus)
-        .collect();
-    let orchestrator_check = match orchestrator_checks.as_slice() {
-        [] => return Err(BeadCupidError::MissingCheck("orchestrator_status")),
-        [check] => *check,
-        _ => return Err(BeadCupidError::InvalidReport("duplicate orchestrator_status checks")),
-    };
-
-    let decision = if ingress_check.success && orchestrator_check.success {
-        BeadCupidDecision::Pass
-    } else {
-        BeadCupidDecision::Fail
-    };
-    let ingress_stage_timestamp = ingress_check.timestamp;
-    let orchestrator_stage_timestamp = if orchestrator_check.timestamp < ingress_stage_timestamp {
-        ingress_stage_timestamp
-    } else {
-        orchestrator_check.timestamp
-    };
-    let final_timestamp = orchestrator_stage_timestamp + chrono::Duration::milliseconds(1);
+        observation.runtime_command.as_str(),
+        observation.ingress_health_url.as_str(),
+        observation.orchestrator_status_url.as_str(),
+    )?;
+    let ingress_check = find_bead_cupid_check(
+        observation.checks.as_slice(),
+        BeadCupidCheckName::IngressHealth,
+        "ingress_health",
+        "duplicate ingress_health checks",
+    )?;
+    let orchestrator_check = find_bead_cupid_check(
+        observation.checks.as_slice(),
+        BeadCupidCheckName::OrchestratorStatus,
+        "orchestrator_status",
+        "duplicate orchestrator_status checks",
+    )?;
+    let decision = derive_bead_cupid_decision(ingress_check, orchestrator_check);
 
     let report = BeadCupidReport {
-        plan: BeadCupidPlan {
-            run_id: observation.run_id.clone(),
-            bead_id: observation.bead_id.clone(),
-            runtime_command: observation.runtime_command.clone(),
-            ingress_health_url: observation.ingress_health_url.clone(),
-            orchestrator_status_url: observation.orchestrator_status_url.clone(),
-        },
+        plan: bead_cupid_plan_from_observation(observation),
         checks: observation.checks.clone(),
-        stages: vec![
-            BeadCupidStageReport {
-                stage: BeadCupidStageName::IngressHealth,
-                status: if ingress_check.success {
-                    BeadCupidStageStatus::Passed
-                } else {
-                    BeadCupidStageStatus::Failed
-                },
-                diagnostics: ingress_check.diagnostics.clone(),
-                timestamp: ingress_stage_timestamp,
-            },
-            BeadCupidStageReport {
-                stage: BeadCupidStageName::OrchestratorStatus,
-                status: if orchestrator_check.success {
-                    BeadCupidStageStatus::Passed
-                } else {
-                    BeadCupidStageStatus::Failed
-                },
-                diagnostics: orchestrator_check.diagnostics.clone(),
-                timestamp: orchestrator_stage_timestamp,
-            },
-            BeadCupidStageReport {
-                stage: BeadCupidStageName::FinalDecision,
-                status: if decision == BeadCupidDecision::Pass {
-                    BeadCupidStageStatus::Passed
-                } else {
-                    BeadCupidStageStatus::Failed
-                },
-                diagnostics: expected_bead_cupid_final_diagnostics(&decision).to_string(),
-                timestamp: final_timestamp,
-            },
-        ],
+        stages: build_bead_cupid_stages(ingress_check, orchestrator_check, &decision),
         decision,
     };
 
@@ -3941,148 +3973,241 @@ pub fn validate_bead_cupid_report(report: &BeadCupidReport) -> Result<(), BeadCu
         MAX_BEAD_CUPID_BEAD_ID_LEN,
     )?;
 
-    if report.plan.runtime_command != DEFAULT_BEAD_CUPID_RUNTIME_COMMAND {
+    validate_bead_cupid_runtime_contract(
+        report.plan.run_id.as_str(),
+        report.plan.runtime_command.as_str(),
+        report.plan.ingress_health_url.as_str(),
+        report.plan.orchestrator_status_url.as_str(),
+    )?;
+    let ingress_check = find_bead_cupid_check(
+        report.checks.as_slice(),
+        BeadCupidCheckName::IngressHealth,
+        "ingress_health",
+        "duplicate ingress_health checks",
+    )?;
+    let orchestrator_check = find_bead_cupid_check(
+        report.checks.as_slice(),
+        BeadCupidCheckName::OrchestratorStatus,
+        "orchestrator_status",
+        "duplicate orchestrator_status checks",
+    )?;
+    validate_bead_cupid_checks_against_plan(report, ingress_check, orchestrator_check)?;
+    validate_bead_cupid_stage_contract(report.stages.as_slice())?;
+    validate_bead_cupid_stage_semantics(report, ingress_check, orchestrator_check)
+}
+
+fn validate_bead_cupid_runtime_contract(
+    run_id: &str,
+    runtime_command: &str,
+    ingress_health_url: &str,
+    orchestrator_status_url: &str,
+) -> Result<(), BeadCupidError> {
+    if runtime_command != DEFAULT_BEAD_CUPID_RUNTIME_COMMAND {
         return Err(BeadCupidError::InvalidRuntimeCommand);
     }
-    if !is_valid_bead_cupid_endpoint(report.plan.ingress_health_url.as_str()) {
+    if !is_valid_bead_cupid_endpoint(ingress_health_url)
+        || !matches_bead_cupid_ingress_contract(ingress_health_url)
+    {
         return Err(BeadCupidError::InvalidEndpoint("ingress_health_url"));
     }
-    if !matches_bead_cupid_ingress_contract(report.plan.ingress_health_url.as_str()) {
-        return Err(BeadCupidError::InvalidEndpoint("ingress_health_url"));
-    }
-    if !is_valid_bead_cupid_endpoint(report.plan.orchestrator_status_url.as_str()) {
+    if !is_valid_bead_cupid_endpoint(orchestrator_status_url)
+        || !matches_bead_cupid_orchestrator_contract(orchestrator_status_url, run_id)
+    {
         return Err(BeadCupidError::InvalidEndpoint("orchestrator_status_url"));
     }
-    if !matches_bead_cupid_orchestrator_contract(
-        report.plan.orchestrator_status_url.as_str(),
-        report.plan.run_id.as_str(),
-    ) {
-        return Err(BeadCupidError::InvalidEndpoint("orchestrator_status_url"));
+    Ok(())
+}
+
+fn build_bead_cupid_checks(
+    handle: &BeadCupidRuntimeHandle,
+    base_timestamp: DateTime<Utc>,
+) -> Vec<BeadCupidCheckObservation> {
+    vec![
+        BeadCupidCheckObservation {
+            check: BeadCupidCheckName::IngressHealth,
+            endpoint: handle.ingress_health_url.clone(),
+            success: true,
+            diagnostics: "ingress health check passed".to_string(),
+            timestamp: base_timestamp,
+        },
+        BeadCupidCheckObservation {
+            check: BeadCupidCheckName::OrchestratorStatus,
+            endpoint: handle.orchestrator_status_url.clone(),
+            success: true,
+            diagnostics: "orchestrator status check passed".to_string(),
+            timestamp: base_timestamp + chrono::Duration::milliseconds(1),
+        },
+    ]
+}
+
+fn find_bead_cupid_check<'a>(
+    checks: &'a [BeadCupidCheckObservation],
+    target: BeadCupidCheckName,
+    missing: &'static str,
+    duplicate: &'static str,
+) -> Result<&'a BeadCupidCheckObservation, BeadCupidError> {
+    let matches: Vec<&BeadCupidCheckObservation> =
+        checks.iter().filter(|check| check.check == target).collect();
+    match matches.as_slice() {
+        [] => Err(BeadCupidError::MissingCheck(missing)),
+        [check] => Ok(*check),
+        _ => Err(BeadCupidError::InvalidReport(duplicate)),
     }
+}
 
-    let ingress_checks: Vec<&BeadCupidCheckObservation> = report
-        .checks
-        .iter()
-        .filter(|check| check.check == BeadCupidCheckName::IngressHealth)
-        .collect();
-    let orchestrator_checks: Vec<&BeadCupidCheckObservation> = report
-        .checks
-        .iter()
-        .filter(|check| check.check == BeadCupidCheckName::OrchestratorStatus)
-        .collect();
+fn derive_bead_cupid_decision(
+    ingress_check: &BeadCupidCheckObservation,
+    orchestrator_check: &BeadCupidCheckObservation,
+) -> BeadCupidDecision {
+    if ingress_check.success && orchestrator_check.success {
+        BeadCupidDecision::Pass
+    } else {
+        BeadCupidDecision::Fail
+    }
+}
 
-    let ingress_check = match ingress_checks.as_slice() {
-        [] => return Err(BeadCupidError::MissingCheck("ingress_health")),
-        [check] => *check,
-        _ => return Err(BeadCupidError::InvalidReport("duplicate ingress_health checks")),
+fn bead_cupid_plan_from_observation(observation: &BeadCupidObservation) -> BeadCupidPlan {
+    BeadCupidPlan {
+        run_id: observation.run_id.clone(),
+        bead_id: observation.bead_id.clone(),
+        runtime_command: observation.runtime_command.clone(),
+        ingress_health_url: observation.ingress_health_url.clone(),
+        orchestrator_status_url: observation.orchestrator_status_url.clone(),
+    }
+}
+
+fn build_bead_cupid_stages(
+    ingress_check: &BeadCupidCheckObservation,
+    orchestrator_check: &BeadCupidCheckObservation,
+    decision: &BeadCupidDecision,
+) -> Vec<BeadCupidStageReport> {
+    let ingress_time = ingress_check.timestamp;
+    let orchestrator_time = if orchestrator_check.timestamp < ingress_time {
+        ingress_time
+    } else {
+        orchestrator_check.timestamp
     };
-    let orchestrator_check = match orchestrator_checks.as_slice() {
-        [] => return Err(BeadCupidError::MissingCheck("orchestrator_status")),
-        [check] => *check,
-        _ => return Err(BeadCupidError::InvalidReport("duplicate orchestrator_status checks")),
-    };
+    let final_time = orchestrator_time + chrono::Duration::milliseconds(1);
+    vec![
+        BeadCupidStageReport {
+            stage: BeadCupidStageName::IngressHealth,
+            status: if ingress_check.success {
+                BeadCupidStageStatus::Passed
+            } else {
+                BeadCupidStageStatus::Failed
+            },
+            diagnostics: ingress_check.diagnostics.clone(),
+            timestamp: ingress_time,
+        },
+        BeadCupidStageReport {
+            stage: BeadCupidStageName::OrchestratorStatus,
+            status: if orchestrator_check.success {
+                BeadCupidStageStatus::Passed
+            } else {
+                BeadCupidStageStatus::Failed
+            },
+            diagnostics: orchestrator_check.diagnostics.clone(),
+            timestamp: orchestrator_time,
+        },
+        BeadCupidStageReport {
+            stage: BeadCupidStageName::FinalDecision,
+            status: if decision == &BeadCupidDecision::Pass {
+                BeadCupidStageStatus::Passed
+            } else {
+                BeadCupidStageStatus::Failed
+            },
+            diagnostics: expected_bead_cupid_final_diagnostics(decision).to_string(),
+            timestamp: final_time,
+        },
+    ]
+}
 
-    let checks_match_plan = ingress_check.endpoint == report.plan.ingress_health_url
-        && orchestrator_check.endpoint == report.plan.orchestrator_status_url;
-    if !checks_match_plan {
+fn validate_bead_cupid_checks_against_plan(
+    report: &BeadCupidReport,
+    ingress_check: &BeadCupidCheckObservation,
+    orchestrator_check: &BeadCupidCheckObservation,
+) -> Result<(), BeadCupidError> {
+    if ingress_check.endpoint != report.plan.ingress_health_url
+        || orchestrator_check.endpoint != report.plan.orchestrator_status_url
+    {
         return Err(BeadCupidError::InvalidReport("check endpoint mismatch"));
     }
-
-    let checks_have_invalid_diagnostics = report.checks.iter().any(|check| {
+    if report.checks.iter().any(|check| {
         check.diagnostics.trim().is_empty()
             || check.diagnostics.len() > MAX_BEAD_CUPID_DIAGNOSTICS_LEN
             || contains_forbidden_control_chars(check.diagnostics.as_str())
-    });
-    if checks_have_invalid_diagnostics {
+    }) {
         return Err(BeadCupidError::InvalidReport("invalid check diagnostics"));
     }
+    Ok(())
+}
 
-    let expected_stage_order = [
+fn validate_bead_cupid_stage_contract(
+    stages: &[BeadCupidStageReport],
+) -> Result<(), BeadCupidError> {
+    let expected = [
         BeadCupidStageName::IngressHealth,
         BeadCupidStageName::OrchestratorStatus,
         BeadCupidStageName::FinalDecision,
     ];
-    let stage_count_valid = report.stages.len() == expected_stage_order.len();
-    if !stage_count_valid {
+    if stages.len() != expected.len() {
         return Err(BeadCupidError::InvalidReport("unexpected stage count"));
     }
-    let stage_order_valid = report
-        .stages
-        .iter()
-        .map(|stage| stage.stage.clone())
-        .eq(expected_stage_order.iter().cloned());
-    if !stage_order_valid {
+    if !stages.iter().map(|stage| stage.stage.clone()).eq(expected.iter().cloned()) {
         return Err(BeadCupidError::InvalidReport("invalid stage order"));
     }
-
-    let stage_has_invalid_diagnostics = report.stages.iter().any(|stage| {
+    if stages.iter().any(|stage| {
         stage.diagnostics.trim().is_empty()
             || stage.diagnostics.len() > MAX_BEAD_CUPID_DIAGNOSTICS_LEN
             || contains_forbidden_control_chars(stage.diagnostics.as_str())
-    });
-    if stage_has_invalid_diagnostics {
+    }) {
         return Err(BeadCupidError::InvalidReport("invalid stage diagnostics"));
     }
-
-    let has_non_monotonic_timestamps =
-        report.stages.windows(2).any(|pair| pair[0].timestamp > pair[1].timestamp);
-    if has_non_monotonic_timestamps {
+    if stages.windows(2).any(|pair| pair[0].timestamp > pair[1].timestamp) {
         return Err(BeadCupidError::InvalidReport("non-monotonic stage timestamps"));
     }
+    Ok(())
+}
 
-    let ingress_stage = &report.stages[0];
-    let orchestrator_stage = &report.stages[1];
-    let final_stage = &report.stages[2];
-
-    let expected_ingress_stage = if ingress_check.success {
+fn validate_bead_cupid_stage_semantics(
+    report: &BeadCupidReport,
+    ingress_check: &BeadCupidCheckObservation,
+    orchestrator_check: &BeadCupidCheckObservation,
+) -> Result<(), BeadCupidError> {
+    let ingress_status = if ingress_check.success {
         BeadCupidStageStatus::Passed
     } else {
         BeadCupidStageStatus::Failed
     };
-    if ingress_stage.status != expected_ingress_stage {
+    let orchestrator_status = if orchestrator_check.success {
+        BeadCupidStageStatus::Passed
+    } else {
+        BeadCupidStageStatus::Failed
+    };
+    if report.stages[0].status != ingress_status
+        || report.stages[0].diagnostics != ingress_check.diagnostics
+    {
         return Err(BeadCupidError::InvalidReport("ingress stage mismatch"));
     }
-
-    let expected_orchestrator_stage = if orchestrator_check.success {
-        BeadCupidStageStatus::Passed
-    } else {
-        BeadCupidStageStatus::Failed
-    };
-    if orchestrator_stage.status != expected_orchestrator_stage {
+    if report.stages[1].status != orchestrator_status
+        || report.stages[1].diagnostics != orchestrator_check.diagnostics
+    {
         return Err(BeadCupidError::InvalidReport("orchestrator stage mismatch"));
     }
-
-    let derived_decision = if ingress_check.success && orchestrator_check.success {
-        BeadCupidDecision::Pass
-    } else {
-        BeadCupidDecision::Fail
-    };
-    if derived_decision != report.decision {
+    let derived = derive_bead_cupid_decision(ingress_check, orchestrator_check);
+    if report.decision != derived {
         return Err(BeadCupidError::InvalidReport("decision mismatch"));
     }
-
-    let expected_final_stage = if report.decision == BeadCupidDecision::Pass {
+    let final_status = if derived == BeadCupidDecision::Pass {
         BeadCupidStageStatus::Passed
     } else {
         BeadCupidStageStatus::Failed
     };
-    if final_stage.status != expected_final_stage {
-        return Err(BeadCupidError::InvalidReport("final decision stage mismatch"));
-    }
-
-    if ingress_stage.diagnostics != ingress_check.diagnostics {
-        return Err(BeadCupidError::InvalidReport("ingress diagnostics mismatch"));
-    }
-
-    if orchestrator_stage.diagnostics != orchestrator_check.diagnostics {
-        return Err(BeadCupidError::InvalidReport("orchestrator diagnostics mismatch"));
-    }
-
-    let expected_final_diagnostics = expected_bead_cupid_final_diagnostics(&report.decision);
-    if final_stage.diagnostics != expected_final_diagnostics {
+    if report.stages[2].status != final_status
+        || report.stages[2].diagnostics != expected_bead_cupid_final_diagnostics(&derived)
+    {
         return Err(BeadCupidError::InvalidReport("final diagnostics mismatch"));
     }
-
     Ok(())
 }
 
@@ -4370,47 +4495,10 @@ pub fn evaluate_src_1ew_observation(
 ) -> Result<Src1ewReport, Src1ewError> {
     validate_src_1ew_checks(observation.checks.as_slice())?;
     let decision = derive_src_1ew_decision(observation.checks.as_slice());
-    let observation_status = if decision == Src1ewDecision::Pass {
-        Src1ewStageStatus::Passed
-    } else {
-        Src1ewStageStatus::Failed
-    };
-    let decision_status = observation_status.clone();
-
-    let timestamp = Utc::now();
     let report = Src1ewReport {
         plan: observation.plan.clone(),
         checks: observation.checks.clone(),
-        stages: vec![
-            Src1ewStageReport {
-                stage: Src1ewStageName::PlanBuild,
-                status: Src1ewStageStatus::Passed,
-                diagnostics: "src-1ew plan built".to_string(),
-                timestamp,
-            },
-            Src1ewStageReport {
-                stage: Src1ewStageName::RuntimeStart,
-                status: Src1ewStageStatus::Passed,
-                diagnostics: "src-1ew runtime started".to_string(),
-                timestamp: timestamp + chrono::Duration::milliseconds(1),
-            },
-            Src1ewStageReport {
-                stage: Src1ewStageName::ObservationCapture,
-                status: observation_status,
-                diagnostics: "src-1ew observation captured".to_string(),
-                timestamp: timestamp + chrono::Duration::milliseconds(2),
-            },
-            Src1ewStageReport {
-                stage: Src1ewStageName::FinalDecision,
-                status: decision_status,
-                diagnostics: if decision == Src1ewDecision::Pass {
-                    "src-1ew gate passed".to_string()
-                } else {
-                    "src-1ew gate failed".to_string()
-                },
-                timestamp: timestamp + chrono::Duration::milliseconds(3),
-            },
-        ],
+        stages: build_src_1ew_stages(&decision, Utc::now()),
         decision,
     };
 
@@ -4424,7 +4512,58 @@ pub fn evaluate_src_1ew_result(
     evaluate_src_1ew_observation(observation)
 }
 
+fn build_src_1ew_stages(
+    decision: &Src1ewDecision,
+    timestamp: DateTime<Utc>,
+) -> Vec<Src1ewStageReport> {
+    let observation_status = if decision == &Src1ewDecision::Pass {
+        Src1ewStageStatus::Passed
+    } else {
+        Src1ewStageStatus::Failed
+    };
+    vec![
+        Src1ewStageReport {
+            stage: Src1ewStageName::PlanBuild,
+            status: Src1ewStageStatus::Passed,
+            diagnostics: "src-1ew plan built".to_string(),
+            timestamp,
+        },
+        Src1ewStageReport {
+            stage: Src1ewStageName::RuntimeStart,
+            status: Src1ewStageStatus::Passed,
+            diagnostics: "src-1ew runtime started".to_string(),
+            timestamp: timestamp + chrono::Duration::milliseconds(1),
+        },
+        Src1ewStageReport {
+            stage: Src1ewStageName::ObservationCapture,
+            status: observation_status.clone(),
+            diagnostics: "src-1ew observation captured".to_string(),
+            timestamp: timestamp + chrono::Duration::milliseconds(2),
+        },
+        Src1ewStageReport {
+            stage: Src1ewStageName::FinalDecision,
+            status: observation_status,
+            diagnostics: if decision == &Src1ewDecision::Pass {
+                "src-1ew gate passed".to_string()
+            } else {
+                "src-1ew gate failed".to_string()
+            },
+            timestamp: timestamp + chrono::Duration::milliseconds(3),
+        },
+    ]
+}
+
 pub fn validate_src_1ew_report(report: &Src1ewReport) -> Result<(), Src1ewError> {
+    validate_src_1ew_plan(report)?;
+    validate_src_1ew_report_stages(report.stages.as_slice())?;
+    let derived_decision = derive_src_1ew_decision(report.checks.as_slice());
+    if derived_decision != report.decision {
+        return Err(Src1ewError::InvalidReport("decision mismatch"));
+    }
+    validate_src_1ew_final_stage(report)
+}
+
+fn validate_src_1ew_plan(report: &Src1ewReport) -> Result<(), Src1ewError> {
     validate_src_1ew_base_url(report.plan.base_url.as_str(), "base_url")?;
     if report.plan.base_url != DEFAULT_SRC_1EW_BASE_URL {
         return Err(Src1ewError::InvalidEndpoint("base_url_contract"));
@@ -4433,74 +4572,53 @@ pub fn validate_src_1ew_report(report: &Src1ewReport) -> Result<(), Src1ewError>
     validate_src_1ew_limit(report.plan.limit)?;
     validate_src_1ew_offset(report.plan.offset)?;
     validate_src_1ew_checks(report.checks.as_slice())?;
+    Ok(())
+}
 
-    let expected_stage_order = [
+fn validate_src_1ew_report_stages(stages: &[Src1ewStageReport]) -> Result<(), Src1ewError> {
+    let expected = [
         Src1ewStageName::PlanBuild,
         Src1ewStageName::RuntimeStart,
         Src1ewStageName::ObservationCapture,
         Src1ewStageName::FinalDecision,
     ];
-
-    if report.stages.len() != expected_stage_order.len() {
+    if stages.len() != expected.len() {
         return Err(Src1ewError::InvalidReport("unexpected stage count"));
     }
-
-    let stage_order_valid = report
-        .stages
-        .iter()
-        .map(|stage| stage.stage.clone())
-        .eq(expected_stage_order.iter().cloned());
-    if !stage_order_valid {
+    if !stages.iter().map(|stage| stage.stage.clone()).eq(expected.iter().cloned()) {
         return Err(Src1ewError::InvalidReport("invalid stage order"));
     }
-
-    let has_empty_stage_diagnostics =
-        report.stages.iter().any(|stage| stage.diagnostics.trim().is_empty());
-    if has_empty_stage_diagnostics {
+    if stages.iter().any(|stage| stage.diagnostics.trim().is_empty()) {
         return Err(Src1ewError::InvalidReport("empty stage diagnostics"));
     }
-
-    let has_oversized_stage_diagnostics =
-        report.stages.iter().any(|stage| stage.diagnostics.len() > MAX_SRC_1EW_DIAGNOSTICS_LEN);
-    if has_oversized_stage_diagnostics {
+    if stages.iter().any(|stage| stage.diagnostics.len() > MAX_SRC_1EW_DIAGNOSTICS_LEN) {
         return Err(Src1ewError::InvalidReport("stage diagnostics exceed max length"));
     }
-
-    let has_invalid_stage_diagnostics = report
-        .stages
-        .iter()
-        .any(|stage| contains_forbidden_control_chars(stage.diagnostics.as_str()));
-    if has_invalid_stage_diagnostics {
+    if stages.iter().any(|stage| contains_forbidden_control_chars(stage.diagnostics.as_str())) {
         return Err(Src1ewError::InvalidReport(
             "stage diagnostics contain invalid control characters",
         ));
     }
-
-    let non_monotonic_stage_timestamps =
-        report.stages.windows(2).any(|pair| pair[0].timestamp > pair[1].timestamp);
-    if non_monotonic_stage_timestamps {
+    if stages.windows(2).any(|pair| pair[0].timestamp > pair[1].timestamp) {
         return Err(Src1ewError::InvalidReport("non-monotonic stage timestamps"));
     }
+    Ok(())
+}
 
-    let derived_decision = derive_src_1ew_decision(report.checks.as_slice());
-    if derived_decision != report.decision {
-        return Err(Src1ewError::InvalidReport("decision mismatch"));
-    }
-
+fn validate_src_1ew_final_stage(report: &Src1ewReport) -> Result<(), Src1ewError> {
     let final_stage = report
         .stages
         .iter()
         .find(|stage| stage.stage == Src1ewStageName::FinalDecision)
         .ok_or(Src1ewError::InvalidReport("missing final decision stage"))?;
-    let expected_final_status = if report.decision == Src1ewDecision::Pass {
+    let expected = if report.decision == Src1ewDecision::Pass {
         Src1ewStageStatus::Passed
     } else {
         Src1ewStageStatus::Failed
     };
-    if final_stage.status != expected_final_status {
+    if final_stage.status != expected {
         return Err(Src1ewError::InvalidReport("final decision stage mismatch"));
     }
-
     Ok(())
 }
 
@@ -4836,32 +4954,7 @@ pub fn collect_test_trace_final_observation(
         MAX_TEST_TRACE_FINAL_STAGE_NAME_LEN,
     )?;
 
-    let gate_signal = !stage_name.to_ascii_lowercase().contains("fail");
-    let base = Utc::now();
-    let checks = vec![
-        TestTraceFinalCheckObservation {
-            check: TestTraceFinalCheckName::PlanContract,
-            success: true,
-            diagnostics: "plan contract verified".to_string(),
-            timestamp: base,
-        },
-        TestTraceFinalCheckObservation {
-            check: TestTraceFinalCheckName::TraceCollection,
-            success: true,
-            diagnostics: format!("trace {} collected", trace_id),
-            timestamp: base + chrono::Duration::milliseconds(1),
-        },
-        TestTraceFinalCheckObservation {
-            check: TestTraceFinalCheckName::FinalGateSignal,
-            success: gate_signal,
-            diagnostics: if gate_signal {
-                "final gate signal pass".to_string()
-            } else {
-                "final gate signal fail".to_string()
-            },
-            timestamp: base + chrono::Duration::milliseconds(2),
-        },
-    ];
+    let checks = build_test_trace_final_checks(stage_name.as_str(), trace_id.as_str(), Utc::now());
 
     Ok(TestTraceFinalObservation {
         plan: TestTraceFinalPlan { workflow_id, trace_id, stage_name },
@@ -4912,71 +5005,8 @@ pub fn derive_test_trace_final_decision(report: &TestTraceFinalReport) -> TestTr
 pub fn validate_test_trace_final_report(
     report: &TestTraceFinalReport,
 ) -> Result<(), TestTraceFinalError> {
-    validate_test_trace_final_field(
-        report.plan.workflow_id.as_str(),
-        "workflow_id",
-        MAX_TEST_TRACE_FINAL_WORKFLOW_ID_LEN,
-    )?;
-    validate_test_trace_final_field(
-        report.plan.trace_id.as_str(),
-        "trace_id",
-        MAX_TEST_TRACE_FINAL_TRACE_ID_LEN,
-    )?;
-    validate_test_trace_final_field(
-        report.plan.stage_name.as_str(),
-        "stage_name",
-        MAX_TEST_TRACE_FINAL_STAGE_NAME_LEN,
-    )?;
-    validate_test_trace_final_checks(report.checks.as_slice())?;
-
-    let expected_stage_order = [
-        TestTraceFinalStageName::PlanContract,
-        TestTraceFinalStageName::TraceCollection,
-        TestTraceFinalStageName::FinalDecision,
-    ];
-    if report.stages.len() != expected_stage_order.len() {
-        return Err(TestTraceFinalError::InvalidReport("unexpected stage count"));
-    }
-
-    let stage_order_valid = report
-        .stages
-        .iter()
-        .map(|stage| stage.stage.clone())
-        .eq(expected_stage_order.iter().cloned());
-    if !stage_order_valid {
-        return Err(TestTraceFinalError::InvalidReport("invalid stage order"));
-    }
-
-    let has_empty_stage_diagnostics =
-        report.stages.iter().any(|stage| stage.diagnostics.trim().is_empty());
-    if has_empty_stage_diagnostics {
-        return Err(TestTraceFinalError::InvalidReport("empty stage diagnostics"));
-    }
-
-    let has_oversized_stage_diagnostics = report
-        .stages
-        .iter()
-        .any(|stage| stage.diagnostics.len() > MAX_TEST_TRACE_FINAL_DIAGNOSTICS_LEN);
-    if has_oversized_stage_diagnostics {
-        return Err(TestTraceFinalError::InvalidReport("stage diagnostics exceed max length"));
-    }
-
-    let has_invalid_stage_diagnostics = report
-        .stages
-        .iter()
-        .any(|stage| contains_forbidden_control_chars(stage.diagnostics.as_str()));
-    if has_invalid_stage_diagnostics {
-        return Err(TestTraceFinalError::InvalidReport(
-            "stage diagnostics contain invalid control characters",
-        ));
-    }
-
-    let non_monotonic_stage_timestamps =
-        report.stages.windows(2).any(|pair| pair[0].timestamp > pair[1].timestamp);
-    if non_monotonic_stage_timestamps {
-        return Err(TestTraceFinalError::InvalidReport("non-monotonic stage timestamps"));
-    }
-
+    validate_test_trace_final_plan(report)?;
+    validate_test_trace_final_stage_contract(report.stages.as_slice())?;
     let stage_status_mismatch =
         report.stages.iter().zip(report.checks.iter()).any(|(stage, check)| {
             let expected = if check.success {
@@ -4995,6 +5025,91 @@ pub fn validate_test_trace_final_report(
         return Err(TestTraceFinalError::InvalidReport("decision mismatch"));
     }
 
+    Ok(())
+}
+
+fn build_test_trace_final_checks(
+    stage_name: &str,
+    trace_id: &str,
+    base: DateTime<Utc>,
+) -> Vec<TestTraceFinalCheckObservation> {
+    let gate_signal = !stage_name.to_ascii_lowercase().contains("fail");
+    vec![
+        TestTraceFinalCheckObservation {
+            check: TestTraceFinalCheckName::PlanContract,
+            success: true,
+            diagnostics: "plan contract verified".to_string(),
+            timestamp: base,
+        },
+        TestTraceFinalCheckObservation {
+            check: TestTraceFinalCheckName::TraceCollection,
+            success: true,
+            diagnostics: format!("trace {trace_id} collected"),
+            timestamp: base + chrono::Duration::milliseconds(1),
+        },
+        TestTraceFinalCheckObservation {
+            check: TestTraceFinalCheckName::FinalGateSignal,
+            success: gate_signal,
+            diagnostics: if gate_signal {
+                "final gate signal pass".to_string()
+            } else {
+                "final gate signal fail".to_string()
+            },
+            timestamp: base + chrono::Duration::milliseconds(2),
+        },
+    ]
+}
+
+fn validate_test_trace_final_plan(
+    report: &TestTraceFinalReport,
+) -> Result<(), TestTraceFinalError> {
+    validate_test_trace_final_field(
+        report.plan.workflow_id.as_str(),
+        "workflow_id",
+        MAX_TEST_TRACE_FINAL_WORKFLOW_ID_LEN,
+    )?;
+    validate_test_trace_final_field(
+        report.plan.trace_id.as_str(),
+        "trace_id",
+        MAX_TEST_TRACE_FINAL_TRACE_ID_LEN,
+    )?;
+    validate_test_trace_final_field(
+        report.plan.stage_name.as_str(),
+        "stage_name",
+        MAX_TEST_TRACE_FINAL_STAGE_NAME_LEN,
+    )?;
+    validate_test_trace_final_checks(report.checks.as_slice())?;
+    Ok(())
+}
+
+fn validate_test_trace_final_stage_contract(
+    stages: &[TestTraceFinalStageReport],
+) -> Result<(), TestTraceFinalError> {
+    let expected = [
+        TestTraceFinalStageName::PlanContract,
+        TestTraceFinalStageName::TraceCollection,
+        TestTraceFinalStageName::FinalDecision,
+    ];
+    if stages.len() != expected.len() {
+        return Err(TestTraceFinalError::InvalidReport("unexpected stage count"));
+    }
+    if !stages.iter().map(|stage| stage.stage.clone()).eq(expected.iter().cloned()) {
+        return Err(TestTraceFinalError::InvalidReport("invalid stage order"));
+    }
+    if stages.iter().any(|stage| stage.diagnostics.trim().is_empty()) {
+        return Err(TestTraceFinalError::InvalidReport("empty stage diagnostics"));
+    }
+    if stages.iter().any(|stage| stage.diagnostics.len() > MAX_TEST_TRACE_FINAL_DIAGNOSTICS_LEN) {
+        return Err(TestTraceFinalError::InvalidReport("stage diagnostics exceed max length"));
+    }
+    if stages.iter().any(|stage| contains_forbidden_control_chars(stage.diagnostics.as_str())) {
+        return Err(TestTraceFinalError::InvalidReport(
+            "stage diagnostics contain invalid control characters",
+        ));
+    }
+    if stages.windows(2).any(|pair| pair[0].timestamp > pair[1].timestamp) {
+        return Err(TestTraceFinalError::InvalidReport("non-monotonic stage timestamps"));
+    }
     Ok(())
 }
 
@@ -8835,6 +8950,18 @@ mod tests {
     fn opencode_sse_given_crlf_line_endings_when_parse_then_normalizes_to_lf() {
         let result = parse_opencode_sse_events("data: hello\r\n\r\n", 10);
         assert_eq!(result, Ok(vec!["hello".to_string()]));
+    }
+
+    #[test]
+    fn opencode_sse_given_standalone_cr_when_parse_then_normalizes_to_lf() {
+        let result = parse_opencode_sse_events("data: hello\r\r", 10);
+        assert_eq!(result, Ok(vec!["hello".to_string()]));
+    }
+
+    #[test]
+    fn opencode_sse_given_mixed_line_endings_when_parse_then_normalizes_all() {
+        let result = parse_opencode_sse_events("data: hello\r\n\ndata: world\r\r", 10);
+        assert_eq!(result, Ok(vec!["hello".to_string(), "world".to_string()]));
     }
 
     #[test]

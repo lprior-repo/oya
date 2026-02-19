@@ -10,7 +10,7 @@
 //! - One concept per test
 //! - Tests serve as executable documentation
 
-use oya::orchestrator::{Orchestrator, StageExecutionResult};
+use oya::orchestrator::{Orchestrator, StageExecutionResult, StageRequest};
 use oya::types::{FailureCategory, StageName};
 use serde_json::json;
 
@@ -37,7 +37,16 @@ async fn given_all_stages_pass_when_pipeline_runs_then_status_is_shipped() {
     ];
 
     for stage in &stages {
-        let result = orch.run_stage(stage.clone(), 1, "bead", "ctx", None).await.unwrap();
+        let result = orch
+            .run_stage(StageRequest {
+                stage: stage.clone(),
+                attempt: 1 as u32,
+                bead_id: "bead".to_string(),
+                context: "ctx".to_string(),
+                last_failure: None,
+            })
+            .await
+            .unwrap();
         assert!(result.passed, "Stage {:?} should pass", stage);
     }
 
@@ -53,7 +62,16 @@ async fn given_all_stages_pass_when_pipeline_runs_then_status_is_shipped() {
 async fn given_stage_succeeds_when_it_completes_then_advances_to_next() {
     let orch = util::passing_orchestrator();
 
-    let result = orch.run_stage(StageName::Plan, 1, "bead", "ctx", None).await.unwrap();
+    let result = orch
+        .run_stage(StageRequest {
+            stage: StageName::Plan,
+            attempt: 1 as u32,
+            bead_id: "bead".to_string(),
+            context: "ctx".to_string(),
+            last_failure: None,
+        })
+        .await
+        .unwrap();
 
     assert!(result.passed);
     assert_eq!(result.next_stage, Some(StageName::Contract), "Plan should advance to Contract");
@@ -74,12 +92,30 @@ async fn given_retryable_failure_when_exhausted_2_attempts_then_fails_permanentl
     ]);
 
     // Attempt 1: Fail
-    let result1 = orch.run_stage(StageName::Tdd15, 1, "bead", "ctx", None).await.unwrap();
+    let result1 = orch
+        .run_stage(StageRequest {
+            stage: StageName::Tdd15,
+            attempt: 1 as u32,
+            bead_id: "bead".to_string(),
+            context: "ctx".to_string(),
+            last_failure: None,
+        })
+        .await
+        .unwrap();
     assert!(!result1.passed);
     assert_eq!(result1.next_stage, Some(StageName::Tdd15)); // Retry
 
     // Attempt 2: Fail
-    let result2 = orch.run_stage(StageName::Tdd15, 2, "bead", "ctx", None).await.unwrap();
+    let result2 = orch
+        .run_stage(StageRequest {
+            stage: StageName::Tdd15,
+            attempt: 2 as u32,
+            bead_id: "bead".to_string(),
+            context: "ctx".to_string(),
+            last_failure: None,
+        })
+        .await
+        .unwrap();
     assert!(!result2.passed);
     assert_eq!(result2.next_stage, Some(StageName::Tdd15)); // Retry
 
@@ -95,7 +131,16 @@ async fn given_retryable_failure_when_exhausted_2_attempts_then_fails_permanentl
 async fn given_retryable_failure_when_under_max_attempts_then_stays_on_stage() {
     let orch = util::failing_orchestrator(vec![(StageName::Qa, 1, FailureCategory::TestFailed)]);
 
-    let result = orch.run_stage(StageName::Qa, 1, "bead", "ctx", None).await.unwrap();
+    let result = orch
+        .run_stage(StageRequest {
+            stage: StageName::Qa,
+            attempt: 1 as u32,
+            bead_id: "bead".to_string(),
+            context: "ctx".to_string(),
+            last_failure: None,
+        })
+        .await
+        .unwrap();
 
     // Behavior: Stays on same stage to retry
     assert!(!result.passed);
@@ -131,11 +176,29 @@ async fn given_stage_fails_then_succeeds_on_retry_when_retry_passes_then_advance
     ]);
 
     // Attempt 1: Fail
-    let result1 = orch.run_stage(StageName::Tdd15, 1, "bead", "ctx", None).await.unwrap();
+    let result1 = orch
+        .run_stage(StageRequest {
+            stage: StageName::Tdd15,
+            attempt: 1 as u32,
+            bead_id: "bead".to_string(),
+            context: "ctx".to_string(),
+            last_failure: None,
+        })
+        .await
+        .unwrap();
     assert!(!result1.passed);
 
     // Attempt 2: Succeed
-    let result2 = orch.run_stage(StageName::Tdd15, 2, "bead", "ctx", None).await.unwrap();
+    let result2 = orch
+        .run_stage(StageRequest {
+            stage: StageName::Tdd15,
+            attempt: 2 as u32,
+            bead_id: "bead".to_string(),
+            context: "ctx".to_string(),
+            last_failure: None,
+        })
+        .await
+        .unwrap();
 
     // Behavior: Advances to next stage after success
     assert!(result2.passed);
@@ -157,7 +220,16 @@ async fn given_stage_fails_then_succeeds_on_retry_when_retry_passes_then_advance
 async fn given_non_retryable_failure_when_it_occurs_then_fails_immediately() {
     let orch = util::failing_orchestrator(vec![(StageName::Plan, 1, FailureCategory::AuthFailed)]);
 
-    let result = orch.run_stage(StageName::Plan, 1, "bead", "ctx", None).await.unwrap();
+    let result = orch
+        .run_stage(StageRequest {
+            stage: StageName::Plan,
+            attempt: 1 as u32,
+            bead_id: "bead".to_string(),
+            context: "ctx".to_string(),
+            last_failure: None,
+        })
+        .await
+        .unwrap();
 
     // Behavior: Fails immediately, no retry
     assert!(!result.passed);
@@ -183,7 +255,16 @@ async fn given_non_retryable_failure_when_it_occurs_then_fails_immediately() {
 async fn given_plan_completes_when_successful_then_moves_to_contract() {
     let orch = util::passing_orchestrator();
 
-    let result = orch.run_stage(StageName::Plan, 1, "bead", "ctx", None).await.unwrap();
+    let result = orch
+        .run_stage(StageRequest {
+            stage: StageName::Plan,
+            attempt: 1 as u32,
+            bead_id: "bead".to_string(),
+            context: "ctx".to_string(),
+            last_failure: None,
+        })
+        .await
+        .unwrap();
 
     assert!(result.passed);
     assert_eq!(result.next_stage, Some(StageName::Contract));
@@ -196,7 +277,16 @@ async fn given_plan_completes_when_successful_then_moves_to_contract() {
 async fn given_shipgate_passes_when_successful_then_pipeline_completes() {
     let orch = util::passing_orchestrator();
 
-    let result = orch.run_stage(StageName::ShipGate, 1, "bead", "ctx", None).await.unwrap();
+    let result = orch
+        .run_stage(StageRequest {
+            stage: StageName::ShipGate,
+            attempt: 1 as u32,
+            bead_id: "bead".to_string(),
+            context: "ctx".to_string(),
+            last_failure: None,
+        })
+        .await
+        .unwrap();
 
     assert!(result.passed);
     assert_eq!(result.next_stage, None, "ShipGate is terminal - pipeline should complete");
@@ -218,7 +308,16 @@ async fn given_any_stage_when_successful_then_transitions_to_correct_next() {
 
     for (current, expected_next) in test_cases {
         let orch = util::passing_orchestrator();
-        let result = orch.run_stage(current.clone(), 1, "bead", "ctx", None).await.unwrap();
+        let result = orch
+            .run_stage(StageRequest {
+                stage: current.clone(),
+                attempt: 1 as u32,
+                bead_id: "bead".to_string(),
+                context: "ctx".to_string(),
+                last_failure: None,
+            })
+            .await
+            .unwrap();
 
         assert!(result.passed, "{:?} should pass in happy path", current);
         assert_eq!(
@@ -243,16 +342,24 @@ async fn given_stage_fails_when_retry_attempted_then_failure_context_available()
     let orch = util::failing_orchestrator(vec![(StageName::Tdd15, 1, FailureCategory::TestFailed)]);
 
     // First attempt
-    orch.run_stage(StageName::Tdd15, 1, "bead", "ctx", None).await.unwrap();
+    orch.run_stage(StageRequest {
+        stage: StageName::Tdd15,
+        attempt: 1 as u32,
+        bead_id: "bead".to_string(),
+        context: "ctx".to_string(),
+        last_failure: None,
+    })
+    .await
+    .unwrap();
 
     // Second attempt with failure context
-    orch.run_stage(
-        StageName::Tdd15,
-        2,
-        "bead",
-        "ctx",
-        Some((FailureCategory::TestFailed, "previous error details".to_string())),
-    )
+    orch.run_stage(StageRequest {
+        stage: StageName::Tdd15,
+        attempt: 2 as u32,
+        bead_id: "bead".to_string(),
+        context: "ctx".to_string(),
+        last_failure: Some((FailureCategory::TestFailed, "previous error details".to_string())),
+    })
     .await
     .unwrap();
 
@@ -295,7 +402,16 @@ async fn given_tdd15_fails_once_then_succeeds_when_pipeline_continues_then_compl
 
     // Run Tdd15 twice
     for attempt in 1..=2 {
-        let result = orch.run_stage(StageName::Tdd15, attempt, "bead", "ctx", None).await.unwrap();
+        let result = orch
+            .run_stage(StageRequest {
+                stage: StageName::Tdd15,
+                attempt: attempt as u32,
+                bead_id: "bead".to_string(),
+                context: "ctx".to_string(),
+                last_failure: None,
+            })
+            .await
+            .unwrap();
         if attempt == 2 {
             assert!(result.passed);
         }
@@ -346,8 +462,16 @@ async fn given_intermittent_failures_when_within_retry_limits_then_completes() {
 
     // Contract stage: 2 attempts
     for attempt in 1..=2 {
-        let result =
-            orch.run_stage(StageName::Contract, attempt, "bead", "ctx", None).await.unwrap();
+        let result = orch
+            .run_stage(StageRequest {
+                stage: StageName::Contract,
+                attempt: attempt as u32,
+                bead_id: "bead".to_string(),
+                context: "ctx".to_string(),
+                last_failure: None,
+            })
+            .await
+            .unwrap();
         if attempt == 2 {
             assert!(result.passed);
         }
@@ -355,7 +479,16 @@ async fn given_intermittent_failures_when_within_retry_limits_then_completes() {
 
     // Tdd15 stage: 2 attempts
     for attempt in 1..=2 {
-        let result = orch.run_stage(StageName::Tdd15, attempt, "bead", "ctx", None).await.unwrap();
+        let result = orch
+            .run_stage(StageRequest {
+                stage: StageName::Tdd15,
+                attempt: attempt as u32,
+                bead_id: "bead".to_string(),
+                context: "ctx".to_string(),
+                last_failure: None,
+            })
+            .await
+            .unwrap();
         if attempt == 2 {
             assert!(result.passed);
         }
