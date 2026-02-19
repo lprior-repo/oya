@@ -31,9 +31,11 @@
 //! - Final decision is derived only from trace/check outcomes and matches validation results.
 //! - Re-running with equivalent inputs yields equivalent report structure and decisions.
 
+pub mod config;
 pub mod orchestrator;
 pub mod telemetry;
 pub mod types;
+pub mod usage;
 
 use chrono::{DateTime, Utc};
 use std::path::PathBuf;

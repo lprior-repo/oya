@@ -1383,6 +1383,26 @@ pub fn truncate_clean(input: &str, max_chars: usize) -> String {
     }
 }
 
+// =============================================================================
+//  Usage Tracking Types
+// =============================================================================
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ModelHealth {
+    pub model_id: String,
+    pub is_rate_limited: bool,
+    pub consecutive_failures: u32,
+    pub cooldown_until: Option<DateTime<Utc>>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct UsageStatus {
+    pub active_models: std::collections::HashMap<String, String>,
+    pub model_health: std::collections::HashMap<String, ModelHealth>,
+    pub circuit_state: CircuitState,
+    pub last_updated: DateTime<Utc>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

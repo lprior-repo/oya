@@ -7,6 +7,7 @@ use oya::types::{
     truncate_clean, FailureCategory, Gate, GateSummary, StageName as Stage, StageResult,
     TimelineEntry,
 };
+use oya::usage::{OyaUsageTracker, OyaUsageTrackerImpl};
 use oya::{
     build_opencode_poll_snapshot, build_zjj_workspace_name, is_retryable_failure,
     parse_opencode_sse_events,
@@ -50,6 +51,7 @@ pub trait OyaOpsMonitor {
 struct StartRequestPayload {
     bead_id: Option<String>,
     context: Option<String>,
+    model: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -109,6 +111,7 @@ struct OrchestratorState {
     attempt: u32,
     bead_id: String,
     context: String,
+    model: String,
     last_failure: String,
     last_output: String,
     last_prompt: String,
@@ -214,6 +217,7 @@ impl OyaOrchestrator for OyaOrchestratorImpl {
 
         let bead_id = parsed.bead_id.unwrap_or_else(|| "unknown".to_string());
         let context = parsed.context.map_or(String::new(), |s| s);
+        let model = parsed.model.unwrap_or_else(|| "zai-coding-plan/glm-5".to_string());
         let run_id = ctx.key().to_string();
         let started_at = deterministic_timestamp(&ctx).await?;
 
@@ -223,6 +227,7 @@ impl OyaOrchestrator for OyaOrchestratorImpl {
             attempt: 1,
             bead_id: bead_id.clone(),
             context: context.clone(),
+            model: model.clone(),
             last_failure: String::new(),
             last_output: String::new(),
             last_prompt: String::new(),
@@ -254,7 +259,8 @@ impl OyaOrchestrator for OyaOrchestratorImpl {
         tracing::info!("=== RUN {} STARTED ===", run_id);
         tracing::info!("Bead: {}", bead_id);
         tracing::info!("Context: {}", context);
-        run_pipeline(&ctx, run_id.clone(), bead_id, context).await?;
+        tracing::info!("Model: {}", model);
+        run_pipeline(&ctx, run_id.clone(), bead_id, context, model).await?;
 
         Ok(run_id)
     }
@@ -348,7 +354,6 @@ struct RuntimeConfig {
     skip_zjj_workspace: bool,
     skip_zjj_gate: bool,
     repo_root: PathBuf,
-    opencode_model: String,
 }
 
 impl RuntimeConfig {
@@ -367,16 +372,7 @@ impl RuntimeConfig {
             .await
             .map_err(|e| OyaError(format!("config error: repo_root: {}", e)))?;
 
-        let opencode_model = Self::deterministic_opencode_model(ctx)
-            .await
-            .map_err(|e| OyaError(format!("config error: opencode_model: {}", e)))?;
-
-        Ok(Self {
-            skip_zjj_workspace,
-            skip_zjj_gate,
-            repo_root: PathBuf::from(repo_root_str),
-            opencode_model,
-        })
+        Ok(Self { skip_zjj_workspace, skip_zjj_gate, repo_root: PathBuf::from(repo_root_str) })
     }
 
     async fn deterministic_repo_root(ctx: &WorkflowContext<'_>) -> Result<String, TerminalError> {
@@ -390,18 +386,6 @@ impl RuntimeConfig {
         })
         .await
     }
-
-    async fn deterministic_opencode_model(
-        ctx: &WorkflowContext<'_>,
-    ) -> Result<String, TerminalError> {
-        ctx.run(|| async move {
-            if let Ok(model) = std::env::var("OYA_OPENCODE_MODEL") {
-                return Ok::<_, HandlerError>(model);
-            }
-            Ok("opencode/big-pickle".to_string())
-        })
-        .await
-    }
 }
 
 async fn run_pipeline(
@@ -409,6 +393,7 @@ async fn run_pipeline(
     run_id: String,
     bead_id: String,
     context: String,
+    model: String,
 ) -> Result<(), OyaError> {
     // Load all runtime config deterministically at workflow start
     let config = RuntimeConfig::load(ctx).await?;
@@ -424,6 +409,7 @@ async fn run_pipeline(
         attempt,
         bead_id: bead_id.clone(),
         context: context.clone(),
+        model: model.clone(),
         last_failure: String::new(),
         last_output: String::new(),
         last_prompt: String::new(),
@@ -505,6 +491,7 @@ async fn run_pipeline(
             current_stage.clone(),
             attempt,
             &context,
+            &model,
             last_failure.clone(),
             &config,
         )
@@ -827,16 +814,18 @@ async fn execute_stage_real(
     stage: Stage,
     attempt: u32,
     context: &str,
+    model: &str,
     last_failure: Option<(FailureCategory, String)>,
     config: &RuntimeConfig,
 ) -> Result<(StageResult, String), OyaError> {
     let bead_id = bead_id.to_string();
     let context = context.to_string();
+    let model = model.to_string();
     let run_id = run_id.to_string();
     let stage_for_closure = stage.clone();
     let skip_zjj_gate = config.skip_zjj_gate;
     let repo_root = config.repo_root.clone();
-    let model = config.opencode_model.clone();
+    let model_for_closure = model.clone();
 
     let execution = tokio::task::spawn_blocking(move || match stage_for_closure {
         Stage::Plan
@@ -857,7 +846,7 @@ async fn execute_stage_real(
                 success_next_stage,
                 &checks,
                 &repo_root,
-                &model,
+                &model_for_closure,
             )
         }
         Stage::ShipGate => {
@@ -1619,6 +1608,8 @@ struct RunArgs {
     timeout: u64,
     #[arg(long, help = "Poll interval in seconds for status checks")]
     poll_interval: Option<u64>,
+    #[arg(long, default_value = "zai-coding-plan/glm-5", help = "OpenCode model to use")]
+    model: String,
 }
 
 #[derive(Debug, Clone)]
@@ -1628,6 +1619,7 @@ struct WorkflowConfig {
     restate_ingress: String,
     restate_admin: String,
     context: String,
+    model: String,
     timeout_secs: u64,
     poll_interval_secs: u64,
     repo_root: PathBuf,
@@ -1644,6 +1636,7 @@ impl WorkflowConfig {
             restate_ingress,
             restate_admin,
             context: args.context,
+            model: args.model,
             timeout_secs: args.timeout,
             poll_interval_secs: args.poll_interval.unwrap_or(5),
             repo_root,
@@ -1760,6 +1753,7 @@ async fn execute_workflow(config: WorkflowConfig) -> Result<(), Box<dyn std::err
             "bead_id": config.bead_id,
             "run_id": config.run_id,
             "context": config.context,
+            "model": config.model,
             "repo_root": config.repo_root.display().to_string(),
             "restate_ingress": config.restate_ingress,
             "restate_admin": config.restate_admin,
@@ -1818,7 +1812,8 @@ fn start_workflow<'a>(
         format!("{}/OyaOrchestrator/{}/start/send", config.restate_ingress, config.run_id);
     let payload = serde_json::json!({
         "bead_id": config.bead_id,
-        "context": config.context
+        "context": config.context,
+        "model": config.model
     });
 
     Box::pin(async move {
@@ -2039,6 +2034,7 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
     let endpoint = Endpoint::builder()
         .bind_with_options(workflow_service, workflow_service_options)
         .bind_with_options(monitor_service, monitor_service_options)
+        .bind(OyaUsageTrackerImpl.serve())
         .build();
 
     let bind_addr = resolve_bind_addr()?;
