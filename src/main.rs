@@ -271,7 +271,6 @@ fn is_valid_http_url(value: &str) -> bool {
             let scheme_valid = url.scheme() == "http" || url.scheme() == "https";
             let host_valid = url.host_str().is_some();
             let creds_valid = url.username().is_empty() && url.password().is_none();
-            // Ensure URL has no path, query, or fragment (should be base URL)
             let path_valid = url.path() == "/" || url.path().is_empty();
             let no_query = url.query().is_none();
             let no_fragment = url.fragment().is_none();
