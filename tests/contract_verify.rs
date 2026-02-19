@@ -107,10 +107,12 @@ fn contract_workspace_name_format() {
 fn contract_stage_ordering() {
     use oya::types::StageName;
 
+    // ATDD pipeline flow: Plan → Contract → AcceptanceTest → Implementation → QA → ...
     let expected_order = vec![
         StageName::Plan,
         StageName::Contract,
-        StageName::Tdd15,
+        StageName::AcceptanceTest,
+        StageName::Implementation,
         StageName::Qa,
         StageName::RedQueen,
         StageName::GptReview,
@@ -133,6 +135,9 @@ fn contract_stage_ordering() {
 
     // Verify ShipGate is terminal
     assert_eq!(StageName::ShipGate.next(), None);
+
+    // Verify legacy Tdd15 still transitions to QA for backward compatibility
+    assert_eq!(StageName::Tdd15.next(), Some(StageName::Qa));
 }
 
 /// Contract: Gate definitions

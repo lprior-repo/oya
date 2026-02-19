@@ -254,7 +254,7 @@ pub fn build_bead_cupid_plan(input: &BeadCupidInput) -> Result<BeadCupidPlan, Be
         runtime_command: DEFAULT_BEAD_CUPID_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: format!(
-            "http://localhost:8080/OyaOrchestrator/{}/get_status",
+            "http://localhost:8080/Oya/{}/get_status",
             run_id
         ),
     })
@@ -611,15 +611,17 @@ fn validate_bead_cupid_stage_semantics(
     } else {
         BeadCupidStageStatus::Failed
     };
-    if report.stages[0].status != ingress_status
-        || report.stages[0].diagnostics != ingress_check.diagnostics
-    {
+    if report.stages[0].status != ingress_status {
         return Err(BeadCupidError::InvalidReport("ingress stage mismatch"));
     }
-    if report.stages[1].status != orchestrator_status
-        || report.stages[1].diagnostics != orchestrator_check.diagnostics
-    {
+    if report.stages[0].diagnostics != ingress_check.diagnostics {
+        return Err(BeadCupidError::InvalidReport("ingress diagnostics mismatch"));
+    }
+    if report.stages[1].status != orchestrator_status {
         return Err(BeadCupidError::InvalidReport("orchestrator stage mismatch"));
+    }
+    if report.stages[1].diagnostics != orchestrator_check.diagnostics {
+        return Err(BeadCupidError::InvalidReport("orchestrator diagnostics mismatch"));
     }
     let derived = derive_bead_cupid_decision(ingress_check, orchestrator_check);
     if report.decision != derived {
@@ -630,9 +632,10 @@ fn validate_bead_cupid_stage_semantics(
     } else {
         BeadCupidStageStatus::Failed
     };
-    if report.stages[2].status != final_status
-        || report.stages[2].diagnostics != expected_bead_cupid_final_diagnostics(&derived)
-    {
+    if report.stages[2].status != final_status {
+        return Err(BeadCupidError::InvalidReport("final decision stage mismatch"));
+    }
+    if report.stages[2].diagnostics != expected_bead_cupid_final_diagnostics(&derived) {
         return Err(BeadCupidError::InvalidReport("final diagnostics mismatch"));
     }
     Ok(())
@@ -712,7 +715,7 @@ fn matches_bead_cupid_ingress_contract(value: &str) -> bool {
 }
 
 fn matches_bead_cupid_orchestrator_contract(value: &str, run_id: &str) -> bool {
-    value == format!("http://localhost:8080/OyaOrchestrator/{}/get_status", run_id)
+    value == format!("http://localhost:8080/Oya/{}/get_status", run_id)
 }
 
 fn expected_bead_cupid_final_diagnostics(decision: &BeadCupidDecision) -> &'static str {

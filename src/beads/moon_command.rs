@@ -33,6 +33,9 @@ pub struct MoonCommand {
 pub fn generate_moon_command(gate: &Gate) -> MoonCommand {
     let (task_name, description, command) = match gate {
         Gate::Compiles => ("check", "Type check the project", "moon run :check"),
+        Gate::AcceptanceTestsAreRed => {
+            ("test", "Verify acceptance tests are red", "moon run :test")
+        }
         Gate::TestsPass => ("test", "Run all tests", "moon run :test"),
         Gate::EdgeCases => ("test", "Test edge cases", "moon run :test -- --test-threads=1"),
         Gate::NoVulnerabilities => ("security", "Check for vulnerabilities", "moon run :security"),

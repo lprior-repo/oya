@@ -92,7 +92,7 @@ docs/
 
 ## OYA Integration Points
 
-OYA's `OyaOrchestrator` uses these Restate features:
+OYA's `Oya` uses these Restate features:
 
 | OYA Feature | Restate Concept | Documentation |
 |-------------|-----------------|---------------|

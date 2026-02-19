@@ -106,6 +106,12 @@ fn test_gate_failure_outcome_shipgate_merge_conflict_routes_to_review() {
 }
 
 #[test]
+fn test_gate_failure_outcome_acceptance_tests_are_red() {
+    let outcome = gate_failure_outcome(&Stage::AcceptanceTest, &Gate::AcceptanceTestsAreRed);
+    assert_eq!(outcome, (FailureCategory::TestsUnexpectedlyGreen, Stage::AcceptanceTest));
+}
+
+#[test]
 fn test_execute_ship_gate_skip_zjj_gate() {
     let result = execute_ship_gate_with_gate_runner(MergeQueuePolicy::Skip, |gate| {
         assert_eq!(gate, Gate::MoonCi);

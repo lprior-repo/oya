@@ -34,7 +34,7 @@ use restate_sdk::prelude::*;
 ### Service Types
 
 1. **Virtual Object** (`#[restate_sdk::object]`) - Stateful, keyed services
-   - OYA uses this for `OyaOrchestrator`
+   - OYA uses this for `Oya`
    - One instance per key with persistent state
 
 2. **Workflow** (`#[restate_sdk::workflow]`) - Long-running processes
@@ -71,7 +71,7 @@ pub trait MyService {
 use restate_sdk::prelude::*;
 
 #[restate_sdk::object]
-pub trait OyaOrchestrator {
+pub trait Oya {
     async fn start(request: String) -> Result<String, HandlerError>;
     async fn get_status() -> Result<String, HandlerError>;
     async fn ping() -> Result<String, HandlerError>;
@@ -79,7 +79,7 @@ pub trait OyaOrchestrator {
 
 pub struct OyaOrchestratorImpl;
 
-impl OyaOrchestrator for OyaOrchestratorImpl {
+impl Oya for OyaOrchestratorImpl {
     async fn start(
         &self,
         ctx: ObjectContext<'_>,

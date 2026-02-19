@@ -6,13 +6,18 @@
 //! - Circuit breaking for persistent failures.
 //! - Usage statistics for monitoring.
 
-use crate::types::{CircuitState, ModelHealth, UsageStatus};
+use crate::types::{
+    load_model_tier_config, CircuitState, ModelHealth, ModelTierConfig, UsageStatus,
+};
 use chrono::{DateTime, Duration, Utc};
 use restate_sdk::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::OnceLock;
 
 const DEFAULT_COOLDOWN_SECONDS: i64 = 300; // 5 minutes
+
+static MODEL_TIER_CONFIG: OnceLock<Option<ModelTierConfig>> = OnceLock::new();
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct TrackerState {
@@ -125,7 +130,7 @@ impl OyaUsageTracker for OyaUsageTrackerImpl {
 
         // Convert active indices to model names for display
         let mut active_models = HashMap::new();
-        for tier in ["fast", "balanced", "capable", "best"] {
+        for tier in ["d", "c", "b", "a", "s"] {
             let list = get_models_for_tier(tier);
             if !list.is_empty() {
                 let idx = *state.active_indices.get(tier).unwrap_or(&0);
@@ -194,7 +199,7 @@ fn persist_index_change(
 }
 
 fn rotate_tiers_on_rate_limit(state: &mut TrackerState, model: &str) {
-    for tier in ["fast", "balanced", "capable", "best"] {
+    for tier in ["d", "c", "b", "a", "s"] {
         let list = get_models_for_tier(tier);
         if let Some(idx) = list.iter().position(|m| m == model) {
             let current = *state.active_indices.get(tier).unwrap_or(&0);
@@ -224,34 +229,70 @@ fn is_model_healthy(state: &TrackerState, model_id: &str) -> bool {
 }
 
 fn get_models_for_tier(tier: &str) -> Vec<String> {
-    // Load from env or use defaults
-    // Note: In real Restate app, this should be deterministic or passed in.
-    // Env vars are stable per deployment, so acceptable here.
+    if let Some(models) = models_for_tier_from_env(tier) {
+        return models;
+    }
+
+    let from_config = models_for_tier_from_file(tier);
+    if !from_config.is_empty() {
+        return from_config;
+    }
+
     match tier {
-        "fast" => parse_model_list(
-            "OYA_MODELS_FAST",
+        "d" => parse_model_list(
+            "OYA_MODELS_D",
             vec!["openai/gpt-3.5-turbo", "anthropic/claude-3-haiku"],
         ),
-        "balanced" => parse_model_list(
-            "OYA_MODELS_BALANCED",
+        "c" => parse_model_list(
+            "OYA_MODELS_C",
             vec!["openai/gpt-4o-mini", "anthropic/claude-3-sonnet"],
         ),
-        "capable" => parse_model_list(
-            "OYA_MODELS_CAPABLE",
-            vec!["openai/gpt-4-turbo", "anthropic/claude-3-opus"],
-        ),
-        "best" => parse_model_list(
-            "OYA_MODELS_BEST",
-            vec!["openai/gpt-4o", "anthropic/claude-3-5-sonnet"],
-        ),
+        "b" => {
+            parse_model_list("OYA_MODELS_B", vec!["openai/gpt-4-turbo", "anthropic/claude-3-opus"])
+        }
+        "a" => {
+            parse_model_list("OYA_MODELS_A", vec!["openai/gpt-4o", "anthropic/claude-3-5-sonnet"])
+        }
+        "s" => {
+            parse_model_list("OYA_MODELS_S", vec!["openai/gpt-4o", "anthropic/claude-3-5-sonnet"])
+        }
         _ => vec![],
     }
 }
 
+fn models_for_tier_from_env(tier: &str) -> Option<Vec<String>> {
+    let env_key = match tier {
+        "d" => Some("OYA_MODELS_D"),
+        "c" => Some("OYA_MODELS_C"),
+        "b" => Some("OYA_MODELS_B"),
+        "a" => Some("OYA_MODELS_A"),
+        "s" => Some("OYA_MODELS_S"),
+        _ => None,
+    }?;
+
+    std::env::var(env_key).ok().map(|env_models| parse_csv_model_list(&env_models))
+}
+
+fn models_for_tier_from_file(tier: &str) -> Vec<String> {
+    let Some(config) = model_tier_config_cached() else {
+        return vec![];
+    };
+
+    config.tiers.get(tier).cloned().unwrap_or_default()
+}
+
+fn model_tier_config_cached() -> Option<ModelTierConfig> {
+    MODEL_TIER_CONFIG.get_or_init(|| load_model_tier_config().ok()).clone()
+}
+
 fn parse_model_list(env_key: &str, default: Vec<&str>) -> Vec<String> {
     std::env::var(env_key)
-        .map(|s| s.split(',').map(|s| s.trim().to_string()).collect())
+        .map(|s| parse_csv_model_list(&s))
         .unwrap_or_else(|_| default.iter().map(|s| s.to_string()).collect())
+}
+
+fn parse_csv_model_list(raw: &str) -> Vec<String> {
+    raw.split(',').map(|s| s.trim().to_string()).collect()
 }
 
 /// Determine if a failure category indicates a rate limit condition.

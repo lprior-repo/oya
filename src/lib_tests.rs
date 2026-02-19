@@ -15,7 +15,7 @@ fn make_valid_smoke_report() -> SmokeReport {
             },
             SmokeCheckObservation {
                 check: SmokeCheckName::OrchestratorStatus,
-                endpoint: "http://localhost:8080/OyaOrchestrator/run-test/get_status".to_string(),
+                endpoint: "http://localhost:8080/Oya/run-test/get_status".to_string(),
                 success: true,
                 diagnostics: "orchestrator status check passed".to_string(),
                 timestamp: base + Duration::seconds(1),
@@ -59,8 +59,7 @@ fn make_valid_smoke_bead_report() -> SmokeBeadReport {
             },
             SmokeBeadCheckObservation {
                 check: SmokeBeadCheckName::OrchestratorStatus,
-                endpoint: "http://localhost:8080/OyaOrchestrator/run-smoke-bead-test/get_status"
-                    .to_string(),
+                endpoint: "http://localhost:8080/Oya/run-smoke-bead-test/get_status".to_string(),
                 success: true,
                 diagnostics: "orchestrator status check passed".to_string(),
                 timestamp: base + Duration::seconds(1),
@@ -104,8 +103,7 @@ fn make_valid_bead_min_report() -> BeadMinReport {
             },
             BeadMinCheckObservation {
                 check: BeadMinCheckName::OrchestratorStatus,
-                endpoint: "http://localhost:8080/OyaOrchestrator/run-bead-min-test/get_status"
-                    .to_string(),
+                endpoint: "http://localhost:8080/Oya/run-bead-min-test/get_status".to_string(),
                 success: true,
                 diagnostics: "orchestrator status check passed".to_string(),
                 timestamp: base + Duration::milliseconds(1),
@@ -149,8 +147,8 @@ fn make_valid_bead_cupid_report() -> BeadCupidReport {
                     bead_id: "bead-cupid-001".to_string(),
                     runtime_command: DEFAULT_BEAD_CUPID_RUNTIME_COMMAND.to_string(),
                     ingress_health_url: DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL.to_string(),
-                    orchestrator_status_url:
-                        "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status".to_string(),
+                    orchestrator_status_url: "http://localhost:8080/Oya/run-cupid-001/get_status"
+                        .to_string(),
                 },
                 checks: vec![],
                 stages: vec![],
@@ -875,10 +873,7 @@ fn build_bead_cupid_plan_normalizes_ids_and_sets_default_contract() {
     assert_eq!(plan.bead_id, "bead-cupid-001");
     assert_eq!(plan.runtime_command, DEFAULT_BEAD_CUPID_RUNTIME_COMMAND);
     assert_eq!(plan.ingress_health_url, DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL);
-    assert_eq!(
-        plan.orchestrator_status_url,
-        "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status"
-    );
+    assert_eq!(plan.orchestrator_status_url, "http://localhost:8080/Oya/run-cupid-001/get_status");
 }
 
 #[test]
@@ -888,8 +883,7 @@ fn start_bead_cupid_runtime_rejects_non_default_runtime_command() {
         bead_id: "bead-cupid-001".to_string(),
         runtime_command: "scripts/other.sh".to_string(),
         ingress_health_url: DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-cupid-001/get_status".to_string(),
     };
 
     let result = start_bead_cupid_runtime(&plan);
@@ -989,8 +983,7 @@ fn start_bead_cupid_runtime_rejects_non_normalized_run_id() {
         bead_id: "bead-cupid-001".to_string(),
         runtime_command: DEFAULT_BEAD_CUPID_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-cupid-001/get_status".to_string(),
     };
 
     let result = start_bead_cupid_runtime(&plan);
@@ -1004,8 +997,7 @@ fn start_bead_cupid_runtime_rejects_invalid_ingress_endpoint() {
         bead_id: "bead-cupid-001".to_string(),
         runtime_command: DEFAULT_BEAD_CUPID_RUNTIME_COMMAND.to_string(),
         ingress_health_url: "localhost:8080/restate/health".to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-cupid-001/get_status".to_string(),
     };
 
     let result = start_bead_cupid_runtime(&plan);
@@ -1019,8 +1011,7 @@ fn start_bead_cupid_runtime_rejects_non_contract_orchestrator_endpoint() {
         bead_id: "bead-cupid-001".to_string(),
         runtime_command: DEFAULT_BEAD_CUPID_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-cupid-001/status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-cupid-001/status".to_string(),
     };
 
     let result = start_bead_cupid_runtime(&plan);
@@ -1034,8 +1025,7 @@ fn capture_bead_cupid_observation_rejects_runtime_not_ready() {
         bead_id: "bead-cupid-001".to_string(),
         runtime_command: DEFAULT_BEAD_CUPID_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-cupid-001/get_status".to_string(),
         started_at: Utc::now(),
         runtime_ready: false,
     };
@@ -1051,8 +1041,7 @@ fn capture_bead_cupid_observation_rejects_non_contract_ingress_endpoint() {
         bead_id: "bead-cupid-001".to_string(),
         runtime_command: DEFAULT_BEAD_CUPID_RUNTIME_COMMAND.to_string(),
         ingress_health_url: "http://localhost:8080/health".to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-cupid-001/get_status".to_string(),
         started_at: Utc::now(),
         runtime_ready: true,
     };
@@ -1068,8 +1057,7 @@ fn capture_bead_cupid_observation_rejects_non_contract_orchestrator_endpoint() {
         bead_id: "bead-cupid-001".to_string(),
         runtime_command: DEFAULT_BEAD_CUPID_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-cupid-001/status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-cupid-001/status".to_string(),
         started_at: Utc::now(),
         runtime_ready: true,
     };
@@ -1086,11 +1074,10 @@ fn evaluate_bead_cupid_result_rejects_missing_ingress_check() {
         bead_id: "bead-cupid-001".to_string(),
         runtime_command: DEFAULT_BEAD_CUPID_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-cupid-001/get_status".to_string(),
         checks: vec![BeadCupidCheckObservation {
             check: BeadCupidCheckName::OrchestratorStatus,
-            endpoint: "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status".to_string(),
+            endpoint: "http://localhost:8080/Oya/run-cupid-001/get_status".to_string(),
             success: true,
             diagnostics: "orchestrator status check passed".to_string(),
             timestamp: base,
@@ -1109,8 +1096,7 @@ fn evaluate_bead_cupid_result_rejects_duplicate_orchestrator_checks() {
         bead_id: "bead-cupid-001".to_string(),
         runtime_command: DEFAULT_BEAD_CUPID_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-cupid-001/get_status".to_string(),
         checks: vec![
             BeadCupidCheckObservation {
                 check: BeadCupidCheckName::IngressHealth,
@@ -1121,16 +1107,14 @@ fn evaluate_bead_cupid_result_rejects_duplicate_orchestrator_checks() {
             },
             BeadCupidCheckObservation {
                 check: BeadCupidCheckName::OrchestratorStatus,
-                endpoint: "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status"
-                    .to_string(),
+                endpoint: "http://localhost:8080/Oya/run-cupid-001/get_status".to_string(),
                 success: true,
                 diagnostics: "orchestrator status check passed".to_string(),
                 timestamp: base + Duration::milliseconds(1),
             },
             BeadCupidCheckObservation {
                 check: BeadCupidCheckName::OrchestratorStatus,
-                endpoint: "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status"
-                    .to_string(),
+                endpoint: "http://localhost:8080/Oya/run-cupid-001/get_status".to_string(),
                 success: true,
                 diagnostics: "duplicate orchestrator status check".to_string(),
                 timestamp: base + Duration::milliseconds(2),
@@ -1150,8 +1134,7 @@ fn evaluate_bead_cupid_result_sets_fail_when_any_check_fails() {
         bead_id: "bead-cupid-001".to_string(),
         runtime_command: DEFAULT_BEAD_CUPID_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-cupid-001/get_status".to_string(),
         checks: vec![
             BeadCupidCheckObservation {
                 check: BeadCupidCheckName::IngressHealth,
@@ -1162,8 +1145,7 @@ fn evaluate_bead_cupid_result_sets_fail_when_any_check_fails() {
             },
             BeadCupidCheckObservation {
                 check: BeadCupidCheckName::OrchestratorStatus,
-                endpoint: "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status"
-                    .to_string(),
+                endpoint: "http://localhost:8080/Oya/run-cupid-001/get_status".to_string(),
                 success: true,
                 diagnostics: "orchestrator status check passed".to_string(),
                 timestamp: base + Duration::milliseconds(1),
@@ -1189,8 +1171,7 @@ fn evaluate_bead_cupid_result_normalizes_orchestrator_stage_timestamp_floor() {
         bead_id: "bead-cupid-001".to_string(),
         runtime_command: DEFAULT_BEAD_CUPID_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-cupid-001/get_status".to_string(),
         checks: vec![
             BeadCupidCheckObservation {
                 check: BeadCupidCheckName::IngressHealth,
@@ -1201,8 +1182,7 @@ fn evaluate_bead_cupid_result_normalizes_orchestrator_stage_timestamp_floor() {
             },
             BeadCupidCheckObservation {
                 check: BeadCupidCheckName::OrchestratorStatus,
-                endpoint: "http://localhost:8080/OyaOrchestrator/run-cupid-001/get_status"
-                    .to_string(),
+                endpoint: "http://localhost:8080/Oya/run-cupid-001/get_status".to_string(),
                 success: true,
                 diagnostics: "orchestrator status check passed".to_string(),
                 timestamp: base - Duration::milliseconds(1),
@@ -1329,10 +1309,7 @@ fn build_smoke_plan_sets_docker_default_endpoints() {
 
     assert_eq!(plan.runtime_command, DEFAULT_SMOKE_RUNTIME_COMMAND);
     assert_eq!(plan.ingress_health_url, DEFAULT_SMOKE_INGRESS_HEALTH_URL);
-    assert_eq!(
-        plan.orchestrator_status_url,
-        "http://localhost:8080/OyaOrchestrator/run-001/get_status"
-    );
+    assert_eq!(plan.orchestrator_status_url, "http://localhost:8080/Oya/run-001/get_status");
 }
 
 #[test]
@@ -1380,8 +1357,7 @@ fn start_docker_default_runtime_rejects_invalid_runtime_command() {
         run_id: "run-001".to_string(),
         runtime_command: "scripts/not-default.sh".to_string(),
         ingress_health_url: DEFAULT_SMOKE_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-001/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-001/get_status".to_string(),
     };
 
     let result = start_docker_default_runtime(&plan);
@@ -1394,8 +1370,7 @@ fn start_docker_default_runtime_rejects_invalid_run_id_in_plan() {
         run_id: " run-001 ".to_string(),
         runtime_command: DEFAULT_SMOKE_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-001/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-001/get_status".to_string(),
     };
 
     let result = start_docker_default_runtime(&plan);
@@ -1408,8 +1383,7 @@ fn start_docker_default_runtime_rejects_empty_run_id_in_plan() {
         run_id: "".to_string(),
         runtime_command: DEFAULT_SMOKE_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-001/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-001/get_status".to_string(),
     };
 
     let result = start_docker_default_runtime(&plan);
@@ -1422,8 +1396,7 @@ fn start_docker_default_runtime_rejects_invalid_ingress_endpoint() {
         run_id: "run-001".to_string(),
         runtime_command: DEFAULT_SMOKE_RUNTIME_COMMAND.to_string(),
         ingress_health_url: "localhost:8080/restate/health".to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-001/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-001/get_status".to_string(),
     };
 
     let result = start_docker_default_runtime(&plan);
@@ -1436,8 +1409,7 @@ fn start_docker_default_runtime_rejects_non_default_ingress_contract() {
         run_id: "run-001".to_string(),
         runtime_command: DEFAULT_SMOKE_RUNTIME_COMMAND.to_string(),
         ingress_health_url: "http://localhost:8080/health".to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-001/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-001/get_status".to_string(),
     };
 
     let result = start_docker_default_runtime(&plan);
@@ -1464,10 +1436,7 @@ fn start_docker_default_runtime_starts_with_valid_default_contract() {
     assert_eq!(handle.run_id, "run-001");
     assert_eq!(handle.runtime_command, DEFAULT_SMOKE_RUNTIME_COMMAND);
     assert_eq!(handle.ingress_health_url, DEFAULT_SMOKE_INGRESS_HEALTH_URL);
-    assert_eq!(
-        handle.orchestrator_status_url,
-        "http://localhost:8080/OyaOrchestrator/run-001/get_status"
-    );
+    assert_eq!(handle.orchestrator_status_url, "http://localhost:8080/Oya/run-001/get_status");
 }
 
 #[test]
@@ -1489,8 +1458,8 @@ fn start_docker_default_runtime_rejects_orchestrator_endpoint_with_credentials()
         run_id: "run-001".to_string(),
         runtime_command: DEFAULT_SMOKE_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url:
-            "http://user:secret@localhost:8080/OyaOrchestrator/run-001/get_status".to_string(),
+        orchestrator_status_url: "http://user:secret@localhost:8080/Oya/run-001/get_status"
+            .to_string(),
     };
 
     let result = start_docker_default_runtime(&plan);
@@ -1503,8 +1472,7 @@ fn start_docker_default_runtime_rejects_orchestrator_contract_mismatch() {
         run_id: "run-001".to_string(),
         runtime_command: DEFAULT_SMOKE_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-xyz/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-xyz/get_status".to_string(),
     };
 
     let result = start_docker_default_runtime(&plan);
@@ -1517,8 +1485,7 @@ fn run_default_smoke_checks_rejects_unready_runtime() {
         run_id: "run-001".to_string(),
         runtime_command: DEFAULT_SMOKE_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-001/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-001/get_status".to_string(),
         started_at: Utc::now(),
         runtime_ready: false,
     };
@@ -1533,8 +1500,7 @@ fn run_default_smoke_checks_rejects_invalid_runtime_command() {
         run_id: "run-001".to_string(),
         runtime_command: "scripts/other.sh".to_string(),
         ingress_health_url: DEFAULT_SMOKE_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-001/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-001/get_status".to_string(),
         started_at: Utc::now(),
         runtime_ready: true,
     };
@@ -1549,8 +1515,7 @@ fn run_default_smoke_checks_rejects_invalid_ingress_endpoint() {
         run_id: "run-001".to_string(),
         runtime_command: DEFAULT_SMOKE_RUNTIME_COMMAND.to_string(),
         ingress_health_url: "restate/health".to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-001/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-001/get_status".to_string(),
         started_at: Utc::now(),
         runtime_ready: true,
     };
@@ -1565,8 +1530,7 @@ fn run_default_smoke_checks_rejects_non_default_ingress_contract() {
         run_id: "run-001".to_string(),
         runtime_command: DEFAULT_SMOKE_RUNTIME_COMMAND.to_string(),
         ingress_health_url: "http://localhost:8080/health".to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-001/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-001/get_status".to_string(),
         started_at: Utc::now(),
         runtime_ready: true,
     };
@@ -1596,8 +1560,7 @@ fn run_default_smoke_checks_rejects_orchestrator_contract_mismatch() {
         run_id: "run-001".to_string(),
         runtime_command: DEFAULT_SMOKE_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/other/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/other/get_status".to_string(),
         started_at: Utc::now(),
         runtime_ready: true,
     };
@@ -1612,8 +1575,7 @@ fn run_default_smoke_checks_rejects_invalid_run_id_in_handle() {
         run_id: " run-001 ".to_string(),
         runtime_command: DEFAULT_SMOKE_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-001/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-001/get_status".to_string(),
         started_at: Utc::now(),
         runtime_ready: true,
     };
@@ -1671,7 +1633,7 @@ fn evaluate_smoke_result_fails_when_orchestrator_check_fails() {
             },
             SmokeCheckObservation {
                 check: SmokeCheckName::OrchestratorStatus,
-                endpoint: "http://localhost:8080/OyaOrchestrator/run-003/get_status".to_string(),
+                endpoint: "http://localhost:8080/Oya/run-003/get_status".to_string(),
                 success: false,
                 diagnostics: "orchestrator timeout".to_string(),
                 timestamp: Utc::now(),
@@ -1703,7 +1665,7 @@ fn evaluate_smoke_result_fails_when_ingress_check_fails() {
             },
             SmokeCheckObservation {
                 check: SmokeCheckName::OrchestratorStatus,
-                endpoint: "http://localhost:8080/OyaOrchestrator/run-003/get_status".to_string(),
+                endpoint: "http://localhost:8080/Oya/run-003/get_status".to_string(),
                 success: true,
                 diagnostics: "orchestrator healthy".to_string(),
                 timestamp: Utc::now(),
@@ -1727,7 +1689,7 @@ fn evaluate_smoke_result_rejects_missing_ingress_check() {
         run_id: "run-003".to_string(),
         checks: vec![SmokeCheckObservation {
             check: SmokeCheckName::OrchestratorStatus,
-            endpoint: "http://localhost:8080/OyaOrchestrator/run-003/get_status".to_string(),
+            endpoint: "http://localhost:8080/Oya/run-003/get_status".to_string(),
             success: true,
             diagnostics: "ok".to_string(),
             timestamp: Utc::now(),
@@ -1777,7 +1739,7 @@ fn evaluate_smoke_result_rejects_duplicate_ingress_checks() {
             },
             SmokeCheckObservation {
                 check: SmokeCheckName::OrchestratorStatus,
-                endpoint: "http://localhost:8080/OyaOrchestrator/run-003/get_status".to_string(),
+                endpoint: "http://localhost:8080/Oya/run-003/get_status".to_string(),
                 success: true,
                 diagnostics: "ok".to_string(),
                 timestamp: now,
@@ -1804,14 +1766,14 @@ fn evaluate_smoke_result_rejects_duplicate_orchestrator_checks() {
             },
             SmokeCheckObservation {
                 check: SmokeCheckName::OrchestratorStatus,
-                endpoint: "http://localhost:8080/OyaOrchestrator/run-003/get_status".to_string(),
+                endpoint: "http://localhost:8080/Oya/run-003/get_status".to_string(),
                 success: true,
                 diagnostics: "ok".to_string(),
                 timestamp: now,
             },
             SmokeCheckObservation {
                 check: SmokeCheckName::OrchestratorStatus,
-                endpoint: "http://localhost:8080/OyaOrchestrator/run-003/get_status".to_string(),
+                endpoint: "http://localhost:8080/Oya/run-003/get_status".to_string(),
                 success: true,
                 diagnostics: "ok".to_string(),
                 timestamp: now,
@@ -1837,7 +1799,7 @@ fn evaluate_smoke_result_rejects_empty_diagnostics_from_observation_checks() {
             },
             SmokeCheckObservation {
                 check: SmokeCheckName::OrchestratorStatus,
-                endpoint: "http://localhost:8080/OyaOrchestrator/run-003/get_status".to_string(),
+                endpoint: "http://localhost:8080/Oya/run-003/get_status".to_string(),
                 success: true,
                 diagnostics: "ok".to_string(),
                 timestamp: Utc::now(),
@@ -1864,7 +1826,7 @@ fn validate_smoke_report_rejects_unexpected_stage_count() {
             },
             SmokeCheckObservation {
                 check: SmokeCheckName::OrchestratorStatus,
-                endpoint: "http://localhost:8080/OyaOrchestrator/run-005/get_status".to_string(),
+                endpoint: "http://localhost:8080/Oya/run-005/get_status".to_string(),
                 success: true,
                 diagnostics: "ok".to_string(),
                 timestamp: base,
@@ -1886,8 +1848,7 @@ fn validate_smoke_report_rejects_unexpected_stage_count() {
 #[test]
 fn validate_smoke_report_rejects_invalid_orchestrator_endpoint_in_checks() {
     let mut report = make_valid_smoke_report();
-    report.checks[1].endpoint =
-        "http://localhost:8080/OyaOrchestrator/other/get_status".to_string();
+    report.checks[1].endpoint = "http://localhost:8080/Oya/other/get_status".to_string();
 
     let result = validate_smoke_report(&report);
     assert_eq!(result, Err(SmokeError::InvalidReport("invalid orchestrator check endpoint")));
@@ -2064,8 +2025,7 @@ fn start_smoke_bead_runtime_enforces_default_runtime_contract() {
         run_id: "run-smoke-01".to_string(),
         runtime_command: "scripts/not-default.sh".to_string(),
         ingress_health_url: DEFAULT_SMOKE_BEAD_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-smoke-01/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-smoke-01/get_status".to_string(),
     };
 
     let result = start_smoke_bead_runtime(&plan);
@@ -2078,8 +2038,7 @@ fn start_smoke_bead_runtime_rejects_invalid_run_id_and_endpoints() {
         run_id: " run-smoke-01 ".to_string(),
         runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_BEAD_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-smoke-01/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-smoke-01/get_status".to_string(),
     };
     assert_eq!(
         start_smoke_bead_runtime(&invalid_run_id_plan),
@@ -2090,8 +2049,7 @@ fn start_smoke_bead_runtime_rejects_invalid_run_id_and_endpoints() {
         run_id: "run-smoke-01".to_string(),
         runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
         ingress_health_url: "localhost:8080/restate/health".to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-smoke-01/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-smoke-01/get_status".to_string(),
     };
     assert_eq!(
         start_smoke_bead_runtime(&invalid_ingress_endpoint_plan),
@@ -2116,8 +2074,7 @@ fn start_smoke_bead_runtime_rejects_empty_and_oversized_run_id() {
         run_id: "".to_string(),
         runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_BEAD_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-smoke-01/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-smoke-01/get_status".to_string(),
     };
     assert_eq!(
         start_smoke_bead_runtime(&empty_run_id_plan),
@@ -2128,8 +2085,7 @@ fn start_smoke_bead_runtime_rejects_empty_and_oversized_run_id() {
         run_id: "r".repeat(MAX_SMOKE_RUN_ID_LEN + 1),
         runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_BEAD_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-smoke-01/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-smoke-01/get_status".to_string(),
     };
     assert_eq!(
         start_smoke_bead_runtime(&oversized_run_id_plan),
@@ -2143,8 +2099,8 @@ fn start_smoke_bead_runtime_rejects_orchestrator_endpoint_with_credentials() {
         run_id: "run-smoke-01".to_string(),
         runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_BEAD_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url:
-            "http://user:secret@localhost:8080/OyaOrchestrator/run-smoke-01/get_status".to_string(),
+        orchestrator_status_url: "http://user:secret@localhost:8080/Oya/run-smoke-01/get_status"
+            .to_string(),
     };
 
     assert_eq!(
@@ -2159,8 +2115,7 @@ fn start_smoke_bead_runtime_rejects_contract_mismatches() {
         run_id: "run-smoke-01".to_string(),
         runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
         ingress_health_url: "http://localhost:8080/health".to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-smoke-01/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-smoke-01/get_status".to_string(),
     };
     assert_eq!(
         start_smoke_bead_runtime(&ingress_contract_mismatch_plan),
@@ -2171,8 +2126,7 @@ fn start_smoke_bead_runtime_rejects_contract_mismatches() {
         run_id: "run-smoke-01".to_string(),
         runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_BEAD_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-other/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-other/get_status".to_string(),
     };
     assert_eq!(
         start_smoke_bead_runtime(&orchestrator_contract_mismatch_plan),
@@ -2220,8 +2174,7 @@ fn capture_smoke_bead_observation_rejects_runtime_and_endpoint_errors() {
         run_id: "run-smoke-02".to_string(),
         runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_BEAD_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-smoke-02/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-smoke-02/get_status".to_string(),
         started_at: Utc::now(),
         runtime_ready: false,
     };
@@ -2234,8 +2187,7 @@ fn capture_smoke_bead_observation_rejects_runtime_and_endpoint_errors() {
         run_id: " run-smoke-02 ".to_string(),
         runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_BEAD_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-smoke-02/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-smoke-02/get_status".to_string(),
         started_at: Utc::now(),
         runtime_ready: true,
     };
@@ -2248,8 +2200,7 @@ fn capture_smoke_bead_observation_rejects_runtime_and_endpoint_errors() {
         run_id: "run-smoke-02".to_string(),
         runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_BEAD_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/other/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/other/get_status".to_string(),
         started_at: Utc::now(),
         runtime_ready: true,
     };
@@ -2265,8 +2216,7 @@ fn capture_smoke_bead_observation_rejects_invalid_runtime_command_and_ingress() 
         run_id: "run-smoke-02".to_string(),
         runtime_command: "scripts/other.sh".to_string(),
         ingress_health_url: DEFAULT_SMOKE_BEAD_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-smoke-02/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-smoke-02/get_status".to_string(),
         started_at: Utc::now(),
         runtime_ready: true,
     };
@@ -2279,8 +2229,7 @@ fn capture_smoke_bead_observation_rejects_invalid_runtime_command_and_ingress() 
         run_id: "run-smoke-02".to_string(),
         runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
         ingress_health_url: "restate/health".to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-smoke-02/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-smoke-02/get_status".to_string(),
         started_at: Utc::now(),
         runtime_ready: true,
     };
@@ -2293,8 +2242,7 @@ fn capture_smoke_bead_observation_rejects_invalid_runtime_command_and_ingress() 
         run_id: "run-smoke-02".to_string(),
         runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
         ingress_health_url: "http://localhost:8080/health".to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-smoke-02/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-smoke-02/get_status".to_string(),
         started_at: Utc::now(),
         runtime_ready: true,
     };
@@ -2310,8 +2258,7 @@ fn capture_smoke_bead_observation_rejects_empty_run_id_and_invalid_orchestrator_
         run_id: "".to_string(),
         runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_BEAD_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-smoke-02/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-smoke-02/get_status".to_string(),
         started_at: Utc::now(),
         runtime_ready: true,
     };
@@ -2324,8 +2271,7 @@ fn capture_smoke_bead_observation_rejects_empty_run_id_and_invalid_orchestrator_
         run_id: "run-smoke-02".to_string(),
         runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_BEAD_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "localhost:8080/OyaOrchestrator/run-smoke-02/get_status"
-            .to_string(),
+        orchestrator_status_url: "localhost:8080/Oya/run-smoke-02/get_status".to_string(),
         started_at: Utc::now(),
         runtime_ready: true,
     };
@@ -2350,8 +2296,7 @@ fn evaluate_smoke_bead_result_uses_deterministic_stage_order_and_decision() {
             },
             SmokeBeadCheckObservation {
                 check: SmokeBeadCheckName::OrchestratorStatus,
-                endpoint: "http://localhost:8080/OyaOrchestrator/run-smoke-03/get_status"
-                    .to_string(),
+                endpoint: "http://localhost:8080/Oya/run-smoke-03/get_status".to_string(),
                 success: false,
                 diagnostics: "orchestrator timeout".to_string(),
                 timestamp: base + Duration::milliseconds(1),
@@ -2381,7 +2326,7 @@ fn evaluate_smoke_bead_result_rejects_missing_and_duplicate_checks() {
         run_id: "run-smoke-03".to_string(),
         checks: vec![SmokeBeadCheckObservation {
             check: SmokeBeadCheckName::OrchestratorStatus,
-            endpoint: "http://localhost:8080/OyaOrchestrator/run-smoke-03/get_status".to_string(),
+            endpoint: "http://localhost:8080/Oya/run-smoke-03/get_status".to_string(),
             success: true,
             diagnostics: "ok".to_string(),
             timestamp: Utc::now(),
@@ -2405,16 +2350,14 @@ fn evaluate_smoke_bead_result_rejects_missing_and_duplicate_checks() {
             },
             SmokeBeadCheckObservation {
                 check: SmokeBeadCheckName::OrchestratorStatus,
-                endpoint: "http://localhost:8080/OyaOrchestrator/run-smoke-03/get_status"
-                    .to_string(),
+                endpoint: "http://localhost:8080/Oya/run-smoke-03/get_status".to_string(),
                 success: true,
                 diagnostics: "ok".to_string(),
                 timestamp: now,
             },
             SmokeBeadCheckObservation {
                 check: SmokeBeadCheckName::OrchestratorStatus,
-                endpoint: "http://localhost:8080/OyaOrchestrator/run-smoke-03/get_status"
-                    .to_string(),
+                endpoint: "http://localhost:8080/Oya/run-smoke-03/get_status".to_string(),
                 success: true,
                 diagnostics: "ok".to_string(),
                 timestamp: now,
@@ -2471,8 +2414,7 @@ fn evaluate_smoke_bead_result_rejects_invalid_run_id_and_other_check_shapes() {
             },
             SmokeBeadCheckObservation {
                 check: SmokeBeadCheckName::OrchestratorStatus,
-                endpoint: "http://localhost:8080/OyaOrchestrator/run-smoke-03/get_status"
-                    .to_string(),
+                endpoint: "http://localhost:8080/Oya/run-smoke-03/get_status".to_string(),
                 success: true,
                 diagnostics: "ok".to_string(),
                 timestamp: now,
@@ -2503,8 +2445,7 @@ fn evaluate_smoke_bead_result_uses_latest_check_timestamp_for_final_stage() {
             },
             SmokeBeadCheckObservation {
                 check: SmokeBeadCheckName::OrchestratorStatus,
-                endpoint: "http://localhost:8080/OyaOrchestrator/run-smoke-03/get_status"
-                    .to_string(),
+                endpoint: "http://localhost:8080/Oya/run-smoke-03/get_status".to_string(),
                 success: true,
                 diagnostics: "orchestrator healthy".to_string(),
                 timestamp: orchestrator_timestamp,
@@ -2534,8 +2475,7 @@ fn evaluate_smoke_bead_result_rejects_invalid_check_diagnostics() {
             },
             SmokeBeadCheckObservation {
                 check: SmokeBeadCheckName::OrchestratorStatus,
-                endpoint: "http://localhost:8080/OyaOrchestrator/run-smoke-03/get_status"
-                    .to_string(),
+                endpoint: "http://localhost:8080/Oya/run-smoke-03/get_status".to_string(),
                 success: true,
                 diagnostics: "ok".to_string(),
                 timestamp: Utc::now(),
@@ -2559,8 +2499,7 @@ fn evaluate_smoke_bead_result_rejects_invalid_check_diagnostics() {
             },
             SmokeBeadCheckObservation {
                 check: SmokeBeadCheckName::OrchestratorStatus,
-                endpoint: "http://localhost:8080/OyaOrchestrator/run-smoke-03/get_status"
-                    .to_string(),
+                endpoint: "http://localhost:8080/Oya/run-smoke-03/get_status".to_string(),
                 success: true,
                 diagnostics: "ok".to_string(),
                 timestamp: Utc::now(),
@@ -2588,8 +2527,7 @@ fn validate_smoke_bead_report_rejects_decision_stage_mismatch() {
             },
             SmokeBeadCheckObservation {
                 check: SmokeBeadCheckName::OrchestratorStatus,
-                endpoint: "http://localhost:8080/OyaOrchestrator/run-smoke-04/get_status"
-                    .to_string(),
+                endpoint: "http://localhost:8080/Oya/run-smoke-04/get_status".to_string(),
                 success: true,
                 diagnostics: "orchestrator healthy".to_string(),
                 timestamp: base + Duration::milliseconds(1),
@@ -2649,7 +2587,7 @@ fn validate_smoke_bead_report_rejects_invalid_stage_count_and_order() {
 fn validate_smoke_bead_report_rejects_invalid_checks_and_diagnostics() {
     let mut invalid_orchestrator_endpoint = make_valid_smoke_bead_report();
     invalid_orchestrator_endpoint.checks[1].endpoint =
-        "http://localhost:8080/OyaOrchestrator/other/get_status".to_string();
+        "http://localhost:8080/Oya/other/get_status".to_string();
     assert_eq!(
         validate_smoke_bead_report(&invalid_orchestrator_endpoint),
         Err(SmokeBeadError::InvalidReport("invalid orchestrator check endpoint"))
@@ -2880,7 +2818,7 @@ fn build_bead_min_plan_rejects_empty_run_id_and_sets_defaults() {
     assert_eq!(plan.ingress_health_url, DEFAULT_BEAD_MIN_INGRESS_HEALTH_URL);
     assert_eq!(
         plan.orchestrator_status_url,
-        "http://localhost:8080/OyaOrchestrator/run-bead-min-01/get_status"
+        "http://localhost:8080/Oya/run-bead-min-01/get_status"
     );
 }
 
@@ -2909,8 +2847,7 @@ fn start_bead_min_runtime_rejects_non_default_runtime_command() {
         run_id: "run-bead-min-01".to_string(),
         runtime_command: "scripts/not-default.sh".to_string(),
         ingress_health_url: DEFAULT_BEAD_MIN_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-bead-min-01/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-bead-min-01/get_status".to_string(),
     };
 
     let result = start_bead_min_runtime(&plan);
@@ -2923,8 +2860,7 @@ fn start_bead_min_runtime_rejects_invalid_run_id_and_endpoints() {
         run_id: " run-bead-min-01 ".to_string(),
         runtime_command: DEFAULT_BEAD_MIN_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_BEAD_MIN_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-bead-min-01/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-bead-min-01/get_status".to_string(),
     };
     assert_eq!(
         start_bead_min_runtime(&invalid_run_id_plan),
@@ -2935,8 +2871,7 @@ fn start_bead_min_runtime_rejects_invalid_run_id_and_endpoints() {
         run_id: "run-bead-min-01".to_string(),
         runtime_command: DEFAULT_BEAD_MIN_RUNTIME_COMMAND.to_string(),
         ingress_health_url: "localhost:8080/restate/health".to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-bead-min-01/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-bead-min-01/get_status".to_string(),
     };
     assert_eq!(
         start_bead_min_runtime(&invalid_ingress_url_plan),
@@ -2947,8 +2882,7 @@ fn start_bead_min_runtime_rejects_invalid_run_id_and_endpoints() {
         run_id: "run-bead-min-01".to_string(),
         runtime_command: DEFAULT_BEAD_MIN_RUNTIME_COMMAND.to_string(),
         ingress_health_url: "http://localhost:8080/health".to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-bead-min-01/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-bead-min-01/get_status".to_string(),
     };
     assert_eq!(
         start_bead_min_runtime(&invalid_ingress_contract_plan),
@@ -2959,8 +2893,7 @@ fn start_bead_min_runtime_rejects_invalid_run_id_and_endpoints() {
         run_id: "run-bead-min-01".to_string(),
         runtime_command: DEFAULT_BEAD_MIN_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_BEAD_MIN_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "localhost:8080/OyaOrchestrator/run-bead-min-01/get_status"
-            .to_string(),
+        orchestrator_status_url: "localhost:8080/Oya/run-bead-min-01/get_status".to_string(),
     };
     assert_eq!(
         start_bead_min_runtime(&invalid_orchestrator_url_plan),
@@ -2971,8 +2904,7 @@ fn start_bead_min_runtime_rejects_invalid_run_id_and_endpoints() {
         run_id: "run-bead-min-01".to_string(),
         runtime_command: DEFAULT_BEAD_MIN_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_BEAD_MIN_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/other/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/other/get_status".to_string(),
     };
     assert_eq!(
         start_bead_min_runtime(&invalid_orchestrator_contract_plan),
@@ -3018,8 +2950,7 @@ fn capture_bead_min_observation_rejects_runtime_state_and_endpoint_violations() 
         run_id: "run-bead-min-02".to_string(),
         runtime_command: DEFAULT_BEAD_MIN_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_BEAD_MIN_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-bead-min-02/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-bead-min-02/get_status".to_string(),
         started_at: Utc::now(),
         runtime_ready: false,
     };
@@ -3036,8 +2967,7 @@ fn capture_bead_min_observation_rejects_runtime_state_and_endpoint_violations() 
         run_id: "run-bead-min-02".to_string(),
         runtime_command: DEFAULT_BEAD_MIN_RUNTIME_COMMAND.to_string(),
         ingress_health_url: "http://localhost:8080/health".to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/run-bead-min-02/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/run-bead-min-02/get_status".to_string(),
         started_at: Utc::now(),
         runtime_ready: true,
     };
@@ -3050,8 +2980,7 @@ fn capture_bead_min_observation_rejects_runtime_state_and_endpoint_violations() 
         run_id: "run-bead-min-02".to_string(),
         runtime_command: DEFAULT_BEAD_MIN_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_BEAD_MIN_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: "http://localhost:8080/OyaOrchestrator/other/get_status"
-            .to_string(),
+        orchestrator_status_url: "http://localhost:8080/Oya/other/get_status".to_string(),
         started_at: Utc::now(),
         runtime_ready: true,
     };
@@ -3076,8 +3005,7 @@ fn evaluate_bead_min_result_uses_strict_stage_order_and_derived_decision() {
             },
             BeadMinCheckObservation {
                 check: BeadMinCheckName::OrchestratorStatus,
-                endpoint: "http://localhost:8080/OyaOrchestrator/run-bead-min-03/get_status"
-                    .to_string(),
+                endpoint: "http://localhost:8080/Oya/run-bead-min-03/get_status".to_string(),
                 success: false,
                 diagnostics: "orchestrator timeout".to_string(),
                 timestamp: base + Duration::milliseconds(1),
@@ -3108,8 +3036,7 @@ fn evaluate_bead_min_result_rejects_missing_or_duplicate_checks() {
         run_id: "run-bead-min-03".to_string(),
         checks: vec![BeadMinCheckObservation {
             check: BeadMinCheckName::OrchestratorStatus,
-            endpoint: "http://localhost:8080/OyaOrchestrator/run-bead-min-03/get_status"
-                .to_string(),
+            endpoint: "http://localhost:8080/Oya/run-bead-min-03/get_status".to_string(),
             success: true,
             diagnostics: "orchestrator healthy".to_string(),
             timestamp: base,
@@ -3139,8 +3066,7 @@ fn evaluate_bead_min_result_rejects_missing_or_duplicate_checks() {
             },
             BeadMinCheckObservation {
                 check: BeadMinCheckName::OrchestratorStatus,
-                endpoint: "http://localhost:8080/OyaOrchestrator/run-bead-min-03/get_status"
-                    .to_string(),
+                endpoint: "http://localhost:8080/Oya/run-bead-min-03/get_status".to_string(),
                 success: true,
                 diagnostics: "orchestrator healthy".to_string(),
                 timestamp: base + Duration::milliseconds(2),
@@ -3179,16 +3105,14 @@ fn evaluate_bead_min_result_rejects_missing_or_duplicate_checks() {
             },
             BeadMinCheckObservation {
                 check: BeadMinCheckName::OrchestratorStatus,
-                endpoint: "http://localhost:8080/OyaOrchestrator/run-bead-min-03/get_status"
-                    .to_string(),
+                endpoint: "http://localhost:8080/Oya/run-bead-min-03/get_status".to_string(),
                 success: true,
                 diagnostics: "orchestrator healthy".to_string(),
                 timestamp: base + Duration::milliseconds(1),
             },
             BeadMinCheckObservation {
                 check: BeadMinCheckName::OrchestratorStatus,
-                endpoint: "http://localhost:8080/OyaOrchestrator/run-bead-min-03/get_status"
-                    .to_string(),
+                endpoint: "http://localhost:8080/Oya/run-bead-min-03/get_status".to_string(),
                 success: false,
                 diagnostics: "orchestrator duplicate".to_string(),
                 timestamp: base + Duration::milliseconds(2),
@@ -3205,7 +3129,7 @@ fn evaluate_bead_min_result_rejects_missing_or_duplicate_checks() {
 fn validate_bead_min_report_rejects_endpoint_and_decision_mismatches() {
     let mut invalid_endpoint_report = make_valid_bead_min_report();
     invalid_endpoint_report.checks[1].endpoint =
-        "http://localhost:8080/OyaOrchestrator/other/get_status".to_string();
+        "http://localhost:8080/Oya/other/get_status".to_string();
     assert_eq!(
         validate_bead_min_report(&invalid_endpoint_report),
         Err(BeadMinError::InvalidReport("invalid orchestrator check endpoint"))
@@ -3385,6 +3309,17 @@ fn parse_opencode_output_accepts_stdout_string() {
 #[test]
 fn parse_opencode_output_trims_outer_whitespace() {
     let result = parse_opencode_output("  {\"stdout\":\"ok\"}  ");
+    assert_eq!(result, Ok(OpencodeRunOutput { stdout: "ok".to_string() }));
+}
+
+#[test]
+fn parse_opencode_output_accepts_event_stream_text_parts() {
+    let payload = concat!(
+        "[hypr-notifier] plugin initialized\n",
+        "{\"type\":\"step_start\",\"part\":{\"id\":\"p1\"}}\n",
+        "{\"type\":\"text\",\"part\":{\"text\":\"ok\"}}\n"
+    );
+    let result = parse_opencode_output(payload);
     assert_eq!(result, Ok(OpencodeRunOutput { stdout: "ok".to_string() }));
 }
 

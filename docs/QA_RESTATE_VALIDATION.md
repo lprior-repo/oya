@@ -29,7 +29,7 @@ curl -sS -i http://127.0.0.1:9070/services
 Expected:
 
 - `200 OK` from `/health`
-- `200 OK` from `/services` and an `OyaOrchestrator` entry
+- `200 OK` from `/services` and an `Oya` entry
 
 3. Validate ingress liveness:
 
@@ -50,7 +50,7 @@ scripts/pipeline-run.sh qa-run-001 qa-bead-001 "qa validation"
 5. Validate input contract failure path:
 
 ```bash
-curl -sS -i -X POST http://127.0.0.1:8080/OyaOrchestrator/qa-invalid-json/start \
+curl -sS -i -X POST http://127.0.0.1:8080/Oya/qa-invalid-json/start \
   -H "content-type: application/json" \
   -d "not-json"
 ```

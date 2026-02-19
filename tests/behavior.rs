@@ -299,7 +299,9 @@ async fn given_shipgate_passes_when_successful_then_pipeline_completes() {
 async fn given_any_stage_when_successful_then_transitions_to_correct_next() {
     let test_cases = vec![
         (StageName::Plan, StageName::Contract),
-        (StageName::Contract, StageName::Tdd15),
+        (StageName::Contract, StageName::AcceptanceTest),
+        (StageName::AcceptanceTest, StageName::Implementation),
+        (StageName::Implementation, StageName::Qa),
         (StageName::Tdd15, StageName::Qa),
         (StageName::Qa, StageName::RedQueen),
         (StageName::RedQueen, StageName::GptReview),

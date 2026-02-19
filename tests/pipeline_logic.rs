@@ -68,35 +68,35 @@ fn given_pipeline_start_when_checking_first_stage_then_is_plan() {
 }
 
 #[test]
-fn given_plan_stage_when_checking_model_tier_then_is_balanced() {
+fn given_plan_stage_when_checking_model_tier_then_is_c() {
     use oya::types::{ModelTier, StageName};
 
     assert_eq!(StageName::Plan.model_for_stage(), ModelTier::Balanced);
 }
 
 #[test]
-fn given_contract_stage_when_checking_model_tier_then_is_fast() {
+fn given_contract_stage_when_checking_model_tier_then_is_d() {
     use oya::types::{ModelTier, StageName};
 
     assert_eq!(StageName::Contract.model_for_stage(), ModelTier::Fast);
 }
 
 #[test]
-fn given_qa_stage_when_checking_model_tier_then_is_balanced() {
+fn given_qa_stage_when_checking_model_tier_then_is_c() {
     use oya::types::{ModelTier, StageName};
 
     assert_eq!(StageName::Qa.model_for_stage(), ModelTier::Balanced);
 }
 
 #[test]
-fn given_redqueen_stage_when_checking_model_tier_then_is_capable() {
+fn given_redqueen_stage_when_checking_model_tier_then_is_b() {
     use oya::types::{ModelTier, StageName};
 
     assert_eq!(StageName::RedQueen.model_for_stage(), ModelTier::Capable);
 }
 
 #[test]
-fn given_shipgate_stage_when_checking_model_tier_then_is_best() {
+fn given_shipgate_stage_when_checking_model_tier_then_is_a() {
     use oya::types::{ModelTier, StageName};
 
     assert_eq!(StageName::ShipGate.model_for_stage(), ModelTier::Best);
@@ -114,10 +114,12 @@ fn given_shipgate_when_checking_next_stage_then_is_none() {
 fn given_stage_order_when_verifying_then_follows_pipeline_flow() {
     use oya::types::StageName;
 
+    // ATDD pipeline flow
     let stages = vec![
         StageName::Plan,
         StageName::Contract,
-        StageName::Tdd15,
+        StageName::AcceptanceTest,
+        StageName::Implementation,
         StageName::Qa,
         StageName::RedQueen,
         StageName::GptReview,
@@ -127,6 +129,12 @@ fn given_stage_order_when_verifying_then_follows_pipeline_flow() {
     for i in 0..stages.len() - 1 {
         assert_eq!(stages[i].next(), Some(stages[i + 1].clone()));
     }
+
+    // Verify terminal stage
+    assert_eq!(StageName::ShipGate.next(), None);
+
+    // Verify legacy Tdd15 still works
+    assert_eq!(StageName::Tdd15.next(), Some(StageName::Qa));
 }
 
 // =============================================================================
@@ -139,6 +147,8 @@ fn given_any_stage_when_checking_max_attempts_then_is_always_two() {
     for stage in [
         StageName::Plan,
         StageName::Contract,
+        StageName::AcceptanceTest,
+        StageName::Implementation,
         StageName::Tdd15,
         StageName::Qa,
         StageName::RedQueen,

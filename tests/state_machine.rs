@@ -34,7 +34,9 @@ async fn test_stage_success_advances() {
 async fn test_all_stage_transitions() {
     let test_cases = vec![
         (StageName::Plan, Some(StageName::Contract)),
-        (StageName::Contract, Some(StageName::Tdd15)),
+        (StageName::Contract, Some(StageName::AcceptanceTest)),
+        (StageName::AcceptanceTest, Some(StageName::Implementation)),
+        (StageName::Implementation, Some(StageName::Qa)),
         (StageName::Tdd15, Some(StageName::Qa)),
         (StageName::Qa, Some(StageName::RedQueen)),
         (StageName::RedQueen, Some(StageName::GptReview)),
@@ -186,7 +188,8 @@ async fn test_complete_pipeline_simulation() {
     let stages = vec![
         StageName::Plan,
         StageName::Contract,
-        StageName::Tdd15,
+        StageName::AcceptanceTest,
+        StageName::Implementation,
         StageName::Qa,
         StageName::RedQueen,
         StageName::GptReview,
@@ -209,7 +212,7 @@ async fn test_complete_pipeline_simulation() {
 
     // Verify all stages were called
     let all_calls = orch.calls();
-    assert_eq!(all_calls.len(), 7);
+    assert_eq!(all_calls.len(), 8);
 }
 
 /// Test that stage failure context is passed correctly

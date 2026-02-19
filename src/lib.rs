@@ -313,25 +313,81 @@ pub fn parse_opencode_output(raw: &str) -> Result<OpencodeRunOutput, OpencodePar
         return Err(OpencodeParseError::new("opencode output exceeds maximum length"));
     }
 
-    let value: serde_json::Value = serde_json::from_str(trimmed)
-        .map_err(|e| OpencodeParseError::new(format!("invalid opencode json: {}", e)))?;
+    if let Some(output) = parse_opencode_json_payload(trimmed)? {
+        return Ok(output);
+    }
 
+    let extracted = parse_opencode_output_text_events(trimmed)?;
+    parse_opencode_output_text(&serde_json::Value::String(extracted))
+}
+
+fn parse_opencode_json_payload(
+    trimmed: &str,
+) -> Result<Option<OpencodeRunOutput>, OpencodeParseError> {
+    let Some(value) = serde_json::from_str::<serde_json::Value>(trimmed).ok() else {
+        return Ok(None);
+    };
     match value.get("stdout") {
-        Some(serde_json::Value::String(stdout)) => {
-            if stdout.len() > MAX_OPENCODE_STDOUT_LEN {
-                return Err(OpencodeParseError::new("opencode stdout exceeds maximum length"));
-            }
-            if contains_forbidden_control_chars(stdout) {
-                return Err(OpencodeParseError::new(
-                    "opencode stdout contains invalid control characters",
-                ));
-            }
-
-            Ok(OpencodeRunOutput { stdout: stdout.to_string() })
-        }
-        Some(_) => Err(OpencodeParseError::new("opencode json stdout is not a string")),
+        Some(stdout) => parse_opencode_output_stdout(stdout).map(Some),
         None => Err(OpencodeParseError::new("opencode json missing stdout field")),
     }
+}
+
+fn parse_opencode_text_events(raw: &str) -> String {
+    raw.lines().filter_map(parse_opencode_text_event_piece).collect::<Vec<String>>().join("")
+}
+
+fn parse_opencode_text_event_piece(raw_line: &str) -> Option<String> {
+    let line = raw_line.trim();
+    let mut payload = line;
+    if let Some(rest) = line.strip_prefix("data:") {
+        payload = rest.trim_start();
+    }
+
+    serde_json::from_str::<serde_json::Value>(payload).ok().and_then(|value| {
+        let type_is_text = value.get("type").and_then(serde_json::Value::as_str) == Some("text");
+        if let Some(stdout) = value.get("stdout").and_then(serde_json::Value::as_str) {
+            Some(stdout.to_string())
+        } else if type_is_text {
+            value
+                .get("part")
+                .and_then(|part| part.get("text"))
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string)
+        } else {
+            None
+        }
+    })
+}
+
+fn parse_opencode_output_text_events(raw: &str) -> Result<String, OpencodeParseError> {
+    let extracted = parse_opencode_text_events(raw);
+    if extracted.is_empty() {
+        return Err(OpencodeParseError::new("opencode json missing stdout field"));
+    }
+    Ok(extracted)
+}
+
+fn parse_opencode_output_stdout(
+    value: &serde_json::Value,
+) -> Result<OpencodeRunOutput, OpencodeParseError> {
+    parse_opencode_output_text(value)
+}
+
+fn parse_opencode_output_text(
+    value: &serde_json::Value,
+) -> Result<OpencodeRunOutput, OpencodeParseError> {
+    let Some(stdout) = value.as_str() else {
+        return Err(OpencodeParseError::new("opencode json stdout is not a string"));
+    };
+
+    if stdout.len() > MAX_OPENCODE_STDOUT_LEN {
+        return Err(OpencodeParseError::new("opencode stdout exceeds maximum length"));
+    }
+    if contains_forbidden_control_chars(stdout) {
+        return Err(OpencodeParseError::new("opencode stdout contains invalid control characters"));
+    }
+    Ok(OpencodeRunOutput { stdout: stdout.to_string() })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -11,7 +11,7 @@
 //! # Example
 //!
 //! ```rust,no_run
-//! use oya::orchestrator::{Orchestrator, StageExecutionResult};
+//! use oya::orchestrator::{Orchestrator, StageRequest};
 //! use oya::types::{StageName, FailureCategory};
 //!
 //! async fn test_happy_path<T: Orchestrator>(orch: T) {

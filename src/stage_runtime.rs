@@ -31,6 +31,12 @@ pub(super) fn stage_prompt(input: StagePromptInput<'_>) -> String {
         Stage::Contract => {
             "TASK: Write a design contract as a Rust doc comment in src/lib.rs (create if needed).\n\nInclude:\n1. Purpose and goals\n2. Key functions to implement\n3. Acceptance criteria\n\nJust write the code. Do not explain."
         }
+        Stage::AcceptanceTest => {
+            "TASK:\n1. Write acceptance tests that MUST FAIL (RED state)\n2. Tests should compile but fail when run\n3. Use proptest for property-based tests\n4. Tests MUST encode invariants of the public contract\n5. NO IMPLEMENTATION - tests only\n\nCRITICAL: Tests MUST be RED (failing) before implementation.\nIf tests pass, they are WRONG - they need stronger assertions.\n\nJust write the tests. Do not explain."
+        }
+        Stage::Implementation => {
+            "TASK:\n1. Implement the code to make the acceptance tests pass (GREEN state)\n2. Use Result<T, E> for all fallible operations - NO unwrap/expect\n3. Pure functions in core, IO only at shell boundaries\n4. Ensure `cargo test` passes\n\nCRITICAL: Make failing tests pass WITHOUT modifying the tests.\nTests are the specification - implementation must conform.\n\nJust write the code. Do not explain."
+        }
         Stage::Tdd15 => {
             "TASK:\n1. Write tests in src/lib.rs for the functionality\n2. Implement the code to pass those tests\n3. Ensure `moon run :test` passes\n\nJust write the code. Do not explain."
         }
@@ -52,7 +58,9 @@ pub(super) fn stage_prompt(input: StagePromptInput<'_>) -> String {
 pub(super) fn stage_success(stage: &Stage) -> (&'static str, Option<Stage>) {
     match stage {
         Stage::Plan => ("Planning completed", Some(Stage::Contract)),
-        Stage::Contract => ("Contract written and compiles", Some(Stage::Tdd15)),
+        Stage::Contract => ("Contract written and compiles", Some(Stage::AcceptanceTest)),
+        Stage::AcceptanceTest => ("Tests compile and are RED", Some(Stage::Implementation)),
+        Stage::Implementation => ("Implementation complete, tests GREEN", Some(Stage::Qa)),
         Stage::Tdd15 => ("Tests written and passing", Some(Stage::Qa)),
         Stage::Qa => ("QA tests added and passing", Some(Stage::RedQueen)),
         Stage::RedQueen => ("Adversarial tests pass", Some(Stage::GptReview)),

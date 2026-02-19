@@ -88,6 +88,8 @@ proptest! {
         stage in prop::sample::select(vec![
             StageName::Plan,
             StageName::Contract,
+            StageName::AcceptanceTest,
+            StageName::Implementation,
             StageName::Tdd15,
             StageName::Qa,
             StageName::RedQueen,
@@ -98,7 +100,9 @@ proptest! {
         // Property: Each stage has correct next stage
         match stage {
             StageName::Plan => assert_eq!(stage.next(), Some(StageName::Contract)),
-            StageName::Contract => assert_eq!(stage.next(), Some(StageName::Tdd15)),
+            StageName::Contract => assert_eq!(stage.next(), Some(StageName::AcceptanceTest)),
+            StageName::AcceptanceTest => assert_eq!(stage.next(), Some(StageName::Implementation)),
+            StageName::Implementation => assert_eq!(stage.next(), Some(StageName::Qa)),
             StageName::Tdd15 => assert_eq!(stage.next(), Some(StageName::Qa)),
             StageName::Qa => assert_eq!(stage.next(), Some(StageName::RedQueen)),
             StageName::RedQueen => assert_eq!(stage.next(), Some(StageName::GptReview)),
@@ -120,6 +124,8 @@ proptest! {
         stage in prop::sample::select(vec![
             StageName::Plan,
             StageName::Contract,
+            StageName::AcceptanceTest,
+            StageName::Implementation,
             StageName::Tdd15,
             StageName::Qa,
             StageName::RedQueen,
@@ -139,6 +145,8 @@ proptest! {
         stage in prop::sample::select(vec![
             StageName::Plan,
             StageName::Contract,
+            StageName::AcceptanceTest,
+            StageName::Implementation,
             StageName::Tdd15,
             StageName::Qa,
             StageName::RedQueen,

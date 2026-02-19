@@ -115,6 +115,74 @@ OYA is associated with the number 9. Current architecture maps to nine execution
 
 ---
 
+## ATDD Red Gate Pattern
+
+The storm demands TRUTH. Tests must be RED before implementation begins.
+
+### The Problem
+
+AI agents write tests that pass against code they just wrote. This defeats the purpose of TDD - the test should FAIL first, proving the behavior doesn't exist yet.
+
+### The Solution: Split TDD15 into Two Stages
+
+**AcceptanceTest Stage (TEST_AGENT)**
+- Writes ONLY test code
+- Tests MUST compile
+- Tests MUST FAIL (are RED)
+- Gate: `AcceptanceTestsAreRed` verifies failure
+- If tests are GREEN, the gate FAILS
+
+**Implementation Stage (LOGIC_AGENT)**
+- Writes ONLY implementation code
+- NOT allowed to modify tests
+- Must make all tests pass (turn GREEN)
+- Gate: `TestsPass` verifies success
+
+### Pipeline Flow
+
+```
+Plan → Contract → AcceptanceTest (RED) → Implementation (GREEN) → QA → RedQueen → GptReview → ShipGate
+                      ↑                          ↑
+               TEST_AGENT                  LOGIC_AGENT
+               Tests FAIL                  Tests PASS
+```
+
+### Why This Works
+
+1. **Separation of Concerns**: TEST_AGENT never sees implementation code
+2. **Verification by Compiler**: The gate runs actual cargo commands, not agent claims
+3. **Forces Honest Tests**: If implementation exists, tests will be green and gate fails
+4. **Explicit State Machine**: Red → Green is enforced by types, not conventions
+
+### The Red Gate Command
+
+```bash
+moon run :check && ! moon run :test
+```
+
+Exit code 0 = Tests compile and are RED (correct)
+Exit code 1 = Tests don't compile OR tests are GREEN (wrong)
+
+### Failure Categories
+
+**TestsUnexpectedlyGreen** (New Failure Mode)
+- When: AcceptanceTest stage produces passing tests
+- Meaning: Implementation already exists or tests are fake
+- Action: Reject the bead, agent must write REAL failing tests
+- Severity: CRITICAL - defeats the entire TDD purpose
+
+**TestsDoNotCompile** (Existing)
+- When: Test code has syntax/type errors
+- Meaning: Agent wrote broken code
+- Action: Fix compilation issues, retry gate
+
+**TestsRedAsExpected** (Success)
+- When: Tests compile and fail as designed
+- Meaning: Honest ATDD - behavior doesn't exist yet
+- Action: Proceed to Implementation stage
+
+---
+
 ## The Cleaner's Goddess
 
 From Tim Grover's philosophy - the Cleaner:

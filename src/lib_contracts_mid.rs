@@ -561,7 +561,7 @@ pub fn build_smoke_plan(input: &SmokeInput) -> Result<SmokePlan, SmokeError> {
         runtime_command: DEFAULT_SMOKE_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: format!(
-            "http://localhost:8080/OyaOrchestrator/{}/get_status",
+            "http://localhost:8080/Oya/{}/get_status",
             run_id
         ),
     })
@@ -896,7 +896,7 @@ fn matches_ingress_health_contract(value: &str) -> bool {
 }
 
 fn matches_orchestrator_status_contract(value: &str, run_id: &str) -> bool {
-    value == format!("http://localhost:8080/OyaOrchestrator/{}/get_status", run_id)
+    value == format!("http://localhost:8080/Oya/{}/get_status", run_id)
 }
 
 const DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND: &str = "scripts/dev-up.sh";
@@ -1035,7 +1035,7 @@ pub fn build_smoke_bead_plan(input: &SmokeBeadInput) -> Result<SmokeBeadPlan, Sm
         runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_BEAD_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: format!(
-            "http://localhost:8080/OyaOrchestrator/{}/get_status",
+            "http://localhost:8080/Oya/{}/get_status",
             run_id
         ),
     })
@@ -1143,8 +1143,16 @@ pub fn validate_smoke_bead_report(report: &SmokeBeadReport) -> Result<(), SmokeB
     validate_smoke_bead_stage_diagnostics(report.stages.as_slice())?;
     validate_smoke_bead_timestamps(report.stages.as_slice())?;
 
-    validate_smoke_bead_stage_status(&report.stages[0], ingress_check)?;
-    validate_smoke_bead_stage_status(&report.stages[1], orchestrator_check)?;
+    validate_smoke_bead_stage_status(
+        &report.stages[0],
+        ingress_check,
+        SmokeBeadStageRole::Ingress,
+    )?;
+    validate_smoke_bead_stage_status(
+        &report.stages[1],
+        orchestrator_check,
+        SmokeBeadStageRole::Orchestrator,
+    )?;
     validate_smoke_bead_decision(report, ingress_check, orchestrator_check)?;
     validate_smoke_bead_final_stage(&report.stages[2], &report.decision)?;
 
@@ -1340,20 +1348,43 @@ fn validate_smoke_bead_timestamps(stages: &[SmokeBeadStageReport]) -> Result<(),
     Ok(())
 }
 
+#[derive(Clone, Copy)]
+enum SmokeBeadStageRole {
+    Ingress,
+    Orchestrator,
+}
+
+fn smoke_bead_stage_error(role: SmokeBeadStageRole, kind: &str) -> &'static str {
+    match (role, kind) {
+        (SmokeBeadStageRole::Ingress, "status") => "ingress stage mismatch",
+        (SmokeBeadStageRole::Ingress, "diagnostics") => "ingress stage diagnostics mismatch",
+        (SmokeBeadStageRole::Ingress, "timestamp") => "ingress stage timestamp precedes check",
+        (SmokeBeadStageRole::Orchestrator, "status") => "orchestrator stage mismatch",
+        (SmokeBeadStageRole::Orchestrator, "diagnostics") => {
+            "orchestrator stage diagnostics mismatch"
+        }
+        (SmokeBeadStageRole::Orchestrator, "timestamp") => {
+            "orchestrator stage timestamp precedes check"
+        }
+        _ => "stage mismatch",
+    }
+}
+
 fn validate_smoke_bead_stage_status(
     stage: &SmokeBeadStageReport,
     check: &SmokeBeadCheckObservation,
+    role: SmokeBeadStageRole,
 ) -> Result<(), SmokeBeadError> {
     let expected_status =
         if check.success { SmokeBeadStageStatus::Passed } else { SmokeBeadStageStatus::Failed };
     if stage.status != expected_status {
-        return Err(SmokeBeadError::InvalidReport("stage status mismatch"));
+        return Err(SmokeBeadError::InvalidReport(smoke_bead_stage_error(role, "status")));
     }
     if stage.diagnostics != check.diagnostics {
-        return Err(SmokeBeadError::InvalidReport("stage diagnostics mismatch"));
+        return Err(SmokeBeadError::InvalidReport(smoke_bead_stage_error(role, "diagnostics")));
     }
     if stage.timestamp < check.timestamp {
-        return Err(SmokeBeadError::InvalidReport("stage timestamp precedes check"));
+        return Err(SmokeBeadError::InvalidReport(smoke_bead_stage_error(role, "timestamp")));
     }
     Ok(())
 }
@@ -1436,7 +1467,7 @@ fn matches_smoke_bead_ingress_health_contract(value: &str) -> bool {
 }
 
 fn matches_smoke_bead_orchestrator_status_contract(value: &str, run_id: &str) -> bool {
-    value == format!("http://localhost:8080/OyaOrchestrator/{}/get_status", run_id)
+    value == format!("http://localhost:8080/Oya/{}/get_status", run_id)
 }
 
 fn expected_smoke_bead_final_diagnostics(decision: &SmokeBeadDecision) -> &'static str {
@@ -1569,7 +1600,7 @@ pub fn build_lean_bead_plan(input: &LeanBeadInput) -> Result<LeanBeadPlan, LeanB
         runtime_command: DEFAULT_LEAN_BEAD_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_LEAN_BEAD_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: format!(
-            "http://localhost:8080/OyaOrchestrator/{}/get_status",
+            "http://localhost:8080/Oya/{}/get_status",
             run_id
         ),
     })
@@ -1927,7 +1958,7 @@ fn matches_lean_bead_ingress_health_contract(value: &str) -> bool {
 }
 
 fn matches_lean_bead_orchestrator_status_contract(value: &str, run_id: &str) -> bool {
-    value == format!("http://localhost:8080/OyaOrchestrator/{}/get_status", run_id)
+    value == format!("http://localhost:8080/Oya/{}/get_status", run_id)
 }
 
 fn expected_lean_bead_final_diagnostics(decision: &LeanBeadDecision) -> &'static str {
@@ -2060,7 +2091,7 @@ pub fn build_bead_min_plan(input: &BeadMinInput) -> Result<BeadMinPlan, BeadMinE
         runtime_command: DEFAULT_BEAD_MIN_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_BEAD_MIN_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: format!(
-            "http://localhost:8080/OyaOrchestrator/{}/get_status",
+            "http://localhost:8080/Oya/{}/get_status",
             run_id
         ),
     })
@@ -2327,10 +2358,11 @@ fn validate_bead_min_stage_semantics(
     {
         return Err(BeadMinError::InvalidReport("orchestrator stage mismatch"));
     }
-    if report.stages[0].timestamp < ingress_check.timestamp
-        || report.stages[1].timestamp < orchestrator_check.timestamp
-    {
-        return Err(BeadMinError::InvalidReport("stage timestamp precedes check"));
+    if report.stages[0].timestamp < ingress_check.timestamp {
+        return Err(BeadMinError::InvalidReport("ingress stage timestamp precedes check"));
+    }
+    if report.stages[1].timestamp < orchestrator_check.timestamp {
+        return Err(BeadMinError::InvalidReport("orchestrator stage timestamp precedes check"));
     }
     let derived = derive_bead_min_decision(ingress_check, orchestrator_check);
     if report.decision != derived {
@@ -2408,7 +2440,7 @@ fn matches_bead_min_ingress_health_contract(value: &str) -> bool {
 }
 
 fn matches_bead_min_orchestrator_status_contract(value: &str, run_id: &str) -> bool {
-    value == format!("http://localhost:8080/OyaOrchestrator/{}/get_status", run_id)
+    value == format!("http://localhost:8080/Oya/{}/get_status", run_id)
 }
 
 fn expected_bead_min_final_diagnostics(decision: &BeadMinDecision) -> &'static str {

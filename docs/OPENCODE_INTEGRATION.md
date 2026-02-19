@@ -103,7 +103,7 @@ small ops-monitor service for OpenCode observability.
 
 ### OpenCode monitor endpoints
 
-`OyaOpsMonitor` service exposes:
+`Oya` service exposes:
 
 - `poll_status`: snapshots OpenCode `/session/status`, `/permission`, and `/question`.
 - `poll_events`: long-poll proxy for OpenCode `/event`, returns bounded parsed event payloads.

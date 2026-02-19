@@ -23,7 +23,7 @@ Transform Oya from a multi-dependency orchestration tool into a self-contained b
 │    Spawned as subprocess by `oya up`                        │
 ├─────────────────────────────────────────────────────────────┤
 │  RESTATE SERVICES (via restate-sdk)                         │
-│    OyaOrchestrator • OyaOpsMonitor • OyaUsageTracker        │
+│    Oya • Oya • Oya        │
 │    OyaWorkspaceManager • OyaMergeQueue (NEW)                │
 ├─────────────────────────────────────────────────────────────┤
 │  NATIVE RUST                                                │
@@ -226,7 +226,7 @@ impl RestateProcess {
 │ Service          Status    Port     Uptime              │
 ├─────────────────────────────────────────────────────────┤
 │ Restate          ● running  8080     2h 14m             │
-│ OyaOrchestrator  ● running  9080     2h 14m             │
+│ Oya  ● running  9080     2h 14m             │
 │ OpenCode         ● running  4097     4h 32m             │
 │ Workspace Queue  ○ empty    -        -                  │
 ├─────────────────────────────────────────────────────────┤
@@ -252,7 +252,7 @@ create → [Creating] → Active → sync → [Syncing] → Active
 
 ### Integration with Pipeline
 
-OyaOrchestrator calls OyaWorkspaceManager instead of shelling to zjj:
+Oya calls OyaWorkspaceManager instead of shelling to zjj:
 
 ```rust
 // Before (subprocess)
@@ -341,7 +341,7 @@ TUI using ratatui crate:
 - `OyaWorkspaceManager` Restate service
 - `OyaMergeQueue` Restate service
 - `oya workspace` CLI commands
-- Integration with OyaOrchestrator
+- Integration with Oya
 
 ### Phase 3: Bead & Quality Gates
 - `oya bead` commands (br wrapper)

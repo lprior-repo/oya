@@ -18,7 +18,7 @@ OYA uses Restate's Rust SDK (`restate-sdk = "0.8"`) for durable execution. Key p
 ### Service Definition
 ```rust
 #[restate_sdk::object]
-pub trait OyaOrchestrator {
+pub trait Oya {
     async fn start(request: String) -> Result<String, HandlerError>;
     async fn get_status() -> Result<String, HandlerError>;
     async fn ping() -> Result<String, HandlerError>;
