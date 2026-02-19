@@ -49,7 +49,22 @@ pub fn is_retryable_failure(category: &FailureCategory) -> bool {
         FailureCategory::TestFailed
             | FailureCategory::LintFailed
             | FailureCategory::OutputParseFailure
+            | FailureCategory::RateLimited
     )
+}
+
+/// Classify opencode CLI error output
+pub fn classify_opencode_error(stderr: &str) -> Option<FailureCategory> {
+    if stderr.contains("429")
+        || stderr.contains("Rate Limited")
+        || stderr.contains("Too Many Requests")
+        || stderr.contains("Quota exceeded")
+        || stderr.contains("Provider is overloaded")
+        || stderr.contains("Provider unavailable")
+    {
+        return Some(FailureCategory::RateLimited);
+    }
+    None
 }
 
 const MAX_MANUAL_E2E_SCENARIO_LEN: usize = 128;

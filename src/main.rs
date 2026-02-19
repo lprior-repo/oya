@@ -897,10 +897,13 @@ fn execute_prompt_stage(
 ) -> Result<StageExecution, OyaError> {
     let (opencode_ok, opencode_output) = run_opencode(&prompt, repo_root, model)?;
     if !opencode_ok {
+        let failure_category = oya::classify_opencode_error(&opencode_output)
+            .unwrap_or(FailureCategory::OutputParseFailure);
+
         return Ok(StageExecution {
             passed: false,
             output: opencode_output,
-            failure_category: Some(FailureCategory::OutputParseFailure),
+            failure_category: Some(failure_category),
             next_stage: Some(opencode_fail_stage),
             prompt,
         });
