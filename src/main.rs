@@ -7,7 +7,7 @@ use oya::types::{
     truncate_clean, FailureCategory, Gate, GateSummary, StageName as Stage, StageResult,
     TimelineEntry,
 };
-use oya::usage::{OyaUsageTracker, OyaUsageTrackerClient, OyaUsageTrackerImpl};
+use oya::usage::{OyaUsageTracker, OyaUsageTrackerImpl};
 use oya::{
     build_opencode_poll_snapshot, build_zjj_workspace_name, is_retryable_failure,
     parse_opencode_sse_events,
@@ -15,7 +15,6 @@ use oya::{
 use restate_sdk::endpoint::Endpoint;
 use restate_sdk::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::future::IntoFuture;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;

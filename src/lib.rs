@@ -43,13 +43,15 @@ use thiserror::Error;
 use types::FailureCategory;
 
 /// Determine if a failure category is retryable
+///
+/// Retryable: code-level failures the AI can fix (test, lint, parse errors)
+/// Non-retryable: provider/environment failures that require external intervention
 pub fn is_retryable_failure(category: &FailureCategory) -> bool {
     matches!(
         category,
         FailureCategory::TestFailed
             | FailureCategory::LintFailed
             | FailureCategory::OutputParseFailure
-            | FailureCategory::RateLimited
     )
 }
 
