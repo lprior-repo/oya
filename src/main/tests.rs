@@ -1,4 +1,5 @@
 use super::*;
+use crate::pipeline::MergeQueuePolicy;
 use chrono::Datelike;
 
 #[test]

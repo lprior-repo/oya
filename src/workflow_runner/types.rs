@@ -1,0 +1,111 @@
+use std::path::PathBuf;
+
+use oya::config;
+
+use super::{RunArgs, PIPELINE_STAGES};
+
+#[derive(Debug, Clone)]
+pub(super) struct WorkflowConfig {
+    pub(super) bead_id: String,
+    pub(super) run_id: String,
+    pub(super) restate_ingress: String,
+    pub(super) restate_admin: String,
+    pub(super) context: String,
+    pub(super) model: String,
+    pub(super) timeout_secs: u64,
+    pub(super) poll_interval_secs: u64,
+    pub(super) repo_root: PathBuf,
+    pub(super) stages: &'static [&'static str],
+}
+
+impl WorkflowConfig {
+    pub(super) fn from_args(
+        args: RunArgs,
+        repo_root: PathBuf,
+        oya_config: &config::OyaConfig,
+    ) -> Self {
+        let restate_ingress = args.restate_url.trim_end_matches('/').to_string();
+        let restate_admin = restate_ingress.replace(":8080", ":9070");
+        let model = args.model.unwrap_or_else(|| oya_config.model.clone());
+        Self {
+            run_id: args.bead_id.clone(),
+            bead_id: args.bead_id,
+            restate_ingress,
+            restate_admin,
+            context: args.context,
+            model,
+            timeout_secs: args.timeout,
+            poll_interval_secs: args.poll_interval.unwrap_or(5),
+            repo_root,
+            stages: PIPELINE_STAGES,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(super) struct WorkflowStatus {
+    pub(super) status: String,
+    pub(super) stage: String,
+    pub(super) attempt: u32,
+    pub(super) orchestration_status: String,
+    pub(super) last_failure: String,
+}
+
+impl WorkflowStatus {
+    pub(super) fn from_query_response(body: &str) -> Result<Self, String> {
+        let response: serde_json::Value =
+            serde_json::from_str(body).map_err(|e| format!("Invalid JSON response: {}", e))?;
+        let rows = response
+            .get("rows")
+            .ok_or("Missing 'rows' field in response")?
+            .as_array()
+            .ok_or("'rows' field is not an array")?;
+        let row = rows.first().ok_or("No rows in response")?;
+        let status = row
+            .get("status")
+            .and_then(|s| s.as_str())
+            .ok_or("Missing or invalid 'status' field")?
+            .to_string();
+
+        let state_json_str = row.get("state_json").and_then(|s| s.as_str()).unwrap_or("{}");
+        let state_outer: serde_json::Value = serde_json::from_str(state_json_str)
+            .map_err(|e| format!("Invalid state_json: {}", e))?;
+        let state_str = state_outer.as_str().unwrap_or("{}");
+        let state: serde_json::Value =
+            serde_json::from_str(state_str).map_err(|e| format!("Invalid state string: {}", e))?;
+
+        Ok(Self {
+            status,
+            stage: state.get("stage").and_then(|s| s.as_str()).unwrap_or("unknown").to_string(),
+            attempt: state.get("attempt").and_then(|a| a.as_u64()).unwrap_or(0) as u32,
+            orchestration_status: state
+                .get("status")
+                .and_then(|s| s.as_str())
+                .unwrap_or("unknown")
+                .to_string(),
+            last_failure: state
+                .get("last_failure")
+                .and_then(|s| s.as_str())
+                .unwrap_or("")
+                .to_string(),
+        })
+    }
+
+    pub(super) fn is_complete(&self) -> bool {
+        self.status == "completed"
+    }
+
+    pub(super) fn is_failed(&self) -> bool {
+        self.status == "failed"
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(super) struct WorkflowResult {
+    pub(super) bead_id: String,
+    pub(super) run_id: String,
+    pub(super) status: String,
+    pub(super) final_stage: String,
+    pub(super) error: Option<String>,
+    pub(super) repo_root: PathBuf,
+}
