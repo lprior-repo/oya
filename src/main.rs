@@ -248,9 +248,7 @@ impl OyaOrchestrator for OyaOrchestratorImpl {
             TimelineEntry::RunStarted {
                 bead_id: bead_id.clone(),
                 context: context.clone(),
-                at: chrono::DateTime::parse_from_rfc3339(&started_at)
-                    .map(|dt| dt.with_timezone(&chrono::Utc))
-                    .unwrap_or_else(|_| chrono::Utc::now()),
+                at: parse_rfc3339_deterministic(&started_at),
             },
         )
         .await?;
@@ -325,6 +323,15 @@ impl OyaOpsMonitor for OyaOpsMonitorImpl {
 /// Wraps chrono::Utc::now() in ctx.run() for journal consistency on replay.
 async fn deterministic_timestamp(ctx: &WorkflowContext<'_>) -> Result<String, TerminalError> {
     ctx.run(|| async move { Ok::<_, HandlerError>(chrono::Utc::now().to_rfc3339()) }).await
+}
+
+/// Parse an RFC3339 timestamp string into a DateTime<Utc>, falling back to UNIX_EPOCH.
+/// This is deterministic: on parse failure, always returns 1970-01-01T00:00:00Z.
+/// Use this instead of `.unwrap_or_else(|_| chrono::Utc::now())` in workflow contexts.
+fn parse_rfc3339_deterministic(s: &str) -> chrono::DateTime<chrono::Utc> {
+    chrono::DateTime::parse_from_rfc3339(s)
+        .map(|dt| dt.with_timezone(&chrono::Utc))
+        .unwrap_or_else(|_| chrono::DateTime::UNIX_EPOCH)
 }
 
 /// Read an environment variable deterministically within a Restate workflow context.
@@ -467,9 +474,7 @@ async fn run_pipeline(
             set_json_state(ctx, &workspace_key, workspace_event)?;
         }
 
-        let started_at_ts = chrono::DateTime::parse_from_rfc3339(&stage_start)
-            .map(|dt| dt.with_timezone(&chrono::Utc))
-            .unwrap_or_else(|_| chrono::Utc::now());
+        let started_at_ts = parse_rfc3339_deterministic(&stage_start);
 
         append_timeline(
             ctx,
@@ -531,9 +536,7 @@ async fn run_pipeline(
                 orchestrator_state.last_failure = format!("Stage execution error: {}", error);
                 orchestrator_state.updated_at = fail_ts.clone();
                 write_orchestrator_state(ctx, &orchestrator_state)?;
-                let fail_ts_dt = chrono::DateTime::parse_from_rfc3339(&fail_ts)
-                    .map(|dt| dt.with_timezone(&chrono::Utc))
-                    .unwrap_or_else(|_| chrono::Utc::now());
+                let fail_ts_dt = parse_rfc3339_deterministic(&fail_ts);
                 append_timeline(
                     ctx,
                     TimelineEntry::RunFailed {
@@ -676,9 +679,7 @@ async fn run_pipeline(
         let stage_duration_ms =
             (chrono::Utc::now() - stage_started_at).num_milliseconds().max(0) as u64;
 
-        let event_ts_dt = chrono::DateTime::parse_from_rfc3339(&event_ts)
-            .map(|dt| dt.with_timezone(&chrono::Utc))
-            .unwrap_or_else(|_| chrono::Utc::now());
+        let event_ts_dt = parse_rfc3339_deterministic(&event_ts);
 
         if stage_result.passed {
             let gate_summaries: Vec<GateSummary> = current_stage
@@ -714,9 +715,7 @@ async fn run_pipeline(
                     orchestrator_state.stage = "none".to_string();
                     orchestrator_state.updated_at = shipped_ts.clone();
                     write_orchestrator_state(ctx, &orchestrator_state)?;
-                    let shipped_ts_dt = chrono::DateTime::parse_from_rfc3339(&shipped_ts)
-                        .map(|dt| dt.with_timezone(&chrono::Utc))
-                        .unwrap_or_else(|_| chrono::Utc::now());
+                    let shipped_ts_dt = parse_rfc3339_deterministic(&shipped_ts);
                     append_timeline(
                         ctx,
                         TimelineEntry::RunShipped {
@@ -734,9 +733,7 @@ async fn run_pipeline(
                 .await
                 .map_err(|_e| OyaError("timestamp error".to_string()))?;
 
-            let fail_ts_dt = chrono::DateTime::parse_from_rfc3339(&fail_ts)
-                .map(|dt| dt.with_timezone(&chrono::Utc))
-                .unwrap_or_else(|_| chrono::Utc::now());
+            let fail_ts_dt = parse_rfc3339_deterministic(&fail_ts);
 
             let category = stage_result.failure_category.clone();
             let category_str = category
@@ -2166,4 +2163,50 @@ async fn fetch_text_with_client(
     }
 
     Ok(text)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Datelike;
+
+    #[test]
+    fn test_parse_rfc3339_deterministic_valid_input() {
+        let result = parse_rfc3339_deterministic("2024-01-15T10:30:00Z");
+        assert_eq!(result.year(), 2024);
+        assert_eq!(result.month(), 1);
+        assert_eq!(result.day(), 15);
+    }
+
+    #[test]
+    fn test_parse_rfc3339_deterministic_with_timezone() {
+        let result = parse_rfc3339_deterministic("2024-01-15T10:30:00+05:00");
+        assert_eq!(result.year(), 2024);
+    }
+
+    #[test]
+    fn test_parse_rfc3339_deterministic_invalid_returns_epoch() {
+        let result = parse_rfc3339_deterministic("invalid-timestamp");
+        assert_eq!(result, chrono::DateTime::UNIX_EPOCH);
+    }
+
+    #[test]
+    fn test_parse_rfc3339_deterministic_empty_returns_epoch() {
+        let result = parse_rfc3339_deterministic("");
+        assert_eq!(result, chrono::DateTime::UNIX_EPOCH);
+    }
+
+    #[test]
+    fn test_parse_rfc3339_deterministic_malformed_returns_epoch() {
+        let result = parse_rfc3339_deterministic("2024-13-45T99:99:99Z");
+        assert_eq!(result, chrono::DateTime::UNIX_EPOCH);
+    }
+
+    #[test]
+    fn test_parse_rfc3339_deterministic_is_deterministic() {
+        let result1 = parse_rfc3339_deterministic("garbage");
+        let result2 = parse_rfc3339_deterministic("garbage");
+        assert_eq!(result1, result2);
+        assert_eq!(result1, chrono::DateTime::UNIX_EPOCH);
+    }
 }

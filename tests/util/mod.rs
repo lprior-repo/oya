@@ -41,6 +41,20 @@ pub fn failing_orchestrator(failures: Vec<(StageName, u32, FailureCategory)>) ->
     FakeOrchestrator::new(config, "test-run-fail".to_string(), "test-bead-fail".to_string())
 }
 
+/// Create a fake orchestrator with explicit stage execution results
+#[allow(dead_code)]
+pub fn orchestrator_with_stage_results(
+    stage_results: Vec<((StageName, u32), StageExecutionResult)>,
+) -> FakeOrchestrator {
+    let mut config = FakeOrchestratorConfig::default();
+
+    for (key, result) in stage_results {
+        config.stage_results.insert(key, result);
+    }
+
+    FakeOrchestrator::new(config, "test-run-custom".to_string(), "test-bead-custom".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -10,36 +10,11 @@
 //! - One concept per test
 //! - Tests serve as executable documentation
 
-use oya::orchestrator::{
-    FakeOrchestrator, FakeOrchestratorConfig, Orchestrator, StageExecutionResult,
-};
+use oya::orchestrator::{Orchestrator, StageExecutionResult};
 use oya::types::{FailureCategory, StageName};
 use serde_json::json;
 
 mod util;
-
-fn max_retries_exceeded_orchestrator(stage: StageName) -> FakeOrchestrator {
-    let mut config = FakeOrchestratorConfig::default();
-
-    for attempt in 1..=2 {
-        config.stage_results.insert(
-            (stage.clone(), attempt),
-            StageExecutionResult {
-                passed: false,
-                output: json!({"error": "persistent failure"}),
-                failure_category: Some(FailureCategory::TestFailed),
-                next_stage: Some(stage.clone()),
-                prompt: "fix it".to_string(),
-            },
-        );
-    }
-
-    FakeOrchestrator::new(
-        config,
-        "test-run-max-retries".to_string(),
-        "test-bead-max-retries".to_string(),
-    )
-}
 
 // =============================================================================
 // HAPPY PATH: Pipeline succeeds
@@ -93,7 +68,10 @@ async fn given_stage_succeeds_when_it_completes_then_advances_to_next() {
 /// Then: It should retry each time, then fail permanently
 #[tokio::test]
 async fn given_retryable_failure_when_exhausted_2_attempts_then_fails_permanently() {
-    let orch = max_retries_exceeded_orchestrator(StageName::Tdd15);
+    let orch = util::failing_orchestrator(vec![
+        (StageName::Tdd15, 1, FailureCategory::TestFailed),
+        (StageName::Tdd15, 2, FailureCategory::TestFailed),
+    ]);
 
     // Attempt 1: Fail
     let result1 = orch.run_stage(StageName::Tdd15, 1, "bead", "ctx", None).await.unwrap();
@@ -115,19 +93,7 @@ async fn given_retryable_failure_when_exhausted_2_attempts_then_fails_permanentl
 /// Then: It should stay on same stage for retry
 #[tokio::test]
 async fn given_retryable_failure_when_under_max_attempts_then_stays_on_stage() {
-    let mut config = FakeOrchestratorConfig::default();
-    config.stage_results.insert(
-        (StageName::Qa, 1),
-        StageExecutionResult {
-            passed: false,
-            output: json!({"error": "tests failed"}),
-            failure_category: Some(FailureCategory::TestFailed),
-            next_stage: Some(StageName::Qa), // Retry same stage
-            prompt: "fix tests".to_string(),
-        },
-    );
-
-    let orch = FakeOrchestrator::new(config, "run".to_string(), "bead".to_string());
+    let orch = util::failing_orchestrator(vec![(StageName::Qa, 1, FailureCategory::TestFailed)]);
 
     let result = orch.run_stage(StageName::Qa, 1, "bead", "ctx", None).await.unwrap();
 
@@ -141,33 +107,28 @@ async fn given_retryable_failure_when_under_max_attempts_then_stays_on_stage() {
 /// Then: It should advance to next stage
 #[tokio::test]
 async fn given_stage_fails_then_succeeds_on_retry_when_retry_passes_then_advances() {
-    let mut config = FakeOrchestratorConfig::default();
-
-    // First attempt fails
-    config.stage_results.insert(
-        (StageName::Tdd15, 1),
-        StageExecutionResult {
-            passed: false,
-            output: json!({"error": "compile error"}),
-            failure_category: Some(FailureCategory::CompileFailed),
-            next_stage: Some(StageName::Tdd15),
-            prompt: "fix compile".to_string(),
-        },
-    );
-
-    // Second attempt succeeds
-    config.stage_results.insert(
-        (StageName::Tdd15, 2),
-        StageExecutionResult {
-            passed: true,
-            output: json!({"output": "success"}),
-            failure_category: None,
-            next_stage: Some(StageName::Qa),
-            prompt: "success".to_string(),
-        },
-    );
-
-    let orch = FakeOrchestrator::new(config, "run".to_string(), "bead".to_string());
+    let orch = util::orchestrator_with_stage_results(vec![
+        (
+            (StageName::Tdd15, 1),
+            StageExecutionResult {
+                passed: false,
+                output: json!({"error": "compile error"}),
+                failure_category: Some(FailureCategory::CompileFailed),
+                next_stage: Some(StageName::Tdd15),
+                prompt: "fix compile".to_string(),
+            },
+        ),
+        (
+            (StageName::Tdd15, 2),
+            StageExecutionResult {
+                passed: true,
+                output: json!({"output": "success"}),
+                failure_category: None,
+                next_stage: Some(StageName::Qa),
+                prompt: "success".to_string(),
+            },
+        ),
+    ]);
 
     // Attempt 1: Fail
     let result1 = orch.run_stage(StageName::Tdd15, 1, "bead", "ctx", None).await.unwrap();
@@ -194,19 +155,7 @@ async fn given_stage_fails_then_succeeds_on_retry_when_retry_passes_then_advance
 /// Then: Pipeline should fail immediately without retry
 #[tokio::test]
 async fn given_non_retryable_failure_when_it_occurs_then_fails_immediately() {
-    let mut config = FakeOrchestratorConfig::default();
-    config.stage_results.insert(
-        (StageName::Plan, 1),
-        StageExecutionResult {
-            passed: false,
-            output: json!({"error": "auth failed"}),
-            failure_category: Some(FailureCategory::AuthFailed), // Non-retryable
-            next_stage: None,
-            prompt: "auth error".to_string(),
-        },
-    );
-
-    let orch = FakeOrchestrator::new(config, "run".to_string(), "bead".to_string());
+    let orch = util::failing_orchestrator(vec![(StageName::Plan, 1, FailureCategory::AuthFailed)]);
 
     let result = orch.run_stage(StageName::Plan, 1, "bead", "ctx", None).await.unwrap();
 
@@ -291,34 +240,21 @@ async fn given_any_stage_when_successful_then_transitions_to_correct_next() {
 /// Then: Failure context should be available for the retry
 #[tokio::test]
 async fn given_stage_fails_when_retry_attempted_then_failure_context_available() {
-    let mut config = FakeOrchestratorConfig::default();
-    config.stage_results.insert(
-        (StageName::Tdd15, 1),
-        StageExecutionResult {
-            passed: false,
-            output: json!({"test": "specific failure details"}),
-            failure_category: Some(FailureCategory::TestFailed),
-            next_stage: Some(StageName::Tdd15),
-            prompt: "detailed error message".to_string(),
-        },
-    );
-
-    let orch = FakeOrchestrator::new(config, "run".to_string(), "bead".to_string());
+    let orch = util::failing_orchestrator(vec![(StageName::Tdd15, 1, FailureCategory::TestFailed)]);
 
     // First attempt
-    let _result1 = orch.run_stage(StageName::Tdd15, 1, "bead", "ctx", None).await.unwrap();
+    orch.run_stage(StageName::Tdd15, 1, "bead", "ctx", None).await.unwrap();
 
     // Second attempt with failure context
-    let _result2 = orch
-        .run_stage(
-            StageName::Tdd15,
-            2,
-            "bead",
-            "ctx",
-            Some((FailureCategory::TestFailed, "previous error details".to_string())),
-        )
-        .await
-        .unwrap();
+    orch.run_stage(
+        StageName::Tdd15,
+        2,
+        "bead",
+        "ctx",
+        Some((FailureCategory::TestFailed, "previous error details".to_string())),
+    )
+    .await
+    .unwrap();
 
     // Behavior: Both attempts were made (context was passed)
     let calls = orch.stage_calls(StageName::Tdd15);
@@ -334,31 +270,28 @@ async fn given_stage_fails_when_retry_attempted_then_failure_context_available()
 /// Then: Should complete all stages including ShipGate
 #[tokio::test]
 async fn given_tdd15_fails_once_then_succeeds_when_pipeline_continues_then_completes() {
-    let mut config = FakeOrchestratorConfig::default();
-
-    // Tdd15: Fail, Succeed
-    config.stage_results.insert(
-        (StageName::Tdd15, 1),
-        StageExecutionResult {
-            passed: false,
-            output: json!({"error": "test failure"}),
-            failure_category: Some(FailureCategory::TestFailed),
-            next_stage: Some(StageName::Tdd15),
-            prompt: "fix tests".to_string(),
-        },
-    );
-    config.stage_results.insert(
-        (StageName::Tdd15, 2),
-        StageExecutionResult {
-            passed: true,
-            output: json!({"output": "tests pass"}),
-            failure_category: None,
-            next_stage: Some(StageName::Qa),
-            prompt: "success".to_string(),
-        },
-    );
-
-    let orch = FakeOrchestrator::new(config, "run".to_string(), "bead".to_string());
+    let orch = util::orchestrator_with_stage_results(vec![
+        (
+            (StageName::Tdd15, 1),
+            StageExecutionResult {
+                passed: false,
+                output: json!({"error": "test failure"}),
+                failure_category: Some(FailureCategory::TestFailed),
+                next_stage: Some(StageName::Tdd15),
+                prompt: "fix tests".to_string(),
+            },
+        ),
+        (
+            (StageName::Tdd15, 2),
+            StageExecutionResult {
+                passed: true,
+                output: json!({"output": "tests pass"}),
+                failure_category: None,
+                next_stage: Some(StageName::Qa),
+                prompt: "success".to_string(),
+            },
+        ),
+    ]);
 
     // Run Tdd15 twice
     for attempt in 1..=2 {
@@ -378,43 +311,38 @@ async fn given_tdd15_fails_once_then_succeeds_when_pipeline_continues_then_compl
 /// Then: Should eventually complete if all stages pass within retry limit
 #[tokio::test]
 async fn given_intermittent_failures_when_within_retry_limits_then_completes() {
-    let mut config = FakeOrchestratorConfig::default();
-
-    // Contract: Fail once, then succeed
-    config.stage_results.insert(
-        (StageName::Contract, 1),
-        StageExecutionResult {
-            passed: false,
-            output: json!({"error": "compile error"}),
-            failure_category: Some(FailureCategory::CompileFailed),
-            next_stage: Some(StageName::Contract),
-            prompt: "fix compile".to_string(),
-        },
-    );
-
-    // Tdd15: Fail once, then succeed
-    config.stage_results.insert(
-        (StageName::Tdd15, 1),
-        StageExecutionResult {
-            passed: false,
-            output: json!({"error": "test failure"}),
-            failure_category: Some(FailureCategory::TestFailed),
-            next_stage: Some(StageName::Tdd15),
-            prompt: "fix tests".to_string(),
-        },
-    );
-    config.stage_results.insert(
-        (StageName::Tdd15, 2),
-        StageExecutionResult {
-            passed: true,
-            output: json!({"output": "tests pass"}),
-            failure_category: None,
-            next_stage: Some(StageName::Qa),
-            prompt: "success".to_string(),
-        },
-    );
-
-    let orch = FakeOrchestrator::new(config, "run".to_string(), "bead".to_string());
+    let orch = util::orchestrator_with_stage_results(vec![
+        (
+            (StageName::Contract, 1),
+            StageExecutionResult {
+                passed: false,
+                output: json!({"error": "compile error"}),
+                failure_category: Some(FailureCategory::CompileFailed),
+                next_stage: Some(StageName::Contract),
+                prompt: "fix compile".to_string(),
+            },
+        ),
+        (
+            (StageName::Tdd15, 1),
+            StageExecutionResult {
+                passed: false,
+                output: json!({"error": "test failure"}),
+                failure_category: Some(FailureCategory::TestFailed),
+                next_stage: Some(StageName::Tdd15),
+                prompt: "fix tests".to_string(),
+            },
+        ),
+        (
+            (StageName::Tdd15, 2),
+            StageExecutionResult {
+                passed: true,
+                output: json!({"output": "tests pass"}),
+                failure_category: None,
+                next_stage: Some(StageName::Qa),
+                prompt: "success".to_string(),
+            },
+        ),
+    ]);
 
     // Contract stage: 2 attempts
     for attempt in 1..=2 {
