@@ -8,9 +8,31 @@ use oya::orchestrator::{
 };
 use oya::types::{FailureCategory, StageName};
 use serde_json::json;
-use std::collections::HashMap;
 
 mod util;
+
+fn max_retries_exceeded_orchestrator(stage: StageName) -> FakeOrchestrator {
+    let mut config = FakeOrchestratorConfig::default();
+
+    for attempt in 1..=2 {
+        config.stage_results.insert(
+            (stage.clone(), attempt),
+            StageExecutionResult {
+                passed: false,
+                output: json!({"error": "persistent failure"}),
+                failure_category: Some(FailureCategory::TestFailed),
+                next_stage: Some(stage.clone()),
+                prompt: "fix it".to_string(),
+            },
+        );
+    }
+
+    FakeOrchestrator::new(
+        config,
+        "test-run-max-retries".to_string(),
+        "test-bead-max-retries".to_string(),
+    )
+}
 
 /// Test that a stage progresses to its next stage on success
 #[tokio::test]
@@ -74,22 +96,22 @@ async fn test_test_failed_retries() {
     assert_eq!(result.next_stage, Some(StageName::Tdd15)); // Retry
 }
 
-/// Test that max attempts (3) is respected
+/// Test that max attempts (2) is respected
 #[tokio::test]
 async fn test_max_attempts_exceeded() {
-    let orch = util::max_retries_exceeded_orchestrator(StageName::Tdd15);
+    let orch = max_retries_exceeded_orchestrator(StageName::Tdd15);
 
-    // Simulate 3 failed attempts
-    for attempt in 1..=3 {
+    // Simulate 2 failed attempts
+    for attempt in 1..=2 {
         let result = orch.run_stage(StageName::Tdd15, attempt, "bead", "ctx", None).await.unwrap();
 
         assert!(!result.passed);
         assert_eq!(result.failure_category, Some(FailureCategory::TestFailed));
     }
 
-    // Verify we made exactly 3 calls
+    // Verify we made exactly 2 calls
     let calls = orch.stage_calls(StageName::Tdd15);
-    assert_eq!(calls.len(), 3);
+    assert_eq!(calls.len(), 2);
 }
 
 /// Test that CompileFailed is retryable
@@ -119,8 +141,8 @@ async fn test_compile_failed_is_retryable() {
 async fn test_merge_conflict_fails_after_max_attempts() {
     let mut config = FakeOrchestratorConfig::default();
 
-    // Set up failures for all 3 attempts
-    for attempt in 1..=3 {
+    // Set up failures for all configured attempts
+    for attempt in 1..=2 {
         config.stage_results.insert(
             (StageName::ShipGate, attempt),
             StageExecutionResult {
@@ -135,10 +157,10 @@ async fn test_merge_conflict_fails_after_max_attempts() {
 
     let orch = FakeOrchestrator::new(config, "run".to_string(), "bead".to_string());
 
-    // All 3 attempts should fail
-    for attempt in 1..=3 {
+    // All configured attempts should fail
+    for attempt in 1..=2 {
         let result = orch.run_stage(StageName::ShipGate, attempt, "b", "c", None).await.unwrap();
-        if attempt < 3 {
+        if attempt < 2 {
             assert_eq!(result.next_stage, Some(StageName::GptReview));
         }
     }

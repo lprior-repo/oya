@@ -7,12 +7,12 @@ use oya::types::StageName;
 use oya::{build_zjj_workspace_name, parse_opencode_sse_events};
 use proptest::prelude::*;
 
-/// Property: Workspace names are always valid
-///
-/// For any valid inputs, workspace name should:
-/// - Not be empty
-/// - Contain only allowed characters
-/// - Be within length limit
+// Property: Workspace names are always valid
+//
+// For any valid inputs, workspace name should:
+// - Not be empty
+// - Contain only allowed characters
+// - Be within length limit
 proptest! {
     #[test]
     fn prop_workspace_name_is_valid(
@@ -55,7 +55,7 @@ proptest! {
     }
 }
 
-/// Property: Empty/malformed inputs should fail gracefully
+// Property: Empty/malformed inputs should fail gracefully
 proptest! {
     #[test]
     fn prop_invalid_workspace_inputs_fail(
@@ -69,7 +69,7 @@ proptest! {
     }
 }
 
-/// Property: SSE parsing doesn't panic on any input
+// Property: SSE parsing doesn't panic on any input
 proptest! {
     #[test]
     fn prop_sse_parsing_no_panic(
@@ -81,7 +81,7 @@ proptest! {
     }
 }
 
-/// Property: Stage ordering is consistent
+// Property: Stage ordering is consistent
 proptest! {
     #[test]
     fn prop_stage_ordering(
@@ -113,7 +113,7 @@ proptest! {
     }
 }
 
-/// Property: Max attempts is always 2
+// Property: Max attempts is always 2
 proptest! {
     #[test]
     fn prop_max_attempts_is_two(
@@ -132,7 +132,7 @@ proptest! {
     }
 }
 
-/// Property: Gates exist for each stage
+// Property: Gates exist for each stage
 proptest! {
     #[test]
     fn prop_stages_have_gates(

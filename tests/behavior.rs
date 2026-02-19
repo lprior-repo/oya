@@ -18,6 +18,29 @@ use serde_json::json;
 
 mod util;
 
+fn max_retries_exceeded_orchestrator(stage: StageName) -> FakeOrchestrator {
+    let mut config = FakeOrchestratorConfig::default();
+
+    for attempt in 1..=2 {
+        config.stage_results.insert(
+            (stage.clone(), attempt),
+            StageExecutionResult {
+                passed: false,
+                output: json!({"error": "persistent failure"}),
+                failure_category: Some(FailureCategory::TestFailed),
+                next_stage: Some(stage.clone()),
+                prompt: "fix it".to_string(),
+            },
+        );
+    }
+
+    FakeOrchestrator::new(
+        config,
+        "test-run-max-retries".to_string(),
+        "test-bead-max-retries".to_string(),
+    )
+}
+
 // =============================================================================
 // HAPPY PATH: Pipeline succeeds
 // =============================================================================
@@ -66,11 +89,11 @@ async fn given_stage_succeeds_when_it_completes_then_advances_to_next() {
 // =============================================================================
 
 /// Given: Stage fails with retryable error (TestFailed)
-/// When: It's attempted 3 times
+/// When: It's attempted 2 times
 /// Then: It should retry each time, then fail permanently
 #[tokio::test]
-async fn given_retryable_failure_when_exhausted_3_attempts_then_fails_permanently() {
-    let orch = util::max_retries_exceeded_orchestrator(StageName::Tdd15);
+async fn given_retryable_failure_when_exhausted_2_attempts_then_fails_permanently() {
+    let orch = max_retries_exceeded_orchestrator(StageName::Tdd15);
 
     // Attempt 1: Fail
     let result1 = orch.run_stage(StageName::Tdd15, 1, "bead", "ctx", None).await.unwrap();
@@ -82,13 +105,9 @@ async fn given_retryable_failure_when_exhausted_3_attempts_then_fails_permanentl
     assert!(!result2.passed);
     assert_eq!(result2.next_stage, Some(StageName::Tdd15)); // Retry
 
-    // Attempt 3: Fail
-    let result3 = orch.run_stage(StageName::Tdd15, 3, "bead", "ctx", None).await.unwrap();
-    assert!(!result3.passed);
-
-    // Behavior: Exactly 3 attempts were made
+    // Behavior: Exactly 2 attempts were made
     let calls = orch.stage_calls(StageName::Tdd15);
-    assert_eq!(calls.len(), 3, "Should make exactly 3 attempts before giving up");
+    assert_eq!(calls.len(), 2, "Should make exactly 2 attempts before giving up");
 }
 
 /// Given: Stage fails with retryable error
@@ -310,28 +329,26 @@ async fn given_stage_fails_when_retry_attempted_then_failure_context_available()
 // COMPLEX SCENARIOS: Real-world situations
 // =============================================================================
 
-/// Given: Tdd15 fails twice with TestFailed, succeeds on third attempt
+/// Given: Tdd15 fails once with TestFailed, succeeds on second attempt
 /// When: Pipeline continues
 /// Then: Should complete all stages including ShipGate
 #[tokio::test]
-async fn given_tdd15_fails_twice_then_succeeds_when_pipeline_continues_then_completes() {
+async fn given_tdd15_fails_once_then_succeeds_when_pipeline_continues_then_completes() {
     let mut config = FakeOrchestratorConfig::default();
 
-    // Tdd15: Fail, Fail, Succeed
-    for attempt in [1, 2] {
-        config.stage_results.insert(
-            (StageName::Tdd15, attempt),
-            StageExecutionResult {
-                passed: false,
-                output: json!({"error": "test failure"}),
-                failure_category: Some(FailureCategory::TestFailed),
-                next_stage: Some(StageName::Tdd15),
-                prompt: "fix tests".to_string(),
-            },
-        );
-    }
+    // Tdd15: Fail, Succeed
     config.stage_results.insert(
-        (StageName::Tdd15, 3),
+        (StageName::Tdd15, 1),
+        StageExecutionResult {
+            passed: false,
+            output: json!({"error": "test failure"}),
+            failure_category: Some(FailureCategory::TestFailed),
+            next_stage: Some(StageName::Tdd15),
+            prompt: "fix tests".to_string(),
+        },
+    );
+    config.stage_results.insert(
+        (StageName::Tdd15, 2),
         StageExecutionResult {
             passed: true,
             output: json!({"output": "tests pass"}),
@@ -343,17 +360,17 @@ async fn given_tdd15_fails_twice_then_succeeds_when_pipeline_continues_then_comp
 
     let orch = FakeOrchestrator::new(config, "run".to_string(), "bead".to_string());
 
-    // Run Tdd15 three times
-    for attempt in 1..=3 {
+    // Run Tdd15 twice
+    for attempt in 1..=2 {
         let result = orch.run_stage(StageName::Tdd15, attempt, "bead", "ctx", None).await.unwrap();
-        if attempt == 3 {
+        if attempt == 2 {
             assert!(result.passed);
         }
     }
 
-    // Behavior: Exactly 3 attempts on Tdd15
+    // Behavior: Exactly 2 attempts on Tdd15
     let tdd15_calls = orch.stage_calls(StageName::Tdd15);
-    assert_eq!(tdd15_calls.len(), 3);
+    assert_eq!(tdd15_calls.len(), 2);
 }
 
 /// Given: Multiple stages with intermittent failures
@@ -375,21 +392,19 @@ async fn given_intermittent_failures_when_within_retry_limits_then_completes() {
         },
     );
 
-    // Tdd15: Fail twice, then succeed
-    for attempt in [1, 2] {
-        config.stage_results.insert(
-            (StageName::Tdd15, attempt),
-            StageExecutionResult {
-                passed: false,
-                output: json!({"error": "test failure"}),
-                failure_category: Some(FailureCategory::TestFailed),
-                next_stage: Some(StageName::Tdd15),
-                prompt: "fix tests".to_string(),
-            },
-        );
-    }
+    // Tdd15: Fail once, then succeed
     config.stage_results.insert(
-        (StageName::Tdd15, 3),
+        (StageName::Tdd15, 1),
+        StageExecutionResult {
+            passed: false,
+            output: json!({"error": "test failure"}),
+            failure_category: Some(FailureCategory::TestFailed),
+            next_stage: Some(StageName::Tdd15),
+            prompt: "fix tests".to_string(),
+        },
+    );
+    config.stage_results.insert(
+        (StageName::Tdd15, 2),
         StageExecutionResult {
             passed: true,
             output: json!({"output": "tests pass"}),
@@ -410,15 +425,15 @@ async fn given_intermittent_failures_when_within_retry_limits_then_completes() {
         }
     }
 
-    // Tdd15 stage: 3 attempts
-    for attempt in 1..=3 {
+    // Tdd15 stage: 2 attempts
+    for attempt in 1..=2 {
         let result = orch.run_stage(StageName::Tdd15, attempt, "bead", "ctx", None).await.unwrap();
-        if attempt == 3 {
+        if attempt == 2 {
             assert!(result.passed);
         }
     }
 
     // Verify retry counts
     assert_eq!(orch.stage_calls(StageName::Contract).len(), 2);
-    assert_eq!(orch.stage_calls(StageName::Tdd15).len(), 3);
+    assert_eq!(orch.stage_calls(StageName::Tdd15).len(), 2);
 }

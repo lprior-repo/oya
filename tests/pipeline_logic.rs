@@ -2,7 +2,7 @@
 //!
 //! These test the core orchestration logic extracted from main.rs
 
-use oya::types::{FailureCategory, StageName};
+use oya::types::FailureCategory;
 
 /// The decision engine: Given a failure category, should we retry?
 #[test]

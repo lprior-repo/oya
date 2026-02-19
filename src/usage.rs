@@ -20,8 +20,6 @@ struct TrackerState {
     active_indices: HashMap<String, usize>,
     // Health status per model ID
     model_health: HashMap<String, ModelHealth>,
-    // Circuit breaker state per tier
-    circuit_states: HashMap<String, CircuitState>,
     last_updated: DateTime<Utc>,
 }
 
@@ -30,7 +28,6 @@ impl Default for TrackerState {
         Self {
             active_indices: HashMap::new(),
             model_health: HashMap::new(),
-            circuit_states: HashMap::new(),
             last_updated: Utc::now(),
         }
     }
@@ -186,7 +183,7 @@ impl OyaUsageTracker for OyaUsageTrackerImpl {
         Ok(Json(UsageStatus {
             active_models,
             model_health: state.model_health,
-            circuit_state: CircuitState::Closed, // TODO: Implement circuit logic if needed
+            circuit_state: CircuitState::Closed,
             last_updated: state.last_updated,
         }))
     }
@@ -516,6 +513,7 @@ mod tests {
         use crate::types::CircuitState;
 
         let mut state = CircuitState::Closed;
+        assert_eq!(state, CircuitState::Closed);
 
         state = CircuitState::Open;
         assert_eq!(state, CircuitState::Open);
