@@ -7,7 +7,7 @@ use oya::types::{
     truncate_clean, FailureCategory, Gate, GateSummary, StageName as Stage, StageResult,
     TimelineEntry,
 };
-use oya::usage::{OyaUsageTracker, OyaUsageTrackerImpl};
+use oya::usage::{OyaUsageTracker, OyaUsageTrackerClient, OyaUsageTrackerImpl};
 use oya::{
     build_opencode_poll_snapshot, build_zjj_workspace_name, is_retryable_failure,
     parse_opencode_sse_events,
@@ -482,14 +482,18 @@ async fn run_pipeline(
         )
         .await?;
 
-        // 1. Get active model for current stage (TODO: Fix Restate client await issue)
-        // let tier = current_stage.model_for_stage().as_str().to_string();
-        // let tracker = ctx.object_client::<OyaUsageTrackerClient>("global");
-        // let active_model_json = tracker.get_active_model(tier).await.map_err(|e| OyaError(e.to_string()))?;
-        // let active_model = active_model_json.0;
+        // 1. Get active model for current stage from OyaUsageTracker
+        let tier = current_stage.model_for_stage().as_str().to_string();
+        let tracker = ctx.object_client::<OyaUsageTrackerClient>("global");
+        let active_model = tracker
+            .get_active_model(tier)
+            .call()
+            .await
+            .map_err(|e| OyaError(format!("Failed to get active model from tracker: {}", e)))?;
 
-        // orchestrator_state.model = active_model.clone();
-        // write_orchestrator_state(ctx, &orchestrator_state)?;
+        let model = active_model.0;
+        orchestrator_state.model = model.clone();
+        write_orchestrator_state(ctx, &orchestrator_state)?;
 
         let stage_started_at = chrono::Utc::now();
 
@@ -499,25 +503,24 @@ async fn run_pipeline(
             current_stage.clone(),
             attempt,
             &context,
-            &model, // Use input model for now
+            &model,
             last_failure.clone(),
             &config,
         )
         .await
         {
             Ok(result) => {
-                // 2. Report outcome to tracker (TODO: Fix client await)
-                // let is_rate_limit =
-                //     matches!(result.0.failure_category, Some(FailureCategory::RateLimited));
-                // let report_req = oya::usage::ReportOutcomeRequest {
-                //     model: model.clone(),
-                //     success: result.0.passed,
-                //     is_rate_limit,
-                // };
-                // tracker
-                //     .report_outcome(restate_sdk::prelude::Json(report_req))
-                //     .await
-                //     .map_err(|e| OyaError(e.to_string()))?;
+                // 2. Report outcome to tracker for health tracking
+                let is_rate_limit =
+                    matches!(result.0.failure_category, Some(FailureCategory::RateLimited));
+                let report_req = oya::usage::ReportOutcomeRequest {
+                    model: model.clone(),
+                    success: result.0.passed,
+                    is_rate_limit,
+                };
+                if let Err(e) = tracker.report_outcome(Json(report_req)).call().await {
+                    tracing::warn!("Failed to report outcome to tracker: {}", e);
+                }
                 result
             }
             Err(error) => {

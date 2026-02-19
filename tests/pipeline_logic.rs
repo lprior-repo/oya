@@ -28,23 +28,17 @@ fn given_lintfailed_error_when_checking_retryable_then_should_retry() {
 }
 
 #[test]
-fn given_outputparsefailure_when_checking_retryable_then_should_retry() {
+fn given_outputparsefailure_error_when_checking_retryable_then_should_retry() {
     use oya::is_retryable_failure;
 
     assert!(is_retryable_failure(&FailureCategory::OutputParseFailure));
 }
 
 #[test]
-fn given_authfailed_error_when_checking_retryable_then_should_not_retry() {
-    use oya::is_retryable_failure;
-
-    assert!(!is_retryable_failure(&FailureCategory::AuthFailed));
-}
-
-#[test]
 fn given_rate_limited_when_checking_retryable_then_should_not_retry() {
     use oya::is_retryable_failure;
 
+    // RateLimited is NOT retryable - it should trigger cooldown instead
     assert!(!is_retryable_failure(&FailureCategory::RateLimited));
 }
 
@@ -55,13 +49,71 @@ fn given_merge_conflict_when_checking_retryable_then_should_not_retry() {
     assert!(!is_retryable_failure(&FailureCategory::MergeConflict));
 }
 
+#[test]
+fn given_auth_failed_when_checking_retryable_then_should_not_retry() {
+    use oya::is_retryable_failure;
+
+    assert!(!is_retryable_failure(&FailureCategory::AuthFailed));
+}
+
 // =============================================================================
 // STAGE TRANSITION LOGIC
-// =============================================================================
 
-/// Verify all stages have max 2 attempts
 #[test]
-fn given_any_stage_when_checking_max_attempts_then_is_always_two() {
+fn given_pipeline_start_when_checking_first_stage_then_is_plan() {
+    use oya::types::StageName;
+
+    let next = StageName::Plan.next();
+    assert_eq!(next, Some(StageName::Contract));
+}
+
+#[test]
+fn given_plan_stage_when_checking_model_tier_then_is_balanced() {
+    use oya::types::{ModelTier, StageName};
+
+    assert_eq!(StageName::Plan.model_for_stage(), ModelTier::Balanced);
+}
+
+#[test]
+fn given_contract_stage_when_checking_model_tier_then_is_fast() {
+    use oya::types::{ModelTier, StageName};
+
+    assert_eq!(StageName::Contract.model_for_stage(), ModelTier::Fast);
+}
+
+#[test]
+fn given_qa_stage_when_checking_model_tier_then_is_balanced() {
+    use oya::types::{ModelTier, StageName};
+
+    assert_eq!(StageName::Qa.model_for_stage(), ModelTier::Balanced);
+}
+
+#[test]
+fn given_redqueen_stage_when_checking_model_tier_then_is_capable() {
+    use oya::types::{ModelTier, StageName};
+
+    assert_eq!(StageName::RedQueen.model_for_stage(), ModelTier::Capable);
+}
+
+#[test]
+fn given_shipgate_stage_when_checking_model_tier_then_is_best() {
+    use oya::types::{ModelTier, StageName};
+
+    assert_eq!(StageName::ShipGate.model_for_stage(), ModelTier::Best);
+}
+
+#[test]
+fn given_shipgate_when_checking_next_stage_then_is_none() {
+    use oya::types::StageName;
+
+    let next = StageName::ShipGate.next();
+    assert_eq!(next, None);
+}
+
+#[test]
+fn given_stage_order_when_verifying_then_follows_pipeline_flow() {
+    use oya::types::StageName;
+
     let stages = vec![
         StageName::Plan,
         StageName::Contract,
@@ -72,73 +124,94 @@ fn given_any_stage_when_checking_max_attempts_then_is_always_two() {
         StageName::ShipGate,
     ];
 
-    for stage in stages {
-        assert_eq!(stage.max_attempts(), 2, "{:?} should have 2 max attempts", stage);
+    for i in 0..stages.len() - 1 {
+        assert_eq!(stages[i].next(), Some(stages[i + 1].clone()));
     }
 }
 
-/// Verify stage ordering is consistent
-#[test]
-fn given_stage_order_when_verifying_then_follows_pipeline_flow() {
-    assert_eq!(StageName::Plan.next(), Some(StageName::Contract));
-    assert_eq!(StageName::Contract.next(), Some(StageName::Tdd15));
-    assert_eq!(StageName::Tdd15.next(), Some(StageName::Qa));
-    assert_eq!(StageName::Qa.next(), Some(StageName::RedQueen));
-    assert_eq!(StageName::RedQueen.next(), Some(StageName::GptReview));
-    assert_eq!(StageName::GptReview.next(), Some(StageName::ShipGate));
-    assert_eq!(StageName::ShipGate.next(), None);
-}
-
-/// Verify Plan is the starting stage
-#[test]
-fn given_pipeline_start_when_checking_first_stage_then_is_plan() {
-    // Plan is the first stage in any pipeline
-    let plan = StageName::Plan;
-    assert_eq!(plan.as_str(), "plan");
-    assert_eq!(plan.next(), Some(StageName::Contract));
-}
-
-/// Verify ShipGate is terminal
-#[test]
-fn given_shipgate_when_checking_next_stage_then_is_none() {
-    assert_eq!(StageName::ShipGate.next(), None, "ShipGate should be terminal");
-}
-
 // =============================================================================
-// MODEL TIER ASSIGNMENTS
-// =============================================================================
+// GATE DEFINITIONS
 
 #[test]
-fn given_plan_stage_when_checking_model_tier_then_is_balanced() {
-    assert_eq!(StageName::Plan.model_for_stage().as_str(), "balanced");
+fn given_any_stage_when_checking_max_attempts_then_is_always_two() {
+    use oya::types::StageName;
+
+    for stage in [
+        StageName::Plan,
+        StageName::Contract,
+        StageName::Tdd15,
+        StageName::Qa,
+        StageName::RedQueen,
+        StageName::GptReview,
+        StageName::ShipGate,
+    ] {
+        assert_eq!(stage.max_attempts(), 2);
+    }
 }
 
 #[test]
-fn given_contract_stage_when_checking_model_tier_then_is_fast() {
-    assert_eq!(StageName::Contract.model_for_stage().as_str(), "fast");
+fn given_plan_stage_when_checking_gates_then_only_compiles_required() {
+    use oya::types::StageName;
+
+    let gates = StageName::Plan.gates();
+    assert_eq!(gates.len(), 1);
+    assert_eq!(gates[0], oya::types::Gate::Compiles);
 }
 
 #[test]
-fn given_tdd15_stage_when_checking_model_tier_then_is_balanced() {
-    assert_eq!(StageName::Tdd15.model_for_stage().as_str(), "balanced");
+fn given_contract_stage_when_checking_gates_then_only_compiles_required() {
+    use oya::types::StageName;
+
+    let gates = StageName::Contract.gates();
+    assert_eq!(gates.len(), 1);
+    assert_eq!(gates[0], oya::types::Gate::Compiles);
 }
 
 #[test]
-fn given_qa_stage_when_checking_model_tier_then_is_balanced() {
-    assert_eq!(StageName::Qa.model_for_stage().as_str(), "balanced");
+fn given_tdd15_stage_when_checking_gates_then_compiles_and_tests_required() {
+    use oya::types::StageName;
+
+    let gates = StageName::Tdd15.gates();
+    assert_eq!(gates.len(), 2);
+    assert_eq!(gates[0], oya::types::Gate::Compiles);
+    assert_eq!(gates[1], oya::types::Gate::TestsPass);
 }
 
 #[test]
-fn given_redqueen_stage_when_checking_model_tier_then_is_capable() {
-    assert_eq!(StageName::RedQueen.model_for_stage().as_str(), "capable");
+fn given_qa_stage_when_checking_gates_then_tests_and_edge_cases_required() {
+    use oya::types::StageName;
+
+    let gates = StageName::Qa.gates();
+    assert_eq!(gates.len(), 2);
+    assert_eq!(gates[0], oya::types::Gate::TestsPass);
+    assert_eq!(gates[1], oya::types::Gate::EdgeCases);
 }
 
 #[test]
-fn given_gptreview_stage_when_checking_model_tier_then_is_capable() {
-    assert_eq!(StageName::GptReview.model_for_stage().as_str(), "capable");
+fn given_redqueen_stage_when_checking_gates_then_no_vulnerabilities_required() {
+    use oya::types::StageName;
+
+    let gates = StageName::RedQueen.gates();
+    assert_eq!(gates.len(), 1);
+    assert_eq!(gates[0], oya::types::Gate::NoVulnerabilities);
 }
 
 #[test]
-fn given_shipgate_stage_when_checking_model_tier_then_is_best() {
-    assert_eq!(StageName::ShipGate.model_for_stage().as_str(), "best");
+fn given_gpt_review_stage_when_checking_gates_then_clippy_and_security_required() {
+    use oya::types::StageName;
+
+    let gates = StageName::GptReview.gates();
+    assert_eq!(gates.len(), 2);
+    assert_eq!(gates[0], oya::types::Gate::ClippyClean);
+    assert_eq!(gates[1], oya::types::Gate::Security);
+}
+
+#[test]
+fn given_shipgate_stage_when_checking_gates_then_moon_ci_and_merge_queue_required() {
+    use oya::types::StageName;
+
+    let gates = StageName::ShipGate.gates();
+    assert_eq!(gates.len(), 2);
+    assert_eq!(gates[0], oya::types::Gate::MoonCi);
+    assert_eq!(gates[1], oya::types::Gate::ZjjMergeQueue);
 }

@@ -9,17 +9,7 @@ vcs:
   provider: "github"
   defaultBranch: "main"
 
-# Version constraint
-versionConstraint: ">=2.0.0-alpha.0"
-
-# HYPER-FAST LOCAL CACHE CONFIGURATION
-# Remote cache runs locally on this machine for zero network latency
-remote:
-  host: 'grpc://127.0.0.1:9092'
-  cache:
-    compression: 'zstd'
-    verifyIntegrity: false  # Trusted local cache
-    localReadOnly: false  # Allow uploads from local dev
+# Version constraint - Moon v1 compatible
 
 # Pipeline configuration
 pipeline:

@@ -178,8 +178,8 @@ fn contract_failure_category_retryability() {
     // Non-retryable failures (examples)
     let non_retryable = vec![
         FailureCategory::AuthFailed,
-        FailureCategory::RateLimited,
         FailureCategory::ProviderUnavailable,
+        FailureCategory::ContextOverflow,
     ];
 
     for category in non_retryable {
