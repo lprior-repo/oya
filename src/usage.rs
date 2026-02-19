@@ -6,7 +6,7 @@
 //! - Circuit breaking for persistent failures.
 //! - Usage statistics for monitoring.
 
-use crate::types::{CircuitState, ModelHealth, ModelTier, UsageStatus};
+use crate::types::{CircuitState, ModelHealth, UsageStatus};
 use chrono::{DateTime, Duration, Utc};
 use restate_sdk::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -47,7 +47,7 @@ pub struct ReportOutcomeRequest {
 pub trait OyaUsageTracker {
     /// Get the currently active, healthy model for the requested tier.
     /// Rotates automatically if the current one is unhealthy.
-    async fn get_active_model(tier: String) -> Result<String, HandlerError>;
+    async fn get_active_model(tier: String) -> Result<Json<String>, HandlerError>;
 
     /// Report the outcome of a model execution.
     /// Triggers failover if rate limited.
@@ -67,7 +67,7 @@ impl OyaUsageTracker for OyaUsageTrackerImpl {
         &self,
         ctx: ObjectContext<'_>,
         tier: String,
-    ) -> Result<String, HandlerError> {
+    ) -> Result<Json<String>, HandlerError> {
         let mut state =
             ctx.get::<Json<TrackerState>>("state").await?.map(|j| j.0).unwrap_or_default();
         let model_list = get_models_for_tier(&tier);
@@ -108,7 +108,7 @@ impl OyaUsageTracker for OyaUsageTrackerImpl {
             ctx.set("state", Json(state));
         }
 
-        Ok(model_list[selected_index].clone())
+        Ok(Json(model_list[selected_index].clone()))
     }
 
     async fn report_outcome(

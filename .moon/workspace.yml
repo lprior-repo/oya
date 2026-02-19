@@ -6,7 +6,6 @@ projects:
 
 # VCS configuration
 vcs:
-  client: "git"
   provider: "github"
   defaultBranch: "main"
 
