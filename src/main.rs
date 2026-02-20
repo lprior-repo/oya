@@ -25,9 +25,9 @@ mod workflow_runner;
 
 use orchestrator_types::*;
 use pipeline::{
-    execute_stage_with_tracker, handle_stage_transition, init_pipeline_state, mark_stage_running,
-    parse_rfc3339_deterministic, pipeline_input, prepare_stage_attempt, record_stage_outputs,
-    PipelineRunInput, PipelineState, RecordStageOutputsInput, RuntimeConfig, StageExecutionResult,
+    execute_and_accumulate_stage, init_pipeline_state, parse_rfc3339_deterministic,
+    persist_stage_artifact, pipeline_input, RuntimeConfig, PipelineRunInput, PipelineState,
+    StageExecutionInput,
 };
 use runtime_tools::*;
 
@@ -228,39 +228,103 @@ async fn run_pipeline_loop(
     state: &mut PipelineState,
 ) -> Result<(), OyaError> {
     loop {
-        mark_stage_running(ctx, state).await?;
-        let attempt_record = prepare_stage_attempt(ctx, state, input, config).await?;
-        let stage_started_at = chrono::Utc::now();
-        let execution = execute_stage_with_tracker(ctx, state, input, config).await?;
-        let StageExecutionResult::Continue { stage_result, stage_prompt } = execution else {
-            return Ok(());
-        };
-        let artifacts = record_stage_outputs(
+        // Execute stage and accumulate all data into single artifact (no Restate sets during execution)
+        let artifact = execute_and_accumulate_stage(
             ctx,
-            state,
-            RecordStageOutputsInput {
-                input,
-                attempt_record: &attempt_record,
-                stage_result: &stage_result,
-                stage_prompt: &stage_prompt,
-                stage_started_at,
+            StageExecutionInput {
+                run_id: &input.run_id,
+                bead_id: &input.bead_id,
+                context: &input.context,
+                model: &state.orchestrator.model,
+                stage: state.current_stage.clone(),
+                attempt: state.attempt,
+                last_failure: state.last_failure.clone(),
                 repo_root: &config.repo_root,
             },
+            config,
+            state,
         )
         .await?;
-        if handle_stage_transition(
-            ctx,
-            state,
-            &stage_result,
-            &attempt_record.workspace_info,
-            &artifacts,
-        )
-        .await?
-        {
-            return Ok(());
+
+        // Persist single artifact after stage completes (only Restate set per stage)
+        persist_stage_artifact(ctx, &artifact).await?;
+
+        // Update orchestrator state for recovery
+        state.orchestrator.stage = artifact.stage.clone();
+        state.orchestrator.attempt = artifact.attempt;
+        state.orchestrator.updated_at = artifact.timing.completed_at.clone();
+
+        // Determine next action based on artifact status
+        match artifact.status {
+            orchestrator_types::StageStatus::Completed => {
+                // Stage passed - move to next stage or complete
+                if let Some(next_stage) = state.current_stage.next() {
+                    state.current_stage = next_stage;
+                    state.attempt = 1;
+                    state.last_failure = None;
+                } else {
+                    // All stages complete - mark run as shipped
+                    return mark_run_completed(ctx, state, &artifact).await;
+                }
+            }
+            orchestrator_types::StageStatus::Failed => {
+                // Stage failed - check retry count
+                if state.attempt >= state.current_stage.max_attempts() {
+                    return mark_run_failed(ctx, state, &artifact).await;
+                }
+                // Retry same stage
+                state.attempt += 1;
+                state.last_failure = Some((
+                    oya::types::FailureCategory::OutputParseFailure,
+                    artifact.output.full_log.clone(),
+                ));
+            }
         }
+
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
+}
+
+async fn mark_run_completed(
+    ctx: &WorkflowContext<'_>,
+    state: &mut PipelineState,
+    final_artifact: &orchestrator_types::StageArtifact,
+) -> Result<(), OyaError> {
+    let completed_at = ctx
+        .run(|| async { Ok::<_, HandlerError>(chrono::Utc::now().to_rfc3339()) })
+        .await
+        .map_err(|e| OyaError(format!("timestamp failed: {}", e)))?;
+
+    state.orchestrator.status = "shipped".to_string();
+    state.orchestrator.stage = "none".to_string();
+    state.orchestrator.updated_at = completed_at.clone();
+    orchestrator_types::write_orchestrator_state(ctx, &state.orchestrator)?;
+
+    // Build lean timeline as JSON array
+    let timeline = serde_json::json!([
+        {"event": "RunStarted", "at": state.orchestrator.updated_at},
+        {"event": "RunShipped", "at": completed_at, "total_duration_ms": final_artifact.timing.duration_ms}
+    ]);
+
+    orchestrator_types::set_timeline_once(ctx, &timeline.to_string())
+}
+
+async fn mark_run_failed(
+    ctx: &WorkflowContext<'_>,
+    state: &mut PipelineState,
+    artifact: &orchestrator_types::StageArtifact,
+) -> Result<(), OyaError> {
+    state.orchestrator.status = "failed".to_string();
+    state.orchestrator.updated_at = artifact.timing.completed_at.clone();
+    orchestrator_types::write_orchestrator_state(ctx, &state.orchestrator)?;
+
+    // Build lean timeline as JSON array
+    let timeline = serde_json::json!([
+        {"event": "RunStarted", "at": state.orchestrator.updated_at},
+        {"event": "RunFailed", "stage": artifact.stage, "at": artifact.timing.completed_at}
+    ]);
+
+    orchestrator_types::set_timeline_once(ctx, &timeline.to_string())
 }
 
 fn is_valid_http_url(value: &str) -> bool {
