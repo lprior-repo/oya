@@ -6,7 +6,9 @@
 #![forbid(unsafe_code)]
 
 use oya::build_opencode_poll_snapshot;
-use oya::types::{truncate_clean, FailureCategory, Gate, StageName as Stage, TimelineEntry};
+use oya::types::{
+    truncate_clean, FailureCategory, StageFailure, StageName as Stage, TimelineEntry,
+};
 use oya::usage::{
     is_rate_limit_failure, tier_for_stage, OyaUsageTracker, OyaUsageTrackerClient,
     OyaUsageTrackerImpl, ReportOutcomeRequest, ServeOyaUsageTracker,
@@ -330,7 +332,13 @@ async fn should_continue_after_artifact(
         orchestrator_types::StageStatus::Failed => {
             let failure_category = parse_failure_category(&artifact.failure_category)
                 .unwrap_or(FailureCategory::OutputParseFailure);
-            state.last_failure = Some((failure_category, artifact.output.full_log.clone()));
+            let retryable = oya::is_retryable_failure(&failure_category);
+            state.last_failure = Some(StageFailure::new(
+                failure_category,
+                artifact.output.full_log.clone(),
+                retryable,
+                artifact.timing.completed_at.clone(),
+            ));
             handle_failed_stage(ctx, state, artifact).await
         }
     }
@@ -357,7 +365,13 @@ async fn completed_stage_next_action(
     if let Err(landing_failure) = run_landing_plane(ctx, state, config, artifact).await {
         state.current_stage = landing_failure.next_stage;
         state.attempt = 1;
-        state.last_failure = Some((landing_failure.failure_category, landing_failure.output));
+        let retryable = oya::is_retryable_failure(&landing_failure.failure_category);
+        state.last_failure = Some(StageFailure::new(
+            landing_failure.failure_category,
+            landing_failure.output,
+            retryable,
+            artifact.timing.completed_at.clone(),
+        ));
         // Resolve model for the retry stage's tier
         state.orchestrator.model = resolve_model_for_stage(ctx, &state.current_stage).await?;
         return Ok(true);
@@ -389,13 +403,19 @@ async fn handle_failed_stage(
         }
     }
 
-    if state.attempt >= state.current_stage.max_attempts() {
+    if !should_retry_after_failure(state) {
         mark_run_failed(ctx, state, artifact).await?;
         return Ok(false);
     }
 
     state.attempt += 1;
     Ok(true)
+}
+
+fn should_retry_after_failure(state: &PipelineState) -> bool {
+    state.last_failure.as_ref().is_some_and(|failure| {
+        failure.retryable && state.attempt < state.current_stage.max_attempts()
+    })
 }
 
 struct LandingFailure {

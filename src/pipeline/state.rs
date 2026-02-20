@@ -4,7 +4,7 @@
 //! and recovery. Stage execution and artifact persistence is handled by
 //! the executor module.
 
-use oya::types::{FailureCategory, StageName as Stage};
+use oya::types::{StageFailure, StageName as Stage};
 use restate_sdk::prelude::*;
 
 use crate::orchestrator_types::{write_orchestrator_state, OrchestratorState};
@@ -67,7 +67,7 @@ pub(crate) struct PipelineRunInput {
 pub(crate) struct PipelineState {
     pub(crate) current_stage: Stage,
     pub(crate) attempt: u32,
-    pub(crate) last_failure: Option<(FailureCategory, String)>,
+    pub(crate) last_failure: Option<StageFailure>,
     pub(crate) orchestrator: OrchestratorState,
 }
 

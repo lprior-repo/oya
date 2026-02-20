@@ -21,8 +21,8 @@ pub use ids::{AgentId, BeadId, RunId};
 // --- pipeline ---
 pub use pipeline::{
     determine_transition, load_model_tier_config, passed_stage_transition, ApproverMode,
-    FailureCategory, Gate, ModelTier, ModelTierConfig, ShipDecision, StageAttempt, StageName,
-    StageResult, StageState, StageTransition, TransitionDecision, TransitionReason,
+    FailureCategory, Gate, ModelTier, ModelTierConfig, ShipDecision, StageAttempt, StageFailure,
+    StageName, StageResult, StageState, StageTransition, TransitionDecision, TransitionReason,
 };
 
 // --- domain ---

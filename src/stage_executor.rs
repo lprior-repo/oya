@@ -6,7 +6,9 @@ use crate::runtime_tools::{
 use crate::stage_runtime::{
     execute_ship_gate, stage_prompt, stage_success, ShipGateRequest, StagePromptInput,
 };
-use oya::types::{truncate_clean, FailureCategory, Gate, StageName as Stage, StageResult};
+use oya::types::{
+    truncate_clean, FailureCategory, Gate, StageFailure, StageName as Stage, StageResult,
+};
 use restate_sdk::context::ContextSideEffects;
 use restate_sdk::prelude::{HandlerError, Json, WorkflowContext};
 use std::path::PathBuf;
@@ -40,7 +42,7 @@ pub(super) struct StageExecutionRequest {
     pub attempt: u32,
     pub context: String,
     pub model: String,
-    pub last_failure: Option<(FailureCategory, String)>,
+    pub last_failure: Option<StageFailure>,
 }
 
 #[derive(Clone)]
@@ -222,16 +224,15 @@ pub(super) fn format_gate_command_output(command: &str, exit_code: i32, output: 
     format!("command={} exit_code={}\n{}", command, exit_code, output)
 }
 
-pub(super) fn stage_failure_context(
-    stage: &Stage,
-    last_failure: &Option<(FailureCategory, String)>,
-) -> String {
+pub(super) fn stage_failure_context(stage: &Stage, last_failure: &Option<StageFailure>) -> String {
     match (stage, last_failure) {
-        (Stage::GptReview, Some((FailureCategory::LintFailed, message))) => format!(
-            "\n\nPREVIOUS CLIPPY FAILURE:\n{}\n\nCRITICAL: Fix the actual code issues. DO NOT use #[allow(...)] attributes to suppress warnings. Fix the underlying problem.",
-            summarize_failure_output(&FailureCategory::LintFailed, message)
-        ),
-        (_, Some((category, message))) => format!(
+        (Stage::GptReview, Some(StageFailure { category, message, .. })) if *category == FailureCategory::LintFailed => {
+            format!(
+                "\n\nPREVIOUS CLIPPY FAILURE:\n{}\n\nCRITICAL: Fix the actual code issues. DO NOT use #[allow(...)] attributes to suppress warnings. Fix the underlying problem.",
+                summarize_failure_output(&FailureCategory::LintFailed, message)
+            )
+        }
+        (_, Some(StageFailure { category, message, .. })) => format!(
             "\n\nPREVIOUS FAILURE: {:?}\nERROR OUTPUT:\n{}\n\nFix the issue that caused this failure.",
             category,
             summarize_failure_output(category, message)

@@ -15,7 +15,7 @@
 
 use std::path::Path;
 
-use oya::types::{truncate_clean, FailureCategory, StageName as Stage, StageResult};
+use oya::types::{truncate_clean, StageFailure, StageName as Stage, StageResult};
 use restate_sdk::prelude::*;
 
 use crate::orchestrator_types::{
@@ -37,7 +37,7 @@ pub struct StageExecutionInput<'a> {
     pub model: &'a str,
     pub stage: Stage,
     pub attempt: u32,
-    pub last_failure: Option<(FailureCategory, String)>,
+    pub last_failure: Option<StageFailure>,
     pub repo_root: &'a Path,
 }
 
@@ -233,9 +233,9 @@ fn build_stage_input_data(input: &StageExecutionInput<'_>) -> StageInputData {
         bead_id: input.bead_id.to_string(),
         context: input.context.to_string(),
         model: input.model.to_string(),
-        last_failure: input.last_failure.as_ref().map(|(cat, msg)| FailureSnapshot {
-            category: format!("{:?}", cat),
-            message: truncate_clean(msg, 2000),
+        last_failure: input.last_failure.as_ref().map(|failure| FailureSnapshot {
+            category: failure.category.as_str().to_string(),
+            message: truncate_clean(&failure.message, 2000),
         }),
     }
 }
@@ -271,6 +271,7 @@ fn build_stage_output_data(stage: &Stage, stage_result: &StageResult) -> StageOu
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oya::types::FailureCategory;
 
     #[test]
     fn test_calculate_stage_timing_with_valid_rfc3339() {
@@ -317,7 +318,12 @@ mod tests {
             model: "test-model",
             stage: Stage::Plan,
             attempt: 1,
-            last_failure: Some((FailureCategory::TestFailed, "test failed".to_string())),
+            last_failure: Some(StageFailure {
+                category: FailureCategory::TestFailed,
+                message: "test failed".to_string(),
+                retryable: false,
+                failed_at: "2026-02-20T00:00:00Z".to_string(),
+            }),
             repo_root: Path::new("/tmp"),
         };
 
@@ -329,7 +335,7 @@ mod tests {
         assert_eq!(stage_input.model, "test-model");
         assert!(stage_input.last_failure.is_some());
         let failure = stage_input.last_failure.unwrap();
-        assert_eq!(failure.category, "TestFailed");
+        assert_eq!(failure.category, "test_failed");
         assert_eq!(failure.message, "test failed");
     }
 

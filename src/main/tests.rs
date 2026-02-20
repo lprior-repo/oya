@@ -1,6 +1,7 @@
 use super::*;
 use crate::pipeline::MergeQueuePolicy;
 use chrono::Datelike;
+use oya::types::Gate;
 
 #[test]
 fn test_parse_rfc3339_deterministic_valid_input() {
@@ -133,7 +134,7 @@ fn test_execute_ship_gate_zjj_failure_routes_to_review() {
     use std::cell::RefCell;
 
     let seen = RefCell::new(Vec::new());
-    let result = execute_ship_gate_with_gate_runner(MergeQueuePolicy::Enforce, |gate| {
+    let result = execute_ship_gate_with_gate_runner(MergeQueuePolicy::Enforce, |gate: Gate| {
         seen.borrow_mut().push(gate.clone());
         match gate {
             Gate::MoonCi => Ok(GateEvidence {
@@ -186,4 +187,45 @@ fn test_cli_init_mode_parses() {
 fn test_cli_up_alias_parses_as_init() {
     let mode = parse_cli_mode_from(["oya", "up"]);
     assert_eq!(mode, CliMode::Init);
+}
+
+#[test]
+fn test_tests_unexpectedly_green_maps_to_retry_loop() {
+    let mut state =
+        test_pipeline_state(FailureCategory::TestsUnexpectedlyGreen, Stage::AcceptanceTest, 1);
+    assert!(should_retry_after_failure(&state));
+
+    state.attempt = 2;
+    assert!(!should_retry_after_failure(&state));
+}
+
+#[test]
+fn test_infra_failed_is_non_retryable() {
+    let state = test_pipeline_state(FailureCategory::TestInfraFailed, Stage::AcceptanceTest, 1);
+    assert!(!should_retry_after_failure(&state));
+}
+
+fn test_pipeline_state(category: FailureCategory, stage: Stage, attempt: u32) -> PipelineState {
+    PipelineState {
+        current_stage: stage.clone(),
+        attempt,
+        last_failure: Some(StageFailure {
+            category: category.clone(),
+            message: "failure".to_string(),
+            retryable: oya::is_retryable_failure(&category),
+            failed_at: "2026-02-20T00:00:00Z".to_string(),
+        }),
+        orchestrator: OrchestratorState {
+            status: "running".to_string(),
+            stage: stage.as_str().to_string(),
+            attempt,
+            bead_id: "bead".to_string(),
+            context: "ctx".to_string(),
+            model: "model".to_string(),
+            last_failure: String::new(),
+            last_output: String::new(),
+            last_prompt: String::new(),
+            updated_at: "2026-02-20T00:00:00Z".to_string(),
+        },
+    }
 }

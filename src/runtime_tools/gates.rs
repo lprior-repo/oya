@@ -1,6 +1,7 @@
 use super::super::*;
 use super::command_exec::{combine_command_output, run_command_with_timeout_with_exit};
 use oya::beads::moon_command::generate_moon_command;
+use oya::types::Gate;
 use std::path::PathBuf;
 
 const MOON_TIMEOUT_SECONDS: u64 = 900;

@@ -12,7 +12,7 @@
 //!
 //! ```rust,no_run
 //! use oya::orchestrator::{Orchestrator, StageRequest};
-//! use oya::types::{StageName, FailureCategory};
+//! use oya::types::{StageName, StageFailure};
 //!
 //! async fn test_happy_path<T: Orchestrator>(orch: T) {
 //!     let result = orch.run_stage(StageRequest {
@@ -20,13 +20,13 @@
 //!         attempt: 1,
 //!         bead_id: "bead-001".to_string(),
 //!         context: "test context".to_string(),
-//!         last_failure: None::<(FailureCategory, String)>,
+//!         last_failure: None,
 //!     }).await.unwrap();
 //!     assert!(result.passed);
 //! }
 //! ```
 
-use crate::types::{FailureCategory, StageName};
+use crate::types::{FailureCategory, StageFailure, StageName};
 use serde_json::Value;
 use thiserror::Error;
 
@@ -36,7 +36,7 @@ pub struct StageRequest {
     pub attempt: u32,
     pub bead_id: String,
     pub context: String,
-    pub last_failure: Option<(FailureCategory, String)>,
+    pub last_failure: Option<StageFailure>,
 }
 
 /// Result of executing a stage

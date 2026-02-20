@@ -81,6 +81,7 @@ pub fn is_retryable_failure(category: &FailureCategory) -> bool {
     matches!(
         category,
         FailureCategory::TestFailed
+            | FailureCategory::TestsUnexpectedlyGreen
             | FailureCategory::LintFailed
             | FailureCategory::OutputParseFailure
             | FailureCategory::CompileFailed

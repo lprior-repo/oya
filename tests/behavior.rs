@@ -11,7 +11,7 @@
 //! - Tests serve as executable documentation
 
 use oya::orchestrator::{Orchestrator, StageExecutionResult, StageRequest};
-use oya::types::{FailureCategory, StageName};
+use oya::types::{FailureCategory, StageFailure, StageName};
 use serde_json::json;
 
 mod util;
@@ -360,7 +360,12 @@ async fn given_stage_fails_when_retry_attempted_then_failure_context_available()
         attempt: 2 as u32,
         bead_id: "bead".to_string(),
         context: "ctx".to_string(),
-        last_failure: Some((FailureCategory::TestFailed, "previous error details".to_string())),
+        last_failure: Some(StageFailure {
+            category: FailureCategory::TestFailed,
+            message: "previous error details".to_string(),
+            retryable: oya::is_retryable_failure(&FailureCategory::TestFailed),
+            failed_at: "2026-02-20T00:00:00Z".to_string(),
+        }),
     })
     .await
     .unwrap();

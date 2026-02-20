@@ -216,6 +216,31 @@ pub enum FailureCategory {
     MaxAttemptsExceeded,
 }
 
+/// Typed failure details carried between stage attempts.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct StageFailure {
+    pub category: FailureCategory,
+    pub message: String,
+    pub retryable: bool,
+    pub failed_at: String,
+}
+
+impl StageFailure {
+    pub fn new(
+        category: FailureCategory,
+        message: String,
+        retryable: bool,
+        failed_at: String,
+    ) -> Self {
+        Self { category, message, retryable, failed_at }
+    }
+
+    pub fn with_reason(category: FailureCategory, message: String, failed_at: String) -> Self {
+        let retryable = crate::is_retryable_failure(&category);
+        Self::new(category, message, retryable, failed_at)
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ApproverMode {

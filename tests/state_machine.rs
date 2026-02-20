@@ -4,7 +4,7 @@
 //! all stages and handles failures appropriately.
 
 use oya::orchestrator::{Orchestrator, StageExecutionResult, StageRequest};
-use oya::types::{FailureCategory, StageName};
+use oya::types::{FailureCategory, StageFailure, StageName};
 use serde_json::json;
 
 mod util;
@@ -240,7 +240,12 @@ async fn test_failure_context_propagation() {
         attempt: 2 as u32,
         bead_id: "bead".to_string(),
         context: "ctx".to_string(),
-        last_failure: Some((FailureCategory::TestFailed, "previous error".to_string())),
+        last_failure: Some(StageFailure {
+            category: FailureCategory::TestFailed,
+            message: "previous error".to_string(),
+            retryable: oya::is_retryable_failure(&FailureCategory::TestFailed),
+            failed_at: "2026-02-20T00:00:00Z".to_string(),
+        }),
     })
     .await
     .unwrap();

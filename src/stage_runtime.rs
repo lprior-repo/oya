@@ -2,6 +2,7 @@ use super::*;
 use crate::orchestrator_types::GateResultData;
 use crate::pipeline::MergeQueuePolicy;
 use crate::stage_executor::StageExecution;
+use oya::types::Gate;
 
 fn format_gate_command_output(command: &str, exit_code: i32, output: &str) -> String {
     format!("command={} exit_code={}\n{}", command, exit_code, output)
