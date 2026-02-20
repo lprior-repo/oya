@@ -1,5 +1,5 @@
 use super::OyaError;
-use oya::types::{StageName, TimelineEntry};
+use oya::types::TimelineEntry;
 use restate_sdk::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -50,6 +50,7 @@ pub struct OpsMonitorEventResponse {
 #[derive(Debug, Serialize)]
 pub(super) struct WorkspaceLifecycleEvent {
     pub workspace: String,
+    pub workspace_path: String,
     pub queue_command: String,
     pub queue_passed: bool,
     pub queue_exit_code: i32,
@@ -101,6 +102,7 @@ pub(super) struct StageTiming {
 #[derive(Debug, Clone, Serialize)]
 pub(super) struct WorkspaceLifecycle {
     pub name: String,
+    pub path: String,
     pub queue_command: String,
     pub queue_passed: bool,
     pub queue_exit_code: i32,
@@ -173,61 +175,6 @@ pub(super) struct RunRequestEvent {
 pub(super) struct FailureSnapshot {
     pub category: String,
     pub message: String,
-}
-
-#[derive(Debug, Serialize)]
-pub(super) struct StageInputEvent {
-    pub run_id: String,
-    pub bead_id: String,
-    pub stage: String,
-    pub attempt: u32,
-    pub context: String,
-    pub last_failure: Option<FailureSnapshot>,
-    pub started_at: String,
-}
-
-#[derive(Debug, Serialize)]
-pub(super) struct StageResultEvent {
-    pub passed: bool,
-    pub failure_category: Option<String>,
-    pub next_stage: Option<String>,
-    pub output: String,
-}
-
-#[derive(Debug, Serialize)]
-pub(super) struct SkillOutputEvent {
-    pub success: bool,
-    pub exit_code: i32,
-    pub full_log: String,
-    pub feedback: String,
-    pub contract_document: Option<String>,
-    pub implementation_code: Option<String>,
-    pub test_results: Option<String>,
-    pub adversarial_report: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(super) struct GateEventSummary {
-    pub gate: String,
-    pub state_key: String,
-    pub artifact_id: String,
-    pub passed: bool,
-    pub exit_code: i32,
-}
-
-#[derive(Debug, Serialize)]
-pub(super) struct StageEnvelopeEvent {
-    pub run_id: String,
-    pub bead_id: String,
-    pub stage: String,
-    pub attempt: u32,
-    pub status: String,
-    pub input_key: String,
-    pub prompt_key: String,
-    pub result_key: String,
-    pub skill_output_key: String,
-    pub gate_events: Vec<GateEventSummary>,
-    pub recorded_at: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -310,10 +257,6 @@ pub(super) async fn append_timeline(
     Ok(())
 }
 
-pub(super) fn stage_attempt_key(stage: &StageName, attempt: u32, suffix: &str) -> String {
-    format!("{}_{}_{}", stage.as_str(), attempt, suffix)
-}
-
 /// Persist a single consolidated stage artifact.
 pub(super) fn set_stage_artifact(
     ctx: &WorkflowContext<'_>,
@@ -324,10 +267,7 @@ pub(super) fn set_stage_artifact(
 }
 
 /// Set lean timeline as a single JSON array instead of incremental appends.
-pub(super) fn set_timeline_once(
-    ctx: &WorkflowContext<'_>,
-    timeline: &str,
-) -> Result<(), OyaError> {
+pub(super) fn set_timeline_once(ctx: &WorkflowContext<'_>, timeline: &str) -> Result<(), OyaError> {
     ctx.set("timeline", timeline.to_string());
     Ok(())
 }
