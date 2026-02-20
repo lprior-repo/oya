@@ -1,40 +1,97 @@
-# PLAN: src-3g9 - Verify codex-grade gpt review and rework routing
+# PLAN: src-3g9 - OYA_OPENCODE_BASE_URL URL Validation
 
-## Context
-Ensure that the `GptReview` stage utilizes high-tier "codex-grade" models and follows the correct routing policy (failures route to `Tdd15` retry lane).
+## Summary
+Fix bug where `OYA_OPENCODE_BASE_URL` environment variable accepts invalid URLs silently. Add comprehensive validation and test coverage.
 
-## Implementation Steps
+## Current State
+- `opencode_config()` in `src/runtime_tools/http.rs:113-127` reads env var
+- `is_valid_http_url()` in `src/main.rs:603-621` validates URLs
+- Validation logic exists but lacks test coverage
+- No tests for `opencode_config()` function
 
-1.  **Verify Model Assignment**:
-    *   Confirm `StageName::model_for_stage(GptReview)` returns `ModelTier::Best`.
-    *   Verify `oya.yaml` maps `a` and `s` tiers to Codex-grade models (GPT-5 Codex, Claude Opus).
+## Phase 1: Tests (TEST_AGENT)
 
-2.  **Rework Routing Logic**:
-    *   **Refactor `src/stage_executor.rs`**:
-        *   Update `opencode_failure_stage_execution` to route `Stage::GptReview` to `Stage::Tdd15` instead of `Stage::Implementation` when OpenCode fails.
-    *   **Refactor `src/runtime_tools/gates.rs`**:
-        *   Update `gate_failure_mapping` to route all "retry lane" stages (`Qa`, `RedQueen`, `GptReview`) to `Stage::Tdd15` instead of `Stage::Implementation` upon gate failure.
-        *   Ensure `Stage::ShipGate` still routes to `Stage::GptReview` on merge conflict (existing logic).
+### File: `src/runtime_tools/http.rs`
+Add tests in existing `#[cfg(test)] mod tests` block for `opencode_config()`:
+- Default when env not set
+- Accepts valid http/https URLs
+- Rejects invalid URLs (no scheme, ftp, credentials, path, query, fragment)
+- Handles empty/whitespace strings (falls back to default)
+- Trims whitespace from URLs
 
-3.  **Unit Testing**:
-    *   Add/Update tests in `src/runtime_tools/gates.rs` to verify the new mapping logic.
-    *   Add/Update tests in `src/stage_executor.rs` (if feasible) to verify failure routing.
+### File: `src/main/tests.rs`
+Add tests for `is_valid_http_url`:
+- Accepts http, https, with port
+- Rejects empty, no scheme, ftp, credentials, path, query, fragment
+- Trims whitespace
+
+## Phase 2: Implementation (LOGIC_AGENT)
+
+### Task 1: Verify Implementation Correctness
+- Confirm `is_valid_http_url()` in `src/main.rs:603-621` correctly validates all cases
+- Confirm `opencode_config()` in `src/runtime_tools/http.rs:113-127` handles edge cases
+
+### Task 2: No Code Changes Expected
+- Current implementation appears correct
+- Tests should pass with existing code
 
 ## Test Strategy & Quality Gates
 
-### Quality Gates
-- `moon run :check`: Ensure no type errors.
-- `moon run :test`: Verify all unit and integration tests pass.
-- `moon run :clippy`: Ensure strict linting compliance (no unwrap/panic).
+### Gate 1: Tests Written (RED)
+- All tests compile
+- All new tests exist in test modules
+- Tests cover all edge cases from bead requirements
 
-### Test Scenarios
-- **Success**: `GptReview` passes all gates -> transition to `ShipGate`.
-- **OpenCode Failure**: `GptReview` LLM error -> transition to `Tdd15`.
-- **Gate Failure (Lint)**: `GptReview` Clippy fail -> transition to `Tdd15`.
-- **Gate Failure (Security)**: `GptReview` Security fail -> transition to `Tdd15`.
-- **QA Failure**: `Qa` fail -> transition to `Tdd15`.
-- **RedQueen Failure**: `RedQueen` fail -> transition to `Tdd15`.
+### Gate 2: Tests Pass (GREEN)
+- `moon run :test` passes all tests
+- `moon run :check` passes
+- `moon run :ci` passes
 
-## Verification
-- Code review of `src/types/pipeline.rs`, `src/stage_executor.rs`, and `src/runtime_tools/gates.rs`.
-- Execution of `moon run :test`.
+### Gate 3: Code Quality
+- No `unwrap` or `expect` in new code
+- No `panic!`, `todo!`, or `unimplemented!`
+- All functions return `Result<T, E>` for fallible operations
+
+## Verification Commands
+```bash
+moon run :test
+moon run :check
+moon run :ci
+```
+
+## Files Modified
+- `src/runtime_tools/http.rs` - add tests in existing test module
+- `src/main/tests.rs` - add tests for `is_valid_http_url`
+
+## Dependencies
+- `reqwest::Url::parse` - existing, used for URL validation
+- `std::env::var` - existing, used for environment variable access
+
+## Test Cases (Detailed)
+
+### `opencode_config()` tests:
+1. `test_opencode_config_default_when_env_not_set` - verify default URL
+2. `test_opencode_config_accepts_valid_http_url` - http://localhost:8080
+3. `test_opencode_config_accepts_valid_https_url` - https://api.example.com
+4. `test_opencode_config_rejects_invalid_url` - "not-a-url"
+5. `test_opencode_config_rejects_url_with_path` - http://localhost:8080/api
+6. `test_opencode_config_rejects_url_with_query` - http://localhost:8080?foo=bar
+7. `test_opencode_config_rejects_url_with_fragment` - http://localhost:8080#anchor
+8. `test_opencode_config_rejects_url_with_credentials` - http://user:pass@localhost:8080
+9. `test_opencode_config_rejects_ftp_scheme` - ftp://localhost
+10. `test_opencode_config_empty_string_uses_default` - "" falls back
+11. `test_opencode_config_whitespace_uses_default` - "   " falls back
+12. `test_opencode_config_trims_url` - "  http://localhost:8080  "
+
+### `is_valid_http_url()` tests:
+1. `test_is_valid_http_url_accepts_http`
+2. `test_is_valid_http_url_accepts_https`
+3. `test_is_valid_http_url_accepts_port`
+4. `test_is_valid_http_url_rejects_empty`
+5. `test_is_valid_http_url_rejects_no_scheme`
+6. `test_is_valid_http_url_rejects_ftp`
+7. `test_is_valid_http_url_rejects_credentials`
+8. `test_is_valid_http_url_rejects_path`
+9. `test_is_valid_http_url_rejects_query`
+10. `test_is_valid_http_url_rejects_fragment`
+11. `test_is_valid_http_url_trims_whitespace`

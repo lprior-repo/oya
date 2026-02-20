@@ -7,7 +7,7 @@
 
 use super::types::{RestateInvocationRow, RestateQueryResponse};
 use anyhow::Result;
-use reqwest::Client;
+use reqwest::blocking::Client as BlockingClient;
 use serde_json::json;
 
 const DEFAULT_RESTATE_ADMIN_URL: &str = "http://127.0.0.1:9070";
@@ -18,8 +18,11 @@ fn resolve_restate_admin_url() -> String {
         .map_or_else(|_| DEFAULT_RESTATE_ADMIN_URL.to_string(), std::convert::identity)
 }
 
-/// Fetch OyaOrchestrator invocations from Restate.
-pub async fn fetch_invocations(client: &Client, limit: usize) -> Result<Vec<RestateInvocationRow>> {
+/// Fetch OyaOrchestrator invocations from Restate using blocking HTTP.
+pub fn fetch_invocations_blocking(
+    client: &BlockingClient,
+    limit: usize,
+) -> Result<Vec<RestateInvocationRow>> {
     let url = resolve_restate_admin_url();
 
     let query = format!(
@@ -34,10 +37,8 @@ pub async fn fetch_invocations(client: &Client, limit: usize) -> Result<Vec<Rest
     let response = client
         .post(format!("{}/query", url))
         .json(&json!({ "query": query }))
-        .send()
-        .await?
-        .json::<RestateQueryResponse>()
-        .await?;
+        .send()?
+        .json::<RestateQueryResponse>()?;
 
     Ok(response.rows)
 }

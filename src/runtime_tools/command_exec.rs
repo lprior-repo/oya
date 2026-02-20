@@ -193,9 +193,10 @@ pub(crate) fn run_opencode(
     repo_root: &PathBuf,
     model: &str,
 ) -> Result<(bool, String), OyaError> {
+    let opencode_program = resolve_opencode_program();
     tracing::info!("Running opencode with prompt ({} chars) model={}", prompt.len(), model);
     let command_result = run_command_with_timeout(
-        "opencode",
+        opencode_program.as_str(),
         &["run", "--format", "json", "--model", model, prompt],
         OPENCODE_TIMEOUT_SECONDS,
         repo_root,
@@ -218,6 +219,14 @@ pub(crate) fn run_opencode(
         }
         Err(err) => Err(err),
     }
+}
+
+fn resolve_opencode_program() -> String {
+    std::env::var("OPENCODE_PATH")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "opencode".to_string())
 }
 
 fn fallback_to_opencode_http(

@@ -175,3 +175,15 @@ fn test_cli_tail_mode_parses_interval_and_run_id() {
     let mode = parse_cli_mode_from(["oya", "tail", "--interval", "5", "run-123"]);
     assert_eq!(mode, CliMode::Tail(TailArgs { interval: 5, run_id: Some("run-123".to_string()) }));
 }
+
+#[test]
+fn test_cli_init_mode_parses() {
+    let mode = parse_cli_mode_from(["oya", "init"]);
+    assert_eq!(mode, CliMode::Init);
+}
+
+#[test]
+fn test_cli_up_alias_parses_as_init() {
+    let mode = parse_cli_mode_from(["oya", "up"]);
+    assert_eq!(mode, CliMode::Init);
+}

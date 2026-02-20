@@ -41,7 +41,17 @@ systemctl --user stop oya-manual.service >/dev/null 2>&1 || true
 systemctl --user reset-failed oya-manual.service >/dev/null 2>&1 || true
 
 MOON_BIN="${MOON_PATH:-$(command -v moon)}"
-OPENCODE_BIN="${OPENCODE_PATH:-${HOME}/.local/share/mise/installs/github-sst-opencode/1.2.6/opencode}"
+DEFAULT_OPENCODE_BIN="${HOME}/.local/share/mise/installs/github-sst-opencode/latest/opencode"
+OPENCODE_BIN="${OPENCODE_PATH:-$(command -v opencode 2>/dev/null || true)}"
+if [[ -z "$OPENCODE_BIN" ]]; then
+	OPENCODE_BIN="$DEFAULT_OPENCODE_BIN"
+fi
+
+if [[ ! -x "$OPENCODE_BIN" ]]; then
+	echo "[oya] ERROR: OpenCode binary not found or not executable: $OPENCODE_BIN"
+	echo "[oya] Set OPENCODE_PATH or ensure 'opencode' is in PATH"
+	exit 1
+fi
 OPENCODE_PORT="${OPENCODE_PORT:-4096}"
 
 resolve_opencode_port() {

@@ -7,11 +7,15 @@
 
 use oya::build_opencode_poll_snapshot;
 use oya::types::{truncate_clean, FailureCategory, Gate, StageName as Stage, TimelineEntry};
-use oya::usage::ServeOyaUsageTracker;
-use oya::usage::{OyaUsageTracker, OyaUsageTrackerImpl};
+use oya::usage::{
+    is_rate_limit_failure, tier_for_stage, OyaUsageTracker, OyaUsageTrackerClient,
+    OyaUsageTrackerImpl, ReportOutcomeRequest, ServeOyaUsageTracker,
+};
 use restate_sdk::endpoint::Endpoint;
 use restate_sdk::prelude::*;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+const USAGE_TRACKER_KEY: &str = "global";
 
 use clap::{Parser, Subcommand};
 
@@ -19,6 +23,7 @@ mod ops_poller;
 mod orchestrator_types;
 mod pipeline;
 mod runtime_tools;
+mod runtime_up;
 mod stage_executor;
 mod stage_runtime;
 mod tail;
@@ -105,12 +110,47 @@ async fn build_start_context(
 ) -> Result<StartContext, OyaError> {
     let bead_id = parsed.bead_id.map_or_else(|| "unknown".to_string(), std::convert::identity);
     let context = parsed.context.map_or_else(String::new, std::convert::identity);
-    let model =
-        parsed.model.map_or_else(|| "zai-coding-plan/glm-5".to_string(), std::convert::identity);
+
+    // Get model from request or resolve via usage tracker for Plan stage tier
+    let model = match parsed.model {
+        Some(m) => m,
+        None => resolve_model_for_stage(ctx, &Stage::Plan).await?,
+    };
+
     let started_at = pipeline::deterministic_timestamp(ctx)
         .await
         .map_err(|_| OyaError("timestamp error".to_string()))?;
     Ok(StartContext { run_id: ctx.key().to_string(), bead_id, context, model, started_at })
+}
+
+/// Resolve the active model for a stage via the OyaUsageTracker VirtualObject.
+/// Uses workflow object client calls to read service state.
+async fn resolve_model_for_stage(
+    ctx: &WorkflowContext<'_>,
+    stage: &Stage,
+) -> Result<String, OyaError> {
+    let tier = tier_for_stage(stage).to_string();
+    ctx.object_client::<OyaUsageTrackerClient>(USAGE_TRACKER_KEY)
+        .get_active_model(tier)
+        .call()
+        .await
+        .map(|result| result.0)
+        .map_err(|error| OyaError(format!("usage tracker get_active_model failed: {}", error)))
+}
+
+/// Report execution outcome to the usage tracker for model health tracking.
+async fn report_stage_outcome(
+    ctx: &WorkflowContext<'_>,
+    model: &str,
+    success: bool,
+    is_rate_limit: bool,
+) -> Result<(), OyaError> {
+    let model = model.to_string();
+    ctx.object_client::<OyaUsageTrackerClient>(USAGE_TRACKER_KEY)
+        .report_outcome(Json(ReportOutcomeRequest { model, success, is_rate_limit }))
+        .call()
+        .await
+        .map_err(|error| OyaError(format!("usage tracker report_outcome failed: {}", error)))
 }
 
 async fn persist_run_start(
@@ -229,74 +269,13 @@ async fn run_pipeline_loop(
     state: &mut PipelineState,
 ) -> Result<(), OyaError> {
     loop {
-        // Execute stage and accumulate all data into single artifact (no Restate sets during execution)
-        let artifact = execute_and_accumulate_stage(
-            ctx,
-            StageExecutionInput {
-                run_id: &input.run_id,
-                bead_id: &input.bead_id,
-                context: &input.context,
-                model: &state.orchestrator.model,
-                stage: state.current_stage.clone(),
-                attempt: state.attempt,
-                last_failure: state.last_failure.clone(),
-                repo_root: &config.repo_root,
-            },
-            config,
-            state,
-        )
-        .await?;
-
-        // Persist single artifact after stage completes (only Restate set per stage)
+        let artifact = run_pipeline_stage(ctx, config, input, state).await?;
         persist_stage_artifact(ctx, &artifact).await?;
+        set_pipeline_state_from_artifact(state, &artifact);
 
-        // Update orchestrator state for recovery
-        state.orchestrator.stage = artifact.stage.clone();
-        state.orchestrator.attempt = artifact.attempt;
-        state.orchestrator.updated_at = artifact.timing.completed_at.clone();
-
-        // Determine next action based on artifact status
-        match artifact.status {
-            orchestrator_types::StageStatus::Completed => {
-                // Stage passed - move to next stage or complete
-                if let Some(next_stage) = state.current_stage.next() {
-                    state.current_stage = next_stage;
-                    state.attempt = 1;
-                    state.last_failure = None;
-                } else {
-                    if let Err(landing_failure) =
-                        run_landing_plane(ctx, state, config, &artifact).await
-                    {
-                        state.current_stage = landing_failure.next_stage;
-                        state.attempt = 1;
-                        state.last_failure =
-                            Some((landing_failure.failure_category, landing_failure.output));
-                        continue;
-                    }
-                    // All stages complete - mark run as shipped
-                    return mark_run_completed(ctx, state, &artifact).await;
-                }
-            }
-            orchestrator_types::StageStatus::Failed => {
-                let failure_category = parse_failure_category(&artifact.failure_category)
-                    .unwrap_or(FailureCategory::OutputParseFailure);
-
-                state.last_failure = Some((failure_category, artifact.output.full_log.clone()));
-
-                if let Some(next_stage) = parse_next_stage(&artifact.next_stage) {
-                    if next_stage != state.current_stage {
-                        state.current_stage = next_stage;
-                        state.attempt = 1;
-                        continue;
-                    }
-                }
-
-                // Stage failed - retry same stage up to max attempts
-                if state.attempt >= state.current_stage.max_attempts() {
-                    return mark_run_failed(ctx, state, &artifact).await;
-                }
-                state.attempt += 1;
-            }
+        let should_continue = should_continue_after_artifact(ctx, state, config, &artifact).await?;
+        if !should_continue {
+            return Ok(());
         }
 
         ctx.sleep(std::time::Duration::from_millis(100))
@@ -305,17 +284,131 @@ async fn run_pipeline_loop(
     }
 }
 
+async fn run_pipeline_stage(
+    ctx: &WorkflowContext<'_>,
+    config: &RuntimeConfig,
+    input: &PipelineRunInput,
+    state: &PipelineState,
+) -> Result<StageArtifact, OyaError> {
+    execute_and_accumulate_stage(
+        ctx,
+        StageExecutionInput {
+            run_id: &input.run_id,
+            bead_id: &input.bead_id,
+            context: &input.context,
+            model: &state.orchestrator.model,
+            stage: state.current_stage.clone(),
+            attempt: state.attempt,
+            last_failure: state.last_failure.clone(),
+            repo_root: &config.repo_root,
+        },
+        config,
+        state,
+    )
+    .await
+}
+
+fn set_pipeline_state_from_artifact(
+    state: &mut PipelineState,
+    artifact: &orchestrator_types::StageArtifact,
+) {
+    state.orchestrator.stage = artifact.stage.clone();
+    state.orchestrator.attempt = artifact.attempt;
+    state.orchestrator.updated_at = artifact.timing.completed_at.clone();
+}
+
+async fn should_continue_after_artifact(
+    ctx: &WorkflowContext<'_>,
+    state: &mut PipelineState,
+    config: &RuntimeConfig,
+    artifact: &orchestrator_types::StageArtifact,
+) -> Result<bool, OyaError> {
+    match artifact.status {
+        orchestrator_types::StageStatus::Completed => {
+            return completed_stage_next_action(ctx, state, config, artifact).await;
+        }
+        orchestrator_types::StageStatus::Failed => {
+            let failure_category = parse_failure_category(&artifact.failure_category)
+                .unwrap_or(FailureCategory::OutputParseFailure);
+            state.last_failure = Some((failure_category, artifact.output.full_log.clone()));
+            handle_failed_stage(ctx, state, artifact).await
+        }
+    }
+}
+
+async fn completed_stage_next_action(
+    ctx: &WorkflowContext<'_>,
+    state: &mut PipelineState,
+    config: &RuntimeConfig,
+    artifact: &orchestrator_types::StageArtifact,
+) -> Result<bool, OyaError> {
+    // Report successful outcome for the current model
+    report_stage_outcome(ctx, &state.orchestrator.model, true, false).await?;
+
+    if let Some(next_stage) = state.current_stage.next() {
+        state.current_stage = next_stage;
+        state.attempt = 1;
+        state.last_failure = None;
+        // Resolve model for the next stage's tier
+        state.orchestrator.model = resolve_model_for_stage(ctx, &state.current_stage).await?;
+        return Ok(true);
+    }
+
+    if let Err(landing_failure) = run_landing_plane(ctx, state, config, artifact).await {
+        state.current_stage = landing_failure.next_stage;
+        state.attempt = 1;
+        state.last_failure = Some((landing_failure.failure_category, landing_failure.output));
+        // Resolve model for the retry stage's tier
+        state.orchestrator.model = resolve_model_for_stage(ctx, &state.current_stage).await?;
+        return Ok(true);
+    }
+
+    mark_run_completed(ctx, state, artifact).await?;
+    Ok(false)
+}
+
+async fn handle_failed_stage(
+    ctx: &WorkflowContext<'_>,
+    state: &mut PipelineState,
+    artifact: &orchestrator_types::StageArtifact,
+) -> Result<bool, OyaError> {
+    let failure_category = parse_failure_category(&artifact.failure_category)
+        .unwrap_or(FailureCategory::OutputParseFailure);
+    let is_rate_limit = is_rate_limit_failure(&failure_category);
+
+    // Report failure outcome to the usage tracker
+    report_stage_outcome(ctx, &state.orchestrator.model, false, is_rate_limit).await?;
+
+    if let Some(next_stage) = parse_next_stage(&artifact.next_stage) {
+        if next_stage != state.current_stage {
+            state.current_stage = next_stage;
+            state.attempt = 1;
+            // Resolve model for the new stage's tier
+            state.orchestrator.model = resolve_model_for_stage(ctx, &state.current_stage).await?;
+            return Ok(true);
+        }
+    }
+
+    if state.attempt >= state.current_stage.max_attempts() {
+        mark_run_failed(ctx, state, artifact).await?;
+        return Ok(false);
+    }
+
+    state.attempt += 1;
+    Ok(true)
+}
+
 struct LandingFailure {
     failure_category: FailureCategory,
     next_stage: Stage,
     output: String,
 }
 
-struct CommandStep<'a> {
-    id: &'a str,
-    label: &'a str,
-    program: &'a str,
-    args: Vec<&'a str>,
+struct CommandStep {
+    id: String,
+    label: String,
+    program: String,
+    args: Vec<String>,
     timeout_seconds: u64,
     failure_category: FailureCategory,
     next_stage: Stage,
@@ -341,158 +434,212 @@ struct LandingStepTelemetry {
     stderr: String,
 }
 
+struct LandingStepTemplate {
+    id: &'static str,
+    label: &'static str,
+    program: &'static str,
+    args: &'static [&'static str],
+    timeout_seconds: u64,
+    failure_category: FailureCategory,
+    next_stage: Stage,
+}
+
+const LANDING_STEPS: &[LandingStepTemplate] = &[
+    LandingStepTemplate {
+        id: "moon_ci",
+        label: "moon ci",
+        program: "moon",
+        args: &["run", ":ci"],
+        timeout_seconds: 1_800,
+        failure_category: FailureCategory::TestFailed,
+        next_stage: Stage::Implementation,
+    },
+    LandingStepTemplate {
+        id: "zjj_sync",
+        label: "zjj sync",
+        program: "zjj",
+        args: &["sync"],
+        timeout_seconds: 120,
+        failure_category: FailureCategory::MergeConflict,
+        next_stage: Stage::GptReview,
+    },
+    LandingStepTemplate {
+        id: "zjj_done",
+        label: "zjj done",
+        program: "zjj",
+        args: &["done"],
+        timeout_seconds: 120,
+        failure_category: FailureCategory::MergeConflict,
+        next_stage: Stage::GptReview,
+    },
+];
+
 async fn run_landing_plane(
     ctx: &WorkflowContext<'_>,
     state: &PipelineState,
     config: &RuntimeConfig,
     artifact: &orchestrator_types::StageArtifact,
 ) -> Result<(), LandingFailure> {
-    let run_root = artifact
-        .workspace
-        .as_ref()
-        .map(|workspace| std::path::PathBuf::from(workspace.path.as_str()))
-        .filter(|path| !path.as_os_str().is_empty())
-        .unwrap_or_else(|| config.repo_root.clone());
-
-    let mut steps = vec![
-        CommandStep {
-            id: "moon_ci",
-            label: "moon ci",
-            program: "moon",
-            args: vec!["run", ":ci"],
-            timeout_seconds: 1_800,
-            failure_category: FailureCategory::TestFailed,
-            next_stage: Stage::Implementation,
-        },
-        CommandStep {
-            id: "zjj_sync",
-            label: "zjj sync",
-            program: "zjj",
-            args: vec!["sync"],
-            timeout_seconds: 120,
-            failure_category: FailureCategory::MergeConflict,
-            next_stage: Stage::GptReview,
-        },
-        CommandStep {
-            id: "zjj_done",
-            label: "zjj done",
-            program: "zjj",
-            args: vec!["done"],
-            timeout_seconds: 120,
-            failure_category: FailureCategory::MergeConflict,
-            next_stage: Stage::GptReview,
-        },
-    ];
-
-    steps.push(CommandStep {
-        id: "br_close",
-        label: "br close",
-        program: "br",
-        args: vec!["close", state.orchestrator.bead_id.as_str()],
-        timeout_seconds: 60,
-        failure_category: FailureCategory::OutputParseFailure,
-        next_stage: Stage::GptReview,
-    });
-    steps.push(CommandStep {
-        id: "br_sync_flush_only",
-        label: "br sync --flush-only",
-        program: "br",
-        args: vec!["sync", "--flush-only"],
-        timeout_seconds: 60,
-        failure_category: FailureCategory::OutputParseFailure,
-        next_stage: Stage::GptReview,
-    });
-
-    for step in steps {
+    let run_root = resolve_landing_run_root(config, artifact);
+    for template in LANDING_STEPS {
+        let step = landing_step_from_template(template);
         run_landing_step(ctx, &run_root, step).await?;
     }
+
+    run_landing_step(ctx, &run_root, closing_step(&state.orchestrator.bead_id)).await?;
+    run_landing_step(ctx, &run_root, sync_flush_step()).await?;
 
     Ok(())
 }
 
+fn landing_step_from_template(template: &LandingStepTemplate) -> CommandStep {
+    CommandStep {
+        id: template.id.to_string(),
+        label: template.label.to_string(),
+        program: template.program.to_string(),
+        args: template.args.iter().map(|value| value.to_string()).collect::<Vec<_>>(),
+        timeout_seconds: template.timeout_seconds,
+        failure_category: template.failure_category.clone(),
+        next_stage: template.next_stage.clone(),
+    }
+}
+
+fn closing_step(bead_id: &str) -> CommandStep {
+    CommandStep {
+        id: "br_close".to_string(),
+        label: "br close".to_string(),
+        program: "br".to_string(),
+        args: vec!["close".to_string(), bead_id.to_string()],
+        timeout_seconds: 60,
+        failure_category: FailureCategory::OutputParseFailure,
+        next_stage: Stage::GptReview,
+    }
+}
+
+fn sync_flush_step() -> CommandStep {
+    CommandStep {
+        id: "br_sync_flush_only".to_string(),
+        label: "br sync --flush-only".to_string(),
+        program: "br".to_string(),
+        args: vec!["sync".to_string(), "--flush-only".to_string()],
+        timeout_seconds: 60,
+        failure_category: FailureCategory::OutputParseFailure,
+        next_stage: Stage::GptReview,
+    }
+}
+
+fn resolve_landing_run_root(
+    config: &RuntimeConfig,
+    artifact: &orchestrator_types::StageArtifact,
+) -> PathBuf {
+    artifact
+        .workspace
+        .as_ref()
+        .map(|workspace| PathBuf::from(workspace.path.as_str()))
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or_else(|| config.repo_root.clone())
+}
+
 async fn run_landing_step(
     ctx: &WorkflowContext<'_>,
-    repo_root: &PathBuf,
-    step: CommandStep<'_>,
+    repo_root: &Path,
+    step: CommandStep,
 ) -> Result<(), LandingFailure> {
-    let telemetry_key = landing_step_key(step.id);
+    let telemetry_key = landing_step_key(step.id.as_str());
     if landing_step_completed(ctx, &telemetry_key).await? {
         return Ok(());
     }
 
-    let args = step.args.iter().map(|value| value.to_string()).collect::<Vec<_>>();
-    let program = step.program.to_string();
-    let command = format!("{} {}", step.program, step.args.join(" "));
-    let root = repo_root.clone();
-    let timeout_seconds = step.timeout_seconds;
+    let command = build_landing_command(&step);
     let started_at = pipeline::deterministic_timestamp(ctx).await.map_err(|error| {
         landing_failure_from_step(&step, format!("{} timestamp failed: {}", step.label, error))
     })?;
 
-    let result: Json<LandingCommandResult> = ctx
-        .run(move || async move {
-            let command_result = tokio::task::spawn_blocking(move || {
-                let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
-                run_command_with_timeout_with_exit(
-                    program.as_str(),
-                    &arg_refs,
-                    timeout_seconds,
-                    &root,
-                )
-            })
-            .await
-            .map_err(|error| {
-                HandlerError::from(format!("landing command join failed: {}", error))
-            })?;
-
-            command_result
-                .map(|(passed, stdout, stderr, exit_code)| {
-                    Json(LandingCommandResult { passed, stdout, stderr, exit_code })
-                })
-                .map_err(|error| HandlerError::from(error.0))
-        })
-        .await
-        .map_err(|error| LandingFailure {
-            failure_category: step.failure_category.clone(),
-            next_stage: step.next_stage.clone(),
-            output: format!("{} failed before completion: {}", step.label, error),
-        })?;
+    let result = run_landing_command(ctx, repo_root, &step).await?;
 
     let completed_at = pipeline::deterministic_timestamp(ctx).await.map_err(|error| {
         landing_failure_from_step(&step, format!("{} timestamp failed: {}", step.label, error))
     })?;
-
-    persist_landing_step(
-        ctx,
-        &telemetry_key,
-        LandingStepTelemetry {
-            step_id: step.id.to_string(),
-            command: command.clone(),
-            started_at,
-            completed_at,
-            passed: result.0.passed,
-            exit_code: result.0.exit_code,
-            stdout: truncate_clean(&result.0.stdout, 4000),
-            stderr: truncate_clean(&result.0.stderr, 4000),
-        },
-        &step,
-    )?;
+    let telemetry = build_landing_telemetry(&step, &command, &started_at, &completed_at, &result);
+    persist_landing_step(ctx, &telemetry_key, telemetry, &step)?;
 
     if result.0.passed {
         return Ok(());
     }
 
-    let output = truncate_clean(
-        &format!(
-            "command={} exit_code={}\n{}\n{}",
-            command, result.0.exit_code, result.0.stdout, result.0.stderr
-        ),
-        6000,
-    );
-    Err(LandingFailure {
+    Err(build_landing_failure(step, command, &result.0))
+}
+
+fn build_landing_command(step: &CommandStep) -> String {
+    format!("{} {}", step.program.as_str(), step.args.join(" "))
+}
+
+fn build_landing_telemetry(
+    step: &CommandStep,
+    command: &str,
+    started_at: &str,
+    completed_at: &str,
+    result: &Json<LandingCommandResult>,
+) -> LandingStepTelemetry {
+    LandingStepTelemetry {
+        step_id: step.id.clone(),
+        command: command.to_string(),
+        started_at: started_at.to_string(),
+        completed_at: completed_at.to_string(),
+        passed: result.0.passed,
+        exit_code: result.0.exit_code,
+        stdout: truncate_clean(&result.0.stdout, 4000),
+        stderr: truncate_clean(&result.0.stderr, 4000),
+    }
+}
+
+fn build_landing_failure(
+    step: CommandStep,
+    command: String,
+    result: &LandingCommandResult,
+) -> LandingFailure {
+    LandingFailure {
         failure_category: step.failure_category,
         next_stage: step.next_stage,
-        output,
+        output: truncate_clean(
+            &format!(
+                "command={} exit_code={}\n{}\n{}",
+                command, result.exit_code, result.stdout, result.stderr
+            ),
+            6000,
+        ),
+    }
+}
+
+async fn run_landing_command(
+    ctx: &WorkflowContext<'_>,
+    repo_root: &Path,
+    step: &CommandStep,
+) -> Result<Json<LandingCommandResult>, LandingFailure> {
+    let args = step.args.to_vec();
+    let program = step.program.to_string();
+    let root = repo_root.to_path_buf();
+    let timeout_seconds = step.timeout_seconds;
+
+    ctx.run(move || async move {
+        let command_result = tokio::task::spawn_blocking(move || {
+            let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+            run_command_with_timeout_with_exit(&program, &arg_refs, timeout_seconds, &root)
+        })
+        .await
+        .map_err(|error| HandlerError::from(format!("landing command join failed: {}", error)))?;
+
+        command_result
+            .map(|(passed, stdout, stderr, exit_code)| {
+                Json(LandingCommandResult { passed, stdout, stderr, exit_code })
+            })
+            .map_err(|error| HandlerError::from(error.0))
+    })
+    .await
+    .map_err(|error| LandingFailure {
+        failure_category: step.failure_category.clone(),
+        next_stage: step.next_stage.clone(),
+        output: format!("{} failed before completion: {}", step.label, error),
     })
 }
 
@@ -519,7 +666,7 @@ fn persist_landing_step(
     ctx: &WorkflowContext<'_>,
     key: &str,
     telemetry: LandingStepTelemetry,
-    step: &CommandStep<'_>,
+    step: &CommandStep,
 ) -> Result<(), LandingFailure> {
     let encoded = serde_json::to_string(&telemetry).map_err(|error| {
         landing_failure_from_step(step, format!("landing telemetry encode failed: {}", error))
@@ -528,7 +675,7 @@ fn persist_landing_step(
     Ok(())
 }
 
-fn landing_failure_from_step(step: &CommandStep<'_>, output: String) -> LandingFailure {
+fn landing_failure_from_step(step: &CommandStep, output: String) -> LandingFailure {
     LandingFailure {
         failure_category: step.failure_category.clone(),
         next_stage: step.next_stage.clone(),
@@ -644,6 +791,8 @@ enum CliCommand {
     Run(RunArgs),
     #[command(about = "Live TUI for monitoring pipeline invocations")]
     Tail(TailArgs),
+    #[command(about = "Bootstrap local runtime (restate + opencode + oya service)", alias = "up")]
+    Init,
 }
 
 #[derive(Parser, Debug, Clone, PartialEq)]
@@ -687,6 +836,7 @@ where
         Some(CliCommand::OpsPoll) => CliMode::OpsPoll,
         Some(CliCommand::Run(args)) => CliMode::Run(args),
         Some(CliCommand::Tail(args)) => CliMode::Tail(args),
+        Some(CliCommand::Init) => CliMode::Init,
     }
 }
 
@@ -696,6 +846,7 @@ enum CliMode {
     OpsPoll,
     Run(RunArgs),
     Tail(TailArgs),
+    Init,
 }
 
 #[tokio::main]
@@ -706,6 +857,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         CliMode::OpsPoll => ops_poller::run_ops_poller().await,
         CliMode::Serve => run_server().await,
         CliMode::Run(args) => workflow_runner::run_workflow(args).await,
+        CliMode::Init => runtime_up::run_local_up()
+            .map_err(|e| Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error>),
         CliMode::Tail(args) => {
             // Need to enter tokio runtime for the tail app
             tail::run_tail(args.interval, args.run_id)
@@ -715,11 +868,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
+    let _shutdown_guard = oya::telemetry::init_default()?;
+    report_server_start_messages();
+    let endpoint = build_restate_endpoint();
+    let bind_addr = resolve_bind_addr()?;
+    HttpServer::new(endpoint).listen_and_serve(bind_addr).await;
+
+    Ok(())
+}
+
+fn report_server_start_messages() {
     // Initialize OpenTelemetry with dual-layer output:
     // - JSON logs to stdout (for OpenObserve log stream)
     // - OTLP traces to OpenObserve trace backend
-    let _shutdown_guard = oya::telemetry::init_default()?;
-
     tracing::info!(
         service = "oya-orchestrator",
         port = 9080,
@@ -728,11 +889,21 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
     );
     tracing::info!("Using REAL execution: opencode CLI + moon/zjj quality gates");
 
+    tracing::info!(
+        workflow_service = "OyaOrchestrator",
+        monitor_service = "OyaOpsMonitor",
+        usage_service = "OyaUsageTracker",
+        "Discovered Restate services before binding"
+    );
+}
+
+fn build_restate_endpoint() -> Endpoint {
     let workflow_service = OyaOrchestratorImpl.serve();
     let monitor_service = OyaOpsMonitorImpl.serve();
     let service_option_input = default_restate_service_option_input();
     let workflow_service_options = build_restate_service_options(service_option_input);
     let monitor_service_options = build_restate_service_options(service_option_input);
+
     let workflow_discovery =
         <ServeOyaOrchestrator<OyaOrchestratorImpl> as restate_sdk::service::Discoverable>::discover(
         );
@@ -741,6 +912,7 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
     let usage_discovery =
         <ServeOyaUsageTracker<OyaUsageTrackerImpl> as restate_sdk::service::Discoverable>::discover(
         );
+
     tracing::info!(
         workflow_service = workflow_discovery.name.to_string(),
         workflow_service_type = ?workflow_discovery.ty,
@@ -753,16 +925,12 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         usage_handlers = usage_discovery.handlers.len(),
         "Discovered Restate services before binding"
     );
-    let endpoint = Endpoint::builder()
+
+    Endpoint::builder()
         .bind_with_options(workflow_service, workflow_service_options)
         .bind_with_options(monitor_service, monitor_service_options)
         .bind(OyaUsageTrackerImpl.serve())
-        .build();
-
-    let bind_addr = resolve_bind_addr()?;
-    HttpServer::new(endpoint).listen_and_serve(bind_addr).await;
-
-    Ok(())
+        .build()
 }
 
 #[derive(Clone, Copy)]

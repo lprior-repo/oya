@@ -2,7 +2,7 @@ use super::super::*;
 use super::command_exec::{combine_command_output, run_command_with_timeout_with_exit};
 use crate::pipeline::WorkspacePreparationPolicy;
 use oya::build_zjj_workspace_name;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 const ZJJ_TIMEOUT_SECONDS: u64 = 60;
 
@@ -59,12 +59,12 @@ fn add_workspace(
     run_workspace_command(request, &command, &args, "zjj add", workspace)
 }
 
-fn resolve_workspace_path(repo_root: &PathBuf, workspace: &str) -> String {
+fn resolve_workspace_path(repo_root: &Path, workspace: &str) -> String {
     let repo_name = repo_root
         .file_name()
         .and_then(|name| name.to_str())
         .map_or_else(|| "workspace".to_string(), |name| name.to_string());
-    let parent = repo_root.parent().unwrap_or(repo_root.as_path());
+    let parent = repo_root.parent().unwrap_or(repo_root);
     parent.join(format!("{}__workspaces", repo_name)).join(workspace).to_string_lossy().to_string()
 }
 
@@ -97,7 +97,7 @@ pub(crate) fn prepare_stage_workspace(
         return Ok(None);
     }
     let workspace = ensure_workspace_name(&request)?;
-    let workspace_path = resolve_workspace_path(&request.repo_root, workspace.as_str());
+    let workspace_path = resolve_workspace_path(request.repo_root.as_path(), workspace.as_str());
     let queue = queue_workspace(&request, &workspace)?;
     let add = add_workspace(&request, &workspace)?;
     Ok(Some(WorkspaceLifecycleEvent {

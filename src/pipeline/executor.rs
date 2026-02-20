@@ -19,8 +19,8 @@ use oya::types::{truncate_clean, FailureCategory, StageName as Stage, StageResul
 use restate_sdk::prelude::*;
 
 use crate::orchestrator_types::{
-    set_stage_artifact, FailureSnapshot, StageArtifact, StageInputData, StageOutputData,
-    StageStatus, StageTiming, WorkspaceLifecycle,
+    set_stage_artifact, FailureSnapshot, GateResultData, StageArtifact, StageInputData,
+    StageOutputData, StageStatus, StageTiming, WorkspaceLifecycle,
 };
 use crate::runtime_tools::prepare_stage_workspace;
 use crate::stage_executor::{execute_stage_real, StageExecutionRequest};
@@ -59,18 +59,45 @@ pub async fn execute_and_accumulate_stage(
     config: &RuntimeConfig,
     _state: &PipelineState,
 ) -> Result<StageArtifact, OyaError> {
-    // Get start time (deterministic via ctx.run)
-    let started_at = ctx
-        .run(|| async { Ok::<_, HandlerError>(chrono::Utc::now().to_rfc3339()) })
-        .await
-        .map_err(|e| OyaError(format!("timestamp failed: {}", e)))?;
-
-    // Prepare workspace (in-memory, no persistence yet)
+    let started_at = capture_stage_timestamp(ctx).await?;
     let workspace = prepare_workspace_lifecycle(ctx, &input, config).await?;
     let execution_root = resolve_execution_root(input.repo_root, workspace.as_ref());
+    let (stage_result, prompt, gates) =
+        execute_stage_workflow(ctx, &input, config, execution_root).await?;
+    let completed_at = capture_stage_timestamp(ctx).await?;
 
-    // Execute stage (all side effects happen here, but no Restate sets)
-    let (stage_result, prompt, gates) = execute_stage_real(
+    Ok(build_stage_artifact(StageArtifactData {
+        input: &input,
+        workspace,
+        prompt,
+        timing: calculate_stage_timing(&started_at, &completed_at),
+        stage_result,
+        gates,
+    }))
+}
+
+struct StageArtifactData<'a> {
+    input: &'a StageExecutionInput<'a>,
+    workspace: Option<WorkspaceLifecycle>,
+    prompt: String,
+    timing: StageTiming,
+    stage_result: StageResult,
+    gates: Vec<GateResultData>,
+}
+
+async fn capture_stage_timestamp(ctx: &WorkflowContext<'_>) -> Result<String, OyaError> {
+    ctx.run(|| async { Ok::<_, HandlerError>(chrono::Utc::now().to_rfc3339()) })
+        .await
+        .map_err(|error| OyaError(format!("timestamp failed: {}", error)))
+}
+
+async fn execute_stage_workflow(
+    ctx: &WorkflowContext<'_>,
+    input: &StageExecutionInput<'_>,
+    config: &RuntimeConfig,
+    execution_root: std::path::PathBuf,
+) -> Result<(StageResult, String, Vec<GateResultData>), OyaError> {
+    execute_stage_real(
         ctx,
         StageExecutionRequest {
             run_id: input.run_id.to_string(),
@@ -82,43 +109,33 @@ pub async fn execute_and_accumulate_stage(
             last_failure: input.last_failure.clone(),
         },
         config.merge_queue_policy,
-        execution_root.clone(),
+        execution_root,
     )
-    .await?;
+    .await
+}
 
-    // Get end time
-    let completed_at = ctx
-        .run(|| async { Ok::<_, HandlerError>(chrono::Utc::now().to_rfc3339()) })
-        .await
-        .map_err(|e| OyaError(format!("timestamp failed: {}", e)))?;
-
-    // Calculate duration
-    let timing = calculate_stage_timing(&started_at, &completed_at);
-
-    // Build input data
-    let stage_input = build_stage_input_data(&input);
-
-    // Build output data from stage result
-    let stage_output = build_stage_output_data(&input.stage, &stage_result);
-
-    // Determine status
-    let status = if stage_result.passed { StageStatus::Completed } else { StageStatus::Failed };
-
-    // Build complete artifact
-    Ok(StageArtifact {
-        stage: input.stage.as_str().to_string(),
-        attempt: input.attempt,
-        failure_category: stage_result.failure_category.as_ref().map(|c| c.as_str().to_string()),
-        next_stage: stage_result.next_stage.as_ref().map(|s| s.as_str().to_string()),
-        timing,
-        workspace,
+fn build_stage_artifact(data: StageArtifactData<'_>) -> StageArtifact {
+    let stage_input = build_stage_input_data(data.input);
+    let status =
+        if data.stage_result.passed { StageStatus::Completed } else { StageStatus::Failed };
+    StageArtifact {
+        stage: data.input.stage.as_str().to_string(),
+        attempt: data.input.attempt,
+        failure_category: data
+            .stage_result
+            .failure_category
+            .as_ref()
+            .map(|category| category.as_str().to_string()),
+        next_stage: data.stage_result.next_stage.as_ref().map(|stage| stage.as_str().to_string()),
+        timing: data.timing,
+        workspace: data.workspace,
         input: stage_input,
-        prompt,
-        output: stage_output,
-        task_tracking: None, // TODO: extract from skill output if needed
-        gates,
+        prompt: data.prompt,
+        output: build_stage_output_data(&data.input.stage, &data.stage_result),
+        task_tracking: None,
+        gates: data.gates,
         status,
-    })
+    }
 }
 
 /// Persist a completed stage artifact to Restate KVP.

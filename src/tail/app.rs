@@ -6,7 +6,7 @@
 #![forbid(unsafe_code)]
 
 use super::parser::parse_invocation;
-use super::restate::fetch_invocations;
+use super::restate::fetch_invocations_blocking;
 use super::types::InvocationView;
 use super::ui::{render_invocation, render_invocation_list};
 use anyhow::Result;
@@ -16,7 +16,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
-use reqwest::Client;
+use reqwest::blocking::Client as BlockingClient;
 use std::io::Stdout;
 use std::time::{Duration, Instant};
 
@@ -46,14 +46,11 @@ impl App {
         }
     }
 
-    pub fn refresh(&mut self, client: &Client) {
+    pub fn refresh(&mut self, client: &BlockingClient) {
         self.last_refresh = Instant::now();
 
-        let result = tokio::runtime::Handle::try_current()
-            .map(|handle| handle.block_on(async { fetch_invocations(client, 20).await }));
-
-        match result {
-            Ok(Ok(rows)) => {
+        match fetch_invocations_blocking(client, 20) {
+            Ok(rows) => {
                 self.invocations = rows.iter().map(parse_invocation).collect();
                 self.error = None;
 
@@ -66,9 +63,6 @@ impl App {
                 if self.selected >= self.invocations.len() && !self.invocations.is_empty() {
                     self.selected = self.invocations.len() - 1;
                 }
-            }
-            Ok(Err(e)) => {
-                self.error = Some(e.to_string());
             }
             Err(e) => {
                 self.error = Some(e.to_string());
@@ -119,7 +113,7 @@ pub fn run_tail(refresh_interval: u64, run_id: Option<String>) -> Result<()> {
 
     // Create app and client
     let mut app = App::new(refresh_interval, run_id);
-    let client = Client::new();
+    let client = BlockingClient::new();
 
     // Initial data load
     app.refresh(&client);
@@ -138,7 +132,7 @@ pub fn run_tail(refresh_interval: u64, run_id: Option<String>) -> Result<()> {
 fn run_main_loop(
     terminal: &mut Terminal<CrosstermBackend<Stdout>>,
     app: &mut App,
-    client: &Client,
+    client: &BlockingClient,
 ) -> Result<()> {
     loop {
         terminal.draw(|frame| draw_frame(frame, app))?;

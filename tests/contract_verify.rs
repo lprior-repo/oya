@@ -65,7 +65,7 @@ fn verify_zjj_exit_codes() {
     }
 }
 
-/// Verify opencode is available and returns JSON
+/// Verify opencode is available and returns JSONL (JSON Lines)
 #[test]
 #[ignore = "runs real opencode - requires API access"]
 fn verify_opencode_json_format() {
@@ -74,12 +74,27 @@ fn verify_opencode_json_format() {
     if let Ok(output) = output {
         let stdout = String::from_utf8_lossy(&output.stdout);
 
-        // Verify it's valid JSON
-        let parsed: serde_json::Value =
-            serde_json::from_str(&stdout).expect("opencode should return valid JSON");
+        // Openencode returns JSONL (JSON Lines) - one JSON object per line
+        // Parse each line and verify it's valid JSON
+        let mut found_content = false;
+        for line in stdout.lines() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            let parsed: serde_json::Value = serde_json::from_str(line).unwrap_or_else(|e| {
+                panic!(
+                    "opencode should return valid JSONL, but line '{}' failed to parse: {}",
+                    line, e
+                )
+            });
 
-        // Verify it has stdout field
-        assert!(parsed.get("stdout").is_some(), "opencode JSON should have 'stdout' field");
+            // Check for stdout or content field (different event types have different fields)
+            if parsed.get("stdout").is_some() || parsed.get("content").is_some() {
+                found_content = true;
+            }
+        }
+
+        assert!(found_content, "opencode JSONL should contain events with stdout or content field");
     } else {
         println!("opencode not available, skipping");
     }
