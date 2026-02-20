@@ -32,6 +32,34 @@
 //! - Report evaluation preserves contract stage order and enforces monotonic timestamps.
 //! - Final decision is derived only from trace/check outcomes and matches validation results.
 //! - Re-running with equivalent inputs yields equivalent report structure and decisions.
+//!
+//! # Design Contract: `src-2nw`
+//!
+//! ## Purpose and goals
+//! - Fix critical determinism bug in Restate workflow execution by ensuring `spawn_blocking`
+//!   operations are properly journaled and not re-executed on workflow replay.
+//! - Maintain Restate's determinism guarantee by separating non-deterministic operations
+//!   from deterministic journaling in the workflow execution context.
+//! - Ensure workflow state consistency across executions and replays by following the
+//!   correct execution pattern for blocking operations.
+//!
+//! ## Key functions to implement
+//! - `execute_stage_real(ctx: &WorkflowContext<'_>, request: StageExecutionRequest, merge_queue_policy: MergeQueuePolicy, repo_root: PathBuf) -> Result<(StageResult, String), OyaError>`
+//!   - Fixed implementation with `spawn_blocking` outside `ctx.run()`
+//! - `execute_stage_blocking(input: StageBlockingInput) -> Result<StageExecution, OyaError>`
+//!   - Existing synchronous blocking execution (no changes needed)
+//! - `test_execute_stage_real_deterministic_replay()`
+//!   - New test to verify spawn_blocking is not called on replay
+//!
+//! ## Acceptance criteria
+//! - `spawn_blocking` is called OUTSIDE of `ctx.run()` (non-deterministic part)
+//! - Only result mapping is inside `ctx.run()` (deterministic journaling)
+//! - Error handling properly separates OyaError (outer) from HandlerError (inner)
+//! - Test added that verifies spawn_blocking is not called on replay
+//! - Documentation explains the determinism pattern with proper doc comments
+//! - `moon run :clippy` passes with no unwrap/expect/panic violations
+//! - `moon run :test` passes with all tests green
+//! - Code review confirms no other functions have this anti-pattern
 
 pub mod beads;
 pub mod config;

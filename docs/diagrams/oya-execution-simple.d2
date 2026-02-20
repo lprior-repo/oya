@@ -1,0 +1,99 @@
+# OYA Execution Flow - Based on test-run-20260219-203815
+
+direction: down
+
+# Start
+start["Start"]: {
+  icon: https://icons.terraformdesign.io/emoji/rocket.svg
+  style.bold: true
+  style.fill: "#cce6ff"
+}
+
+# Setup
+setup["Setup Phase"]: {
+  style.fill: "#f0f0f0"
+}
+
+select["Select Bead\nsrc-2nw (P0)"] { }
+runid["Generate Run ID\ntest-run-20260219-203815"] { }
+invoke["Start Invocation\ninv_1i6pEc..."] { }
+
+# Stages
+workflow["Workflow Execution"]: {
+  style.fill: "#f0f0f0"
+  style.bold: true
+}
+
+stage1["Plan\nJournal 3-35\n197s\nopencode/glm-5-free"]: {
+  style.fill: "#e6f3ff"
+  style.stroke: "#4dabf7"
+  style.stroke-width: 2
+}
+
+stage2["Contract\nJournal 35-73\nzai-coding-plan/glm-4.6"]: {
+  style.fill: "#fff0e6"
+  style.stroke: "#ff922b"
+  style.stroke-width: 2
+}
+
+stage3["Acceptance Test\nJournal 73-110\nRED Gate\nTests MUST FAIL"]: {
+  style.fill: "#ffd6d6"
+  style.stroke: "#ff5252"
+  style.stroke-width: 3
+}
+
+stage4["Implementation\nJournal 110-118\nGREEN Gate\nTests MUST PASS"]: {
+  style.fill: "#d6ffeb"
+  style.stroke: "#20c997"
+  style.stroke-width: 3
+}
+
+stage5["QA & Completion\nJournal 118-141\nQuality Gates"]: {
+  style.fill: "#fff0cc"
+  style.stroke: "#fab005"
+  style.stroke-width: 2
+}
+
+# Success
+success["SUCCESS\nWorkflow Complete\nJournal 141\nResult: success"]: {
+  icon: https://icons.terraformdesign.io/emoji/check.svg
+  style.bold: true
+  style.fill: "#d3f9d8"
+  style.stroke = "#20c997"
+  style.stroke-width: 3
+}
+
+# Infrastructure
+infra["Infrastructure\noya-manual.service\nBinary: 13MB\nRestate: running"]: {
+  style.fill: "#f8f9fa"
+  style.stroke-dash: 3
+}
+
+# Services
+endpoints["Services\nAdmin: :9070\nIngress: :8080\nService: :9080"]: {
+  style.fill: "#f8f9fa"
+  style.stroke-dash: 3
+}
+
+# Flow
+start -> setup
+setup -> select
+select -> runid
+runid -> invoke
+invoke -> workflow
+
+workflow -> stage1
+stage1 -> stage2
+stage2 -> stage3
+stage3 -> stage4
+stage4 -> stage5
+stage5 -> success
+
+success -- infra
+success -- endpoints
+
+# Labels
+stage1.stage2: "Plan done"
+stage2.stage3: "Contract done"
+stage3.stage4: "Red to Green"
+stage4.stage5: "Implement"

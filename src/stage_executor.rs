@@ -48,6 +48,19 @@ pub(super) struct StageBlockingInput {
     pub repo_root: PathBuf,
 }
 
+/// Executes a stage with deterministic Restate journaling.
+///
+/// # Determinism Contract
+///
+/// This function ensures that on workflow replay:
+/// - The blocking operation (`spawn_blocking`) is not re-executed
+/// - Only the journaled result mapping is replayed
+/// - Identical inputs produce identical journaled outputs
+///
+/// # Implementation Pattern
+///
+/// 1. Execute `spawn_blocking` outside `ctx.run()` (non-deterministic runtime work)
+/// 2. Wrap only result-to-`Json` mapping in `ctx.run()` (deterministic journaling)
 pub(super) async fn execute_stage_real(
     ctx: &WorkflowContext<'_>,
     request: StageExecutionRequest,
@@ -58,14 +71,9 @@ pub(super) async fn execute_stage_real(
         return Err(OyaError("attempt must be greater than 0".to_string()));
     }
     let input = StageBlockingInput { request: request.clone(), merge_queue_policy, repo_root };
+    let blocking_execution = run_stage_blocking(move || execute_stage_blocking(input)).await?;
     let execution: Json<StageExecution> = ctx
-        .run(|| async move {
-            let result =
-                tokio::task::spawn_blocking(move || execute_stage_blocking(input)).await.map_err(
-                    |error| HandlerError::from(format!("spawn_blocking failed: {}", error)),
-                )?;
-            result.map(Json).map_err(|e| HandlerError::from(e.0))
-        })
+        .run(move || async move { map_stage_execution_for_journal(Ok(blocking_execution)) })
         .await
         .map_err(|e| OyaError(format!("ctx.run failed: {}", e)))?;
     let StageExecution { passed, output, failure_category, next_stage, prompt } = execution.0;
@@ -79,6 +87,21 @@ pub(super) async fn execute_stage_real(
         next_stage,
     };
     Ok((stage_result, prompt))
+}
+
+async fn run_stage_blocking<F>(run: F) -> Result<StageExecution, OyaError>
+where
+    F: FnOnce() -> Result<StageExecution, OyaError> + Send + 'static,
+{
+    tokio::task::spawn_blocking(run)
+        .await
+        .map_err(|error| OyaError(format!("spawn_blocking failed: {}", error)))?
+}
+
+fn map_stage_execution_for_journal(
+    execution: Result<StageExecution, OyaError>,
+) -> Result<Json<StageExecution>, HandlerError> {
+    execution.map(Json).map_err(|error| HandlerError::from(error.0))
 }
 
 pub(super) fn execute_stage_blocking(
@@ -197,5 +220,46 @@ pub(super) fn stage_failure_context(
             summarize_failure_output(category, message)
         ),
         (_, None) => String::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+
+    #[tokio::test]
+    async fn test_execute_stage_real_deterministic_replay_pattern() {
+        let counter = Arc::new(AtomicUsize::new(0));
+        let counter_for_blocking = Arc::clone(&counter);
+
+        let blocking_execution = run_stage_blocking(move || {
+            counter_for_blocking.fetch_add(1, Ordering::SeqCst);
+            Ok(sample_execution())
+        })
+        .await;
+
+        assert!(blocking_execution.is_ok());
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+
+        let first_journal = map_stage_execution_for_journal(blocking_execution);
+        assert!(first_journal.is_ok());
+
+        let replay_journal = map_stage_execution_for_journal(Ok(sample_execution()));
+        assert!(replay_journal.is_ok());
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+    }
+
+    fn sample_execution() -> StageExecution {
+        StageExecution {
+            passed: true,
+            output: "ok".to_string(),
+            failure_category: None,
+            next_stage: None,
+            prompt: "prompt".to_string(),
+        }
     }
 }

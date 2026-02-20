@@ -65,7 +65,8 @@ pub(super) async fn start_workflow(
     client: &reqwest::Client,
     config: &WorkflowConfig,
 ) -> Result<(), DynError> {
-    let start_url = format!("{}/Oya/{}/start/send", config.restate_ingress, config.run_id);
+    let start_url =
+        format!("{}/OyaOrchestrator/{}/run/send", config.restate_ingress, config.run_id);
     let payload = serde_json::json!({
         "bead_id": config.bead_id,
         "context": config.context,
@@ -179,9 +180,9 @@ pub(super) async fn fetch_workflow_status(
             "select i.status, s.value_utf8 as state_json from sys_invocation i \
              left join state s on s.service_name = i.target_service_name \
              and s.service_key = i.target_service_key and s.key = 'state' \
-             where i.target_service_name = 'Oya' \
-             and i.target_service_key = '{}' \
-             and i.target_handler_name = 'start' \
+              where i.target_service_name = 'OyaOrchestrator' \
+              and i.target_service_key = '{}' \
+              and i.target_handler_name = 'run' \
              order by i.modified_at desc limit 1",
             config.run_id
         )

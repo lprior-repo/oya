@@ -46,6 +46,7 @@ pub struct ReportOutcomeRequest {
 }
 
 #[restate_sdk::object]
+#[name = "Oya"]
 pub trait OyaUsageTracker {
     /// Get the currently active, healthy model for the requested tier.
     /// Rotates automatically if the current one is unhealthy.

@@ -77,7 +77,24 @@ systemd-run --user --unit oya-manual \
 	"$REPO_ROOT/target/release/oya" >/dev/null
 
 echo "[oya] Registering deployment..."
-curl -fsS -X POST "http://127.0.0.1:9070/deployments" --json '{"uri":"http://localhost:9080"}' >/dev/null
+DEPLOYMENT_RESPONSE="$(curl -fsS -X POST "http://127.0.0.1:9070/deployments" --json '{"uri":"http://localhost:9080"}')"
+DEPLOYMENT_ID="$(
+	python - "$DEPLOYMENT_RESPONSE" <<'PY'
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+print(payload.get("id", ""))
+PY
+)"
+
+if [[ -z "$DEPLOYMENT_ID" ]]; then
+	echo "[oya] ERROR: could not resolve deployment id from register response"
+	exit 1
+fi
+
+curl -fsS -X PATCH "http://127.0.0.1:9070/deployments/${DEPLOYMENT_ID}" \
+	--json '{"uri":"http://localhost:9080","overwrite":true}' >/dev/null
 
 DEPLOYMENTS_JSON="$(curl -fsS "http://127.0.0.1:9070/deployments")"
 if ! python - "$DEPLOYMENTS_JSON" <<'PY'; then
@@ -92,7 +109,7 @@ for deployment in deployments:
     if not uri.startswith("http://localhost:9080"):
         continue
     service_names = {service.get("name") for service in deployment.get("services", [])}
-    required = {"Oya"}
+    required = {"Oya", "OyaOrchestrator"}
     if required.issubset(service_names):
         sys.exit(0)
 

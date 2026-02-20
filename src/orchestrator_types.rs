@@ -75,6 +75,92 @@ pub(super) struct OrchestratorState {
     pub updated_at: String,
 }
 
+/// Consolidated stage artifact containing all data for one stage attempt.
+/// Replaces 8+ individual keys with a single rich payload.
+#[derive(Debug, Clone, Serialize)]
+pub(super) struct StageArtifact {
+    pub stage: String,
+    pub attempt: u32,
+    pub timing: StageTiming,
+    pub workspace: Option<WorkspaceLifecycle>,
+    pub input: StageInputData,
+    pub prompt: String,
+    pub output: StageOutputData,
+    pub task_tracking: Option<TaskTracking>,
+    pub gates: Vec<GateResultData>,
+    pub status: StageStatus,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(super) struct StageTiming {
+    pub started_at: String,
+    pub completed_at: String,
+    pub duration_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(super) struct WorkspaceLifecycle {
+    pub name: String,
+    pub queue_command: String,
+    pub queue_passed: bool,
+    pub queue_exit_code: i32,
+    pub add_command: String,
+    pub add_passed: bool,
+    pub add_exit_code: i32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(super) struct StageInputData {
+    pub run_id: String,
+    pub bead_id: String,
+    pub context: String,
+    pub model: String,
+    pub last_failure: Option<FailureSnapshot>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(super) struct StageOutputData {
+    pub success: bool,
+    pub exit_code: i32,
+    pub full_log: String,
+    pub feedback: String,
+    pub contract_document: Option<String>,
+    pub implementation_code: Option<String>,
+    pub test_results: Option<String>,
+    pub adversarial_report: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(super) struct TaskTracking {
+    pub tasks_created: Vec<String>,
+    pub tasks_updated: Vec<String>,
+    pub tasks_completed: Vec<String>,
+    pub task_states: std::collections::HashMap<String, TaskState>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(super) struct TaskState {
+    pub subject: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(super) struct GateResultData {
+    pub gate: String,
+    pub passed: bool,
+    pub exit_code: i32,
+    pub command: String,
+    pub output: String,
+}
+
+/// Stage status - mutually exclusive states making illegal states unrepresentable.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum StageStatus {
+    Completed,
+    Failed,
+}
+
 #[derive(Debug, Serialize)]
 pub(super) struct RunRequestEvent {
     pub run_id: String,
@@ -83,7 +169,7 @@ pub(super) struct RunRequestEvent {
     pub started_at: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub(super) struct FailureSnapshot {
     pub category: String,
     pub message: String,
@@ -226,4 +312,22 @@ pub(super) async fn append_timeline(
 
 pub(super) fn stage_attempt_key(stage: &StageName, attempt: u32, suffix: &str) -> String {
     format!("{}_{}_{}", stage.as_str(), attempt, suffix)
+}
+
+/// Persist a single consolidated stage artifact.
+pub(super) fn set_stage_artifact(
+    ctx: &WorkflowContext<'_>,
+    key: &str,
+    artifact: &StageArtifact,
+) -> Result<(), OyaError> {
+    set_json_state(ctx, key, artifact)
+}
+
+/// Set lean timeline as a single JSON array instead of incremental appends.
+pub(super) fn set_timeline_once(
+    ctx: &WorkflowContext<'_>,
+    timeline: &str,
+) -> Result<(), OyaError> {
+    ctx.set("timeline", timeline.to_string());
+    Ok(())
 }

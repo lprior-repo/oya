@@ -1,0 +1,377 @@
+//! Batch stage executor - accumulates all stage data in-memory, persists once.
+//!
+//! This module implements the simplified state model:
+//! - Executes each stage completely in-memory
+//! - Accumulates ALL stage data (timing, workspace, input, prompt, output, gates)
+//! - Persists ONE rich artifact after stage completion
+//! - Only checkpoint at stage boundaries (~13 ops vs 140+)
+
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+#![deny(clippy::panic)]
+#![deny(clippy::too_many_lines)]
+#![deny(clippy::too_many_arguments)]
+#![forbid(unsafe_code)]
+
+use std::path::Path;
+
+use oya::types::{truncate_clean, FailureCategory, StageName as Stage, StageResult};
+use restate_sdk::prelude::*;
+
+use crate::orchestrator_types::{
+    set_stage_artifact, FailureSnapshot, GateResultData, StageArtifact, StageInputData,
+    StageOutputData, StageStatus, StageTiming, WorkspaceLifecycle,
+};
+use crate::runtime_tools::execute_gate;
+use crate::stage_executor::{execute_stage_real, StageExecutionRequest};
+
+use super::state::PipelineState;
+use super::{OyaError, RuntimeConfig};
+
+/// Input data for executing a stage and building its artifact.
+#[derive(Clone)]
+pub struct StageExecutionInput<'a> {
+    pub run_id: &'a str,
+    pub bead_id: &'a str,
+    pub context: &'a str,
+    pub model: &'a str,
+    pub stage: Stage,
+    pub attempt: u32,
+    pub last_failure: Option<(FailureCategory, String)>,
+    pub repo_root: &'a Path,
+}
+
+/// Execute a stage and accumulate all data into a single rich artifact.
+///
+/// This function:
+/// 1. Records start timestamp
+/// 2. Executes the stage (no Restate ops during execution)
+/// 3. Records end timestamp
+/// 4. Executes all gates and collects results
+/// 5. Builds complete artifact with all stage data
+/// 6. Returns artifact for later persistence (in caller)
+///
+/// No Restate operations are performed during stage execution - only
+/// timestamp capture via `ctx.run()`.
+pub async fn execute_and_accumulate_stage(
+    ctx: &WorkflowContext<'_>,
+    input: StageExecutionInput<'_>,
+    config: &RuntimeConfig,
+    _state: &PipelineState,
+) -> Result<StageArtifact, OyaError> {
+    // Get start time (deterministic via ctx.run)
+    let started_at = ctx
+        .run(|| async { Ok::<_, HandlerError>(chrono::Utc::now().to_rfc3339()) })
+        .await
+        .map_err(|e| OyaError(format!("timestamp failed: {}", e)))?;
+
+    // Prepare workspace (in-memory, no persistence yet)
+    let workspace = prepare_workspace_lifecycle(&input, config).await?;
+
+    // Execute stage (all side effects happen here, but no Restate sets)
+    let (stage_result, prompt) = execute_stage_real(
+        ctx,
+        StageExecutionRequest {
+            run_id: input.run_id.to_string(),
+            bead_id: input.bead_id.to_string(),
+            stage: input.stage.clone(),
+            attempt: input.attempt,
+            context: input.context.to_string(),
+            model: input.model.to_string(),
+            last_failure: input.last_failure.clone(),
+        },
+        config.merge_queue_policy,
+        input.repo_root.to_path_buf(),
+    )
+    .await?;
+
+    // Get end time
+    let completed_at = ctx
+        .run(|| async { Ok::<_, HandlerError>(chrono::Utc::now().to_rfc3339()) })
+        .await
+        .map_err(|e| OyaError(format!("timestamp failed: {}", e)))?;
+
+    // Calculate duration
+    let timing = calculate_stage_timing(&started_at, &completed_at);
+
+    // Execute gates and collect results
+    let gates = execute_and_collect_gates(input.stage.clone(), input.repo_root)?;
+
+    // Build input data
+    let stage_input = build_stage_input_data(&input);
+
+    // Build output data from stage result
+    let stage_output = build_stage_output_data(&input.stage, &stage_result);
+
+    // Determine status
+    let status = if stage_result.passed { StageStatus::Completed } else { StageStatus::Failed };
+
+    // Build complete artifact
+    Ok(StageArtifact {
+        stage: input.stage.as_str().to_string(),
+        attempt: input.attempt,
+        timing,
+        workspace,
+        input: stage_input,
+        prompt,
+        output: stage_output,
+        task_tracking: None, // TODO: extract from skill output if needed
+        gates,
+        status,
+    })
+}
+
+/// Persist a completed stage artifact to Restate KVP.
+///
+/// This is the ONLY Restate set operation per stage (1.5 ops counting timestamps).
+pub async fn persist_stage_artifact(
+    ctx: &WorkflowContext<'_>,
+    artifact: &StageArtifact,
+) -> Result<(), OyaError> {
+    let key = format!("{}_{}", artifact.stage, artifact.attempt);
+    set_stage_artifact(ctx, &key, artifact)
+}
+
+// ---------------------------------------------------------------------------
+// Helper functions (all pure, no side effects)
+// ---------------------------------------------------------------------------
+
+async fn prepare_workspace_lifecycle(
+    input: &StageExecutionInput<'_>,
+    config: &RuntimeConfig,
+) -> Result<Option<WorkspaceLifecycle>, OyaError> {
+    use crate::runtime_tools::prepare_stage_workspace;
+
+    // Skip workspace preparation if policy says so
+    if config.workspace_policy.should_skip() {
+        return Ok(None);
+    }
+
+    // Prepare workspace (this may have side effects via zjj, but no Restate ops)
+    let workspace_event = prepare_stage_workspace(crate::runtime_tools::WorkspacePrepRequest {
+        run_id: input.run_id.to_string(),
+        bead_id: input.bead_id.to_string(),
+        stage: input.stage.clone(),
+        attempt: input.attempt,
+        recorded_at: chrono::Utc::now().to_rfc3339(),
+        workspace_policy: config.workspace_policy,
+        repo_root: input.repo_root.to_path_buf(),
+    })?;
+
+    // Convert to WorkspaceLifecycle (persistable type)
+    match workspace_event {
+        Some(event) => Ok(Some(WorkspaceLifecycle {
+            name: event.workspace,
+            queue_command: event.queue_command,
+            queue_passed: event.queue_passed,
+            queue_exit_code: event.queue_exit_code,
+            add_command: event.add_command,
+            add_passed: event.add_passed,
+            add_exit_code: event.add_exit_code,
+        })),
+        None => Ok(None),
+    }
+}
+
+fn calculate_stage_timing(started_at: &str, completed_at: &str) -> StageTiming {
+    let start_dt = chrono::DateTime::parse_from_rfc3339(started_at)
+        .map(|dt| dt.with_timezone(&chrono::Utc))
+        .unwrap_or_else(|_| chrono::DateTime::UNIX_EPOCH);
+    let end_dt = chrono::DateTime::parse_from_rfc3339(completed_at)
+        .map(|dt| dt.with_timezone(&chrono::Utc))
+        .unwrap_or_else(|_| chrono::DateTime::UNIX_EPOCH);
+    let duration_ms = (end_dt - start_dt).num_milliseconds().max(0) as u64;
+
+    StageTiming {
+        started_at: started_at.to_string(),
+        completed_at: completed_at.to_string(),
+        duration_ms,
+    }
+}
+
+fn execute_and_collect_gates(
+    stage: Stage,
+    repo_root: &Path,
+) -> Result<Vec<GateResultData>, OyaError> {
+    let repo_path = repo_root.to_path_buf();
+    stage
+        .gates()
+        .into_iter()
+        .map(|gate| {
+            execute_gate(gate.clone(), &repo_path).map(|evidence| GateResultData {
+                gate: gate.as_str().to_string(),
+                passed: evidence.passed,
+                exit_code: evidence.exit_code,
+                command: evidence.command,
+                output: truncate_clean(&evidence.output, 4000),
+            })
+        })
+        .collect()
+}
+
+fn build_stage_input_data(input: &StageExecutionInput<'_>) -> StageInputData {
+    StageInputData {
+        run_id: input.run_id.to_string(),
+        bead_id: input.bead_id.to_string(),
+        context: input.context.to_string(),
+        model: input.model.to_string(),
+        last_failure: input.last_failure.as_ref().map(|(cat, msg)| FailureSnapshot {
+            category: format!("{:?}", cat),
+            message: truncate_clean(msg, 2000),
+        }),
+    }
+}
+
+fn build_stage_output_data(stage: &Stage, stage_result: &StageResult) -> StageOutputData {
+    let full_log = truncate_clean(&stage_result.output.to_string(), 12000);
+    let feedback = stage_result
+        .failure_category
+        .as_ref()
+        .map_or_else(|| "Success".to_string(), |c| c.as_str().to_string());
+
+    // Stage-specific output fields
+    let (contract_document, implementation_code, test_results, adversarial_report) = match stage {
+        Stage::Contract => (Some(full_log.clone()), None, None, None),
+        Stage::Tdd15 | Stage::Implementation => (None, Some(full_log.clone()), None, None),
+        Stage::Qa => (None, None, Some(full_log.clone()), None),
+        Stage::RedQueen => (None, None, Some(full_log.clone()), Some(full_log.clone())),
+        _ => (None, None, None, None),
+    };
+
+    StageOutputData {
+        success: stage_result.passed,
+        exit_code: if stage_result.passed { 0 } else { 1 },
+        full_log,
+        feedback,
+        contract_document,
+        implementation_code,
+        test_results,
+        adversarial_report,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_calculate_stage_timing_with_valid_rfc3339() {
+        let started_at = "2026-02-19T20:38:15Z";
+        let completed_at = "2026-02-19T20:38:17Z";
+
+        let timing = calculate_stage_timing(started_at, completed_at);
+
+        assert_eq!(timing.started_at, started_at);
+        assert_eq!(timing.completed_at, completed_at);
+        assert_eq!(timing.duration_ms, 2000);
+    }
+
+    #[test]
+    fn test_calculate_stage_timing_handles_invalid_timestamps() {
+        let started_at = "invalid";
+        let completed_at = "also-invalid";
+
+        let timing = calculate_stage_timing(started_at, completed_at);
+
+        // Should fall back to UNIX_EPOCH for both, resulting in 0 duration
+        assert_eq!(timing.started_at, started_at);
+        assert_eq!(timing.completed_at, completed_at);
+        assert_eq!(timing.duration_ms, 0);
+    }
+
+    #[test]
+    fn test_calculate_stage_timing_negative_duration_becomes_zero() {
+        let started_at = "2026-02-19T20:38:17Z";
+        let completed_at = "2026-02-19T20:38:15Z"; // End before start
+
+        let timing = calculate_stage_timing(started_at, completed_at);
+
+        // Negative duration should become 0
+        assert_eq!(timing.duration_ms, 0);
+    }
+
+    #[test]
+    fn test_build_stage_input_data_with_last_failure() {
+        let input = StageExecutionInput {
+            run_id: "test-run",
+            bead_id: "test-bead",
+            context: "test context",
+            model: "test-model",
+            stage: Stage::Plan,
+            attempt: 1,
+            last_failure: Some((FailureCategory::TestFailed, "test failed".to_string())),
+            repo_root: Path::new("/tmp"),
+        };
+
+        let stage_input = build_stage_input_data(&input);
+
+        assert_eq!(stage_input.run_id, "test-run");
+        assert_eq!(stage_input.bead_id, "test-bead");
+        assert_eq!(stage_input.context, "test context");
+        assert_eq!(stage_input.model, "test-model");
+        assert!(stage_input.last_failure.is_some());
+        let failure = stage_input.last_failure.unwrap();
+        assert_eq!(failure.category, "TestFailed");
+        assert_eq!(failure.message, "test failed");
+    }
+
+    #[test]
+    fn test_build_stage_input_data_without_last_failure() {
+        let input = StageExecutionInput {
+            run_id: "test-run",
+            bead_id: "test-bead",
+            context: "test context",
+            model: "test-model",
+            stage: Stage::Plan,
+            attempt: 1,
+            last_failure: None,
+            repo_root: Path::new("/tmp"),
+        };
+
+        let stage_input = build_stage_input_data(&input);
+
+        assert_eq!(stage_input.run_id, "test-run");
+        assert!(stage_input.last_failure.is_none());
+    }
+
+    #[test]
+    fn test_build_stage_output_data_for_contract_stage() {
+        let stage_result = StageResult {
+            run_id: "test-run".to_string(),
+            stage: Stage::Contract,
+            attempt: 1,
+            passed: true,
+            output: serde_json::json!("contract output"),
+            failure_category: None,
+            next_stage: None,
+        };
+
+        let stage_output = build_stage_output_data(&Stage::Contract, &stage_result);
+
+        assert!(stage_output.success);
+        assert_eq!(stage_output.exit_code, 0);
+        assert!(stage_output.contract_document.is_some());
+        assert!(stage_output.implementation_code.is_none());
+        assert!(stage_output.test_results.is_none());
+        assert!(stage_output.adversarial_report.is_none());
+    }
+
+    #[test]
+    fn test_build_stage_output_data_for_failed_stage() {
+        let stage_result = StageResult {
+            run_id: "test-run".to_string(),
+            stage: Stage::Plan,
+            attempt: 1,
+            passed: false,
+            output: serde_json::json!("stage failed"),
+            failure_category: Some(FailureCategory::CompileFailed),
+            next_stage: None,
+        };
+
+        let stage_output = build_stage_output_data(&Stage::Plan, &stage_result);
+
+        assert!(!stage_output.success);
+        assert_eq!(stage_output.exit_code, 1);
+        assert_eq!(stage_output.feedback, "compile_failed");
+    }
+}

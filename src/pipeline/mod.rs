@@ -1,7 +1,9 @@
+mod executor;
 mod outputs;
 mod state;
 mod timeline;
 
+pub(super) use executor::{execute_and_accumulate_stage, persist_stage_artifact, StageExecutionInput};
 pub(super) use outputs::{record_stage_outputs, RecordStageOutputsInput};
 pub(super) use state::{
     deterministic_env_bool, deterministic_timestamp, execute_stage_with_tracker,

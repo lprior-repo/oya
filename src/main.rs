@@ -7,6 +7,7 @@
 
 use oya::build_opencode_poll_snapshot;
 use oya::types::{truncate_clean, FailureCategory, Gate, StageName as Stage, TimelineEntry};
+use oya::usage::ServeOyaUsageTracker;
 use oya::usage::{OyaUsageTracker, OyaUsageTrackerImpl};
 use restate_sdk::endpoint::Endpoint;
 use restate_sdk::prelude::*;
@@ -52,11 +53,13 @@ impl From<TerminalError> for OyaError {
 }
 
 #[restate_sdk::workflow]
+#[name = "OyaOrchestrator"]
 pub trait OyaOrchestrator {
-    async fn start(request: Json<serde_json::Value>) -> Result<String, HandlerError>;
+    async fn run(request: Json<serde_json::Value>) -> Result<String, HandlerError>;
 }
 
 #[restate_sdk::service]
+#[name = "OyaOpsMonitor"]
 pub trait OyaOpsMonitor {
     async fn poll_status() -> Result<Json<OpsMonitorPollResponse>, HandlerError>;
     async fn poll_events(
@@ -70,7 +73,7 @@ pub struct OyaOrchestratorImpl;
 pub struct OyaOpsMonitorImpl;
 
 impl OyaOrchestrator for OyaOrchestratorImpl {
-    async fn start(
+    async fn run(
         &self,
         ctx: WorkflowContext<'_>,
         request: Json<serde_json::Value>,
@@ -368,6 +371,26 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
     let service_option_input = default_restate_service_option_input();
     let workflow_service_options = build_restate_service_options(service_option_input);
     let monitor_service_options = build_restate_service_options(service_option_input);
+    let workflow_discovery =
+        <ServeOyaOrchestrator<OyaOrchestratorImpl> as restate_sdk::service::Discoverable>::discover(
+        );
+    let monitor_discovery =
+        <ServeOyaOpsMonitor<OyaOpsMonitorImpl> as restate_sdk::service::Discoverable>::discover();
+    let usage_discovery =
+        <ServeOyaUsageTracker<OyaUsageTrackerImpl> as restate_sdk::service::Discoverable>::discover(
+        );
+    tracing::info!(
+        workflow_service = workflow_discovery.name.to_string(),
+        workflow_service_type = ?workflow_discovery.ty,
+        workflow_handlers = workflow_discovery.handlers.len(),
+        monitor_service = monitor_discovery.name.to_string(),
+        monitor_service_type = ?monitor_discovery.ty,
+        monitor_handlers = monitor_discovery.handlers.len(),
+        usage_service = usage_discovery.name.to_string(),
+        usage_service_type = ?usage_discovery.ty,
+        usage_handlers = usage_discovery.handlers.len(),
+        "Discovered Restate services before binding"
+    );
     let endpoint = Endpoint::builder()
         .bind_with_options(workflow_service, workflow_service_options)
         .bind_with_options(monitor_service, monitor_service_options)
