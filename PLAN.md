@@ -1,97 +1,84 @@
-# PLAN: src-3g9 - OYA_OPENCODE_BASE_URL URL Validation
+# PLAN: src-3ag - Add --version Flag to CLI
 
 ## Summary
-Fix bug where `OYA_OPENCODE_BASE_URL` environment variable accepts invalid URLs silently. Add comprehensive validation and test coverage.
+Add `--version` flag support to the OYA CLI. Currently `oya --version` returns error exit code 2.
 
 ## Current State
-- `opencode_config()` in `src/runtime_tools/http.rs:113-127` reads env var
-- `is_valid_http_url()` in `src/main.rs:603-621` validates URLs
-- Validation logic exists but lacks test coverage
-- No tests for `opencode_config()` function
+- `src/main.rs:797-802` defines `Cli` struct with `#[command(name, about)]`
+- Missing `version` attribute in `#[command(...)]` derive macro
+- Package version: `0.1.0` (from `Cargo.toml:3`)
 
 ## Phase 1: Tests (TEST_AGENT)
 
-### File: `src/runtime_tools/http.rs`
-Add tests in existing `#[cfg(test)] mod tests` block for `opencode_config()`:
-- Default when env not set
-- Accepts valid http/https URLs
-- Rejects invalid URLs (no scheme, ftp, credentials, path, query, fragment)
-- Handles empty/whitespace strings (falls back to default)
-- Trims whitespace from URLs
-
 ### File: `src/main/tests.rs`
-Add tests for `is_valid_http_url`:
-- Accepts http, https, with port
-- Rejects empty, no scheme, ftp, credentials, path, query, fragment
-- Trims whitespace
+Add e2e validation tests for version flag:
+- `test_version_flag_outputs_version` - `oya --version` exits 0 with "oya 0.1.0"
+- `test_version_short_flag_outputs_version` - `oya -V` exits 0 with version
+- `test_version_flag_with_other_args_fails` - version is mutually exclusive
+- `test_version_output_format` - verify format matches "oya <version>"
+
+### File: `src/main.rs`
+Add inline test in `#[cfg(test)]` block:
+- Verify `Cli::parse_from(["oya", "--version"])` behavior
 
 ## Phase 2: Implementation (LOGIC_AGENT)
 
-### Task 1: Verify Implementation Correctness
-- Confirm `is_valid_http_url()` in `src/main.rs:603-621` correctly validates all cases
-- Confirm `opencode_config()` in `src/runtime_tools/http.rs:113-127` handles edge cases
+### Task 1: Add version attribute
+File: `src/main.rs:798`
+```rust
+// FROM:
+#[command(name = "oya", about = "OYA Orchestrator - AI governance runtime")]
+// TO:
+#[command(name = "oya", about = "OYA Orchestrator - AI governance runtime", version)]
+```
 
-### Task 2: No Code Changes Expected
-- Current implementation appears correct
-- Tests should pass with existing code
+### Task 2: Verify clap derive behavior
+- Confirm `--version` and `-V` work correctly
+- Confirm version string uses `env!("CARGO_PKG_VERSION")`
 
 ## Test Strategy & Quality Gates
 
 ### Gate 1: Tests Written (RED)
 - All tests compile
-- All new tests exist in test modules
-- Tests cover all edge cases from bead requirements
+- Tests verify version flag behavior
+- Tests fail before implementation
 
 ### Gate 2: Tests Pass (GREEN)
 - `moon run :test` passes all tests
 - `moon run :check` passes
 - `moon run :ci` passes
 
-### Gate 3: Code Quality
-- No `unwrap` or `expect` in new code
-- No `panic!`, `todo!`, or `unimplemented!`
-- All functions return `Result<T, E>` for fallible operations
+### Gate 3: E2E Validation
+```bash
+./target/debug/oya --version   # Exit 0, output: oya 0.1.0
+./target/debug/oya -V          # Exit 0, output: oya 0.1.0
+./target/debug/oya --help      # Shows -V, --version in options
+```
 
 ## Verification Commands
 ```bash
 moon run :test
 moon run :check
 moon run :ci
+cargo run -- --version
 ```
 
 ## Files Modified
-- `src/runtime_tools/http.rs` - add tests in existing test module
-- `src/main/tests.rs` - add tests for `is_valid_http_url`
+- `src/main.rs:798` - add `version` to `#[command(...)]` attribute
 
 ## Dependencies
-- `reqwest::Url::parse` - existing, used for URL validation
-- `std::env::var` - existing, used for environment variable access
+- `clap::Parser` - existing, derives version from `CARGO_PKG_VERSION`
 
 ## Test Cases (Detailed)
 
-### `opencode_config()` tests:
-1. `test_opencode_config_default_when_env_not_set` - verify default URL
-2. `test_opencode_config_accepts_valid_http_url` - http://localhost:8080
-3. `test_opencode_config_accepts_valid_https_url` - https://api.example.com
-4. `test_opencode_config_rejects_invalid_url` - "not-a-url"
-5. `test_opencode_config_rejects_url_with_path` - http://localhost:8080/api
-6. `test_opencode_config_rejects_url_with_query` - http://localhost:8080?foo=bar
-7. `test_opencode_config_rejects_url_with_fragment` - http://localhost:8080#anchor
-8. `test_opencode_config_rejects_url_with_credentials` - http://user:pass@localhost:8080
-9. `test_opencode_config_rejects_ftp_scheme` - ftp://localhost
-10. `test_opencode_config_empty_string_uses_default` - "" falls back
-11. `test_opencode_config_whitespace_uses_default` - "   " falls back
-12. `test_opencode_config_trims_url` - "  http://localhost:8080  "
+### Version flag tests:
+1. `test_version_flag_exits_zero` - `oya --version` exits with code 0
+2. `test_version_short_flag_exits_zero` - `oya -V` exits with code 0
+3. `test_version_output_contains_package_name` - output contains "oya"
+4. `test_version_output_contains_version_number` - output contains "0.1.0"
+5. `test_help_shows_version_option` - `oya --help` shows `-V, --version`
 
-### `is_valid_http_url()` tests:
-1. `test_is_valid_http_url_accepts_http`
-2. `test_is_valid_http_url_accepts_https`
-3. `test_is_valid_http_url_accepts_port`
-4. `test_is_valid_http_url_rejects_empty`
-5. `test_is_valid_http_url_rejects_no_scheme`
-6. `test_is_valid_http_url_rejects_ftp`
-7. `test_is_valid_http_url_rejects_credentials`
-8. `test_is_valid_http_url_rejects_path`
-9. `test_is_valid_http_url_rejects_query`
-10. `test_is_valid_http_url_rejects_fragment`
-11. `test_is_valid_http_url_trims_whitespace`
+## Risk Assessment
+- **Low risk**: Single-line change to existing derive macro
+- **No breaking changes**: Adds new flag, doesn't modify existing behavior
+- **Clap handles everything**: No custom version logic needed

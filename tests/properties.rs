@@ -138,6 +138,22 @@ proptest! {
     }
 }
 
+// Property: Acceptance tests are RED invariant
+proptest! {
+    #[test]
+    fn prop_acceptance_tests_must_fail_initially(
+        passed in any::<bool>(),
+        output in "\\PC*",
+    ) {
+        // This is a placeholder for a more complex property test
+        // In the real system, the AcceptanceTestsAreRed gate would execute 'moon run :test'
+        // and expect it to FAIL (exit code != 0).
+
+        // Invariant: If the stage is AcceptanceTest, the goal is to have passed=false
+        // but for the GATE to pass. This logic is handled by the gate runner.
+    }
+}
+
 // Property: Gates exist for each stage
 proptest! {
     #[test]

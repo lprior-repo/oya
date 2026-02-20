@@ -795,7 +795,7 @@ fn resolve_bind_addr() -> Result<std::net::SocketAddr, OyaError> {
 }
 
 #[derive(Parser, Debug)]
-#[command(name = "oya", about = "OYA Orchestrator - AI governance runtime")]
+#[command(name = "oya", about = "OYA Orchestrator - AI governance runtime", version = env!("CARGO_PKG_VERSION"))]
 struct Cli {
     #[command(subcommand)]
     command: Option<CliCommand>,

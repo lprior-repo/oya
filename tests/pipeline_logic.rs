@@ -144,6 +144,16 @@ fn given_stage_order_when_verifying_then_follows_pipeline_flow() {
     assert_eq!(StageName::Tdd15.next(), Some(StageName::Qa));
 }
 
+#[test]
+fn given_acceptance_test_stage_when_checking_gates_then_compiles_and_red_required() {
+    use oya::types::{Gate, StageName};
+
+    let gates = StageName::AcceptanceTest.gates();
+    assert_eq!(gates.len(), 2);
+    assert!(gates.contains(&Gate::Compiles));
+    assert!(gates.contains(&Gate::AcceptanceTestsAreRed));
+}
+
 // =============================================================================
 // GATE DEFINITIONS
 

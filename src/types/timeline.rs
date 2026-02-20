@@ -190,13 +190,22 @@ pub fn strip_ansi_codes(input: &str) -> String {
 }
 
 /// Truncate text to max chars, appending truncation marker if needed.
+///
+/// # Edge Cases
+///
+/// - If `max_chars` is 0 and input is non-empty, returns `"[truncated]"` marker
+/// - If both input is empty and `max_chars` is 0, returns empty string
 pub fn truncate_clean(input: &str, max_chars: usize) -> String {
-    if max_chars == 0 {
-        return String::new();
-    }
     let stripped = strip_ansi_codes(input);
+    let input_len = stripped.chars().count();
+
+    // Handle edge case: max_chars=0 with non-empty input shows truncation marker
+    if max_chars == 0 {
+        return if input_len > 0 { "…[truncated]".to_string() } else { String::new() };
+    }
+
     let chars: Vec<char> = stripped.chars().take(max_chars).collect();
-    if stripped.chars().count() > max_chars {
+    if input_len > max_chars {
         format!("{}…[truncated]", chars.into_iter().collect::<String>())
     } else {
         chars.into_iter().collect()
@@ -231,6 +240,26 @@ mod tests {
         let result = truncate_clean(input, 10);
         assert!(result.contains("This is a"));
         assert!(result.contains("truncated"));
+    }
+
+    #[test]
+    fn truncate_clean_zero_max_chars_shows_truncated_marker() {
+        // When max_chars=0, any non-empty input should show truncation marker
+        // rather than silently returning empty string
+        let input = "Some content here";
+        let result = truncate_clean(input, 0);
+        assert!(
+            result.contains("truncated"),
+            "Expected truncation marker for max_chars=0, got: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn truncate_clean_zero_max_chars_empty_input_returns_empty() {
+        // When both input is empty and max_chars=0, empty string is correct
+        let result = truncate_clean("", 0);
+        assert_eq!(result, "");
     }
 
     #[test]
