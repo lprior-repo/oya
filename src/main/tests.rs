@@ -163,3 +163,15 @@ fn test_execute_ship_gate_zjj_failure_routes_to_review() {
     assert_eq!(result.failure_category, Some(FailureCategory::MergeConflict));
     assert_eq!(result.next_stage, Some(Stage::GptReview));
 }
+
+#[test]
+fn test_cli_tail_mode_parses_default_interval() {
+    let mode = parse_cli_mode_from(["oya", "tail"]);
+    assert_eq!(mode, CliMode::Tail(TailArgs { interval: 2, run_id: None }));
+}
+
+#[test]
+fn test_cli_tail_mode_parses_interval_and_run_id() {
+    let mode = parse_cli_mode_from(["oya", "tail", "--interval", "5", "run-123"]);
+    assert_eq!(mode, CliMode::Tail(TailArgs { interval: 5, run_id: Some("run-123".to_string()) }));
+}

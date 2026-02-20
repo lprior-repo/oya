@@ -1,11 +1,12 @@
 use super::OyaError;
+use crate::orchestrator_types::GateResultData;
 use crate::runtime_tools::{
     execute_gate, gate_failure_outcome, run_opencode, summarize_failure_output, GateEvidence,
 };
 use crate::stage_runtime::{
     execute_ship_gate, stage_prompt, stage_success, ShipGateRequest, StagePromptInput,
 };
-use oya::types::{FailureCategory, Gate, StageName as Stage, StageResult};
+use oya::types::{truncate_clean, FailureCategory, Gate, StageName as Stage, StageResult};
 use restate_sdk::context::ContextSideEffects;
 use restate_sdk::prelude::{HandlerError, Json, WorkflowContext};
 use std::path::PathBuf;
@@ -19,6 +20,7 @@ pub(super) struct StageExecution {
     pub failure_category: Option<FailureCategory>,
     pub next_stage: Option<Stage>,
     pub prompt: String,
+    pub gate_results: Vec<GateResultData>,
 }
 
 pub(super) struct PromptStageRequest {
@@ -67,7 +69,7 @@ pub(super) async fn execute_stage_real(
     request: StageExecutionRequest,
     merge_queue_policy: MergeQueuePolicy,
     repo_root: PathBuf,
-) -> Result<(StageResult, String), OyaError> {
+) -> Result<(StageResult, String, Vec<GateResultData>), OyaError> {
     validate_attempt(request.attempt)?;
     let input = StageBlockingInput { request: request.clone(), merge_queue_policy, repo_root };
     // Wrap the entire blocking operation in ctx.run() for deterministic replay
@@ -81,7 +83,8 @@ pub(super) async fn execute_stage_real(
         })
         .await
         .map_err(|e| OyaError(format!("ctx.run failed: {}", e)))?;
-    let StageExecution { passed, output, failure_category, next_stage, prompt } = execution.0;
+    let StageExecution { passed, output, failure_category, next_stage, prompt, gate_results } =
+        execution.0;
     let stage_result = StageResult {
         run_id: request.run_id,
         stage: request.stage,
@@ -91,7 +94,7 @@ pub(super) async fn execute_stage_real(
         failure_category,
         next_stage,
     };
-    Ok((stage_result, prompt))
+    Ok((stage_result, prompt, gate_results))
 }
 
 fn validate_attempt(attempt: u32) -> Result<(), OyaError> {
@@ -149,10 +152,18 @@ pub(super) fn execute_prompt_stage(
         return Ok(opencode_failure_stage_execution(&request, opencode_output));
     }
 
+    let mut gate_results = Vec::new();
     for gate in request.stage.gates() {
         let gate_evidence = execute_gate(gate.clone(), &request.repo_root)?;
+        gate_results.push(GateResultData {
+            gate: gate.as_str().to_string(),
+            passed: gate_evidence.passed,
+            exit_code: gate_evidence.exit_code,
+            command: gate_evidence.command.clone(),
+            output: truncate_clean(&gate_evidence.output, 4000),
+        });
         if !gate_evidence.passed {
-            return Ok(gate_failure_stage_execution(&request, gate, gate_evidence));
+            return Ok(gate_failure_stage_execution(&request, gate, gate_evidence, gate_results));
         }
     }
 
@@ -162,6 +173,7 @@ pub(super) fn execute_prompt_stage(
         failure_category: None,
         next_stage: request.success_next_stage,
         prompt: request.prompt,
+        gate_results,
     })
 }
 
@@ -181,6 +193,7 @@ fn opencode_failure_stage_execution(
         failure_category: Some(category),
         next_stage: Some(next_stage),
         prompt: request.prompt.clone(),
+        gate_results: Vec::new(),
     }
 }
 
@@ -188,6 +201,7 @@ fn gate_failure_stage_execution(
     request: &PromptStageRequest,
     gate: Gate,
     gate_evidence: GateEvidence,
+    gate_results: Vec<GateResultData>,
 ) -> StageExecution {
     let (failure, next_stage) = gate_failure_outcome(&request.stage, &gate);
     StageExecution {
@@ -200,6 +214,7 @@ fn gate_failure_stage_execution(
         failure_category: Some(failure),
         next_stage: Some(next_stage),
         prompt: request.prompt.clone(),
+        gate_results,
     }
 }
 
@@ -262,6 +277,7 @@ mod tests {
                     failure_category: Some(FailureCategory::OutputParseFailure),
                     next_stage: None,
                     prompt: "replay".to_string(),
+                    gate_results: Vec::new(),
                 }
             }
         });
@@ -292,6 +308,7 @@ mod tests {
             failure_category: None,
             next_stage: None,
             prompt: "prompt".to_string(),
+            gate_results: Vec::new(),
         }
     }
 

@@ -218,9 +218,8 @@ pub(super) fn output_result(
             "next_steps": if result.status == "shipped" {
                 serde_json::json!([
                     {"action": "review_code", "path": format!("{}/src/", result.repo_root.display()), "description": "Review generated source code"},
-                    {"action": "run_ci", "command": "moon run :ci", "description": "Run CI quality gates"},
-                    {"action": "merge_workspace", "command": "zjj done", "description": "Merge zjj workspace to main"},
-                    {"action": "close_bead", "command": format!("br close {}", result.bead_id), "description": "Close the bead issue"}
+                    {"action": "verify_landing", "description": "Confirm landing commands completed in ShipGate logs"},
+                    {"action": "inspect_timeline", "description": "Review timeline and stage artifacts in Restate admin"}
                 ])
             } else {
                 serde_json::json!([

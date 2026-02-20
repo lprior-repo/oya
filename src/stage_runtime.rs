@@ -1,4 +1,5 @@
 use super::*;
+use crate::orchestrator_types::GateResultData;
 use crate::pipeline::MergeQueuePolicy;
 use crate::stage_executor::StageExecution;
 
@@ -35,7 +36,7 @@ pub(super) fn stage_prompt(input: StagePromptInput<'_>) -> String {
             "TASK:\n1. Write acceptance tests that MUST FAIL (RED state)\n2. Tests should compile but fail when run\n3. Use proptest for property-based tests\n4. Tests MUST encode invariants of the public contract\n5. NO IMPLEMENTATION - tests only\n\nCRITICAL: Tests MUST be RED (failing) before implementation.\nIf tests pass, they are WRONG - they need stronger assertions.\n\nJust write the tests. Do not explain."
         }
         Stage::Implementation => {
-            "TASK:\n1. Implement the code to make the acceptance tests pass (GREEN state)\n2. Use Result<T, E> for all fallible operations - NO unwrap/expect\n3. Pure functions in core, IO only at shell boundaries\n4. Ensure `cargo test` passes\n\nCRITICAL: Make failing tests pass WITHOUT modifying the tests.\nTests are the specification - implementation must conform.\n\nJust write the code. Do not explain."
+            "TASK:\n1. Implement the code to make the acceptance tests pass (GREEN state)\n2. Use Result<T, E> for all fallible operations - NO unwrap/expect\n3. Pure functions in core, IO only at shell boundaries\n4. Ensure `moon run :test` passes\n\nCRITICAL: Make failing tests pass WITHOUT modifying the tests.\nTests are the specification - implementation must conform.\n\nJust write the code. Do not explain."
         }
         Stage::Tdd15 => {
             "TASK:\n1. Write tests in src/lib.rs for the functionality\n2. Implement the code to pass those tests\n3. Ensure `moon run :test` passes\n\nJust write the code. Do not explain."
@@ -93,6 +94,7 @@ where
 {
     tracing::info!("SHIP GATE: Running final validation");
     let prompt = ship_gate_prompt();
+    let mut gate_results = Vec::new();
 
     for gate in Stage::ShipGate.gates() {
         if !merge_queue_policy.should_run(&gate) {
@@ -101,8 +103,15 @@ where
         }
 
         let gate_evidence = run_gate(gate.clone())?;
+        gate_results.push(GateResultData {
+            gate: gate.as_str().to_string(),
+            passed: gate_evidence.passed,
+            exit_code: gate_evidence.exit_code,
+            command: gate_evidence.command.clone(),
+            output: truncate_clean(&gate_evidence.output, 4000),
+        });
         if !gate_evidence.passed {
-            return Ok(ship_gate_failure(gate, gate_evidence, prompt));
+            return Ok(ship_gate_failure(gate, gate_evidence, prompt, gate_results));
         }
     }
 
@@ -113,6 +122,7 @@ where
         failure_category: None,
         next_stage: None,
         prompt,
+        gate_results,
     })
 }
 
@@ -120,7 +130,12 @@ fn ship_gate_prompt() -> String {
     "Ship gate executes quality gates only (moon/zjj); no OpenCode prompt".to_string()
 }
 
-fn ship_gate_failure(gate: Gate, evidence: GateEvidence, prompt: String) -> StageExecution {
+fn ship_gate_failure(
+    gate: Gate,
+    evidence: GateEvidence,
+    prompt: String,
+    gate_results: Vec<GateResultData>,
+) -> StageExecution {
     let (failure, next_stage) = gate_failure_outcome(&Stage::ShipGate, &gate);
     StageExecution {
         passed: false,
@@ -132,5 +147,6 @@ fn ship_gate_failure(gate: Gate, evidence: GateEvidence, prompt: String) -> Stag
         failure_category: Some(failure),
         next_stage: Some(next_stage),
         prompt,
+        gate_results,
     }
 }

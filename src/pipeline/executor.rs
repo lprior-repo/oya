@@ -19,10 +19,10 @@ use oya::types::{truncate_clean, FailureCategory, StageName as Stage, StageResul
 use restate_sdk::prelude::*;
 
 use crate::orchestrator_types::{
-    set_stage_artifact, FailureSnapshot, GateResultData, StageArtifact, StageInputData,
-    StageOutputData, StageStatus, StageTiming, WorkspaceLifecycle,
+    set_stage_artifact, FailureSnapshot, StageArtifact, StageInputData, StageOutputData,
+    StageStatus, StageTiming, WorkspaceLifecycle,
 };
-use crate::runtime_tools::execute_gate;
+use crate::runtime_tools::prepare_stage_workspace;
 use crate::stage_executor::{execute_stage_real, StageExecutionRequest};
 
 use super::state::PipelineState;
@@ -66,11 +66,11 @@ pub async fn execute_and_accumulate_stage(
         .map_err(|e| OyaError(format!("timestamp failed: {}", e)))?;
 
     // Prepare workspace (in-memory, no persistence yet)
-    let workspace = prepare_workspace_lifecycle(&input, config).await?;
+    let workspace = prepare_workspace_lifecycle(ctx, &input, config).await?;
     let execution_root = resolve_execution_root(input.repo_root, workspace.as_ref());
 
     // Execute stage (all side effects happen here, but no Restate sets)
-    let (stage_result, prompt) = execute_stage_real(
+    let (stage_result, prompt, gates) = execute_stage_real(
         ctx,
         StageExecutionRequest {
             run_id: input.run_id.to_string(),
@@ -94,9 +94,6 @@ pub async fn execute_and_accumulate_stage(
 
     // Calculate duration
     let timing = calculate_stage_timing(&started_at, &completed_at);
-
-    // Execute gates and collect results
-    let gates = execute_and_collect_gates(input.stage.clone(), &execution_root)?;
 
     // Build input data
     let stage_input = build_stage_input_data(&input);
@@ -140,18 +137,17 @@ pub async fn persist_stage_artifact(
 // ---------------------------------------------------------------------------
 
 async fn prepare_workspace_lifecycle(
+    ctx: &WorkflowContext<'_>,
     input: &StageExecutionInput<'_>,
     config: &RuntimeConfig,
 ) -> Result<Option<WorkspaceLifecycle>, OyaError> {
-    use crate::runtime_tools::prepare_stage_workspace;
-
     // Skip workspace preparation if policy says so
     if config.workspace_policy.should_skip() {
         return Ok(None);
     }
 
-    // Prepare workspace (this may have side effects via zjj, but no Restate ops)
-    let workspace_event = prepare_stage_workspace(crate::runtime_tools::WorkspacePrepRequest {
+    // Prepare workspace in ctx.run so replay does not repeat side effects.
+    let request = crate::runtime_tools::WorkspacePrepRequest {
         run_id: input.run_id.to_string(),
         bead_id: input.bead_id.to_string(),
         stage: input.stage.clone(),
@@ -159,10 +155,21 @@ async fn prepare_workspace_lifecycle(
         recorded_at: chrono::Utc::now().to_rfc3339(),
         workspace_policy: config.workspace_policy,
         repo_root: input.repo_root.to_path_buf(),
-    })?;
+    };
+    let workspace_event = ctx
+        .run(move || async move {
+            let result = tokio::task::spawn_blocking(move || prepare_stage_workspace(request))
+                .await
+                .map_err(|error| {
+                    HandlerError::from(format!("workspace task join failed: {}", error))
+                })?;
+            result.map(Json).map_err(|error| HandlerError::from(error.0))
+        })
+        .await
+        .map_err(|error| OyaError(format!("workspace journaling failed: {}", error)))?;
 
     // Convert to WorkspaceLifecycle (persistable type)
-    match workspace_event {
+    match workspace_event.0 {
         Some(event) => Ok(Some(WorkspaceLifecycle {
             name: event.workspace,
             path: event.workspace_path,
@@ -201,26 +208,6 @@ fn calculate_stage_timing(started_at: &str, completed_at: &str) -> StageTiming {
         completed_at: completed_at.to_string(),
         duration_ms,
     }
-}
-
-fn execute_and_collect_gates(
-    stage: Stage,
-    repo_root: &Path,
-) -> Result<Vec<GateResultData>, OyaError> {
-    let repo_path = repo_root.to_path_buf();
-    stage
-        .gates()
-        .into_iter()
-        .map(|gate| {
-            execute_gate(gate.clone(), &repo_path).map(|evidence| GateResultData {
-                gate: gate.as_str().to_string(),
-                passed: evidence.passed,
-                exit_code: evidence.exit_code,
-                command: evidence.command,
-                output: truncate_clean(&evidence.output, 4000),
-            })
-        })
-        .collect()
 }
 
 fn build_stage_input_data(input: &StageExecutionInput<'_>) -> StageInputData {

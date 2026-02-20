@@ -98,6 +98,15 @@ pub fn classify_opencode_error(stderr: &str) -> Option<FailureCategory> {
     {
         return Some(FailureCategory::RateLimited);
     }
+
+    if stderr.contains("OpenCode provider unavailable")
+        || stderr.contains("OpenCode HTTP request failed")
+        || stderr.contains("Connection refused")
+        || stderr.contains("error sending request for url")
+    {
+        return Some(FailureCategory::ProviderUnavailable);
+    }
+
     None
 }
 

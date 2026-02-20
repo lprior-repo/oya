@@ -47,7 +47,7 @@ pub struct OpsMonitorEventResponse {
 // Internal orchestrator event types persisted into Restate state
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub(super) struct WorkspaceLifecycleEvent {
     pub workspace: String,
     pub workspace_path: String,
@@ -78,7 +78,7 @@ pub(super) struct OrchestratorState {
 
 /// Consolidated stage artifact containing all data for one stage attempt.
 /// Replaces 8+ individual keys with a single rich payload.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct StageArtifact {
     pub stage: String,
     pub attempt: u32,
@@ -94,14 +94,14 @@ pub(super) struct StageArtifact {
     pub status: StageStatus,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct StageTiming {
     pub started_at: String,
     pub completed_at: String,
     pub duration_ms: u64,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct WorkspaceLifecycle {
     pub name: String,
     pub path: String,
@@ -113,7 +113,7 @@ pub(super) struct WorkspaceLifecycle {
     pub add_exit_code: i32,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct StageInputData {
     pub run_id: String,
     pub bead_id: String,
@@ -122,7 +122,7 @@ pub(super) struct StageInputData {
     pub last_failure: Option<FailureSnapshot>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct StageOutputData {
     pub success: bool,
     pub exit_code: i32,
@@ -134,7 +134,7 @@ pub(super) struct StageOutputData {
     pub adversarial_report: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct TaskTracking {
     pub tasks_created: Vec<String>,
     pub tasks_updated: Vec<String>,
@@ -142,13 +142,13 @@ pub(super) struct TaskTracking {
     pub task_states: std::collections::HashMap<String, TaskState>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct TaskState {
     pub subject: String,
     pub status: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct GateResultData {
     pub gate: String,
     pub passed: bool,
@@ -158,7 +158,7 @@ pub(super) struct GateResultData {
 }
 
 /// Stage status - mutually exclusive states making illegal states unrepresentable.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(super) enum StageStatus {
     Completed,
@@ -173,7 +173,7 @@ pub(super) struct RunRequestEvent {
     pub started_at: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct FailureSnapshot {
     pub category: String,
     pub message: String,

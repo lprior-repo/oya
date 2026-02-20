@@ -1,38 +1,40 @@
-# PLAN: Fix spawn_blocking Determinism in execute_stage_real
+# PLAN: src-3g9 - Verify codex-grade gpt review and rework routing
 
 ## Context
-Refactor `execute_stage_real` to move `spawn_blocking` *inside* of `ctx.run()`. This ensures that the blocking operation (which contains non-deterministic side effects like LLM calls) is journaled by Restate and **not re-executed on replay**.
+Ensure that the `GptReview` stage utilizes high-tier "codex-grade" models and follows the correct routing policy (failures route to `Tdd15` retry lane).
 
 ## Implementation Steps
 
-1.  **Refactor `src/stage_executor.rs`**:
-    *   Update `execute_stage_real` implementation.
-    *   Move the `run_stage_blocking` call inside the closure passed to `ctx.run()`.
-    *   Ensure the closure captures `input` by value.
-    *   Map the result to `Json<StageExecution>` inside the closure.
-    *   Update documentation comments to reflect the correct pattern ("Execute inside `ctx.run()`").
+1.  **Verify Model Assignment**:
+    *   Confirm `StageName::model_for_stage(GptReview)` returns `ModelTier::Best`.
+    *   Verify `oya.yaml` maps `a` and `s` tiers to Codex-grade models (GPT-5 Codex, Claude Opus).
 
-2.  **Update Unit Tests**:
-    *   **Location:** `src/stage_executor.rs` (inside `#[cfg(test)] mod tests`).
-    *   Update `test_execute_stage_real_deterministic_replay_pattern` to verify that the execution logic is wrapped in the journaled future.
-    *   Since `WorkflowContext` is hard to mock directly without the test suite, focus on verifying the function composition logic.
+2.  **Rework Routing Logic**:
+    *   **Refactor `src/stage_executor.rs`**:
+        *   Update `opencode_failure_stage_execution` to route `Stage::GptReview` to `Stage::Tdd15` instead of `Stage::Implementation` when OpenCode fails.
+    *   **Refactor `src/runtime_tools/gates.rs`**:
+        *   Update `gate_failure_mapping` to route all "retry lane" stages (`Qa`, `RedQueen`, `GptReview`) to `Stage::Tdd15` instead of `Stage::Implementation` upon gate failure.
+        *   Ensure `Stage::ShipGate` still routes to `Stage::GptReview` on merge conflict (existing logic).
 
-3.  **Manual Runtime Verification**:
-    *   **Goal**: Verify that stage execution happens only once, even across restarts/replays.
-    *   **Procedure**:
-        1.  Start infrastructure: `scripts/dev-up.sh`
-        2.  Trigger a workflow execution (e.g., `oya run --bead src-2nw`).
-        3.  Observe logs (`docker logs oya-restate -f`) for "Executing stage..." messages.
-        4.  Force a service restart during or after execution.
-        5.  Verify that upon recovery/replay, the "Executing stage..." logic is NOT re-triggered, but the workflow proceeds.
+3.  **Unit Testing**:
+    *   Add/Update tests in `src/runtime_tools/gates.rs` to verify the new mapping logic.
+    *   Add/Update tests in `src/stage_executor.rs` (if feasible) to verify failure routing.
 
-## Quality Gates
-*   `moon run :check` passes
-*   `moon run :test` passes
-*   `moon run :clippy` passes (no new warnings)
-*   Zero `unwrap()`, `expect()`, or `panic!()`
-*   Manual verification successful
+## Test Strategy & Quality Gates
+
+### Quality Gates
+- `moon run :check`: Ensure no type errors.
+- `moon run :test`: Verify all unit and integration tests pass.
+- `moon run :clippy`: Ensure strict linting compliance (no unwrap/panic).
+
+### Test Scenarios
+- **Success**: `GptReview` passes all gates -> transition to `ShipGate`.
+- **OpenCode Failure**: `GptReview` LLM error -> transition to `Tdd15`.
+- **Gate Failure (Lint)**: `GptReview` Clippy fail -> transition to `Tdd15`.
+- **Gate Failure (Security)**: `GptReview` Security fail -> transition to `Tdd15`.
+- **QA Failure**: `Qa` fail -> transition to `Tdd15`.
+- **RedQueen Failure**: `RedQueen` fail -> transition to `Tdd15`.
 
 ## Verification
-*   `src/stage_executor.rs` (unit tests)
-*   Manual runtime verification logs
+- Code review of `src/types/pipeline.rs`, `src/stage_executor.rs`, and `src/runtime_tools/gates.rs`.
+- Execution of `moon run :test`.

@@ -31,6 +31,8 @@ tracing-opentelemetry = "0.32"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
 ulid = "1"
 url = "2"
+crossterm = "0.28"
+ratatui = "0.29"
 
 [lints.rust]
 unsafe_code = "forbid"

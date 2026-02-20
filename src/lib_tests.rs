@@ -3366,6 +3366,21 @@ fn opencode_parse_error_display_returns_message() {
 }
 
 #[test]
+fn classify_opencode_error_returns_provider_unavailable_for_http_fallback_unreachable() {
+    let message =
+        "OpenCode HTTP request failed for /run: error sending request for url (http://127.0.0.1:4098/run)";
+    let category = classify_opencode_error(message);
+    assert_eq!(category, Some(FailureCategory::ProviderUnavailable));
+}
+
+#[test]
+fn classify_opencode_error_returns_provider_unavailable_for_health_preflight_failure() {
+    let message = "OpenCode provider unavailable (health): connection refused";
+    let category = classify_opencode_error(message);
+    assert_eq!(category, Some(FailureCategory::ProviderUnavailable));
+}
+
+#[test]
 fn opencode_poll_snapshot_is_debug_clone_and_eq() {
     let snapshot = OpencodePollSnapshot {
         busy_sessions: vec!["ses_1".to_string()],

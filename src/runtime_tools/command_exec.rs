@@ -194,29 +194,57 @@ pub(crate) fn run_opencode(
     model: &str,
 ) -> Result<(bool, String), OyaError> {
     tracing::info!("Running opencode with prompt ({} chars) model={}", prompt.len(), model);
-    match run_command_with_timeout(
+    let command_result = run_command_with_timeout(
         "opencode",
         &["run", "--format", "json", "--model", model, prompt],
         OPENCODE_TIMEOUT_SECONDS,
         repo_root,
-    ) {
-        Ok(res) => Ok(res),
-        Err(err) => {
-            let msg = err.to_string();
-            if msg.contains("not found") || msg.contains("not found.") {
-                tracing::warn!("opencode CLI not found on PATH, attempting HTTP fallback: {}", msg);
-                match opencode_config() {
-                    Ok(config) => run_opencode_via_http_blocking(&config, prompt, model),
-                    Err(cfg_err) => Err(OyaError(format!(
-                        "opencode CLI missing and opencode HTTP config invalid: {} / {}",
-                        msg, cfg_err
-                    ))),
-                }
-            } else {
-                Err(err)
+    );
+
+    match command_result {
+        Ok((passed, output)) if passed => Ok((passed, output)),
+        Ok((_passed, output)) if is_opencode_cli_missing_output(output.as_str()) => {
+            match fallback_to_opencode_http(prompt, model, output.as_str()) {
+                Ok(http_output) => Ok((true, http_output)),
+                Err(error) => Ok((false, error.to_string())),
             }
         }
+        Ok(res) => Ok(res),
+        Err(err) if is_opencode_missing_error(err.to_string().as_str()) => {
+            match fallback_to_opencode_http(prompt, model, err.to_string().as_str()) {
+                Ok(http_output) => Ok((true, http_output)),
+                Err(error) => Ok((false, error.to_string())),
+            }
+        }
+        Err(err) => Err(err),
     }
+}
+
+fn fallback_to_opencode_http(
+    prompt: &str,
+    model: &str,
+    source_message: &str,
+) -> Result<String, OyaError> {
+    tracing::warn!("opencode CLI unavailable, attempting HTTP fallback: {}", source_message);
+    let config = opencode_config().map_err(|cfg_err| {
+        OyaError(format!(
+            "opencode CLI unavailable and opencode HTTP config invalid: {} / {}",
+            source_message, cfg_err
+        ))
+    })?;
+    let (_passed, output) = run_opencode_via_http_blocking(&config, prompt, model)?;
+    Ok(output)
+}
+
+fn is_opencode_missing_error(message: &str) -> bool {
+    message.contains("not found") || message.contains("not found.")
+}
+
+fn is_opencode_cli_missing_output(output: &str) -> bool {
+    let normalized = output.to_ascii_lowercase();
+    normalized.contains("failed to run command")
+        && normalized.contains("opencode")
+        && normalized.contains("no such file or directory")
 }
 
 fn run_opencode_via_http_blocking(
@@ -227,6 +255,8 @@ fn run_opencode_via_http_blocking(
     let settings = opencode_http_client_settings(OPENCODE_TIMEOUT_SECONDS);
     let client = build_blocking_http_client(settings)
         .map_err(|e| OyaError(format!("Failed to build blocking HTTP client: {}", e)))?;
+
+    verify_opencode_http_ready(&client, config)?;
 
     let url = format!("{}/run", config.base_url.trim_end_matches('/'));
     let payload = serde_json::json!({ "model": model, "prompt": prompt, "format": "json" });
@@ -257,5 +287,53 @@ fn run_opencode_via_http_blocking(
         Err(parse_err) => {
             Err(OyaError(format!("OpenCode /run returned invalid output: {}", parse_err)))
         }
+    }
+}
+
+fn verify_opencode_http_ready(
+    client: &reqwest::blocking::Client,
+    config: &OpenCodeConfig,
+) -> Result<(), OyaError> {
+    let health_url = format!("{}/session/status", config.base_url.trim_end_matches('/'));
+    let request = config.password.as_ref().map_or_else(
+        || client.get(&health_url),
+        |pwd| client.get(&health_url).basic_auth("opencode", Some(pwd)),
+    );
+
+    let response = request
+        .send()
+        .map_err(|error| OyaError(format!("OpenCode provider unavailable (health): {}", error)))?;
+
+    if response.status().is_success() {
+        Ok(())
+    } else {
+        Err(OyaError(format!(
+            "OpenCode provider unavailable (health status {} at /session/status)",
+            response.status().as_u16()
+        )))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_opencode_cli_missing_output_detects_timeout_wrapper_message() {
+        let output = "timeout: failed to run command 'opencode': No such file or directory";
+        assert!(is_opencode_cli_missing_output(output));
+    }
+
+    #[test]
+    fn test_is_opencode_cli_missing_output_ignores_unrelated_output() {
+        let output = "command failed with exit code 1";
+        assert!(!is_opencode_cli_missing_output(output));
+    }
+
+    #[test]
+    fn test_is_opencode_missing_error_detects_not_found_variants() {
+        assert!(is_opencode_missing_error("Command 'opencode' not found"));
+        assert!(is_opencode_missing_error("opencode not found."));
+        assert!(!is_opencode_missing_error("timeout after 300 seconds"));
     }
 }

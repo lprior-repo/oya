@@ -4,7 +4,7 @@ mod gates;
 mod http;
 mod workspace;
 
-pub(crate) use command_exec::run_opencode;
+pub(crate) use command_exec::{run_command_with_timeout_with_exit, run_opencode};
 pub(crate) use failure_summary::summarize_failure_output;
 pub(crate) use gates::{execute_gate, gate_failure_outcome, GateEvidence};
 #[cfg(test)]

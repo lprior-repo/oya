@@ -21,6 +21,7 @@ mod pipeline;
 mod runtime_tools;
 mod stage_executor;
 mod stage_runtime;
+mod tail;
 mod workflow_runner;
 
 use orchestrator_types::*;
@@ -263,6 +264,15 @@ async fn run_pipeline_loop(
                     state.attempt = 1;
                     state.last_failure = None;
                 } else {
+                    if let Err(landing_failure) =
+                        run_landing_plane(ctx, state, config, &artifact).await
+                    {
+                        state.current_stage = landing_failure.next_stage;
+                        state.attempt = 1;
+                        state.last_failure =
+                            Some((landing_failure.failure_category, landing_failure.output));
+                        continue;
+                    }
                     // All stages complete - mark run as shipped
                     return mark_run_completed(ctx, state, &artifact).await;
                 }
@@ -289,7 +299,240 @@ async fn run_pipeline_loop(
             }
         }
 
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        ctx.sleep(std::time::Duration::from_millis(100))
+            .await
+            .map_err(|error| OyaError(format!("durable sleep failed: {}", error)))?;
+    }
+}
+
+struct LandingFailure {
+    failure_category: FailureCategory,
+    next_stage: Stage,
+    output: String,
+}
+
+struct CommandStep<'a> {
+    id: &'a str,
+    label: &'a str,
+    program: &'a str,
+    args: Vec<&'a str>,
+    timeout_seconds: u64,
+    failure_category: FailureCategory,
+    next_stage: Stage,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct LandingCommandResult {
+    passed: bool,
+    stdout: String,
+    stderr: String,
+    exit_code: i32,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct LandingStepTelemetry {
+    step_id: String,
+    command: String,
+    started_at: String,
+    completed_at: String,
+    passed: bool,
+    exit_code: i32,
+    stdout: String,
+    stderr: String,
+}
+
+async fn run_landing_plane(
+    ctx: &WorkflowContext<'_>,
+    state: &PipelineState,
+    config: &RuntimeConfig,
+    artifact: &orchestrator_types::StageArtifact,
+) -> Result<(), LandingFailure> {
+    let run_root = artifact
+        .workspace
+        .as_ref()
+        .map(|workspace| std::path::PathBuf::from(workspace.path.as_str()))
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or_else(|| config.repo_root.clone());
+
+    let mut steps = vec![
+        CommandStep {
+            id: "moon_ci",
+            label: "moon ci",
+            program: "moon",
+            args: vec!["run", ":ci"],
+            timeout_seconds: 1_800,
+            failure_category: FailureCategory::TestFailed,
+            next_stage: Stage::Implementation,
+        },
+        CommandStep {
+            id: "zjj_sync",
+            label: "zjj sync",
+            program: "zjj",
+            args: vec!["sync"],
+            timeout_seconds: 120,
+            failure_category: FailureCategory::MergeConflict,
+            next_stage: Stage::GptReview,
+        },
+        CommandStep {
+            id: "zjj_done",
+            label: "zjj done",
+            program: "zjj",
+            args: vec!["done"],
+            timeout_seconds: 120,
+            failure_category: FailureCategory::MergeConflict,
+            next_stage: Stage::GptReview,
+        },
+    ];
+
+    steps.push(CommandStep {
+        id: "br_close",
+        label: "br close",
+        program: "br",
+        args: vec!["close", state.orchestrator.bead_id.as_str()],
+        timeout_seconds: 60,
+        failure_category: FailureCategory::OutputParseFailure,
+        next_stage: Stage::GptReview,
+    });
+    steps.push(CommandStep {
+        id: "br_sync_flush_only",
+        label: "br sync --flush-only",
+        program: "br",
+        args: vec!["sync", "--flush-only"],
+        timeout_seconds: 60,
+        failure_category: FailureCategory::OutputParseFailure,
+        next_stage: Stage::GptReview,
+    });
+
+    for step in steps {
+        run_landing_step(ctx, &run_root, step).await?;
+    }
+
+    Ok(())
+}
+
+async fn run_landing_step(
+    ctx: &WorkflowContext<'_>,
+    repo_root: &PathBuf,
+    step: CommandStep<'_>,
+) -> Result<(), LandingFailure> {
+    let telemetry_key = landing_step_key(step.id);
+    if landing_step_completed(ctx, &telemetry_key).await? {
+        return Ok(());
+    }
+
+    let args = step.args.iter().map(|value| value.to_string()).collect::<Vec<_>>();
+    let program = step.program.to_string();
+    let command = format!("{} {}", step.program, step.args.join(" "));
+    let root = repo_root.clone();
+    let timeout_seconds = step.timeout_seconds;
+    let started_at = pipeline::deterministic_timestamp(ctx).await.map_err(|error| {
+        landing_failure_from_step(&step, format!("{} timestamp failed: {}", step.label, error))
+    })?;
+
+    let result: Json<LandingCommandResult> = ctx
+        .run(move || async move {
+            let command_result = tokio::task::spawn_blocking(move || {
+                let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+                run_command_with_timeout_with_exit(
+                    program.as_str(),
+                    &arg_refs,
+                    timeout_seconds,
+                    &root,
+                )
+            })
+            .await
+            .map_err(|error| {
+                HandlerError::from(format!("landing command join failed: {}", error))
+            })?;
+
+            command_result
+                .map(|(passed, stdout, stderr, exit_code)| {
+                    Json(LandingCommandResult { passed, stdout, stderr, exit_code })
+                })
+                .map_err(|error| HandlerError::from(error.0))
+        })
+        .await
+        .map_err(|error| LandingFailure {
+            failure_category: step.failure_category.clone(),
+            next_stage: step.next_stage.clone(),
+            output: format!("{} failed before completion: {}", step.label, error),
+        })?;
+
+    let completed_at = pipeline::deterministic_timestamp(ctx).await.map_err(|error| {
+        landing_failure_from_step(&step, format!("{} timestamp failed: {}", step.label, error))
+    })?;
+
+    persist_landing_step(
+        ctx,
+        &telemetry_key,
+        LandingStepTelemetry {
+            step_id: step.id.to_string(),
+            command: command.clone(),
+            started_at,
+            completed_at,
+            passed: result.0.passed,
+            exit_code: result.0.exit_code,
+            stdout: truncate_clean(&result.0.stdout, 4000),
+            stderr: truncate_clean(&result.0.stderr, 4000),
+        },
+        &step,
+    )?;
+
+    if result.0.passed {
+        return Ok(());
+    }
+
+    let output = truncate_clean(
+        &format!(
+            "command={} exit_code={}\n{}\n{}",
+            command, result.0.exit_code, result.0.stdout, result.0.stderr
+        ),
+        6000,
+    );
+    Err(LandingFailure {
+        failure_category: step.failure_category,
+        next_stage: step.next_stage,
+        output,
+    })
+}
+
+fn landing_step_key(step_id: &str) -> String {
+    format!("landing_step_{}", step_id)
+}
+
+async fn landing_step_completed(
+    ctx: &WorkflowContext<'_>,
+    key: &str,
+) -> Result<bool, LandingFailure> {
+    let stored = ctx.get::<String>(key).await.map_err(|error| LandingFailure {
+        failure_category: FailureCategory::OutputParseFailure,
+        next_stage: Stage::GptReview,
+        output: format!("landing telemetry read failed: {}", error),
+    })?;
+
+    Ok(stored
+        .and_then(|raw| serde_json::from_str::<LandingStepTelemetry>(&raw).ok())
+        .is_some_and(|entry| entry.passed))
+}
+
+fn persist_landing_step(
+    ctx: &WorkflowContext<'_>,
+    key: &str,
+    telemetry: LandingStepTelemetry,
+    step: &CommandStep<'_>,
+) -> Result<(), LandingFailure> {
+    let encoded = serde_json::to_string(&telemetry).map_err(|error| {
+        landing_failure_from_step(step, format!("landing telemetry encode failed: {}", error))
+    })?;
+    ctx.set(key, encoded);
+    Ok(())
+}
+
+fn landing_failure_from_step(step: &CommandStep<'_>, output: String) -> LandingFailure {
+    LandingFailure {
+        failure_category: step.failure_category.clone(),
+        next_stage: step.next_stage.clone(),
+        output,
     }
 }
 
@@ -399,6 +642,8 @@ enum CliCommand {
     OpsPoll,
     #[command(about = "Run a bead through the TDD15 pipeline via Restate")]
     Run(RunArgs),
+    #[command(about = "Live TUI for monitoring pipeline invocations")]
+    Tail(TailArgs),
 }
 
 #[derive(Parser, Debug, Clone, PartialEq)]
@@ -417,14 +662,31 @@ struct RunArgs {
     model: Option<String>,
 }
 
+#[derive(Parser, Debug, Clone, PartialEq)]
+struct TailArgs {
+    #[arg(long, default_value = "2", help = "Refresh interval in seconds")]
+    interval: u64,
+    #[arg(help = "Filter to specific run ID (optional)")]
+    run_id: Option<String>,
+}
+
 type DynError = Box<dyn std::error::Error>;
 
 fn parse_cli_mode() -> CliMode {
-    let cli = Cli::parse();
+    parse_cli_mode_from(std::env::args_os())
+}
+
+fn parse_cli_mode_from<I, T>(args: I) -> CliMode
+where
+    I: IntoIterator<Item = T>,
+    T: Into<std::ffi::OsString> + Clone,
+{
+    let cli = Cli::parse_from(args);
     match cli.command {
         None | Some(CliCommand::Serve) => CliMode::Serve,
         Some(CliCommand::OpsPoll) => CliMode::OpsPoll,
         Some(CliCommand::Run(args)) => CliMode::Run(args),
+        Some(CliCommand::Tail(args)) => CliMode::Tail(args),
     }
 }
 
@@ -433,6 +695,7 @@ enum CliMode {
     Serve,
     OpsPoll,
     Run(RunArgs),
+    Tail(TailArgs),
 }
 
 #[tokio::main]
@@ -443,6 +706,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         CliMode::OpsPoll => ops_poller::run_ops_poller().await,
         CliMode::Serve => run_server().await,
         CliMode::Run(args) => workflow_runner::run_workflow(args).await,
+        CliMode::Tail(args) => {
+            // Need to enter tokio runtime for the tail app
+            tail::run_tail(args.interval, args.run_id)
+                .map_err(|e| Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error>)
+        }
     }
 }
 

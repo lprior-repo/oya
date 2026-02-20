@@ -42,7 +42,37 @@ systemctl --user reset-failed oya-manual.service >/dev/null 2>&1 || true
 
 MOON_BIN="${MOON_PATH:-$(command -v moon)}"
 OPENCODE_BIN="${OPENCODE_PATH:-${HOME}/.local/share/mise/installs/github-sst-opencode/1.2.6/opencode}"
-OPENCODE_PORT="${OPENCODE_PORT:-4098}"
+OPENCODE_PORT="${OPENCODE_PORT:-4096}"
+
+resolve_opencode_port() {
+	local preferred_port="$1"
+	python - "$preferred_port" <<'PY'
+import socket
+import sys
+
+preferred = int(sys.argv[1])
+for candidate in [preferred, preferred + 1, preferred + 2, preferred + 3]:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        sock.bind(("127.0.0.1", candidate))
+    except OSError:
+        continue
+    finally:
+        sock.close()
+    print(candidate)
+    sys.exit(0)
+
+print("")
+sys.exit(1)
+PY
+}
+
+OPENCODE_PORT="$(resolve_opencode_port "$OPENCODE_PORT")"
+if [[ -z "$OPENCODE_PORT" ]]; then
+	echo "[oya] ERROR: could not find an available OpenCode port near 4096"
+	exit 1
+fi
 
 # Ensure an isolated OpenCode HTTP server is running for OYA to talk to.
 # Local dev mode intentionally runs without HTTP auth.
@@ -57,11 +87,17 @@ systemd-run --user --unit opencode-manual \
 
 # Wait for HTTP server to be available (short loop)
 for i in $(seq 1 20); do
-	if curl -fsS "http://127.0.0.1:${OPENCODE_PORT}" >/dev/null 2>&1; then
+	if curl -fsS "http://127.0.0.1:${OPENCODE_PORT}/session/status" >/dev/null 2>&1; then
 		break
 	fi
 	sleep 1
 done
+
+if ! curl -fsS "http://127.0.0.1:${OPENCODE_PORT}/session/status" >/dev/null 2>&1; then
+	echo "[oya] ERROR: OpenCode HTTP server did not become ready on port ${OPENCODE_PORT}"
+	journalctl --user -u opencode-manual.service -n 50 --no-pager || true
+	exit 1
+fi
 
 echo "[oya] Starting OYA service (systemd transient unit)..."
 systemctl --user stop oya-manual.service >/dev/null 2>&1 || true
@@ -124,3 +160,4 @@ echo "[oya] Runtime ready"
 echo "  Admin:   http://127.0.0.1:9070"
 echo "  Ingress: http://127.0.0.1:8080"
 echo "  Service: http://127.0.0.1:9080"
+echo "  OpenCode: http://127.0.0.1:${OPENCODE_PORT}"

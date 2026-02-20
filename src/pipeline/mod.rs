@@ -1,7 +1,9 @@
 mod executor;
 mod state;
 
-pub(super) use executor::{execute_and_accumulate_stage, persist_stage_artifact, StageExecutionInput};
+pub(super) use executor::{
+    execute_and_accumulate_stage, persist_stage_artifact, StageExecutionInput,
+};
 pub(super) use state::{
     deterministic_env_bool, deterministic_timestamp, init_pipeline_state,
     parse_rfc3339_deterministic, pipeline_input, PipelineRunInput, PipelineState,
