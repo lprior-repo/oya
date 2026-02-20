@@ -33,6 +33,9 @@ ulid = "1"
 url = "2"
 crossterm = "0.28"
 ratatui = "0.29"
+# Security: Pin time to >=0.3.47 to fix RUSTSEC-2026-0009 (DoS via stack exhaustion)
+# This is a transitive dependency via jsonwebtoken -> simple_asn1 -> time
+time = ">=0.3.47"
 
 [lints.rust]
 unsafe_code = "forbid"

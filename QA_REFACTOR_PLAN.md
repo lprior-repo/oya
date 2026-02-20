@@ -32,17 +32,17 @@ Each milestone includes owner, exact change location, and exit checks. Keep chan
 
 ### P0-2: Security Baseline (must pass before merge)
 
-- [ ] Status: PENDING
+- [x] Status: DONE
 - Owner: platform
 - Files:
-  - `Cargo.toml` (add/override `time` dependency to `">=0.3.47"`)
-  - `Cargo.lock` (updated by `moon run :ci` dependency resolution)
-- Scope:
-  - Raise transitive `time` to satisfy `RUSTSEC-2026-0009`.
-  - Keep `tokio-tar` as accepted-risk dev dependency; record rationale in this file or ADR.
+  - `Cargo.toml` (added `time = ">=0.3.47"` to fix RUSTSEC-2026-0009)
+- Accepted Risks:
+  - `tokio-tar 0.3.1` (RUSTSEC-2025-0111): Dev-only dependency via testcontainers. No fix available. Risk accepted because:
+    1. Only used in test environments
+    2. Not exposed to production workloads
+    3. File smuggling requires malicious tar archive input which we control in tests
 - Exit check:
-  - `moon run :security`
-  - confirm output no longer reports `RUSTSEC-2026-0009` with fixed `time`
+  - `moon run :security` - RUSTSEC-2026-0009 no longer reported
 
 ### P1-1: Add failure-category behavior tests
 
