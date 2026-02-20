@@ -47,7 +47,7 @@ pub(super) fn stage_prompt(input: StagePromptInput<'_>) -> String {
             "TASK:\n1. Write adversarial tests that try to break the code\n2. Test boundary conditions\n3. Test malformed inputs\n4. Fix any vulnerabilities found\n\nJust write the code. Do not explain."
         }
         Stage::GptReview => {
-            "TASK:\n1. Review all code in src/\n2. Fix any code quality issues\n3. Add missing documentation\n4. Ensure clippy is happy with no warnings\n\nIMPORTANT RULES:\n- DO NOT use #[allow(...)] attributes to suppress warnings\n- Fix the actual underlying code issues\n- Remove dead code instead of allowing it\n- Fix type issues properly, don't work around them\n\nJust fix the code. Do not explain."
+            "TASK:\n1. Perform a codex-grade final review of src/ and tests/\n2. Validate behavior against acceptance criteria and stage contracts\n3. Fix issues directly in implementation\n4. Ensure clippy is clean with no warning suppressions\n\nIMPORTANT RULES:\n- DO NOT use #[allow(...)] attributes to suppress warnings\n- Fix the underlying code issues\n- Keep changes deterministic and minimal\n\nJust fix the code. Do not explain."
         }
         Stage::ShipGate => "",
     };
@@ -64,7 +64,7 @@ pub(super) fn stage_success(stage: &Stage) -> (&'static str, Option<Stage>) {
         Stage::Tdd15 => ("Tests written and passing", Some(Stage::Qa)),
         Stage::Qa => ("QA tests added and passing", Some(Stage::RedQueen)),
         Stage::RedQueen => ("Adversarial tests pass", Some(Stage::GptReview)),
-        Stage::GptReview => ("Code review complete, clippy clean", Some(Stage::ShipGate)),
+        Stage::GptReview => ("Codex review complete, ready for ship gate", Some(Stage::ShipGate)),
         Stage::ShipGate => ("All gates passed - ready to ship", None),
     }
 }

@@ -67,7 +67,7 @@ impl StageName {
             Self::Tdd15 => ModelTier::Balanced,
             Self::Qa => ModelTier::Balanced,
             Self::RedQueen => ModelTier::Capable,
-            Self::GptReview => ModelTier::Capable,
+            Self::GptReview => ModelTier::Best,
             Self::ShipGate => ModelTier::Best,
         }
     }

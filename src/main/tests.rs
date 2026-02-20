@@ -94,9 +94,9 @@ fn test_parse_gate_command_accepts_zjj_sync_status() {
 }
 
 #[test]
-fn test_gate_failure_outcome_gpt_review_clippy_stays_on_review() {
+fn test_gate_failure_outcome_gpt_review_clippy_routes_to_implementation() {
     let outcome = gate_failure_outcome(&Stage::GptReview, &Gate::ClippyClean);
-    assert_eq!(outcome, (FailureCategory::LintFailed, Stage::GptReview));
+    assert_eq!(outcome, (FailureCategory::LintFailed, Stage::Implementation));
 }
 
 #[test]

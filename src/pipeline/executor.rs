@@ -67,6 +67,7 @@ pub async fn execute_and_accumulate_stage(
 
     // Prepare workspace (in-memory, no persistence yet)
     let workspace = prepare_workspace_lifecycle(&input, config).await?;
+    let execution_root = resolve_execution_root(input.repo_root, workspace.as_ref());
 
     // Execute stage (all side effects happen here, but no Restate sets)
     let (stage_result, prompt) = execute_stage_real(
@@ -81,7 +82,7 @@ pub async fn execute_and_accumulate_stage(
             last_failure: input.last_failure.clone(),
         },
         config.merge_queue_policy,
-        input.repo_root.to_path_buf(),
+        execution_root.clone(),
     )
     .await?;
 
@@ -95,7 +96,7 @@ pub async fn execute_and_accumulate_stage(
     let timing = calculate_stage_timing(&started_at, &completed_at);
 
     // Execute gates and collect results
-    let gates = execute_and_collect_gates(input.stage.clone(), input.repo_root)?;
+    let gates = execute_and_collect_gates(input.stage.clone(), &execution_root)?;
 
     // Build input data
     let stage_input = build_stage_input_data(&input);
@@ -110,6 +111,8 @@ pub async fn execute_and_accumulate_stage(
     Ok(StageArtifact {
         stage: input.stage.as_str().to_string(),
         attempt: input.attempt,
+        failure_category: stage_result.failure_category.as_ref().map(|c| c.as_str().to_string()),
+        next_stage: stage_result.next_stage.as_ref().map(|s| s.as_str().to_string()),
         timing,
         workspace,
         input: stage_input,
@@ -162,6 +165,7 @@ async fn prepare_workspace_lifecycle(
     match workspace_event {
         Some(event) => Ok(Some(WorkspaceLifecycle {
             name: event.workspace,
+            path: event.workspace_path,
             queue_command: event.queue_command,
             queue_passed: event.queue_passed,
             queue_exit_code: event.queue_exit_code,
@@ -171,6 +175,16 @@ async fn prepare_workspace_lifecycle(
         })),
         None => Ok(None),
     }
+}
+
+fn resolve_execution_root(
+    repo_root: &Path,
+    workspace: Option<&WorkspaceLifecycle>,
+) -> std::path::PathBuf {
+    workspace
+        .map(|lifecycle| std::path::PathBuf::from(lifecycle.path.as_str()))
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or_else(|| repo_root.to_path_buf())
 }
 
 fn calculate_stage_timing(started_at: &str, completed_at: &str) -> StageTiming {

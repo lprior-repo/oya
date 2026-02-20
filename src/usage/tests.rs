@@ -33,7 +33,7 @@ fn test_tier_for_stage_maps_correctly() {
     assert_eq!(tier_for_stage(&StageName::Tdd15), "c");
     assert_eq!(tier_for_stage(&StageName::Qa), "c");
     assert_eq!(tier_for_stage(&StageName::RedQueen), "b");
-    assert_eq!(tier_for_stage(&StageName::GptReview), "b");
+    assert_eq!(tier_for_stage(&StageName::GptReview), "a");
     assert_eq!(tier_for_stage(&StageName::ShipGate), "a");
 }
 

@@ -167,7 +167,7 @@ fn gate_failure_mapping(stage: &Stage, gate: &Gate) -> Option<(FailureCategory, 
             Some((FailureCategory::TestFailed, Stage::Implementation))
         }
         (&Stage::GptReview, &Gate::ClippyClean) => {
-            Some((FailureCategory::LintFailed, Stage::GptReview))
+            Some((FailureCategory::LintFailed, Stage::Implementation))
         }
         (&Stage::GptReview, &Gate::Security) => {
             Some((FailureCategory::TestFailed, Stage::Implementation))

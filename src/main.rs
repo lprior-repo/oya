@@ -26,7 +26,7 @@ mod workflow_runner;
 use orchestrator_types::*;
 use pipeline::{
     execute_and_accumulate_stage, init_pipeline_state, parse_rfc3339_deterministic,
-    persist_stage_artifact, pipeline_input, RuntimeConfig, PipelineRunInput, PipelineState,
+    persist_stage_artifact, pipeline_input, PipelineRunInput, PipelineState, RuntimeConfig,
     StageExecutionInput,
 };
 use runtime_tools::*;
@@ -268,21 +268,51 @@ async fn run_pipeline_loop(
                 }
             }
             orchestrator_types::StageStatus::Failed => {
-                // Stage failed - check retry count
+                let failure_category = parse_failure_category(&artifact.failure_category)
+                    .unwrap_or(FailureCategory::OutputParseFailure);
+
+                state.last_failure = Some((failure_category, artifact.output.full_log.clone()));
+
+                if let Some(next_stage) = parse_next_stage(&artifact.next_stage) {
+                    if next_stage != state.current_stage {
+                        state.current_stage = next_stage;
+                        state.attempt = 1;
+                        continue;
+                    }
+                }
+
+                // Stage failed - retry same stage up to max attempts
                 if state.attempt >= state.current_stage.max_attempts() {
                     return mark_run_failed(ctx, state, &artifact).await;
                 }
-                // Retry same stage
                 state.attempt += 1;
-                state.last_failure = Some((
-                    oya::types::FailureCategory::OutputParseFailure,
-                    artifact.output.full_log.clone(),
-                ));
             }
         }
 
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
+}
+
+fn parse_next_stage(next_stage: &Option<String>) -> Option<Stage> {
+    next_stage.as_deref().and_then(|value| Stage::try_from(value).ok())
+}
+
+fn parse_failure_category(category: &Option<String>) -> Option<FailureCategory> {
+    category.as_deref().and_then(|value| match value {
+        "test_failed" => Some(FailureCategory::TestFailed),
+        "tests_unexpectedly_green" => Some(FailureCategory::TestsUnexpectedlyGreen),
+        "test_infra_failed" => Some(FailureCategory::TestInfraFailed),
+        "compile_failed" => Some(FailureCategory::CompileFailed),
+        "lint_failed" => Some(FailureCategory::LintFailed),
+        "merge_conflict" => Some(FailureCategory::MergeConflict),
+        "rate_limited" => Some(FailureCategory::RateLimited),
+        "auth_failed" => Some(FailureCategory::AuthFailed),
+        "context_overflow" => Some(FailureCategory::ContextOverflow),
+        "provider_unavailable" => Some(FailureCategory::ProviderUnavailable),
+        "output_parse_failure" => Some(FailureCategory::OutputParseFailure),
+        "max_attempts_exceeded" => Some(FailureCategory::MaxAttemptsExceeded),
+        _ => None,
+    })
 }
 
 async fn mark_run_completed(

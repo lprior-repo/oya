@@ -59,6 +59,15 @@ fn add_workspace(
     run_workspace_command(request, &command, &args, "zjj add", workspace)
 }
 
+fn resolve_workspace_path(repo_root: &PathBuf, workspace: &str) -> String {
+    let repo_name = repo_root
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map_or_else(|| "workspace".to_string(), |name| name.to_string());
+    let parent = repo_root.parent().unwrap_or(repo_root.as_path());
+    parent.join(format!("{}__workspaces", repo_name)).join(workspace).to_string_lossy().to_string()
+}
+
 fn run_workspace_command(
     request: &WorkspacePrepRequest,
     command: &str,
@@ -88,10 +97,12 @@ pub(crate) fn prepare_stage_workspace(
         return Ok(None);
     }
     let workspace = ensure_workspace_name(&request)?;
+    let workspace_path = resolve_workspace_path(&request.repo_root, workspace.as_str());
     let queue = queue_workspace(&request, &workspace)?;
     let add = add_workspace(&request, &workspace)?;
     Ok(Some(WorkspaceLifecycleEvent {
         workspace,
+        workspace_path,
         queue_command: queue.command,
         queue_passed: queue.passed,
         queue_exit_code: queue.exit_code,

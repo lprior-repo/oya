@@ -82,6 +82,8 @@ pub(super) struct OrchestratorState {
 pub(super) struct StageArtifact {
     pub stage: String,
     pub attempt: u32,
+    pub failure_category: Option<String>,
+    pub next_stage: Option<String>,
     pub timing: StageTiming,
     pub workspace: Option<WorkspaceLifecycle>,
     pub input: StageInputData,

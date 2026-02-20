@@ -31,11 +31,11 @@ pub(super) async fn execute_stage_real(
 ```
 
 **The Problem:**
-1. `spawn_blocking` is INSIDE `ctx.run()` closure (lines 62-68)
-2. `spawn_blocking` is a NON-DETERMINISTIC runtime operation (task creation, scheduling)
-3. On workflow REPLAY, Restate re-executes the closure, causing `spawn_blocking` to run AGAIN
-4. This violates determinism: the blocking operation executes multiple times instead of using journaled result
-5. Each replay could produce different results, causing workflow state divergence
+1. Non-deterministic stage execution can diverge between original run and replay if the closure body does not remain fully journal-consistent.
+2. Prior fixes changed behavior without preserving replay consistency at state-write boundaries.
+3. We must enforce one journaled execution contract for full stage execution and avoid partial journaling patterns.
+4. Any divergence in command output/state payload across replay causes Restate mismatch failures.
+5. The fix must include replay-safe implementation and mock-based contract tests.
 
 **Why This Breaks Restate:**
 - Restate journals the RESULT of `ctx.run()`
@@ -55,31 +55,29 @@ pub(crate) async fn deterministic_timestamp(
 }
 ```
 
-**Key Insight:** Operations inside `ctx.run()` must be PURE - they should return the same value every time. `spawn_blocking` is NOT pure.
+**Key Insight:** For this workflow, stage execution must be treated as one journaled side-effect boundary so replay reads the same recorded value at subsequent state writes.
 
 ## Your Task
 
-### Step 1: Refactor `execute_stage_real` to Separate Concerns
+### Step 1: Refactor `execute_stage_real` to Preserve Replay Consistency
 
-**WRONG (current):**
+**WRONG (caused mismatch):**
 ```rust
-let execution: Json<StageExecution> = ctx.run(|| async move {
-    tokio::task::spawn_blocking(move || execute_stage_blocking(input)).await ...
+let blocking_result = tokio::task::spawn_blocking(move || execute_stage_blocking(input)).await ...;
+let execution: Json<StageExecution> = ctx.run(move || async move {
+    blocking_result.map(Json) ...
 }).await
 ```
 
 **CORRECT:**
 ```rust
-// 1. Execute spawn_blocking OUTSIDE ctx.run() - this is the non-deterministic part
-let blocking_result = tokio::task::spawn_blocking(move || {
-    execute_stage_blocking(input)
-}).await
-.map_err(|error| OyaError(format!("spawn_blocking failed: {}", error)))?;
-
-// 2. Wrap ONLY the result handling in ctx.run() - this is what gets journaled
+// 1. Keep full stage execution inside one journaled closure
 let execution: Json<StageExecution> = ctx
     .run(move || async move {
-        blocking_result.map(Json).map_err(|e| HandlerError::from(e.0))
+        let result = tokio::task::spawn_blocking(move || execute_stage_blocking(input))
+            .await
+            .map_err(|error| HandlerError::from(format!("spawn_blocking failed: {}", error)))?;
+        result.map(Json).map_err(|e| HandlerError::from(e.0))
     })
     .await
     .map_err(|e| OyaError(format!("ctx.run failed: {}", e)))?;
@@ -141,8 +139,8 @@ Check that other similar functions in `src/stage_executor.rs` follow the same pa
 
 ## Acceptance Criteria
 
-1. ✅ `spawn_blocking` is called OUTSIDE of `ctx.run()`
-2. ✅ Only result mapping is inside `ctx.run()`
+1. ✅ Stage execution closure remains fully journaled in `ctx.run()`
+2. ✅ Replay reuses journaled value and does not re-run mocked execution branch
 3. ✅ Error handling properly separates OyaError (outer) from HandlerError (inner)
 4. ✅ Test added that verifies spawn_blocking is not called on replay
 5. ✅ Documentation explains the determinism pattern

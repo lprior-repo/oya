@@ -96,6 +96,13 @@ fn given_redqueen_stage_when_checking_model_tier_then_is_b() {
 }
 
 #[test]
+fn given_gpt_review_stage_when_checking_model_tier_then_is_a() {
+    use oya::types::{ModelTier, StageName};
+
+    assert_eq!(StageName::GptReview.model_for_stage(), ModelTier::Best);
+}
+
+#[test]
 fn given_shipgate_stage_when_checking_model_tier_then_is_a() {
     use oya::types::{ModelTier, StageName};
 
