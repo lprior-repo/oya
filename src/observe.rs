@@ -55,16 +55,23 @@ fn read_lines(path: &PathBuf) -> Result<Vec<String>> {
 }
 
 fn filter_events(lines: Vec<String>, run_id: &Option<String>) -> Result<Vec<String>> {
-    if run_id.is_none() {
-        return Ok(lines);
+    match run_id {
+        None => Ok(lines),
+        Some(needle) => lines
+            .into_iter()
+            .map(|line| {
+                matches_run_id(line.as_str(), needle)
+                    .with_context(|| format!("bridge filter parse failure: {}", line))
+                    .map(|is_match| (line, is_match))
+            })
+            .collect::<Result<Vec<_>>>()
+            .map(|pairs| {
+                pairs
+                    .into_iter()
+                    .filter_map(|(line, is_match)| if is_match { Some(line) } else { None })
+                    .collect()
+            }),
     }
-
-    let needle = run_id.clone().unwrap_or_default();
-    lines
-        .into_iter()
-        .filter(|line| matches_run_id(line, &needle).unwrap_or(false))
-        .map(Ok)
-        .collect()
 }
 
 fn matches_run_id(line: &str, run_id: &str) -> Result<bool> {

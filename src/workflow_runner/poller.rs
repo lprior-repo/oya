@@ -2,13 +2,58 @@ use crate::runtime_tools::{build_http_client, workflow_http_client_settings};
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
+use thiserror::Error;
 
 use super::types::{WorkflowConfig, WorkflowResult, WorkflowStatus};
 use super::DynError;
 
+#[derive(Debug, Error)]
+pub(super) enum WorkflowRunnerError {
+    #[error("failed to build HTTP client: {0}")]
+    HttpClientBuild(String),
+    #[error("failed to start workflow request: {0}")]
+    WorkflowStartRequest(String),
+    #[error("failed to start workflow (HTTP {status}): {body}")]
+    WorkflowStartRejected { status: u16, body: String },
+    #[error("workflow timed out after {timeout_secs} seconds")]
+    WorkflowTimeout { timeout_secs: u64 },
+    #[error("workflow failed at stage {stage} attempt {attempt}: {message}")]
+    WorkflowFailed { stage: String, attempt: u32, message: String },
+    #[error("workflow query request failed: {0}")]
+    WorkflowQueryRequest(String),
+    #[error("workflow query response invalid: {0}")]
+    WorkflowQueryResponse(String),
+    #[error("bridge directory creation failed: {0}")]
+    BridgeDirectoryCreate(String),
+    #[error("bridge events file open failed: {0}")]
+    BridgeOpen(String),
+    #[error("bridge events serialization failed: {0}")]
+    BridgeSerialize(String),
+    #[error("bridge events newline write failed: {0}")]
+    BridgeWrite(String),
+}
+
+impl WorkflowRunnerError {
+    fn code(&self) -> &'static str {
+        match self {
+            Self::HttpClientBuild(_) => "http_client_build",
+            Self::WorkflowStartRequest(_) => "workflow_start_request",
+            Self::WorkflowStartRejected { .. } => "workflow_start_rejected",
+            Self::WorkflowTimeout { .. } => "workflow_timeout",
+            Self::WorkflowFailed { .. } => "workflow_failed",
+            Self::WorkflowQueryRequest(_) => "workflow_query_request",
+            Self::WorkflowQueryResponse(_) => "workflow_query_response",
+            Self::BridgeDirectoryCreate(_) => "bridge_directory_create",
+            Self::BridgeOpen(_) => "bridge_open",
+            Self::BridgeSerialize(_) => "bridge_serialize",
+            Self::BridgeWrite(_) => "bridge_write",
+        }
+    }
+}
+
 pub(super) fn workflow_http_client() -> Result<reqwest::Client, DynError> {
     build_http_client(workflow_http_client_settings())
-        .map_err(|error| format!("Failed to build HTTP client: {}", error).into())
+        .map_err(|error| WorkflowRunnerError::HttpClientBuild(error.to_string()).into())
 }
 
 pub(super) fn emit_workflow_starting(config: &WorkflowConfig) {
@@ -82,14 +127,16 @@ pub(super) async fn start_workflow(
         .json(&payload)
         .send()
         .await
-        .map_err(|error| format!("Failed to start workflow: {}", error))?;
+        .map_err(|error| WorkflowRunnerError::WorkflowStartRequest(error.to_string()))?;
     if response.status().is_success() {
         return Ok(());
     }
     let status = response.status();
     let body =
         response.text().await.map_or_else(|_| "<no body>".to_string(), std::convert::identity);
-    Err(format!("Failed to start workflow (HTTP {}): {}", status, body).into())
+    let error = WorkflowRunnerError::WorkflowStartRejected { status: status.as_u16(), body };
+    emit_workflow_error(config, &error);
+    Err(error.into())
 }
 
 #[derive(Clone)]
@@ -124,17 +171,9 @@ async fn poll_iteration(
     state: &mut PollState,
 ) -> Result<Option<WorkflowStatus>, DynError> {
     if state.start_time.elapsed() > state.timeout_duration {
-        emit_event(
-            config,
-            serde_json::json!({
-                "type": "workflow_error",
-                "bead_id": config.bead_id,
-                "run_id": config.run_id,
-                "error": "timeout",
-                "message": format!("Workflow timed out after {} seconds", config.timeout_secs),
-            }),
-        );
-        return Err(format!("Workflow timed out after {} seconds", config.timeout_secs).into());
+        let error = WorkflowRunnerError::WorkflowTimeout { timeout_secs: config.timeout_secs };
+        emit_workflow_error(config, &error);
+        return Err(error.into());
     }
     let status = fetch_workflow_status(client, config).await?;
     print_stage_progress(config, &status, state.start_time, state.last_status.as_ref());
@@ -142,19 +181,13 @@ async fn poll_iteration(
         return Ok(Some(status));
     }
     if status.is_failed() {
-        emit_event(
-            config,
-            serde_json::json!({
-                "type": "workflow_error",
-                "bead_id": config.bead_id,
-                "run_id": config.run_id,
-                "error": "failed",
-                "current_stage": status.stage,
-                "attempt": status.attempt,
-                "message": status.last_failure,
-            }),
-        );
-        return Err(format!("Workflow failed: {}", status.last_failure).into());
+        let error = WorkflowRunnerError::WorkflowFailed {
+            stage: status.stage.clone(),
+            attempt: status.attempt,
+            message: status.last_failure.clone(),
+        };
+        emit_workflow_error(config, &error);
+        return Err(error.into());
     }
     state.last_status = Some(status);
     Ok(None)
@@ -219,9 +252,10 @@ pub(super) async fn fetch_workflow_status(
         .json(&query_payload)
         .send()
         .await
-        .map_err(|error| format!("Query request failed: {}", error))?;
+        .map_err(|error| WorkflowRunnerError::WorkflowQueryRequest(error.to_string()))?;
     let body = response.text().await.map_or_else(|_| "{}".to_string(), std::convert::identity);
-    WorkflowStatus::from_query_response(&body).map_err(|error| -> DynError { error.into() })
+    WorkflowStatus::from_query_response(&body)
+        .map_err(|error| WorkflowRunnerError::WorkflowQueryResponse(error).into())
 }
 
 pub(super) fn output_result(
@@ -272,20 +306,35 @@ fn emit_event(config: &WorkflowConfig, event: serde_json::Value) {
     }
 }
 
+fn emit_workflow_error(config: &WorkflowConfig, error: &WorkflowRunnerError) {
+    emit_event(
+        config,
+        serde_json::json!({
+            "type": "workflow_error",
+            "bead_id": config.bead_id,
+            "run_id": config.run_id,
+            "error_code": error.code(),
+            "message": error.to_string(),
+        }),
+    );
+}
+
 fn append_bridge_event(config: &WorkflowConfig, event: &serde_json::Value) -> Result<(), DynError> {
     let path = bridge_events_path(config);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
-            .map_err(|error| format!("create bridge dir failed: {}", error))?;
+            .map_err(|error| WorkflowRunnerError::BridgeDirectoryCreate(error.to_string()))?;
     }
 
     let mut file = fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(&path)
-        .map_err(|error| format!("open bridge events file failed: {}", error))?;
+        .map_err(|error| WorkflowRunnerError::BridgeOpen(error.to_string()))?;
 
-    writeln!(file, "{}", event).map_err(|error| format!("write bridge event failed: {}", error))?;
+    serde_json::to_writer(&mut file, event)
+        .map_err(|error| WorkflowRunnerError::BridgeSerialize(error.to_string()))?;
+    file.write_all(b"\n").map_err(|error| WorkflowRunnerError::BridgeWrite(error.to_string()))?;
     Ok(())
 }
 

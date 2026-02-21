@@ -431,6 +431,7 @@ fn test_pipeline_state(category: FailureCategory, stage: Stage, attempt: u32) ->
             retryable: oya::is_retryable_failure(&category),
             failed_at: "2026-02-20T00:00:00Z".to_string(),
         }),
+        resolved_models: std::collections::HashMap::new(),
         orchestrator: OrchestratorState {
             status: "running".to_string(),
             stage: stage.as_str().to_string(),

@@ -1,8 +1,12 @@
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use oya::config;
 
 use super::{RunArgs, RunIdMode, PIPELINE_STAGES};
+
+static UNIQUE_RUN_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone)]
 pub(super) struct WorkflowConfig {
@@ -27,7 +31,7 @@ impl WorkflowConfig {
         let run_id = resolve_run_id(&args);
         let restate_ingress = args.restate_url.trim_end_matches('/').to_string();
         let restate_admin = restate_ingress.replace(":8080", ":9070");
-        let model = args.model.unwrap_or_else(|| oya_config.model.clone());
+        let model = args.model.map_or_else(|| oya_config.model.clone(), std::convert::identity);
         Self {
             run_id,
             bead_id: args.bead_id,
@@ -36,7 +40,7 @@ impl WorkflowConfig {
             context: args.context,
             model,
             timeout_secs: args.timeout,
-            poll_interval_secs: args.poll_interval.unwrap_or(5),
+            poll_interval_secs: args.poll_interval.map_or(5, std::convert::identity),
             repo_root,
             stages: PIPELINE_STAGES,
         }
@@ -51,11 +55,11 @@ fn resolve_run_id(args: &RunArgs) -> String {
 }
 
 fn unique_run_id(bead_id: &str) -> String {
-    let timestamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|value| value.as_secs())
-        .unwrap_or(0);
-    format!("{}-{}", bead_id, timestamp)
+    let nanos =
+        SystemTime::now().duration_since(UNIX_EPOCH).map_or(0_u128, |value| value.as_nanos());
+    let pid = u128::from(std::process::id());
+    let sequence = u128::from(UNIQUE_RUN_COUNTER.fetch_add(1, Ordering::Relaxed));
+    format!("{}-{:x}-{:x}-{:x}", bead_id, nanos, pid, sequence)
 }
 
 #[cfg(test)]
@@ -176,26 +180,31 @@ impl WorkflowStatus {
             .ok_or("Missing or invalid 'status' field")?
             .to_string();
 
-        let state_json_str = row.get("state_json").and_then(|s| s.as_str()).unwrap_or("{}");
+        let state_json_str =
+            row.get("state_json").and_then(|s| s.as_str()).map_or("{}", std::convert::identity);
         let state_outer: serde_json::Value = serde_json::from_str(state_json_str)
             .map_err(|e| format!("Invalid state_json: {}", e))?;
-        let state_str = state_outer.as_str().unwrap_or("{}");
+        let state_str = state_outer.as_str().map_or("{}", std::convert::identity);
         let state: serde_json::Value =
             serde_json::from_str(state_str).map_err(|e| format!("Invalid state string: {}", e))?;
 
         Ok(Self {
             status,
-            stage: state.get("stage").and_then(|s| s.as_str()).unwrap_or("unknown").to_string(),
-            attempt: state.get("attempt").and_then(|a| a.as_u64()).unwrap_or(0) as u32,
+            stage: state
+                .get("stage")
+                .and_then(|s| s.as_str())
+                .map_or("unknown", std::convert::identity)
+                .to_string(),
+            attempt: state.get("attempt").and_then(|a| a.as_u64()).map_or(0, |value| value) as u32,
             orchestration_status: state
                 .get("status")
                 .and_then(|s| s.as_str())
-                .unwrap_or("unknown")
+                .map_or("unknown", std::convert::identity)
                 .to_string(),
             last_failure: state
                 .get("last_failure")
                 .and_then(|s| s.as_str())
-                .unwrap_or("")
+                .map_or("", std::convert::identity)
                 .to_string(),
         })
     }

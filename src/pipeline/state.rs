@@ -6,8 +6,10 @@
 
 use oya::types::{StageFailure, StageName as Stage};
 use restate_sdk::prelude::*;
+use std::collections::HashMap;
 
 use crate::orchestrator_types::{write_orchestrator_state, OrchestratorState};
+use oya::usage::tier_for_stage;
 
 use super::OyaError;
 
@@ -69,6 +71,7 @@ pub(crate) struct PipelineState {
     pub(crate) attempt: u32,
     pub(crate) red_seal_ready: bool,
     pub(crate) last_failure: Option<StageFailure>,
+    pub(crate) resolved_models: HashMap<String, String>,
     pub(crate) orchestrator: OrchestratorState,
 }
 
@@ -84,9 +87,13 @@ pub(crate) async fn init_pipeline_state(
     model: String,
 ) -> Result<PipelineState, OyaError> {
     let updated_at = deterministic_timestamp_or_error(ctx).await?;
+    let stage = Stage::Explore;
+    let tier = tier_for_stage(&stage).to_string();
+    let mut resolved_models = HashMap::new();
+    resolved_models.insert(tier, model.clone());
     let orchestrator = OrchestratorState {
         status: "running".to_string(),
-        stage: Stage::Explore.as_str().to_string(),
+        stage: stage.as_str().to_string(),
         attempt: 1,
         bead_id: input.bead_id.clone(),
         context: input.context.clone(),
@@ -98,10 +105,11 @@ pub(crate) async fn init_pipeline_state(
     };
     write_orchestrator_state(ctx, &orchestrator)?;
     Ok(PipelineState {
-        current_stage: Stage::Explore,
+        current_stage: stage,
         attempt: 1,
         red_seal_ready: false,
         last_failure: None,
+        resolved_models,
         orchestrator,
     })
 }

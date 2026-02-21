@@ -91,15 +91,21 @@ impl OyaOrchestrator for OyaOrchestratorImpl {
         request: Json<serde_json::Value>,
     ) -> Result<String, HandlerError> {
         let parsed = parse_start_request(request.0)?;
-        let start = build_start_context(&ctx, parsed).await?;
-        persist_run_start(&ctx, &start).await?;
+        let start = build_start_context(&ctx, parsed).await.map_err(terminal_workflow_error)?;
+        persist_run_start(&ctx, &start).await.map_err(terminal_workflow_error)?;
         tracing::info!("=== RUN {} STARTED ===", start.run_id);
         tracing::info!("Bead: {}", start.bead_id);
         tracing::info!("Context: {}", start.context);
         tracing::info!("Model: {}", start.model);
-        run_pipeline(&ctx, start.run_id.clone(), start.bead_id, start.context, start.model).await?;
+        run_pipeline(&ctx, start.run_id.clone(), start.bead_id, start.context, start.model)
+            .await
+            .map_err(terminal_workflow_error)?;
         Ok(start.run_id)
     }
+}
+
+fn terminal_workflow_error(error: OyaError) -> HandlerError {
+    TerminalError::new(error.to_string()).into()
 }
 
 struct StartContext {
@@ -146,6 +152,25 @@ async fn resolve_model_for_stage(
 ) -> Result<String, OyaError> {
     let tier = tier_for_stage(stage).to_string();
     resolve_model_for_stage_with_backoff(ctx, &tier).await
+}
+
+async fn resolve_model_for_stage_cached(
+    ctx: &WorkflowContext<'_>,
+    state: &mut PipelineState,
+    stage: &Stage,
+) -> Result<String, OyaError> {
+    let tier = tier_for_stage(stage).to_string();
+    if let Some(model) = state.resolved_models.get(&tier) {
+        return Ok(model.clone());
+    }
+    let model = resolve_model_for_stage_with_backoff(ctx, &tier).await?;
+    state.resolved_models.insert(tier, model.clone());
+    Ok(model)
+}
+
+fn invalidate_cached_model_for_stage(state: &mut PipelineState, stage: &Stage) {
+    let tier = tier_for_stage(stage).to_string();
+    state.resolved_models.remove(&tier);
 }
 
 async fn resolve_model_for_stage_with_backoff(
@@ -368,7 +393,8 @@ async fn enforce_red_gate_precondition(
     ));
     state.current_stage = Stage::Red;
     state.attempt = 1;
-    state.orchestrator.model = resolve_model_for_stage(ctx, &Stage::Red).await?;
+    let stage = Stage::Red;
+    state.orchestrator.model = resolve_model_for_stage_cached(ctx, state, &stage).await?;
     Ok(())
 }
 
@@ -483,7 +509,8 @@ async fn completed_stage_next_action(
     if stage_is_implementation(artifact) && !state.red_seal_ready {
         state.current_stage = Stage::Red;
         state.attempt = 1;
-        state.orchestrator.model = resolve_model_for_stage(ctx, &state.current_stage).await?;
+        let stage = state.current_stage.clone();
+        state.orchestrator.model = resolve_model_for_stage_cached(ctx, state, &stage).await?;
         return Ok(true);
     }
 
@@ -493,7 +520,8 @@ async fn completed_stage_next_action(
         state.last_failure = None;
         emit_behavioral_alert_if_needed(ctx, state, artifact).await?;
         // Resolve model for the next stage's tier
-        state.orchestrator.model = resolve_model_for_stage(ctx, &state.current_stage).await?;
+        let stage = state.current_stage.clone();
+        state.orchestrator.model = resolve_model_for_stage_cached(ctx, state, &stage).await?;
         return Ok(true);
     }
 
@@ -508,7 +536,8 @@ async fn completed_stage_next_action(
             artifact.timing.completed_at.clone(),
         ));
         // Resolve model for the retry stage's tier
-        state.orchestrator.model = resolve_model_for_stage(ctx, &state.current_stage).await?;
+        let stage = state.current_stage.clone();
+        state.orchestrator.model = resolve_model_for_stage_cached(ctx, state, &stage).await?;
         return Ok(true);
     }
 
@@ -528,6 +557,10 @@ async fn handle_failed_stage(
 
     // Report failure outcome to the usage tracker
     report_stage_outcome(ctx, &state.orchestrator.model, false, is_rate_limit).await?;
+    if is_rate_limit {
+        let stage = state.current_stage.clone();
+        invalidate_cached_model_for_stage(state, &stage);
+    }
     emit_behavioral_alert_if_needed(ctx, state, artifact).await?;
 
     if let Some(next_stage) = parse_next_stage(&artifact.next_stage) {
@@ -535,7 +568,8 @@ async fn handle_failed_stage(
             state.current_stage = next_stage;
             state.attempt = 1;
             // Resolve model for the new stage's tier
-            state.orchestrator.model = resolve_model_for_stage(ctx, &state.current_stage).await?;
+            let stage = state.current_stage.clone();
+            state.orchestrator.model = resolve_model_for_stage_cached(ctx, state, &stage).await?;
             return Ok(true);
         }
     }
@@ -547,7 +581,8 @@ async fn handle_failed_stage(
     }
 
     state.attempt += 1;
-    state.orchestrator.model = resolve_model_for_stage(ctx, &state.current_stage).await?;
+    let stage = state.current_stage.clone();
+    state.orchestrator.model = resolve_model_for_stage_cached(ctx, state, &stage).await?;
     Ok(true)
 }
 
