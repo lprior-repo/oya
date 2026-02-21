@@ -3307,6 +3307,23 @@ fn parse_opencode_output_accepts_stdout_string() {
 }
 
 #[test]
+fn parse_opencode_output_accepts_prefixed_stdout_json_line() {
+    let result = parse_opencode_output("[hypr-notifier] plugin initialized {\"stdout\":\"ok\"}");
+    assert_eq!(result, Ok(OpencodeRunOutput { stdout: "ok".to_string() }));
+}
+
+#[test]
+fn parse_opencode_output_accepts_mixed_log_and_stdout_json_lines() {
+    let payload = concat!(
+        "[hypr-notifier] plugin initialized\n",
+        "{\"type\":\"step_start\",\"part\":{\"id\":\"p1\"}}\n",
+        "{\"stdout\":\"ok\"}\n"
+    );
+    let result = parse_opencode_output(payload);
+    assert_eq!(result, Ok(OpencodeRunOutput { stdout: "ok".to_string() }));
+}
+
+#[test]
 fn parse_opencode_output_trims_outer_whitespace() {
     let result = parse_opencode_output("  {\"stdout\":\"ok\"}  ");
     assert_eq!(result, Ok(OpencodeRunOutput { stdout: "ok".to_string() }));

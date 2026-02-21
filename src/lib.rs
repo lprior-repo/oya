@@ -78,6 +78,7 @@ use types::FailureCategory;
 ///
 /// Retryable: code-level failures the AI can fix (test, lint, parse errors)
 /// Non-retryable: provider/environment failures that require external intervention
+/// Note: RateLimited is non-retryable because it triggers model rotation instead of stage retry
 pub fn is_retryable_failure(category: &FailureCategory) -> bool {
     matches!(
         category,
@@ -86,7 +87,6 @@ pub fn is_retryable_failure(category: &FailureCategory) -> bool {
             | FailureCategory::LintFailed
             | FailureCategory::OutputParseFailure
             | FailureCategory::CompileFailed
-            | FailureCategory::RateLimited
     )
 }
 
@@ -364,13 +364,34 @@ pub fn parse_opencode_output(raw: &str) -> Result<OpencodeRunOutput, OpencodePar
 fn parse_opencode_json_payload(
     trimmed: &str,
 ) -> Result<Option<OpencodeRunOutput>, OpencodeParseError> {
-    let Some(value) = serde_json::from_str::<serde_json::Value>(trimmed).ok() else {
-        return Ok(None);
-    };
-    match value.get("stdout") {
-        Some(stdout) => parse_opencode_output_stdout(stdout).map(Some),
-        None => Err(OpencodeParseError::new("opencode json missing stdout field")),
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) {
+        return match value.get("stdout") {
+            Some(stdout) => parse_opencode_output_stdout(stdout).map(Some),
+            None => Err(OpencodeParseError::new("opencode json missing stdout field")),
+        };
     }
+
+    match find_stdout_field_in_json_lines(trimmed) {
+        Some(stdout) => parse_opencode_output_stdout(&stdout).map(Some),
+        None => Ok(None),
+    }
+}
+
+fn find_stdout_field_in_json_lines(raw: &str) -> Option<serde_json::Value> {
+    raw.lines().find_map(find_stdout_field_in_line)
+}
+
+fn find_stdout_field_in_line(line: &str) -> Option<serde_json::Value> {
+    let trimmed = line.trim();
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) {
+        return value.get("stdout").cloned();
+    }
+
+    trimmed.find('{').and_then(|start| {
+        serde_json::from_str::<serde_json::Value>(&trimmed[start..])
+            .ok()
+            .and_then(|value| value.get("stdout").cloned())
+    })
 }
 
 fn parse_opencode_text_events(raw: &str) -> String {

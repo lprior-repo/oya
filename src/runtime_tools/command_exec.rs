@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 const OPENCODE_TIMEOUT_SECONDS: u64 = 600;
+const OPENCODE_CLI_RATE_LIMIT_RETRIES: u32 = 2;
 const FALLBACK_MODEL: &str = "google/gemini-3-flash-preview";
 
 pub(crate) fn run_command_with_timeout(
@@ -205,6 +206,9 @@ pub(crate) fn run_opencode(
 
     match command_result {
         Ok((passed, output)) if passed => Ok((passed, output)),
+        Ok((false, output)) if is_rate_limited_cli_output(output.as_str()) => {
+            retry_rate_limited_opencode(prompt, repo_root, model, output)
+        }
         Ok((_passed, output)) if is_opencode_cli_missing_output(output.as_str()) => {
             match fallback_to_opencode_http(prompt, model, output.as_str()) {
                 Ok(http_output) => Ok((true, http_output)),
@@ -246,6 +250,43 @@ fn retry_with_fallback_model(
         OPENCODE_TIMEOUT_SECONDS,
         repo_root,
     )
+}
+
+fn retry_rate_limited_opencode(
+    prompt: &str,
+    repo_root: &PathBuf,
+    model: &str,
+    first_output: String,
+) -> Result<(bool, String), OyaError> {
+    let mut attempt = 0;
+    let mut last_output = first_output;
+    while attempt < OPENCODE_CLI_RATE_LIMIT_RETRIES {
+        std::thread::sleep(rate_limit_backoff(attempt));
+        let (passed, output) = run_command_with_timeout(
+            resolve_opencode_program().as_str(),
+            &["run", "--format", "json", "--model", model, prompt],
+            OPENCODE_TIMEOUT_SECONDS,
+            repo_root,
+        )?;
+        if passed {
+            return Ok((true, output));
+        }
+        if !is_rate_limited_cli_output(output.as_str()) {
+            return Ok((false, output));
+        }
+        last_output = output;
+        attempt += 1;
+    }
+    Ok((false, last_output))
+}
+
+fn is_rate_limited_cli_output(output: &str) -> bool {
+    oya::classify_opencode_error(output) == Some(oya::types::FailureCategory::RateLimited)
+}
+
+fn rate_limit_backoff(attempt: u32) -> std::time::Duration {
+    let millis = 400_u64.saturating_mul(2_u64.saturating_pow(attempt));
+    std::time::Duration::from_millis(millis)
 }
 
 fn resolve_opencode_program() -> String {
@@ -375,5 +416,19 @@ mod tests {
         assert!(is_opencode_missing_error("Command 'opencode' not found"));
         assert!(is_opencode_missing_error("opencode not found."));
         assert!(!is_opencode_missing_error("timeout after 300 seconds"));
+    }
+
+    #[test]
+    fn test_is_rate_limited_cli_output_detects_common_messages() {
+        assert!(is_rate_limited_cli_output("429 Too Many Requests"));
+        assert!(is_rate_limited_cli_output("Provider is overloaded"));
+        assert!(!is_rate_limited_cli_output("syntax error in prompt"));
+    }
+
+    #[test]
+    fn test_rate_limit_backoff_is_exponential() {
+        assert_eq!(rate_limit_backoff(0), std::time::Duration::from_millis(400));
+        assert_eq!(rate_limit_backoff(1), std::time::Duration::from_millis(800));
+        assert_eq!(rate_limit_backoff(2), std::time::Duration::from_millis(1600));
     }
 }

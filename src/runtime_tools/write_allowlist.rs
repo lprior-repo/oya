@@ -97,10 +97,17 @@ impl StageWriteConfig {
     #[must_use]
     pub fn for_stage(stage: StageName) -> Self {
         match stage {
+            StageName::Explore | StageName::Red | StageName::Witness => {
+                Self::read_only_config(stage)
+            }
             StageName::Contract => Self::contract_config(stage),
             StageName::Implementation => Self::implementation_config(stage),
             StageName::ShipGate => Self::ship_gate_config(stage),
         }
+    }
+
+    const fn read_only_config(stage: StageName) -> Self {
+        Self { stage, allowed_dirs: vec![], allowed_patterns: vec![], read_only: true }
     }
 
     fn contract_config(stage: StageName) -> Self {

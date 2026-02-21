@@ -107,6 +107,48 @@ mod tests {
 
         assert!(cfg.run_id.starts_with("src-36h-"));
     }
+
+    #[test]
+    fn workflow_status_is_complete_requires_terminal_orchestration_status() {
+        let completed_running = WorkflowStatus {
+            status: "completed".to_string(),
+            stage: "explore".to_string(),
+            attempt: 1,
+            orchestration_status: "running".to_string(),
+            last_failure: String::new(),
+        };
+        let completed_shipped = WorkflowStatus {
+            status: "completed".to_string(),
+            stage: "ship_gate".to_string(),
+            attempt: 1,
+            orchestration_status: "shipped".to_string(),
+            last_failure: String::new(),
+        };
+
+        assert!(!completed_running.is_complete());
+        assert!(completed_shipped.is_complete());
+    }
+
+    #[test]
+    fn workflow_status_is_failed_includes_orchestration_failure() {
+        let invocation_completed_but_failed = WorkflowStatus {
+            status: "completed".to_string(),
+            stage: "red".to_string(),
+            attempt: 2,
+            orchestration_status: "failed".to_string(),
+            last_failure: "gate failed".to_string(),
+        };
+        let invocation_failed = WorkflowStatus {
+            status: "failed".to_string(),
+            stage: "contract".to_string(),
+            attempt: 1,
+            orchestration_status: "running".to_string(),
+            last_failure: "invoke failed".to_string(),
+        };
+
+        assert!(invocation_completed_but_failed.is_failed());
+        assert!(invocation_failed.is_failed());
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -159,11 +201,11 @@ impl WorkflowStatus {
     }
 
     pub(super) fn is_complete(&self) -> bool {
-        self.status == "completed"
+        self.status == "completed" && self.orchestration_status != "running"
     }
 
     pub(super) fn is_failed(&self) -> bool {
-        self.status == "failed"
+        self.status == "failed" || self.orchestration_status == "failed"
     }
 }
 
