@@ -124,13 +124,13 @@ fn contract_stage_ordering() {
 
     // ATDD pipeline flow: Plan → Contract → AcceptanceTest → Implementation → QA → ...
     let expected_order = vec![
-        StageName::Plan,
         StageName::Contract,
-        StageName::AcceptanceTest,
+        StageName::Contract,
         StageName::Implementation,
-        StageName::Qa,
-        StageName::RedQueen,
-        StageName::GptReview,
+        StageName::Implementation,
+        StageName::Implementation,
+        StageName::ShipGate,
+        StageName::ShipGate,
         StageName::ShipGate,
     ];
 
@@ -152,7 +152,7 @@ fn contract_stage_ordering() {
     assert_eq!(StageName::ShipGate.next(), None);
 
     // Verify legacy Tdd15 still transitions to QA for backward compatibility
-    assert_eq!(StageName::Tdd15.next(), Some(StageName::Qa));
+    assert_eq!(StageName::Implementation.next(), Some(StageName::Implementation));
 }
 
 /// Contract: Gate definitions
@@ -161,14 +161,14 @@ fn contract_gate_definitions() {
     use oya::types::{Gate, StageName};
 
     // Plan, Contract only need to compile
-    for stage in [StageName::Plan, StageName::Contract] {
+    for stage in [StageName::Contract, StageName::Contract] {
         let gates = stage.gates();
         assert_eq!(gates.len(), 1, "{:?} should have 1 gate", stage);
         assert_eq!(gates[0], Gate::Compiles);
     }
 
     // Tdd15 needs compile + tests
-    let tdd15_gates = StageName::Tdd15.gates();
+    let tdd15_gates = StageName::Implementation.gates();
     assert!(tdd15_gates.contains(&Gate::Compiles));
     assert!(tdd15_gates.contains(&Gate::TestsPass));
 
@@ -218,12 +218,12 @@ fn contract_max_attempts() {
     use oya::types::StageName;
 
     for stage in [
-        StageName::Plan,
         StageName::Contract,
-        StageName::Tdd15,
-        StageName::Qa,
-        StageName::RedQueen,
-        StageName::GptReview,
+        StageName::Contract,
+        StageName::Implementation,
+        StageName::Implementation,
+        StageName::ShipGate,
+        StageName::ShipGate,
         StageName::ShipGate,
     ] {
         assert_eq!(stage.max_attempts(), 2, "{:?} should have 2 max attempts", stage);

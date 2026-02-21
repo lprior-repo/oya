@@ -95,21 +95,9 @@ fn test_parse_gate_command_accepts_zjj_sync_status() {
 }
 
 #[test]
-fn test_gate_failure_outcome_gpt_review_clippy_routes_to_implementation() {
-    let outcome = gate_failure_outcome(&Stage::GptReview, &Gate::ClippyClean);
-    assert_eq!(outcome, (FailureCategory::LintFailed, Stage::Implementation));
-}
-
-#[test]
-fn test_gate_failure_outcome_shipgate_merge_conflict_routes_to_review() {
+fn test_gate_failure_outcome_shipgate_merge_conflict_routes_to_implementation() {
     let outcome = gate_failure_outcome(&Stage::ShipGate, &Gate::ZjjMergeQueue);
-    assert_eq!(outcome, (FailureCategory::MergeConflict, Stage::GptReview));
-}
-
-#[test]
-fn test_gate_failure_outcome_acceptance_tests_are_red() {
-    let outcome = gate_failure_outcome(&Stage::AcceptanceTest, &Gate::AcceptanceTestsAreRed);
-    assert_eq!(outcome, (FailureCategory::TestsUnexpectedlyGreen, Stage::AcceptanceTest));
+    assert_eq!(outcome, (FailureCategory::MergeConflict, Stage::Implementation));
 }
 
 #[test]
@@ -162,7 +150,7 @@ fn test_execute_ship_gate_zjj_failure_routes_to_review() {
     assert_eq!(seen.into_inner(), vec![Gate::MoonCi, Gate::ZjjMergeQueue]);
     assert!(!result.passed);
     assert_eq!(result.failure_category, Some(FailureCategory::MergeConflict));
-    assert_eq!(result.next_stage, Some(Stage::GptReview));
+    assert_eq!(result.next_stage, Some(Stage::Implementation));
 }
 
 #[test]
@@ -192,7 +180,7 @@ fn test_cli_up_alias_parses_as_init() {
 #[test]
 fn test_tests_unexpectedly_green_maps_to_retry_loop() {
     let mut state =
-        test_pipeline_state(FailureCategory::TestsUnexpectedlyGreen, Stage::AcceptanceTest, 1);
+        test_pipeline_state(FailureCategory::TestsUnexpectedlyGreen, Stage::Implementation, 1);
     assert!(should_retry_after_failure(&state));
 
     state.attempt = 2;
@@ -201,7 +189,7 @@ fn test_tests_unexpectedly_green_maps_to_retry_loop() {
 
 #[test]
 fn test_infra_failed_is_non_retryable() {
-    let state = test_pipeline_state(FailureCategory::TestInfraFailed, Stage::AcceptanceTest, 1);
+    let state = test_pipeline_state(FailureCategory::TestInfraFailed, Stage::Implementation, 1);
     assert!(!should_retry_after_failure(&state));
 }
 

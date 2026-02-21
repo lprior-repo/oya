@@ -16,7 +16,7 @@ async fn test_stage_success_advances() {
 
     let result = orch
         .run_stage(StageRequest {
-            stage: StageName::Plan,
+            stage: StageName::Contract,
             attempt: 1 as u32,
             bead_id: "bead-001".to_string(),
             context: "context".to_string(),
@@ -33,14 +33,14 @@ async fn test_stage_success_advances() {
 #[tokio::test]
 async fn test_all_stage_transitions() {
     let test_cases = vec![
-        (StageName::Plan, Some(StageName::Contract)),
-        (StageName::Contract, Some(StageName::AcceptanceTest)),
-        (StageName::AcceptanceTest, Some(StageName::Implementation)),
-        (StageName::Implementation, Some(StageName::Qa)),
-        (StageName::Tdd15, Some(StageName::Qa)),
-        (StageName::Qa, Some(StageName::RedQueen)),
-        (StageName::RedQueen, Some(StageName::GptReview)),
-        (StageName::GptReview, Some(StageName::ShipGate)),
+        (StageName::Contract, Some(StageName::Contract)),
+        (StageName::Contract, Some(StageName::Implementation)),
+        (StageName::Implementation, Some(StageName::Implementation)),
+        (StageName::Implementation, Some(StageName::Implementation)),
+        (StageName::Implementation, Some(StageName::Implementation)),
+        (StageName::Implementation, Some(StageName::ShipGate)),
+        (StageName::ShipGate, Some(StageName::ShipGate)),
+        (StageName::ShipGate, Some(StageName::ShipGate)),
         (StageName::ShipGate, None), // Terminal stage
     ];
 
@@ -69,11 +69,11 @@ async fn test_all_stage_transitions() {
 /// Test that TestFailed triggers retry (stays on same stage)
 #[tokio::test]
 async fn test_test_failed_retries() {
-    let orch = util::failing_orchestrator(vec![(StageName::Tdd15, 1, FailureCategory::TestFailed)]);
+    let orch = util::failing_orchestrator(vec![(StageName::Implementation, 1, FailureCategory::TestFailed)]);
 
     let result = orch
         .run_stage(StageRequest {
-            stage: StageName::Tdd15,
+            stage: StageName::Implementation,
             attempt: 1 as u32,
             bead_id: "bead".to_string(),
             context: "ctx".to_string(),
@@ -84,22 +84,22 @@ async fn test_test_failed_retries() {
 
     assert!(!result.passed);
     assert_eq!(result.failure_category, Some(FailureCategory::TestFailed));
-    assert_eq!(result.next_stage, Some(StageName::Tdd15)); // Retry
+    assert_eq!(result.next_stage, Some(StageName::Implementation)); // Retry
 }
 
 /// Test that max attempts (2) is respected
 #[tokio::test]
 async fn test_max_attempts_exceeded() {
     let orch = util::failing_orchestrator(vec![
-        (StageName::Tdd15, 1, FailureCategory::TestFailed),
-        (StageName::Tdd15, 2, FailureCategory::TestFailed),
+        (StageName::Implementation, 1, FailureCategory::TestFailed),
+        (StageName::Implementation, 2, FailureCategory::TestFailed),
     ]);
 
     // Simulate 2 failed attempts
     for attempt in 1..=2 {
         let result = orch
             .run_stage(StageRequest {
-                stage: StageName::Tdd15,
+                stage: StageName::Implementation,
                 attempt: attempt as u32,
                 bead_id: "bead".to_string(),
                 context: "ctx".to_string(),
@@ -113,7 +113,7 @@ async fn test_max_attempts_exceeded() {
     }
 
     // Verify we made exactly 2 calls
-    let calls = orch.stage_calls(&StageName::Tdd15);
+    let calls = orch.stage_calls(&StageName::Implementation);
     assert_eq!(calls.len(), 2);
 }
 
@@ -121,10 +121,10 @@ async fn test_max_attempts_exceeded() {
 #[tokio::test]
 async fn test_compile_failed_is_retryable() {
     let orch =
-        util::failing_orchestrator(vec![(StageName::Tdd15, 1, FailureCategory::CompileFailed)]);
+        util::failing_orchestrator(vec![(StageName::Implementation, 1, FailureCategory::CompileFailed)]);
     let result = orch
         .run_stage(StageRequest {
-            stage: StageName::Tdd15,
+            stage: StageName::Implementation,
             attempt: 1 as u32,
             bead_id: "b".to_string(),
             context: "c".to_string(),
@@ -134,7 +134,7 @@ async fn test_compile_failed_is_retryable() {
         .unwrap();
 
     assert!(!result.passed);
-    assert_eq!(result.next_stage, Some(StageName::Tdd15)); // Can retry
+    assert_eq!(result.next_stage, Some(StageName::Implementation)); // Can retry
 }
 
 /// Test that MergeConflict eventually fails (not retryable forever)
@@ -147,7 +147,7 @@ async fn test_merge_conflict_fails_after_max_attempts() {
                 passed: false,
                 output: json!({"error": "merge conflict"}),
                 failure_category: Some(FailureCategory::MergeConflict),
-                next_stage: Some(StageName::GptReview),
+                next_stage: Some(StageName::ShipGate),
                 prompt: "fix conflicts".to_string(),
             },
         ),
@@ -157,7 +157,7 @@ async fn test_merge_conflict_fails_after_max_attempts() {
                 passed: false,
                 output: json!({"error": "merge conflict"}),
                 failure_category: Some(FailureCategory::MergeConflict),
-                next_stage: Some(StageName::GptReview),
+                next_stage: Some(StageName::ShipGate),
                 prompt: "fix conflicts".to_string(),
             },
         ),
@@ -176,7 +176,7 @@ async fn test_merge_conflict_fails_after_max_attempts() {
             .await
             .unwrap();
         if attempt < 2 {
-            assert_eq!(result.next_stage, Some(StageName::GptReview));
+            assert_eq!(result.next_stage, Some(StageName::ShipGate));
         }
     }
 }
@@ -186,13 +186,13 @@ async fn test_merge_conflict_fails_after_max_attempts() {
 async fn test_complete_pipeline_simulation() {
     let orch = util::passing_orchestrator();
     let stages = vec![
-        StageName::Plan,
         StageName::Contract,
-        StageName::AcceptanceTest,
+        StageName::Contract,
         StageName::Implementation,
-        StageName::Qa,
-        StageName::RedQueen,
-        StageName::GptReview,
+        StageName::Implementation,
+        StageName::Implementation,
+        StageName::ShipGate,
+        StageName::ShipGate,
         StageName::ShipGate,
     ];
 
@@ -218,12 +218,12 @@ async fn test_complete_pipeline_simulation() {
 /// Test that stage failure context is passed correctly
 #[tokio::test]
 async fn test_failure_context_propagation() {
-    let orch = util::failing_orchestrator(vec![(StageName::Tdd15, 1, FailureCategory::TestFailed)]);
+    let orch = util::failing_orchestrator(vec![(StageName::Implementation, 1, FailureCategory::TestFailed)]);
 
     // First attempt fails
     let result1 = orch
         .run_stage(StageRequest {
-            stage: StageName::Tdd15,
+            stage: StageName::Implementation,
             attempt: 1 as u32,
             bead_id: "bead".to_string(),
             context: "ctx".to_string(),
@@ -236,7 +236,7 @@ async fn test_failure_context_propagation() {
 
     // Second attempt should receive failure context
     orch.run_stage(StageRequest {
-        stage: StageName::Tdd15,
+        stage: StageName::Implementation,
         attempt: 2 as u32,
         bead_id: "bead".to_string(),
         context: "ctx".to_string(),
@@ -251,6 +251,6 @@ async fn test_failure_context_propagation() {
     .unwrap();
 
     // Verify second attempt was made
-    let calls = orch.stage_calls(&StageName::Tdd15);
+    let calls = orch.stage_calls(&StageName::Implementation);
     assert_eq!(calls.len(), 2);
 }

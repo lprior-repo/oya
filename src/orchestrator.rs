@@ -16,7 +16,7 @@
 //!
 //! async fn test_happy_path<T: Orchestrator>(orch: T) {
 //!     let result = orch.run_stage(StageRequest {
-//!         stage: StageName::Plan,
+//!         stage: StageName::Contract,
 //!         attempt: 1,
 //!         bead_id: "bead-001".to_string(),
 //!         context: "test context".to_string(),
@@ -225,19 +225,9 @@ impl Orchestrator for FakeOrchestrator {
 
         let key = (stage.clone(), attempt);
         let result = self.config.stage_results.get(&key).cloned().unwrap_or_else(|| {
-            if stage == StageName::AcceptanceTest && request.bead_id == "test-run-123" {
-                StageExecutionResult {
-                    passed: false,
-                    output: serde_json::json!({"output": "Tests are RED"}),
-                    failure_category: Some(FailureCategory::TestsUnexpectedlyGreen),
-                    next_stage: stage.next(),
-                    prompt: "implement it".to_string(),
-                }
-            } else {
-                let mut default = self.config.default_result.clone();
-                default.next_stage = stage.next();
-                default
-            }
+            let mut default = self.config.default_result.clone();
+            default.next_stage = stage.next();
+            default
         });
 
         Ok(result)

@@ -13,7 +13,7 @@ async fn fake_orch_returns_default_success() {
     let orch = fake_orch();
     let result = orch
         .run_stage(StageRequest {
-            stage: StageName::Plan,
+            stage: StageName::Contract,
             attempt: 1,
             bead_id: "test-bead".to_string(),
             context: "test context".to_string(),
@@ -23,7 +23,7 @@ async fn fake_orch_returns_default_success() {
         .unwrap();
 
     assert!(result.passed);
-    assert_eq!(result.next_stage, Some(StageName::Contract));
+    assert_eq!(result.next_stage, Some(StageName::Implementation));
 }
 
 #[tokio::test]
@@ -31,7 +31,7 @@ async fn fake_orch_records_calls() {
     let orch = fake_orch();
 
     orch.run_stage(StageRequest {
-        stage: StageName::Plan,
+        stage: StageName::Contract,
         attempt: 1,
         bead_id: "b".to_string(),
         context: "c".to_string(),
@@ -40,7 +40,7 @@ async fn fake_orch_records_calls() {
     .await
     .unwrap();
     orch.run_stage(StageRequest {
-        stage: StageName::Plan,
+        stage: StageName::Contract,
         attempt: 2,
         bead_id: "b".to_string(),
         context: "c".to_string(),
@@ -49,7 +49,7 @@ async fn fake_orch_records_calls() {
     .await
     .unwrap();
 
-    let calls = orch.stage_calls(&StageName::Plan);
+    let calls = orch.stage_calls(&StageName::Contract);
     assert_eq!(calls.len(), 2);
     assert_eq!(calls[0].attempt, Some(1));
     assert_eq!(calls[1].attempt, Some(2));
@@ -59,12 +59,12 @@ async fn fake_orch_records_calls() {
 async fn fake_orch_uses_configured_results() {
     let mut config = FakeOrchestratorConfig::default();
     config.stage_results.insert(
-        (StageName::Tdd15, 1),
+        (StageName::Implementation, 1),
         StageExecutionResult {
             passed: false,
             output: serde_json::json!({"error": "test failed"}),
             failure_category: Some(FailureCategory::TestFailed),
-            next_stage: Some(StageName::Tdd15),
+            next_stage: Some(StageName::Implementation),
             prompt: "fix the tests".to_string(),
         },
     );
@@ -73,7 +73,7 @@ async fn fake_orch_uses_configured_results() {
 
     let result = orch
         .run_stage(StageRequest {
-            stage: StageName::Tdd15,
+            stage: StageName::Implementation,
             attempt: 1,
             bead_id: "b".to_string(),
             context: "c".to_string(),
