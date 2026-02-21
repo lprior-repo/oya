@@ -123,17 +123,18 @@ async fn given_all_stages_when_gates_checked_then_appropriate_for_stage() {
 
     // QA stage: Tests + edge cases
     let qa_gates = StageName::Implementation.gates();
-    assert!(qa_gates.contains(&Gate::TestsPass));
+    assert!(qa_gates.contains(&Gate::Compiles));
     assert!(qa_gates.contains(&Gate::TestsPass));
 
     // Security stage: Vulnerability check
     let redqueen_gates = StageName::ShipGate.gates();
     assert!(redqueen_gates.contains(&Gate::MoonCi));
+    assert!(redqueen_gates.contains(&Gate::ZjjMergeQueue));
 
     // Review stage: Lint + security
     let gptreview_gates = StageName::ShipGate.gates();
-    assert!(gptreview_gates.contains(&Gate::Compiles));
     assert!(gptreview_gates.contains(&Gate::MoonCi));
+    assert!(gptreview_gates.contains(&Gate::ZjjMergeQueue));
 
     // Ship stage: Full CI + merge check
     let shipgate_gates = StageName::ShipGate.gates();

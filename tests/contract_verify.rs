@@ -123,16 +123,7 @@ fn contract_stage_ordering() {
     use oya::types::StageName;
 
     // ATDD pipeline flow: Plan → Contract → AcceptanceTest → Implementation → QA → ...
-    let expected_order = vec![
-        StageName::Contract,
-        StageName::Contract,
-        StageName::Implementation,
-        StageName::Implementation,
-        StageName::Implementation,
-        StageName::ShipGate,
-        StageName::ShipGate,
-        StageName::ShipGate,
-    ];
+    let expected_order = vec![StageName::Contract, StageName::Implementation, StageName::ShipGate];
 
     // Verify each stage transitions to the next
     for window in expected_order.windows(2) {
@@ -152,7 +143,7 @@ fn contract_stage_ordering() {
     assert_eq!(StageName::ShipGate.next(), None);
 
     // Verify legacy Tdd15 still transitions to QA for backward compatibility
-    assert_eq!(StageName::Implementation.next(), Some(StageName::Implementation));
+    assert_eq!(StageName::Implementation.next(), Some(StageName::ShipGate));
 }
 
 /// Contract: Gate definitions
