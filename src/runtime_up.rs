@@ -64,13 +64,15 @@ fn ensure_restate_running(repo_root: &Path) -> Result<()> {
 }
 
 fn resolve_restate_bin() -> Result<PathBuf> {
+    let from_env = std::env::var("OYA_RESTATE_BIN").ok().map(PathBuf::from);
     let from_path = lookup_binary("restate");
     let fallback = std::env::var("HOME").ok().map(|home| {
         PathBuf::from(home).join(".local/share/mise/installs/ubi-restatedev-restate/latest/restate")
     });
 
-    from_path
+    from_env
         .into_iter()
+        .chain(from_path)
         .chain(fallback)
         .find(|candidate| candidate.exists())
         .ok_or_else(|| anyhow!("restate binary not found. Install restate CLI or set PATH"))

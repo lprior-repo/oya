@@ -99,6 +99,20 @@ tasks:
       runInCI: true
       cache: true
 
+  holdout:
+    command: "cargo test --workspace --all-features -- --ignored holdout"
+    description: "Run hidden holdout scenario suite"
+    toolchains:
+      - rust
+    inputs:
+      - "src/**/*.rs"
+      - "tests/**/*.rs"
+      - "Cargo.toml"
+      - "/Cargo.lock"
+    options:
+      runInCI: true
+      cache: true
+
   coverage:
     command: "cargo tarpaulin --workspace --all-features --out Html --out Lcov --output-dir target/coverage -- --test-threads=1"
     description: "Generate test coverage report (HTML + LCOV)"
@@ -165,8 +179,15 @@ tasks:
       cache: false  # Composite task - deps handle caching
 
   ci:
-    command: "moon ci"  # Canonical Moon v2 CI gate
-    description: "Full CI pipeline using moon ci (affected targets only)"
+    command: "true"
+    description: "Full CI pipeline (fmt + clippy + tests + holdout + build + cue)"
+    deps:
+      - "~:fmt"
+      - "~:clippy"
+      - "test"
+      - "holdout"
+      - "build"
+      - "cue-check"
     options:
       runInCI: true
       cache: false

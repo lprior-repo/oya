@@ -49,6 +49,7 @@ pub(crate) enum MoonTask {
     Check,
     Test,
     Ci,
+    Holdout,
     CueCheck,
 }
 
@@ -104,6 +105,7 @@ impl MoonTask {
             ":check" => Some(Self::Check),
             ":test" => Some(Self::Test),
             ":ci" => Some(Self::Ci),
+            ":holdout" => Some(Self::Holdout),
             ":cue-check" => Some(Self::CueCheck),
             _ => None,
         }
@@ -114,6 +116,7 @@ impl MoonTask {
             MoonTask::Check => ":check",
             MoonTask::Test => ":test",
             MoonTask::Ci => ":ci",
+            MoonTask::Holdout => ":holdout",
             MoonTask::CueCheck => ":cue-check",
         }
     }
@@ -139,16 +142,18 @@ pub(crate) fn gate_failure_outcome(stage: &Stage, gate: &Gate) -> (FailureCatego
 
 fn gate_failure_mapping(stage: &Stage, gate: &Gate) -> Option<(FailureCategory, Stage)> {
     match (stage, gate) {
+        (&Stage::Explore, _) => None,
         (&Stage::Contract, &Gate::Compiles) => {
             Some((FailureCategory::CompileFailed, Stage::Contract))
         }
+        (&Stage::Red, &Gate::Compiles) => Some((FailureCategory::CompileFailed, Stage::Red)),
         (&Stage::Implementation, &Gate::Compiles) => {
             Some((FailureCategory::CompileFailed, Stage::Implementation))
         }
         (&Stage::Implementation, &Gate::TestsPass) => {
             Some((FailureCategory::TestFailed, Stage::Implementation))
         }
-        (&Stage::ShipGate, &Gate::MoonCi) => {
+        (&Stage::Witness, &Gate::HoldoutScenarios) => {
             Some((FailureCategory::TestFailed, Stage::Implementation))
         }
         (&Stage::ShipGate, &Gate::CueArtifactGenerated) => {
@@ -197,8 +202,24 @@ mod tests {
     }
 
     #[test]
+    fn test_moon_task_holdout_roundtrip() {
+        let task = MoonTask::Holdout;
+        assert_eq!(task.as_task_name(), ":holdout");
+        let parsed = MoonTask::from_task_name(":holdout");
+        assert!(matches!(parsed, Some(MoonTask::Holdout)));
+    }
+
+    #[test]
+    fn test_witness_holdout_failure_routes_to_implementation() {
+        let (failure, next_stage) =
+            gate_failure_outcome(&StageName::Witness, &Gate::HoldoutScenarios);
+        assert_eq!(failure, FailureCategory::TestFailed);
+        assert_eq!(next_stage, StageName::Implementation);
+    }
+
+    #[test]
     fn test_all_ship_gate_failures_route_to_implementation() {
-        let ship_gates = vec![Gate::MoonCi, Gate::CueArtifactGenerated, Gate::ZjjMergeQueue];
+        let ship_gates = vec![Gate::CueArtifactGenerated, Gate::ZjjMergeQueue];
         for gate in ship_gates {
             let (_, next_stage) = gate_failure_outcome(&StageName::ShipGate, &gate);
             assert_eq!(

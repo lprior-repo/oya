@@ -18,32 +18,44 @@ use anyhow::Result;
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum StageName {
+    Explore,
     Contract,
+    Red,
     Implementation,
+    Witness,
     ShipGate,
 }
 
 impl StageName {
     pub fn as_str(&self) -> &'static str {
         match self {
+            Self::Explore => "explore",
             Self::Contract => "contract",
+            Self::Red => "red",
             Self::Implementation => "implementation",
+            Self::Witness => "witness",
             Self::ShipGate => "ship_gate",
         }
     }
 
     pub fn next(&self) -> Option<Self> {
         match self {
-            Self::Contract => Some(Self::Implementation),
-            Self::Implementation => Some(Self::ShipGate),
+            Self::Explore => Some(Self::Contract),
+            Self::Contract => Some(Self::Red),
+            Self::Red => Some(Self::Implementation),
+            Self::Implementation => Some(Self::Witness),
+            Self::Witness => Some(Self::ShipGate),
             Self::ShipGate => None,
         }
     }
 
     pub fn model_for_stage(&self) -> ModelTier {
         match self {
+            Self::Explore => ModelTier::Fast,
             Self::Contract => ModelTier::Fast,
+            Self::Red => ModelTier::Balanced,
             Self::Implementation => ModelTier::Balanced,
+            Self::Witness => ModelTier::Capable,
             Self::ShipGate => ModelTier::Best,
         }
     }
@@ -54,9 +66,12 @@ impl StageName {
 
     pub fn gates(&self) -> Vec<Gate> {
         match self {
+            Self::Explore => vec![],
             Self::Contract => vec![Gate::Compiles],
+            Self::Red => vec![Gate::Compiles],
             Self::Implementation => vec![Gate::Compiles, Gate::TestsPass],
-            Self::ShipGate => vec![Gate::CueArtifactGenerated, Gate::MoonCi, Gate::ZjjMergeQueue],
+            Self::Witness => vec![Gate::HoldoutScenarios],
+            Self::ShipGate => vec![Gate::CueArtifactGenerated, Gate::ZjjMergeQueue],
         }
     }
 }
@@ -66,8 +81,11 @@ impl TryFrom<&str> for StageName {
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         match s {
+            "explore" => Ok(Self::Explore),
             "contract" => Ok(Self::Contract),
+            "red" => Ok(Self::Red),
             "implementation" => Ok(Self::Implementation),
+            "witness" => Ok(Self::Witness),
             "ship_gate" => Ok(Self::ShipGate),
             _ => Err(format!("Unknown stage: {s}")),
         }
@@ -116,6 +134,7 @@ pub enum Gate {
     Compiles,
     TestsPass,
     MoonCi,
+    HoldoutScenarios,
     ZjjMergeQueue,
     CueArtifactGenerated,
 }
@@ -126,6 +145,7 @@ impl Gate {
             Self::Compiles => "compiles",
             Self::TestsPass => "tests_pass",
             Self::MoonCi => "moon_ci",
+            Self::HoldoutScenarios => "holdout_scenarios",
             Self::ZjjMergeQueue => "zjj_merge_queue",
             Self::CueArtifactGenerated => "cue_artifact_generated",
         }
@@ -140,6 +160,7 @@ impl TryFrom<&str> for Gate {
             "compiles" => Ok(Self::Compiles),
             "tests_pass" => Ok(Self::TestsPass),
             "moon_ci" => Ok(Self::MoonCi),
+            "holdout_scenarios" => Ok(Self::HoldoutScenarios),
             "zjj_merge_queue" => Ok(Self::ZjjMergeQueue),
             "cue_artifact_generated" => Ok(Self::CueArtifactGenerated),
             _ => Err(format!("Unknown gate: {s}")),
@@ -333,11 +354,23 @@ pub fn determine_transition(
 #[must_use]
 pub fn passed_stage_transition(stage: StageName) -> TransitionDecision {
     match stage {
+        StageName::Explore => TransitionDecision::new(
+            StageTransition::Advance(StageName::Contract),
+            TransitionReason::StagePassedAdvance,
+        ),
         StageName::Contract => TransitionDecision::new(
+            StageTransition::Advance(StageName::Red),
+            TransitionReason::StagePassedAdvance,
+        ),
+        StageName::Red => TransitionDecision::new(
             StageTransition::Advance(StageName::Implementation),
             TransitionReason::StagePassedAdvance,
         ),
         StageName::Implementation => TransitionDecision::new(
+            StageTransition::Advance(StageName::Witness),
+            TransitionReason::StagePassedAdvance,
+        ),
+        StageName::Witness => TransitionDecision::new(
             StageTransition::Advance(StageName::ShipGate),
             TransitionReason::StagePassedAdvance,
         ),

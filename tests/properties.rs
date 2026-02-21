@@ -86,15 +86,21 @@ proptest! {
     #[test]
     fn prop_stage_ordering(
         stage in prop::sample::select(vec![
+            StageName::Explore,
             StageName::Contract,
+            StageName::Red,
             StageName::Implementation,
+            StageName::Witness,
             StageName::ShipGate,
         ]),
     ) {
         // Property: Each stage has correct next stage
         match stage {
-            StageName::Contract => assert_eq!(stage.next(), Some(StageName::Implementation)),
-            StageName::Implementation => assert_eq!(stage.next(), Some(StageName::ShipGate)),
+            StageName::Explore => assert_eq!(stage.next(), Some(StageName::Contract)),
+            StageName::Contract => assert_eq!(stage.next(), Some(StageName::Red)),
+            StageName::Red => assert_eq!(stage.next(), Some(StageName::Implementation)),
+            StageName::Implementation => assert_eq!(stage.next(), Some(StageName::Witness)),
+            StageName::Witness => assert_eq!(stage.next(), Some(StageName::ShipGate)),
             StageName::ShipGate => assert_eq!(stage.next(), None),
         }
 
@@ -110,8 +116,11 @@ proptest! {
     #[test]
     fn prop_max_attempts_is_two(
         stage in prop::sample::select(vec![
+            StageName::Explore,
             StageName::Contract,
+            StageName::Red,
             StageName::Implementation,
+            StageName::Witness,
             StageName::ShipGate,
         ]),
     ) {
@@ -124,8 +133,8 @@ proptest! {
 proptest! {
     #[test]
     fn prop_acceptance_tests_must_fail_initially(
-        passed in any::<bool>(),
-        output in "\\PC*",
+        _passed in any::<bool>(),
+        _output in "\\PC*",
     ) {
         // This is a placeholder for a more complex property test
         // In the real system, the AcceptanceTestsAreRed gate would execute 'moon run :test'
@@ -141,12 +150,15 @@ proptest! {
     #[test]
     fn prop_stages_have_gates(
         stage in prop::sample::select(vec![
+            StageName::Explore,
             StageName::Contract,
             StageName::Contract,
+            StageName::Red,
             StageName::Implementation,
             StageName::Implementation,
             StageName::Implementation,
             StageName::Implementation,
+            StageName::Witness,
             StageName::ShipGate,
             StageName::ShipGate,
             StageName::ShipGate,
@@ -154,12 +166,17 @@ proptest! {
     ) {
         let gates = stage.gates();
 
-        // Property: Every stage has at least one gate
-        prop_assert!(!gates.is_empty(), "Stage {:?} has no gates", stage);
+        // Explore intentionally has no gates.
+        if stage != StageName::Explore {
+            prop_assert!(!gates.is_empty(), "Stage {:?} has no gates", stage);
+        }
 
-        // Property: ShipGate has exactly 3 gates (cue proof, moon CI, zjj merge)
+        // Property: Witness has one deterministic gate and ShipGate has close gates.
+        if stage == StageName::Witness {
+            prop_assert_eq!(gates.len(), 1);
+        }
         if stage == StageName::ShipGate {
-            prop_assert_eq!(gates.len(), 3);
+            prop_assert_eq!(gates.len(), 2);
         }
     }
 }
@@ -208,8 +225,8 @@ fn test_health_metrics_properties() {
 // Circuit Breaker Timeout Properties (src-12y)
 // ---------------------------------------------------------------------------
 
-/// Property: Circuit stays Open before timeout elapses
-/// INVARIANT: After opening, circuit MUST remain Open until reset_timeout_ms has passed
+// Property: Circuit stays Open before timeout elapses
+// INVARIANT: After opening, circuit MUST remain Open until reset_timeout_ms has passed
 proptest! {
     #[test]
     fn prop_circuit_remains_open_before_timeout(
@@ -251,8 +268,8 @@ proptest! {
     }
 }
 
-/// Property: Circuit transitions to HalfOpen after timeout elapses
-/// INVARIANT: After reset_timeout_ms, try_half_open MUST transition Open -> HalfOpen
+// Property: Circuit transitions to HalfOpen after timeout elapses
+// INVARIANT: After reset_timeout_ms, try_half_open MUST transition Open -> HalfOpen
 proptest! {
     #[test]
     fn prop_circuit_half_opens_after_timeout(
@@ -287,8 +304,8 @@ proptest! {
     }
 }
 
-/// Property: HalfOpen allows operations and resets on success
-/// INVARIANT: HalfOpen state allows operations and success_count resets
+// Property: HalfOpen allows operations and resets on success
+// INVARIANT: HalfOpen state allows operations and success_count resets
 proptest! {
     #[test]
     fn prop_half_open_allows_operations_and_resets_on_success(
@@ -323,8 +340,8 @@ proptest! {
     }
 }
 
-/// Property: HalfOpen returns to Open on any failure
-/// INVARIANT: In HalfOpen state, ANY failure must immediately return to Open
+// Property: HalfOpen returns to Open on any failure
+// INVARIANT: In HalfOpen state, ANY failure must immediately return to Open
 proptest! {
     #[test]
     fn prop_half_open_returns_to_open_on_failure(
@@ -354,8 +371,8 @@ proptest! {
     }
 }
 
-/// Property: HalfOpen closes after success_threshold consecutive successes
-/// INVARIANT: After success_threshold successes in HalfOpen, circuit closes
+// Property: HalfOpen closes after success_threshold consecutive successes
+// INVARIANT: After success_threshold successes in HalfOpen, circuit closes
 proptest! {
     #[test]
     fn prop_half_open_closes_after_success_threshold(
@@ -390,8 +407,8 @@ proptest! {
     }
 }
 
-/// Property: opened_at is set when circuit opens
-/// INVARIANT: When circuit transitions to Open, opened_at MUST be set
+// Property: opened_at is set when circuit opens
+// INVARIANT: When circuit transitions to Open, opened_at MUST be set
 proptest! {
     #[test]
     fn prop_opened_at_set_when_circuit_opens(
@@ -412,8 +429,8 @@ proptest! {
     }
 }
 
-/// Property: Closed circuit has no opened_at
-/// INVARIANT: When circuit is Closed, opened_at MUST be None
+// Property: Closed circuit has no opened_at
+// INVARIANT: When circuit is Closed, opened_at MUST be None
 proptest! {
     #[test]
     fn prop_closed_circuit_has_no_opened_at(

@@ -64,6 +64,7 @@
 pub mod beads;
 pub mod config;
 pub mod orchestrator;
+pub mod quality_gate;
 pub mod telemetry;
 pub mod types;
 pub mod usage;
@@ -85,6 +86,7 @@ pub fn is_retryable_failure(category: &FailureCategory) -> bool {
             | FailureCategory::LintFailed
             | FailureCategory::OutputParseFailure
             | FailureCategory::CompileFailed
+            | FailureCategory::RateLimited
     )
 }
 

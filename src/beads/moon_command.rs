@@ -35,6 +35,9 @@ pub fn generate_moon_command(gate: &Gate) -> MoonCommand {
         Gate::Compiles => ("check", "Type check the project", "moon run :check"),
         Gate::TestsPass => ("test", "Run all tests", "moon run :test"),
         Gate::MoonCi => ("ci", "Run full CI pipeline", "moon run :ci"),
+        Gate::HoldoutScenarios => {
+            ("holdout", "Run hidden holdout scenario suite", "moon run :holdout")
+        }
         Gate::ZjjMergeQueue => ("test", "Verify merge queue", "zjj sync --status"),
         Gate::CueArtifactGenerated => {
             ("cue", "Verify CUE artifact generated", "moon run :cue-check")
@@ -84,6 +87,14 @@ mod tests {
     }
 
     #[test]
+    fn generate_holdout_command() {
+        let cmd = generate_moon_command(&Gate::HoldoutScenarios);
+        assert_eq!(cmd.task_name, "holdout");
+        assert_eq!(cmd.description, "Run hidden holdout scenario suite");
+        assert_eq!(cmd.command, "moon run :holdout");
+    }
+
+    #[test]
     fn generate_cue_artifact_command() {
         let cmd = generate_moon_command(&Gate::CueArtifactGenerated);
         assert_eq!(cmd.task_name, "cue");
@@ -104,6 +115,7 @@ mod tests {
             Gate::Compiles,
             Gate::TestsPass,
             Gate::MoonCi,
+            Gate::HoldoutScenarios,
             Gate::ZjjMergeQueue,
             Gate::CueArtifactGenerated,
         ];

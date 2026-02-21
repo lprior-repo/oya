@@ -74,11 +74,7 @@ async fn given_stage_succeeds_when_it_completes_then_advances_to_next() {
         .unwrap();
 
     assert!(result.passed);
-    assert_eq!(
-        result.next_stage,
-        Some(StageName::Implementation),
-        "Contract should advance to Implementation"
-    );
+    assert_eq!(result.next_stage, Some(StageName::Red), "Contract should advance to Red");
 }
 
 // =============================================================================
@@ -280,7 +276,7 @@ async fn given_plan_completes_when_successful_then_moves_to_contract() {
         .unwrap();
 
     assert!(result.passed);
-    assert_eq!(result.next_stage, Some(StageName::Implementation));
+    assert_eq!(result.next_stage, Some(StageName::Red));
 }
 
 /// Given: Pipeline reaches ShipGate
@@ -311,8 +307,8 @@ async fn given_shipgate_passes_when_successful_then_pipeline_completes() {
 #[tokio::test]
 async fn given_any_stage_when_successful_then_transitions_to_correct_next() {
     let test_cases = vec![
-        (StageName::Contract, StageName::Implementation),
-        (StageName::Implementation, StageName::ShipGate),
+        (StageName::Contract, StageName::Red),
+        (StageName::Implementation, StageName::Witness),
     ];
 
     for (current, expected_next) in test_cases {

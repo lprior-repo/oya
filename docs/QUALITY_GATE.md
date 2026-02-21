@@ -85,14 +85,14 @@ Add quality gate as a stage in your workflow:
 
 ```yaml
 stages:
-  - name: quality-gate
-    action: run_quality_gate
-    requires: [tdd15]  # After agent development
+  - name: witness
+    action: run_holdout_scenarios
+    requires: [implementation]  # After agent development
     on_fail: feedback
 
-  - name: autonomous-dev
-    action: tdd15  # Agent implements
-    requires: [quality-gate]
+  - name: ship-gate
+    action: run_ship_gate
+    requires: [witness]
 ```
 
 ## State Transitions

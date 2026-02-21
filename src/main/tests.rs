@@ -126,7 +126,7 @@ fn test_execute_ship_gate_skip_zjj_gate() {
     })
     .expect("ship gate should pass when cue check passes and zjj is skipped");
 
-    assert_eq!(seen.into_inner(), vec![Gate::CueArtifactGenerated, Gate::MoonCi]);
+    assert_eq!(seen.into_inner(), vec![Gate::CueArtifactGenerated]);
     assert!(result.passed);
     assert_eq!(result.next_stage, None);
 }
@@ -145,12 +145,6 @@ fn test_execute_ship_gate_zjj_failure_routes_to_review() {
                 exit_code: 0,
                 output: "cue ok".to_string(),
             }),
-            Gate::MoonCi => Ok(GateEvidence {
-                command: "moon run :ci".to_string(),
-                passed: true,
-                exit_code: 0,
-                output: "ci ok".to_string(),
-            }),
             Gate::ZjjMergeQueue => Ok(GateEvidence {
                 command: "zjj sync --status".to_string(),
                 passed: false,
@@ -167,10 +161,7 @@ fn test_execute_ship_gate_zjj_failure_routes_to_review() {
     })
     .expect("ship gate execution should return a stage result");
 
-    assert_eq!(
-        seen.into_inner(),
-        vec![Gate::CueArtifactGenerated, Gate::MoonCi, Gate::ZjjMergeQueue]
-    );
+    assert_eq!(seen.into_inner(), vec![Gate::CueArtifactGenerated, Gate::ZjjMergeQueue]);
     assert!(!result.passed);
     assert_eq!(result.failure_category, Some(FailureCategory::MergeConflict));
     assert_eq!(result.next_stage, Some(Stage::Implementation));
@@ -195,9 +186,47 @@ fn test_cli_init_mode_parses() {
 }
 
 #[test]
+fn test_cli_check_mode_parses() {
+    let mode = parse_cli_mode_from(["oya", "check"]);
+    assert_eq!(mode, CliMode::Check);
+}
+
+#[test]
 fn test_cli_up_alias_parses_as_init() {
     let mode = parse_cli_mode_from(["oya", "up"]);
     assert_eq!(mode, CliMode::Init);
+}
+
+#[test]
+fn test_cli_bundle_mode_parses() {
+    let mode = parse_cli_mode_from(["oya", "bundle"]);
+    assert_eq!(mode, CliMode::Bundle);
+}
+
+#[test]
+fn test_cli_observe_mode_parses_defaults() {
+    let mode = parse_cli_mode_from(["oya", "observe"]);
+    assert_eq!(
+        mode,
+        CliMode::Observe(ObserveArgs { run_id: None, follow: false, interval: 2, limit: 50_u64 })
+    );
+}
+
+#[test]
+fn test_cli_run_mode_parses_unique_run_id_mode() {
+    let mode = parse_cli_mode_from(["oya", "run", "src-1", "--run-id-mode", "unique"]);
+    assert_eq!(
+        mode,
+        CliMode::Run(RunArgs {
+            bead_id: "src-1".to_string(),
+            restate_url: "http://127.0.0.1:8080".to_string(),
+            context: "local docker validation".to_string(),
+            timeout: 3600,
+            poll_interval: None,
+            model: None,
+            run_id_mode: RunIdMode::Unique,
+        })
+    );
 }
 
 #[test]
@@ -236,9 +265,36 @@ fn test_tests_unexpectedly_green_maps_to_retry_loop() {
 }
 
 #[test]
+fn test_rate_limited_maps_to_retry_loop() {
+    let mut state = test_pipeline_state(FailureCategory::RateLimited, Stage::Red, 1);
+    assert!(should_retry_after_failure(&state));
+
+    state.attempt = 2;
+    assert!(!should_retry_after_failure(&state));
+}
+
+#[test]
 fn test_infra_failed_is_non_retryable() {
     let state = test_pipeline_state(FailureCategory::TestInfraFailed, Stage::Implementation, 1);
     assert!(!should_retry_after_failure(&state));
+}
+
+#[test]
+fn test_tracker_backpressure_error_detection() {
+    assert!(is_tracker_backpressure_error("tier_circuit_open tier=c retry_after_ms=1200"));
+    assert!(is_tracker_backpressure_error("all_models_rate_limited tier=d retry_after_ms=30000"));
+    assert!(is_tracker_backpressure_error("tier_token_exhausted tier=b"));
+    assert!(!is_tracker_backpressure_error("provider unavailable"));
+}
+
+#[test]
+fn test_tracker_backoff_duration_grows_and_caps() {
+    let first = tracker_backoff_duration("c", 1);
+    let second = tracker_backoff_duration("c", 2);
+    let tenth = tracker_backoff_duration("c", 10);
+
+    assert!(second > first);
+    assert!(tenth <= std::time::Duration::from_millis(8_000));
 }
 
 #[test]
@@ -283,10 +339,94 @@ fn test_remediation_description_includes_failure_context() {
     assert!(description.contains("test_failed"));
 }
 
+#[test]
+fn test_stage_kind_helpers_match_expected_stage_names() {
+    let red_artifact = StageArtifact {
+        stage: "red".to_string(),
+        attempt: 1,
+        failure_category: None,
+        next_stage: Some("implementation".to_string()),
+        timing: StageTiming {
+            started_at: "2026-02-20T00:00:00Z".to_string(),
+            completed_at: "2026-02-20T00:00:01Z".to_string(),
+            duration_ms: 1000,
+        },
+        workspace: None,
+        input: StageInputData {
+            run_id: "run-1".to_string(),
+            bead_id: "bead-1".to_string(),
+            context: "ctx".to_string(),
+            model: "model".to_string(),
+            last_failure: None,
+        },
+        prompt: "prompt".to_string(),
+        output: StageOutputData {
+            success: true,
+            exit_code: 0,
+            full_log: "ok".to_string(),
+            feedback: "Success".to_string(),
+            contract_document: None,
+            implementation_code: None,
+            test_results: Some("tests are red".to_string()),
+            adversarial_report: None,
+        },
+        task_tracking: None,
+        gates: vec![],
+        status: StageStatus::Completed,
+    };
+
+    assert!(stage_is_red(&red_artifact));
+    assert!(!stage_is_implementation(&red_artifact));
+}
+
+#[test]
+fn test_red_seal_record_tracks_artifact_identity() {
+    let state = test_pipeline_state(FailureCategory::TestFailed, Stage::Red, 1);
+    let artifact = StageArtifact {
+        stage: "red".to_string(),
+        attempt: 2,
+        failure_category: None,
+        next_stage: Some("implementation".to_string()),
+        timing: StageTiming {
+            started_at: "2026-02-20T00:00:00Z".to_string(),
+            completed_at: "2026-02-20T00:00:01Z".to_string(),
+            duration_ms: 1000,
+        },
+        workspace: None,
+        input: StageInputData {
+            run_id: "run-1".to_string(),
+            bead_id: "bead-1".to_string(),
+            context: "ctx".to_string(),
+            model: "model".to_string(),
+            last_failure: None,
+        },
+        prompt: "prompt".to_string(),
+        output: StageOutputData {
+            success: true,
+            exit_code: 0,
+            full_log: "ok".to_string(),
+            feedback: "Success".to_string(),
+            contract_document: None,
+            implementation_code: None,
+            test_results: Some("tests are red".to_string()),
+            adversarial_report: None,
+        },
+        task_tracking: None,
+        gates: vec![],
+        status: StageStatus::Completed,
+    };
+
+    let seal = red_seal_record(&state, &artifact);
+    assert_eq!(seal.bead_id, "bead");
+    assert_eq!(seal.stage, "red");
+    assert_eq!(seal.artifact_key, "red_2");
+}
+
 fn test_pipeline_state(category: FailureCategory, stage: Stage, attempt: u32) -> PipelineState {
     PipelineState {
         current_stage: stage.clone(),
         attempt,
+        red_seal_ready: false,
         last_failure: Some(StageFailure {
             category: category.clone(),
             message: "failure".to_string(),

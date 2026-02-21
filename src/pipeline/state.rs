@@ -67,6 +67,7 @@ pub(crate) struct PipelineRunInput {
 pub(crate) struct PipelineState {
     pub(crate) current_stage: Stage,
     pub(crate) attempt: u32,
+    pub(crate) red_seal_ready: bool,
     pub(crate) last_failure: Option<StageFailure>,
     pub(crate) orchestrator: OrchestratorState,
 }
@@ -85,7 +86,7 @@ pub(crate) async fn init_pipeline_state(
     let updated_at = deterministic_timestamp_or_error(ctx).await?;
     let orchestrator = OrchestratorState {
         status: "running".to_string(),
-        stage: Stage::Contract.as_str().to_string(),
+        stage: Stage::Explore.as_str().to_string(),
         attempt: 1,
         bead_id: input.bead_id.clone(),
         context: input.context.clone(),
@@ -97,8 +98,9 @@ pub(crate) async fn init_pipeline_state(
     };
     write_orchestrator_state(ctx, &orchestrator)?;
     Ok(PipelineState {
-        current_stage: Stage::Contract,
+        current_stage: Stage::Explore,
         attempt: 1,
+        red_seal_ready: false,
         last_failure: None,
         orchestrator,
     })

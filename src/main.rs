@@ -7,7 +7,8 @@
 
 use oya::build_opencode_poll_snapshot;
 use oya::types::{
-    truncate_clean, FailureCategory, StageFailure, StageName as Stage, TimelineEntry,
+    truncate_clean, AgentHealthStatus, BehavioralContext, BehavioralFingerprint, FailureCategory,
+    StageFailure, StageName as Stage, TimelineEntry,
 };
 use oya::usage::{
     is_rate_limit_failure, tier_for_stage, OyaUsageTracker, OyaUsageTrackerClient,
@@ -18,12 +19,15 @@ use restate_sdk::prelude::*;
 use std::path::{Path, PathBuf};
 
 const USAGE_TRACKER_KEY: &str = "global";
+const RED_SEAL_KEY: &str = "red_acceptance_seal";
 
 use clap::{Parser, Subcommand};
 
+mod observe;
 mod ops_poller;
 mod orchestrator_types;
 mod pipeline;
+mod runtime_bundle;
 mod runtime_tools;
 mod runtime_up;
 mod stage_executor;
@@ -106,6 +110,15 @@ struct StartContext {
     started_at: String,
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct RedSealRecord {
+    bead_id: String,
+    stage: String,
+    attempt: u32,
+    sealed_at: String,
+    artifact_key: String,
+}
+
 async fn build_start_context(
     ctx: &WorkflowContext<'_>,
     parsed: StartRequestPayload,
@@ -132,12 +145,53 @@ async fn resolve_model_for_stage(
     stage: &Stage,
 ) -> Result<String, OyaError> {
     let tier = tier_for_stage(stage).to_string();
-    ctx.object_client::<OyaUsageTrackerClient>(USAGE_TRACKER_KEY)
-        .get_active_model(tier)
-        .call()
-        .await
-        .map(|result| result.0)
-        .map_err(|error| OyaError(format!("usage tracker get_active_model failed: {}", error)))
+    resolve_model_for_stage_with_backoff(ctx, &tier).await
+}
+
+async fn resolve_model_for_stage_with_backoff(
+    ctx: &WorkflowContext<'_>,
+    tier: &str,
+) -> Result<String, OyaError> {
+    let mut attempt: u32 = 1;
+    loop {
+        let result = ctx
+            .object_client::<OyaUsageTrackerClient>(USAGE_TRACKER_KEY)
+            .get_active_model(tier.to_string())
+            .call()
+            .await;
+
+        match result {
+            Ok(model) => return Ok(model.0),
+            Err(error) => {
+                let message = error.to_string();
+                if !is_tracker_backpressure_error(&message) || attempt >= 5 {
+                    return Err(OyaError(format!(
+                        "usage tracker get_active_model failed: {}",
+                        message
+                    )));
+                }
+                let delay = tracker_backoff_duration(tier, attempt);
+                ctx.sleep(delay).await.map_err(|sleep_error| {
+                    OyaError(format!("durable sleep failed: {}", sleep_error))
+                })?;
+                attempt += 1;
+            }
+        }
+    }
+}
+
+fn is_tracker_backpressure_error(message: &str) -> bool {
+    ["all_models_rate_limited", "tier_circuit_open", "tier_token_exhausted"]
+        .iter()
+        .any(|needle| message.contains(needle))
+}
+
+fn tracker_backoff_duration(tier: &str, attempt: u32) -> std::time::Duration {
+    let capped_attempt = attempt.min(8);
+    let base_ms = 200_u64.saturating_mul(2_u64.pow(capped_attempt.saturating_sub(1)));
+    let jitter_seed = tier.bytes().fold(0_u64, |acc, byte| acc.wrapping_add(u64::from(byte)));
+    let jitter_ms = (jitter_seed + u64::from(attempt) * 17) % 250;
+    std::time::Duration::from_millis((base_ms + jitter_ms).min(8_000))
 }
 
 /// Report execution outcome to the usage tracker for model health tracking.
@@ -271,6 +325,7 @@ async fn run_pipeline_loop(
     state: &mut PipelineState,
 ) -> Result<(), OyaError> {
     loop {
+        enforce_red_gate_precondition(ctx, state).await?;
         let artifact = run_pipeline_stage(ctx, config, input, state).await?;
         persist_stage_artifact(ctx, &artifact).await?;
         set_pipeline_state_from_artifact(state, &artifact);
@@ -284,6 +339,73 @@ async fn run_pipeline_loop(
             .await
             .map_err(|error| OyaError(format!("durable sleep failed: {}", error)))?;
     }
+}
+
+async fn enforce_red_gate_precondition(
+    ctx: &WorkflowContext<'_>,
+    state: &mut PipelineState,
+) -> Result<(), OyaError> {
+    if state.current_stage != Stage::Implementation {
+        return Ok(());
+    }
+
+    if state.red_seal_ready {
+        return Ok(());
+    }
+
+    if has_red_seal(ctx).await? {
+        state.red_seal_ready = true;
+        return Ok(());
+    }
+
+    let failed_at = pipeline::deterministic_timestamp(ctx)
+        .await
+        .map_err(|_| OyaError("timestamp error".to_string()))?;
+    state.last_failure = Some(StageFailure::with_reason(
+        FailureCategory::TestsUnexpectedlyGreen,
+        "implementation blocked: missing sealed red acceptance tests".to_string(),
+        failed_at,
+    ));
+    state.current_stage = Stage::Red;
+    state.attempt = 1;
+    state.orchestrator.model = resolve_model_for_stage(ctx, &Stage::Red).await?;
+    Ok(())
+}
+
+async fn has_red_seal(ctx: &WorkflowContext<'_>) -> Result<bool, OyaError> {
+    ctx.get::<String>(RED_SEAL_KEY)
+        .await
+        .map(|value| value.is_some())
+        .map_err(|error| OyaError(format!("red seal read failed: {}", error)))
+}
+
+fn red_seal_record(
+    state: &PipelineState,
+    artifact: &orchestrator_types::StageArtifact,
+) -> RedSealRecord {
+    RedSealRecord {
+        bead_id: state.orchestrator.bead_id.clone(),
+        stage: artifact.stage.clone(),
+        attempt: artifact.attempt,
+        sealed_at: artifact.timing.completed_at.clone(),
+        artifact_key: format!("{}_{}", artifact.stage, artifact.attempt),
+    }
+}
+
+fn stage_is_red(artifact: &orchestrator_types::StageArtifact) -> bool {
+    artifact.stage == Stage::Red.as_str()
+}
+
+fn stage_is_implementation(artifact: &orchestrator_types::StageArtifact) -> bool {
+    artifact.stage == Stage::Implementation.as_str()
+}
+
+fn seal_red_acceptance(
+    ctx: &WorkflowContext<'_>,
+    state: &PipelineState,
+    artifact: &orchestrator_types::StageArtifact,
+) -> Result<(), OyaError> {
+    set_json_state(ctx, RED_SEAL_KEY, &red_seal_record(state, artifact))
 }
 
 async fn run_pipeline_stage(
@@ -353,10 +475,23 @@ async fn completed_stage_next_action(
     // Report successful outcome for the current model
     report_stage_outcome(ctx, &state.orchestrator.model, true, false).await?;
 
+    if stage_is_red(artifact) {
+        seal_red_acceptance(ctx, state, artifact)?;
+        state.red_seal_ready = true;
+    }
+
+    if stage_is_implementation(artifact) && !state.red_seal_ready {
+        state.current_stage = Stage::Red;
+        state.attempt = 1;
+        state.orchestrator.model = resolve_model_for_stage(ctx, &state.current_stage).await?;
+        return Ok(true);
+    }
+
     if let Some(next_stage) = state.current_stage.next() {
         state.current_stage = next_stage;
         state.attempt = 1;
         state.last_failure = None;
+        emit_behavioral_alert_if_needed(ctx, state, artifact).await?;
         // Resolve model for the next stage's tier
         state.orchestrator.model = resolve_model_for_stage(ctx, &state.current_stage).await?;
         return Ok(true);
@@ -393,6 +528,7 @@ async fn handle_failed_stage(
 
     // Report failure outcome to the usage tracker
     report_stage_outcome(ctx, &state.orchestrator.model, false, is_rate_limit).await?;
+    emit_behavioral_alert_if_needed(ctx, state, artifact).await?;
 
     if let Some(next_stage) = parse_next_stage(&artifact.next_stage) {
         if next_stage != state.current_stage {
@@ -411,6 +547,7 @@ async fn handle_failed_stage(
     }
 
     state.attempt += 1;
+    state.orchestrator.model = resolve_model_for_stage(ctx, &state.current_stage).await?;
     Ok(true)
 }
 
@@ -418,6 +555,89 @@ fn should_retry_after_failure(state: &PipelineState) -> bool {
     state.last_failure.as_ref().is_some_and(|failure| {
         failure.retryable && state.attempt < state.current_stage.max_attempts()
     })
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct BehavioralInterventionAlert {
+    stage: String,
+    attempt: u32,
+    status: String,
+    action: String,
+    message: String,
+}
+
+async fn emit_behavioral_alert_if_needed(
+    ctx: &WorkflowContext<'_>,
+    state: &PipelineState,
+    artifact: &orchestrator_types::StageArtifact,
+) -> Result<(), OyaError> {
+    if let Some(alert) = build_behavioral_alert(state, artifact) {
+        tracing::warn!(
+            stage = %alert.stage,
+            attempt = alert.attempt,
+            status = %alert.status,
+            action = %alert.action,
+            "{}",
+            alert.message
+        );
+        let key = format!("behavioral_alert_{}_{}", alert.stage, alert.attempt);
+        set_json_state(ctx, key.as_str(), &alert)?;
+    }
+    Ok(())
+}
+
+fn build_behavioral_alert(
+    state: &PipelineState,
+    artifact: &orchestrator_types::StageArtifact,
+) -> Option<BehavioralInterventionAlert> {
+    let fingerprint = behavioral_fingerprint(state, artifact);
+    let stuck = fingerprint.is_stuck(300, 2);
+    let retry_loop =
+        fingerprint.is_retry_loop(state.current_stage.max_attempts().saturating_sub(1));
+    let status = alert_status(stuck, retry_loop);
+    if !status.needs_intervention() {
+        return None;
+    }
+    Some(BehavioralInterventionAlert {
+        stage: state.current_stage.as_str().to_string(),
+        attempt: state.attempt,
+        status: status.as_str().to_string(),
+        action: "escalate_to_operator".to_string(),
+        message: format!(
+            "behavioral intervention required: stage={} attempt={} duration_ms={} retry_count={}",
+            state.current_stage.as_str(),
+            state.attempt,
+            artifact.timing.duration_ms,
+            state.attempt.saturating_sub(1)
+        ),
+    })
+}
+
+fn behavioral_fingerprint(
+    state: &PipelineState,
+    artifact: &orchestrator_types::StageArtifact,
+) -> BehavioralFingerprint {
+    let context = BehavioralContext::new(
+        Some(state.orchestrator.bead_id.clone()),
+        state.current_stage.as_str().to_string(),
+    );
+    BehavioralFingerprint::new(
+        format!("oya-{}", state.orchestrator.bead_id),
+        context,
+        state.attempt,
+        artifact.timing.duration_ms / 1_000,
+        state.attempt.saturating_sub(1),
+    )
+}
+
+fn alert_status(stuck: bool, retry_loop: bool) -> AgentHealthStatus {
+    if retry_loop {
+        AgentHealthStatus::RetryLoop
+    } else if stuck {
+        AgentHealthStatus::Stuck
+    } else {
+        AgentHealthStatus::Healthy
+    }
 }
 
 async fn block_and_file_remediation(
@@ -816,6 +1036,7 @@ async fn mark_run_completed(
     state: &mut PipelineState,
     final_artifact: &orchestrator_types::StageArtifact,
 ) -> Result<(), OyaError> {
+    let started_at = state.orchestrator.updated_at.clone();
     let completed_at = ctx
         .run(|| async { Ok::<_, HandlerError>(chrono::Utc::now().to_rfc3339()) })
         .await
@@ -828,7 +1049,7 @@ async fn mark_run_completed(
 
     // Build lean timeline as JSON array
     let timeline = serde_json::json!([
-        {"event": "RunStarted", "at": state.orchestrator.updated_at},
+        {"event": "RunStarted", "at": started_at},
         {"event": "RunShipped", "at": completed_at, "total_duration_ms": final_artifact.timing.duration_ms}
     ]);
 
@@ -840,13 +1061,14 @@ async fn mark_run_failed(
     state: &mut PipelineState,
     artifact: &orchestrator_types::StageArtifact,
 ) -> Result<(), OyaError> {
+    let started_at = state.orchestrator.updated_at.clone();
     state.orchestrator.status = "failed".to_string();
     state.orchestrator.updated_at = artifact.timing.completed_at.clone();
     orchestrator_types::write_orchestrator_state(ctx, &state.orchestrator)?;
 
     // Build lean timeline as JSON array
     let timeline = serde_json::json!([
-        {"event": "RunStarted", "at": state.orchestrator.updated_at},
+        {"event": "RunStarted", "at": started_at},
         {"event": "RunFailed", "stage": artifact.stage, "at": artifact.timing.completed_at}
     ]);
 
@@ -897,8 +1119,20 @@ enum CliCommand {
     Run(RunArgs),
     #[command(about = "Live TUI for monitoring pipeline invocations")]
     Tail(TailArgs),
+    #[command(about = "Run holdout quality gate checks")]
+    Check,
     #[command(about = "Bootstrap local runtime (restate + opencode + oya service)", alias = "up")]
     Init,
+    #[command(about = "Install self-contained oya binary into current repo (.oya/bin/oya)")]
+    Bundle,
+    #[command(about = "Stream JSON bridge events from .oya/bridge/events.jsonl")]
+    Observe(ObserveArgs),
+}
+
+#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
+enum RunIdMode {
+    Bead,
+    Unique,
 }
 
 #[derive(Parser, Debug, Clone, PartialEq)]
@@ -924,6 +1158,35 @@ struct RunArgs {
     poll_interval: Option<u64>,
     #[arg(long, help = "OpenCode model to use (overrides oya.yaml and built-in defaults)")]
     model: Option<String>,
+    #[arg(
+        long,
+        value_enum,
+        default_value = "unique",
+        help = "Run ID mode: bead (stable) or unique (timestamped)"
+    )]
+    run_id_mode: RunIdMode,
+}
+
+#[derive(Parser, Debug, Clone, PartialEq)]
+struct ObserveArgs {
+    #[arg(help = "Filter to specific run ID (optional)")]
+    run_id: Option<String>,
+    #[arg(long, default_value = "false", help = "Follow new events as they are appended")]
+    follow: bool,
+    #[arg(
+        long,
+        default_value = "2",
+        value_parser = clap::value_parser!(u64).range(1..=3600),
+        help = "Refresh interval seconds when --follow is used"
+    )]
+    interval: u64,
+    #[arg(
+        long,
+        default_value = "50",
+        value_parser = clap::value_parser!(u64).range(1..=10_000),
+        help = "How many recent events to print first"
+    )]
+    limit: u64,
 }
 
 #[derive(Parser, Debug, Clone, PartialEq)]
@@ -956,7 +1219,10 @@ where
         Some(CliCommand::OpsPoll) => CliMode::OpsPoll,
         Some(CliCommand::Run(args)) => CliMode::Run(args),
         Some(CliCommand::Tail(args)) => CliMode::Tail(args),
+        Some(CliCommand::Check) => CliMode::Check,
         Some(CliCommand::Init) => CliMode::Init,
+        Some(CliCommand::Bundle) => CliMode::Bundle,
+        Some(CliCommand::Observe(args)) => CliMode::Observe(args),
     }
 }
 
@@ -966,7 +1232,10 @@ enum CliMode {
     OpsPoll,
     Run(RunArgs),
     Tail(TailArgs),
+    Check,
     Init,
+    Bundle,
+    Observe(ObserveArgs),
 }
 
 #[tokio::main]
@@ -977,7 +1246,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         CliMode::OpsPoll => ops_poller::run_ops_poller().await,
         CliMode::Serve => run_server().await,
         CliMode::Run(args) => workflow_runner::run_workflow(args).await,
+        CliMode::Check => run_quality_gate_command()
+            .map_err(|e| Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error>),
         CliMode::Init => runtime_up::run_local_up()
+            .map_err(|e| Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error>),
+        CliMode::Bundle => runtime_bundle::install_local_binary()
+            .map(|path| {
+                println!("[oya] Local binary installed: {}", path.display());
+            })
+            .map_err(|e| Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error>),
+        CliMode::Observe(args) => observe::run(args)
             .map_err(|e| Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error>),
         CliMode::Tail(args) => {
             // Need to enter tokio runtime for the tail app
@@ -985,6 +1263,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .map_err(|e| Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error>)
         }
     }
+}
+
+fn run_quality_gate_command() -> Result<(), String> {
+    let gate = oya::quality_gate::QualityGate::new(oya::quality_gate::QualityGateConfig::default());
+    let result = gate.run().map_err(|error| format!("quality gate execution failed: {}", error))?;
+
+    if result.passed() {
+        println!(
+            "[oya] quality gate passed: scenarios {}/{}",
+            result.scenarios_passed_count, result.scenarios_total_count
+        );
+        return Ok(());
+    }
+
+    Err(format!(
+        "quality gate failed on iteration {}/{}: {}",
+        result.iteration, result.max_iterations, result.message
+    ))
 }
 
 async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
@@ -1062,7 +1358,7 @@ struct RestateServiceOptionInput {
 
 fn default_restate_service_option_input() -> RestateServiceOptionInput {
     RestateServiceOptionInput {
-        inactivity_timeout: std::time::Duration::from_secs(30 * 60),
+        inactivity_timeout: std::time::Duration::from_secs(45 * 60),
         abort_timeout: std::time::Duration::from_secs(5 * 60),
         retry_policy_max_attempts: 2,
     }

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use oya::config;
 
-use super::{RunArgs, PIPELINE_STAGES};
+use super::{RunArgs, RunIdMode, PIPELINE_STAGES};
 
 #[derive(Debug, Clone)]
 pub(super) struct WorkflowConfig {
@@ -24,11 +24,12 @@ impl WorkflowConfig {
         repo_root: PathBuf,
         oya_config: &config::OyaConfig,
     ) -> Self {
+        let run_id = resolve_run_id(&args);
         let restate_ingress = args.restate_url.trim_end_matches('/').to_string();
         let restate_admin = restate_ingress.replace(":8080", ":9070");
         let model = args.model.unwrap_or_else(|| oya_config.model.clone());
         Self {
-            run_id: args.bead_id.clone(),
+            run_id,
             bead_id: args.bead_id,
             restate_ingress,
             restate_admin,
@@ -40,6 +41,21 @@ impl WorkflowConfig {
             stages: PIPELINE_STAGES,
         }
     }
+}
+
+fn resolve_run_id(args: &RunArgs) -> String {
+    match args.run_id_mode {
+        RunIdMode::Bead => args.bead_id.clone(),
+        RunIdMode::Unique => unique_run_id(args.bead_id.as_str()),
+    }
+}
+
+fn unique_run_id(bead_id: &str) -> String {
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|value| value.as_secs())
+        .unwrap_or(0);
+    format!("{}-{}", bead_id, timestamp)
 }
 
 #[cfg(test)]
@@ -54,6 +70,7 @@ mod tests {
             timeout: 3600,
             poll_interval: Some(5),
             model: model.map(str::to_string),
+            run_id_mode: RunIdMode::Bead,
         }
     }
 
@@ -77,6 +94,18 @@ mod tests {
         let cfg = WorkflowConfig::from_args(args, repo_root, &oya_config);
 
         assert_eq!(cfg.model, "config/model");
+    }
+
+    #[test]
+    fn workflow_config_unique_mode_generates_prefixed_run_id() {
+        let mut args = sample_args(None);
+        args.run_id_mode = RunIdMode::Unique;
+        let repo_root = PathBuf::from("/tmp/repo");
+        let oya_config = config::OyaConfig { model: "config/model".to_string() };
+
+        let cfg = WorkflowConfig::from_args(args, repo_root, &oya_config);
+
+        assert!(cfg.run_id.starts_with("src-36h-"));
     }
 }
 

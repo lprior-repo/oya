@@ -122,8 +122,15 @@ fn contract_workspace_name_format() {
 fn contract_stage_ordering() {
     use oya::types::StageName;
 
-    // ATDD pipeline flow: Plan → Contract → AcceptanceTest → Implementation → QA → ...
-    let expected_order = vec![StageName::Contract, StageName::Implementation, StageName::ShipGate];
+    // Staged flow: Explore -> Contract -> Red -> Implementation -> Witness -> ShipGate.
+    let expected_order = vec![
+        StageName::Explore,
+        StageName::Contract,
+        StageName::Red,
+        StageName::Implementation,
+        StageName::Witness,
+        StageName::ShipGate,
+    ];
 
     // Verify each stage transitions to the next
     for window in expected_order.windows(2) {
@@ -142,8 +149,8 @@ fn contract_stage_ordering() {
     // Verify ShipGate is terminal
     assert_eq!(StageName::ShipGate.next(), None);
 
-    // Verify legacy Tdd15 still transitions to QA for backward compatibility
-    assert_eq!(StageName::Implementation.next(), Some(StageName::ShipGate));
+    // Verify implementation transitions through witness before close.
+    assert_eq!(StageName::Implementation.next(), Some(StageName::Witness));
 }
 
 /// Contract: Gate definitions
@@ -151,8 +158,8 @@ fn contract_stage_ordering() {
 fn contract_gate_definitions() {
     use oya::types::{Gate, StageName};
 
-    // Plan, Contract only need to compile
-    for stage in [StageName::Contract, StageName::Contract] {
+    // Contract and Red only need to compile.
+    for stage in [StageName::Contract, StageName::Red] {
         let gates = stage.gates();
         assert_eq!(gates.len(), 1, "{:?} should have 1 gate", stage);
         assert_eq!(gates[0], Gate::Compiles);
@@ -163,11 +170,15 @@ fn contract_gate_definitions() {
     assert!(tdd15_gates.contains(&Gate::Compiles));
     assert!(tdd15_gates.contains(&Gate::TestsPass));
 
-    // ShipGate has the most gates
+    // Witness uses holdout scenario gate.
+    let witness_gates = StageName::Witness.gates();
+    assert_eq!(witness_gates.len(), 1);
+    assert!(witness_gates.contains(&Gate::HoldoutScenarios));
+
+    // ShipGate closes with artifact + merge queue gates.
     let ship_gates = StageName::ShipGate.gates();
-    assert_eq!(ship_gates.len(), 3);
+    assert_eq!(ship_gates.len(), 2);
     assert!(ship_gates.contains(&Gate::CueArtifactGenerated));
-    assert!(ship_gates.contains(&Gate::MoonCi));
     assert!(ship_gates.contains(&Gate::ZjjMergeQueue));
 }
 
@@ -183,6 +194,7 @@ fn contract_failure_category_retryability() {
         FailureCategory::LintFailed,
         FailureCategory::OutputParseFailure,
         FailureCategory::CompileFailed,
+        FailureCategory::RateLimited,
     ];
 
     for category in retryable {
@@ -194,7 +206,6 @@ fn contract_failure_category_retryability() {
         FailureCategory::AuthFailed,
         FailureCategory::ProviderUnavailable,
         FailureCategory::ContextOverflow,
-        FailureCategory::RateLimited,
         FailureCategory::MergeConflict,
         FailureCategory::MaxAttemptsExceeded,
     ];

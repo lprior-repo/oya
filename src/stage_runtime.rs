@@ -27,11 +27,20 @@ pub(super) fn stage_prompt(input: StagePromptInput<'_>) -> String {
     );
 
     let body = match input.stage {
+        Stage::Explore => {
+            "TASK: Use Codanna-only discovery to produce a minimal context pack: symbols, callers, impact, and exact file paths for this bead. Keep output deterministic and concise.\n\nJust write the code. Do not explain."
+        }
         Stage::Contract => {
             "TASK: Write a design contract as a Rust doc comment in src/lib.rs (create if needed).\n\nInclude:\n1. Purpose and goals\n2. Key functions to implement\n3. Acceptance criteria\n\nJust write the code. Do not explain."
         }
+        Stage::Red => {
+            "TASK:\n1. Create or update acceptance tests for this bead as ATDD specifications\n2. Ensure tests COMPILE but FAIL (red state)\n3. Do not modify production implementation in this stage\n4. Keep acceptance tests immutable after they are sealed\n\nJust write the code. Do not explain."
+        }
         Stage::Implementation => {
             "TASK:\n1. Write tests that encode the contract invariants\n2. Implement the code to make those tests pass (GREEN state)\n3. Use Result<T, E> for all fallible operations - NO unwrap/expect\n4. Pure functions in core, IO only at shell boundaries\n5. Ensure `moon run :test` passes and clippy is clean\n\nCRITICAL: Tests MUST pass. Fix the underlying code issues, never suppress with #[allow(...)].\n\nJust write the code. Do not explain."
+        }
+        Stage::Witness => {
+            "TASK: Prepare implementation for holdout scenario validation and emit only deterministic artifacts.\n\nJust write the code. Do not explain."
         }
         Stage::ShipGate => "",
     };
@@ -39,10 +48,70 @@ pub(super) fn stage_prompt(input: StagePromptInput<'_>) -> String {
     format!("{}{}", header, body)
 }
 
+pub(super) fn execute_witness_gate(repo_root: PathBuf) -> Result<StageExecution, OyaError> {
+    let prompt = witness_prompt();
+    let gate = Gate::HoldoutScenarios;
+    let evidence = execute_gate(gate.clone(), &repo_root)?;
+    let gate_results = vec![GateResultData {
+        gate: gate.as_str().to_string(),
+        passed: evidence.passed,
+        exit_code: evidence.exit_code,
+        command: evidence.command.clone(),
+        output: truncate_clean(&sanitize_holdout_output(evidence.output.as_str()), 4000),
+    }];
+
+    if evidence.passed {
+        return Ok(StageExecution {
+            passed: true,
+            output: "Holdout scenario suite passed".to_string(),
+            failure_category: None,
+            next_stage: Some(Stage::ShipGate),
+            prompt,
+            gate_results,
+        });
+    }
+
+    let (failure, next_stage) = gate_failure_outcome(&Stage::Witness, &gate);
+    Ok(StageExecution {
+        passed: false,
+        output: format_gate_command_output(
+            evidence.command.as_str(),
+            evidence.exit_code,
+            sanitize_holdout_output(evidence.output.as_str()).as_str(),
+        ),
+        failure_category: Some(failure),
+        next_stage: Some(next_stage),
+        prompt,
+        gate_results,
+    })
+}
+
+fn witness_prompt() -> String {
+    "Witness executes holdout scenarios only (moon :holdout); no OpenCode prompt".to_string()
+}
+
+fn sanitize_holdout_output(raw: &str) -> String {
+    raw.lines()
+        .filter(|line| {
+            let lower = line.to_ascii_lowercase();
+            !lower.contains("scenario id")
+                && !lower.contains("assert_eq!")
+                && !lower.contains("given/")
+                && !lower.contains("when/")
+                && !lower.contains("then/")
+        })
+        .map(str::trim_end)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 pub(super) fn stage_success(stage: &Stage) -> (&'static str, Option<Stage>) {
     match stage {
-        Stage::Contract => ("Contract written and compiles", Some(Stage::Implementation)),
-        Stage::Implementation => ("Implementation complete, tests GREEN", Some(Stage::ShipGate)),
+        Stage::Explore => ("Explore context pack completed", Some(Stage::Contract)),
+        Stage::Contract => ("Contract written and compiles", Some(Stage::Red)),
+        Stage::Red => ("Acceptance tests are RED and sealed", Some(Stage::Implementation)),
+        Stage::Implementation => ("Implementation complete, tests GREEN", Some(Stage::Witness)),
+        Stage::Witness => ("Witness checks passed", Some(Stage::ShipGate)),
         Stage::ShipGate => ("All gates passed - ready to ship", None),
     }
 }

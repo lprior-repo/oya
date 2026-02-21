@@ -52,6 +52,16 @@ pub fn run_quality_gate_pipeline(
     // Step 1: Select typed gates for stage
     let gates = gate_selection::select_gates(&stage);
 
+    if gates.is_empty() {
+        return Ok(PipelineResult {
+            stage,
+            passed: true,
+            decisions: Vec::new(),
+            total_gates: 0,
+            passed_gates: 0,
+        });
+    }
+
     // Step 3: Execute each gate using generated moon command
     let gate_results: Vec<_> = gates
         .iter()
@@ -87,11 +97,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn pipeline_plan_stage() {
-        let result = run_quality_gate_pipeline(StageName::Contract).unwrap();
+    fn pipeline_explore_stage() {
+        let result = run_quality_gate_pipeline(StageName::Explore).unwrap();
         assert!(result.passed);
-        assert_eq!(result.total_gates, 1);
-        assert_eq!(result.passed_gates, 1);
+        assert_eq!(result.total_gates, 0);
+        assert_eq!(result.passed_gates, 0);
     }
 
     #[test]
@@ -103,49 +113,41 @@ mod tests {
     }
 
     #[test]
-    fn pipeline_tdd15_stage() {
+    fn pipeline_red_stage() {
+        let result = run_quality_gate_pipeline(StageName::Red).unwrap();
+        assert!(result.passed);
+        assert_eq!(result.total_gates, 1);
+        assert_eq!(result.passed_gates, 1);
+    }
+
+    #[test]
+    fn pipeline_implementation_stage() {
         let result = run_quality_gate_pipeline(StageName::Implementation).unwrap();
-        assert!(result.passed); // In pure function, defaults to success
+        assert!(result.passed);
         assert_eq!(result.total_gates, 2);
         assert_eq!(result.passed_gates, 2);
     }
 
     #[test]
-    fn pipeline_qa_stage() {
-        let result = run_quality_gate_pipeline(StageName::Implementation).unwrap();
+    fn pipeline_witness_stage() {
+        let result = run_quality_gate_pipeline(StageName::Witness).unwrap();
         assert!(result.passed);
-        assert_eq!(result.total_gates, 2);
-        assert_eq!(result.passed_gates, 2);
-    }
-
-    #[test]
-    fn pipeline_red_queen_stage() {
-        let result = run_quality_gate_pipeline(StageName::ShipGate).unwrap();
-        assert!(result.passed);
-        assert_eq!(result.total_gates, 3);
-        assert_eq!(result.passed_gates, 3);
-    }
-
-    #[test]
-    fn pipeline_gpt_review_stage() {
-        let result = run_quality_gate_pipeline(StageName::ShipGate).unwrap();
-        assert!(result.passed);
-        assert_eq!(result.total_gates, 3);
-        assert_eq!(result.passed_gates, 3);
+        assert_eq!(result.total_gates, 1);
+        assert_eq!(result.passed_gates, 1);
     }
 
     #[test]
     fn pipeline_ship_gate_stage() {
         let result = run_quality_gate_pipeline(StageName::ShipGate).unwrap();
         assert!(result.passed);
-        assert_eq!(result.total_gates, 3);
-        assert_eq!(result.passed_gates, 3);
+        assert_eq!(result.total_gates, 2);
+        assert_eq!(result.passed_gates, 2);
     }
 
     #[test]
     fn pipeline_preserves_stage() {
-        let result = run_quality_gate_pipeline(StageName::Implementation).unwrap();
-        assert_eq!(result.stage, StageName::Implementation);
+        let result = run_quality_gate_pipeline(StageName::Witness).unwrap();
+        assert_eq!(result.stage, StageName::Witness);
     }
 
     #[test]
@@ -158,18 +160,17 @@ mod tests {
     #[test]
     fn pipeline_all_stages_pass() {
         let stages = vec![
+            StageName::Explore,
             StageName::Contract,
-            StageName::Contract,
+            StageName::Red,
             StageName::Implementation,
-            StageName::Implementation,
-            StageName::ShipGate,
-            StageName::ShipGate,
+            StageName::Witness,
             StageName::ShipGate,
         ];
 
-        for stage in stages {
+        stages.into_iter().for_each(|stage| {
             let result = run_quality_gate_pipeline(stage.clone()).unwrap();
             assert!(result.passed, "Stage {:?} should pass", stage);
-        }
+        });
     }
 }

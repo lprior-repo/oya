@@ -76,16 +76,15 @@ async fn given_plan_stage_when_gates_run_then_only_compiles_required() {
 
 /// Given: ShipGate stage
 /// When: Gates run
-/// Then: Should run CueArtifactGenerated, MoonCi, and ZjjMergeQueue
+/// Then: Should run CueArtifactGenerated and ZjjMergeQueue.
 #[tokio::test]
 async fn given_shipgate_when_gates_run_then_runs_ci_and_merge_checks() {
     use oya::types::StageName;
 
     let gates = StageName::ShipGate.gates();
 
-    assert_eq!(gates.len(), 3);
+    assert_eq!(gates.len(), 2);
     assert!(gates.contains(&Gate::CueArtifactGenerated));
-    assert!(gates.contains(&Gate::MoonCi));
     assert!(gates.contains(&Gate::ZjjMergeQueue));
 }
 
@@ -103,7 +102,7 @@ async fn given_tdd15_when_gates_run_then_runs_compile_and_test() {
     assert!(gates.contains(&Gate::TestsPass));
 }
 
-/// Given: All 7 stages
+/// Given: All pipeline stages
 /// When: Gates are checked
 /// Then: Each stage should have appropriate gates
 #[tokio::test]
@@ -111,7 +110,7 @@ async fn given_all_stages_when_gates_checked_then_appropriate_for_stage() {
     use oya::types::StageName;
 
     // Early stages: Just compile
-    for stage in [StageName::Contract, StageName::Contract] {
+    for stage in [StageName::Contract, StageName::Red] {
         let gates = stage.gates();
         assert_eq!(gates.len(), 1, "{:?} should have 1 gate", stage);
         assert_eq!(gates[0], Gate::Compiles);
@@ -127,22 +126,13 @@ async fn given_all_stages_when_gates_checked_then_appropriate_for_stage() {
     assert!(qa_gates.contains(&Gate::Compiles));
     assert!(qa_gates.contains(&Gate::TestsPass));
 
-    // Security stage: Vulnerability check
-    let redqueen_gates = StageName::ShipGate.gates();
-    assert!(redqueen_gates.contains(&Gate::CueArtifactGenerated));
-    assert!(redqueen_gates.contains(&Gate::MoonCi));
-    assert!(redqueen_gates.contains(&Gate::ZjjMergeQueue));
+    // Witness stage: holdout verification
+    let witness_gates = StageName::Witness.gates();
+    assert!(witness_gates.contains(&Gate::HoldoutScenarios));
 
-    // Review stage: Lint + security
-    let gptreview_gates = StageName::ShipGate.gates();
-    assert!(gptreview_gates.contains(&Gate::CueArtifactGenerated));
-    assert!(gptreview_gates.contains(&Gate::MoonCi));
-    assert!(gptreview_gates.contains(&Gate::ZjjMergeQueue));
-
-    // Ship stage: Full CI + merge check
+    // Ship stage: artifact + merge check
     let shipgate_gates = StageName::ShipGate.gates();
     assert!(shipgate_gates.contains(&Gate::CueArtifactGenerated));
-    assert!(shipgate_gates.contains(&Gate::MoonCi));
     assert!(shipgate_gates.contains(&Gate::ZjjMergeQueue));
 }
 

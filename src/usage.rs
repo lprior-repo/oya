@@ -16,16 +16,49 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 
 const DEFAULT_COOLDOWN_SECONDS: i64 = 300; // 5 minutes
+const TIER_CIRCUIT_OPEN_SECONDS: i64 = 30;
+const TIER_TOKEN_BUCKET_CAPACITY: f64 = 2.0;
+const TIER_TOKEN_BUCKET_REFILL_PER_SEC: f64 = 0.2;
 
 static MODEL_TIER_CONFIG: OnceLock<Option<ModelTierConfig>> = OnceLock::new();
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct TrackerState {
+pub struct TrackerState {
     // Current active index for each tier's model list
-    active_indices: HashMap<String, usize>,
+    pub active_indices: HashMap<String, usize>,
     // Health status per model ID
-    model_health: HashMap<String, ModelHealth>,
-    last_updated: DateTime<Utc>,
+    pub model_health: HashMap<String, ModelHealth>,
+    // Tier-level breaker state when all models are overloaded
+    #[serde(default)]
+    pub tier_circuits: HashMap<String, TierCircuit>,
+    // Tier-level token bucket to smooth bursts
+    #[serde(default)]
+    pub tier_limiters: HashMap<String, TierLimiter>,
+    pub last_updated: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TierCircuit {
+    pub state: CircuitState,
+    pub open_until: Option<DateTime<Utc>>,
+}
+
+impl Default for TierCircuit {
+    fn default() -> Self {
+        Self { state: CircuitState::Closed, open_until: None }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TierLimiter {
+    pub tokens: f64,
+    pub last_refill: DateTime<Utc>,
+}
+
+impl Default for TierLimiter {
+    fn default() -> Self {
+        Self { tokens: TIER_TOKEN_BUCKET_CAPACITY, last_refill: DateTime::UNIX_EPOCH }
+    }
 }
 
 impl Default for TrackerState {
@@ -33,7 +66,9 @@ impl Default for TrackerState {
         Self {
             active_indices: HashMap::new(),
             model_health: HashMap::new(),
-            last_updated: Utc::now(),
+            tier_circuits: HashMap::new(),
+            tier_limiters: HashMap::new(),
+            last_updated: DateTime::UNIX_EPOCH,
         }
     }
 }
@@ -72,20 +107,28 @@ impl OyaUsageTracker for OyaUsageTrackerImpl {
         tier: String,
     ) -> Result<Json<String>, HandlerError> {
         let mut state = tracker_state_from_ctx(&ctx).await?;
+        let now = next_logical_time(&state);
+        guard_tier_circuit(&mut state, &tier, now)?;
+        consume_tier_token(&mut state, &tier, now)?;
         let model_list = models_for_tier_or_error(&tier)?;
         let current_index = active_index_for_tier(&state, &tier);
-        let selected_index = selected_healthy_index(&state, &model_list, current_index)
-            .map_or_else(
-                || {
-                    tracing::warn!(
-                        "All models in tier '{}' are unhealthy. Using current index.",
-                        tier
-                    );
-                    current_index
-                },
-                std::convert::identity,
-            );
+        let selected_index =
+            if let Some(index) = selected_healthy_index(&state, &model_list, current_index, now) {
+                index
+            } else {
+                open_tier_circuit(&mut state, &tier, now);
+                state.last_updated = now;
+                ctx.set("state", Json(state));
+                let retry_after_ms = TIER_CIRCUIT_OPEN_SECONDS * 1_000;
+                return Err(TerminalError::new(format!(
+                    "all_models_rate_limited tier={} retry_after_ms={retry_after_ms}",
+                    tier
+                ))
+                .into());
+            };
         persist_index_change(&ctx, &mut state, &tier, current_index, selected_index);
+        state.last_updated = now;
+        ctx.set("state", Json(state.clone()));
         Ok(Json(model_list[selected_index].clone()))
     }
 
@@ -97,7 +140,7 @@ impl OyaUsageTracker for OyaUsageTrackerImpl {
         let mut state =
             ctx.get::<Json<TrackerState>>("state").await?.map(|j| j.0).unwrap_or_default();
         let request = request.0;
-        let now = Utc::now();
+        let now = next_logical_time(&state);
         let model = request.model;
 
         let health = state.model_health.entry(model.clone()).or_insert(ModelHealth {
@@ -118,7 +161,12 @@ impl OyaUsageTracker for OyaUsageTrackerImpl {
                 health.is_rate_limited = true;
                 health.cooldown_until = Some(now + Duration::seconds(DEFAULT_COOLDOWN_SECONDS));
                 rotate_tiers_on_rate_limit(&mut state, &model);
+                open_circuit_for_overloaded_tiers(&mut state, &model, now);
             }
+        }
+
+        if request.success {
+            close_circuit_for_model_tiers(&mut state, &model);
         }
 
         state.last_updated = now;
@@ -128,6 +176,7 @@ impl OyaUsageTracker for OyaUsageTrackerImpl {
 
     async fn get_status(&self, ctx: ObjectContext<'_>) -> Result<Json<UsageStatus>, HandlerError> {
         let state = ctx.get::<Json<TrackerState>>("state").await?.map(|j| j.0).unwrap_or_default();
+        let circuit_state = aggregate_circuit_state(&state);
 
         // Convert active indices to model names for display
         let mut active_models = HashMap::new();
@@ -144,7 +193,7 @@ impl OyaUsageTracker for OyaUsageTrackerImpl {
         Ok(Json(UsageStatus {
             active_models,
             model_health: state.model_health,
-            circuit_state: CircuitState::Closed,
+            circuit_state,
             last_updated: state.last_updated,
         }))
     }
@@ -178,10 +227,11 @@ fn selected_healthy_index(
     state: &TrackerState,
     model_list: &[String],
     current_index: usize,
+    now: DateTime<Utc>,
 ) -> Option<usize> {
     (0..model_list.len()).find_map(|offset| {
         let idx = (current_index + offset) % model_list.len();
-        is_model_healthy(state, &model_list[idx]).then_some(idx)
+        is_model_healthy_at(state, &model_list[idx], now).then_some(idx)
     })
 }
 
@@ -194,7 +244,7 @@ fn persist_index_change(
 ) {
     if selected_index != current_index {
         state.active_indices.insert(tier.to_string(), selected_index);
-        state.last_updated = Utc::now();
+        state.last_updated = next_logical_time(state);
         ctx.set("state", Json(state.clone()));
     }
 }
@@ -218,15 +268,140 @@ fn rotate_tiers_on_rate_limit(state: &mut TrackerState, model: &str) {
     }
 }
 
-fn is_model_healthy(state: &TrackerState, model_id: &str) -> bool {
+fn open_circuit_for_overloaded_tiers(state: &mut TrackerState, model: &str, now: DateTime<Utc>) {
+    for tier in ["d", "c", "b", "a", "s"] {
+        let models = get_models_for_tier(tier);
+        if !models.iter().any(|entry| entry == model) {
+            continue;
+        }
+        let all_unhealthy = models.iter().all(|entry| !is_model_healthy_at(state, entry, now));
+        if all_unhealthy {
+            open_tier_circuit(state, tier, now);
+        }
+    }
+}
+
+fn close_circuit_for_model_tiers(state: &mut TrackerState, model: &str) {
+    for tier in ["d", "c", "b", "a", "s"] {
+        let models = get_models_for_tier(tier);
+        if models.iter().any(|entry| entry == model) {
+            close_tier_circuit(state, tier);
+        }
+    }
+}
+
+fn close_tier_circuit(state: &mut TrackerState, tier: &str) {
+    let circuit = state.tier_circuits.entry(tier.to_string()).or_default();
+    circuit.state = CircuitState::Closed;
+    circuit.open_until = None;
+}
+
+fn open_tier_circuit(state: &mut TrackerState, tier: &str, now: DateTime<Utc>) {
+    let circuit = state.tier_circuits.entry(tier.to_string()).or_default();
+    circuit.state = CircuitState::Open;
+    circuit.open_until = Some(now + Duration::seconds(TIER_CIRCUIT_OPEN_SECONDS));
+}
+
+fn guard_tier_circuit(
+    state: &mut TrackerState,
+    tier: &str,
+    now: DateTime<Utc>,
+) -> Result<(), HandlerError> {
+    let circuit = state.tier_circuits.entry(tier.to_string()).or_default();
+    if circuit.state != CircuitState::Open {
+        return Ok(());
+    }
+    let Some(open_until) = circuit.open_until else {
+        return Ok(());
+    };
+    if now >= open_until {
+        circuit.state = CircuitState::HalfOpen;
+        circuit.open_until = None;
+        return Ok(());
+    }
+    let retry_after_ms = (open_until - now).num_milliseconds().max(0);
+    Err(TerminalError::new(format!(
+        "tier_circuit_open tier={} retry_after_ms={retry_after_ms}",
+        tier
+    ))
+    .into())
+}
+
+fn consume_tier_token(
+    state: &mut TrackerState,
+    tier: &str,
+    now: DateTime<Utc>,
+) -> Result<(), HandlerError> {
+    let limiter = state.tier_limiters.entry(tier.to_string()).or_default();
+    let elapsed_ms = (now - limiter.last_refill).num_milliseconds().max(0) as f64;
+    let refill = (elapsed_ms / 1000.0) * TIER_TOKEN_BUCKET_REFILL_PER_SEC;
+    limiter.tokens = (limiter.tokens + refill).min(TIER_TOKEN_BUCKET_CAPACITY);
+    limiter.last_refill = now;
+
+    if limiter.tokens < 1.0 {
+        let retry_after_ms = tier_backoff_duration(limiter.tokens)
+            .map(|duration| duration.as_millis() as i64)
+            .unwrap_or(0);
+        return Err(TerminalError::new(format!(
+            "tier_token_exhausted tier={tier} retry_after_ms={retry_after_ms}"
+        ))
+        .into());
+    }
+
+    limiter.tokens -= 1.0;
+    Ok(())
+}
+
+/// Compute backoff duration needed for a tier token bucket to refill to 1 token.
+///
+/// Returns `None` when there are already sufficient tokens.
+#[must_use]
+pub fn tier_backoff_duration(tokens: f64) -> Option<std::time::Duration> {
+    if tokens >= 1.0 {
+        return None;
+    }
+    let deficit = (1.0 - tokens).max(0.0);
+    let seconds = (deficit / TIER_TOKEN_BUCKET_REFILL_PER_SEC).ceil();
+    Some(std::time::Duration::from_secs_f64(seconds))
+}
+
+fn aggregate_circuit_state(state: &TrackerState) -> CircuitState {
+    let now = state.last_updated;
+    if state.tier_circuits.values().any(|circuit| {
+        circuit.state == CircuitState::Open
+            && circuit.open_until.map(|open_until| now < open_until).unwrap_or(false)
+    }) {
+        return CircuitState::Open;
+    }
+    if state.tier_circuits.values().any(|circuit| circuit.state == CircuitState::HalfOpen) {
+        return CircuitState::HalfOpen;
+    }
+    CircuitState::Closed
+}
+
+fn is_model_healthy_at(state: &TrackerState, model_id: &str, now: DateTime<Utc>) -> bool {
     if let Some(health) = state.model_health.get(model_id) {
         if let Some(cooldown) = health.cooldown_until {
-            if Utc::now() < cooldown {
+            if now < cooldown {
                 return false;
             }
         }
     }
     true
+}
+
+#[cfg(test)]
+fn is_model_healthy(state: &TrackerState, model_id: &str) -> bool {
+    is_model_healthy_at(state, model_id, state.last_updated)
+}
+
+fn next_logical_time(state: &TrackerState) -> DateTime<Utc> {
+    let base = if state.last_updated == DateTime::UNIX_EPOCH {
+        DateTime::UNIX_EPOCH
+    } else {
+        state.last_updated
+    };
+    base + Duration::seconds(1)
 }
 
 fn get_models_for_tier(tier: &str) -> Vec<String> {

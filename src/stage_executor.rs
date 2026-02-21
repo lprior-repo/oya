@@ -4,7 +4,8 @@ use crate::runtime_tools::{
     execute_gate, gate_failure_outcome, run_opencode, summarize_failure_output, GateEvidence,
 };
 use crate::stage_runtime::{
-    execute_ship_gate, stage_prompt, stage_success, ShipGateRequest, StagePromptInput,
+    execute_ship_gate, execute_witness_gate, stage_prompt, stage_success, ShipGateRequest,
+    StagePromptInput,
 };
 use oya::types::{
     truncate_clean, FailureCategory, Gate, StageFailure, StageName as Stage, StageResult,
@@ -117,6 +118,9 @@ pub(super) fn execute_stage_blocking(
             merge_queue_policy: input.merge_queue_policy,
             repo_root: input.repo_root,
         });
+    }
+    if request.stage == Stage::Witness {
+        return execute_witness_gate(input.repo_root);
     }
     execute_prompt_driven_stage(request, input.repo_root)
 }

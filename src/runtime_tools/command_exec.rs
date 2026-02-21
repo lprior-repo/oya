@@ -5,7 +5,8 @@ use super::http::{
 use std::path::PathBuf;
 use std::process::Command;
 
-const OPENCODE_TIMEOUT_SECONDS: u64 = 300;
+const OPENCODE_TIMEOUT_SECONDS: u64 = 600;
+const FALLBACK_MODEL: &str = "google/gemini-3-flash-preview";
 
 pub(crate) fn run_command_with_timeout(
     command_name: &str,
@@ -210,6 +211,9 @@ pub(crate) fn run_opencode(
                 Err(error) => Ok((false, error.to_string())),
             }
         }
+        Ok((false, output)) if is_timeout_failure(output.as_str()) => {
+            retry_with_fallback_model(prompt, repo_root, model, output.as_str())
+        }
         Ok(res) => Ok(res),
         Err(err) if is_opencode_missing_error(err.to_string().as_str()) => {
             match fallback_to_opencode_http(prompt, model, err.to_string().as_str()) {
@@ -219,6 +223,29 @@ pub(crate) fn run_opencode(
         }
         Err(err) => Err(err),
     }
+}
+
+fn retry_with_fallback_model(
+    prompt: &str,
+    repo_root: &PathBuf,
+    model: &str,
+    output: &str,
+) -> Result<(bool, String), OyaError> {
+    if model == FALLBACK_MODEL {
+        return Ok((false, output.to_string()));
+    }
+
+    tracing::warn!(
+        "OpenCode command timed out with model {}; retrying once with fallback {}",
+        model,
+        FALLBACK_MODEL
+    );
+    run_command_with_timeout(
+        resolve_opencode_program().as_str(),
+        &["run", "--format", "json", "--model", FALLBACK_MODEL, prompt],
+        OPENCODE_TIMEOUT_SECONDS,
+        repo_root,
+    )
 }
 
 fn resolve_opencode_program() -> String {
@@ -254,6 +281,10 @@ fn is_opencode_cli_missing_output(output: &str) -> bool {
     normalized.contains("failed to run command")
         && normalized.contains("opencode")
         && normalized.contains("no such file or directory")
+}
+
+fn is_timeout_failure(output: &str) -> bool {
+    output.to_ascii_lowercase().contains("timed out")
 }
 
 fn run_opencode_via_http_blocking(

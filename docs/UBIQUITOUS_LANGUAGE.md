@@ -9,9 +9,9 @@
 | **Bead** | Unit of work from Steve Yegge's beads system | `oya-a1b2` |
 | **Pipeline** | CI/CD-style flow for software creation | Contract → Shipped |
 | **Run** | One execution of a Bead through the Pipeline | - |
-| **Stage** | Discrete step in Pipeline | Contract, Tdd15, Qa, etc. |
+| **Stage** | Discrete step in Pipeline | Explore, Contract, Red, Implementation, Witness, ShipGate |
 | **Gate** | Quality check at end of each Stage | lint, compile, test |
-| **Attempt** | One try at passing a Stage | max 3 per Stage |
+| **Attempt** | One try at passing a Stage | max 2 per Stage |
 | **Shipped** | Bead merged to main, passed ALL gates | - |
 | **OpenCode Adapter** | CLI subprocess path for AI stage execution | `opencode run ...` |
 | **Orchestrator** | Restate workflow runtime governing state transitions | Restate service |
@@ -19,7 +19,7 @@
 ## Pipeline Stages (in order)
 
 ```
-Contract → Tdd15 → Qa → RedQueen → GptReview → ShipGate → [SHIP]
+Explore → Contract → Red → Implementation → Witness → ShipGate → [SHIP]
 ```
 
 Each Stage has:
@@ -59,10 +59,9 @@ Use the right model for the right stage:
 | Stage | Model Profile | Reasoning |
 |-------|--------------|-----------|
 | **Contract** | Fast, cheap | Simple specification writing |
-| **Tdd15** | Balanced | Implementation needs moderate capability |
-| **Qa** | Balanced | Test writing is straightforward |
-| **RedQueen** | Capable | Adversarial testing needs creativity |
-| **GptReview** | Capable | Code review needs deep understanding |
+| **Red** | Balanced | Acceptance tests are created and sealed in RED state |
+| **Implementation** | Balanced | Production code turns sealed tests GREEN |
+| **Witness** | Capable | Hidden holdout scenario verification |
 | **ShipGate** | Best | Final validation requires maximum capability |
 
 ## State Machine
@@ -90,12 +89,12 @@ Each Stage has specific Gates:
 
 | Stage | Gates |
 |-------|-------|
+| Explore | None |
 | Contract | Compiles |
-| Tdd15 | Compiles + Tests Pass |
-| Qa | Tests Pass + Edge Cases |
-| RedQueen | No Vulnerabilities |
-| GptReview | Clippy Clean + Security |
-| ShipGate | Moon CI + zjj Merge Queue |
+| Red | Compiles |
+| Implementation | Compiles + Tests Pass |
+| Witness | Holdout Scenarios |
+| ShipGate | CUE Artifact + zjj Merge Queue |
 
 ## Aggregates
 

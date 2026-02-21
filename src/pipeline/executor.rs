@@ -163,13 +163,15 @@ async fn prepare_workspace_lifecycle(
         return Ok(None);
     }
 
+    let recorded_at = capture_stage_timestamp(ctx).await?;
+
     // Prepare workspace in ctx.run so replay does not repeat side effects.
     let request = crate::runtime_tools::WorkspacePrepRequest {
         run_id: input.run_id.to_string(),
         bead_id: input.bead_id.to_string(),
         stage: input.stage.clone(),
         attempt: input.attempt,
-        recorded_at: chrono::Utc::now().to_rfc3339(),
+        recorded_at,
         workspace_policy: config.workspace_policy,
         repo_root: input.repo_root.to_path_buf(),
     };
@@ -249,8 +251,11 @@ fn build_stage_output_data(stage: &Stage, stage_result: &StageResult) -> StageOu
 
     // Stage-specific output fields
     let (contract_document, implementation_code, test_results, adversarial_report) = match stage {
+        Stage::Explore => (None, None, None, None),
         Stage::Contract => (Some(full_log.clone()), None, None, None),
+        Stage::Red => (None, None, Some(full_log.clone()), None),
         Stage::Implementation => (None, Some(full_log.clone()), None, None),
+        Stage::Witness => (None, None, None, Some(full_log.clone())),
         _ => (None, None, None, None),
     };
 

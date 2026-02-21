@@ -1,5 +1,5 @@
 use super::*;
-use crate::types::{FailureCategory, StageName};
+use crate::types::{CircuitState, FailureCategory, StageName};
 
 #[test]
 fn test_is_rate_limit_failure_returns_true_for_rate_limited() {
@@ -104,6 +104,7 @@ fn test_is_model_healthy_returns_true_for_unknown_model() {
 #[test]
 fn test_is_model_healthy_returns_true_when_not_in_cooldown() {
     let mut state = TrackerState::default();
+    state.last_updated = Utc::now();
     state.model_health.insert(
         "test-model".to_string(),
         ModelHealth {
@@ -119,6 +120,7 @@ fn test_is_model_healthy_returns_true_when_not_in_cooldown() {
 #[test]
 fn test_is_model_healthy_returns_false_when_in_cooldown() {
     let mut state = TrackerState::default();
+    state.last_updated = Utc::now();
     state.model_health.insert(
         "test-model".to_string(),
         ModelHealth {
@@ -262,6 +264,38 @@ fn test_tier_rotation_with_all_models_unhealthy() {
 }
 
 #[test]
+fn test_open_tier_circuit_blocks_until_timeout() {
+    let mut state = TrackerState::default();
+    let now = Utc::now();
+
+    open_tier_circuit(&mut state, "c", now);
+    let blocked = guard_tier_circuit(&mut state, "c", now + Duration::seconds(1));
+    assert!(blocked.is_err());
+
+    let recovered = guard_tier_circuit(&mut state, "c", now + Duration::seconds(31));
+    assert!(recovered.is_ok());
+}
+
+#[test]
+fn test_consume_tier_token_exhausts_bucket_without_refill() {
+    let mut state = TrackerState::default();
+    let now = Utc::now();
+    let tier = "d";
+
+    for _ in 0..2 {
+        assert!(consume_tier_token(&mut state, tier, now).is_ok());
+    }
+    assert!(consume_tier_token(&mut state, tier, now).is_err());
+}
+
+#[test]
+fn test_aggregate_circuit_state_reports_open_when_any_tier_open() {
+    let mut state = TrackerState::default();
+    open_tier_circuit(&mut state, "b", Utc::now());
+    assert_eq!(aggregate_circuit_state(&state), CircuitState::Open);
+}
+
+#[test]
 fn test_circuit_breaker_state_transitions() {
     use crate::types::CircuitState;
 
@@ -373,6 +407,7 @@ fn test_consecutive_failures_accumulate() {
 #[test]
 fn test_cooldown_expiration_allows_model_recovery() {
     let mut state = TrackerState::default();
+    state.last_updated = Utc::now();
     let model = "test-model".to_string();
 
     state.model_health.insert(

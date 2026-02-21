@@ -1,4 +1,7 @@
 use crate::runtime_tools::{build_http_client, workflow_http_client_settings};
+use std::fs;
+use std::io::Write;
+use std::path::PathBuf;
 
 use super::types::{WorkflowConfig, WorkflowResult, WorkflowStatus};
 use super::DynError;
@@ -9,8 +12,8 @@ pub(super) fn workflow_http_client() -> Result<reqwest::Client, DynError> {
 }
 
 pub(super) fn emit_workflow_starting(config: &WorkflowConfig) {
-    eprintln!(
-        "{}",
+    emit_event(
+        config,
         serde_json::json!({
             "type": "workflow_starting",
             "bead_id": config.bead_id,
@@ -25,13 +28,13 @@ pub(super) fn emit_workflow_starting(config: &WorkflowConfig) {
             "pipeline_stages": config.stages,
             "tool": "oya",
             "action": "run"
-        })
+        }),
     );
 }
 
 pub(super) fn emit_workflow_submitted(config: &WorkflowConfig) {
-    eprintln!(
-        "{}",
+    emit_event(
+        config,
         serde_json::json!({
             "type": "workflow_submitted",
             "bead_id": config.bead_id,
@@ -39,7 +42,7 @@ pub(super) fn emit_workflow_submitted(config: &WorkflowConfig) {
             "timeout_seconds": config.timeout_secs,
             "poll_interval_seconds": config.poll_interval_secs,
             "message": "Workflow submitted to Restate, polling for completion"
-        })
+        }),
     );
 }
 
@@ -121,6 +124,16 @@ async fn poll_iteration(
     state: &mut PollState,
 ) -> Result<Option<WorkflowStatus>, DynError> {
     if state.start_time.elapsed() > state.timeout_duration {
+        emit_event(
+            config,
+            serde_json::json!({
+                "type": "workflow_error",
+                "bead_id": config.bead_id,
+                "run_id": config.run_id,
+                "error": "timeout",
+                "message": format!("Workflow timed out after {} seconds", config.timeout_secs),
+            }),
+        );
         return Err(format!("Workflow timed out after {} seconds", config.timeout_secs).into());
     }
     let status = fetch_workflow_status(client, config).await?;
@@ -129,6 +142,18 @@ async fn poll_iteration(
         return Ok(Some(status));
     }
     if status.is_failed() {
+        emit_event(
+            config,
+            serde_json::json!({
+                "type": "workflow_error",
+                "bead_id": config.bead_id,
+                "run_id": config.run_id,
+                "error": "failed",
+                "current_stage": status.stage,
+                "attempt": status.attempt,
+                "message": status.last_failure,
+            }),
+        );
         return Err(format!("Workflow failed: {}", status.last_failure).into());
     }
     state.last_status = Some(status);
@@ -148,8 +173,8 @@ fn print_stage_progress(
         return;
     }
     let elapsed_secs = start_time.elapsed().as_secs();
-    eprintln!(
-        "{}",
+    emit_event(
+        config,
         serde_json::json!({
             "type": "stage_progress",
             "bead_id": config.bead_id,
@@ -167,7 +192,7 @@ fn print_stage_progress(
             },
             "pipeline_stages": config.stages,
             "repo_root": config.repo_root.display().to_string()
-        })
+        }),
     );
 }
 
@@ -203,32 +228,67 @@ pub(super) fn output_result(
     result: &WorkflowResult,
     config: &WorkflowConfig,
 ) -> Result<(), DynError> {
-    println!(
-        "{}",
-        serde_json::json!({
-            "type": "workflow_result",
-            "bead_id": result.bead_id,
-            "run_id": result.run_id,
-            "status": result.status,
-            "final_stage": result.final_stage,
-            "error": result.error,
-            "repo_root": result.repo_root.display().to_string(),
-            "pipeline_stages": config.stages,
-            "is_success": result.status == "shipped",
-            "next_steps": if result.status == "shipped" {
-                serde_json::json!([
-                    {"action": "review_code", "path": format!("{}/src/", result.repo_root.display()), "description": "Review generated source code"},
-                    {"action": "verify_landing", "description": "Confirm landing commands completed in ShipGate logs"},
-                    {"action": "inspect_timeline", "description": "Review timeline and stage artifacts in Restate admin"}
-                ])
-            } else {
-                serde_json::json!([
-                    {"action": "review_error", "description": "Review the error output above to understand the failure"},
-                    {"action": "fix_issue", "path": format!("{}/src/", result.repo_root.display()), "description": "Fix the underlying issue in the source code"},
-                    {"action": "rerun", "command": format!("oya run {}", result.bead_id), "description": "Re-run the workflow after fixing"}
-                ])
-            }
-        })
-    );
+    let event = serde_json::json!({
+        "type": "workflow_result",
+        "bead_id": result.bead_id,
+        "run_id": result.run_id,
+        "status": result.status,
+        "final_stage": result.final_stage,
+        "error": result.error,
+        "repo_root": result.repo_root.display().to_string(),
+        "pipeline_stages": config.stages,
+        "is_success": result.status == "shipped",
+        "next_steps": if result.status == "shipped" {
+            serde_json::json!([
+                {"action": "review_code", "path": format!("{}/src/", result.repo_root.display()), "description": "Review generated source code"},
+                {"action": "verify_landing", "description": "Confirm landing commands completed in ShipGate logs"},
+                {"action": "inspect_timeline", "description": "Review timeline and stage artifacts in Restate admin"}
+            ])
+        } else {
+            serde_json::json!([
+                {"action": "review_error", "description": "Review the error output above to understand the failure"},
+                {"action": "fix_issue", "path": format!("{}/src/", result.repo_root.display()), "description": "Fix the underlying issue in the source code"},
+                {"action": "rerun", "command": format!("oya run {}", result.bead_id), "description": "Re-run the workflow after fixing"}
+            ])
+        }
+    });
+    println!("{}", event);
+    append_bridge_event(config, &event)?;
     Ok(())
+}
+
+fn emit_event(config: &WorkflowConfig, event: serde_json::Value) {
+    eprintln!("{}", event);
+    if let Err(error) = append_bridge_event(config, &event) {
+        eprintln!(
+            "{}",
+            serde_json::json!({
+                "type": "bridge_write_error",
+                "run_id": config.run_id,
+                "bead_id": config.bead_id,
+                "message": error.to_string()
+            })
+        );
+    }
+}
+
+fn append_bridge_event(config: &WorkflowConfig, event: &serde_json::Value) -> Result<(), DynError> {
+    let path = bridge_events_path(config);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("create bridge dir failed: {}", error))?;
+    }
+
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .map_err(|error| format!("open bridge events file failed: {}", error))?;
+
+    writeln!(file, "{}", event).map_err(|error| format!("write bridge event failed: {}", error))?;
+    Ok(())
+}
+
+fn bridge_events_path(config: &WorkflowConfig) -> PathBuf {
+    config.repo_root.join(".oya").join("bridge").join("events.jsonl")
 }

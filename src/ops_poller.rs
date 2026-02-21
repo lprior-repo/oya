@@ -146,9 +146,13 @@ fn should_retry_rate_limit(status: reqwest::StatusCode, text: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn poll_interval_rejects_invalid_env_value() {
+        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
         std::env::set_var("OYA_POLL_INTERVAL_MS", "abc");
         let result = poll_interval_ms();
         std::env::remove_var("OYA_POLL_INTERVAL_MS");
@@ -157,6 +161,7 @@ mod tests {
 
     #[test]
     fn poll_interval_defaults_when_env_missing() {
+        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
         std::env::remove_var("OYA_POLL_INTERVAL_MS");
         let result = poll_interval_ms();
         assert!(matches!(result, Ok(2000)));

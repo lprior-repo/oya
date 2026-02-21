@@ -23,7 +23,7 @@ async fn fake_orch_returns_default_success() {
         .unwrap();
 
     assert!(result.passed);
-    assert_eq!(result.next_stage, Some(StageName::Implementation));
+    assert_eq!(result.next_stage, Some(StageName::Red));
 }
 
 #[tokio::test]

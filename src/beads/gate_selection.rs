@@ -32,8 +32,21 @@ mod tests {
     use super::*;
 
     #[test]
+    fn select_gates_explore_stage() {
+        let gates = select_gates(&StageName::Explore);
+        assert!(gates.is_empty());
+    }
+
+    #[test]
     fn select_gates_contract_stage() {
         let gates = select_gates(&StageName::Contract);
+        assert_eq!(gates.len(), 1);
+        assert!(gates.contains(&Gate::Compiles));
+    }
+
+    #[test]
+    fn select_gates_red_stage() {
+        let gates = select_gates(&StageName::Red);
         assert_eq!(gates.len(), 1);
         assert!(gates.contains(&Gate::Compiles));
     }
@@ -47,23 +60,35 @@ mod tests {
     }
 
     #[test]
-    fn select_gates_all_stages() {
-        // Verify all stages have at least one gate
-        let stages = vec![StageName::Contract, StageName::Implementation, StageName::ShipGate];
-
-        for stage in stages {
-            let gates = select_gates(&stage);
-            assert!(!gates.is_empty(), "Stage {:?} should have at least one gate", stage);
-        }
+    fn select_gates_witness_stage() {
+        let gates = select_gates(&StageName::Witness);
+        assert_eq!(gates.len(), 1);
+        assert!(gates.contains(&Gate::HoldoutScenarios));
     }
 
     #[test]
     fn select_gates_ship_gate_stage() {
         let gates = select_gates(&StageName::ShipGate);
-        assert_eq!(gates.len(), 3);
+        assert_eq!(gates.len(), 2);
         assert!(gates.contains(&Gate::CueArtifactGenerated));
-        assert!(gates.contains(&Gate::MoonCi));
         assert!(gates.contains(&Gate::ZjjMergeQueue));
+    }
+
+    #[test]
+    fn select_gates_all_stages_match_stage_gates() {
+        let stages = vec![
+            StageName::Explore,
+            StageName::Contract,
+            StageName::Red,
+            StageName::Implementation,
+            StageName::Witness,
+            StageName::ShipGate,
+        ];
+
+        stages.into_iter().for_each(|stage| {
+            let selected: Vec<_> = select_gates(&stage).into_iter().collect();
+            assert_eq!(selected, stage.gates());
+        });
     }
 
     #[test]
