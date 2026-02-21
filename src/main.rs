@@ -7,7 +7,8 @@
 
 use oya::build_opencode_poll_snapshot;
 use oya::types::{
-    truncate_clean, FailureCategory, StageFailure, StageName as Stage, TimelineEntry,
+    sanitize_url_for_logging, truncate_clean, FailureCategory, StageFailure, StageName as Stage,
+    TimelineEntry,
 };
 use oya::usage::{
     is_rate_limit_failure, tier_for_stage, OyaUsageTracker, OyaUsageTrackerClient,
@@ -113,10 +114,10 @@ async fn build_start_context(
     let bead_id = parsed.bead_id.map_or_else(|| "unknown".to_string(), std::convert::identity);
     let context = parsed.context.map_or_else(String::new, std::convert::identity);
 
-    // Get model from request or resolve via usage tracker for Plan stage tier
+    // Get model from request or resolve via usage tracker for Contract stage tier
     let model = match parsed.model {
         Some(m) => m,
-        None => resolve_model_for_stage(ctx, &Stage::Plan).await?,
+        None => resolve_model_for_stage(ctx, &Stage::Contract).await?,
     };
 
     let started_at = pipeline::deterministic_timestamp(ctx)
@@ -163,7 +164,7 @@ async fn persist_run_start(
         ctx,
         &OrchestratorState {
             status: "running".to_string(),
-            stage: "plan".to_string(),
+            stage: "contract".to_string(),
             attempt: 1,
             bead_id: start.bead_id.clone(),
             context: start.context.clone(),
@@ -213,7 +214,7 @@ impl OyaOpsMonitor for OyaOpsMonitorImpl {
         .map_err(|error| OyaError(format!("OpenCode snapshot parse failed: {}", error)))?;
 
         Ok(Json(OpsMonitorPollResponse {
-            source: config.base_url,
+            source: sanitize_url_for_logging(&config.base_url),
             observed_at: chrono::Utc::now().to_rfc3339(),
             busy_sessions: snapshot.busy_sessions,
             pending_permissions: snapshot.pending_permissions,
@@ -242,7 +243,7 @@ impl OyaOpsMonitor for OyaOpsMonitorImpl {
             .collect::<Vec<_>>();
 
         Ok(Json(OpsMonitorEventResponse {
-            source: config.base_url,
+            source: sanitize_url_for_logging(&config.base_url),
             observed_at: chrono::Utc::now().to_rfc3339(),
             count: events.len(),
             events,
@@ -481,7 +482,7 @@ const LANDING_STEPS: &[LandingStepTemplate] = &[
         args: &["sync"],
         timeout_seconds: 120,
         failure_category: FailureCategory::MergeConflict,
-        next_stage: Stage::GptReview,
+        next_stage: Stage::Implementation,
     },
     LandingStepTemplate {
         id: "zjj_done",
@@ -490,7 +491,7 @@ const LANDING_STEPS: &[LandingStepTemplate] = &[
         args: &["done"],
         timeout_seconds: 120,
         failure_category: FailureCategory::MergeConflict,
-        next_stage: Stage::GptReview,
+        next_stage: Stage::Implementation,
     },
 ];
 
@@ -532,7 +533,7 @@ fn closing_step(bead_id: &str) -> CommandStep {
         args: vec!["close".to_string(), bead_id.to_string()],
         timeout_seconds: 60,
         failure_category: FailureCategory::OutputParseFailure,
-        next_stage: Stage::GptReview,
+        next_stage: Stage::ShipGate,
     }
 }
 
@@ -544,7 +545,7 @@ fn sync_flush_step() -> CommandStep {
         args: vec!["sync".to_string(), "--flush-only".to_string()],
         timeout_seconds: 60,
         failure_category: FailureCategory::OutputParseFailure,
-        next_stage: Stage::GptReview,
+        next_stage: Stage::ShipGate,
     }
 }
 
@@ -673,7 +674,7 @@ async fn landing_step_completed(
 ) -> Result<bool, LandingFailure> {
     let stored = ctx.get::<String>(key).await.map_err(|error| LandingFailure {
         failure_category: FailureCategory::OutputParseFailure,
-        next_stage: Stage::GptReview,
+        next_stage: Stage::Review,
         output: format!("landing telemetry read failed: {}", error),
     })?;
 
@@ -769,7 +770,7 @@ async fn mark_run_failed(
 
 fn is_valid_http_url(value: &str) -> bool {
     let trimmed = value.trim();
-    if trimmed.is_empty() {
+    if trimmed.is_empty() || contains_forbidden_control_chars(trimmed) {
         return false;
     }
 
@@ -785,6 +786,190 @@ fn is_valid_http_url(value: &str) -> bool {
         }
         Err(_) => false,
     }
+}
+
+fn contains_forbidden_control_chars(value: &str) -> bool {
+    value.chars().any(|char| char.is_control() && char != '\n' && char != '\r' && char != '\t')
+}
+
+// ---------------------------------------------------------------------------
+// CLI Input Validation (src-1dr)
+// ---------------------------------------------------------------------------
+
+/// Maximum allowed length for bead_id input to prevent DoS/memory exhaustion
+const MAX_BEAD_ID_LEN: usize = 128;
+
+/// Maximum allowed length for context string input
+const MAX_CONTEXT_LEN: usize = 4096;
+
+/// Maximum allowed length for model name input
+const MAX_MODEL_NAME_LEN: usize = 128;
+
+/// Maximum allowed length for restate URL input
+const MAX_RESTATE_URL_LEN: usize = 2048;
+
+/// Maximum allowed timeout value in seconds (24 hours)
+const MAX_TIMEOUT_SECS: u64 = 86_400;
+
+/// Maximum allowed poll interval in seconds (1 hour)
+const MAX_POLL_INTERVAL_SECS: u64 = 3600;
+
+/// Validates CLI RunArgs for oversized inputs that could cause memory issues.
+fn validate_run_args(args: &RunArgs) -> Result<(), String> {
+    validate_bead_id(&args.bead_id)?;
+    validate_context(&args.context)?;
+    validate_restate_url(&args.restate_url)?;
+    validate_timeout(args.timeout)?;
+    if let Some(model) = &args.model {
+        validate_model(model)?;
+    }
+    if let Some(interval) = args.poll_interval {
+        validate_poll_interval(interval)?;
+    }
+    Ok(())
+}
+
+fn validate_bead_id(bead_id: &str) -> Result<(), String> {
+    let trimmed = bead_id.trim();
+    if trimmed.is_empty() {
+        return Err("bead_id cannot be empty".to_string());
+    }
+    if trimmed.len() > MAX_BEAD_ID_LEN {
+        return Err(format!(
+            "bead_id exceeds maximum length: {} > {}",
+            trimmed.len(),
+            MAX_BEAD_ID_LEN
+        ));
+    }
+    if contains_forbidden_control_chars(trimmed) {
+        return Err("bead_id contains invalid control characters".to_string());
+    }
+    Ok(())
+}
+
+fn validate_context(context: &str) -> Result<(), String> {
+    if context.len() > MAX_CONTEXT_LEN {
+        return Err(format!(
+            "context exceeds maximum length: {} > {}",
+            context.len(),
+            MAX_CONTEXT_LEN
+        ));
+    }
+    if contains_forbidden_control_chars(context) {
+        return Err("context contains invalid control characters".to_string());
+    }
+    Ok(())
+}
+
+fn validate_model(model: &str) -> Result<(), String> {
+    let trimmed = model.trim();
+    if trimmed.is_empty() {
+        return Err("model cannot be empty when provided".to_string());
+    }
+    if trimmed.len() > MAX_MODEL_NAME_LEN {
+        return Err(format!(
+            "model exceeds maximum length: {} > {}",
+            trimmed.len(),
+            MAX_MODEL_NAME_LEN
+        ));
+    }
+    if contains_forbidden_control_chars(trimmed) {
+        return Err("model contains invalid control characters".to_string());
+    }
+    Ok(())
+}
+
+fn validate_restate_url(url: &str) -> Result<(), String> {
+    let trimmed = url.trim();
+    if trimmed.is_empty() {
+        return Err("restate_url cannot be empty".to_string());
+    }
+    if trimmed.len() > MAX_RESTATE_URL_LEN {
+        return Err(format!(
+            "restate_url exceeds maximum length: {} > {}",
+            trimmed.len(),
+            MAX_RESTATE_URL_LEN
+        ));
+    }
+    if contains_forbidden_control_chars(trimmed) {
+        return Err("restate_url contains invalid control characters".to_string());
+    }
+    if !is_valid_http_url(trimmed) {
+        return Err(format!(
+            "restate_url is not a valid HTTP/HTTPS URL: {}",
+            sanitize_url_for_logging(trimmed)
+        ));
+    }
+    Ok(())
+}
+
+fn validate_timeout(timeout: u64) -> Result<(), String> {
+    if timeout == 0 {
+        return Err("timeout must be greater than 0".to_string());
+    }
+    if timeout > MAX_TIMEOUT_SECS {
+        return Err(format!(
+            "timeout exceeds maximum value: {} > {} seconds",
+            timeout, MAX_TIMEOUT_SECS
+        ));
+    }
+    Ok(())
+}
+
+fn validate_poll_interval(interval: u64) -> Result<(), String> {
+    if interval == 0 {
+        return Err("poll_interval must be greater than 0".to_string());
+    }
+    if interval > MAX_POLL_INTERVAL_SECS {
+        return Err(format!(
+            "poll_interval exceeds maximum value: {} > {} seconds",
+            interval, MAX_POLL_INTERVAL_SECS
+        ));
+    }
+    Ok(())
+}
+
+/// Maximum allowed length for run_id in tail command
+const MAX_RUN_ID_LEN: usize = 128;
+
+/// Validates CLI TailArgs for oversized inputs.
+fn validate_tail_args(args: &TailArgs) -> Result<(), String> {
+    validate_interval(args.interval)?;
+    if let Some(run_id) = &args.run_id {
+        validate_run_id(run_id)?;
+    }
+    Ok(())
+}
+
+fn validate_interval(interval: u64) -> Result<(), String> {
+    if interval == 0 {
+        return Err("interval must be greater than 0".to_string());
+    }
+    if interval > MAX_POLL_INTERVAL_SECS {
+        return Err(format!(
+            "interval exceeds maximum value: {} > {} seconds",
+            interval, MAX_POLL_INTERVAL_SECS
+        ));
+    }
+    Ok(())
+}
+
+fn validate_run_id(run_id: &str) -> Result<(), String> {
+    let trimmed = run_id.trim();
+    if trimmed.is_empty() {
+        return Err("run_id cannot be empty when provided".to_string());
+    }
+    if trimmed.len() > MAX_RUN_ID_LEN {
+        return Err(format!(
+            "run_id exceeds maximum length: {} > {}",
+            trimmed.len(),
+            MAX_RUN_ID_LEN
+        ));
+    }
+    if contains_forbidden_control_chars(trimmed) {
+        return Err("run_id contains invalid control characters".to_string());
+    }
+    Ok(())
 }
 
 fn resolve_bind_addr() -> Result<std::net::SocketAddr, OyaError> {
@@ -854,8 +1039,22 @@ where
     match cli.command {
         None | Some(CliCommand::Serve) => CliMode::Serve,
         Some(CliCommand::OpsPoll) => CliMode::OpsPoll,
-        Some(CliCommand::Run(args)) => CliMode::Run(args),
-        Some(CliCommand::Tail(args)) => CliMode::Tail(args),
+        Some(CliCommand::Run(args)) => {
+            // Validate CLI inputs before processing (src-1dr)
+            if let Err(validation_error) = validate_run_args(&args) {
+                eprintln!("error: {}", validation_error);
+                std::process::exit(1);
+            }
+            CliMode::Run(args)
+        }
+        Some(CliCommand::Tail(args)) => {
+            // Validate CLI inputs before processing (src-1dr)
+            if let Err(validation_error) = validate_tail_args(&args) {
+                eprintln!("error: {}", validation_error);
+                std::process::exit(1);
+            }
+            CliMode::Tail(args)
+        }
         Some(CliCommand::Init) => CliMode::Init,
     }
 }

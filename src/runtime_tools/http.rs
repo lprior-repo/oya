@@ -117,7 +117,10 @@ pub(crate) fn opencode_config() -> Result<OpenCodeConfig, OyaError> {
         .unwrap_or_else(|| "http://127.0.0.1:4097".to_string());
 
     if !is_valid_http_url(base_url.as_str()) {
-        return Err(OyaError(format!("Invalid OYA_OPENCODE_BASE_URL '{}'", base_url)));
+        return Err(OyaError(format!(
+            "Invalid OYA_OPENCODE_BASE_URL '{}'",
+            sanitize_url_for_logging(&base_url)
+        )));
     }
 
     let password =

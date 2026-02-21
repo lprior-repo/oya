@@ -61,7 +61,7 @@ mod tests {
 
     #[test]
     fn test_failing_orchestrator_config() {
-        let orch = failing_orchestrator(vec![(StageName::Tdd15, 1, FailureCategory::TestFailed)]);
+        let orch = failing_orchestrator(vec![(StageName::Implementation, 1, FailureCategory::TestFailed)]);
 
         // Just verify it builds without panicking
         assert_eq!(orch.run_id(), "test-run-fail");

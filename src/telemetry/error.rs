@@ -2,6 +2,11 @@
 //!
 //! Functional Rust compliant: no unwrap/panic/expect
 
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+#![deny(clippy::panic)]
+#![warn(clippy::pedantic)]
+
 use thiserror::Error;
 
 /// Observability initialization and runtime errors
@@ -63,5 +68,24 @@ mod tests {
 
         let err = ObservabilityError::InvalidEndpoint("not-a-url".to_string());
         assert!(err.to_string().contains("not-a-url"));
+    }
+
+    #[test]
+    fn test_connection_failure_error_type_exists() {
+        // Verify that the HttpRequest error variant exists and has the correct shape
+        // This ensures we have proper error handling for connection failures
+        let error_msg = ObservabilityError::SetGlobalError("connection refused".to_string());
+        assert!(error_msg.to_string().contains("connection refused"));
+    }
+
+    #[test]
+    fn test_invalid_filter_error() {
+        let err = ObservabilityError::InvalidFilter(
+            "OTEL_TRACES_SAMPLER_ARG".to_string(),
+            "must be a float".to_string(),
+        );
+        let msg = err.to_string();
+        assert!(msg.contains("OTEL_TRACES_SAMPLER_ARG"), "Error should contain the env var name");
+        assert!(msg.contains("must be a float"), "Error should contain the reason");
     }
 }

@@ -7,6 +7,11 @@
 //! Both layers share the same tracing Registry, ensuring consistent
 //! `trace_id`/`span_id` correlation across logs and traces.
 
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+#![deny(clippy::panic)]
+#![warn(clippy::pedantic)]
+
 pub mod config;
 pub mod error;
 
@@ -28,7 +33,7 @@ impl Drop for ShutdownGuard {
     fn drop(&mut self) {
         // Flush any remaining spans
         if let Err(err) = self.0.shutdown() {
-            eprintln!("Failed to shutdown tracer provider: {}", err);
+            eprintln!("Failed to shutdown tracer provider: {err}");
         }
     }
 }
@@ -36,8 +41,8 @@ impl Drop for ShutdownGuard {
 /// Initialize telemetry with custom configuration
 ///
 /// Creates dual-layer output:
-/// - JSON logs to stdout with automatic trace_id/span_id injection
-/// - OTLP trace export to OpenObserve
+/// - JSON logs to stdout with automatic `trace_id`/`span_id` injection
+/// - OTLP trace export to `OpenObserve`
 ///
 /// # Returns
 ///
@@ -75,7 +80,7 @@ pub fn init_telemetry(config: &ObservabilityConfig) -> Result<ShutdownGuard, Obs
         .build()
         .map_err(|err| ObservabilityError::HttpClientBuild { source: Box::new(err) })?;
 
-    eprintln!("[Telemetry] OTLP exporter configured for {} (gRPC)", endpoint);
+    eprintln!("[Telemetry] OTLP exporter configured for {endpoint} (gRPC)");
 
     // Configure batch processor for efficient export
     let provider = SdkTracerProvider::builder().with_batch_exporter(exporter).build();
@@ -95,9 +100,13 @@ pub fn init_telemetry(config: &ObservabilityConfig) -> Result<ShutdownGuard, Obs
         .with_target(true)
         .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE);
 
-    // Build env filter from RUST_LOG or default
-    let env_filter =
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&config.env_filter));
+    // Build env filter from RUST_LOG or default from config
+    // Using map_or with Ok result extracted, since map_or_else with identity
+    // triggers clippy::unnecessary_result_map_or_else
+    let env_filter = match EnvFilter::try_from_default_env() {
+        Ok(filter) => filter,
+        Err(_) => EnvFilter::new(&config.env_filter),
+    };
 
     // Compose subscriber with both layers
     let subscriber = Registry::default().with(env_filter).with(json_layer).with(otel_layer);
@@ -117,8 +126,13 @@ pub fn init_telemetry(config: &ObservabilityConfig) -> Result<ShutdownGuard, Obs
 /// # Environment Variables
 ///
 /// - `OTEL_SERVICE_NAME`: Service name (default: "oya-orchestrator")
-/// - `OTEL_EXPORTER_OTLP_ENDPOINT`: OTLP endpoint (default: "http://localhost:4318")
+/// - `OTEL_EXPORTER_OTLP_ENDPOINT`: OTLP endpoint (default: `<http://localhost:4318>`)
 /// - `RUST_LOG`: Log level filter (default: "oya=info")
+///
+/// # Errors
+///
+/// Returns `ObservabilityError` if configuration loading or telemetry
+/// initialization fails.
 ///
 /// # Returns
 ///

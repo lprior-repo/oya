@@ -185,10 +185,7 @@ fn opencode_failure_stage_execution(
 ) -> StageExecution {
     let category =
         oya::classify_opencode_error(&output).unwrap_or(FailureCategory::OutputParseFailure);
-    let next_stage = match request.stage {
-        Stage::GptReview => Stage::Implementation,
-        _ => request.stage.clone(),
-    };
+    let next_stage = request.stage.clone();
     StageExecution {
         passed: false,
         output,
@@ -226,7 +223,7 @@ pub(super) fn format_gate_command_output(command: &str, exit_code: i32, output: 
 
 pub(super) fn stage_failure_context(stage: &Stage, last_failure: &Option<StageFailure>) -> String {
     match (stage, last_failure) {
-        (Stage::GptReview, Some(StageFailure { category, message, .. })) if *category == FailureCategory::LintFailed => {
+        (Stage::Implementation, Some(StageFailure { category, message, .. })) if *category == FailureCategory::LintFailed => {
             format!(
                 "\n\nPREVIOUS CLIPPY FAILURE:\n{}\n\nCRITICAL: Fix the actual code issues. DO NOT use #[allow(...)] attributes to suppress warnings. Fix the underlying problem.",
                 summarize_failure_output(&FailureCategory::LintFailed, message)

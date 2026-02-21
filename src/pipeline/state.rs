@@ -85,7 +85,7 @@ pub(crate) async fn init_pipeline_state(
     let updated_at = deterministic_timestamp_or_error(ctx).await?;
     let orchestrator = OrchestratorState {
         status: "running".to_string(),
-        stage: Stage::Plan.as_str().to_string(),
+        stage: Stage::Contract.as_str().to_string(),
         attempt: 1,
         bead_id: input.bead_id.clone(),
         context: input.context.clone(),
@@ -96,5 +96,10 @@ pub(crate) async fn init_pipeline_state(
         updated_at,
     };
     write_orchestrator_state(ctx, &orchestrator)?;
-    Ok(PipelineState { current_stage: Stage::Plan, attempt: 1, last_failure: None, orchestrator })
+    Ok(PipelineState {
+        current_stage: Stage::Contract,
+        attempt: 1,
+        last_failure: None,
+        orchestrator,
+    })
 }

@@ -164,12 +164,13 @@ impl QualityGate {
     }
 
     fn validate_spec(&self) -> Result<SpecValidationResult, Box<dyn std::error::Error>> {
-        let spec_linter_path = "cargo run --bin spec-linter".to_string();
         let spec_arg = format!("-- {}", self.config.spec_path.display());
+        let project_root = std::env::var("PROJECT_ROOT")
+            .map_or_else(|_| PathBuf::from("."), PathBuf::from);
 
-        let output = Command::new(spec_linter_path)
-            .args(["--format", "json", &spec_arg])
-            .current_dir(&std::env::var("PROJECT_ROOT").unwrap_or_else(|_| PathBuf::from(".")))
+        let output = Command::new("cargo")
+            .args(["run", "--bin", "spec-linter", "--format", "json", &spec_arg])
+            .current_dir(&project_root)
             .output()?;
 
         let json_str = String::from_utf8_lossy(&output.stdout);
@@ -182,14 +183,15 @@ impl QualityGate {
     }
 
     fn validate_scenarios(&self) -> Result<ScenarioValidationResult, Box<dyn std::error::Error>> {
-        let scenario_runner_path = "cargo run --bin scenario-runner".to_string();
         let scenarios_arg = format!("-- {}", self.config.scenarios_path.display());
         let app_arg = format!("--app-endpoint {}", self.config.app_endpoint);
         let level_arg = format!("--level {}", self.config.feedback_level);
+        let project_root = std::env::var("PROJECT_ROOT")
+            .map_or_else(|_| PathBuf::from("."), PathBuf::from);
 
-        let output = Command::new(scenario_runner_path)
-            .args(["--format", "json", &scenarios_arg, &app_arg, &level_arg])
-            .current_dir(&std::env::var("PROJECT_ROOT").unwrap_or_else(|_| PathBuf::from(".")))
+        let output = Command::new("cargo")
+            .args(["run", "--bin", "scenario-runner", "--format", "json", &scenarios_arg, &app_arg, &level_arg])
+            .current_dir(&project_root)
             .output()?;
 
         let json_str = String::from_utf8_lossy(&output.stdout);

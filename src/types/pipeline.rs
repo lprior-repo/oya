@@ -18,56 +18,32 @@ use anyhow::Result;
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum StageName {
-    Plan,
     Contract,
-    AcceptanceTest,
     Implementation,
-    Tdd15,
-    Qa,
-    RedQueen,
-    GptReview,
     ShipGate,
 }
 
 impl StageName {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Self::Plan => "plan",
             Self::Contract => "contract",
-            Self::AcceptanceTest => "acceptance_test",
             Self::Implementation => "implementation",
-            Self::Tdd15 => "tdd15",
-            Self::Qa => "qa",
-            Self::RedQueen => "red_queen",
-            Self::GptReview => "gpt_review",
             Self::ShipGate => "ship_gate",
         }
     }
 
     pub fn next(&self) -> Option<Self> {
         match self {
-            Self::Plan => Some(Self::Contract),
-            Self::Contract => Some(Self::AcceptanceTest),
-            Self::AcceptanceTest => Some(Self::Implementation),
-            Self::Implementation => Some(Self::Qa),
-            Self::Tdd15 => Some(Self::Qa),
-            Self::Qa => Some(Self::RedQueen),
-            Self::RedQueen => Some(Self::GptReview),
-            Self::GptReview => Some(Self::ShipGate),
+            Self::Contract => Some(Self::Implementation),
+            Self::Implementation => Some(Self::ShipGate),
             Self::ShipGate => None,
         }
     }
 
     pub fn model_for_stage(&self) -> ModelTier {
         match self {
-            Self::Plan => ModelTier::Balanced,
             Self::Contract => ModelTier::Fast,
-            Self::AcceptanceTest => ModelTier::Balanced,
             Self::Implementation => ModelTier::Balanced,
-            Self::Tdd15 => ModelTier::Balanced,
-            Self::Qa => ModelTier::Balanced,
-            Self::RedQueen => ModelTier::Capable,
-            Self::GptReview => ModelTier::Best,
             Self::ShipGate => ModelTier::Best,
         }
     }
@@ -78,14 +54,8 @@ impl StageName {
 
     pub fn gates(&self) -> Vec<Gate> {
         match self {
-            Self::Plan => vec![Gate::Compiles],
-            Self::Contract => vec![Gate::Compiles],
-            Self::AcceptanceTest => vec![Gate::Compiles, Gate::AcceptanceTestsAreRed],
+            Self::Contract => vec![Gate::Compiles, Gate::CueArtifactGenerated],
             Self::Implementation => vec![Gate::Compiles, Gate::TestsPass],
-            Self::Tdd15 => vec![Gate::Compiles, Gate::TestsPass],
-            Self::Qa => vec![Gate::TestsPass, Gate::EdgeCases],
-            Self::RedQueen => vec![Gate::NoVulnerabilities],
-            Self::GptReview => vec![Gate::ClippyClean, Gate::Security],
             Self::ShipGate => vec![Gate::MoonCi, Gate::ZjjMergeQueue],
         }
     }
@@ -96,14 +66,8 @@ impl TryFrom<&str> for StageName {
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         match s {
-            "plan" => Ok(Self::Plan),
             "contract" => Ok(Self::Contract),
-            "acceptance_test" => Ok(Self::AcceptanceTest),
             "implementation" => Ok(Self::Implementation),
-            "tdd15" => Ok(Self::Tdd15),
-            "qa" => Ok(Self::Qa),
-            "red_queen" => Ok(Self::RedQueen),
-            "gpt_review" => Ok(Self::GptReview),
             "ship_gate" => Ok(Self::ShipGate),
             _ => Err(format!("Unknown stage: {s}")),
         }
@@ -158,6 +122,7 @@ pub enum Gate {
     Security,
     MoonCi,
     ZjjMergeQueue,
+    CueArtifactGenerated,
 }
 
 impl Gate {
@@ -172,6 +137,7 @@ impl Gate {
             Self::Security => "security",
             Self::MoonCi => "moon_ci",
             Self::ZjjMergeQueue => "zjj_merge_queue",
+            Self::CueArtifactGenerated => "cue_artifact_generated",
         }
     }
 }
@@ -190,6 +156,7 @@ impl TryFrom<&str> for Gate {
             "security" => Ok(Self::Security),
             "moon_ci" => Ok(Self::MoonCi),
             "zjj_merge_queue" => Ok(Self::ZjjMergeQueue),
+            "cue_artifact_generated" => Ok(Self::CueArtifactGenerated),
             _ => Err(format!("Unknown gate: {s}")),
         }
     }
@@ -208,6 +175,7 @@ pub enum FailureCategory {
     CompileFailed,
     LintFailed,
     MergeConflict,
+    CiFailed,
     RateLimited,
     AuthFailed,
     ContextOverflow,
@@ -381,35 +349,11 @@ pub fn determine_transition(
 #[must_use]
 pub fn passed_stage_transition(stage: StageName) -> TransitionDecision {
     match stage {
-        StageName::Plan => TransitionDecision::new(
-            StageTransition::Advance(StageName::Contract),
-            TransitionReason::StagePassedAdvance,
-        ),
         StageName::Contract => TransitionDecision::new(
-            StageTransition::Advance(StageName::AcceptanceTest),
-            TransitionReason::StagePassedAdvance,
-        ),
-        StageName::AcceptanceTest => TransitionDecision::new(
             StageTransition::Advance(StageName::Implementation),
             TransitionReason::StagePassedAdvance,
         ),
         StageName::Implementation => TransitionDecision::new(
-            StageTransition::Advance(StageName::Qa),
-            TransitionReason::StagePassedAdvance,
-        ),
-        StageName::Tdd15 => TransitionDecision::new(
-            StageTransition::Advance(StageName::Qa),
-            TransitionReason::StagePassedAdvance,
-        ),
-        StageName::Qa => TransitionDecision::new(
-            StageTransition::Advance(StageName::RedQueen),
-            TransitionReason::StagePassedAdvance,
-        ),
-        StageName::RedQueen => TransitionDecision::new(
-            StageTransition::Advance(StageName::GptReview),
-            TransitionReason::StagePassedAdvance,
-        ),
-        StageName::GptReview => TransitionDecision::new(
             StageTransition::Advance(StageName::ShipGate),
             TransitionReason::StagePassedAdvance,
         ),
@@ -417,6 +361,30 @@ pub fn passed_stage_transition(stage: StageName) -> TransitionDecision {
             StageTransition::Complete,
             TransitionReason::RedQueenPassedComplete,
         ),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Attempt normalization
+// ---------------------------------------------------------------------------
+
+/// Normalize attempt number: ensure attempt >= 1.
+/// Attempt 0 is invalid (attempts start at 1), so normalize to first attempt.
+/// This provides consistent validation at boundaries where external data enters the system.
+///
+/// # Examples
+/// ```
+/// use oya::types::normalize_attempt;
+/// assert_eq!(normalize_attempt(0), 1);  // Invalid becomes first attempt
+/// assert_eq!(normalize_attempt(1), 1);  // Valid unchanged
+/// assert_eq!(normalize_attempt(2), 2);  // Valid unchanged
+/// ```
+#[must_use]
+pub const fn normalize_attempt(attempt: u32) -> u32 {
+    if attempt == 0 {
+        1
+    } else {
+        attempt
     }
 }
 
@@ -452,6 +420,7 @@ impl FailureCategory {
             Self::CompileFailed => "compile_failed",
             Self::LintFailed => "lint_failed",
             Self::MergeConflict => "merge_conflict",
+            Self::CiFailed => "ci_failed",
             Self::RateLimited => "rate_limited",
             Self::AuthFailed => "auth_failed",
             Self::ContextOverflow => "context_overflow",
@@ -530,5 +499,18 @@ mod tests {
         assert!(tiers.contains(&"b"));
         assert!(tiers.contains(&"a"));
         assert!(tiers.contains(&"s"));
+    }
+
+    /// Test: normalize_attempt enforces attempt >= 1 invariant
+    #[test]
+    fn normalize_attempt_converts_zero_to_one() {
+        assert_eq!(super::normalize_attempt(0), 1, "attempt=0 must become 1");
+    }
+
+    #[test]
+    fn normalize_attempt_preserves_valid_attempts() {
+        assert_eq!(super::normalize_attempt(1), 1);
+        assert_eq!(super::normalize_attempt(2), 2);
+        assert_eq!(super::normalize_attempt(100), 100);
     }
 }

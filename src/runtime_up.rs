@@ -185,7 +185,9 @@ fn resolve_moon_bin() -> Result<PathBuf> {
 }
 
 fn lookup_binary(name: &str) -> Option<PathBuf> {
-    let output = Command::new("which").arg(name).output().ok()?;
+    // Validate command name against whitelist to prevent injection
+    let validated = crate::runtime_tools::validate_command(name).ok()?;
+    let output = Command::new("which").arg(&validated).output().ok()?;
     if !output.status.success() {
         return None;
     }

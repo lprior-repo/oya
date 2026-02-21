@@ -38,8 +38,13 @@ fn clamp_poll_interval(parsed: u64) -> u64 {
 
 fn write_poller_banner(config: &OpenCodeConfig, interval_ms: u64) -> Result<(), OyaError> {
     let mut stderr = std::io::stderr().lock();
-    writeln!(stderr, "[oya:ops-poll] source={} interval_ms={}", config.base_url, interval_ms)
-        .map_err(|error| OyaError(format!("Failed to write poller banner: {}", error)))?;
+    writeln!(
+        stderr,
+        "[oya:ops-poll] source={} interval_ms={}",
+        sanitize_url_for_logging(&config.base_url),
+        interval_ms
+    )
+    .map_err(|error| OyaError(format!("Failed to write poller banner: {}", error)))?;
     writeln!(stderr, "[oya:ops-poll] columns: ts | busy | perm | quest | event_preview")
         .map_err(|error| OyaError(format!("Failed to write poller banner: {}", error)))?;
     Ok(())
@@ -107,22 +112,20 @@ async fn fetch_text_with_client(
     let request = password
         .map_or_else(|| client.get(url), |pwd| client.get(url).basic_auth("opencode", Some(pwd)));
 
-    let response = request
-        .send()
-        .await
-        .map_err(|error| OyaError(format!("Request failed for {}: {}", url, error)))?;
+    let response = request.send().await.map_err(|error| {
+        OyaError(format!("Request failed for {}: {}", sanitize_url_for_logging(url), error))
+    })?;
 
     let status = response.status();
-    let text = response
-        .text()
-        .await
-        .map_err(|error| OyaError(format!("Read failed for {}: {}", url, error)))?;
+    let text = response.text().await.map_err(|error| {
+        OyaError(format!("Read failed for {}: {}", sanitize_url_for_logging(url), error))
+    })?;
 
     if !status.is_success() {
         return Err(OyaError(format!(
             "Status {} for {}: {}",
             status.as_u16(),
-            url,
+            sanitize_url_for_logging(url),
             truncate_clean(&text, 200)
         )));
     }

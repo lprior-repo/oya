@@ -179,8 +179,8 @@ mod tests {
 
     #[test]
     fn build_report_passed_variant() {
-        let aggregated = agg_passed(StageName::Plan, 1);
-        let report = build_gate_report(StageName::Plan, &aggregated);
+        let aggregated = agg_passed(StageName::Contract, 1);
+        let report = build_gate_report(StageName::Contract, &aggregated);
 
         assert!(report.is_passed());
         assert!(!report.is_failed());
@@ -188,7 +188,7 @@ mod tests {
 
         match report {
             GateReport::Passed { stage, stats, entries } => {
-                assert_eq!(stage, StageName::Plan);
+                assert_eq!(stage, StageName::Contract);
                 assert_eq!(stats.total, 1);
                 assert_eq!(stats.passed, 1);
                 assert_eq!(entries.len(), 1);
@@ -199,15 +199,15 @@ mod tests {
 
     #[test]
     fn build_report_failed_variant() {
-        let aggregated = agg_failed(StageName::Tdd15, 1, 2);
-        let report = build_gate_report(StageName::Tdd15, &aggregated);
+        let aggregated = agg_failed(StageName::Implementation, 1, 2);
+        let report = build_gate_report(StageName::Implementation, &aggregated);
 
         assert!(!report.is_passed());
         assert!(report.is_failed());
 
         match report {
             GateReport::Failed { stage, stats, category, .. } => {
-                assert_eq!(stage, StageName::Tdd15);
+                assert_eq!(stage, StageName::Implementation);
                 assert_eq!(stats.total, 2);
                 assert_eq!(stats.passed, 1);
                 assert_eq!(stats.failed(), 1);
@@ -219,8 +219,8 @@ mod tests {
 
     #[test]
     fn build_report_all_passed() {
-        let aggregated = agg_passed(StageName::Tdd15, 2);
-        let report = build_gate_report(StageName::Tdd15, &aggregated);
+        let aggregated = agg_passed(StageName::Implementation, 2);
+        let report = build_gate_report(StageName::Implementation, &aggregated);
 
         assert!(report.is_passed());
         let stats = report.stats();
@@ -231,8 +231,8 @@ mod tests {
 
     #[test]
     fn build_report_all_failed() {
-        let aggregated = agg_failed(StageName::Tdd15, 0, 2);
-        let report = build_gate_report(StageName::Tdd15, &aggregated);
+        let aggregated = agg_failed(StageName::Implementation, 0, 2);
+        let report = build_gate_report(StageName::Implementation, &aggregated);
 
         assert!(report.is_failed());
         let stats = report.stats();
@@ -243,15 +243,15 @@ mod tests {
 
     #[test]
     fn build_report_preserves_stage() {
-        let aggregated = agg_passed(StageName::Qa, 2);
-        let report = build_gate_report(StageName::Qa, &aggregated);
-        assert_eq!(report.stage(), &StageName::Qa);
+        let aggregated = agg_passed(StageName::Implementation, 2);
+        let report = build_gate_report(StageName::Implementation, &aggregated);
+        assert_eq!(report.stage(), &StageName::Implementation);
     }
 
     #[test]
     fn build_report_failure_category_set_when_failed() {
-        let aggregated = agg_failed(StageName::Tdd15, 1, 2);
-        let report = build_gate_report(StageName::Tdd15, &aggregated);
+        let aggregated = agg_failed(StageName::Implementation, 1, 2);
+        let report = build_gate_report(StageName::Implementation, &aggregated);
 
         match report {
             GateReport::Failed { category, .. } => {
@@ -263,8 +263,8 @@ mod tests {
 
     #[test]
     fn build_report_failure_category_none_when_passed() {
-        let aggregated = agg_passed(StageName::Plan, 1);
-        let report = build_gate_report(StageName::Plan, &aggregated);
+        let aggregated = agg_passed(StageName::Contract, 1);
+        let report = build_gate_report(StageName::Contract, &aggregated);
 
         match report {
             GateReport::Passed { .. } => {
@@ -276,9 +276,9 @@ mod tests {
 
     #[test]
     fn build_report_deterministic() {
-        let aggregated = agg_failed(StageName::Tdd15, 1, 2);
-        let report1 = build_gate_report(StageName::Tdd15, &aggregated);
-        let report2 = build_gate_report(StageName::Tdd15, &aggregated);
+        let aggregated = agg_failed(StageName::Implementation, 1, 2);
+        let report1 = build_gate_report(StageName::Implementation, &aggregated);
+        let report2 = build_gate_report(StageName::Implementation, &aggregated);
         assert_eq!(report1, report2);
     }
 
@@ -292,8 +292,8 @@ mod tests {
     #[test]
     fn passed_cannot_have_failure_category() {
         // Demonstrates compile-time guarantee: Passed variant has no category field
-        let aggregated = agg_passed(StageName::Plan, 1);
-        let report = build_gate_report(StageName::Plan, &aggregated);
+        let aggregated = agg_passed(StageName::Contract, 1);
+        let report = build_gate_report(StageName::Contract, &aggregated);
 
         match report {
             GateReport::Passed { .. } => {
@@ -307,8 +307,8 @@ mod tests {
     #[test]
     fn failed_must_have_failure_category() {
         // Failed variant always has a category - no Option needed
-        let aggregated = agg_failed(StageName::Tdd15, 0, 1);
-        let report = build_gate_report(StageName::Tdd15, &aggregated);
+        let aggregated = agg_failed(StageName::Implementation, 0, 1);
+        let report = build_gate_report(StageName::Implementation, &aggregated);
 
         match report {
             GateReport::Failed { category, .. } => {
@@ -321,19 +321,19 @@ mod tests {
 
     #[test]
     fn entries_accessible_from_both_variants() {
-        let agg_pass = agg_passed(StageName::Plan, 2);
-        let report_pass = build_gate_report(StageName::Plan, &agg_pass);
+        let agg_pass = agg_passed(StageName::Contract, 2);
+        let report_pass = build_gate_report(StageName::Contract, &agg_pass);
         assert_eq!(report_pass.entries().len(), 2);
 
-        let agg_fail = agg_failed(StageName::Tdd15, 1, 2);
-        let report_fail = build_gate_report(StageName::Tdd15, &agg_fail);
+        let agg_fail = agg_failed(StageName::Implementation, 1, 2);
+        let report_fail = build_gate_report(StageName::Implementation, &agg_fail);
         assert_eq!(report_fail.entries().len(), 2);
     }
 
     #[test]
     fn report_entries_show_correct_pass_fail_status() {
-        let aggregated = agg_failed(StageName::Tdd15, 1, 3);
-        let report = build_gate_report(StageName::Tdd15, &aggregated);
+        let aggregated = agg_failed(StageName::Implementation, 1, 3);
+        let report = build_gate_report(StageName::Implementation, &aggregated);
 
         let entries = report.entries();
         assert_eq!(entries.len(), 3);

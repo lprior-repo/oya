@@ -11,16 +11,19 @@ pub(super) use state::{
 
 use std::path::PathBuf;
 
-use oya::types::Gate;
+use oya::types::{load_model_tier_config, Gate, ModelTierConfig};
 use restate_sdk::prelude::*;
 
 use super::OyaError;
 
 /// Runtime configuration read deterministically from environment at workflow start.
+#[allow(dead_code)]
 pub(super) struct RuntimeConfig {
     pub(super) workspace_policy: WorkspacePreparationPolicy,
     pub(super) merge_queue_policy: MergeQueuePolicy,
     pub(super) repo_root: PathBuf,
+    /// Model tier configuration loaded from oya.yaml
+    pub(super) model_tiers: ModelTierConfig,
 }
 
 #[derive(Clone, Copy)]
@@ -78,10 +81,15 @@ impl RuntimeConfig {
             .await
             .map_err(|e| OyaError(format!("config error: repo_root: {}", e)))?;
 
+        let model_tiers = Self::deterministic_model_tier_config(ctx)
+            .await
+            .map_err(|e| OyaError(format!("config error: model_tiers: {}", e)))?;
+
         Ok(Self {
             workspace_policy: WorkspacePreparationPolicy::from_skip_flag(skip_zjj_workspace),
             merge_queue_policy: MergeQueuePolicy::from_skip_flag(skip_zjj_gate),
             repo_root: PathBuf::from(repo_root_str),
+            model_tiers,
         })
     }
 
@@ -95,5 +103,31 @@ impl RuntimeConfig {
                 .map_err(|e| HandlerError::from(format!("Failed to resolve repo root: {}", e)))
         })
         .await
+    }
+
+    /// Load model tier configuration deterministically within the workflow context.
+    /// Serializes to JSON string to satisfy Restate's serde requirements.
+    async fn deterministic_model_tier_config(
+        ctx: &WorkflowContext<'_>,
+    ) -> Result<ModelTierConfig, TerminalError> {
+        let json_str = ctx
+            .run(|| async move {
+                let config = load_model_tier_config().map_err(|e| {
+                    HandlerError::from(format!("Failed to load model tier config: {}", e))
+                })?;
+                serde_json::to_string(&config)
+                    .map_err(|e| HandlerError::from(format!("Failed to serialize config: {}", e)))
+            })
+            .await?;
+
+        serde_json::from_str(&json_str).map_err(|e| {
+            TerminalError::new_with_code(500, format!("Failed to deserialize config: {}", e))
+        })
+    }
+
+    /// Get the list of models for a specific tier.
+    #[allow(dead_code)]
+    pub(super) fn models_for_tier(&self, tier: &str) -> Vec<String> {
+        self.model_tiers.get_models_for_tier(tier)
     }
 }

@@ -117,20 +117,18 @@ fn contract_workspace_name_format() {
     assert!(name.contains("a1"));
 }
 
-/// Contract: Stage ordering is preserved
+/// Contract: Stage ordering is preserved (five canonical stages)
 #[test]
 fn contract_stage_ordering() {
     use oya::types::StageName;
 
-    // ATDD pipeline flow: Plan → Contract → AcceptanceTest → Implementation → QA → ...
+    // Canonical five-stage ATDD pipeline flow:
+    // Contract -> AcceptanceTest -> Implementation -> Review -> ShipGate
     let expected_order = vec![
-        StageName::Plan,
         StageName::Contract,
         StageName::AcceptanceTest,
         StageName::Implementation,
-        StageName::Qa,
-        StageName::RedQueen,
-        StageName::GptReview,
+        StageName::Review,
         StageName::ShipGate,
     ];
 
@@ -150,29 +148,37 @@ fn contract_stage_ordering() {
 
     // Verify ShipGate is terminal
     assert_eq!(StageName::ShipGate.next(), None);
-
-    // Verify legacy Tdd15 still transitions to QA for backward compatibility
-    assert_eq!(StageName::Tdd15.next(), Some(StageName::Qa));
 }
 
-/// Contract: Gate definitions
+/// Contract: Gate definitions for five canonical stages
 #[test]
 fn contract_gate_definitions() {
     use oya::types::{Gate, StageName};
 
-    // Plan, Contract only need to compile
-    for stage in [StageName::Plan, StageName::Contract] {
-        let gates = stage.gates();
-        assert_eq!(gates.len(), 1, "{:?} should have 1 gate", stage);
-        assert_eq!(gates[0], Gate::Compiles);
-    }
+    // Contract only needs to compile
+    let contract_gates = StageName::Contract.gates();
+    assert_eq!(contract_gates.len(), 1, "Contract should have 1 gate");
+    assert_eq!(contract_gates[0], Gate::Compiles);
 
-    // Tdd15 needs compile + tests
-    let tdd15_gates = StageName::Tdd15.gates();
-    assert!(tdd15_gates.contains(&Gate::Compiles));
-    assert!(tdd15_gates.contains(&Gate::TestsPass));
+    // AcceptanceTest needs compile + tests must be red
+    let acceptance_gates = StageName::AcceptanceTest.gates();
+    assert!(acceptance_gates.contains(&Gate::Compiles));
+    assert!(acceptance_gates.contains(&Gate::AcceptanceTestsAreRed));
 
-    // ShipGate has the most gates
+    // Implementation needs compile + tests pass
+    let impl_gates = StageName::Implementation.gates();
+    assert!(impl_gates.contains(&Gate::Compiles));
+    assert!(impl_gates.contains(&Gate::TestsPass));
+
+    // Review consolidates Qa + RedQueen + GptReview gates
+    let review_gates = StageName::Review.gates();
+    assert!(review_gates.contains(&Gate::TestsPass));
+    assert!(review_gates.contains(&Gate::EdgeCases));
+    assert!(review_gates.contains(&Gate::NoVulnerabilities));
+    assert!(review_gates.contains(&Gate::ClippyClean));
+    assert!(review_gates.contains(&Gate::Security));
+
+    // ShipGate has final CI + merge queue gates
     let ship_gates = StageName::ShipGate.gates();
     assert_eq!(ship_gates.len(), 2);
     assert!(ship_gates.contains(&Gate::MoonCi));
@@ -212,18 +218,16 @@ fn contract_failure_category_retryability() {
     }
 }
 
-/// Contract: Max attempts is consistent
+/// Contract: Max attempts is consistent for all canonical stages
 #[test]
 fn contract_max_attempts() {
     use oya::types::StageName;
 
     for stage in [
-        StageName::Plan,
         StageName::Contract,
-        StageName::Tdd15,
-        StageName::Qa,
-        StageName::RedQueen,
-        StageName::GptReview,
+        StageName::AcceptanceTest,
+        StageName::Implementation,
+        StageName::Review,
         StageName::ShipGate,
     ] {
         assert_eq!(stage.max_attempts(), 2, "{:?} should have 2 max attempts", stage);

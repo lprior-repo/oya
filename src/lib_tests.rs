@@ -3380,6 +3380,82 @@ fn classify_opencode_error_returns_provider_unavailable_for_health_preflight_fai
     assert_eq!(category, Some(FailureCategory::ProviderUnavailable));
 }
 
+// ============================================================================
+// Rate Limit Detection Tests
+// ============================================================================
+
+#[test]
+fn classify_opencode_error_returns_rate_limited_for_http_429_code() {
+    let message = "Error: HTTP 429: Too Many Requests from API";
+    let category = classify_opencode_error(message);
+    assert_eq!(category, Some(FailureCategory::RateLimited));
+}
+
+#[test]
+fn classify_opencode_error_returns_rate_limited_for_rate_limited_text() {
+    let message = "Error: Rate Limited - please retry after 60 seconds";
+    let category = classify_opencode_error(message);
+    assert_eq!(category, Some(FailureCategory::RateLimited));
+}
+
+#[test]
+fn classify_opencode_error_returns_rate_limited_for_too_many_requests() {
+    let message = "Error: Too Many Requests - quota exceeded for this period";
+    let category = classify_opencode_error(message);
+    assert_eq!(category, Some(FailureCategory::RateLimited));
+}
+
+#[test]
+fn classify_opencode_error_returns_rate_limited_for_quota_exceeded() {
+    let message = "Error: Quota exceeded for model gpt-4o";
+    let category = classify_opencode_error(message);
+    assert_eq!(category, Some(FailureCategory::RateLimited));
+}
+
+#[test]
+fn classify_opencode_error_returns_rate_limited_for_provider_overloaded() {
+    let message = "Error: Provider is overloaded - please retry later";
+    let category = classify_opencode_error(message);
+    assert_eq!(category, Some(FailureCategory::RateLimited));
+}
+
+#[test]
+fn classify_opencode_error_returns_none_for_generic_errors() {
+    let message = "Error: Something went wrong with the request";
+    let category = classify_opencode_error(message);
+    assert_eq!(category, None);
+}
+
+#[test]
+fn classify_opencode_error_returns_none_for_empty_string() {
+    let message = "";
+    let category = classify_opencode_error(message);
+    assert_eq!(category, None);
+}
+
+#[test]
+fn classify_opencode_error_prioritizes_rate_limit_over_provider_unavailable() {
+    // When a message contains both rate limit and provider unavailable indicators,
+    // rate limit should take priority since it's more specific
+    let message = "429 Provider unavailable temporarily";
+    let category = classify_opencode_error(message);
+    assert_eq!(category, Some(FailureCategory::RateLimited));
+}
+
+#[test]
+fn classify_opencode_error_returns_provider_unavailable_for_connection_refused() {
+    let message = "Error: Connection refused when connecting to localhost:8080";
+    let category = classify_opencode_error(message);
+    assert_eq!(category, Some(FailureCategory::ProviderUnavailable));
+}
+
+#[test]
+fn classify_opencode_error_returns_provider_unavailable_for_url_error() {
+    let message = "error sending request for url (http://127.0.0.1:4098/run)";
+    let category = classify_opencode_error(message);
+    assert_eq!(category, Some(FailureCategory::ProviderUnavailable));
+}
+
 #[test]
 fn opencode_poll_snapshot_is_debug_clone_and_eq() {
     let snapshot = OpencodePollSnapshot {
