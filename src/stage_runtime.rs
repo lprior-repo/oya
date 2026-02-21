@@ -91,18 +91,47 @@ fn witness_prompt() -> String {
 }
 
 fn sanitize_holdout_output(raw: &str) -> String {
-    raw.lines()
-        .filter(|line| {
-            let lower = line.to_ascii_lowercase();
-            !lower.contains("scenario id")
-                && !lower.contains("assert_eq!")
-                && !lower.contains("given/")
-                && !lower.contains("when/")
-                && !lower.contains("then/")
-        })
+    let redacted = raw
+        .lines()
         .map(str::trim_end)
+        .filter(|line| is_safe_holdout_line(line))
+        .take(60)
         .collect::<Vec<_>>()
-        .join("\n")
+        .join("\n");
+
+    if redacted.is_empty() {
+        "holdout output redacted for scenario isolation".to_string()
+    } else {
+        redacted
+    }
+}
+
+fn is_safe_holdout_line(line: &str) -> bool {
+    let lower = line.to_ascii_lowercase();
+    let has_sensitive_tokens = [
+        "scenario id",
+        "scenario:",
+        "assert_",
+        "assert!",
+        "given/",
+        "when/",
+        "then/",
+        "expected:",
+        "fixtures/",
+        "vault/",
+        "scenarios/",
+        ".yaml",
+        ".yml",
+    ]
+    .iter()
+    .any(|token| lower.contains(token));
+
+    !has_sensitive_tokens
+        && (lower.contains("running ")
+            || lower.contains("test result:")
+            || lower.contains("finished")
+            || lower.contains("blocking")
+            || lower.contains("error: test failed"))
 }
 
 pub(super) fn stage_success(stage: &Stage) -> (&'static str, Option<Stage>) {
@@ -194,5 +223,35 @@ fn ship_gate_failure(
         next_stage: Some(next_stage),
         prompt,
         gate_results,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_safe_holdout_line, sanitize_holdout_output};
+
+    #[test]
+    fn sanitize_holdout_output_removes_sensitive_lines() {
+        let raw = "running 2 tests\nScenario ID: scn-secret-001\nGiven/ a hidden precondition\nassert_eq!(a, b)\ntest result: FAILED. 1 passed; 1 failed;";
+        let sanitized = sanitize_holdout_output(raw);
+        assert!(!sanitized.contains("Scenario ID"));
+        assert!(!sanitized.contains("Given/"));
+        assert!(!sanitized.contains("assert_eq!"));
+        assert!(sanitized.contains("running 2 tests"));
+        assert!(sanitized.contains("test result: FAILED"));
+    }
+
+    #[test]
+    fn sanitize_holdout_output_has_safe_fallback_message() {
+        let raw = "Scenario: hidden\nTHEN/ secret expectation\nassert!(false)";
+        let sanitized = sanitize_holdout_output(raw);
+        assert_eq!(sanitized, "holdout output redacted for scenario isolation");
+    }
+
+    #[test]
+    fn is_safe_holdout_line_allows_summary_but_blocks_leaks() {
+        assert!(is_safe_holdout_line("test result: ok. 4 passed; 0 failed;"));
+        assert!(!is_safe_holdout_line("Scenario: holdout-password-reset-expired"));
+        assert!(!is_safe_holdout_line("expected: HTTP 410 Gone"));
     }
 }

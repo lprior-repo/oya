@@ -135,11 +135,34 @@ async fn build_start_context(
     // Get model from request or resolve via usage tracker for Plan stage tier
     let model = match parsed.model {
         Some(m) => m,
-        None => resolve_model_for_stage(ctx, &Stage::Contract).await?,
+        None => match resolve_model_for_stage(ctx, &Stage::Contract).await {
+            Ok(model) => model,
+            Err(error) => {
+                let message = error.to_string();
+                if is_tracker_backpressure_error(message.as_str()) {
+                    let fallback_model = configured_fallback_model();
+                    tracing::warn!(
+                        "usage tracker unavailable at run start; using fallback model '{}'",
+                        fallback_model
+                    );
+                    fallback_model
+                } else {
+                    return Err(error);
+                }
+            }
+        },
     };
 
     let started_at = workflow_timestamp_or_error(ctx).await?;
     Ok(StartContext { run_id: ctx.key().to_string(), bead_id, context, model, started_at })
+}
+
+fn configured_fallback_model() -> String {
+    std::env::var("OYA_FALLBACK_MODEL")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .map_or_else(|| "openai/gpt-5".to_string(), std::convert::identity)
 }
 
 /// Resolve the active model for a stage via the OyaUsageTracker VirtualObject.
@@ -161,9 +184,25 @@ async fn resolve_model_for_stage_cached(
     if let Some(model) = state.resolved_models.get(&tier) {
         return Ok(model.clone());
     }
-    let model = resolve_model_for_stage_with_backoff(ctx, &tier).await?;
-    state.resolved_models.insert(tier, model.clone());
-    Ok(model)
+    match resolve_model_for_stage_with_backoff(ctx, &tier).await {
+        Ok(model) => {
+            state.resolved_models.insert(tier, model.clone());
+            Ok(model)
+        }
+        Err(error) => {
+            let error_message = error.to_string();
+            if is_tracker_backpressure_error(error_message.as_str()) {
+                tracing::warn!(
+                    "usage tracker unavailable for tier '{}'; reusing current model '{}'",
+                    tier,
+                    state.orchestrator.model
+                );
+                Ok(state.orchestrator.model.clone())
+            } else {
+                Err(error)
+            }
+        }
+    }
 }
 
 fn invalidate_cached_model_for_stage(state: &mut PipelineState, stage: &Stage) {

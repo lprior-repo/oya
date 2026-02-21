@@ -2,7 +2,7 @@ use crate::types::FailureCategory;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Output};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QualityGateConfig {
@@ -148,42 +148,22 @@ impl QualityGate {
             iteration,
             max_iterations: self.config.max_iterations,
             failure_category: Some(FailureCategory::TestFailed),
-            message: format!(
-                "{} of {} scenarios failed",
-                scenarios.failed_count, scenarios.total_count
-            ),
+            message: scenario_failure_message(&scenarios),
         }
     }
 
     fn validate_spec(&self) -> Result<SpecValidationResult, Box<dyn std::error::Error>> {
         let output = run_moon_command(["run", ":check"])?;
-        let score = if output.status.success() { 100 } else { 0 };
-        Ok(SpecValidationResult { passed: score >= self.config.spec_threshold, score })
+        let score = spec_score_from_output(&output);
+        Ok(SpecValidationResult {
+            passed: output.status.success() && score >= self.config.spec_threshold,
+            score,
+        })
     }
 
     fn validate_scenarios(&self) -> Result<ScenarioValidationResult, Box<dyn std::error::Error>> {
         let output = run_moon_command(["run", ":holdout"])?;
-
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        let parsed = serde_json::from_str::<Value>(stdout.as_str()).ok();
-        let passed_count = parsed
-            .as_ref()
-            .and_then(|value| value.get("passed_scenarios"))
-            .and_then(Value::as_u64)
-            .map_or(usize::from(output.status.success()), |value| value as usize);
-        let total_count = parsed
-            .as_ref()
-            .and_then(|value| value.get("total_scenarios"))
-            .and_then(Value::as_u64)
-            .map_or(1, |value| value as usize);
-        let failed_count = total_count.saturating_sub(passed_count);
-
-        Ok(ScenarioValidationResult {
-            passed: failed_count == 0 && output.status.success(),
-            passed_count,
-            total_count,
-            failed_count,
-        })
+        Ok(scenario_validation_from_output(&output))
     }
 }
 
@@ -191,6 +171,134 @@ fn run_moon_command<const N: usize>(
     args: [&str; N],
 ) -> Result<std::process::Output, std::io::Error> {
     Command::new("moon").args(args).output()
+}
+
+fn command_output(output: &Output) -> String {
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    if stdout.is_empty() {
+        return stderr.into_owned();
+    }
+    if stderr.is_empty() {
+        return stdout.into_owned();
+    }
+
+    format!("{}\n{}", stdout, stderr)
+}
+
+fn occurrence_count(haystack: &str, needle: &str) -> u32 {
+    let count = haystack.match_indices(needle).count();
+    match u32::try_from(count) {
+        Ok(value) => value,
+        Err(_) => u32::MAX,
+    }
+}
+
+fn spec_score_from_output(output: &Output) -> u32 {
+    spec_score_from_text(command_output(output).as_str(), output.status.success())
+}
+
+fn spec_score_from_text(raw: &str, command_succeeded: bool) -> u32 {
+    let lower = raw.to_ascii_lowercase();
+    let warnings = occurrence_count(lower.as_str(), "warning:");
+    let errors = occurrence_count(lower.as_str(), "error:");
+    let penalty = warnings.saturating_mul(5).saturating_add(errors.saturating_mul(20)).min(100);
+
+    if !command_succeeded && warnings == 0 && errors == 0 {
+        return 0;
+    }
+
+    100_u32.saturating_sub(penalty)
+}
+
+fn scenario_validation_from_output(output: &Output) -> ScenarioValidationResult {
+    scenario_validation_from_text(command_output(output).as_str(), output.status.success())
+}
+
+fn scenario_validation_from_text(raw: &str, command_succeeded: bool) -> ScenarioValidationResult {
+    let (passed_count, total_count) = parse_scenario_counts_from_json(raw)
+        .or_else(|| parse_scenario_counts_from_test_output(raw))
+        .unwrap_or((0, 0));
+    let normalized_passed = passed_count.min(total_count);
+    let failed_count = total_count.saturating_sub(normalized_passed);
+    let passed = command_succeeded && total_count > 0 && failed_count == 0;
+
+    ScenarioValidationResult { passed, passed_count: normalized_passed, total_count, failed_count }
+}
+
+fn parse_scenario_counts_from_json(raw: &str) -> Option<(usize, usize)> {
+    serde_json::from_str::<Value>(raw)
+        .ok()
+        .and_then(|value| parse_scenario_counts_from_value(&value))
+        .or_else(|| {
+            raw.lines().rev().find_map(|line| {
+                serde_json::from_str::<Value>(line.trim())
+                    .ok()
+                    .and_then(|value| parse_scenario_counts_from_value(&value))
+            })
+        })
+}
+
+fn parse_scenario_counts_from_value(value: &Value) -> Option<(usize, usize)> {
+    let passed = usize::try_from(value.get("passed_scenarios")?.as_u64()?).ok()?;
+    let total = usize::try_from(value.get("total_scenarios")?.as_u64()?).ok()?;
+    Some((passed.min(total), total))
+}
+
+fn parse_scenario_counts_from_test_output(raw: &str) -> Option<(usize, usize)> {
+    let (passed_count, total_count) = raw.lines().filter_map(parse_test_result_counts).fold(
+        (0usize, 0usize),
+        |(passed, total), (line_passed, line_total)| {
+            (passed.saturating_add(line_passed), total.saturating_add(line_total))
+        },
+    );
+
+    if total_count == 0 {
+        None
+    } else {
+        Some((passed_count.min(total_count), total_count))
+    }
+}
+
+fn parse_test_result_counts(line: &str) -> Option<(usize, usize)> {
+    if !line.to_ascii_lowercase().contains("test result:") {
+        return None;
+    }
+
+    let segments = line.split(';').collect::<Vec<_>>();
+    let passed = parse_metric_count(segments.as_slice(), "passed")?;
+    let failed = parse_metric_count(segments.as_slice(), "failed")?;
+    Some((passed, passed.saturating_add(failed)))
+}
+
+fn parse_metric_count(segments: &[&str], metric: &str) -> Option<usize> {
+    segments.iter().find_map(|segment| {
+        let tokens = segment.trim().trim_end_matches('.').split_whitespace().collect::<Vec<_>>();
+
+        if tokens.len() < 2 {
+            return None;
+        }
+
+        let metric_token = tokens[tokens.len().saturating_sub(1)];
+        let count_token = tokens[tokens.len().saturating_sub(2)];
+        if metric_token != metric {
+            return None;
+        }
+
+        count_token.parse::<usize>().ok()
+    })
+}
+
+fn scenario_failure_message(scenarios: &ScenarioValidationResult) -> String {
+    if scenarios.total_count == 0 {
+        return "holdout scenarios produced no executable results (details redacted)".to_string();
+    }
+
+    format!(
+        "{} of {} holdout scenarios failed (details redacted)",
+        scenarios.failed_count, scenarios.total_count
+    )
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -251,5 +359,49 @@ mod tests {
             message: "ok".to_string(),
         };
         assert_eq!(result.next_iteration().iteration, 2);
+    }
+
+    #[test]
+    fn spec_score_penalizes_warning_and_error_lines() {
+        let raw = "warning: deprecated config\nerror: parse failed\nwarning: unused";
+        assert_eq!(spec_score_from_text(raw, false), 70);
+    }
+
+    #[test]
+    fn spec_score_returns_zero_on_silent_failure() {
+        assert_eq!(spec_score_from_text("", false), 0);
+    }
+
+    #[test]
+    fn parse_scenario_counts_from_json_accepts_json_line() {
+        let raw = "noise\n{\"passed_scenarios\":2,\"total_scenarios\":3}";
+        assert_eq!(parse_scenario_counts_from_json(raw), Some((2, 3)));
+    }
+
+    #[test]
+    fn parse_scenario_counts_from_test_output_aggregates_lines() {
+        let raw = "test result: ok. 2 passed; 0 failed;\ntest result: FAILED. 1 passed; 1 failed;";
+        assert_eq!(parse_scenario_counts_from_test_output(raw), Some((3, 4)));
+    }
+
+    #[test]
+    fn scenario_validation_requires_executed_scenarios() {
+        let validation = scenario_validation_from_text("running 0 tests", true);
+        assert!(!validation.passed);
+        assert_eq!(validation.total_count, 0);
+    }
+
+    #[test]
+    fn scenario_failure_message_redacts_details() {
+        let scenarios = ScenarioValidationResult {
+            passed: false,
+            passed_count: 1,
+            total_count: 2,
+            failed_count: 1,
+        };
+        assert_eq!(
+            scenario_failure_message(&scenarios),
+            "1 of 2 holdout scenarios failed (details redacted)"
+        );
     }
 }

@@ -97,13 +97,13 @@ systemd-run --user --unit opencode-manual \
 
 # Wait for HTTP server to be available (short loop)
 for i in $(seq 1 20); do
-	if curl -fsS "http://127.0.0.1:${OPENCODE_PORT}/session/status" >/dev/null 2>&1; then
+	if curl -fsS "http://127.0.0.1:${OPENCODE_PORT}/global/health" >/dev/null 2>&1; then
 		break
 	fi
 	sleep 1
 done
 
-if ! curl -fsS "http://127.0.0.1:${OPENCODE_PORT}/session/status" >/dev/null 2>&1; then
+if ! curl -fsS "http://127.0.0.1:${OPENCODE_PORT}/global/health" >/dev/null 2>&1; then
 	echo "[oya] ERROR: OpenCode HTTP server did not become ready on port ${OPENCODE_PORT}"
 	journalctl --user -u opencode-manual.service -n 50 --no-pager || true
 	exit 1

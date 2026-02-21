@@ -132,7 +132,7 @@ fn start_opencode_service(repo_root: &Path, opencode_bin: &Path, port: u16) -> R
         "--print-logs".to_string(),
     ];
     run_checked_owned("systemd-run", &args, repo_root)?;
-    wait_for_http_ready(&format!("http://127.0.0.1:{port}/session/status"), 25, 1)
+    wait_for_http_ready(&format!("http://127.0.0.1:{port}/global/health"), 25, 1)
 }
 
 fn start_oya_service(repo_root: &Path, opencode_bin: &Path, port: u16) -> Result<()> {

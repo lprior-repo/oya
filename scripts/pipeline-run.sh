@@ -10,6 +10,11 @@ RUN_ID="$1"
 BEAD_ID="$2"
 CONTEXT="${3:-local docker validation}"
 
+if ! br show "$BEAD_ID" --json >/dev/null 2>&1; then
+	echo "[oya] ERROR: bead '$BEAD_ID' not found (run 'br list' to choose a valid id)"
+	exit 1
+fi
+
 curl -fsS -X POST "http://127.0.0.1:8080/OyaOrchestrator/${RUN_ID}/run/send" \
 	-H "content-type: application/json" \
 	-d "{\"bead_id\":\"${BEAD_ID}\",\"context\":\"${CONTEXT}\"}" >/dev/null
@@ -26,6 +31,18 @@ while true; do
 	echo "[oya] invocation=${INV_ID} status=${INV_STATUS} result=${INV_RESULT} journal=${JOURNAL_SIZE}"
 
 	if [[ "$INV_STATUS" == "completed" ]]; then
+		if [[ "$INV_RESULT" != "success" ]]; then
+			FAILURE="$(curl -fsS http://127.0.0.1:9070/query --json "{\"query\":\"select completion_failure from sys_invocation where id = '${INV_ID}' limit 1;\"}" | python -c 'import json,sys; rows=json.load(sys.stdin).get("rows", []); print(rows[0].get("completion_failure", "") if rows else "")')"
+			echo "[oya] ERROR: invocation failed: ${FAILURE}"
+			exit 1
+		fi
+
+		STATE_STATUS="$(curl -fsS http://127.0.0.1:9070/query --json "{\"query\":\"select value_utf8 from state where service_name = 'OyaOrchestrator' and service_key = '${RUN_ID}' and key = 'state' limit 1;\"}" | python -c 'import json,sys; rows=json.load(sys.stdin).get("rows", []); raw=rows[0].get("value_utf8", "") if rows else ""; outer=json.loads(raw) if raw else "{}"; state=json.loads(outer) if isinstance(outer, str) else outer; print(state.get("status", ""))')"
+		if [[ "$STATE_STATUS" != "shipped" ]]; then
+			echo "[oya] ERROR: run completed at transport level but orchestration status is '${STATE_STATUS}' (expected 'shipped')"
+			exit 1
+		fi
+
 		break
 	fi
 
