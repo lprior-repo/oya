@@ -171,7 +171,7 @@ proptest! {
             prop_assert!(!gates.is_empty(), "Stage {:?} has no gates", stage);
         }
 
-        // Property: Witness has one deterministic gate and ShipGate has close gates.
+        // Property: Witness has one stable gate and ShipGate has close gates.
         if stage == StageName::Witness {
             prop_assert_eq!(gates.len(), 1);
         }

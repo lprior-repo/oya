@@ -328,7 +328,7 @@ mod token_exhaustion_backoff {
     }
 
     #[test]
-    fn acceptance_backoff_is_deterministic() {
+    fn acceptance_backoff_is_stable() {
         let tokens = 0.5;
 
         let backoff1 = tier_backoff_duration(tokens);

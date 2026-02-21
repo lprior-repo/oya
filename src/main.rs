@@ -37,9 +37,9 @@ mod workflow_runner;
 
 use orchestrator_types::*;
 use pipeline::{
-    execute_and_accumulate_stage, init_pipeline_state, parse_rfc3339_deterministic,
-    persist_stage_artifact, pipeline_input, PipelineRunInput, PipelineState, RuntimeConfig,
-    StageExecutionInput,
+    execute_and_accumulate_stage, init_pipeline_state, parse_rfc3339_stable,
+    persist_stage_artifact, pipeline_input, workflow_timestamp_or_error, PipelineRunInput,
+    PipelineState, RuntimeConfig, StageExecutionInput,
 };
 use runtime_tools::*;
 
@@ -138,9 +138,7 @@ async fn build_start_context(
         None => resolve_model_for_stage(ctx, &Stage::Contract).await?,
     };
 
-    let started_at = pipeline::deterministic_timestamp(ctx)
-        .await
-        .map_err(|_| OyaError("timestamp error".to_string()))?;
+    let started_at = workflow_timestamp_or_error(ctx).await?;
     Ok(StartContext { run_id: ctx.key().to_string(), bead_id, context, model, started_at })
 }
 
@@ -268,7 +266,7 @@ async fn persist_run_start(
         TimelineEntry::RunStarted {
             bead_id: start.bead_id.clone(),
             context: start.context.clone(),
-            at: parse_rfc3339_deterministic(&start.started_at),
+            at: parse_rfc3339_stable(&start.started_at),
         },
     )
     .await
@@ -383,9 +381,7 @@ async fn enforce_red_gate_precondition(
         return Ok(());
     }
 
-    let failed_at = pipeline::deterministic_timestamp(ctx)
-        .await
-        .map_err(|_| OyaError("timestamp error".to_string()))?;
+    let failed_at = workflow_timestamp_or_error(ctx).await?;
     state.last_failure = Some(StageFailure::with_reason(
         FailureCategory::TestsUnexpectedlyGreen,
         "implementation blocked: missing sealed red acceptance tests".to_string(),
@@ -912,13 +908,13 @@ async fn run_landing_step(
     }
 
     let command = build_landing_command(&step);
-    let started_at = pipeline::deterministic_timestamp(ctx).await.map_err(|error| {
+    let started_at = pipeline::workflow_timestamp(ctx).await.map_err(|error| {
         landing_failure_from_step(&step, format!("{} timestamp failed: {}", step.label, error))
     })?;
 
     let result = run_landing_command(ctx, repo_root, &step).await?;
 
-    let completed_at = pipeline::deterministic_timestamp(ctx).await.map_err(|error| {
+    let completed_at = pipeline::workflow_timestamp(ctx).await.map_err(|error| {
         landing_failure_from_step(&step, format!("{} timestamp failed: {}", step.label, error))
     })?;
     let telemetry = build_landing_telemetry(&step, &command, &started_at, &completed_at, &result);
@@ -1072,10 +1068,7 @@ async fn mark_run_completed(
     final_artifact: &orchestrator_types::StageArtifact,
 ) -> Result<(), OyaError> {
     let started_at = state.orchestrator.updated_at.clone();
-    let completed_at = ctx
-        .run(|| async { Ok::<_, HandlerError>(chrono::Utc::now().to_rfc3339()) })
-        .await
-        .map_err(|e| OyaError(format!("timestamp failed: {}", e)))?;
+    let completed_at = workflow_timestamp_or_error(ctx).await?;
 
     state.orchestrator.status = "shipped".to_string();
     state.orchestrator.stage = "none".to_string();

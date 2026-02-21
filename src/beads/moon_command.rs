@@ -1,7 +1,7 @@
 //! Quality Gates: Moon Command Generation
 //!
 //! Generates moon command from gate configuration.
-//! Pure function: no I/O, deterministic command generation.
+//! Pure function: no I/O, stable command generation.
 
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
@@ -103,7 +103,7 @@ mod tests {
     }
 
     #[test]
-    fn generate_command_deterministic() {
+    fn generate_command_stable() {
         let cmd1 = generate_moon_command(&Gate::Compiles);
         let cmd2 = generate_moon_command(&Gate::Compiles);
         assert_eq!(cmd1, cmd2);

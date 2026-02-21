@@ -5,41 +5,41 @@ use clap::{error::ErrorKind, CommandFactory};
 use oya::types::Gate;
 
 #[test]
-fn test_parse_rfc3339_deterministic_valid_input() {
-    let result = parse_rfc3339_deterministic("2024-01-15T10:30:00Z");
+fn test_parse_rfc3339_stable_valid_input() {
+    let result = parse_rfc3339_stable("2024-01-15T10:30:00Z");
     assert_eq!(result.year(), 2024);
     assert_eq!(result.month(), 1);
     assert_eq!(result.day(), 15);
 }
 
 #[test]
-fn test_parse_rfc3339_deterministic_with_timezone() {
-    let result = parse_rfc3339_deterministic("2024-01-15T10:30:00+05:00");
+fn test_parse_rfc3339_stable_with_timezone() {
+    let result = parse_rfc3339_stable("2024-01-15T10:30:00+05:00");
     assert_eq!(result.year(), 2024);
 }
 
 #[test]
-fn test_parse_rfc3339_deterministic_invalid_returns_epoch() {
-    let result = parse_rfc3339_deterministic("invalid-timestamp");
+fn test_parse_rfc3339_stable_invalid_returns_epoch() {
+    let result = parse_rfc3339_stable("invalid-timestamp");
     assert_eq!(result, chrono::DateTime::UNIX_EPOCH);
 }
 
 #[test]
-fn test_parse_rfc3339_deterministic_empty_returns_epoch() {
-    let result = parse_rfc3339_deterministic("");
+fn test_parse_rfc3339_stable_empty_returns_epoch() {
+    let result = parse_rfc3339_stable("");
     assert_eq!(result, chrono::DateTime::UNIX_EPOCH);
 }
 
 #[test]
-fn test_parse_rfc3339_deterministic_malformed_returns_epoch() {
-    let result = parse_rfc3339_deterministic("2024-13-45T99:99:99Z");
+fn test_parse_rfc3339_stable_malformed_returns_epoch() {
+    let result = parse_rfc3339_stable("2024-13-45T99:99:99Z");
     assert_eq!(result, chrono::DateTime::UNIX_EPOCH);
 }
 
 #[test]
-fn test_parse_rfc3339_deterministic_is_deterministic() {
-    let result1 = parse_rfc3339_deterministic("garbage");
-    let result2 = parse_rfc3339_deterministic("garbage");
+fn test_parse_rfc3339_stable_is_stable() {
+    let result1 = parse_rfc3339_stable("garbage");
+    let result2 = parse_rfc3339_stable("garbage");
     assert_eq!(result1, result2);
     assert_eq!(result1, chrono::DateTime::UNIX_EPOCH);
 }

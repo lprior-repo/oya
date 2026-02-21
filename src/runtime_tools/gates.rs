@@ -123,7 +123,7 @@ impl MoonTask {
 }
 
 pub(crate) fn parse_command_parts(command: &str) -> Result<ParsedCommandParts, OyaError> {
-    let parts: Vec<String> = command.split_whitespace().map(str::to_string).collect();
+    let parts = tokenize_command(command)?;
     if parts.is_empty() {
         return Err(OyaError("gate command cannot be empty".to_string()));
     }
@@ -133,6 +133,48 @@ pub(crate) fn parse_command_parts(command: &str) -> Result<ParsedCommandParts, O
         .ok_or_else(|| OyaError("gate command program missing".to_string()))?;
     let args = parts.iter().skip(1).cloned().collect();
     Ok(ParsedCommandParts { program, args })
+}
+
+fn tokenize_command(command: &str) -> Result<Vec<String>, OyaError> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut in_single = false;
+    let mut in_double = false;
+    let mut escaped = false;
+
+    for character in command.chars() {
+        if escaped {
+            current.push(character);
+            escaped = false;
+            continue;
+        }
+
+        match character {
+            '\\' => escaped = true,
+            '\'' if !in_double => in_single = !in_single,
+            '"' if !in_single => in_double = !in_double,
+            c if c.is_whitespace() && !in_single && !in_double => {
+                push_token_if_present(&mut parts, &mut current);
+            }
+            c => current.push(c),
+        }
+    }
+
+    if escaped {
+        return Err(OyaError("gate command has trailing escape".to_string()));
+    }
+    if in_single || in_double {
+        return Err(OyaError("gate command has unclosed quote".to_string()));
+    }
+
+    push_token_if_present(&mut parts, &mut current);
+    Ok(parts)
+}
+
+fn push_token_if_present(parts: &mut Vec<String>, current: &mut String) {
+    if !current.is_empty() {
+        parts.push(std::mem::take(current));
+    }
 }
 
 pub(crate) fn gate_failure_outcome(stage: &Stage, gate: &Gate) -> (FailureCategory, Stage) {
@@ -229,5 +271,49 @@ mod tests {
                 gate
             );
         }
+    }
+
+    #[test]
+    fn test_parse_command_parts_handles_quoted_passthrough() {
+        let parsed = parse_command_parts("moon run :test -- --filter 'retry loop'")
+            .expect("quoted command should parse");
+        assert_eq!(
+            parsed.args,
+            vec![
+                "run".to_string(),
+                ":test".to_string(),
+                "--".to_string(),
+                "--filter".to_string(),
+                "retry loop".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_parse_command_parts_handles_escaped_whitespace() {
+        let parsed = parse_command_parts("moon run :test -- --name retry\\ loop")
+            .expect("escaped whitespace should parse");
+        assert_eq!(
+            parsed.args,
+            vec![
+                "run".to_string(),
+                ":test".to_string(),
+                "--".to_string(),
+                "--name".to_string(),
+                "retry loop".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_parse_command_parts_rejects_unclosed_quotes() {
+        let parsed = parse_command_parts("moon run :test -- --name 'retry loop");
+        assert!(parsed.is_err());
+    }
+
+    #[test]
+    fn test_parse_command_parts_rejects_trailing_escape() {
+        let parsed = parse_command_parts("moon run :test -- --name retry\\");
+        assert!(parsed.is_err());
     }
 }

@@ -13,24 +13,22 @@ use oya::usage::tier_for_stage;
 
 use super::OyaError;
 
-// ── Deterministic helpers ─────────────────────────────────────────────────────
+// ── Stable helpers ─────────────────────────────────────────────────────
 
-/// Get a deterministic RFC3339 timestamp within a Restate workflow context.
-pub(crate) async fn deterministic_timestamp(
-    ctx: &WorkflowContext<'_>,
-) -> Result<String, TerminalError> {
+/// Get an RFC3339 timestamp recorded through workflow journaling.
+pub(crate) async fn workflow_timestamp(ctx: &WorkflowContext<'_>) -> Result<String, TerminalError> {
     ctx.run(|| async move { Ok::<_, HandlerError>(chrono::Utc::now().to_rfc3339()) }).await
 }
 
 /// Parse an RFC3339 timestamp string into a DateTime<Utc>, falling back to UNIX_EPOCH.
-pub(crate) fn parse_rfc3339_deterministic(s: &str) -> chrono::DateTime<chrono::Utc> {
+pub(crate) fn parse_rfc3339_stable(s: &str) -> chrono::DateTime<chrono::Utc> {
     chrono::DateTime::parse_from_rfc3339(s)
         .map(|dt| dt.with_timezone(&chrono::Utc))
         .unwrap_or_else(|_| chrono::DateTime::UNIX_EPOCH)
 }
 
-/// Read an environment variable deterministically within a Restate workflow context.
-pub(crate) async fn deterministic_env_var(
+/// Read an environment variable reliably within a Restate workflow context.
+pub(crate) async fn stable_env_var(
     ctx: &WorkflowContext<'_>,
     key: &str,
 ) -> Result<Option<String>, TerminalError> {
@@ -39,11 +37,11 @@ pub(crate) async fn deterministic_env_var(
 }
 
 /// Check if an environment variable is set to a truthy value (1 or true).
-pub(crate) async fn deterministic_env_bool(
+pub(crate) async fn stable_env_bool(
     ctx: &WorkflowContext<'_>,
     key: &str,
 ) -> Result<bool, TerminalError> {
-    let value = deterministic_env_var(ctx, key).await?;
+    let value = stable_env_var(ctx, key).await?;
     Ok(value.is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true")))
 }
 
@@ -51,10 +49,10 @@ pub(crate) fn timestamp_error() -> OyaError {
     OyaError("timestamp error".to_string())
 }
 
-pub(crate) async fn deterministic_timestamp_or_error(
+pub(crate) async fn workflow_timestamp_or_error(
     ctx: &WorkflowContext<'_>,
 ) -> Result<String, OyaError> {
-    deterministic_timestamp(ctx).await.map_err(|_error| timestamp_error())
+    workflow_timestamp(ctx).await.map_err(|_error| timestamp_error())
 }
 
 // ── Data types ────────────────────────────────────────────────────────────────
@@ -86,7 +84,7 @@ pub(crate) async fn init_pipeline_state(
     input: &PipelineRunInput,
     model: String,
 ) -> Result<PipelineState, OyaError> {
-    let updated_at = deterministic_timestamp_or_error(ctx).await?;
+    let updated_at = workflow_timestamp_or_error(ctx).await?;
     let stage = Stage::Explore;
     let tier = tier_for_stage(&stage).to_string();
     let mut resolved_models = HashMap::new();

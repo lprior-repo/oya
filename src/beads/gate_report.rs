@@ -1,7 +1,7 @@
 //! Quality Gates: Gate Report Generation
 //!
 //! Builds a quality gate report from aggregated results.
-//! Pure function: no I/O, deterministic report construction.
+//! Pure function: no I/O, stable report construction.
 //!
 //! # Design (Scott Wlaschin DDD)
 //!
@@ -275,7 +275,7 @@ mod tests {
     }
 
     #[test]
-    fn build_report_deterministic() {
+    fn build_report_stable() {
         let aggregated = agg_failed(StageName::Implementation, 1, 2);
         let report1 = build_gate_report(StageName::Implementation, &aggregated);
         let report2 = build_gate_report(StageName::Implementation, &aggregated);

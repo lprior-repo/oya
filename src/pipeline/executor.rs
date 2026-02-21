@@ -59,12 +59,12 @@ pub async fn execute_and_accumulate_stage(
     config: &RuntimeConfig,
     _state: &PipelineState,
 ) -> Result<StageArtifact, OyaError> {
-    let started_at = capture_stage_timestamp(ctx).await?;
+    let started_at = super::state::workflow_timestamp_or_error(ctx).await?;
     let workspace = prepare_workspace_lifecycle(ctx, &input, config).await?;
     let execution_root = resolve_execution_root(input.repo_root, workspace.as_ref());
     let (stage_result, prompt, gates) =
         execute_stage_workflow(ctx, &input, config, execution_root).await?;
-    let completed_at = capture_stage_timestamp(ctx).await?;
+    let completed_at = super::state::workflow_timestamp_or_error(ctx).await?;
 
     Ok(build_stage_artifact(StageArtifactData {
         input: &input,
@@ -83,12 +83,6 @@ struct StageArtifactData<'a> {
     timing: StageTiming,
     stage_result: StageResult,
     gates: Vec<GateResultData>,
-}
-
-async fn capture_stage_timestamp(ctx: &WorkflowContext<'_>) -> Result<String, OyaError> {
-    ctx.run(|| async { Ok::<_, HandlerError>(chrono::Utc::now().to_rfc3339()) })
-        .await
-        .map_err(|error| OyaError(format!("timestamp failed: {}", error)))
 }
 
 async fn execute_stage_workflow(
@@ -163,7 +157,7 @@ async fn prepare_workspace_lifecycle(
         return Ok(None);
     }
 
-    let recorded_at = capture_stage_timestamp(ctx).await?;
+    let recorded_at = super::state::workflow_timestamp_or_error(ctx).await?;
 
     // Prepare workspace in ctx.run so replay does not repeat side effects.
     let request = crate::runtime_tools::WorkspacePrepRequest {

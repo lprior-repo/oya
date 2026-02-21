@@ -1,7 +1,7 @@
 //! Quality Gates: CUE Artifact Generation
 //!
 //! Generates and validates CUE schema artifacts for each bead during the Contract stage.
-//! Pure function: no I/O, deterministic artifact generation.
+//! Pure function: no I/O, stable artifact generation.
 //!
 //! # Contract
 //!
@@ -394,7 +394,7 @@ package validation
     }
 
     #[test]
-    fn cue_artifact_deterministic_for_same_inputs() {
+    fn cue_artifact_stable_for_same_inputs() {
         let bead_id = make_bead_id("src-s6d");
         let timestamp = Utc::now();
 

@@ -694,7 +694,7 @@ impl<'ctx, CTX: private::SealedContext<'ctx>> ContextAwakeables<'ctx> for CTX {}
 /// # Journaling Results
 ///
 /// Restate uses an execution log for replay after failures and suspensions.
-/// This means that non-deterministic results (e.g. database responses, UUID generation) need to be stored in the execution log.
+/// This means that non-stable results (e.g. database responses, UUID generation) need to be stored in the execution log.
 /// The SDK offers some functionalities to help you with this:
 /// 1. **[Journaled actions][crate::context::ContextSideEffects::run]**: Run any block of code and store the result in Restate. Restate replays the result instead of re-executing the block on retries.
 /// 2. **[UUID generator][crate::context::ContextSideEffects::rand_uuid]**: Built-in helpers for generating stable UUIDs. Restate seeds the random number generator with the invocation ID, so it always returns the same value on retries.
@@ -702,7 +702,7 @@ impl<'ctx, CTX: private::SealedContext<'ctx>> ContextAwakeables<'ctx> for CTX {}
 ///
 pub trait ContextSideEffects<'ctx>: private::SealedContext<'ctx> {
     /// ## Journaled actions
-    /// You can store the result of a (non-deterministic) operation in the Restate execution log (e.g. database requests, HTTP calls, etc).
+    /// You can store the result of a (non-stable) operation in the Restate execution log (e.g. database requests, HTTP calls, etc).
     /// Restate replays the result instead of re-executing the operation on retries.
     ///
     /// Here is an example of a database request for which the string response is stored in Restate:
@@ -758,7 +758,7 @@ pub trait ContextSideEffects<'ctx>: private::SealedContext<'ctx> {
     /// **Caution: Immediately await journaled actions:**
     /// Always immediately await `ctx.run`, before doing any other context calls.
     /// If not, you might bump into non-determinism errors during replay,
-    /// because the journaled result can get interleaved with the other context calls in the journal in a non-deterministic way.
+    /// because the journaled result can get interleaved with the other context calls in the journal in a non-stable way.
     ///
     #[must_use]
     fn run<R, F, T>(&self, run_closure: R) -> impl RunFuture<Result<T, TerminalError>> + 'ctx

@@ -1950,7 +1950,7 @@ fn validate_smoke_report_accepts_equal_consecutive_timestamps() {
 }
 
 #[test]
-fn smoke_decision_is_deterministic_for_same_valid_input() {
+fn smoke_decision_is_stable_for_same_valid_input() {
     let plan_result = build_smoke_plan(&SmokeInput { run_id: "run-004".to_string() });
     assert!(plan_result.is_ok());
     let plan = match plan_result {
@@ -2282,7 +2282,7 @@ fn capture_smoke_bead_observation_rejects_empty_run_id_and_invalid_orchestrator_
 }
 
 #[test]
-fn evaluate_smoke_bead_result_uses_deterministic_stage_order_and_decision() {
+fn evaluate_smoke_bead_result_uses_stable_stage_order_and_decision() {
     let base = Utc::now();
     let observation = SmokeBeadObservation {
         run_id: "run-smoke-03".to_string(),
@@ -5270,7 +5270,7 @@ fn make_valid_src_kes_report() -> SrcKesReport {
     SrcKesReport {
         plan,
         runtime_started: true,
-        deterministic_behavior: true,
+        stable_behavior: true,
         stages: vec![
             SrcKesStageReport {
                 stage: SrcKesStageName::PlanBuild,
@@ -5320,7 +5320,7 @@ fn build_src_kes_plan_sets_scotty_contract() {
 }
 
 #[test]
-fn src_kes_plan_and_route_contract_are_deterministic_for_same_input() {
+fn src_kes_plan_and_route_contract_are_stable_for_same_input() {
     let input = SrcKesInput { service_name: "src-kes-api".to_string() };
 
     let first_result = build_src_kes_plan(&input);
@@ -5399,7 +5399,7 @@ fn src_kes_user_crud_operations_report_user_not_found_for_missing_ids() {
 }
 
 #[test]
-fn src_kes_user_crud_flow_is_deterministic() {
+fn src_kes_user_crud_flow_is_stable() {
     let initial = SrcKesServiceState::default();
 
     let create_result = run_user_create(
@@ -5688,11 +5688,11 @@ fn validate_src_kes_report_rejects_runtime_and_determinism_flags() {
         Err(SrcKesError::InvalidReport("runtime not started"))
     );
 
-    let mut non_deterministic = make_valid_src_kes_report();
-    non_deterministic.deterministic_behavior = false;
+    let mut non_stable = make_valid_src_kes_report();
+    non_stable.stable_behavior = false;
     assert_eq!(
-        validate_src_kes_report(&non_deterministic),
-        Err(SrcKesError::InvalidReport("deterministic behavior violated"))
+        validate_src_kes_report(&non_stable),
+        Err(SrcKesError::InvalidReport("stable behavior violated"))
     );
 }
 

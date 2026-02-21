@@ -13,7 +13,7 @@
 //! # Design Contract: `test-trace-final`
 //!
 //! ## Purpose and goals
-//! - Define a deterministic final-stage trace contract for planning, trace collection,
+//! - Define a stable final-stage trace contract for planning, trace collection,
 //!   report evaluation, and final gate validation.
 //! - Guarantee reproducible outcomes for identical inputs by enforcing strict validation,
 //!   stable stage ordering, and explicit decision derivation.
@@ -38,8 +38,8 @@
 //! ## Purpose and goals
 //! - Fix critical determinism bug in Restate workflow execution by ensuring `spawn_blocking`
 //!   operations are properly journaled and not re-executed on workflow replay.
-//! - Maintain Restate's determinism guarantee by separating non-deterministic operations
-//!   from deterministic journaling in the workflow execution context.
+//! - Maintain Restate's determinism guarantee by separating non-stable operations
+//!   from stable journaling in the workflow execution context.
 //! - Ensure workflow state consistency across executions and replays by following the
 //!   correct execution pattern for blocking operations.
 //!
@@ -48,12 +48,12 @@
 //!   - Fixed implementation with `spawn_blocking` outside `ctx.run()`
 //! - `execute_stage_blocking(input: StageBlockingInput) -> Result<StageExecution, OyaError>`
 //!   - Existing synchronous blocking execution (no changes needed)
-//! - `test_execute_stage_real_deterministic_replay()`
+//! - `test_execute_stage_real_stable_replay()`
 //!   - New test to verify spawn_blocking is not called on replay
 //!
 //! ## Acceptance criteria
-//! - `spawn_blocking` is called OUTSIDE of `ctx.run()` (non-deterministic part)
-//! - Only result mapping is inside `ctx.run()` (deterministic journaling)
+//! - `spawn_blocking` is called OUTSIDE of `ctx.run()` (non-stable part)
+//! - Only result mapping is inside `ctx.run()` (stable journaling)
 //! - Error handling properly separates OyaError (outer) from HandlerError (inner)
 //! - Test added that verifies spawn_blocking is not called on replay
 //! - Documentation explains the determinism pattern with proper doc comments

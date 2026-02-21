@@ -1,7 +1,7 @@
 //! Quality Gates: Decision Making
 //!
 //! Makes pass/fail decision based on gate reports.
-//! Pure function: no I/O, deterministic decision logic.
+//! Pure function: no I/O, stable decision logic.
 //!
 //! # Design (Scott Wlaschin DDD)
 //!
@@ -239,7 +239,7 @@ mod tests {
     }
 
     #[test]
-    fn decision_deterministic() {
+    fn decision_stable() {
         let report = report_failed(StageName::Implementation, 2, 1, FailureCategory::TestFailed);
 
         let decision1 = make_gate_decision(&report);

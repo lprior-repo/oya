@@ -1,7 +1,7 @@
 //! Quality Gates: Full Pipeline Orchestration
 //!
 //! Orchestrates the complete quality gate workflow for a stage.
-//! Pure function: no I/O, deterministic pipeline composition.
+//! Pure function: no I/O, stable pipeline composition.
 
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
@@ -151,7 +151,7 @@ mod tests {
     }
 
     #[test]
-    fn pipeline_deterministic() {
+    fn pipeline_stable() {
         let result1 = run_quality_gate_pipeline(StageName::Implementation).unwrap();
         let result2 = run_quality_gate_pipeline(StageName::Implementation).unwrap();
         assert_eq!(result1, result2);

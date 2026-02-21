@@ -53,7 +53,7 @@ pub(super) struct StageBlockingInput {
     pub repo_root: PathBuf,
 }
 
-/// Executes a stage with deterministic Restate journaling.
+/// Executes a stage with stable Restate journaling.
 ///
 /// # Determinism Contract
 ///
@@ -75,7 +75,7 @@ pub(super) async fn execute_stage_real(
 ) -> Result<(StageResult, String, Vec<GateResultData>), OyaError> {
     validate_attempt(request.attempt)?;
     let input = StageBlockingInput { request: request.clone(), merge_queue_policy, repo_root };
-    // Wrap the entire blocking operation in ctx.run() for deterministic replay
+    // Wrap the entire blocking operation in ctx.run() for stable replay
     let execution: Json<StageExecution> = ctx
         .run(move || async move {
             let result =
@@ -258,7 +258,7 @@ mod tests {
     }
 
     #[test]
-    fn test_deterministic_replay_contract_uses_cached_result() {
+    fn test_stable_replay_contract_uses_cached_result() {
         let counter = Arc::new(AtomicUsize::new(0));
         let mut journaled: Option<StageExecution> = None;
 

@@ -104,7 +104,7 @@ mod tests {
     }
 
     #[test]
-    fn execute_gate_deterministic() {
+    fn execute_gate_stable() {
         // Same inputs should always produce same output
         let result1 = execute_gate("compiles", "moon run :check");
         let result2 = execute_gate("compiles", "moon run :check");

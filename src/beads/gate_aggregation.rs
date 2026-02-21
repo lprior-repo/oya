@@ -1,7 +1,7 @@
 //! Quality Gates: Gate Result Aggregation
 //!
 //! Aggregates individual gate results into a summary.
-//! Pure function: no I/O, deterministic aggregation.
+//! Pure function: no I/O, stable aggregation.
 //!
 //! # Design (Scott Wlaschin DDD)
 //!
@@ -256,7 +256,7 @@ mod tests {
     }
 
     #[test]
-    fn aggregate_deterministic() {
+    fn aggregate_stable() {
         let results = Vector::from(vec![exec_passed("compiles"), exec_failed("tests_pass", 1)]);
 
         let agg1 = aggregate_gate_results(StageName::Implementation, &results).unwrap();

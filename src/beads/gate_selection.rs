@@ -1,7 +1,7 @@
 //! Quality Gates: Gate Selection
 //!
 //! Selects gates for a given stage based on stage configuration.
-//! Pure function: no I/O, deterministic selection.
+//! Pure function: no I/O, stable selection.
 
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
@@ -92,7 +92,7 @@ mod tests {
     }
 
     #[test]
-    fn select_gates_deterministic() {
+    fn select_gates_stable() {
         // Same input should always produce same output
         let gates1 = select_gates(&StageName::Implementation);
         let gates2 = select_gates(&StageName::Implementation);

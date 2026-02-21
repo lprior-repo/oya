@@ -28,7 +28,7 @@ pub(super) fn stage_prompt(input: StagePromptInput<'_>) -> String {
 
     let body = match input.stage {
         Stage::Explore => {
-            "TASK: Use Codanna-only discovery to produce a minimal context pack: symbols, callers, impact, and exact file paths for this bead. Keep output deterministic and concise.\n\nJust write the code. Do not explain."
+            "TASK: Use Codanna-only discovery to produce a minimal context pack: symbols, callers, impact, and exact file paths for this bead. Keep output stable and concise.\n\nJust write the code. Do not explain."
         }
         Stage::Contract => {
             "TASK: Write a design contract as a Rust doc comment in src/lib.rs (create if needed).\n\nInclude:\n1. Purpose and goals\n2. Key functions to implement\n3. Acceptance criteria\n\nJust write the code. Do not explain."
@@ -40,7 +40,7 @@ pub(super) fn stage_prompt(input: StagePromptInput<'_>) -> String {
             "TASK:\n1. Write tests that encode the contract invariants\n2. Implement the code to make those tests pass (GREEN state)\n3. Use Result<T, E> for all fallible operations - NO unwrap/expect\n4. Pure functions in core, IO only at shell boundaries\n5. Ensure `moon run :test` passes and clippy is clean\n\nCRITICAL: Tests MUST pass. Fix the underlying code issues, never suppress with #[allow(...)].\n\nJust write the code. Do not explain."
         }
         Stage::Witness => {
-            "TASK: Prepare implementation for holdout scenario validation and emit only deterministic artifacts.\n\nJust write the code. Do not explain."
+            "TASK: Prepare implementation for holdout scenario validation and emit only stable artifacts.\n\nJust write the code. Do not explain."
         }
         Stage::ShipGate => "",
     };

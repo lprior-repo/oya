@@ -31,7 +31,7 @@ pub struct SrcKesRouteContract {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-/// Deterministic service plan for `src-kes` execution and validation.
+/// Stable service plan for `src-kes` execution and validation.
 pub struct SrcKesPlan {
     /// Normalized service name.
     pub service_name: String,
@@ -87,7 +87,7 @@ pub struct UserRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-/// In-memory deterministic state for `src-kes` user CRUD operations.
+/// In-memory stable state for `src-kes` user CRUD operations.
 pub struct SrcKesServiceState {
     /// User table keyed by normalized user ID.
     pub users: std::collections::BTreeMap<UserId, UserRecord>,
@@ -137,8 +137,8 @@ pub struct SrcKesReport {
     pub plan: SrcKesPlan,
     /// Indicates runtime startup succeeded.
     pub runtime_started: bool,
-    /// Indicates deterministic behavior constraints were met.
-    pub deterministic_behavior: bool,
+    /// Indicates stable behavior constraints were met.
+    pub stable_behavior: bool,
     /// Ordered stage reports.
     pub stages: Vec<SrcKesStageReport>,
     /// Derived final decision.
@@ -384,8 +384,8 @@ fn validate_src_kes_report_plan(report: &SrcKesReport) -> Result<(), SrcKesError
     if !report.runtime_started {
         return Err(SrcKesError::InvalidReport("runtime not started"));
     }
-    if !report.deterministic_behavior {
-        return Err(SrcKesError::InvalidReport("deterministic behavior violated"));
+    if !report.stable_behavior {
+        return Err(SrcKesError::InvalidReport("stable behavior violated"));
     }
 
     Ok(())
