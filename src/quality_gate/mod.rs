@@ -189,10 +189,7 @@ fn command_output(output: &Output) -> String {
 
 fn occurrence_count(haystack: &str, needle: &str) -> u32 {
     let count = haystack.match_indices(needle).count();
-    match u32::try_from(count) {
-        Ok(value) => value,
-        Err(_) => u32::MAX,
-    }
+    u32::try_from(count).map_or(u32::MAX, |value| value)
 }
 
 fn spec_score_from_output(output: &Output) -> u32 {
