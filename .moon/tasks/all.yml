@@ -498,6 +498,21 @@ tasks:
       runFromWorkspaceRoot: true
       mergeArgs: "append"
 
+  # ============================================================================
+  # CUE VALIDATION
+  # ============================================================================
+
+  cue-check:
+    command: "scripts/cue-check.sh"
+    description: "Validate CUE implementation proofs against schemas"
+    inputs:
+      - ".beads/schemas/*.cue"
+      - ".beads/implementation/*.cue"
+    options:
+      runInCI: true
+      cache: true
+      runFromWorkspaceRoot: true
+
   # Convenience: start IPC server
   run-serve:
     command: "cargo run --release --bin oya -- serve"

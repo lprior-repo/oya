@@ -42,6 +42,44 @@ impl WorkflowConfig {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_args(model: Option<&str>) -> RunArgs {
+        RunArgs {
+            bead_id: "src-36h".to_string(),
+            restate_url: "http://127.0.0.1:8080".to_string(),
+            context: "ctx".to_string(),
+            timeout: 3600,
+            poll_interval: Some(5),
+            model: model.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn workflow_config_cli_model_overrides_config_model() {
+        let args = sample_args(Some("cli/model"));
+        let repo_root = PathBuf::from("/tmp/repo");
+        let oya_config = config::OyaConfig { model: "config/model".to_string() };
+
+        let cfg = WorkflowConfig::from_args(args, repo_root, &oya_config);
+
+        assert_eq!(cfg.model, "cli/model");
+    }
+
+    #[test]
+    fn workflow_config_uses_config_model_when_cli_missing() {
+        let args = sample_args(None);
+        let repo_root = PathBuf::from("/tmp/repo");
+        let oya_config = config::OyaConfig { model: "config/model".to_string() };
+
+        let cfg = WorkflowConfig::from_args(args, repo_root, &oya_config);
+
+        assert_eq!(cfg.model, "config/model");
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(super) struct WorkflowStatus {
     pub(super) status: String,

@@ -30,7 +30,6 @@ pub(crate) fn execute_gate(gate: Gate, repo_root: &PathBuf) -> Result<GateEviden
         timeout_seconds,
         repo_root,
     )?;
-    let passed = passed;
     let output = combine_command_output(stdout, stderr);
     Ok(GateEvidence { command, passed, exit_code, output })
 }
@@ -159,5 +158,55 @@ fn gate_failure_mapping(stage: &Stage, gate: &Gate) -> Option<(FailureCategory, 
             Some((FailureCategory::MergeConflict, Stage::Implementation))
         }
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oya::types::StageName;
+
+    #[test]
+    fn test_cue_artifact_gate_routes_to_implementation_on_failure() {
+        let (failure, next_stage) =
+            gate_failure_outcome(&StageName::ShipGate, &Gate::CueArtifactGenerated);
+        assert_eq!(failure, FailureCategory::OutputParseFailure);
+        assert_eq!(next_stage, StageName::Implementation);
+    }
+
+    #[test]
+    fn test_parse_cue_check_command() {
+        let result = parse_gate_command("moon run :cue-check");
+        assert!(result.is_ok());
+        let gate_command = result.unwrap();
+        match gate_command {
+            GateCommand::Moon { task, passthrough } => {
+                assert!(matches!(task, MoonTask::CueCheck));
+                assert!(passthrough.is_empty());
+            }
+            _ => panic!("Expected Moon command"),
+        }
+    }
+
+    #[test]
+    fn test_moon_task_cue_check_roundtrip() {
+        let task = MoonTask::CueCheck;
+        assert_eq!(task.as_task_name(), ":cue-check");
+        let parsed = MoonTask::from_task_name(":cue-check");
+        assert!(matches!(parsed, Some(MoonTask::CueCheck)));
+    }
+
+    #[test]
+    fn test_all_ship_gate_failures_route_to_implementation() {
+        let ship_gates = vec![Gate::MoonCi, Gate::CueArtifactGenerated, Gate::ZjjMergeQueue];
+        for gate in ship_gates {
+            let (_, next_stage) = gate_failure_outcome(&StageName::ShipGate, &gate);
+            assert_eq!(
+                next_stage,
+                StageName::Implementation,
+                "Gate {:?} should route to Implementation stage",
+                gate
+            );
+        }
     }
 }
