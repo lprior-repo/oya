@@ -7,15 +7,7 @@ use std::path::{Path, PathBuf};
 const ZJJ_TIMEOUT_SECONDS: u64 = 60;
 
 fn stage_uses_workspace(stage: &Stage) -> bool {
-    matches!(
-        stage,
-        Stage::Contract
-            | Stage::Tdd15
-            | Stage::Qa
-            | Stage::RedQueen
-            | Stage::GptReview
-            | Stage::ShipGate
-    )
+    matches!(stage, Stage::Contract | Stage::Implementation | Stage::ShipGate)
 }
 
 #[derive(Clone)]

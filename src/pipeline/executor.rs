@@ -250,9 +250,7 @@ fn build_stage_output_data(stage: &Stage, stage_result: &StageResult) -> StageOu
     // Stage-specific output fields
     let (contract_document, implementation_code, test_results, adversarial_report) = match stage {
         Stage::Contract => (Some(full_log.clone()), None, None, None),
-        Stage::Tdd15 | Stage::Implementation => (None, Some(full_log.clone()), None, None),
-        Stage::Qa => (None, None, Some(full_log.clone()), None),
-        Stage::RedQueen => (None, None, Some(full_log.clone()), Some(full_log.clone())),
+        Stage::Implementation => (None, Some(full_log.clone()), None, None),
         _ => (None, None, None, None),
     };
 
@@ -316,7 +314,7 @@ mod tests {
             bead_id: "test-bead",
             context: "test context",
             model: "test-model",
-            stage: Stage::Plan,
+            stage: Stage::Contract,
             attempt: 1,
             last_failure: Some(StageFailure {
                 category: FailureCategory::TestFailed,
@@ -346,7 +344,7 @@ mod tests {
             bead_id: "test-bead",
             context: "test context",
             model: "test-model",
-            stage: Stage::Plan,
+            stage: Stage::Contract,
             attempt: 1,
             last_failure: None,
             repo_root: Path::new("/tmp"),
@@ -384,7 +382,7 @@ mod tests {
     fn test_build_stage_output_data_for_failed_stage() {
         let stage_result = StageResult {
             run_id: "test-run".to_string(),
-            stage: Stage::Plan,
+            stage: Stage::Contract,
             attempt: 1,
             passed: false,
             output: serde_json::json!("stage failed"),
@@ -392,7 +390,7 @@ mod tests {
             next_stage: None,
         };
 
-        let stage_output = build_stage_output_data(&Stage::Plan, &stage_result);
+        let stage_output = build_stage_output_data(&Stage::Contract, &stage_result);
 
         assert!(!stage_output.success);
         assert_eq!(stage_output.exit_code, 1);

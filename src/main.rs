@@ -116,7 +116,7 @@ async fn build_start_context(
     // Get model from request or resolve via usage tracker for Plan stage tier
     let model = match parsed.model {
         Some(m) => m,
-        None => resolve_model_for_stage(ctx, &Stage::Plan).await?,
+        None => resolve_model_for_stage(ctx, &Stage::Contract).await?,
     };
 
     let started_at = pipeline::deterministic_timestamp(ctx)
@@ -481,7 +481,7 @@ const LANDING_STEPS: &[LandingStepTemplate] = &[
         args: &["sync"],
         timeout_seconds: 120,
         failure_category: FailureCategory::MergeConflict,
-        next_stage: Stage::GptReview,
+        next_stage: Stage::Implementation,
     },
     LandingStepTemplate {
         id: "zjj_done",
@@ -490,7 +490,7 @@ const LANDING_STEPS: &[LandingStepTemplate] = &[
         args: &["done"],
         timeout_seconds: 120,
         failure_category: FailureCategory::MergeConflict,
-        next_stage: Stage::GptReview,
+        next_stage: Stage::Implementation,
     },
 ];
 
@@ -532,7 +532,7 @@ fn closing_step(bead_id: &str) -> CommandStep {
         args: vec!["close".to_string(), bead_id.to_string()],
         timeout_seconds: 60,
         failure_category: FailureCategory::OutputParseFailure,
-        next_stage: Stage::GptReview,
+        next_stage: Stage::ShipGate,
     }
 }
 
@@ -544,7 +544,7 @@ fn sync_flush_step() -> CommandStep {
         args: vec!["sync".to_string(), "--flush-only".to_string()],
         timeout_seconds: 60,
         failure_category: FailureCategory::OutputParseFailure,
-        next_stage: Stage::GptReview,
+        next_stage: Stage::ShipGate,
     }
 }
 
@@ -673,7 +673,7 @@ async fn landing_step_completed(
 ) -> Result<bool, LandingFailure> {
     let stored = ctx.get::<String>(key).await.map_err(|error| LandingFailure {
         failure_category: FailureCategory::OutputParseFailure,
-        next_stage: Stage::GptReview,
+        next_stage: Stage::Implementation,
         output: format!("landing telemetry read failed: {}", error),
     })?;
 

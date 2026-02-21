@@ -27,12 +27,12 @@ mod util;
 async fn given_all_stages_pass_when_pipeline_runs_then_status_is_shipped() {
     let orch = util::passing_orchestrator();
     let stages = vec![
-        StageName::Plan,
         StageName::Contract,
-        StageName::Tdd15,
-        StageName::Qa,
-        StageName::RedQueen,
-        StageName::GptReview,
+        StageName::Contract,
+        StageName::Implementation,
+        StageName::Implementation,
+        StageName::ShipGate,
+        StageName::ShipGate,
         StageName::ShipGate,
     ];
 
@@ -64,7 +64,7 @@ async fn given_stage_succeeds_when_it_completes_then_advances_to_next() {
 
     let result = orch
         .run_stage(StageRequest {
-            stage: StageName::Plan,
+            stage: StageName::Contract,
             attempt: 1 as u32,
             bead_id: "bead".to_string(),
             context: "ctx".to_string(),
@@ -74,7 +74,11 @@ async fn given_stage_succeeds_when_it_completes_then_advances_to_next() {
         .unwrap();
 
     assert!(result.passed);
-    assert_eq!(result.next_stage, Some(StageName::Contract), "Plan should advance to Contract");
+    assert_eq!(
+        result.next_stage,
+        Some(StageName::Implementation),
+        "Contract should advance to Implementation"
+    );
 }
 
 // =============================================================================
@@ -87,14 +91,14 @@ async fn given_stage_succeeds_when_it_completes_then_advances_to_next() {
 #[tokio::test]
 async fn given_retryable_failure_when_exhausted_2_attempts_then_fails_permanently() {
     let orch = util::failing_orchestrator(vec![
-        (StageName::Tdd15, 1, FailureCategory::TestFailed),
-        (StageName::Tdd15, 2, FailureCategory::TestFailed),
+        (StageName::Implementation, 1, FailureCategory::TestFailed),
+        (StageName::Implementation, 2, FailureCategory::TestFailed),
     ]);
 
     // Attempt 1: Fail
     let result1 = orch
         .run_stage(StageRequest {
-            stage: StageName::Tdd15,
+            stage: StageName::Implementation,
             attempt: 1 as u32,
             bead_id: "bead".to_string(),
             context: "ctx".to_string(),
@@ -103,12 +107,12 @@ async fn given_retryable_failure_when_exhausted_2_attempts_then_fails_permanentl
         .await
         .unwrap();
     assert!(!result1.passed);
-    assert_eq!(result1.next_stage, Some(StageName::Tdd15)); // Retry
+    assert_eq!(result1.next_stage, Some(StageName::Implementation)); // Retry
 
     // Attempt 2: Fail
     let result2 = orch
         .run_stage(StageRequest {
-            stage: StageName::Tdd15,
+            stage: StageName::Implementation,
             attempt: 2 as u32,
             bead_id: "bead".to_string(),
             context: "ctx".to_string(),
@@ -117,10 +121,10 @@ async fn given_retryable_failure_when_exhausted_2_attempts_then_fails_permanentl
         .await
         .unwrap();
     assert!(!result2.passed);
-    assert_eq!(result2.next_stage, Some(StageName::Tdd15)); // Retry
+    assert_eq!(result2.next_stage, Some(StageName::Implementation)); // Retry
 
     // Behavior: Exactly 2 attempts were made
-    let calls = orch.stage_calls(&StageName::Tdd15);
+    let calls = orch.stage_calls(&StageName::Implementation);
     assert_eq!(calls.len(), 2, "Should make exactly 2 attempts before giving up");
 }
 
@@ -129,11 +133,15 @@ async fn given_retryable_failure_when_exhausted_2_attempts_then_fails_permanentl
 /// Then: It should stay on same stage for retry
 #[tokio::test]
 async fn given_retryable_failure_when_under_max_attempts_then_stays_on_stage() {
-    let orch = util::failing_orchestrator(vec![(StageName::Qa, 1, FailureCategory::TestFailed)]);
+    let orch = util::failing_orchestrator(vec![(
+        StageName::Implementation,
+        1,
+        FailureCategory::TestFailed,
+    )]);
 
     let result = orch
         .run_stage(StageRequest {
-            stage: StageName::Qa,
+            stage: StageName::Implementation,
             attempt: 1 as u32,
             bead_id: "bead".to_string(),
             context: "ctx".to_string(),
@@ -144,7 +152,11 @@ async fn given_retryable_failure_when_under_max_attempts_then_stays_on_stage() {
 
     // Behavior: Stays on same stage to retry
     assert!(!result.passed);
-    assert_eq!(result.next_stage, Some(StageName::Qa), "Should stay on Qa stage for retry");
+    assert_eq!(
+        result.next_stage,
+        Some(StageName::Implementation),
+        "Should stay on Qa stage for retry"
+    );
 }
 
 /// Given: Stage fails, then succeeds on retry
@@ -154,22 +166,22 @@ async fn given_retryable_failure_when_under_max_attempts_then_stays_on_stage() {
 async fn given_stage_fails_then_succeeds_on_retry_when_retry_passes_then_advances() {
     let orch = util::orchestrator_with_stage_results(vec![
         (
-            (StageName::Tdd15, 1),
+            (StageName::Implementation, 1),
             StageExecutionResult {
                 passed: false,
                 output: json!({"error": "compile error"}),
                 failure_category: Some(FailureCategory::CompileFailed),
-                next_stage: Some(StageName::Tdd15),
+                next_stage: Some(StageName::Implementation),
                 prompt: "fix compile".to_string(),
             },
         ),
         (
-            (StageName::Tdd15, 2),
+            (StageName::Implementation, 2),
             StageExecutionResult {
                 passed: true,
                 output: json!({"output": "success"}),
                 failure_category: None,
-                next_stage: Some(StageName::Qa),
+                next_stage: Some(StageName::Implementation),
                 prompt: "success".to_string(),
             },
         ),
@@ -178,7 +190,7 @@ async fn given_stage_fails_then_succeeds_on_retry_when_retry_passes_then_advance
     // Attempt 1: Fail
     let result1 = orch
         .run_stage(StageRequest {
-            stage: StageName::Tdd15,
+            stage: StageName::Implementation,
             attempt: 1 as u32,
             bead_id: "bead".to_string(),
             context: "ctx".to_string(),
@@ -191,7 +203,7 @@ async fn given_stage_fails_then_succeeds_on_retry_when_retry_passes_then_advance
     // Attempt 2: Succeed
     let result2 = orch
         .run_stage(StageRequest {
-            stage: StageName::Tdd15,
+            stage: StageName::Implementation,
             attempt: 2 as u32,
             bead_id: "bead".to_string(),
             context: "ctx".to_string(),
@@ -204,7 +216,7 @@ async fn given_stage_fails_then_succeeds_on_retry_when_retry_passes_then_advance
     assert!(result2.passed);
     assert_eq!(
         result2.next_stage,
-        Some(StageName::Qa),
+        Some(StageName::Implementation),
         "Should advance to Qa after Tdd15 succeeds"
     );
 }
@@ -218,11 +230,12 @@ async fn given_stage_fails_then_succeeds_on_retry_when_retry_passes_then_advance
 /// Then: Pipeline should fail immediately without retry
 #[tokio::test]
 async fn given_non_retryable_failure_when_it_occurs_then_fails_immediately() {
-    let orch = util::failing_orchestrator(vec![(StageName::Plan, 1, FailureCategory::AuthFailed)]);
+    let orch =
+        util::failing_orchestrator(vec![(StageName::Contract, 1, FailureCategory::AuthFailed)]);
 
     let result = orch
         .run_stage(StageRequest {
-            stage: StageName::Plan,
+            stage: StageName::Contract,
             attempt: 1 as u32,
             bead_id: "bead".to_string(),
             context: "ctx".to_string(),
@@ -240,7 +253,7 @@ async fn given_non_retryable_failure_when_it_occurs_then_fails_immediately() {
     );
 
     // Only 1 attempt made (no retries)
-    let calls = orch.stage_calls(&StageName::Plan);
+    let calls = orch.stage_calls(&StageName::Contract);
     assert_eq!(calls.len(), 1, "Should not retry non-retryable failures");
 }
 
@@ -257,7 +270,7 @@ async fn given_plan_completes_when_successful_then_moves_to_contract() {
 
     let result = orch
         .run_stage(StageRequest {
-            stage: StageName::Plan,
+            stage: StageName::Contract,
             attempt: 1 as u32,
             bead_id: "bead".to_string(),
             context: "ctx".to_string(),
@@ -267,7 +280,7 @@ async fn given_plan_completes_when_successful_then_moves_to_contract() {
         .unwrap();
 
     assert!(result.passed);
-    assert_eq!(result.next_stage, Some(StageName::Contract));
+    assert_eq!(result.next_stage, Some(StageName::Implementation));
 }
 
 /// Given: Pipeline reaches ShipGate
@@ -298,14 +311,14 @@ async fn given_shipgate_passes_when_successful_then_pipeline_completes() {
 #[tokio::test]
 async fn given_any_stage_when_successful_then_transitions_to_correct_next() {
     let test_cases = vec![
-        (StageName::Plan, StageName::Contract),
-        (StageName::Contract, StageName::AcceptanceTest),
-        (StageName::AcceptanceTest, StageName::Implementation),
-        (StageName::Implementation, StageName::Qa),
-        (StageName::Tdd15, StageName::Qa),
-        (StageName::Qa, StageName::RedQueen),
-        (StageName::RedQueen, StageName::GptReview),
-        (StageName::GptReview, StageName::ShipGate),
+        (StageName::Contract, StageName::Contract),
+        (StageName::Contract, StageName::Implementation),
+        (StageName::Implementation, StageName::Implementation),
+        (StageName::Implementation, StageName::Implementation),
+        (StageName::Implementation, StageName::Implementation),
+        (StageName::Implementation, StageName::ShipGate),
+        (StageName::ShipGate, StageName::ShipGate),
+        (StageName::ShipGate, StageName::ShipGate),
     ];
 
     for (current, expected_next) in test_cases {
@@ -341,11 +354,15 @@ async fn given_any_stage_when_successful_then_transitions_to_correct_next() {
 /// Then: Failure context should be available for the retry
 #[tokio::test]
 async fn given_stage_fails_when_retry_attempted_then_failure_context_available() {
-    let orch = util::failing_orchestrator(vec![(StageName::Tdd15, 1, FailureCategory::TestFailed)]);
+    let orch = util::failing_orchestrator(vec![(
+        StageName::Implementation,
+        1,
+        FailureCategory::TestFailed,
+    )]);
 
     // First attempt
     orch.run_stage(StageRequest {
-        stage: StageName::Tdd15,
+        stage: StageName::Implementation,
         attempt: 1 as u32,
         bead_id: "bead".to_string(),
         context: "ctx".to_string(),
@@ -356,7 +373,7 @@ async fn given_stage_fails_when_retry_attempted_then_failure_context_available()
 
     // Second attempt with failure context
     orch.run_stage(StageRequest {
-        stage: StageName::Tdd15,
+        stage: StageName::Implementation,
         attempt: 2 as u32,
         bead_id: "bead".to_string(),
         context: "ctx".to_string(),
@@ -371,7 +388,7 @@ async fn given_stage_fails_when_retry_attempted_then_failure_context_available()
     .unwrap();
 
     // Behavior: Both attempts were made (context was passed)
-    let calls = orch.stage_calls(&StageName::Tdd15);
+    let calls = orch.stage_calls(&StageName::Implementation);
     assert_eq!(calls.len(), 2, "Retry should have been attempted with context");
 }
 
@@ -386,22 +403,22 @@ async fn given_stage_fails_when_retry_attempted_then_failure_context_available()
 async fn given_tdd15_fails_once_then_succeeds_when_pipeline_continues_then_completes() {
     let orch = util::orchestrator_with_stage_results(vec![
         (
-            (StageName::Tdd15, 1),
+            (StageName::Implementation, 1),
             StageExecutionResult {
                 passed: false,
                 output: json!({"error": "test failure"}),
                 failure_category: Some(FailureCategory::TestFailed),
-                next_stage: Some(StageName::Tdd15),
+                next_stage: Some(StageName::Implementation),
                 prompt: "fix tests".to_string(),
             },
         ),
         (
-            (StageName::Tdd15, 2),
+            (StageName::Implementation, 2),
             StageExecutionResult {
                 passed: true,
                 output: json!({"output": "tests pass"}),
                 failure_category: None,
-                next_stage: Some(StageName::Qa),
+                next_stage: Some(StageName::Implementation),
                 prompt: "success".to_string(),
             },
         ),
@@ -411,7 +428,7 @@ async fn given_tdd15_fails_once_then_succeeds_when_pipeline_continues_then_compl
     for attempt in 1..=2 {
         let result = orch
             .run_stage(StageRequest {
-                stage: StageName::Tdd15,
+                stage: StageName::Implementation,
                 attempt: attempt as u32,
                 bead_id: "bead".to_string(),
                 context: "ctx".to_string(),
@@ -425,7 +442,7 @@ async fn given_tdd15_fails_once_then_succeeds_when_pipeline_continues_then_compl
     }
 
     // Behavior: Exactly 2 attempts on Tdd15
-    let tdd15_calls = orch.stage_calls(&StageName::Tdd15);
+    let tdd15_calls = orch.stage_calls(&StageName::Implementation);
     assert_eq!(tdd15_calls.len(), 2);
 }
 
@@ -446,22 +463,22 @@ async fn given_intermittent_failures_when_within_retry_limits_then_completes() {
             },
         ),
         (
-            (StageName::Tdd15, 1),
+            (StageName::Implementation, 1),
             StageExecutionResult {
                 passed: false,
                 output: json!({"error": "test failure"}),
                 failure_category: Some(FailureCategory::TestFailed),
-                next_stage: Some(StageName::Tdd15),
+                next_stage: Some(StageName::Implementation),
                 prompt: "fix tests".to_string(),
             },
         ),
         (
-            (StageName::Tdd15, 2),
+            (StageName::Implementation, 2),
             StageExecutionResult {
                 passed: true,
                 output: json!({"output": "tests pass"}),
                 failure_category: None,
-                next_stage: Some(StageName::Qa),
+                next_stage: Some(StageName::Implementation),
                 prompt: "success".to_string(),
             },
         ),
@@ -488,7 +505,7 @@ async fn given_intermittent_failures_when_within_retry_limits_then_completes() {
     for attempt in 1..=2 {
         let result = orch
             .run_stage(StageRequest {
-                stage: StageName::Tdd15,
+                stage: StageName::Implementation,
                 attempt: attempt as u32,
                 bead_id: "bead".to_string(),
                 context: "ctx".to_string(),
@@ -503,5 +520,5 @@ async fn given_intermittent_failures_when_within_retry_limits_then_completes() {
 
     // Verify retry counts
     assert_eq!(orch.stage_calls(&StageName::Contract).len(), 2);
-    assert_eq!(orch.stage_calls(&StageName::Tdd15).len(), 2);
+    assert_eq!(orch.stage_calls(&StageName::Implementation).len(), 2);
 }

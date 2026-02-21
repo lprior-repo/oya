@@ -164,7 +164,7 @@ mod tests {
     fn aggregate_all_passed() {
         let results = Vector::from(vec![exec_passed("compiles"), exec_passed("tests_pass")]);
 
-        let aggregated = aggregate_gate_results(StageName::Tdd15, &results).unwrap();
+        let aggregated = aggregate_gate_results(StageName::Implementation, &results).unwrap();
         assert!(aggregated.is_passed());
         assert!(!aggregated.is_failed());
         assert_eq!(aggregated.stats().passed_count, 2);
@@ -174,7 +174,7 @@ mod tests {
 
         match aggregated {
             AggregatedGateResult::Passed { stage, stats, gate_names } => {
-                assert_eq!(stage, StageName::Tdd15);
+                assert_eq!(stage, StageName::Implementation);
                 assert_eq!(stats.total_count, 2);
                 assert_eq!(gate_names.len(), 2);
             }
@@ -186,7 +186,7 @@ mod tests {
     fn aggregate_some_failed() {
         let results = Vector::from(vec![exec_passed("compiles"), exec_failed("tests_pass", 1)]);
 
-        let aggregated = aggregate_gate_results(StageName::Tdd15, &results).unwrap();
+        let aggregated = aggregate_gate_results(StageName::Implementation, &results).unwrap();
         assert!(!aggregated.is_passed());
         assert!(aggregated.is_failed());
         assert_eq!(aggregated.stats().passed_count, 1);
@@ -195,7 +195,7 @@ mod tests {
 
         match aggregated {
             AggregatedGateResult::Failed { stage, stats, gate_names, failed_gate_names } => {
-                assert_eq!(stage, StageName::Tdd15);
+                assert_eq!(stage, StageName::Implementation);
                 assert_eq!(stats.total_count, 2);
                 assert_eq!(stats.passed_count, 1);
                 assert_eq!(gate_names.len(), 2);
@@ -209,7 +209,7 @@ mod tests {
     #[test]
     fn aggregate_empty_results_error() {
         let results = Vector::new();
-        let result = aggregate_gate_results(StageName::Plan, &results);
+        let result = aggregate_gate_results(StageName::Contract, &results);
         assert!(matches!(result, Err(GateAggregationError::EmptyResults(_))));
     }
 
@@ -217,7 +217,7 @@ mod tests {
     fn aggregate_all_failed() {
         let results = Vector::from(vec![exec_failed("compiles", 1), exec_failed("tests_pass", 2)]);
 
-        let aggregated = aggregate_gate_results(StageName::Tdd15, &results).unwrap();
+        let aggregated = aggregate_gate_results(StageName::Implementation, &results).unwrap();
         assert!(!aggregated.is_passed());
         assert!(aggregated.is_failed());
         assert_eq!(aggregated.stats().passed_count, 0);
@@ -238,7 +238,7 @@ mod tests {
     fn aggregate_single_passed() {
         let results = Vector::from(vec![exec_passed("compiles")]);
 
-        let aggregated = aggregate_gate_results(StageName::Plan, &results).unwrap();
+        let aggregated = aggregate_gate_results(StageName::Contract, &results).unwrap();
         assert!(aggregated.is_passed());
         assert_eq!(aggregated.stats().passed_count, 1);
         assert_eq!(aggregated.stats().total_count, 1);
@@ -248,7 +248,7 @@ mod tests {
     fn aggregate_preserves_gate_names() {
         let results = Vector::from(vec![exec_passed("compiles"), exec_passed("tests_pass")]);
 
-        let aggregated = aggregate_gate_results(StageName::Tdd15, &results).unwrap();
+        let aggregated = aggregate_gate_results(StageName::Implementation, &results).unwrap();
         let gate_names = aggregated.gate_names();
         assert_eq!(gate_names.len(), 2);
         assert!(gate_names.contains(&"compiles".to_string()));
@@ -259,18 +259,18 @@ mod tests {
     fn aggregate_deterministic() {
         let results = Vector::from(vec![exec_passed("compiles"), exec_failed("tests_pass", 1)]);
 
-        let agg1 = aggregate_gate_results(StageName::Tdd15, &results).unwrap();
-        let agg2 = aggregate_gate_results(StageName::Tdd15, &results).unwrap();
+        let agg1 = aggregate_gate_results(StageName::Implementation, &results).unwrap();
+        let agg2 = aggregate_gate_results(StageName::Implementation, &results).unwrap();
         assert_eq!(agg1, agg2);
     }
 
     #[test]
     fn aggregate_empty_results_error_contains_stage_name() {
         let results = Vector::new();
-        let result = aggregate_gate_results(StageName::Plan, &results);
+        let result = aggregate_gate_results(StageName::Contract, &results);
         match result {
             Err(GateAggregationError::EmptyResults(stage_name)) => {
-                assert_eq!(stage_name, "plan");
+                assert_eq!(stage_name, "contract");
             }
             _ => panic!("Expected EmptyResults error"),
         }
@@ -280,7 +280,7 @@ mod tests {
     fn passed_cannot_have_failed_gate_names() {
         // Demonstrates compile-time guarantee: Passed variant has no failed_gate_names field
         let results = Vector::from(vec![exec_passed("compiles"), exec_passed("tests_pass")]);
-        let aggregated = aggregate_gate_results(StageName::Tdd15, &results).unwrap();
+        let aggregated = aggregate_gate_results(StageName::Implementation, &results).unwrap();
 
         match aggregated {
             AggregatedGateResult::Passed { .. } => {
@@ -295,7 +295,7 @@ mod tests {
     fn failed_must_have_failed_gate_names() {
         // Failed variant always has failed_gate_names - no implicit failure state
         let results = Vector::from(vec![exec_passed("compiles"), exec_failed("tests_pass", 1)]);
-        let aggregated = aggregate_gate_results(StageName::Tdd15, &results).unwrap();
+        let aggregated = aggregate_gate_results(StageName::Implementation, &results).unwrap();
 
         match aggregated {
             AggregatedGateResult::Failed { ref failed_gate_names, .. } => {
@@ -324,12 +324,12 @@ mod tests {
     #[test]
     fn stage_accessible_from_both_variants() {
         let results_pass = Vector::from(vec![exec_passed("g1")]);
-        let agg_pass = aggregate_gate_results(StageName::Plan, &results_pass).unwrap();
-        assert_eq!(agg_pass.stage(), &StageName::Plan);
+        let agg_pass = aggregate_gate_results(StageName::Contract, &results_pass).unwrap();
+        assert_eq!(agg_pass.stage(), &StageName::Contract);
 
         let results_fail = Vector::from(vec![exec_failed("g1", 1)]);
-        let agg_fail = aggregate_gate_results(StageName::Tdd15, &results_fail).unwrap();
-        assert_eq!(agg_fail.stage(), &StageName::Tdd15);
+        let agg_fail = aggregate_gate_results(StageName::Implementation, &results_fail).unwrap();
+        assert_eq!(agg_fail.stage(), &StageName::Implementation);
     }
 
     #[test]
@@ -342,7 +342,7 @@ mod tests {
             exec_failed("test3", 3),
         ]);
 
-        let aggregated = aggregate_gate_results(StageName::Tdd15, &results).unwrap();
+        let aggregated = aggregate_gate_results(StageName::Implementation, &results).unwrap();
         assert!(aggregated.is_failed());
         assert_eq!(aggregated.stats().passed_count, 2);
         assert_eq!(aggregated.stats().total_count, 5);

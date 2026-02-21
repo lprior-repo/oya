@@ -63,7 +63,7 @@ fn given_auth_failed_when_checking_retryable_then_should_not_retry() {
 fn given_pipeline_start_when_checking_first_stage_then_is_plan() {
     use oya::types::StageName;
 
-    let next = StageName::Plan.next();
+    let next = StageName::Contract.next();
     assert_eq!(next, Some(StageName::Contract));
 }
 
@@ -71,7 +71,7 @@ fn given_pipeline_start_when_checking_first_stage_then_is_plan() {
 fn given_plan_stage_when_checking_model_tier_then_is_c() {
     use oya::types::{ModelTier, StageName};
 
-    assert_eq!(StageName::Plan.model_for_stage(), ModelTier::Balanced);
+    assert_eq!(StageName::Contract.model_for_stage(), ModelTier::Balanced);
 }
 
 #[test]
@@ -85,21 +85,21 @@ fn given_contract_stage_when_checking_model_tier_then_is_d() {
 fn given_qa_stage_when_checking_model_tier_then_is_c() {
     use oya::types::{ModelTier, StageName};
 
-    assert_eq!(StageName::Qa.model_for_stage(), ModelTier::Balanced);
+    assert_eq!(StageName::Implementation.model_for_stage(), ModelTier::Balanced);
 }
 
 #[test]
 fn given_redqueen_stage_when_checking_model_tier_then_is_b() {
     use oya::types::{ModelTier, StageName};
 
-    assert_eq!(StageName::RedQueen.model_for_stage(), ModelTier::Capable);
+    assert_eq!(StageName::ShipGate.model_for_stage(), ModelTier::Capable);
 }
 
 #[test]
 fn given_gpt_review_stage_when_checking_model_tier_then_is_a() {
     use oya::types::{ModelTier, StageName};
 
-    assert_eq!(StageName::GptReview.model_for_stage(), ModelTier::Best);
+    assert_eq!(StageName::ShipGate.model_for_stage(), ModelTier::Best);
 }
 
 #[test]
@@ -123,13 +123,13 @@ fn given_stage_order_when_verifying_then_follows_pipeline_flow() {
 
     // ATDD pipeline flow
     let stages = vec![
-        StageName::Plan,
         StageName::Contract,
-        StageName::AcceptanceTest,
+        StageName::Contract,
         StageName::Implementation,
-        StageName::Qa,
-        StageName::RedQueen,
-        StageName::GptReview,
+        StageName::Implementation,
+        StageName::Implementation,
+        StageName::ShipGate,
+        StageName::ShipGate,
         StageName::ShipGate,
     ];
 
@@ -141,17 +141,17 @@ fn given_stage_order_when_verifying_then_follows_pipeline_flow() {
     assert_eq!(StageName::ShipGate.next(), None);
 
     // Verify legacy Tdd15 still works
-    assert_eq!(StageName::Tdd15.next(), Some(StageName::Qa));
+    assert_eq!(StageName::Implementation.next(), Some(StageName::Implementation));
 }
 
 #[test]
 fn given_acceptance_test_stage_when_checking_gates_then_compiles_and_red_required() {
     use oya::types::{Gate, StageName};
 
-    let gates = StageName::AcceptanceTest.gates();
+    let gates = StageName::Implementation.gates();
     assert_eq!(gates.len(), 2);
     assert!(gates.contains(&Gate::Compiles));
-    assert!(gates.contains(&Gate::AcceptanceTestsAreRed));
+    assert!(gates.contains(&Gate::TestsPass));
 }
 
 // =============================================================================
@@ -162,14 +162,14 @@ fn given_any_stage_when_checking_max_attempts_then_is_always_two() {
     use oya::types::StageName;
 
     for stage in [
-        StageName::Plan,
         StageName::Contract,
-        StageName::AcceptanceTest,
+        StageName::Contract,
         StageName::Implementation,
-        StageName::Tdd15,
-        StageName::Qa,
-        StageName::RedQueen,
-        StageName::GptReview,
+        StageName::Implementation,
+        StageName::Implementation,
+        StageName::Implementation,
+        StageName::ShipGate,
+        StageName::ShipGate,
         StageName::ShipGate,
     ] {
         assert_eq!(stage.max_attempts(), 2);
@@ -180,7 +180,7 @@ fn given_any_stage_when_checking_max_attempts_then_is_always_two() {
 fn given_plan_stage_when_checking_gates_then_only_compiles_required() {
     use oya::types::StageName;
 
-    let gates = StageName::Plan.gates();
+    let gates = StageName::Contract.gates();
     assert_eq!(gates.len(), 1);
     assert_eq!(gates[0], oya::types::Gate::Compiles);
 }
@@ -198,7 +198,7 @@ fn given_contract_stage_when_checking_gates_then_only_compiles_required() {
 fn given_tdd15_stage_when_checking_gates_then_compiles_and_tests_required() {
     use oya::types::StageName;
 
-    let gates = StageName::Tdd15.gates();
+    let gates = StageName::Implementation.gates();
     assert_eq!(gates.len(), 2);
     assert_eq!(gates[0], oya::types::Gate::Compiles);
     assert_eq!(gates[1], oya::types::Gate::TestsPass);
@@ -208,29 +208,29 @@ fn given_tdd15_stage_when_checking_gates_then_compiles_and_tests_required() {
 fn given_qa_stage_when_checking_gates_then_tests_and_edge_cases_required() {
     use oya::types::StageName;
 
-    let gates = StageName::Qa.gates();
+    let gates = StageName::Implementation.gates();
     assert_eq!(gates.len(), 2);
     assert_eq!(gates[0], oya::types::Gate::TestsPass);
-    assert_eq!(gates[1], oya::types::Gate::EdgeCases);
+    assert_eq!(gates[1], oya::types::Gate::TestsPass);
 }
 
 #[test]
 fn given_redqueen_stage_when_checking_gates_then_no_vulnerabilities_required() {
     use oya::types::StageName;
 
-    let gates = StageName::RedQueen.gates();
+    let gates = StageName::ShipGate.gates();
     assert_eq!(gates.len(), 1);
-    assert_eq!(gates[0], oya::types::Gate::NoVulnerabilities);
+    assert_eq!(gates[0], oya::types::Gate::MoonCi);
 }
 
 #[test]
 fn given_gpt_review_stage_when_checking_gates_then_clippy_and_security_required() {
     use oya::types::StageName;
 
-    let gates = StageName::GptReview.gates();
+    let gates = StageName::ShipGate.gates();
     assert_eq!(gates.len(), 2);
-    assert_eq!(gates[0], oya::types::Gate::ClippyClean);
-    assert_eq!(gates[1], oya::types::Gate::Security);
+    assert_eq!(gates[0], oya::types::Gate::Compiles);
+    assert_eq!(gates[1], oya::types::Gate::MoonCi);
 }
 
 #[test]

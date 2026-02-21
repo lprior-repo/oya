@@ -151,7 +151,7 @@ mod tests {
 
     #[test]
     fn decision_passed_variant() {
-        let report = report_passed(StageName::Plan, 1, 1);
+        let report = report_passed(StageName::Contract, 1, 1);
         let decision = make_gate_decision(&report);
 
         assert!(decision.is_passed());
@@ -160,7 +160,7 @@ mod tests {
 
         match decision {
             GateDecision::Passed { stage, stats } => {
-                assert_eq!(stage, StageName::Plan);
+                assert_eq!(stage, StageName::Contract);
                 assert_eq!(stats.total_gates, 1);
                 assert_eq!(stats.passed_gates, 1);
             }
@@ -170,7 +170,7 @@ mod tests {
 
     #[test]
     fn decision_failed_variant() {
-        let report = report_failed(StageName::Tdd15, 2, 1, FailureCategory::TestFailed);
+        let report = report_failed(StageName::Implementation, 2, 1, FailureCategory::TestFailed);
         let decision = make_gate_decision(&report);
 
         assert!(!decision.is_passed());
@@ -178,7 +178,7 @@ mod tests {
 
         match decision {
             GateDecision::Failed { stage, stats, category } => {
-                assert_eq!(stage, StageName::Tdd15);
+                assert_eq!(stage, StageName::Implementation);
                 assert_eq!(stats.total_gates, 2);
                 assert_eq!(stats.passed_gates, 1);
                 assert_eq!(category, FailureCategory::TestFailed);
@@ -189,7 +189,7 @@ mod tests {
 
     #[test]
     fn decision_passed_all_gates() {
-        let report = report_passed(StageName::Tdd15, 2, 2);
+        let report = report_passed(StageName::Implementation, 2, 2);
         let decision = make_gate_decision(&report);
 
         assert!(decision.is_passed());
@@ -198,7 +198,7 @@ mod tests {
 
     #[test]
     fn decision_failed_all_gates() {
-        let report = report_failed(StageName::Tdd15, 2, 0, FailureCategory::TestFailed);
+        let report = report_failed(StageName::Implementation, 2, 0, FailureCategory::TestFailed);
         let decision = make_gate_decision(&report);
 
         assert!(decision.is_failed());
@@ -207,14 +207,14 @@ mod tests {
 
     #[test]
     fn decision_preserves_stage() {
-        let report = report_passed(StageName::Qa, 2, 2);
+        let report = report_passed(StageName::Implementation, 2, 2);
         let decision = make_gate_decision(&report);
-        assert_eq!(decision.stage(), &StageName::Qa);
+        assert_eq!(decision.stage(), &StageName::Implementation);
     }
 
     #[test]
     fn decision_failed_preserves_category() {
-        let report = report_failed(StageName::RedQueen, 1, 0, FailureCategory::RateLimited);
+        let report = report_failed(StageName::ShipGate, 1, 0, FailureCategory::RateLimited);
         let decision = make_gate_decision(&report);
 
         assert_eq!(decision.failure_category(), Some(&FailureCategory::RateLimited));
@@ -222,25 +222,25 @@ mod tests {
 
     #[test]
     fn decision_reason_format_passed() {
-        let report = report_passed(StageName::Plan, 1, 1);
+        let report = report_passed(StageName::Contract, 1, 1);
         let decision = make_gate_decision(&report);
 
         assert!(decision.reason().starts_with("All"));
-        assert!(decision.reason().ends_with("passed for stage plan"));
+        assert!(decision.reason().ends_with("passed for stage contract"));
     }
 
     #[test]
     fn decision_reason_format_failed() {
-        let report = report_failed(StageName::Tdd15, 3, 1, FailureCategory::TestFailed);
+        let report = report_failed(StageName::Implementation, 3, 1, FailureCategory::TestFailed);
         let decision = make_gate_decision(&report);
 
         assert!(decision.reason().contains("2/3 gates failed"));
-        assert!(decision.reason().ends_with("for stage tdd15"));
+        assert!(decision.reason().ends_with("for stage implementation"));
     }
 
     #[test]
     fn decision_deterministic() {
-        let report = report_failed(StageName::Tdd15, 2, 1, FailureCategory::TestFailed);
+        let report = report_failed(StageName::Implementation, 2, 1, FailureCategory::TestFailed);
 
         let decision1 = make_gate_decision(&report);
         let decision2 = make_gate_decision(&report);
@@ -249,7 +249,7 @@ mod tests {
 
     #[test]
     fn decision_cloneable() {
-        let report = report_passed(StageName::Plan, 1, 1);
+        let report = report_passed(StageName::Contract, 1, 1);
         let decision = make_gate_decision(&report);
         let cloned = decision.clone();
         assert_eq!(decision, cloned);
@@ -266,7 +266,7 @@ mod tests {
         // This test demonstrates that the type system prevents
         // constructing a Passed decision with a failure category.
         // The compiler enforces this - no runtime check needed.
-        let report = report_passed(StageName::Plan, 1, 1);
+        let report = report_passed(StageName::Contract, 1, 1);
         let decision = make_gate_decision(&report);
 
         // Can only get category from Failed variant
@@ -282,7 +282,7 @@ mod tests {
     #[test]
     fn failed_must_have_failure_category() {
         // Failed variant always has a category - no Option needed
-        let report = report_failed(StageName::Tdd15, 1, 0, FailureCategory::CompileFailed);
+        let report = report_failed(StageName::Implementation, 1, 0, FailureCategory::CompileFailed);
         let decision = make_gate_decision(&report);
 
         match decision {

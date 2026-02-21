@@ -68,7 +68,7 @@ async fn given_gate_configured_to_fail_when_it_runs_then_reports_failure() {
 async fn given_plan_stage_when_gates_run_then_only_compiles_required() {
     use oya::types::StageName;
 
-    let gates = StageName::Plan.gates();
+    let gates = StageName::Contract.gates();
 
     assert_eq!(gates.len(), 1);
     assert_eq!(gates[0], Gate::Compiles);
@@ -95,7 +95,7 @@ async fn given_shipgate_when_gates_run_then_runs_ci_and_merge_checks() {
 async fn given_tdd15_when_gates_run_then_runs_compile_and_test() {
     use oya::types::StageName;
 
-    let gates = StageName::Tdd15.gates();
+    let gates = StageName::Implementation.gates();
 
     assert_eq!(gates.len(), 2);
     assert!(gates.contains(&Gate::Compiles));
@@ -110,30 +110,30 @@ async fn given_all_stages_when_gates_checked_then_appropriate_for_stage() {
     use oya::types::StageName;
 
     // Early stages: Just compile
-    for stage in [StageName::Plan, StageName::Contract] {
+    for stage in [StageName::Contract, StageName::Contract] {
         let gates = stage.gates();
         assert_eq!(gates.len(), 1, "{:?} should have 1 gate", stage);
         assert_eq!(gates[0], Gate::Compiles);
     }
 
     // Implementation stages: Compile + tests
-    let tdd15_gates = StageName::Tdd15.gates();
+    let tdd15_gates = StageName::Implementation.gates();
     assert!(tdd15_gates.contains(&Gate::Compiles));
     assert!(tdd15_gates.contains(&Gate::TestsPass));
 
     // QA stage: Tests + edge cases
-    let qa_gates = StageName::Qa.gates();
+    let qa_gates = StageName::Implementation.gates();
     assert!(qa_gates.contains(&Gate::TestsPass));
-    assert!(qa_gates.contains(&Gate::EdgeCases));
+    assert!(qa_gates.contains(&Gate::TestsPass));
 
     // Security stage: Vulnerability check
-    let redqueen_gates = StageName::RedQueen.gates();
-    assert!(redqueen_gates.contains(&Gate::NoVulnerabilities));
+    let redqueen_gates = StageName::ShipGate.gates();
+    assert!(redqueen_gates.contains(&Gate::MoonCi));
 
     // Review stage: Lint + security
-    let gptreview_gates = StageName::GptReview.gates();
-    assert!(gptreview_gates.contains(&Gate::ClippyClean));
-    assert!(gptreview_gates.contains(&Gate::Security));
+    let gptreview_gates = StageName::ShipGate.gates();
+    assert!(gptreview_gates.contains(&Gate::Compiles));
+    assert!(gptreview_gates.contains(&Gate::MoonCi));
 
     // Ship stage: Full CI + merge check
     let shipgate_gates = StageName::ShipGate.gates();

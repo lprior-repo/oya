@@ -28,12 +28,8 @@ fn test_is_rate_limit_failure_returns_false_for_other_failures() {
 
 #[test]
 fn test_tier_for_stage_maps_correctly() {
-    assert_eq!(tier_for_stage(&StageName::Plan), "c");
     assert_eq!(tier_for_stage(&StageName::Contract), "d");
-    assert_eq!(tier_for_stage(&StageName::Tdd15), "c");
-    assert_eq!(tier_for_stage(&StageName::Qa), "c");
-    assert_eq!(tier_for_stage(&StageName::RedQueen), "b");
-    assert_eq!(tier_for_stage(&StageName::GptReview), "a");
+    assert_eq!(tier_for_stage(&StageName::Implementation), "c");
     assert_eq!(tier_for_stage(&StageName::ShipGate), "a");
 }
 

@@ -33,14 +33,7 @@ pub struct MoonCommand {
 pub fn generate_moon_command(gate: &Gate) -> MoonCommand {
     let (task_name, description, command) = match gate {
         Gate::Compiles => ("check", "Type check the project", "moon run :check"),
-        Gate::AcceptanceTestsAreRed => {
-            ("test", "Verify acceptance tests are red", "moon run :test")
-        }
         Gate::TestsPass => ("test", "Run all tests", "moon run :test"),
-        Gate::EdgeCases => ("test", "Test edge cases", "moon run :test -- --test-threads=1"),
-        Gate::NoVulnerabilities => ("security", "Check for vulnerabilities", "moon run :security"),
-        Gate::ClippyClean => ("clippy", "Run clippy lints", "moon run :clippy"),
-        Gate::Security => ("security", "Security audit", "moon run :security"),
         Gate::MoonCi => ("ci", "Run full CI pipeline", "moon run :ci"),
         Gate::ZjjMergeQueue => ("test", "Verify merge queue", "zjj sync --status"),
     };
@@ -73,34 +66,6 @@ mod tests {
     }
 
     #[test]
-    fn generate_edge_cases_command() {
-        let cmd = generate_moon_command(&Gate::EdgeCases);
-        assert_eq!(cmd.task_name, "test");
-        assert_eq!(cmd.command, "moon run :test -- --test-threads=1");
-    }
-
-    #[test]
-    fn generate_no_vulnerabilities_command() {
-        let cmd = generate_moon_command(&Gate::NoVulnerabilities);
-        assert_eq!(cmd.task_name, "security");
-        assert_eq!(cmd.command, "moon run :security");
-    }
-
-    #[test]
-    fn generate_clippy_command() {
-        let cmd = generate_moon_command(&Gate::ClippyClean);
-        assert_eq!(cmd.task_name, "clippy");
-        assert_eq!(cmd.command, "moon run :clippy");
-    }
-
-    #[test]
-    fn generate_security_command() {
-        let cmd = generate_moon_command(&Gate::Security);
-        assert_eq!(cmd.task_name, "security");
-        assert_eq!(cmd.command, "moon run :security");
-    }
-
-    #[test]
     fn generate_moon_ci_command() {
         let cmd = generate_moon_command(&Gate::MoonCi);
         assert_eq!(cmd.task_name, "ci");
@@ -124,16 +89,7 @@ mod tests {
 
     #[test]
     fn generate_command_all_gates() {
-        let gates = vec![
-            Gate::Compiles,
-            Gate::TestsPass,
-            Gate::EdgeCases,
-            Gate::NoVulnerabilities,
-            Gate::ClippyClean,
-            Gate::Security,
-            Gate::MoonCi,
-            Gate::ZjjMergeQueue,
-        ];
+        let gates = vec![Gate::Compiles, Gate::TestsPass, Gate::MoonCi, Gate::ZjjMergeQueue];
 
         for gate in gates {
             let cmd = generate_moon_command(&gate);

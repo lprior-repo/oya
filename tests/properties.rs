@@ -86,27 +86,15 @@ proptest! {
     #[test]
     fn prop_stage_ordering(
         stage in prop::sample::select(vec![
-            StageName::Plan,
             StageName::Contract,
-            StageName::AcceptanceTest,
             StageName::Implementation,
-            StageName::Tdd15,
-            StageName::Qa,
-            StageName::RedQueen,
-            StageName::GptReview,
             StageName::ShipGate,
         ]),
     ) {
         // Property: Each stage has correct next stage
         match stage {
-            StageName::Plan => assert_eq!(stage.next(), Some(StageName::Contract)),
-            StageName::Contract => assert_eq!(stage.next(), Some(StageName::AcceptanceTest)),
-            StageName::AcceptanceTest => assert_eq!(stage.next(), Some(StageName::Implementation)),
-            StageName::Implementation => assert_eq!(stage.next(), Some(StageName::Qa)),
-            StageName::Tdd15 => assert_eq!(stage.next(), Some(StageName::Qa)),
-            StageName::Qa => assert_eq!(stage.next(), Some(StageName::RedQueen)),
-            StageName::RedQueen => assert_eq!(stage.next(), Some(StageName::GptReview)),
-            StageName::GptReview => assert_eq!(stage.next(), Some(StageName::ShipGate)),
+            StageName::Contract => assert_eq!(stage.next(), Some(StageName::Implementation)),
+            StageName::Implementation => assert_eq!(stage.next(), Some(StageName::ShipGate)),
             StageName::ShipGate => assert_eq!(stage.next(), None),
         }
 
@@ -122,14 +110,8 @@ proptest! {
     #[test]
     fn prop_max_attempts_is_two(
         stage in prop::sample::select(vec![
-            StageName::Plan,
             StageName::Contract,
-            StageName::AcceptanceTest,
             StageName::Implementation,
-            StageName::Tdd15,
-            StageName::Qa,
-            StageName::RedQueen,
-            StageName::GptReview,
             StageName::ShipGate,
         ]),
     ) {
@@ -159,14 +141,14 @@ proptest! {
     #[test]
     fn prop_stages_have_gates(
         stage in prop::sample::select(vec![
-            StageName::Plan,
             StageName::Contract,
-            StageName::AcceptanceTest,
+            StageName::Contract,
             StageName::Implementation,
-            StageName::Tdd15,
-            StageName::Qa,
-            StageName::RedQueen,
-            StageName::GptReview,
+            StageName::Implementation,
+            StageName::Implementation,
+            StageName::Implementation,
+            StageName::ShipGate,
+            StageName::ShipGate,
             StageName::ShipGate,
         ]),
     ) {
@@ -220,4 +202,315 @@ fn test_health_metrics_properties() {
     // Property: Mixed is calculated correctly
     let mixed = HealthMetrics::new(10, 5, 5, 0);
     assert_eq!(mixed.success_rate(), 50);
+}
+
+// ---------------------------------------------------------------------------
+// Circuit Breaker Timeout Properties (src-12y)
+// ---------------------------------------------------------------------------
+
+/// Property: Circuit stays Open before timeout elapses
+/// INVARIANT: After opening, circuit MUST remain Open until reset_timeout_ms has passed
+proptest! {
+    #[test]
+    fn prop_circuit_remains_open_before_timeout(
+        failure_threshold in 1u32..10u32,
+        reset_timeout_ms in 100u64..500u64,
+        failures in 1u32..20u32,
+        wait_before_check_ms in 0u64..50u64,
+    ) {
+        use oya::types::{CircuitBreaker, CircuitConfig, CircuitState};
+        use std::thread;
+        use std::time::Duration;
+
+        let config = CircuitConfig::new(failure_threshold, 3, reset_timeout_ms);
+        let breaker = CircuitBreaker::new("test-scope", config);
+
+        // Drive to Open state
+        let breaker = (0..failures).fold(breaker, |b, _| b.record_failure());
+
+        // Property: Must be Open after failures exceed threshold
+        prop_assert_eq!(breaker.state, CircuitState::Open,
+            "Circuit should be Open after {} failures with threshold {}",
+            failures, failure_threshold);
+
+        // Wait less than timeout
+        if wait_before_check_ms > 0 {
+            thread::sleep(Duration::from_millis(wait_before_check_ms));
+        }
+
+        let breaker = breaker.try_half_open();
+
+        // INVARIANT: Circuit MUST remain Open when timeout not elapsed
+        // We waited wait_before_check_ms which is < reset_timeout_ms (by prop constraints)
+        prop_assert_eq!(breaker.state, CircuitState::Open,
+            "Circuit should REMAIN Open after {}ms wait (timeout={}ms)",
+            wait_before_check_ms, reset_timeout_ms);
+    }
+}
+
+/// Property: Circuit transitions to HalfOpen after timeout elapses
+/// INVARIANT: After reset_timeout_ms, try_half_open MUST transition Open -> HalfOpen
+proptest! {
+    #[test]
+    fn prop_circuit_half_opens_after_timeout(
+        failure_threshold in 1u32..5u32,
+        reset_timeout_ms in 50u64..150u64,
+        failures in 5u32..15u32,
+    ) {
+        use oya::types::{CircuitBreaker, CircuitConfig, CircuitState};
+        use std::thread;
+        use std::time::Duration;
+
+        let config = CircuitConfig::new(failure_threshold, 3, reset_timeout_ms);
+        let breaker = CircuitBreaker::new("test-scope", config);
+
+        // Drive to Open state
+        let breaker = (0..failures).fold(breaker, |b, _| b.record_failure());
+        prop_assert_eq!(breaker.state, CircuitState::Open);
+
+        // Wait for timeout to elapse (with 20ms margin for timing variance)
+        let wait_ms = reset_timeout_ms.saturating_add(20);
+        thread::sleep(Duration::from_millis(wait_ms));
+
+        let breaker = breaker.try_half_open();
+
+        // INVARIANT: Circuit MUST transition to HalfOpen after timeout
+        prop_assert_eq!(breaker.state, CircuitState::HalfOpen,
+            "Circuit should transition to HalfOpen after {}ms (timeout was {}ms)",
+            wait_ms, reset_timeout_ms);
+    }
+}
+
+/// Property: HalfOpen allows operations and resets on success
+/// INVARIANT: HalfOpen state allows operations and success_count resets
+proptest! {
+    #[test]
+    fn prop_half_open_allows_operations_and_resets_on_success(
+        failure_threshold in 1u32..5u32,
+        success_threshold in 1u32..5u32,
+        reset_timeout_ms in 50u64..100u64,
+    ) {
+        use oya::types::{CircuitBreaker, CircuitConfig, CircuitState};
+        use std::thread;
+        use std::time::Duration;
+
+        let config = CircuitConfig::new(failure_threshold, success_threshold, reset_timeout_ms);
+        let breaker = CircuitBreaker::new("test-scope", config);
+
+        // Drive to Open state
+        let breaker = (0..failure_threshold).fold(breaker, |b, _| b.record_failure());
+        prop_assert_eq!(breaker.state, CircuitState::Open);
+
+        // Wait for timeout
+        thread::sleep(Duration::from_millis(reset_timeout_ms.saturating_add(10)));
+
+        let breaker = breaker.try_half_open();
+        prop_assert_eq!(breaker.state, CircuitState::HalfOpen);
+
+        // Property: HalfOpen allows operations
+        prop_assert!(breaker.state.allows_operations(),
+            "HalfOpen state should allow operations");
+
+        // Property: success_count should be reset to 0 on entering HalfOpen
+        prop_assert_eq!(breaker.success_count, 0,
+            "success_count should be 0 when entering HalfOpen");
+    }
+}
+
+/// Property: HalfOpen returns to Open on any failure
+/// INVARIANT: In HalfOpen state, ANY failure must immediately return to Open
+proptest! {
+    #[test]
+    fn prop_half_open_returns_to_open_on_failure(
+        failure_threshold in 1u32..5u32,
+        success_threshold in 2u32..5u32,
+        reset_timeout_ms in 50u64..100u64,
+    ) {
+        use oya::types::{CircuitBreaker, CircuitConfig, CircuitState};
+        use std::thread;
+        use std::time::Duration;
+
+        let config = CircuitConfig::new(failure_threshold, success_threshold, reset_timeout_ms);
+        let breaker = CircuitBreaker::new("test-scope", config);
+
+        // Drive to Open, then to HalfOpen
+        let breaker = (0..failure_threshold).fold(breaker, |b, _| b.record_failure());
+        thread::sleep(Duration::from_millis(reset_timeout_ms.saturating_add(10)));
+        let breaker = breaker.try_half_open();
+        prop_assert_eq!(breaker.state, CircuitState::HalfOpen);
+
+        // Record a failure in HalfOpen
+        let breaker = breaker.record_failure();
+
+        // INVARIANT: Must immediately return to Open
+        prop_assert_eq!(breaker.state, CircuitState::Open,
+            "HalfOpen should transition to Open on failure");
+    }
+}
+
+/// Property: HalfOpen closes after success_threshold consecutive successes
+/// INVARIANT: After success_threshold successes in HalfOpen, circuit closes
+proptest! {
+    #[test]
+    fn prop_half_open_closes_after_success_threshold(
+        failure_threshold in 1u32..5u32,
+        success_threshold in 2u32..5u32,
+        reset_timeout_ms in 50u64..100u64,
+    ) {
+        use oya::types::{CircuitBreaker, CircuitConfig, CircuitState};
+        use std::thread;
+        use std::time::Duration;
+
+        let config = CircuitConfig::new(failure_threshold, success_threshold, reset_timeout_ms);
+        let breaker = CircuitBreaker::new("test-scope", config);
+
+        // Drive to Open, then to HalfOpen
+        let breaker = (0..failure_threshold).fold(breaker, |b, _| b.record_failure());
+        thread::sleep(Duration::from_millis(reset_timeout_ms.saturating_add(10)));
+        let breaker = breaker.try_half_open();
+        prop_assert_eq!(breaker.state, CircuitState::HalfOpen);
+
+        // Record successes up to threshold
+        let breaker = (0..success_threshold).fold(breaker, |b, _| b.record_success());
+
+        // INVARIANT: Must close after success_threshold successes
+        prop_assert_eq!(breaker.state, CircuitState::Closed,
+            "HalfOpen should transition to Closed after {} successes",
+            success_threshold);
+
+        // Property: opened_at must be None when Closed
+        prop_assert!(breaker.opened_at.is_none(),
+            "opened_at should be None when circuit is Closed");
+    }
+}
+
+/// Property: opened_at is set when circuit opens
+/// INVARIANT: When circuit transitions to Open, opened_at MUST be set
+proptest! {
+    #[test]
+    fn prop_opened_at_set_when_circuit_opens(
+        failure_threshold in 1u32..10u32,
+    ) {
+        use oya::types::{CircuitBreaker, CircuitConfig, CircuitState};
+
+        let config = CircuitConfig::new(failure_threshold, 3, 60_000);
+        let breaker = CircuitBreaker::new("test-scope", config);
+
+        // Drive to Open state
+        let breaker = (0..failure_threshold).fold(breaker, |b, _| b.record_failure());
+
+        // INVARIANT: opened_at must be set when Open
+        prop_assert_eq!(breaker.state, CircuitState::Open);
+        prop_assert!(breaker.opened_at.is_some(),
+            "opened_at MUST be set when circuit is Open");
+    }
+}
+
+/// Property: Closed circuit has no opened_at
+/// INVARIANT: When circuit is Closed, opened_at MUST be None
+proptest! {
+    #[test]
+    fn prop_closed_circuit_has_no_opened_at(
+        failure_threshold in 1u32..5u32,
+        success_threshold in 2u32..5u32,
+        reset_timeout_ms in 50u64..100u64,
+    ) {
+        use oya::types::{CircuitBreaker, CircuitConfig, CircuitState};
+
+        let config = CircuitConfig::new(failure_threshold, success_threshold, reset_timeout_ms);
+        let breaker = CircuitBreaker::new("test-scope", config);
+
+        // New breaker is Closed
+        prop_assert_eq!(breaker.state, CircuitState::Closed);
+        prop_assert!(breaker.opened_at.is_none(),
+            "opened_at should be None for new Closed circuit");
+
+        // Success keeps it Closed
+        let breaker = breaker.record_success();
+        prop_assert_eq!(breaker.state, CircuitState::Closed);
+        prop_assert!(breaker.opened_at.is_none());
+    }
+}
+
+/// Property: Timing precision - HalfOpen occurs within acceptable variance
+/// INVARIANT: Transition happens within reset_timeout_ms + tolerance
+#[test]
+fn test_half_open_timing_precision() {
+    use oya::types::{CircuitBreaker, CircuitConfig, CircuitState};
+    use std::thread;
+    use std::time::{Duration, Instant};
+
+    let reset_timeout_ms = 100u64;
+    let config = CircuitConfig::new(3, 2, reset_timeout_ms);
+    let breaker = CircuitBreaker::new("timing-test", config);
+
+    // Drive to Open
+    let breaker = (0..3).fold(breaker, |b, _| b.record_failure());
+    assert_eq!(breaker.state, CircuitState::Open);
+
+    // Measure actual transition time
+    let start = Instant::now();
+    let mut breaker = breaker;
+
+    // Poll until transition (simulating real usage)
+    loop {
+        breaker = breaker.try_half_open();
+        if breaker.state == CircuitState::HalfOpen {
+            break;
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+
+    let elapsed_ms = start.elapsed().as_millis() as u64;
+
+    // INVARIANT: Transition should happen between timeout and timeout + 20% tolerance
+    assert!(
+        elapsed_ms >= reset_timeout_ms,
+        "Transition too early: {}ms < {}ms timeout",
+        elapsed_ms,
+        reset_timeout_ms
+    );
+    assert!(
+        elapsed_ms <= reset_timeout_ms + 50,
+        "Transition too late: {}ms > {}ms timeout + 50ms tolerance",
+        elapsed_ms,
+        reset_timeout_ms
+    );
+}
+
+/// Property: No timing drift across multiple cycles
+/// INVARIANT: Each open-halfopen cycle respects the timeout
+#[test]
+fn test_no_timing_drift_across_cycles() {
+    use oya::types::{CircuitBreaker, CircuitConfig, CircuitState};
+    use std::thread;
+    use std::time::{Duration, Instant};
+
+    let reset_timeout_ms = 75u64;
+    let config = CircuitConfig::new(2, 1, reset_timeout_ms);
+
+    for cycle in 0..3 {
+        let breaker = CircuitBreaker::new(&format!("cycle-{}", cycle), config);
+
+        // Drive to Open
+        let breaker = (0..2).fold(breaker, |b, _| b.record_failure());
+        assert_eq!(breaker.state, CircuitState::Open);
+
+        // Time the transition
+        let start = Instant::now();
+        thread::sleep(Duration::from_millis(reset_timeout_ms.saturating_add(10)));
+        let breaker = breaker.try_half_open();
+
+        let elapsed_ms = start.elapsed().as_millis() as u64;
+
+        // INVARIANT: Each cycle should respect the same timeout
+        assert!(
+            elapsed_ms >= reset_timeout_ms,
+            "Cycle {} transition too early: {}ms < {}ms",
+            cycle,
+            elapsed_ms,
+            reset_timeout_ms
+        );
+        assert_eq!(breaker.state, CircuitState::HalfOpen, "Cycle {} should reach HalfOpen", cycle);
+    }
 }
