@@ -114,7 +114,7 @@ mod tests {
     #[test]
     fn execute_gate_preserves_gate_name() {
         // Gate name should be preserved exactly as passed
-        let gate_names = ["compiles", "tests_pass", "clippy_clean", "moon_ci"];
+        let gate_names = ["compiles", "tests_pass", "clippy_clean", "moon_ci", "cue_artifact_generated"];
         for gate_name in gate_names {
             let result = execute_gate(gate_name, "command");
             assert_eq!(result.gate_name(), gate_name);

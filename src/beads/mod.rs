@@ -28,6 +28,7 @@
 #![warn(clippy::pedantic)]
 #![forbid(unsafe_code)]
 
+pub mod cue_artifact;
 pub mod gate_aggregation;
 pub mod gate_decision;
 pub mod gate_execution;

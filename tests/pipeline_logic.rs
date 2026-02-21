@@ -60,46 +60,32 @@ fn given_auth_failed_when_checking_retryable_then_should_not_retry() {
 // STAGE TRANSITION LOGIC
 
 #[test]
-fn given_pipeline_start_when_checking_first_stage_then_is_plan() {
+fn given_pipeline_start_when_checking_first_stage_then_is_contract() {
     use oya::types::StageName;
 
-    let next = StageName::Plan.next();
-    assert_eq!(next, Some(StageName::Contract));
+    let next = StageName::Contract.next();
+    assert_eq!(next, Some(StageName::AcceptanceTest));
 }
 
 #[test]
-fn given_plan_stage_when_checking_model_tier_then_is_c() {
-    use oya::types::{ModelTier, StageName};
-
-    assert_eq!(StageName::Plan.model_for_stage(), ModelTier::Balanced);
-}
-
-#[test]
-fn given_contract_stage_when_checking_model_tier_then_is_d() {
+fn given_contract_stage_when_checking_model_tier_then_is_fast() {
     use oya::types::{ModelTier, StageName};
 
     assert_eq!(StageName::Contract.model_for_stage(), ModelTier::Fast);
 }
 
 #[test]
-fn given_qa_stage_when_checking_model_tier_then_is_c() {
+fn given_implementation_stage_when_checking_model_tier_then_is_balanced() {
     use oya::types::{ModelTier, StageName};
 
-    assert_eq!(StageName::Qa.model_for_stage(), ModelTier::Balanced);
+    assert_eq!(StageName::Implementation.model_for_stage(), ModelTier::Balanced);
 }
 
 #[test]
-fn given_redqueen_stage_when_checking_model_tier_then_is_b() {
+fn given_review_stage_when_checking_model_tier_then_is_capable() {
     use oya::types::{ModelTier, StageName};
 
-    assert_eq!(StageName::RedQueen.model_for_stage(), ModelTier::Capable);
-}
-
-#[test]
-fn given_gpt_review_stage_when_checking_model_tier_then_is_a() {
-    use oya::types::{ModelTier, StageName};
-
-    assert_eq!(StageName::GptReview.model_for_stage(), ModelTier::Best);
+    assert_eq!(StageName::Review.model_for_stage(), ModelTier::Capable);
 }
 
 #[test]
@@ -118,18 +104,16 @@ fn given_shipgate_when_checking_next_stage_then_is_none() {
 }
 
 #[test]
-fn given_stage_order_when_verifying_then_follows_pipeline_flow() {
+fn given_stage_order_when_verifying_then_follows_five_stage_pipeline_flow() {
     use oya::types::StageName;
 
-    // ATDD pipeline flow
+    // Canonical five-stage ATDD pipeline flow:
+    // Contract -> AcceptanceTest -> Implementation -> Review -> ShipGate
     let stages = vec![
-        StageName::Plan,
         StageName::Contract,
         StageName::AcceptanceTest,
         StageName::Implementation,
-        StageName::Qa,
-        StageName::RedQueen,
-        StageName::GptReview,
+        StageName::Review,
         StageName::ShipGate,
     ];
 
@@ -139,9 +123,22 @@ fn given_stage_order_when_verifying_then_follows_pipeline_flow() {
 
     // Verify terminal stage
     assert_eq!(StageName::ShipGate.next(), None);
+}
 
-    // Verify legacy Tdd15 still works
-    assert_eq!(StageName::Tdd15.next(), Some(StageName::Qa));
+#[test]
+fn given_five_stages_when_counting_then_exactly_five() {
+    use oya::types::StageName;
+
+    // Count all non-legacy stage variants
+    let canonical_stages = [
+        StageName::Contract,
+        StageName::AcceptanceTest,
+        StageName::Implementation,
+        StageName::Review,
+        StageName::ShipGate,
+    ];
+
+    assert_eq!(canonical_stages.len(), 5, "Pipeline must have exactly 5 canonical stages");
 }
 
 #[test]
@@ -158,31 +155,18 @@ fn given_acceptance_test_stage_when_checking_gates_then_compiles_and_red_require
 // GATE DEFINITIONS
 
 #[test]
-fn given_any_stage_when_checking_max_attempts_then_is_always_two() {
+fn given_any_canonical_stage_when_checking_max_attempts_then_is_always_two() {
     use oya::types::StageName;
 
     for stage in [
-        StageName::Plan,
         StageName::Contract,
         StageName::AcceptanceTest,
         StageName::Implementation,
-        StageName::Tdd15,
-        StageName::Qa,
-        StageName::RedQueen,
-        StageName::GptReview,
+        StageName::Review,
         StageName::ShipGate,
     ] {
         assert_eq!(stage.max_attempts(), 2);
     }
-}
-
-#[test]
-fn given_plan_stage_when_checking_gates_then_only_compiles_required() {
-    use oya::types::StageName;
-
-    let gates = StageName::Plan.gates();
-    assert_eq!(gates.len(), 1);
-    assert_eq!(gates[0], oya::types::Gate::Compiles);
 }
 
 #[test]
@@ -195,42 +179,26 @@ fn given_contract_stage_when_checking_gates_then_only_compiles_required() {
 }
 
 #[test]
-fn given_tdd15_stage_when_checking_gates_then_compiles_and_tests_required() {
+fn given_implementation_stage_when_checking_gates_then_compiles_and_tests_required() {
     use oya::types::StageName;
 
-    let gates = StageName::Tdd15.gates();
+    let gates = StageName::Implementation.gates();
     assert_eq!(gates.len(), 2);
     assert_eq!(gates[0], oya::types::Gate::Compiles);
     assert_eq!(gates[1], oya::types::Gate::TestsPass);
 }
 
 #[test]
-fn given_qa_stage_when_checking_gates_then_tests_and_edge_cases_required() {
-    use oya::types::StageName;
+fn given_review_stage_when_checking_gates_then_quality_gates_required() {
+    use oya::types::{Gate, StageName};
 
-    let gates = StageName::Qa.gates();
-    assert_eq!(gates.len(), 2);
-    assert_eq!(gates[0], oya::types::Gate::TestsPass);
-    assert_eq!(gates[1], oya::types::Gate::EdgeCases);
-}
-
-#[test]
-fn given_redqueen_stage_when_checking_gates_then_no_vulnerabilities_required() {
-    use oya::types::StageName;
-
-    let gates = StageName::RedQueen.gates();
-    assert_eq!(gates.len(), 1);
-    assert_eq!(gates[0], oya::types::Gate::NoVulnerabilities);
-}
-
-#[test]
-fn given_gpt_review_stage_when_checking_gates_then_clippy_and_security_required() {
-    use oya::types::StageName;
-
-    let gates = StageName::GptReview.gates();
-    assert_eq!(gates.len(), 2);
-    assert_eq!(gates[0], oya::types::Gate::ClippyClean);
-    assert_eq!(gates[1], oya::types::Gate::Security);
+    let gates = StageName::Review.gates();
+    // Review stage consolidates Qa + RedQueen + GptReview gates
+    assert!(gates.contains(&Gate::TestsPass));
+    assert!(gates.contains(&Gate::EdgeCases));
+    assert!(gates.contains(&Gate::NoVulnerabilities));
+    assert!(gates.contains(&Gate::ClippyClean));
+    assert!(gates.contains(&Gate::Security));
 }
 
 #[test]

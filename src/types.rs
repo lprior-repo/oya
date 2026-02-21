@@ -20,9 +20,10 @@ pub use ids::{AgentId, BeadId, RunId};
 
 // --- pipeline ---
 pub use pipeline::{
-    determine_transition, load_model_tier_config, passed_stage_transition, ApproverMode,
-    FailureCategory, Gate, ModelTier, ModelTierConfig, ShipDecision, StageAttempt, StageFailure,
-    StageName, StageResult, StageState, StageTransition, TransitionDecision, TransitionReason,
+    determine_transition, load_model_tier_config, normalize_attempt, passed_stage_transition,
+    ApproverMode, FailureCategory, Gate, ModelTier, ModelTierConfig, ShipDecision, StageAttempt,
+    StageFailure, StageName, StageResult, StageState, StageTransition, TransitionDecision,
+    TransitionReason,
 };
 
 // --- domain ---
@@ -39,6 +40,6 @@ pub use health::{
 
 // --- timeline ---
 pub use timeline::{
-    strip_ansi_codes, truncate_clean, DurationMs, GateSummary, StageOutcome, TimelineEntry,
-    WorkspaceName,
+    sanitize_url_for_logging, strip_ansi_codes, truncate_clean, DurationMs, GateSummary,
+    StageOutcome, TimelineEntry, WorkspaceName,
 };

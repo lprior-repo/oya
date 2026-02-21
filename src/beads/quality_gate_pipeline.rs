@@ -87,14 +87,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn pipeline_plan_stage() {
-        let result = run_quality_gate_pipeline(StageName::Plan).unwrap();
-        assert!(result.passed);
-        assert_eq!(result.total_gates, 1);
-        assert_eq!(result.passed_gates, 1);
-    }
-
-    #[test]
     fn pipeline_contract_stage() {
         let result = run_quality_gate_pipeline(StageName::Contract).unwrap();
         assert!(result.passed);
@@ -103,32 +95,8 @@ mod tests {
     }
 
     #[test]
-    fn pipeline_tdd15_stage() {
-        let result = run_quality_gate_pipeline(StageName::Tdd15).unwrap();
-        assert!(result.passed); // In pure function, defaults to success
-        assert_eq!(result.total_gates, 2);
-        assert_eq!(result.passed_gates, 2);
-    }
-
-    #[test]
-    fn pipeline_qa_stage() {
-        let result = run_quality_gate_pipeline(StageName::Qa).unwrap();
-        assert!(result.passed);
-        assert_eq!(result.total_gates, 2);
-        assert_eq!(result.passed_gates, 2);
-    }
-
-    #[test]
-    fn pipeline_red_queen_stage() {
-        let result = run_quality_gate_pipeline(StageName::RedQueen).unwrap();
-        assert!(result.passed);
-        assert_eq!(result.total_gates, 1);
-        assert_eq!(result.passed_gates, 1);
-    }
-
-    #[test]
-    fn pipeline_gpt_review_stage() {
-        let result = run_quality_gate_pipeline(StageName::GptReview).unwrap();
+    fn pipeline_implementation_stage() {
+        let result = run_quality_gate_pipeline(StageName::Implementation).unwrap();
         assert!(result.passed);
         assert_eq!(result.total_gates, 2);
         assert_eq!(result.passed_gates, 2);
@@ -144,28 +112,20 @@ mod tests {
 
     #[test]
     fn pipeline_preserves_stage() {
-        let result = run_quality_gate_pipeline(StageName::Qa).unwrap();
-        assert_eq!(result.stage, StageName::Qa);
+        let result = run_quality_gate_pipeline(StageName::Implementation).unwrap();
+        assert_eq!(result.stage, StageName::Implementation);
     }
 
     #[test]
     fn pipeline_deterministic() {
-        let result1 = run_quality_gate_pipeline(StageName::Tdd15).unwrap();
-        let result2 = run_quality_gate_pipeline(StageName::Tdd15).unwrap();
+        let result1 = run_quality_gate_pipeline(StageName::Implementation).unwrap();
+        let result2 = run_quality_gate_pipeline(StageName::Implementation).unwrap();
         assert_eq!(result1, result2);
     }
 
     #[test]
     fn pipeline_all_stages_pass() {
-        let stages = vec![
-            StageName::Plan,
-            StageName::Contract,
-            StageName::Tdd15,
-            StageName::Qa,
-            StageName::RedQueen,
-            StageName::GptReview,
-            StageName::ShipGate,
-        ];
+        let stages = vec![StageName::Contract, StageName::Implementation, StageName::ShipGate];
 
         for stage in stages {
             let result = run_quality_gate_pipeline(stage.clone()).unwrap();

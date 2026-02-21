@@ -28,12 +28,9 @@ fn test_is_rate_limit_failure_returns_false_for_other_failures() {
 
 #[test]
 fn test_tier_for_stage_maps_correctly() {
-    assert_eq!(tier_for_stage(&StageName::Plan), "c");
+    // Three canonical stages tier mapping
     assert_eq!(tier_for_stage(&StageName::Contract), "d");
-    assert_eq!(tier_for_stage(&StageName::Tdd15), "c");
-    assert_eq!(tier_for_stage(&StageName::Qa), "c");
-    assert_eq!(tier_for_stage(&StageName::RedQueen), "b");
-    assert_eq!(tier_for_stage(&StageName::GptReview), "a");
+    assert_eq!(tier_for_stage(&StageName::Implementation), "c");
     assert_eq!(tier_for_stage(&StageName::ShipGate), "a");
 }
 
@@ -420,4 +417,59 @@ fn test_tier_rotation_on_rate_limit() {
 
     assert_eq!(next, 1);
     assert_eq!(*state.active_indices.get(&tier).unwrap(), 1);
+}
+
+// ---------------------------------------------------------------------------
+// Strict JSON schema tests: unknown field rejection (src-17y)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_report_outcome_request_rejects_unknown_field() {
+    let json = serde_json::json!({
+        "model": "claude-3-opus",
+        "success": true,
+        "is_rate_limit": false,
+        "extra_field": "should be rejected"
+    });
+    let result: Result<ReportOutcomeRequest, _> = serde_json::from_value(json);
+    assert!(result.is_err(), "unknown field 'extra_field' should be rejected");
+    let error_msg = result.err().map(|e| e.to_string()).unwrap_or_default();
+    assert!(
+        error_msg.contains("unknown field") || error_msg.contains("unexpected"),
+        "error message should mention unknown/unexpected field, got: {}",
+        error_msg
+    );
+}
+
+#[test]
+fn test_report_outcome_request_rejects_typo_field() {
+    // Test that typos are caught (success_typo instead of success)
+    let json = serde_json::json!({
+        "model": "claude-3-opus",
+        "success_typo": true,  // typo: should be 'success'
+        "is_rate_limit": false
+    });
+    let result: Result<ReportOutcomeRequest, _> = serde_json::from_value(json);
+    assert!(result.is_err(), "unknown field 'success_typo' should be rejected");
+    let error_msg = result.err().map(|e| e.to_string()).unwrap_or_default();
+    assert!(
+        error_msg.contains("unknown field") || error_msg.contains("unexpected"),
+        "error message should mention unknown/unexpected field, got: {}",
+        error_msg
+    );
+}
+
+#[test]
+fn test_report_outcome_request_accepts_valid_payload() {
+    let json = serde_json::json!({
+        "model": "claude-3-opus",
+        "success": true,
+        "is_rate_limit": false
+    });
+    let result: Result<ReportOutcomeRequest, _> = serde_json::from_value(json);
+    assert!(result.is_ok(), "valid payload should be accepted");
+    let request = result.unwrap();
+    assert_eq!(request.model, "claude-3-opus");
+    assert!(request.success);
+    assert!(!request.is_rate_limit);
 }

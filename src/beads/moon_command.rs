@@ -43,6 +43,7 @@ pub fn generate_moon_command(gate: &Gate) -> MoonCommand {
         Gate::Security => ("security", "Security audit", "moon run :security"),
         Gate::MoonCi => ("ci", "Run full CI pipeline", "moon run :ci"),
         Gate::ZjjMergeQueue => ("test", "Verify merge queue", "zjj sync --status"),
+        Gate::CueArtifactGenerated => ("cue", "Verify CUE artifact generated", "moon run :cue-check"),
     };
 
     MoonCommand {
@@ -116,6 +117,14 @@ mod tests {
     }
 
     #[test]
+    fn generate_cue_artifact_generated_command() {
+        let cmd = generate_moon_command(&Gate::CueArtifactGenerated);
+        assert_eq!(cmd.task_name, "cue");
+        assert_eq!(cmd.description, "Verify CUE artifact generated");
+        assert_eq!(cmd.command, "moon run :cue-check");
+    }
+
+    #[test]
     fn generate_command_deterministic() {
         let cmd1 = generate_moon_command(&Gate::Compiles);
         let cmd2 = generate_moon_command(&Gate::Compiles);
@@ -133,6 +142,7 @@ mod tests {
             Gate::Security,
             Gate::MoonCi,
             Gate::ZjjMergeQueue,
+            Gate::CueArtifactGenerated,
         ];
 
         for gate in gates {

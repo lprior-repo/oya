@@ -1,7 +1,7 @@
 use super::super::*;
 use super::command_exec::{combine_command_output, run_command_with_timeout_with_exit};
 use oya::beads::moon_command::generate_moon_command;
-use oya::types::Gate;
+use oya::types::{Gate, StageName as Stage};
 use std::path::PathBuf;
 
 const MOON_TIMEOUT_SECONDS: u64 = 900;
@@ -143,15 +143,8 @@ pub(crate) fn gate_failure_outcome(stage: &Stage, gate: &Gate) -> (FailureCatego
 
 fn gate_failure_mapping(stage: &Stage, gate: &Gate) -> Option<(FailureCategory, Stage)> {
     match (stage, gate) {
-        (&Stage::Plan, &Gate::Compiles) => Some((FailureCategory::CompileFailed, Stage::Plan)),
         (&Stage::Contract, &Gate::Compiles) => {
             Some((FailureCategory::CompileFailed, Stage::Contract))
-        }
-        (&Stage::AcceptanceTest, &Gate::Compiles) => {
-            Some((FailureCategory::CompileFailed, Stage::AcceptanceTest))
-        }
-        (&Stage::AcceptanceTest, &Gate::AcceptanceTestsAreRed) => {
-            Some((FailureCategory::TestsUnexpectedlyGreen, Stage::AcceptanceTest))
         }
         (&Stage::Implementation, &Gate::Compiles) => {
             Some((FailureCategory::CompileFailed, Stage::Implementation))
@@ -159,25 +152,11 @@ fn gate_failure_mapping(stage: &Stage, gate: &Gate) -> Option<(FailureCategory, 
         (&Stage::Implementation, &Gate::TestsPass) => {
             Some((FailureCategory::TestFailed, Stage::Implementation))
         }
-        (&Stage::Tdd15, &Gate::Compiles) => Some((FailureCategory::CompileFailed, Stage::Tdd15)),
-        (&Stage::Tdd15, &Gate::TestsPass) => Some((FailureCategory::TestFailed, Stage::Tdd15)),
-        (&Stage::Qa, &Gate::TestsPass) | (&Stage::Qa, &Gate::EdgeCases) => {
-            Some((FailureCategory::TestFailed, Stage::Implementation))
-        }
-        (&Stage::RedQueen, &Gate::NoVulnerabilities) => {
-            Some((FailureCategory::TestFailed, Stage::Implementation))
-        }
-        (&Stage::GptReview, &Gate::ClippyClean) => {
-            Some((FailureCategory::LintFailed, Stage::Implementation))
-        }
-        (&Stage::GptReview, &Gate::Security) => {
-            Some((FailureCategory::TestFailed, Stage::Implementation))
-        }
         (&Stage::ShipGate, &Gate::MoonCi) => {
-            Some((FailureCategory::TestFailed, Stage::Implementation))
+            Some((FailureCategory::CiFailed, Stage::Implementation))
         }
         (&Stage::ShipGate, &Gate::ZjjMergeQueue) => {
-            Some((FailureCategory::MergeConflict, Stage::GptReview))
+            Some((FailureCategory::MergeConflict, Stage::Implementation))
         }
         _ => None,
     }

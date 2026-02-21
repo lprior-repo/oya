@@ -223,7 +223,7 @@ impl Run {
     pub fn start(&self) -> Result<Self, DomainError> {
         match &self.state {
             RunState::Pending => Ok(Self {
-                state: RunState::Running { current_stage: StageName::Plan },
+                state: RunState::Running { current_stage: StageName::Contract },
                 updated_at: Utc::now(),
                 ..self.clone()
             }),

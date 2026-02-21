@@ -81,32 +81,24 @@ proptest! {
     }
 }
 
-// Property: Stage ordering is consistent
+// Property: Stage ordering is consistent (five canonical stages)
 proptest! {
     #[test]
     fn prop_stage_ordering(
         stage in prop::sample::select(vec![
-            StageName::Plan,
             StageName::Contract,
             StageName::AcceptanceTest,
             StageName::Implementation,
-            StageName::Tdd15,
-            StageName::Qa,
-            StageName::RedQueen,
-            StageName::GptReview,
+            StageName::Review,
             StageName::ShipGate,
         ]),
     ) {
         // Property: Each stage has correct next stage
         match stage {
-            StageName::Plan => assert_eq!(stage.next(), Some(StageName::Contract)),
             StageName::Contract => assert_eq!(stage.next(), Some(StageName::AcceptanceTest)),
             StageName::AcceptanceTest => assert_eq!(stage.next(), Some(StageName::Implementation)),
-            StageName::Implementation => assert_eq!(stage.next(), Some(StageName::Qa)),
-            StageName::Tdd15 => assert_eq!(stage.next(), Some(StageName::Qa)),
-            StageName::Qa => assert_eq!(stage.next(), Some(StageName::RedQueen)),
-            StageName::RedQueen => assert_eq!(stage.next(), Some(StageName::GptReview)),
-            StageName::GptReview => assert_eq!(stage.next(), Some(StageName::ShipGate)),
+            StageName::Implementation => assert_eq!(stage.next(), Some(StageName::Review)),
+            StageName::Review => assert_eq!(stage.next(), Some(StageName::ShipGate)),
             StageName::ShipGate => assert_eq!(stage.next(), None),
         }
 
@@ -122,14 +114,10 @@ proptest! {
     #[test]
     fn prop_max_attempts_is_two(
         stage in prop::sample::select(vec![
-            StageName::Plan,
             StageName::Contract,
             StageName::AcceptanceTest,
             StageName::Implementation,
-            StageName::Tdd15,
-            StageName::Qa,
-            StageName::RedQueen,
-            StageName::GptReview,
+            StageName::Review,
             StageName::ShipGate,
         ]),
     ) {
@@ -159,14 +147,10 @@ proptest! {
     #[test]
     fn prop_stages_have_gates(
         stage in prop::sample::select(vec![
-            StageName::Plan,
             StageName::Contract,
             StageName::AcceptanceTest,
             StageName::Implementation,
-            StageName::Tdd15,
-            StageName::Qa,
-            StageName::RedQueen,
-            StageName::GptReview,
+            StageName::Review,
             StageName::ShipGate,
         ]),
     ) {

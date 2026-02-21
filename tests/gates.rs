@@ -61,14 +61,14 @@ async fn given_gate_configured_to_fail_when_it_runs_then_reports_failure() {
     assert_eq!(result.exit_code, 1);
 }
 
-/// Given: Plan stage
+/// Given: Contract stage
 /// When: Gates run
 /// Then: Should only run Compiles gate
 #[tokio::test]
-async fn given_plan_stage_when_gates_run_then_only_compiles_required() {
+async fn given_contract_stage_when_gates_run_then_only_compiles_required() {
     use oya::types::StageName;
 
-    let gates = StageName::Plan.gates();
+    let gates = StageName::Contract.gates();
 
     assert_eq!(gates.len(), 1);
     assert_eq!(gates[0], Gate::Compiles);
@@ -88,52 +88,49 @@ async fn given_shipgate_when_gates_run_then_runs_ci_and_merge_checks() {
     assert!(gates.contains(&Gate::ZjjMergeQueue));
 }
 
-/// Given: Tdd15 stage
+/// Given: Implementation stage
 /// When: Gates run
 /// Then: Should run Compiles and TestsPass
 #[tokio::test]
-async fn given_tdd15_when_gates_run_then_runs_compile_and_test() {
+async fn given_implementation_when_gates_run_then_runs_compile_and_test() {
     use oya::types::StageName;
 
-    let gates = StageName::Tdd15.gates();
+    let gates = StageName::Implementation.gates();
 
     assert_eq!(gates.len(), 2);
     assert!(gates.contains(&Gate::Compiles));
     assert!(gates.contains(&Gate::TestsPass));
 }
 
-/// Given: All 7 stages
+/// Given: All 5 canonical stages
 /// When: Gates are checked
 /// Then: Each stage should have appropriate gates
 #[tokio::test]
 async fn given_all_stages_when_gates_checked_then_appropriate_for_stage() {
     use oya::types::StageName;
 
-    // Early stages: Just compile
-    for stage in [StageName::Plan, StageName::Contract] {
-        let gates = stage.gates();
-        assert_eq!(gates.len(), 1, "{:?} should have 1 gate", stage);
-        assert_eq!(gates[0], Gate::Compiles);
-    }
+    // Contract stage: Just compile
+    let contract_gates = StageName::Contract.gates();
+    assert_eq!(contract_gates.len(), 1, "Contract should have 1 gate");
+    assert_eq!(contract_gates[0], Gate::Compiles);
 
-    // Implementation stages: Compile + tests
-    let tdd15_gates = StageName::Tdd15.gates();
-    assert!(tdd15_gates.contains(&Gate::Compiles));
-    assert!(tdd15_gates.contains(&Gate::TestsPass));
+    // AcceptanceTest stage: Compile + tests must be red
+    let acceptance_gates = StageName::AcceptanceTest.gates();
+    assert!(acceptance_gates.contains(&Gate::Compiles));
+    assert!(acceptance_gates.contains(&Gate::AcceptanceTestsAreRed));
 
-    // QA stage: Tests + edge cases
-    let qa_gates = StageName::Qa.gates();
-    assert!(qa_gates.contains(&Gate::TestsPass));
-    assert!(qa_gates.contains(&Gate::EdgeCases));
+    // Implementation stage: Compile + tests
+    let impl_gates = StageName::Implementation.gates();
+    assert!(impl_gates.contains(&Gate::Compiles));
+    assert!(impl_gates.contains(&Gate::TestsPass));
 
-    // Security stage: Vulnerability check
-    let redqueen_gates = StageName::RedQueen.gates();
-    assert!(redqueen_gates.contains(&Gate::NoVulnerabilities));
-
-    // Review stage: Lint + security
-    let gptreview_gates = StageName::GptReview.gates();
-    assert!(gptreview_gates.contains(&Gate::ClippyClean));
-    assert!(gptreview_gates.contains(&Gate::Security));
+    // Review stage: Consolidated quality gates
+    let review_gates = StageName::Review.gates();
+    assert!(review_gates.contains(&Gate::TestsPass));
+    assert!(review_gates.contains(&Gate::EdgeCases));
+    assert!(review_gates.contains(&Gate::NoVulnerabilities));
+    assert!(review_gates.contains(&Gate::ClippyClean));
+    assert!(review_gates.contains(&Gate::Security));
 
     // Ship stage: Full CI + merge check
     let shipgate_gates = StageName::ShipGate.gates();

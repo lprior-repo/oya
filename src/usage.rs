@@ -39,6 +39,7 @@ impl Default for TrackerState {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ReportOutcomeRequest {
     pub model: String,
     pub success: bool,
