@@ -1,4 +1,11 @@
 use super::super::*;
+use std::sync::OnceLock;
+
+const OPENCODE_MIN_REQUEST_INTERVAL_MS: u64 = 200;
+const OPENCODE_RATE_LIMIT_RETRIES: u32 = 2;
+
+static OPENCODE_RATE_LIMITER: OnceLock<tokio::sync::Mutex<Option<std::time::Instant>>> =
+    OnceLock::new();
 
 #[derive(Debug, Clone)]
 pub(crate) struct OpenCodeConfig {
@@ -82,6 +89,38 @@ pub(crate) fn opencode_http_client_settings(timeout_seconds: u64) -> HttpClientS
     }
 }
 
+pub(crate) async fn enforce_opencode_rate_limit() {
+    let limiter = OPENCODE_RATE_LIMITER.get_or_init(|| tokio::sync::Mutex::new(None));
+    let min_interval = std::time::Duration::from_millis(OPENCODE_MIN_REQUEST_INTERVAL_MS);
+
+    loop {
+        let wait_duration = {
+            let mut guard = limiter.lock().await;
+            match *guard {
+                Some(last) => {
+                    let elapsed = last.elapsed();
+                    if elapsed >= min_interval {
+                        *guard = Some(std::time::Instant::now());
+                        None
+                    } else {
+                        Some(min_interval - elapsed)
+                    }
+                }
+                None => {
+                    *guard = Some(std::time::Instant::now());
+                    None
+                }
+            }
+        };
+
+        if let Some(duration) = wait_duration {
+            tokio::time::sleep(duration).await;
+        } else {
+            break;
+        }
+    }
+}
+
 pub(crate) fn build_blocking_http_client(
     settings: HttpClientSettings,
 ) -> Result<reqwest::blocking::Client, reqwest::Error> {
@@ -107,6 +146,21 @@ mod tests {
         let settings = opencode_http_client_settings(300);
         let _client =
             build_blocking_http_client(settings).expect("Failed to build blocking client");
+    }
+
+    #[test]
+    fn test_should_retry_rate_limited_true_for_429() {
+        assert!(should_retry_rate_limited(reqwest::StatusCode::TOO_MANY_REQUESTS, ""));
+    }
+
+    #[test]
+    fn test_should_retry_rate_limited_true_for_message() {
+        assert!(should_retry_rate_limited(reqwest::StatusCode::BAD_REQUEST, "Rate limit exceeded"));
+    }
+
+    #[test]
+    fn test_should_retry_rate_limited_false_for_other_status() {
+        assert!(!should_retry_rate_limited(reqwest::StatusCode::BAD_REQUEST, "invalid input"));
     }
 }
 
@@ -140,16 +194,41 @@ pub(crate) async fn fetch_opencode_text(
         |password| client.get(url.clone()).basic_auth("opencode", Some(password)),
     );
 
-    let response = request
-        .send()
-        .await
-        .map_err(|error| OyaError(format!("OpenCode request failed for {}: {}", path, error)))?;
-    let status = response.status();
-    let text = response.text().await.map_err(|error| {
-        OyaError(format!("OpenCode response read failed for {}: {}", path, error))
-    })?;
+    fetch_opencode_text_with_backoff(request, path).await
+}
 
-    if !status.is_success() {
+async fn fetch_opencode_text_with_backoff(
+    request: reqwest::RequestBuilder,
+    path: &str,
+) -> Result<String, OyaError> {
+    let mut attempt = 0;
+    loop {
+        enforce_opencode_rate_limit().await;
+        let response = request
+            .try_clone()
+            .ok_or_else(|| OyaError("failed to clone OpenCode request".to_string()))?
+            .send()
+            .await
+            .map_err(|error| {
+                OyaError(format!("OpenCode request failed for {}: {}", path, error))
+            })?;
+
+        let status = response.status();
+        let text = response.text().await.map_err(|error| {
+            OyaError(format!("OpenCode response read failed for {}: {}", path, error))
+        })?;
+
+        if status.is_success() {
+            return Ok(text);
+        }
+
+        if should_retry_rate_limited(status, text.as_str()) && attempt < OPENCODE_RATE_LIMIT_RETRIES
+        {
+            tokio::time::sleep(rate_limit_backoff(attempt)).await;
+            attempt += 1;
+            continue;
+        }
+
         return Err(OyaError(format!(
             "OpenCode request failed for {} with status {}: {}",
             path,
@@ -157,6 +236,13 @@ pub(crate) async fn fetch_opencode_text(
             truncate_clean(text.as_str(), 4000)
         )));
     }
+}
 
-    Ok(text)
+fn should_retry_rate_limited(status: reqwest::StatusCode, body: &str) -> bool {
+    status.as_u16() == 429 || body.to_ascii_lowercase().contains("rate limit")
+}
+
+fn rate_limit_backoff(attempt: u32) -> std::time::Duration {
+    let millis = 200_u64.saturating_mul(2_u64.saturating_pow(attempt));
+    std::time::Duration::from_millis(millis)
 }

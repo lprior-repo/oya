@@ -122,24 +122,24 @@ mod tests {
     fn pipeline_red_queen_stage() {
         let result = run_quality_gate_pipeline(StageName::ShipGate).unwrap();
         assert!(result.passed);
-        assert_eq!(result.total_gates, 2);
-        assert_eq!(result.passed_gates, 2);
+        assert_eq!(result.total_gates, 3);
+        assert_eq!(result.passed_gates, 3);
     }
 
     #[test]
     fn pipeline_gpt_review_stage() {
         let result = run_quality_gate_pipeline(StageName::ShipGate).unwrap();
         assert!(result.passed);
-        assert_eq!(result.total_gates, 2);
-        assert_eq!(result.passed_gates, 2);
+        assert_eq!(result.total_gates, 3);
+        assert_eq!(result.passed_gates, 3);
     }
 
     #[test]
     fn pipeline_ship_gate_stage() {
         let result = run_quality_gate_pipeline(StageName::ShipGate).unwrap();
         assert!(result.passed);
-        assert_eq!(result.total_gates, 2);
-        assert_eq!(result.passed_gates, 2);
+        assert_eq!(result.total_gates, 3);
+        assert_eq!(result.passed_gates, 3);
     }
 
     #[test]

@@ -17,6 +17,7 @@ use crossterm::{
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 use reqwest::blocking::Client as BlockingClient;
+use std::io::IsTerminal;
 use std::io::Stdout;
 use std::time::{Duration, Instant};
 
@@ -104,6 +105,12 @@ impl App {
 
 /// Run the tail TUI.
 pub fn run_tail(refresh_interval: u64, run_id: Option<String>) -> Result<()> {
+    if !std::io::stdout().is_terminal() {
+        return Err(anyhow::anyhow!(
+            "tail TUI requires an interactive terminal; run without piping or use a TTY"
+        ));
+    }
+
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();

@@ -157,9 +157,9 @@ proptest! {
         // Property: Every stage has at least one gate
         prop_assert!(!gates.is_empty(), "Stage {:?} has no gates", stage);
 
-        // Property: ShipGate has exactly 2 gates (moon CI, zjj merge)
+        // Property: ShipGate has exactly 3 gates (cue proof, moon CI, zjj merge)
         if stage == StageName::ShipGate {
-            prop_assert_eq!(gates.len(), 2);
+            prop_assert_eq!(gates.len(), 3);
         }
     }
 }

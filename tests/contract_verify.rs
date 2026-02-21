@@ -165,7 +165,8 @@ fn contract_gate_definitions() {
 
     // ShipGate has the most gates
     let ship_gates = StageName::ShipGate.gates();
-    assert_eq!(ship_gates.len(), 2);
+    assert_eq!(ship_gates.len(), 3);
+    assert!(ship_gates.contains(&Gate::CueArtifactGenerated));
     assert!(ship_gates.contains(&Gate::MoonCi));
     assert!(ship_gates.contains(&Gate::ZjjMergeQueue));
 }

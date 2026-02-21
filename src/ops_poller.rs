@@ -3,7 +3,7 @@ use std::io::Write;
 
 pub(super) async fn run_ops_poller() -> Result<(), DynError> {
     let config = opencode_config()?;
-    let interval_ms = poll_interval_ms();
+    let interval_ms = poll_interval_ms()?;
     write_poller_banner(&config, interval_ms)?;
     let client = poller_http_client()?;
     loop {
@@ -12,19 +12,15 @@ pub(super) async fn run_ops_poller() -> Result<(), DynError> {
     }
 }
 
-fn poll_interval_ms() -> u64 {
+fn poll_interval_ms() -> Result<u64, OyaError> {
     match std::env::var("OYA_POLL_INTERVAL_MS") {
-        Ok(value) => value.parse::<u64>().map_or_else(
-            |_| {
-                tracing::warn!(
-                    "OYA_POLL_INTERVAL_MS='{}' is not a valid number, using default 2000",
-                    value
-                );
-                2000
-            },
-            clamp_poll_interval,
-        ),
-        Err(_) => 2000,
+        Ok(value) => value.parse::<u64>().map(clamp_poll_interval).map_err(|error| {
+            OyaError(format!(
+                "Invalid OYA_POLL_INTERVAL_MS='{}': {} (expected integer milliseconds)",
+                value, error
+            ))
+        }),
+        Err(_) => Ok(2000),
     }
 }
 
@@ -104,21 +100,36 @@ async fn fetch_text_with_client(
     url: &str,
     password: Option<&str>,
 ) -> Result<String, OyaError> {
-    let request = password
-        .map_or_else(|| client.get(url), |pwd| client.get(url).basic_auth("opencode", Some(pwd)));
+    let mut attempt = 0;
+    loop {
+        enforce_opencode_rate_limit().await;
+        let request = password.map_or_else(
+            || client.get(url),
+            |pwd| client.get(url).basic_auth("opencode", Some(pwd)),
+        );
 
-    let response = request
-        .send()
-        .await
-        .map_err(|error| OyaError(format!("Request failed for {}: {}", url, error)))?;
+        let response = request
+            .send()
+            .await
+            .map_err(|error| OyaError(format!("Request failed for {}: {}", url, error)))?;
 
-    let status = response.status();
-    let text = response
-        .text()
-        .await
-        .map_err(|error| OyaError(format!("Read failed for {}: {}", url, error)))?;
+        let status = response.status();
+        let text = response
+            .text()
+            .await
+            .map_err(|error| OyaError(format!("Read failed for {}: {}", url, error)))?;
 
-    if !status.is_success() {
+        if status.is_success() {
+            return Ok(text);
+        }
+
+        if should_retry_rate_limit(status, &text) && attempt < 2 {
+            let wait = std::time::Duration::from_millis(200_u64.saturating_mul(1_u64 << attempt));
+            tokio::time::sleep(wait).await;
+            attempt += 1;
+            continue;
+        }
+
         return Err(OyaError(format!(
             "Status {} for {}: {}",
             status.as_u16(),
@@ -126,6 +137,28 @@ async fn fetch_text_with_client(
             truncate_clean(&text, 200)
         )));
     }
+}
 
-    Ok(text)
+fn should_retry_rate_limit(status: reqwest::StatusCode, text: &str) -> bool {
+    status.as_u16() == 429 || text.to_ascii_lowercase().contains("rate limit")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn poll_interval_rejects_invalid_env_value() {
+        std::env::set_var("OYA_POLL_INTERVAL_MS", "abc");
+        let result = poll_interval_ms();
+        std::env::remove_var("OYA_POLL_INTERVAL_MS");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn poll_interval_defaults_when_env_missing() {
+        std::env::remove_var("OYA_POLL_INTERVAL_MS");
+        let result = poll_interval_ms();
+        assert!(matches!(result, Ok(2000)));
+    }
 }

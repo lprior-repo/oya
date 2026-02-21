@@ -56,7 +56,7 @@ impl StageName {
         match self {
             Self::Contract => vec![Gate::Compiles],
             Self::Implementation => vec![Gate::Compiles, Gate::TestsPass],
-            Self::ShipGate => vec![Gate::MoonCi, Gate::ZjjMergeQueue],
+            Self::ShipGate => vec![Gate::CueArtifactGenerated, Gate::MoonCi, Gate::ZjjMergeQueue],
         }
     }
 }

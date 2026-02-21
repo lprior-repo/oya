@@ -76,14 +76,15 @@ async fn given_plan_stage_when_gates_run_then_only_compiles_required() {
 
 /// Given: ShipGate stage
 /// When: Gates run
-/// Then: Should run MoonCi and ZjjMergeQueue
+/// Then: Should run CueArtifactGenerated, MoonCi, and ZjjMergeQueue
 #[tokio::test]
 async fn given_shipgate_when_gates_run_then_runs_ci_and_merge_checks() {
     use oya::types::StageName;
 
     let gates = StageName::ShipGate.gates();
 
-    assert_eq!(gates.len(), 2);
+    assert_eq!(gates.len(), 3);
+    assert!(gates.contains(&Gate::CueArtifactGenerated));
     assert!(gates.contains(&Gate::MoonCi));
     assert!(gates.contains(&Gate::ZjjMergeQueue));
 }
@@ -128,16 +129,19 @@ async fn given_all_stages_when_gates_checked_then_appropriate_for_stage() {
 
     // Security stage: Vulnerability check
     let redqueen_gates = StageName::ShipGate.gates();
+    assert!(redqueen_gates.contains(&Gate::CueArtifactGenerated));
     assert!(redqueen_gates.contains(&Gate::MoonCi));
     assert!(redqueen_gates.contains(&Gate::ZjjMergeQueue));
 
     // Review stage: Lint + security
     let gptreview_gates = StageName::ShipGate.gates();
+    assert!(gptreview_gates.contains(&Gate::CueArtifactGenerated));
     assert!(gptreview_gates.contains(&Gate::MoonCi));
     assert!(gptreview_gates.contains(&Gate::ZjjMergeQueue));
 
     // Ship stage: Full CI + merge check
     let shipgate_gates = StageName::ShipGate.gates();
+    assert!(shipgate_gates.contains(&Gate::CueArtifactGenerated));
     assert!(shipgate_gates.contains(&Gate::MoonCi));
     assert!(shipgate_gates.contains(&Gate::ZjjMergeQueue));
 }

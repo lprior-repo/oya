@@ -50,6 +50,7 @@ pub(crate) enum MoonTask {
     Check,
     Test,
     Ci,
+    CueCheck,
 }
 
 pub(crate) fn parse_gate_command(command: &str) -> Result<GateCommand, OyaError> {
@@ -104,6 +105,7 @@ impl MoonTask {
             ":check" => Some(Self::Check),
             ":test" => Some(Self::Test),
             ":ci" => Some(Self::Ci),
+            ":cue-check" => Some(Self::CueCheck),
             _ => None,
         }
     }
@@ -113,6 +115,7 @@ impl MoonTask {
             MoonTask::Check => ":check",
             MoonTask::Test => ":test",
             MoonTask::Ci => ":ci",
+            MoonTask::CueCheck => ":cue-check",
         }
     }
 }
@@ -148,6 +151,9 @@ fn gate_failure_mapping(stage: &Stage, gate: &Gate) -> Option<(FailureCategory, 
         }
         (&Stage::ShipGate, &Gate::MoonCi) => {
             Some((FailureCategory::TestFailed, Stage::Implementation))
+        }
+        (&Stage::ShipGate, &Gate::CueArtifactGenerated) => {
+            Some((FailureCategory::OutputParseFailure, Stage::Implementation))
         }
         (&Stage::ShipGate, &Gate::ZjjMergeQueue) => {
             Some((FailureCategory::MergeConflict, Stage::Implementation))

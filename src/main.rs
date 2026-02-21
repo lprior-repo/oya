@@ -339,7 +339,7 @@ async fn should_continue_after_artifact(
                 retryable,
                 artifact.timing.completed_at.clone(),
             ));
-            handle_failed_stage(ctx, state, artifact).await
+            handle_failed_stage(ctx, state, config, artifact).await
         }
     }
 }
@@ -384,6 +384,7 @@ async fn completed_stage_next_action(
 async fn handle_failed_stage(
     ctx: &WorkflowContext<'_>,
     state: &mut PipelineState,
+    config: &RuntimeConfig,
     artifact: &orchestrator_types::StageArtifact,
 ) -> Result<bool, OyaError> {
     let failure_category = parse_failure_category(&artifact.failure_category)
@@ -404,6 +405,7 @@ async fn handle_failed_stage(
     }
 
     if !should_retry_after_failure(state) {
+        block_and_file_remediation(ctx, &config.repo_root, state, artifact).await?;
         mark_run_failed(ctx, state, artifact).await?;
         return Ok(false);
     }
@@ -416,6 +418,90 @@ fn should_retry_after_failure(state: &PipelineState) -> bool {
     state.last_failure.as_ref().is_some_and(|failure| {
         failure.retryable && state.attempt < state.current_stage.max_attempts()
     })
+}
+
+async fn block_and_file_remediation(
+    ctx: &WorkflowContext<'_>,
+    repo_root: &Path,
+    state: &PipelineState,
+    artifact: &orchestrator_types::StageArtifact,
+) -> Result<(), OyaError> {
+    let bead_id = state.orchestrator.bead_id.clone();
+    let title = format!("[remediation] {} retry-exhausted", bead_id);
+    let description = remediation_description(state, artifact);
+    let root = repo_root.to_path_buf();
+
+    let blocked_args = vec!["update", &bead_id, "--status", "blocked"];
+    run_br_command(ctx, &root, &blocked_args).await?;
+
+    let create_args = vec![
+        "create",
+        title.as_str(),
+        "--type",
+        "bug",
+        "--priority",
+        "1",
+        "--parent",
+        bead_id.as_str(),
+        "--description",
+        description.as_str(),
+    ];
+    run_br_command(ctx, &root, &create_args).await
+}
+
+fn remediation_description(
+    state: &PipelineState,
+    artifact: &orchestrator_types::StageArtifact,
+) -> String {
+    let category = artifact.failure_category.clone().unwrap_or_else(|| "unknown".to_string());
+    let summary = truncate_clean(&artifact.output.full_log, 1200);
+    format!(
+        "Parent bead {} exhausted automatic retries at stage '{}' (attempt {}).\nFailure category: {}\n\nLatest failure:\n{}",
+        state.orchestrator.bead_id,
+        artifact.stage,
+        artifact.attempt,
+        category,
+        summary
+    )
+}
+
+async fn run_br_command(
+    ctx: &WorkflowContext<'_>,
+    repo_root: &Path,
+    args: &[&str],
+) -> Result<(), OyaError> {
+    let root = repo_root.to_path_buf();
+    let arg_list = args.iter().map(|value| (*value).to_string()).collect::<Vec<_>>();
+    let display = refs_to_display(&arg_list);
+
+    ctx.run(move || async move {
+        let args_for_spawn = arg_list.clone();
+        let command_result = tokio::task::spawn_blocking(move || {
+            let refs = args_for_spawn.iter().map(String::as_str).collect::<Vec<_>>();
+            run_command_with_timeout_with_exit("br", &refs, 60, &root)
+        })
+        .await
+        .map_err(|error| HandlerError::from(format!("br command join failed: {}", error)))?;
+
+        command_result
+            .map(|(passed, stdout, stderr, exit_code)| {
+                if passed {
+                    Ok(())
+                } else {
+                    Err(HandlerError::from(format!(
+                        "br {} failed (exit {}): {} {}",
+                        display, exit_code, stdout, stderr
+                    )))
+                }
+            })
+            .map_err(|error| HandlerError::from(error.0))?
+    })
+    .await
+    .map_err(|error| OyaError(format!("br command failed: {}", error)))
+}
+
+fn refs_to_display(args: &[String]) -> String {
+    args.join(" ")
 }
 
 struct LandingFailure {
@@ -823,9 +909,18 @@ struct RunArgs {
     restate_url: String,
     #[arg(long, default_value = "local docker validation", help = "Context string for workflow")]
     context: String,
-    #[arg(long, default_value = "3600", help = "Timeout in seconds for workflow completion")]
+    #[arg(
+        long,
+        default_value = "3600",
+        value_parser = clap::value_parser!(u64).range(1..=86_400),
+        help = "Timeout in seconds for workflow completion (1-86400)"
+    )]
     timeout: u64,
-    #[arg(long, help = "Poll interval in seconds for status checks")]
+    #[arg(
+        long,
+        value_parser = clap::value_parser!(u64).range(1..=3600),
+        help = "Poll interval in seconds for status checks (1-3600)"
+    )]
     poll_interval: Option<u64>,
     #[arg(long, help = "OpenCode model to use (overrides oya.yaml and built-in defaults)")]
     model: Option<String>,
@@ -833,7 +928,12 @@ struct RunArgs {
 
 #[derive(Parser, Debug, Clone, PartialEq)]
 struct TailArgs {
-    #[arg(long, default_value = "2", help = "Refresh interval in seconds")]
+    #[arg(
+        long,
+        default_value = "2",
+        value_parser = clap::value_parser!(u64).range(1..=3600),
+        help = "Refresh interval in seconds (1-3600)"
+    )]
     interval: u64,
     #[arg(help = "Filter to specific run ID (optional)")]
     run_id: Option<String>,

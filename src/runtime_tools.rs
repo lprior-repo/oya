@@ -12,7 +12,8 @@ pub(crate) use gates::{
     parse_command_parts, parse_gate_command, GateCommand, MoonTask, ParsedCommandParts,
 };
 pub(crate) use http::{
-    build_http_client, fetch_opencode_text, opencode_config, opencode_endpoint_url,
-    poller_http_client_settings, workflow_http_client_settings, OpenCodeConfig, OpenCodeEndpoint,
+    build_http_client, enforce_opencode_rate_limit, fetch_opencode_text, opencode_config,
+    opencode_endpoint_url, poller_http_client_settings, workflow_http_client_settings,
+    OpenCodeConfig, OpenCodeEndpoint,
 };
 pub(crate) use workspace::{prepare_stage_workspace, WorkspacePrepRequest};
