@@ -3,6 +3,8 @@ mod failure_summary;
 mod gates;
 mod http;
 mod workspace;
+#[allow(dead_code)]
+mod write_allowlist;
 
 pub(crate) use command_exec::{run_command_with_timeout_with_exit, run_opencode};
 pub(crate) use failure_summary::summarize_failure_output;
@@ -17,3 +19,7 @@ pub(crate) use http::{
     OpenCodeConfig, OpenCodeEndpoint,
 };
 pub(crate) use workspace::{prepare_stage_workspace, WorkspacePrepRequest};
+#[allow(unused_imports)]
+pub use write_allowlist::{
+    is_write_allowed, validate_write_path, StageWriteConfig, WriteAllowlistError,
+};
