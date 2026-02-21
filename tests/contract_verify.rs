@@ -194,7 +194,6 @@ fn contract_failure_category_retryability() {
         FailureCategory::LintFailed,
         FailureCategory::OutputParseFailure,
         FailureCategory::CompileFailed,
-        FailureCategory::RateLimited,
     ];
 
     for category in retryable {
@@ -208,6 +207,7 @@ fn contract_failure_category_retryability() {
         FailureCategory::ContextOverflow,
         FailureCategory::MergeConflict,
         FailureCategory::MaxAttemptsExceeded,
+        FailureCategory::RateLimited,
     ];
 
     for category in non_retryable {

@@ -265,11 +265,9 @@ fn test_tests_unexpectedly_green_maps_to_retry_loop() {
 }
 
 #[test]
-fn test_rate_limited_maps_to_retry_loop() {
-    let mut state = test_pipeline_state(FailureCategory::RateLimited, Stage::Red, 1);
-    assert!(should_retry_after_failure(&state));
-
-    state.attempt = 2;
+fn test_rate_limited_is_non_retryable() {
+    // RateLimited triggers model rotation, NOT stage retry
+    let state = test_pipeline_state(FailureCategory::RateLimited, Stage::Red, 1);
     assert!(!should_retry_after_failure(&state));
 }
 
