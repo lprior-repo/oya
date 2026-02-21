@@ -222,6 +222,9 @@ proptest! {
         use std::thread;
         use std::time::Duration;
 
+        // Ensure we actually trip the breaker
+        prop_assume!(failures >= failure_threshold);
+
         let config = CircuitConfig::new(failure_threshold, 3, reset_timeout_ms);
         let breaker = CircuitBreaker::new("test-scope", config);
 
@@ -260,6 +263,9 @@ proptest! {
         use oya::types::{CircuitBreaker, CircuitConfig, CircuitState};
         use std::thread;
         use std::time::Duration;
+
+        // Ensure we actually trip the breaker
+        prop_assume!(failures >= failure_threshold);
 
         let config = CircuitConfig::new(failure_threshold, 3, reset_timeout_ms);
         let breaker = CircuitBreaker::new("test-scope", config);

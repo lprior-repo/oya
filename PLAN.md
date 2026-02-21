@@ -1,84 +1,72 @@
-# PLAN: src-3ag - Add --version Flag to CLI
+# PLAN: src-s6d - Contract CUE Artifact Enforcement
 
 ## Summary
-Add `--version` flag support to the OYA CLI. Currently `oya --version` returns error exit code 2.
+Enforce strict output validation for the "Contract" stage. The system must ensure exactly one canonical CUE artifact is generated. If zero, multiple, or non-CUE artifacts are produced, the stage must fail.
+
+## Context
+- **Bead:** `src-s6d` (contract: require per-bead cue artifact generation)
+- **Goal:** Ensure deterministic governance boundary via typed CUE contracts.
+- **Constraint:** Zero unwrap/panic. Functional Rust only.
 
 ## Current State
-- `src/main.rs:797-802` defines `Cli` struct with `#[command(name, about)]`
-- Missing `version` attribute in `#[command(...)]` derive macro
-- Package version: `0.1.0` (from `Cargo.toml:3`)
+- `src/stage_executor.rs` likely handles stage execution and artifact collection.
+- Current behavior likely accepts any number of artifacts or doesn't validate specific file extensions for the Contract stage.
 
-## Phase 1: Tests (TEST_AGENT)
+## Phase 1: Research & Discovery
+1.  **Analyze `src/stage_executor.rs`**:
+    - Identify `execute_stage` or equivalent function.
+    - Locate where `StageOutput` or artifacts are processed.
+2.  **Analyze `src/orchestrator_types.rs`**:
+    - Check `StageResult` and `Artifact` definitions.
+    - specific `StageType::Contract` enum variant existence.
 
-### File: `src/main/tests.rs`
-Add e2e validation tests for version flag:
-- `test_version_flag_outputs_version` - `oya --version` exits 0 with "oya 0.1.0"
-- `test_version_short_flag_outputs_version` - `oya -V` exits 0 with version
-- `test_version_flag_with_other_args_fails` - version is mutually exclusive
-- `test_version_output_format` - verify format matches "oya <version>"
+## Phase 2: Tests (TEST_AGENT)
+**File:** `src/stage_executor/tests.rs` (or `src/stage_executor.rs` if inline)
 
-### File: `src/main.rs`
-Add inline test in `#[cfg(test)]` block:
-- Verify `Cli::parse_from(["oya", "--version"])` behavior
+1.  **Test: `test_contract_stage_zero_artifacts_fails`**
+    - Setup: Mock Contract stage returning empty artifact list.
+    - Expect: `Err(StageError::MissingContractArtifact)`
 
-## Phase 2: Implementation (LOGIC_AGENT)
+2.  **Test: `test_contract_stage_multiple_artifacts_fails`**
+    - Setup: Mock Contract stage returning 2 CUE files.
+    - Expect: `Err(StageError::AmbiguousContractArtifact)`
 
-### Task 1: Add version attribute
-File: `src/main.rs:798`
-```rust
-// FROM:
-#[command(name = "oya", about = "OYA Orchestrator - AI governance runtime")]
-// TO:
-#[command(name = "oya", about = "OYA Orchestrator - AI governance runtime", version)]
-```
+3.  **Test: `test_contract_stage_non_cue_artifact_fails`**
+    - Setup: Mock Contract stage returning `contract.json`.
+    - Expect: `Err(StageError::InvalidContractArtifactType)`
 
-### Task 2: Verify clap derive behavior
-- Confirm `--version` and `-V` work correctly
-- Confirm version string uses `env!("CARGO_PKG_VERSION")`
+4.  **Test: `test_contract_stage_valid_single_cue_success`**
+    - Setup: Mock Contract stage returning `contract.cue`.
+    - Expect: `Ok(_)` with canonical path verified.
 
-## Test Strategy & Quality Gates
+## Phase 3: Implementation (LOGIC_AGENT)
+**File:** `src/stage_executor.rs`
 
-### Gate 1: Tests Written (RED)
-- All tests compile
-- Tests verify version flag behavior
-- Tests fail before implementation
+1.  **Modify `validate_stage_output` (or equivalent)**:
+    - Add matching on `StageType::Contract`.
+    - Implement functional check:
+      ```rust
+      // Pseudo-code
+      let contracts: Vec<_> = artifacts.iter().filter(|a| a.path.ends_with(".cue")).collect();
+      match contracts.len() {
+          0 => Err("No CUE contract found"),
+          1 => Ok(contracts[0]),
+          _ => Err("Multiple CUE contracts found"),
+      }
+      ```
+2.  **Update Error Types**:
+    - Add necessary variants to `StageError` in `src/orchestrator_types.rs` (if needed) or reuse existing validation errors.
 
-### Gate 2: Tests Pass (GREEN)
-- `moon run :test` passes all tests
-- `moon run :check` passes
-- `moon run :ci` passes
-
-### Gate 3: E2E Validation
-```bash
-./target/debug/oya --version   # Exit 0, output: oya 0.1.0
-./target/debug/oya -V          # Exit 0, output: oya 0.1.0
-./target/debug/oya --help      # Shows -V, --version in options
-```
+## Quality Gates
+1.  **Red Gate**: Tests written and failing. (Verified by `moon run :test`)
+2.  **Green Gate**: Implementation makes tests pass. Zero clippy warnings.
+3.  **Integration**: `moon run :ci` passes.
 
 ## Verification Commands
 ```bash
-moon run :test
-moon run :check
+# Run specific tests
+moon run :test -- --package oya --lib stage_executor
+
+# Full CI
 moon run :ci
-cargo run -- --version
 ```
-
-## Files Modified
-- `src/main.rs:798` - add `version` to `#[command(...)]` attribute
-
-## Dependencies
-- `clap::Parser` - existing, derives version from `CARGO_PKG_VERSION`
-
-## Test Cases (Detailed)
-
-### Version flag tests:
-1. `test_version_flag_exits_zero` - `oya --version` exits with code 0
-2. `test_version_short_flag_exits_zero` - `oya -V` exits with code 0
-3. `test_version_output_contains_package_name` - output contains "oya"
-4. `test_version_output_contains_version_number` - output contains "0.1.0"
-5. `test_help_shows_version_option` - `oya --help` shows `-V, --version`
-
-## Risk Assessment
-- **Low risk**: Single-line change to existing derive macro
-- **No breaking changes**: Adds new flag, doesn't modify existing behavior
-- **Clap handles everything**: No custom version logic needed
