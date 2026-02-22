@@ -11,8 +11,7 @@ fn stage_uses_workspace(stage: &Stage) -> bool {
 }
 
 fn stage_requires_merge_queue(stage: &Stage) -> bool {
-    let _ = stage;
-    false
+    matches!(stage, Stage::ShipGate)
 }
 
 #[derive(Clone)]
@@ -67,7 +66,8 @@ fn queue_workspace(
 }
 
 fn queue_duplicate_error(message: &str) -> bool {
-    message.to_ascii_lowercase().contains("already in the queue")
+    let normalized = message.to_ascii_lowercase();
+    normalized.contains("already in the queue") || normalized.contains("already queued")
 }
 
 fn add_workspace(
@@ -143,12 +143,18 @@ mod tests {
     fn stage_requires_merge_queue_only_for_ship_gate() {
         assert!(!stage_requires_merge_queue(&Stage::Contract));
         assert!(!stage_requires_merge_queue(&Stage::Implementation));
-        assert!(!stage_requires_merge_queue(&Stage::ShipGate));
+        assert!(stage_requires_merge_queue(&Stage::ShipGate));
     }
 
     #[test]
     fn queue_duplicate_error_detects_duplicate_workspace_message() {
         let message = "Error: Invalid configuration: Workspace 'foo' is already in the queue";
+        assert!(queue_duplicate_error(message));
+    }
+
+    #[test]
+    fn queue_duplicate_error_detects_already_queued_message() {
+        let message = "workspace foo is already queued";
         assert!(queue_duplicate_error(message));
     }
 
