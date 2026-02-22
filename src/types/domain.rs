@@ -5,6 +5,7 @@ use super::pipeline::{StageAttempt, StageName, StageResult};
 use chrono::{DateTime, Utc};
 use im::Vector;
 use serde::{Deserialize, Serialize};
+use std::num::NonZeroU32;
 use thiserror::Error;
 
 // ---------------------------------------------------------------------------
@@ -352,6 +353,107 @@ fn validate_passed_exit_code_consistency(
         "passed=false but exit_code=0".to_string()
     };
     Err(ValidationError::InconsistentEvidence(description))
+}
+
+// ---------------------------------------------------------------------------
+// Queue / lock / merge contracts
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct QueuePosition(NonZeroU32);
+
+impl QueuePosition {
+    #[must_use]
+    pub const fn as_u32(self) -> u32 {
+        self.0.get()
+    }
+
+    #[must_use]
+    pub fn next(self) -> Self {
+        let next = self.0.get().saturating_add(1);
+        Self(NonZeroU32::new(next).unwrap_or(NonZeroU32::MIN))
+    }
+}
+
+impl TryFrom<u32> for QueuePosition {
+    type Error = ValidationError;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        NonZeroU32::new(value)
+            .map(Self)
+            .ok_or_else(|| ValidationError::InvalidState("queue_position must be > 0".to_string()))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct LockToken(String);
+
+impl LockToken {
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl TryFrom<&str> for LockToken {
+    type Error = ValidationError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            return Err(ValidationError::MissingField("lock_token".to_string()));
+        }
+        if contains_forbidden_control_chars(trimmed) {
+            return Err(ValidationError::InvalidState(
+                "lock_token contains control characters".to_string(),
+            ));
+        }
+        Ok(Self(trimmed.to_string()))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MergeBlockReason {
+    LockUnavailable,
+    DependencyPending,
+    QueueConflict,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "decision", rename_all = "snake_case")]
+pub enum MergeDecision {
+    Merge { queue_position: QueuePosition, lock: LockToken },
+    Requeue { reason: MergeBlockReason, queue_position: QueuePosition },
+    Block { reason: MergeBlockReason },
+}
+
+#[must_use]
+pub fn derive_merge_decision(
+    queue_position: QueuePosition,
+    lock: Option<LockToken>,
+    dependencies_ready: bool,
+) -> MergeDecision {
+    if !dependencies_ready {
+        return MergeDecision::Requeue {
+            reason: MergeBlockReason::DependencyPending,
+            queue_position: queue_position.next(),
+        };
+    }
+
+    match lock {
+        Some(lock) => MergeDecision::Merge { queue_position, lock },
+        None => MergeDecision::Requeue {
+            reason: MergeBlockReason::LockUnavailable,
+            queue_position: queue_position.next(),
+        },
+    }
+}
+
+fn contains_forbidden_control_chars(value: &str) -> bool {
+    value.chars().any(|ch| ch.is_control() && ch != '\n' && ch != '\r' && ch != '\t')
 }
 
 // ---------------------------------------------------------------------------

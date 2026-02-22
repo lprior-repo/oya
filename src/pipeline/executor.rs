@@ -240,6 +240,7 @@ fn workspace_lifecycle_from_event(
         add_command: event.add_command,
         add_passed: event.add_passed,
         add_exit_code: event.add_exit_code,
+        coordination: event.coordination,
     }
 }
 

@@ -2,6 +2,7 @@ use super::super::*;
 use super::command_exec::{combine_command_output, run_command_with_timeout_with_exit};
 use crate::pipeline::WorkspacePreparationPolicy;
 use oya::build_zjj_workspace_name;
+use oya::types::{derive_merge_decision, LockToken, QueuePosition};
 use std::path::{Path, PathBuf};
 
 const ZJJ_TIMEOUT_SECONDS: u64 = 60;
@@ -31,6 +32,19 @@ struct WorkspaceCommandResult {
     exit_code: i32,
     output: String,
     applied: bool,
+}
+
+fn derive_workspace_coordination(
+    workspace: &str,
+) -> Result<crate::orchestrator_types::WorkspaceCoordination, OyaError> {
+    let queue_position = QueuePosition::try_from(1_u32)
+        .map_err(|error| OyaError(format!("queue position contract violated: {}", error)))?;
+    let lock = LockToken::try_from(format!("lock-{}", workspace).as_str())
+        .map_err(|error| OyaError(format!("lock token contract violated: {}", error)))?;
+    Ok(crate::orchestrator_types::WorkspaceCoordination {
+        queue_position,
+        merge_decision: derive_merge_decision(queue_position, Some(lock), true),
+    })
 }
 
 fn ensure_workspace_name(request: &WorkspacePrepRequest) -> Result<String, OyaError> {
@@ -216,6 +230,7 @@ pub(crate) fn prepare_stage_workspace(
             return Err(fail_with_compensation(add_error, add_rollback, queue_rollback));
         }
     };
+    let coordination = derive_workspace_coordination(&workspace)?;
     Ok(Some(WorkspaceLifecycleEvent {
         workspace,
         workspace_path,
@@ -227,6 +242,7 @@ pub(crate) fn prepare_stage_workspace(
         add_passed: add.passed,
         add_exit_code: add.exit_code,
         add_output: truncate_clean(add.output.as_str(), 4000),
+        coordination,
         recorded_at: request.recorded_at,
     }))
 }

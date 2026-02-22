@@ -305,14 +305,23 @@ fn make_valid_src_1ew_observation() -> Src1ewObservation {
 
 #[test]
 fn given_dependency_chain_when_scheduling_merge_train_then_dependencies_run_before_dependents() {
+    let a = MergeTrainCandidate::new("src-a", 2, vec!["src-b"]);
+    let b = MergeTrainCandidate::new("src-b", 3, vec![]);
+    let c = MergeTrainCandidate::new("src-c", 1, vec![]);
+    assert!(a.is_ok() && b.is_ok() && c.is_ok());
     let candidates = vec![
-        MergeTrainCandidate {
-            bead_id: "src-a".to_string(),
-            priority: 2,
-            depends_on: vec!["src-b".to_string()],
+        match a {
+            Ok(value) => value,
+            Err(_) => return,
         },
-        MergeTrainCandidate { bead_id: "src-b".to_string(), priority: 3, depends_on: vec![] },
-        MergeTrainCandidate { bead_id: "src-c".to_string(), priority: 1, depends_on: vec![] },
+        match b {
+            Ok(value) => value,
+            Err(_) => return,
+        },
+        match c {
+            Ok(value) => value,
+            Err(_) => return,
+        },
     ];
 
     let schedule = schedule_dependency_aware_priority_processing(&candidates);
@@ -322,15 +331,31 @@ fn given_dependency_chain_when_scheduling_merge_train_then_dependencies_run_befo
         Err(_) => return,
     };
 
-    assert_eq!(schedule, vec!["src-c".to_string(), "src-b".to_string(), "src-a".to_string()]);
+    assert_eq!(
+        schedule.iter().map(|id| id.as_str().to_string()).collect::<Vec<_>>(),
+        vec!["src-c".to_string(), "src-b".to_string(), "src-a".to_string()]
+    );
 }
 
 #[test]
 fn given_multiple_ready_beads_when_scheduling_merge_train_then_lower_priority_number_runs_first() {
+    let p2 = MergeTrainCandidate::new("src-p2", 2, vec![]);
+    let p0 = MergeTrainCandidate::new("src-p0", 0, vec![]);
+    let p1 = MergeTrainCandidate::new("src-p1", 1, vec![]);
+    assert!(p2.is_ok() && p0.is_ok() && p1.is_ok());
     let candidates = vec![
-        MergeTrainCandidate { bead_id: "src-p2".to_string(), priority: 2, depends_on: vec![] },
-        MergeTrainCandidate { bead_id: "src-p0".to_string(), priority: 0, depends_on: vec![] },
-        MergeTrainCandidate { bead_id: "src-p1".to_string(), priority: 1, depends_on: vec![] },
+        match p2 {
+            Ok(value) => value,
+            Err(_) => return,
+        },
+        match p0 {
+            Ok(value) => value,
+            Err(_) => return,
+        },
+        match p1 {
+            Ok(value) => value,
+            Err(_) => return,
+        },
     ];
 
     let schedule = schedule_dependency_aware_priority_processing(&candidates);
@@ -340,26 +365,89 @@ fn given_multiple_ready_beads_when_scheduling_merge_train_then_lower_priority_nu
         Err(_) => return,
     };
 
-    assert_eq!(schedule, vec!["src-p0".to_string(), "src-p1".to_string(), "src-p2".to_string()]);
+    assert_eq!(
+        schedule.iter().map(|id| id.as_str().to_string()).collect::<Vec<_>>(),
+        vec!["src-p0".to_string(), "src-p1".to_string(), "src-p2".to_string()]
+    );
 }
 
 #[test]
 fn given_dependency_cycle_when_scheduling_merge_train_then_returns_cycle_error() {
+    let a = MergeTrainCandidate::new("src-a", 1, vec!["src-b"]);
+    let b = MergeTrainCandidate::new("src-b", 1, vec!["src-a"]);
+    assert!(a.is_ok() && b.is_ok());
     let candidates = vec![
-        MergeTrainCandidate {
-            bead_id: "src-a".to_string(),
-            priority: 1,
-            depends_on: vec!["src-b".to_string()],
+        match a {
+            Ok(value) => value,
+            Err(_) => return,
         },
-        MergeTrainCandidate {
-            bead_id: "src-b".to_string(),
-            priority: 1,
-            depends_on: vec!["src-a".to_string()],
+        match b {
+            Ok(value) => value,
+            Err(_) => return,
         },
     ];
 
     let schedule = schedule_dependency_aware_priority_processing(&candidates);
     assert_eq!(schedule, Err(MergeTrainError::DependencyCycle));
+}
+
+#[test]
+fn given_invalid_merge_priority_when_building_candidate_then_rejects_at_boundary() {
+    let candidate = MergeTrainCandidate::new("src-bad", 9, Vec::<&str>::new());
+    assert_eq!(candidate, Err(MergeTrainError::InvalidPriority(9)));
+}
+
+#[test]
+fn given_missing_lock_when_deriving_merge_decisions_then_requeues_candidate() {
+    let candidate = MergeTrainCandidate::new("src-a", 1, Vec::<&str>::new());
+    assert!(candidate.is_ok());
+    let candidate = match candidate {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+
+    let decisions =
+        schedule_merge_train_with_decisions(&[candidate], &std::collections::HashMap::new());
+    assert!(decisions.is_ok());
+    let decisions = match decisions {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+
+    assert_eq!(decisions.len(), 1);
+    assert!(matches!(
+        decisions[0],
+        types::MergeDecision::Requeue { reason: types::MergeBlockReason::LockUnavailable, .. }
+    ));
+}
+
+#[test]
+fn given_lock_token_and_valid_candidate_when_deriving_merge_decisions_then_merges() {
+    let candidate = MergeTrainCandidate::new("src-merge", 0, Vec::<&str>::new());
+    assert!(candidate.is_ok());
+    let candidate = match candidate {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+
+    let token = types::LockToken::try_from("lock-src-merge");
+    assert!(token.is_ok());
+    let token = match token {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+
+    let mut locks = std::collections::HashMap::new();
+    locks.insert(candidate.bead_id.clone(), token);
+
+    let decisions = schedule_merge_train_with_decisions(&[candidate], &locks);
+    assert!(decisions.is_ok());
+    let decisions = match decisions {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+
+    assert!(matches!(decisions[0], types::MergeDecision::Merge { queue_position: _, lock: _ }));
 }
 
 #[test]

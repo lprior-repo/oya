@@ -537,3 +537,35 @@ fn test_no_timing_drift_across_cycles() {
         assert_eq!(breaker.state, CircuitState::HalfOpen, "Cycle {} should reach HalfOpen", cycle);
     }
 }
+
+proptest! {
+    #[test]
+    fn prop_merge_decision_is_deterministic_for_same_input(
+        bead_id in "[a-z0-9_-]{1,16}",
+        priority in 0u8..5u8,
+        lock_present in any::<bool>(),
+    ) {
+        let candidate = oya::MergeTrainCandidate::new(bead_id.as_str(), priority, Vec::<&str>::new());
+        prop_assume!(candidate.is_ok());
+        let candidate = match candidate {
+            Ok(value) => value,
+            Err(_) => return Ok(()),
+        };
+
+        let mut locks = std::collections::HashMap::new();
+        if lock_present {
+            let token = oya::types::LockToken::try_from("lock-token-1");
+            prop_assume!(token.is_ok());
+            let token = match token {
+                Ok(value) => value,
+                Err(_) => return Ok(()),
+            };
+            locks.insert(candidate.bead_id.clone(), token);
+        }
+
+        let once = oya::schedule_merge_train_with_decisions(std::slice::from_ref(&candidate), &locks);
+        let twice = oya::schedule_merge_train_with_decisions(std::slice::from_ref(&candidate), &locks);
+
+        prop_assert_eq!(once, twice);
+    }
+}

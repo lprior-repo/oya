@@ -220,7 +220,7 @@ pub mod usage;
 use chrono::{DateTime, Utc};
 use std::path::PathBuf;
 use thiserror::Error;
-use types::FailureCategory;
+use types::{derive_merge_decision, FailureCategory, LockToken, MergeDecision, QueuePosition};
 
 /// Determine if a failure category is retryable
 ///
@@ -1044,15 +1044,85 @@ fn is_allowed_manual_e2e_task(task: &str) -> bool {
 }
 
 const MAX_MERGE_TRAIN_PRIORITY: u8 = 4;
-type MergeTrainPriorities = std::collections::HashMap<String, u8>;
-type MergeTrainIndegree = std::collections::HashMap<String, usize>;
-type MergeTrainDependents = std::collections::HashMap<String, Vec<String>>;
+type MergeTrainPriorities = std::collections::HashMap<MergeBeadId, MergePriority>;
+type MergeTrainIndegree = std::collections::HashMap<MergeBeadId, usize>;
+type MergeTrainDependents = std::collections::HashMap<MergeBeadId, Vec<MergeBeadId>>;
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct MergeBeadId(String);
+
+impl MergeBeadId {
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl std::fmt::Display for MergeBeadId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl TryFrom<&str> for MergeBeadId {
+    type Error = MergeTrainError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            return Err(MergeTrainError::EmptyField("bead_id"));
+        }
+        if !trimmed.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_') {
+            return Err(MergeTrainError::InvalidBeadId(trimmed.to_string()));
+        }
+        Ok(Self(trimmed.to_string()))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct MergePriority(u8);
+
+impl MergePriority {
+    #[must_use]
+    pub const fn as_u8(self) -> u8 {
+        self.0
+    }
+}
+
+impl TryFrom<u8> for MergePriority {
+    type Error = MergeTrainError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        if value > MAX_MERGE_TRAIN_PRIORITY {
+            Err(MergeTrainError::InvalidPriority(value))
+        } else {
+            Ok(Self(value))
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MergeTrainCandidate {
-    pub bead_id: String,
-    pub priority: u8,
-    pub depends_on: Vec<String>,
+    pub bead_id: MergeBeadId,
+    pub priority: MergePriority,
+    pub depends_on: Vec<MergeBeadId>,
+}
+
+impl MergeTrainCandidate {
+    pub fn new(
+        bead_id: &str,
+        priority: u8,
+        depends_on: Vec<&str>,
+    ) -> Result<Self, MergeTrainError> {
+        Ok(Self {
+            bead_id: MergeBeadId::try_from(bead_id)?,
+            priority: MergePriority::try_from(priority)?,
+            depends_on: depends_on
+                .into_iter()
+                .map(MergeBeadId::try_from)
+                .collect::<Result<Vec<_>, _>>()?,
+        })
+    }
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -1062,16 +1132,20 @@ pub enum MergeTrainError {
     #[error("merge train priority out of range: {0}")]
     InvalidPriority(u8),
     #[error("merge train duplicate bead id: {0}")]
-    DuplicateBeadId(String),
+    DuplicateBeadId(MergeBeadId),
+    #[error("merge train invalid bead id: {0}")]
+    InvalidBeadId(String),
     #[error("merge train unknown dependency: bead={bead_id} dependency={dependency}")]
-    UnknownDependency { bead_id: String, dependency: String },
+    UnknownDependency { bead_id: MergeBeadId, dependency: MergeBeadId },
+    #[error("merge train invalid queue position: {0}")]
+    InvalidQueuePosition(u32),
     #[error("merge train dependency cycle detected")]
     DependencyCycle,
 }
 
 pub fn schedule_dependency_aware_priority_processing(
     candidates: &[MergeTrainCandidate],
-) -> Result<Vec<String>, MergeTrainError> {
+) -> Result<Vec<MergeBeadId>, MergeTrainError> {
     let priorities = validate_and_collect_priorities(candidates)?;
     let (mut indegree, dependents) = build_merge_train_graph(candidates, &priorities)?;
     let mut ready = initial_ready_queue(candidates, &indegree);
@@ -1098,12 +1172,6 @@ fn validate_and_collect_priorities(
 ) -> Result<MergeTrainPriorities, MergeTrainError> {
     let mut priorities = std::collections::HashMap::new();
     for candidate in candidates {
-        if candidate.bead_id.trim().is_empty() {
-            return Err(MergeTrainError::EmptyField("bead_id"));
-        }
-        if candidate.priority > MAX_MERGE_TRAIN_PRIORITY {
-            return Err(MergeTrainError::InvalidPriority(candidate.priority));
-        }
         if priorities.insert(candidate.bead_id.clone(), candidate.priority).is_some() {
             return Err(MergeTrainError::DuplicateBeadId(candidate.bead_id.clone()));
         }
@@ -1116,7 +1184,7 @@ fn build_merge_train_graph(
     priorities: &MergeTrainPriorities,
 ) -> Result<(MergeTrainIndegree, MergeTrainDependents), MergeTrainError> {
     let mut indegree = priorities.keys().map(|id| (id.clone(), 0_usize)).collect::<_>();
-    let mut dependents = std::collections::HashMap::<String, Vec<String>>::new();
+    let mut dependents = std::collections::HashMap::<MergeBeadId, Vec<MergeBeadId>>::new();
 
     for candidate in candidates {
         for dependency in &candidate.depends_on {
@@ -1126,7 +1194,7 @@ fn build_merge_train_graph(
                     dependency: dependency.clone(),
                 });
             }
-            increment_indegree(candidate.bead_id.as_str(), &mut indegree)?;
+            increment_indegree(&candidate.bead_id, &mut indegree)?;
             dependents.entry(dependency.clone()).or_default().push(candidate.bead_id.clone());
         }
     }
@@ -1137,7 +1205,7 @@ fn build_merge_train_graph(
 fn initial_ready_queue(
     candidates: &[MergeTrainCandidate],
     indegree: &MergeTrainIndegree,
-) -> Vec<String> {
+) -> Vec<MergeBeadId> {
     candidates
         .iter()
         .filter(|candidate| indegree.get(&candidate.bead_id).copied().unwrap_or(0) == 0)
@@ -1147,11 +1215,16 @@ fn initial_ready_queue(
         .collect()
 }
 
-fn pop_next_ready(ready: &mut Vec<String>, priorities: &MergeTrainPriorities) -> Option<String> {
+fn pop_next_ready(
+    ready: &mut Vec<MergeBeadId>,
+    priorities: &MergeTrainPriorities,
+) -> Option<MergeBeadId> {
     ready.sort_by(|left, right| {
-        let left_priority = priorities.get(left).copied().unwrap_or(MAX_MERGE_TRAIN_PRIORITY);
-        let right_priority = priorities.get(right).copied().unwrap_or(MAX_MERGE_TRAIN_PRIORITY);
-        left_priority.cmp(&right_priority).then_with(|| left.cmp(right))
+        let left_priority =
+            priorities.get(left).copied().unwrap_or(MergePriority(MAX_MERGE_TRAIN_PRIORITY));
+        let right_priority =
+            priorities.get(right).copied().unwrap_or(MergePriority(MAX_MERGE_TRAIN_PRIORITY));
+        left_priority.as_u8().cmp(&right_priority.as_u8()).then_with(|| left.cmp(right))
     });
     if ready.is_empty() {
         None
@@ -1161,7 +1234,7 @@ fn pop_next_ready(ready: &mut Vec<String>, priorities: &MergeTrainPriorities) ->
 }
 
 fn increment_indegree(
-    bead_id: &str,
+    bead_id: &MergeBeadId,
     indegree: &mut MergeTrainIndegree,
 ) -> Result<(), MergeTrainError> {
     if let Some(value) = indegree.get_mut(bead_id) {
@@ -1169,16 +1242,16 @@ fn increment_indegree(
         Ok(())
     } else {
         Err(MergeTrainError::UnknownDependency {
-            bead_id: bead_id.to_string(),
-            dependency: bead_id.to_string(),
+            bead_id: bead_id.clone(),
+            dependency: bead_id.clone(),
         })
     }
 }
 
 fn decrement_indegree_and_queue(
-    bead_id: &str,
+    bead_id: &MergeBeadId,
     indegree: &mut MergeTrainIndegree,
-    ready: &mut Vec<String>,
+    ready: &mut Vec<MergeBeadId>,
 ) -> Result<(), MergeTrainError> {
     if let Some(value) = indegree.get_mut(bead_id) {
         if *value == 0 {
@@ -1186,15 +1259,31 @@ fn decrement_indegree_and_queue(
         }
         *value -= 1;
         if *value == 0 {
-            ready.push(bead_id.to_string());
+            ready.push(bead_id.clone());
         }
         Ok(())
     } else {
         Err(MergeTrainError::UnknownDependency {
-            bead_id: bead_id.to_string(),
-            dependency: bead_id.to_string(),
+            bead_id: bead_id.clone(),
+            dependency: bead_id.clone(),
         })
     }
+}
+
+pub fn schedule_merge_train_with_decisions(
+    candidates: &[MergeTrainCandidate],
+    locks: &std::collections::HashMap<MergeBeadId, LockToken>,
+) -> Result<Vec<MergeDecision>, MergeTrainError> {
+    let ordered = schedule_dependency_aware_priority_processing(candidates)?;
+    ordered
+        .iter()
+        .enumerate()
+        .map(|(index, bead_id)| {
+            let position = QueuePosition::try_from(index as u32 + 1)
+                .map_err(|_| MergeTrainError::InvalidQueuePosition(index as u32 + 1))?;
+            Ok(derive_merge_decision(position, locks.get(bead_id).cloned(), true))
+        })
+        .collect()
 }
 
 include!("lib_contracts_src_kes.rs");

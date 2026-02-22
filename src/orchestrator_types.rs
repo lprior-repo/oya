@@ -1,5 +1,5 @@
 use super::OyaError;
-use oya::types::TimelineEntry;
+use oya::types::{MergeDecision, QueuePosition, TimelineEntry};
 use restate_sdk::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -59,7 +59,14 @@ pub(super) struct WorkspaceLifecycleEvent {
     pub add_passed: bool,
     pub add_exit_code: i32,
     pub add_output: String,
+    pub coordination: WorkspaceCoordination,
     pub recorded_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(super) struct WorkspaceCoordination {
+    pub queue_position: QueuePosition,
+    pub merge_decision: MergeDecision,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -111,6 +118,7 @@ pub(super) struct WorkspaceLifecycle {
     pub add_command: String,
     pub add_passed: bool,
     pub add_exit_code: i32,
+    pub coordination: WorkspaceCoordination,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
