@@ -113,6 +113,18 @@ mod tests {
     }
 
     #[test]
+    fn query_response_success_completion_normalizes_failed_orchestration_status() {
+        let body = r#"{"rows":[{"status":"completed","completion_result":"success","state_json":"\"{\\\"stage\\\":\\\"contract\\\",\\\"attempt\\\":1,\\\"status\\\":\\\"failed\\\",\\\"last_failure\\\":\\\"old failure\\\"}\""}]}"#;
+
+        let parsed = WorkflowStatus::from_query_response(body);
+
+        assert!(parsed.is_ok());
+        if let Ok(status) = parsed {
+            assert_eq!(status.orchestration_status, "shipped");
+        }
+    }
+
+    #[test]
     fn workflow_status_is_complete_requires_terminal_orchestration_status() {
         let completed_running = WorkflowStatus {
             status: "completed".to_string(),
@@ -179,6 +191,7 @@ impl WorkflowStatus {
             .and_then(|s| s.as_str())
             .ok_or("Missing or invalid 'status' field")?
             .to_string();
+        let completion_result = row.get("completion_result").and_then(|s| s.as_str());
 
         let state_json_str =
             row.get("state_json").and_then(|s| s.as_str()).map_or("{}", std::convert::identity);
@@ -188,6 +201,15 @@ impl WorkflowStatus {
         let state: serde_json::Value =
             serde_json::from_str(state_str).map_err(|e| format!("Invalid state string: {}", e))?;
 
+        let raw_orchestration_status =
+            state.get("status").and_then(|s| s.as_str()).map_or("unknown", std::convert::identity);
+        let orchestration_status = reconcile_orchestration_status(
+            status.as_str(),
+            completion_result,
+            raw_orchestration_status,
+        )
+        .to_string();
+
         Ok(Self {
             status,
             stage: state
@@ -196,11 +218,7 @@ impl WorkflowStatus {
                 .map_or("unknown", std::convert::identity)
                 .to_string(),
             attempt: state.get("attempt").and_then(|a| a.as_u64()).map_or(0, |value| value) as u32,
-            orchestration_status: state
-                .get("status")
-                .and_then(|s| s.as_str())
-                .map_or("unknown", std::convert::identity)
-                .to_string(),
+            orchestration_status,
             last_failure: state
                 .get("last_failure")
                 .and_then(|s| s.as_str())
@@ -215,6 +233,18 @@ impl WorkflowStatus {
 
     pub(super) fn is_failed(&self) -> bool {
         self.status == "failed" || self.orchestration_status == "failed"
+    }
+}
+
+fn reconcile_orchestration_status(
+    invocation_status: &str,
+    completion_result: Option<&str>,
+    orchestration_status: &str,
+) -> &str {
+    if invocation_status == "completed" && completion_result == Some("success") {
+        "shipped"
+    } else {
+        orchestration_status
     }
 }
 

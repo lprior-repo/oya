@@ -235,10 +235,10 @@ pub(super) async fn fetch_workflow_status(
 ) -> Result<WorkflowStatus, DynError> {
     let query_payload = serde_json::json!({
         "query": format!(
-            "select i.status, s.value_utf8 as state_json from sys_invocation i \
+            "select i.status, i.completion_result, s.value_utf8 as state_json from sys_invocation i \
              left join state s on s.service_name = i.target_service_name \
              and s.service_key = i.target_service_key and s.key = 'state' \
-              where i.target_service_name = 'OyaOrchestrator' \
+               where i.target_service_name = 'OyaOrchestrator' \
               and i.target_service_key = '{}' \
               and i.target_handler_name = 'run' \
              order by i.modified_at desc limit 1",
