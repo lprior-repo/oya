@@ -5,7 +5,6 @@ use oya::types::Gate;
 use std::path::PathBuf;
 
 const MOON_TIMEOUT_SECONDS: u64 = 900;
-const ZJJ_TIMEOUT_SECONDS: u64 = 60;
 const GIT_TIMEOUT_SECONDS: u64 = 30;
 
 #[derive(Clone)]
@@ -20,10 +19,7 @@ pub(crate) struct GateEvidence {
 
 pub(crate) fn execute_gate(gate: Gate, repo_root: &PathBuf) -> Result<GateEvidence, OyaError> {
     let command = generate_moon_command(&gate).command;
-    let timeout_seconds = match gate {
-        Gate::ZjjMergeQueue => ZJJ_TIMEOUT_SECONDS,
-        _ => MOON_TIMEOUT_SECONDS,
-    };
+    let timeout_seconds = MOON_TIMEOUT_SECONDS;
     let parsed_command = parse_gate_command(command.as_str())?;
     let pinned_revision = collect_pinned_revision(&parsed_command, repo_root)?;
     let (program, args) = parsed_command.command_parts();
@@ -53,7 +49,6 @@ pub(crate) fn execute_gate(gate: Gate, repo_root: &PathBuf) -> Result<GateEviden
 #[derive(Clone)]
 pub(crate) enum GateCommand {
     Moon { task: MoonTask, passthrough: Vec<String> },
-    ZjjSyncStatus,
 }
 
 pub(crate) struct ParsedCommandParts {
@@ -78,7 +73,6 @@ pub(crate) fn parse_gate_command(command: &str) -> Result<GateCommand, OyaError>
 fn parse_gate_command_parts(command: ParsedCommandParts) -> Result<GateCommand, OyaError> {
     match (command.program.as_str(), command.args.as_slice()) {
         ("moon", moon_args) => parse_moon_gate_command(moon_args),
-        ("zjj", zjj_args) if zjj_args == ["sync", "--status"] => Ok(GateCommand::ZjjSyncStatus),
         _ => Err(OyaError(format!(
             "unsupported gate command: {} {}",
             command.program,
@@ -110,9 +104,6 @@ impl GateCommand {
                     .chain(passthrough.iter().cloned())
                     .collect();
                 ("moon".to_string(), args)
-            }
-            GateCommand::ZjjSyncStatus => {
-                ("zjj".to_string(), vec!["sync".to_string(), "--status".to_string()])
             }
         }
     }
@@ -292,9 +283,6 @@ fn gate_failure_mapping(stage: &Stage, gate: &Gate) -> Option<(FailureCategory, 
         (&Stage::ShipGate, &Gate::CueArtifactGenerated) => {
             Some((FailureCategory::OutputParseFailure, Stage::Implementation))
         }
-        (&Stage::ShipGate, &Gate::ZjjMergeQueue) => {
-            Some((FailureCategory::MergeConflict, Stage::Implementation))
-        }
         _ => None,
     }
 }
@@ -316,13 +304,11 @@ mod tests {
     fn test_parse_cue_check_command() {
         let result = parse_gate_command("moon run :cue-check");
         assert!(result.is_ok());
-        let gate_command = result.unwrap();
-        match gate_command {
-            GateCommand::Moon { task, passthrough } => {
-                assert!(matches!(task, MoonTask::CueCheck));
-                assert!(passthrough.is_empty());
-            }
-            _ => panic!("Expected Moon command"),
+        if let Ok(GateCommand::Moon { task, passthrough }) = result {
+            assert!(matches!(task, MoonTask::CueCheck));
+            assert!(passthrough.is_empty());
+        } else {
+            panic!("Expected Moon command");
         }
     }
 
@@ -352,7 +338,7 @@ mod tests {
 
     #[test]
     fn test_all_ship_gate_failures_route_to_implementation() {
-        let ship_gates = vec![Gate::CueArtifactGenerated, Gate::ZjjMergeQueue];
+        let ship_gates = vec![Gate::CueArtifactGenerated];
         for gate in ship_gates {
             let (_, next_stage) = gate_failure_outcome(&StageName::ShipGate, &gate);
             assert_eq!(
@@ -362,6 +348,9 @@ mod tests {
                 gate
             );
         }
+
+        let unknown_gate_outcome = gate_failure_outcome(&StageName::ShipGate, &Gate::ZjjMergeQueue);
+        assert_eq!(unknown_gate_outcome, (FailureCategory::TestFailed, StageName::ShipGate));
     }
 
     #[test]

@@ -38,7 +38,7 @@ pub fn generate_moon_command(gate: &Gate) -> MoonCommand {
         Gate::HoldoutScenarios => {
             ("holdout", "Run hidden holdout scenario suite", "moon run :holdout")
         }
-        Gate::ZjjMergeQueue => ("test", "Verify merge queue", "zjj sync --status"),
+        Gate::ZjjMergeQueue => ("check", "Legacy merge gate (moon fallback)", "moon run :check"),
         Gate::CueArtifactGenerated => {
             ("cue", "Verify CUE artifact generated", "moon run :cue-check")
         }
@@ -82,8 +82,8 @@ mod tests {
     #[test]
     fn generate_zjj_merge_queue_command() {
         let cmd = generate_moon_command(&Gate::ZjjMergeQueue);
-        assert_eq!(cmd.task_name, "test");
-        assert_eq!(cmd.command, "zjj sync --status");
+        assert_eq!(cmd.task_name, "check");
+        assert_eq!(cmd.command, "moon run :check");
     }
 
     #[test]

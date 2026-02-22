@@ -23,6 +23,7 @@ const RED_SEAL_KEY: &str = "red_acceptance_seal";
 const DEFAULT_PIPELINE_STAGE_WATCHDOG_SECONDS: u64 = 480;
 const DEFAULT_PROVIDER_POOL_RECOVERY_SECONDS: u64 = 180;
 const DEFAULT_PROVIDER_UNAVAILABLE_MAX_ATTEMPTS: u32 = 3;
+const PIPELINE_EXECUTION_ENV_KEY: &str = "OYA_ENABLE_PIPELINE_EXECUTION";
 
 use clap::{Parser, Subcommand};
 
@@ -42,8 +43,8 @@ mod workflow_runner;
 use orchestrator_types::*;
 use pipeline::{
     execute_and_accumulate_stage, init_pipeline_state, parse_rfc3339_stable,
-    persist_stage_artifact, pipeline_input, workflow_timestamp_or_error, PipelineRunInput,
-    PipelineState, RuntimeConfig, StageExecutionInput,
+    persist_stage_artifact, pipeline_input, stable_env_var, workflow_timestamp_or_error,
+    PipelineRunInput, PipelineState, RuntimeConfig, StageExecutionInput,
 };
 use runtime_tools::*;
 
@@ -450,10 +451,39 @@ async fn run_pipeline(
     context: String,
     model: String,
 ) -> Result<(), OyaError> {
+    ensure_pipeline_execution_enabled(ctx).await?;
     let config = RuntimeConfig::load(ctx).await?;
     let input = pipeline_input(run_id, bead_id, context);
     let mut state = init_pipeline_state(ctx, &input, model).await?;
     run_pipeline_loop(ctx, &config, &input, &mut state).await
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PipelineExecutionPolicy {
+    Enabled,
+    Disabled,
+}
+
+fn parse_pipeline_execution_policy(value: Option<&str>) -> PipelineExecutionPolicy {
+    if matches!(value, Some("1")) {
+        PipelineExecutionPolicy::Enabled
+    } else {
+        PipelineExecutionPolicy::Disabled
+    }
+}
+
+async fn ensure_pipeline_execution_enabled(ctx: &WorkflowContext<'_>) -> Result<(), OyaError> {
+    let raw = stable_env_var(ctx, PIPELINE_EXECUTION_ENV_KEY)
+        .await
+        .map_err(|error| OyaError(format!("pipeline execution flag read failed: {}", error)))?;
+    let policy = parse_pipeline_execution_policy(raw.as_deref());
+    match policy {
+        PipelineExecutionPolicy::Enabled => Ok(()),
+        PipelineExecutionPolicy::Disabled => Err(OyaError(format!(
+            "pipeline execution disabled: set {}=1 to enable",
+            PIPELINE_EXECUTION_ENV_KEY
+        ))),
+    }
 }
 
 async fn run_pipeline_loop(
@@ -1438,35 +1468,15 @@ struct LandingStepTemplate {
     next_stage: Stage,
 }
 
-const LANDING_STEPS: &[LandingStepTemplate] = &[
-    LandingStepTemplate {
-        id: "moon_ci",
-        label: "moon ci",
-        program: "moon",
-        args: &["run", ":ci"],
-        timeout_seconds: 1_800,
-        failure_category: FailureCategory::TestFailed,
-        next_stage: Stage::Implementation,
-    },
-    LandingStepTemplate {
-        id: "zjj_sync",
-        label: "zjj sync",
-        program: "zjj",
-        args: &["sync"],
-        timeout_seconds: 120,
-        failure_category: FailureCategory::MergeConflict,
-        next_stage: Stage::Implementation,
-    },
-    LandingStepTemplate {
-        id: "zjj_done",
-        label: "zjj done",
-        program: "zjj",
-        args: &["done"],
-        timeout_seconds: 120,
-        failure_category: FailureCategory::MergeConflict,
-        next_stage: Stage::Implementation,
-    },
-];
+const LANDING_STEPS: &[LandingStepTemplate] = &[LandingStepTemplate {
+    id: "moon_ci",
+    label: "moon ci",
+    program: "moon",
+    args: &["run", ":ci"],
+    timeout_seconds: 1_800,
+    failure_category: FailureCategory::TestFailed,
+    next_stage: Stage::Implementation,
+}];
 
 async fn run_landing_plane(
     ctx: &WorkflowContext<'_>,
@@ -2139,7 +2149,7 @@ fn report_server_start_messages() {
         execution_mode = "real",
         "OYA Orchestrator starting"
     );
-    tracing::info!("Using REAL execution: opencode CLI + moon/zjj quality gates");
+    tracing::info!("Using REAL execution: opencode CLI + moon quality gates + br landing");
 
     tracing::info!(
         workflow_service = "OyaOrchestrator",

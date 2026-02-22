@@ -97,9 +97,9 @@ fn test_parse_gate_command_rejects_unknown_moon_task() {
 }
 
 #[test]
-fn test_parse_gate_command_accepts_zjj_sync_status() {
+fn test_parse_gate_command_rejects_zjj_sync_status() {
     let parsed = parse_gate_command("zjj sync --status");
-    assert!(matches!(parsed, Ok(GateCommand::ZjjSyncStatus)));
+    assert!(parsed.is_err());
 }
 
 #[test]
@@ -112,9 +112,9 @@ fn test_parse_gate_command_accepts_cue_check_task() {
 }
 
 #[test]
-fn test_gate_failure_outcome_shipgate_merge_conflict_routes_to_implementation() {
+fn test_gate_failure_outcome_unknown_shipgate_gate_defaults_to_stage_retry() {
     let outcome = gate_failure_outcome(&Stage::ShipGate, &Gate::ZjjMergeQueue);
-    assert_eq!(outcome, (FailureCategory::MergeConflict, Stage::Implementation));
+    assert_eq!(outcome, (FailureCategory::TestFailed, Stage::ShipGate));
 }
 
 #[test]
@@ -208,6 +208,26 @@ fn test_execute_ship_gate_rejects_missing_cue_revision_metadata() {
 
     assert!(!result.passed);
     assert_eq!(result.failure_category, Some(FailureCategory::OutputParseFailure));
+}
+
+#[test]
+fn given_landing_steps_when_rendered_then_they_use_moon_and_br_only() {
+    let programs = LANDING_STEPS.iter().map(|step| step.program).collect::<Vec<_>>();
+
+    assert_eq!(programs, vec!["moon"]);
+    assert!(programs.iter().all(|program| *program != "zjj"));
+}
+
+#[test]
+fn given_pipeline_execution_flag_when_unset_then_execution_is_disabled() {
+    let policy = parse_pipeline_execution_policy(None);
+    assert_eq!(policy, PipelineExecutionPolicy::Disabled);
+}
+
+#[test]
+fn given_pipeline_execution_flag_when_one_then_execution_is_enabled() {
+    let policy = parse_pipeline_execution_policy(Some("1"));
+    assert_eq!(policy, PipelineExecutionPolicy::Enabled);
 }
 
 #[test]

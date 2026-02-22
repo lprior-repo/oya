@@ -69,9 +69,8 @@ mod tests {
     #[test]
     fn select_gates_ship_gate_stage() {
         let gates = select_gates(&StageName::ShipGate);
-        assert_eq!(gates.len(), 2);
+        assert_eq!(gates.len(), 1);
         assert!(gates.contains(&Gate::CueArtifactGenerated));
-        assert!(gates.contains(&Gate::ZjjMergeQueue));
     }
 
     #[test]

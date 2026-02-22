@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 
 const ZJJ_TIMEOUT_SECONDS: u64 = 60;
 
-fn stage_uses_workspace(stage: &Stage) -> bool {
-    matches!(stage, Stage::Contract | Stage::Implementation | Stage::ShipGate)
+fn stage_uses_workspace(_stage: &Stage) -> bool {
+    false
 }
 
 fn stage_requires_merge_queue(_stage: &Stage) -> bool {

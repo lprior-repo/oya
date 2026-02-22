@@ -262,7 +262,7 @@ fn gate_result_data(gate: &Gate, evidence: &GateEvidence) -> GateResultData {
 }
 
 fn ship_gate_prompt() -> String {
-    "Ship gate executes quality gates only (moon/zjj); no OpenCode prompt".to_string()
+    "Ship gate executes quality gates only (moon); no OpenCode prompt".to_string()
 }
 
 fn ship_gate_failure(
@@ -445,7 +445,7 @@ mod tests {
                 });
             }
             Ok(GateEvidence {
-                command: "zjj sync --status".to_string(),
+                command: "moon run :check".to_string(),
                 passed: true,
                 exit_code: 0,
                 output: "ok".to_string(),

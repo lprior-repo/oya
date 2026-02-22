@@ -76,16 +76,15 @@ async fn given_plan_stage_when_gates_run_then_only_compiles_required() {
 
 /// Given: ShipGate stage
 /// When: Gates run
-/// Then: Should run CueArtifactGenerated and ZjjMergeQueue.
+/// Then: Should run CueArtifactGenerated only.
 #[tokio::test]
-async fn given_shipgate_when_gates_run_then_runs_ci_and_merge_checks() {
+async fn given_shipgate_when_gates_run_then_runs_cue_artifact_check_only() {
     use oya::types::StageName;
 
     let gates = StageName::ShipGate.gates();
 
-    assert_eq!(gates.len(), 2);
+    assert_eq!(gates.len(), 1);
     assert!(gates.contains(&Gate::CueArtifactGenerated));
-    assert!(gates.contains(&Gate::ZjjMergeQueue));
 }
 
 /// Given: Tdd15 stage
@@ -130,10 +129,10 @@ async fn given_all_stages_when_gates_checked_then_appropriate_for_stage() {
     let witness_gates = StageName::Witness.gates();
     assert!(witness_gates.contains(&Gate::HoldoutScenarios));
 
-    // Ship stage: artifact + merge check
+    // Ship stage: artifact check only
     let shipgate_gates = StageName::ShipGate.gates();
     assert!(shipgate_gates.contains(&Gate::CueArtifactGenerated));
-    assert!(shipgate_gates.contains(&Gate::ZjjMergeQueue));
+    assert_eq!(shipgate_gates.len(), 1);
 }
 
 /// Given: Gate fails

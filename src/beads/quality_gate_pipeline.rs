@@ -140,8 +140,8 @@ mod tests {
     fn pipeline_ship_gate_stage() {
         let result = run_quality_gate_pipeline(StageName::ShipGate).unwrap();
         assert!(result.passed);
-        assert_eq!(result.total_gates, 2);
-        assert_eq!(result.passed_gates, 2);
+        assert_eq!(result.total_gates, 1);
+        assert_eq!(result.passed_gates, 1);
     }
 
     #[test]
