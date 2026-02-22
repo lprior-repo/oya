@@ -60,6 +60,34 @@
 //! - `moon run :clippy` passes with no unwrap/expect/panic violations
 //! - `moon run :test` passes with all tests green
 //! - Code review confirms no other functions have this anti-pattern
+//!
+//! # Design Contract: `src-23s`
+//!
+//! ## Purpose and goals
+//! - Verify that zjj workspace isolation is properly disabled by default
+//! - Ensure zjj commands execute in the current working directory without creating
+//!   isolated workspaces when not explicitly requested
+//! - Validate that the default behavior provides direct command execution
+//!   for backward compatibility and simple use cases
+//!
+//! ## Key functions to implement
+//! - `verify_zjj_default_disabled() -> Result<(), ZjjVerificationError>`
+//!   - Checks that zjj operates in current directory by default
+//! - `test_zjj_no_workspace_creation()`
+//!   - Test to verify no workspace directories are created implicitly
+//! - `test_zjj_commands_in_current_dir()`
+//!   - Test to verify commands execute in the current working directory
+//! - `validate_zjj_default_config() -> Result<(), ZjjVerificationError>`
+//!   - Validates that default configuration has workspace isolation disabled
+//!
+//! ## Acceptance criteria
+//! - zjj commands execute in current directory by default without workspace creation
+//! - No implicit workspace directories are created when using basic zjj commands
+//! - Default configuration explicitly disables workspace isolation
+//! - Commands like `zjj status`, `zjj list`, `zjj help` work in current directory
+//! - Tests verify both the absence of workspace creation and correct command behavior
+//! - Error handling works correctly when workspace isolation is not enabled
+//! - Documentation clearly states the default behavior and how to enable workspaces
 
 pub mod beads;
 pub mod config;
