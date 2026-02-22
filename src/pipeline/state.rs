@@ -36,15 +36,6 @@ pub(crate) async fn stable_env_var(
     ctx.run(move || async move { Ok::<_, HandlerError>(std::env::var(&key).ok()) }).await
 }
 
-/// Check if an environment variable is set to a truthy value (1 or true).
-pub(crate) async fn stable_env_bool(
-    ctx: &WorkflowContext<'_>,
-    key: &str,
-) -> Result<bool, TerminalError> {
-    let value = stable_env_var(ctx, key).await?;
-    Ok(value.is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true")))
-}
-
 pub(crate) fn timestamp_error() -> OyaError {
     OyaError("timestamp error".to_string())
 }

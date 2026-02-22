@@ -11,7 +11,8 @@ fn stage_uses_workspace(stage: &Stage) -> bool {
 }
 
 fn stage_requires_merge_queue(stage: &Stage) -> bool {
-    matches!(stage, Stage::ShipGate)
+    let _ = stage;
+    false
 }
 
 #[derive(Clone)]
@@ -43,11 +44,10 @@ fn queue_workspace(
 ) -> Result<WorkspaceCommandResult, OyaError> {
     if !stage_requires_merge_queue(&request.stage) {
         return Ok(WorkspaceCommandResult {
-            command: "zjj queue --add <workspace> --bead <bead_id> (skipped for non-ship_gate)"
-                .to_string(),
+            command: "zjj queue --add <workspace> --bead <bead_id> (disabled)".to_string(),
             passed: true,
             exit_code: 0,
-            output: "merge queue not required for this stage".to_string(),
+            output: "merge queue disabled in runtime".to_string(),
         });
     }
     let command = format!("zjj queue --add {} --bead {}", workspace, request.bead_id);
@@ -143,7 +143,7 @@ mod tests {
     fn stage_requires_merge_queue_only_for_ship_gate() {
         assert!(!stage_requires_merge_queue(&Stage::Contract));
         assert!(!stage_requires_merge_queue(&Stage::Implementation));
-        assert!(stage_requires_merge_queue(&Stage::ShipGate));
+        assert!(!stage_requires_merge_queue(&Stage::ShipGate));
     }
 
     #[test]

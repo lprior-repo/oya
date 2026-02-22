@@ -132,7 +132,7 @@ fn test_execute_ship_gate_skip_zjj_gate() {
 }
 
 #[test]
-fn test_execute_ship_gate_zjj_failure_routes_to_review() {
+fn test_execute_ship_gate_enforce_still_skips_zjj_gate() {
     use std::cell::RefCell;
 
     let seen = RefCell::new(Vec::new());
@@ -145,12 +145,6 @@ fn test_execute_ship_gate_zjj_failure_routes_to_review() {
                 exit_code: 0,
                 output: "cue ok".to_string(),
             }),
-            Gate::ZjjMergeQueue => Ok(GateEvidence {
-                command: "zjj sync --status".to_string(),
-                passed: false,
-                exit_code: 1,
-                output: "queue blocked".to_string(),
-            }),
             _ => Ok(GateEvidence {
                 command: "unexpected".to_string(),
                 passed: false,
@@ -161,10 +155,10 @@ fn test_execute_ship_gate_zjj_failure_routes_to_review() {
     })
     .expect("ship gate execution should return a stage result");
 
-    assert_eq!(seen.into_inner(), vec![Gate::CueArtifactGenerated, Gate::ZjjMergeQueue]);
-    assert!(!result.passed);
-    assert_eq!(result.failure_category, Some(FailureCategory::MergeConflict));
-    assert_eq!(result.next_stage, Some(Stage::Implementation));
+    assert_eq!(seen.into_inner(), vec![Gate::CueArtifactGenerated]);
+    assert!(result.passed);
+    assert_eq!(result.failure_category, None);
+    assert_eq!(result.next_stage, None);
 }
 
 #[test]

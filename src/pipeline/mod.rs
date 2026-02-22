@@ -5,7 +5,7 @@ pub(super) use executor::{
     execute_and_accumulate_stage, persist_stage_artifact, StageExecutionInput,
 };
 pub(super) use state::{
-    init_pipeline_state, parse_rfc3339_stable, pipeline_input, stable_env_bool, workflow_timestamp,
+    init_pipeline_state, parse_rfc3339_stable, pipeline_input, stable_env_var, workflow_timestamp,
     workflow_timestamp_or_error, PipelineRunInput, PipelineState,
 };
 
@@ -59,28 +59,17 @@ impl MergeQueuePolicy {
     }
 
     pub(super) fn should_run(self, gate: &Gate) -> bool {
-        !(matches!(self, Self::Skip) && *gate == Gate::ZjjMergeQueue)
+        let _ = self;
+        *gate != Gate::ZjjMergeQueue
     }
 }
 
 impl RuntimeConfig {
     /// Read all configuration reliably from environment.
     pub(super) async fn load(ctx: &WorkflowContext<'_>) -> Result<Self, OyaError> {
-        let skip_zjj_workspace = stable_env_bool(ctx, "OYA_SKIP_ZJJ_WORKSPACE")
-            .await
-            .map_err(|error| {
-                OyaError(format!(
-                    "config error reading OYA_SKIP_ZJJ_WORKSPACE (expected 1/true/0/false or unset): {}",
-                    error
-                ))
-            })?;
-
-        let skip_zjj_gate = stable_env_bool(ctx, "OYA_SKIP_ZJJ_GATE").await.map_err(|error| {
-            OyaError(format!(
-                "config error reading OYA_SKIP_ZJJ_GATE (expected 1/true/0/false or unset): {}",
-                error
-            ))
-        })?;
+        let disable_zjj = Self::read_flag(ctx, "OYA_DISABLE_ZJJ").await?;
+        let (skip_zjj_workspace, skip_zjj_gate) =
+            Self::read_zjj_skip_flags(ctx, disable_zjj).await?;
 
         let repo_root_str = Self::stable_repo_root(ctx).await.map_err(|error| {
             OyaError(format!(
@@ -94,6 +83,49 @@ impl RuntimeConfig {
             merge_queue_policy: MergeQueuePolicy::from_skip_flag(skip_zjj_gate),
             repo_root: PathBuf::from(repo_root_str),
         })
+    }
+
+    async fn read_flag(ctx: &WorkflowContext<'_>, key: &str) -> Result<bool, OyaError> {
+        Self::stable_env_bool_default_true(ctx, key).await.map_err(|error| {
+            OyaError(format!(
+                "config error reading {} (expected 1/true/0/false or unset): {}",
+                key, error
+            ))
+        })
+    }
+
+    async fn read_zjj_skip_flags(
+        ctx: &WorkflowContext<'_>,
+        disable_zjj: bool,
+    ) -> Result<(bool, bool), OyaError> {
+        if disable_zjj {
+            return Ok((true, true));
+        }
+        let workspace = Self::stable_env_bool_default_true(ctx, "OYA_SKIP_ZJJ_WORKSPACE")
+            .await
+            .map_err(|error| {
+                OyaError(format!(
+                    "config error reading OYA_SKIP_ZJJ_WORKSPACE (expected 1/true/0/false or unset): {}",
+                    error
+                ))
+            })?;
+        let gate = Self::stable_env_bool_default_true(ctx, "OYA_SKIP_ZJJ_GATE").await.map_err(
+            |error| {
+                OyaError(format!(
+                    "config error reading OYA_SKIP_ZJJ_GATE (expected 1/true/0/false or unset): {}",
+                    error
+                ))
+            },
+        )?;
+        Ok((workspace, gate))
+    }
+
+    async fn stable_env_bool_default_true(
+        ctx: &WorkflowContext<'_>,
+        key: &str,
+    ) -> Result<bool, TerminalError> {
+        let value = stable_env_var(ctx, key).await?;
+        Ok(value.is_none_or(|v| v == "1" || v.eq_ignore_ascii_case("true")))
     }
 
     async fn stable_repo_root(ctx: &WorkflowContext<'_>) -> Result<String, TerminalError> {

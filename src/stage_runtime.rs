@@ -173,7 +173,7 @@ where
 
     for gate in Stage::ShipGate.gates() {
         if !merge_queue_policy.should_run(&gate) {
-            tracing::info!("SHIP GATE: skipping zjj merge queue check (OYA_SKIP_ZJJ_GATE=1)");
+            tracing::info!("SHIP GATE: skipping zjj merge queue check (disabled)");
             continue;
         }
 
