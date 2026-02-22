@@ -134,6 +134,8 @@ pub fn classify_opencode_error(stderr: &str) -> Option<FailureCategory> {
         || stderr.contains("OpenCode HTTP request failed")
         || stderr.contains("Connection refused")
         || stderr.contains("error sending request for url")
+        || stderr.contains("Cannot find module '@opencode-ai/plugin'")
+        || stderr.contains("Cannot find module \"@opencode-ai/plugin\"")
     {
         return Some(FailureCategory::ProviderUnavailable);
     }

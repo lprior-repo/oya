@@ -3398,6 +3398,13 @@ fn classify_opencode_error_returns_provider_unavailable_for_health_preflight_fai
 }
 
 #[test]
+fn classify_opencode_error_returns_provider_unavailable_for_plugin_module_resolution_failure() {
+    let message = "Unexpected error\n\nResolveMessage: Cannot find module '@opencode-ai/plugin' from '/home/lewis/.cache/opencode/node_modules/opencode-gemini-auth/src/plugin/quota.ts'";
+    let category = classify_opencode_error(message);
+    assert_eq!(category, Some(FailureCategory::ProviderUnavailable));
+}
+
+#[test]
 fn opencode_poll_snapshot_is_debug_clone_and_eq() {
     let snapshot = OpencodePollSnapshot {
         busy_sessions: vec!["ses_1".to_string()],
