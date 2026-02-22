@@ -197,7 +197,7 @@ tasks:
   # ============================================================================
 
   install:
-    command: "mkdir -p ~/.local/bin && cargo build --release --bin oya && cp target/release/oya ~/.local/bin/oya && chmod +x ~/.local/bin/oya && echo '✅ Installed oya to ~/.local/bin/oya (v0.1.2)'"
+    script: "mkdir -p ~/.local/bin && cargo build --release --bin oya && cp target/release/oya ~/.local/bin/oya && chmod +x ~/.local/bin/oya && echo '✅ Installed oya to ~/.local/bin/oya (v0.1.2)'"
     description: "Install oya binary to ~/.local/bin (system-wide)"
     toolchains:
       - rust
@@ -263,7 +263,7 @@ tasks:
       persistent: true
 
   build-ui:
-    command: "cd crates/oya-ui && trunk build --release"
+    script: "cd crates/oya-ui && trunk build --release"
     description: "Build Leptos frontend to dist/"
     toolchains:
       - rust
@@ -363,7 +363,7 @@ tasks:
   # ============================================================================
 
   check-tauri:
-    command: "cd crates/oya-tauri && cargo check"
+    script: "cd crates/oya-tauri && cargo check"
     description: "Type check oya-tauri crate (standalone workspace)"
     toolchains:
       - rust
@@ -375,7 +375,7 @@ tasks:
       cache: true
 
   test-tauri:
-    command: "cd crates/oya-tauri && cargo test"
+    script: "cd crates/oya-tauri && cargo test"
     description: "Run oya-tauri tests"
     toolchains:
       - rust
@@ -387,7 +387,7 @@ tasks:
       cache: true
 
   build-tauri:
-    command: "cd crates/oya-tauri && cargo build --release"
+    script: "cd crates/oya-tauri && cargo build --release"
     description: "Build oya-tauri desktop app"
     toolchains:
       - rust
@@ -405,7 +405,7 @@ tasks:
   # ============================================================================
 
   check-zellij:
-    command: "cd crates/zellij-frontend && cargo check"
+    script: "cd crates/zellij-frontend && cargo check"
     description: "Type check zellij-frontend crate"
     toolchains:
       - rust
@@ -416,7 +416,7 @@ tasks:
       cache: true
 
   test-zellij:
-    command: "cd crates/zellij-frontend && cargo test --target x86_64-unknown-linux-gnu"
+    script: "cd crates/zellij-frontend && cargo test --target x86_64-unknown-linux-gnu"
     description: "Run zellij-frontend tests (native target)"
     toolchains:
       - rust
@@ -439,7 +439,7 @@ tasks:
       runFromWorkspaceRoot: true
 
   install-zellij:
-    command: "mkdir -p ~/.config/zellij/plugins && cp target/wasm32-wasip1/release/zellij_frontend.wasm ~/.config/zellij/plugins/ && cp crates/zellij-frontend/plugin.yaml ~/.config/zellij/plugins/oya.yaml && echo '✅ Installed zellij-frontend plugin to ~/.config/zellij/plugins/'"
+    script: "mkdir -p ~/.config/zellij/plugins && cp target/wasm32-wasip1/release/zellij_frontend.wasm ~/.config/zellij/plugins/ && cp crates/zellij-frontend/plugin.yaml ~/.config/zellij/plugins/oya.yaml && echo '✅ Installed zellij-frontend plugin to ~/.config/zellij/plugins/'"
     description: "Install Zellij plugin to user config"
     toolchains:
       - rust
@@ -509,7 +509,7 @@ tasks:
 
   # Run oya directly from moon (without installing)
   run:
-    command: "cargo run --release --bin oya --"
+    script: "cargo run --release --bin oya --"
     description: "Run oya directly (via moon)"
     toolchains:
       - rust
@@ -536,7 +536,7 @@ tasks:
 
   # Convenience: start IPC server
   run-serve:
-    command: "cargo run --release --bin oya -- serve"
+    script: "cargo run --release --bin oya -- serve"
     description: "Start OYA IPC server"
     toolchains:
       - rust
