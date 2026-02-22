@@ -1,8 +1,13 @@
 use super::*;
+use crate::operator_visibility::{
+    bounded_tail_events, build_cleanup_reconcile_plan, deterministic_prune_run_artifacts,
+    doctor_report_from_events, status_snapshot_from_events,
+};
 use crate::pipeline::MergeQueuePolicy;
 use chrono::Datelike;
 use clap::{error::ErrorKind, CommandFactory};
 use oya::types::Gate;
+use serde_json::json;
 
 #[test]
 fn test_parse_rfc3339_stable_valid_input() {
@@ -122,6 +127,8 @@ fn test_execute_ship_gate_skip_zjj_gate() {
             passed: true,
             exit_code: 0,
             output: "ok".to_string(),
+            revision: None,
+            current_revision: None,
         })
     })
     .expect("ship gate should pass when cue check passes and zjj is skipped");
@@ -144,12 +151,16 @@ fn test_execute_ship_gate_enforce_still_skips_zjj_gate() {
                 passed: true,
                 exit_code: 0,
                 output: "cue ok".to_string(),
+                revision: None,
+                current_revision: None,
             }),
             _ => Ok(GateEvidence {
                 command: "unexpected".to_string(),
                 passed: false,
                 exit_code: 1,
                 output: "unexpected".to_string(),
+                revision: None,
+                current_revision: None,
             }),
         }
     })
@@ -162,15 +173,170 @@ fn test_execute_ship_gate_enforce_still_skips_zjj_gate() {
 }
 
 #[test]
+fn test_execute_ship_gate_rejects_stale_cue_evidence() {
+    let result = execute_ship_gate_with_gate_runner(MergeQueuePolicy::Skip, |_gate| {
+        Ok(GateEvidence {
+            command: "moon run :cue-check".to_string(),
+            passed: true,
+            exit_code: 0,
+            output: "cue ok".to_string(),
+            revision: Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string()),
+            current_revision: Some("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string()),
+        })
+    })
+    .expect("ship gate execution should return a stage result");
+
+    assert!(!result.passed);
+    assert_eq!(result.failure_category, Some(FailureCategory::OutputParseFailure));
+}
+
+#[test]
 fn test_cli_tail_mode_parses_default_interval() {
     let mode = parse_cli_mode_from(["oya", "tail"]);
-    assert_eq!(mode, CliMode::Tail(TailArgs { interval: 2, run_id: None }));
+    assert_eq!(
+        mode,
+        CliMode::Tail(TailArgs {
+            interval: 2,
+            run_id: None,
+            events: false,
+            follow: false,
+            limit: 50,
+        })
+    );
 }
 
 #[test]
 fn test_cli_tail_mode_parses_interval_and_run_id() {
     let mode = parse_cli_mode_from(["oya", "tail", "--interval", "5", "run-123"]);
-    assert_eq!(mode, CliMode::Tail(TailArgs { interval: 5, run_id: Some("run-123".to_string()) }));
+    assert_eq!(
+        mode,
+        CliMode::Tail(TailArgs {
+            interval: 5,
+            run_id: Some("run-123".to_string()),
+            events: false,
+            follow: false,
+            limit: 50,
+        })
+    );
+}
+
+#[test]
+fn test_status_command_returns_stage_attempt_reason_and_next_action() {
+    let events = vec![json!({
+        "run_id": "run-42",
+        "stage": "implementation",
+        "attempt": 2,
+        "reason": "test_failed",
+        "next_action": "rerun implementation",
+        "at": "2026-02-22T10:00:00Z"
+    })];
+
+    let snapshot = status_snapshot_from_events(&events, Some("run-42"));
+    assert_eq!(snapshot.run_id, "run-42");
+    assert_eq!(snapshot.stage, "implementation");
+    assert_eq!(snapshot.attempt, 2);
+    assert_eq!(snapshot.reason, "test_failed");
+    assert_eq!(snapshot.next_action, "rerun implementation");
+}
+
+#[test]
+fn test_tail_streams_ordered_events_with_bounded_output_window() {
+    let events = vec![
+        json!({"seq": 1, "run_id": "r1"}),
+        json!({"seq": 2, "run_id": "r1"}),
+        json!({"seq": 3, "run_id": "r1"}),
+    ];
+
+    let tail = bounded_tail_events(&events, None, 2);
+    assert_eq!(tail.len(), 2);
+    assert_eq!(tail[0]["seq"], 2);
+    assert_eq!(tail[1]["seq"], 3);
+}
+
+#[test]
+fn test_doctor_flags_stuck_runs_with_reason_codes() {
+    let events = vec![json!({
+        "run_id": "run-stuck",
+        "status": "running",
+        "stage": "contract",
+        "at": "2026-02-22T09:00:00Z"
+    })];
+
+    let report = doctor_report_from_events(&events, "2026-02-22T10:00:00Z", 300);
+    assert_eq!(report.stuck_runs, 1);
+    assert_eq!(report.issues.len(), 1);
+    assert_eq!(report.issues[0].reason_code, "stuck_running");
+}
+
+#[test]
+fn test_doctor_flags_cleanup_pending_backlog_with_counts() {
+    let events = vec![
+        json!({
+            "run_id": "run-a",
+            "status": "cleanup_pending",
+            "at": "2026-02-22T09:59:00Z"
+        }),
+        json!({
+            "run_id": "run-b",
+            "cleanup_pending": true,
+            "at": "2026-02-22T09:59:30Z"
+        }),
+    ];
+
+    let report = doctor_report_from_events(&events, "2026-02-22T10:00:00Z", 300);
+    assert_eq!(report.cleanup_pending_backlog, 2);
+}
+
+#[test]
+fn test_doctor_flags_cleanup_retry_exhausted_with_reason_code() {
+    let events = vec![json!({
+        "run_id": "run-exhausted",
+        "status": "cleanup_pending",
+        "stage": "implementation",
+        "at": "2026-02-22T09:00:00Z"
+    })];
+
+    let report = doctor_report_from_events(&events, "2026-02-22T10:00:00Z", 300);
+    assert_eq!(report.issues.len(), 1);
+    assert_eq!(report.issues[0].reason_code, "cleanup_retry_exhausted");
+}
+
+#[test]
+fn test_cleanup_reconcile_plan_prunes_oldest_cleanup_pending_first() {
+    let events = vec![
+        json!({"run_id":"run-b","status":"cleanup_pending","at":"2026-02-22T10:01:00Z"}),
+        json!({"run_id":"run-a","status":"cleanup_pending","at":"2026-02-22T09:59:00Z"}),
+        json!({"run_id":"run-c","cleanup_pending":true,"at":"2026-02-22T09:59:00Z"}),
+    ];
+
+    let plan = build_cleanup_reconcile_plan(&events, 1);
+
+    assert_eq!(plan.prune_run_ids, vec!["run-a".to_string(), "run-c".to_string()]);
+}
+
+#[test]
+fn test_deterministic_prune_run_artifacts_removes_sorted_unique_run_dirs() {
+    let root = std::env::temp_dir().join(format!(
+        "oya-prune-test-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |value| value.as_nanos())
+    ));
+    let runs_root = root.join(".orchestrator").join("runs");
+    std::fs::create_dir_all(runs_root.join("run-b")).expect("create run-b artifact dir");
+    std::fs::create_dir_all(runs_root.join("run-a")).expect("create run-a artifact dir");
+
+    let removed = deterministic_prune_run_artifacts(
+        &root,
+        &["run-b".to_string(), "run-a".to_string(), "run-a".to_string(), "run-missing".to_string()],
+    )
+    .expect("artifact pruning should succeed");
+
+    assert_eq!(removed, vec!["run-a".to_string(), "run-b".to_string()]);
+    assert!(!runs_root.join("run-a").exists());
+    assert!(!runs_root.join("run-b").exists());
+
+    let _ = std::fs::remove_dir_all(root);
 }
 
 #[test]
@@ -183,6 +349,12 @@ fn test_cli_init_mode_parses() {
 fn test_cli_check_mode_parses() {
     let mode = parse_cli_mode_from(["oya", "check"]);
     assert_eq!(mode, CliMode::Check);
+}
+
+#[test]
+fn test_cli_cleanup_reconcile_parses_defaults() {
+    let mode = parse_cli_mode_from(["oya", "cleanup-reconcile"]);
+    assert_eq!(mode, CliMode::CleanupReconcile(CleanupReconcileArgs { keep_latest: 10 }));
 }
 
 #[test]
@@ -347,6 +519,56 @@ fn test_provider_unavailable_retries_for_all_stages() {
 }
 
 #[test]
+fn test_watchdog_timeout_is_terminal_and_non_retryable() {
+    let state = test_pipeline_state(FailureCategory::WatchdogTimeout, Stage::Explore, 1);
+    assert!(!should_retry_after_failure(&state));
+}
+
+#[test]
+fn test_watchdog_completed_result_returns_stage_result_when_under_budget() {
+    let artifact = StageArtifact {
+        stage: "explore".to_string(),
+        attempt: 1,
+        failure_category: None,
+        next_stage: Some("contract".to_string()),
+        timing: StageTiming {
+            started_at: "2026-02-22T10:00:00Z".to_string(),
+            completed_at: "2026-02-22T10:00:01Z".to_string(),
+            duration_ms: 1000,
+        },
+        workspace: None,
+        input: StageInputData {
+            run_id: "run-1".to_string(),
+            bead_id: "src-1".to_string(),
+            context: "ctx".to_string(),
+            model: "openai/gpt-5".to_string(),
+            last_failure: None,
+        },
+        prompt: "prompt".to_string(),
+        output: StageOutputData {
+            success: true,
+            exit_code: 0,
+            full_log: "ok".to_string(),
+            feedback: "ok".to_string(),
+            contract_document: None,
+            implementation_code: None,
+            test_results: None,
+            adversarial_report: None,
+        },
+        task_tracking: None,
+        gates: vec![],
+        status: StageStatus::Completed,
+    };
+
+    let result = watchdog_completed_result(Ok::<StageArtifact, tokio::time::error::Elapsed>(
+        artifact.clone(),
+    ));
+    let preserved = result.expect("under-budget stage should preserve execution result");
+    assert_eq!(preserved.stage, "explore");
+    assert_eq!(preserved.attempt, 1);
+}
+
+#[test]
 fn test_provider_retry_backoff_grows_and_caps() {
     assert_eq!(provider_retry_backoff(1), std::time::Duration::from_millis(1_000));
     assert_eq!(provider_retry_backoff(2), std::time::Duration::from_millis(2_000));
@@ -354,8 +576,26 @@ fn test_provider_retry_backoff_grows_and_caps() {
 }
 
 #[test]
+fn test_parse_failure_category_supports_watchdog_timeout() {
+    let parsed = parse_failure_category(&Some("watchdog_timeout".to_string()));
+    assert_eq!(parsed, Some(FailureCategory::WatchdogTimeout));
+}
+
+#[test]
 fn test_provider_unavailable_rotates_provider() {
     assert!(should_rotate_provider_on_failure(&FailureCategory::ProviderUnavailable));
+}
+
+#[test]
+fn test_provider_rotation_reason_includes_category_and_models() {
+    let reason = provider_rotation_reason(
+        "openai/gpt-5",
+        "anthropic/claude-sonnet-4",
+        &FailureCategory::ProviderUnavailable,
+    );
+    assert!(reason.contains("provider_unavailable"));
+    assert!(reason.contains("openai/gpt-5"));
+    assert!(reason.contains("anthropic/claude-sonnet-4"));
 }
 
 #[test]
@@ -416,6 +656,29 @@ fn test_failure_transition_policy_allows_same_stage_and_implementation() {
 fn test_failure_transition_policy_rejects_non_implementation_hops() {
     assert!(!is_allowed_failure_transition(&Stage::Explore, &Stage::Contract));
     assert!(!is_allowed_failure_transition(&Stage::Contract, &Stage::Red));
+}
+
+#[test]
+fn test_lifecycle_transition_accepts_running_to_terminal() {
+    let shipped = lifecycle_transition("running", LifecycleStatus::Shipped)
+        .expect("running -> shipped should be valid");
+    let failed = lifecycle_transition("running", LifecycleStatus::Failed)
+        .expect("running -> failed should be valid");
+    assert_eq!(shipped, Some(LifecycleStatus::Shipped));
+    assert_eq!(failed, Some(LifecycleStatus::Failed));
+}
+
+#[test]
+fn test_lifecycle_transition_rejects_invalid_edges_without_mutation() {
+    let result = lifecycle_transition("queued", LifecycleStatus::Failed);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_lifecycle_transition_duplicate_is_idempotent_noop() {
+    let result = lifecycle_transition("running", LifecycleStatus::Running)
+        .expect("duplicate transition should be accepted as no-op");
+    assert_eq!(result, None);
 }
 
 #[test]
@@ -499,6 +762,60 @@ fn test_remediation_description_includes_failure_context() {
 }
 
 #[test]
+fn test_stack_transition_parent_blocked_child_ready_is_deterministic() {
+    let before = StackPairState::new(StackReadiness::Ready, StackReadiness::Ready);
+    let after =
+        apply_stack_transition(before.clone(), StackTransitionKind::ParentBlockedChildReady);
+
+    assert!(after.is_ok());
+    let after = after.unwrap_or(before);
+    assert_eq!(after.parent, StackReadiness::Blocked);
+    assert_eq!(after.child, StackReadiness::Ready);
+}
+
+#[test]
+fn test_stack_transition_parent_ready_rejects_when_child_still_blocked() {
+    let before = StackPairState::new(StackReadiness::Blocked, StackReadiness::Blocked);
+
+    let result = apply_stack_transition(before, StackTransitionKind::ParentReady);
+
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_extract_child_bead_id_ignores_parent_and_returns_new_child() {
+    let output = BrCommandOutput {
+        stdout: "created src-16e with parent src-16d".to_string(),
+        stderr: String::new(),
+    };
+
+    let child = extract_child_bead_id(&output, "src-16d");
+
+    assert_eq!(child, Some("src-16e".to_string()));
+}
+
+#[test]
+fn test_stack_transition_metadata_representation_captures_before_after() {
+    let before = StackPairState::new(StackReadiness::Ready, StackReadiness::Ready);
+    let after = StackPairState::new(StackReadiness::Blocked, StackReadiness::Ready);
+
+    let metadata = build_stack_transition_metadata(StackTransitionRecordInput {
+        parent_bead_id: "src-16d".to_string(),
+        child_bead_id: Some("src-16e".to_string()),
+        transition: StackTransitionKind::ParentBlockedChildReady,
+        before,
+        after,
+        reason: "retry_exhausted".to_string(),
+        recorded_at: "2026-02-22T12:00:00Z".to_string(),
+    });
+
+    assert_eq!(metadata.parent_bead_id, "src-16d");
+    assert_eq!(metadata.child_bead_id, Some("src-16e".to_string()));
+    assert_eq!(metadata.before.parent, StackReadiness::Ready);
+    assert_eq!(metadata.after.parent, StackReadiness::Blocked);
+}
+
+#[test]
 fn test_terminal_pipeline_failure_message_includes_stage_and_category() {
     let state = test_pipeline_state(FailureCategory::TestFailed, Stage::Implementation, 2);
     let artifact = StageArtifact {
@@ -571,6 +888,8 @@ fn test_stage_timeout_log_mentions_stage_attempt_and_watchdog() {
         context: "ctx".to_string(),
     };
     let message = stage_timeout_log(&state, &input, 480);
+    assert!(message.contains("outcome=terminal"));
+    assert!(message.contains("failure_category=watchdog_timeout"));
     assert!(message.contains("stage=explore"));
     assert!(message.contains("attempt=2"));
     assert!(message.contains("watchdog_seconds=480"));

@@ -30,6 +30,7 @@ struct WorkspaceCommandResult {
     passed: bool,
     exit_code: i32,
     output: String,
+    applied: bool,
 }
 
 fn ensure_workspace_name(request: &WorkspacePrepRequest) -> Result<String, OyaError> {
@@ -47,6 +48,7 @@ fn queue_workspace(
             passed: true,
             exit_code: 0,
             output: "merge queue disabled in runtime".to_string(),
+            applied: false,
         });
     }
     let command = format!("zjj queue --add {} --bead {}", workspace, request.bead_id);
@@ -59,6 +61,7 @@ fn queue_workspace(
                 passed: true,
                 exit_code: 0,
                 output: "workspace already queued; treating queue add as idempotent".to_string(),
+                applied: false,
             })
         }
         Err(error) => Err(error),
@@ -77,6 +80,86 @@ fn add_workspace(
     let command = format!("zjj add {} --idempotent", workspace);
     let args = ["add", workspace, "--idempotent"];
     run_workspace_command(request, &command, &args, "zjj add", workspace)
+}
+
+fn rollback_workspace_add(
+    request: &WorkspacePrepRequest,
+    workspace: &str,
+) -> Result<WorkspaceCommandResult, OyaError> {
+    let command = format!("zjj abort --workspace {} --no-bead-update", workspace);
+    let args = ["abort", "--workspace", workspace, "--no-bead-update"];
+    match run_workspace_command(request, &command, &args, "zjj abort", workspace) {
+        Ok(result) => Ok(result),
+        Err(error) if rollback_idempotent_error(error.to_string().as_str()) => {
+            Ok(WorkspaceCommandResult {
+                command,
+                passed: true,
+                exit_code: 0,
+                output: "workspace rollback already applied; treating abort as idempotent"
+                    .to_string(),
+                applied: false,
+            })
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn rollback_workspace_queue(
+    request: &WorkspacePrepRequest,
+    workspace: &str,
+    queue_applied: bool,
+) -> Result<WorkspaceCommandResult, OyaError> {
+    if !queue_applied {
+        return Ok(WorkspaceCommandResult {
+            command: "zjj queue --remove <workspace> (skipped)".to_string(),
+            passed: true,
+            exit_code: 0,
+            output: "queue rollback skipped because queue add was idempotent/no-op".to_string(),
+            applied: false,
+        });
+    }
+
+    let command = format!("zjj queue --remove {}", workspace);
+    let args = ["queue", "--remove", workspace];
+    match run_workspace_command(request, &command, &args, "zjj queue remove", workspace) {
+        Ok(result) => Ok(result),
+        Err(error) if rollback_idempotent_error(error.to_string().as_str()) => {
+            Ok(WorkspaceCommandResult {
+                command,
+                passed: true,
+                exit_code: 0,
+                output: "queue rollback already applied; treating remove as idempotent".to_string(),
+                applied: false,
+            })
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn rollback_idempotent_error(message: &str) -> bool {
+    let normalized = message.to_ascii_lowercase();
+    normalized.contains("already removed")
+        || normalized.contains("already aborted")
+        || normalized.contains("not in the queue")
+        || normalized.contains("not found")
+        || normalized.contains("does not exist")
+}
+
+fn fail_with_compensation(
+    add_error: OyaError,
+    add_rollback: WorkspaceCommandResult,
+    queue_rollback: WorkspaceCommandResult,
+) -> OyaError {
+    OyaError(format!(
+        "workspace provisioning failed: {}; compensation add='{}' (exit={}): {}; compensation queue='{}' (exit={}): {}",
+        add_error,
+        add_rollback.command,
+        add_rollback.exit_code,
+        truncate_clean(add_rollback.output.as_str(), 1000),
+        queue_rollback.command,
+        queue_rollback.exit_code,
+        truncate_clean(queue_rollback.output.as_str(), 1000),
+    ))
 }
 
 fn resolve_workspace_path(repo_root: &Path, workspace: &str) -> String {
@@ -107,7 +190,13 @@ fn run_workspace_command(
             truncate_clean(output.as_str(), 2000)
         )));
     }
-    Ok(WorkspaceCommandResult { command: command.to_string(), passed, exit_code, output })
+    Ok(WorkspaceCommandResult {
+        command: command.to_string(),
+        passed,
+        exit_code,
+        output,
+        applied: true,
+    })
 }
 
 pub(crate) fn prepare_stage_workspace(
@@ -119,7 +208,14 @@ pub(crate) fn prepare_stage_workspace(
     let workspace = ensure_workspace_name(&request)?;
     let workspace_path = resolve_workspace_path(request.repo_root.as_path(), workspace.as_str());
     let queue = queue_workspace(&request, &workspace)?;
-    let add = add_workspace(&request, &workspace)?;
+    let add = match add_workspace(&request, &workspace) {
+        Ok(result) => result,
+        Err(add_error) => {
+            let add_rollback = rollback_workspace_add(&request, &workspace)?;
+            let queue_rollback = rollback_workspace_queue(&request, &workspace, queue.applied)?;
+            return Err(fail_with_compensation(add_error, add_rollback, queue_rollback));
+        }
+    };
     Ok(Some(WorkspaceLifecycleEvent {
         workspace,
         workspace_path,
@@ -162,5 +258,20 @@ mod tests {
     fn queue_duplicate_error_ignores_other_queue_errors() {
         let message = "Error: queue backend unavailable";
         assert!(!queue_duplicate_error(message));
+    }
+
+    #[test]
+    fn rollback_idempotent_error_detects_already_removed_message() {
+        assert!(rollback_idempotent_error("workspace was already removed"));
+    }
+
+    #[test]
+    fn rollback_idempotent_error_detects_not_found_message() {
+        assert!(rollback_idempotent_error("workspace not found"));
+    }
+
+    #[test]
+    fn rollback_idempotent_error_ignores_other_errors() {
+        assert!(!rollback_idempotent_error("queue backend unavailable"));
     }
 }

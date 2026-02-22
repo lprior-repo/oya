@@ -310,6 +310,7 @@ pub(super) async fn append_durable_event(
     ctx: &WorkflowContext<'_>,
     event: DurableEvent,
 ) -> Result<(), OyaError> {
+    enforce_durable_event_sequence(ctx, &event).await?;
     let existing = ctx
         .get::<String>("event_ledger")
         .await
@@ -318,6 +319,39 @@ pub(super) async fn append_durable_event(
     let line = to_json_string(&event)?;
     let next = if existing.is_empty() { line } else { format!("{}\n{}", existing, line) };
     ctx.set("event_ledger", next);
+    ctx.set("event_ledger_last_at", event.at.clone());
+    Ok(())
+}
+
+async fn enforce_durable_event_sequence(
+    ctx: &WorkflowContext<'_>,
+    event: &DurableEvent,
+) -> Result<(), OyaError> {
+    let last_seen = ctx
+        .get::<String>("event_ledger_last_at")
+        .await
+        .map_err(|error| OyaError(format!("event_ledger_last_at read failed: {}", error)))?;
+    validate_event_timestamp_sequence(last_seen.as_deref(), event.at.as_str())
+}
+
+fn validate_event_timestamp_sequence(
+    last_seen: Option<&str>,
+    next_at: &str,
+) -> Result<(), OyaError> {
+    let Some(last_seen) = last_seen else {
+        return Ok(());
+    };
+    let last = chrono::DateTime::parse_from_rfc3339(last_seen).map_err(|error| {
+        OyaError(format!("invalid stored event timestamp '{}': {}", last_seen, error))
+    })?;
+    let next = chrono::DateTime::parse_from_rfc3339(next_at)
+        .map_err(|error| OyaError(format!("invalid event timestamp '{}': {}", next_at, error)))?;
+    if next < last {
+        return Err(OyaError(format!(
+            "event sequence guard rejected out-of-order event: last_at={} next_at={}",
+            last_seen, next_at
+        )));
+    }
     Ok(())
 }
 
@@ -337,5 +371,25 @@ mod tests {
         let identity = resolve_change_identity("run-1", "src-2s0", None);
         assert_eq!(identity.logical_change_id, "src-2s0:run-1");
         assert_eq!(identity.vcs_change_id, "git:run-1");
+    }
+
+    #[test]
+    fn validate_event_timestamp_sequence_accepts_monotonic_order() {
+        let result =
+            validate_event_timestamp_sequence(Some("2026-02-22T10:00:00Z"), "2026-02-22T10:00:01Z");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn validate_event_timestamp_sequence_rejects_out_of_order_write() {
+        let result =
+            validate_event_timestamp_sequence(Some("2026-02-22T10:00:01Z"), "2026-02-22T10:00:00Z");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn validate_event_timestamp_sequence_rejects_invalid_next_timestamp() {
+        let result = validate_event_timestamp_sequence(Some("2026-02-22T10:00:01Z"), "bad-ts");
+        assert!(result.is_err());
     }
 }

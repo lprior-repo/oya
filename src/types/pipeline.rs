@@ -185,6 +185,7 @@ pub enum FailureCategory {
     AuthFailed,
     ContextOverflow,
     ProviderUnavailable,
+    WatchdogTimeout,
     OutputParseFailure,
     MaxAttemptsExceeded,
 }
@@ -419,6 +420,7 @@ impl FailureCategory {
             Self::ProviderUnavailable => "provider_unavailable",
             Self::OutputParseFailure => "output_parse_failure",
             Self::MaxAttemptsExceeded => "max_attempts_exceeded",
+            Self::WatchdogTimeout => "watchdog_timeout",
         }
     }
 }
@@ -445,6 +447,34 @@ pub fn load_model_tier_config() -> Result<ModelTierConfig> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn determine_transition_advances_on_successful_stage() {
+        let decision = determine_transition(StageName::Explore, true, false);
+        assert_eq!(decision.reason(), TransitionReason::StagePassedAdvance);
+        assert_eq!(decision.transition(), StageTransition::Advance(StageName::Contract));
+    }
+
+    #[test]
+    fn determine_transition_retries_failed_stage_before_exhaustion() {
+        let decision = determine_transition(StageName::Implementation, false, false);
+        assert_eq!(decision.reason(), TransitionReason::StageFailedRetry);
+        assert_eq!(decision.transition(), StageTransition::Retry);
+    }
+
+    #[test]
+    fn determine_transition_blocks_after_retry_exhaustion() {
+        let decision = determine_transition(StageName::Witness, false, true);
+        assert_eq!(decision.reason(), TransitionReason::StageFailedMaxAttemptsReached);
+        assert_eq!(decision.transition(), StageTransition::Block);
+    }
+
+    #[test]
+    fn passed_stage_transition_completes_at_ship_gate() {
+        let decision = passed_stage_transition(StageName::ShipGate);
+        assert_eq!(decision.reason(), TransitionReason::RedQueenPassedComplete);
+        assert_eq!(decision.transition(), StageTransition::Complete);
+    }
 
     #[test]
     fn test_load_model_tier_config_from_oya_yaml() {

@@ -178,6 +178,17 @@ where
         }
 
         let gate_evidence = run_gate(gate.clone())?;
+        if let Some(message) = stale_evidence_message(&gate, &gate_evidence) {
+            let stale_evidence = stale_evidence_failure(gate_evidence, message);
+            gate_results.push(GateResultData {
+                gate: gate.as_str().to_string(),
+                passed: false,
+                exit_code: stale_evidence.exit_code,
+                command: stale_evidence.command.clone(),
+                output: truncate_clean(&stale_evidence.output, 4000),
+            });
+            return Ok(ship_gate_failure(gate, stale_evidence, prompt, gate_results));
+        }
         gate_results.push(GateResultData {
             gate: gate.as_str().to_string(),
             passed: gate_evidence.passed,
@@ -226,9 +237,35 @@ fn ship_gate_failure(
     }
 }
 
+fn stale_evidence_message(gate: &Gate, evidence: &GateEvidence) -> Option<String> {
+    if *gate != Gate::CueArtifactGenerated {
+        return None;
+    }
+    match (&evidence.revision, &evidence.current_revision) {
+        (Some(pinned), Some(current)) if pinned != current => Some(format!(
+            "stale evidence rejected: pinned_revision={} current_head={}",
+            pinned, current
+        )),
+        _ => None,
+    }
+}
+
+fn stale_evidence_failure(mut evidence: GateEvidence, message: String) -> GateEvidence {
+    evidence.passed = false;
+    evidence.exit_code = 1;
+    evidence.output = if evidence.output.is_empty() {
+        message
+    } else {
+        format!("{}\n{}", message, evidence.output)
+    };
+    evidence
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{is_safe_holdout_line, sanitize_holdout_output};
+    use super::{
+        is_safe_holdout_line, sanitize_holdout_output, stale_evidence_message, Gate, GateEvidence,
+    };
 
     #[test]
     fn sanitize_holdout_output_removes_sensitive_lines() {
@@ -253,5 +290,33 @@ mod tests {
         assert!(is_safe_holdout_line("test result: ok. 4 passed; 0 failed;"));
         assert!(!is_safe_holdout_line("Scenario: holdout-password-reset-expired"));
         assert!(!is_safe_holdout_line("expected: HTTP 410 Gone"));
+    }
+
+    #[test]
+    fn stale_evidence_message_detects_revision_mismatch_for_ship_gate() {
+        let evidence = GateEvidence {
+            command: "moon run :cue-check".to_string(),
+            passed: true,
+            exit_code: 0,
+            output: "ok".to_string(),
+            revision: Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string()),
+            current_revision: Some("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string()),
+        };
+        let message = stale_evidence_message(&Gate::CueArtifactGenerated, &evidence);
+        assert!(message.is_some());
+    }
+
+    #[test]
+    fn stale_evidence_message_ignores_matching_revision() {
+        let evidence = GateEvidence {
+            command: "moon run :cue-check".to_string(),
+            passed: true,
+            exit_code: 0,
+            output: "ok".to_string(),
+            revision: Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string()),
+            current_revision: Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string()),
+        };
+        let message = stale_evidence_message(&Gate::CueArtifactGenerated, &evidence);
+        assert!(message.is_none());
     }
 }

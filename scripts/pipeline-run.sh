@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+echo "[oya] scripts/pipeline-run.sh is temporarily disabled."
+echo "[oya] Pipeline execution is blocked until re-enabled."
+exit 1
+
 if [[ $# -lt 2 ]]; then
 	echo "Usage: scripts/pipeline-run.sh <run_id> <bead_id> [context]"
 	exit 1

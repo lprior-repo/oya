@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+echo "[oya] scripts/dev-up.sh is temporarily disabled."
+echo "[oya] Runtime stand-up is blocked until re-enabled."
+exit 1
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 cd "$REPO_ROOT"

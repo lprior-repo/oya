@@ -27,6 +27,7 @@ const DEFAULT_PROVIDER_UNAVAILABLE_MAX_ATTEMPTS: u32 = 3;
 use clap::{Parser, Subcommand};
 
 mod observe;
+mod operator_visibility;
 mod ops_poller;
 mod orchestrator_types;
 mod pipeline;
@@ -334,46 +335,9 @@ async fn persist_run_start(
     ctx: &WorkflowContext<'_>,
     start: &StartContext,
 ) -> Result<(), OyaError> {
-    write_orchestrator_state(
-        ctx,
-        &OrchestratorState {
-            status: "running".to_string(),
-            stage: "plan".to_string(),
-            attempt: 1,
-            bead_id: start.bead_id.clone(),
-            context: start.context.clone(),
-            model: start.model.clone(),
-            last_failure: String::new(),
-            last_output: String::new(),
-            last_prompt: String::new(),
-            updated_at: start.started_at.clone(),
-        },
-    )?;
-    set_json_state(
-        ctx,
-        "run_request",
-        &RunRequestEvent {
-            run_id: start.run_id.clone(),
-            bead_id: start.bead_id.clone(),
-            context: start.context.clone(),
-            started_at: start.started_at.clone(),
-        },
-    )?;
-    append_durable_event(
-        ctx,
-        DurableEvent {
-            event_type: "run_started".to_string(),
-            run_id: start.run_id.clone(),
-            bead_id: start.bead_id.clone(),
-            stage: "plan".to_string(),
-            attempt: 1,
-            status: "running".to_string(),
-            reason: "run accepted".to_string(),
-            at: start.started_at.clone(),
-            identity: resolve_change_identity(start.run_id.as_str(), start.bead_id.as_str(), None),
-        },
-    )
-    .await?;
+    write_orchestrator_state(ctx, &build_running_orchestrator_state(start))?;
+    set_json_state(ctx, "run_request", &build_run_request_event(start))?;
+    append_durable_event(ctx, build_run_started_event(start)).await?;
     append_timeline(
         ctx,
         TimelineEntry::RunStarted {
@@ -383,6 +347,44 @@ async fn persist_run_start(
         },
     )
     .await
+}
+
+fn build_running_orchestrator_state(start: &StartContext) -> OrchestratorState {
+    OrchestratorState {
+        status: "running".to_string(),
+        stage: "plan".to_string(),
+        attempt: 1,
+        bead_id: start.bead_id.clone(),
+        context: start.context.clone(),
+        model: start.model.clone(),
+        last_failure: String::new(),
+        last_output: String::new(),
+        last_prompt: String::new(),
+        updated_at: start.started_at.clone(),
+    }
+}
+
+fn build_run_request_event(start: &StartContext) -> RunRequestEvent {
+    RunRequestEvent {
+        run_id: start.run_id.clone(),
+        bead_id: start.bead_id.clone(),
+        context: start.context.clone(),
+        started_at: start.started_at.clone(),
+    }
+}
+
+fn build_run_started_event(start: &StartContext) -> DurableEvent {
+    DurableEvent {
+        event_type: "run_started".to_string(),
+        run_id: start.run_id.clone(),
+        bead_id: start.bead_id.clone(),
+        stage: "plan".to_string(),
+        attempt: 1,
+        status: "running".to_string(),
+        reason: "run accepted".to_string(),
+        at: start.started_at.clone(),
+        identity: resolve_change_identity(start.run_id.as_str(), start.bead_id.as_str(), None),
+    }
 }
 
 impl OyaOpsMonitor for OyaOpsMonitorImpl {
@@ -494,13 +496,21 @@ async fn run_pipeline_stage_with_watchdog(
     let started_at = workflow_timestamp_or_error(ctx).await?;
     let watchdog_seconds = pipeline_stage_watchdog_seconds();
     let execution = run_pipeline_stage(ctx, config, input, state);
-    match tokio::time::timeout(std::time::Duration::from_secs(watchdog_seconds), execution).await {
-        Ok(result) => result,
-        Err(_) => {
+    let timeout_result =
+        tokio::time::timeout(std::time::Duration::from_secs(watchdog_seconds), execution).await;
+    match watchdog_completed_result(timeout_result) {
+        Some(result) => result,
+        None => {
             build_stage_watchdog_timeout_artifact(ctx, input, state, started_at, watchdog_seconds)
                 .await
         }
     }
+}
+
+fn watchdog_completed_result<T>(
+    timeout_result: Result<T, tokio::time::error::Elapsed>,
+) -> Option<T> {
+    timeout_result.ok()
 }
 
 async fn build_stage_watchdog_timeout_artifact(
@@ -516,8 +526,8 @@ async fn build_stage_watchdog_timeout_artifact(
     Ok(orchestrator_types::StageArtifact {
         stage: state.current_stage.as_str().to_string(),
         attempt: state.attempt,
-        failure_category: Some("provider_unavailable".to_string()),
-        next_stage: Some(state.current_stage.as_str().to_string()),
+        failure_category: Some("watchdog_timeout".to_string()),
+        next_stage: None,
         timing: orchestrator_types::StageTiming { started_at, completed_at, duration_ms },
         workspace: None,
         input: orchestrator_types::StageInputData {
@@ -556,7 +566,7 @@ fn stage_timeout_log(
     watchdog_seconds: u64,
 ) -> String {
     format!(
-        "provider_diagnostics source=pipeline_watchdog stage={} attempt={} model={} run_id={} bead_id={} watchdog_seconds={}",
+        "provider_diagnostics source=pipeline_watchdog outcome=terminal failure_category=watchdog_timeout stage={} attempt={} model={} run_id={} bead_id={} watchdog_seconds={}",
         state.current_stage.as_str(),
         state.attempt,
         state.orchestrator.model,
@@ -752,6 +762,7 @@ async fn handle_failed_stage(
     let failure_category = parse_failure_category(&artifact.failure_category)
         .unwrap_or(FailureCategory::OutputParseFailure);
     let should_rotate_provider = should_rotate_provider_on_failure(&failure_category);
+    let previous_model = state.orchestrator.model.clone();
 
     // Report failure outcome to the usage tracker
     report_stage_outcome(ctx, &state.orchestrator.model, false, should_rotate_provider).await?;
@@ -761,22 +772,8 @@ async fn handle_failed_stage(
     }
     emit_behavioral_alert_if_needed(ctx, state, artifact).await?;
 
-    if let Some(next_stage) = parse_next_stage(&artifact.next_stage) {
-        if next_stage != state.current_stage {
-            if !is_allowed_failure_transition(&state.current_stage, &next_stage) {
-                return Err(OyaError(format!(
-                    "invalid failure transition: {} -> {}",
-                    state.current_stage.as_str(),
-                    next_stage.as_str()
-                )));
-            }
-            state.current_stage = next_stage;
-            state.attempt = 1;
-            // Resolve model for the new stage's tier
-            let stage = state.current_stage.clone();
-            state.orchestrator.model = resolve_model_for_stage_cached(ctx, state, &stage).await?;
-            return Ok(true);
-        }
+    if maybe_transition_to_next_stage(ctx, state, artifact).await? {
+        return Ok(true);
     }
 
     if !should_retry_after_failure(state) {
@@ -786,13 +783,131 @@ async fn handle_failed_stage(
     }
 
     apply_retry_backoff_if_needed(ctx, state).await?;
-    state.attempt += 1;
-    let stage = state.current_stage.clone();
-    state.orchestrator.model = if should_rotate_provider {
-        resolve_model_for_stage_with_pool_recovery(ctx, state, &stage).await?
+    resolve_retry_model_and_record_rotation(
+        ctx,
+        RetryModelResolutionInput {
+            state,
+            artifact,
+            should_rotate_provider,
+            failure_category: &failure_category,
+            previous_model: previous_model.as_str(),
+        },
+    )
+    .await?;
+    Ok(true)
+}
+
+struct RetryModelResolutionInput<'a> {
+    state: &'a mut PipelineState,
+    artifact: &'a orchestrator_types::StageArtifact,
+    should_rotate_provider: bool,
+    failure_category: &'a FailureCategory,
+    previous_model: &'a str,
+}
+
+async fn resolve_retry_model_and_record_rotation(
+    ctx: &WorkflowContext<'_>,
+    input: RetryModelResolutionInput<'_>,
+) -> Result<(), OyaError> {
+    input.state.attempt += 1;
+    let stage = input.state.current_stage.clone();
+    input.state.orchestrator.model = if input.should_rotate_provider {
+        resolve_model_for_stage_with_pool_recovery(ctx, input.state, &stage).await?
     } else {
-        resolve_model_for_stage_cached(ctx, state, &stage).await?
+        resolve_model_for_stage_cached(ctx, input.state, &stage).await?
     };
+    if input.should_rotate_provider {
+        emit_provider_rotation_event(
+            ctx,
+            ProviderRotationRecordInput {
+                state: input.state,
+                artifact: input.artifact,
+                previous_model: input.previous_model,
+                next_model: input.state.orchestrator.model.as_str(),
+                failure_category: input.failure_category,
+            },
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+async fn emit_provider_rotation_event(
+    ctx: &WorkflowContext<'_>,
+    input: ProviderRotationRecordInput<'_>,
+) -> Result<(), OyaError> {
+    let reason =
+        provider_rotation_reason(input.previous_model, input.next_model, input.failure_category);
+    let event = provider_rotation_event(ctx.key(), input.state, input.artifact, reason);
+    append_durable_event(ctx, event).await
+}
+
+struct ProviderRotationRecordInput<'a> {
+    state: &'a PipelineState,
+    artifact: &'a orchestrator_types::StageArtifact,
+    previous_model: &'a str,
+    next_model: &'a str,
+    failure_category: &'a FailureCategory,
+}
+
+fn provider_rotation_reason(
+    previous_model: &str,
+    next_model: &str,
+    failure_category: &FailureCategory,
+) -> String {
+    format!(
+        "provider rotation category={} from={} to={}",
+        failure_category.as_str(),
+        previous_model,
+        next_model
+    )
+}
+
+fn provider_rotation_event(
+    run_id: &str,
+    state: &PipelineState,
+    artifact: &orchestrator_types::StageArtifact,
+    reason: String,
+) -> DurableEvent {
+    DurableEvent {
+        event_type: "provider_rotated".to_string(),
+        run_id: run_id.to_string(),
+        bead_id: state.orchestrator.bead_id.clone(),
+        stage: artifact.stage.clone(),
+        attempt: artifact.attempt,
+        status: "failed".to_string(),
+        reason,
+        at: artifact.timing.completed_at.clone(),
+        identity: resolve_change_identity(
+            run_id,
+            state.orchestrator.bead_id.as_str(),
+            artifact.workspace.as_ref().map(|workspace| workspace.name.as_str()),
+        ),
+    }
+}
+
+async fn maybe_transition_to_next_stage(
+    ctx: &WorkflowContext<'_>,
+    state: &mut PipelineState,
+    artifact: &orchestrator_types::StageArtifact,
+) -> Result<bool, OyaError> {
+    let Some(next_stage) = parse_next_stage(&artifact.next_stage) else {
+        return Ok(false);
+    };
+    if next_stage == state.current_stage {
+        return Ok(false);
+    }
+    if !is_allowed_failure_transition(&state.current_stage, &next_stage) {
+        return Err(OyaError(format!(
+            "invalid failure transition: {} -> {}",
+            state.current_stage.as_str(),
+            next_stage.as_str()
+        )));
+    }
+    state.current_stage = next_stage;
+    state.attempt = 1;
+    let stage = state.current_stage.clone();
+    state.orchestrator.model = resolve_model_for_stage_cached(ctx, state, &stage).await?;
     Ok(true)
 }
 
@@ -835,6 +950,7 @@ async fn resolve_model_for_stage_with_pool_recovery(
                     delay_seconds,
                     "provider pool exhausted; waiting before model re-selection"
                 );
+                emit_provider_pool_wait_event(ctx, state, stage, attempts, delay_seconds).await?;
                 ctx.sleep(delay).await.map_err(|sleep_error| {
                     OyaError(format!("durable sleep failed: {}", sleep_error))
                 })?;
@@ -842,6 +958,35 @@ async fn resolve_model_for_stage_with_pool_recovery(
             }
         }
     }
+}
+
+async fn emit_provider_pool_wait_event(
+    ctx: &WorkflowContext<'_>,
+    state: &PipelineState,
+    stage: &Stage,
+    attempt: u32,
+    delay_seconds: u64,
+) -> Result<(), OyaError> {
+    let at = workflow_timestamp_or_error(ctx).await?;
+    let reason = format!(
+        "provider pool exhausted; recovery wait={}s retry_attempt={}",
+        delay_seconds, attempt
+    );
+    append_durable_event(
+        ctx,
+        DurableEvent {
+            event_type: "provider_pool_wait".to_string(),
+            run_id: ctx.key().to_string(),
+            bead_id: state.orchestrator.bead_id.clone(),
+            stage: stage.as_str().to_string(),
+            attempt: state.attempt,
+            status: "running".to_string(),
+            reason,
+            at,
+            identity: resolve_change_identity(ctx.key(), state.orchestrator.bead_id.as_str(), None),
+        },
+    )
+    .await
 }
 
 fn terminal_pipeline_failure_message(
@@ -1024,7 +1169,16 @@ async fn block_and_file_remediation(
         "--description",
         description.as_str(),
     ];
-    run_br_command(ctx, &root, &create_args).await
+    let create_output = run_br_command(ctx, &root, &create_args).await?;
+    let child_bead_id = extract_child_bead_id(&create_output, bead_id.as_str());
+    record_stack_transition(
+        ctx,
+        bead_id.as_str(),
+        child_bead_id.as_deref(),
+        StackTransitionKind::ParentBlockedChildReady,
+        "retry_exhausted",
+    )
+    .await
 }
 
 fn remediation_description(
@@ -1043,39 +1197,171 @@ fn remediation_description(
     )
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum StackReadiness {
+    Ready,
+    Blocked,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+struct StackPairState {
+    parent: StackReadiness,
+    child: StackReadiness,
+}
+
+impl StackPairState {
+    const fn new(parent: StackReadiness, child: StackReadiness) -> Self {
+        Self { parent, child }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum StackTransitionKind {
+    ParentBlockedChildReady,
+    ChildBlocked,
+    ChildReady,
+    ParentReady,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+struct StackTransitionMetadata {
+    parent_bead_id: String,
+    child_bead_id: Option<String>,
+    transition: StackTransitionKind,
+    before: StackPairState,
+    after: StackPairState,
+    reason: String,
+    recorded_at: String,
+}
+
+fn apply_stack_transition(
+    state: StackPairState,
+    transition: StackTransitionKind,
+) -> Result<StackPairState, OyaError> {
+    match (state.parent, state.child, transition) {
+        (StackReadiness::Ready, _, StackTransitionKind::ParentBlockedChildReady) => {
+            Ok(StackPairState::new(StackReadiness::Blocked, StackReadiness::Ready))
+        }
+        (StackReadiness::Blocked, StackReadiness::Ready, StackTransitionKind::ChildBlocked) => {
+            Ok(StackPairState::new(StackReadiness::Blocked, StackReadiness::Blocked))
+        }
+        (StackReadiness::Blocked, StackReadiness::Blocked, StackTransitionKind::ChildReady) => {
+            Ok(StackPairState::new(StackReadiness::Blocked, StackReadiness::Ready))
+        }
+        (StackReadiness::Blocked, StackReadiness::Ready, StackTransitionKind::ParentReady) => {
+            Ok(StackPairState::new(StackReadiness::Ready, StackReadiness::Ready))
+        }
+        _ => Err(OyaError(format!("invalid stack transition: {:?}", transition))),
+    }
+}
+
+struct StackTransitionRecordInput {
+    parent_bead_id: String,
+    child_bead_id: Option<String>,
+    transition: StackTransitionKind,
+    before: StackPairState,
+    after: StackPairState,
+    reason: String,
+    recorded_at: String,
+}
+
+fn build_stack_transition_metadata(input: StackTransitionRecordInput) -> StackTransitionMetadata {
+    StackTransitionMetadata {
+        parent_bead_id: input.parent_bead_id,
+        child_bead_id: input.child_bead_id,
+        transition: input.transition,
+        before: input.before,
+        after: input.after,
+        reason: input.reason,
+        recorded_at: input.recorded_at,
+    }
+}
+
+#[derive(Debug, Clone)]
+struct BrCommandOutput {
+    stdout: String,
+    stderr: String,
+}
+
+fn extract_child_bead_id(output: &BrCommandOutput, parent_bead_id: &str) -> Option<String> {
+    [output.stdout.as_str(), output.stderr.as_str()]
+        .iter()
+        .find_map(|text| find_distinct_bead_id(text, parent_bead_id))
+}
+
+fn find_distinct_bead_id(text: &str, parent_bead_id: &str) -> Option<String> {
+    text.split_whitespace().find_map(|token| {
+        let normalized =
+            token.trim_matches(|ch: char| !ch.is_ascii_alphanumeric() && ch != '-').to_string();
+        let looks_like_bead = normalized.starts_with("src-") && normalized.len() > 4;
+        if looks_like_bead && normalized != parent_bead_id {
+            Some(normalized)
+        } else {
+            None
+        }
+    })
+}
+
+async fn record_stack_transition(
+    ctx: &WorkflowContext<'_>,
+    parent_bead_id: &str,
+    child_bead_id: Option<&str>,
+    transition: StackTransitionKind,
+    reason: &str,
+) -> Result<(), OyaError> {
+    let before = StackPairState::new(StackReadiness::Ready, StackReadiness::Ready);
+    let after = apply_stack_transition(before.clone(), transition)?;
+    let recorded_at = workflow_timestamp_or_error(ctx).await?;
+    let metadata = build_stack_transition_metadata(StackTransitionRecordInput {
+        parent_bead_id: parent_bead_id.to_string(),
+        child_bead_id: child_bead_id.map(str::to_string),
+        transition,
+        before,
+        after,
+        reason: reason.to_string(),
+        recorded_at,
+    });
+    set_json_state(ctx, "stack_transition", &metadata)
+}
+
 async fn run_br_command(
     ctx: &WorkflowContext<'_>,
     repo_root: &Path,
     args: &[&str],
-) -> Result<(), OyaError> {
+) -> Result<BrCommandOutput, OyaError> {
     let root = repo_root.to_path_buf();
     let arg_list = args.iter().map(|value| (*value).to_string()).collect::<Vec<_>>();
     let display = refs_to_display(&arg_list);
 
-    ctx.run(move || async move {
-        let args_for_spawn = arg_list.clone();
-        let command_result = tokio::task::spawn_blocking(move || {
-            let refs = args_for_spawn.iter().map(String::as_str).collect::<Vec<_>>();
-            run_command_with_timeout_with_exit("br", &refs, 60, &root)
+    let result = ctx
+        .run(move || async move {
+            let args_for_spawn = arg_list.clone();
+            let command_result = tokio::task::spawn_blocking(move || {
+                let refs = args_for_spawn.iter().map(String::as_str).collect::<Vec<_>>();
+                run_command_with_timeout_with_exit("br", &refs, 60, &root)
+            })
+            .await
+            .map_err(|error| HandlerError::from(format!("br command join failed: {}", error)))?;
+
+            command_result
+                .map(|(passed, stdout, stderr, exit_code)| {
+                    if passed {
+                        Ok(stdout)
+                    } else {
+                        Err(HandlerError::from(format!(
+                            "br {} failed (exit {}): {} {}",
+                            display, exit_code, stdout, stderr
+                        )))
+                    }
+                })
+                .map_err(|error| HandlerError::from(error.0))?
         })
         .await
-        .map_err(|error| HandlerError::from(format!("br command join failed: {}", error)))?;
+        .map_err(|error| OyaError(format!("br command failed: {}", error)))?;
 
-        command_result
-            .map(|(passed, stdout, stderr, exit_code)| {
-                if passed {
-                    Ok(())
-                } else {
-                    Err(HandlerError::from(format!(
-                        "br {} failed (exit {}): {} {}",
-                        display, exit_code, stdout, stderr
-                    )))
-                }
-            })
-            .map_err(|error| HandlerError::from(error.0))?
-    })
-    .await
-    .map_err(|error| OyaError(format!("br command failed: {}", error)))
+    Ok(BrCommandOutput { stdout: result, stderr: String::new() })
 }
 
 fn refs_to_display(args: &[String]) -> String {
@@ -1383,10 +1669,64 @@ fn parse_failure_category(category: &Option<String>) -> Option<FailureCategory> 
         "auth_failed" => Some(FailureCategory::AuthFailed),
         "context_overflow" => Some(FailureCategory::ContextOverflow),
         "provider_unavailable" => Some(FailureCategory::ProviderUnavailable),
+        "watchdog_timeout" => Some(FailureCategory::WatchdogTimeout),
         "output_parse_failure" => Some(FailureCategory::OutputParseFailure),
         "max_attempts_exceeded" => Some(FailureCategory::MaxAttemptsExceeded),
         _ => None,
     })
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LifecycleStatus {
+    Queued,
+    Running,
+    Shipped,
+    Failed,
+}
+
+impl LifecycleStatus {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Queued => "queued",
+            Self::Running => "running",
+            Self::Shipped => "shipped",
+            Self::Failed => "failed",
+        }
+    }
+
+    fn parse(value: &str) -> Result<Self, OyaError> {
+        match value {
+            "queued" => Ok(Self::Queued),
+            "running" => Ok(Self::Running),
+            "shipped" => Ok(Self::Shipped),
+            "failed" => Ok(Self::Failed),
+            _ => Err(OyaError(format!("unknown lifecycle status: {}", value))),
+        }
+    }
+}
+
+fn lifecycle_transition(
+    current: &str,
+    target: LifecycleStatus,
+) -> Result<Option<LifecycleStatus>, OyaError> {
+    let current = LifecycleStatus::parse(current)?;
+    if current == target {
+        return Ok(None);
+    }
+    let allowed = matches!(
+        (current, target),
+        (LifecycleStatus::Queued, LifecycleStatus::Running)
+            | (LifecycleStatus::Running, LifecycleStatus::Shipped)
+            | (LifecycleStatus::Running, LifecycleStatus::Failed)
+    );
+    if !allowed {
+        return Err(OyaError(format!(
+            "invalid lifecycle transition: {} -> {}",
+            current.as_str(),
+            target.as_str()
+        )));
+    }
+    Ok(Some(target))
 }
 
 async fn mark_run_completed(
@@ -1394,10 +1734,15 @@ async fn mark_run_completed(
     state: &mut PipelineState,
     final_artifact: &orchestrator_types::StageArtifact,
 ) -> Result<(), OyaError> {
+    let Some(next_status) =
+        lifecycle_transition(state.orchestrator.status.as_str(), LifecycleStatus::Shipped)?
+    else {
+        return Ok(());
+    };
     let started_at = state.orchestrator.updated_at.clone();
     let completed_at = workflow_timestamp_or_error(ctx).await?;
 
-    state.orchestrator.status = "shipped".to_string();
+    state.orchestrator.status = next_status.as_str().to_string();
     state.orchestrator.stage = "none".to_string();
     state.orchestrator.updated_at = completed_at.clone();
     orchestrator_types::write_orchestrator_state(ctx, &state.orchestrator)?;
@@ -1435,8 +1780,13 @@ async fn mark_run_failed(
     state: &mut PipelineState,
     artifact: &orchestrator_types::StageArtifact,
 ) -> Result<(), OyaError> {
+    let Some(next_status) =
+        lifecycle_transition(state.orchestrator.status.as_str(), LifecycleStatus::Failed)?
+    else {
+        return Ok(());
+    };
     let started_at = state.orchestrator.updated_at.clone();
-    state.orchestrator.status = "failed".to_string();
+    state.orchestrator.status = next_status.as_str().to_string();
     state.orchestrator.updated_at = artifact.timing.completed_at.clone();
     orchestrator_types::write_orchestrator_state(ctx, &state.orchestrator)?;
     append_durable_event(
@@ -1512,6 +1862,12 @@ enum CliCommand {
     Run(RunArgs),
     #[command(about = "Live TUI for monitoring pipeline invocations")]
     Tail(TailArgs),
+    #[command(about = "Show latest operator status fields for a run")]
+    Status(StatusArgs),
+    #[command(about = "Show operator diagnostics for stuck/cleanup-pending runs")]
+    Doctor(DoctorArgs),
+    #[command(about = "Prune deterministic cleanup-pending run artifacts")]
+    CleanupReconcile(CleanupReconcileArgs),
     #[command(about = "Run holdout quality gate checks")]
     Check,
     #[command(about = "Bootstrap local runtime (restate + opencode + oya service)", alias = "up")]
@@ -1593,6 +1949,45 @@ struct TailArgs {
     interval: u64,
     #[arg(help = "Filter to specific run ID (optional)")]
     run_id: Option<String>,
+    #[arg(long, default_value = "false", help = "Use event stream mode (deterministic lines)")]
+    events: bool,
+    #[arg(long, default_value = "false", help = "Follow new events when --events is enabled")]
+    follow: bool,
+    #[arg(
+        long,
+        default_value = "50",
+        value_parser = clap::value_parser!(u64).range(1..=10_000),
+        help = "Bounded output window for --events mode"
+    )]
+    limit: u64,
+}
+
+#[derive(Parser, Debug, Clone, PartialEq)]
+struct StatusArgs {
+    #[arg(help = "Run ID to inspect (optional, defaults to latest)")]
+    run_id: Option<String>,
+}
+
+#[derive(Parser, Debug, Clone, PartialEq)]
+struct DoctorArgs {
+    #[arg(
+        long,
+        default_value = "900",
+        value_parser = clap::value_parser!(u64).range(60..=86_400),
+        help = "Mark running runs as stuck after this many seconds"
+    )]
+    stuck_after_seconds: u64,
+}
+
+#[derive(Parser, Debug, Clone, PartialEq)]
+struct CleanupReconcileArgs {
+    #[arg(
+        long,
+        default_value = "10",
+        value_parser = clap::value_parser!(u64).range(0..=10_000),
+        help = "Keep this many most-recent cleanup-pending run artifacts"
+    )]
+    keep_latest: u64,
 }
 
 type DynError = Box<dyn std::error::Error>;
@@ -1612,6 +2007,9 @@ where
         Some(CliCommand::OpsPoll) => CliMode::OpsPoll,
         Some(CliCommand::Run(args)) => CliMode::Run(args),
         Some(CliCommand::Tail(args)) => CliMode::Tail(args),
+        Some(CliCommand::Status(args)) => CliMode::Status(args),
+        Some(CliCommand::Doctor(args)) => CliMode::Doctor(args),
+        Some(CliCommand::CleanupReconcile(args)) => CliMode::CleanupReconcile(args),
         Some(CliCommand::Check) => CliMode::Check,
         Some(CliCommand::Init) => CliMode::Init,
         Some(CliCommand::Bundle) => CliMode::Bundle,
@@ -1625,6 +2023,9 @@ enum CliMode {
     OpsPoll,
     Run(RunArgs),
     Tail(TailArgs),
+    Status(StatusArgs),
+    Doctor(DoctorArgs),
+    CleanupReconcile(CleanupReconcileArgs),
     Check,
     Init,
     Bundle,
@@ -1639,6 +2040,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         CliMode::OpsPoll => ops_poller::run_ops_poller().await,
         CliMode::Serve => run_server().await,
         CliMode::Run(args) => workflow_runner::run_workflow(args).await,
+        CliMode::Status(args) => operator_visibility::run_status_command(args.run_id)
+            .map_err(|e| Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error>),
+        CliMode::Doctor(args) => operator_visibility::run_doctor_command(args.stuck_after_seconds)
+            .map_err(|e| Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error>),
+        CliMode::CleanupReconcile(args) => {
+            operator_visibility::run_cleanup_reconciler_command(args.keep_latest)
+                .map_err(|e| Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error>)
+        }
         CliMode::Check => run_quality_gate_command()
             .map_err(|e| Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error>),
         CliMode::Init => runtime_up::run_local_up()
@@ -1651,9 +2060,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         CliMode::Observe(args) => observe::run(args)
             .map_err(|e| Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error>),
         CliMode::Tail(args) => {
-            // Need to enter tokio runtime for the tail app
-            tail::run_tail(args.interval, args.run_id)
+            if args.events {
+                operator_visibility::run_tail_events_command(
+                    args.run_id,
+                    args.limit,
+                    args.follow,
+                    args.interval,
+                )
                 .map_err(|e| Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error>)
+            } else {
+                // Need to enter tokio runtime for the tail app
+                tail::run_tail(args.interval, args.run_id)
+                    .map_err(|e| Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error>)
+            }
         }
     }
 }

@@ -1,6 +1,7 @@
 use crate::types::FailureCategory;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::process::{Command, Output};
 
@@ -67,6 +68,143 @@ impl QualityGateResult {
 
 pub struct QualityGate {
     config: QualityGateConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReleaseReadinessSoakConfig {
+    pub min_success_rate_percent: u8,
+    pub min_runs: u32,
+}
+
+impl Default for ReleaseReadinessSoakConfig {
+    fn default() -> Self {
+        Self { min_success_rate_percent: 90, min_runs: 5 }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SoakRunResult {
+    pub passed: bool,
+    pub failure_category: Option<FailureCategory>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReleaseReadinessSoakSummary {
+    pub total_runs: u32,
+    pub passed_runs: u32,
+    pub failed_by_category: BTreeMap<String, u32>,
+    pub success_rate_percent: u8,
+    pub release_ready: bool,
+    pub reason: String,
+    pub stop_reason: String,
+}
+
+pub fn evaluate_release_readiness_soak(
+    outcomes: &[SoakRunResult],
+    config: &ReleaseReadinessSoakConfig,
+    aborted_cause: Option<&str>,
+) -> ReleaseReadinessSoakSummary {
+    let total_runs = u32::try_from(outcomes.len()).map_or(u32::MAX, |value| value);
+    let passed_runs = count_passed_runs(outcomes);
+    let failed_by_category = summarize_failures(outcomes);
+    let success_rate_percent = success_rate(passed_runs, total_runs);
+    let release_ready = is_release_ready(success_rate_percent, total_runs, config, aborted_cause);
+    let stop_reason = resolve_stop_reason(aborted_cause, release_ready);
+    let reason = summarize_soak_reason(
+        success_rate_percent,
+        total_runs,
+        config,
+        aborted_cause,
+        release_ready,
+    );
+    ReleaseReadinessSoakSummary {
+        total_runs,
+        passed_runs,
+        failed_by_category,
+        success_rate_percent,
+        release_ready,
+        reason,
+        stop_reason,
+    }
+}
+
+fn count_passed_runs(outcomes: &[SoakRunResult]) -> u32 {
+    let count = outcomes.iter().filter(|outcome| outcome.passed).count();
+    u32::try_from(count).map_or(u32::MAX, |value| value)
+}
+
+fn summarize_failures(outcomes: &[SoakRunResult]) -> BTreeMap<String, u32> {
+    outcomes
+        .iter()
+        .filter(|outcome| !outcome.passed)
+        .map(|outcome| {
+            outcome.failure_category.as_ref().map_or_else(
+                || "unknown_failure".to_string(),
+                |category| category.as_str().to_string(),
+            )
+        })
+        .fold(BTreeMap::new(), |mut map, key| {
+            let current = map.get(&key).copied().unwrap_or(0);
+            map.insert(key, current.saturating_add(1));
+            map
+        })
+}
+
+fn success_rate(passed_runs: u32, total_runs: u32) -> u8 {
+    if total_runs == 0 {
+        return 0;
+    }
+    let scaled = passed_runs.saturating_mul(100) / total_runs;
+    u8::try_from(scaled).map_or(100, |value| value)
+}
+
+fn is_release_ready(
+    success_rate_percent: u8,
+    total_runs: u32,
+    config: &ReleaseReadinessSoakConfig,
+    aborted_cause: Option<&str>,
+) -> bool {
+    aborted_cause.is_none()
+        && total_runs >= config.min_runs
+        && success_rate_percent >= config.min_success_rate_percent
+}
+
+fn resolve_stop_reason(aborted_cause: Option<&str>, release_ready: bool) -> String {
+    if aborted_cause.is_some() {
+        return "aborted".to_string();
+    }
+    if release_ready {
+        return "threshold_met".to_string();
+    }
+    "threshold_miss".to_string()
+}
+
+fn summarize_soak_reason(
+    success_rate_percent: u8,
+    total_runs: u32,
+    config: &ReleaseReadinessSoakConfig,
+    aborted_cause: Option<&str>,
+    release_ready: bool,
+) -> String {
+    if let Some(cause) = aborted_cause {
+        return format!("soak interrupted: {}", cause);
+    }
+    if release_ready {
+        return format!(
+            "release readiness met: success_rate={} threshold={} min_runs={} total_runs={}",
+            success_rate_percent, config.min_success_rate_percent, config.min_runs, total_runs
+        );
+    }
+    if total_runs < config.min_runs {
+        return format!(
+            "release not ready: insufficient runs total_runs={} min_runs={} (collect more stable runs)",
+            total_runs, config.min_runs
+        );
+    }
+    format!(
+        "release not ready: success_rate={} threshold={} (collect more stable runs)",
+        success_rate_percent, config.min_success_rate_percent
+    )
 }
 
 impl QualityGate {
@@ -400,5 +538,82 @@ mod tests {
             scenario_failure_message(&scenarios),
             "1 of 2 holdout scenarios failed (details redacted)"
         );
+    }
+
+    #[test]
+    fn release_readiness_soak_meets_threshold() {
+        let config = ReleaseReadinessSoakConfig { min_success_rate_percent: 80, min_runs: 5 };
+        let outcomes = vec![
+            SoakRunResult { passed: true, failure_category: None },
+            SoakRunResult { passed: true, failure_category: None },
+            SoakRunResult { passed: true, failure_category: None },
+            SoakRunResult { passed: true, failure_category: None },
+            SoakRunResult { passed: false, failure_category: Some(FailureCategory::TestFailed) },
+        ];
+        let summary = evaluate_release_readiness_soak(&outcomes, &config, None);
+        assert!(summary.release_ready);
+        assert_eq!(summary.success_rate_percent, 80);
+        assert_eq!(summary.stop_reason, "threshold_met");
+    }
+
+    #[test]
+    fn release_readiness_soak_threshold_miss_reports_actionable_reason() {
+        let config = ReleaseReadinessSoakConfig { min_success_rate_percent: 90, min_runs: 5 };
+        let outcomes = vec![
+            SoakRunResult { passed: true, failure_category: None },
+            SoakRunResult { passed: true, failure_category: None },
+            SoakRunResult { passed: false, failure_category: Some(FailureCategory::TestFailed) },
+            SoakRunResult { passed: false, failure_category: Some(FailureCategory::LintFailed) },
+            SoakRunResult { passed: true, failure_category: None },
+        ];
+        let summary = evaluate_release_readiness_soak(&outcomes, &config, None);
+        assert!(!summary.release_ready);
+        assert_eq!(summary.stop_reason, "threshold_miss");
+        assert!(summary.reason.contains("collect more stable runs"));
+    }
+
+    #[test]
+    fn release_readiness_soak_requires_minimum_run_count() {
+        let config = ReleaseReadinessSoakConfig { min_success_rate_percent: 80, min_runs: 5 };
+        let outcomes = vec![
+            SoakRunResult { passed: true, failure_category: None },
+            SoakRunResult { passed: true, failure_category: None },
+            SoakRunResult { passed: true, failure_category: None },
+            SoakRunResult { passed: true, failure_category: None },
+        ];
+        let summary = evaluate_release_readiness_soak(&outcomes, &config, None);
+        assert!(!summary.release_ready);
+        assert_eq!(summary.stop_reason, "threshold_miss");
+        assert!(summary.reason.contains("insufficient runs"));
+    }
+
+    #[test]
+    fn release_readiness_soak_counts_unknown_failure_categories() {
+        let config = ReleaseReadinessSoakConfig::default();
+        let outcomes = vec![
+            SoakRunResult { passed: false, failure_category: None },
+            SoakRunResult { passed: false, failure_category: None },
+            SoakRunResult { passed: false, failure_category: Some(FailureCategory::TestFailed) },
+        ];
+        let summary = evaluate_release_readiness_soak(&outcomes, &config, None);
+        assert_eq!(summary.failed_by_category.get("unknown_failure"), Some(&2));
+        assert_eq!(summary.failed_by_category.get("test_failed"), Some(&1));
+    }
+
+    #[test]
+    fn release_readiness_soak_aborted_emits_partial_summary() {
+        let config = ReleaseReadinessSoakConfig::default();
+        let outcomes = vec![
+            SoakRunResult { passed: true, failure_category: None },
+            SoakRunResult {
+                passed: false,
+                failure_category: Some(FailureCategory::TestInfraFailed),
+            },
+        ];
+        let summary = evaluate_release_readiness_soak(&outcomes, &config, Some("operator abort"));
+        assert!(!summary.release_ready);
+        assert_eq!(summary.total_runs, 2);
+        assert_eq!(summary.stop_reason, "aborted");
+        assert!(summary.reason.contains("operator abort"));
     }
 }

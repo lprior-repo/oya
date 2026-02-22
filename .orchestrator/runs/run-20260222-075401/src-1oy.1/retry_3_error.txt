@@ -1,0 +1,9 @@
+command failed: oya agent run --phase SCOUT --bead src-1oy.1 --run run-20260222-075401 --output .orchestrator/runs/run-20260222-075401/src-1oy.1/scout.json
+stdout:
+
+stderr:
+error: unrecognized subcommand 'agent'
+
+Usage: oya [COMMAND]
+
+For more information, try '--help'.

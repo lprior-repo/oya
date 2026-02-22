@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 const MOON_TIMEOUT_SECONDS: u64 = 900;
 const ZJJ_TIMEOUT_SECONDS: u64 = 60;
+const GIT_TIMEOUT_SECONDS: u64 = 30;
 
 #[derive(Clone)]
 pub(crate) struct GateEvidence {
@@ -13,6 +14,8 @@ pub(crate) struct GateEvidence {
     pub(crate) passed: bool,
     pub(crate) exit_code: i32,
     pub(crate) output: String,
+    pub(crate) revision: Option<String>,
+    pub(crate) current_revision: Option<String>,
 }
 
 pub(crate) fn execute_gate(gate: Gate, repo_root: &PathBuf) -> Result<GateEvidence, OyaError> {
@@ -22,18 +25,32 @@ pub(crate) fn execute_gate(gate: Gate, repo_root: &PathBuf) -> Result<GateEviden
         _ => MOON_TIMEOUT_SECONDS,
     };
     let parsed_command = parse_gate_command(command.as_str())?;
+    let pinned_revision = collect_pinned_revision(&parsed_command, repo_root)?;
     let (program, args) = parsed_command.command_parts();
     let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-    let (passed, stdout, stderr, exit_code) = run_command_with_timeout_with_exit(
+    let (command_passed, stdout, stderr, command_exit_code) = run_command_with_timeout_with_exit(
         program.as_str(),
         &arg_refs,
         timeout_seconds,
         repo_root,
     )?;
     let output = combine_command_output(stdout, stderr);
-    Ok(GateEvidence { command, passed, exit_code, output })
+    let current_revision = collect_current_revision(&parsed_command, repo_root)?;
+    let revision_check = validate_revision_pair(&pinned_revision, &current_revision);
+    let passed = command_passed && revision_check.is_ok();
+    let exit_code = if revision_check.is_ok() { command_exit_code } else { 1 };
+    let output = append_revision_failure(output, revision_check.err());
+    Ok(GateEvidence {
+        command,
+        passed,
+        exit_code,
+        output,
+        revision: pinned_revision,
+        current_revision,
+    })
 }
 
+#[derive(Clone)]
 pub(crate) enum GateCommand {
     Moon { task: MoonTask, passthrough: Vec<String> },
     ZjjSyncStatus,
@@ -85,11 +102,13 @@ fn parse_moon_gate_command(args: &[String]) -> Result<GateCommand, OyaError> {
 }
 
 impl GateCommand {
-    fn command_parts(self) -> (String, Vec<String>) {
+    fn command_parts(&self) -> (String, Vec<String>) {
         match self {
             GateCommand::Moon { task, passthrough } => {
-                let mut args = vec!["run".to_string(), task.as_task_name().to_string()];
-                args.extend(passthrough);
+                let args = std::iter::once("run".to_string())
+                    .chain(std::iter::once(task.as_task_name().to_string()))
+                    .chain(passthrough.iter().cloned())
+                    .collect();
                 ("moon".to_string(), args)
             }
             GateCommand::ZjjSyncStatus => {
@@ -175,6 +194,78 @@ fn push_token_if_present(parts: &mut Vec<String>, current: &mut String) {
     if !current.is_empty() {
         parts.push(std::mem::take(current));
     }
+}
+
+fn collect_pinned_revision(
+    command: &GateCommand,
+    repo_root: &PathBuf,
+) -> Result<Option<String>, OyaError> {
+    if uses_moon(command) {
+        return current_head_revision(repo_root).map(Some);
+    }
+    Ok(None)
+}
+
+fn collect_current_revision(
+    command: &GateCommand,
+    repo_root: &PathBuf,
+) -> Result<Option<String>, OyaError> {
+    if uses_moon(command) {
+        return current_head_revision(repo_root).map(Some);
+    }
+    Ok(None)
+}
+
+const fn uses_moon(command: &GateCommand) -> bool {
+    matches!(command, GateCommand::Moon { .. })
+}
+
+fn current_head_revision(repo_root: &PathBuf) -> Result<String, OyaError> {
+    let args = ["rev-parse", "HEAD"];
+    let (passed, stdout, stderr, exit_code) =
+        run_command_with_timeout_with_exit("git", &args, GIT_TIMEOUT_SECONDS, repo_root)?;
+    if !passed {
+        let output = combine_command_output(stdout, stderr);
+        return Err(OyaError(format!(
+            "failed to resolve git revision (exit={}): {}",
+            exit_code,
+            truncate_clean(output.as_str(), 2000)
+        )));
+    }
+    parse_revision(stdout.trim())
+}
+
+fn parse_revision(value: &str) -> Result<String, OyaError> {
+    if is_full_sha(value) {
+        return Ok(value.to_string());
+    }
+    Err(OyaError(format!("invalid git revision format: {}", value)))
+}
+
+fn is_full_sha(value: &str) -> bool {
+    value.len() == 40 && value.chars().all(|character| character.is_ascii_hexdigit())
+}
+
+fn validate_revision_pair(
+    pinned_revision: &Option<String>,
+    current_revision: &Option<String>,
+) -> Result<(), String> {
+    match (pinned_revision.as_deref(), current_revision.as_deref()) {
+        (Some(pinned), Some(current)) if pinned != current => {
+            Err(format!("stale_evidence pinned_revision={} current_head={}", pinned, current))
+        }
+        _ => Ok(()),
+    }
+}
+
+fn append_revision_failure(output: String, failure: Option<String>) -> String {
+    let Some(failure) = failure else {
+        return output;
+    };
+    if output.is_empty() {
+        return failure;
+    }
+    format!("{}\n{}", failure, output)
 }
 
 pub(crate) fn gate_failure_outcome(stage: &Stage, gate: &Gate) -> (FailureCategory, Stage) {
@@ -315,5 +406,27 @@ mod tests {
     fn test_parse_command_parts_rejects_trailing_escape() {
         let parsed = parse_command_parts("moon run :test -- --name retry\\");
         assert!(parsed.is_err());
+    }
+
+    #[test]
+    fn test_validate_revision_pair_detects_mismatch() {
+        let pinned = Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string());
+        let current = Some("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string());
+        let result = validate_revision_pair(&pinned, &current);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_revision_pair_allows_match() {
+        let revision = Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string());
+        let result = validate_revision_pair(&revision, &revision);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_is_full_sha_requires_40_hex_chars() {
+        assert!(is_full_sha("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+        assert!(!is_full_sha("short"));
+        assert!(!is_full_sha("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"));
     }
 }
