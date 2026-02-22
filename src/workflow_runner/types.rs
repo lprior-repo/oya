@@ -192,14 +192,7 @@ impl WorkflowStatus {
             .ok_or("Missing or invalid 'status' field")?
             .to_string();
         let completion_result = row.get("completion_result").and_then(|s| s.as_str());
-
-        let state_json_str =
-            row.get("state_json").and_then(|s| s.as_str()).map_or("{}", std::convert::identity);
-        let state_outer: serde_json::Value = serde_json::from_str(state_json_str)
-            .map_err(|e| format!("Invalid state_json: {}", e))?;
-        let state_str = state_outer.as_str().map_or("{}", std::convert::identity);
-        let state: serde_json::Value =
-            serde_json::from_str(state_str).map_err(|e| format!("Invalid state string: {}", e))?;
+        let state = parse_state_json(row)?;
 
         let raw_orchestration_status =
             state.get("status").and_then(|s| s.as_str()).map_or("unknown", std::convert::identity);
@@ -236,11 +229,21 @@ impl WorkflowStatus {
     }
 }
 
-fn reconcile_orchestration_status(
-    invocation_status: &str,
-    completion_result: Option<&str>,
-    orchestration_status: &str,
-) -> &str {
+fn parse_state_json(row: &serde_json::Value) -> Result<serde_json::Value, String> {
+    let state_json_str =
+        row.get("state_json").and_then(|s| s.as_str()).map_or("{}", std::convert::identity);
+    let state_outer: serde_json::Value =
+        serde_json::from_str(state_json_str).map_err(|e| format!("Invalid state_json: {}", e))?;
+    let state_str = state_outer.as_str().map_or("{}", std::convert::identity);
+
+    serde_json::from_str(state_str).map_err(|e| format!("Invalid state string: {}", e))
+}
+
+fn reconcile_orchestration_status<'a>(
+    invocation_status: &'a str,
+    completion_result: Option<&'a str>,
+    orchestration_status: &'a str,
+) -> &'a str {
     if invocation_status == "completed" && completion_result == Some("success") {
         "shipped"
     } else {

@@ -359,48 +359,6 @@ tasks:
       cache: true
 
   # ============================================================================
-  # OYA-TAURI (Standalone workspace - Tauri desktop app)
-  # ============================================================================
-
-  check-tauri:
-    script: "cd crates/oya-tauri && cargo check"
-    description: "Type check oya-tauri crate (standalone workspace)"
-    toolchains:
-      - rust
-    inputs:
-      - "crates/oya-tauri/**/*.rs"
-      - "crates/oya-tauri/Cargo.toml"
-      - "crates/oya-shared/**/*.rs"
-    options:
-      cache: true
-
-  test-tauri:
-    script: "cd crates/oya-tauri && cargo test"
-    description: "Run oya-tauri tests"
-    toolchains:
-      - rust
-    inputs:
-      - "crates/oya-tauri/**/*.rs"
-      - "crates/oya-tauri/Cargo.toml"
-      - "crates/oya-shared/**/*.rs"
-    options:
-      cache: true
-
-  build-tauri:
-    script: "cd crates/oya-tauri && cargo build --release"
-    description: "Build oya-tauri desktop app"
-    toolchains:
-      - rust
-    inputs:
-      - "crates/oya-tauri/**/*.rs"
-      - "crates/oya-tauri/Cargo.toml"
-      - "crates/oya-shared/**/*.rs"
-    outputs:
-      - "crates/oya-tauri/target/release/oya-tauri"
-    options:
-      cache: true
-
-  # ============================================================================
   # ZELLIJ FRONTEND (WASM plugin + UI components)
   # ============================================================================
 
