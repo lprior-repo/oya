@@ -226,6 +226,17 @@ fn cue_monitor_failure(
         ));
     }
 
+    if let Some(message) = cue_schema_failure_message(gate, gate_evidence) {
+        let schema_evidence = main_drift_regression_failure(gate_evidence.clone(), message);
+        gate_results.push(gate_result_data(gate, &schema_evidence));
+        return Some(ship_gate_failure(
+            gate.clone(),
+            schema_evidence,
+            prompt.to_string(),
+            gate_results.clone(),
+        ));
+    }
+
     if let Some(message) = main_drift_regression_message(gate, gate_evidence) {
         let regression_evidence = main_drift_regression_failure(gate_evidence.clone(), message);
         gate_results.push(gate_result_data(gate, &regression_evidence));
@@ -320,6 +331,28 @@ fn main_drift_regression_message(gate: &Gate, evidence: &GateEvidence) -> Option
     Some("main drift monitor blocked land: main gates regressed".to_string())
 }
 
+fn cue_schema_failure_message(gate: &Gate, evidence: &GateEvidence) -> Option<String> {
+    if *gate != Gate::CueArtifactGenerated {
+        return None;
+    }
+    let line = cue_schema_failure_line(evidence.output.as_str())?;
+    let artifact = cue_schema_failure_field(line, "artifact=").unwrap_or("unknown");
+    let definition = cue_schema_failure_field(line, "definition=").unwrap_or("unknown");
+    let path = cue_schema_failure_field(line, "path=").unwrap_or("unknown");
+    Some(format!(
+        "cue schema monitor blocked land: artifact={} definition={} path={}",
+        artifact, definition, path
+    ))
+}
+
+fn cue_schema_failure_line(output: &str) -> Option<&str> {
+    output.lines().find(|line| line.trim_start().starts_with("cue_schema_failure ")).map(str::trim)
+}
+
+fn cue_schema_failure_field<'a>(line: &'a str, key: &str) -> Option<&'a str> {
+    line.split_whitespace().find_map(|token| token.strip_prefix(key))
+}
+
 fn signals_main_drift_regression(output: &str) -> bool {
     let normalized = output.to_ascii_lowercase();
     normalized.contains("main-drift-monitor")
@@ -341,7 +374,7 @@ fn main_drift_regression_failure(mut evidence: GateEvidence, message: String) ->
 mod tests {
     use super::{
         execute_ship_gate_with_gate_runner, is_safe_holdout_line, sanitize_holdout_output,
-        stale_evidence_message, Gate, GateEvidence,
+        stale_evidence_message, FailureCategory, Gate, GateEvidence, Stage,
     };
     use crate::pipeline::MergeQueuePolicy;
 
@@ -457,5 +490,34 @@ mod tests {
             }
         };
         assert!(execution.passed);
+    }
+
+    #[test]
+    fn given_cue_schema_failure_when_execute_ship_gate_then_routes_with_deterministic_failure() {
+        let result = execute_ship_gate_with_gate_runner(MergeQueuePolicy::Skip, |_gate| {
+            Ok(GateEvidence {
+                command: "moon run :cue-check".to_string(),
+                passed: true,
+                exit_code: 0,
+                output: "cue_schema_failure artifact=queue definition=#QueueArtifact path=.orchestrator/queue_artifact.json\ninvalid value".to_string(),
+                revision: Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string()),
+                current_revision: Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string()),
+            })
+        });
+
+        assert!(result.is_ok());
+        let execution = match result {
+            Ok(value) => value,
+            Err(error) => {
+                assert!(false, "unexpected error: {}", error);
+                return;
+            }
+        };
+        assert!(!execution.passed);
+        assert_eq!(execution.failure_category, Some(FailureCategory::OutputParseFailure));
+        assert_eq!(execution.next_stage, Some(Stage::Implementation));
+        assert!(execution.output.contains("cue schema monitor blocked land"));
+        assert_eq!(execution.gate_results.len(), 1);
+        assert!(!execution.gate_results[0].passed);
     }
 }

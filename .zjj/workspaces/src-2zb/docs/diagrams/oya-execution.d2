@@ -1,0 +1,96 @@
+# OYA Execution Flow test-run-20260219-203815
+
+direction: down
+
+# Start
+start: {
+  label: Start
+  style.bold: true
+}
+
+# Setup
+setup: {
+  label: Setup Phase
+}
+
+select: {
+  label: Select Bead src-2nw P0
+}
+
+runid: {
+  label: Generate Run ID
+}
+
+invoke: {
+  label: Start Invocation
+}
+
+# Workflow
+workflow: {
+  label: Workflow Execution
+  style.bold: true
+}
+
+stage1: {
+  label: Plan Journal 3-35 197s
+}
+
+stage2: {
+  label: Contract Journal 35-73
+}
+
+stage3: {
+  label: Acceptance Test Journal 73-110 RED Gate
+  style.stroke-width: 3
+}
+
+stage4: {
+  label: Implementation Journal 110-118 GREEN Gate
+  style.stroke-width: 3
+}
+
+stage5: {
+  label: QA Journal 118-141
+}
+
+# Success
+success: {
+  label: SUCCESS Complete Journal 141
+  style.bold: true
+  style.stroke-width: 3
+}
+
+# Infrastructure
+infra: {
+  label: Infrastructure oya-manual service Binary Restate
+  style.stroke-dash: 3
+}
+
+# Services
+services: {
+  label: Services Admin 9070 Ingress 8080 Service 9080
+  style.stroke-dash: 3
+}
+
+# Flow
+start -> setup
+setup -> select
+select -> runid
+runid -> invoke
+invoke -> workflow
+
+workflow -> stage1
+stage1 -> stage2
+stage2 -> stage3
+stage3 -> stage4
+stage4 -> stage5
+stage5 -> success
+
+success -- infra: running on
+success -- services: endpoints
+
+# Stage labels
+stage1.stage2: Plan complete
+stage2.stage3: Contract complete
+stage3.stage4: Red to Green
+stage4.stage5: Implemented

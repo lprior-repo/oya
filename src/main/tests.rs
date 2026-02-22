@@ -8,6 +8,7 @@ use crate::pipeline::MergeQueuePolicy;
 use chrono::Datelike;
 use clap::{error::ErrorKind, CommandFactory};
 use oya::types::Gate;
+use proptest::prelude::*;
 use serde_json::json;
 
 #[test]
@@ -628,6 +629,216 @@ fn test_evaluate_start_request_rejects_different_payload() {
     };
     let admission = evaluate_start_request(Some(existing), &parsed, "run-1");
     assert!(admission.is_err());
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(32))]
+
+    #[test]
+    fn prop_deterministic_ordering_bounded_tail_events_matches_suffix(
+        events in proptest::collection::vec(0_u16..500_u16, 1..32),
+        limit in 1_usize..32
+    ) {
+        let json_events = events
+            .iter()
+            .enumerate()
+            .map(|(idx, seq)| {
+                json!({
+                    "run_id": format!("run-{}", idx % 3),
+                    "seq": seq,
+                })
+            })
+            .collect::<Vec<_>>();
+
+        let bounded = bounded_tail_events(&json_events, None, limit);
+        let start = json_events.len().saturating_sub(limit);
+        let expected = json_events[start..].to_vec();
+
+        prop_assert_eq!(bounded, expected);
+    }
+
+    #[test]
+    fn prop_lock_exclusivity_rejects_stale_lease_tokens(
+        workflow_run_id in "run-[a-z0-9]{1,6}",
+        existing_run_id in "run-[a-z0-9]{1,6}",
+        bead_id in "src-[a-z0-9]{1,4}",
+        context in "[a-z0-9 _-]{0,16}"
+    ) {
+        prop_assume!(workflow_run_id != existing_run_id);
+
+        let payload = StartRequestPayload {
+            bead_id: Some(bead_id.clone()),
+            context: Some(context.clone()),
+            model: None,
+        };
+        let existing = RunRequestEvent {
+            run_id: existing_run_id,
+            bead_id,
+            context,
+            started_at: "2026-02-22T00:00:00Z".to_string(),
+        };
+
+        let admission = evaluate_start_request(Some(existing), &payload, workflow_run_id.as_str());
+
+        prop_assert!(admission.is_err());
+        if let Err(error) = admission {
+            prop_assert!(error.0.contains("stale lease token"));
+        }
+    }
+
+    #[test]
+    fn prop_ttl_reclaim_classifies_cleanup_pending_vs_exhausted(threshold in 1_u64..120_u64) {
+        let now = "2026-02-22T10:00:00Z";
+        let events = vec![json!({
+            "run_id": "run-ttl",
+            "status": "cleanup_pending",
+            "stage": "implementation",
+            "at": "2026-02-22T09:59:00Z"
+        })];
+
+        let report = doctor_report_from_events(&events, now, threshold);
+        prop_assert_eq!(report.issues.len(), 1);
+        let reason = report.issues[0].reason_code.as_str();
+        if threshold <= 60 {
+            prop_assert_eq!(reason, "cleanup_retry_exhausted");
+        } else {
+            prop_assert_eq!(reason, "cleanup_pending");
+        }
+    }
+
+    #[test]
+    fn prop_freshness_no_stale_merge_rejects_revision_mismatch(
+        pinned in "[a-f0-9]{40}",
+        current in "[a-f0-9]{40}"
+    ) {
+        prop_assume!(pinned != current);
+
+        let result = execute_ship_gate_with_gate_runner(MergeQueuePolicy::Skip, |_gate| {
+            Ok(GateEvidence {
+                command: "moon run :cue-check".to_string(),
+                passed: true,
+                exit_code: 0,
+                output: "cue ok".to_string(),
+                revision: Some(pinned.clone()),
+                current_revision: Some(current.clone()),
+            })
+        });
+
+        prop_assert!(result.is_ok());
+        if let Ok(execution) = result {
+            prop_assert!(!execution.passed);
+            prop_assert_eq!(execution.failure_category, Some(FailureCategory::OutputParseFailure));
+            prop_assert!(execution.output.contains("stale evidence rejected"));
+        }
+    }
+
+    #[test]
+    fn prop_conflict_propagation_safety_only_merge_queue_maps_to_merge_conflict(
+        choose_merge_queue in any::<bool>()
+    ) {
+        let gate = if choose_merge_queue {
+            Gate::ZjjMergeQueue
+        } else {
+            Gate::CueArtifactGenerated
+        };
+        let (category, next_stage) = gate_failure_outcome(&Stage::ShipGate, &gate);
+
+        if choose_merge_queue {
+            prop_assert_eq!(category, FailureCategory::MergeConflict);
+            prop_assert_eq!(next_stage, Stage::Implementation);
+        } else {
+            prop_assert!(category != FailureCategory::MergeConflict);
+            prop_assert_eq!(next_stage, Stage::Implementation);
+        }
+    }
+}
+
+#[test]
+fn given_fresh_start_claim_when_admitted_then_it_is_accepted() {
+    let payload = StartRequestPayload {
+        bead_id: Some("src-2uo".to_string()),
+        context: Some("coordination-happy-path".to_string()),
+        model: None,
+    };
+
+    let admission = evaluate_start_request(None, &payload, "run-accept-1");
+
+    assert!(matches!(admission, Ok(StartAdmission::Fresh)));
+}
+
+#[test]
+fn given_matching_start_claim_when_replayed_then_it_is_idempotent() {
+    let payload = StartRequestPayload {
+        bead_id: Some("src-2uo".to_string()),
+        context: Some("coordination-idempotent".to_string()),
+        model: None,
+    };
+    let existing = RunRequestEvent {
+        run_id: "run-accept-2".to_string(),
+        bead_id: "src-2uo".to_string(),
+        context: "coordination-idempotent".to_string(),
+        started_at: "2026-02-22T00:00:00Z".to_string(),
+    };
+
+    let admission = evaluate_start_request(Some(existing), &payload, "run-accept-2");
+
+    assert!(
+        matches!(admission, Ok(StartAdmission::Idempotent(run_id)) if run_id == "run-accept-2")
+    );
+}
+
+#[test]
+fn given_conflicting_start_claim_when_replayed_then_it_is_rejected() {
+    let payload = StartRequestPayload {
+        bead_id: Some("src-2uo".to_string()),
+        context: Some("new-context".to_string()),
+        model: None,
+    };
+    let existing = RunRequestEvent {
+        run_id: "run-accept-3".to_string(),
+        bead_id: "src-2uo".to_string(),
+        context: "old-context".to_string(),
+        started_at: "2026-02-22T00:00:00Z".to_string(),
+    };
+
+    let admission = evaluate_start_request(Some(existing), &payload, "run-accept-3");
+
+    assert!(admission.is_err());
+}
+
+#[test]
+fn given_cleanup_pending_run_past_ttl_when_doctor_runs_then_reclaim_is_flagged() {
+    let events = vec![json!({
+        "run_id": "run-ttl-accept",
+        "status": "cleanup_pending",
+        "stage": "implementation",
+        "at": "2026-02-22T09:50:00Z"
+    })];
+
+    let report = doctor_report_from_events(&events, "2026-02-22T10:00:00Z", 300);
+
+    assert_eq!(report.issues.len(), 1);
+    assert_eq!(report.issues[0].reason_code, "cleanup_retry_exhausted");
+}
+
+#[test]
+fn given_stale_cue_revision_when_ship_gate_runs_then_merge_is_blocked() {
+    let result = execute_ship_gate_with_gate_runner(MergeQueuePolicy::Skip, |_gate| {
+        Ok(GateEvidence {
+            command: "moon run :cue-check".to_string(),
+            passed: true,
+            exit_code: 0,
+            output: "cue ok".to_string(),
+            revision: Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string()),
+            current_revision: Some("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string()),
+        })
+    });
+
+    assert!(result.is_ok());
+    if let Ok(execution) = result {
+        assert!(!execution.passed);
+        assert_eq!(execution.failure_category, Some(FailureCategory::OutputParseFailure));
+    }
 }
 
 #[test]

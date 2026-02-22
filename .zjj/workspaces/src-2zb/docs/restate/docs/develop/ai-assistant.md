@@ -1,0 +1,148 @@
+# AI-Assisted Development
+
+Source: https://docs.restate.dev/develop/ai-assistant
+
+Developing Restate apps with AI coding agents.
+
+The Restate documentation site includes several features to help you leverage AI coding agents like Cursor and Claude Code in your development workflow.
+
+## Contextual menu
+
+Each page of the Restate documentation has a contextual menu in the top right corner that provides quick access to various AI resources:
+
+<img alt="Contextual menu" />
+
+You can use this to quickly hydrate your AI chat with the content of the current page, or to add the Restate docs MCP server to Cursor, or VSCode.
+
+## Restate skill
+
+To add the Restate skill to your AI code assistant:
+
+```shell theme={null}
+npx skills add https://docs.restate.dev
+```
+
+We are continuously improving the Restate skill, let us know if you have any feedback via [Discord](https://discord.restate.dev) or [Slack](https://slack.restate.dev).
+
+## Restate Docs as MCP server
+
+The Restate documentation is available as an MCP server, which you can add to Cursor or other AI coding agents that support MCP.
+
+You can either use the shortcuts in the [contextual menu](/develop/ai-assistant#contextual-menu) or follow the following guidelines:
+
+<Tabs>
+  <Tab title="Claude">
+    1. Navigate to the `Connectors` page in the Claude settings.
+    2. Select `Add custom connector`.
+    3. Add the MCP server name and URL: `restate-docs`, `https://docs.restate.dev/mcp`.
+    4. Select `Add`.
+    5. When using Claude, select the attachments button (the plus icon).
+    6. Select your MCP server.
+  </Tab>
+
+  <Tab title="Claude Code">
+    To add the Restate documentation MCP server to Claude Code, run the following command in your terminal:
+
+    ```shell theme={null}
+    claude mcp add --transport http restate-docs https://docs.restate.dev/mcp
+    ```
+  </Tab>
+
+  <Tab title="Cursor">
+    1. Use `Command` + `Shift` + `P` (`Ctrl` + `Shift` + `P` on Windows) to open the command palette.
+    2. Search for `“Open MCP settings”`.
+    3. Select `Add custom MCP`. This will open the `mcp.json` file.
+    4. In `mcp.json`, configure your server:
+
+    ```json theme={null}
+    {
+        "mcpServers": {
+            "restate-docs": {
+                "url": "https://docs.restate.dev/mcp"
+            }
+        }
+    }
+    ```
+  </Tab>
+
+  <Tab title="VS Code">
+    1. Create a `.vscode/mcp.json` file.
+    2. In `mcp.json`, configure your server:
+
+    ```json theme={null}
+    {
+        "servers": {
+        "restate-docs": {
+                "type": "http",
+                "url": "https://docs.restate.dev/mcp"
+            }
+        }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+More information in the [Mintlify documentation](https://www.mintlify.com/docs/ai/model-context-protocol#using-your-mcp-server).
+
+## AGENTS.md: Coding agent rules
+
+AGENTS.md is a simple markdown file for defining agent instructions.
+
+To improve the performance of coding agents when implementing Restate applications, add the following rules to your agent's context.
+
+* [TypeScript SDK AGENTS.md](/develop/ts/agents.md)
+* [Java SDK AGENTS.md](/develop/java/agents.md)
+* [Python SDK AGENTS.md](/develop/python/agents.md)
+* [Go SDK AGENTS.md](/develop/go/agents.md)
+
+### Cursor
+
+Download the AGENTS.md file and put it [in the `.cursor/rules` folder](https://cursor.com/docs/context/rules#agentsmd) at the root of your project:
+
+<CodeGroup>
+  ```shell Typescript theme={null}
+  mkdir -p ./.cursor/rules && wget -O ./.cursor/rules/AGENTS.md https://docs.restate.dev/develop/ts/agents.md
+  ```
+
+  ```shell Java theme={null}
+  mkdir -p ./.cursor/rules && wget -O ./.cursor/rules/AGENTS.md https://docs.restate.dev/develop/java/agents.md
+  ```
+
+  ```shell Python theme={null}
+  mkdir -p ./.cursor/rules && wget -O ./.cursor/rules/AGENTS.md https://docs.restate.dev/develop/python/agents.md
+  ```
+
+  ```shell Go theme={null}
+  mkdir -p ./.cursor/rules && wget -O ./.cursor/rules/AGENTS.md https://docs.restate.dev/develop/go/agents.md
+  ```
+</CodeGroup>
+
+### Claude Code
+
+Download the CLAUDE.md file and put it [in the `.claude` folder](https://www.anthropic.com/engineering/claude-code-best-practices) at the root of your project:
+
+<CodeGroup>
+  ```shell Typescript theme={null}
+  mkdir -p ./.claude && wget -O ./.claude/CLAUDE.md https://docs.restate.dev/develop/ts/agents.md
+  ```
+
+  ```shell Java theme={null}
+  mkdir -p ./.claude && wget -O ./.claude/CLAUDE.md https://docs.restate.dev/develop/java/agents.md
+  ```
+
+  ```shell Python theme={null}
+  mkdir -p ./.claude && wget -O ./.claude/CLAUDE.md https://docs.restate.dev/develop/python/agents.md
+  ```
+
+  ```shell Go theme={null}
+  mkdir -p ./.claude && wget -O ./.claude/CLAUDE.md https://docs.restate.dev/develop/go/agents.md
+  ```
+</CodeGroup>
+
+## llms.txt and llms-full.txt
+
+The Restate documentation is available in markdown, for easy ingestion by LLMs.
+
+Add `.md` to any page’s URL to view a Markdown version.
+
+The documentation also includes [`llms.txt`](https://docs.restate.dev/llms.txt) (navigation structure) and [`llms-full.txt`](https://docs.restate.dev/llms-full.txt) (full documentation) files.

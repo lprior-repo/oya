@@ -104,7 +104,6 @@ async fn execute_stage_workflow(
             model: input.model.to_string(),
             last_failure: input.last_failure.clone(),
         },
-        config.merge_queue_policy,
         execution_root,
     )
     .await

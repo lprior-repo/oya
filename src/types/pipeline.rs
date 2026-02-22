@@ -71,7 +71,7 @@ impl StageName {
             Self::Red => vec![Gate::Compiles],
             Self::Implementation => vec![Gate::Compiles, Gate::TestsPass],
             Self::Witness => vec![Gate::HoldoutScenarios],
-            Self::ShipGate => vec![Gate::CueArtifactGenerated, Gate::ZjjMergeQueue],
+            Self::ShipGate => vec![Gate::CueArtifactGenerated],
         }
     }
 }

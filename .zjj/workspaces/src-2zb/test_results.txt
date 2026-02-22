@@ -1,0 +1,188 @@
+▮▮▮▮ oya:test (d3a7bd05)
+[1m[92m   Compiling[0m oya v0.1.0 (/home/lewis/src/oya)
+[1m[91merror[E0432][0m[1m: unresolved import `InvocationState`[0m
+   [1m[94m--> [0msrc/tail/parser.rs:302:13
+    [1m[94m|[0m
+[1m[94m302[0m [1m[94m|[0m         use InvocationState::*;
+    [1m[94m|[0m             [1m[91m^^^^^^^^^^^^^^^[0m [1m[91muse of undeclared type `InvocationState`[0m
+
+[1m[91merror[E0433][0m[1m: failed to resolve: use of undeclared type `RunId`[0m
+  [1m[94m--> [0msrc/tail/parser.rs:19:18
+   [1m[94m|[0m
+[1m[94m19[0m [1m[94m|[0m     let run_id = RunId::new_or_fallback(row.target_service_key.clone());
+   [1m[94m|[0m                  [1m[91m^^^^^[0m [1m[91muse of undeclared type `RunId`[0m
+   [1m[94m|[0m
+[1m[96mhelp[0m: consider importing one of these structs
+   [1m[94m|[0m
+ [1m[94m9[0m [92m+ use crate::tail::RunId;[0m
+   [1m[94m|[0m
+ [1m[94m9[0m [92m+ use oya::types::RunId;[0m
+   [1m[94m|[0m
+
+[1m[91merror[E0433][0m[1m: failed to resolve: use of undeclared type `InvocationState`[0m
+  [1m[94m--> [0msrc/tail/parser.rs:21:17
+   [1m[94m|[0m
+[1m[94m21[0m [1m[94m|[0m     let state = InvocationState::from_restate_status(
+   [1m[94m|[0m                 [1m[91m^^^^^^^^^^^^^^^[0m [1m[91muse of undeclared type `InvocationState`[0m
+   [1m[94m|[0m
+[1m[96mhelp[0m: a struct with a similar name exists
+   [1m[94m|[0m
+[1m[94m21[0m [91m- [0m    let state = [91mInvocationState[0m::from_restate_status(
+[1m[94m21[0m [92m+ [0m    let state = [92mInvocationView[0m::from_restate_status(
+   [1m[94m|[0m
+[1m[96mhelp[0m: consider importing this enum through its public re-export
+   [1m[94m|[0m
+ [1m[94m9[0m [92m+ use crate::tail::InvocationState;[0m
+   [1m[94m|[0m
+
+[1m[91merror[E0425][0m[1m: cannot find type `StageName` in this scope[0m
+   [1m[94m--> [0msrc/tail/parser.rs:50:12
+    [1m[94m|[0m
+ [1m[94m50[0m [1m[94m|[0m     Option<StageName>,
+    [1m[94m|[0m            [1m[91m^^^^^^^^^[0m
+    [1m[94m|[0m
+   [1m[94m::: [0msrc/tail/types.rs:174:1
+    [1m[94m|[0m
+[1m[94m174[0m [1m[94m|[0m pub struct GateName(String);
+    [1m[94m|[0m [1m[94m----------------------------[0m [1m[94msimilarly named struct `GateName` defined here[0m
+    [1m[94m|[0m
+[1m[96mhelp[0m: a struct with a similar name exists
+    [1m[94m|[0m
+ [1m[94m50[0m [91m- [0m    Option<[91mStageName[0m>,
+ [1m[94m50[0m [92m+ [0m    Option<[92mGateName[0m>,
+    [1m[94m|[0m
+[1m[96mhelp[0m: consider importing one of these items
+    [1m[94m|[0m
+  [1m[94m9[0m [92m+ use crate::tail::StageName;[0m
+    [1m[94m|[0m
+  [1m[94m9[0m [92m+ use oya::types::StageName;[0m
+    [1m[94m|[0m
+
+[1m[91merror[E0425][0m[1m: cannot find type `Attempt` in this scope[0m
+  [1m[94m--> [0msrc/tail/parser.rs:51:12
+   [1m[94m|[0m
+[1m[94m51[0m [1m[94m|[0m     Option<Attempt>,
+   [1m[94m|[0m            [1m[91m^^^^^^^[0m [1m[91mnot found in this scope[0m
+   [1m[94m|[0m
+[1m[96mhelp[0m: consider importing one of these structs
+   [1m[94m|[0m
+ [1m[94m9[0m [92m+ use crate::tail::types::Attempt;[0m
+   [1m[94m|[0m
+ [1m[94m9[0m [92m+ use reqwest::redirect::Attempt;[0m
+   [1m[94m|[0m
+
+[1m[91merror[E0425][0m[1m: cannot find type `StageName` in this scope[0m
+   [1m[94m--> [0msrc/tail/parser.rs:85:67
+    [1m[94m|[0m
+ [1m[94m85[0m [1m[94m|[0m fn extract_stage_from_failure(json: &serde_json::Value) -> Option<StageName> {
+    [1m[94m|[0m                                                                   [1m[91m^^^^^^^^^[0m
+    [1m[94m|[0m
+   [1m[94m::: [0msrc/tail/types.rs:174:1
+    [1m[94m|[0m
+[1m[94m174[0m [1m[94m|[0m pub struct GateName(String);
+    [1m[94m|[0m [1m[94m----------------------------[0m [1m[94msimilarly named struct `GateName` defined here[0m
+    [1m[94m|[0m
+[1m[96mhelp[0m: a struct with a similar name exists
+    [1m[94m|[0m
+ [1m[94m85[0m [91m- [0mfn extract_stage_from_failure(json: &serde_json::Value) -> Option<[91mStageName[0m> {
+ [1m[94m85[0m [92m+ [0mfn extract_stage_from_failure(json: &serde_json::Value) -> Option<[92mGateName[0m> {
+    [1m[94m|[0m
+[1m[96mhelp[0m: consider importing one of these items
+    [1m[94m|[0m
+  [1m[94m9[0m [92m+ use crate::tail::StageName;[0m
+    [1m[94m|[0m
+  [1m[94m9[0m [92m+ use oya::types::StageName;[0m
+    [1m[94m|[0m
+
+[1m[91merror[E0433][0m[1m: failed to resolve: use of undeclared type `StageName`[0m
+  [1m[94m--> [0msrc/tail/parser.rs:89:18
+   [1m[94m|[0m
+[1m[94m89[0m [1m[94m|[0m         .map(|s| StageName::new(s.to_string()))
+   [1m[94m|[0m                  [1m[91m^^^^^^^^^[0m [1m[91muse of undeclared type `StageName`[0m
+   [1m[94m|[0m
+[1m[96mhelp[0m: a struct with a similar name exists
+   [1m[94m|[0m
+[1m[94m89[0m [91m- [0m        .map(|s| [91mStageName[0m::new(s.to_string()))
+[1m[94m89[0m [92m+ [0m        .map(|s| [92mGateName[0m::new(s.to_string()))
+   [1m[94m|[0m
+[1m[96mhelp[0m: consider importing one of these items
+   [1m[94m|[0m
+ [1m[94m9[0m [92m+ use crate::tail::StageName;[0m
+   [1m[94m|[0m
+ [1m[94m9[0m [92m+ use oya::types::StageName;[0m
+   [1m[94m|[0m
+
+[1m[91merror[E0425][0m[1m: cannot find type `Attempt` in this scope[0m
+  [1m[94m--> [0msrc/tail/parser.rs:93:75
+   [1m[94m|[0m
+[1m[94m93[0m [1m[94m|[0m fn extract_attempt(json: &serde_json::Value, max_attempts: u32) -> Option<Attempt> {
+   [1m[94m|[0m                                                                           [1m[91m^^^^^^^[0m [1m[91mnot found in this scope[0m
+   [1m[94m|[0m
+[1m[96mhelp[0m: consider importing one of these structs
+   [1m[94m|[0m
+ [1m[94m9[0m [92m+ use crate::tail::types::Attempt;[0m
+   [1m[94m|[0m
+ [1m[94m9[0m [92m+ use reqwest::redirect::Attempt;[0m
+   [1m[94m|[0m
+
+[1m[91merror[E0433][0m[1m: failed to resolve: use of undeclared type `Attempt`[0m
+  [1m[94m--> [0msrc/tail/parser.rs:98:23
+   [1m[94m|[0m
+[1m[94m98[0m [1m[94m|[0m         .and_then(|v| Attempt::new(v, max_attempts))
+   [1m[94m|[0m                       [1m[91m^^^^^^^[0m [1m[91muse of undeclared type `Attempt`[0m
+   [1m[94m|[0m
+[1m[96mhelp[0m: consider importing one of these structs
+   [1m[94m|[0m
+ [1m[94m9[0m [92m+ use crate::tail::types::Attempt;[0m
+   [1m[94m|[0m
+ [1m[94m9[0m [92m+ use reqwest::redirect::Attempt;[0m
+   [1m[94m|[0m
+
+[1m[91merror[E0433][0m[1m: failed to resolve: use of undeclared type `Attempt`[0m
+  [1m[94m--> [0msrc/tail/parser.rs:99:26
+   [1m[94m|[0m
+[1m[94m99[0m [1m[94m|[0m         .or_else(|| Some(Attempt::first()))
+   [1m[94m|[0m                          [1m[91m^^^^^^^[0m [1m[91muse of undeclared type `Attempt`[0m
+   [1m[94m|[0m
+[1m[96mhelp[0m: consider importing one of these structs
+   [1m[94m|[0m
+ [1m[94m9[0m [92m+ use crate::tail::types::Attempt;[0m
+   [1m[94m|[0m
+ [1m[94m9[0m [92m+ use reqwest::redirect::Attempt;[0m
+   [1m[94m|[0m
+
+[1m[33mwarning[0m[1m: unused imports: `GateName`, `GateState`, `GateView`, `InvocationState`, `InvocationView`, `RestateInvocationRow`, `RestateQueryResponse`, `RunId`, and `StageName`[0m
+  [1m[94m--> [0msrc/tail/mod.rs:17:5
+   [1m[94m|[0m
+[1m[94m17[0m [1m[94m|[0m     GateName, GateState, GateView, InvocationState, InvocationView,
+   [1m[94m|[0m     [1m[33m^^^^^^^^[0m  [1m[33m^^^^^^^^^[0m  [1m[33m^^^^^^^^[0m  [1m[33m^^^^^^^^^^^^^^^[0m  [1m[33m^^^^^^^^^^^^^^[0m
+[1m[94m18[0m [1m[94m|[0m     RestateInvocationRow, RestateQueryResponse, RunId, StageName,
+   [1m[94m|[0m     [1m[33m^^^^^^^^^^^^^^^^^^^^[0m  [1m[33m^^^^^^^^^^^^^^^^^^^^[0m  [1m[33m^^^^^[0m  [1m[33m^^^^^^^^^[0m
+   [1m[94m|[0m
+   [1m[94m= [0m[1mnote[0m: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+[1m[91merror[E0282][0m[1m: type annotations needed[0m
+  [1m[94m--> [0msrc/tail/parser.rs:70:50
+   [1m[94m|[0m
+[1m[94m70[0m [1m[94m|[0m     let max_attempts = stage.as_ref().map_or(2, |s| s.max_attempts());
+   [1m[94m|[0m                                                  [1m[91m^[0m  [1m[94m-[0m [1m[94mtype must be known at this point[0m
+   [1m[94m|[0m
+[1m[96mhelp[0m: consider giving this closure parameter an explicit type
+   [1m[94m|[0m
+[1m[94m70[0m [1m[94m| [0m    let max_attempts = stage.as_ref().map_or(2, |s[92m: /* Type */[0m| s.max_attempts());
+   [1m[94m|[0m                                                   [92m++++++++++++[0m
+
+[1mSome errors have detailed explanations: E0282, E0425, E0433.[0m
+[1mFor more information about an error, try `rustc --explain E0282`.[0m
+[1m[33mwarning[0m: `oya` (bin "oya") generated 1 warning
+[1m[91merror[0m: could not compile `oya` (bin "oya") due to 10 previous errors; 1 warning emitted
+[1m[33mwarning[0m: build failed, waiting for other jobs to finish...
+[1mSome errors have detailed explanations: E0282, E0432.[0m
+[1m[33mwarning[0m: `oya` (bin "oya" test) generated 1 warning (1 duplicate)
+[1m[91merror[0m: could not compile `oya` (bin "oya" test) due to 2 previous errors; 1 warning emitted
+▮▮▮▮ oya:test (732ms, d3a7bd05)
+Error: task_runner::run_failed
+
+  × Task oya:test failed to run.
+  ╰─▶ Process cargo failed: exit code 101
+

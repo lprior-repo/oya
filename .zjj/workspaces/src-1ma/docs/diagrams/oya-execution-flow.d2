@@ -1,0 +1,129 @@
+# OYA Workflow Execution Flow
+# Based on actual execution: test-run-20260219-203815 for bead src-2nw
+
+direction: down
+
+# Start
+start["🚀 Start\nUser runs: ./scripts/pipeline-run.sh"]: {
+  style.fill: "#e6f3ff"
+  style.bold: true
+}
+
+# Setup Phase
+setup["Setup Phase"]: {
+  style.fill: "#f0f0f0"
+  style.bold: true
+}
+
+select_bead["1. Select Bead\nbr ready → src-2nw\n(P0: spawn_blocking journaling)"]: {
+  style.fill: "#fff4e6"
+}
+
+gen_runid["2. Generate Run ID\ntest-run-20260219-203815"]: {
+  style.fill: "#fff4e6"
+}
+
+post_invoke["3. Start Invocation\nPOST :8080/OyaOrchestrator/{run_id}/run/send\ninv_1i6pEc8CF5470GtxDf2KyF98K2hO0u94hZ"]: {
+  style.fill: "#fff4e6"
+}
+
+# Workflow Execution
+workflow["🔄 Workflow Execution\nJournal States"]: {
+  style.fill: "#f0f0f0"
+  style.bold: true
+}
+
+stage1["Stage 1: Plan\n━━━━━━━━━━━━━━━━━━━━━━\n📍 Journal: 3 → 35\n🤖 Model: opencode/glm-5-free\n⏱️  Duration: 197s (3.3min)\n📝 Output: 62KB PLAN.md\n✅ Status: Complete"]: {
+  style.fill: "#e6f7ff"
+  style.stroke: "#4dabf7"
+  style.stroke-width: 2
+}
+
+stage2["Stage 2: Contract\n━━━━━━━━━━━━━━━━━━━━━━\n📍 Journal: 35 → 73\n🤖 Model: zai-coding-plan/glm-4.6\n📋 Tasks: Design contracts, invariants\n🗂️  Workspace: oya-test-run...contract-a1\n✅ Status: Complete"]: {
+  style.fill: "#fff0e6"
+  style.stroke: "#ff922b"
+  style.stroke-width: 2
+}
+
+stage3["Stage 3: Acceptance Test\n━━━━━━━━━━━━━━━━━━━━━━\n📍 Journal: 73 → 110\n🔴 RED Gate: Tests MUST FAIL\n✅ Tests compile but fail\n❌ No false positives\n✅ Status: Complete"]: {
+  style.fill: "#ffe6e6"
+  style.stroke: "#fa5252"
+  style.stroke-width: 3
+}
+
+stage4["Stage 4: Implementation\n━━━━━━━━━━━━━━━━━━━━━━\n📍 Journal: 110 → 118\n🟢 GREEN Gate: Tests MUST PASS\n💻 Write implementation code\n✅ Zero unwrap/panic\n✅ Status: Complete"]: {
+  style.fill: "#e6ffe6"
+  style.stroke: "#40c057"
+  style.stroke-width: 3
+}
+
+stage5["Stage 5: QA & Completion\n━━━━━━━━━━━━━━━━━━━━━━\n📍 Journal: 118 → 141\n🛡️  Quality gates\n✅ clippy clean\n✅ all tests pass\n✅ Status: Complete"]: {
+  style.fill: "#fff4e6"
+  style.stroke: "#fab005"
+  style.stroke-width: 2
+}
+
+# Completion
+completion["✅ Workflow Complete\n━━━━━━━━━━━━━━━━━━━━━━\n📊 Final State: success\n📈 Journal: 141\n⏱️  Total Time: ~10-15min\n🎯 Bead src-2nw processed"]: {
+  style.fill: "#d3f9d8"
+  style.bold: true
+  style.stroke: "#20c997"
+  style.stroke-width: 3
+}
+
+# Infrastructure
+infra["🏗️  Running Infrastructure\n━━━━━━━━━━━━━━━━━━━━━━\n✅ oya-manual.service (PID 2537318)\n✅ Binary: target/release/oya (13MB)\n✅ Restate: oya-restate container\n✅ OpenCode: :4098 (isolated)\n✅ Monitoring: journalctl -u oya-manual"]: {
+  style.fill: "#f8f9fa"
+  style.stroke-dash: 3
+}
+
+# Services
+services["🔌 Service Endpoints\n━━━━━━━━━━━━━━━━━━━━━━\n🔍 Admin UI:   http://127.0.0.1:9070\n📥 Ingress:   http://127.0.0.1:8080\n💼 Service:   http://127.0.0.1:9080\n📊 Health:    http://127.0.0.1:8080/restate/health"]: {
+  style.fill: "#f8f9fa"
+  style.stroke-dash: 3
+}
+
+# Connect flow
+start -> setup
+setup -> select_bead
+select_bead -> gen_runid
+gen_runid -> post_invoke
+post_invoke -> workflow
+
+workflow -> stage1
+stage1 -> stage2
+stage2 -> stage3
+stage3 -> stage4
+stage4 -> stage5
+stage5 -> completion
+
+# Side connections
+completion -- infra: "running on"
+completion -- services: "accessible via"
+
+# Add timing annotations
+stage1.stage2: {
+  label: "📊 Plan → Contract"
+}
+
+stage2.stage3: {
+  label: "📝 Contract → Test"
+}
+
+stage3.stage4: {
+  label: "🔴 Red → Green\n(TDD Core)"
+}
+
+stage4.stage5: {
+  label: "💻 Implement → QA"
+}
+
+# Quality gates badge
+quality_gates["🛡️  Quality Gates Enforced\n\n✅ AcceptanceTestsAreRed\n✅ TestsPass\n✅ ClippyClean\n✅ ZeroUnwrapPanic\n✅ MoonCI"]: {
+  style.fill: "#fff9db"
+  style.stroke: "#fab005"
+  style.stroke-width: 2
+  style.stroke-dash: 3
+}
+
+stage5 -- quality_gates: "enforces"

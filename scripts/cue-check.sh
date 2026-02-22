@@ -12,6 +12,7 @@ set -euo pipefail
 
 SCHEMAS_DIR=".beads/schemas"
 IMPL_DIR=".beads/implementation"
+RUNTIME_SCHEMA="cue/queue_schema.cue"
 
 # Colors for output
 RED='\033[0;31m'
@@ -29,6 +30,43 @@ log_warn() {
 
 log_error() {
 	echo -e "${RED}[CUE ERROR]${NC} $1"
+}
+
+resolve_runtime_artifacts() {
+	local -a artifacts=()
+	for candidate in "$@"; do
+		if [[ -f "$candidate" ]]; then
+			artifacts+=("$candidate")
+		fi
+	done
+	printf '%s\n' "${artifacts[@]}"
+}
+
+validate_runtime_artifact() {
+	local artifact_name="$1"
+	local definition="$2"
+	shift 2
+	local paths
+	paths="$(resolve_runtime_artifacts "$@")"
+	if [[ -z "$paths" ]]; then
+		return 0
+	fi
+	if [[ ! -f "$RUNTIME_SCHEMA" ]]; then
+		echo "cue_schema_failure artifact=${artifact_name} definition=${definition} path=${RUNTIME_SCHEMA}"
+		log_error "Runtime schema missing for ${artifact_name}: ${RUNTIME_SCHEMA}"
+		return 1
+	fi
+	while IFS= read -r artifact_path; do
+		[[ -n "$artifact_path" ]] || continue
+		if cue vet "$RUNTIME_SCHEMA" "$artifact_path" -d "$definition" >/dev/null 2>&1; then
+			log_info "Runtime schema PASSED: $(basename "$artifact_path")"
+		else
+			echo "cue_schema_failure artifact=${artifact_name} definition=${definition} path=${artifact_path}"
+			log_error "Runtime schema FAILED for ${artifact_name}: ${artifact_path}"
+			return 1
+		fi
+	done <<<"$paths"
+	return 0
 }
 
 # Check if cue is available
@@ -97,6 +135,30 @@ for proof_file in "$IMPL_DIR"/*.cue; do
 		failed=$((failed + 1))
 	fi
 done
+
+if ! validate_runtime_artifact \
+	"queue" \
+	"#QueueArtifact" \
+	".orchestrator/queue_artifact.json" \
+	".beads/queue_artifact.json"; then
+	failed=$((failed + 1))
+fi
+
+if ! validate_runtime_artifact \
+	"lock" \
+	"#LockArtifact" \
+	".orchestrator/lock_artifact.json" \
+	".beads/lock_artifact.json"; then
+	failed=$((failed + 1))
+fi
+
+if ! validate_runtime_artifact \
+	"conflict" \
+	"#ConflictArtifact" \
+	".orchestrator/conflict_artifact.json" \
+	".beads/conflict_artifact.json"; then
+	failed=$((failed + 1))
+fi
 
 # Summary
 echo ""

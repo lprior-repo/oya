@@ -468,22 +468,15 @@ fn normalize_workspace_segment(
         return Err(OpsMonitorError::InvalidFieldContent(field));
     }
 
-    let normalized =
-        trimmed
-            .to_ascii_lowercase()
-            .chars()
-            .map(|char| {
-                if char.is_ascii_alphanumeric() || char == '-' || char == '_' {
-                    char
-                } else {
-                    '-'
-                }
-            })
-            .collect::<String>()
-            .split('-')
-            .filter(|segment| !segment.is_empty())
-            .collect::<Vec<_>>()
-            .join("-");
+    let normalized = trimmed
+        .to_ascii_lowercase()
+        .chars()
+        .map(|char| if char.is_ascii_alphanumeric() || char == '-' { char } else { '-' })
+        .collect::<String>()
+        .split('-')
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>()
+        .join("-");
 
     if normalized.is_empty() {
         return Err(OpsMonitorError::InvalidFieldFormat(field));

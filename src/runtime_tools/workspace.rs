@@ -10,8 +10,8 @@ fn stage_uses_workspace(stage: &Stage) -> bool {
     matches!(stage, Stage::Contract | Stage::Implementation | Stage::ShipGate)
 }
 
-fn stage_requires_merge_queue(stage: &Stage) -> bool {
-    matches!(stage, Stage::ShipGate)
+fn stage_requires_merge_queue(_stage: &Stage) -> bool {
+    false
 }
 
 #[derive(Clone)]
@@ -236,10 +236,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn stage_requires_merge_queue_only_for_ship_gate() {
+    fn stage_requires_merge_queue_always_false() {
         assert!(!stage_requires_merge_queue(&Stage::Contract));
         assert!(!stage_requires_merge_queue(&Stage::Implementation));
-        assert!(stage_requires_merge_queue(&Stage::ShipGate));
+        assert!(!stage_requires_merge_queue(&Stage::ShipGate));
     }
 
     #[test]

@@ -1,0 +1,201 @@
+# Invocations
+
+Source: https://docs.restate.dev/foundations/invocations
+
+Invoke handlers in Restate services over HTTP, Kafka or with typed clients.
+
+An invocation is a request to execute a handler that is part of a Restate service.
+
+There are three ways to invoke a handler: over HTTP, using typed clients, or through Kafka topics.
+
+## HTTP invocations
+
+To call a function over HTTP, send a request to the Restate Server, specifying the service and the function you want to invoke.
+
+For example, to call the `processPayment` function of the `PaymentService`:
+
+```bash theme={null}
+curl -X POST localhost:8080/PaymentService/processPayment \
+--json '{"amount": 100, "currency": "USD"}'
+```
+
+The Restate Server ingress endpoint is here hosted at `localhost:8080`.
+
+To call Virtual Objects or Workflows, you need to specify the object key or workflow ID in the URL.
+
+For example, to call `updateBalance` of the `UserAccount` object with key `user123`:
+
+```bash theme={null}
+curl -X POST localhost:8080/UserAccount/user123/updateBalance \
+--json '{"amount": 50}'
+```
+
+Check out the [HTTP invocation](/services/invocation/http) docs to learn more.
+
+## Typed client invocations
+
+Use typed clients from external applications to invoke Restate handlers:
+
+<CodeGroup>
+  ```typescript TypeScript {"CODE_LOAD::ts/src/foundations/invocations/client.ts#here"}  theme={null}
+  //import * as clients from "@restatedev/restate-sdk-clients";
+  const restateClient = clients.connect({ url: "http://localhost:8080" });
+
+  // To call a service:
+  const greet = await restateClient
+    .serviceClient(greeterService)
+    .greet({ greeting: "Hi" });
+  ```
+
+  ```java Java {"CODE_LOAD::java/src/main/java/foundations/invocations/Client.java#here"}  theme={null}
+  var restate = Client.connect("http://localhost:8080");
+
+  // To call a service:
+  MyServiceClient.fromClient(restate).myHandler(req);
+  ```
+
+  ```go Go {"CODE_LOAD::go/foundations/invocations/client.go#here"}  theme={null}
+  restateClient := restateingress.NewClient("http://localhost:8080")
+
+  // To call a service
+  response, err := restateingress.Service[*MyInput, *MyOutput](
+    restateClient, "MyService", "MyHandler").
+    Request(context.Background(), &input)
+  if err != nil {
+    return err
+  }
+  ```
+</CodeGroup>
+
+For service-to-service calls within handlers, see [Service Communication](/foundations/actions#service-communication).
+
+## Kafka invocations
+
+You can connect your Restate handlers to Kafka topics, to let Restate invoke them for each message.
+
+Consult the [Kafka Quickstart](/guides/kafka-quickstart) to get started.
+
+## Idempotency
+
+Add an idempotency key to your request header to let Restate deduplicate retries:
+
+```bash theme={null}
+curl -X POST localhost:8080/PaymentService/processPayment \
+-H 'idempotency-key: payment-123' \
+--json '{"amount": 100, "currency": "USD"}'
+```
+
+On retry, Restate returns the first invocation’s result or lets you attach to it if still running.
+
+## Inspecting invocations
+
+Use the Restate UI to monitor and troubleshoot invocations:
+
+<Frame>
+  <img alt="Durable Execution" />
+</Frame>
+
+## Attaching to invocations
+
+Attach to ongoing invocations to retrieve their results:
+
+<CodeGroup>
+  ```typescript TypeScript {"CODE_LOAD::ts/src/foundations/invocations/client.ts#attach"}  theme={null}
+  const handle = ctx
+    .serviceSendClient(myService)
+    .myHandler("Hi", sendOpts({ idempotencyKey: "my-key" }));
+  const invocationId = await handle.invocationId;
+
+  // Later...
+  const response = ctx.attach(invocationId);
+  ```
+
+  ```java Java {"CODE_LOAD::java/src/main/java/foundations/invocations/Client.java#attach"}  theme={null}
+  var handle =
+      MyServiceClient.fromContext(ctx)
+          .send()
+          .myHandler("Hi", opt -> opt.idempotencyKey("my-key"));
+  var response = handle.attach().await();
+  ```
+
+  ```python Python {"CODE_LOAD::python/src/foundations/invocations/client.py#attach"}  theme={null}
+  handle = ctx.service_send(my_handler, "Hi", idempotency_key="my-key")
+  invocation_id = await handle.invocation_id()
+
+  # Later...
+  await ctx.attach_invocation(invocation_id)
+  ```
+
+  ```go Go {"CODE_LOAD::go/foundations/invocations/client.go#attach"}  theme={null}
+  // Execute the request and retrieve the invocation id
+  invocationId := restate.
+    ServiceSend(ctx, "MyService", "MyHandler").
+    Send("Hi", restate.WithIdempotencyKey("my-idempotency-key")).
+    GetInvocationId()
+
+  // Later re-attach to the request
+  response, err := restate.AttachInvocation[string](ctx, invocationId).Response()
+  ```
+</CodeGroup>
+
+Or over HTTP:
+
+```bash theme={null}
+curl localhost:8080/restate/invocation/inv_1234567890abcdef/attach
+```
+
+This is useful when another process needs the result of an ongoing operation or wants to check whether it has completed.
+
+## Cancelling invocations
+
+Cancel running invocations when they're no longer needed:
+
+<CodeGroup>
+  ```bash CLI theme={null}
+  restate invocations cancel inv_1234567890abcdef
+  ```
+
+  ```bash HTTP theme={null}
+  curl -X PATCH http://localhost:9070/invocations/inv_1gdJBtdVEcM942bjcDmb1c1khoaJe11Hbz/cancel
+  ```
+</CodeGroup>
+
+Or programmatically:
+
+<CodeGroup>
+  ```typescript TypeScript {"CODE_LOAD::ts/src/foundations/invocations/client.ts#cancel"}  theme={null}
+  const handle = ctx.serviceSendClient(myService).myHandler("Hi");
+  const invocationId = await handle.invocationId;
+
+  // Cancel the invocation
+  ctx.cancel(invocationId);
+  ```
+
+  ```java Java {"CODE_LOAD::java/src/main/java/foundations/invocations/Client.java#cancel"}  theme={null}
+  var handle = MyServiceClient.fromContext(ctx).send().myHandler("Hi");
+
+  // Cancel the invocation
+  handle.cancel();
+  ```
+
+  ```python Python {"CODE_LOAD::python/src/foundations/invocations/client.py#cancel"}  theme={null}
+  handle = ctx.service_send(my_handler, "Hi", idempotency_key="my-key")
+  invocation_id = await handle.invocation_id()
+
+  # Cancel the invocation
+  ctx.cancel_invocation(invocation_id)
+  ```
+
+  ```go Go {"CODE_LOAD::go/foundations/invocations/client.go#cancel"}  theme={null}
+  // Execute the request and retrieve the invocation id
+  invocationId := restate.
+    ServiceSend(ctx, "MyService", "MyHandler").
+    Send("Hi").
+    GetInvocationId()
+
+  // I don't need this invocation anymore, let me just cancel it
+  restate.CancelInvocation(ctx, invocationId)
+  ```
+</CodeGroup>
+
+To roll back the actions the handler already completed before cancellation, check out at the [sagas guide](/guides/sagas).
