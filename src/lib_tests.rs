@@ -3464,6 +3464,14 @@ fn classify_opencode_error_returns_provider_unavailable_for_plugin_module_resolu
 }
 
 #[test]
+fn classify_opencode_error_given_resolve_message_with_escaped_plugin_module_when_classify_then_returns_provider_unavailable(
+) {
+    let message = "Unexpected error\n\nResolveMessage: Cannot find module \\\"@opencode-ai/plugin\\\" from '/home/lewis/.cache/opencode/node_modules/opencode-gemini-auth/src/plugin/quota.ts'";
+    let category = classify_opencode_error(message);
+    assert_eq!(category, Some(FailureCategory::ProviderUnavailable));
+}
+
+#[test]
 fn opencode_poll_snapshot_is_debug_clone_and_eq() {
     let snapshot = OpencodePollSnapshot {
         busy_sessions: vec!["ses_1".to_string()],
@@ -3865,7 +3873,7 @@ fn opencode_poll_given_invalid_question_json_when_build_then_propagates_error() 
 fn build_manual_e2e_plan_rejects_blank_fields() {
     let missing_scenario = build_manual_e2e_plan(&ManualE2eInput {
         scenario: " ".to_string(),
-        command: "oya run manual-e2e".to_string(),
+        command: "moon run :test".to_string(),
         raw_output: "{\"success\":true,\"diagnostics\":\"ok\"}".to_string(),
     });
     assert_eq!(missing_scenario, Err(ManualE2eError::EmptyField("scenario")));
@@ -3879,7 +3887,7 @@ fn build_manual_e2e_plan_rejects_blank_fields() {
 
     let missing_output = build_manual_e2e_plan(&ManualE2eInput {
         scenario: "manual-e2e".to_string(),
-        command: "oya run manual-e2e".to_string(),
+        command: "moon run :test".to_string(),
         raw_output: " ".to_string(),
     });
     assert_eq!(missing_output, Err(ManualE2eError::EmptyField("raw_output")));
@@ -3889,7 +3897,7 @@ fn build_manual_e2e_plan_rejects_blank_fields() {
 fn build_manual_e2e_plan_rejects_boundary_and_malformed_inputs() {
     let oversized_scenario = build_manual_e2e_plan(&ManualE2eInput {
         scenario: "s".repeat(MAX_MANUAL_E2E_SCENARIO_LEN + 1),
-        command: "oya run manual-e2e".to_string(),
+        command: "moon run :test".to_string(),
         raw_output: "{\"success\":true,\"diagnostics\":\"ok\"}".to_string(),
     });
     assert_eq!(
@@ -3909,7 +3917,7 @@ fn build_manual_e2e_plan_rejects_boundary_and_malformed_inputs() {
 
     let oversized_raw = build_manual_e2e_plan(&ManualE2eInput {
         scenario: "manual-e2e".to_string(),
-        command: "oya run manual-e2e".to_string(),
+        command: "moon run :test".to_string(),
         raw_output: "x".repeat(MAX_MANUAL_E2E_RAW_OUTPUT_LEN + 1),
     });
     assert_eq!(
@@ -3919,7 +3927,7 @@ fn build_manual_e2e_plan_rejects_boundary_and_malformed_inputs() {
 
     let scenario_with_control_char = build_manual_e2e_plan(&ManualE2eInput {
         scenario: "manual\u{0007}e2e".to_string(),
-        command: "oya run manual-e2e".to_string(),
+        command: "moon run :test".to_string(),
         raw_output: "{\"success\":true,\"diagnostics\":\"ok\"}".to_string(),
     });
     assert_eq!(scenario_with_control_char, Err(ManualE2eError::InvalidFieldContent("scenario")));
@@ -3947,7 +3955,7 @@ fn parse_pipeline_output_rejects_empty_malformed_or_incomplete_payloads() {
 fn build_manual_e2e_plan_trims_whitespace_from_valid_fields() {
     let result = build_manual_e2e_plan(&ManualE2eInput {
         scenario: "  manual-e2e  ".to_string(),
-        command: "  oya run manual-e2e  ".to_string(),
+        command: "  moon run :test  ".to_string(),
         raw_output: "  {\"success\":true,\"diagnostics\":\"ok\"}  ".to_string(),
     });
 
@@ -3955,16 +3963,82 @@ fn build_manual_e2e_plan_trims_whitespace_from_valid_fields() {
         result,
         Ok(ManualE2ePlan {
             scenario: "manual-e2e".to_string(),
-            command: "oya run manual-e2e".to_string(),
+            command: "moon run :test".to_string(),
             raw_output: "{\"success\":true,\"diagnostics\":\"ok\"}".to_string(),
         })
     );
 }
 
 #[test]
+fn given_oya_run_command_when_building_manual_e2e_plan_then_rejects_command_contract() {
+    let result = build_manual_e2e_plan(&ManualE2eInput {
+        scenario: "manual-e2e".to_string(),
+        command: "oya run manual-e2e".to_string(),
+        raw_output: "{\"success\":true,\"diagnostics\":\"ok\"}".to_string(),
+    });
+
+    assert_eq!(result, Err(ManualE2eError::InvalidFieldFormat("command")));
+}
+
+#[test]
+fn given_moon_command_when_building_manual_e2e_plan_then_accepts_command_contract() {
+    let result = build_manual_e2e_plan(&ManualE2eInput {
+        scenario: "manual-e2e".to_string(),
+        command: "moon run :test".to_string(),
+        raw_output: "{\"success\":true,\"diagnostics\":\"ok\"}".to_string(),
+    });
+
+    assert!(result.is_ok());
+}
+
+#[test]
+fn given_non_validation_moon_task_when_building_manual_e2e_plan_then_rejects_command_contract() {
+    let result = build_manual_e2e_plan(&ManualE2eInput {
+        scenario: "manual-e2e".to_string(),
+        command: "moon run :build".to_string(),
+        raw_output: "{\"success\":true,\"diagnostics\":\"ok\"}".to_string(),
+    });
+
+    assert_eq!(result, Err(ManualE2eError::InvalidFieldFormat("command")));
+}
+
+#[test]
+fn given_moon_testx_command_when_building_manual_e2e_plan_then_rejects_command_contract() {
+    let result = build_manual_e2e_plan(&ManualE2eInput {
+        scenario: "manual-e2e".to_string(),
+        command: "moon run :testx".to_string(),
+        raw_output: "{\"success\":true,\"diagnostics\":\"ok\"}".to_string(),
+    });
+
+    assert_eq!(result, Err(ManualE2eError::InvalidFieldFormat("command")));
+}
+
+#[test]
+fn given_moon_test_with_extra_tokens_when_building_manual_e2e_plan_then_rejects_command_contract() {
+    let result = build_manual_e2e_plan(&ManualE2eInput {
+        scenario: "manual-e2e".to_string(),
+        command: "moon run :test --verbose".to_string(),
+        raw_output: "{\"success\":true,\"diagnostics\":\"ok\"}".to_string(),
+    });
+
+    assert_eq!(result, Err(ManualE2eError::InvalidFieldFormat("command")));
+}
+
+#[test]
+fn given_moon_ci_command_when_building_manual_e2e_plan_then_accepts_command_contract() {
+    let result = build_manual_e2e_plan(&ManualE2eInput {
+        scenario: "manual-e2e".to_string(),
+        command: "moon run :ci".to_string(),
+        raw_output: "{\"success\":true,\"diagnostics\":\"ok\"}".to_string(),
+    });
+
+    assert!(result.is_ok());
+}
+
+#[test]
 fn build_manual_e2e_plan_accepts_boundary_lengths_and_allowed_controls() {
     let scenario = format!("{}\n", "s".repeat(MAX_MANUAL_E2E_SCENARIO_LEN - 1));
-    let command = format!("{}\t", "c".repeat(MAX_MANUAL_E2E_COMMAND_LEN - 1));
+    let command = "moon run :ci\t".to_string();
     let result = build_manual_e2e_plan(&ManualE2eInput {
         scenario,
         command,
@@ -4043,7 +4117,7 @@ fn parse_pipeline_output_accepts_diagnostics_at_max_length() {
 fn run_manual_e2e_pipeline_records_stage_results_in_order() {
     let plan_result = build_manual_e2e_plan(&ManualE2eInput {
         scenario: "manual-e2e".to_string(),
-        command: "oya run manual-e2e".to_string(),
+        command: "moon run :test".to_string(),
         raw_output: "{\"success\":true,\"diagnostics\":\"pipeline green\"}".to_string(),
     });
     assert!(plan_result.is_ok());
@@ -4074,10 +4148,71 @@ fn run_manual_e2e_pipeline_records_stage_results_in_order() {
 }
 
 #[test]
+fn given_moon_validation_run_when_pipeline_succeeds_then_gate_allows() {
+    let plan = ManualE2ePlan {
+        scenario: "e2e-validation-run".to_string(),
+        command: "moon run :test && moon run :ci".to_string(),
+        raw_output: "{\"success\":true,\"diagnostics\":\"validation green\"}".to_string(),
+    };
+
+    let report_result = run_e2e_validation_pipeline(&plan);
+    assert!(report_result.is_ok());
+    let report = match report_result {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+
+    assert_eq!(report.decision, ManualE2eGateDecision::Allow);
+    assert_eq!(validate_manual_e2e_report(&report), Ok(()));
+}
+
+#[test]
+fn given_oya_run_when_running_e2e_validation_then_command_is_rejected() {
+    let plan = ManualE2ePlan {
+        scenario: "e2e-validation-run".to_string(),
+        command: "oya run --bead src-1k3".to_string(),
+        raw_output: "{\"success\":true,\"diagnostics\":\"validation green\"}".to_string(),
+    };
+
+    assert_eq!(
+        run_e2e_validation_pipeline(&plan),
+        Err(ManualE2eError::InvalidCommand("oya_run_not_allowed"))
+    );
+}
+
+#[test]
+fn given_incidental_test_substring_when_validating_e2e_then_moon_test_is_still_required() {
+    let plan = ManualE2ePlan {
+        scenario: "e2e-validation-run".to_string(),
+        command: "echo moon run :test && moon run :ci".to_string(),
+        raw_output: "{\"success\":true,\"diagnostics\":\"validation green\"}".to_string(),
+    };
+
+    assert_eq!(
+        run_e2e_validation_pipeline(&plan),
+        Err(ManualE2eError::InvalidCommand("missing_moon_test"))
+    );
+}
+
+#[test]
+fn given_incidental_ci_substring_when_validating_e2e_then_moon_ci_is_still_required() {
+    let plan = ManualE2ePlan {
+        scenario: "e2e-validation-run".to_string(),
+        command: "moon run :test && printf '%s' 'moon run :ci'".to_string(),
+        raw_output: "{\"success\":true,\"diagnostics\":\"validation green\"}".to_string(),
+    };
+
+    assert_eq!(
+        run_e2e_validation_pipeline(&plan),
+        Err(ManualE2eError::InvalidCommand("missing_moon_ci"))
+    );
+}
+
+#[test]
 fn run_manual_e2e_pipeline_blocks_gate_when_any_stage_fails() {
     let plan_result = build_manual_e2e_plan(&ManualE2eInput {
         scenario: "manual-e2e".to_string(),
-        command: "oya run manual-e2e".to_string(),
+        command: "moon run :test".to_string(),
         raw_output: "{\"success\":false,\"diagnostics\":\"output mismatch\"}".to_string(),
     });
     assert!(plan_result.is_ok());
@@ -4106,7 +4241,7 @@ fn run_manual_e2e_pipeline_blocks_gate_when_any_stage_fails() {
 fn rerunning_same_plan_yields_equivalent_validation_outcomes() {
     let plan_result = build_manual_e2e_plan(&ManualE2eInput {
         scenario: "manual-e2e".to_string(),
-        command: "oya run manual-e2e".to_string(),
+        command: "moon run :test".to_string(),
         raw_output: "{\"success\":false,\"diagnostics\":\"gate blocked\"}".to_string(),
     });
     assert!(plan_result.is_ok());
@@ -4150,7 +4285,7 @@ fn rerunning_same_plan_yields_equivalent_validation_outcomes() {
 fn validate_manual_e2e_report_rejects_inconsistent_decision() {
     let plan_result = build_manual_e2e_plan(&ManualE2eInput {
         scenario: "manual-e2e".to_string(),
-        command: "oya run manual-e2e".to_string(),
+        command: "moon run :test".to_string(),
         raw_output: "{\"success\":false,\"diagnostics\":\"failed stage\"}".to_string(),
     });
     assert!(plan_result.is_ok());
@@ -4177,7 +4312,7 @@ fn validate_manual_e2e_report_rejects_inconsistent_decision() {
 fn run_manual_e2e_pipeline_returns_parse_errors() {
     let plan = ManualE2ePlan {
         scenario: "manual-e2e".to_string(),
-        command: "oya run manual-e2e".to_string(),
+        command: "moon run :test".to_string(),
         raw_output: "not json".to_string(),
     };
 
@@ -4190,7 +4325,7 @@ fn validate_manual_e2e_report_rejects_unexpected_stage_count() {
     let report = ManualE2eReport {
         plan: ManualE2ePlan {
             scenario: "manual-e2e".to_string(),
-            command: "oya run manual-e2e".to_string(),
+            command: "moon run :test".to_string(),
             raw_output: "{\"success\":true,\"diagnostics\":\"ok\"}".to_string(),
         },
         output: ManualE2eOutput { success: true, diagnostics: "ok".to_string() },
@@ -4213,7 +4348,7 @@ fn validate_manual_e2e_report_rejects_invalid_stage_order() {
     let report = ManualE2eReport {
         plan: ManualE2ePlan {
             scenario: "manual-e2e".to_string(),
-            command: "oya run manual-e2e".to_string(),
+            command: "moon run :test".to_string(),
             raw_output: "{\"success\":true,\"diagnostics\":\"ok\"}".to_string(),
         },
         output: ManualE2eOutput { success: true, diagnostics: "ok".to_string() },
@@ -4249,7 +4384,7 @@ fn validate_manual_e2e_report_rejects_empty_stage_diagnostics() {
     let report = ManualE2eReport {
         plan: ManualE2ePlan {
             scenario: "manual-e2e".to_string(),
-            command: "oya run manual-e2e".to_string(),
+            command: "moon run :test".to_string(),
             raw_output: "{\"success\":true,\"diagnostics\":\"ok\"}".to_string(),
         },
         output: ManualE2eOutput { success: true, diagnostics: "ok".to_string() },
@@ -4285,7 +4420,7 @@ fn validate_manual_e2e_report_rejects_oversized_stage_diagnostics() {
     let report = ManualE2eReport {
         plan: ManualE2ePlan {
             scenario: "manual-e2e".to_string(),
-            command: "oya run manual-e2e".to_string(),
+            command: "moon run :test".to_string(),
             raw_output: "{\"success\":true,\"diagnostics\":\"ok\"}".to_string(),
         },
         output: ManualE2eOutput { success: true, diagnostics: "ok".to_string() },
@@ -4325,7 +4460,7 @@ fn validate_manual_e2e_report_rejects_invalid_stage_diagnostics_content() {
     let report = ManualE2eReport {
         plan: ManualE2ePlan {
             scenario: "manual-e2e".to_string(),
-            command: "oya run manual-e2e".to_string(),
+            command: "moon run :test".to_string(),
             raw_output: "{\"success\":true,\"diagnostics\":\"ok\"}".to_string(),
         },
         output: ManualE2eOutput { success: true, diagnostics: "ok".to_string() },
@@ -4366,7 +4501,7 @@ fn validate_manual_e2e_report_rejects_non_monotonic_stage_timestamps() {
     let report = ManualE2eReport {
         plan: ManualE2ePlan {
             scenario: "manual-e2e".to_string(),
-            command: "oya run manual-e2e".to_string(),
+            command: "moon run :test".to_string(),
             raw_output: "{\"success\":true,\"diagnostics\":\"ok\"}".to_string(),
         },
         output: ManualE2eOutput { success: true, diagnostics: "ok".to_string() },
@@ -4410,7 +4545,7 @@ fn derive_manual_e2e_gate_blocks_when_stage_has_error_status() {
     let report = ManualE2eReport {
         plan: ManualE2ePlan {
             scenario: "manual-e2e".to_string(),
-            command: "oya run manual-e2e".to_string(),
+            command: "moon run :test".to_string(),
             raw_output: "{\"success\":true,\"diagnostics\":\"ok\"}".to_string(),
         },
         output: ManualE2eOutput { success: true, diagnostics: "ok".to_string() },

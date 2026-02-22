@@ -1,7 +1,8 @@
 use super::*;
 use crate::operator_visibility::{
     bounded_tail_events, build_cleanup_reconcile_plan, deterministic_prune_run_artifacts,
-    doctor_report_from_events, status_snapshot_from_events,
+    doctor_enforcement_from_events, doctor_report_from_events, status_snapshot_from_events,
+    validate_stress_harness,
 };
 use crate::pipeline::MergeQueuePolicy;
 use chrono::Datelike;
@@ -380,6 +381,100 @@ fn given_missing_artifact_between_candidates_when_pruning_artifacts_then_removed
     assert!(!runs_root.join("run-a").exists());
 
     let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
+fn given_stable_completed_runs_when_validating_stress_harness_then_validation_passes() {
+    let events = vec![
+        json!({"run_id":"run-2","status":"completed","stage":"ship_gate","attempt":1,"at":"2026-02-22T09:59:00Z"}),
+        json!({"run_id":"run-1","status":"completed","stage":"ship_gate","attempt":1,"at":"2026-02-22T09:58:00Z"}),
+    ];
+
+    let report = validate_stress_harness(&events, "2026-02-22T10:00:00Z", 120, 1, 3);
+
+    assert!(report.passed);
+    assert_eq!(report.total_runs, 2);
+    assert_eq!(report.cleanup_pending_run_ids, Vec::<String>::new());
+    assert_eq!(report.stuck_run_ids, Vec::<String>::new());
+    assert_eq!(report.exhausted_attempt_run_ids, Vec::<String>::new());
+}
+
+#[test]
+fn given_cleanup_pending_backlog_exceeds_budget_when_validating_then_report_is_deterministic_failure(
+) {
+    let events = vec![
+        json!({"run_id":"run-c","status":"cleanup_pending","stage":"ship_gate","attempt":1,"at":"2026-02-22T09:59:00Z"}),
+        json!({"run_id":"run-a","status":"cleanup_pending","stage":"ship_gate","attempt":1,"at":"2026-02-22T09:57:00Z"}),
+        json!({"run_id":"run-b","cleanup_pending":true,"stage":"ship_gate","attempt":1,"at":"2026-02-22T09:58:00Z"}),
+    ];
+
+    let report = validate_stress_harness(&events, "2026-02-22T10:00:00Z", 120, 1, 3);
+
+    assert!(!report.passed);
+    assert_eq!(
+        report.cleanup_pending_run_ids,
+        vec!["run-a".to_string(), "run-b".to_string(), "run-c".to_string()]
+    );
+    assert!(report.stuck_run_ids.is_empty());
+    assert!(report.exhausted_attempt_run_ids.is_empty());
+}
+
+#[test]
+fn given_stuck_and_exhausted_runs_when_validating_stress_harness_then_failures_are_sorted() {
+    let events = vec![
+        json!({"run_id":"run-z","status":"running","stage":"implementation","attempt":1,"at":"2026-02-22T09:00:00Z"}),
+        json!({"run_id":"run-a","status":"running","stage":"implementation","attempt":5,"at":"2026-02-22T09:30:00Z"}),
+        json!({"run_id":"run-m","status":"running","stage":"implementation","attempt":4,"at":"2026-02-22T09:55:30Z"}),
+    ];
+
+    let report = validate_stress_harness(&events, "2026-02-22T10:00:00Z", 600, 2, 3);
+
+    assert!(!report.passed);
+    assert_eq!(report.stuck_run_ids, vec!["run-a".to_string(), "run-z".to_string()]);
+    assert_eq!(report.exhausted_attempt_run_ids, vec!["run-a".to_string(), "run-m".to_string()]);
+}
+
+#[test]
+fn given_clean_stress_runs_when_doctor_enforces_policy_then_it_passes_with_deterministic_message() {
+    let events = vec![
+        json!({"run_id":"run-2","status":"completed","stage":"ship_gate","attempt":1,"at":"2026-02-22T09:59:00Z"}),
+        json!({"run_id":"run-1","status":"completed","stage":"ship_gate","attempt":1,"at":"2026-02-22T09:58:00Z"}),
+    ];
+
+    let outcome = doctor_enforcement_from_events(&events, "2026-02-22T10:00:00Z", 300);
+
+    assert!(outcome.passed);
+    assert_eq!(outcome.reason_codes, Vec::<String>::new());
+    assert_eq!(
+        outcome.message,
+        "reasons=none total_runs=2 cleanup_pending=none stuck_runs=none exhausted_attempts=none"
+    );
+}
+
+#[test]
+fn given_stress_violations_when_doctor_enforces_policy_then_it_fails_with_stable_reasons() {
+    let events = vec![
+        json!({"run_id":"run-z","status":"running","stage":"implementation","attempt":1,"at":"2026-02-22T09:00:00Z"}),
+        json!({"run_id":"run-a","status":"cleanup_pending","stage":"implementation","attempt":5,"at":"2026-02-22T09:30:00Z"}),
+        json!({"run_id":"run-b","status":"cleanup_pending","stage":"implementation","attempt":1,"at":"2026-02-22T09:31:00Z"}),
+        json!({"run_id":"run-c","cleanup_pending":true,"stage":"implementation","attempt":1,"at":"2026-02-22T09:32:00Z"}),
+    ];
+
+    let outcome = doctor_enforcement_from_events(&events, "2026-02-22T10:00:00Z", 300);
+
+    assert!(!outcome.passed);
+    assert_eq!(
+        outcome.reason_codes,
+        vec![
+            "cleanup_backlog_exceeded".to_string(),
+            "stuck_runs_detected".to_string(),
+            "attempt_budget_exhausted".to_string()
+        ]
+    );
+    assert_eq!(
+        outcome.message,
+        "reasons=cleanup_backlog_exceeded,stuck_runs_detected,attempt_budget_exhausted total_runs=4 cleanup_pending=run-a,run-b,run-c stuck_runs=run-z exhausted_attempts=run-a"
+    );
 }
 
 #[test]

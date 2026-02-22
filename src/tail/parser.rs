@@ -89,12 +89,16 @@ fn extract_stage_from_failure(json: &serde_json::Value) -> Option<StageName> {
 
 /// Extract attempt with type-safe invariant: 1 <= attempt <= max_attempts.
 fn extract_attempt(json: &serde_json::Value, max_attempts: u32) -> Option<Attempt> {
-    json.as_object()
+    let parsed_attempt = json
+        .as_object()
         .and_then(|obj| obj.get("attempt"))
         .and_then(|a| a.as_u64())
-        .map(|v| v as u32)
-        .and_then(|v| Attempt::new(v, max_attempts))
-        .or_else(|| Some(Attempt::first()))
+        .map(|value| value as u32);
+
+    match parsed_attempt {
+        Some(value) => Attempt::new(value, max_attempts),
+        None => Some(Attempt::first()),
+    }
 }
 
 fn extract_gates(json: &serde_json::Value) -> Vec<GateView> {
@@ -269,5 +273,35 @@ mod tests {
         assert_eq!(GateState::Passed.icon(), '\u{2705}');
         assert_eq!(GateState::Failed.icon(), '\u{274c}');
         assert_eq!(GateState::Running.icon(), '\u{231b}');
+    }
+
+    #[test]
+    fn given_failure_payload_with_out_of_range_attempt_when_parse_invocation_then_attempt_is_none()
+    {
+        let row = RestateInvocationRow {
+            target_service_key: "run-123".to_string(),
+            status: "completed".to_string(),
+            completion_result: Some("failure".to_string()),
+            completion_failure: Some(r#"{"stage":"implementation","attempt":7}"#.to_string()),
+            modified_at: "2026-02-20T00:00:00Z".to_string(),
+        };
+
+        let view = parse_invocation(&row);
+        assert_eq!(view.attempt, None);
+    }
+
+    #[test]
+    fn given_failure_payload_without_attempt_when_parse_invocation_then_attempt_defaults_to_first()
+    {
+        let row = RestateInvocationRow {
+            target_service_key: "run-456".to_string(),
+            status: "completed".to_string(),
+            completion_result: Some("failure".to_string()),
+            completion_failure: Some(r#"{"stage":"implementation"}"#.to_string()),
+            modified_at: "2026-02-20T00:00:00Z".to_string(),
+        };
+
+        let view = parse_invocation(&row);
+        assert_eq!(view.attempt.map(|attempt| attempt.value()), Some(1));
     }
 }

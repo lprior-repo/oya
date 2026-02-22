@@ -3,7 +3,7 @@
 #![deny(clippy::panic)]
 #![forbid(unsafe_code)]
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
 use serde_json::Value;
@@ -42,6 +42,25 @@ pub(crate) struct CleanupReconcilePlan {
     pub prune_run_ids: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct StressHarnessValidationReport {
+    pub passed: bool,
+    pub total_runs: usize,
+    pub cleanup_pending_run_ids: Vec<String>,
+    pub stuck_run_ids: Vec<String>,
+    pub exhausted_attempt_run_ids: Vec<String>,
+}
+
+const DOCTOR_MAX_CLEANUP_PENDING: usize = 2;
+const DOCTOR_MAX_ATTEMPTS: u64 = 3;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DoctorEnforcement {
+    pub passed: bool,
+    pub reason_codes: Vec<String>,
+    pub message: String,
+}
+
 pub(crate) fn run_status_command(run_id: Option<String>) -> Result<()> {
     let events = read_bridge_events()?;
     let snapshot = status_snapshot_from_events(&events, run_id.as_deref());
@@ -57,6 +76,7 @@ pub(crate) fn run_doctor_command(stuck_after_seconds: u64) -> Result<()> {
     let events = read_bridge_events()?;
     let now = Utc::now().to_rfc3339();
     let report = doctor_report_from_events(&events, &now, stuck_after_seconds);
+    let enforcement = doctor_enforcement_from_events(&events, &now, stuck_after_seconds);
     println!("stuck_runs={}", report.stuck_runs);
     println!("cleanup_pending_backlog={}", report.cleanup_pending_backlog);
     for issue in report.issues {
@@ -64,6 +84,12 @@ pub(crate) fn run_doctor_command(stuck_after_seconds: u64) -> Result<()> {
             "run_id={} reason_code={} stage={} age_seconds={} next_action={}",
             issue.run_id, issue.reason_code, issue.stage, issue.age_seconds, issue.next_action
         );
+    }
+    println!("stress_validation={}", if enforcement.passed { "pass" } else { "fail" });
+    println!("stress_reason_codes={}", join_or_none(&enforcement.reason_codes));
+    println!("stress_summary={}", enforcement.message);
+    if !enforcement.passed {
+        return Err(anyhow!(enforcement.message));
     }
     Ok(())
 }
@@ -181,6 +207,104 @@ pub(crate) fn deterministic_prune_run_artifacts(
             .with_context(|| format!("remove artifact directory {}", artifact_path.display()))
             .map(|()| removed.into_iter().chain(std::iter::once(run_id)).collect::<Vec<_>>())
     })
+}
+
+pub(crate) fn validate_stress_harness(
+    events: &[Value],
+    now_rfc3339: &str,
+    stuck_after_seconds: u64,
+    max_cleanup_pending: usize,
+    max_attempts: u64,
+) -> StressHarnessValidationReport {
+    let latest = latest_event_per_run(events);
+    let now = parse_timestamp(now_rfc3339).unwrap_or_else(Utc::now);
+    let cleanup_pending_run_ids = latest
+        .iter()
+        .filter(|event| is_cleanup_pending(event))
+        .filter_map(|event| json_string(event, "run_id"))
+        .sorted()
+        .collect::<Vec<_>>();
+    let stuck_run_ids = latest
+        .iter()
+        .filter(|event| json_string(event, "status").as_deref() == Some("running"))
+        .filter(|event| age_seconds(event, now) >= stuck_after_seconds)
+        .filter_map(|event| json_string(event, "run_id"))
+        .sorted()
+        .collect::<Vec<_>>();
+    let exhausted_attempt_run_ids = latest
+        .iter()
+        .filter(|event| json_u64(event, "attempt").is_some_and(|attempt| attempt > max_attempts))
+        .filter_map(|event| json_string(event, "run_id"))
+        .sorted()
+        .collect::<Vec<_>>();
+    let passed = !latest.is_empty()
+        && cleanup_pending_run_ids.len() <= max_cleanup_pending
+        && stuck_run_ids.is_empty()
+        && exhausted_attempt_run_ids.is_empty();
+    StressHarnessValidationReport {
+        passed,
+        total_runs: latest.len(),
+        cleanup_pending_run_ids,
+        stuck_run_ids,
+        exhausted_attempt_run_ids,
+    }
+}
+
+pub(crate) fn doctor_enforcement_from_events(
+    events: &[Value],
+    now_rfc3339: &str,
+    stuck_after_seconds: u64,
+) -> DoctorEnforcement {
+    let validation = validate_stress_harness(
+        events,
+        now_rfc3339,
+        stuck_after_seconds,
+        DOCTOR_MAX_CLEANUP_PENDING,
+        DOCTOR_MAX_ATTEMPTS,
+    );
+    let reason_codes = enforcement_reason_codes(&validation);
+    let passed = reason_codes.is_empty();
+    let message = enforcement_message(&validation, &reason_codes);
+    DoctorEnforcement { passed, reason_codes, message }
+}
+
+fn enforcement_reason_codes(validation: &StressHarnessValidationReport) -> Vec<String> {
+    let mut reason_codes = Vec::new();
+    if validation.total_runs == 0 {
+        reason_codes.push("no_runs".to_string());
+    }
+    if validation.cleanup_pending_run_ids.len() > DOCTOR_MAX_CLEANUP_PENDING {
+        reason_codes.push("cleanup_backlog_exceeded".to_string());
+    }
+    if !validation.stuck_run_ids.is_empty() {
+        reason_codes.push("stuck_runs_detected".to_string());
+    }
+    if !validation.exhausted_attempt_run_ids.is_empty() {
+        reason_codes.push("attempt_budget_exhausted".to_string());
+    }
+    reason_codes
+}
+
+fn enforcement_message(
+    validation: &StressHarnessValidationReport,
+    reason_codes: &[String],
+) -> String {
+    let reasons = join_or_none(reason_codes);
+    let cleanup = join_or_none(&validation.cleanup_pending_run_ids);
+    let stuck = join_or_none(&validation.stuck_run_ids);
+    let exhausted = join_or_none(&validation.exhausted_attempt_run_ids);
+    format!(
+        "reasons={} total_runs={} cleanup_pending={} stuck_runs={} exhausted_attempts={}",
+        reasons, validation.total_runs, cleanup, stuck, exhausted
+    )
+}
+
+fn join_or_none(values: &[String]) -> String {
+    if values.is_empty() {
+        "none".to_string()
+    } else {
+        values.join(",")
+    }
 }
 
 fn classify_issue(

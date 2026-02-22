@@ -254,13 +254,21 @@ pub fn classify_opencode_error(stderr: &str) -> Option<FailureCategory> {
         || stderr.contains("OpenCode HTTP request failed")
         || stderr.contains("Connection refused")
         || stderr.contains("error sending request for url")
-        || stderr.contains("Cannot find module '@opencode-ai/plugin'")
-        || stderr.contains("Cannot find module \"@opencode-ai/plugin\"")
+        || has_opencode_plugin_resolution_failure(stderr)
     {
         return Some(FailureCategory::ProviderUnavailable);
     }
 
     None
+}
+
+fn has_opencode_plugin_resolution_failure(stderr: &str) -> bool {
+    let normalized = stderr.to_ascii_lowercase();
+    let normalized_no_escape = normalized.replace('\\', "");
+    normalized_no_escape.contains("cannot find module")
+        && (normalized_no_escape.contains("@opencode-ai/plugin")
+            || normalized_no_escape.contains("opencode-gemini-auth")
+            || normalized_no_escape.contains("resolvemessage: cannot find module"))
 }
 
 const MAX_MANUAL_E2E_SCENARIO_LEN: usize = 128;
@@ -672,8 +680,12 @@ pub enum ManualE2eError {
     FieldTooLong(&'static str, usize),
     #[error("manual e2e field contains invalid control characters: {0}")]
     InvalidFieldContent(&'static str),
+    #[error("manual e2e field has invalid format: {0}")]
+    InvalidFieldFormat(&'static str),
     #[error("manual e2e report invalid: {0}")]
     InvalidReport(&'static str),
+    #[error("manual e2e command invalid: {0}")]
+    InvalidCommand(&'static str),
 }
 
 pub fn build_manual_e2e_plan(input: &ManualE2eInput) -> Result<ManualE2ePlan, ManualE2eError> {
@@ -698,6 +710,7 @@ pub fn build_manual_e2e_plan(input: &ManualE2eInput) -> Result<ManualE2ePlan, Ma
     if contains_forbidden_control_chars(command) {
         return Err(ManualE2eError::InvalidFieldContent("command"));
     }
+    validate_manual_e2e_command(command)?;
 
     let raw_output = input.raw_output.trim();
     if raw_output.is_empty() {
@@ -799,6 +812,13 @@ pub fn run_manual_e2e_pipeline(plan: &ManualE2ePlan) -> Result<ManualE2eReport, 
     Ok(report)
 }
 
+pub fn run_e2e_validation_pipeline(
+    plan: &ManualE2ePlan,
+) -> Result<ManualE2eReport, ManualE2eError> {
+    validate_e2e_validation_command(plan.command.as_str())?;
+    run_manual_e2e_pipeline(plan)
+}
+
 pub fn validate_manual_e2e_report(report: &ManualE2eReport) -> Result<(), ManualE2eError> {
     validate_manual_e2e_stage_contract(report)?;
     validate_manual_e2e_stage_diagnostics(report)?;
@@ -876,6 +896,126 @@ pub fn derive_manual_e2e_gate(report: &ManualE2eReport) -> ManualE2eGateDecision
     }
 }
 
+fn validate_e2e_validation_command(command: &str) -> Result<(), ManualE2eError> {
+    let command_tokens = split_shell_command_tokens(command);
+    if contains_exact_command(&command_tokens, "oya", "run") {
+        return Err(ManualE2eError::InvalidCommand("oya_run_not_allowed"));
+    }
+
+    if !contains_moon_task(&command_tokens, ":test") {
+        return Err(ManualE2eError::InvalidCommand("missing_moon_test"));
+    }
+    if !contains_moon_task(&command_tokens, ":ci") {
+        return Err(ManualE2eError::InvalidCommand("missing_moon_ci"));
+    }
+
+    Ok(())
+}
+
+fn split_shell_command_tokens(command: &str) -> Vec<Vec<String>> {
+    split_shell_segments(command)
+        .into_iter()
+        .map(|segment| shell_tokenize(segment.as_str()))
+        .filter(|tokens| !tokens.is_empty())
+        .collect()
+}
+
+fn split_shell_segments(command: &str) -> Vec<String> {
+    let mut segments = Vec::new();
+    let mut current = String::new();
+    let mut quote: Option<char> = None;
+    let mut chars = command.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if quote.is_none() && (ch == ';' || ch == '&' || ch == '|') {
+            if (ch == '&' || ch == '|') && chars.peek().copied() == Some(ch) {
+                let _ = chars.next();
+            }
+            push_shell_segment(&mut segments, &mut current);
+            continue;
+        }
+        if ch == '\'' || ch == '"' {
+            quote = if quote == Some(ch) {
+                None
+            } else if quote.is_none() {
+                Some(ch)
+            } else {
+                quote
+            };
+        }
+        current.push(ch);
+    }
+
+    push_shell_segment(&mut segments, &mut current);
+    segments
+}
+
+fn push_shell_segment(segments: &mut Vec<String>, current: &mut String) {
+    let trimmed = current.trim();
+    if !trimmed.is_empty() {
+        segments.push(trimmed.to_string());
+    }
+    current.clear();
+}
+
+fn shell_tokenize(segment: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+
+    for ch in segment.chars() {
+        if escaped {
+            current.push(ch);
+            escaped = false;
+            continue;
+        }
+        if ch == '\\' {
+            escaped = true;
+            continue;
+        }
+        if ch == '\'' || ch == '"' {
+            quote = if quote == Some(ch) {
+                None
+            } else if quote.is_none() {
+                Some(ch)
+            } else {
+                quote
+            };
+            continue;
+        }
+        if quote.is_none() && ch.is_whitespace() {
+            push_shell_token(&mut tokens, &mut current);
+            continue;
+        }
+        current.push(ch);
+    }
+
+    push_shell_token(&mut tokens, &mut current);
+    tokens
+}
+
+fn push_shell_token(tokens: &mut Vec<String>, current: &mut String) {
+    if !current.is_empty() {
+        tokens.push(std::mem::take(current));
+    }
+}
+
+fn contains_exact_command(command_tokens: &[Vec<String>], program: &str, subcommand: &str) -> bool {
+    command_tokens.iter().any(|tokens| {
+        tokens.first().is_some_and(|token| token == program)
+            && tokens.get(1).is_some_and(|token| token == subcommand)
+    })
+}
+
+fn contains_moon_task(command_tokens: &[Vec<String>], task: &str) -> bool {
+    command_tokens.iter().any(|tokens| {
+        tokens.first().is_some_and(|token| token == "moon")
+            && tokens.get(1).is_some_and(|token| token == "run")
+            && tokens.get(2).is_some_and(|token| token == task)
+    })
+}
+
 fn stage_report(
     stage: ManualE2eStageName,
     status: ManualE2eStageStatus,
@@ -891,6 +1031,23 @@ fn stage_report(
 
 fn contains_forbidden_control_chars(value: &str) -> bool {
     value.chars().any(|char| char.is_control() && char != '\n' && char != '\r' && char != '\t')
+}
+
+fn validate_manual_e2e_command(command: &str) -> Result<(), ManualE2eError> {
+    let tokens = command.split_whitespace().map(str::to_ascii_lowercase).collect::<Vec<_>>();
+    if !is_allowed_manual_e2e_command(tokens.as_slice()) {
+        return Err(ManualE2eError::InvalidFieldFormat("command"));
+    }
+
+    Ok(())
+}
+
+fn is_allowed_manual_e2e_command(tokens: &[String]) -> bool {
+    matches!(tokens, [moon, run, task] if moon == "moon" && run == "run" && is_allowed_manual_e2e_task(task.as_str()))
+}
+
+fn is_allowed_manual_e2e_task(task: &str) -> bool {
+    task == ":test" || task == ":ci"
 }
 
 const MAX_MERGE_TRAIN_PRIORITY: u8 = 4;
