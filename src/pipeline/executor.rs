@@ -20,8 +20,9 @@ use oya::types::{truncate_clean, StageFailure, StageName as Stage, StageResult};
 use restate_sdk::prelude::*;
 
 use crate::orchestrator_types::{
-    set_stage_artifact, FailureSnapshot, GateResultData, StageArtifact, StageInputData,
-    StageOutputData, StageStatus, StageTiming, WorkspaceLifecycle,
+    append_durable_event, resolve_change_identity, set_stage_artifact, DurableEvent,
+    FailureSnapshot, GateResultData, StageArtifact, StageInputData, StageOutputData, StageStatus,
+    StageTiming, WorkspaceLifecycle,
 };
 use crate::runtime_tools::prepare_stage_workspace;
 use crate::stage_executor::{execute_stage_real, StageExecutionRequest};
@@ -141,7 +142,29 @@ pub async fn persist_stage_artifact(
     artifact: &StageArtifact,
 ) -> Result<(), OyaError> {
     let key = format!("{}_{}", artifact.stage, artifact.attempt);
-    set_stage_artifact(ctx, &key, artifact)
+    set_stage_artifact(ctx, &key, artifact)?;
+    append_durable_event(
+        ctx,
+        DurableEvent {
+            event_type: "stage_persisted".to_string(),
+            run_id: artifact.input.run_id.clone(),
+            bead_id: artifact.input.bead_id.clone(),
+            stage: artifact.stage.clone(),
+            attempt: artifact.attempt,
+            status: match artifact.status {
+                StageStatus::Completed => "completed".to_string(),
+                StageStatus::Failed => "failed".to_string(),
+            },
+            reason: artifact.failure_category.clone().unwrap_or_else(|| "ok".to_string()),
+            at: artifact.timing.completed_at.clone(),
+            identity: resolve_change_identity(
+                artifact.input.run_id.as_str(),
+                artifact.input.bead_id.as_str(),
+                artifact.workspace.as_ref().map(|workspace| workspace.name.as_str()),
+            ),
+        },
+    )
+    .await
 }
 
 // ---------------------------------------------------------------------------

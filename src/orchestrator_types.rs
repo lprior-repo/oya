@@ -165,7 +165,7 @@ pub(super) enum StageStatus {
     Failed,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub(super) struct RunRequestEvent {
     pub run_id: String,
     pub bead_id: String,
@@ -177,6 +177,25 @@ pub(super) struct RunRequestEvent {
 pub(super) struct FailureSnapshot {
     pub category: String,
     pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub(super) struct ChangeIdentity {
+    pub logical_change_id: String,
+    pub vcs_change_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(super) struct DurableEvent {
+    pub event_type: String,
+    pub run_id: String,
+    pub bead_id: String,
+    pub stage: String,
+    pub attempt: u32,
+    pub status: String,
+    pub reason: String,
+    pub at: String,
+    pub identity: ChangeIdentity,
 }
 
 // ---------------------------------------------------------------------------
@@ -272,4 +291,51 @@ pub(super) fn set_stage_artifact(
 pub(super) fn set_timeline_once(ctx: &WorkflowContext<'_>, timeline: &str) -> Result<(), OyaError> {
     ctx.set("timeline", timeline.to_string());
     Ok(())
+}
+
+pub(super) fn resolve_change_identity(
+    run_id: &str,
+    bead_id: &str,
+    workspace_name: Option<&str>,
+) -> ChangeIdentity {
+    let vcs_change_id = workspace_name
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| format!("jj:{}", value))
+        .unwrap_or_else(|| format!("git:{}", run_id));
+    ChangeIdentity { logical_change_id: format!("{}:{}", bead_id, run_id), vcs_change_id }
+}
+
+pub(super) async fn append_durable_event(
+    ctx: &WorkflowContext<'_>,
+    event: DurableEvent,
+) -> Result<(), OyaError> {
+    let existing = ctx
+        .get::<String>("event_ledger")
+        .await
+        .map_err(|error| OyaError(format!("event_ledger read failed: {}", error)))?
+        .unwrap_or_default();
+    let line = to_json_string(&event)?;
+    let next = if existing.is_empty() { line } else { format!("{}\n{}", existing, line) };
+    ctx.set("event_ledger", next);
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_change_identity_prefers_jj_workspace_when_present() {
+        let identity = resolve_change_identity("run-1", "src-2s0", Some("ws-1"));
+        assert_eq!(identity.logical_change_id, "src-2s0:run-1");
+        assert_eq!(identity.vcs_change_id, "jj:ws-1");
+    }
+
+    #[test]
+    fn resolve_change_identity_falls_back_to_git_when_workspace_missing() {
+        let identity = resolve_change_identity("run-1", "src-2s0", None);
+        assert_eq!(identity.logical_change_id, "src-2s0:run-1");
+        assert_eq!(identity.vcs_change_id, "git:run-1");
+    }
 }

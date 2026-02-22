@@ -22,6 +22,7 @@ const USAGE_TRACKER_KEY: &str = "global";
 const RED_SEAL_KEY: &str = "red_acceptance_seal";
 const DEFAULT_PIPELINE_STAGE_WATCHDOG_SECONDS: u64 = 480;
 const DEFAULT_PROVIDER_POOL_RECOVERY_SECONDS: u64 = 180;
+const DEFAULT_PROVIDER_UNAVAILABLE_MAX_ATTEMPTS: u32 = 3;
 
 use clap::{Parser, Subcommand};
 
@@ -93,6 +94,11 @@ impl OyaOrchestrator for OyaOrchestratorImpl {
         request: Json<serde_json::Value>,
     ) -> Result<String, HandlerError> {
         let parsed = parse_start_request(request.0)?;
+        if let StartAdmission::Idempotent(run_id) =
+            enforce_start_request_admission(&ctx, &parsed).await.map_err(terminal_workflow_error)?
+        {
+            return Ok(run_id);
+        }
         let start = build_start_context(&ctx, parsed).await.map_err(terminal_workflow_error)?;
         persist_run_start(&ctx, &start).await.map_err(terminal_workflow_error)?;
         tracing::info!("=== RUN {} STARTED ===", start.run_id);
@@ -125,6 +131,57 @@ struct RedSealRecord {
     attempt: u32,
     sealed_at: String,
     artifact_key: String,
+}
+
+enum StartAdmission {
+    Fresh,
+    Idempotent(String),
+}
+
+async fn enforce_start_request_admission(
+    ctx: &WorkflowContext<'_>,
+    parsed: &StartRequestPayload,
+) -> Result<StartAdmission, OyaError> {
+    let existing = ctx
+        .get::<String>("run_request")
+        .await
+        .map_err(|error| OyaError(format!("run_request read failed: {}", error)))?;
+    let existing = existing
+        .map(|raw| {
+            serde_json::from_str::<RunRequestEvent>(&raw)
+                .map_err(|error| OyaError(format!("run_request parse failed: {}", error)))
+        })
+        .transpose()?;
+    evaluate_start_request(existing, parsed, ctx.key())
+}
+
+fn evaluate_start_request(
+    existing: Option<RunRequestEvent>,
+    parsed: &StartRequestPayload,
+    workflow_run_id: &str,
+) -> Result<StartAdmission, OyaError> {
+    let Some(existing) = existing else {
+        return Ok(StartAdmission::Fresh);
+    };
+    let (bead_id, context) = normalized_start_inputs(parsed);
+    if existing.run_id != workflow_run_id {
+        return Err(OyaError(format!(
+            "stale lease token: expected run_id={}, found run_id={}",
+            workflow_run_id, existing.run_id
+        )));
+    }
+    if existing.bead_id == bead_id && existing.context == context {
+        Ok(StartAdmission::Idempotent(existing.run_id))
+    } else {
+        Err(OyaError("start rejected: workflow already claimed by a different payload".to_string()))
+    }
+}
+
+fn normalized_start_inputs(parsed: &StartRequestPayload) -> (String, String) {
+    (
+        parsed.bead_id.clone().unwrap_or_else(|| "unknown".to_string()),
+        parsed.context.clone().unwrap_or_default(),
+    )
 }
 
 async fn build_start_context(
@@ -302,6 +359,21 @@ async fn persist_run_start(
             started_at: start.started_at.clone(),
         },
     )?;
+    append_durable_event(
+        ctx,
+        DurableEvent {
+            event_type: "run_started".to_string(),
+            run_id: start.run_id.clone(),
+            bead_id: start.bead_id.clone(),
+            stage: "plan".to_string(),
+            attempt: 1,
+            status: "running".to_string(),
+            reason: "run accepted".to_string(),
+            at: start.started_at.clone(),
+            identity: resolve_change_identity(start.run_id.as_str(), start.bead_id.as_str(), None),
+        },
+    )
+    .await?;
     append_timeline(
         ctx,
         TimelineEntry::RunStarted {
@@ -691,6 +763,13 @@ async fn handle_failed_stage(
 
     if let Some(next_stage) = parse_next_stage(&artifact.next_stage) {
         if next_stage != state.current_stage {
+            if !is_allowed_failure_transition(&state.current_stage, &next_stage) {
+                return Err(OyaError(format!(
+                    "invalid failure transition: {} -> {}",
+                    state.current_stage.as_str(),
+                    next_stage.as_str()
+                )));
+            }
             state.current_stage = next_stage;
             state.attempt = 1;
             // Resolve model for the new stage's tier
@@ -780,12 +859,33 @@ fn should_retry_after_failure(state: &PipelineState) -> bool {
     state.last_failure.as_ref().is_some_and(|failure| {
         let retryable = failure.retryable
             || transient_provider_retry_stage(&state.current_stage, &failure.category);
-        retryable && state.attempt < state.current_stage.max_attempts()
+        retryable
+            && state.attempt < max_attempts_for_failure(&state.current_stage, &failure.category)
     })
+}
+
+fn max_attempts_for_failure(stage: &Stage, category: &FailureCategory) -> u32 {
+    if transient_provider_retry_stage(stage, category) {
+        provider_unavailable_max_attempts()
+    } else {
+        stage.max_attempts()
+    }
+}
+
+fn provider_unavailable_max_attempts() -> u32 {
+    std::env::var("OYA_PROVIDER_UNAVAILABLE_MAX_ATTEMPTS")
+        .ok()
+        .and_then(|value| value.trim().parse::<u32>().ok())
+        .map(|value| value.clamp(2, 6))
+        .unwrap_or(DEFAULT_PROVIDER_UNAVAILABLE_MAX_ATTEMPTS)
 }
 
 fn transient_provider_retry_stage(_stage: &Stage, category: &FailureCategory) -> bool {
     *category == FailureCategory::ProviderUnavailable
+}
+
+fn is_allowed_failure_transition(current: &Stage, next: &Stage) -> bool {
+    current == next || *next == Stage::Implementation
 }
 
 async fn apply_retry_backoff_if_needed(
@@ -1301,6 +1401,25 @@ async fn mark_run_completed(
     state.orchestrator.stage = "none".to_string();
     state.orchestrator.updated_at = completed_at.clone();
     orchestrator_types::write_orchestrator_state(ctx, &state.orchestrator)?;
+    append_durable_event(
+        ctx,
+        DurableEvent {
+            event_type: "run_completed".to_string(),
+            run_id: ctx.key().to_string(),
+            bead_id: state.orchestrator.bead_id.clone(),
+            stage: final_artifact.stage.clone(),
+            attempt: final_artifact.attempt,
+            status: "shipped".to_string(),
+            reason: "terminal success".to_string(),
+            at: completed_at.clone(),
+            identity: resolve_change_identity(
+                ctx.key(),
+                state.orchestrator.bead_id.as_str(),
+                final_artifact.workspace.as_ref().map(|workspace| workspace.name.as_str()),
+            ),
+        },
+    )
+    .await?;
 
     // Build lean timeline as JSON array
     let timeline = serde_json::json!([
@@ -1320,6 +1439,25 @@ async fn mark_run_failed(
     state.orchestrator.status = "failed".to_string();
     state.orchestrator.updated_at = artifact.timing.completed_at.clone();
     orchestrator_types::write_orchestrator_state(ctx, &state.orchestrator)?;
+    append_durable_event(
+        ctx,
+        DurableEvent {
+            event_type: "run_failed".to_string(),
+            run_id: ctx.key().to_string(),
+            bead_id: state.orchestrator.bead_id.clone(),
+            stage: artifact.stage.clone(),
+            attempt: artifact.attempt,
+            status: "failed".to_string(),
+            reason: artifact.failure_category.clone().unwrap_or_else(|| "unknown".to_string()),
+            at: artifact.timing.completed_at.clone(),
+            identity: resolve_change_identity(
+                ctx.key(),
+                state.orchestrator.bead_id.as_str(),
+                artifact.workspace.as_ref().map(|workspace| workspace.name.as_str()),
+            ),
+        },
+    )
+    .await?;
 
     // Build lean timeline as JSON array
     let timeline = serde_json::json!([

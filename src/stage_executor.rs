@@ -127,7 +127,7 @@ async fn stage_execution_journaled(
 
 fn stage_timeout_seconds(stage: &Stage) -> u64 {
     let default = match stage {
-        Stage::Explore => 420,
+        Stage::Explore => 300,
         Stage::Contract => 780,
         Stage::Red => 600,
         Stage::Implementation => 1_200,
@@ -345,7 +345,7 @@ mod tests {
     #[test]
     fn test_stage_timeout_seconds_has_defaults_and_override_clamp() {
         std::env::remove_var("OYA_STAGE_TIMEOUT_SECONDS");
-        assert_eq!(stage_timeout_seconds(&Stage::Explore), 420);
+        assert_eq!(stage_timeout_seconds(&Stage::Explore), 300);
         assert_eq!(stage_timeout_seconds(&Stage::Implementation), 1_200);
 
         std::env::set_var("OYA_STAGE_TIMEOUT_SECONDS", "30");

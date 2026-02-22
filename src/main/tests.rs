@@ -259,6 +259,68 @@ fn test_tests_unexpectedly_green_maps_to_retry_loop() {
 }
 
 #[test]
+fn test_evaluate_start_request_allows_fresh_claim() {
+    let parsed = StartRequestPayload {
+        bead_id: Some("src-2s0".to_string()),
+        context: Some("context".to_string()),
+        model: None,
+    };
+    let admission = evaluate_start_request(None, &parsed, "run-1");
+    assert!(matches!(admission, Ok(StartAdmission::Fresh)));
+}
+
+#[test]
+fn test_evaluate_start_request_returns_idempotent_for_same_payload() {
+    let parsed = StartRequestPayload {
+        bead_id: Some("src-2s0".to_string()),
+        context: Some("context".to_string()),
+        model: None,
+    };
+    let existing = RunRequestEvent {
+        run_id: "run-1".to_string(),
+        bead_id: "src-2s0".to_string(),
+        context: "context".to_string(),
+        started_at: "2026-02-22T00:00:00Z".to_string(),
+    };
+    let admission = evaluate_start_request(Some(existing), &parsed, "run-1");
+    assert!(matches!(admission, Ok(StartAdmission::Idempotent(run_id)) if run_id == "run-1"));
+}
+
+#[test]
+fn test_evaluate_start_request_rejects_stale_lease_token() {
+    let parsed = StartRequestPayload {
+        bead_id: Some("src-2s0".to_string()),
+        context: Some("context".to_string()),
+        model: None,
+    };
+    let existing = RunRequestEvent {
+        run_id: "run-old".to_string(),
+        bead_id: "src-2s0".to_string(),
+        context: "context".to_string(),
+        started_at: "2026-02-22T00:00:00Z".to_string(),
+    };
+    let admission = evaluate_start_request(Some(existing), &parsed, "run-1");
+    assert!(admission.is_err());
+}
+
+#[test]
+fn test_evaluate_start_request_rejects_different_payload() {
+    let parsed = StartRequestPayload {
+        bead_id: Some("src-2s0".to_string()),
+        context: Some("new-context".to_string()),
+        model: None,
+    };
+    let existing = RunRequestEvent {
+        run_id: "run-1".to_string(),
+        bead_id: "src-2s0".to_string(),
+        context: "old-context".to_string(),
+        started_at: "2026-02-22T00:00:00Z".to_string(),
+    };
+    let admission = evaluate_start_request(Some(existing), &parsed, "run-1");
+    assert!(admission.is_err());
+}
+
+#[test]
 fn test_rate_limited_is_non_retryable() {
     // RateLimited triggers model rotation, NOT stage retry
     let state = test_pipeline_state(FailureCategory::RateLimited, Stage::Red, 1);
@@ -308,8 +370,22 @@ fn test_provider_unavailable_retry_honors_stage_max_attempts() {
     let mut state = test_pipeline_state(FailureCategory::ProviderUnavailable, Stage::Explore, 1);
     assert!(should_retry_after_failure(&state));
 
-    state.attempt = state.current_stage.max_attempts();
+    state.attempt = provider_unavailable_max_attempts();
     assert!(!should_retry_after_failure(&state));
+}
+
+#[test]
+fn test_provider_unavailable_max_attempts_defaults_and_clamps() {
+    std::env::remove_var("OYA_PROVIDER_UNAVAILABLE_MAX_ATTEMPTS");
+    assert_eq!(provider_unavailable_max_attempts(), 3);
+
+    std::env::set_var("OYA_PROVIDER_UNAVAILABLE_MAX_ATTEMPTS", "1");
+    assert_eq!(provider_unavailable_max_attempts(), 2);
+
+    std::env::set_var("OYA_PROVIDER_UNAVAILABLE_MAX_ATTEMPTS", "99");
+    assert_eq!(provider_unavailable_max_attempts(), 6);
+
+    std::env::remove_var("OYA_PROVIDER_UNAVAILABLE_MAX_ATTEMPTS");
 }
 
 #[test]
@@ -328,6 +404,18 @@ fn test_transient_provider_retry_stage_is_enabled_for_all_stages() {
         .all(|stage| transient_provider_retry_stage(stage, &FailureCategory::ProviderUnavailable));
 
     assert!(all_retryable);
+}
+
+#[test]
+fn test_failure_transition_policy_allows_same_stage_and_implementation() {
+    assert!(is_allowed_failure_transition(&Stage::Explore, &Stage::Explore));
+    assert!(is_allowed_failure_transition(&Stage::Witness, &Stage::Implementation));
+}
+
+#[test]
+fn test_failure_transition_policy_rejects_non_implementation_hops() {
+    assert!(!is_allowed_failure_transition(&Stage::Explore, &Stage::Contract));
+    assert!(!is_allowed_failure_transition(&Stage::Contract, &Stage::Red));
 }
 
 #[test]
