@@ -272,7 +272,7 @@ fn test_rate_limited_is_non_retryable() {
 }
 
 #[test]
-fn test_provider_unavailable_retries_for_explore_and_contract_only() {
+fn test_provider_unavailable_retries_for_all_stages() {
     let explore = test_pipeline_state(FailureCategory::ProviderUnavailable, Stage::Explore, 1);
     assert!(should_retry_after_failure(&explore));
 
@@ -281,7 +281,13 @@ fn test_provider_unavailable_retries_for_explore_and_contract_only() {
 
     let implementation =
         test_pipeline_state(FailureCategory::ProviderUnavailable, Stage::Implementation, 1);
-    assert!(!should_retry_after_failure(&implementation));
+    assert!(should_retry_after_failure(&implementation));
+
+    let witness = test_pipeline_state(FailureCategory::ProviderUnavailable, Stage::Witness, 1);
+    assert!(should_retry_after_failure(&witness));
+
+    let ship_gate = test_pipeline_state(FailureCategory::ProviderUnavailable, Stage::ShipGate, 1);
+    assert!(should_retry_after_failure(&ship_gate));
 }
 
 #[test]
@@ -289,6 +295,59 @@ fn test_provider_retry_backoff_grows_and_caps() {
     assert_eq!(provider_retry_backoff(1), std::time::Duration::from_millis(1_000));
     assert_eq!(provider_retry_backoff(2), std::time::Duration::from_millis(2_000));
     assert_eq!(provider_retry_backoff(6), std::time::Duration::from_millis(8_000));
+}
+
+#[test]
+fn test_provider_unavailable_rotates_provider() {
+    assert!(should_rotate_provider_on_failure(&FailureCategory::ProviderUnavailable));
+}
+
+#[test]
+fn test_should_rotate_provider_on_failure_includes_rate_limited_only_failure_classes() {
+    assert!(should_rotate_provider_on_failure(&FailureCategory::RateLimited));
+    assert!(should_rotate_provider_on_failure(&FailureCategory::ProviderUnavailable));
+    assert!(!should_rotate_provider_on_failure(&FailureCategory::CompileFailed));
+}
+
+#[test]
+fn test_provider_unavailable_retry_honors_stage_max_attempts() {
+    let mut state = test_pipeline_state(FailureCategory::ProviderUnavailable, Stage::Explore, 1);
+    assert!(should_retry_after_failure(&state));
+
+    state.attempt = state.current_stage.max_attempts();
+    assert!(!should_retry_after_failure(&state));
+}
+
+#[test]
+fn test_transient_provider_retry_stage_is_enabled_for_all_stages() {
+    let stages = vec![
+        Stage::Explore,
+        Stage::Contract,
+        Stage::Red,
+        Stage::Implementation,
+        Stage::Witness,
+        Stage::ShipGate,
+    ];
+
+    let all_retryable = stages
+        .iter()
+        .all(|stage| transient_provider_retry_stage(stage, &FailureCategory::ProviderUnavailable));
+
+    assert!(all_retryable);
+}
+
+#[test]
+fn test_provider_pool_recovery_seconds_defaults_and_clamps() {
+    std::env::remove_var("OYA_PROVIDER_POOL_RECOVERY_SECONDS");
+    assert_eq!(provider_pool_recovery_seconds(), 180);
+
+    std::env::set_var("OYA_PROVIDER_POOL_RECOVERY_SECONDS", "15");
+    assert_eq!(provider_pool_recovery_seconds(), 60);
+
+    std::env::set_var("OYA_PROVIDER_POOL_RECOVERY_SECONDS", "1500");
+    assert_eq!(provider_pool_recovery_seconds(), 900);
+
+    std::env::remove_var("OYA_PROVIDER_POOL_RECOVERY_SECONDS");
 }
 
 #[test]

@@ -10,6 +10,10 @@ fn stage_uses_workspace(stage: &Stage) -> bool {
     matches!(stage, Stage::Contract | Stage::Implementation | Stage::ShipGate)
 }
 
+fn stage_requires_merge_queue(stage: &Stage) -> bool {
+    matches!(stage, Stage::ShipGate)
+}
+
 #[derive(Clone)]
 pub(crate) struct WorkspacePrepRequest {
     pub(crate) run_id: String,
@@ -37,6 +41,15 @@ fn queue_workspace(
     request: &WorkspacePrepRequest,
     workspace: &str,
 ) -> Result<WorkspaceCommandResult, OyaError> {
+    if !stage_requires_merge_queue(&request.stage) {
+        return Ok(WorkspaceCommandResult {
+            command: "zjj queue --add <workspace> --bead <bead_id> (skipped for non-ship_gate)"
+                .to_string(),
+            passed: true,
+            exit_code: 0,
+            output: "merge queue not required for this stage".to_string(),
+        });
+    }
     let command = format!("zjj queue --add {} --bead {}", workspace, request.bead_id);
     let args = ["queue", "--add", workspace, "--bead", request.bead_id.as_str()];
     match run_workspace_command(request, &command, &args, "zjj queue", workspace) {
@@ -125,6 +138,13 @@ pub(crate) fn prepare_stage_workspace(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stage_requires_merge_queue_only_for_ship_gate() {
+        assert!(!stage_requires_merge_queue(&Stage::Contract));
+        assert!(!stage_requires_merge_queue(&Stage::Implementation));
+        assert!(stage_requires_merge_queue(&Stage::ShipGate));
+    }
 
     #[test]
     fn queue_duplicate_error_detects_duplicate_workspace_message() {

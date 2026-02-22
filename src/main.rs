@@ -21,6 +21,7 @@ use std::path::{Path, PathBuf};
 const USAGE_TRACKER_KEY: &str = "global";
 const RED_SEAL_KEY: &str = "red_acceptance_seal";
 const DEFAULT_PIPELINE_STAGE_WATCHDOG_SECONDS: u64 = 480;
+const DEFAULT_PROVIDER_POOL_RECOVERY_SECONDS: u64 = 180;
 
 use clap::{Parser, Subcommand};
 
@@ -678,11 +679,11 @@ async fn handle_failed_stage(
 ) -> Result<bool, OyaError> {
     let failure_category = parse_failure_category(&artifact.failure_category)
         .unwrap_or(FailureCategory::OutputParseFailure);
-    let is_rate_limit = is_rate_limit_failure(&failure_category);
+    let should_rotate_provider = should_rotate_provider_on_failure(&failure_category);
 
     // Report failure outcome to the usage tracker
-    report_stage_outcome(ctx, &state.orchestrator.model, false, is_rate_limit).await?;
-    if is_rate_limit {
+    report_stage_outcome(ctx, &state.orchestrator.model, false, should_rotate_provider).await?;
+    if should_rotate_provider {
         let stage = state.current_stage.clone();
         invalidate_cached_model_for_stage(state, &stage);
     }
@@ -708,8 +709,60 @@ async fn handle_failed_stage(
     apply_retry_backoff_if_needed(ctx, state).await?;
     state.attempt += 1;
     let stage = state.current_stage.clone();
-    state.orchestrator.model = resolve_model_for_stage_cached(ctx, state, &stage).await?;
+    state.orchestrator.model = if should_rotate_provider {
+        resolve_model_for_stage_with_pool_recovery(ctx, state, &stage).await?
+    } else {
+        resolve_model_for_stage_cached(ctx, state, &stage).await?
+    };
     Ok(true)
+}
+
+fn should_rotate_provider_on_failure(category: &FailureCategory) -> bool {
+    is_rate_limit_failure(category) || *category == FailureCategory::ProviderUnavailable
+}
+
+fn provider_pool_recovery_seconds() -> u64 {
+    std::env::var("OYA_PROVIDER_POOL_RECOVERY_SECONDS")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .map(|seconds| seconds.clamp(60, 900))
+        .unwrap_or(DEFAULT_PROVIDER_POOL_RECOVERY_SECONDS)
+}
+
+async fn resolve_model_for_stage_with_pool_recovery(
+    ctx: &WorkflowContext<'_>,
+    state: &mut PipelineState,
+    stage: &Stage,
+) -> Result<String, OyaError> {
+    let tier = tier_for_stage(stage).to_string();
+    state.resolved_models.remove(&tier);
+    let mut attempts: u32 = 1;
+    loop {
+        match resolve_model_for_stage_with_backoff(ctx, &tier).await {
+            Ok(model) => {
+                state.resolved_models.insert(tier.clone(), model.clone());
+                return Ok(model);
+            }
+            Err(error) => {
+                let message = error.to_string();
+                if !is_tracker_backpressure_error(message.as_str()) || attempts >= 3 {
+                    return Err(error);
+                }
+                let delay_seconds = provider_pool_recovery_seconds() * u64::from(attempts);
+                let delay = std::time::Duration::from_secs(delay_seconds.min(1_800));
+                tracing::warn!(
+                    tier = %tier,
+                    attempt = attempts,
+                    delay_seconds,
+                    "provider pool exhausted; waiting before model re-selection"
+                );
+                ctx.sleep(delay).await.map_err(|sleep_error| {
+                    OyaError(format!("durable sleep failed: {}", sleep_error))
+                })?;
+                attempts += 1;
+            }
+        }
+    }
 }
 
 fn terminal_pipeline_failure_message(
@@ -731,9 +784,8 @@ fn should_retry_after_failure(state: &PipelineState) -> bool {
     })
 }
 
-fn transient_provider_retry_stage(stage: &Stage, category: &FailureCategory) -> bool {
+fn transient_provider_retry_stage(_stage: &Stage, category: &FailureCategory) -> bool {
     *category == FailureCategory::ProviderUnavailable
-        && matches!(stage, Stage::Explore | Stage::Contract)
 }
 
 async fn apply_retry_backoff_if_needed(
