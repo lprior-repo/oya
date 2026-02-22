@@ -1222,7 +1222,23 @@ enum StackTransitionKind {
     ParentBlockedChildReady,
     ChildBlocked,
     ChildReady,
+    MainMovedChildReady,
     ParentReady,
+}
+
+#[cfg(test)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StackMovement {
+    ParentMoved,
+    MainMoved,
+}
+
+#[cfg(test)]
+fn stack_rebase_transition_from_movement(movement: StackMovement) -> StackTransitionKind {
+    match movement {
+        StackMovement::ParentMoved => StackTransitionKind::ParentReady,
+        StackMovement::MainMoved => StackTransitionKind::MainMovedChildReady,
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -1249,6 +1265,14 @@ fn apply_stack_transition(
         }
         (StackReadiness::Blocked, StackReadiness::Blocked, StackTransitionKind::ChildReady) => {
             Ok(StackPairState::new(StackReadiness::Blocked, StackReadiness::Ready))
+        }
+        (
+            StackReadiness::Blocked,
+            StackReadiness::Blocked,
+            StackTransitionKind::MainMovedChildReady,
+        ) => Ok(StackPairState::new(StackReadiness::Blocked, StackReadiness::Ready)),
+        (StackReadiness::Blocked, StackReadiness::Blocked, StackTransitionKind::ParentReady) => {
+            Ok(StackPairState::new(StackReadiness::Ready, StackReadiness::Ready))
         }
         (StackReadiness::Blocked, StackReadiness::Ready, StackTransitionKind::ParentReady) => {
             Ok(StackPairState::new(StackReadiness::Ready, StackReadiness::Ready))

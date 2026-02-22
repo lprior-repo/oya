@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
 use serde_json::Value;
-use std::collections::BTreeSet;
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -162,7 +162,16 @@ pub(crate) fn deterministic_prune_run_artifacts(
     repo_root: &Path,
     prune_run_ids: &[String],
 ) -> Result<Vec<String>> {
-    let ordered = prune_run_ids.iter().cloned().collect::<BTreeSet<_>>();
+    let stable_unique =
+        prune_run_ids.iter().fold((HashSet::new(), Vec::new()), |(mut seen, ordered), run_id| {
+            if seen.insert(run_id.clone()) {
+                (seen, ordered.into_iter().chain(std::iter::once(run_id.clone())).collect())
+            } else {
+                (seen, ordered)
+            }
+        });
+    let ordered = stable_unique.1;
+
     ordered.into_iter().try_fold(Vec::new(), |removed, run_id| {
         let artifact_path = repo_root.join(".orchestrator").join("runs").join(&run_id);
         if !artifact_path.exists() {

@@ -304,6 +304,65 @@ fn make_valid_src_1ew_observation() -> Src1ewObservation {
 }
 
 #[test]
+fn given_dependency_chain_when_scheduling_merge_train_then_dependencies_run_before_dependents() {
+    let candidates = vec![
+        MergeTrainCandidate {
+            bead_id: "src-a".to_string(),
+            priority: 2,
+            depends_on: vec!["src-b".to_string()],
+        },
+        MergeTrainCandidate { bead_id: "src-b".to_string(), priority: 3, depends_on: vec![] },
+        MergeTrainCandidate { bead_id: "src-c".to_string(), priority: 1, depends_on: vec![] },
+    ];
+
+    let schedule = schedule_dependency_aware_priority_processing(&candidates);
+    assert!(schedule.is_ok());
+    let schedule = match schedule {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+
+    assert_eq!(schedule, vec!["src-c".to_string(), "src-b".to_string(), "src-a".to_string()]);
+}
+
+#[test]
+fn given_multiple_ready_beads_when_scheduling_merge_train_then_lower_priority_number_runs_first() {
+    let candidates = vec![
+        MergeTrainCandidate { bead_id: "src-p2".to_string(), priority: 2, depends_on: vec![] },
+        MergeTrainCandidate { bead_id: "src-p0".to_string(), priority: 0, depends_on: vec![] },
+        MergeTrainCandidate { bead_id: "src-p1".to_string(), priority: 1, depends_on: vec![] },
+    ];
+
+    let schedule = schedule_dependency_aware_priority_processing(&candidates);
+    assert!(schedule.is_ok());
+    let schedule = match schedule {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+
+    assert_eq!(schedule, vec!["src-p0".to_string(), "src-p1".to_string(), "src-p2".to_string()]);
+}
+
+#[test]
+fn given_dependency_cycle_when_scheduling_merge_train_then_returns_cycle_error() {
+    let candidates = vec![
+        MergeTrainCandidate {
+            bead_id: "src-a".to_string(),
+            priority: 1,
+            depends_on: vec!["src-b".to_string()],
+        },
+        MergeTrainCandidate {
+            bead_id: "src-b".to_string(),
+            priority: 1,
+            depends_on: vec!["src-a".to_string()],
+        },
+    ];
+
+    let schedule = schedule_dependency_aware_priority_processing(&candidates);
+    assert_eq!(schedule, Err(MergeTrainError::DependencyCycle));
+}
+
+#[test]
 fn build_src_1ew_plan_rejects_empty_query_for_get() {
     let result = build_src_1ew_plan(&Src1ewInput {
         command_mode: "get-pokemon".to_string(),

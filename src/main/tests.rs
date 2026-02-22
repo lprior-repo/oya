@@ -127,8 +127,8 @@ fn test_execute_ship_gate_skip_zjj_gate() {
             passed: true,
             exit_code: 0,
             output: "ok".to_string(),
-            revision: None,
-            current_revision: None,
+            revision: Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string()),
+            current_revision: Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string()),
         })
     })
     .expect("ship gate should pass when cue check passes and zjj is skipped");
@@ -151,8 +151,8 @@ fn test_execute_ship_gate_enforce_still_skips_zjj_gate() {
                 passed: true,
                 exit_code: 0,
                 output: "cue ok".to_string(),
-                revision: None,
-                current_revision: None,
+                revision: Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string()),
+                current_revision: Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string()),
             }),
             _ => Ok(GateEvidence {
                 command: "unexpected".to_string(),
@@ -333,7 +333,7 @@ fn test_cleanup_reconcile_plan_prunes_oldest_cleanup_pending_first() {
 }
 
 #[test]
-fn test_deterministic_prune_run_artifacts_removes_sorted_unique_run_dirs() {
+fn given_duplicate_prune_candidates_when_pruning_artifacts_then_removals_follow_first_seen_order() {
     let root = std::env::temp_dir().join(format!(
         "oya-prune-test-{}",
         std::time::SystemTime::now()
@@ -350,9 +350,34 @@ fn test_deterministic_prune_run_artifacts_removes_sorted_unique_run_dirs() {
     )
     .expect("artifact pruning should succeed");
 
-    assert_eq!(removed, vec!["run-a".to_string(), "run-b".to_string()]);
+    assert_eq!(removed, vec!["run-b".to_string(), "run-a".to_string()]);
     assert!(!runs_root.join("run-a").exists());
     assert!(!runs_root.join("run-b").exists());
+
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
+fn given_missing_artifact_between_candidates_when_pruning_artifacts_then_removed_order_is_stable() {
+    let root = std::env::temp_dir().join(format!(
+        "oya-prune-stable-test-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |value| value.as_nanos())
+    ));
+    let runs_root = root.join(".orchestrator").join("runs");
+    std::fs::create_dir_all(runs_root.join("run-c")).expect("create run-c artifact dir");
+    std::fs::create_dir_all(runs_root.join("run-a")).expect("create run-a artifact dir");
+
+    let removed = deterministic_prune_run_artifacts(
+        &root,
+        &["run-c".to_string(), "run-missing".to_string(), "run-a".to_string()],
+    )
+    .expect("artifact pruning should succeed");
+
+    assert_eq!(removed, vec!["run-c".to_string(), "run-a".to_string()]);
+    assert!(!runs_root.join("run-c").exists());
+    assert!(!runs_root.join("run-a").exists());
 
     let _ = std::fs::remove_dir_all(root);
 }
@@ -792,12 +817,44 @@ fn test_stack_transition_parent_blocked_child_ready_is_deterministic() {
 }
 
 #[test]
-fn test_stack_transition_parent_ready_rejects_when_child_still_blocked() {
+fn test_stack_transition_parent_ready_refreshes_when_child_still_blocked() {
     let before = StackPairState::new(StackReadiness::Blocked, StackReadiness::Blocked);
 
     let result = apply_stack_transition(before, StackTransitionKind::ParentReady);
 
-    assert!(result.is_err());
+    assert!(result.is_ok());
+    let after = result
+        .unwrap_or_else(|_| StackPairState::new(StackReadiness::Blocked, StackReadiness::Blocked));
+    assert_eq!(after.parent, StackReadiness::Ready);
+    assert_eq!(after.child, StackReadiness::Ready);
+}
+
+#[test]
+fn given_child_blocked_when_parent_moves_then_child_is_auto_refreshed() {
+    let before = StackPairState::new(StackReadiness::Blocked, StackReadiness::Blocked);
+    let transition = stack_rebase_transition_from_movement(StackMovement::ParentMoved);
+
+    let result = apply_stack_transition(before, transition);
+
+    assert!(result.is_ok());
+    let after = result
+        .unwrap_or_else(|_| StackPairState::new(StackReadiness::Blocked, StackReadiness::Blocked));
+    assert_eq!(after.parent, StackReadiness::Ready);
+    assert_eq!(after.child, StackReadiness::Ready);
+}
+
+#[test]
+fn given_child_blocked_when_main_moves_then_child_is_auto_refreshed() {
+    let before = StackPairState::new(StackReadiness::Blocked, StackReadiness::Blocked);
+    let transition = stack_rebase_transition_from_movement(StackMovement::MainMoved);
+
+    let result = apply_stack_transition(before, transition);
+
+    assert!(result.is_ok());
+    let after = result
+        .unwrap_or_else(|_| StackPairState::new(StackReadiness::Blocked, StackReadiness::Blocked));
+    assert_eq!(after.parent, StackReadiness::Blocked);
+    assert_eq!(after.child, StackReadiness::Ready);
 }
 
 #[test]

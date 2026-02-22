@@ -178,24 +178,16 @@ where
         }
 
         let gate_evidence = run_gate(gate.clone())?;
-        if let Some(message) = stale_evidence_message(&gate, &gate_evidence) {
-            let stale_evidence = stale_evidence_failure(gate_evidence, message);
-            gate_results.push(GateResultData {
-                gate: gate.as_str().to_string(),
-                passed: false,
-                exit_code: stale_evidence.exit_code,
-                command: stale_evidence.command.clone(),
-                output: truncate_clean(&stale_evidence.output, 4000),
-            });
-            return Ok(ship_gate_failure(gate, stale_evidence, prompt, gate_results));
+        if let Some(failure) = cue_monitor_failure(
+            merge_queue_policy,
+            &gate,
+            &gate_evidence,
+            prompt.as_str(),
+            &mut gate_results,
+        ) {
+            return Ok(failure);
         }
-        gate_results.push(GateResultData {
-            gate: gate.as_str().to_string(),
-            passed: gate_evidence.passed,
-            exit_code: gate_evidence.exit_code,
-            command: gate_evidence.command.clone(),
-            output: truncate_clean(&gate_evidence.output, 4000),
-        });
+        gate_results.push(gate_result_data(&gate, &gate_evidence));
         if !gate_evidence.passed {
             return Ok(ship_gate_failure(gate, gate_evidence, prompt, gate_results));
         }
@@ -210,6 +202,52 @@ where
         prompt,
         gate_results,
     })
+}
+
+fn cue_monitor_failure(
+    merge_queue_policy: MergeQueuePolicy,
+    gate: &Gate,
+    gate_evidence: &GateEvidence,
+    prompt: &str,
+    gate_results: &mut Vec<GateResultData>,
+) -> Option<StageExecution> {
+    if !should_validate_cue_monitor(merge_queue_policy, gate, gate_evidence) {
+        return None;
+    }
+
+    if let Some(message) = stale_evidence_message(gate, gate_evidence) {
+        let stale_evidence = stale_evidence_failure(gate_evidence.clone(), message);
+        gate_results.push(gate_result_data(gate, &stale_evidence));
+        return Some(ship_gate_failure(
+            gate.clone(),
+            stale_evidence,
+            prompt.to_string(),
+            gate_results.clone(),
+        ));
+    }
+
+    if let Some(message) = main_drift_regression_message(gate, gate_evidence) {
+        let regression_evidence = main_drift_regression_failure(gate_evidence.clone(), message);
+        gate_results.push(gate_result_data(gate, &regression_evidence));
+        return Some(ship_gate_failure(
+            gate.clone(),
+            regression_evidence,
+            prompt.to_string(),
+            gate_results.clone(),
+        ));
+    }
+
+    None
+}
+
+fn gate_result_data(gate: &Gate, evidence: &GateEvidence) -> GateResultData {
+    GateResultData {
+        gate: gate.as_str().to_string(),
+        passed: evidence.passed,
+        exit_code: evidence.exit_code,
+        command: evidence.command.clone(),
+        output: truncate_clean(&evidence.output, 4000),
+    }
 }
 
 fn ship_gate_prompt() -> String {
@@ -262,11 +300,50 @@ fn stale_evidence_failure(mut evidence: GateEvidence, message: String) -> GateEv
     evidence
 }
 
+fn should_validate_cue_monitor(
+    merge_queue_policy: MergeQueuePolicy,
+    gate: &Gate,
+    evidence: &GateEvidence,
+) -> bool {
+    matches!(merge_queue_policy, MergeQueuePolicy::Skip)
+        && *gate == Gate::CueArtifactGenerated
+        && evidence.command.contains(":cue-check")
+}
+
+fn main_drift_regression_message(gate: &Gate, evidence: &GateEvidence) -> Option<String> {
+    if *gate != Gate::CueArtifactGenerated {
+        return None;
+    }
+    if !signals_main_drift_regression(evidence.output.as_str()) {
+        return None;
+    }
+    Some("main drift monitor blocked land: main gates regressed".to_string())
+}
+
+fn signals_main_drift_regression(output: &str) -> bool {
+    let normalized = output.to_ascii_lowercase();
+    normalized.contains("main-drift-monitor")
+        && (normalized.contains("regress") || normalized.contains("regression"))
+}
+
+fn main_drift_regression_failure(mut evidence: GateEvidence, message: String) -> GateEvidence {
+    evidence.passed = false;
+    evidence.exit_code = 1;
+    evidence.output = if evidence.output.is_empty() {
+        message
+    } else {
+        format!("{}\n{}", message, evidence.output)
+    };
+    evidence
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        is_safe_holdout_line, sanitize_holdout_output, stale_evidence_message, Gate, GateEvidence,
+        execute_ship_gate_with_gate_runner, is_safe_holdout_line, sanitize_holdout_output,
+        stale_evidence_message, Gate, GateEvidence,
     };
+    use crate::pipeline::MergeQueuePolicy;
 
     #[test]
     fn sanitize_holdout_output_removes_sensitive_lines() {
@@ -319,5 +396,66 @@ mod tests {
         };
         let message = stale_evidence_message(&Gate::CueArtifactGenerated, &evidence);
         assert!(message.is_none());
+    }
+
+    #[test]
+    fn given_main_drift_monitor_regression_when_execute_ship_gate_then_land_is_blocked() {
+        let result = execute_ship_gate_with_gate_runner(MergeQueuePolicy::Skip, |gate| {
+            if gate == Gate::CueArtifactGenerated {
+                return Ok(GateEvidence {
+                    command: "moon run :cue-check".to_string(),
+                    passed: true,
+                    exit_code: 0,
+                    output: "main-drift-monitor: main gates regress on origin/main".to_string(),
+                    revision: Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string()),
+                    current_revision: Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string()),
+                });
+            }
+            Ok(GateEvidence {
+                command: "zjj sync --status".to_string(),
+                passed: true,
+                exit_code: 0,
+                output: "ok".to_string(),
+                revision: None,
+                current_revision: None,
+            })
+        });
+
+        assert!(result.is_ok());
+        let execution = match result {
+            Ok(value) => value,
+            Err(error) => {
+                assert!(false, "unexpected error: {}", error);
+                return;
+            }
+        };
+        assert!(!execution.passed);
+        assert!(execution.output.contains("main drift monitor blocked land"));
+        assert_eq!(execution.gate_results.len(), 1);
+        assert!(!execution.gate_results[0].passed);
+    }
+
+    #[test]
+    fn given_no_main_drift_regression_when_execute_ship_gate_then_land_can_proceed() {
+        let result = execute_ship_gate_with_gate_runner(MergeQueuePolicy::Skip, |_gate| {
+            Ok(GateEvidence {
+                command: "moon run :cue-check".to_string(),
+                passed: true,
+                exit_code: 0,
+                output: "main-drift-monitor: stable".to_string(),
+                revision: Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string()),
+                current_revision: Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string()),
+            })
+        });
+
+        assert!(result.is_ok());
+        let execution = match result {
+            Ok(value) => value,
+            Err(error) => {
+                assert!(false, "unexpected error: {}", error);
+                return;
+            }
+        };
+        assert!(execution.passed);
     }
 }
