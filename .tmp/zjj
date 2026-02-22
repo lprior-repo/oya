@@ -1,6 +1,0 @@
-#!/bin/sh
-if [ "$1" = "query" ] && [ "$2" = "--type" ] && [ -n "$3" ]; then
-  shift 2
-  exec /usr/bin/env zjj query "$@"
-fi
-exec /usr/bin/env zjj "$@"

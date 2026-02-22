@@ -1,1 +1,0 @@
-{"bead_id":"src-1oy.1","phase":"JUDGE","agent_id":"mock-JUDGE","command_runs":[{"cmd":"moon run :check","exit_code":0}],"artifacts":["run-20260222-075728"],"gate_result":{"passed":true,"reason":"ok"},"timestamp_utc":"2026-02-22T13:57:39Z","judge_verdict":{"status":"PASS"}}

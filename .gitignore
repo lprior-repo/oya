@@ -52,3 +52,5 @@ oya-db/
 restate-data/
 crates/
 PLAN_docker-fix-bead3.md
+.tmp/
+.orchestrator/
