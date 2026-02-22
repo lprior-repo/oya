@@ -13,6 +13,7 @@ use oya::types::{
 use restate_sdk::context::ContextSideEffects;
 use restate_sdk::prelude::{HandlerError, Json, WorkflowContext};
 use std::path::PathBuf;
+use std::time::Duration;
 
 use crate::pipeline::MergeQueuePolicy;
 
@@ -74,15 +75,26 @@ pub(super) async fn execute_stage_real(
     repo_root: PathBuf,
 ) -> Result<(StageResult, String, Vec<GateResultData>), OyaError> {
     validate_attempt(request.attempt)?;
+    let stage_timeout_seconds = stage_timeout_seconds(&request.stage);
+    let timeout_stage = request.stage.clone();
     let input = StageBlockingInput { request: request.clone(), merge_queue_policy, repo_root };
     // Wrap the entire blocking operation in ctx.run() for stable replay
     let execution: Json<StageExecution> = ctx
         .run(move || async move {
-            let result =
-                tokio::task::spawn_blocking(move || execute_stage_blocking(input)).await.map_err(
-                    |error| HandlerError::from(format!("spawn_blocking failed: {}", error)),
-                )?;
-            result.map(Json).map_err(|error| HandlerError::from(error.0))
+            match tokio::time::timeout(
+                Duration::from_secs(stage_timeout_seconds),
+                tokio::task::spawn_blocking(move || execute_stage_blocking(input)),
+            )
+            .await
+            {
+                Ok(join_result) => {
+                    let result = join_result.map_err(|error| {
+                        HandlerError::from(format!("spawn_blocking failed: {}", error))
+                    })?;
+                    result.map(Json).map_err(|error| HandlerError::from(error.0))
+                }
+                Err(_) => Ok(Json(stage_timeout_execution(&timeout_stage, stage_timeout_seconds))),
+            }
         })
         .await
         .map_err(|e| OyaError(format!("ctx.run failed: {}", e)))?;
@@ -98,6 +110,34 @@ pub(super) async fn execute_stage_real(
         next_stage,
     };
     Ok((stage_result, prompt, gate_results))
+}
+
+fn stage_timeout_seconds(stage: &Stage) -> u64 {
+    let default = match stage {
+        Stage::Explore => 420,
+        Stage::Contract => 780,
+        Stage::Red => 600,
+        Stage::Implementation => 1_200,
+        Stage::Witness => 900,
+        Stage::ShipGate => 1_200,
+    };
+
+    std::env::var("OYA_STAGE_TIMEOUT_SECONDS")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .map(|value| value.clamp(60, 3_600))
+        .unwrap_or(default)
+}
+
+fn stage_timeout_execution(stage: &Stage, timeout_seconds: u64) -> StageExecution {
+    StageExecution {
+        passed: false,
+        output: format!("stage execution timed out after {} seconds", timeout_seconds),
+        failure_category: Some(FailureCategory::ProviderUnavailable),
+        next_stage: Some(stage.clone()),
+        prompt: String::new(),
+        gate_results: Vec::new(),
+    }
 }
 
 fn validate_attempt(attempt: u32) -> Result<(), OyaError> {
@@ -255,6 +295,30 @@ mod tests {
     fn test_validate_attempt_rejects_zero() {
         let result = validate_attempt(0);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_stage_timeout_seconds_has_defaults_and_override_clamp() {
+        std::env::remove_var("OYA_STAGE_TIMEOUT_SECONDS");
+        assert_eq!(stage_timeout_seconds(&Stage::Explore), 420);
+        assert_eq!(stage_timeout_seconds(&Stage::Implementation), 1_200);
+
+        std::env::set_var("OYA_STAGE_TIMEOUT_SECONDS", "30");
+        assert_eq!(stage_timeout_seconds(&Stage::Witness), 60);
+
+        std::env::set_var("OYA_STAGE_TIMEOUT_SECONDS", "9999");
+        assert_eq!(stage_timeout_seconds(&Stage::Contract), 3_600);
+
+        std::env::remove_var("OYA_STAGE_TIMEOUT_SECONDS");
+    }
+
+    #[test]
+    fn test_stage_timeout_execution_marks_retryable_failure() {
+        let execution = stage_timeout_execution(&Stage::Explore, 123);
+        assert!(!execution.passed);
+        assert!(execution.output.contains("123"));
+        assert_eq!(execution.failure_category, Some(FailureCategory::ProviderUnavailable));
+        assert_eq!(execution.next_stage, Some(Stage::Explore));
     }
 
     #[test]

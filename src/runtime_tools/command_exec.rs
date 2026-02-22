@@ -5,9 +5,17 @@ use super::http::{
 use std::path::PathBuf;
 use std::process::Command;
 
-const OPENCODE_TIMEOUT_SECONDS: u64 = 600;
+const DEFAULT_OPENCODE_TIMEOUT_SECONDS: u64 = 300;
 const OPENCODE_CLI_RATE_LIMIT_RETRIES: u32 = 2;
 const FALLBACK_MODEL: &str = "google/gemini-3-flash-preview";
+
+fn opencode_timeout_seconds() -> u64 {
+    std::env::var("OYA_OPENCODE_TIMEOUT_SECONDS")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .map(|value| value.clamp(30, 1_800))
+        .unwrap_or(DEFAULT_OPENCODE_TIMEOUT_SECONDS)
+}
 
 pub(crate) fn run_command_with_timeout(
     command_name: &str,
@@ -66,8 +74,11 @@ fn run_with_timeout_command(
     timeout_seconds: u64,
     repo_root: &PathBuf,
 ) -> Result<(bool, String, String, i32), OyaError> {
+    let timeout_arg = timeout_seconds.to_string();
     let output = Command::new("timeout")
-        .arg(timeout_seconds.to_string())
+        .arg("--signal=TERM")
+        .arg("--kill-after=5s")
+        .arg(timeout_arg)
         .arg(command_name)
         .args(args)
         .current_dir(repo_root)
@@ -195,12 +206,13 @@ pub(crate) fn run_opencode(
     repo_root: &PathBuf,
     model: &str,
 ) -> Result<(bool, String), OyaError> {
+    let timeout_seconds = opencode_timeout_seconds();
     let opencode_program = resolve_opencode_program();
     tracing::info!("Running opencode with prompt ({} chars) model={}", prompt.len(), model);
     let command_result = run_command_with_timeout(
         opencode_program.as_str(),
         &["run", "--format", "json", "--model", model, prompt],
-        OPENCODE_TIMEOUT_SECONDS,
+        timeout_seconds,
         repo_root,
     );
 
@@ -244,10 +256,11 @@ fn retry_with_fallback_model(
         model,
         FALLBACK_MODEL
     );
+    let timeout_seconds = opencode_timeout_seconds();
     run_command_with_timeout(
         resolve_opencode_program().as_str(),
         &["run", "--format", "json", "--model", FALLBACK_MODEL, prompt],
-        OPENCODE_TIMEOUT_SECONDS,
+        timeout_seconds,
         repo_root,
     )
 }
@@ -259,13 +272,14 @@ fn retry_rate_limited_opencode(
     first_output: String,
 ) -> Result<(bool, String), OyaError> {
     let mut attempt = 0;
+    let timeout_seconds = opencode_timeout_seconds();
     let mut last_output = first_output;
     while attempt < OPENCODE_CLI_RATE_LIMIT_RETRIES {
         std::thread::sleep(rate_limit_backoff(attempt));
         let (passed, output) = run_command_with_timeout(
             resolve_opencode_program().as_str(),
             &["run", "--format", "json", "--model", model, prompt],
-            OPENCODE_TIMEOUT_SECONDS,
+            timeout_seconds,
             repo_root,
         )?;
         if passed {
@@ -333,7 +347,7 @@ fn run_opencode_via_http_blocking(
     prompt: &str,
     model: &str,
 ) -> Result<(bool, String), OyaError> {
-    let settings = opencode_http_client_settings(OPENCODE_TIMEOUT_SECONDS);
+    let settings = opencode_http_client_settings(opencode_timeout_seconds());
     let client = build_blocking_http_client(settings)
         .map_err(|e| OyaError(format!("Failed to build blocking HTTP client: {}", e)))?;
 
@@ -430,5 +444,19 @@ mod tests {
         assert_eq!(rate_limit_backoff(0), std::time::Duration::from_millis(400));
         assert_eq!(rate_limit_backoff(1), std::time::Duration::from_millis(800));
         assert_eq!(rate_limit_backoff(2), std::time::Duration::from_millis(1600));
+    }
+
+    #[test]
+    fn test_opencode_timeout_seconds_defaults_and_clamps() {
+        std::env::remove_var("OYA_OPENCODE_TIMEOUT_SECONDS");
+        assert_eq!(opencode_timeout_seconds(), 300);
+
+        std::env::set_var("OYA_OPENCODE_TIMEOUT_SECONDS", "20");
+        assert_eq!(opencode_timeout_seconds(), 30);
+
+        std::env::set_var("OYA_OPENCODE_TIMEOUT_SECONDS", "3600");
+        assert_eq!(opencode_timeout_seconds(), 1_800);
+
+        std::env::remove_var("OYA_OPENCODE_TIMEOUT_SECONDS");
     }
 }

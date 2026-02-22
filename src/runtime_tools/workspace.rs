@@ -39,7 +39,22 @@ fn queue_workspace(
 ) -> Result<WorkspaceCommandResult, OyaError> {
     let command = format!("zjj queue --add {} --bead {}", workspace, request.bead_id);
     let args = ["queue", "--add", workspace, "--bead", request.bead_id.as_str()];
-    run_workspace_command(request, &command, &args, "zjj queue", workspace)
+    match run_workspace_command(request, &command, &args, "zjj queue", workspace) {
+        Ok(result) => Ok(result),
+        Err(error) if queue_duplicate_error(error.to_string().as_str()) => {
+            Ok(WorkspaceCommandResult {
+                command,
+                passed: true,
+                exit_code: 0,
+                output: "workspace already queued; treating queue add as idempotent".to_string(),
+            })
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn queue_duplicate_error(message: &str) -> bool {
+    message.to_ascii_lowercase().contains("already in the queue")
 }
 
 fn add_workspace(
@@ -105,4 +120,21 @@ pub(crate) fn prepare_stage_workspace(
         add_output: truncate_clean(add.output.as_str(), 4000),
         recorded_at: request.recorded_at,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn queue_duplicate_error_detects_duplicate_workspace_message() {
+        let message = "Error: Invalid configuration: Workspace 'foo' is already in the queue";
+        assert!(queue_duplicate_error(message));
+    }
+
+    #[test]
+    fn queue_duplicate_error_ignores_other_queue_errors() {
+        let message = "Error: queue backend unavailable";
+        assert!(!queue_duplicate_error(message));
+    }
 }

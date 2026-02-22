@@ -20,6 +20,7 @@ use std::path::{Path, PathBuf};
 
 const USAGE_TRACKER_KEY: &str = "global";
 const RED_SEAL_KEY: &str = "red_acceptance_seal";
+const DEFAULT_PIPELINE_STAGE_WATCHDOG_SECONDS: u64 = 480;
 
 use clap::{Parser, Subcommand};
 
@@ -388,7 +389,7 @@ async fn run_pipeline_loop(
 ) -> Result<(), OyaError> {
     loop {
         enforce_red_gate_precondition(ctx, state).await?;
-        let artifact = run_pipeline_stage(ctx, config, input, state).await?;
+        let artifact = run_pipeline_stage_with_watchdog(ctx, config, input, state).await?;
         persist_stage_artifact(ctx, &artifact).await?;
         set_pipeline_state_from_artifact(state, &artifact);
 
@@ -401,6 +402,88 @@ async fn run_pipeline_loop(
             .await
             .map_err(|error| OyaError(format!("durable sleep failed: {}", error)))?;
     }
+}
+
+fn pipeline_stage_watchdog_seconds() -> u64 {
+    std::env::var("OYA_PIPELINE_STAGE_WATCHDOG_SECONDS")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .map(|seconds| seconds.clamp(60, 3_600))
+        .unwrap_or(DEFAULT_PIPELINE_STAGE_WATCHDOG_SECONDS)
+}
+
+async fn run_pipeline_stage_with_watchdog(
+    ctx: &WorkflowContext<'_>,
+    config: &RuntimeConfig,
+    input: &PipelineRunInput,
+    state: &PipelineState,
+) -> Result<orchestrator_types::StageArtifact, OyaError> {
+    let started_at = workflow_timestamp_or_error(ctx).await?;
+    let watchdog_seconds = pipeline_stage_watchdog_seconds();
+    let execution = run_pipeline_stage(ctx, config, input, state);
+    match tokio::time::timeout(std::time::Duration::from_secs(watchdog_seconds), execution).await {
+        Ok(result) => result,
+        Err(_) => {
+            build_stage_watchdog_timeout_artifact(ctx, input, state, started_at, watchdog_seconds)
+                .await
+        }
+    }
+}
+
+async fn build_stage_watchdog_timeout_artifact(
+    ctx: &WorkflowContext<'_>,
+    input: &PipelineRunInput,
+    state: &PipelineState,
+    started_at: String,
+    watchdog_seconds: u64,
+) -> Result<orchestrator_types::StageArtifact, OyaError> {
+    let completed_at = workflow_timestamp_or_error(ctx).await?;
+    let duration_ms = stage_timeout_duration_ms(&started_at, &completed_at);
+    let full_log = stage_timeout_log(&state.current_stage, state.attempt, watchdog_seconds);
+    Ok(orchestrator_types::StageArtifact {
+        stage: state.current_stage.as_str().to_string(),
+        attempt: state.attempt,
+        failure_category: Some("provider_unavailable".to_string()),
+        next_stage: Some(state.current_stage.as_str().to_string()),
+        timing: orchestrator_types::StageTiming { started_at, completed_at, duration_ms },
+        workspace: None,
+        input: orchestrator_types::StageInputData {
+            run_id: input.run_id.clone(),
+            bead_id: input.bead_id.clone(),
+            context: input.context.clone(),
+            model: state.orchestrator.model.clone(),
+            last_failure: None,
+        },
+        prompt: String::new(),
+        output: orchestrator_types::StageOutputData {
+            success: false,
+            exit_code: 124,
+            full_log: full_log.clone(),
+            feedback: full_log,
+            contract_document: None,
+            implementation_code: None,
+            test_results: None,
+            adversarial_report: None,
+        },
+        task_tracking: None,
+        gates: Vec::new(),
+        status: orchestrator_types::StageStatus::Failed,
+    })
+}
+
+fn stage_timeout_duration_ms(started_at: &str, completed_at: &str) -> u64 {
+    let started = parse_rfc3339_stable(started_at);
+    let completed = parse_rfc3339_stable(completed_at);
+    (completed - started).num_milliseconds().max(0) as u64
+}
+
+fn stage_timeout_log(stage: &Stage, attempt: u32, watchdog_seconds: u64) -> String {
+    format!(
+        "stage watchdog timeout: stage={} attempt={} watchdog_seconds={}",
+        stage.as_str(),
+        attempt,
+        watchdog_seconds
+    )
 }
 
 async fn enforce_red_gate_precondition(
@@ -612,13 +695,24 @@ async fn handle_failed_stage(
     if !should_retry_after_failure(state) {
         block_and_file_remediation(ctx, &config.repo_root, state, artifact).await?;
         mark_run_failed(ctx, state, artifact).await?;
-        return Ok(false);
+        return Err(OyaError(terminal_pipeline_failure_message(state, artifact)));
     }
 
     state.attempt += 1;
     let stage = state.current_stage.clone();
     state.orchestrator.model = resolve_model_for_stage_cached(ctx, state, &stage).await?;
     Ok(true)
+}
+
+fn terminal_pipeline_failure_message(
+    state: &PipelineState,
+    artifact: &orchestrator_types::StageArtifact,
+) -> String {
+    let category = artifact.failure_category.clone().unwrap_or_else(|| "unknown".to_string());
+    format!(
+        "pipeline failed: bead={} stage={} attempt={} category={}",
+        state.orchestrator.bead_id, artifact.stage, artifact.attempt, category
+    )
 }
 
 fn should_retry_after_failure(state: &PipelineState) -> bool {

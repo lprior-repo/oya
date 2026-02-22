@@ -338,6 +338,77 @@ fn test_remediation_description_includes_failure_context() {
 }
 
 #[test]
+fn test_terminal_pipeline_failure_message_includes_stage_and_category() {
+    let state = test_pipeline_state(FailureCategory::TestFailed, Stage::Implementation, 2);
+    let artifact = StageArtifact {
+        stage: "implementation".to_string(),
+        attempt: 2,
+        failure_category: Some("test_failed".to_string()),
+        next_stage: Some("implementation".to_string()),
+        timing: StageTiming {
+            started_at: "2026-02-20T00:00:00Z".to_string(),
+            completed_at: "2026-02-20T00:00:01Z".to_string(),
+            duration_ms: 1000,
+        },
+        workspace: None,
+        input: StageInputData {
+            run_id: "run-1".to_string(),
+            bead_id: "bead".to_string(),
+            context: "ctx".to_string(),
+            model: "model".to_string(),
+            last_failure: None,
+        },
+        prompt: "prompt".to_string(),
+        output: StageOutputData {
+            success: false,
+            exit_code: 1,
+            full_log: "tests failed".to_string(),
+            feedback: "test_failed".to_string(),
+            contract_document: None,
+            implementation_code: None,
+            test_results: None,
+            adversarial_report: None,
+        },
+        task_tracking: None,
+        gates: vec![],
+        status: StageStatus::Failed,
+    };
+
+    let message = terminal_pipeline_failure_message(&state, &artifact);
+    assert!(message.contains("pipeline failed:"));
+    assert!(message.contains("stage=implementation"));
+    assert!(message.contains("category=test_failed"));
+}
+
+#[test]
+fn test_pipeline_stage_watchdog_seconds_defaults_and_clamps() {
+    std::env::remove_var("OYA_PIPELINE_STAGE_WATCHDOG_SECONDS");
+    assert_eq!(pipeline_stage_watchdog_seconds(), 480);
+
+    std::env::set_var("OYA_PIPELINE_STAGE_WATCHDOG_SECONDS", "30");
+    assert_eq!(pipeline_stage_watchdog_seconds(), 60);
+
+    std::env::set_var("OYA_PIPELINE_STAGE_WATCHDOG_SECONDS", "9000");
+    assert_eq!(pipeline_stage_watchdog_seconds(), 3_600);
+
+    std::env::remove_var("OYA_PIPELINE_STAGE_WATCHDOG_SECONDS");
+}
+
+#[test]
+fn test_stage_timeout_duration_ms_never_negative() {
+    let duration = stage_timeout_duration_ms("2026-02-22T02:10:00Z", "2026-02-22T02:09:00Z");
+    assert_eq!(duration, 0);
+}
+
+#[test]
+fn test_stage_timeout_log_mentions_stage_attempt_and_watchdog() {
+    let message = stage_timeout_log(&Stage::Explore, 2, 480);
+    assert!(message.contains("stage=explore"));
+    assert!(message.contains("attempt=2"));
+    assert!(message.contains("watchdog_seconds=480"));
+}
+
+#[test]
 fn test_stage_kind_helpers_match_expected_stage_names() {
     let red_artifact = StageArtifact {
         stage: "red".to_string(),
