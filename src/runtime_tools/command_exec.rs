@@ -333,12 +333,14 @@ fn is_opencode_missing_error(message: &str) -> bool {
 
 fn is_opencode_cli_missing_output(output: &str) -> bool {
     let normalized = output.to_ascii_lowercase();
+    let normalized_no_escape = normalized.replace('\\', "");
     let timeout_wrapper_missing_binary = normalized.contains("failed to run command")
         && normalized.contains("opencode")
         && normalized.contains("no such file or directory");
-    let node_module_resolution_failure = normalized.contains("cannot find module")
-        && (normalized.contains("@opencode-ai/plugin")
-            || normalized.contains("opencode-gemini-auth"));
+    let node_module_resolution_failure = normalized_no_escape.contains("cannot find module")
+        && (normalized_no_escape.contains("@opencode-ai/plugin")
+            || normalized_no_escape.contains("opencode-gemini-auth")
+            || normalized_no_escape.contains("resolvemessage: cannot find module"));
     timeout_wrapper_missing_binary || node_module_resolution_failure
 }
 
@@ -426,6 +428,13 @@ mod tests {
     #[test]
     fn test_is_opencode_cli_missing_output_detects_missing_opencode_plugin_module() {
         let output = "Cannot find module '@opencode-ai/plugin' from '/tmp/opencode-gemini-auth/src/plugin/quota.ts'";
+        assert!(is_opencode_cli_missing_output(output));
+    }
+
+    #[test]
+    fn test_is_opencode_cli_missing_output_detects_escaped_plugin_module_message() {
+        let output =
+            "ResolveMessage: Cannot find module \\\"@opencode-ai/plugin\\\" from '/tmp/opencode-gemini-auth/src/plugin/quota.ts'";
         assert!(is_opencode_cli_missing_output(output));
     }
 
