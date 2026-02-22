@@ -191,6 +191,24 @@ fn test_execute_ship_gate_rejects_stale_cue_evidence() {
 }
 
 #[test]
+fn test_execute_ship_gate_rejects_missing_cue_revision_metadata() {
+    let result = execute_ship_gate_with_gate_runner(MergeQueuePolicy::Skip, |_gate| {
+        Ok(GateEvidence {
+            command: "moon run :cue-check".to_string(),
+            passed: true,
+            exit_code: 0,
+            output: "cue ok".to_string(),
+            revision: None,
+            current_revision: Some("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string()),
+        })
+    })
+    .expect("ship gate execution should return a stage result");
+
+    assert!(!result.passed);
+    assert_eq!(result.failure_category, Some(FailureCategory::OutputParseFailure));
+}
+
+#[test]
 fn test_cli_tail_mode_parses_default_interval() {
     let mode = parse_cli_mode_from(["oya", "tail"]);
     assert_eq!(

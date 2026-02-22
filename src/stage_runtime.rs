@@ -246,7 +246,8 @@ fn stale_evidence_message(gate: &Gate, evidence: &GateEvidence) -> Option<String
             "stale evidence rejected: pinned_revision={} current_head={}",
             pinned, current
         )),
-        _ => None,
+        (Some(_), Some(_)) => None,
+        _ => Some("stale evidence rejected: missing revision metadata".to_string()),
     }
 }
 
