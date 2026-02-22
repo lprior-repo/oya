@@ -59,8 +59,10 @@ impl MergeQueuePolicy {
     }
 
     pub(super) fn should_run(self, gate: &Gate) -> bool {
-        let _ = self;
-        *gate != Gate::ZjjMergeQueue
+        match self {
+            Self::Enforce => true,
+            Self::Skip => *gate != Gate::ZjjMergeQueue,
+        }
     }
 }
 

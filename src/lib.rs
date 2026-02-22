@@ -1143,6 +1143,240 @@ pub enum MergeTrainError {
     DependencyCycle,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MergeQueueCandidate {
+    pub bead_id: String,
+    pub priority: u8,
+    pub depends_on: Vec<String>,
+    pub base_revision: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MergeWorkerLock {
+    pub owner: String,
+    pub acquired_at_epoch_seconds: u64,
+    pub ttl_seconds: u64,
+}
+
+impl MergeWorkerLock {
+    pub fn new(owner: String, acquired_at_epoch_seconds: u64, ttl_seconds: u64) -> Self {
+        Self { owner, acquired_at_epoch_seconds, ttl_seconds }
+    }
+
+    pub fn expires_at_epoch_seconds(&self) -> u64 {
+        self.acquired_at_epoch_seconds.saturating_add(self.ttl_seconds)
+    }
+
+    pub fn is_expired(&self, now_epoch_seconds: u64) -> bool {
+        now_epoch_seconds >= self.expires_at_epoch_seconds()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct MergeQueueState {
+    pub lock: Option<MergeWorkerLock>,
+    pub conflicted_beads: std::collections::BTreeSet<String>,
+}
+
+impl MergeQueueState {
+    pub fn new(lock: Option<MergeWorkerLock>) -> Self {
+        Self { lock, conflicted_beads: std::collections::BTreeSet::new() }
+    }
+
+    pub fn with_conflict(mut self, bead_id: String) -> Self {
+        self.conflicted_beads.insert(bead_id);
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MergeWorkerRequest {
+    pub worker_id: String,
+    pub now_epoch_seconds: u64,
+    pub lock_ttl_seconds: u64,
+    pub main_revision: String,
+}
+
+impl MergeWorkerRequest {
+    pub fn new(
+        worker_id: String,
+        now_epoch_seconds: u64,
+        lock_ttl_seconds: u64,
+        main_revision: String,
+    ) -> Self {
+        Self { worker_id, now_epoch_seconds, lock_ttl_seconds, main_revision }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MergeQueueSelection {
+    Selected { bead_id: String },
+    DeferredByLock { owner: String, expires_at_epoch_seconds: u64 },
+    RebaseRequired { bead_id: String, candidate_revision: String, main_revision: String },
+    Idle,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MergeQueueRoute {
+    Proceed,
+    Retryable(String),
+    Terminal(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MergeQueueDecision {
+    pub selection: MergeQueueSelection,
+    pub route: MergeQueueRoute,
+    pub lock: Option<MergeWorkerLock>,
+    pub ordered_candidates: Vec<String>,
+}
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum MergeQueueError {
+    #[error(transparent)]
+    Train(#[from] MergeTrainError),
+    #[error("merge worker lock ttl must be > 0")]
+    InvalidLockTtl,
+}
+
+pub fn process_single_merge_worker_queue(
+    candidates: &[MergeQueueCandidate],
+    state: &MergeQueueState,
+    request: &MergeWorkerRequest,
+) -> Result<MergeQueueDecision, MergeQueueError> {
+    if request.lock_ttl_seconds == 0 {
+        return Err(MergeQueueError::InvalidLockTtl);
+    }
+    if let Some(decision) = lock_contention_decision(state, request) {
+        return Ok(decision);
+    }
+
+    let lock = Some(MergeWorkerLock::new(
+        request.worker_id.clone(),
+        request.now_epoch_seconds,
+        request.lock_ttl_seconds,
+    ));
+    let ordered = schedule_merge_queue(candidates)?;
+    Ok(select_merge_candidate(candidates, state, request, lock, ordered))
+}
+
+fn lock_contention_decision(
+    state: &MergeQueueState,
+    request: &MergeWorkerRequest,
+) -> Option<MergeQueueDecision> {
+    state.lock.as_ref().and_then(|lock| {
+        let lock_is_other_owner = lock.owner != request.worker_id;
+        if lock_is_other_owner && !lock.is_expired(request.now_epoch_seconds) {
+            Some(MergeQueueDecision {
+                selection: MergeQueueSelection::DeferredByLock {
+                    owner: lock.owner.clone(),
+                    expires_at_epoch_seconds: lock.expires_at_epoch_seconds(),
+                },
+                route: MergeQueueRoute::Retryable("merge worker lock contention".to_string()),
+                lock: Some(lock.clone()),
+                ordered_candidates: Vec::new(),
+            })
+        } else {
+            None
+        }
+    })
+}
+
+fn schedule_merge_queue(
+    candidates: &[MergeQueueCandidate],
+) -> Result<Vec<String>, MergeQueueError> {
+    let train_candidates = candidates
+        .iter()
+        .map(|candidate| MergeTrainCandidate {
+            bead_id: candidate.bead_id.clone(),
+            priority: candidate.priority,
+            depends_on: candidate.depends_on.clone(),
+        })
+        .collect::<Vec<_>>();
+    schedule_dependency_aware_priority_processing(&train_candidates).map_err(Into::into)
+}
+
+fn select_merge_candidate(
+    candidates: &[MergeQueueCandidate],
+    state: &MergeQueueState,
+    request: &MergeWorkerRequest,
+    lock: Option<MergeWorkerLock>,
+    ordered: Vec<String>,
+) -> MergeQueueDecision {
+    let by_id = candidates
+        .iter()
+        .map(|c| (c.bead_id.as_str(), c))
+        .collect::<std::collections::HashMap<_, _>>();
+    for bead_id in &ordered {
+        if let Some(candidate) = by_id.get(bead_id.as_str()) {
+            if is_conflict_cascade_blocked(candidate, &state.conflicted_beads) {
+                continue;
+            }
+            return candidate_selection_decision(candidate, request, lock, ordered);
+        }
+    }
+    idle_or_terminal_decision(candidates, state, lock, ordered)
+}
+
+fn candidate_selection_decision(
+    candidate: &MergeQueueCandidate,
+    request: &MergeWorkerRequest,
+    lock: Option<MergeWorkerLock>,
+    ordered: Vec<String>,
+) -> MergeQueueDecision {
+    if candidate.base_revision != request.main_revision {
+        return MergeQueueDecision {
+            selection: MergeQueueSelection::RebaseRequired {
+                bead_id: candidate.bead_id.clone(),
+                candidate_revision: candidate.base_revision.clone(),
+                main_revision: request.main_revision.clone(),
+            },
+            route: MergeQueueRoute::Retryable(
+                "candidate requires rebase onto latest main".to_string(),
+            ),
+            lock,
+            ordered_candidates: ordered,
+        };
+    }
+    MergeQueueDecision {
+        selection: MergeQueueSelection::Selected { bead_id: candidate.bead_id.clone() },
+        route: MergeQueueRoute::Proceed,
+        lock,
+        ordered_candidates: ordered,
+    }
+}
+
+fn idle_or_terminal_decision(
+    candidates: &[MergeQueueCandidate],
+    state: &MergeQueueState,
+    lock: Option<MergeWorkerLock>,
+    ordered: Vec<String>,
+) -> MergeQueueDecision {
+    let all_blocked = !candidates.is_empty()
+        && candidates
+            .iter()
+            .all(|candidate| is_conflict_cascade_blocked(candidate, &state.conflicted_beads));
+    let route = if all_blocked {
+        MergeQueueRoute::Terminal("conflict cascade blocks all remaining queue entries".to_string())
+    } else {
+        MergeQueueRoute::Proceed
+    };
+    MergeQueueDecision {
+        selection: MergeQueueSelection::Idle,
+        route,
+        lock,
+        ordered_candidates: ordered,
+    }
+}
+
+fn is_conflict_cascade_blocked(
+    candidate: &MergeQueueCandidate,
+    conflicted_beads: &std::collections::BTreeSet<String>,
+) -> bool {
+    conflicted_beads.contains(&candidate.bead_id)
+        || candidate.depends_on.iter().any(|dependency| conflicted_beads.contains(dependency))
+}
+
 pub fn schedule_dependency_aware_priority_processing(
     candidates: &[MergeTrainCandidate],
 ) -> Result<Vec<MergeBeadId>, MergeTrainError> {

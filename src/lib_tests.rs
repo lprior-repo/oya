@@ -1,5 +1,6 @@
 use super::*;
 use chrono::Duration;
+use proptest::prelude::*;
 
 fn make_valid_smoke_report() -> SmokeReport {
     let base = Utc::now();
@@ -448,6 +449,189 @@ fn given_lock_token_and_valid_candidate_when_deriving_merge_decisions_then_merge
     };
 
     assert!(matches!(decisions[0], types::MergeDecision::Merge { queue_position: _, lock: _ }));
+}
+
+#[test]
+fn given_unexpired_lock_owned_by_other_worker_when_processing_merge_queue_then_worker_is_deferred_retryably(
+) {
+    let candidates = vec![MergeQueueCandidate {
+        bead_id: "src-a".to_string(),
+        priority: 1,
+        depends_on: vec![],
+        base_revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+    }];
+    let state =
+        MergeQueueState::new(Some(MergeWorkerLock::new("worker-a".to_string(), 1_000, 120)));
+    let request = MergeWorkerRequest::new(
+        "worker-b".to_string(),
+        1_010,
+        120,
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+    );
+
+    let decision = process_single_merge_worker_queue(&candidates, &state, &request);
+    assert!(decision.is_ok());
+    let decision = match decision {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    assert!(matches!(decision.selection, MergeQueueSelection::DeferredByLock { .. }));
+    assert!(matches!(decision.route, MergeQueueRoute::Retryable(_)));
+}
+
+#[test]
+fn given_stale_candidate_revision_when_processing_merge_queue_then_rebase_is_required_retryably() {
+    let candidates = vec![MergeQueueCandidate {
+        bead_id: "src-a".to_string(),
+        priority: 0,
+        depends_on: vec![],
+        base_revision: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string(),
+    }];
+    let state = MergeQueueState::new(None);
+    let request = MergeWorkerRequest::new(
+        "worker-a".to_string(),
+        2_000,
+        300,
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+    );
+
+    let decision = process_single_merge_worker_queue(&candidates, &state, &request);
+    assert!(decision.is_ok());
+    let decision = match decision {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    assert!(matches!(decision.selection, MergeQueueSelection::RebaseRequired { .. }));
+    assert!(matches!(decision.route, MergeQueueRoute::Retryable(_)));
+}
+
+#[test]
+fn given_conflict_cascade_when_processing_merge_queue_then_dependents_are_skipped() {
+    let candidates = vec![
+        MergeQueueCandidate {
+            bead_id: "src-a".to_string(),
+            priority: 1,
+            depends_on: vec![],
+            base_revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+        },
+        MergeQueueCandidate {
+            bead_id: "src-b".to_string(),
+            priority: 0,
+            depends_on: vec!["src-a".to_string()],
+            base_revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+        },
+        MergeQueueCandidate {
+            bead_id: "src-c".to_string(),
+            priority: 2,
+            depends_on: vec![],
+            base_revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+        },
+    ];
+    let state = MergeQueueState::new(None).with_conflict("src-a".to_string());
+    let request = MergeWorkerRequest::new(
+        "worker-a".to_string(),
+        2_500,
+        300,
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+    );
+
+    let decision = process_single_merge_worker_queue(&candidates, &state, &request);
+    assert!(decision.is_ok());
+    let decision = match decision {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    assert_eq!(decision.selection, MergeQueueSelection::Selected { bead_id: "src-c".to_string() });
+    assert!(matches!(decision.route, MergeQueueRoute::Proceed));
+}
+
+proptest! {
+    #[test]
+    fn given_active_lock_when_other_worker_attempts_then_lock_exclusivity_holds(
+        holder in "[a-z]{1,5}",
+        contender in "[a-z]{1,5}",
+        now in 1_000_u64..10_000,
+        ttl in 1_u64..1_000,
+    ) {
+        prop_assume!(holder != contender);
+        let candidates = vec![MergeQueueCandidate {
+            bead_id: "src-a".to_string(),
+            priority: 0,
+            depends_on: vec![],
+            base_revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+        }];
+        let state = MergeQueueState::new(Some(MergeWorkerLock::new(holder, now, ttl)));
+        let request = MergeWorkerRequest::new(
+            contender,
+            now.saturating_add(ttl / 2),
+            ttl,
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+        );
+
+        let decision = process_single_merge_worker_queue(&candidates, &state, &request);
+        prop_assert!(decision.is_ok());
+        let selection = match decision {
+            Ok(value) => value.selection,
+            Err(_) => MergeQueueSelection::Idle,
+        };
+        prop_assert!(
+            matches!(selection, MergeQueueSelection::DeferredByLock { .. }),
+            "selection must defer on active lock"
+        );
+    }
+}
+
+proptest! {
+    #[test]
+    fn given_same_candidates_in_different_order_when_processing_then_selection_is_deterministic(
+        p0 in 0_u8..5,
+        p1 in 0_u8..5,
+        p2 in 0_u8..5,
+    ) {
+        let request = MergeWorkerRequest::new(
+            "worker-a".to_string(),
+            5_000,
+            90,
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+        );
+        let state = MergeQueueState::new(None);
+        let forward = vec![
+            MergeQueueCandidate {
+                bead_id: "src-a".to_string(),
+                priority: p0,
+                depends_on: vec![],
+                base_revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+            },
+            MergeQueueCandidate {
+                bead_id: "src-b".to_string(),
+                priority: p1,
+                depends_on: vec![],
+                base_revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+            },
+            MergeQueueCandidate {
+                bead_id: "src-c".to_string(),
+                priority: p2,
+                depends_on: vec![],
+                base_revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+            },
+        ];
+        let mut reverse = forward.clone();
+        reverse.reverse();
+
+        let selected_forward = process_single_merge_worker_queue(&forward, &state, &request);
+        let selected_reverse = process_single_merge_worker_queue(&reverse, &state, &request);
+        prop_assert!(selected_forward.is_ok());
+        prop_assert!(selected_reverse.is_ok());
+        let left = match selected_forward {
+            Ok(value) => value.selection,
+            Err(_) => MergeQueueSelection::Idle,
+        };
+        let right = match selected_reverse {
+            Ok(value) => value.selection,
+            Err(_) => MergeQueueSelection::Idle,
+        };
+        prop_assert_eq!(left, right);
+    }
 }
 
 #[test]
