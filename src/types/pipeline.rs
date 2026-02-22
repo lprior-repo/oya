@@ -135,7 +135,6 @@ pub enum Gate {
     TestsPass,
     MoonCi,
     HoldoutScenarios,
-    ZjjMergeQueue,
     CueArtifactGenerated,
 }
 
@@ -146,7 +145,6 @@ impl Gate {
             Self::TestsPass => "tests_pass",
             Self::MoonCi => "moon_ci",
             Self::HoldoutScenarios => "holdout_scenarios",
-            Self::ZjjMergeQueue => "zjj_merge_queue",
             Self::CueArtifactGenerated => "cue_artifact_generated",
         }
     }
@@ -161,7 +159,6 @@ impl TryFrom<&str> for Gate {
             "tests_pass" => Ok(Self::TestsPass),
             "moon_ci" => Ok(Self::MoonCi),
             "holdout_scenarios" => Ok(Self::HoldoutScenarios),
-            "zjj_merge_queue" => Ok(Self::ZjjMergeQueue),
             "cue_artifact_generated" => Ok(Self::CueArtifactGenerated),
             _ => Err(format!("Unknown gate: {s}")),
         }
@@ -521,5 +518,11 @@ mod tests {
         assert!(tiers.contains(&"b"));
         assert!(tiers.contains(&"a"));
         assert!(tiers.contains(&"s"));
+    }
+
+    #[test]
+    fn test_zjj_merge_queue_is_not_a_valid_gate() {
+        let gate = Gate::try_from("zjj_merge_queue");
+        assert!(gate.is_err(), "zjj_merge_queue should no longer be a valid gate");
     }
 }

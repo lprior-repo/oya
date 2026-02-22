@@ -208,16 +208,15 @@ fn given_special_chars_only_when_building_workspace_name_then_rejects_empty() {
 /// When: getting stage gates
 /// Then: includes ZjjMergeQueue gate
 #[test]
-fn given_shipgate_stage_when_getting_gates_then_includes_zjj_merge_queue() {
+fn given_shipgate_stage_when_getting_gates_then_includes_cue_artifact_generated() {
     let gates = StageName::ShipGate.gates();
 
     assert!(!gates.is_empty(), "ShipGate should have gates");
-    assert!(gates.contains(&Gate::ZjjMergeQueue), "ShipGate must include ZjjMergeQueue gate");
     assert!(
         gates.contains(&Gate::CueArtifactGenerated),
         "ShipGate must include CueArtifactGenerated gate"
     );
-    assert_eq!(gates.len(), 2, "ShipGate should have exactly 2 gates");
+    assert_eq!(gates.len(), 1, "ShipGate should have exactly 2 gates");
 }
 
 /// Given: Explore stage
@@ -240,7 +239,7 @@ fn given_implementation_stage_when_getting_gates_then_includes_compiles_and_test
     assert!(!gates.is_empty(), "Implementation should have gates");
     assert!(gates.contains(&Gate::Compiles), "Implementation must include Compiles gate");
     assert!(gates.contains(&Gate::TestsPass), "Implementation must include TestsPass gate");
-    assert_eq!(gates.len(), 2, "Implementation should have exactly 2 gates");
+    assert_eq!(gates.len(), 1, "Implementation should have exactly 2 gates");
 }
 
 /// Given: Contract stage
@@ -386,7 +385,6 @@ fn given_all_gates_when_getting_as_str_then_returns_valid_identifiers() {
         (Gate::TestsPass, "tests_pass"),
         (Gate::MoonCi, "moon_ci"),
         (Gate::HoldoutScenarios, "holdout_scenarios"),
-        (Gate::ZjjMergeQueue, "zjj_merge_queue"),
         (Gate::CueArtifactGenerated, "cue_artifact_generated"),
     ];
 
@@ -406,33 +404,11 @@ fn given_all_gates_when_getting_as_str_then_returns_valid_identifiers() {
 /// When: attempting to parse gate command
 /// Then: API should be available (TODO: not yet implemented)
 #[test]
-fn given_zjj_sync_status_command_when_parsing_then_api_exists() {
-    // NOTE: This test documents a missing API
-    // The runtime_tools::gates module is not publicly exposed
-    // When implemented, this should parse "zjj sync --status" successfully
-
-    // For now, we verify the Gate enum exists and has ZjjMergeQueue variant
-    let gate = Gate::ZjjMergeQueue;
-    assert_eq!(gate.as_str(), "zjj_merge_queue");
-}
 
 /// Given: zjj queue command
 /// When: attempting to use zjj coordination
 /// Then: API should be available (TODO: not yet implemented)
 #[test]
-fn given_zjj_queue_command_when_using_then_api_exists() {
-    // NOTE: This test documents a missing API
-    // Zjj coordination for queue operations is not yet implemented
-    // When implemented, this should support queue commands
-
-    // For now, we verify the Gate enum has the correct variant
-    let gate_str = "zjj_merge_queue";
-    let gate = Gate::try_from(gate_str);
-
-    assert!(gate.is_ok(), "Should parse zjj_merge_queue gate");
-    assert_eq!(gate.unwrap(), Gate::ZjjMergeQueue);
-}
-
 // =============================================================================
 // CONTRACT: Gate Timeouts
 // =============================================================================
@@ -441,17 +417,6 @@ fn given_zjj_queue_command_when_using_then_api_exists() {
 /// When: checking timeout configuration
 /// Then: ZJJ_TIMEOUT_SECONDS should be defined as 60s (TODO: API not exposed)
 #[test]
-fn given_zjj_merge_queue_gate_when_getting_timeout_then_config_is_60s() {
-    // NOTE: This test documents a missing API
-    // The execute_gate function and timeout configuration are not publicly exposed
-    // When implemented, Zjj gates should use 60s timeout
-
-    // For now, verify the gate type exists
-    let gate = Gate::ZjjMergeQueue;
-    let gate_str = gate.as_str();
-
-    assert_eq!(gate_str, "zjj_merge_queue");
-}
 
 /// Given: Moon gate (e.g., Compiles)
 /// When: checking timeout configuration
@@ -639,7 +604,6 @@ fn prop_all_gates_have_valid_string_reps() {
         Gate::TestsPass,
         Gate::MoonCi,
         Gate::HoldoutScenarios,
-        Gate::ZjjMergeQueue,
         Gate::CueArtifactGenerated,
     ];
 

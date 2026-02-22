@@ -177,9 +177,8 @@ fn contract_gate_definitions() {
 
     // ShipGate closes with artifact + merge queue gates.
     let ship_gates = StageName::ShipGate.gates();
-    assert_eq!(ship_gates.len(), 2);
+    assert_eq!(ship_gates.len(), 1);
     assert!(ship_gates.contains(&Gate::CueArtifactGenerated));
-    assert!(ship_gates.contains(&Gate::ZjjMergeQueue));
 }
 
 /// Contract: Failure categories are retryable/non-retryable

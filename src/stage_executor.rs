@@ -15,8 +15,6 @@ use restate_sdk::prelude::{HandlerError, Json, WorkflowContext};
 use std::path::PathBuf;
 use std::time::Duration;
 
-use crate::pipeline::MergeQueuePolicy;
-
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(super) struct StageExecution {
     pub passed: bool,
@@ -51,7 +49,6 @@ pub(super) struct StageExecutionRequest {
 #[derive(Clone)]
 pub(super) struct StageBlockingInput {
     pub request: StageExecutionRequest,
-    pub merge_queue_policy: MergeQueuePolicy,
     pub repo_root: PathBuf,
 }
 
@@ -72,11 +69,10 @@ pub(super) struct StageBlockingInput {
 pub(super) async fn execute_stage_real(
     ctx: &WorkflowContext<'_>,
     request: StageExecutionRequest,
-    merge_queue_policy: MergeQueuePolicy,
     repo_root: PathBuf,
 ) -> Result<(StageResult, String, Vec<GateResultData>), OyaError> {
     validate_attempt(request.attempt)?;
-    let input = StageBlockingInput { request: request.clone(), merge_queue_policy, repo_root };
+    let input = StageBlockingInput { request: request.clone(), repo_root };
     let execution = stage_execution_journaled(ctx, input).await?;
     let StageExecution { passed, output, failure_category, next_stage, prompt, gate_results } =
         execution.0;
@@ -179,7 +175,7 @@ pub(super) fn execute_stage_blocking(
     if request.stage == Stage::ShipGate {
         return execute_ship_gate(ShipGateRequest {
             attempt: request.attempt,
-            merge_queue_policy: input.merge_queue_policy,
+
             repo_root: input.repo_root,
         });
     }

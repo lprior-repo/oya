@@ -349,7 +349,7 @@ mod tests {
             );
         }
 
-        let unknown_gate_outcome = gate_failure_outcome(&StageName::ShipGate, &Gate::ZjjMergeQueue);
+        let unknown_gate_outcome = gate_failure_outcome(&StageName::ShipGate, &Gate::Compiles);
         assert_eq!(unknown_gate_outcome, (FailureCategory::TestFailed, StageName::ShipGate));
     }
 

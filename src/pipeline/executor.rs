@@ -90,7 +90,7 @@ struct StageArtifactData<'a> {
 async fn execute_stage_workflow(
     ctx: &WorkflowContext<'_>,
     input: &StageExecutionInput<'_>,
-    config: &RuntimeConfig,
+    _config: &RuntimeConfig,
     execution_root: std::path::PathBuf,
 ) -> Result<(StageResult, String, Vec<GateResultData>), OyaError> {
     execute_stage_real(
@@ -173,12 +173,9 @@ pub async fn persist_stage_artifact(
 async fn prepare_workspace_lifecycle(
     ctx: &WorkflowContext<'_>,
     input: &StageExecutionInput<'_>,
-    config: &RuntimeConfig,
+    _config: &RuntimeConfig,
 ) -> Result<Option<WorkspaceLifecycle>, OyaError> {
-    if config.workspace_policy.should_skip() {
-        return Ok(None);
-    }
-    let request = workspace_prep_request(ctx, input, config).await?;
+    let request = workspace_prep_request(ctx, input).await?;
     let workspace_event = run_workspace_prep(ctx, request).await?;
     Ok(workspace_event.0.map(workspace_lifecycle_from_event))
 }
@@ -186,7 +183,6 @@ async fn prepare_workspace_lifecycle(
 async fn workspace_prep_request(
     ctx: &WorkflowContext<'_>,
     input: &StageExecutionInput<'_>,
-    config: &RuntimeConfig,
 ) -> Result<crate::runtime_tools::WorkspacePrepRequest, OyaError> {
     let recorded_at = super::state::workflow_timestamp_or_error(ctx).await?;
     Ok(crate::runtime_tools::WorkspacePrepRequest {
@@ -195,7 +191,6 @@ async fn workspace_prep_request(
         stage: input.stage.clone(),
         attempt: input.attempt,
         recorded_at,
-        workspace_policy: config.workspace_policy,
         repo_root: input.repo_root.to_path_buf(),
     })
 }

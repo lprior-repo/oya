@@ -468,15 +468,22 @@ fn normalize_workspace_segment(
         return Err(OpsMonitorError::InvalidFieldContent(field));
     }
 
-    let normalized = trimmed
-        .to_ascii_lowercase()
-        .chars()
-        .map(|char| if char.is_ascii_alphanumeric() || char == '-' { char } else { '-' })
-        .collect::<String>()
-        .split('-')
-        .filter(|segment| !segment.is_empty())
-        .collect::<Vec<_>>()
-        .join("-");
+    let normalized =
+        trimmed
+            .to_ascii_lowercase()
+            .chars()
+            .map(|char| {
+                if char.is_ascii_alphanumeric() || char == '-' || char == '_' {
+                    char
+                } else {
+                    '-'
+                }
+            })
+            .collect::<String>()
+            .split('-')
+            .filter(|segment| !segment.is_empty())
+            .collect::<Vec<_>>()
+            .join("-");
 
     if normalized.is_empty() {
         return Err(OpsMonitorError::InvalidFieldFormat(field));
@@ -1288,12 +1295,14 @@ fn schedule_merge_queue(
     let train_candidates = candidates
         .iter()
         .map(|candidate| MergeTrainCandidate {
-            bead_id: candidate.bead_id.clone(),
-            priority: candidate.priority,
-            depends_on: candidate.depends_on.clone(),
+            bead_id: MergeBeadId(candidate.bead_id.clone()),
+            priority: MergePriority(candidate.priority),
+            depends_on: candidate.depends_on.iter().cloned().map(MergeBeadId).collect(),
         })
         .collect::<Vec<_>>();
-    schedule_dependency_aware_priority_processing(&train_candidates).map_err(Into::into)
+    schedule_dependency_aware_priority_processing(&train_candidates)
+        .map(|res| res.into_iter().map(|id| id.0).collect())
+        .map_err(Into::into)
 }
 
 fn select_merge_candidate(

@@ -1,6 +1,5 @@
 use super::*;
 use crate::orchestrator_types::GateResultData;
-use crate::pipeline::MergeQueuePolicy;
 use crate::stage_executor::StageExecution;
 use oya::types::Gate;
 
@@ -147,7 +146,6 @@ pub(super) fn stage_success(stage: &Stage) -> (&'static str, Option<Stage>) {
 
 pub(super) struct ShipGateRequest {
     pub(super) attempt: u32,
-    pub(super) merge_queue_policy: MergeQueuePolicy,
     pub(super) repo_root: PathBuf,
 }
 
@@ -155,15 +153,10 @@ pub(super) fn execute_ship_gate(request: ShipGateRequest) -> Result<StageExecuti
     if request.attempt == 0 {
         return Err(OyaError("attempt must be greater than 0".to_string()));
     }
-    execute_ship_gate_with_gate_runner(request.merge_queue_policy, |gate| {
-        execute_gate(gate, &request.repo_root)
-    })
+    execute_ship_gate_with_gate_runner(|gate| execute_gate(gate, &request.repo_root))
 }
 
-pub(super) fn execute_ship_gate_with_gate_runner<F>(
-    merge_queue_policy: MergeQueuePolicy,
-    run_gate: F,
-) -> Result<StageExecution, OyaError>
+pub(super) fn execute_ship_gate_with_gate_runner<F>(run_gate: F) -> Result<StageExecution, OyaError>
 where
     F: Fn(Gate) -> Result<GateEvidence, OyaError>,
 {
@@ -172,19 +165,10 @@ where
     let mut gate_results = Vec::new();
 
     for gate in Stage::ShipGate.gates() {
-        if !merge_queue_policy.should_run(&gate) {
-            tracing::info!("SHIP GATE: skipping zjj merge queue check (disabled)");
-            continue;
-        }
-
         let gate_evidence = run_gate(gate.clone())?;
-        if let Some(failure) = cue_monitor_failure(
-            merge_queue_policy,
-            &gate,
-            &gate_evidence,
-            prompt.as_str(),
-            &mut gate_results,
-        ) {
+        if let Some(failure) =
+            cue_monitor_failure(&gate, &gate_evidence, prompt.as_str(), &mut gate_results)
+        {
             return Ok(failure);
         }
         gate_results.push(gate_result_data(&gate, &gate_evidence));
@@ -205,13 +189,12 @@ where
 }
 
 fn cue_monitor_failure(
-    merge_queue_policy: MergeQueuePolicy,
     gate: &Gate,
     gate_evidence: &GateEvidence,
     prompt: &str,
     gate_results: &mut Vec<GateResultData>,
 ) -> Option<StageExecution> {
-    if !should_validate_cue_monitor(merge_queue_policy, gate, gate_evidence) {
+    if !should_validate_cue_monitor(gate, gate_evidence) {
         return None;
     }
 
@@ -311,14 +294,8 @@ fn stale_evidence_failure(mut evidence: GateEvidence, message: String) -> GateEv
     evidence
 }
 
-fn should_validate_cue_monitor(
-    merge_queue_policy: MergeQueuePolicy,
-    gate: &Gate,
-    evidence: &GateEvidence,
-) -> bool {
-    matches!(merge_queue_policy, MergeQueuePolicy::Skip)
-        && *gate == Gate::CueArtifactGenerated
-        && evidence.command.contains(":cue-check")
+fn should_validate_cue_monitor(gate: &Gate, evidence: &GateEvidence) -> bool {
+    *gate == Gate::CueArtifactGenerated && evidence.command.contains(":cue-check")
 }
 
 fn main_drift_regression_message(gate: &Gate, evidence: &GateEvidence) -> Option<String> {
@@ -376,7 +353,6 @@ mod tests {
         execute_ship_gate_with_gate_runner, is_safe_holdout_line, sanitize_holdout_output,
         stale_evidence_message, FailureCategory, Gate, GateEvidence, Stage,
     };
-    use crate::pipeline::MergeQueuePolicy;
 
     #[test]
     fn sanitize_holdout_output_removes_sensitive_lines() {
@@ -433,7 +409,7 @@ mod tests {
 
     #[test]
     fn given_main_drift_monitor_regression_when_execute_ship_gate_then_land_is_blocked() {
-        let result = execute_ship_gate_with_gate_runner(MergeQueuePolicy::Skip, |gate| {
+        let result = execute_ship_gate_with_gate_runner(|gate| {
             if gate == Gate::CueArtifactGenerated {
                 return Ok(GateEvidence {
                     command: "moon run :cue-check".to_string(),
@@ -470,7 +446,7 @@ mod tests {
 
     #[test]
     fn given_no_main_drift_regression_when_execute_ship_gate_then_land_can_proceed() {
-        let result = execute_ship_gate_with_gate_runner(MergeQueuePolicy::Skip, |_gate| {
+        let result = execute_ship_gate_with_gate_runner(|_gate| {
             Ok(GateEvidence {
                 command: "moon run :cue-check".to_string(),
                 passed: true,
@@ -494,7 +470,7 @@ mod tests {
 
     #[test]
     fn given_cue_schema_failure_when_execute_ship_gate_then_routes_with_deterministic_failure() {
-        let result = execute_ship_gate_with_gate_runner(MergeQueuePolicy::Skip, |_gate| {
+        let result = execute_ship_gate_with_gate_runner(|_gate| {
             Ok(GateEvidence {
                 command: "moon run :cue-check".to_string(),
                 passed: true,

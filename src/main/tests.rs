@@ -4,7 +4,6 @@ use crate::operator_visibility::{
     doctor_enforcement_from_events, doctor_report_from_events, status_snapshot_from_events,
     validate_stress_harness,
 };
-use crate::pipeline::MergeQueuePolicy;
 use chrono::Datelike;
 use clap::{error::ErrorKind, CommandFactory};
 use oya::types::Gate;
@@ -97,12 +96,6 @@ fn test_parse_gate_command_rejects_unknown_moon_task() {
 }
 
 #[test]
-fn test_parse_gate_command_rejects_zjj_sync_status() {
-    let parsed = parse_gate_command("zjj sync --status");
-    assert!(parsed.is_err());
-}
-
-#[test]
 fn test_parse_gate_command_accepts_cue_check_task() {
     let parsed = parse_gate_command("moon run :cue-check");
     assert!(matches!(
@@ -113,71 +106,13 @@ fn test_parse_gate_command_accepts_cue_check_task() {
 
 #[test]
 fn test_gate_failure_outcome_unknown_shipgate_gate_defaults_to_stage_retry() {
-    let outcome = gate_failure_outcome(&Stage::ShipGate, &Gate::ZjjMergeQueue);
+    let outcome = gate_failure_outcome(&Stage::ShipGate, &Gate::Compiles);
     assert_eq!(outcome, (FailureCategory::TestFailed, Stage::ShipGate));
 }
 
 #[test]
-fn test_execute_ship_gate_skip_zjj_gate() {
-    use std::cell::RefCell;
-
-    let seen = RefCell::new(Vec::new());
-    let result = execute_ship_gate_with_gate_runner(MergeQueuePolicy::Skip, |gate| {
-        seen.borrow_mut().push(gate.clone());
-        Ok(GateEvidence {
-            command: "moon run :gate".to_string(),
-            passed: true,
-            exit_code: 0,
-            output: "ok".to_string(),
-            revision: Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string()),
-            current_revision: Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string()),
-        })
-    })
-    .expect("ship gate should pass when cue check passes and zjj is skipped");
-
-    assert_eq!(seen.into_inner(), vec![Gate::CueArtifactGenerated]);
-    assert!(result.passed);
-    assert_eq!(result.next_stage, None);
-}
-
-#[test]
-fn test_execute_ship_gate_enforce_runs_zjj_gate() {
-    use std::cell::RefCell;
-
-    let seen = RefCell::new(Vec::new());
-    let result = execute_ship_gate_with_gate_runner(MergeQueuePolicy::Enforce, |gate: Gate| {
-        seen.borrow_mut().push(gate.clone());
-        match gate {
-            Gate::CueArtifactGenerated => Ok(GateEvidence {
-                command: "moon run :cue-check".to_string(),
-                passed: true,
-                exit_code: 0,
-                output: "cue ok".to_string(),
-                revision: Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string()),
-                current_revision: Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string()),
-            }),
-            Gate::ZjjMergeQueue => Ok(GateEvidence {
-                command: "zjj sync --status".to_string(),
-                passed: true,
-                exit_code: 0,
-                output: "queue ok".to_string(),
-                revision: None,
-                current_revision: None,
-            }),
-            _ => Err(OyaError("unexpected gate".to_string())),
-        }
-    })
-    .expect("ship gate execution should return a stage result");
-
-    assert_eq!(seen.into_inner(), vec![Gate::CueArtifactGenerated, Gate::ZjjMergeQueue]);
-    assert!(result.passed);
-    assert_eq!(result.failure_category, None);
-    assert_eq!(result.next_stage, None);
-}
-
-#[test]
 fn test_execute_ship_gate_rejects_stale_cue_evidence() {
-    let result = execute_ship_gate_with_gate_runner(MergeQueuePolicy::Skip, |_gate| {
+    let result = execute_ship_gate_with_gate_runner(|_gate| {
         Ok(GateEvidence {
             command: "moon run :cue-check".to_string(),
             passed: true,
@@ -195,7 +130,7 @@ fn test_execute_ship_gate_rejects_stale_cue_evidence() {
 
 #[test]
 fn test_execute_ship_gate_rejects_missing_cue_revision_metadata() {
-    let result = execute_ship_gate_with_gate_runner(MergeQueuePolicy::Skip, |_gate| {
+    let result = execute_ship_gate_with_gate_runner(|_gate| {
         Ok(GateEvidence {
             command: "moon run :cue-check".to_string(),
             passed: true,
@@ -734,7 +669,7 @@ proptest! {
     ) {
         prop_assume!(pinned != current);
 
-        let result = execute_ship_gate_with_gate_runner(MergeQueuePolicy::Skip, |_gate| {
+        let result = execute_ship_gate_with_gate_runner(|_gate| {
             Ok(GateEvidence {
                 command: "moon run :cue-check".to_string(),
                 passed: true,
@@ -750,26 +685,6 @@ proptest! {
             prop_assert!(!execution.passed);
             prop_assert_eq!(execution.failure_category, Some(FailureCategory::OutputParseFailure));
             prop_assert!(execution.output.contains("stale evidence rejected"));
-        }
-    }
-
-    #[test]
-    fn prop_conflict_propagation_safety_only_merge_queue_maps_to_merge_conflict(
-        choose_merge_queue in any::<bool>()
-    ) {
-        let gate = if choose_merge_queue {
-            Gate::ZjjMergeQueue
-        } else {
-            Gate::CueArtifactGenerated
-        };
-        let (category, next_stage) = gate_failure_outcome(&Stage::ShipGate, &gate);
-
-        if choose_merge_queue {
-            prop_assert_eq!(category, FailureCategory::MergeConflict);
-            prop_assert_eq!(next_stage, Stage::Implementation);
-        } else {
-            prop_assert!(category != FailureCategory::MergeConflict);
-            prop_assert_eq!(next_stage, Stage::Implementation);
         }
     }
 }
@@ -844,7 +759,7 @@ fn given_cleanup_pending_run_past_ttl_when_doctor_runs_then_reclaim_is_flagged()
 
 #[test]
 fn given_stale_cue_revision_when_ship_gate_runs_then_merge_is_blocked() {
-    let result = execute_ship_gate_with_gate_runner(MergeQueuePolicy::Skip, |_gate| {
+    let result = execute_ship_gate_with_gate_runner(|_gate| {
         Ok(GateEvidence {
             command: "moon run :cue-check".to_string(),
             passed: true,

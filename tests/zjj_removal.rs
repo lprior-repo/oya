@@ -238,12 +238,7 @@ fn test_postcondition_all_stages_have_valid_gate_configurations() {
                 | Gate::MoonCi
                 | Gate::HoldoutScenarios
                 | Gate::CueArtifactGenerated => {
-                    // Valid (after ZJJ removal)
-                }
-                // This variant should be removed during implementation
-                Gate::ZjjMergeQueue => {
-                    // This case exists BEFORE removal, should be removed AFTER
-                    // This test will fail if ZjjMergeQueue is still in ShipGate.gates()
+                    // Valid
                 }
             }
         }
