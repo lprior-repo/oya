@@ -272,6 +272,26 @@ fn test_rate_limited_is_non_retryable() {
 }
 
 #[test]
+fn test_provider_unavailable_retries_for_explore_and_contract_only() {
+    let explore = test_pipeline_state(FailureCategory::ProviderUnavailable, Stage::Explore, 1);
+    assert!(should_retry_after_failure(&explore));
+
+    let contract = test_pipeline_state(FailureCategory::ProviderUnavailable, Stage::Contract, 1);
+    assert!(should_retry_after_failure(&contract));
+
+    let implementation =
+        test_pipeline_state(FailureCategory::ProviderUnavailable, Stage::Implementation, 1);
+    assert!(!should_retry_after_failure(&implementation));
+}
+
+#[test]
+fn test_provider_retry_backoff_grows_and_caps() {
+    assert_eq!(provider_retry_backoff(1), std::time::Duration::from_millis(1_000));
+    assert_eq!(provider_retry_backoff(2), std::time::Duration::from_millis(2_000));
+    assert_eq!(provider_retry_backoff(6), std::time::Duration::from_millis(8_000));
+}
+
+#[test]
 fn test_infra_failed_is_non_retryable() {
     let state = test_pipeline_state(FailureCategory::TestInfraFailed, Stage::Implementation, 1);
     assert!(!should_retry_after_failure(&state));
@@ -402,10 +422,19 @@ fn test_stage_timeout_duration_ms_never_negative() {
 
 #[test]
 fn test_stage_timeout_log_mentions_stage_attempt_and_watchdog() {
-    let message = stage_timeout_log(&Stage::Explore, 2, 480);
+    let mut state = test_pipeline_state(FailureCategory::ProviderUnavailable, Stage::Explore, 2);
+    state.orchestrator.model = "free-tier-model".to_string();
+    let input = PipelineRunInput {
+        run_id: "run-123".to_string(),
+        bead_id: "bead-abc".to_string(),
+        context: "ctx".to_string(),
+    };
+    let message = stage_timeout_log(&state, &input, 480);
     assert!(message.contains("stage=explore"));
     assert!(message.contains("attempt=2"));
     assert!(message.contains("watchdog_seconds=480"));
+    assert!(message.contains("model=free-tier-model"));
+    assert!(message.contains("run_id=run-123"));
 }
 
 #[test]

@@ -439,7 +439,7 @@ async fn build_stage_watchdog_timeout_artifact(
 ) -> Result<orchestrator_types::StageArtifact, OyaError> {
     let completed_at = workflow_timestamp_or_error(ctx).await?;
     let duration_ms = stage_timeout_duration_ms(&started_at, &completed_at);
-    let full_log = stage_timeout_log(&state.current_stage, state.attempt, watchdog_seconds);
+    let full_log = stage_timeout_log(state, input, watchdog_seconds);
     Ok(orchestrator_types::StageArtifact {
         stage: state.current_stage.as_str().to_string(),
         attempt: state.attempt,
@@ -477,11 +477,18 @@ fn stage_timeout_duration_ms(started_at: &str, completed_at: &str) -> u64 {
     (completed - started).num_milliseconds().max(0) as u64
 }
 
-fn stage_timeout_log(stage: &Stage, attempt: u32, watchdog_seconds: u64) -> String {
+fn stage_timeout_log(
+    state: &PipelineState,
+    input: &PipelineRunInput,
+    watchdog_seconds: u64,
+) -> String {
     format!(
-        "stage watchdog timeout: stage={} attempt={} watchdog_seconds={}",
-        stage.as_str(),
-        attempt,
+        "provider_diagnostics source=pipeline_watchdog stage={} attempt={} model={} run_id={} bead_id={} watchdog_seconds={}",
+        state.current_stage.as_str(),
+        state.attempt,
+        state.orchestrator.model,
+        input.run_id,
+        input.bead_id,
         watchdog_seconds
     )
 }
@@ -698,6 +705,7 @@ async fn handle_failed_stage(
         return Err(OyaError(terminal_pipeline_failure_message(state, artifact)));
     }
 
+    apply_retry_backoff_if_needed(ctx, state).await?;
     state.attempt += 1;
     let stage = state.current_stage.clone();
     state.orchestrator.model = resolve_model_for_stage_cached(ctx, state, &stage).await?;
@@ -717,8 +725,42 @@ fn terminal_pipeline_failure_message(
 
 fn should_retry_after_failure(state: &PipelineState) -> bool {
     state.last_failure.as_ref().is_some_and(|failure| {
-        failure.retryable && state.attempt < state.current_stage.max_attempts()
+        let retryable = failure.retryable
+            || transient_provider_retry_stage(&state.current_stage, &failure.category);
+        retryable && state.attempt < state.current_stage.max_attempts()
     })
+}
+
+fn transient_provider_retry_stage(stage: &Stage, category: &FailureCategory) -> bool {
+    *category == FailureCategory::ProviderUnavailable
+        && matches!(stage, Stage::Explore | Stage::Contract)
+}
+
+async fn apply_retry_backoff_if_needed(
+    ctx: &WorkflowContext<'_>,
+    state: &PipelineState,
+) -> Result<(), OyaError> {
+    let delay = state.last_failure.as_ref().and_then(|failure| {
+        transient_provider_retry_stage(&state.current_stage, &failure.category)
+            .then_some(provider_retry_backoff(state.attempt))
+    });
+    if let Some(delay) = delay {
+        tracing::warn!(
+            stage = %state.current_stage.as_str(),
+            attempt = state.attempt,
+            delay_ms = delay.as_millis(),
+            "provider unavailable; applying retry backoff"
+        );
+        ctx.sleep(delay)
+            .await
+            .map_err(|error| OyaError(format!("durable retry backoff failed: {}", error)))?;
+    }
+    Ok(())
+}
+
+fn provider_retry_backoff(attempt: u32) -> std::time::Duration {
+    let millis = 1_000_u64.saturating_mul(2_u64.saturating_pow(attempt.saturating_sub(1)));
+    std::time::Duration::from_millis(millis.min(8_000))
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

@@ -30,6 +30,7 @@ pub(super) struct StageExecution {
 pub(super) struct PromptStageRequest {
     pub prompt: String,
     pub stage: Stage,
+    pub attempt: u32,
     pub success_message: &'static str,
     pub success_next_stage: Option<Stage>,
     pub repo_root: PathBuf,
@@ -75,29 +76,8 @@ pub(super) async fn execute_stage_real(
     repo_root: PathBuf,
 ) -> Result<(StageResult, String, Vec<GateResultData>), OyaError> {
     validate_attempt(request.attempt)?;
-    let stage_timeout_seconds = stage_timeout_seconds(&request.stage);
-    let timeout_stage = request.stage.clone();
     let input = StageBlockingInput { request: request.clone(), merge_queue_policy, repo_root };
-    // Wrap the entire blocking operation in ctx.run() for stable replay
-    let execution: Json<StageExecution> = ctx
-        .run(move || async move {
-            match tokio::time::timeout(
-                Duration::from_secs(stage_timeout_seconds),
-                tokio::task::spawn_blocking(move || execute_stage_blocking(input)),
-            )
-            .await
-            {
-                Ok(join_result) => {
-                    let result = join_result.map_err(|error| {
-                        HandlerError::from(format!("spawn_blocking failed: {}", error))
-                    })?;
-                    result.map(Json).map_err(|error| HandlerError::from(error.0))
-                }
-                Err(_) => Ok(Json(stage_timeout_execution(&timeout_stage, stage_timeout_seconds))),
-            }
-        })
-        .await
-        .map_err(|e| OyaError(format!("ctx.run failed: {}", e)))?;
+    let execution = stage_execution_journaled(ctx, input).await?;
     let StageExecution { passed, output, failure_category, next_stage, prompt, gate_results } =
         execution.0;
     let stage_result = StageResult {
@@ -110,6 +90,39 @@ pub(super) async fn execute_stage_real(
         next_stage,
     };
     Ok((stage_result, prompt, gate_results))
+}
+
+async fn stage_execution_journaled(
+    ctx: &WorkflowContext<'_>,
+    input: StageBlockingInput,
+) -> Result<Json<StageExecution>, OyaError> {
+    let timeout_seconds = stage_timeout_seconds(&input.request.stage);
+    let timeout_stage = input.request.stage.clone();
+    let timeout_attempt = input.request.attempt;
+    let timeout_model = input.request.model.clone();
+    ctx.run(move || async move {
+        match tokio::time::timeout(
+            Duration::from_secs(timeout_seconds),
+            tokio::task::spawn_blocking(move || execute_stage_blocking(input)),
+        )
+        .await
+        {
+            Ok(join_result) => {
+                let result = join_result.map_err(|error| {
+                    HandlerError::from(format!("spawn_blocking failed: {}", error))
+                })?;
+                result.map(Json).map_err(|error| HandlerError::from(error.0))
+            }
+            Err(_) => Ok(Json(stage_timeout_execution(
+                &timeout_stage,
+                &timeout_model,
+                timeout_attempt,
+                timeout_seconds,
+            ))),
+        }
+    })
+    .await
+    .map_err(|e| OyaError(format!("ctx.run failed: {}", e)))
 }
 
 fn stage_timeout_seconds(stage: &Stage) -> u64 {
@@ -129,10 +142,21 @@ fn stage_timeout_seconds(stage: &Stage) -> u64 {
         .unwrap_or(default)
 }
 
-fn stage_timeout_execution(stage: &Stage, timeout_seconds: u64) -> StageExecution {
+fn stage_timeout_execution(
+    stage: &Stage,
+    model: &str,
+    attempt: u32,
+    timeout_seconds: u64,
+) -> StageExecution {
     StageExecution {
         passed: false,
-        output: format!("stage execution timed out after {} seconds", timeout_seconds),
+        output: format!(
+            "provider_diagnostics source=stage_executor_timeout stage={} attempt={} model={} timeout_seconds={}",
+            stage.as_str(),
+            attempt,
+            model,
+            timeout_seconds
+        ),
         failure_category: Some(FailureCategory::ProviderUnavailable),
         next_stage: Some(stage.clone()),
         prompt: String::new(),
@@ -182,6 +206,7 @@ fn execute_prompt_driven_stage(
     execute_prompt_stage(PromptStageRequest {
         prompt,
         stage: request.stage,
+        attempt: request.attempt,
         success_message,
         success_next_stage,
         repo_root,
@@ -229,6 +254,7 @@ fn opencode_failure_stage_execution(
 ) -> StageExecution {
     let category =
         oya::classify_opencode_error(&output).unwrap_or(FailureCategory::OutputParseFailure);
+    let output = with_provider_diagnostics(category.clone(), request, output);
     let next_stage = request.stage.clone();
     StageExecution {
         passed: false,
@@ -238,6 +264,25 @@ fn opencode_failure_stage_execution(
         prompt: request.prompt.clone(),
         gate_results: Vec::new(),
     }
+}
+
+fn with_provider_diagnostics(
+    category: FailureCategory,
+    request: &PromptStageRequest,
+    output: String,
+) -> String {
+    if category != FailureCategory::ProviderUnavailable {
+        return output;
+    }
+    let detail = summarize_failure_output(&category, &output);
+    format!(
+        "provider_diagnostics source=opencode stage={} attempt={} model={} detail={}\n{}",
+        request.stage.as_str(),
+        request.attempt,
+        request.model,
+        detail,
+        output
+    )
 }
 
 fn gate_failure_stage_execution(
@@ -314,9 +359,10 @@ mod tests {
 
     #[test]
     fn test_stage_timeout_execution_marks_retryable_failure() {
-        let execution = stage_timeout_execution(&Stage::Explore, 123);
+        let execution = stage_timeout_execution(&Stage::Explore, "model", 2, 123);
         assert!(!execution.passed);
         assert!(execution.output.contains("123"));
+        assert!(execution.output.contains("source=stage_executor_timeout"));
         assert_eq!(execution.failure_category, Some(FailureCategory::ProviderUnavailable));
         assert_eq!(execution.next_stage, Some(Stage::Explore));
     }

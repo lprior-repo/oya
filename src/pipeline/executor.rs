@@ -14,6 +14,7 @@
 #![forbid(unsafe_code)]
 
 use std::path::Path;
+use std::time::Duration;
 
 use oya::types::{truncate_clean, StageFailure, StageName as Stage, StageResult};
 use restate_sdk::prelude::*;
@@ -152,15 +153,21 @@ async fn prepare_workspace_lifecycle(
     input: &StageExecutionInput<'_>,
     config: &RuntimeConfig,
 ) -> Result<Option<WorkspaceLifecycle>, OyaError> {
-    // Skip workspace preparation if policy says so
     if config.workspace_policy.should_skip() {
         return Ok(None);
     }
+    let request = workspace_prep_request(ctx, input, config).await?;
+    let workspace_event = run_workspace_prep(ctx, request).await?;
+    Ok(workspace_event.0.map(workspace_lifecycle_from_event))
+}
 
+async fn workspace_prep_request(
+    ctx: &WorkflowContext<'_>,
+    input: &StageExecutionInput<'_>,
+    config: &RuntimeConfig,
+) -> Result<crate::runtime_tools::WorkspacePrepRequest, OyaError> {
     let recorded_at = super::state::workflow_timestamp_or_error(ctx).await?;
-
-    // Prepare workspace in ctx.run so replay does not repeat side effects.
-    let request = crate::runtime_tools::WorkspacePrepRequest {
+    Ok(crate::runtime_tools::WorkspacePrepRequest {
         run_id: input.run_id.to_string(),
         bead_id: input.bead_id.to_string(),
         stage: input.stage.clone(),
@@ -168,33 +175,58 @@ async fn prepare_workspace_lifecycle(
         recorded_at,
         workspace_policy: config.workspace_policy,
         repo_root: input.repo_root.to_path_buf(),
-    };
-    let workspace_event = ctx
-        .run(move || async move {
-            let result = tokio::task::spawn_blocking(move || prepare_stage_workspace(request))
-                .await
-                .map_err(|error| {
+    })
+}
+
+async fn run_workspace_prep(
+    ctx: &WorkflowContext<'_>,
+    request: crate::runtime_tools::WorkspacePrepRequest,
+) -> Result<Json<Option<crate::orchestrator_types::WorkspaceLifecycleEvent>>, OyaError> {
+    let timeout_seconds = workspace_prep_timeout_seconds();
+    ctx.run(move || async move {
+        match tokio::time::timeout(
+            Duration::from_secs(timeout_seconds),
+            tokio::task::spawn_blocking(move || prepare_stage_workspace(request)),
+        )
+        .await
+        {
+            Ok(join_result) => {
+                let result = join_result.map_err(|error| {
                     HandlerError::from(format!("workspace task join failed: {}", error))
                 })?;
-            result.map(Json).map_err(|error| HandlerError::from(error.0))
-        })
-        .await
-        .map_err(|error| OyaError(format!("workspace journaling failed: {}", error)))?;
+                result.map(Json).map_err(|error| HandlerError::from(error.0))
+            }
+            Err(_) => Err(HandlerError::from(format!(
+                "workspace preparation timed out after {} seconds",
+                timeout_seconds
+            ))),
+        }
+    })
+    .await
+    .map_err(|error| OyaError(format!("workspace journaling failed: {}", error)))
+}
 
-    // Convert to WorkspaceLifecycle (persistable type)
-    match workspace_event.0 {
-        Some(event) => Ok(Some(WorkspaceLifecycle {
-            name: event.workspace,
-            path: event.workspace_path,
-            queue_command: event.queue_command,
-            queue_passed: event.queue_passed,
-            queue_exit_code: event.queue_exit_code,
-            add_command: event.add_command,
-            add_passed: event.add_passed,
-            add_exit_code: event.add_exit_code,
-        })),
-        None => Ok(None),
+fn workspace_lifecycle_from_event(
+    event: crate::orchestrator_types::WorkspaceLifecycleEvent,
+) -> WorkspaceLifecycle {
+    WorkspaceLifecycle {
+        name: event.workspace,
+        path: event.workspace_path,
+        queue_command: event.queue_command,
+        queue_passed: event.queue_passed,
+        queue_exit_code: event.queue_exit_code,
+        add_command: event.add_command,
+        add_passed: event.add_passed,
+        add_exit_code: event.add_exit_code,
     }
+}
+
+fn workspace_prep_timeout_seconds() -> u64 {
+    std::env::var("OYA_WORKSPACE_PREP_TIMEOUT_SECONDS")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .map(|seconds| seconds.clamp(10, 300))
+        .unwrap_or(45)
 }
 
 fn resolve_execution_root(
@@ -394,5 +426,19 @@ mod tests {
         assert!(!stage_output.success);
         assert_eq!(stage_output.exit_code, 1);
         assert_eq!(stage_output.feedback, "compile_failed");
+    }
+
+    #[test]
+    fn test_workspace_prep_timeout_seconds_defaults_and_clamps() {
+        std::env::remove_var("OYA_WORKSPACE_PREP_TIMEOUT_SECONDS");
+        assert_eq!(workspace_prep_timeout_seconds(), 45);
+
+        std::env::set_var("OYA_WORKSPACE_PREP_TIMEOUT_SECONDS", "1");
+        assert_eq!(workspace_prep_timeout_seconds(), 10);
+
+        std::env::set_var("OYA_WORKSPACE_PREP_TIMEOUT_SECONDS", "900");
+        assert_eq!(workspace_prep_timeout_seconds(), 300);
+
+        std::env::remove_var("OYA_WORKSPACE_PREP_TIMEOUT_SECONDS");
     }
 }
