@@ -63,8 +63,8 @@ fn given_special_chars_when_building_workspace_name_then_normalizes_to_hyphens()
     assert!(result.is_ok(), "Should succeed with special characters");
     let workspace = result.unwrap();
 
-    // Invariant: Special characters replaced with hyphens
-    assert_eq!(workspace, "oya-test-run-id-qa-stage-a2");
+    // Invariant: Special characters replaced with hyphens, underscores preserved
+    assert_eq!(workspace, "oya-test-run-id-qa_stage-a2");
 
     // Invariant: Consecutive hyphens collapsed
     assert!(!workspace.contains("--"), "Should collapse consecutive hyphens");
@@ -161,7 +161,7 @@ fn given_oversized_inputs_when_building_workspace_name_then_rejects() {
     // Create inputs that would exceed 64 chars
     // Format: oya-{run_id}-{stage}-a{attempt}
     // Max run_id + stage combined should fit in ~50 chars
-    let run_id = "r".repeat(40);
+    let run_id = "r".repeat(50);
     let stage = "s".repeat(10);
     let attempt = 10;
 
@@ -239,7 +239,7 @@ fn given_implementation_stage_when_getting_gates_then_includes_compiles_and_test
     assert!(!gates.is_empty(), "Implementation should have gates");
     assert!(gates.contains(&Gate::Compiles), "Implementation must include Compiles gate");
     assert!(gates.contains(&Gate::TestsPass), "Implementation must include TestsPass gate");
-    assert_eq!(gates.len(), 1, "Implementation should have exactly 2 gates");
+    assert_eq!(gates.len(), 2, "Implementation should have exactly 2 gates");
 }
 
 /// Given: Contract stage

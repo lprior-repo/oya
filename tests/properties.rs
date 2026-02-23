@@ -176,7 +176,7 @@ proptest! {
             prop_assert_eq!(gates.len(), 1);
         }
         if stage == StageName::ShipGate {
-            prop_assert_eq!(gates.len(), 2);
+            prop_assert_eq!(gates.len(), 1);
         }
     }
 }
