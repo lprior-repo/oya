@@ -25,3 +25,7 @@
 {"session_name":"src-2ey","commit_id":"","pre_merge_commit_id":"f4c494ed0f4bf4947f78ecd7031c4f19d75908cb","timestamp":1771789769,"pushed_to_remote":false,"status":"completed"}
 {"session_name":"src-2ey","commit_id":"","pre_merge_commit_id":"a678119194735fcb5cffd85b0b532159f1762b60","timestamp":1771789848,"pushed_to_remote":false,"status":"completed"}
 {"session_name":"src-2zb","commit_id":"","pre_merge_commit_id":"08e4a4859050866d20d99343ef3fc3df42e36f5d","timestamp":1771791911,"pushed_to_remote":false,"status":"completed"}
+{"session_name":"contracts-smoke-decision","commit_id":"","pre_merge_commit_id":"e9c04df55688ec270818c6fbc024c0cc9331a180","timestamp":1771873892,"pushed_to_remote":false,"status":"completed"}
+{"session_name":"contracts-smoke-stages","commit_id":"","pre_merge_commit_id":"d7526c7d8e7fd32f94ee4cc4e7e31235d2490794","timestamp":1771873900,"pushed_to_remote":false,"status":"completed"}
+{"session_name":"tests-cupid-error","commit_id":"","pre_merge_commit_id":"89ba8ed51af788590379b10cbc05896e19f72db8","timestamp":1771873906,"pushed_to_remote":false,"status":"completed"}
+{"session_name":"tests-smoke-spaces","commit_id":"","pre_merge_commit_id":"cc4aafbdf08bc4d13f3aea9ff21822fab8897e12","timestamp":1771873912,"pushed_to_remote":false,"status":"completed"}

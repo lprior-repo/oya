@@ -433,10 +433,7 @@ mod tests {
         assert!(result.is_ok());
         let execution = match result {
             Ok(value) => value,
-            Err(error) => {
-                assert!(false, "unexpected error: {}", error);
-                return;
-            }
+            Err(_) => return, // assert!(result.is_ok()) above already caught this
         };
         assert!(!execution.passed);
         assert!(execution.output.contains("main drift monitor blocked land"));
@@ -460,10 +457,7 @@ mod tests {
         assert!(result.is_ok());
         let execution = match result {
             Ok(value) => value,
-            Err(error) => {
-                assert!(false, "unexpected error: {}", error);
-                return;
-            }
+            Err(_) => return,
         };
         assert!(execution.passed);
     }
@@ -484,10 +478,7 @@ mod tests {
         assert!(result.is_ok());
         let execution = match result {
             Ok(value) => value,
-            Err(error) => {
-                assert!(false, "unexpected error: {}", error);
-                return;
-            }
+            Err(_) => return,
         };
         assert!(!execution.passed);
         assert_eq!(execution.failure_category, Some(FailureCategory::OutputParseFailure));

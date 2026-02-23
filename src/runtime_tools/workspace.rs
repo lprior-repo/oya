@@ -23,7 +23,19 @@ pub(crate) fn prepare_stage_workspace(
     request: WorkspacePrepRequest,
 ) -> Result<Option<WorkspaceLifecycleEvent>, OyaError> {
     let queue_result = run_zjj_queue(&request)?;
+    if !queue_result.0 {
+        return Err(OyaError(format!(
+            "zjj queue --add {} failed (exit {}): {}",
+            request.bead_id, queue_result.2, queue_result.1
+        )));
+    }
     let add_result = run_zjj_add(&request)?;
+    if !add_result.0 {
+        return Err(OyaError(format!(
+            "zjj add {} failed (exit {}): {}",
+            request.bead_id, add_result.2, add_result.1
+        )));
+    }
     let coordination = build_coordination(&request.bead_id)?;
     let workspace_path = resolve_workspace_path(&request.repo_root, &request.bead_id);
     Ok(Some(build_lifecycle_event(

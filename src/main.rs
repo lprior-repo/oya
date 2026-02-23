@@ -201,7 +201,7 @@ async fn build_start_context(
             Err(error) => {
                 let message = error.to_string();
                 if is_tracker_backpressure_error(message.as_str()) {
-                    let fallback_model = configured_fallback_model();
+                    let fallback_model = configured_fallback_model(ctx).await?;
                     tracing::warn!(
                         "usage tracker unavailable at run start; using fallback model '{}'",
                         fallback_model
@@ -218,12 +218,15 @@ async fn build_start_context(
     Ok(StartContext { run_id: ctx.key().to_string(), bead_id, context, model, started_at })
 }
 
-fn configured_fallback_model() -> String {
-    std::env::var("OYA_FALLBACK_MODEL")
-        .ok()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-        .map_or_else(|| "openai/gpt-5".to_string(), std::convert::identity)
+async fn configured_fallback_model(ctx: &WorkflowContext<'_>) -> Result<String, OyaError> {
+    let raw = stable_env_var(ctx, "OYA_FALLBACK_MODEL")
+        .await
+        .map_err(|e| OyaError(format!("fallback model env read failed: {}", e)))?;
+    Ok(raw
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map_or_else(|| "openai/gpt-5".to_string(), str::to_string))
 }
 
 /// Resolve the active model for a stage via the OyaUsageTracker VirtualObject.
@@ -353,7 +356,7 @@ async fn persist_run_start(
 fn build_running_orchestrator_state(start: &StartContext) -> OrchestratorState {
     OrchestratorState {
         status: "running".to_string(),
-        stage: "plan".to_string(),
+        stage: Stage::Explore.as_str().to_string(),
         attempt: 1,
         bead_id: start.bead_id.clone(),
         context: start.context.clone(),
@@ -379,7 +382,7 @@ fn build_run_started_event(start: &StartContext) -> DurableEvent {
         event_type: "run_started".to_string(),
         run_id: start.run_id.clone(),
         bead_id: start.bead_id.clone(),
-        stage: "plan".to_string(),
+        stage: Stage::Explore.as_str().to_string(),
         attempt: 1,
         status: "running".to_string(),
         reason: "run accepted".to_string(),
@@ -509,12 +512,15 @@ async fn run_pipeline_loop(
     }
 }
 
-fn pipeline_stage_watchdog_seconds() -> u64 {
-    std::env::var("OYA_PIPELINE_STAGE_WATCHDOG_SECONDS")
-        .ok()
-        .and_then(|value| value.trim().parse::<u64>().ok())
-        .map(|seconds| seconds.clamp(60, 3_600))
-        .unwrap_or(DEFAULT_PIPELINE_STAGE_WATCHDOG_SECONDS)
+async fn pipeline_stage_watchdog_seconds(ctx: &WorkflowContext<'_>) -> Result<u64, OyaError> {
+    let raw = stable_env_var(ctx, "OYA_PIPELINE_STAGE_WATCHDOG_SECONDS")
+        .await
+        .map_err(|e| OyaError(format!("watchdog env read failed: {}", e)))?;
+    Ok(raw
+        .as_deref()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .map(|s| s.clamp(60, 3_600))
+        .unwrap_or(DEFAULT_PIPELINE_STAGE_WATCHDOG_SECONDS))
 }
 
 async fn run_pipeline_stage_with_watchdog(
@@ -524,7 +530,7 @@ async fn run_pipeline_stage_with_watchdog(
     state: &PipelineState,
 ) -> Result<orchestrator_types::StageArtifact, OyaError> {
     let started_at = workflow_timestamp_or_error(ctx).await?;
-    let watchdog_seconds = pipeline_stage_watchdog_seconds();
+    let watchdog_seconds = pipeline_stage_watchdog_seconds(ctx).await?;
     let execution = run_pipeline_stage(ctx, config, input, state);
     let timeout_result =
         tokio::time::timeout(std::time::Duration::from_secs(watchdog_seconds), execution).await;
@@ -764,6 +770,9 @@ async fn completed_stage_next_action(
     }
 
     if let Err(landing_failure) = run_landing_plane(ctx, state, config, artifact).await {
+        // Best-effort workspace cleanup on landing failure
+        run_zjj_abort_best_effort(ctx, &config.repo_root, &state.orchestrator.bead_id).await;
+
         state.current_stage = landing_failure.next_stage;
         state.attempt = 1;
         let retryable = oya::is_retryable_failure(&landing_failure.failure_category);
@@ -806,7 +815,7 @@ async fn handle_failed_stage(
         return Ok(true);
     }
 
-    if !should_retry_after_failure(state) {
+    if !should_retry_after_failure(ctx, state).await? {
         block_and_file_remediation(ctx, &config.repo_root, state, artifact).await?;
         mark_run_failed(ctx, state, artifact).await?;
         return Err(OyaError(terminal_pipeline_failure_message(state, artifact)));
@@ -945,12 +954,15 @@ fn should_rotate_provider_on_failure(category: &FailureCategory) -> bool {
     is_rate_limit_failure(category) || *category == FailureCategory::ProviderUnavailable
 }
 
-fn provider_pool_recovery_seconds() -> u64 {
-    std::env::var("OYA_PROVIDER_POOL_RECOVERY_SECONDS")
-        .ok()
-        .and_then(|value| value.trim().parse::<u64>().ok())
-        .map(|seconds| seconds.clamp(60, 900))
-        .unwrap_or(DEFAULT_PROVIDER_POOL_RECOVERY_SECONDS)
+async fn provider_pool_recovery_seconds(ctx: &WorkflowContext<'_>) -> Result<u64, OyaError> {
+    let raw = stable_env_var(ctx, "OYA_PROVIDER_POOL_RECOVERY_SECONDS")
+        .await
+        .map_err(|e| OyaError(format!("pool recovery env read failed: {}", e)))?;
+    Ok(raw
+        .as_deref()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .map(|s| s.clamp(60, 900))
+        .unwrap_or(DEFAULT_PROVIDER_POOL_RECOVERY_SECONDS))
 }
 
 async fn resolve_model_for_stage_with_pool_recovery(
@@ -972,7 +984,8 @@ async fn resolve_model_for_stage_with_pool_recovery(
                 if !is_tracker_backpressure_error(message.as_str()) || attempts >= 3 {
                     return Err(error);
                 }
-                let delay_seconds = provider_pool_recovery_seconds() * u64::from(attempts);
+                let delay_seconds =
+                    provider_pool_recovery_seconds(ctx).await? * u64::from(attempts);
                 let delay = std::time::Duration::from_secs(delay_seconds.min(1_800));
                 tracing::warn!(
                     tier = %tier,
@@ -1030,29 +1043,88 @@ fn terminal_pipeline_failure_message(
     )
 }
 
-fn should_retry_after_failure(state: &PipelineState) -> bool {
-    state.last_failure.as_ref().is_some_and(|failure| {
-        let retryable = failure.retryable
-            || transient_provider_retry_stage(&state.current_stage, &failure.category);
-        retryable
-            && state.attempt < max_attempts_for_failure(&state.current_stage, &failure.category)
-    })
-}
-
-fn max_attempts_for_failure(stage: &Stage, category: &FailureCategory) -> u32 {
-    if transient_provider_retry_stage(stage, category) {
-        provider_unavailable_max_attempts()
-    } else {
-        stage.max_attempts()
+async fn should_retry_after_failure(
+    ctx: &WorkflowContext<'_>,
+    state: &PipelineState,
+) -> Result<bool, OyaError> {
+    match state.last_failure.as_ref() {
+        None => Ok(false),
+        Some(failure) => {
+            let max =
+                max_attempts_for_failure(ctx, &state.current_stage, &failure.category).await?;
+            Ok(should_retry_with_max(state, failure, max))
+        }
     }
 }
 
-fn provider_unavailable_max_attempts() -> u32 {
+fn should_retry_with_max(state: &PipelineState, failure: &StageFailure, max: u32) -> bool {
+    let retryable = failure.retryable
+        || transient_provider_retry_stage(&state.current_stage, &failure.category);
+    retryable && state.attempt < max
+}
+
+// Pure sync helpers used in tests. These read env vars directly from the process
+// environment (no Restate journaling) — acceptable outside a workflow context.
+#[cfg(test)]
+fn pipeline_stage_watchdog_seconds_sync() -> u64 {
+    std::env::var("OYA_PIPELINE_STAGE_WATCHDOG_SECONDS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .map(|s| s.clamp(60, 3_600))
+        .unwrap_or(DEFAULT_PIPELINE_STAGE_WATCHDOG_SECONDS)
+}
+
+#[cfg(test)]
+fn provider_unavailable_max_attempts_sync() -> u32 {
     std::env::var("OYA_PROVIDER_UNAVAILABLE_MAX_ATTEMPTS")
         .ok()
-        .and_then(|value| value.trim().parse::<u32>().ok())
-        .map(|value| value.clamp(2, 6))
+        .and_then(|v| v.trim().parse::<u32>().ok())
+        .map(|v| v.clamp(2, 6))
         .unwrap_or(DEFAULT_PROVIDER_UNAVAILABLE_MAX_ATTEMPTS)
+}
+
+#[cfg(test)]
+fn provider_pool_recovery_seconds_sync() -> u64 {
+    std::env::var("OYA_PROVIDER_POOL_RECOVERY_SECONDS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .map(|s| s.clamp(60, 900))
+        .unwrap_or(DEFAULT_PROVIDER_POOL_RECOVERY_SECONDS)
+}
+
+#[cfg(test)]
+fn should_retry_after_failure_sync(state: &PipelineState) -> bool {
+    state.last_failure.as_ref().is_some_and(|failure| {
+        let max = if transient_provider_retry_stage(&state.current_stage, &failure.category) {
+            provider_unavailable_max_attempts_sync()
+        } else {
+            state.current_stage.max_attempts()
+        };
+        should_retry_with_max(state, failure, max)
+    })
+}
+
+async fn max_attempts_for_failure(
+    ctx: &WorkflowContext<'_>,
+    stage: &Stage,
+    category: &FailureCategory,
+) -> Result<u32, OyaError> {
+    if transient_provider_retry_stage(stage, category) {
+        provider_unavailable_max_attempts(ctx).await
+    } else {
+        Ok(stage.max_attempts())
+    }
+}
+
+async fn provider_unavailable_max_attempts(ctx: &WorkflowContext<'_>) -> Result<u32, OyaError> {
+    let raw = stable_env_var(ctx, "OYA_PROVIDER_UNAVAILABLE_MAX_ATTEMPTS")
+        .await
+        .map_err(|e| OyaError(format!("provider max attempts env read failed: {}", e)))?;
+    Ok(raw
+        .as_deref()
+        .and_then(|v| v.trim().parse::<u32>().ok())
+        .map(|v| v.clamp(2, 6))
+        .unwrap_or(DEFAULT_PROVIDER_UNAVAILABLE_MAX_ATTEMPTS))
 }
 
 fn transient_provider_retry_stage(_stage: &Stage, category: &FailureCategory) -> bool {
@@ -1183,6 +1255,9 @@ async fn block_and_file_remediation(
     let title = format!("[remediation] {} retry-exhausted", bead_id);
     let description = remediation_description(state, artifact);
     let root = repo_root.to_path_buf();
+
+    // Best-effort workspace cleanup — must happen before bead status update
+    run_zjj_abort_best_effort(ctx, &root, &bead_id).await;
 
     let blocked_args = vec!["update", &bead_id, "--status", "blocked"];
     run_br_command(ctx, &root, &blocked_args).await?;
@@ -1380,6 +1455,35 @@ async fn record_stack_transition(
     set_json_state(ctx, "stack_transition", &metadata)
 }
 
+/// Abort the zjj workspace for a bead on a best-effort basis.
+/// Errors are logged but not propagated — workspace cleanup must not
+/// mask the primary failure that triggered the abort.
+async fn run_zjj_abort_best_effort(ctx: &WorkflowContext<'_>, repo_root: &Path, bead_id: &str) {
+    let root = repo_root.to_path_buf();
+    let workspace = bead_id.to_string();
+    let bead_id_owned = bead_id.to_string();
+    let result = ctx
+        .run(move || async move {
+            let args_owned = [
+                "abort".to_string(),
+                "--workspace".to_string(),
+                workspace,
+                "--confirm".to_string(),
+            ];
+            let output = tokio::task::spawn_blocking(move || {
+                let args_ref: Vec<&str> = args_owned.iter().map(String::as_str).collect();
+                run_command_with_timeout_with_exit("zjj", &args_ref, 30, &root)
+            })
+            .await
+            .map_err(|e| HandlerError::from(format!("zjj abort join failed: {}", e)))?;
+            output.map(|_| ()).map_err(|e| HandlerError::from(e.0))
+        })
+        .await;
+    if let Err(error) = result {
+        tracing::warn!(bead_id = %bead_id_owned, error = %error, "zjj abort best-effort failed");
+    }
+}
+
 async fn run_br_command(
     ctx: &WorkflowContext<'_>,
     repo_root: &Path,
@@ -1485,11 +1589,18 @@ async fn run_landing_plane(
     artifact: &orchestrator_types::StageArtifact,
 ) -> Result<(), LandingFailure> {
     let run_root = resolve_landing_run_root(config, artifact);
+
+    // Phase 1: CI gate
     for template in LANDING_STEPS {
         let step = landing_step_from_template(template);
         run_landing_step(ctx, &run_root, step).await?;
     }
 
+    // Phase 2: Merge workspace into main (zjj sync → zjj done)
+    run_landing_step(ctx, &run_root, zjj_sync_step()).await?;
+    run_landing_step(ctx, &run_root, zjj_done_step(&state.orchestrator.bead_id)).await?;
+
+    // Phase 3: Close bead and flush bead tracker
     run_landing_step(ctx, &run_root, closing_step(&state.orchestrator.bead_id)).await?;
     run_landing_step(ctx, &run_root, sync_flush_step()).await?;
 
@@ -1508,6 +1619,30 @@ fn landing_step_from_template(template: &LandingStepTemplate) -> CommandStep {
     }
 }
 
+fn zjj_sync_step() -> CommandStep {
+    CommandStep {
+        id: "zjj_sync".to_string(),
+        label: "zjj sync".to_string(),
+        program: "zjj".to_string(),
+        args: vec!["sync".to_string()],
+        timeout_seconds: 120,
+        failure_category: FailureCategory::MergeConflict,
+        next_stage: Stage::Implementation,
+    }
+}
+
+fn zjj_done_step(bead_id: &str) -> CommandStep {
+    CommandStep {
+        id: "zjj_done".to_string(),
+        label: "zjj done".to_string(),
+        program: "zjj".to_string(),
+        args: vec!["done".to_string(), "--workspace".to_string(), bead_id.to_string()],
+        timeout_seconds: 120,
+        failure_category: FailureCategory::MergeConflict,
+        next_stage: Stage::Implementation,
+    }
+}
+
 fn closing_step(bead_id: &str) -> CommandStep {
     CommandStep {
         id: "br_close".to_string(),
@@ -1515,8 +1650,8 @@ fn closing_step(bead_id: &str) -> CommandStep {
         program: "br".to_string(),
         args: vec!["close".to_string(), bead_id.to_string()],
         timeout_seconds: 60,
-        failure_category: FailureCategory::OutputParseFailure,
-        next_stage: Stage::ShipGate,
+        failure_category: FailureCategory::TestFailed,
+        next_stage: Stage::Implementation,
     }
 }
 
@@ -1527,8 +1662,8 @@ fn sync_flush_step() -> CommandStep {
         program: "br".to_string(),
         args: vec!["sync".to_string(), "--flush-only".to_string()],
         timeout_seconds: 60,
-        failure_category: FailureCategory::OutputParseFailure,
-        next_stage: Stage::ShipGate,
+        failure_category: FailureCategory::TestFailed,
+        next_stage: Stage::Implementation,
     }
 }
 
@@ -2188,10 +2323,11 @@ fn build_restate_endpoint() -> Endpoint {
         "Discovered Restate services before binding"
     );
 
+    let usage_service_options = build_restate_service_options(service_option_input);
     Endpoint::builder()
         .bind_with_options(workflow_service, workflow_service_options)
         .bind_with_options(monitor_service, monitor_service_options)
-        .bind(OyaUsageTrackerImpl.serve())
+        .bind_with_options(OyaUsageTrackerImpl.serve(), usage_service_options)
         .build()
 }
 

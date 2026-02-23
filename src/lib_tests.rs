@@ -135,12 +135,11 @@ fn make_valid_bead_min_report() -> BeadMinReport {
 }
 
 fn make_valid_bead_cupid_report() -> BeadCupidReport {
-    let plan_result = build_bead_cupid_plan(&BeadCupidInput {
+    let plan = match build_bead_cupid_plan(&BeadCupidInput {
         run_id: "run-cupid-001".to_string(),
         bead_id: "bead-cupid-001".to_string(),
-    });
-    let plan = match plan_result {
-        Ok(value) => value,
+    }) {
+        Ok(p) => p,
         Err(_) => {
             return BeadCupidReport {
                 plan: BeadCupidPlan {
@@ -148,7 +147,7 @@ fn make_valid_bead_cupid_report() -> BeadCupidReport {
                     bead_id: "bead-cupid-001".to_string(),
                     runtime_command: DEFAULT_BEAD_CUPID_RUNTIME_COMMAND.to_string(),
                     ingress_health_url: DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL.to_string(),
-                    orchestrator_status_url: "http://localhost:8080/Oya/run-cupid-001/get_status"
+                    orchestrator_status_url: "http://localhost:8080/Oya/bead-cupid-001/get_status"
                         .to_string(),
                 },
                 checks: vec![],
@@ -158,12 +157,17 @@ fn make_valid_bead_cupid_report() -> BeadCupidReport {
         }
     };
 
-    let runtime_result = start_bead_cupid_runtime(&plan);
-    let runtime = match runtime_result {
-        Ok(value) => value,
+    let runtime = match start_bead_cupid_runtime(&plan) {
+        Ok(r) => r,
         Err(_) => {
             return BeadCupidReport {
-                plan,
+                plan: BeadCupidPlan {
+                    run_id: plan.run_id,
+                    bead_id: plan.bead_id,
+                    runtime_command: plan.runtime_command,
+                    ingress_health_url: plan.ingress_health_url,
+                    orchestrator_status_url: plan.orchestrator_status_url,
+                },
                 checks: vec![],
                 stages: vec![],
                 decision: BeadCupidDecision::Fail,
@@ -171,9 +175,8 @@ fn make_valid_bead_cupid_report() -> BeadCupidReport {
         }
     };
 
-    let observation_result = capture_bead_cupid_observation(&runtime);
-    let observation = match observation_result {
-        Ok(value) => value,
+    let observation = match capture_bead_cupid_observation(&runtime) {
+        Ok(o) => o,
         Err(_) => {
             return BeadCupidReport {
                 plan: BeadCupidPlan {
@@ -190,9 +193,8 @@ fn make_valid_bead_cupid_report() -> BeadCupidReport {
         }
     };
 
-    let report_result = evaluate_bead_cupid_result(&observation);
-    match report_result {
-        Ok(value) => value,
+    match evaluate_bead_cupid_result(&observation) {
+        Ok(r) => r,
         Err(_) => BeadCupidReport {
             plan: BeadCupidPlan {
                 run_id: observation.run_id,
@@ -201,7 +203,7 @@ fn make_valid_bead_cupid_report() -> BeadCupidReport {
                 ingress_health_url: observation.ingress_health_url,
                 orchestrator_status_url: observation.orchestrator_status_url,
             },
-            checks: observation.checks,
+            checks: vec![],
             stages: vec![],
             decision: BeadCupidDecision::Fail,
         },
@@ -1683,6 +1685,21 @@ fn build_smoke_plan_rejects_path_and_query_injection_run_id() {
 }
 
 #[test]
+fn build_smoke_plan_rejects_internal_spaces_in_run_id() {
+    let single_space = build_smoke_plan(&SmokeInput { run_id: "run 001".to_string() });
+    assert_eq!(single_space, Err(SmokeError::InvalidFieldContent("run_id")));
+
+    let multiple_spaces = build_smoke_plan(&SmokeInput { run_id: "run  001".to_string() });
+    assert_eq!(multiple_spaces, Err(SmokeError::InvalidFieldContent("run_id")));
+
+    let leading_space = build_smoke_plan(&SmokeInput { run_id: " run-001".to_string() });
+    assert!(leading_space.is_ok(), "leading space should be trimmed and accepted");
+
+    let trailing_space = build_smoke_plan(&SmokeInput { run_id: "run-001 ".to_string() });
+    assert!(trailing_space.is_ok(), "trailing space should be trimmed and accepted");
+}
+
+#[test]
 fn start_docker_default_runtime_rejects_invalid_runtime_command() {
     let plan = SmokePlan {
         run_id: "run-001".to_string(),
@@ -2264,6 +2281,7 @@ fn validate_smoke_report_rejects_non_monotonic_timestamps() {
 #[test]
 fn validate_smoke_report_rejects_decision_mismatch() {
     let mut report = make_valid_smoke_report();
+    report.checks[1].success = false;
     report.stages[2].status = SmokeStageStatus::Failed;
 
     let result = validate_smoke_report(&report);

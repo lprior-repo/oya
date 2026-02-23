@@ -519,10 +519,10 @@ fn test_cli_supports_version_flag() {
 fn test_tests_unexpectedly_green_maps_to_retry_loop() {
     let mut state =
         test_pipeline_state(FailureCategory::TestsUnexpectedlyGreen, Stage::Implementation, 1);
-    assert!(should_retry_after_failure(&state));
+    assert!(should_retry_after_failure_sync(&state));
 
     state.attempt = 2;
-    assert!(!should_retry_after_failure(&state));
+    assert!(!should_retry_after_failure_sync(&state));
 }
 
 #[test]
@@ -781,32 +781,32 @@ fn given_stale_cue_revision_when_ship_gate_runs_then_merge_is_blocked() {
 fn test_rate_limited_is_non_retryable() {
     // RateLimited triggers model rotation, NOT stage retry
     let state = test_pipeline_state(FailureCategory::RateLimited, Stage::Red, 1);
-    assert!(!should_retry_after_failure(&state));
+    assert!(!should_retry_after_failure_sync(&state));
 }
 
 #[test]
 fn test_provider_unavailable_retries_for_all_stages() {
     let explore = test_pipeline_state(FailureCategory::ProviderUnavailable, Stage::Explore, 1);
-    assert!(should_retry_after_failure(&explore));
+    assert!(should_retry_after_failure_sync(&explore));
 
     let contract = test_pipeline_state(FailureCategory::ProviderUnavailable, Stage::Contract, 1);
-    assert!(should_retry_after_failure(&contract));
+    assert!(should_retry_after_failure_sync(&contract));
 
     let implementation =
         test_pipeline_state(FailureCategory::ProviderUnavailable, Stage::Implementation, 1);
-    assert!(should_retry_after_failure(&implementation));
+    assert!(should_retry_after_failure_sync(&implementation));
 
     let witness = test_pipeline_state(FailureCategory::ProviderUnavailable, Stage::Witness, 1);
-    assert!(should_retry_after_failure(&witness));
+    assert!(should_retry_after_failure_sync(&witness));
 
     let ship_gate = test_pipeline_state(FailureCategory::ProviderUnavailable, Stage::ShipGate, 1);
-    assert!(should_retry_after_failure(&ship_gate));
+    assert!(should_retry_after_failure_sync(&ship_gate));
 }
 
 #[test]
 fn test_watchdog_timeout_is_terminal_and_non_retryable() {
     let state = test_pipeline_state(FailureCategory::WatchdogTimeout, Stage::Explore, 1);
-    assert!(!should_retry_after_failure(&state));
+    assert!(!should_retry_after_failure_sync(&state));
 }
 
 #[test]
@@ -893,22 +893,22 @@ fn test_should_rotate_provider_on_failure_includes_rate_limited_only_failure_cla
 #[test]
 fn test_provider_unavailable_retry_honors_stage_max_attempts() {
     let mut state = test_pipeline_state(FailureCategory::ProviderUnavailable, Stage::Explore, 1);
-    assert!(should_retry_after_failure(&state));
+    assert!(should_retry_after_failure_sync(&state));
 
-    state.attempt = provider_unavailable_max_attempts();
-    assert!(!should_retry_after_failure(&state));
+    state.attempt = provider_unavailable_max_attempts_sync();
+    assert!(!should_retry_after_failure_sync(&state));
 }
 
 #[test]
 fn test_provider_unavailable_max_attempts_defaults_and_clamps() {
     std::env::remove_var("OYA_PROVIDER_UNAVAILABLE_MAX_ATTEMPTS");
-    assert_eq!(provider_unavailable_max_attempts(), 3);
+    assert_eq!(provider_unavailable_max_attempts_sync(), 3);
 
     std::env::set_var("OYA_PROVIDER_UNAVAILABLE_MAX_ATTEMPTS", "1");
-    assert_eq!(provider_unavailable_max_attempts(), 2);
+    assert_eq!(provider_unavailable_max_attempts_sync(), 2);
 
     std::env::set_var("OYA_PROVIDER_UNAVAILABLE_MAX_ATTEMPTS", "99");
-    assert_eq!(provider_unavailable_max_attempts(), 6);
+    assert_eq!(provider_unavailable_max_attempts_sync(), 6);
 
     std::env::remove_var("OYA_PROVIDER_UNAVAILABLE_MAX_ATTEMPTS");
 }
@@ -969,13 +969,13 @@ fn test_lifecycle_transition_duplicate_is_idempotent_noop() {
 #[test]
 fn test_provider_pool_recovery_seconds_defaults_and_clamps() {
     std::env::remove_var("OYA_PROVIDER_POOL_RECOVERY_SECONDS");
-    assert_eq!(provider_pool_recovery_seconds(), 180);
+    assert_eq!(provider_pool_recovery_seconds_sync(), 180);
 
     std::env::set_var("OYA_PROVIDER_POOL_RECOVERY_SECONDS", "15");
-    assert_eq!(provider_pool_recovery_seconds(), 60);
+    assert_eq!(provider_pool_recovery_seconds_sync(), 60);
 
     std::env::set_var("OYA_PROVIDER_POOL_RECOVERY_SECONDS", "1500");
-    assert_eq!(provider_pool_recovery_seconds(), 900);
+    assert_eq!(provider_pool_recovery_seconds_sync(), 900);
 
     std::env::remove_var("OYA_PROVIDER_POOL_RECOVERY_SECONDS");
 }
@@ -983,7 +983,7 @@ fn test_provider_pool_recovery_seconds_defaults_and_clamps() {
 #[test]
 fn test_infra_failed_is_non_retryable() {
     let state = test_pipeline_state(FailureCategory::TestInfraFailed, Stage::Implementation, 1);
-    assert!(!should_retry_after_failure(&state));
+    assert!(!should_retry_after_failure_sync(&state));
 }
 
 #[test]
@@ -1178,13 +1178,13 @@ fn test_terminal_pipeline_failure_message_includes_stage_and_category() {
 #[test]
 fn test_pipeline_stage_watchdog_seconds_defaults_and_clamps() {
     std::env::remove_var("OYA_PIPELINE_STAGE_WATCHDOG_SECONDS");
-    assert_eq!(pipeline_stage_watchdog_seconds(), 480);
+    assert_eq!(pipeline_stage_watchdog_seconds_sync(), 480);
 
     std::env::set_var("OYA_PIPELINE_STAGE_WATCHDOG_SECONDS", "30");
-    assert_eq!(pipeline_stage_watchdog_seconds(), 60);
+    assert_eq!(pipeline_stage_watchdog_seconds_sync(), 60);
 
     std::env::set_var("OYA_PIPELINE_STAGE_WATCHDOG_SECONDS", "9000");
-    assert_eq!(pipeline_stage_watchdog_seconds(), 3_600);
+    assert_eq!(pipeline_stage_watchdog_seconds_sync(), 3_600);
 
     std::env::remove_var("OYA_PIPELINE_STAGE_WATCHDOG_SECONDS");
 }

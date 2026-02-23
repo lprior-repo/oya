@@ -56,22 +56,46 @@ impl GateExecutionResult {
     }
 }
 
-/// Execute a gate command (pure function - accepts command, returns result)
-/// In shell, this would run the command and capture exit code
-#[must_use]
-pub fn execute_gate(gate_name: &str, _command: &str) -> GateExecutionResult {
-    // In real implementation, this would run the command
-    // For pure function, we model the result structure
-    GateExecutionResult::Passed { gate_name: gate_name.to_string() }
+/// Execute a gate command via an injected executor.
+///
+/// The executor is a capability-based injection that separates the pure gate
+/// decision logic from the impure subprocess execution. The caller (shell layer)
+/// provides an executor that runs the command and returns the exit code.
+///
+/// # Arguments
+/// * `gate_name` - The name of the gate being executed (preserved in result)
+/// * `command` - The command string (passed through to the executor)
+/// * `executor` - A closure that runs `command` and returns its exit code
+pub fn execute_gate(
+    gate_name: &str,
+    command: &str,
+    executor: impl Fn(&str) -> i32,
+) -> GateExecutionResult {
+    let exit_code = executor(command);
+    if exit_code == 0 {
+        GateExecutionResult::Passed { gate_name: gate_name.to_string() }
+    } else {
+        GateExecutionResult::Failed { gate_name: gate_name.to_string(), exit_code }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn pass(_cmd: &str) -> i32 {
+        0
+    }
+    fn fail(_cmd: &str) -> i32 {
+        1
+    }
+    fn exit_code_42(_cmd: &str) -> i32 {
+        42
+    }
+
     #[test]
-    fn execute_gate_success() {
-        let result = execute_gate("compiles", "moon run :check");
+    fn execute_gate_success_with_passing_executor() {
+        let result = execute_gate("compiles", "moon run :check", pass);
         assert!(result.is_passed());
         assert!(!result.is_failed());
         assert_eq!(result.gate_name(), "compiles");
@@ -81,14 +105,13 @@ mod tests {
             GateExecutionResult::Passed { gate_name } => {
                 assert_eq!(gate_name, "compiles");
             }
-            GateExecutionResult::Failed { .. } => panic!("expected Passed variant"),
+            GateExecutionResult::Failed { .. } => unreachable!("expected Passed variant"),
         }
     }
 
     #[test]
-    fn execute_gate_failure_manual() {
-        // Test the Failed variant directly since execute_gate returns Passed
-        let result = GateExecutionResult::Failed { gate_name: "clippy".to_string(), exit_code: 1 };
+    fn execute_gate_failure_with_failing_executor() {
+        let result = execute_gate("clippy", "moon run :clippy", fail);
         assert!(!result.is_passed());
         assert!(result.is_failed());
         assert_eq!(result.gate_name(), "clippy");
@@ -99,74 +122,61 @@ mod tests {
                 assert_eq!(gate_name, "clippy");
                 assert_eq!(exit_code, 1);
             }
-            GateExecutionResult::Passed { .. } => panic!("expected Failed variant"),
+            GateExecutionResult::Passed { .. } => unreachable!("expected Failed variant"),
         }
     }
 
     #[test]
-    fn execute_gate_stable() {
-        // Same inputs should always produce same output
-        let result1 = execute_gate("compiles", "moon run :check");
-        let result2 = execute_gate("compiles", "moon run :check");
+    fn execute_gate_preserves_exit_code_from_executor() {
+        let result = execute_gate("tests", "moon run :test", exit_code_42);
+        assert_eq!(result.exit_code(), Some(42));
+    }
+
+    #[test]
+    fn execute_gate_stable_with_same_executor() {
+        let result1 = execute_gate("compiles", "moon run :check", pass);
+        let result2 = execute_gate("compiles", "moon run :check", pass);
         assert_eq!(result1, result2);
     }
 
     #[test]
     fn execute_gate_preserves_gate_name() {
-        // Gate name should be preserved exactly as passed
         let gate_names = ["compiles", "tests_pass", "clippy_clean", "moon_ci"];
         for gate_name in gate_names {
-            let result = execute_gate(gate_name, "command");
+            let result = execute_gate(gate_name, "command", pass);
             assert_eq!(result.gate_name(), gate_name);
         }
     }
 
     #[test]
     fn execute_gate_result_cloneable() {
-        let result = execute_gate("compiles", "moon run :check");
+        let result = execute_gate("compiles", "moon run :check", pass);
         let cloned = result.clone();
         assert_eq!(result, cloned);
     }
 
     #[test]
-    fn execute_gate_result_eq_comparable() {
-        let result1 = execute_gate("compiles", "moon run :check");
-        let result2 = execute_gate("compiles", "moon run :check");
-        assert_eq!(result1, result2);
-    }
-
-    #[test]
     fn passed_cannot_have_exit_code() {
-        // Demonstrates compile-time guarantee: Passed variant has no exit_code field
-        let result = execute_gate("compiles", "moon run :check");
-
-        match result {
-            GateExecutionResult::Passed { .. } => {
-                // No exit_code field available - compile-time guarantee
-                assert!(result.exit_code().is_none());
-            }
-            GateExecutionResult::Failed { .. } => panic!("expected Passed variant"),
-        }
+        let result = execute_gate("compiles", "moon run :check", pass);
+        assert!(result.exit_code().is_none());
     }
 
     #[test]
     fn failed_must_have_exit_code() {
-        // Failed variant always has an exit_code - no implicit failure state
         let result = GateExecutionResult::Failed { gate_name: "tests".to_string(), exit_code: 42 };
 
         match result {
             GateExecutionResult::Failed { exit_code, .. } => {
-                // exit_code is directly available, not wrapped in Option in the variant
                 assert_eq!(exit_code, 42);
                 assert_eq!(result.exit_code(), Some(42));
             }
-            GateExecutionResult::Passed { .. } => panic!("expected Failed variant"),
+            GateExecutionResult::Passed { .. } => unreachable!("expected Failed variant"),
         }
     }
 
     #[test]
     fn gate_name_accessible_from_both_variants() {
-        let passed = execute_gate("gate1", "cmd");
+        let passed = execute_gate("gate1", "cmd", pass);
         let failed = GateExecutionResult::Failed { gate_name: "gate2".to_string(), exit_code: 1 };
 
         assert_eq!(passed.gate_name(), "gate1");

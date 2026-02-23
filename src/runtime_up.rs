@@ -167,6 +167,8 @@ fn start_oya_service(repo_root: &Path, opencode_bin: &Path, port: u16) -> Result
         "OYA_OPENCODE_PASSWORD=".to_string(),
         "-E".to_string(),
         format!("OYA_SKIP_ZJJ_GATE={skip_gate}"),
+        "-E".to_string(),
+        "OYA_ENABLE_PIPELINE_EXECUTION=1".to_string(),
         "--working-directory".to_string(),
         repo_root.display().to_string(),
         oya_bin.display().to_string(),
