@@ -1640,7 +1640,7 @@ fn build_smoke_plan_sets_docker_default_endpoints() {
         Err(_) => return,
     };
 
-    assert_eq!(plan.runtime_command, DEFAULT_SMOKE_RUNTIME_COMMAND);
+    assert_eq!(plan.runtime_command, DEFAULT_DEV_RUNTIME_COMMAND);
     assert_eq!(plan.ingress_health_url, DEFAULT_SMOKE_INGRESS_HEALTH_URL);
     assert_eq!(plan.orchestrator_status_url, "http://localhost:8080/Oya/run-001/get_status");
 }
@@ -1716,7 +1716,7 @@ fn start_docker_default_runtime_rejects_invalid_runtime_command() {
 fn start_docker_default_runtime_rejects_invalid_run_id_in_plan() {
     let plan = SmokePlan {
         run_id: " run-001 ".to_string(),
-        runtime_command: DEFAULT_SMOKE_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: "http://localhost:8080/Oya/run-001/get_status".to_string(),
     };
@@ -1729,7 +1729,7 @@ fn start_docker_default_runtime_rejects_invalid_run_id_in_plan() {
 fn start_docker_default_runtime_rejects_empty_run_id_in_plan() {
     let plan = SmokePlan {
         run_id: "".to_string(),
-        runtime_command: DEFAULT_SMOKE_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: "http://localhost:8080/Oya/run-001/get_status".to_string(),
     };
@@ -1742,7 +1742,7 @@ fn start_docker_default_runtime_rejects_empty_run_id_in_plan() {
 fn start_docker_default_runtime_rejects_invalid_ingress_endpoint() {
     let plan = SmokePlan {
         run_id: "run-001".to_string(),
-        runtime_command: DEFAULT_SMOKE_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: "localhost:8080/restate/health".to_string(),
         orchestrator_status_url: "http://localhost:8080/Oya/run-001/get_status".to_string(),
     };
@@ -1755,7 +1755,7 @@ fn start_docker_default_runtime_rejects_invalid_ingress_endpoint() {
 fn start_docker_default_runtime_rejects_non_default_ingress_contract() {
     let plan = SmokePlan {
         run_id: "run-001".to_string(),
-        runtime_command: DEFAULT_SMOKE_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: "http://localhost:8080/health".to_string(),
         orchestrator_status_url: "http://localhost:8080/Oya/run-001/get_status".to_string(),
     };
@@ -1782,7 +1782,7 @@ fn start_docker_default_runtime_starts_with_valid_default_contract() {
 
     assert!(handle.runtime_ready);
     assert_eq!(handle.run_id, "run-001");
-    assert_eq!(handle.runtime_command, DEFAULT_SMOKE_RUNTIME_COMMAND);
+    assert_eq!(handle.runtime_command, DEFAULT_DEV_RUNTIME_COMMAND);
     assert_eq!(handle.ingress_health_url, DEFAULT_SMOKE_INGRESS_HEALTH_URL);
     assert_eq!(handle.orchestrator_status_url, "http://localhost:8080/Oya/run-001/get_status");
 }
@@ -1791,7 +1791,7 @@ fn start_docker_default_runtime_starts_with_valid_default_contract() {
 fn start_docker_default_runtime_rejects_invalid_orchestrator_endpoint() {
     let plan = SmokePlan {
         run_id: "run-001".to_string(),
-        runtime_command: DEFAULT_SMOKE_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: "  ".to_string(),
     };
@@ -1804,7 +1804,7 @@ fn start_docker_default_runtime_rejects_invalid_orchestrator_endpoint() {
 fn start_docker_default_runtime_rejects_orchestrator_endpoint_with_credentials() {
     let plan = SmokePlan {
         run_id: "run-001".to_string(),
-        runtime_command: DEFAULT_SMOKE_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: "http://user:secret@localhost:8080/Oya/run-001/get_status"
             .to_string(),
@@ -1818,7 +1818,7 @@ fn start_docker_default_runtime_rejects_orchestrator_endpoint_with_credentials()
 fn start_docker_default_runtime_rejects_orchestrator_contract_mismatch() {
     let plan = SmokePlan {
         run_id: "run-001".to_string(),
-        runtime_command: DEFAULT_SMOKE_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: "http://localhost:8080/Oya/run-xyz/get_status".to_string(),
     };
@@ -1831,7 +1831,7 @@ fn start_docker_default_runtime_rejects_orchestrator_contract_mismatch() {
 fn run_default_smoke_checks_rejects_unready_runtime() {
     let handle = RuntimeHandle {
         run_id: "run-001".to_string(),
-        runtime_command: DEFAULT_SMOKE_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: "http://localhost:8080/Oya/run-001/get_status".to_string(),
         started_at: Utc::now(),
@@ -1861,7 +1861,7 @@ fn run_default_smoke_checks_rejects_invalid_runtime_command() {
 fn run_default_smoke_checks_rejects_invalid_ingress_endpoint() {
     let handle = RuntimeHandle {
         run_id: "run-001".to_string(),
-        runtime_command: DEFAULT_SMOKE_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: "restate/health".to_string(),
         orchestrator_status_url: "http://localhost:8080/Oya/run-001/get_status".to_string(),
         started_at: Utc::now(),
@@ -1876,7 +1876,7 @@ fn run_default_smoke_checks_rejects_invalid_ingress_endpoint() {
 fn run_default_smoke_checks_rejects_non_default_ingress_contract() {
     let handle = RuntimeHandle {
         run_id: "run-001".to_string(),
-        runtime_command: DEFAULT_SMOKE_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: "http://localhost:8080/health".to_string(),
         orchestrator_status_url: "http://localhost:8080/Oya/run-001/get_status".to_string(),
         started_at: Utc::now(),
@@ -1891,7 +1891,7 @@ fn run_default_smoke_checks_rejects_non_default_ingress_contract() {
 fn run_default_smoke_checks_rejects_invalid_orchestrator_endpoint() {
     let handle = RuntimeHandle {
         run_id: "run-001".to_string(),
-        runtime_command: DEFAULT_SMOKE_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: "https://localhost:8080\u{0007}".to_string(),
         started_at: Utc::now(),
@@ -1906,7 +1906,7 @@ fn run_default_smoke_checks_rejects_invalid_orchestrator_endpoint() {
 fn run_default_smoke_checks_rejects_orchestrator_contract_mismatch() {
     let handle = RuntimeHandle {
         run_id: "run-001".to_string(),
-        runtime_command: DEFAULT_SMOKE_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: "http://localhost:8080/Oya/other/get_status".to_string(),
         started_at: Utc::now(),
@@ -1921,7 +1921,7 @@ fn run_default_smoke_checks_rejects_orchestrator_contract_mismatch() {
 fn run_default_smoke_checks_rejects_invalid_run_id_in_handle() {
     let handle = RuntimeHandle {
         run_id: " run-001 ".to_string(),
-        runtime_command: DEFAULT_SMOKE_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: "http://localhost:8080/Oya/run-001/get_status".to_string(),
         started_at: Utc::now(),
@@ -2385,7 +2385,7 @@ fn start_smoke_bead_runtime_enforces_default_runtime_contract() {
 fn start_smoke_bead_runtime_rejects_invalid_run_id_and_endpoints() {
     let invalid_run_id_plan = SmokeBeadPlan {
         run_id: " run-smoke-01 ".to_string(),
-        runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_BEAD_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: "http://localhost:8080/Oya/run-smoke-01/get_status".to_string(),
     };
@@ -2396,7 +2396,7 @@ fn start_smoke_bead_runtime_rejects_invalid_run_id_and_endpoints() {
 
     let invalid_ingress_endpoint_plan = SmokeBeadPlan {
         run_id: "run-smoke-01".to_string(),
-        runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: "localhost:8080/restate/health".to_string(),
         orchestrator_status_url: "http://localhost:8080/Oya/run-smoke-01/get_status".to_string(),
     };
@@ -2407,7 +2407,7 @@ fn start_smoke_bead_runtime_rejects_invalid_run_id_and_endpoints() {
 
     let invalid_orchestrator_endpoint_plan = SmokeBeadPlan {
         run_id: "run-smoke-01".to_string(),
-        runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_BEAD_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: "  ".to_string(),
     };
@@ -2421,7 +2421,7 @@ fn start_smoke_bead_runtime_rejects_invalid_run_id_and_endpoints() {
 fn start_smoke_bead_runtime_rejects_empty_and_oversized_run_id() {
     let empty_run_id_plan = SmokeBeadPlan {
         run_id: "".to_string(),
-        runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_BEAD_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: "http://localhost:8080/Oya/run-smoke-01/get_status".to_string(),
     };
@@ -2432,7 +2432,7 @@ fn start_smoke_bead_runtime_rejects_empty_and_oversized_run_id() {
 
     let oversized_run_id_plan = SmokeBeadPlan {
         run_id: "r".repeat(MAX_SMOKE_RUN_ID_LEN + 1),
-        runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_BEAD_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: "http://localhost:8080/Oya/run-smoke-01/get_status".to_string(),
     };
@@ -2446,7 +2446,7 @@ fn start_smoke_bead_runtime_rejects_empty_and_oversized_run_id() {
 fn start_smoke_bead_runtime_rejects_orchestrator_endpoint_with_credentials() {
     let plan = SmokeBeadPlan {
         run_id: "run-smoke-01".to_string(),
-        runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_BEAD_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: "http://user:secret@localhost:8080/Oya/run-smoke-01/get_status"
             .to_string(),
@@ -2462,7 +2462,7 @@ fn start_smoke_bead_runtime_rejects_orchestrator_endpoint_with_credentials() {
 fn start_smoke_bead_runtime_rejects_contract_mismatches() {
     let ingress_contract_mismatch_plan = SmokeBeadPlan {
         run_id: "run-smoke-01".to_string(),
-        runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: "http://localhost:8080/health".to_string(),
         orchestrator_status_url: "http://localhost:8080/Oya/run-smoke-01/get_status".to_string(),
     };
@@ -2473,7 +2473,7 @@ fn start_smoke_bead_runtime_rejects_contract_mismatches() {
 
     let orchestrator_contract_mismatch_plan = SmokeBeadPlan {
         run_id: "run-smoke-01".to_string(),
-        runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_BEAD_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: "http://localhost:8080/Oya/run-other/get_status".to_string(),
     };
@@ -2521,7 +2521,7 @@ fn capture_smoke_bead_observation_emits_exactly_two_named_checks() {
 fn capture_smoke_bead_observation_rejects_runtime_and_endpoint_errors() {
     let unready_handle = SmokeBeadRuntimeHandle {
         run_id: "run-smoke-02".to_string(),
-        runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_BEAD_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: "http://localhost:8080/Oya/run-smoke-02/get_status".to_string(),
         started_at: Utc::now(),
@@ -2534,7 +2534,7 @@ fn capture_smoke_bead_observation_rejects_runtime_and_endpoint_errors() {
 
     let invalid_run_id_handle = SmokeBeadRuntimeHandle {
         run_id: " run-smoke-02 ".to_string(),
-        runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_BEAD_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: "http://localhost:8080/Oya/run-smoke-02/get_status".to_string(),
         started_at: Utc::now(),
@@ -2547,7 +2547,7 @@ fn capture_smoke_bead_observation_rejects_runtime_and_endpoint_errors() {
 
     let invalid_orchestrator_contract_handle = SmokeBeadRuntimeHandle {
         run_id: "run-smoke-02".to_string(),
-        runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_BEAD_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: "http://localhost:8080/Oya/other/get_status".to_string(),
         started_at: Utc::now(),
@@ -2576,7 +2576,7 @@ fn capture_smoke_bead_observation_rejects_invalid_runtime_command_and_ingress() 
 
     let invalid_ingress_endpoint_handle = SmokeBeadRuntimeHandle {
         run_id: "run-smoke-02".to_string(),
-        runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: "restate/health".to_string(),
         orchestrator_status_url: "http://localhost:8080/Oya/run-smoke-02/get_status".to_string(),
         started_at: Utc::now(),
@@ -2589,7 +2589,7 @@ fn capture_smoke_bead_observation_rejects_invalid_runtime_command_and_ingress() 
 
     let ingress_contract_mismatch_handle = SmokeBeadRuntimeHandle {
         run_id: "run-smoke-02".to_string(),
-        runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: "http://localhost:8080/health".to_string(),
         orchestrator_status_url: "http://localhost:8080/Oya/run-smoke-02/get_status".to_string(),
         started_at: Utc::now(),
@@ -2605,7 +2605,7 @@ fn capture_smoke_bead_observation_rejects_invalid_runtime_command_and_ingress() 
 fn capture_smoke_bead_observation_rejects_empty_run_id_and_invalid_orchestrator_endpoint() {
     let empty_run_id_handle = SmokeBeadRuntimeHandle {
         run_id: "".to_string(),
-        runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_BEAD_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: "http://localhost:8080/Oya/run-smoke-02/get_status".to_string(),
         started_at: Utc::now(),
@@ -2618,7 +2618,7 @@ fn capture_smoke_bead_observation_rejects_empty_run_id_and_invalid_orchestrator_
 
     let invalid_orchestrator_endpoint_handle = SmokeBeadRuntimeHandle {
         run_id: "run-smoke-02".to_string(),
-        runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_BEAD_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: "localhost:8080/Oya/run-smoke-02/get_status".to_string(),
         started_at: Utc::now(),
@@ -3163,7 +3163,7 @@ fn build_bead_min_plan_rejects_empty_run_id_and_sets_defaults() {
     assert!(plan_result.is_ok());
     let Ok(plan) = plan_result else { return };
 
-    assert_eq!(plan.runtime_command, DEFAULT_BEAD_MIN_RUNTIME_COMMAND);
+    assert_eq!(plan.runtime_command, DEFAULT_DEV_RUNTIME_COMMAND);
     assert_eq!(plan.ingress_health_url, DEFAULT_BEAD_MIN_INGRESS_HEALTH_URL);
     assert_eq!(
         plan.orchestrator_status_url,
@@ -3207,7 +3207,7 @@ fn start_bead_min_runtime_rejects_non_default_runtime_command() {
 fn start_bead_min_runtime_rejects_invalid_run_id_and_endpoints() {
     let invalid_run_id_plan = BeadMinPlan {
         run_id: " run-bead-min-01 ".to_string(),
-        runtime_command: DEFAULT_BEAD_MIN_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_BEAD_MIN_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: "http://localhost:8080/Oya/run-bead-min-01/get_status".to_string(),
     };
@@ -3218,7 +3218,7 @@ fn start_bead_min_runtime_rejects_invalid_run_id_and_endpoints() {
 
     let invalid_ingress_url_plan = BeadMinPlan {
         run_id: "run-bead-min-01".to_string(),
-        runtime_command: DEFAULT_BEAD_MIN_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: "localhost:8080/restate/health".to_string(),
         orchestrator_status_url: "http://localhost:8080/Oya/run-bead-min-01/get_status".to_string(),
     };
@@ -3229,7 +3229,7 @@ fn start_bead_min_runtime_rejects_invalid_run_id_and_endpoints() {
 
     let invalid_ingress_contract_plan = BeadMinPlan {
         run_id: "run-bead-min-01".to_string(),
-        runtime_command: DEFAULT_BEAD_MIN_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: "http://localhost:8080/health".to_string(),
         orchestrator_status_url: "http://localhost:8080/Oya/run-bead-min-01/get_status".to_string(),
     };
@@ -3240,7 +3240,7 @@ fn start_bead_min_runtime_rejects_invalid_run_id_and_endpoints() {
 
     let invalid_orchestrator_url_plan = BeadMinPlan {
         run_id: "run-bead-min-01".to_string(),
-        runtime_command: DEFAULT_BEAD_MIN_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_BEAD_MIN_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: "localhost:8080/Oya/run-bead-min-01/get_status".to_string(),
     };
@@ -3251,7 +3251,7 @@ fn start_bead_min_runtime_rejects_invalid_run_id_and_endpoints() {
 
     let invalid_orchestrator_contract_plan = BeadMinPlan {
         run_id: "run-bead-min-01".to_string(),
-        runtime_command: DEFAULT_BEAD_MIN_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_BEAD_MIN_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: "http://localhost:8080/Oya/other/get_status".to_string(),
     };
@@ -3297,7 +3297,7 @@ fn capture_bead_min_observation_emits_exactly_one_check_per_stage() {
 fn capture_bead_min_observation_rejects_runtime_state_and_endpoint_violations() {
     let mut not_ready_handle = BeadMinRuntimeHandle {
         run_id: "run-bead-min-02".to_string(),
-        runtime_command: DEFAULT_BEAD_MIN_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_BEAD_MIN_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: "http://localhost:8080/Oya/run-bead-min-02/get_status".to_string(),
         started_at: Utc::now(),
@@ -3314,7 +3314,7 @@ fn capture_bead_min_observation_rejects_runtime_state_and_endpoint_violations() 
 
     let invalid_ingress_handle = BeadMinRuntimeHandle {
         run_id: "run-bead-min-02".to_string(),
-        runtime_command: DEFAULT_BEAD_MIN_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: "http://localhost:8080/health".to_string(),
         orchestrator_status_url: "http://localhost:8080/Oya/run-bead-min-02/get_status".to_string(),
         started_at: Utc::now(),
@@ -3327,7 +3327,7 @@ fn capture_bead_min_observation_rejects_runtime_state_and_endpoint_violations() 
 
     let invalid_orchestrator_handle = BeadMinRuntimeHandle {
         run_id: "run-bead-min-02".to_string(),
-        runtime_command: DEFAULT_BEAD_MIN_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_BEAD_MIN_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: "http://localhost:8080/Oya/other/get_status".to_string(),
         started_at: Utc::now(),

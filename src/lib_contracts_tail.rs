@@ -111,7 +111,7 @@ pub fn validate_docker_config(config: &DockerConfig) -> Result<(), DockerFixErro
     Ok(())
 }
 
-const DEFAULT_BEAD_CUPID_RUNTIME_COMMAND: &str = DEFAULT_SMOKE_RUNTIME_COMMAND;
+const DEFAULT_BEAD_CUPID_RUNTIME_COMMAND: &str = DEFAULT_DEV_RUNTIME_COMMAND;
 const DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL: &str = "http://localhost:8080/restate/health";
 const MAX_BEAD_CUPID_RUN_ID_LEN: usize = 128;
 const MAX_BEAD_CUPID_BEAD_ID_LEN: usize = 128;

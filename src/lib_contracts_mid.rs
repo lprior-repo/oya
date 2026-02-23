@@ -1,5 +1,6 @@
-/// Common constants shared across smoke test contract families.
+/// Common default runtime command shared across all bead contract families.
 pub const DEFAULT_SMOKE_RUNTIME_COMMAND: &str = "scripts/dev-up.sh";
+const DEFAULT_DEV_RUNTIME_COMMAND: &str = DEFAULT_SMOKE_RUNTIME_COMMAND;
 const DEFAULT_SMOKE_INGRESS_HEALTH_URL: &str = "http://localhost:8080/restate/health";
 const MAX_SMOKE_DIAGNOSTICS_LEN: usize = 4096;
 
@@ -561,7 +562,7 @@ pub fn build_smoke_plan(input: &SmokeInput) -> Result<SmokePlan, SmokeError> {
 
     Ok(SmokePlan {
         run_id: run_id.to_string(),
-        runtime_command: DEFAULT_SMOKE_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: format!("http://localhost:8080/Oya/{}/get_status", run_id),
     })
@@ -570,7 +571,7 @@ pub fn build_smoke_plan(input: &SmokeInput) -> Result<SmokePlan, SmokeError> {
 pub fn start_docker_default_runtime(plan: &SmokePlan) -> Result<RuntimeHandle, SmokeError> {
     validate_normalized_smoke_run_id(&plan.run_id)?;
 
-    if plan.runtime_command != DEFAULT_SMOKE_RUNTIME_COMMAND {
+    if plan.runtime_command != DEFAULT_DEV_RUNTIME_COMMAND {
         return Err(SmokeError::InvalidRuntimeCommand);
     }
     if !is_valid_http_url(&plan.ingress_health_url) {
@@ -602,7 +603,7 @@ pub fn run_default_smoke_checks(handle: &RuntimeHandle) -> Result<SmokeObservati
     if !handle.runtime_ready {
         return Err(SmokeError::RuntimeNotReady);
     }
-    if handle.runtime_command != DEFAULT_SMOKE_RUNTIME_COMMAND {
+    if handle.runtime_command != DEFAULT_DEV_RUNTIME_COMMAND {
         return Err(SmokeError::InvalidRuntimeCommand);
     }
     if !is_valid_http_url(&handle.ingress_health_url) {
@@ -905,7 +906,7 @@ fn matches_orchestrator_status_contract(value: &str, run_id: &str) -> bool {
 }
 
 #[allow(dead_code)]
-const DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND: &str = DEFAULT_SMOKE_RUNTIME_COMMAND;
+const DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND: &str = DEFAULT_DEV_RUNTIME_COMMAND;
 #[allow(dead_code)]
 const DEFAULT_SMOKE_BEAD_INGRESS_HEALTH_URL: &str = DEFAULT_SMOKE_INGRESS_HEALTH_URL;
 #[allow(dead_code)]
@@ -1483,7 +1484,7 @@ fn expected_smoke_bead_final_diagnostics(decision: &SmokeBeadDecision) -> &'stat
 }
 
 #[allow(dead_code)]
-const DEFAULT_LEAN_BEAD_RUNTIME_COMMAND: &str = DEFAULT_SMOKE_RUNTIME_COMMAND;
+const DEFAULT_LEAN_BEAD_RUNTIME_COMMAND: &str = DEFAULT_DEV_RUNTIME_COMMAND;
 #[allow(dead_code)]
 const DEFAULT_LEAN_BEAD_INGRESS_HEALTH_URL: &str = DEFAULT_SMOKE_INGRESS_HEALTH_URL;
 #[allow(dead_code)]
@@ -1974,7 +1975,7 @@ fn expected_lean_bead_final_diagnostics(decision: &LeanBeadDecision) -> &'static
 }
 
 #[allow(dead_code)]
-const DEFAULT_BEAD_MIN_RUNTIME_COMMAND: &str = DEFAULT_SMOKE_RUNTIME_COMMAND;
+const DEFAULT_BEAD_MIN_RUNTIME_COMMAND: &str = DEFAULT_DEV_RUNTIME_COMMAND;
 #[allow(dead_code)]
 const DEFAULT_BEAD_MIN_INGRESS_HEALTH_URL: &str = DEFAULT_SMOKE_INGRESS_HEALTH_URL;
 #[allow(dead_code)]
