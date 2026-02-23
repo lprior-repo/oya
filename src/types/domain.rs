@@ -457,7 +457,6 @@ pub fn derive_merge_decision(
 /// # Returns
 /// - `Ok(QueueItem)` with all fields wrapped in validated newtypes
 /// - `Err(ValidationError)` with field-scoped parse diagnostics
-#[allow(dead_code)]
 pub fn parse_queue_record(
     id: &str,
     bead_id: &str,
@@ -473,7 +472,6 @@ pub fn parse_queue_record(
 /// # Returns
 /// - `Ok(SelectionDecision)` with exhaustive variant based on queue/state
 /// - `Err(ValidationError)` if queue snapshot is invalid
-#[allow(dead_code)]
 pub fn select_next_merge_candidate(
     queue_snapshot: &[QueueItem],
     current_lock: Option<&SessionLock>,
