@@ -1,316 +1,392 @@
-# Contract Specification
+# Contract Specification: Queue Lock and Merge-Decision Types
+
+**Bead ID:** src-49q
+**Purpose:** Define typed domain contracts for queue lock management and merge decision selection with compile-time safety and exhaustive matching.
+
+---
 
 ## Context
-- **Feature**: Remove ZJJ merge queue gate enum and configuration branches
-- **Domain terms**:
-  - `Gate`: Enumeration of pipeline quality gates (compiles, tests_pass, moon_ci, holdout_scenarios, cue_artifact_generated)
-  - `GateCommand`: Parsed command representation (Moon tasks only after ZJJ removal)
-  - `MergeQueuePolicy`: Runtime policy for ZJJ merge queue enforcement (TO BE REMOVED)
-  - `RuntimeConfig`: Pipeline runtime configuration (merge_queue_policy TO BE REMOVED)
-  - `StageName`: Pipeline stage enumeration (ShipGate gates TO BE REDUCED)
-- **Assumptions**:
-  - The ZJJ merge queue functionality is being deprecated or replaced
-  - All tests for ZJJ-specific behavior must pass after removal (or be removed)
-  - Backward compatibility is not required (breaking change acceptable)
-- **Open questions**:
-  - Should `OYA_SKIP_ZJJ_GATE` and `OYA_SKIP_ZJJ_WORKSPACE` env vars also be removed?
-  - Should `Gate::MoonCi` be used as a replacement for the ZJJ gate?
-  - Is `StageName::ShipGate` still valid with only `CueArtifactGenerated` gate?
+
+### Feature
+Define compile-safe contracts for queue lock ownership, merge decision selection, and deterministic candidate selection from queue snapshots.
+
+### Domain Terms
+- **Queue Snapshot**: Immutable collection of queue items at a point in time
+- **Queue Item**: Serializable record with `id`, `bead_id`, `workspace`, `priority`, `freshness_base_rev`, `state`
+- **Selection Decision**: Outcome of selecting next merge candidate (`Ready`, `Blocked`, `Stale`, `Conflict`, `Merged`)
+- **Session Lock**: Token-based lock with ownership and expiration (`token`, `acquired_at`, `expires_at`)
+- **Merge Decision**: Action to take for a queue item (`Merge`, `Requeue`, `Block`)
+
+### Assumptions
+- Queue records come from external serialized sources (files, network)
+- Lock expiration is checked against epoch seconds in UTC
+- At most one queue item can be in `Merging` state globally
+- Lock reclamation is single-winner when multiple workers detect expiry
+- Same queue snapshot (same items, same order) always selects same next item
+
+### Open Questions
+- None
+
+---
 
 ## Preconditions
 
-### Removal Operations
-- Precondition: The codebase must compile before removal
-- Precondition: All existing tests for ZJJ functionality must be identified
-- Precondition: Any consumers of `Gate::ZjjMergeQueue` must be identified and updated
+### Queue Item Parsing
+- Input record must have all required fields: `id`, `bead_id`, `workspace`, `priority`, `freshness_base_rev`, `state`
+- `priority` must be numeric and in range `1..=10`
+- `freshness_base_rev` must be exactly 40 hexadecimal characters
+- String fields must be non-empty after trimming
+- String fields must not contain forbidden control characters (except `\n`, `\r`, `\t`)
 
-### RuntimeConfig Loading
-- Precondition (BEFORE): RuntimeConfig loads OYA_DISABLE_ZJJ, OYA_SKIP_ZJJ_GATE, OYA_SKIP_ZJJ_WORKSPACE
-- Precondition (AFTER): RuntimeConfig no longer loads these env vars
-- Precondition: OYA_REPO_ROOT must still be readable
+### Lock Acquisition
+- Worker must provide a non-empty lock token
+- TTL must be > 0 seconds
+- `expires_at` must be > `acquired_at`
 
-### Gate Execution
-- Precondition: All non-ZJJ gates must continue to work
-- Precondition: Moon gates must still parse and execute correctly
-- Precondition: Revision validation for moon gates must still work
+### Lock Release
+- Caller must hold the lock (token matches owner)
+- `now_epoch_seconds` must be valid (non-zero, reasonable)
+
+### Queue Selection
+- Queue snapshot must be valid (all items pass parsing)
+- At most one item can be in `Merging` state globally
+- Lock state must be available for querying
+
+---
 
 ## Postconditions
 
-### Type System
-- Postcondition: `Gate` enum has 5 variants (not 6): Compiles, TestsPass, MoonCi, HoldoutScenarios, CueArtifactGenerated
-- Postcondition: `Gate::ZjjMergeQueue` variant does NOT exist
-- Postcondition: `Gate::as_str()` does NOT return "zjj_merge_queue"
-- Postcondition: `TryFrom<&str>` for Gate does NOT accept "zjj_merge_queue"
+### Queue Item Parsing Success
+- Returns `QueueItem` with all fields validated as newtypes
+- All newtypes wrap validated values (e.g., `NonZeroPriority(5)`, `FullSha("aaaa...")`)
+- Input is not modified
 
-### Stage Configuration
-- Postcondition: `StageName::ShipGate.gates()` returns `[Gate::CueArtifactGenerated]` only
-- Postcondition: ZJJ-related gates are not present in any stage's gate list
+### Queue Item Parsing Failure
+- Returns `ValidationError` with field-level context
+- `MissingField` variant indicates which field is missing/empty
+- `InvalidState` variant indicates constraint violation with reason
+- No partial state is created
 
-### Runtime Configuration
-- Postcondition: `RuntimeConfig` struct has NO `merge_queue_policy` field
-- Postcondition: `MergeQueuePolicy` enum does NOT exist
-- Postcondition: `RuntimeConfig::load()` does NOT read OYA_DISABLE_ZJJ, OYA_SKIP_ZJJ_GATE, OYA_SKIP_ZJJ_WORKSPACE
-- Postcondition: `RuntimeConfig` has only `workspace_policy` and `repo_root` fields
+### Lock Acquisition Success
+- Returns `SessionLock` with `token`, `acquired_at`, `expires_at`
+- Lock is now considered owned by `token`
+- `expires_at` = `acquired_at` + `ttl_seconds`
+- No other lock exists for the resource
 
-### Gate Command Parsing
-- Postcondition: `GateCommand` enum has ONLY `Moon` variant
-- Postcondition: `GateCommand::ZjjSyncStatus` variant does NOT exist
-- Postcondition: `parse_gate_command_parts()` does NOT handle zjj commands
-- Postcondition: Unsupported zjj commands return `OyaError`
+### Lock Acquisition Failure
+- Returns `ValidationError::InvalidState` if TTL is 0
+- Returns `ValidationError::MissingField` if token is empty
+- Returns `ValidationError::InvalidState` if `expires_at` ≤ `acquired_at`
 
-### Gate Execution
-- Postcondition: `execute_gate()` uses MOON_TIMEOUT_SECONDS for ALL gates
-- Postcondition: `ZJJ_TIMEOUT_SECONDS` constant is not used
-- Postcondition: ZJJ-specific revision handling is removed
+### Lock Release Success
+- Lock is removed from tracking
+- Resource is now available for acquisition
+- Returns `Ok(())`
 
-### Failure Mapping
-- Postcondition: `gate_failure_mapping()` has NO entry for `Gate::ZjjMergeQueue`
-- Postcondition: ZJJ-specific failure routing is removed
+### Lock Release Failure
+- Returns `ValidationError::InvalidState` if caller does not own lock
+- Returns `ValidationError::InvalidState` if lock is not found
 
-### Tests
-- Postcondition: All tests compile
-- Postcondition: All non-ZJJ tests pass
-- Postcondition: No test references `Gate::ZjjMergeQueue`
-- Postcondition: No test references `MergeQueuePolicy`
-- Postcondition: No test references `ZjjSyncStatus`
+### Queue Selection Success
+- Returns `SelectionDecision` with exhaustive variant
+- `Ready` → contains `QueueItem` ready to merge
+- `Blocked` → contains `BlockReason` (lock unavailable or dependencies pending)
+- `Stale` → contains `StaleReason` (base revision advanced or conflict detected)
+- `Conflict` → contains conflicting `QueueBeadId`
+- `Merged` → contains completed `QueueBeadId` and `QueuePosition`
+- Decision is deterministic for same queue snapshot and state
+
+### Queue Selection Failure
+- Returns `ValidationError` if any queue item fails parsing
+- Returns `ValidationError` if queue snapshot is invalid
+
+---
 
 ## Invariants
 
-### Type Safety
-- Invariant: All `Gate` enum variants are valid pipeline quality checks
-- Invariant: Each stage's gates are appropriate for that stage's purpose
+### Queue Item Invariants
+- `priority` is always in range `1..=10`
+- `freshness_base_rev` is always exactly 40 hex characters
+- `id` is always non-empty and control-character-clean
+- `bead_id` is always non-empty and control-character-clean
+- `workspace` is always non-empty and control-character-clean
+- `state` is a valid state enum value
 
-### Runtime Configuration
-- Invariant: RuntimeConfig must be loadable from environment
-- Invariant: RuntimeConfig fields are all required and validated
+### Session Lock Invariants
+- `token` is always non-empty and control-character-clean
+- `expires_at` is always > `acquired_at`
+- `ttl_seconds` is always > 0
+- Lock expiration is monotonic (once expired, stays expired)
 
-### Gate Execution
-- Invariant: All gates have executable commands
-- Invariant: All gates have defined failure outcomes
-- Invariant: Gate commands are parseable and executable
+### Selection Invariants
+- At most one `QueueItem` can be in `Merging` state globally
+- Same queue snapshot + same state → same selection (deterministic)
+- `MergeDecision` matching is compile-time exhaustive (no `_` wildcard)
+- All queue items in snapshot are validated before selection
+- Selection preserves priority ordering (higher priority selected first)
+
+---
 
 ## Error Taxonomy
 
-### Domain Errors (Preserved)
-- `OyaError::ParseError` - when gate command cannot be parsed
-- `OyaError::ExecutionError` - when gate command fails to execute
-- `OyaError::RevisionError` - when git revision validation fails
+All queue/lock operations return `Result<T, ValidationError>`.
 
-### Error Removal
-- `OyaError` variants specific to ZJJ queue should be removed
-- Error handling for ZJJ sync status should be removed
+### ValidationError Variants
+
+```rust
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum ValidationError {
+    /// A required field is missing or empty
+    #[error("Missing required field: {0}")]
+    MissingField(String),
+
+    /// A field contains a placeholder value
+    #[error("Placeholder value in {0}: {1}")]
+    PlaceholderValue(String, String),
+
+    /// An invariant violation occurred
+    #[error("Invalid state: {0}")]
+    InvalidState(String),
+
+    /// An exit code is out of valid range
+    #[error("Invalid exit code: {0}")]
+    InvalidExitCode(i32),
+
+    /// Evidence is inconsistent with claims
+    #[error("Inconsistent evidence: {0}")]
+    InconsistentEvidence(String),
+}
+```
+
+### Error Variant Usage
+
+| Error Variant | When to Use | Example Message |
+|----------------|-------------|------------------|
+| `MissingField` | Field is `None`, `""`, or whitespace-only | `"Missing required field: priority"` |
+| `InvalidState` | Constraint violation, out-of-range, or invariant breach | `"Invalid state: priority must be in 1..=10"` |
+| `PlaceholderValue` | Field contains placeholder text | `"Placeholder value in bead_id: todo"` |
+
+### Field-Scoped Parse Errors
+
+Parsing failures include the field name in the error:
+
+- `"Missing required field: priority"` → `priority` field is missing/empty
+- `"Invalid state: priority must be in 1..=10"` → `priority` is out of range
+- `"Invalid state: sha must be 40 characters"` → `freshness_base_rev` has wrong length
+- `"Invalid state: sha must be hexadecimal"` → `freshness_base_rev` has non-hex chars
+- `"Missing required field: queue_item_id"` → `id` field is missing
+
+---
 
 ## Contract Signatures
 
-### Types Module (src/types/pipeline.rs)
+### Queue Item Parsing
 
 ```rust
-// BEFORE:
-pub enum Gate {
-    Compiles,
-    TestsPass,
-    MoonCi,
-    HoldoutScenarios,
-    ZjjMergeQueue,  // TO BE REMOVED
-    CueArtifactGenerated,
-}
+/// Parse a raw serialized queue record into a validated QueueItem
+///
+/// # Returns
+/// - `Ok(QueueItem)` with all fields wrapped in validated newtypes
+/// - `Err(ValidationError)` with field-scoped parse diagnostics
+pub fn parse_queue_record(
+    raw: &SerializedQueueRecord,
+) -> Result<QueueItem, ValidationError>;
 
-// AFTER:
-pub enum Gate {
-    Compiles,
-    TestsPass,
-    MoonCi,
-    HoldoutScenarios,
-    CueArtifactGenerated,
+/// Try to create a QueueItem from raw field values (parse boundary)
+///
+/// # Returns
+/// - `Ok(QueueItem)` if all fields validate
+/// - `Err(ValidationError)` with field name in message
+impl QueueItem {
+    pub fn try_new(
+        id: &str,
+        bead_id: &str,
+        workspace: &str,
+        priority: u8,
+        freshness_base_rev: &str,
+        state: &str,
+    ) -> Result<Self, ValidationError>;
 }
+```
 
-// BEFORE:
-impl StageName {
-    pub fn gates(&self) -> Vec<Gate> {
-        match self {
-            // ...
-            Self::ShipGate => vec![Gate::CueArtifactGenerated, Gate::ZjjMergeQueue],  // REMOVE ZjjMergeQueue
+### Priority Validation
+
+```rust
+/// Validated priority: 1-10 inclusive (non-zero)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct NonZeroPriority(u8);
+
+impl TryFrom<u8> for NonZeroPriority {
+    type Error = ValidationError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        if value == 0 {
+            return Err(ValidationError::InvalidState(
+                "priority must be > 0".to_string(),
+            ));
         }
-    }
-}
-
-// AFTER:
-impl StageName {
-    pub fn gates(&self) -> Vec<Gate> {
-        match self {
-            // ...
-            Self::ShipGate => vec![Gate::CueArtifactGenerated],
+        if value > 10 {
+            return Err(ValidationError::InvalidState(
+                "priority must be <= 10".to_string(),
+            ));
         }
+        Ok(Self(value))
     }
 }
 ```
 
-### Pipeline Module (src/pipeline/mod.rs)
+### Freshness SHA Validation
 
 ```rust
-// BEFORE:
-pub(super) struct RuntimeConfig {
-    pub(super) workspace_policy: WorkspacePreparationPolicy,
-    pub(super) merge_queue_policy: MergeQueuePolicy,  // TO BE REMOVED
-    pub(super) repo_root: PathBuf,
-}
+/// Validated 40-character hexadecimal SHA
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct FullSha(String);
 
-#[derive(Clone, Copy)]
-pub(super) enum MergeQueuePolicy {  // TO BE REMOVED
-    Enforce,
-    Skip,
-}
+impl TryFrom<&str> for FullSha {
+    type Error = ValidationError;
 
-// AFTER:
-pub(super) struct RuntimeConfig {
-    pub(super) workspace_policy: WorkspacePreparationPolicy,
-    pub(super) repo_root: PathBuf,
-}
-
-// BEFORE:
-impl RuntimeConfig {
-    pub(super) async fn load(ctx: &WorkflowContext<'_>) -> Result<Self, OyaError> {
-        let disable_zjj = Self::read_flag(ctx, "OYA_DISABLE_ZJJ").await?;
-        let (skip_zjj_workspace, skip_zjj_gate) =
-            Self::read_zjj_skip_flags(ctx, disable_zjj).await?;  // TO BE REMOVED
-        // ...
-        Ok(Self {
-            workspace_policy: WorkspacePreparationPolicy::from_skip_flag(skip_zjj_workspace),
-            merge_queue_policy: MergeQueuePolicy::from_skip_flag(skip_zjj_gate),  // TO BE REMOVED
-            repo_root: PathBuf::from(repo_root_str),
-        })
-    }
-}
-
-// AFTER:
-impl RuntimeConfig {
-    pub(super) async fn load(ctx: &WorkflowContext<'_>) -> Result<Self, OyaError> {
-        let repo_root_str = Self::stable_repo_root(ctx).await.map_err(|error| {
-            OyaError(format!(
-                "config error resolving repo root (OYA_REPO_ROOT or current_dir): {}",
-                error
-            ))
-        })?;
-
-        Ok(Self {
-            workspace_policy: WorkspacePreparationPolicy::from_skip_flag(false),  // Simplify or remove
-            repo_root: PathBuf::from(repo_root_str),
-        })
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let trimmed = value.trim();
+        if trimmed.len() != 40 {
+            return Err(ValidationError::InvalidState(
+                "sha must be 40 characters".to_string(),
+            ));
+        }
+        if !trimmed.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Err(ValidationError::InvalidState(
+                "sha must be hexadecimal".to_string(),
+            ));
+        }
+        Ok(Self(trimmed.to_string()))
     }
 }
 ```
 
-### Gates Module (src/runtime_tools/gates.rs)
+### Session Lock Management
 
 ```rust
-// BEFORE:
-pub(crate) fn execute_gate(gate: Gate, repo_root: &PathBuf) -> Result<GateEvidence, OyaError> {
-    let command = generate_moon_command(&gate).command;
-    let timeout_seconds = match gate {
-        Gate::ZjjMergeQueue => ZJJ_TIMEOUT_SECONDS,  // TO BE REMOVED
-        _ => MOON_TIMEOUT_SECONDS,
-    };
-    // ...
+/// Token-based session lock with expiration
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SessionLock {
+    pub token: LockToken,
+    pub acquired_at: u64,
+    pub expires_at: u64,
 }
 
-// AFTER:
-pub(crate) fn execute_gate(gate: Gate, repo_root: &PathBuf) -> Result<GateEvidence, OyaError> {
-    let command = generate_moon_command(&gate).command;
-    let timeout_seconds = MOON_TIMEOUT_SECONDS;  // Constant for all gates
-    // ...
-}
+impl SessionLock {
+    /// Create a new session lock
+    ///
+    /// # Returns
+    /// - `Ok(SessionLock)` if token non-empty, ttl > 0, expires_at > acquired_at
+    /// - `Err(ValidationError)` otherwise
+    pub fn try_new(
+        token: &str,
+        acquired_at: u64,
+        ttl_seconds: u64,
+    ) -> Result<Self, ValidationError>;
 
-// BEFORE:
-pub(crate) enum GateCommand {
-    Moon { task: MoonTask, passthrough: Vec<String> },
-    ZjjSyncStatus,  // TO BE REMOVED
-}
+    /// Check if lock is expired at given epoch seconds
+    #[must_use]
+    pub fn is_expired(&self, now_epoch_seconds: u64) -> bool;
 
-// AFTER:
-pub(crate) enum GateCommand {
-    Moon { task: MoonTask, passthrough: Vec<String> },
-}
-
-// BEFORE:
-fn parse_gate_command_parts(command: ParsedCommandParts) -> Result<GateCommand, OyaError> {
-    match (command.program.as_str(), command.args.as_slice()) {
-        ("moon", moon_args) => parse_moon_gate_command(moon_args),
-        ("zjj", zjj_args) if zjj_args == ["sync", "--status"] => Ok(GateCommand::ZjjSyncStatus),  // TO BE REMOVED
-        _ => Err(OyaError(format!(
-            "unsupported gate command: {} {}",
-            command.program,
-            command.args.join(" ")
-        ))),
-    }
-}
-
-// AFTER:
-fn parse_gate_command_parts(command: ParsedCommandParts) -> Result<GateCommand, OyaError> {
-    match (command.program.as_str(), command.args.as_slice()) {
-        ("moon", moon_args) => parse_moon_gate_command(moon_args),
-        _ => Err(OyaError(format!(
-            "unsupported gate command: {} {}",
-            command.program,
-            command.args.join(" ")
-        ))),
-    }
-}
-
-// BEFORE:
-impl GateCommand {
-    fn command_parts(&self) -> (String, Vec<String>) {
-        match self {
-            GateCommand::Moon { task, passthrough } => {
-                let args = std::iter::once("run".to_string())
-                    .chain(std::iter::once(task.as_task_name().to_string()))
-                    .chain(passthrough.iter().cloned())
-                    .collect();
-                ("moon".to_string(), args)
-            }
-            GateCommand::ZjjSyncStatus => {  // TO BE REMOVED
-                ("zjj".to_string(), vec!["sync".to_string(), "--status".to_string()])
-            }
-        }
-    }
-}
-
-// AFTER:
-impl GateCommand {
-    fn command_parts(&self) -> (String, Vec<String>) {
-        match self {
-            GateCommand::Moon { task, passthrough } => {
-                let args = std::iter::once("run".to_string())
-                    .chain(std::iter::once(task.as_task_name().to_string()))
-                    .chain(passthrough.iter().cloned())
-                    .collect();
-                ("moon".to_string(), args)
-            }
-        }
-    }
-}
-
-// BEFORE:
-fn gate_failure_mapping(stage: &Stage, gate: &Gate) -> Option<(FailureCategory, Stage)> {
-    match (stage, gate) {
-        // ...
-        (&Stage::ShipGate, &Gate::ZjjMergeQueue) => {  // TO BE REMOVED
-            Some((FailureCategory::MergeConflict, Stage::Implementation))
-        }
-        _ => None,
-    }
-}
-
-// AFTER:
-fn gate_failure_mapping(stage: &Stage, gate: &Gate) -> Option<(FailureCategory, Stage)> {
-    match (stage, gate) {
-        // ...
-        _ => None,
-    }
+    /// Verify ownership of lock
+    #[must_use]
+    pub fn is_owned_by(&self, token: &str) -> bool;
 }
 ```
 
-## Non-goals
-- NOT adding new gate types to replace ZjjMergeQueue
-- NOT preserving backward compatibility with ZJJ-based workflows
-- NOT maintaining ZJJ-related test coverage
-- NOT adding new runtime configuration options
+### Selection Decision
+
+```rust
+/// Exhaustive decision for queue item selection
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SelectionDecision {
+    /// Item is ready to merge
+    Ready { queue_item: QueueItem },
+    /// Item is blocked (lock unavailable or dependencies pending)
+    Blocked { reason: BlockReason },
+    /// Item is stale (base advanced or conflict detected)
+    Stale { reason: StaleReason },
+    /// Conflict detected with another bead
+    Conflict { bead_id: QueueBeadId },
+    /// Item was already merged
+    Merged { bead_id: QueueBeadId, queue_position: QueuePosition },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BlockReason {
+    LockUnavailable { owner: Option<String>, expires_at: Option<u64> },
+    DependencyPending,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StaleReason {
+    BaseRevisionAdvanced,
+    ConflictDetected,
+}
+
+/// Select next merge candidate from queue snapshot
+///
+/// # Returns
+/// - `Ok(SelectionDecision)` with exhaustive variant based on queue/state
+/// - `Err(ValidationError)` if queue snapshot is invalid
+pub fn select_next_merge_candidate(
+    queue_snapshot: &[QueueItem],
+    current_lock: Option<&SessionLock>,
+    now_epoch_seconds: u64,
+    main_revision: &FullSha,
+) -> Result<SelectionDecision, ValidationError>;
+```
+
+### Merge Decision
+
+```rust
+/// Exhaustive merge decision (compile-time enforced matching)
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "decision", rename_all = "snake_case")]
+pub enum MergeDecision {
+    /// Proceed with merge
+    Merge { queue_position: QueuePosition, lock: LockToken },
+    /// Requeue for later processing
+    Requeue { reason: MergeBlockReason, queue_position: QueuePosition },
+    /// Block processing indefinitely
+    Block { reason: MergeBlockReason },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MergeBlockReason {
+    LockUnavailable,
+    DependencyPending,
+    QueueConflict,
+}
+
+/// Derive merge decision from queue position and lock state
+///
+/// # Returns
+/// - `MergeDecision::Merge` if lock held and dependencies ready
+/// - `MergeDecision::Requeue` if lock unavailable or dependencies pending
+/// - `MergeDecision::Block` if queue conflict
+#[must_use]
+pub fn derive_merge_decision(
+    queue_position: QueuePosition,
+    lock: Option<LockToken>,
+    dependencies_ready: bool,
+) -> MergeDecision;
+```
+
+---
+
+## Non-Goals
+
+- ~~Implement actual lock storage~~ - This is a contract definition; storage implementation is separate
+- ~~Implement queue persistence~~ - This contract defines validation and selection logic only
+- ~~Implement worker coordination protocol~~ - Only defines types and invariants
+- ~~Add authentication/authorization~~ - Lock is token-based, not user-based
+- ~~Support priority inversion~~ - Priority is strictly higher-is-better, no dynamic adjustment
+- ~~Support partial queue selection~~ - Always selects exactly one candidate or returns none
