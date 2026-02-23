@@ -16,7 +16,7 @@ mod timeline;
 // Re-export everything so all existing `use oya::types::*` paths continue to work.
 
 // --- ids ---
-pub use ids::{AgentId, BeadId, RunId};
+pub use ids::{AgentId, BeadId, ModelId, ModelIdError, RunId, Tier, TierError};
 
 // --- pipeline ---
 pub use pipeline::{
