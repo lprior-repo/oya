@@ -457,6 +457,7 @@ pub fn derive_merge_decision(
 /// # Returns
 /// - `Ok(QueueItem)` with all fields wrapped in validated newtypes
 /// - `Err(ValidationError)` with field-scoped parse diagnostics
+#[allow(dead_code)]
 pub fn parse_queue_record(
     id: &str,
     bead_id: &str,
@@ -472,7 +473,7 @@ pub fn parse_queue_record(
 /// # Returns
 /// - `Ok(SelectionDecision)` with exhaustive variant based on queue/state
 /// - `Err(ValidationError)` if queue snapshot is invalid
-#[must_use]
+#[allow(dead_code)]
 pub fn select_next_merge_candidate(
     queue_snapshot: &[QueueItem],
     current_lock: Option<&SessionLock>,
@@ -699,23 +700,7 @@ impl TryFrom<&str> for QueueBeadId {
     }
 }
 
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    Eq,
-    Hash,
-    Serialize,
-    Deserialize,
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Hash,
-    Serialize,
-    Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct NonZeroPriority(u8);
 

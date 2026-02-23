@@ -404,11 +404,20 @@ fn given_all_gates_when_getting_as_str_then_returns_valid_identifiers() {
 /// When: attempting to parse gate command
 /// Then: API should be available (TODO: not yet implemented)
 #[test]
+#[ignore = "API not yet implemented"]
+fn given_zjj_sync_status_when_parsing_gate_command_then_api_is_available() {
+    // TODO: implement when gate command parsing API is exposed
+}
 
 /// Given: zjj queue command
 /// When: attempting to use zjj coordination
 /// Then: API should be available (TODO: not yet implemented)
 #[test]
+#[ignore = "API not yet implemented"]
+fn given_zjj_queue_command_when_using_zjj_coordination_then_api_is_available() {
+    // TODO: implement when zjj queue coordination API is exposed
+}
+
 // =============================================================================
 // CONTRACT: Gate Timeouts
 // =============================================================================
@@ -417,6 +426,10 @@ fn given_all_gates_when_getting_as_str_then_returns_valid_identifiers() {
 /// When: checking timeout configuration
 /// Then: ZJJ_TIMEOUT_SECONDS should be defined as 60s (TODO: API not exposed)
 #[test]
+#[ignore = "API not exposed"]
+fn given_zjj_merge_queue_gate_when_checking_timeout_then_config_is_60s() {
+    // TODO: implement when gate timeout configuration API is exposed
+}
 
 /// Given: Moon gate (e.g., Compiles)
 /// When: checking timeout configuration
