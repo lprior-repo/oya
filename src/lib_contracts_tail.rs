@@ -111,7 +111,7 @@ pub fn validate_docker_config(config: &DockerConfig) -> Result<(), DockerFixErro
     Ok(())
 }
 
-const DEFAULT_BEAD_CUPID_RUNTIME_COMMAND: &str = "scripts/dev-up.sh";
+const DEFAULT_BEAD_CUPID_RUNTIME_COMMAND: &str = DEFAULT_SMOKE_RUNTIME_COMMAND;
 const DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL: &str = "http://localhost:8080/restate/health";
 const MAX_BEAD_CUPID_RUN_ID_LEN: usize = 128;
 const MAX_BEAD_CUPID_BEAD_ID_LEN: usize = 128;
@@ -253,10 +253,7 @@ pub fn build_bead_cupid_plan(input: &BeadCupidInput) -> Result<BeadCupidPlan, Be
         bead_id,
         runtime_command: DEFAULT_BEAD_CUPID_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: format!(
-            "http://localhost:8080/Oya/{}/get_status",
-            run_id
-        ),
+        orchestrator_status_url: format!("http://localhost:8080/Oya/{}/get_status", run_id),
     })
 }
 
@@ -936,6 +933,11 @@ pub fn evaluate_src_1ew_observation(
     Ok(report)
 }
 
+/// Alias for [`evaluate_src_1ew_observation`] - provided for API consistency
+/// with naming conventions used in other contract modules (e.g., test-trace-final).
+/// This function produces identical results to the primary `evaluate_src_1ew_observation`
+/// and exists as a convenience alias. See test `evaluate_src_1ew_result_matches_observation_evaluation`
+/// for verification of equivalence.
 pub fn evaluate_src_1ew_result(
     observation: &Src1ewObservation,
 ) -> Result<Src1ewReport, Src1ewError> {

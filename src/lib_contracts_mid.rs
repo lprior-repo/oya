@@ -1,5 +1,5 @@
 /// Common constants shared across smoke test contract families.
-const DEFAULT_SMOKE_RUNTIME_COMMAND: &str = "scripts/dev-up.sh";
+pub const DEFAULT_SMOKE_RUNTIME_COMMAND: &str = "scripts/dev-up.sh";
 const DEFAULT_SMOKE_INGRESS_HEALTH_URL: &str = "http://localhost:8080/restate/health";
 const MAX_SMOKE_DIAGNOSTICS_LEN: usize = 4096;
 
