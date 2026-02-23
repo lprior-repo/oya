@@ -27,9 +27,11 @@ pub use pipeline::{
 
 // --- domain ---
 pub use domain::{
-    derive_merge_decision, AgentState, AgentStatus, Artifact, ArtifactType, DomainError,
-    EventSchemaVersion, ExecutionEvent, FailureDiagnostics, GateResult, LockToken,
-    MergeBlockReason, MergeDecision, QueuePosition, Run, RunState, ValidationError,
+    derive_merge_decision, AgentState, AgentStatus, Artifact, ArtifactType, BlockReason,
+    DomainError, EventSchemaVersion, ExecutionEvent, FailureDiagnostics, FullSha, GateResult,
+    LockToken, MergeBlockReason, MergeDecision, NonZeroPriority, QueueBeadId, QueueItem,
+    QueueItemId, QueuePosition, Run, RunState, SelectionDecision, SessionLock, StaleReason,
+    ValidationError,
 };
 
 // --- health ---
