@@ -1,3 +1,9 @@
+/// Common constants shared across smoke test contract families.
+const DEFAULT_SMOKE_RUNTIME_COMMAND: &str = "scripts/dev-up.sh";
+const DEFAULT_SMOKE_INGRESS_HEALTH_URL: &str = "http://localhost:8080/restate/health";
+const MAX_SMOKE_DIAGNOSTICS_LEN: usize = 4096;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OnewfBeadQuickInput {
     pub workflow_id: String,
     pub bead_id: String,
@@ -439,9 +445,6 @@ fn validate_onewf_endpoint(value: &str) -> Result<String, OnewfBeadQuickError> {
     Ok(trimmed.to_string())
 }
 
-const DEFAULT_SMOKE_RUNTIME_COMMAND: &str = "scripts/dev-up.sh";
-const DEFAULT_SMOKE_INGRESS_HEALTH_URL: &str = "http://localhost:8080/restate/health";
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SmokeInput {
     pub run_id: String,
@@ -560,10 +563,7 @@ pub fn build_smoke_plan(input: &SmokeInput) -> Result<SmokePlan, SmokeError> {
         run_id: run_id.to_string(),
         runtime_command: DEFAULT_SMOKE_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: format!(
-            "http://localhost:8080/Oya/{}/get_status",
-            run_id
-        ),
+        orchestrator_status_url: format!("http://localhost:8080/Oya/{}/get_status", run_id),
     })
 }
 
@@ -899,9 +899,12 @@ fn matches_orchestrator_status_contract(value: &str, run_id: &str) -> bool {
     value == format!("http://localhost:8080/Oya/{}/get_status", run_id)
 }
 
-const DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND: &str = "scripts/dev-up.sh";
-const DEFAULT_SMOKE_BEAD_INGRESS_HEALTH_URL: &str = "http://localhost:8080/restate/health";
-const MAX_SMOKE_BEAD_DIAGNOSTICS_LEN: usize = 4096;
+#[allow(dead_code)]
+const DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND: &str = DEFAULT_SMOKE_RUNTIME_COMMAND;
+#[allow(dead_code)]
+const DEFAULT_SMOKE_BEAD_INGRESS_HEALTH_URL: &str = DEFAULT_SMOKE_INGRESS_HEALTH_URL;
+#[allow(dead_code)]
+const MAX_SMOKE_BEAD_DIAGNOSTICS_LEN: usize = MAX_SMOKE_DIAGNOSTICS_LEN;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// Input payload for building a smoke-bead execution plan.
@@ -1034,10 +1037,7 @@ pub fn build_smoke_bead_plan(input: &SmokeBeadInput) -> Result<SmokeBeadPlan, Sm
         run_id: run_id.to_string(),
         runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_BEAD_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: format!(
-            "http://localhost:8080/Oya/{}/get_status",
-            run_id
-        ),
+        orchestrator_status_url: format!("http://localhost:8080/Oya/{}/get_status", run_id),
     })
 }
 
@@ -1477,9 +1477,12 @@ fn expected_smoke_bead_final_diagnostics(decision: &SmokeBeadDecision) -> &'stat
     }
 }
 
-const DEFAULT_LEAN_BEAD_RUNTIME_COMMAND: &str = "scripts/dev-up.sh";
-const DEFAULT_LEAN_BEAD_INGRESS_HEALTH_URL: &str = "http://localhost:8080/restate/health";
-const MAX_LEAN_BEAD_DIAGNOSTICS_LEN: usize = 4096;
+#[allow(dead_code)]
+const DEFAULT_LEAN_BEAD_RUNTIME_COMMAND: &str = DEFAULT_SMOKE_RUNTIME_COMMAND;
+#[allow(dead_code)]
+const DEFAULT_LEAN_BEAD_INGRESS_HEALTH_URL: &str = DEFAULT_SMOKE_INGRESS_HEALTH_URL;
+#[allow(dead_code)]
+const MAX_LEAN_BEAD_DIAGNOSTICS_LEN: usize = MAX_SMOKE_DIAGNOSTICS_LEN;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LeanBeadInput {
@@ -1599,10 +1602,7 @@ pub fn build_lean_bead_plan(input: &LeanBeadInput) -> Result<LeanBeadPlan, LeanB
         run_id: run_id.to_string(),
         runtime_command: DEFAULT_LEAN_BEAD_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_LEAN_BEAD_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: format!(
-            "http://localhost:8080/Oya/{}/get_status",
-            run_id
-        ),
+        orchestrator_status_url: format!("http://localhost:8080/Oya/{}/get_status", run_id),
     })
 }
 
@@ -1968,9 +1968,12 @@ fn expected_lean_bead_final_diagnostics(decision: &LeanBeadDecision) -> &'static
     }
 }
 
-const DEFAULT_BEAD_MIN_RUNTIME_COMMAND: &str = "scripts/dev-up.sh";
-const DEFAULT_BEAD_MIN_INGRESS_HEALTH_URL: &str = "http://localhost:8080/restate/health";
-const MAX_BEAD_MIN_DIAGNOSTICS_LEN: usize = 4096;
+#[allow(dead_code)]
+const DEFAULT_BEAD_MIN_RUNTIME_COMMAND: &str = DEFAULT_SMOKE_RUNTIME_COMMAND;
+#[allow(dead_code)]
+const DEFAULT_BEAD_MIN_INGRESS_HEALTH_URL: &str = DEFAULT_SMOKE_INGRESS_HEALTH_URL;
+#[allow(dead_code)]
+const MAX_BEAD_MIN_DIAGNOSTICS_LEN: usize = MAX_SMOKE_DIAGNOSTICS_LEN;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BeadMinInput {
@@ -2090,10 +2093,7 @@ pub fn build_bead_min_plan(input: &BeadMinInput) -> Result<BeadMinPlan, BeadMinE
         run_id: run_id.to_string(),
         runtime_command: DEFAULT_BEAD_MIN_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_BEAD_MIN_INGRESS_HEALTH_URL.to_string(),
-        orchestrator_status_url: format!(
-            "http://localhost:8080/Oya/{}/get_status",
-            run_id
-        ),
+        orchestrator_status_url: format!("http://localhost:8080/Oya/{}/get_status", run_id),
     })
 }
 

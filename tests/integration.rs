@@ -2,9 +2,13 @@
 //!
 //! Uses:
 //! - Wiremock for OpenCode API mocking
-//! - Can use testcontainers for Restate (see commented example)
+//! - Restate testcontainers for real Restate integration tests
 
 use oya::{build_opencode_poll_snapshot, parse_opencode_output, parse_opencode_sse_events};
+use restate_sdk::endpoint::Endpoint;
+use restate_sdk::prelude::*;
+use restate_sdk_testcontainers::TestEnvironment;
+use serde::{Deserialize, Serialize};
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -74,18 +78,65 @@ async fn test_poll_snapshot_with_mocks() {
     assert_eq!(snapshot.pending_questions, 0);
 }
 
-/// Example: Restate testcontainers test (requires Docker)
+/// Simple test service for Restate integration testing
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EchoRequest {
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EchoResponse {
+    pub echo: String,
+}
+
+#[restate_sdk::service]
+pub trait EchoService {
+    async fn echo(request: Json<EchoRequest>) -> Result<Json<EchoResponse>, HandlerError>;
+}
+
+pub struct EchoServiceImpl;
+
+impl EchoService for EchoServiceImpl {
+    async fn echo(
+        &self,
+        _ctx: Context<'_>,
+        request: Json<EchoRequest>,
+    ) -> Result<Json<EchoResponse>, HandlerError> {
+        Ok(Json(EchoResponse { echo: request.0.message }))
+    }
+}
+
+/// Integration test with real Restate container
 ///
-/// To run: `cargo test --test integration -- --ignored`
+/// Runs a full Restate service and makes actual ingress calls.
+/// Requires Docker to be running.
 #[tokio::test]
-#[ignore = "requires Docker"]
+#[ignore = "requires Docker and restate container registration"]
 async fn test_with_restate_container() {
-    // Placeholder - full implementation would:
-    // 1. Start Restate container using restate-sdk-testcontainers
-    // 2. Register OyaOrchestrator service
-    // 3. Send start request
-    // 4. Poll for completion
-    // 5. Verify state
+    let endpoint = Endpoint::builder().bind(EchoServiceImpl.serve()).build();
+
+    let restate = TestEnvironment::new()
+        .with_container_logging()
+        .start(endpoint)
+        .await
+        .expect("Failed to start Restate container");
+
+    let ingress_url = restate.ingress_url();
+    let client = reqwest::Client::new();
+
+    let response = client
+        .post(format!("{}/EchoService/echo", ingress_url))
+        .header("Content-Type", "application/json")
+        .header("idempotency-key", "test-key")
+        .json(&EchoRequest { message: "hello from test".to_string() })
+        .send()
+        .await
+        .expect("Failed to send request");
+
+    assert_eq!(response.status(), 200, "Expected successful response");
+
+    let body: EchoResponse = response.json().await.expect("Failed to parse response");
+    assert_eq!(body.echo, "hello from test", "Echo should return the same message");
 }
 
 /// Test error handling when OpenCode returns invalid JSON
