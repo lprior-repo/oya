@@ -841,10 +841,17 @@ fn validate_smoke_timestamps(stages: &[SmokeStageReport]) -> Result<(), SmokeErr
     Ok(())
 }
 
-fn validate_smoke_decision(report: &SmokeReport) -> Result<(), SmokeError> {
-    match report.decision {
-        SmokeDecision::Pass | SmokeDecision::Fail => Ok(()),
+fn expected_smoke_decision(checks: &[SmokeCheckObservation]) -> SmokeDecision {
+    match checks.iter().all(|c| c.success) {
+        true => SmokeDecision::Pass,
+        false => SmokeDecision::Fail,
     }
+}
+
+fn validate_smoke_decision(report: &SmokeReport) -> Result<(), SmokeError> {
+    (report.decision == expected_smoke_decision(&report.checks))
+        .then_some(())
+        .ok_or(SmokeError::InvalidReport("decision mismatch"))
 }
 
 fn is_valid_http_url(value: &str) -> bool {
