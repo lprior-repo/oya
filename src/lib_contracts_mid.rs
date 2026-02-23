@@ -3,6 +3,8 @@ pub const DEFAULT_SMOKE_RUNTIME_COMMAND: &str = "scripts/dev-up.sh";
 const DEFAULT_DEV_RUNTIME_COMMAND: &str = DEFAULT_SMOKE_RUNTIME_COMMAND;
 const DEFAULT_SMOKE_INGRESS_HEALTH_URL: &str = "http://localhost:8080/restate/health";
 const MAX_SMOKE_DIAGNOSTICS_LEN: usize = 4096;
+/// Max length for run IDs used across smoke, smoke-bead, lean-bead, and bead-min contracts.
+const MAX_SMOKE_RUN_ID_LEN: usize = 128;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OnewfBeadQuickInput {
