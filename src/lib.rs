@@ -44,7 +44,7 @@
 //!   correct execution pattern for blocking operations.
 //!
 //! ## Key functions to implement
-//! - `execute_stage_real(ctx: &WorkflowContext<'_>, request: StageExecutionRequest, merge_queue_policy: MergeQueuePolicy, repo_root: PathBuf) -> Result<(StageResult, String), OyaError>`
+//! - `execute_stage_real(ctx: &WorkflowContext<'_>, request: StageExecutionRequest, repo_root: PathBuf) -> Result<(StageResult, String, Vec<GateResultData>), OyaError>`
 //!   - Fixed implementation with `spawn_blocking` outside `ctx.run()`
 //! - `execute_stage_blocking(input: StageBlockingInput) -> Result<StageExecution, OyaError>`
 //!   - Existing synchronous blocking execution (no changes needed)
