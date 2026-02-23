@@ -80,7 +80,7 @@ impl Tier {
     }
 
     pub fn to_model_tier(&self) -> Result<ModelTier, TierError> {
-        ModelTier::try_from(self.0.as_str()).map_err(|e| TierError::Invalid(e))
+        ModelTier::try_from(self.0.as_str()).map_err(TierError::Invalid)
     }
 }
 
