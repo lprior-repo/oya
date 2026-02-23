@@ -1268,6 +1268,8 @@ pub struct TestTraceFinalInput {
     pub workflow_id: String,
     pub trace_id: String,
     pub stage_name: String,
+    /// Whether the traced stage passed (explicit structured status, not derived from name).
+    pub stage_passed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1275,6 +1277,8 @@ pub struct TestTraceFinalPlan {
     pub workflow_id: String,
     pub trace_id: String,
     pub stage_name: String,
+    /// Whether the traced stage passed (explicit structured status, not derived from name).
+    pub stage_passed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1364,7 +1368,7 @@ pub fn build_test_trace_final_plan(
         MAX_TEST_TRACE_FINAL_STAGE_NAME_LEN,
     )?;
 
-    Ok(TestTraceFinalPlan { workflow_id, trace_id, stage_name })
+    Ok(TestTraceFinalPlan { workflow_id, trace_id, stage_name, stage_passed: input.stage_passed })
 }
 
 pub fn collect_test_trace_final_observation(
@@ -1386,10 +1390,15 @@ pub fn collect_test_trace_final_observation(
         MAX_TEST_TRACE_FINAL_STAGE_NAME_LEN,
     )?;
 
-    let checks = build_test_trace_final_checks(stage_name.as_str(), trace_id.as_str(), Utc::now());
+    let checks = build_test_trace_final_checks(plan.stage_passed, trace_id.as_str(), Utc::now());
 
     Ok(TestTraceFinalObservation {
-        plan: TestTraceFinalPlan { workflow_id, trace_id, stage_name },
+        plan: TestTraceFinalPlan {
+            workflow_id,
+            trace_id,
+            stage_name,
+            stage_passed: plan.stage_passed,
+        },
         checks,
     })
 }
@@ -1461,11 +1470,11 @@ pub fn validate_test_trace_final_report(
 }
 
 fn build_test_trace_final_checks(
-    stage_name: &str,
+    stage_passed: bool,
     trace_id: &str,
     base: DateTime<Utc>,
 ) -> Vec<TestTraceFinalCheckObservation> {
-    let gate_signal = !stage_name.to_ascii_lowercase().contains("fail");
+    let gate_signal = stage_passed;
     vec![
         TestTraceFinalCheckObservation {
             check: TestTraceFinalCheckName::PlanContract,

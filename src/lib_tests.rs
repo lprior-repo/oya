@@ -6244,6 +6244,7 @@ fn build_test_trace_final_plan_rejects_empty_fields() {
         workflow_id: "   ".to_string(),
         trace_id: "trace-001".to_string(),
         stage_name: "final".to_string(),
+        stage_passed: true,
     });
 
     assert_eq!(result, Err(TestTraceFinalError::EmptyField("workflow_id")));
@@ -6255,6 +6256,7 @@ fn build_test_trace_final_plan_rejects_oversized_inputs() {
         workflow_id: "w".repeat(MAX_TEST_TRACE_FINAL_WORKFLOW_ID_LEN + 1),
         trace_id: "trace-001".to_string(),
         stage_name: "final".to_string(),
+        stage_passed: true,
     });
 
     assert_eq!(
@@ -6271,6 +6273,7 @@ fn build_test_trace_final_plan_rejects_invalid_control_characters() {
         workflow_id: "wf-001".to_string(),
         trace_id: "trace\u{0007}-001".to_string(),
         stage_name: "final".to_string(),
+        stage_passed: true,
     });
 
     assert_eq!(result, Err(TestTraceFinalError::InvalidFieldContent("trace_id")));
@@ -6282,6 +6285,7 @@ fn collect_test_trace_final_observation_emits_ordered_checks_and_monotonic_times
         workflow_id: "wf-001".to_string(),
         trace_id: "trace-001".to_string(),
         stage_name: "final".to_string(),
+        stage_passed: true,
     });
     assert!(plan_result.is_ok());
     let Ok(plan) = plan_result else {
@@ -6308,6 +6312,7 @@ fn evaluate_test_trace_final_report_preserves_stage_order_and_validates_timestam
         workflow_id: "wf-002".to_string(),
         trace_id: "trace-002".to_string(),
         stage_name: "final".to_string(),
+        stage_passed: true,
     });
     assert!(plan_result.is_ok());
     let Ok(plan) = plan_result else {
@@ -6340,6 +6345,7 @@ fn validate_test_trace_final_report_rejects_decision_mismatch() {
         workflow_id: "wf-003".to_string(),
         trace_id: "trace-003".to_string(),
         stage_name: "final".to_string(),
+        stage_passed: true,
     });
     assert!(plan_result.is_ok());
     let Ok(plan) = plan_result else {
@@ -6363,4 +6369,76 @@ fn validate_test_trace_final_report_rejects_decision_mismatch() {
         validate_test_trace_final_report(&report),
         Err(TestTraceFinalError::InvalidReport("decision mismatch"))
     );
+}
+
+#[test]
+fn gate_signal_uses_stage_passed_not_stage_name_string() {
+    // Stage named "Failure" but with stage_passed=true should produce Pass decision.
+    let plan_result = build_test_trace_final_plan(&TestTraceFinalInput {
+        workflow_id: "wf-004".to_string(),
+        trace_id: "trace-004".to_string(),
+        stage_name: "Failure".to_string(),
+        stage_passed: true,
+    });
+    assert!(plan_result.is_ok());
+    let Ok(plan) = plan_result else {
+        return;
+    };
+
+    let obs = collect_test_trace_final_observation(&plan);
+    assert!(obs.is_ok());
+    let Ok(observation) = obs else {
+        return;
+    };
+
+    let gate_check =
+        observation.checks.iter().find(|c| c.check == TestTraceFinalCheckName::FinalGateSignal);
+    assert!(gate_check.is_some());
+    assert!(
+        gate_check.unwrap().success,
+        "stage named 'Failure' but stage_passed=true should yield gate success"
+    );
+
+    let report = evaluate_test_trace_final_report(&observation);
+    assert!(report.is_ok());
+    let Ok(report) = report else {
+        return;
+    };
+    assert_eq!(report.decision, TestTraceFinalDecision::Pass);
+}
+
+#[test]
+fn gate_signal_fails_when_stage_passed_is_false_regardless_of_name() {
+    // Stage named "success" but with stage_passed=false should produce Fail decision.
+    let plan_result = build_test_trace_final_plan(&TestTraceFinalInput {
+        workflow_id: "wf-005".to_string(),
+        trace_id: "trace-005".to_string(),
+        stage_name: "success".to_string(),
+        stage_passed: false,
+    });
+    assert!(plan_result.is_ok());
+    let Ok(plan) = plan_result else {
+        return;
+    };
+
+    let obs = collect_test_trace_final_observation(&plan);
+    assert!(obs.is_ok());
+    let Ok(observation) = obs else {
+        return;
+    };
+
+    let gate_check =
+        observation.checks.iter().find(|c| c.check == TestTraceFinalCheckName::FinalGateSignal);
+    assert!(gate_check.is_some());
+    assert!(
+        !gate_check.unwrap().success,
+        "stage named 'success' but stage_passed=false should yield gate failure"
+    );
+
+    let report = evaluate_test_trace_final_report(&observation);
+    assert!(report.is_ok());
+    let Ok(report) = report else {
+        return;
+    };
+    assert_eq!(report.decision, TestTraceFinalDecision::Fail);
 }
