@@ -1,6 +1,7 @@
 //! Health, circuit-breaker, and behavioral-fingerprint types.
 
 use super::domain::DomainError;
+use super::ids::{ModelId, Tier};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -312,7 +313,7 @@ impl BehavioralFingerprint {
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ModelHealth {
-    pub model_id: String,
+    pub model_id: ModelId,
     pub is_rate_limited: bool,
     pub consecutive_failures: u32,
     pub cooldown_until: Option<DateTime<Utc>>,
@@ -320,8 +321,8 @@ pub struct ModelHealth {
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct UsageStatus {
-    pub active_models: std::collections::HashMap<String, String>,
-    pub model_health: std::collections::HashMap<String, ModelHealth>,
+    pub active_models: std::collections::HashMap<Tier, ModelId>,
+    pub model_health: std::collections::HashMap<ModelId, ModelHealth>,
     pub circuit_state: CircuitState,
     pub last_updated: DateTime<Utc>,
 }

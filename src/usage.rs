@@ -7,7 +7,8 @@
 //! - Usage statistics for monitoring.
 
 use crate::types::{
-    load_model_tier_config, CircuitState, ModelHealth, ModelTierConfig, UsageStatus,
+    load_model_tier_config, CircuitState, ModelHealth, ModelId, ModelTierConfig, Tier, TierError,
+    UsageStatus,
 };
 use chrono::{DateTime, Duration, Utc};
 use restate_sdk::prelude::*;
@@ -24,16 +25,12 @@ static MODEL_TIER_CONFIG: OnceLock<Option<ModelTierConfig>> = OnceLock::new();
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrackerState {
-    // Current active index for each tier's model list
-    pub active_indices: HashMap<String, usize>,
-    // Health status per model ID
-    pub model_health: HashMap<String, ModelHealth>,
-    // Tier-level breaker state when all models are overloaded
+    pub active_indices: HashMap<Tier, usize>,
+    pub model_health: HashMap<ModelId, ModelHealth>,
     #[serde(default)]
-    pub tier_circuits: HashMap<String, TierCircuit>,
-    // Tier-level token bucket to smooth bursts
+    pub tier_circuits: HashMap<Tier, TierCircuit>,
     #[serde(default)]
-    pub tier_limiters: HashMap<String, TierLimiter>,
+    pub tier_limiters: HashMap<Tier, TierLimiter>,
     pub last_updated: DateTime<Utc>,
 }
 
@@ -75,7 +72,7 @@ impl Default for TrackerState {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReportOutcomeRequest {
-    pub model: String,
+    pub model: ModelId,
     pub success: bool,
     pub is_rate_limit: bool,
 }
@@ -83,18 +80,12 @@ pub struct ReportOutcomeRequest {
 #[restate_sdk::object]
 #[name = "Oya"]
 pub trait OyaUsageTracker {
-    /// Get the currently active, healthy model for the requested tier.
-    /// Rotates automatically if the current one is unhealthy.
-    async fn get_active_model(tier: String) -> Result<Json<String>, HandlerError>;
+    async fn get_active_model(tier: String) -> Result<Json<ModelId>, HandlerError>;
 
-    /// Report the outcome of a model execution.
-    /// Triggers failover if rate limited.
     async fn report_outcome(request: Json<ReportOutcomeRequest>) -> Result<(), HandlerError>;
 
-    /// Get the full status of the usage tracker for monitoring.
     async fn get_status() -> Result<Json<UsageStatus>, HandlerError>;
 
-    /// Manually reset circuit breakers and health status.
     async fn reset() -> Result<(), HandlerError>;
 }
 
@@ -105,7 +96,8 @@ impl OyaUsageTracker for OyaUsageTrackerImpl {
         &self,
         ctx: ObjectContext<'_>,
         tier: String,
-    ) -> Result<Json<String>, HandlerError> {
+    ) -> Result<Json<ModelId>, HandlerError> {
+        let tier = Tier::new(&tier).map_err(|e| HandlerError::from(e.to_string()))?;
         let mut state = tracker_state_from_ctx(&ctx).await?;
         let now = next_logical_time(&state);
         guard_tier_circuit(&mut state, &tier, now)?;
@@ -122,14 +114,23 @@ impl OyaUsageTracker for OyaUsageTrackerImpl {
                 let retry_after_ms = TIER_CIRCUIT_OPEN_SECONDS * 1_000;
                 return Err(TerminalError::new(format!(
                     "all_models_rate_limited tier={} retry_after_ms={retry_after_ms}",
-                    tier
+                    tier.as_str()
                 ))
                 .into());
             };
         persist_index_change(&ctx, &mut state, &tier, current_index, selected_index);
         state.last_updated = now;
         ctx.set("state", Json(state.clone()));
-        Ok(Json(model_list[selected_index].clone()))
+        let selected_model = model_list.get(selected_index).ok_or_else(|| {
+            HandlerError::from(format!(
+                "no model at index {} for tier {}",
+                selected_index,
+                tier.as_str()
+            ))
+        })?;
+        let model_id =
+            ModelId::new(selected_model).map_err(|e| HandlerError::from(e.to_string()))?;
+        Ok(Json(model_id))
     }
 
     async fn report_outcome(
@@ -178,17 +179,20 @@ impl OyaUsageTracker for OyaUsageTrackerImpl {
         let state = ctx.get::<Json<TrackerState>>("state").await?.map(|j| j.0).unwrap_or_default();
         let circuit_state = aggregate_circuit_state(&state);
 
-        // Convert active indices to model names for display
-        let mut active_models = HashMap::new();
-        for tier in ["d", "c", "b", "a", "s"] {
-            let list = get_models_for_tier(tier);
-            if !list.is_empty() {
-                let idx = *state.active_indices.get(tier).unwrap_or(&0);
-                if idx < list.len() {
-                    active_models.insert(tier.to_string(), list[idx].clone());
+        let active_models = ["d", "c", "b", "a", "s"]
+            .iter()
+            .filter_map(|tier_str| {
+                let tier = Tier::new(*tier_str).ok()?;
+                let list = get_models_for_tier(tier_str);
+                if list.is_empty() {
+                    return None;
                 }
-            }
-        }
+                let idx = *state.active_indices.get(&tier).unwrap_or(&0);
+                let model_str = list.get(idx)?;
+                let model_id = ModelId::new(model_str).ok()?;
+                Some((tier, model_id))
+            })
+            .collect();
 
         Ok(Json(UsageStatus {
             active_models,
@@ -211,15 +215,18 @@ async fn tracker_state_from_ctx(ctx: &ObjectContext<'_>) -> Result<TrackerState,
     Ok(value.map_or_else(TrackerState::default, |json| json.0))
 }
 
-fn models_for_tier_or_error(tier: &str) -> Result<Vec<String>, HandlerError> {
-    let model_list = get_models_for_tier(tier);
+fn models_for_tier_or_error(tier: &Tier) -> Result<Vec<String>, HandlerError> {
+    let model_list = get_models_for_tier(tier.as_str());
     if model_list.is_empty() {
-        return Err(HandlerError::from(format!("No models configured for tier '{}'", tier)));
+        return Err(HandlerError::from(format!(
+            "No models configured for tier '{}'",
+            tier.as_str()
+        )));
     }
     Ok(model_list)
 }
 
-fn active_index_for_tier(state: &TrackerState, tier: &str) -> usize {
+fn active_index_for_tier(state: &TrackerState, tier: &Tier) -> usize {
     *state.active_indices.get(tier).unwrap_or(&0)
 }
 
@@ -231,83 +238,97 @@ fn selected_healthy_index(
 ) -> Option<usize> {
     (0..model_list.len()).find_map(|offset| {
         let idx = (current_index + offset) % model_list.len();
-        is_model_healthy_at(state, &model_list[idx], now).then_some(idx)
+        let model_str = &model_list[idx];
+        is_model_healthy_at(state, model_str, now).then_some(idx)
     })
 }
 
 fn persist_index_change(
     ctx: &ObjectContext<'_>,
     state: &mut TrackerState,
-    tier: &str,
+    tier: &Tier,
     current_index: usize,
     selected_index: usize,
 ) {
     if selected_index != current_index {
-        state.active_indices.insert(tier.to_string(), selected_index);
+        state.active_indices.insert(tier.clone(), selected_index);
         state.last_updated = next_logical_time(state);
         ctx.set("state", Json(state.clone()));
     }
 }
 
-fn rotate_tiers_on_rate_limit(state: &mut TrackerState, model: &str) {
-    for tier in ["d", "c", "b", "a", "s"] {
-        let list = get_models_for_tier(tier);
-        if let Some(idx) = list.iter().position(|m| m == model) {
-            let current = *state.active_indices.get(tier).unwrap_or(&0);
-            if current == idx {
-                let next = (current + 1) % list.len();
-                state.active_indices.insert(tier.to_string(), next);
-                tracing::info!(
-                    "Rate limit detected for {}. Rotating tier '{}' to model {}",
-                    model,
-                    tier,
-                    list[next]
-                );
+fn rotate_tiers_on_rate_limit(state: &mut TrackerState, model: &ModelId) {
+    ["d", "c", "b", "a", "s"]
+        .iter()
+        .filter_map(|tier_str| Tier::new(*tier_str).ok().map(|tier| (tier, *tier_str)))
+        .for_each(|(tier, tier_str)| {
+            let list = get_models_for_tier(tier_str);
+            if let Some(idx) = list.iter().position(|m| m == model.as_str()) {
+                let current = *state.active_indices.get(&tier).unwrap_or(&0);
+                if current == idx {
+                    let next = (current + 1) % list.len();
+                    state.active_indices.insert(tier.clone(), next);
+                    tracing::info!(
+                        "Rate limit detected for {}. Rotating tier '{}' to model {}",
+                        model.as_str(),
+                        tier_str,
+                        list[next]
+                    );
+                }
             }
-        }
-    }
+        });
 }
 
-fn open_circuit_for_overloaded_tiers(state: &mut TrackerState, model: &str, now: DateTime<Utc>) {
-    for tier in ["d", "c", "b", "a", "s"] {
-        let models = get_models_for_tier(tier);
-        if !models.iter().any(|entry| entry == model) {
-            continue;
-        }
-        let all_unhealthy = models.iter().all(|entry| !is_model_healthy_at(state, entry, now));
-        if all_unhealthy {
-            open_tier_circuit(state, tier, now);
-        }
-    }
+fn open_circuit_for_overloaded_tiers(
+    state: &mut TrackerState,
+    model: &ModelId,
+    now: DateTime<Utc>,
+) {
+    ["d", "c", "b", "a", "s"]
+        .iter()
+        .filter_map(|tier_str| Tier::new(*tier_str).ok().map(|tier| (tier, *tier_str)))
+        .for_each(|(tier, tier_str)| {
+            let models = get_models_for_tier(tier_str);
+            if !models.iter().any(|entry| entry == model.as_str()) {
+                return;
+            }
+            let all_unhealthy = models.iter().all(|entry| !is_model_healthy_at(state, entry, now));
+            if all_unhealthy {
+                open_tier_circuit(state, &tier, now);
+            }
+        });
 }
 
-fn close_circuit_for_model_tiers(state: &mut TrackerState, model: &str) {
-    for tier in ["d", "c", "b", "a", "s"] {
-        let models = get_models_for_tier(tier);
-        if models.iter().any(|entry| entry == model) {
-            close_tier_circuit(state, tier);
-        }
-    }
+fn close_circuit_for_model_tiers(state: &mut TrackerState, model: &ModelId) {
+    ["d", "c", "b", "a", "s"]
+        .iter()
+        .filter_map(|tier_str| Tier::new(*tier_str).ok().map(|tier| (tier, *tier_str)))
+        .for_each(|(tier, tier_str)| {
+            let models = get_models_for_tier(tier_str);
+            if models.iter().any(|entry| entry == model.as_str()) {
+                close_tier_circuit(state, &tier);
+            }
+        });
 }
 
-fn close_tier_circuit(state: &mut TrackerState, tier: &str) {
-    let circuit = state.tier_circuits.entry(tier.to_string()).or_default();
+fn close_tier_circuit(state: &mut TrackerState, tier: &Tier) {
+    let circuit = state.tier_circuits.entry(tier.clone()).or_default();
     circuit.state = CircuitState::Closed;
     circuit.open_until = None;
 }
 
-fn open_tier_circuit(state: &mut TrackerState, tier: &str, now: DateTime<Utc>) {
-    let circuit = state.tier_circuits.entry(tier.to_string()).or_default();
+fn open_tier_circuit(state: &mut TrackerState, tier: &Tier, now: DateTime<Utc>) {
+    let circuit = state.tier_circuits.entry(tier.clone()).or_default();
     circuit.state = CircuitState::Open;
     circuit.open_until = Some(now + Duration::seconds(TIER_CIRCUIT_OPEN_SECONDS));
 }
 
 fn guard_tier_circuit(
     state: &mut TrackerState,
-    tier: &str,
+    tier: &Tier,
     now: DateTime<Utc>,
 ) -> Result<(), HandlerError> {
-    let circuit = state.tier_circuits.entry(tier.to_string()).or_default();
+    let circuit = state.tier_circuits.entry(tier.clone()).or_default();
     if circuit.state != CircuitState::Open {
         return Ok(());
     }
@@ -322,17 +343,17 @@ fn guard_tier_circuit(
     let retry_after_ms = (open_until - now).num_milliseconds().max(0);
     Err(TerminalError::new(format!(
         "tier_circuit_open tier={} retry_after_ms={retry_after_ms}",
-        tier
+        tier.as_str()
     ))
     .into())
 }
 
 fn consume_tier_token(
     state: &mut TrackerState,
-    tier: &str,
+    tier: &Tier,
     now: DateTime<Utc>,
 ) -> Result<(), HandlerError> {
-    let limiter = state.tier_limiters.entry(tier.to_string()).or_default();
+    let limiter = state.tier_limiters.entry(tier.clone()).or_default();
     let elapsed_ms = (now - limiter.last_refill).num_milliseconds().max(0) as f64;
     let refill = (elapsed_ms / 1000.0) * TIER_TOKEN_BUCKET_REFILL_PER_SEC;
     limiter.tokens = (limiter.tokens + refill).min(TIER_TOKEN_BUCKET_CAPACITY);
@@ -343,7 +364,8 @@ fn consume_tier_token(
             .map(|duration| duration.as_millis() as i64)
             .unwrap_or(0);
         return Err(TerminalError::new(format!(
-            "tier_token_exhausted tier={tier} retry_after_ms={retry_after_ms}"
+            "tier_token_exhausted tier={} retry_after_ms={retry_after_ms}",
+            tier.as_str()
         ))
         .into());
     }
@@ -380,7 +402,10 @@ fn aggregate_circuit_state(state: &TrackerState) -> CircuitState {
 }
 
 fn is_model_healthy_at(state: &TrackerState, model_id: &str, now: DateTime<Utc>) -> bool {
-    if let Some(health) = state.model_health.get(model_id) {
+    let Ok(id) = ModelId::new(model_id) else {
+        return true;
+    };
+    if let Some(health) = state.model_health.get(&id) {
         if let Some(cooldown) = health.cooldown_until {
             if now < cooldown {
                 return false;
@@ -479,8 +504,8 @@ pub fn is_rate_limit_failure(category: &crate::types::FailureCategory) -> bool {
 
 /// Extract tier name from stage for model selection.
 /// Maps each stage to its appropriate model tier.
-pub fn tier_for_stage(stage: &crate::types::StageName) -> &'static str {
-    stage.model_for_stage().as_str()
+pub fn tier_for_stage(stage: &crate::types::StageName) -> Result<Tier, TierError> {
+    Tier::new(stage.model_for_stage().as_str())
 }
 
 #[cfg(test)]

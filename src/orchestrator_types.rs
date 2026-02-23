@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use super::OyaError;
-use oya::types::{MergeDecision, QueuePosition, TimelineEntry};
+use oya::types::{MergeDecision, ModelId, QueuePosition, TimelineEntry};
 use restate_sdk::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -547,7 +547,7 @@ pub(super) struct OrchestratorState {
     pub attempt: u32,
     pub bead_id: String,
     pub context: String,
-    pub model: String,
+    pub model: ModelId,
     pub last_failure: String,
     pub last_output: String,
     pub last_prompt: String,
@@ -597,7 +597,7 @@ pub(super) struct StageInputData {
     pub run_id: String,
     pub bead_id: String,
     pub context: String,
-    pub model: String,
+    pub model: ModelId,
     pub last_failure: Option<FailureSnapshot>,
 }
 
@@ -685,7 +685,7 @@ pub(super) struct DurableEvent {
 pub(super) struct StartRequestPayload {
     pub bead_id: Option<String>,
     pub context: Option<String>,
-    pub model: Option<String>,
+    pub model: Option<ModelId>,
 }
 
 pub(super) fn parse_start_request(
