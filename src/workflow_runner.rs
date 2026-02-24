@@ -10,8 +10,7 @@ use poller::{
 };
 use types::WorkflowConfig;
 
-const PIPELINE_STAGES: &[&str] =
-    &["explore", "contract", "red", "implementation", "witness", "ship_gate"];
+const PIPELINE_STAGES: &[&str] = &["jj_workspace", "implementation", "main"];
 
 fn find_repo_root() -> Result<PathBuf, String> {
     let current =

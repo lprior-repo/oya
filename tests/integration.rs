@@ -70,7 +70,8 @@ async fn test_poll_snapshot_with_mocks() {
     let permission = r#"{"items": [{"id": "perm-1"}]}"#;
     let question = r#"[]"#;
 
-    let snapshot = build_opencode_poll_snapshot(session_status, permission, question).unwrap();
+    let snapshot =
+        build_opencode_poll_snapshot(session_status, permission, question, 0, 0).unwrap();
 
     assert_eq!(snapshot.busy_sessions.len(), 1);
     assert_eq!(snapshot.busy_sessions[0], "session-1");

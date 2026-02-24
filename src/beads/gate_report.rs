@@ -179,8 +179,8 @@ mod tests {
 
     #[test]
     fn build_report_passed_variant() {
-        let aggregated = agg_passed(StageName::Contract, 1);
-        let report = build_gate_report(StageName::Contract, &aggregated);
+        let aggregated = agg_passed(StageName::Implementation, 1);
+        let report = build_gate_report(StageName::Implementation, &aggregated);
 
         assert!(report.is_passed());
         assert!(!report.is_failed());
@@ -188,7 +188,7 @@ mod tests {
 
         match report {
             GateReport::Passed { stage, stats, entries } => {
-                assert_eq!(stage, StageName::Contract);
+                assert_eq!(stage, StageName::Implementation);
                 assert_eq!(stats.total, 1);
                 assert_eq!(stats.passed, 1);
                 assert_eq!(entries.len(), 1);
@@ -263,8 +263,8 @@ mod tests {
 
     #[test]
     fn build_report_failure_category_none_when_passed() {
-        let aggregated = agg_passed(StageName::Contract, 1);
-        let report = build_gate_report(StageName::Contract, &aggregated);
+        let aggregated = agg_passed(StageName::Implementation, 1);
+        let report = build_gate_report(StageName::Implementation, &aggregated);
 
         match report {
             GateReport::Passed { .. } => {
@@ -292,8 +292,8 @@ mod tests {
     #[test]
     fn passed_cannot_have_failure_category() {
         // Demonstrates compile-time guarantee: Passed variant has no category field
-        let aggregated = agg_passed(StageName::Contract, 1);
-        let report = build_gate_report(StageName::Contract, &aggregated);
+        let aggregated = agg_passed(StageName::Implementation, 1);
+        let report = build_gate_report(StageName::Implementation, &aggregated);
 
         match report {
             GateReport::Passed { .. } => {
@@ -321,8 +321,8 @@ mod tests {
 
     #[test]
     fn entries_accessible_from_both_variants() {
-        let agg_pass = agg_passed(StageName::Contract, 2);
-        let report_pass = build_gate_report(StageName::Contract, &agg_pass);
+        let agg_pass = agg_passed(StageName::Implementation, 2);
+        let report_pass = build_gate_report(StageName::Implementation, &agg_pass);
         assert_eq!(report_pass.entries().len(), 2);
 
         let agg_fail = agg_failed(StageName::Implementation, 1, 2);

@@ -61,30 +61,29 @@ async fn given_gate_configured_to_fail_when_it_runs_then_reports_failure() {
     assert_eq!(result.exit_code, 1);
 }
 
-/// Given: Plan stage
+/// Given: JJ workspace stage
 /// When: Gates run
-/// Then: Should only run Compiles gate
+/// Then: Should run no gates
 #[tokio::test]
 async fn given_plan_stage_when_gates_run_then_only_compiles_required() {
     use oya::types::StageName;
 
-    let gates = StageName::Contract.gates();
+    let gates = StageName::JjWorkspace.gates();
 
-    assert_eq!(gates.len(), 1);
-    assert_eq!(gates[0], Gate::Compiles);
+    assert!(gates.is_empty());
 }
 
 /// Given: ShipGate stage
 /// When: Gates run
-/// Then: Should run CueArtifactGenerated only.
+/// Then: Should run Moon CI only.
 #[tokio::test]
 async fn given_shipgate_when_gates_run_then_runs_cue_artifact_check_only() {
     use oya::types::StageName;
 
-    let gates = StageName::ShipGate.gates();
+    let gates = StageName::Main.gates();
 
     assert_eq!(gates.len(), 1);
-    assert!(gates.contains(&Gate::CueArtifactGenerated));
+    assert!(gates.contains(&Gate::MoonCi));
 }
 
 /// Given: Tdd15 stage
@@ -108,11 +107,10 @@ async fn given_tdd15_when_gates_run_then_runs_compile_and_test() {
 async fn given_all_stages_when_gates_checked_then_appropriate_for_stage() {
     use oya::types::StageName;
 
-    // Early stages: Just compile
-    for stage in [StageName::Contract, StageName::Red] {
+    // JJ workspace stage has no gates
+    for stage in [StageName::JjWorkspace] {
         let gates = stage.gates();
-        assert_eq!(gates.len(), 1, "{:?} should have 1 gate", stage);
-        assert_eq!(gates[0], Gate::Compiles);
+        assert!(gates.is_empty(), "{:?} should have no gates", stage);
     }
 
     // Implementation stages: Compile + tests
@@ -120,18 +118,9 @@ async fn given_all_stages_when_gates_checked_then_appropriate_for_stage() {
     assert!(tdd15_gates.contains(&Gate::Compiles));
     assert!(tdd15_gates.contains(&Gate::TestsPass));
 
-    // QA stage: Tests + edge cases
-    let qa_gates = StageName::Implementation.gates();
-    assert!(qa_gates.contains(&Gate::Compiles));
-    assert!(qa_gates.contains(&Gate::TestsPass));
-
-    // Witness stage: holdout verification
-    let witness_gates = StageName::Witness.gates();
-    assert!(witness_gates.contains(&Gate::HoldoutScenarios));
-
-    // Ship stage: artifact check only
-    let shipgate_gates = StageName::ShipGate.gates();
-    assert!(shipgate_gates.contains(&Gate::CueArtifactGenerated));
+    // Main stage: CI check only
+    let shipgate_gates = StageName::Main.gates();
+    assert!(shipgate_gates.contains(&Gate::MoonCi));
     assert_eq!(shipgate_gates.len(), 1);
 }
 

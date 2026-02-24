@@ -5,6 +5,7 @@
 #   and the built-in default is used only when neither CLI nor config supply a model.
 #   model_tiers: Data-driven model tier configuration. Each tier maps to a list of models
 #   for failover and tier-based selection.
+#   pipeline_execution_enabled: Set to true to enable real pipeline execution (opencode CLI + moon quality gates + br landing). Set to false for dry-run mode.
 model: zai-coding-plan/glm-5
 model_tiers:
   d:

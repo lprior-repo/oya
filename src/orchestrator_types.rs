@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use super::OyaError;
-use oya::types::{MergeDecision, ModelId, QueuePosition, TimelineEntry};
+use oya::types::{GitHubPrMetadata, MergeDecision, ModelId, QueuePosition, TimelineEntry};
 use restate_sdk::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -495,6 +495,7 @@ pub struct OpsMonitorPollResponse {
     pub busy_sessions: Vec<String>,
     pub pending_permissions: usize,
     pub pending_questions: usize,
+    pub dashboard: Option<oya::types::DashboardSnapshot>,
 }
 
 #[derive(Debug, Serialize)]
@@ -520,18 +521,10 @@ pub struct OpsMonitorEventResponse {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(super) struct WorkspaceLifecycleEvent {
-    pub workspace: String,
+    pub workspace_name: String,
     pub workspace_path: String,
-    pub queue_command: String,
-    pub queue_passed: bool,
-    pub queue_exit_code: i32,
-    pub queue_output: String,
-    pub add_command: String,
-    pub add_passed: bool,
-    pub add_exit_code: i32,
-    pub add_output: String,
     pub coordination: WorkspaceCoordination,
-    pub recorded_at: String,
+    pub timestamp: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -570,6 +563,7 @@ pub(super) struct StageArtifact {
     pub task_tracking: Option<TaskTracking>,
     pub gates: Vec<GateResultData>,
     pub status: StageStatus,
+    pub github_pr: Option<GitHubPrMetadata>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -583,12 +577,6 @@ pub(super) struct StageTiming {
 pub(super) struct WorkspaceLifecycle {
     pub name: String,
     pub path: String,
-    pub queue_command: String,
-    pub queue_passed: bool,
-    pub queue_exit_code: i32,
-    pub add_command: String,
-    pub add_passed: bool,
-    pub add_exit_code: i32,
     pub coordination: WorkspaceCoordination,
 }
 
@@ -675,6 +663,7 @@ pub(super) struct DurableEvent {
     pub reason: String,
     pub at: String,
     pub identity: ChangeIdentity,
+    pub payload: Option<serde_json::Value>,
 }
 
 // ---------------------------------------------------------------------------

@@ -1,11 +1,11 @@
 use super::OyaError;
 use crate::orchestrator_types::GateResultData;
 use crate::runtime_tools::{
-    execute_gate, gate_failure_outcome, run_opencode, summarize_failure_output, GateEvidence,
+    execute_gate, gate_failure_outcome, run_opencode, summarize_failure_output,
+    validate_write_path, GateEvidence,
 };
 use crate::stage_runtime::{
-    execute_ship_gate, execute_witness_gate, stage_prompt, stage_success, ShipGateRequest,
-    StagePromptInput,
+    execute_ship_gate, stage_prompt, stage_success, ShipGateRequest, StagePromptInput,
 };
 use oya::types::{
     truncate_clean, FailureCategory, Gate, StageFailure, StageName as Stage, StageResult,
@@ -13,6 +13,7 @@ use oya::types::{
 use restate_sdk::context::ContextSideEffects;
 use restate_sdk::prelude::{HandlerError, Json, WorkflowContext};
 use std::path::PathBuf;
+use std::process::Command;
 use std::time::Duration;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -123,12 +124,9 @@ async fn stage_execution_journaled(
 
 fn stage_timeout_seconds(stage: &Stage) -> u64 {
     let default = match stage {
-        Stage::Explore => 300,
-        Stage::Contract => 780,
-        Stage::Red => 600,
+        Stage::JjWorkspace => 600,
         Stage::Implementation => 1_200,
-        Stage::Witness => 900,
-        Stage::ShipGate => 1_200,
+        Stage::Main => 1_200,
     };
 
     std::env::var("OYA_STAGE_TIMEOUT_SECONDS")
@@ -172,15 +170,11 @@ pub(super) fn execute_stage_blocking(
     input: StageBlockingInput,
 ) -> Result<StageExecution, OyaError> {
     let request = input.request;
-    if request.stage == Stage::ShipGate {
+    if request.stage == Stage::Main {
         return execute_ship_gate(ShipGateRequest {
             attempt: request.attempt,
-
             repo_root: input.repo_root,
         });
-    }
-    if request.stage == Stage::Witness {
-        return execute_witness_gate(input.repo_root);
     }
     execute_prompt_driven_stage(request, input.repo_root)
 }
@@ -213,10 +207,24 @@ fn execute_prompt_driven_stage(
 pub(super) fn execute_prompt_stage(
     request: PromptStageRequest,
 ) -> Result<StageExecution, OyaError> {
+    let baseline_paths = if request.stage == Stage::JjWorkspace {
+        Some(collect_changed_paths(&request.repo_root)?)
+    } else {
+        None
+    };
+
     let (opencode_ok, opencode_output) =
         run_opencode(request.prompt.as_str(), &request.repo_root, request.model.as_str())?;
     if !opencode_ok {
         return Ok(opencode_failure_stage_execution(&request, opencode_output));
+    }
+
+    if let Some(baseline) = baseline_paths.as_ref() {
+        let violations =
+            stage_write_violations_since(&request.stage, &request.repo_root, baseline)?;
+        if !violations.is_empty() {
+            return Ok(write_violation_stage_execution(&request, violations));
+        }
     }
 
     let mut gate_results = Vec::new();
@@ -242,6 +250,81 @@ pub(super) fn execute_prompt_stage(
         prompt: request.prompt,
         gate_results,
     })
+}
+
+fn stage_write_violations_since(
+    stage: &Stage,
+    repo_root: &PathBuf,
+    baseline_paths: &std::collections::BTreeSet<String>,
+) -> Result<Vec<String>, OyaError> {
+    let changed_paths = collect_changed_paths(repo_root)?;
+    Ok(changed_paths
+        .difference(baseline_paths)
+        .filter_map(|relative| {
+            let absolute = repo_root.join(relative);
+            validate_write_path(stage, absolute.as_path(), repo_root.as_path())
+                .err()
+                .map(|error| format!("{} ({})", relative, error))
+        })
+        .collect::<Vec<_>>())
+}
+
+fn collect_changed_paths(
+    repo_root: &PathBuf,
+) -> Result<std::collections::BTreeSet<String>, OyaError> {
+    let mut changed = std::collections::BTreeSet::new();
+    collect_changed_from_git(repo_root, &["diff", "--name-only"], &mut changed)?;
+    collect_changed_from_git(
+        repo_root,
+        &["ls-files", "--others", "--exclude-standard"],
+        &mut changed,
+    )?;
+    Ok(changed)
+}
+
+fn collect_changed_from_git(
+    repo_root: &PathBuf,
+    args: &[&str],
+    changed: &mut std::collections::BTreeSet<String>,
+) -> Result<(), OyaError> {
+    let output =
+        Command::new("git").arg("-C").arg(repo_root).args(args).output().map_err(|error| {
+            OyaError(format!("failed to run git {}: {}", args.join(" "), error))
+        })?;
+
+    if !output.status.success() {
+        return Err(OyaError(format!(
+            "git {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr)
+        )));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for line in stdout.lines().map(str::trim).filter(|line| !line.is_empty()) {
+        changed.insert(line.to_string());
+    }
+    Ok(())
+}
+
+fn write_violation_stage_execution(
+    request: &PromptStageRequest,
+    violations: Vec<String>,
+) -> StageExecution {
+    let details = violations.join("\n");
+    StageExecution {
+        passed: false,
+        output: format!(
+            "write allowlist violation at stage={} attempt={}\n{}",
+            request.stage.as_str(),
+            request.attempt,
+            details
+        ),
+        failure_category: Some(FailureCategory::OutputParseFailure),
+        next_stage: Some(request.stage.clone()),
+        prompt: request.prompt.clone(),
+        gate_results: Vec::new(),
+    }
 }
 
 fn opencode_failure_stage_execution(
@@ -341,26 +424,26 @@ mod tests {
     #[test]
     fn test_stage_timeout_seconds_has_defaults_and_override_clamp() {
         std::env::remove_var("OYA_STAGE_TIMEOUT_SECONDS");
-        assert_eq!(stage_timeout_seconds(&Stage::Explore), 300);
+        assert_eq!(stage_timeout_seconds(&Stage::JjWorkspace), 600);
         assert_eq!(stage_timeout_seconds(&Stage::Implementation), 1_200);
 
         std::env::set_var("OYA_STAGE_TIMEOUT_SECONDS", "30");
-        assert_eq!(stage_timeout_seconds(&Stage::Witness), 60);
+        assert_eq!(stage_timeout_seconds(&Stage::Main), 60);
 
         std::env::set_var("OYA_STAGE_TIMEOUT_SECONDS", "9999");
-        assert_eq!(stage_timeout_seconds(&Stage::Contract), 3_600);
+        assert_eq!(stage_timeout_seconds(&Stage::Implementation), 3_600);
 
         std::env::remove_var("OYA_STAGE_TIMEOUT_SECONDS");
     }
 
     #[test]
     fn test_stage_timeout_execution_marks_retryable_failure() {
-        let execution = stage_timeout_execution(&Stage::Explore, "model", 2, 123);
+        let execution = stage_timeout_execution(&Stage::JjWorkspace, "model", 2, 123);
         assert!(!execution.passed);
         assert!(execution.output.contains("123"));
         assert!(execution.output.contains("source=stage_executor_timeout"));
         assert_eq!(execution.failure_category, Some(FailureCategory::ProviderUnavailable));
-        assert_eq!(execution.next_stage, Some(Stage::Explore));
+        assert_eq!(execution.next_stage, Some(Stage::JjWorkspace));
     }
 
     #[test]

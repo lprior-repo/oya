@@ -45,6 +45,7 @@ pub enum ValidationError {
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum AgentStatus {
     Idle,
     Working,
@@ -80,85 +81,35 @@ impl TryFrom<&str> for AgentStatus {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum AgentStatusData {
+    Idle,
+    Working { bead_id: BeadId, current_stage: StageName, stage_started_at: DateTime<Utc> },
+    Waiting { bead_id: BeadId, current_stage: StageName },
+    Error { bead_id: Option<BeadId>, message: String },
+    Done,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentState {
     pub agent_id: AgentId,
-    pub bead_id: Option<BeadId>,
-    pub current_stage: Option<StageName>,
-    pub stage_started_at: Option<DateTime<Utc>>,
-    pub status: AgentStatus,
+    #[serde(flatten)]
+    pub status: AgentStatusData,
     pub last_update: DateTime<Utc>,
     pub implementation_attempt: u32,
     pub feedback: Option<String>,
 }
 
 impl AgentState {
-    pub fn new(
-        agent_id: AgentId,
-        bead_id: Option<BeadId>,
-        current_stage: Option<StageName>,
-        status: AgentStatus,
-        implementation_attempt: u32,
-    ) -> Self {
-        Self {
-            agent_id,
-            bead_id,
-            current_stage,
-            stage_started_at: None,
-            status,
-            last_update: Utc::now(),
-            implementation_attempt,
-            feedback: None,
-        }
+    pub fn new(agent_id: AgentId, status: AgentStatusData, implementation_attempt: u32) -> Self {
+        Self { agent_id, status, last_update: Utc::now(), implementation_attempt, feedback: None }
     }
 
     pub fn validate_invariants(&self) -> Result<(), ValidationError> {
-        match self.status {
-            AgentStatus::Working => validate_working_agent(self),
-            AgentStatus::Done => validate_done_agent(self),
-            AgentStatus::Idle | AgentStatus::Waiting | AgentStatus::Error => {
-                validate_idle_agent(self)
-            }
-        }
+        // Enforced by type structure.
+        Ok(())
     }
-}
-
-fn validate_working_agent(agent: &AgentState) -> Result<(), ValidationError> {
-    if agent.bead_id.is_none() {
-        return Err(ValidationError::InvalidState(
-            "Agent with Working status must have a bead".to_string(),
-        ));
-    }
-    if agent.current_stage.is_none() {
-        return Err(ValidationError::InvalidState(
-            "Agent with Working status must have a current_stage".to_string(),
-        ));
-    }
-    Ok(())
-}
-
-fn validate_done_agent(agent: &AgentState) -> Result<(), ValidationError> {
-    if agent.bead_id.is_some() {
-        return Err(ValidationError::InvalidState(
-            "Agent with Done status must not have a bead".to_string(),
-        ));
-    }
-    if agent.current_stage.is_some() {
-        return Err(ValidationError::InvalidState(
-            "Agent with Done status must have no active stage".to_string(),
-        ));
-    }
-    Ok(())
-}
-
-fn validate_idle_agent(agent: &AgentState) -> Result<(), ValidationError> {
-    if agent.bead_id.is_some() {
-        return Err(ValidationError::InvalidState(format!(
-            "Agent with {:?} status must not have a bead",
-            agent.status
-        )));
-    }
-    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -224,7 +175,7 @@ impl Run {
     pub fn start(&self) -> Result<Self, DomainError> {
         match &self.state {
             RunState::Pending => Ok(Self {
-                state: RunState::Running { current_stage: StageName::Contract },
+                state: RunState::Running { current_stage: StageName::JjWorkspace },
                 updated_at: Utc::now(),
                 ..self.clone()
             }),
@@ -1003,4 +954,120 @@ mod queue_domain_tests {
         let decision = SelectionDecision::Merged { bead_id, queue_position };
         assert!(matches!(decision, SelectionDecision::Merged { .. }));
     }
+}
+
+#[cfg(test)]
+mod agent_domain_tests {
+    use super::*;
+    use anyhow::Result;
+    use chrono::Utc;
+
+    #[test]
+    fn given_idle_status_when_constructing_agent_then_succeeds() -> Result<()> {
+        let agent_id = AgentId("agent-1".to_string());
+        let agent = AgentState::new(agent_id, AgentStatusData::Idle, 0);
+
+        assert_eq!(agent.agent_id.0, "agent-1");
+        assert!(matches!(agent.status, AgentStatusData::Idle));
+        Ok(())
+    }
+
+    #[test]
+    fn given_working_status_when_constructing_agent_then_has_all_fields() -> Result<()> {
+        let agent_id = AgentId("agent-1".to_string());
+        let bead_id = BeadId::new("bead-1");
+        let now = Utc::now();
+
+        let agent = AgentState::new(
+            agent_id,
+            AgentStatusData::Working {
+                bead_id: bead_id.clone(),
+                current_stage: StageName::Implementation,
+                stage_started_at: now,
+            },
+            1,
+        );
+
+        if let AgentStatusData::Working { bead_id: b, current_stage: s, stage_started_at: t } =
+            agent.status
+        {
+            assert_eq!(b, bead_id);
+            assert_eq!(s, StageName::Implementation);
+            assert_eq!(t, now);
+        } else {
+            anyhow::bail!("Expected Working status");
+        }
+        assert_eq!(agent.implementation_attempt, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn given_error_status_when_constructing_agent_then_has_message() -> Result<()> {
+        let agent_id = AgentId("agent-1".to_string());
+        let agent = AgentState::new(
+            agent_id,
+            AgentStatusData::Error { bead_id: None, message: "Something went wrong".to_string() },
+            0,
+        );
+
+        if let AgentStatusData::Error { bead_id: b, message: m } = agent.status {
+            assert!(b.is_none());
+            assert_eq!(m, "Something went wrong");
+        } else {
+            anyhow::bail!("Expected Error status");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn given_agent_state_when_serializing_then_roundtrips() -> Result<()> {
+        let agent_id = AgentId("agent-1".to_string());
+        let bead_id = BeadId::new("bead-1");
+        let now = Utc::now();
+
+        let agent = AgentState::new(
+            agent_id,
+            AgentStatusData::Working {
+                bead_id,
+                current_stage: StageName::Implementation,
+                stage_started_at: now,
+            },
+            2,
+        );
+
+        let serialized = serde_json::to_string(&agent)?;
+        let deserialized: AgentState = serde_json::from_str(&serialized)?;
+
+        assert_eq!(deserialized.agent_id.0, agent.agent_id.0);
+        assert_eq!(deserialized.implementation_attempt, 2);
+
+        if let AgentStatusData::Working { bead_id: b, .. } = deserialized.status {
+            assert_eq!(b.0, "bead-1");
+        } else {
+            anyhow::bail!("Expected Working status after roundtrip");
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+/// Metadata for a GitHub Pull Request associated with a bead.
+pub struct GitHubPrMetadata {
+    pub pr_url: String,
+    pub pr_number: u64,
+    pub head_branch: String,
+    pub base_branch: String,
+    pub bead_id: String,
+    pub last_updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+/// Dashboard snapshot for multi-agent queue-lock visibility.
+pub struct DashboardSnapshot {
+    pub generated_at: String,
+    pub active_workers: Vec<String>,
+    pub queue_depth: usize,
+    pub stale_count: usize,
+    pub conflict_count: usize,
+    pub warning_count: usize,
 }

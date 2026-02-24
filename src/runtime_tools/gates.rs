@@ -266,21 +266,14 @@ pub(crate) fn gate_failure_outcome(stage: &Stage, gate: &Gate) -> (FailureCatego
 
 fn gate_failure_mapping(stage: &Stage, gate: &Gate) -> Option<(FailureCategory, Stage)> {
     match (stage, gate) {
-        (&Stage::Explore, _) => None,
-        (&Stage::Contract, &Gate::Compiles) => {
-            Some((FailureCategory::CompileFailed, Stage::Contract))
-        }
-        (&Stage::Red, &Gate::Compiles) => Some((FailureCategory::CompileFailed, Stage::Red)),
+        (&Stage::JjWorkspace, _) => None,
         (&Stage::Implementation, &Gate::Compiles) => {
             Some((FailureCategory::CompileFailed, Stage::Implementation))
         }
         (&Stage::Implementation, &Gate::TestsPass) => {
             Some((FailureCategory::TestFailed, Stage::Implementation))
         }
-        (&Stage::Witness, &Gate::HoldoutScenarios) => {
-            Some((FailureCategory::TestFailed, Stage::Implementation))
-        }
-        (&Stage::ShipGate, &Gate::CueArtifactGenerated) => {
+        (&Stage::Main, &Gate::MoonCi) => {
             Some((FailureCategory::OutputParseFailure, Stage::Implementation))
         }
         _ => None,
@@ -294,8 +287,7 @@ mod tests {
 
     #[test]
     fn test_cue_artifact_gate_routes_to_implementation_on_failure() {
-        let (failure, next_stage) =
-            gate_failure_outcome(&StageName::ShipGate, &Gate::CueArtifactGenerated);
+        let (failure, next_stage) = gate_failure_outcome(&StageName::Main, &Gate::MoonCi);
         assert_eq!(failure, FailureCategory::OutputParseFailure);
         assert_eq!(next_stage, StageName::Implementation);
     }
@@ -329,18 +321,24 @@ mod tests {
     }
 
     #[test]
-    fn test_witness_holdout_failure_routes_to_implementation() {
-        let (failure, next_stage) =
-            gate_failure_outcome(&StageName::Witness, &Gate::HoldoutScenarios);
-        assert_eq!(failure, FailureCategory::TestFailed);
+    fn test_main_ci_failure_routes_to_implementation() {
+        let (failure, next_stage) = gate_failure_outcome(&StageName::Main, &Gate::MoonCi);
+        assert_eq!(failure, FailureCategory::OutputParseFailure);
         assert_eq!(next_stage, StageName::Implementation);
     }
 
     #[test]
+    fn test_main_unknown_gate_defaults_to_same_stage() {
+        let (failure, next_stage) = gate_failure_outcome(&StageName::Main, &Gate::HoldoutScenarios);
+        assert_eq!(failure, FailureCategory::TestFailed);
+        assert_eq!(next_stage, StageName::Main);
+    }
+
+    #[test]
     fn test_all_ship_gate_failures_route_to_implementation() {
-        let ship_gates = vec![Gate::CueArtifactGenerated];
+        let ship_gates = vec![Gate::MoonCi];
         for gate in ship_gates {
-            let (_, next_stage) = gate_failure_outcome(&StageName::ShipGate, &gate);
+            let (_, next_stage) = gate_failure_outcome(&StageName::Main, &gate);
             assert_eq!(
                 next_stage,
                 StageName::Implementation,
@@ -349,8 +347,8 @@ mod tests {
             );
         }
 
-        let unknown_gate_outcome = gate_failure_outcome(&StageName::ShipGate, &Gate::Compiles);
-        assert_eq!(unknown_gate_outcome, (FailureCategory::TestFailed, StageName::ShipGate));
+        let unknown_gate_outcome = gate_failure_outcome(&StageName::Main, &Gate::Compiles);
+        assert_eq!(unknown_gate_outcome, (FailureCategory::TestFailed, StageName::Main));
     }
 
     #[test]

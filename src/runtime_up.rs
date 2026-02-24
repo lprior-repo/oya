@@ -138,8 +138,6 @@ fn start_opencode_service(repo_root: &Path, opencode_bin: &Path, port: u16) -> R
 fn start_oya_service(repo_root: &Path, opencode_bin: &Path, port: u16) -> Result<()> {
     let oya_bin = std::env::current_exe().context("resolve running oya binary path")?;
     let moon_bin = resolve_moon_bin()?;
-    let skip_gate =
-        std::env::var("OYA_SKIP_ZJJ_GATE").map_or_else(|_| "1".to_string(), std::convert::identity);
     let env_path = std::env::var("PATH").map_or_else(|_| String::new(), std::convert::identity);
 
     run_best_effort("systemctl", &["--user", "stop", &format!("{}.service", OYA_UNIT)], repo_root);
@@ -165,8 +163,6 @@ fn start_oya_service(repo_root: &Path, opencode_bin: &Path, port: u16) -> Result
         format!("OYA_OPENCODE_BASE_URL=http://127.0.0.1:{port}"),
         "-E".to_string(),
         "OYA_OPENCODE_PASSWORD=".to_string(),
-        "-E".to_string(),
-        format!("OYA_SKIP_ZJJ_GATE={skip_gate}"),
         "-E".to_string(),
         "OYA_ENABLE_PIPELINE_EXECUTION=1".to_string(),
         "--working-directory".to_string(),

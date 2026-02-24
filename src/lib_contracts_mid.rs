@@ -1,6 +1,5 @@
 /// Common default runtime command shared across all bead contract families.
-pub const DEFAULT_SMOKE_RUNTIME_COMMAND: &str = "scripts/dev-up.sh";
-const DEFAULT_DEV_RUNTIME_COMMAND: &str = DEFAULT_SMOKE_RUNTIME_COMMAND;
+pub const DEFAULT_DEV_RUNTIME_COMMAND: &str = "scripts/dev-up.sh";
 const DEFAULT_SMOKE_INGRESS_HEALTH_URL: &str = "http://localhost:8080/restate/health";
 const MAX_SMOKE_DIAGNOSTICS_LEN: usize = 4096;
 /// Max length for run IDs used across smoke, smoke-bead, lean-bead, and bead-min contracts.
@@ -908,8 +907,6 @@ fn matches_orchestrator_status_contract(value: &str, run_id: &str) -> bool {
 }
 
 #[allow(dead_code)]
-const DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND: &str = DEFAULT_DEV_RUNTIME_COMMAND;
-#[allow(dead_code)]
 const DEFAULT_SMOKE_BEAD_INGRESS_HEALTH_URL: &str = DEFAULT_SMOKE_INGRESS_HEALTH_URL;
 #[allow(dead_code)]
 const MAX_SMOKE_BEAD_DIAGNOSTICS_LEN: usize = MAX_SMOKE_DIAGNOSTICS_LEN;
@@ -1043,7 +1040,7 @@ pub fn build_smoke_bead_plan(input: &SmokeBeadInput) -> Result<SmokeBeadPlan, Sm
 
     Ok(SmokeBeadPlan {
         run_id: run_id.to_string(),
-        runtime_command: DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_SMOKE_BEAD_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: format!("http://localhost:8080/Oya/{}/get_status", run_id),
     })
@@ -1055,7 +1052,7 @@ pub fn start_smoke_bead_runtime(
 ) -> Result<SmokeBeadRuntimeHandle, SmokeBeadError> {
     validate_normalized_smoke_bead_run_id(plan.run_id.as_str())?;
 
-    if plan.runtime_command != DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND {
+    if plan.runtime_command != DEFAULT_DEV_RUNTIME_COMMAND {
         return Err(SmokeBeadError::InvalidRuntimeCommand);
     }
     if !is_valid_http_url(plan.ingress_health_url.as_str()) {
@@ -1173,7 +1170,7 @@ fn validate_smoke_bead_runtime_handle(
     if !handle.runtime_ready {
         return Err(SmokeBeadError::RuntimeNotReady);
     }
-    if handle.runtime_command != DEFAULT_SMOKE_BEAD_RUNTIME_COMMAND {
+    if handle.runtime_command != DEFAULT_DEV_RUNTIME_COMMAND {
         return Err(SmokeBeadError::InvalidRuntimeCommand);
     }
     if !is_valid_http_url(handle.ingress_health_url.as_str())
@@ -1486,8 +1483,6 @@ fn expected_smoke_bead_final_diagnostics(decision: &SmokeBeadDecision) -> &'stat
 }
 
 #[allow(dead_code)]
-const DEFAULT_LEAN_BEAD_RUNTIME_COMMAND: &str = DEFAULT_DEV_RUNTIME_COMMAND;
-#[allow(dead_code)]
 const DEFAULT_LEAN_BEAD_INGRESS_HEALTH_URL: &str = DEFAULT_SMOKE_INGRESS_HEALTH_URL;
 #[allow(dead_code)]
 const MAX_LEAN_BEAD_DIAGNOSTICS_LEN: usize = MAX_SMOKE_DIAGNOSTICS_LEN;
@@ -1608,7 +1603,7 @@ pub fn build_lean_bead_plan(input: &LeanBeadInput) -> Result<LeanBeadPlan, LeanB
 
     Ok(LeanBeadPlan {
         run_id: run_id.to_string(),
-        runtime_command: DEFAULT_LEAN_BEAD_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_LEAN_BEAD_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: format!("http://localhost:8080/Oya/{}/get_status", run_id),
     })
@@ -1619,7 +1614,7 @@ pub fn start_lean_bead_runtime(
 ) -> Result<LeanBeadRuntimeHandle, LeanBeadError> {
     validate_normalized_lean_bead_run_id(plan.run_id.as_str())?;
 
-    if plan.runtime_command != DEFAULT_LEAN_BEAD_RUNTIME_COMMAND {
+    if plan.runtime_command != DEFAULT_DEV_RUNTIME_COMMAND {
         return Err(LeanBeadError::InvalidRuntimeCommand);
     }
     if !is_valid_http_url(plan.ingress_health_url.as_str()) {
@@ -1712,7 +1707,7 @@ fn validate_lean_bead_runtime_handle(handle: &LeanBeadRuntimeHandle) -> Result<(
     if !handle.runtime_ready {
         return Err(LeanBeadError::RuntimeNotReady);
     }
-    if handle.runtime_command != DEFAULT_LEAN_BEAD_RUNTIME_COMMAND {
+    if handle.runtime_command != DEFAULT_DEV_RUNTIME_COMMAND {
         return Err(LeanBeadError::InvalidRuntimeCommand);
     }
     if !is_valid_http_url(handle.ingress_health_url.as_str())
@@ -1977,8 +1972,6 @@ fn expected_lean_bead_final_diagnostics(decision: &LeanBeadDecision) -> &'static
 }
 
 #[allow(dead_code)]
-const DEFAULT_BEAD_MIN_RUNTIME_COMMAND: &str = DEFAULT_DEV_RUNTIME_COMMAND;
-#[allow(dead_code)]
 const DEFAULT_BEAD_MIN_INGRESS_HEALTH_URL: &str = DEFAULT_SMOKE_INGRESS_HEALTH_URL;
 #[allow(dead_code)]
 const MAX_BEAD_MIN_DIAGNOSTICS_LEN: usize = MAX_SMOKE_DIAGNOSTICS_LEN;
@@ -2099,7 +2092,7 @@ pub fn build_bead_min_plan(input: &BeadMinInput) -> Result<BeadMinPlan, BeadMinE
 
     Ok(BeadMinPlan {
         run_id: run_id.to_string(),
-        runtime_command: DEFAULT_BEAD_MIN_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_BEAD_MIN_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: format!("http://localhost:8080/Oya/{}/get_status", run_id),
     })
@@ -2108,7 +2101,7 @@ pub fn build_bead_min_plan(input: &BeadMinInput) -> Result<BeadMinPlan, BeadMinE
 pub fn start_bead_min_runtime(plan: &BeadMinPlan) -> Result<BeadMinRuntimeHandle, BeadMinError> {
     validate_normalized_bead_min_run_id(plan.run_id.as_str())?;
 
-    if plan.runtime_command != DEFAULT_BEAD_MIN_RUNTIME_COMMAND {
+    if plan.runtime_command != DEFAULT_DEV_RUNTIME_COMMAND {
         return Err(BeadMinError::InvalidRuntimeCommand);
     }
     if !is_valid_http_url(plan.ingress_health_url.as_str()) {
@@ -2202,7 +2195,7 @@ fn validate_bead_min_runtime_handle(handle: &BeadMinRuntimeHandle) -> Result<(),
     if !handle.runtime_ready {
         return Err(BeadMinError::RuntimeNotReady);
     }
-    if handle.runtime_command != DEFAULT_BEAD_MIN_RUNTIME_COMMAND {
+    if handle.runtime_command != DEFAULT_DEV_RUNTIME_COMMAND {
         return Err(BeadMinError::InvalidRuntimeCommand);
     }
     if !is_valid_http_url(handle.ingress_health_url.as_str())

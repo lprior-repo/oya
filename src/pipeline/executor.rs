@@ -16,7 +16,7 @@
 use std::path::Path;
 use std::time::Duration;
 
-use oya::types::{truncate_clean, StageFailure, StageName as Stage, StageResult};
+use oya::types::{truncate_clean, ModelId, StageFailure, StageName as Stage, StageResult};
 use restate_sdk::prelude::*;
 
 use crate::orchestrator_types::{
@@ -36,7 +36,7 @@ pub struct StageExecutionInput<'a> {
     pub run_id: &'a str,
     pub bead_id: &'a str,
     pub context: &'a str,
-    pub model: &'a str,
+    pub model: &'a ModelId,
     pub stage: Stage,
     pub attempt: u32,
     pub last_failure: Option<StageFailure>,
@@ -101,7 +101,7 @@ async fn execute_stage_workflow(
             stage: input.stage.clone(),
             attempt: input.attempt,
             context: input.context.to_string(),
-            model: input.model.to_string(),
+            model: input.model.0.to_string(),
             last_failure: input.last_failure.clone(),
         },
         execution_root,
@@ -130,6 +130,7 @@ fn build_stage_artifact(data: StageArtifactData<'_>) -> StageArtifact {
         task_tracking: None,
         gates: data.gates,
         status,
+        github_pr: None,
     }
 }
 
@@ -161,6 +162,7 @@ pub async fn persist_stage_artifact(
                 artifact.input.bead_id.as_str(),
                 artifact.workspace.as_ref().map(|workspace| workspace.name.as_str()),
             ),
+            payload: None,
         },
     )
     .await
@@ -227,14 +229,8 @@ fn workspace_lifecycle_from_event(
     event: crate::orchestrator_types::WorkspaceLifecycleEvent,
 ) -> WorkspaceLifecycle {
     WorkspaceLifecycle {
-        name: event.workspace,
+        name: event.workspace_name,
         path: event.workspace_path,
-        queue_command: event.queue_command,
-        queue_passed: event.queue_passed,
-        queue_exit_code: event.queue_exit_code,
-        add_command: event.add_command,
-        add_passed: event.add_passed,
-        add_exit_code: event.add_exit_code,
         coordination: event.coordination,
     }
 }
@@ -260,10 +256,10 @@ fn resolve_execution_root(
 fn calculate_stage_timing(started_at: &str, completed_at: &str) -> StageTiming {
     let start_dt = chrono::DateTime::parse_from_rfc3339(started_at)
         .map(|dt| dt.with_timezone(&chrono::Utc))
-        .unwrap_or_else(|_| chrono::DateTime::UNIX_EPOCH);
+        .unwrap_or(chrono::DateTime::UNIX_EPOCH);
     let end_dt = chrono::DateTime::parse_from_rfc3339(completed_at)
         .map(|dt| dt.with_timezone(&chrono::Utc))
-        .unwrap_or_else(|_| chrono::DateTime::UNIX_EPOCH);
+        .unwrap_or(chrono::DateTime::UNIX_EPOCH);
     let duration_ms = (end_dt - start_dt).num_milliseconds().max(0) as u64;
 
     StageTiming {
@@ -278,7 +274,7 @@ fn build_stage_input_data(input: &StageExecutionInput<'_>) -> StageInputData {
         run_id: input.run_id.to_string(),
         bead_id: input.bead_id.to_string(),
         context: input.context.to_string(),
-        model: input.model.to_string(),
+        model: input.model.clone(),
         last_failure: input.last_failure.as_ref().map(|failure| FailureSnapshot {
             category: failure.category.as_str().to_string(),
             message: truncate_clean(&failure.message, 2000),
@@ -295,12 +291,9 @@ fn build_stage_output_data(stage: &Stage, stage_result: &StageResult) -> StageOu
 
     // Stage-specific output fields
     let (contract_document, implementation_code, test_results, adversarial_report) = match stage {
-        Stage::Explore => (None, None, None, None),
-        Stage::Contract => (Some(full_log.clone()), None, None, None),
-        Stage::Red => (None, None, Some(full_log.clone()), None),
+        Stage::JjWorkspace => (Some(full_log.clone()), None, None, None),
         Stage::Implementation => (None, Some(full_log.clone()), None, None),
-        Stage::Witness => (None, None, None, Some(full_log.clone())),
-        _ => (None, None, None, None),
+        Stage::Main => (None, None, Some(full_log.clone()), None),
     };
 
     StageOutputData {
@@ -318,6 +311,7 @@ fn build_stage_output_data(stage: &Stage, stage_result: &StageResult) -> StageOu
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
     use oya::types::FailureCategory;
 
     #[test]
@@ -357,13 +351,14 @@ mod tests {
     }
 
     #[test]
-    fn test_build_stage_input_data_with_last_failure() {
+    fn test_build_stage_input_data_with_last_failure() -> Result<()> {
+        let model = ModelId::new("test-model")?;
         let input = StageExecutionInput {
             run_id: "test-run",
             bead_id: "test-bead",
             context: "test context",
-            model: "test-model",
-            stage: Stage::Contract,
+            model: &model,
+            stage: Stage::Implementation,
             attempt: 1,
             last_failure: Some(StageFailure {
                 category: FailureCategory::TestFailed,
@@ -379,21 +374,25 @@ mod tests {
         assert_eq!(stage_input.run_id, "test-run");
         assert_eq!(stage_input.bead_id, "test-bead");
         assert_eq!(stage_input.context, "test context");
-        assert_eq!(stage_input.model, "test-model");
+        assert_eq!(stage_input.model.as_str(), "test-model");
         assert!(stage_input.last_failure.is_some());
-        let failure = stage_input.last_failure.unwrap();
+
+        let failure =
+            stage_input.last_failure.as_ref().ok_or_else(|| anyhow::anyhow!("Missing failure"))?;
         assert_eq!(failure.category, "test_failed");
         assert_eq!(failure.message, "test failed");
+        Ok(())
     }
 
     #[test]
-    fn test_build_stage_input_data_without_last_failure() {
+    fn test_build_stage_input_data_without_last_failure() -> Result<()> {
+        let model = ModelId::new("test-model")?;
         let input = StageExecutionInput {
             run_id: "test-run",
             bead_id: "test-bead",
             context: "test context",
-            model: "test-model",
-            stage: Stage::Contract,
+            model: &model,
+            stage: Stage::Implementation,
             attempt: 1,
             last_failure: None,
             repo_root: Path::new("/tmp"),
@@ -403,26 +402,27 @@ mod tests {
 
         assert_eq!(stage_input.run_id, "test-run");
         assert!(stage_input.last_failure.is_none());
+        Ok(())
     }
 
     #[test]
-    fn test_build_stage_output_data_for_contract_stage() {
+    fn test_build_stage_output_data_for_implementation_stage() {
         let stage_result = StageResult {
             run_id: "test-run".to_string(),
-            stage: Stage::Contract,
+            stage: Stage::Implementation,
             attempt: 1,
             passed: true,
-            output: serde_json::json!("contract output"),
+            output: serde_json::json!("implementation output"),
             failure_category: None,
             next_stage: None,
         };
 
-        let stage_output = build_stage_output_data(&Stage::Contract, &stage_result);
+        let stage_output = build_stage_output_data(&Stage::Implementation, &stage_result);
 
         assert!(stage_output.success);
         assert_eq!(stage_output.exit_code, 0);
-        assert!(stage_output.contract_document.is_some());
-        assert!(stage_output.implementation_code.is_none());
+        assert!(stage_output.contract_document.is_none());
+        assert!(stage_output.implementation_code.is_some());
         assert!(stage_output.test_results.is_none());
         assert!(stage_output.adversarial_report.is_none());
     }
@@ -431,7 +431,7 @@ mod tests {
     fn test_build_stage_output_data_for_failed_stage() {
         let stage_result = StageResult {
             run_id: "test-run".to_string(),
-            stage: Stage::Contract,
+            stage: Stage::Implementation,
             attempt: 1,
             passed: false,
             output: serde_json::json!("stage failed"),
@@ -439,7 +439,7 @@ mod tests {
             next_stage: None,
         };
 
-        let stage_output = build_stage_output_data(&Stage::Contract, &stage_result);
+        let stage_output = build_stage_output_data(&Stage::Implementation, &stage_result);
 
         assert!(!stage_output.success);
         assert_eq!(stage_output.exit_code, 1);

@@ -1,7 +1,1 @@
-# Seeds for failure cases proptest has generated in the past. It is
-# automatically read and these particular cases re-run before any
-# novel cases are generated.
-#
-# It is recommended to check this file in to source control so that
-# everyone who runs the test benefits from these saved cases.
-cc c32bc2d9244014f1722854a5e2ef628a4cb15a5fa08b7c226c18d21e67f033d0 # shrinks to bead_id = "-", context = ""
+

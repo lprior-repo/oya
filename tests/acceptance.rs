@@ -1,38 +1,20 @@
 //! Acceptance tests for the orchestrator pipeline
 //!
 //! These tests verify the public API contract for the staged pipeline:
-//! Explore -> Contract -> Red -> Implementation -> Witness -> ShipGate
+//! JjWorkspace -> Implementation -> Main
 
+use anyhow::Result;
 use oya::orchestrator::{Orchestrator, StageRequest};
-use oya::types::{FailureCategory, StageName};
+use oya::types::{FailureCategory, ModelId, StageName};
 use proptest::prelude::*;
 
 mod util;
 
-/// Contract stage passes and advances to Red.
+/// Implementation stage passes and advances to Main.
 #[tokio::test]
-async fn test_contract_stage_passes_and_advances() {
+async fn test_contract_stage_passes_and_advances() -> Result<()> {
     let orch = util::passing_orchestrator();
-
-    let result = orch
-        .run_stage(StageRequest {
-            stage: StageName::Contract,
-            attempt: 1,
-            bead_id: "test-run-123".to_string(),
-            context: "debug".to_string(),
-            last_failure: None,
-        })
-        .await
-        .unwrap();
-
-    assert!(result.passed, "Contract stage should pass");
-    assert_eq!(result.next_stage, Some(StageName::Red));
-}
-
-/// Implementation stage passes and advances to Witness.
-#[tokio::test]
-async fn test_implementation_stage_passes_and_advances() {
-    let orch = util::passing_orchestrator();
+    let model = ModelId::new("test-model").map_err(|e| anyhow::anyhow!(e))?;
 
     let result = orch
         .run_stage(StageRequest {
@@ -40,13 +22,38 @@ async fn test_implementation_stage_passes_and_advances() {
             attempt: 1,
             bead_id: "test-run-123".to_string(),
             context: "debug".to_string(),
+            model,
             last_failure: None,
         })
         .await
-        .unwrap();
+        .map_err(|e| anyhow::anyhow!("Orchestrator error: {}", e))?;
 
     assert!(result.passed, "Implementation stage should pass");
-    assert_eq!(result.next_stage, Some(StageName::Witness));
+    assert_eq!(result.next_stage, Some(StageName::Main));
+    Ok(())
+}
+
+/// Implementation stage passes and advances to Witness.
+#[tokio::test]
+async fn test_implementation_stage_passes_and_advances() -> Result<()> {
+    let orch = util::passing_orchestrator();
+    let model = ModelId::new("test-model").map_err(|e| anyhow::anyhow!(e))?;
+
+    let result = orch
+        .run_stage(StageRequest {
+            stage: StageName::Implementation,
+            attempt: 1,
+            bead_id: "test-run-123".to_string(),
+            context: "debug".to_string(),
+            model,
+            last_failure: None,
+        })
+        .await
+        .map_err(|e| anyhow::anyhow!("Orchestrator error: {}", e))?;
+
+    assert!(result.passed, "Implementation stage should pass");
+    assert_eq!(result.next_stage, Some(StageName::Main));
+    Ok(())
 }
 
 /// Property: Any failed stage returns a non-None failure_category.
@@ -79,17 +86,16 @@ fn test_implementation_gates_invariant() {
 // ============================================================================
 
 mod rate_limit_failover {
+    use anyhow::Result;
     use chrono::{Duration, Utc};
-    use oya::types::{FailureCategory, ModelHealth};
+    use oya::types::{FailureCategory, ModelHealth, ModelId, Tier};
     use oya::usage::{is_rate_limit_failure, ReportOutcomeRequest, TrackerState};
 
     #[test]
-    fn acceptance_rate_limit_triggers_model_rotation() {
-        let request = ReportOutcomeRequest {
-            model: "openai/gpt-3.5-turbo".to_string(),
-            success: false,
-            is_rate_limit: true,
-        };
+    fn acceptance_rate_limit_triggers_model_rotation() -> Result<()> {
+        let model_id = ModelId::new("openai/gpt-3.5-turbo")?;
+        let request =
+            ReportOutcomeRequest { model: model_id.clone(), success: false, is_rate_limit: true };
 
         assert!(!request.success, "Request must indicate failure");
         assert!(request.is_rate_limit, "Request must indicate rate limit");
@@ -107,33 +113,35 @@ mod rate_limit_failover {
             },
         );
 
-        assert!(
-            state.model_health.get(&request.model).unwrap().is_rate_limited,
-            "Model must be marked as rate-limited"
-        );
-        assert!(
-            state.model_health.get(&request.model).unwrap().cooldown_until.is_some(),
-            "Model must have cooldown period set"
-        );
+        let health = state
+            .model_health
+            .get(&request.model)
+            .ok_or_else(|| anyhow::anyhow!("Missing health"))?;
+        assert!(health.is_rate_limited, "Model must be marked as rate-limited");
+        assert!(health.cooldown_until.is_some(), "Model must have cooldown period set");
+        Ok(())
     }
 
     #[test]
-    fn acceptance_all_models_rate_limited_returns_fallback() {
+    fn acceptance_all_models_rate_limited_returns_fallback() -> Result<()> {
         let mut state = TrackerState::default();
+        let model_a = ModelId::new("model-a")?;
+        let model_b = ModelId::new("model-b")?;
+        let tier_d = Tier::new("d")?;
 
         state.model_health.insert(
-            "model-a".to_string(),
+            model_a.clone(),
             ModelHealth {
-                model_id: "model-a".to_string(),
+                model_id: model_a.clone(),
                 is_rate_limited: true,
                 consecutive_failures: 5,
                 cooldown_until: Some(Utc::now() + Duration::seconds(300)),
             },
         );
         state.model_health.insert(
-            "model-b".to_string(),
+            model_b.clone(),
             ModelHealth {
-                model_id: "model-b".to_string(),
+                model_id: model_b.clone(),
                 is_rate_limited: true,
                 consecutive_failures: 3,
                 cooldown_until: Some(Utc::now() + Duration::seconds(300)),
@@ -141,37 +149,44 @@ mod rate_limit_failover {
         );
 
         assert!(
-            state.model_health.get("model-a").unwrap().is_rate_limited,
+            state
+                .model_health
+                .get(&model_a)
+                .ok_or_else(|| anyhow::anyhow!("Missing health A"))?
+                .is_rate_limited,
             "Model A must be rate-limited"
         );
         assert!(
-            state.model_health.get("model-b").unwrap().is_rate_limited,
+            state
+                .model_health
+                .get(&model_b)
+                .ok_or_else(|| anyhow::anyhow!("Missing health B"))?
+                .is_rate_limited,
             "Model B must be rate-limited"
         );
 
-        let active_index = *state.active_indices.get("d").unwrap_or(&0);
+        let active_index = *state.active_indices.get(&tier_d).unwrap_or(&0);
         assert!(active_index < 10, "Must have valid fallback index even when all unhealthy");
+        Ok(())
     }
 
     #[test]
-    fn acceptance_success_clears_rate_limit_state() {
+    fn acceptance_success_clears_rate_limit_state() -> Result<()> {
         let mut state = TrackerState::default();
+        let model_a = ModelId::new("model-a")?;
 
         state.model_health.insert(
-            "model-a".to_string(),
+            model_a.clone(),
             ModelHealth {
-                model_id: "model-a".to_string(),
+                model_id: model_a.clone(),
                 is_rate_limited: true,
                 consecutive_failures: 5,
                 cooldown_until: Some(Utc::now() + Duration::seconds(300)),
             },
         );
 
-        let success_request = ReportOutcomeRequest {
-            model: "model-a".to_string(),
-            success: true,
-            is_rate_limit: false,
-        };
+        let success_request =
+            ReportOutcomeRequest { model: model_a.clone(), success: true, is_rate_limit: false };
 
         if let Some(health) = state.model_health.get_mut(&success_request.model) {
             if success_request.success {
@@ -181,31 +196,36 @@ mod rate_limit_failover {
             }
         }
 
-        let health = state.model_health.get("model-a").unwrap();
+        let health =
+            state.model_health.get(&model_a).ok_or_else(|| anyhow::anyhow!("Missing health"))?;
         assert!(!health.is_rate_limited, "Rate limit flag must be cleared");
         assert_eq!(health.consecutive_failures, 0, "Failures must be reset");
         assert!(health.cooldown_until.is_none(), "Cooldown must be cleared");
+        Ok(())
     }
 
     #[test]
-    fn acceptance_cooldown_expiry_restores_health() {
+    fn acceptance_cooldown_expiry_restores_health() -> Result<()> {
         let mut state = TrackerState::default();
+        let model_a = ModelId::new("model-a")?;
 
         state.model_health.insert(
-            "model-a".to_string(),
+            model_a.clone(),
             ModelHealth {
-                model_id: "model-a".to_string(),
+                model_id: model_a.clone(),
                 is_rate_limited: true,
                 consecutive_failures: 5,
                 cooldown_until: Some(Utc::now() - Duration::seconds(100)),
             },
         );
 
-        let health = state.model_health.get("model-a").unwrap();
-        let cooldown = health.cooldown_until.unwrap();
+        let health =
+            state.model_health.get(&model_a).ok_or_else(|| anyhow::anyhow!("Missing health"))?;
+        let cooldown = health.cooldown_until.ok_or_else(|| anyhow::anyhow!("Missing cooldown"))?;
         let is_healthy = Utc::now() > cooldown;
 
         assert!(is_healthy, "Model must be healthy after cooldown expires");
+        Ok(())
     }
 
     #[test]
@@ -236,22 +256,24 @@ mod rate_limit_failover {
     }
 
     #[test]
-    fn acceptance_rate_limited_model_skipped_during_selection() {
+    fn acceptance_rate_limited_model_skipped_during_selection() -> Result<()> {
         let mut state = TrackerState::default();
-        let models = vec!["model-a".to_string(), "model-b".to_string(), "model-c".to_string()];
+        let model_a = ModelId::new("model-a")?;
+        let tier_d = Tier::new("d")?;
+        let models = vec![model_a.clone(), ModelId::new("model-b")?, ModelId::new("model-c")?];
 
         state.model_health.insert(
-            "model-a".to_string(),
+            model_a.clone(),
             ModelHealth {
-                model_id: "model-a".to_string(),
+                model_id: model_a.clone(),
                 is_rate_limited: true,
                 consecutive_failures: 3,
                 cooldown_until: Some(Utc::now() + Duration::seconds(300)),
             },
         );
-        state.active_indices.insert("d".to_string(), 0);
+        state.active_indices.insert(tier_d.clone(), 0);
 
-        fn is_model_healthy(state: &TrackerState, model_id: &str) -> bool {
+        fn is_model_healthy(state: &TrackerState, model_id: &ModelId) -> bool {
             if let Some(health) = state.model_health.get(model_id) {
                 if let Some(cooldown) = health.cooldown_until {
                     if Utc::now() < cooldown {
@@ -262,7 +284,7 @@ mod rate_limit_failover {
             true
         }
 
-        let current_index = *state.active_indices.get("d").unwrap_or(&0);
+        let current_index = *state.active_indices.get(&tier_d).unwrap_or(&0);
         let selected_index = (0..models.len())
             .find_map(|offset| {
                 let idx = (current_index + offset) % models.len();
@@ -272,26 +294,30 @@ mod rate_limit_failover {
 
         assert_ne!(selected_index, 0, "Must not select rate-limited model at index 0");
         assert_eq!(selected_index, 1, "Must select next healthy model");
+        Ok(())
     }
 
     #[test]
-    fn acceptance_consecutive_rate_limits_stable_rotation() {
+    fn acceptance_consecutive_rate_limits_stable_rotation() -> Result<()> {
         let mut state = TrackerState::default();
-        let models = vec!["model-a".to_string(), "model-b".to_string()];
+        let tier_d = Tier::new("d")?;
+        let models = vec![ModelId::new("model-a")?, ModelId::new("model-b")?];
 
-        state.active_indices.insert("d".to_string(), 0);
+        state.active_indices.insert(tier_d.clone(), 0);
 
         for i in 0..5 {
-            let current = *state.active_indices.get("d").unwrap_or(&0);
+            let current = *state.active_indices.get(&tier_d).unwrap_or(&0);
             let next = (current + 1) % models.len();
-            state.active_indices.insert("d".to_string(), next);
+            state.active_indices.insert(tier_d.clone(), next);
 
-            assert!(
-                *state.active_indices.get("d").unwrap() < models.len(),
-                "Rotation must stay within bounds on iteration {}",
-                i
-            );
+            let idx = state
+                .active_indices
+                .get(&tier_d)
+                .copied()
+                .ok_or_else(|| anyhow::anyhow!("Missing index"))?;
+            assert!(idx < models.len(), "Rotation must stay within bounds on iteration {}", i);
         }
+        Ok(())
     }
 }
 
@@ -300,22 +326,24 @@ mod rate_limit_failover {
 // ============================================================================
 
 mod token_exhaustion_backoff {
+    use anyhow::Result;
+    use oya::types::Tier;
     use oya::usage::{tier_backoff_duration, TierLimiter, TrackerState};
     use std::time::Duration as StdDuration;
 
     #[test]
-    fn acceptance_exhausted_bucket_returns_backoff_duration() {
+    fn acceptance_exhausted_bucket_returns_backoff_duration() -> Result<()> {
         let tokens = 0.3;
 
         let backoff = tier_backoff_duration(tokens);
 
-        assert!(backoff.is_some(), "Must return backoff when tokens exhausted");
-        let backoff = backoff.unwrap();
-        assert!(backoff.as_millis() > 0, "Backoff must be positive");
+        let b = backoff.ok_or_else(|| anyhow::anyhow!("Expected backoff duration"))?;
+        assert!(b.as_millis() > 0, "Backoff must be positive");
         assert!(
-            backoff <= StdDuration::from_secs(10),
+            b <= StdDuration::from_secs(10),
             "Backoff must be bounded (< 10s for 0.7 tokens deficit at 0.2/s)"
         );
+        Ok(())
     }
 
     #[test]
@@ -338,52 +366,70 @@ mod token_exhaustion_backoff {
     }
 
     #[test]
-    fn acceptance_empty_bucket_reasonable_backoff() {
+    fn acceptance_empty_bucket_reasonable_backoff() -> Result<()> {
         let tokens = 0.0;
-        let backoff = tier_backoff_duration(tokens).unwrap();
+        let b = tier_backoff_duration(tokens)
+            .ok_or_else(|| anyhow::anyhow!("Expected backoff duration"))?;
 
         let max_expected = StdDuration::from_secs(6);
-        assert!(backoff <= max_expected, "Empty bucket backoff must be <= 6s (got {:?})", backoff);
+        assert!(b <= max_expected, "Empty bucket backoff must be <= 6s (got {:?})", b);
         assert!(
-            backoff >= StdDuration::from_secs(4),
+            b >= StdDuration::from_secs(4),
             "Empty bucket must need at least 4s to refill 1 token at 0.2/s"
         );
+        Ok(())
     }
 
     #[test]
-    fn acceptance_tiers_have_independent_buckets() {
+    fn acceptance_tiers_have_independent_buckets() -> Result<()> {
         use chrono::Utc;
 
         let mut state = TrackerState::default();
         let now = Utc::now();
+        let tier_d = Tier::new("d")?;
+        let tier_c = Tier::new("c")?;
+        let tier_b = Tier::new("b")?;
 
-        state.tier_limiters.insert("d".to_string(), TierLimiter { tokens: 0.0, last_refill: now });
-        state.tier_limiters.insert("c".to_string(), TierLimiter { tokens: 2.0, last_refill: now });
-        state.tier_limiters.insert("b".to_string(), TierLimiter { tokens: 1.5, last_refill: now });
+        state.tier_limiters.insert(tier_d.clone(), TierLimiter { tokens: 0.0, last_refill: now });
+        state.tier_limiters.insert(tier_c.clone(), TierLimiter { tokens: 2.0, last_refill: now });
+        state.tier_limiters.insert(tier_b.clone(), TierLimiter { tokens: 1.5, last_refill: now });
 
-        let d_tokens = state.tier_limiters.get("d").unwrap().tokens;
-        let c_tokens = state.tier_limiters.get("c").unwrap().tokens;
-        let b_tokens = state.tier_limiters.get("b").unwrap().tokens;
+        let d_tokens = state
+            .tier_limiters
+            .get(&tier_d)
+            .ok_or_else(|| anyhow::anyhow!("Missing tier D"))?
+            .tokens;
+        let c_tokens = state
+            .tier_limiters
+            .get(&tier_c)
+            .ok_or_else(|| anyhow::anyhow!("Missing tier C"))?
+            .tokens;
+        let b_tokens = state
+            .tier_limiters
+            .get(&tier_b)
+            .ok_or_else(|| anyhow::anyhow!("Missing tier B"))?
+            .tokens;
 
         assert!(d_tokens < 1.0, "Tier D must be exhausted");
         assert!(c_tokens >= 1.0, "Tier C must have tokens");
         assert!(b_tokens >= 1.0, "Tier B must have tokens");
+        Ok(())
     }
 
     #[test]
-    fn acceptance_tracker_exposes_tier_limiters() {
+    fn acceptance_tracker_exposes_tier_limiters() -> Result<()> {
         use chrono::Utc;
 
         let mut state = TrackerState::default();
+        let tier_d = Tier::new("d")?;
 
         state
             .tier_limiters
-            .insert("d".to_string(), TierLimiter { tokens: 0.5, last_refill: Utc::now() });
+            .insert(tier_d.clone(), TierLimiter { tokens: 0.5, last_refill: Utc::now() });
 
-        let limiter = state.tier_limiters.get("d");
-        assert!(limiter.is_some(), "Tier limiter must be accessible");
-
-        let limiter = limiter.unwrap();
+        let limiter =
+            state.tier_limiters.get(&tier_d).ok_or_else(|| anyhow::anyhow!("Missing tier D"))?;
         assert_eq!(limiter.tokens, 0.5, "Token count must be preserved");
+        Ok(())
     }
 }

@@ -26,69 +26,19 @@ pub(super) fn stage_prompt(input: StagePromptInput<'_>) -> String {
     );
 
     let body = match input.stage {
-        Stage::Explore => {
-            "TASK: Use Codanna-only discovery to produce a minimal context pack: symbols, callers, impact, and exact file paths for this bead. Keep output stable and concise.\n\nJust write the code. Do not explain."
-        }
-        Stage::Contract => {
-            "TASK: Write a design contract as a Rust doc comment in src/lib.rs (create if needed).\n\nInclude:\n1. Purpose and goals\n2. Key functions to implement\n3. Acceptance criteria\n\nJust write the code. Do not explain."
-        }
-        Stage::Red => {
-            "TASK:\n1. Create or update acceptance tests for this bead as ATDD specifications\n2. Ensure tests COMPILE but FAIL (red state)\n3. Do not modify production implementation in this stage\n4. Keep acceptance tests immutable after they are sealed\n\nJust write the code. Do not explain."
+        Stage::JjWorkspace => {
+            "TASK:\n1. Create or reuse a JJ workspace for this bead\n2. Prepare context and constraints\n3. Do not modify production code in this stage\n\nJust write the code. Do not explain."
         }
         Stage::Implementation => {
             "TASK:\n1. Write tests that encode the contract invariants\n2. Implement the code to make those tests pass (GREEN state)\n3. Use Result<T, E> for all fallible operations - NO unwrap/expect\n4. Pure functions in core, IO only at shell boundaries\n5. Ensure `moon run :test` passes and clippy is clean\n\nCRITICAL: Tests MUST pass. Fix the underlying code issues, never suppress with #[allow(...)].\n\nJust write the code. Do not explain."
         }
-        Stage::Witness => {
-            "TASK: Prepare implementation for holdout scenario validation and emit only stable artifacts.\n\nJust write the code. Do not explain."
-        }
-        Stage::ShipGate => "",
+        Stage::Main => "TASK: Run final CI validation and prepare merge-to-main artifacts.\n\nJust write the code. Do not explain.",
     };
 
     format!("{}{}", header, body)
 }
 
-pub(super) fn execute_witness_gate(repo_root: PathBuf) -> Result<StageExecution, OyaError> {
-    let prompt = witness_prompt();
-    let gate = Gate::HoldoutScenarios;
-    let evidence = execute_gate(gate.clone(), &repo_root)?;
-    let gate_results = vec![GateResultData {
-        gate: gate.as_str().to_string(),
-        passed: evidence.passed,
-        exit_code: evidence.exit_code,
-        command: evidence.command.clone(),
-        output: truncate_clean(&sanitize_holdout_output(evidence.output.as_str()), 4000),
-    }];
-
-    if evidence.passed {
-        return Ok(StageExecution {
-            passed: true,
-            output: "Holdout scenario suite passed".to_string(),
-            failure_category: None,
-            next_stage: Some(Stage::ShipGate),
-            prompt,
-            gate_results,
-        });
-    }
-
-    let (failure, next_stage) = gate_failure_outcome(&Stage::Witness, &gate);
-    Ok(StageExecution {
-        passed: false,
-        output: format_gate_command_output(
-            evidence.command.as_str(),
-            evidence.exit_code,
-            sanitize_holdout_output(evidence.output.as_str()).as_str(),
-        ),
-        failure_category: Some(failure),
-        next_stage: Some(next_stage),
-        prompt,
-        gate_results,
-    })
-}
-
-fn witness_prompt() -> String {
-    "Witness executes holdout scenarios only (moon :holdout); no OpenCode prompt".to_string()
-}
-
+#[cfg(test)]
 fn sanitize_holdout_output(raw: &str) -> String {
     let redacted = raw
         .lines()
@@ -105,6 +55,7 @@ fn sanitize_holdout_output(raw: &str) -> String {
     }
 }
 
+#[cfg(test)]
 fn is_safe_holdout_line(line: &str) -> bool {
     let lower = line.to_ascii_lowercase();
     let has_sensitive_tokens = [
@@ -135,12 +86,9 @@ fn is_safe_holdout_line(line: &str) -> bool {
 
 pub(super) fn stage_success(stage: &Stage) -> (&'static str, Option<Stage>) {
     match stage {
-        Stage::Explore => ("Explore context pack completed", Some(Stage::Contract)),
-        Stage::Contract => ("Contract written and compiles", Some(Stage::Red)),
-        Stage::Red => ("Acceptance tests are RED and sealed", Some(Stage::Implementation)),
-        Stage::Implementation => ("Implementation complete, tests GREEN", Some(Stage::Witness)),
-        Stage::Witness => ("Witness checks passed", Some(Stage::ShipGate)),
-        Stage::ShipGate => ("All gates passed - ready to ship", None),
+        Stage::JjWorkspace => ("JJ workspace prepared", Some(Stage::Implementation)),
+        Stage::Implementation => ("Implementation complete, tests GREEN", Some(Stage::Main)),
+        Stage::Main => ("All gates passed - ready to ship", None),
     }
 }
 
@@ -164,7 +112,7 @@ where
     let prompt = ship_gate_prompt();
     let mut gate_results = Vec::new();
 
-    for gate in Stage::ShipGate.gates() {
+    for gate in Stage::Main.gates() {
         let gate_evidence = run_gate(gate.clone())?;
         if let Some(failure) =
             cue_monitor_failure(&gate, &gate_evidence, prompt.as_str(), &mut gate_results)
@@ -254,7 +202,7 @@ fn ship_gate_failure(
     prompt: String,
     gate_results: Vec<GateResultData>,
 ) -> StageExecution {
-    let (failure, next_stage) = gate_failure_outcome(&Stage::ShipGate, &gate);
+    let (failure, next_stage) = gate_failure_outcome(&Stage::Main, &gate);
     StageExecution {
         passed: false,
         output: format_gate_command_output(
@@ -270,7 +218,7 @@ fn ship_gate_failure(
 }
 
 fn stale_evidence_message(gate: &Gate, evidence: &GateEvidence) -> Option<String> {
-    if *gate != Gate::CueArtifactGenerated {
+    if !should_validate_cue_monitor(gate, evidence) {
         return None;
     }
     match (&evidence.revision, &evidence.current_revision) {
@@ -295,11 +243,12 @@ fn stale_evidence_failure(mut evidence: GateEvidence, message: String) -> GateEv
 }
 
 fn should_validate_cue_monitor(gate: &Gate, evidence: &GateEvidence) -> bool {
-    *gate == Gate::CueArtifactGenerated && evidence.command.contains(":cue-check")
+    (*gate == Gate::CueArtifactGenerated || *gate == Gate::MoonCi)
+        && evidence.command.contains(":cue-check")
 }
 
 fn main_drift_regression_message(gate: &Gate, evidence: &GateEvidence) -> Option<String> {
-    if *gate != Gate::CueArtifactGenerated {
+    if !should_validate_cue_monitor(gate, evidence) {
         return None;
     }
     if !signals_main_drift_regression(evidence.output.as_str()) {
@@ -309,7 +258,7 @@ fn main_drift_regression_message(gate: &Gate, evidence: &GateEvidence) -> Option
 }
 
 fn cue_schema_failure_message(gate: &Gate, evidence: &GateEvidence) -> Option<String> {
-    if *gate != Gate::CueArtifactGenerated {
+    if !should_validate_cue_monitor(gate, evidence) {
         return None;
     }
     let line = cue_schema_failure_line(evidence.output.as_str())?;
@@ -410,7 +359,7 @@ mod tests {
     #[test]
     fn given_main_drift_monitor_regression_when_execute_ship_gate_then_land_is_blocked() {
         let result = execute_ship_gate_with_gate_runner(|gate| {
-            if gate == Gate::CueArtifactGenerated {
+            if gate == Gate::MoonCi {
                 return Ok(GateEvidence {
                     command: "moon run :cue-check".to_string(),
                     passed: true,

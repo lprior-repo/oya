@@ -68,18 +68,41 @@ fn has_timeout_command() -> bool {
     Command::new("which").arg("timeout").output().is_ok_and(|output| output.status.success())
 }
 
+fn resolve_command_program(command_name: &str) -> String {
+    let override_key = format!("OYA_{}_PATH", command_name.to_ascii_uppercase());
+    if let Some(override_path) = std::env::var(override_key)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    {
+        return override_path;
+    }
+
+    if command_name == "br" {
+        if let Some(home) = std::env::var("HOME").ok().filter(|value| !value.trim().is_empty()) {
+            let candidate = PathBuf::from(home).join(".cargo/bin/br");
+            if candidate.exists() {
+                return candidate.to_string_lossy().to_string();
+            }
+        }
+    }
+
+    command_name.to_string()
+}
+
 fn run_with_timeout_command(
     command_name: &str,
     args: &[&str],
     timeout_seconds: u64,
     repo_root: &PathBuf,
 ) -> Result<(bool, String, String, i32), OyaError> {
+    let program = resolve_command_program(command_name);
     let timeout_arg = timeout_seconds.to_string();
     let output = Command::new("timeout")
         .arg("--signal=TERM")
         .arg("--kill-after=5s")
         .arg(timeout_arg)
-        .arg(command_name)
+        .arg(program)
         .args(args)
         .current_dir(repo_root)
         .output()
@@ -95,7 +118,8 @@ fn run_with_spawn_fallback(
     timeout_seconds: u64,
     repo_root: &PathBuf,
 ) -> Result<(bool, String, String, i32), OyaError> {
-    let child = Command::new(command_name)
+    let program = resolve_command_program(command_name);
+    let child = Command::new(program)
         .args(args)
         .current_dir(repo_root)
         .stdout(std::process::Stdio::piped())
@@ -256,13 +280,17 @@ fn retry_with_fallback_model(
         model,
         FALLBACK_MODEL
     );
-    let timeout_seconds = opencode_timeout_seconds();
+    let timeout_seconds = fallback_retry_timeout_seconds(opencode_timeout_seconds());
     run_command_with_timeout(
         resolve_opencode_program().as_str(),
         &["run", "--format", "json", "--model", FALLBACK_MODEL, prompt],
         timeout_seconds,
         repo_root,
     )
+}
+
+fn fallback_retry_timeout_seconds(primary_timeout_seconds: u64) -> u64 {
+    (primary_timeout_seconds / 2).clamp(30, 120)
 }
 
 fn retry_rate_limited_opencode(
@@ -477,5 +505,44 @@ mod tests {
         assert_eq!(opencode_timeout_seconds(), 1_800);
 
         std::env::remove_var("OYA_OPENCODE_TIMEOUT_SECONDS");
+    }
+
+    #[test]
+    fn test_fallback_retry_timeout_seconds_is_bounded() {
+        assert_eq!(fallback_retry_timeout_seconds(300), 120);
+        assert_eq!(fallback_retry_timeout_seconds(120), 60);
+        assert_eq!(fallback_retry_timeout_seconds(60), 30);
+        assert_eq!(fallback_retry_timeout_seconds(30), 30);
+    }
+
+    #[test]
+    fn test_resolve_command_program_uses_override_when_set() {
+        std::env::set_var("OYA_BR_PATH", "/tmp/custom-br");
+        assert_eq!(resolve_command_program("br"), "/tmp/custom-br");
+        std::env::remove_var("OYA_BR_PATH");
+    }
+
+    #[test]
+    fn test_resolve_command_program_falls_back_to_cargo_br() {
+        let test_home = PathBuf::from("/tmp/oya-test-home");
+        let cargo_bin = test_home.join(".cargo/bin");
+        let br_path = cargo_bin.join("br");
+
+        let _remove = std::fs::remove_dir_all(&test_home);
+        let _mkdir = std::fs::create_dir_all(&cargo_bin);
+        let _write = std::fs::write(&br_path, "#!/bin/sh\nexit 0\n");
+
+        let previous_home = std::env::var("HOME").ok();
+        std::env::set_var("HOME", test_home.to_string_lossy().to_string());
+
+        assert_eq!(resolve_command_program("br"), br_path.to_string_lossy().to_string());
+
+        if let Some(value) = previous_home {
+            std::env::set_var("HOME", value);
+        } else {
+            std::env::remove_var("HOME");
+        }
+
+        let _cleanup = std::fs::remove_dir_all(&test_home);
     }
 }

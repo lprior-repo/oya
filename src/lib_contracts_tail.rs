@@ -111,7 +111,6 @@ pub fn validate_docker_config(config: &DockerConfig) -> Result<(), DockerFixErro
     Ok(())
 }
 
-const DEFAULT_BEAD_CUPID_RUNTIME_COMMAND: &str = DEFAULT_DEV_RUNTIME_COMMAND;
 const DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL: &str = "http://localhost:8080/restate/health";
 const MAX_BEAD_CUPID_RUN_ID_LEN: usize = 128;
 const MAX_BEAD_CUPID_BEAD_ID_LEN: usize = 128;
@@ -251,7 +250,7 @@ pub fn build_bead_cupid_plan(input: &BeadCupidInput) -> Result<BeadCupidPlan, Be
     Ok(BeadCupidPlan {
         run_id: run_id.clone(),
         bead_id,
-        runtime_command: DEFAULT_BEAD_CUPID_RUNTIME_COMMAND.to_string(),
+        runtime_command: DEFAULT_DEV_RUNTIME_COMMAND.to_string(),
         ingress_health_url: DEFAULT_BEAD_CUPID_INGRESS_HEALTH_URL.to_string(),
         orchestrator_status_url: format!("http://localhost:8080/Oya/{}/get_status", run_id),
     })
@@ -272,7 +271,7 @@ pub fn start_bead_cupid_runtime(
         MAX_BEAD_CUPID_BEAD_ID_LEN,
     )?;
 
-    if plan.runtime_command != DEFAULT_BEAD_CUPID_RUNTIME_COMMAND {
+    if plan.runtime_command != DEFAULT_DEV_RUNTIME_COMMAND {
         return Err(BeadCupidError::InvalidRuntimeCommand);
     }
     if !is_valid_bead_cupid_endpoint(plan.ingress_health_url.as_str()) {
@@ -426,7 +425,7 @@ fn validate_bead_cupid_runtime_contract(
     ingress_health_url: &str,
     orchestrator_status_url: &str,
 ) -> Result<(), BeadCupidError> {
-    if runtime_command != DEFAULT_BEAD_CUPID_RUNTIME_COMMAND {
+    if runtime_command != DEFAULT_DEV_RUNTIME_COMMAND {
         return Err(BeadCupidError::InvalidRuntimeCommand);
     }
     if !is_valid_bead_cupid_endpoint(ingress_health_url)

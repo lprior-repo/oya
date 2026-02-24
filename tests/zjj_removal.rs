@@ -77,35 +77,31 @@ fn test_error_path_gate_try_from_zjj_merge_queue_returns_error() {
 // CONTRACT VERIFICATION: Stage configuration
 // =============================================================================
 
-/// Contract: ShipGate stage should have only 1 gate (CueArtifactGenerated)
+/// Contract: Main stage should have only 1 gate (MoonCi)
 #[test]
 fn test_postcondition_ship_gate_has_only_cue_artifact_generated_gate() {
-    let gates = StageName::ShipGate.gates();
+    let gates = StageName::Main.gates();
 
     assert_eq!(
         gates.len(),
         1,
-        "ShipGate should have exactly 1 gate after ZJJ removal, got {} gates",
+        "Main should have exactly 1 gate after stage simplification, got {} gates",
         gates.len()
     );
 
-    assert_eq!(
-        gates[0],
-        Gate::CueArtifactGenerated,
-        "ShipGate's only gate should be CueArtifactGenerated"
-    );
+    assert_eq!(gates[0], Gate::MoonCi, "Main's only gate should be MoonCi");
 }
 
 /// Contract: No stage should reference ZjjMergeQueue gate
 #[test]
 fn test_precondition_no_stage_references_zjj_merge_queue() {
     let all_stages = [
-        StageName::Explore,
-        StageName::Contract,
-        StageName::Red,
+        StageName::JjWorkspace,
         StageName::Implementation,
-        StageName::Witness,
-        StageName::ShipGate,
+        StageName::Implementation,
+        StageName::Implementation,
+        StageName::Main,
+        StageName::Main,
     ];
 
     for stage in all_stages {
@@ -133,39 +129,41 @@ fn test_postcondition_implementation_stage_has_correct_gates() {
     assert!(gates.contains(&Gate::TestsPass), "Implementation should have TestsPass gate");
 }
 
-/// Contract: Witness stage has correct gates after ZJJ removal
+/// Contract: Main stage has MoonCi gate after simplification
 #[test]
 fn test_postcondition_witness_stage_has_correct_gates() {
-    let gates = StageName::Witness.gates();
+    let gates = StageName::Main.gates();
 
-    assert_eq!(gates.len(), 1, "Witness should have 1 gate");
-    assert_eq!(gates[0], Gate::HoldoutScenarios, "Witness should have HoldoutScenarios gate");
+    assert_eq!(gates.len(), 1, "Main should have 1 gate");
+    assert_eq!(gates[0], Gate::MoonCi, "Main should have MoonCi gate");
 }
 
 /// Contract: Explore stage has no gates
 #[test]
 fn test_postcondition_explore_stage_has_no_gates() {
-    let gates = StageName::Explore.gates();
+    let gates = StageName::JjWorkspace.gates();
 
     assert_eq!(gates.len(), 0, "Explore should have 0 gates");
 }
 
-/// Contract: Contract stage has only Compiles gate
+/// Contract: Implementation gate set covers former Contract stage checks
 #[test]
 fn test_postcondition_contract_stage_has_only_compiles_gate() {
-    let gates = StageName::Contract.gates();
+    let gates = StageName::Implementation.gates();
 
-    assert_eq!(gates.len(), 1, "Contract should have 1 gate");
-    assert_eq!(gates[0], Gate::Compiles, "Contract should have Compiles gate");
+    assert_eq!(gates.len(), 2, "Implementation should have 2 gates");
+    assert!(gates.contains(&Gate::Compiles), "Implementation should have Compiles gate");
+    assert!(gates.contains(&Gate::TestsPass), "Implementation should have TestsPass gate");
 }
 
-/// Contract: Red stage has only Compiles gate
+/// Contract: Implementation gate set covers former Red stage checks
 #[test]
 fn test_postcondition_red_stage_has_only_compiles_gate() {
-    let gates = StageName::Red.gates();
+    let gates = StageName::Implementation.gates();
 
-    assert_eq!(gates.len(), 1, "Red should have 1 gate");
-    assert_eq!(gates[0], Gate::Compiles, "Red should have Compiles gate");
+    assert_eq!(gates.len(), 2, "Implementation should have 2 gates");
+    assert!(gates.contains(&Gate::Compiles), "Implementation should have Compiles gate");
+    assert!(gates.contains(&Gate::TestsPass), "Implementation should have TestsPass gate");
 }
 
 // =============================================================================
@@ -209,7 +207,7 @@ fn test_postcondition_pipeline_state_machine_works_without_zjj() {
 
     // Verify stage transitions still work
     let decision = TransitionDecision::new(
-        StageTransition::Advance(StageName::Contract),
+        StageTransition::Advance(StageName::Implementation),
         TransitionReason::StagePassedAdvance,
     );
 
@@ -221,12 +219,12 @@ fn test_postcondition_pipeline_state_machine_works_without_zjj() {
 fn test_postcondition_all_stages_have_valid_gate_configurations() {
     // Verify each stage has gates, and all gates are valid Gate variants
     for stage in [
-        StageName::Explore,
-        StageName::Contract,
-        StageName::Red,
+        StageName::JjWorkspace,
         StageName::Implementation,
-        StageName::Witness,
-        StageName::ShipGate,
+        StageName::Implementation,
+        StageName::Implementation,
+        StageName::Main,
+        StageName::Main,
     ] {
         let gates = stage.gates();
         for gate in gates {
@@ -283,7 +281,7 @@ fn test_backward_incompatibility_zjj_merge_queue_removed() {
 
     // Before removal, code like this would compile:
     // let gate = Gate::ZjjMergeQueue;
-    // let gates = StageName::ShipGate.gates();
+    // let gates = StageName::Main.gates();
     // assert!(gates.contains(&Gate::ZjjMergeQueue));
 
     // After removal, the above code would cause compile errors.
@@ -299,10 +297,10 @@ fn test_backward_incompatibility_zjj_merge_queue_string_fails() {
 /// Backward incompatibility: ShipGate no longer has 2 gates
 #[test]
 fn test_backward_incompatibility_ship_gate_no_longer_has_two_gates() {
-    let gates = StageName::ShipGate.gates();
+    let gates = StageName::Main.gates();
 
     // Before removal: gates.len() == 2
     // After removal: gates.len() == 1
-    assert_eq!(gates.len(), 1, "After removal, ShipGate should have 1 gate, not 2");
-    assert_eq!(gates[0], Gate::CueArtifactGenerated, "Only CueArtifactGenerated should remain");
+    assert_eq!(gates.len(), 1, "After simplification, Main should have 1 gate, not 2");
+    assert_eq!(gates[0], Gate::MoonCi, "Only MoonCi should remain for Main");
 }

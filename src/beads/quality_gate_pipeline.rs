@@ -114,7 +114,7 @@ mod tests {
 
     #[test]
     fn pipeline_explore_stage() {
-        let result = run_quality_gate_pipeline(StageName::Explore, passing_executor).unwrap();
+        let result = run_quality_gate_pipeline(StageName::JjWorkspace, passing_executor).unwrap();
         assert!(result.passed);
         assert_eq!(result.total_gates, 0);
         assert_eq!(result.passed_gates, 0);
@@ -122,18 +122,20 @@ mod tests {
 
     #[test]
     fn pipeline_contract_stage() {
-        let result = run_quality_gate_pipeline(StageName::Contract, passing_executor).unwrap();
+        let result =
+            run_quality_gate_pipeline(StageName::Implementation, passing_executor).unwrap();
         assert!(result.passed);
-        assert_eq!(result.total_gates, 1);
-        assert_eq!(result.passed_gates, 1);
+        assert_eq!(result.total_gates, 2);
+        assert_eq!(result.passed_gates, 2);
     }
 
     #[test]
     fn pipeline_red_stage() {
-        let result = run_quality_gate_pipeline(StageName::Red, passing_executor).unwrap();
+        let result =
+            run_quality_gate_pipeline(StageName::Implementation, passing_executor).unwrap();
         assert!(result.passed);
-        assert_eq!(result.total_gates, 1);
-        assert_eq!(result.passed_gates, 1);
+        assert_eq!(result.total_gates, 2);
+        assert_eq!(result.passed_gates, 2);
     }
 
     #[test]
@@ -147,7 +149,7 @@ mod tests {
 
     #[test]
     fn pipeline_witness_stage() {
-        let result = run_quality_gate_pipeline(StageName::Witness, passing_executor).unwrap();
+        let result = run_quality_gate_pipeline(StageName::Main, passing_executor).unwrap();
         assert!(result.passed);
         assert_eq!(result.total_gates, 1);
         assert_eq!(result.passed_gates, 1);
@@ -155,7 +157,7 @@ mod tests {
 
     #[test]
     fn pipeline_ship_gate_stage() {
-        let result = run_quality_gate_pipeline(StageName::ShipGate, passing_executor).unwrap();
+        let result = run_quality_gate_pipeline(StageName::Main, passing_executor).unwrap();
         assert!(result.passed);
         assert_eq!(result.total_gates, 1);
         assert_eq!(result.passed_gates, 1);
@@ -163,8 +165,8 @@ mod tests {
 
     #[test]
     fn pipeline_preserves_stage() {
-        let result = run_quality_gate_pipeline(StageName::Witness, passing_executor).unwrap();
-        assert_eq!(result.stage, StageName::Witness);
+        let result = run_quality_gate_pipeline(StageName::Main, passing_executor).unwrap();
+        assert_eq!(result.stage, StageName::Main);
     }
 
     #[test]
@@ -179,12 +181,12 @@ mod tests {
     #[test]
     fn pipeline_all_stages_pass_with_passing_executor() {
         let stages = [
-            StageName::Explore,
-            StageName::Contract,
-            StageName::Red,
+            StageName::JjWorkspace,
             StageName::Implementation,
-            StageName::Witness,
-            StageName::ShipGate,
+            StageName::Implementation,
+            StageName::Implementation,
+            StageName::Main,
+            StageName::Main,
         ];
 
         for stage in stages {
@@ -197,11 +199,11 @@ mod tests {
     fn pipeline_stages_with_gates_fail_when_executor_fails() {
         // Stages that have gates should fail when the executor returns non-zero
         let stages_with_gates = [
-            StageName::Contract,
-            StageName::Red,
             StageName::Implementation,
-            StageName::Witness,
-            StageName::ShipGate,
+            StageName::Implementation,
+            StageName::Implementation,
+            StageName::Main,
+            StageName::Main,
         ];
 
         for stage in stages_with_gates {
@@ -213,7 +215,7 @@ mod tests {
     #[test]
     fn pipeline_explore_passes_regardless_of_executor() {
         // Explore has no gates — executor result is irrelevant
-        let result = run_quality_gate_pipeline(StageName::Explore, failing_executor).unwrap();
+        let result = run_quality_gate_pipeline(StageName::JjWorkspace, failing_executor).unwrap();
         assert!(result.passed);
         assert_eq!(result.total_gates, 0);
     }

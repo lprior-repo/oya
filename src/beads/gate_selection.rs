@@ -33,22 +33,24 @@ mod tests {
 
     #[test]
     fn select_gates_explore_stage() {
-        let gates = select_gates(&StageName::Explore);
+        let gates = select_gates(&StageName::JjWorkspace);
         assert!(gates.is_empty());
     }
 
     #[test]
     fn select_gates_contract_stage() {
-        let gates = select_gates(&StageName::Contract);
-        assert_eq!(gates.len(), 1);
+        let gates = select_gates(&StageName::Implementation);
+        assert_eq!(gates.len(), 2);
         assert!(gates.contains(&Gate::Compiles));
+        assert!(gates.contains(&Gate::TestsPass));
     }
 
     #[test]
     fn select_gates_red_stage() {
-        let gates = select_gates(&StageName::Red);
-        assert_eq!(gates.len(), 1);
+        let gates = select_gates(&StageName::Implementation);
+        assert_eq!(gates.len(), 2);
         assert!(gates.contains(&Gate::Compiles));
+        assert!(gates.contains(&Gate::TestsPass));
     }
 
     #[test]
@@ -61,27 +63,27 @@ mod tests {
 
     #[test]
     fn select_gates_witness_stage() {
-        let gates = select_gates(&StageName::Witness);
+        let gates = select_gates(&StageName::Main);
         assert_eq!(gates.len(), 1);
-        assert!(gates.contains(&Gate::HoldoutScenarios));
+        assert!(gates.contains(&Gate::MoonCi));
     }
 
     #[test]
     fn select_gates_ship_gate_stage() {
-        let gates = select_gates(&StageName::ShipGate);
+        let gates = select_gates(&StageName::Main);
         assert_eq!(gates.len(), 1);
-        assert!(gates.contains(&Gate::CueArtifactGenerated));
+        assert!(gates.contains(&Gate::MoonCi));
     }
 
     #[test]
     fn select_gates_all_stages_match_stage_gates() {
         let stages = vec![
-            StageName::Explore,
-            StageName::Contract,
-            StageName::Red,
+            StageName::JjWorkspace,
             StageName::Implementation,
-            StageName::Witness,
-            StageName::ShipGate,
+            StageName::Implementation,
+            StageName::Implementation,
+            StageName::Main,
+            StageName::Main,
         ];
 
         stages.into_iter().for_each(|stage| {
@@ -100,7 +102,7 @@ mod tests {
 
     #[test]
     fn select_gates_returns_vector() {
-        let gates = select_gates(&StageName::Contract);
+        let gates = select_gates(&StageName::Implementation);
         // Verify it's an im::Vector
         let _: im::Vector<Gate> = gates;
     }

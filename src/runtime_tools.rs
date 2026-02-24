@@ -2,9 +2,22 @@ mod command_exec;
 mod failure_summary;
 mod gates;
 mod http;
+mod jj;
 mod workspace;
 #[allow(dead_code)]
 mod write_allowlist;
+
+#[cfg(test)]
+mod jj_tests;
+
+#[cfg(test)]
+mod workspace_tests;
+
+#[allow(unused_imports)]
+pub(crate) use jj::{
+    bookmark_and_push, create_workspace, forget_workspace, rebase_onto_main, run_jj_command,
+    validate_bead_id, JjCommandOutput, JjWorkspaceInfo,
+};
 
 pub(crate) use command_exec::{run_command_with_timeout_with_exit, run_opencode};
 pub(crate) use failure_summary::summarize_failure_output;
@@ -23,3 +36,4 @@ pub(crate) use workspace::{prepare_stage_workspace, WorkspacePrepRequest};
 pub use write_allowlist::{
     is_write_allowed, validate_write_path, StageWriteConfig, WriteAllowlistError,
 };
+pub(crate) mod github;

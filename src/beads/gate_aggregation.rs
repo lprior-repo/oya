@@ -209,7 +209,7 @@ mod tests {
     #[test]
     fn aggregate_empty_results_error() {
         let results = Vector::new();
-        let result = aggregate_gate_results(StageName::Contract, &results);
+        let result = aggregate_gate_results(StageName::Implementation, &results);
         assert!(matches!(result, Err(GateAggregationError::EmptyResults(_))));
     }
 
@@ -238,7 +238,7 @@ mod tests {
     fn aggregate_single_passed() {
         let results = Vector::from(vec![exec_passed("compiles")]);
 
-        let aggregated = aggregate_gate_results(StageName::Contract, &results).unwrap();
+        let aggregated = aggregate_gate_results(StageName::Implementation, &results).unwrap();
         assert!(aggregated.is_passed());
         assert_eq!(aggregated.stats().passed_count, 1);
         assert_eq!(aggregated.stats().total_count, 1);
@@ -267,10 +267,10 @@ mod tests {
     #[test]
     fn aggregate_empty_results_error_contains_stage_name() {
         let results = Vector::new();
-        let result = aggregate_gate_results(StageName::Contract, &results);
+        let result = aggregate_gate_results(StageName::Implementation, &results);
         match result {
             Err(GateAggregationError::EmptyResults(stage_name)) => {
-                assert_eq!(stage_name, "contract");
+                assert_eq!(stage_name, "implementation");
             }
             _ => panic!("Expected EmptyResults error"),
         }
@@ -324,8 +324,8 @@ mod tests {
     #[test]
     fn stage_accessible_from_both_variants() {
         let results_pass = Vector::from(vec![exec_passed("g1")]);
-        let agg_pass = aggregate_gate_results(StageName::Contract, &results_pass).unwrap();
-        assert_eq!(agg_pass.stage(), &StageName::Contract);
+        let agg_pass = aggregate_gate_results(StageName::Implementation, &results_pass).unwrap();
+        assert_eq!(agg_pass.stage(), &StageName::Implementation);
 
         let results_fail = Vector::from(vec![exec_failed("g1", 1)]);
         let agg_fail = aggregate_gate_results(StageName::Implementation, &results_fail).unwrap();

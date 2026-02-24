@@ -18,45 +18,31 @@ use anyhow::Result;
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum StageName {
-    Explore,
-    Contract,
-    Red,
+    JjWorkspace,
     Implementation,
-    Witness,
-    ShipGate,
+    Main,
 }
 
 impl StageName {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Self::Explore => "explore",
-            Self::Contract => "contract",
-            Self::Red => "red",
+            Self::JjWorkspace => "jj_workspace",
             Self::Implementation => "implementation",
-            Self::Witness => "witness",
-            Self::ShipGate => "ship_gate",
+            Self::Main => "main",
         }
     }
 
     pub fn next(&self) -> Option<Self> {
         match self {
-            Self::Explore => Some(Self::Contract),
-            Self::Contract => Some(Self::Red),
-            Self::Red => Some(Self::Implementation),
-            Self::Implementation => Some(Self::Witness),
-            Self::Witness => Some(Self::ShipGate),
-            Self::ShipGate => None,
+            Self::JjWorkspace => Some(Self::Implementation),
+            Self::Implementation => Some(Self::Main),
+            Self::Main => None,
         }
     }
 
     pub fn model_for_stage(&self) -> ModelTier {
         match self {
-            Self::Explore => ModelTier::Fast,
-            Self::Contract => ModelTier::Fast,
-            Self::Red => ModelTier::Balanced,
-            Self::Implementation => ModelTier::Balanced,
-            Self::Witness => ModelTier::Capable,
-            Self::ShipGate => ModelTier::Best,
+            Self::JjWorkspace | Self::Implementation | Self::Main => ModelTier::Fast,
         }
     }
 
@@ -66,12 +52,9 @@ impl StageName {
 
     pub fn gates(&self) -> Vec<Gate> {
         match self {
-            Self::Explore => vec![],
-            Self::Contract => vec![Gate::Compiles],
-            Self::Red => vec![Gate::Compiles],
             Self::Implementation => vec![Gate::Compiles, Gate::TestsPass],
-            Self::Witness => vec![Gate::HoldoutScenarios],
-            Self::ShipGate => vec![Gate::CueArtifactGenerated],
+            Self::JjWorkspace => vec![],
+            Self::Main => vec![Gate::MoonCi],
         }
     }
 }
@@ -81,12 +64,9 @@ impl TryFrom<&str> for StageName {
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         match s {
-            "explore" => Ok(Self::Explore),
-            "contract" => Ok(Self::Contract),
-            "red" => Ok(Self::Red),
+            "jj_workspace" => Ok(Self::JjWorkspace),
             "implementation" => Ok(Self::Implementation),
-            "witness" => Ok(Self::Witness),
-            "ship_gate" => Ok(Self::ShipGate),
+            "main" => Ok(Self::Main),
             _ => Err(format!("Unknown stage: {s}")),
         }
     }
@@ -289,8 +269,7 @@ impl StageTransition {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum TransitionReason {
     StagePassedAdvance,
-    StagePassedNoNextStage,
-    RedQueenPassedComplete,
+    StagePassedComplete,
     StageFailedRetry,
     StageFailedMaxAttemptsReached,
 }
@@ -300,8 +279,7 @@ impl TransitionReason {
     pub const fn code(&self) -> &'static str {
         match self {
             Self::StagePassedAdvance => "stage_passed_advance",
-            Self::StagePassedNoNextStage => "stage_passed_no_next_stage",
-            Self::RedQueenPassedComplete => "red_queen_passed_complete",
+            Self::StagePassedComplete => "stage_passed_complete",
             Self::StageFailedRetry => "stage_failed_retry",
             Self::StageFailedMaxAttemptsReached => "stage_failed_max_attempts_reached",
         }
@@ -352,29 +330,17 @@ pub fn determine_transition(
 #[must_use]
 pub fn passed_stage_transition(stage: StageName) -> TransitionDecision {
     match stage {
-        StageName::Explore => TransitionDecision::new(
-            StageTransition::Advance(StageName::Contract),
-            TransitionReason::StagePassedAdvance,
-        ),
-        StageName::Contract => TransitionDecision::new(
-            StageTransition::Advance(StageName::Red),
-            TransitionReason::StagePassedAdvance,
-        ),
-        StageName::Red => TransitionDecision::new(
+        StageName::JjWorkspace => TransitionDecision::new(
             StageTransition::Advance(StageName::Implementation),
             TransitionReason::StagePassedAdvance,
         ),
         StageName::Implementation => TransitionDecision::new(
-            StageTransition::Advance(StageName::Witness),
+            StageTransition::Advance(StageName::Main),
             TransitionReason::StagePassedAdvance,
         ),
-        StageName::Witness => TransitionDecision::new(
-            StageTransition::Advance(StageName::ShipGate),
-            TransitionReason::StagePassedAdvance,
-        ),
-        StageName::ShipGate => TransitionDecision::new(
+        StageName::Main => TransitionDecision::new(
             StageTransition::Complete,
-            TransitionReason::RedQueenPassedComplete,
+            TransitionReason::StagePassedComplete,
         ),
     }
 }
@@ -447,9 +413,9 @@ mod tests {
 
     #[test]
     fn determine_transition_advances_on_successful_stage() {
-        let decision = determine_transition(StageName::Explore, true, false);
+        let decision = determine_transition(StageName::JjWorkspace, true, false);
         assert_eq!(decision.reason(), TransitionReason::StagePassedAdvance);
-        assert_eq!(decision.transition(), StageTransition::Advance(StageName::Contract));
+        assert_eq!(decision.transition(), StageTransition::Advance(StageName::Implementation));
     }
 
     #[test]
@@ -461,34 +427,35 @@ mod tests {
 
     #[test]
     fn determine_transition_blocks_after_retry_exhaustion() {
-        let decision = determine_transition(StageName::Witness, false, true);
+        let decision = determine_transition(StageName::Main, false, true);
         assert_eq!(decision.reason(), TransitionReason::StageFailedMaxAttemptsReached);
         assert_eq!(decision.transition(), StageTransition::Block);
     }
 
     #[test]
-    fn passed_stage_transition_completes_at_ship_gate() {
-        let decision = passed_stage_transition(StageName::ShipGate);
-        assert_eq!(decision.reason(), TransitionReason::RedQueenPassedComplete);
+    fn passed_stage_transition_completes_at_main() {
+        let decision = passed_stage_transition(StageName::Main);
+        assert_eq!(decision.reason(), TransitionReason::StagePassedComplete);
         assert_eq!(decision.transition(), StageTransition::Complete);
     }
 
     #[test]
-    fn test_load_model_tier_config_from_oya_yaml() {
+    fn test_load_model_tier_config_from_oya_yaml() -> Result<()> {
         let config = load_model_tier_config();
         assert!(config.is_ok(), "Should load config from oya.yaml");
 
-        let config = config.unwrap();
+        let config = config?;
         assert!(config.tiers.contains_key("d"));
         assert!(config.tiers.contains_key("c"));
         assert!(config.tiers.contains_key("b"));
         assert!(config.tiers.contains_key("a"));
         assert!(config.tiers.contains_key("s"));
+        Ok(())
     }
 
     #[test]
-    fn test_get_models_for_tier_returns_correct_models() {
-        let config = load_model_tier_config().unwrap();
+    fn test_get_models_for_tier_returns_correct_models() -> Result<()> {
+        let config = load_model_tier_config()?;
 
         let tier_d = config.get_models_for_tier("d");
         assert_eq!(tier_d.len(), 1);
@@ -497,27 +464,30 @@ mod tests {
         let tier_c = config.get_models_for_tier("c");
         assert_eq!(tier_c.len(), 4);
         assert!(tier_c.contains(&"opencode/glm-5-free".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn test_get_models_for_tier_returns_empty_for_unknown() {
-        let config = load_model_tier_config().unwrap();
+    fn test_get_models_for_tier_returns_empty_for_unknown() -> Result<()> {
+        let config = load_model_tier_config()?;
         assert!(config.get_models_for_tier("unknown").is_empty());
         assert!(config.get_models_for_tier("fast").is_empty());
         assert!(config.get_models_for_tier("balanced").is_empty());
         assert!(config.get_models_for_tier("capable").is_empty());
         assert!(config.get_models_for_tier("best").is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_tier_ids_returns_all_tiers() {
-        let config = load_model_tier_config().unwrap();
+    fn test_tier_ids_returns_all_tiers() -> Result<()> {
+        let config = load_model_tier_config()?;
         let tiers = config.tier_ids();
         assert!(tiers.contains(&"d"));
         assert!(tiers.contains(&"c"));
         assert!(tiers.contains(&"b"));
         assert!(tiers.contains(&"a"));
         assert!(tiers.contains(&"s"));
+        Ok(())
     }
 
     #[test]

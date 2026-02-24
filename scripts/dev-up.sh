@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "[oya] scripts/dev-up.sh is temporarily disabled."
-echo "[oya] Runtime stand-up is blocked until re-enabled."
-exit 1
-
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 cd "$REPO_ROOT"
@@ -127,7 +123,7 @@ systemd-run --user --unit oya-manual \
 	-E OYA_WORKSPACE_PREP_TIMEOUT_SECONDS="${OYA_WORKSPACE_PREP_TIMEOUT_SECONDS:-}" \
 	-E OYA_PIPELINE_STAGE_WATCHDOG_SECONDS="${OYA_PIPELINE_STAGE_WATCHDOG_SECONDS:-}" \
 	-E OYA_PROVIDER_POOL_RECOVERY_SECONDS="${OYA_PROVIDER_POOL_RECOVERY_SECONDS:-}" \
-	-E OYA_SKIP_ZJJ_GATE="${OYA_SKIP_ZJJ_GATE:-1}" \
+	-E OYA_ENABLE_PIPELINE_EXECUTION="${OYA_ENABLE_PIPELINE_EXECUTION:-1}" \
 	--working-directory "$REPO_ROOT" \
 	"$REPO_ROOT/target/release/oya" >/dev/null
 

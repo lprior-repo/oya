@@ -35,7 +35,7 @@
 //! assert!(is_write_allowed(&StageName::Implementation, &src_path, workspace));
 //!
 //! // Get stage write configuration
-//! let config = StageWriteConfig::for_stage(StageName::Contract);
+//! let config = StageWriteConfig::for_stage(StageName::Implementation);
 //! assert!(!config.read_only);
 //! ```
 
@@ -97,26 +97,14 @@ impl StageWriteConfig {
     #[must_use]
     pub fn for_stage(stage: StageName) -> Self {
         match stage {
-            StageName::Explore | StageName::Red | StageName::Witness => {
-                Self::read_only_config(stage)
-            }
-            StageName::Contract => Self::contract_config(stage),
+            StageName::JjWorkspace => Self::read_only_config(stage),
             StageName::Implementation => Self::implementation_config(stage),
-            StageName::ShipGate => Self::ship_gate_config(stage),
+            StageName::Main => Self::main_config(stage),
         }
     }
 
     const fn read_only_config(stage: StageName) -> Self {
         Self { stage, allowed_dirs: vec![], allowed_patterns: vec![], read_only: true }
-    }
-
-    fn contract_config(stage: StageName) -> Self {
-        Self {
-            stage,
-            allowed_dirs: vec![PathBuf::from("docs")],
-            allowed_patterns: vec!["*.md".to_string()],
-            read_only: false,
-        }
     }
 
     fn implementation_config(stage: StageName) -> Self {
@@ -136,7 +124,7 @@ impl StageWriteConfig {
         }
     }
 
-    fn ship_gate_config(stage: StageName) -> Self {
+    fn main_config(stage: StageName) -> Self {
         Self {
             stage,
             allowed_dirs: vec![PathBuf::from(".beads"), PathBuf::from(".git")],
@@ -172,7 +160,7 @@ impl StageWriteConfig {
 /// use std::path::Path;
 ///
 /// let workspace = Path::new("/home/user/project");
-/// let stage = StageName::Contract;
+/// let stage = StageName::Implementation;
 ///
 /// // Allowed: writing to docs directory
 /// let docs_path = workspace.join("docs").join("contract.md");
@@ -406,39 +394,55 @@ mod tests {
     }
 
     // ---------------------------------------------------------------------------
-    // Contract Stage Write Allowlist Tests
+    // JJ Workspace Stage Write Allowlist Tests
     // ---------------------------------------------------------------------------
 
     #[test]
-    fn contract_stage_allows_docs_directory() {
+    fn jj_workspace_stage_blocks_docs_directory() {
         let workspace = Path::new("/home/user/project");
         let docs_path = workspace.join("docs").join("contract.md");
-        assert!(validate_write_path(&StageName::Contract, &docs_path, workspace).is_ok());
-    }
-
-    #[test]
-    fn contract_stage_allows_markdown_files() {
-        let workspace = Path::new("/home/user/project");
-        let md_path = workspace.join("README.md");
-        assert!(validate_write_path(&StageName::Contract, &md_path, workspace).is_ok());
-    }
-
-    #[test]
-    fn contract_stage_blocks_src_directory() {
-        let workspace = Path::new("/home/user/project");
-        let src_path = workspace.join("src").join("main.rs");
         assert!(matches!(
-            validate_write_path(&StageName::Contract, &src_path, workspace),
+            validate_write_path(&StageName::JjWorkspace, &docs_path, workspace),
             Err(WriteAllowlistError::WriteNotAllowed { .. })
         ));
     }
 
     #[test]
-    fn contract_stage_blocks_tests_directory() {
+    fn jj_workspace_stage_blocks_markdown_files() {
+        let workspace = Path::new("/home/user/project");
+        let md_path = workspace.join("README.md");
+        assert!(matches!(
+            validate_write_path(&StageName::JjWorkspace, &md_path, workspace),
+            Err(WriteAllowlistError::WriteNotAllowed { .. })
+        ));
+    }
+
+    #[test]
+    fn jj_workspace_stage_blocks_src_directory() {
+        let workspace = Path::new("/home/user/project");
+        let src_path = workspace.join("src").join("main.rs");
+        assert!(matches!(
+            validate_write_path(&StageName::JjWorkspace, &src_path, workspace),
+            Err(WriteAllowlistError::WriteNotAllowed { .. })
+        ));
+    }
+
+    #[test]
+    fn jj_workspace_stage_blocks_tests_directory() {
         let workspace = Path::new("/home/user/project");
         let test_path = workspace.join("tests").join("test.rs");
         assert!(matches!(
-            validate_write_path(&StageName::Contract, &test_path, workspace),
+            validate_write_path(&StageName::JjWorkspace, &test_path, workspace),
+            Err(WriteAllowlistError::WriteNotAllowed { .. })
+        ));
+    }
+
+    #[test]
+    fn jj_workspace_stage_blocks_src_lib_rs() {
+        let workspace = Path::new("/home/user/project");
+        let lib_path = workspace.join("src").join("lib.rs");
+        assert!(matches!(
+            validate_write_path(&StageName::JjWorkspace, &lib_path, workspace),
             Err(WriteAllowlistError::WriteNotAllowed { .. })
         ));
     }
@@ -515,14 +519,14 @@ mod tests {
     fn ship_gate_stage_allows_beads_directory() {
         let workspace = Path::new("/home/user/project");
         let beads_path = workspace.join(".beads").join("src-123.json");
-        assert!(validate_write_path(&StageName::ShipGate, &beads_path, workspace).is_ok());
+        assert!(validate_write_path(&StageName::Main, &beads_path, workspace).is_ok());
     }
 
     #[test]
     fn ship_gate_stage_allows_git_directory() {
         let workspace = Path::new("/home/user/project");
         let git_path = workspace.join(".git").join("MERGE_HEAD");
-        assert!(validate_write_path(&StageName::ShipGate, &git_path, workspace).is_ok());
+        assert!(validate_write_path(&StageName::Main, &git_path, workspace).is_ok());
     }
 
     #[test]
@@ -530,7 +534,7 @@ mod tests {
         let workspace = Path::new("/home/user/project");
         let src_path = workspace.join("src").join("main.rs");
         assert!(matches!(
-            validate_write_path(&StageName::ShipGate, &src_path, workspace),
+            validate_write_path(&StageName::Main, &src_path, workspace),
             Err(WriteAllowlistError::WriteNotAllowed { .. })
         ));
     }
@@ -576,13 +580,13 @@ mod tests {
     fn is_write_allowed_returns_true_for_valid_writes() {
         let workspace = Path::new("/home/user/project");
         assert!(is_write_allowed(
-            &StageName::Contract,
-            &workspace.join("docs").join("test.md"),
+            &StageName::Implementation,
+            &workspace.join("src").join("main.rs"),
             workspace
         ));
         assert!(is_write_allowed(
-            &StageName::Implementation,
-            &workspace.join("src").join("main.rs"),
+            &StageName::Main,
+            &workspace.join(".beads").join("src-123.json"),
             workspace
         ));
     }
@@ -591,12 +595,12 @@ mod tests {
     fn is_write_allowed_returns_false_for_invalid_writes() {
         let workspace = Path::new("/home/user/project");
         assert!(!is_write_allowed(
-            &StageName::Contract,
+            &StageName::JjWorkspace,
             &workspace.join("src").join("main.rs"),
             workspace
         ));
         assert!(!is_write_allowed(
-            &StageName::ShipGate,
+            &StageName::Main,
             &workspace.join("src").join("main.rs"),
             workspace
         ));
@@ -611,7 +615,7 @@ mod tests {
         let workspace = Path::new("/home/user/project");
         let escape_path = workspace.join("docs").join("..").join("src").join("main.rs");
         assert!(matches!(
-            validate_write_path(&StageName::Contract, &escape_path, workspace),
+            validate_write_path(&StageName::Implementation, &escape_path, workspace),
             Err(WriteAllowlistError::PathTraversalDetected(_))
         ));
     }
@@ -630,21 +634,23 @@ mod tests {
     fn blocks_cross_stage_contamination() {
         let workspace = Path::new("/home/user/project");
 
-        // Contract stage should not write to src/ or tests/
+        // JJ workspace stage is read-only.
         assert!(!is_write_allowed(
-            &StageName::Contract,
+            &StageName::JjWorkspace,
             &workspace.join("src").join("lib.rs"),
             workspace
         ));
-        assert!(!is_write_allowed(
-            &StageName::Contract,
+
+        // Implementation stage can write tests/.
+        assert!(is_write_allowed(
+            &StageName::Implementation,
             &workspace.join("tests").join("test.rs"),
             workspace
         ));
 
         // ShipGate should not write to src/
         assert!(!is_write_allowed(
-            &StageName::ShipGate,
+            &StageName::Main,
             &workspace.join("src").join("main.rs"),
             workspace
         ));

@@ -28,10 +28,11 @@ pub use pipeline::{
 // --- domain ---
 pub use domain::{
     derive_merge_decision, parse_queue_record, select_next_merge_candidate, AgentState,
-    AgentStatus, Artifact, ArtifactType, BlockReason, DomainError, EventSchemaVersion,
-    ExecutionEvent, FailureDiagnostics, FullSha, GateResult, LockToken, MergeBlockReason,
-    MergeDecision, NonZeroPriority, QueueBeadId, QueueItem, QueueItemId, QueuePosition, Run,
-    RunState, SelectionDecision, SessionLock, StaleReason, ValidationError,
+    AgentStatus, Artifact, ArtifactType, BlockReason, DashboardSnapshot, DomainError,
+    EventSchemaVersion, ExecutionEvent, FailureDiagnostics, FullSha, GateResult, GitHubPrMetadata,
+    LockToken, MergeBlockReason, MergeDecision, NonZeroPriority, QueueBeadId, QueueItem,
+    QueueItemId, QueuePosition, Run, RunState, SelectionDecision, SessionLock, StaleReason,
+    ValidationError,
 };
 
 // --- health ---

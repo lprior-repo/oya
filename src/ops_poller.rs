@@ -77,7 +77,7 @@ async fn poll_opencode_status(
     let question_raw =
         fetch_text_with_client(client, &question_url, config.password.as_deref()).await?;
 
-    let snapshot = build_opencode_poll_snapshot(&status_raw, &perm_raw, &question_raw)
+    let snapshot = build_opencode_poll_snapshot(&status_raw, &perm_raw, &question_raw, 0, 0)
         .map_err(|error| OyaError(format!("Parse failed: {}", error)))?;
 
     let busy_preview = if snapshot.busy_sessions.is_empty() {

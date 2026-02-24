@@ -86,6 +86,8 @@ pub trait OyaUsageTracker {
 
     async fn get_status() -> Result<Json<UsageStatus>, HandlerError>;
 
+    async fn ping() -> Result<Json<serde_json::Value>, HandlerError>;
+
     async fn reset() -> Result<(), HandlerError>;
 }
 
@@ -118,7 +120,7 @@ impl OyaUsageTracker for OyaUsageTrackerImpl {
                 ))
                 .into());
             };
-        persist_index_change(&ctx, &mut state, &tier, current_index, selected_index);
+        persist_index_change(&mut state, &tier, current_index, selected_index);
         state.last_updated = now;
         ctx.set("state", Json(state.clone()));
         let selected_model = model_list.get(selected_index).ok_or_else(|| {
@@ -202,6 +204,10 @@ impl OyaUsageTracker for OyaUsageTrackerImpl {
         }))
     }
 
+    async fn ping(&self, _ctx: ObjectContext<'_>) -> Result<Json<serde_json::Value>, HandlerError> {
+        Ok(Json(serde_json::json!({"status": "ok"})))
+    }
+
     async fn reset(&self, ctx: ObjectContext<'_>) -> Result<(), HandlerError> {
         ctx.clear("state");
         Ok(())
@@ -244,7 +250,6 @@ fn selected_healthy_index(
 }
 
 fn persist_index_change(
-    ctx: &ObjectContext<'_>,
     state: &mut TrackerState,
     tier: &Tier,
     current_index: usize,
@@ -253,7 +258,6 @@ fn persist_index_change(
     if selected_index != current_index {
         state.active_indices.insert(tier.clone(), selected_index);
         state.last_updated = next_logical_time(state);
-        ctx.set("state", Json(state.clone()));
     }
 }
 

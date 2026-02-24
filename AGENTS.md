@@ -7,26 +7,26 @@
 {"kind":"rule","id":"response-budget","text":"Default response budget: <= 8 lines, no redundant recap, no chain-of-thought, include only decision/files/next-action."}
 {"kind":"policy","id":"non-codanna-explore-failure","text":"Exploration with glob/read/grep before a Codanna attempt is a workflow failure unless user explicitly requests it."}
 {"kind":"cmd","tool":"codanna_mcp","list":["codanna_search_symbols","codanna_find_symbol","codanna_get_calls","codanna_find_callers","codanna_analyze_impact","codanna_semantic_search_with_context","codanna_get_index_info"]}
-{"kind":"skill","load":"/zjj","when":"first","purpose":"workspace isolation + queue"}
+{"kind":"skill","load":"/jj","when":"first","purpose":"workspace isolation"}
 {"kind":"skill","load":"/functional-rust-generator","when":"coding","purpose":"zero-panic rust"}
 {"kind":"skill","load":"/rust-contract","when":"planning","purpose":"contracts + tests"}
 {"kind":"agent","role":"TEST_AGENT","stage":"AcceptanceTest","scope":"public_api_only","output":"tests_only","constraint":"tests_must_be_red","forbidden":["implementation_code","modifying_production_code"]}
 {"kind":"agent","role":"LOGIC_AGENT","stage":"Implementation","scope":"red_tests_plus_types","output":"implementation_only","constraint":"tests_must_become_green","forbidden":["modifying_tests","writing_new_tests"]}
 {"kind":"doc","title":"ATDD Workflow: Two-Phase Development","description":"The ATDD (Acceptance Test-Driven Development) workflow separates concerns into two distinct phases, each handled by a specialized agent role.","phases":[{"name":"AcceptanceTest","agent":"TEST_AGENT","goal":"Write failing acceptance tests that specify desired behavior","activities":["Identify public API surface","Write test cases for all scenarios","Ensure tests compile and FAIL (red state)","Document expected behavior in test assertions","DO NOT write implementation code"],"output":"Red test suite that defines acceptance criteria"},{"name":"Implementation","agent":"LOGIC_AGENT","goal":"Make all red tests pass with minimal, functional code","activities":["Read and understand failing tests","Write ONLY production code needed to pass tests","Use Result<T,E> and functional patterns (no unwrap/panic)","Ensure all tests turn GREEN","DO NOT modify or add tests"],"output":"Green test suite with production implementation"}],"handoff":[{"from":"TEST_AGENT","to":"LOGIC_AGENT","trigger":"All tests written and failing (red)","criteria":["Tests compile successfully","All new tests fail with clear assertions","No implementation code written"]},{"from":"LOGIC_AGENT","to":"Complete","trigger":"All tests pass (green)","criteria":["100% test pass rate","No clippy warnings","Code follows functional Rust guidelines"]}]}
 {"kind":"pattern","name":"Red Gate Pattern","purpose":"Quality enforcement through test failure","description":"The Red Gate Pattern ensures code quality by requiring tests to fail before implementation begins. This prevents false positives and validates that tests actually check the intended behavior.","workflow":["1. TEST_AGENT writes tests","2. Verify tests FAIL (red gate)","3. TEST_AGENT cannot proceed until red gate confirmed","4. LOGIC_AGENT writes implementation","5. Verify tests PASS (green gate)","6. LOGIC_AGENT cannot modify tests"],"benefits":["Guarantees test independence from implementation","Prevents accidentally passing tests","Validates test assertions are meaningful","Enforces strict TDD discipline","Creates clear handoff between roles"],"red_gate_criteria":["Tests must compile successfully","All new tests must fail","Failure messages must be clear and actionable","No implementation code exists"],"green_gate_criteria":["All tests must pass","No unwrap/panic/expect in implementation","Functional Rust patterns used","Clippy linting clean"]}
-{"kind":"workflow","name":"bead","steps":["br ready","zjj queue --add <ws> --bead <id>","zjj add <id>","br update <id> --status in_progress","oya run --bead <id>","moon run :ci","zjj sync","zjj done","br close <id>","br sync --flush-only"]}
+{"kind":"workflow","name":"bead","steps":["br ready","jj workspace add <id>","br update <id> --status in_progress","oya run --bead <id>","moon run :ci","jj git fetch","jj rebase","jj bookmark create <name>","git push","jj workspace forget <name>","br close <id>","br sync --flush-only"]}
 {"kind":"cmd","tool":"br","list":["ready","show <id>","update <id> --status in_progress","close <id>","sync --flush-only"]}
 {"kind":"cmd","tool":"moon","list":["run :quick","run :ci","run :test","run :fmt-fix","run :build","run :check","run :coverage","run :mutants-quick"]}
-{"kind":"cmd","tool":"zjj","list":["add <name>","queue --add <ws> --bead <id>","queue --list","queue --next","sync","done","focus <name>"]}
+{"kind":"cmd","tool":"jj","list":["workspace add <name>","workspace forget <name>","git fetch","rebase","bookmark create <name>","bookmark list","log"]}
 {"kind":"rule","id":"moon","text":"NEVER cargo. moon run only."}
 {"kind":"rule","id":"panic","text":"Zero unwrap/panic/expect. Result<T,E> + ?"}
 {"kind":"rule","id":"tdd","text":"Tests FIRST. RED-GREEN-REFACTOR."}
 {"kind":"rule","id":"clippy","text":"Fix code, never lint config."}
 {"kind":"rule","id":"fn-lines","text":"Source functions must be <= 40 lines (clippy::too_many_lines)."}
 {"kind":"rule","id":"fn-args","text":"Source functions must take <= 5 inputs (clippy::too_many_arguments)."}
-{"kind":"rule","id":"queue","text":"zjj queue --add BEFORE zjj add."}
+{"kind":"rule","id":"workspace","text":"jj workspace add before starting work."}
 {"kind":"lint","rust":"#![deny(clippy::unwrap_used)] #![deny(clippy::expect_used)] #![deny(clippy::panic)] #![deny(clippy::too_many_lines)] #![deny(clippy::too_many_arguments)] #![forbid(unsafe_code)]"}
-{"kind":"land","steps":["moon run :ci","zjj sync","zjj done","br close <id>","br sync --flush-only","git add .beads/","git commit"]}
+{"kind":"land","steps":["moon run :ci","jj git fetch","jj rebase","jj bookmark create <name>","git push","jj workspace forget <name>","br close <id>","br sync --flush-only","git add .beads/","git commit"]}
 {"kind":"ref","moon":"/home/lewis/src/oya/.moon/tasks.yml"}
 {"kind":"ref","rust":"/home/lewis/src/oya/docs/FUNCTIONAL_RUST.md"}
 {"kind":"ref","beads":"/home/lewis/src/oya/docs/BEADS.md"}
@@ -37,3 +37,4 @@
 {"kind":"env","name":"OTEL_EXPORTER_OTLP_ENDPOINT","value":"http://localhost:4318","purpose":"OTLP exporter endpoint for traces/metrics/logs"}
 {"kind":"env","name":"OTEL_SERVICE_NAME","value":"oya-orchestrator","purpose":"Service name in OpenObserve"}
 {"kind":"ref","observability":"~/.local/share/observability/README.md"}
+{"kind":"rule","id":"clippy-test-exemption","text":"Test files (tests/*.rs, src/lib_tests.rs) are EXEMPT from clippy::unwrap_used for brevity in assertions. CLIPPY task excludes tests."}

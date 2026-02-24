@@ -1,3 +1,10 @@
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+#![deny(clippy::panic)]
+#![warn(clippy::pedantic)]
+#![warn(clippy::nursery)]
+#![forbid(unsafe_code)]
+
 //! Orchestrator trait - abstract the workflow execution
 //!
 //! This trait allows us to test orchestration logic without running real tools.
@@ -12,21 +19,24 @@
 //!
 //! ```rust,no_run
 //! use oya::orchestrator::{Orchestrator, StageRequest};
-//! use oya::types::{StageName, StageFailure};
+//! use oya::types::{StageName, StageFailure, ModelId};
 //!
-//! async fn test_happy_path<T: Orchestrator>(orch: T) {
+//! async fn test_happy_path<T: Orchestrator>(orch: T) -> Result<(), Box<dyn std::error::Error>> {
+//!     let model = ModelId::new("test-model")?;
 //!     let result = orch.run_stage(StageRequest {
-//!         stage: StageName::Contract,
+//!         stage: StageName::Implementation,
 //!         attempt: 1,
 //!         bead_id: "bead-001".to_string(),
 //!         context: "test context".to_string(),
+//!         model,
 //!         last_failure: None,
-//!     }).await.unwrap();
+//!     }).await?;
 //!     assert!(result.passed);
+//!     Ok(())
 //! }
 //! ```
 
-use crate::types::{FailureCategory, StageFailure, StageName};
+use crate::types::{FailureCategory, ModelId, StageFailure, StageName};
 use serde_json::Value;
 use thiserror::Error;
 
@@ -36,6 +46,7 @@ pub struct StageRequest {
     pub attempt: u32,
     pub bead_id: String,
     pub context: String,
+    pub model: ModelId,
     pub last_failure: Option<StageFailure>,
 }
 

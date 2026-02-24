@@ -151,7 +151,7 @@ mod tests {
 
     #[test]
     fn decision_passed_variant() {
-        let report = report_passed(StageName::Contract, 1, 1);
+        let report = report_passed(StageName::Implementation, 1, 1);
         let decision = make_gate_decision(&report);
 
         assert!(decision.is_passed());
@@ -160,7 +160,7 @@ mod tests {
 
         match decision {
             GateDecision::Passed { stage, stats } => {
-                assert_eq!(stage, StageName::Contract);
+                assert_eq!(stage, StageName::Implementation);
                 assert_eq!(stats.total_gates, 1);
                 assert_eq!(stats.passed_gates, 1);
             }
@@ -214,7 +214,7 @@ mod tests {
 
     #[test]
     fn decision_failed_preserves_category() {
-        let report = report_failed(StageName::ShipGate, 1, 0, FailureCategory::RateLimited);
+        let report = report_failed(StageName::Main, 1, 0, FailureCategory::RateLimited);
         let decision = make_gate_decision(&report);
 
         assert_eq!(decision.failure_category(), Some(&FailureCategory::RateLimited));
@@ -222,11 +222,11 @@ mod tests {
 
     #[test]
     fn decision_reason_format_passed() {
-        let report = report_passed(StageName::Contract, 1, 1);
+        let report = report_passed(StageName::Implementation, 1, 1);
         let decision = make_gate_decision(&report);
 
         assert!(decision.reason().starts_with("All"));
-        assert!(decision.reason().ends_with("passed for stage contract"));
+        assert!(decision.reason().ends_with("passed for stage implementation"));
     }
 
     #[test]
@@ -249,7 +249,7 @@ mod tests {
 
     #[test]
     fn decision_cloneable() {
-        let report = report_passed(StageName::Contract, 1, 1);
+        let report = report_passed(StageName::Implementation, 1, 1);
         let decision = make_gate_decision(&report);
         let cloned = decision.clone();
         assert_eq!(decision, cloned);
@@ -266,7 +266,7 @@ mod tests {
         // This test demonstrates that the type system prevents
         // constructing a Passed decision with a failure category.
         // The compiler enforces this - no runtime check needed.
-        let report = report_passed(StageName::Contract, 1, 1);
+        let report = report_passed(StageName::Implementation, 1, 1);
         let decision = make_gate_decision(&report);
 
         // Can only get category from Failed variant

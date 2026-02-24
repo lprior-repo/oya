@@ -12,16 +12,25 @@
 
 pub mod beads;
 pub mod config;
+pub mod landing;
 pub mod orchestrator;
 pub mod quality_gate;
 pub mod telemetry;
 pub mod types;
 pub mod usage;
 
+pub use landing::{
+    jj_bookmark_set_step, jj_fetch_step, jj_git_push_step, jj_rebase_step,
+    jj_workspace_forget_step, CommandStep,
+};
+
 use chrono::{DateTime, Utc};
 use std::path::PathBuf;
 use thiserror::Error;
-use types::{derive_merge_decision, FailureCategory, LockToken, MergeDecision, QueuePosition};
+use types::{
+    derive_merge_decision, DashboardSnapshot, FailureCategory, LockToken, MergeDecision,
+    QueuePosition,
+};
 
 /// Determine if a failure category is retryable
 ///
@@ -79,7 +88,6 @@ const MAX_MANUAL_E2E_DIAGNOSTICS_LEN: usize = 8192;
 const MAX_OPENCODE_OUTPUT_JSON_LEN: usize = 256 * 1024;
 const MAX_OPENCODE_STDOUT_LEN: usize = 128 * 1024;
 const MAX_MOON_TASK_NAME_LEN: usize = 128;
-const MAX_ZJJ_WORKSPACE_NAME_LEN: usize = 64;
 const MAX_OPENCODE_SSE_RAW_CHUNK_LEN: usize = 256 * 1024;
 const MAX_OPENCODE_SSE_EVENT_PAYLOAD_LEN: usize = 16 * 1024;
 
@@ -124,6 +132,7 @@ pub struct OpencodePollSnapshot {
     pub busy_sessions: Vec<String>,
     pub pending_permissions: usize,
     pub pending_questions: usize,
+    pub dashboard: Option<DashboardSnapshot>,
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -138,25 +147,6 @@ pub enum OpsMonitorError {
     InvalidFieldFormat(&'static str),
     #[error("ops monitor json parse failed: {0}")]
     InvalidJson(String),
-}
-
-pub fn build_zjj_workspace_name(
-    run_id: &str,
-    stage: &str,
-    attempt: u32,
-) -> Result<String, OpsMonitorError> {
-    let normalized_run_id = normalize_workspace_segment(run_id, "run_id")?;
-    let normalized_stage = normalize_workspace_segment(stage, "stage")?;
-    if attempt == 0 {
-        return Err(OpsMonitorError::InvalidFieldFormat("attempt"));
-    }
-
-    let workspace = format!("oya-{}-{}-a{}", normalized_run_id, normalized_stage, attempt);
-    if workspace.len() > MAX_ZJJ_WORKSPACE_NAME_LEN {
-        return Err(OpsMonitorError::FieldTooLong("workspace", MAX_ZJJ_WORKSPACE_NAME_LEN));
-    }
-
-    Ok(workspace)
 }
 
 pub fn parse_opencode_busy_sessions(raw: &str) -> Result<Vec<String>, OpsMonitorError> {
@@ -175,35 +165,6 @@ pub fn parse_opencode_busy_sessions(raw: &str) -> Result<Vec<String>, OpsMonitor
         .collect::<std::collections::BTreeSet<_>>()
         .into_iter()
         .collect())
-}
-
-pub fn parse_opencode_pending_count(
-    raw: &str,
-    field: &'static str,
-) -> Result<usize, OpsMonitorError> {
-    if raw.trim().is_empty() {
-        return Ok(0);
-    }
-
-    let value: serde_json::Value = serde_json::from_str(raw)
-        .map_err(|error| OpsMonitorError::InvalidJson(error.to_string()))?;
-
-    match value {
-        serde_json::Value::Null => Ok(0),
-        serde_json::Value::Array(items) => Ok(items.len()),
-        serde_json::Value::Object(object) => object
-            .get("items")
-            .and_then(serde_json::Value::as_array)
-            .map(std::vec::Vec::len)
-            .or_else(|| {
-                object.get("requests").and_then(serde_json::Value::as_array).map(std::vec::Vec::len)
-            })
-            .or_else(|| {
-                object.get("rows").and_then(serde_json::Value::as_array).map(std::vec::Vec::len)
-            })
-            .map_or_else(|| Ok(object.len()), Ok),
-        _ => Err(OpsMonitorError::InvalidFieldFormat(field)),
-    }
 }
 
 pub fn parse_opencode_sse_events(
@@ -248,48 +209,60 @@ pub fn build_opencode_poll_snapshot(
     session_status_json: &str,
     permission_json: &str,
     question_json: &str,
+    stale_count: usize,
+    conflict_count: usize,
 ) -> Result<OpencodePollSnapshot, OpsMonitorError> {
+    let busy_sessions = parse_opencode_busy_sessions(session_status_json)?;
+    let (pending_permissions, perm_warnings) =
+        parse_opencode_pending_with_warnings(permission_json, "permission")?;
+    let (pending_questions, quest_warnings) =
+        parse_opencode_pending_with_warnings(question_json, "question")?;
+    let generated_at = Utc::now().to_rfc3339();
+
+    let dashboard = DashboardSnapshot {
+        generated_at,
+        active_workers: busy_sessions.clone(),
+        queue_depth: pending_permissions + pending_questions,
+        stale_count,
+        conflict_count,
+        warning_count: perm_warnings + quest_warnings,
+    };
+
     Ok(OpencodePollSnapshot {
-        busy_sessions: parse_opencode_busy_sessions(session_status_json)?,
-        pending_permissions: parse_opencode_pending_count(permission_json, "permission")?,
-        pending_questions: parse_opencode_pending_count(question_json, "question")?,
+        busy_sessions,
+        pending_permissions,
+        pending_questions,
+        dashboard: Some(dashboard),
     })
 }
 
-fn normalize_workspace_segment(
-    value: &str,
+fn parse_opencode_pending_with_warnings(
+    raw: &str,
     field: &'static str,
-) -> Result<String, OpsMonitorError> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        return Err(OpsMonitorError::EmptyField(field));
-    }
-    if contains_forbidden_control_chars(trimmed) {
-        return Err(OpsMonitorError::InvalidFieldContent(field));
+) -> Result<(usize, usize), OpsMonitorError> {
+    if raw.trim().is_empty() {
+        return Ok((0, 0));
     }
 
-    let normalized =
-        trimmed
-            .to_ascii_lowercase()
-            .chars()
-            .map(|char| {
-                if char.is_ascii_alphanumeric() || char == '-' || char == '_' {
-                    char
-                } else {
-                    '-'
-                }
-            })
-            .collect::<String>()
-            .split('-')
-            .filter(|segment| !segment.is_empty())
-            .collect::<Vec<_>>()
-            .join("-");
+    let value: serde_json::Value = serde_json::from_str(raw)
+        .map_err(|error| OpsMonitorError::InvalidJson(error.to_string()))?;
 
-    if normalized.is_empty() {
-        return Err(OpsMonitorError::InvalidFieldFormat(field));
-    }
+    let items = match value {
+        serde_json::Value::Null => return Ok((0, 0)),
+        serde_json::Value::Array(items) => items,
+        serde_json::Value::Object(object) => object
+            .get("items")
+            .and_then(serde_json::Value::as_array)
+            .or_else(|| object.get("requests").and_then(serde_json::Value::as_array))
+            .or_else(|| object.get("rows").and_then(serde_json::Value::as_array))
+            .cloned()
+            .unwrap_or_default(),
+        _ => return Err(OpsMonitorError::InvalidJson(field.to_string())),
+    };
 
-    Ok(normalized)
+    let (valid, malformed): (Vec<_>, Vec<_>) = items.into_iter().partition(|item| item.is_object());
+
+    Ok((valid.len(), malformed.len()))
 }
 
 fn parse_sse_payload_block(block: &str) -> String {
@@ -1338,6 +1311,3 @@ const MAX_ONEWF_DIAGNOSTICS_LEN: usize = 4096;
 
 include!("lib_contracts_mid.rs");
 include!("lib_contracts_tail.rs");
-
-#[cfg(test)]
-mod lib_tests;
