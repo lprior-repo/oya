@@ -1,7 +1,7 @@
 # Contract Specification: JJ-BR Coordination
 
 ## Context
-- **Feature**: Coordination between Jujutsu (jj) version control system and beads_rust (br) issue tracker
+- **Feature**: Coordination between Jujutsu (jj) version control and beads_rust (br) issue tracker
 - **Domain Terms**:
   - `run_id`: Unique identifier for a pipeline execution
   - `stage`: Current pipeline stage (explore, contract, red, implementation, witness, ship_gate)
@@ -9,14 +9,14 @@
   - `workspace`: jj workspace name in format `oya-{run_id}-{stage}-a{attempt}`
   - `gate`: Quality gate that must pass before stage completion
 - **Assumptions**:
-  - jj workspaces are managed by zjj CLI tool
-  - zjj commands include: `zjj queue --add`, `zjj sync`, `zjj done`
+  - jj workspaces are managed with idiomatic `jj workspace` commands
+  - landing flow uses `jj git fetch`, `jj rebase`, `jj bookmark create`, and `jj workspace forget`
   - Workspace names must follow jj conventions (max 64 chars, valid ASCII chars)
 - **Open Questions**: None identified
 
 ## Preconditions
 
-### `build_zjj_workspace_name(run_id, stage, attempt)`
+### `build_jj_workspace_name(run_id, stage, attempt)`
 - `run_id` must be non-empty after trimming
 - `run_id` must not contain forbidden control characters (ASCII 0-31, 127)
 - `stage` must be non-empty after trimming
@@ -24,21 +24,21 @@
 - `attempt` must be >= 1
 - Final workspace name must be <= 64 characters
 
-### `ZjjSyncStatus` gate execution
-- `zjj` CLI must be installed and available in PATH
+### `JjSyncStatus` gate execution
+- `jj` CLI must be installed and available in PATH
 - Current directory must be within a jj repository
 - Repository must have `.jj` directory
-- Command: `zjj sync --status` must be valid zjj command
+- Command: `jj git fetch && jj rebase` must be valid jj workflow commands
 
-### `ZjjMergeQueue` gate execution
-- `zjj` CLI must be installed and available in PATH
+### `JjBookmark` gate execution
+- `jj` CLI must be installed and available in PATH
 - Current directory must be within a jj repository
 - Repository must have `.jj` directory
-- Command must be a valid zjj merge queue operation
+- Command must be a valid jj bookmark operation
 
 ## Postconditions
 
-### `build_zjj_workspace_name(run_id, stage, attempt)` returns `Ok(workspace)`
+### `build_jj_workspace_name(run_id, stage, attempt)` returns `Ok(workspace)`
 - `workspace` starts with `oya-` prefix
 - `workspace` contains normalized `run_id` (lowercase, special chars replaced with '-')
 - `workspace` contains normalized `stage` (lowercase, special chars replaced with '-')
@@ -47,12 +47,12 @@
 - `workspace` length <= 64 characters
 - No consecutive hyphens in normalized segments
 
-### `ZjjSyncStatus` gate passes
-- Command `zjj sync --status` executes successfully
+### `JjSyncStatus` gate passes
+- Command `jj git fetch && jj rebase` executes successfully
 - Exit code is 0
 - Output indicates database is clean or reports sync status
 
-### `ZjjMergeQueue` gate passes
+### `JjBookmark` gate passes
 - Command executes successfully
 - Exit code is 0
 - Merge queue is in valid state (no conflicts)
@@ -68,13 +68,13 @@
 ### Gate execution invariants
 - Gates always return structured `GateEvidence` with command, passed, exit_code, output
 - Non-zero exit codes always result in `passed = false`
-- Commands always time out after configured timeout (moon: 900s, zjj: 60s)
+- Commands always time out after configured timeout (moon: 900s, jj: 60s)
 - Failed gates preserve stdout/stderr in output field
 
 ### Stage-gate association invariants
 - Each stage has consistent set of gates
-- `ShipGate` stage always includes `ZjjMergeQueue` gate
-- `ZjjMergeQueue` gate is unique to `ShipGate` stage
+- `ShipGate` stage always includes `JjBookmark` gate
+- `JjBookmark` gate is unique to `ShipGate` stage
 
 ## Error Taxonomy
 
@@ -101,11 +101,11 @@ pub enum CoordinationError {
     WorkspaceNameTooLong(String, usize),
 
     // Gate execution errors
-    #[error("zjj command not found: is zjj installed?")]
-    ZjjNotFound,
+    #[error("jj command not found: is jj installed?")]
+    JjNotFound,
 
-    #[error("zjj command failed: {command} (exit code: {code})")]
-    ZjjCommandFailed {
+    #[error("jj command failed: {command} (exit code: {code})")]
+    JjCommandFailed {
         command: String,
         code: i32,
         output: String,
@@ -126,18 +126,18 @@ pub enum CoordinationError {
 
 ```rust
 // Workspace name generation
-pub fn build_zjj_workspace_name(
+pub fn build_jj_workspace_name(
     run_id: &str,
     stage: &str,
     attempt: u32,
 ) -> Result<String, CoordinationError>
 
 // Gate execution
-pub fn execute_zjj_sync_status_gate(
+pub fn execute_jj_sync_status_gate(
     repo_root: &PathBuf,
 ) -> Result<GateEvidence, CoordinationError>
 
-pub fn execute_zjj_merge_queue_gate(
+pub fn execute_jj_bookmark_gate(
     repo_root: &PathBuf,
 ) -> Result<GateEvidence, CoordinationError>
 
@@ -148,7 +148,7 @@ impl StageName {
 ```
 
 ## Non-goals
-- Direct jj command execution (use zjj wrapper only)
+- Direct git command execution (use jj only)
 - br database operations (br coordination is out of scope)
-- Workspace lifecycle management (create/delete via zjj)
+- Workspace lifecycle management beyond jj workspace scope
 - Git integration (use jj only)

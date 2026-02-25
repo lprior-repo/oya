@@ -410,7 +410,7 @@ fn extract_gates(json: &serde_json::Value) -> Vec<GateView> {
 fn parse_gates_from_output(output: &str) -> Vec<GateView> {
     let mut gates = Vec::new();
 
-    // Parse gate results from output like "✅ check" or "❌ zjj:sync"
+    // Parse gate results from output like "✅ check" or "❌ jj:sync"
     for line in output.lines() {
         let line = line.trim();
         if line.contains("✅") || line.contains("PASS") {

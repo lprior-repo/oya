@@ -1,18 +1,18 @@
-# ZJJ Removal + JJ/BR 12-Agent Coordination Plan
+# JJ Removal + JJ/BR 12-Agent Coordination Plan
 
 ## Goal
 
-Remove all runtime reliance on `zjj` while preserving deterministic orchestration with `jj` workspaces and `br` lifecycle commands. Keep pipeline replay-safe under Restate and prevent re-run loops.
+Remove all runtime reliance on `jj` while preserving deterministic orchestration with `jj` workspaces and `br` lifecycle commands. Keep pipeline replay-safe under Restate and prevent re-run loops.
 
 ## Scope
 
 - In scope:
-  - Remove `zjj` command execution from runtime stages, landing, workspace prep, and gate logic.
+  - Remove `jj` command execution from runtime stages, landing, workspace prep, and gate logic.
   - Replace with explicit `jj`/`br` command contracts.
   - Keep merge queue semantics via internal queue schema + single-worker enforcement.
   - Add property tests and contract tests for queue ordering, freshness, lock TTL, and idempotency.
 - Out of scope:
-  - Re-adding `zjj` compatibility.
+  - Re-adding `jj` compatibility.
   - UI-heavy dashboard (minimal CLI status only).
 
 ## Queue Schema (CUE-first contract)
@@ -84,7 +84,7 @@ Create `cue/queue_schema.cue` and validate any queue artifact before execution.
 
 ## Implementation Phases
 
-1. Remove zjj branches and env flags from runtime path.
+1. Remove jj branches and env flags from runtime path.
 2. Introduce `jj` workspace adapter and queue domain types.
 3. Implement deterministic merge worker + lock manager.
 4. Wire freshness guard and conflict recorder into landing path.

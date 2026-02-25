@@ -30,7 +30,7 @@ StageName → GateSelection → GateExecution → GateAggregation → GateReport
 - The orchestrator runtime in `src/main.rs` now uses the same gate model as the bead pipeline.
 - Runtime gate execution resolves commands through `generate_moon_command(gate)` from `src/beads/moon_command.rs`.
 - This keeps command definitions centralized so bead tests and live runtime behavior stay in sync.
-- `OYA_SKIP_ZJJ_GATE=1` only skips the `Gate::ZjjMergeQueue` runtime check; all other stage gates still run.
+- `OYA_SKIP_JJ_GATE=1` only skips the `Gate::JjBookmark` runtime check; all other stage gates still run.
 
 ## API
 

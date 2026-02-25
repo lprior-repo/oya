@@ -84,22 +84,22 @@ Do not document direct cargo commands as operator-facing gate commands.
 
 ## Workspace Isolation
 
-- zjj remains the isolation and merge-flow primitive.
-- No stream is active to replace or remove zjj.
+- jj remains the isolation and merge-flow primitive.
+- No stream is active to replace or remove jj.
 
-## Phase 2: zjj + OpenCode Polling
+## Phase 2: jj + OpenCode Polling
 
-OYA now ties stage execution to zjj workspace lifecycle for implementation stages and exposes a
+OYA now ties stage execution to jj workspace lifecycle for implementation stages and exposes a
 small ops-monitor service for OpenCode observability.
 
-### zjj workspace lifecycle
+### jj workspace lifecycle
 
 - For `contract`, `tdd15`, `qa`, `red_queen`, `gpt_review`, and `ship_gate`, OYA runs:
-  1. `zjj queue --add <workspace> --bead <bead_id>`
-  2. `zjj add <workspace> --idempotent`
+  1. `jj workspace add <workspace>`
+  2. `jj git fetch && jj rebase`
 - Workspace name is deterministic: `oya-<run_id>-<stage>-a<attempt>` (normalized and validated).
 - OYA persists workspace command evidence in stage state and timeline.
-- Set `OYA_SKIP_ZJJ_WORKSPACE=1` to disable workspace setup in local/dev scenarios.
+- Set `OYA_SKIP_JJ_WORKSPACE=1` to disable workspace setup in local/dev scenarios.
 
 ### OpenCode monitor endpoints
 

@@ -94,7 +94,7 @@ Each Stage has specific Gates:
 | Red | Compiles |
 | Implementation | Compiles + Tests Pass |
 | Witness | Holdout Scenarios |
-| ShipGate | CUE Artifact + zjj Merge Queue |
+| ShipGate | CUE Artifact + jj Bookmark |
 
 ## Aggregates
 
@@ -108,4 +108,4 @@ Each Stage has specific Gates:
 - Restate (stateful orchestration)
 - Sled (embedded DB)
 - OpenCode CLI (AI subprocess execution)
-- zjj (workspace isolation + merge flow)
+- jj (workspace isolation + merge flow)

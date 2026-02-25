@@ -33,7 +33,7 @@ This is the "conservative, correct side" of AI development: deterministic workfl
 | **OYA/Restate** | Orchestration runtime—decides stage transitions, retries, terminal outcomes |
 | **OpenCode Adapter** | Subprocess execution per stage, returns structured output only |
 | **Moon** | CI/CD wrapper—executes validation gates, emits pass/fail evidence |
-| **zjj** | Workspace isolation and merge-flow primitive |
+| **jj** | Workspace isolation and merge-flow primitive |
 | **Beads (br)** | Intake and lifecycle source of truth for all work items |
 | **Codanna MCP** | Code discovery (symbols, callers, calls, impact, dependency tracing) |
 | **Sled** | Persistence baseline for run and evidence state |
@@ -453,14 +453,14 @@ br close <id> --reason "..."       # Close with reason
 br sync --flush-only               # Export to JSONL
 ```
 
-### zjj (Workspace Isolation)
+### jj (Workspace Isolation)
 
 ```bash
-zjj add <name>                     # Create workspace
-zjj queue --add <ws> --bead <id>   # Add to merge queue
-zjj sync                           # Sync with main
-zjj done                           # Complete and merge
-zjj focus <name>                   # Switch workspace
+jj workspace add <workspace>       # Create workspace
+jj git fetch                       # Sync remote refs
+jj rebase                          # Rebase onto latest main
+jj bookmark create <name>          # Create bookmark for landing
+jj workspace forget <workspace>    # Cleanup workspace
 ```
 
 ### Codanna (Code Discovery)
@@ -481,9 +481,8 @@ codanna_analyze_impact             # Full dependency graph
 # 1. Find work
 br ready
 
-# 2. Queue and create workspace
-zjj queue --add <workspace> --bead <bead-id>
-zjj add <bead-id>
+# 2. Create workspace
+jj workspace add <workspace>
 
 # 3. Claim work
 br update <id> --status in_progress
@@ -495,8 +494,9 @@ oya run --bead <id>
 moon run :ci
 
 # 6. Complete
-zjj sync
-zjj done
+jj git fetch
+jj rebase
+jj bookmark create <name>
 br close <id>
 br sync --flush-only
 ```
@@ -508,8 +508,8 @@ br sync --flush-only
 Before any change lands:
 
 1. `moon run :ci` passes
-2. `zjj sync` completes
-3. `zjj done` merges to main
+2. `jj git fetch && jj rebase` completes
+3. `jj bookmark create <name>` prepared for merge
 4. `br close <id>` closes the bead
 5. `br sync --flush-only` exports state
 6. `git add .beads/` and commit
@@ -519,7 +519,7 @@ Before any change lands:
 ## Non-Goals (Current)
 
 - UI/frontend productization beyond the planner companion
-- Replacing or removing zjj
+- Replacing or removing jj
 - Speculative multi-framework support
 - UX polish ahead of governance correctness
 - "Rewrite whole apps" as a single action (emergent property of many safe runs, not a single action)

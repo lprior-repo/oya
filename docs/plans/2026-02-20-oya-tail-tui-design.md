@@ -58,11 +58,11 @@ A Ratatui-based TUI for watching Restate pipeline invocations in real-time. Desi
                      ━━━━━━━━━━━━━━━━━━
 
             ✅ check   ✅ test   ✅ clippy
-            ✅ fmt     ❌ zjj:sync
+            ✅ fmt     ❌ jj:sync
 
                      ━━━━━━━━━━━━━━━━━━
 
-    zjj sync failed: uncommitted changes
+    jj sync failed: uncommitted changes
 
     M src/pipeline/executor.rs
     M src/pipeline/mod.rs

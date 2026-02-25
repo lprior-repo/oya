@@ -1,6 +1,6 @@
-# zjj Restate Pivot - Comprehensive Plan
+# jj Restate Pivot - Comprehensive Plan
 
-Source: `/home/lewis/src/zjj/RESTATE_PIVOT_PLAN.md`
+Source: `/home/lewis/src/jj/RESTATE_PIVOT_PLAN.md`
 
 ## Overview
 Pivot from 137,000 lines of custom Rust infrastructure to ~10,000 lines using Restate for durable execution.
@@ -197,6 +197,6 @@ Pivot from 137,000 lines of custom Rust infrastructure to ~10,000 lines using Re
 | **Complete 35-bead plan first** | Working system, understand pain points | 26h wasted on code to delete |
 | **Pivot now to Restate** | Build right architecture from start | Delay features, learn while doing |
 | **Hybrid: Core on Restate, keep current CLI** | Incremental migration, lower risk | Two systems to maintain |
-| **Start new project "zjj-restate"** | Clean slate, no baggage | Split attention, duplicate work |
+| **Start new project "jj-restate"** | Clean slate, no baggage | Split attention, duplicate work |
 
-**Recommendation**: Start new "zjj-restate" project. Keep current zjj for reference. Migrate business logic modules directly (jj.rs, moon_gates.rs, hooks.rs, etc.) as-is to Restate services. Build CLI as thin Rust wrapper.
+**Recommendation**: Start new "jj-restate" project. Keep current jj for reference. Migrate business logic modules directly (jj.rs, moon_gates.rs, hooks.rs, etc.) as-is to Restate services. Build CLI as thin Rust wrapper.

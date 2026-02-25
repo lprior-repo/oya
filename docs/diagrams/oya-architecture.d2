@@ -67,8 +67,8 @@ moon: {
   label: Moon Build
 }
 
-zjj: {
-  label: zjj Workspace
+jj: {
+  label: jj Workspace
 }
 
 # Data
@@ -93,7 +93,7 @@ opencode -> models: queries
 models -> opencode: response
 opencode -> oya_binary: output
 oya_binary -> moon: build
-oya_binary -> zjj: isolate
+oya_binary -> jj: isolate
 
 orchestrator -> plan: 1
 plan -> contract: 2

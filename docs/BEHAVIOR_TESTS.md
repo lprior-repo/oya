@@ -69,7 +69,7 @@ given_intermittent_failures_when_within_retry_limits_then_completes()
 3. **Gate Execution**
    - Compiles gate runs for early stages
    - TestsPass + EdgeCases for QA
-   - MoonCi + ZjjMergeQueue for ShipGate
+   - MoonCi + JjBookmark for ShipGate
    - Gate failures cause stage failures
 
 4. **Pipeline Flow**

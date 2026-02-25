@@ -54,3 +54,5 @@ crates/
 PLAN_docker-fix-bead3.md
 .tmp/
 .orchestrator/
+workspaces/
+src-*.*/

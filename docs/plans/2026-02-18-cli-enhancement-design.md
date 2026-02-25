@@ -78,7 +78,7 @@ oya
 
 ### OyaWorkspaceManager (Virtual Object)
 
-Per-workspace state and operations. Replaces zjj subprocess calls with durable Restate handlers.
+Per-workspace state and operations. Replaces jj subprocess calls with durable Restate handlers.
 
 ```rust
 service OyaWorkspaceManager /{workspace_id}/ {
@@ -236,7 +236,7 @@ impl RestateProcess {
 └─────────────────────────────────────────────────────────┘
 ```
 
-## Workspace Isolation (replaces zjj)
+## Workspace Isolation (replaces jj)
 
 Drops Zellij integration (agents run headless). Retains JJ subprocess for workspace operations.
 
@@ -252,12 +252,12 @@ create → [Creating] → Active → sync → [Syncing] → Active
 
 ### Integration with Pipeline
 
-Oya calls OyaWorkspaceManager instead of shelling to zjj:
+Oya calls OyaWorkspaceManager instead of shelling to jj:
 
 ```rust
 // Before (subprocess)
 let workspace = format!("oya-{}-{}-a{}", run_id, stage, attempt);
-Command::new("zjj").args(["add", &workspace]).spawn()?;
+Command::new("jj").args(["add", &workspace]).spawn()?;
 
 // After (Restate call)
 let workspace_id = WorkspaceId::new(&format!("oya-{}-{}-a{}", run_id, stage, attempt));
