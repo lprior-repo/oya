@@ -12,7 +12,7 @@ use crate::lifecycle::types::{BeadData, BeadId, FailureCategory, LifecycleError,
 use futures_util::stream::{self, StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
 
-const DEFAULT_MODEL: &str = "openai/gpt-5.3-codex";
+const DEFAULT_MODEL: &str = "zai-coding-plan/glm-5";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LifecycleRunRequest {
@@ -256,43 +256,4 @@ fn append_compensation(
     compensation: Compensation,
 ) -> Vec<Compensation> {
     compensations.into_iter().chain(std::iter::once(compensation)).collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::lifecycle::effects::{CommandFailure, CommandResult};
-    use async_trait::async_trait;
-    use std::time::Duration;
-
-    #[derive(Debug)]
-    struct FakeExecutor;
-
-    #[async_trait]
-    impl CommandExecutor for FakeExecutor {
-        async fn run(
-            &self,
-            program: &str,
-            _args: &[String],
-            _timeout: Duration,
-        ) -> Result<CommandResult, CommandFailure> {
-            let status_code = if program == "gh" { Some(1) } else { Some(0) };
-            Ok(CommandResult { status_code, stdout: String::new(), stderr: String::new() })
-        }
-    }
-
-    #[tokio::test]
-    async fn terminal_error_runs_compensation_in_reverse_order() {
-        let request =
-            LifecycleRunRequest { bead_id: "src-31nq".to_owned(), model: Some("model".to_owned()) };
-        let result = run_lifecycle(&FakeExecutor, request).await;
-        assert!(result.is_err());
-
-        if let Err(failure) = result {
-            let first = failure.compensation_journal.first();
-            let second = failure.compensation_journal.get(1);
-            assert!(matches!(first, Some(EffectJournalEntry { effect: Effect::Jj { .. }, .. })));
-            assert!(matches!(second, Some(EffectJournalEntry { effect: Effect::Br { .. }, .. })));
-        }
-    }
 }

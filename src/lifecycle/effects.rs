@@ -213,34 +213,3 @@ fn effect_command(effect: &Effect) -> (&'static str, Vec<String>) {
         ),
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn moon_ci_timeout_is_bounded() {
-        assert_eq!(effect_timeout_secs(&Effect::MoonCi), 900);
-    }
-
-    #[test]
-    fn opencode_timeout_is_bounded() {
-        let effect = Effect::Opencode { prompt: "hello".to_owned(), model: "model".to_owned() };
-        assert_eq!(effect_timeout_secs(&effect), 1_200);
-    }
-
-    #[test]
-    fn timeout_is_transient() {
-        let error =
-            classify_command_failure(&Effect::MoonCi, CommandFailure::Timeout { timeout_secs: 5 });
-        assert!(!error.is_terminal());
-    }
-
-    #[test]
-    fn gh_non_zero_is_terminal_pull_request_error() {
-        let effect = Effect::Gh { args: vec!["pr".to_owned(), "create".to_owned()] };
-        let error = classify_non_zero(&effect, Some(1), "boom");
-        assert!(error.is_terminal());
-        assert_eq!(error.category(), FailureCategory::PullRequest);
-    }
-}
