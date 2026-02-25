@@ -1,0 +1,86 @@
+# Testing
+
+Source: https://docs.restate.dev/develop/ts/testing
+
+Utilities to test your handler logic.
+
+The Typescript SDK has a companion library which makes it easy to test against a Restate container:
+[`@restatedev/restate-sdk-testcontainers`](https://www.npmjs.com/package/@restatedev/restate-sdk-testcontainers).
+
+This uses [Testcontainers](https://testcontainers.com/) to run a Restate Server in a Docker container and let you test your Restate handlers.
+
+## Setup
+
+`RestateTestEnvironment.start` creates a Restate container and executes a user-provided closure to register services.
+An optional second argument allows you to specify a custom [Testcontainer](https://node.testcontainers.org/) for Restate.
+
+```typescript {"CODE_LOAD::ts/src/develop/testing.test.ts#setup"}  theme={null}
+describe("ExampleObject", () => {
+  // import { RestateTestEnvironment } from "@restatedev/restate-sdk-testcontainers";
+  let restateTestEnvironment: RestateTestEnvironment;
+  // import * as clients from "@restatedev/restate-sdk-clients";
+  let restateIngress: clients.Ingress;
+
+  beforeAll(async () => {
+    restateTestEnvironment = await RestateTestEnvironment.start({
+      services: [router],
+    });
+    restateIngress = clients.connect({ url: restateTestEnvironment.baseUrl() });
+  }, 20_000);
+
+  afterAll(async () => {
+    if (restateTestEnvironment !== undefined) {
+      await restateTestEnvironment.stop();
+    }
+  });
+```
+
+## Calling services
+
+The Restate ingress client can be used as usual (see the [clients documentation](/services/invocation/clients/typescript-sdk))
+
+```typescript {"CODE_LOAD::ts/src/develop/testing.test.ts#methods"}  theme={null}
+it("Can call methods", async () => {
+  const client = restateIngress.objectClient(router, "myKey");
+
+  await client.greet("Test!");
+});
+```
+
+## Checking and mutating state
+
+The `stateOf` method on the `RestateTestEnvironment` class can be used to obtain a handle on the Virtual Object / Workflow state
+for a particular key.
+
+```typescript {"CODE_LOAD::ts/src/develop/testing.test.ts#state"}  theme={null}
+it("Can read state", async () => {
+  const state = restateTestEnvironment.stateOf(router, "myKey");
+
+  expect(await state.getAll()).toStrictEqual({});
+  expect(await state.get("count")).toBeNull();
+});
+
+it("Can write state", async () => {
+  const state = restateTestEnvironment.stateOf(router, "myKey");
+
+  await state.setAll({
+    count: 123,
+  });
+  await state.set("count", 321);
+});
+```
+
+## Typed state
+
+`stateOf` can be provided with a type for the services state, to allow for type-safe state operations.
+
+```typescript {"CODE_LOAD::ts/src/develop/testing.test.ts#typedstate"}  theme={null}
+type ServiceState = { count: number };
+
+it("Can operate on typed state", async () => {
+  const state = restateTestEnvironment.stateOf<ServiceState>(router, "myKey");
+
+  await state.setAll({ count: 1 });
+  await state.set("count", 2);
+});
+```

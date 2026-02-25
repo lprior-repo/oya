@@ -1,0 +1,504 @@
+$schema: "https://moonrepo.dev/schemas/tasks.json"
+
+# Moon Task Configuration - Moon v2 format
+# All commands use cargo with Rust toolchain
+# Tasks are inherited by all projects in the workspace
+
+tasks:
+  # ============================================================================
+  # STAGE 1: CODE FORMATTING & LINTING
+  # ============================================================================
+
+  fmt:
+    command: "cargo fmt --all --check"
+    description: "Check code formatting (rustfmt)"
+    toolchains:
+      - rust
+    inputs:
+      - "src/**/*.rs"
+      - "tests/**/*.rs"
+      - "Cargo.toml"
+      - "rustfmt.toml"
+    options:
+      runInCI: true
+      cache: true
+
+  fmt-fix:
+    command: "cargo fmt --all"
+    description: "Auto-fix code formatting"
+    toolchains:
+      - rust
+    inputs:
+      - "src/**/*.rs"
+      - "tests/**/*.rs"
+      - "Cargo.toml"
+    options:
+      cache: false  # Never cache - always format
+
+  clippy:
+    command: "cargo clippy --workspace --all-features --lib --bins --examples -- -D warnings -W clippy::all -D clippy::too_many_lines -D clippy::too_many_arguments"
+    description: "Strict source linting with Clippy (tests excluded) - ZERO TOLERANCE"
+    toolchains:
+      - rust
+    inputs:
+      - "src/**/*.rs"
+      - "Cargo.toml"
+      - "/Cargo.lock"
+      - ".clippy.toml"
+    options:
+      runInCI: true
+      cache: true
+
+  max-lines:
+    command: "bash scripts/max-lines.sh 300"
+    description: "List files exceeding 300 lines"
+
+  security:
+    command: "cargo audit"
+    description: "Audit dependencies for known vulnerabilities"
+    toolchains:
+      - rust
+    inputs:
+      - "Cargo.toml"
+      - "/Cargo.lock"
+    options:
+      runInCI: true
+      cache: false
+
+  # ============================================================================
+  # STAGE 2: TESTING
+  # ============================================================================
+
+  test:
+    command: "cargo test --workspace --all-features"
+    description: "Run all tests"
+    toolchains:
+      - rust
+    inputs:
+      - "src/**/*.rs"
+      - "tests/**/*.rs"
+      - "Cargo.toml"
+      - "/Cargo.lock"
+    options:
+      runInCI: true
+      cache: true
+      mergeArgs: "replace"  # Allow overriding with specific test filters
+    env:
+      CARGO_BUILD_JOBS: "16"
+
+  test-doc:
+    command: "cargo test --doc --workspace"
+    description: "Run documentation tests"
+    toolchains:
+      - rust
+    inputs:
+      - "src/**/*.rs"
+      - "Cargo.toml"
+      - "/Cargo.lock"
+    options:
+      runInCI: true
+      cache: true
+
+  holdout:
+    command: "cargo test --workspace --all-features -- --ignored holdout"
+    description: "Run hidden holdout scenario suite"
+    toolchains:
+      - rust
+    inputs:
+      - "src/**/*.rs"
+      - "tests/**/*.rs"
+      - "Cargo.toml"
+      - "/Cargo.lock"
+    options:
+      runInCI: true
+      cache: true
+
+  coverage:
+    command: "cargo tarpaulin --workspace --all-features --out Html --out Lcov --output-dir target/coverage -- --test-threads=1"
+    description: "Generate test coverage report (HTML + LCOV)"
+    toolchains:
+      - rust
+    inputs:
+      - "src/**/*.rs"
+      - "tests/**/*.rs"
+      - "Cargo.toml"
+      - "/Cargo.lock"
+    outputs:
+      - "/target/coverage/index.html"
+      - "/target/coverage/lcov.info"
+    options:
+      cache: false
+    env:
+      CARGO_BUILD_JOBS: "8"
+
+  # ============================================================================
+  # STAGE 3: BUILD
+  # ============================================================================
+
+  build:
+    command: "cargo build --release --workspace"
+    description: "Build release binaries"
+    toolchains:
+      - rust
+    inputs:
+      - "src/**/*.rs"
+      - "Cargo.toml"
+      - "/Cargo.lock"
+    outputs:
+      - "/target/release/oya"
+    options:
+      runInCI: true
+      cache: true
+    env:
+      CARGO_BUILD_JOBS: "24"
+
+  build-docs:
+    command: "cargo doc --no-deps --document-private-items"
+    description: "Generate Rust documentation"
+    toolchains:
+      - rust
+    inputs:
+      - "src/**/*.rs"
+      - "Cargo.toml"
+      - "/Cargo.lock"
+    options:
+      runInCI: true
+      cache: true
+
+  # ============================================================================
+  # COMPOSITE PIPELINES
+  # ============================================================================
+
+  quick:
+    command: "true"
+    description: "Fast lint check (format + clippy in parallel)"
+    deps:
+      - "~:fmt"      # ~ prefix runs in parallel
+      - "~:clippy"
+    options:
+      cache: false  # Composite task - deps handle caching
+
+  ci:
+    command: "true"
+    description: "Full CI pipeline (fmt + clippy + tests + holdout + build + cue)"
+    deps:
+      - "~:fmt"
+      - "~:clippy"
+      - "test"
+      - "holdout"
+      - "build"
+      - "cue-check"
+    options:
+      runInCI: true
+      cache: false
+
+  # ============================================================================
+  # CONVENIENCE (workspace-level tasks only)
+  # ============================================================================
+
+  install:
+    script: "mkdir -p ~/.local/bin && cargo build --release --bin oya && cp target/release/oya ~/.local/bin/oya && chmod +x ~/.local/bin/oya && echo '✅ Installed oya to ~/.local/bin/oya (v0.1.2)'"
+    description: "Install oya binary to ~/.local/bin (system-wide)"
+    toolchains:
+      - rust
+    options:
+      cache: false
+      runFromWorkspaceRoot: true
+
+  dev:
+    command: "true"
+    description: "Quick development workflow: build + install"
+    deps:
+      - "build"
+      - "install"
+    options:
+      cache: false
+
+  clean:
+    command: "cargo clean"
+    description: "Clean build artifacts"
+    toolchains:
+      - rust
+    options:
+      cache: false
+
+  check:
+    command: "cargo check --workspace --all-features"
+    description: "Fast type check without building"
+    toolchains:
+      - rust
+    inputs:
+      - "src/**/*.rs"
+      - "Cargo.toml"
+      - "/Cargo.lock"
+    options:
+      runInCI: true
+      cache: true
+
+  bench:
+    command: "cargo bench --workspace"
+    description: "Run all Criterion benchmarks"
+    toolchains:
+      - rust
+    inputs:
+      - "crates/**/*.rs"
+      - "benches/**/*.rs"
+      - "Cargo.toml"
+      - "/Cargo.lock"
+    options:
+      cache: false
+
+  # ============================================================================
+  # DEVELOPMENT SERVERS
+  # ============================================================================
+
+  serve:
+    command: "cargo run --release -p oya-web --bin oya-server"
+    description: "Run full stack server (frontend + API on http://localhost:3000)"
+    toolchains:
+      - rust
+    options:
+      cache: false
+      runInCI: false
+      persistent: true
+
+  build-ui:
+    script: "cd crates/oya-ui && trunk build --release"
+    description: "Build Leptos frontend to dist/"
+    toolchains:
+      - rust
+    options:
+      cache: false
+      runInCI: false
+
+  # ============================================================================
+  # MUTATION TESTING
+  # ============================================================================
+
+  mutants:
+    command: "cargo mutants --workspace --baseline run"
+    description: "Run mutation testing on all 2000+ mutations"
+    toolchains:
+      - rust
+    inputs:
+      - "crates/**/*.rs"
+      - ".cargo/mutants.toml"
+    options:
+      cache: false
+      runInCI: false
+
+  mutants-list:
+    command: "cargo mutants --workspace --list"
+    description: "List all 2000+ possible mutations"
+    toolchains:
+      - rust
+    options:
+      cache: false
+
+  mutants-package:
+    command: "cargo mutants --baseline run"
+    description: "Run mutation testing on specific package (use -p PKG)"
+    toolchains:
+      - rust
+    options:
+      cache: false
+      runInCI: false
+      mergeArgs: "append"
+
+  mutants-quick:
+    command: "cargo mutants -p oya-core -p oya-workflow -p oya-events --baseline run"
+    description: "Quick mutation test on core packages"
+    toolchains:
+      - rust
+    options:
+      cache: false
+      runInCI: false
+
+  mutants-diff:
+    command: "cargo mutants --workspace --in-diff main --baseline run"
+    description: "Mutation test only files changed vs main branch"
+    toolchains:
+      - rust
+    options:
+      cache: false
+      runInCI: false
+
+  mutants-uncaught:
+    command: "cargo mutants --workspace --baseline run --caught"
+    description: "Show only UNCAUGHT mutations (test gaps)"
+    toolchains:
+      - rust
+    options:
+      cache: false
+      runInCI: false
+
+  # ============================================================================
+  # OYA-SHARED (Shared types for WASM + native)
+  # ============================================================================
+
+  check-shared:
+    command: "cargo check -p oya-shared"
+    description: "Type check oya-shared crate"
+    toolchains:
+      - rust
+    inputs:
+      - "crates/oya-shared/**/*.rs"
+      - "crates/oya-shared/Cargo.toml"
+    options:
+      cache: true
+
+  test-shared:
+    command: "cargo test -p oya-shared"
+    description: "Run oya-shared tests"
+    toolchains:
+      - rust
+    inputs:
+      - "crates/oya-shared/**/*.rs"
+      - "crates/oya-shared/Cargo.toml"
+    options:
+      cache: true
+
+  # ============================================================================
+  # ZELLIJ FRONTEND (WASM plugin + UI components)
+  # ============================================================================
+
+  check-zellij:
+    script: "cd crates/zellij-frontend && cargo check"
+    description: "Type check zellij-frontend crate"
+    toolchains:
+      - rust
+    inputs:
+      - "crates/zellij-frontend/src/**/*.rs"
+      - "crates/zellij-frontend/Cargo.toml"
+    options:
+      cache: true
+
+  test-zellij:
+    script: "cd crates/zellij-frontend && cargo test --target x86_64-unknown-linux-gnu"
+    description: "Run zellij-frontend tests (native target)"
+    toolchains:
+      - rust
+    inputs:
+      - "crates/zellij-frontend/src/**/*.rs"
+      - "crates/zellij-frontend/Cargo.toml"
+    options:
+      cache: true
+
+  build-zellij:
+    command: "cargo build --release --target wasm32-wasip1 -p zellij-frontend"
+    description: "Build Zellij plugin to WASM"
+    toolchains:
+      - rust
+    inputs:
+      - "crates/zellij-frontend/**/*.rs"
+      - "crates/zellij-frontend/Cargo.toml"
+    options:
+      cache: true
+      runFromWorkspaceRoot: true
+
+  install-zellij:
+    script: "mkdir -p ~/.config/zellij/plugins && cp target/wasm32-wasip1/release/zellij_frontend.wasm ~/.config/zellij/plugins/ && cp crates/zellij-frontend/plugin.yaml ~/.config/zellij/plugins/oya.yaml && echo '✅ Installed zellij-frontend plugin to ~/.config/zellij/plugins/'"
+    description: "Install Zellij plugin to user config"
+    toolchains:
+      - rust
+    deps:
+      - "build-zellij"
+    options:
+      cache: false
+      runFromWorkspaceRoot: true
+
+  # ============================================================================
+  # OYA CLI (workspace-level tasks)
+  # ============================================================================
+
+  oya:
+    command: "oya"
+    description: "Run installed oya CLI (requires 'moon run install' first)"
+    options:
+      runFromWorkspaceRoot: true
+
+  oya-install-and-run:
+    command: "true"
+    description: "Ensure oya is installed and run it"
+    deps:
+      - "install"
+    options:
+      runFromWorkspaceRoot: true
+      cache: false
+
+  # ============================================================================
+  # RELEASE TARGETS (Single oya binary + WASM plugin)
+  # ============================================================================
+
+  release:
+    command: "true"
+    description: "Build all release targets (oya binary + WASM plugin)"
+    deps:
+      - "~:build-oya"
+      - "~:build-zellij"
+    options:
+      cache: false
+
+  build-oya:
+    command: "cargo build --release --bin oya"
+    description: "Build oya binary (contains everything)"
+    toolchains:
+      - rust
+    inputs:
+      - "src/**/*.rs"
+      - "Cargo.toml"
+      - "/Cargo.lock"
+    outputs:
+      - "/target/release/oya"
+    options:
+      cache: true
+      runFromWorkspaceRoot: true
+    env:
+      CARGO_BUILD_JOBS: "24"
+
+  install-all:
+    command: "true"
+    description: "Install everything (oya binary + WASM plugin)"
+    deps:
+      - "~:install"
+      - "~:install-zellij"
+    options:
+      cache: false
+
+  # Run oya directly from moon (without installing)
+  run:
+    script: "cargo run --release --bin oya --"
+    description: "Run oya directly (via moon)"
+    toolchains:
+      - rust
+    options:
+      cache: false
+      runInCI: false
+      runFromWorkspaceRoot: true
+      mergeArgs: "append"
+
+  # ============================================================================
+  # CUE VALIDATION
+  # ============================================================================
+
+  cue-check:
+    command: "scripts/cue-check.sh"
+    description: "Validate CUE implementation proofs against schemas"
+    inputs:
+      - ".beads/schemas/*.cue"
+      - ".beads/implementation/*.cue"
+    options:
+      runInCI: true
+      cache: true
+      runFromWorkspaceRoot: true
+
+  # Convenience: start IPC server
+  run-serve:
+    script: "cargo run --release --bin oya -- serve"
+    description: "Start OYA IPC server"
+    toolchains:
+      - rust
+    options:
+      cache: false
+      runInCI: false
+      runFromWorkspaceRoot: true

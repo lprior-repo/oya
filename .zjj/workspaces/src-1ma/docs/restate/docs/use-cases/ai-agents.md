@@ -1,0 +1,112 @@
+# AI Agents
+
+Source: https://docs.restate.dev/use-cases/ai-agents
+
+Build resilient, observable AI agents that recover from failures and handle complex multi-step tasks.
+
+## Durable Agents and Workflows
+
+Restate automatically handles the reliability challenges of AI agents:
+
+<img alt="Durable AI Agent Execution" />
+
+* **Automatically retry transient errors** like rate limits and network failures
+* **Persist steps** (LLM calls, tools) and recover previous progress after failures
+* **Suspend long-running agents** when idle to save costs
+
+## Plugs into Popular SDKs
+
+Restate works independently of any SDK and specific AI stack, but its lightweight programming abstraction integrates easily into many popular SDKs. A few lines turn your agent into a durable agent.
+
+```typescript {"CODE_LOAD::ts/src/usecases/agents/weather-agent.ts#here"}  theme={null}
+const model = wrapLanguageModel({
+  model: openai("gpt-4o"),
+  middleware: durableCalls(restateContext, { maxRetryAttempts: 3 }),
+});
+```
+
+Works with [Vercel AI SDK](/ai/sdk-integrations/vercel-ai-sdk), [OpenAI](/ai/sdk-integrations/openai-agents-sdk), and [others](/ai#llm-&-agent-sdk-integrations).
+
+## Human-in-the-Loop and Workflow Patterns
+
+Restate's workflows-as-code and building blocks make it easy to reliably implement:
+
+<CardGroup>
+  <Card title="Human Approval" icon="user-check" href="/ai/patterns/human-in-the-loop">
+    Durable waiting for human decisions with crash-proof timeouts
+  </Card>
+
+  <Card title="Parallelization" icon="arrows-split-up-and-left" href="/ai/patterns/parallelization">
+    Speed up multi-step workflows with recoverable parallel tasks
+  </Card>
+
+  <Card title="Sub-workflows" icon="sitemap" href="/ai/patterns/tools">
+    Break complex agents into smaller, specialized workflows
+  </Card>
+
+  <Card title="Multi-agent Orchestration" icon="users-gear" href="/ai/patterns/multi-agent">
+    Coordinate specialized agents with reliable communication
+  </Card>
+
+  <Card title="Compensation Patterns" icon="arrow-rotate-left" href="/ai/patterns/rollback">
+    Automatically undo previous actions when later steps fail
+  </Card>
+
+  <Card title="And much more" icon="stars" href="/ai">
+    Build agents that can be paused, modified, and resumed during execution
+  </Card>
+</CardGroup>
+
+## Observability and Debugging
+
+See all ongoing executions with detailed journals of agent steps:
+
+<Frame>
+  <img alt="AI Agent Execution Trace" />
+</Frame>
+
+* **Complete execution timeline**: Every LLM call and tool execution
+* **Debug failed agents**: Inspect exactly where and why agents failed
+* **Agent control**: Pause, resume, restart agents during development and production
+
+## End-to-End Resilient Applications
+
+Agents are just a part of your application. Restate covers the plumbing around your agents:
+
+<Frame>
+  <img alt="Application Structure" />
+</Frame>
+
+* **Queuing, state, session management**: Built-in primitives for reliable agent coordination
+* **Deterministic workflows**: Complement agents with structured business logic
+* **Reliable asynchronous tasks**: Handle background work and inter-service communication
+
+## Flexible Deployments and Scalability
+
+Restate's durable execution runtime lets you run your durable code where you want at the scale you want:
+
+<img alt="Application Structure" />
+
+* **Scale to millions** of concurrent agent executions
+* **Deploy your agents** on FaaS or containers
+* **You own the infrastructure**: Run on Restate Cloud or self-host
+
+## Getting Started
+
+<CardGroup>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Set up Restate and run your first agent
+  </Card>
+
+  <Card title="AI recipes" icon="pen" href="/ai">
+    Build durable agents, chatbots, and multi-agent systems
+  </Card>
+
+  <Card title="AI Examples" icon="code" href="https://github.com/restatedev/ai-examples">
+    Explore templates, examples, and SDK integrations
+  </Card>
+</CardGroup>
+
+<Info>
+  Questions? Join our community on [Discord](https://discord.restate.dev) or [Slack](https://slack.restate.dev).
+</Info>

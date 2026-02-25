@@ -1,0 +1,12 @@
+services:
+  restate:
+    image: docker.restate.dev/restatedev/restate:latest
+    container_name: oya-restate
+    network_mode: host
+    command: ["--node-name=restate-1", "--bind-ip", "127.0.0.1"]
+    volumes:
+      - oya_restate_data:/restate-data
+    restart: unless-stopped
+
+volumes:
+  oya_restate_data:

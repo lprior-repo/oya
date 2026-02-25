@@ -1,0 +1,235 @@
+# Service Communication
+
+Source: https://docs.restate.dev/develop/java/service-communication
+
+Call other services from your handler.
+
+Your Restate handler can call other handlers in three ways:
+
+* **[Request-response calls](#request-response-calls)**: Call and wait for a response
+* **[One-way messages](#sending-messages)**: Send a message and continue
+* **[Delayed messages](#delayed-messages)**: Send a message after a delay
+
+<Info>
+  To call a service from an external application, see the [HTTP](/services/invocation/http), [Kafka](/services/invocation/kafka), or [SDK Clients](/services/invocation/clients/java-sdk) documentation.
+</Info>
+
+<Tip>[Why use Restate for service communication?](/foundations/key-concepts#resilient-communication)</Tip>
+
+## Generating service clients
+
+The Restate Java SDK automatically generates clients for each of your services when you build the project.
+
+If you don't see the generated clients, make sure you [added the code generator](develop/java/overview#getting-started) and have built the project with `./gradlew build` or `mvn compile exec:java`.
+
+## Request-response calls
+
+To call a Restate handler, use the generated clients and wait for its result:
+
+<CodeGroup>
+  ```java Java {"CODE_LOAD::java/src/main/java/develop/ServiceCommunication.java#request_response"}  theme={null}
+  // To call a Service:
+  String svcResponse = MyServiceClient.fromContext(ctx).myHandler(request).await();
+
+  // To call a Virtual Object:
+  String objResponse = MyObjectClient.fromContext(ctx, objectKey).myHandler(request).await();
+
+  // To call a Workflow:
+  // `run` handler — can only be called once per workflow ID
+  String wfResponse = MyWorkflowClient.fromContext(ctx, workflowId).run(request).await();
+  // Other handlers can be called anytime within workflow retention
+  String status =
+      MyWorkflowClient.fromContext(ctx, workflowId).interactWithWorkflow(request).await();
+  ```
+
+  ```kotlin Kotlin {"CODE_LOAD::kotlin/src/main/kotlin/develop/ServiceCommunication.kt#request_response"}  theme={null}
+  // To call a Service:
+  val svcResponse = MyServiceClient.fromContext(ctx).myHandler(request).await()
+
+  // To call a Virtual Object:
+  val objResponse = MyObjectClient.fromContext(ctx, objectKey).myHandler(request).await()
+
+  // To call a Workflow:
+  // `run` handler — can only be called once per workflow ID
+  val wfResponse = MyWorkflowClient.fromContext(ctx, workflowId).run(request).await()
+  // Other handlers can be called anytime within workflow retention
+  MyWorkflowClient.fromContext(ctx, workflowId).interactWithWorkflow(request).await()
+  ```
+</CodeGroup>
+
+Use the generic clients when you don't have access to typed clients or need dynamic service names:
+
+<CodeGroup>
+  ```java Java {"CODE_LOAD::java/src/main/java/develop/ServiceCommunication.java#request_response_generic"}  theme={null}
+  Target target = Target.service("MyService", "myHandler"); // or virtualObject or workflow
+  String response =
+      ctx.call(Request.of(target, TypeTag.of(String.class), TypeTag.of(String.class), request))
+          .await();
+  ```
+
+  ```kotlin Kotlin {"CODE_LOAD::kotlin/src/main/kotlin/develop/ServiceCommunication.kt#request_response_generic"}  theme={null}
+  val target = Target.service("MyService", "myHandler")
+  val response =
+      ctx.call(Request.of(target, typeTag<String>(), typeTag<String>(), request)).await()
+  ```
+</CodeGroup>
+
+<Accordion title="Workflow retention">
+  After a workflow's run handler completes, other handlers can still be called for up to 24 hours (default).
+  Update this via the [service configuration](/services/configuration).
+</Accordion>
+
+<Info>
+  Request-response calls between [exclusive handlers](/foundations/handlers#handler-behavior) of Virtual Objects may lead to deadlocks:
+
+  * Cross deadlock: A → B and B → A (same keys).
+  * Cycle deadlock: A → B → C → A.
+
+  Use the UI or CLI to [cancel](/services/invocation/managing-invocations#cancel) and unblock deadlocked invocations.
+</Info>
+
+## Sending messages
+
+To send a message to another Restate handler without waiting for a response:
+
+<CodeGroup>
+  ```java Java {"CODE_LOAD::java/src/main/java/develop/ServiceCommunication.java#one_way"}  theme={null}
+  MyServiceClient.fromContext(ctx).send().myHandler(request);
+  ```
+
+  ```kotlin Kotlin {"CODE_LOAD::kotlin/src/main/kotlin/develop/ServiceCommunication.kt#one_way"}  theme={null}
+  MyServiceClient.fromContext(ctx).send().myHandler(request)
+  ```
+</CodeGroup>
+
+Restate handles message delivery and retries, so the handler can complete and return without waiting for the message to be processed.
+
+Use generic clients when you don't have the service definition:
+
+<CodeGroup>
+  ```java Java {"CODE_LOAD::java/src/main/java/develop/ServiceCommunication.java#one_way_generic"}  theme={null}
+  Target target = Target.service("MyService", "myHandler"); // or virtualObject or workflow
+  ctx.send(Request.of(target, TypeTag.of(String.class), TypeTag.of(String.class), request));
+  ```
+
+  ```kotlin Kotlin {"CODE_LOAD::kotlin/src/main/kotlin/develop/ServiceCommunication.kt#one_way_generic"}  theme={null}
+  val target = Target.service("MyService", "myHandler")
+  ctx.send(Request.of(target, typeTag<String>(), typeTag<String>(), request))
+  ```
+</CodeGroup>
+
+<Info>
+  Calls to a Virtual Object execute in order of arrival, serially.
+  Example:
+
+  ```java {"CODE_LOAD::java/src/main/java/develop/ServiceCommunication.java#ordering"}  theme={null}
+  MyObjectClient.fromContext(ctx, objectKey).send().myHandler("I'm call A");
+  MyObjectClient.fromContext(ctx, objectKey).send().myHandler("I'm call B");
+  ```
+
+  Call A is guaranteed to execute before B. However, other invocations may interleave between A and B.
+</Info>
+
+## Delayed messages
+
+To send a message after a delay, use the generated clients with `.send()` and the `Duration` as second parameter:
+
+<CodeGroup>
+  ```java Java {"CODE_LOAD::java/src/main/java/develop/ServiceCommunication.java#delayed"}  theme={null}
+  MyServiceClient.fromContext(ctx).send().myHandler(request, Duration.ofDays(5));
+  ```
+
+  ```kotlin Kotlin {"CODE_LOAD::kotlin/src/main/kotlin/develop/ServiceCommunication.kt#delayed"}  theme={null}
+  MyServiceClient.fromContext(ctx).send().myHandler(request, 5.days)
+  ```
+</CodeGroup>
+
+Or with the generic clients:
+
+<CodeGroup>
+  ```java Java {"CODE_LOAD::java/src/main/java/develop/ServiceCommunication.java#delayed_generic"}  theme={null}
+  Target target = Target.service("MyService", "myHandler"); // or virtualObject or workflow
+  ctx.send(
+      Request.of(target, TypeTag.of(String.class), TypeTag.of(String.class), request),
+      Duration.ofDays(5));
+  ```
+
+  ```kotlin Kotlin {"CODE_LOAD::kotlin/src/main/kotlin/develop/ServiceCommunication.kt#delayed_generic"}  theme={null}
+  val target = Target.service("MyService", "myHandler")
+  Request.of(target, typeTag<String>(), typeTag<String>(), request).send(ctx, 5.days)
+  ```
+</CodeGroup>
+
+<Info>
+  Learn [how this is different](/develop/java/durable-timers#scheduling-async-tasks) from sleeping and then sending a message.
+</Info>
+
+## Using an idempotency key
+
+To prevent duplicate executions of the same call, add an idempotency key:
+
+<CodeGroup>
+  ```java Java {"CODE_LOAD::java/src/main/java/develop/ServiceCommunication.java#idempotency_key"}  theme={null}
+  // For a request-response call
+  MyServiceClient.fromContext(ctx).myHandler(request, req -> req.idempotencyKey("abc123"));
+  // For a message
+  MyServiceClient.fromContext(ctx).send().myHandler(request, req -> req.idempotencyKey("abc123"));
+  ```
+
+  ```kotlin Kotlin {"CODE_LOAD::kotlin/src/main/kotlin/develop/ServiceCommunication.kt#idempotency_key"}  theme={null}
+  // For a regular call
+  MyServiceClient.fromContext(ctx).myHandler(request) { idempotencyKey = "abc123" }
+  // For a one way call
+  MyServiceClient.fromContext(ctx).send().myHandler(request) { idempotencyKey = "abc123" }
+  ```
+</CodeGroup>
+
+Restate automatically deduplicates calls made during the same handler execution, so there's no need to provide an idempotency key in that case.
+However, if multiple handlers might call the same service independently, you can use an idempotency key to ensure deduplication across those calls.
+
+## Attach to an invocation
+
+To wait for or get the result of a previously sent message:
+
+<CodeGroup>
+  ```java Java {"CODE_LOAD::java/src/main/java/develop/ServiceCommunication.java#attach"}  theme={null}
+  var handle =
+      MyServiceClient.fromContext(ctx)
+          .send()
+          .myHandler(request, req -> req.idempotencyKey("abc123"));
+  var response = handle.attach().await();
+  ```
+
+  ```kotlin Kotlin {"CODE_LOAD::kotlin/src/main/kotlin/develop/ServiceCommunication.kt#attach"}  theme={null}
+  val handle =
+      MyServiceClient.fromContext(ctx).send().myHandler(request) { idempotencyKey = "abc123" }
+  val response = handle.attach().await()
+  ```
+</CodeGroup>
+
+* With an idempotency key: Wait for completion and retrieve the result.
+* Without an idempotency key: Can only wait, not retrieve the result.
+
+## Cancel an invocation
+
+To cancel a running handler:
+
+<CodeGroup>
+  ```java Java {"CODE_LOAD::java/src/main/java/develop/ServiceCommunication.java#cancel"}  theme={null}
+  var handle = MyServiceClient.fromContext(ctx).send().myHandler(request);
+  handle.cancel();
+  ```
+
+  ```kotlin Kotlin {"CODE_LOAD::kotlin/src/main/kotlin/develop/ServiceCommunication.kt#cancel"}  theme={null}
+  val handle = MyServiceClient.fromContext(ctx).send().myHandler(request)
+  handle.cancel()
+  ```
+</CodeGroup>
+
+## See also
+
+* **[SDK Clients](/develop/java/service-communication)**: Call Restate services from external applications
+* **[Error Handling](/develop/java/error-handling)**: Handle failures and terminal errors in service calls
+* **[Durable Timers](/develop/java/durable-timers)**: Implement timeouts for your service calls
+* **[Serialization](/develop/java/serialization)**: Customize how data is serialized between services
+* **[Sagas](/guides/sagas)**: Roll back or compensate for canceled service calls.

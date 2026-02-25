@@ -1,0 +1,72 @@
+# Testing
+
+Source: https://docs.restate.dev/develop/java/testing
+
+Utilities to test your handler logic.
+
+The Java SDK comes with the module `sdk-testing` that integrates with JUnit 5 and [Testcontainers](https://testcontainers.com/) to start up a Restate container together with your services code and automatically register them.
+
+Add the following dependency to your project: .
+
+## Using the JUnit 5 Extension
+
+Given the service to test `MyService`, annotate the test class with `@RestateTest` and annotate the services to bind with `@BindService`:
+
+<CodeGroup>
+  ```java Java {"CODE_LOAD::java/src/main/java/develop/MyServiceTest.java#extension"}  theme={null}
+  @RestateTest
+  class MyServiceTest {
+
+    @BindService MyService service = new MyService();
+
+    // Your tests
+
+  }
+  ```
+
+  ```kotlin Kotlin {"CODE_LOAD::kotlin/src/main/kotlin/develop/MyServiceTest.kt#extension"}  theme={null}
+  @RestateTest
+  class MyServiceTest {
+
+    @BindService val service = MyService()
+
+    // Your tests
+
+  }
+  ```
+</CodeGroup>
+
+Note that the extension will start one Restate server for the whole test class. For more details, checkout [`RestateTest` Javadocs](https://restatedev.github.io/sdk-java/javadocs/dev/restate/sdk/testing/RestateTest.html).
+
+Once the extension is set, you can implement your test methods as usual, and inject a [`Client`](https://restatedev.github.io/sdk-java/javadocs/dev/restate/client/Client.html) using [`@RestateClient`](https://restatedev.github.io/sdk-java/javadocs/dev/restate/sdk/testing/RestateClient.html) to interact with Restate and the registered services:
+
+<CodeGroup>
+  ```java Java {"CODE_LOAD::java/src/main/java/develop/MyServiceTestMethod.java#test"}  theme={null}
+  @Test
+  void testMyHandler(@RestateClient Client ingressClient) {
+    // Create the service client from the injected ingress client
+    var client = MyServiceClient.fromClient(ingressClient);
+
+    // Send request to service and assert the response
+    var response = client.myHandler("Hi");
+    assertEquals(response, "Hi!");
+  }
+  ```
+
+  ```kotlin Kotlin {"CODE_LOAD::kotlin/src/main/kotlin/develop/MyServiceTestMethod.kt#test"}  theme={null}
+  @Test
+  fun testMyHandler(@RestateClient ingressClient: Client) = runTest {
+    // Create the service client from the injected ingress client
+    val client = MyServiceClient.fromClient(ingressClient)
+
+    // Send request to service and assert the response
+    val response = client.myHandler("Hi")
+    assertEquals(response, "Hi!")
+  }
+  ```
+</CodeGroup>
+
+## Usage without JUnit 5
+
+You can use the testing tools without JUnit 5 by using [`RestateRunner`](https://restatedev.github.io/sdk-java/javadocs/dev/restate/sdk/testing/RestateRunner.html) directly.
+For more details, refer to the Javadocs.

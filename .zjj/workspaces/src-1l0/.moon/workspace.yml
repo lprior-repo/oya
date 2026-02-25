@@ -1,0 +1,26 @@
+$schema: "https://moonrepo.dev/schemas/workspace.json"
+
+# Project locations
+projects:
+  oya: "."
+
+# VCS configuration
+vcs:
+  provider: "github"
+  defaultBranch: "main"
+
+# Version constraint - Moon v1 compatible
+
+# Pipeline configuration
+pipeline:
+  installDependencies: true
+  syncWorkspace: true
+
+# Hasher performance optimization
+hasher:
+  optimization: 'performance'
+  walkStrategy: 'vcs'
+
+telemetry: false
+
+# Limit concurrent heavy builds (system has 32 threads, 123GB RAM)
