@@ -8,11 +8,11 @@ use crate::lifecycle::effects::{
     run_compensation, run_effect, CommandExecutor, Compensation, Effect, EffectJournalEntry,
 };
 use crate::lifecycle::transitions::{apply_event, planned_state, LifecycleEvent};
-use crate::lifecycle::types::{BeadData, BeadId, FailureCategory, LifecycleError, LifecycleState};
+use crate::lifecycle::types::{
+    BeadData, BeadId, FailureCategory, LifecycleError, LifecycleState, Model,
+};
 use futures_util::stream::{self, StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
-
-const DEFAULT_MODEL: &str = "zai-coding-plan/glm-5";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LifecycleRunRequest {
@@ -112,12 +112,13 @@ fn parse_bead_data(request: &LifecycleRunRequest) -> Result<BeadData, LifecycleE
 }
 
 fn build_steps(bead: &BeadData, model: Option<String>) -> Vec<LifecycleStep> {
-    let chosen_model = model.map_or_else(|| DEFAULT_MODEL.to_owned(), std::convert::identity);
+    let chosen_model =
+        model.and_then(|m| Model::parse(&m).ok()).unwrap_or_else(Model::default_model);
     vec![
         br_in_progress_step(bead),
         workspace_create_step(bead),
         LifecycleStep { effect: Effect::MoonCi, compensation: None, success_event: None },
-        opencode_step(bead, chosen_model),
+        opencode_step(bead, &chosen_model),
         pr_create_step(bead),
     ]
 }
@@ -154,13 +155,13 @@ fn workspace_create_step(bead: &BeadData) -> LifecycleStep {
     }
 }
 
-fn opencode_step(bead: &BeadData, model: String) -> LifecycleStep {
+fn opencode_step(bead: &BeadData, model: &Model) -> LifecycleStep {
     let prompt = format!(
         "Implement bead {} with functional Rust lifecycle workflow. Run moon run :ci before finishing.",
         bead.bead_id.as_str()
     );
     LifecycleStep {
-        effect: Effect::Opencode { prompt, model },
+        effect: Effect::Opencode { prompt, model: model.as_str().to_owned() },
         compensation: None,
         success_event: None,
     }

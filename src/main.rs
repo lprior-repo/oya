@@ -130,9 +130,7 @@ async fn implement_command(args: ImplementArgs) -> anyhow::Result<()> {
 
 async fn lifecycle_command(args: LifecycleArgs) -> anyhow::Result<()> {
     let request = LifecycleRequest { bead_id: args.bead.clone(), model: Some(args.model) };
-    let body =
-        call_restate_service_json(&args.ingress, "LifecycleWorkflow", &args.bead, "run", request)
-            .await?;
+    let body = call_restate_service_json(&args.ingress, "Oya", &args.bead, "run", request).await?;
     println!("{}", body.output);
     Ok(())
 }
@@ -151,7 +149,7 @@ async fn call_restate_json<T: serde::Serialize>(
     handler: &str,
     request: T,
 ) -> anyhow::Result<StartResponse> {
-    call_restate_service_json(ingress, "oya-orchestrate", id, handler, request).await
+    call_restate_service_json(ingress, "OyaMemory", id, handler, request).await
 }
 
 async fn call_restate_service_json<T: serde::Serialize>(

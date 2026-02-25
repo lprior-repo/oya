@@ -1,12 +1,11 @@
 use crate::lifecycle::effects::TokioCommandExecutor;
+use crate::lifecycle::types::Model;
 use crate::lifecycle::workflow::{run_lifecycle, LifecycleRunRequest};
 use restate_sdk::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::net::SocketAddr;
 use tokio::process::Command;
-
-const DEFAULT_MODEL: &str = "openai/gpt-5.3-codex";
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct StartRequest {
@@ -35,6 +34,33 @@ pub struct LifecycleRequest {
     pub model: Option<String>,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct KeyRequest {
+    pub key: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct BeadSnapshot {
+    pub bead_id: Option<String>,
+    pub bead_status: Option<String>,
+    pub bead_state: Option<Value>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct MemorySnapshot {
+    pub bead: BeadSnapshot,
+    pub last_output_summary: Option<Value>,
+    pub last_output_trace: Option<Value>,
+    pub active_invocation_id: Option<String>,
+    pub cancel_requested: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CancelResponse {
+    pub cancelled: bool,
+    pub message: String,
+}
+
 pub fn pipeline_prompt(bead_id: &str, bead_state: Value) -> Result<Prompt, TerminalError> {
     let state_json = serde_json::to_string_pretty(&bead_state)
         .map_err(|error| TerminalError::new(format!("invalid bead_state json: {error}")))?;
@@ -49,22 +75,36 @@ pub struct StartResponse {
 }
 
 #[restate_sdk::object]
-trait oya_orchestrate {
+trait OyaMemory {
     async fn start(req: Json<StartRequest>) -> Result<Json<StartResponse>, HandlerError>;
     async fn sync_bead(req: Json<BeadSyncRequest>) -> Result<Json<StartResponse>, HandlerError>;
     async fn run_pipeline(req: Json<PipelineRequest>) -> Result<Json<StartResponse>, HandlerError>;
+    #[shared]
+    async fn get_state() -> Result<Json<MemorySnapshot>, HandlerError>;
+    #[shared]
+    async fn get_bead() -> Result<Json<BeadSnapshot>, HandlerError>;
+    async fn request_cancel() -> Result<Json<CancelResponse>, HandlerError>;
 }
 
-pub struct OyaOrchestrateBridge;
+pub struct OyaMemoryBridge;
+
+#[restate_sdk::service]
+trait OyaService {
+    async fn get_state(req: Json<KeyRequest>) -> Result<Json<MemorySnapshot>, HandlerError>;
+    async fn get_bead(req: Json<KeyRequest>) -> Result<Json<BeadSnapshot>, HandlerError>;
+    async fn cancel(req: Json<KeyRequest>) -> Result<Json<CancelResponse>, HandlerError>;
+}
+
+pub struct OyaServiceBridge;
 
 #[restate_sdk::workflow]
-trait oya_workflow {
+trait Oya {
     async fn run(req: Json<LifecycleRequest>) -> Result<Json<StartResponse>, HandlerError>;
 }
 
-pub struct OyaWorkflowBridge;
+pub struct OyaBridge;
 
-impl oya_workflow for OyaWorkflowBridge {
+impl Oya for OyaBridge {
     async fn run(
         &self,
         _ctx: WorkflowContext<'_>,
@@ -88,7 +128,7 @@ impl oya_workflow for OyaWorkflowBridge {
     }
 }
 
-impl oya_orchestrate for OyaOrchestrateBridge {
+impl OyaMemory for OyaMemoryBridge {
     async fn start(
         &self,
         ctx: ObjectContext<'_>,
@@ -121,20 +161,125 @@ impl oya_orchestrate for OyaOrchestrateBridge {
         ctx: ObjectContext<'_>,
         req: Json<PipelineRequest>,
     ) -> Result<Json<StartResponse>, HandlerError> {
+        if ctx.get::<bool>("cancel_requested").await?.unwrap_or(false) {
+            return Err(TerminalError::new("cancel requested before pipeline run").into());
+        }
         let model = model_or_default(req.into_inner().model);
+        ctx.set("active_invocation_id", ctx.invocation_id().to_owned());
+        ctx.set("cancel_requested", false);
         let bead_id = require_state_string(&ctx, "bead_id").await?;
         let bead_state = require_state_json(&ctx, "bead_state").await?;
         let prompt = pipeline_prompt(&bead_id, bead_state)?;
         let output = ctx.run(move || run_opencode(prompt, model)).name("opencode_pipeline").await?;
         store_output(&ctx, &output);
+        ctx.clear("active_invocation_id");
         Ok(StartResponse { output }.into())
+    }
+
+    async fn get_state(
+        &self,
+        ctx: SharedObjectContext<'_>,
+    ) -> Result<Json<MemorySnapshot>, HandlerError> {
+        let bead = BeadSnapshot {
+            bead_id: ctx.get::<String>("bead_id").await?,
+            bead_status: ctx.get::<String>("bead_status").await?,
+            bead_state: ctx.get::<Json<Value>>("bead_state").await?.map(Json::into_inner),
+        };
+        let snapshot = MemorySnapshot {
+            bead,
+            last_output_summary: ctx
+                .get::<Json<Value>>("last_output_summary")
+                .await?
+                .map(Json::into_inner),
+            last_output_trace: ctx
+                .get::<Json<Value>>("last_output_trace")
+                .await?
+                .map(Json::into_inner),
+            active_invocation_id: ctx.get::<String>("active_invocation_id").await?,
+            cancel_requested: ctx.get::<bool>("cancel_requested").await?.unwrap_or(false),
+        };
+        Ok(snapshot.into())
+    }
+
+    async fn get_bead(
+        &self,
+        ctx: SharedObjectContext<'_>,
+    ) -> Result<Json<BeadSnapshot>, HandlerError> {
+        Ok(BeadSnapshot {
+            bead_id: ctx.get::<String>("bead_id").await?,
+            bead_status: ctx.get::<String>("bead_status").await?,
+            bead_state: ctx.get::<Json<Value>>("bead_state").await?.map(Json::into_inner),
+        }
+        .into())
+    }
+
+    async fn request_cancel(
+        &self,
+        ctx: ObjectContext<'_>,
+    ) -> Result<Json<CancelResponse>, HandlerError> {
+        ctx.set("cancel_requested", true);
+        let active_invocation_id = ctx.get::<String>("active_invocation_id").await?;
+        match active_invocation_id {
+            Some(invocation_id) => {
+                let cancel_id = invocation_id.clone();
+                let cancel_result =
+                    ctx.run(move || cancel_invocation(cancel_id)).name("cancel_invocation").await;
+                match cancel_result {
+                    Ok(()) => Ok(CancelResponse {
+                        cancelled: true,
+                        message: format!("cancel requested for invocation {invocation_id}"),
+                    }
+                    .into()),
+                    Err(error) => Ok(CancelResponse {
+                        cancelled: false,
+                        message: format!("failed to cancel invocation {invocation_id}: {error}"),
+                    }
+                    .into()),
+                }
+            }
+            None => Ok(CancelResponse {
+                cancelled: false,
+                message: "no active invocation to cancel".to_owned(),
+            }
+            .into()),
+        }
+    }
+}
+
+impl OyaService for OyaServiceBridge {
+    async fn get_state(
+        &self,
+        ctx: Context<'_>,
+        req: Json<KeyRequest>,
+    ) -> Result<Json<MemorySnapshot>, HandlerError> {
+        let key = req.into_inner().key;
+        ctx.object_client::<OyaMemoryClient>(&key).get_state().call().await.map_err(Into::into)
+    }
+
+    async fn get_bead(
+        &self,
+        ctx: Context<'_>,
+        req: Json<KeyRequest>,
+    ) -> Result<Json<BeadSnapshot>, HandlerError> {
+        let key = req.into_inner().key;
+        ctx.object_client::<OyaMemoryClient>(&key).get_bead().call().await.map_err(Into::into)
+    }
+
+    async fn cancel(
+        &self,
+        ctx: Context<'_>,
+        req: Json<KeyRequest>,
+    ) -> Result<Json<CancelResponse>, HandlerError> {
+        let key = req.into_inner().key;
+        ctx.object_client::<OyaMemoryClient>(&key).request_cancel().call().await.map_err(Into::into)
     }
 }
 
 pub async fn serve(bind: SocketAddr) -> anyhow::Result<()> {
     let endpoint = Endpoint::builder()
-        .bind(OyaOrchestrateBridge.serve())
-        .bind(OyaWorkflowBridge.serve())
+        .bind(OyaMemoryBridge.serve())
+        .bind(OyaBridge.serve())
+        .bind(OyaServiceBridge.serve())
         .build();
     HttpServer::new(endpoint).listen_and_serve(bind).await;
     Ok(())
@@ -166,11 +311,8 @@ impl Prompt {
     }
 }
 
-fn model_or_default(value: Option<String>) -> String {
-    match value {
-        Some(model) => model,
-        None => DEFAULT_MODEL.to_owned(),
-    }
+fn model_or_default(value: Option<String>) -> Model {
+    value.and_then(|m| Model::parse(&m).ok()).unwrap_or_else(Model::default_model)
 }
 
 fn persist_bead_state(ctx: &ObjectContext<'_>, request: &StartRequest) {
@@ -210,13 +352,13 @@ async fn require_state_json(ctx: &ObjectContext<'_>, key: &str) -> Result<Value,
         .ok_or_else(|| TerminalError::new(format!("missing state key: {key}")).into())
 }
 
-async fn run_opencode(prompt: Prompt, model: String) -> Result<String, HandlerError> {
+async fn run_opencode(prompt: Prompt, model: Model) -> Result<String, HandlerError> {
     let output = Command::new("opencode")
         .arg("run")
         .arg("--format")
         .arg("json")
         .arg("--model")
-        .arg(model)
+        .arg(model.as_str())
         .arg(prompt.into_inner())
         .output()
         .await
@@ -233,6 +375,26 @@ fn parse_output(output: std::process::Output) -> Result<String, HandlerError> {
     String::from_utf8(output.stdout).map_err(|error| {
         TerminalError::new(format!("opencode output was not UTF-8: {error}")).into()
     })
+}
+
+async fn cancel_invocation(invocation_id: String) -> Result<(), HandlerError> {
+    let output = Command::new("restate")
+        .arg("invocations")
+        .arg("cancel")
+        .arg(&invocation_id)
+        .output()
+        .await
+        .map_err(|error| HandlerError::from(format!("failed to invoke restate CLI: {error}")))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+        Err(TerminalError::new(format!(
+            "restate cancel failed for {invocation_id}: {}",
+            stderr.trim()
+        ))
+        .into())
+    }
 }
 
 fn parse_jsonl_events(raw: &str) -> Result<Vec<Value>, serde_json::Error> {

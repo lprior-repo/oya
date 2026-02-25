@@ -8,6 +8,88 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 const MAX_BEAD_ID_LEN: usize = 64;
+const MAX_MODEL_LEN: usize = 128;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Model(String);
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum ModelError {
+    #[error("model must not be empty")]
+    Empty,
+    #[error("model exceeds max length: {len} > {max}")]
+    TooLong { len: usize, max: usize },
+}
+
+impl Model {
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// Parses a model identifier from text.
+    ///
+    /// # Errors
+    /// Returns `ModelError::Empty` for blank input, or
+    /// `ModelError::TooLong` for identifiers over 128 chars.
+    pub fn parse(input: &str) -> Result<Self, ModelError> {
+        let normalized = input.trim();
+        if normalized.is_empty() {
+            Err(ModelError::Empty)
+        } else if normalized.len() > MAX_MODEL_LEN {
+            Err(ModelError::TooLong { len: normalized.len(), max: MAX_MODEL_LEN })
+        } else {
+            Ok(Self(normalized.to_owned()))
+        }
+    }
+
+    #[must_use]
+    pub fn default_model() -> Self {
+        Self("zai-coding-plan/glm-5".to_owned())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum BeadStatus {
+    Planned,
+    InProgress,
+    Blocked,
+    Completed,
+}
+
+impl BeadStatus {
+    #[must_use]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Planned => "planned",
+            Self::InProgress => "in_progress",
+            Self::Blocked => "blocked",
+            Self::Completed => "completed",
+        }
+    }
+
+    /// Parses a bead status from text.
+    ///
+    /// # Errors
+    /// Returns `BeadStatusError::Invalid` when input is not one of
+    /// "planned", "in_progress", "blocked", or "completed".
+    pub fn parse(input: &str) -> Result<Self, BeadStatusError> {
+        match input.trim().to_lowercase().as_str() {
+            "planned" => Ok(Self::Planned),
+            "in_progress" => Ok(Self::InProgress),
+            "blocked" => Ok(Self::Blocked),
+            "completed" => Ok(Self::Completed),
+            _ => Err(BeadStatusError::Invalid(input.to_owned())),
+        }
+    }
+}
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum BeadStatusError {
+    #[error("invalid bead status: {0}")]
+    Invalid(String),
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
