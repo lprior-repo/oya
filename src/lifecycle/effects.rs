@@ -8,6 +8,8 @@ use crate::lifecycle::types::{BeadData, FailureCategory, LifecycleError, Workspa
 use anyhow::Context;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::Path;
 use std::process::Stdio;
 use std::time::Duration;
 use tokio::process::Command;
@@ -19,11 +21,13 @@ const DEFAULT_CLI_TIMEOUT_SECS: u64 = 120;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Effect {
-    Jj { args: Vec<String> },
-    Br { args: Vec<String> },
-    Gh { args: Vec<String> },
-    MoonCi,
-    Opencode { prompt: String, model: String },
+    WorkspacePrepare { workspace: WorkspaceName, path: String },
+    Jj { args: Vec<String>, cwd: Option<String> },
+    Br { args: Vec<String>, cwd: Option<String> },
+    Gh { args: Vec<String>, cwd: Option<String> },
+    Git { args: Vec<String>, cwd: Option<String> },
+    MoonCi { cwd: Option<String> },
+    Opencode { prompt: String, model: String, cwd: Option<String> },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -65,6 +69,7 @@ pub trait CommandExecutor: Send + Sync {
         program: &str,
         args: &[String],
         timeout: Duration,
+        cwd: Option<&str>,
     ) -> Result<CommandResult, CommandFailure>;
 }
 
@@ -78,8 +83,14 @@ impl CommandExecutor for TokioCommandExecutor {
         program: &str,
         args: &[String],
         timeout: Duration,
+        cwd: Option<&str>,
     ) -> Result<CommandResult, CommandFailure> {
-        let join = Command::new(program).args(args).stdin(Stdio::null()).output();
+        let mut command = Command::new(program);
+        command.args(args).stdin(Stdio::null());
+        if let Some(path) = cwd {
+            command.current_dir(path);
+        }
+        let join = command.output();
         let output = time::timeout(timeout, join)
             .await
             .map_err(|_| CommandFailure::Timeout { timeout_secs: timeout.as_secs() })?;
@@ -96,9 +107,12 @@ impl CommandExecutor for TokioCommandExecutor {
 #[must_use]
 pub fn effect_timeout_secs(effect: &Effect) -> u64 {
     match effect {
-        Effect::MoonCi => MOON_CI_TIMEOUT_SECS,
+        Effect::WorkspacePrepare { .. } => DEFAULT_CLI_TIMEOUT_SECS,
+        Effect::MoonCi { .. } => MOON_CI_TIMEOUT_SECS,
         Effect::Opencode { .. } => OPENCODE_TIMEOUT_SECS,
-        Effect::Jj { .. } | Effect::Br { .. } | Effect::Gh { .. } => DEFAULT_CLI_TIMEOUT_SECS,
+        Effect::Jj { .. } | Effect::Br { .. } | Effect::Gh { .. } | Effect::Git { .. } => {
+            DEFAULT_CLI_TIMEOUT_SECS
+        }
     }
 }
 
@@ -110,10 +124,13 @@ pub async fn run_effect(
     executor: &dyn CommandExecutor,
     effect: Effect,
 ) -> Result<EffectJournalEntry, LifecycleError> {
-    let (program, args) = effect_command(&effect);
+    if let Effect::WorkspacePrepare { workspace, path } = effect.clone() {
+        return prepare_workspace(executor, workspace, path).await;
+    }
+    let (program, args, cwd) = effect_command(&effect);
     let timeout_secs = effect_timeout_secs(&effect);
     let timeout = Duration::from_secs(timeout_secs);
-    let output = executor.run(program, &args, timeout).await;
+    let output = executor.run(program, &args, timeout, cwd.as_deref()).await;
 
     match output {
         Ok(result) if status_ok(result.status_code) => Ok(EffectJournalEntry {
@@ -142,6 +159,7 @@ pub async fn run_compensation(
     let effect = match compensation {
         Compensation::ForgetWorkspace { workspace } => Effect::Jj {
             args: vec!["workspace".to_owned(), "forget".to_owned(), workspace.as_str().to_owned()],
+            cwd: None,
         },
         Compensation::MarkBeadBlocked { bead, reason } => Effect::Br {
             args: vec![
@@ -152,6 +170,7 @@ pub async fn run_compensation(
                 "--notes".to_owned(),
                 reason,
             ],
+            cwd: None,
         },
     };
     run_effect(executor, effect)
@@ -181,8 +200,11 @@ pub fn classify_non_zero(
 ) -> LifecycleError {
     let message = format!("{effect:?} exited with {:?}: {}", status_code, stderr.trim());
     match effect {
+        Effect::WorkspacePrepare { .. } => {
+            LifecycleError::terminal(FailureCategory::Workspace, message)
+        }
         Effect::Jj { .. } => LifecycleError::terminal(FailureCategory::Workspace, message),
-        Effect::Br { .. } | Effect::MoonCi => {
+        Effect::Br { .. } | Effect::MoonCi { .. } | Effect::Git { .. } => {
             LifecycleError::terminal(FailureCategory::Command, message)
         }
         Effect::Gh { .. } => LifecycleError::terminal(FailureCategory::PullRequest, message),
@@ -194,13 +216,15 @@ fn status_ok(status_code: Option<i32>) -> bool {
     status_code == Some(0)
 }
 
-fn effect_command(effect: &Effect) -> (&'static str, Vec<String>) {
+fn effect_command(effect: &Effect) -> (&'static str, Vec<String>, Option<String>) {
     match effect {
-        Effect::Jj { args } => ("jj", args.clone()),
-        Effect::Br { args } => ("br", args.clone()),
-        Effect::Gh { args } => ("gh", args.clone()),
-        Effect::MoonCi => ("moon", vec!["run".to_owned(), ":ci".to_owned()]),
-        Effect::Opencode { prompt, model } => (
+        Effect::WorkspacePrepare { .. } => ("true", Vec::new(), None),
+        Effect::Jj { args, cwd } => ("jj", args.clone(), cwd.clone()),
+        Effect::Br { args, cwd } => ("br", args.clone(), cwd.clone()),
+        Effect::Gh { args, cwd } => ("gh", args.clone(), cwd.clone()),
+        Effect::Git { args, cwd } => ("git", args.clone(), cwd.clone()),
+        Effect::MoonCi { cwd } => ("moon", vec!["run".to_owned(), ":ci".to_owned()], cwd.clone()),
+        Effect::Opencode { prompt, model, cwd } => (
             "opencode",
             vec![
                 "run".to_owned(),
@@ -210,6 +234,53 @@ fn effect_command(effect: &Effect) -> (&'static str, Vec<String>) {
                 model.clone(),
                 prompt.clone(),
             ],
+            cwd.clone(),
         ),
+    }
+}
+
+async fn prepare_workspace(
+    executor: &dyn CommandExecutor,
+    workspace: WorkspaceName,
+    path: String,
+) -> Result<EffectJournalEntry, LifecycleError> {
+    let timeout_secs = effect_timeout_secs(&Effect::WorkspacePrepare {
+        workspace: workspace.clone(),
+        path: path.clone(),
+    });
+    let timeout = Duration::from_secs(timeout_secs);
+    let args = vec!["workspace".to_owned(), "forget".to_owned(), workspace.as_str().to_owned()];
+    let forget_result = executor.run("jj", &args, timeout, None).await;
+    let path_result = remove_workspace_dir(&path);
+    let stderr = forget_result.err().map(|error| error.to_string()).unwrap_or_default();
+    path_result.map(|stdout| EffectJournalEntry {
+        effect: Effect::WorkspacePrepare { workspace, path },
+        timeout_secs,
+        success: true,
+        stdout,
+        stderr,
+    })
+}
+
+fn remove_workspace_dir(path: &str) -> Result<String, LifecycleError> {
+    let target = Path::new(path);
+    if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent).map_err(|error| {
+            LifecycleError::terminal(
+                FailureCategory::Workspace,
+                format!("failed to create workspace parent {}: {error}", parent.display()),
+            )
+        })?;
+    }
+    if target.exists() {
+        fs::remove_dir_all(target).map_err(|error| {
+            LifecycleError::terminal(
+                FailureCategory::Workspace,
+                format!("failed to clean workspace directory {path}: {error}"),
+            )
+        })?;
+        Ok(format!("workspace path {path} prepared"))
+    } else {
+        Ok(format!("workspace path {path} already clean"))
     }
 }

@@ -9,7 +9,8 @@ pub mod restate_oya;
 use clap::{Parser, Subcommand};
 use reqwest::Client;
 use restate_oya::{
-    BeadSyncRequest, LifecycleRequest, PipelineRequest, StartRequest, StartResponse,
+    BeadSyncRequest, CancelResponse, KeyRequest, LifecycleRequest, LifecycleStatusSnapshot,
+    PipelineRequest, StartRequest, StartResponse,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -34,6 +35,8 @@ enum Command {
     Invoke(InvokeArgs),
     Implement(ImplementArgs),
     Lifecycle(LifecycleArgs),
+    Status(StatusArgs),
+    Cancel(CancelArgs),
 }
 
 #[derive(Debug, clap::Args)]
@@ -67,11 +70,27 @@ struct ImplementArgs {
 #[derive(Debug, clap::Args)]
 struct LifecycleArgs {
     #[arg(long)]
-    bead: String,
+    bead: Option<String>,
     #[arg(long, default_value = DEFAULT_INGRESS)]
     ingress: String,
     #[arg(long, default_value = DEFAULT_IMPL_MODEL)]
     model: String,
+}
+
+#[derive(Debug, clap::Args)]
+struct StatusArgs {
+    #[arg(long)]
+    key: String,
+    #[arg(long, default_value = DEFAULT_INGRESS)]
+    ingress: String,
+}
+
+#[derive(Debug, clap::Args)]
+struct CancelArgs {
+    #[arg(long)]
+    key: String,
+    #[arg(long, default_value = DEFAULT_INGRESS)]
+    ingress: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -87,6 +106,8 @@ async fn main() -> anyhow::Result<()> {
         Command::Invoke(args) => invoke_command(args).await,
         Command::Implement(args) => implement_command(args).await,
         Command::Lifecycle(args) => lifecycle_command(args).await,
+        Command::Status(args) => status_command(args).await,
+        Command::Cancel(args) => cancel_command(args).await,
     }
 }
 
@@ -129,9 +150,29 @@ async fn implement_command(args: ImplementArgs) -> anyhow::Result<()> {
 }
 
 async fn lifecycle_command(args: LifecycleArgs) -> anyhow::Result<()> {
-    let request = LifecycleRequest { bead_id: args.bead.clone(), model: Some(args.model) };
-    let body = call_restate_service_json(&args.ingress, "Oya", &args.bead, "run", request).await?;
+    let workflow_key = args.bead.clone().unwrap_or_else(|| "auto".to_owned());
+    let request = LifecycleRequest { bead_id: args.bead, model: Some(args.model) };
+    let body =
+        call_restate_service_json(&args.ingress, "Oya", &workflow_key, "run", request).await?;
     println!("{}", body.output);
+    Ok(())
+}
+
+async fn status_command(args: StatusArgs) -> anyhow::Result<()> {
+    let request = KeyRequest { key: args.key };
+    let snapshot: LifecycleStatusSnapshot =
+        call_restate_root_json(&args.ingress, "OyaService", "get_lifecycle", request).await?;
+    let formatted = serde_json::to_string_pretty(&snapshot)?;
+    println!("{formatted}");
+    Ok(())
+}
+
+async fn cancel_command(args: CancelArgs) -> anyhow::Result<()> {
+    let request = KeyRequest { key: args.key };
+    let response: CancelResponse =
+        call_restate_root_json(&args.ingress, "OyaService", "cancel", request).await?;
+    let formatted = serde_json::to_string_pretty(&response)?;
+    println!("{formatted}");
     Ok(())
 }
 
@@ -160,6 +201,18 @@ async fn call_restate_service_json<T: serde::Serialize>(
     request: T,
 ) -> anyhow::Result<StartResponse> {
     let url = format!("{}/{}/{}/{}", ingress, service, id, handler);
+    let response = Client::new().post(url).json(&request).send().await?;
+    let response = response.error_for_status()?;
+    response.json().await.map_err(Into::into)
+}
+
+async fn call_restate_root_json<T: serde::Serialize, R: serde::de::DeserializeOwned>(
+    ingress: &str,
+    service: &str,
+    handler: &str,
+    request: T,
+) -> anyhow::Result<R> {
+    let url = format!("{}/{}/{}", ingress, service, handler);
     let response = Client::new().post(url).json(&request).send().await?;
     let response = response.error_for_status()?;
     response.json().await.map_err(Into::into)
