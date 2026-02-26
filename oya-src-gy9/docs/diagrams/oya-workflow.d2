@@ -1,0 +1,172 @@
+# OYA ATDD Workflow Architecture
+# D2 Diagram
+
+direction: right
+
+layer.users: {
+  User: {
+    icon: https://icons.terraformdesign.io/emoji/user.svg
+    style.stroke-dash: 3
+  }
+}
+
+layer.cli: {
+  br_cli["br CLI"]: {
+    icon: https://icons.terraformdesign.io/emoji/terminal.svg
+    style.fill: "#e8f4f8"
+  }
+
+  pipeline_script["pipeline-run.sh"]: {
+    style.fill: "#fff4e6"
+  }
+}
+
+layer.services: {
+  restate_ingress["Restate Ingress\n:8080"]: {
+    icon: https://icons.terraformdesign.io/logos/restate.svg
+    style.fill: "#f0e6ff"
+  }
+
+  restate_admin["Restate Admin\n:9070"]: {
+    icon: https://icons.terraformdesign.io/logos/restate.svg
+    style.fill: "#f0e6ff"
+  }
+
+  oya_orchestrator["OyaOrchestrator\nWorkflow"]: {
+    icon: https://icons.terraformdesign.io/logos/rust.svg
+    style.fill: "#ffe6f0"
+  }
+
+  oya_virtual["Oya\nVirtual Object"]: {
+    icon: https://icons.terraformdesign.io/logos/rust.svg
+    style.fill: "#ffe6f0"
+  }
+
+  oya_monitor["OyaOpsMonitor\nService"]: {
+    icon: https://icons.terraformdesign.io/logos/rust.svg
+    style.fill: "#ffe6f0"
+  }
+
+  oya_binary["oya binary\n(target/release/oya)"]: {
+    icon: https://icons.terraformdesign.io/logos/rust.svg
+    style.fill: "#e6ffe6"
+  }
+}
+
+layer.ai_tools: {
+  opencode["OpenCode\n:4098"]: {
+    icon: https://icons.terraformdesign.io/emoji/brain.svg
+    style.fill: "#fff0e6"
+  }
+
+  ai_models["AI Models\n(glm-5, glm-4.6)"]: {
+    icon: https://icons.terraformdesign.io/emoji/robot.svg
+    style.fill: "#f0e6ff"
+  }
+}
+
+layer.build_tools: {
+  moon["Moon\nBuild System"]: {
+    icon: https://icons.terraformdesign.io/logos/moonrepo.svg
+    style.fill: "#e6f0ff"
+  }
+
+  jj["jj\nWorkspace Isolation"]: {
+    icon: https://icons.terraformdesign.io/emoji/folder.svg
+    style.fill: "#e6f0ff"
+  }
+}
+
+layer.workflow_stages: {
+  plan_stage["Plan Stage\n- Generate PLAN.md\n- opencode/glm-5-free\n- Duration: ~3min"]: {
+    style.fill: "#e6fff0"
+    icon: https://icons.terraformdesign.io/emoji/memo.svg
+  }
+
+  contract_stage["Contract Stage\n- Design contracts\n- Define invariants\n- zai-coding-plan/glm-4.6"]: {
+    style.fill: "#e6fff0"
+    icon: https://icons.terraformdesign.io/emoji/document.svg
+  }
+
+  acceptance_test["Acceptance Test Stage\n- Write failing tests\n- Red Gate: MUST FAIL\n- Validate compilation"]: {
+    style.fill: "#ffe6e6"
+    icon: https://icons.terraformdesign.io/emoji/x.svg
+  }
+
+  implementation["Implementation Stage\n- Write code to pass tests\n- Green Gate: MUST PASS\n- Zero unwrap/panic"]: {
+    style.fill: "#e6ffe6"
+    icon: https://icons.terraformdesign.io/emoji/check.svg
+  }
+
+  qa_completion["QA & Completion\n- Quality gates\n- clippy, tests\n- Final validation"]: {
+    style.fill: "#fff4e6"
+    icon: https://icons.terraformdesign.io/emoji/shield.svg
+  }
+}
+
+layer.data: {
+  beads_db["beads_rust\n(br CLI)"]: {
+    icon: https://icons.terraformdesign.io/logos/postgres.svg
+    style.fill: "#f0f0f0"
+  }
+
+  journal["Restate Journal\n(Durable State)"]: {
+    icon: https://icons.terraformdesign.io/emoji/bookmark.svg
+    style.fill: "#f0f0f0"
+  }
+}
+
+# Connections - User Flow
+User -> br_cli: "br ready"
+br_cli -> beads_db: "query\nready beads"
+beads_db -> br_cli: "return\nsrc-2nw"
+br_cli -> pipeline_script: "execute\nbead"
+pipeline_script -> restate_ingress: "POST\n/OyaOrchestrator/{run_id}/run/send"
+
+# Connections - Service Mesh
+restate_ingress -> oya_orchestrator: "invoke\nworkflow"
+oya_orchestrator -> oya_virtual: "get_status\nreport_outcome"
+oya_orchestrator -> oya_monitor: "poll_status\npoll_events"
+oya_orchestrator -> journal: "append\nstate"
+
+# Connections - AI Integration
+oya_orchestrator -> opencode: "execute\nstage"
+opencode -> ai_models: "LLM\ninference"
+ai_models -> opencode: "generate\nresponse"
+opencode -> oya_orchestrator: "return\noutput"
+
+# Connections - Build Tools
+oya_orchestrator -> moon: "moon run\n:check/:test"
+oya_orchestrator -> jj: "workspace\nmanagement"
+oya_orchestrator -> oya_binary: "spawn_blocking\ncommands"
+
+# Connections - Workflow Stages Flow
+oya_orchestrator -> plan_stage: "journal 3-35"
+plan_stage -> contract_stage: "journal 35-73"
+contract_stage -> acceptance_test: "journal 73-110\n(Red Gate)"
+acceptance_test -> implementation: "journal 110-118\n(Green Gate)"
+implementation -> qa_completion: "journal 118-141"
+qa_completion -> oya_orchestrator: "workflow\ncomplete"
+
+# Connections - Monitoring
+restate_admin -> oya_orchestrator: "monitor\ninvocation"
+User -> restate_admin: "view\nworkflow"
+pipeline_script -> restate_admin: "poll\nstatus"
+
+# Styling connections
+User.br_cli: {
+  style.stroke-dash: 3
+}
+
+plan_stage.contract_stage.acceptance_test.implementation.qa_completion: {
+  style.stroke-width: 2
+}
+
+# Labels
+layer.users.label: "User"
+layer.cli.label: "CLI Tools"
+layer.services.label: "Services"
+layer.ai_tools.label: "AI Tools"
+layer.build_tools.label: "Build Tools"
+layer.workflow_stages.label: "ATDD Stages"
+layer.data.label: "Data"

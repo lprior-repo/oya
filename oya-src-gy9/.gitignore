@@ -1,0 +1,58 @@
+vendor/
+node_modules/
+test-results/
+
+# Build artifacts
+target/
+Cargo.lock
+
+# Beads database (SQLite files)
+.beads/beads.db
+.beads/beads.db-shm
+.beads/beads.db-wal
+.beads/issues.jsonl
+.beads/.br_history/
+
+# Events WAL files
+crates/events/.wal/
+
+# ZJJ database
+.zjj/*.db
+.zjj/*.db-shm
+.zjj/*.db-wal
+
+# Orchestrator state database
+crates/orchestrator/.oya/
+
+# Mutants testing output
+mutants.out/
+mutants.out/mutants.json
+
+# Build timer output
+timer
+
+# bv (beads viewer) local config and caches
+.bv/
+
+# Moon cache
+.moon/cache/
+
+# TDD cache
+.tdd15-cache/
+
+# Profiling cache
+profiling/
+bin/
+
+# Codanna index and cache artifacts
+.codanna/
+
+# Local runtime and generated scratch artifacts
+oya-db/
+restate-data/
+crates/
+PLAN_docker-fix-bead3.md
+.tmp/
+.orchestrator/
+workspaces/
+src-*.*/

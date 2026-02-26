@@ -1,0 +1,5 @@
+title = "Gitleaks Allowlist"
+
+[[allowlist]]
+description = "Auto-generated constants in Rust documentation"
+paths = ['''target/doc/.*''']
