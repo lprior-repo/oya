@@ -35,6 +35,7 @@ pub struct LifecycleStepSnapshot {
     pub step: String,
     pub status: String,
     pub message: Option<String>,
+    pub details: Option<Value>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

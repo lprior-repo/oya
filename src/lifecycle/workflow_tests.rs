@@ -153,6 +153,17 @@ async fn run_lifecycle_success_path_executes_jj_only_git_bridge() {
             .iter()
             .any(|event| matches!(event, LifecycleProgressUpdate::Finished { success: true, pr_url: Some(url), .. } if url.ends_with("/pull/321")))
     );
+    assert!(progress.iter().any(|event| {
+        matches!(
+            event,
+            LifecycleProgressUpdate::Step {
+                step,
+                status: super::LifecycleStepStatus::Succeeded,
+                details: Some(details),
+                ..
+            } if step == "opencode" && details.get("events").is_some()
+        )
+    }));
 }
 
 #[tokio::test]
