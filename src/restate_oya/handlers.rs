@@ -709,6 +709,7 @@ fn upsert_step(
 ) -> Vec<LifecycleStepSnapshot> {
     let StepUpdate { step, status, message, details, started_at, finished_at, duration_ms } =
         update;
+    let status_label = lifecycle_status_label(&status).to_owned();
     let mut found = false;
     let mapped = steps
         .into_iter()
@@ -717,7 +718,7 @@ fn upsert_step(
                 found = true;
                 LifecycleStepSnapshot {
                     step: item.step,
-                    status: lifecycle_status_label(&status).to_owned(),
+                    status: status_label.clone(),
                     message: message.clone(),
                     details: details.clone(),
                     started_at: started_at.clone().or(item.started_at),
@@ -736,7 +737,7 @@ fn upsert_step(
             .into_iter()
             .chain(std::iter::once(LifecycleStepSnapshot {
                 step,
-                status: lifecycle_status_label(&status).to_owned(),
+                status: status_label,
                 message,
                 details,
                 started_at,
@@ -772,23 +773,41 @@ fn extract_pr_url_from_state(state: &crate::lifecycle::types::LifecycleState) ->
     }
 }
 
+/// Read an optional string state key, treating deserialization failures (e.g. empty-byte
+/// values written as `None`) as absent rather than propagating an error.
+async fn get_optional_string(
+    ctx: &SharedWorkflowContext<'_>,
+    key: &str,
+) -> Result<Option<String>, HandlerError> {
+    match ctx.get::<String>(key).await {
+        Ok(value) => Ok(value),
+        Err(_) => Ok(None),
+    }
+}
+
 async fn read_lifecycle_status(
     ctx: &SharedWorkflowContext<'_>,
 ) -> Result<LifecycleStatusSnapshot, HandlerError> {
     let steps = ctx
         .get::<Json<Value>>("lifecycle_steps")
-        .await?
+        .await
+        .ok()
+        .flatten()
         .map(Json::into_inner)
         .and_then(|value| serde_json::from_value::<Vec<LifecycleStepSnapshot>>(value).ok())
         .unwrap_or_default();
     let state = ctx
         .get::<Json<Value>>("lifecycle_state")
-        .await?
+        .await
+        .ok()
+        .flatten()
         .map(Json::into_inner)
         .and_then(|value| if value.is_null() { None } else { Some(value) });
     let compensation_diagnostics = ctx
         .get::<Json<Value>>("lifecycle_compensation_diagnostics")
-        .await?
+        .await
+        .ok()
+        .flatten()
         .map(Json::into_inner)
         .and_then(|value| {
             serde_json::from_value::<Vec<crate::lifecycle::types::CompensationDiagnostic>>(value)
@@ -796,13 +815,13 @@ async fn read_lifecycle_status(
         })
         .unwrap_or_default();
     Ok(LifecycleStatusSnapshot {
-        bead_id: ctx.get::<String>("lifecycle_bead_id").await?,
+        bead_id: get_optional_string(ctx, "lifecycle_bead_id").await?,
         steps,
         state,
-        pr_url: ctx.get::<String>("lifecycle_pr_url").await?,
-        done: ctx.get::<bool>("lifecycle_done").await?.unwrap_or(false),
-        success: ctx.get::<bool>("lifecycle_success").await?,
-        message: ctx.get::<String>("lifecycle_message").await?,
+        pr_url: get_optional_string(ctx, "lifecycle_pr_url").await?,
+        done: ctx.get::<bool>("lifecycle_done").await.ok().flatten().unwrap_or(false),
+        success: ctx.get::<bool>("lifecycle_success").await.ok().flatten(),
+        message: get_optional_string(ctx, "lifecycle_message").await?,
         compensation_diagnostics,
     })
 }

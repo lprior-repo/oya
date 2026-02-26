@@ -154,7 +154,7 @@ async fn run_lifecycle_success_path_executes_jj_only_git_bridge() {
 
     executor.assert_empty();
     assert!(result.is_ok());
-    let outcome = result.expect("success outcome");
+    let outcome = result.expect("expected success outcome");
     assert_eq!(outcome.compensation_journal.len(), 1);
     assert!(
         progress
