@@ -567,6 +567,7 @@ fn default_step_snapshots() -> Vec<LifecycleStepSnapshot> {
         step: step.to_owned(),
         status: lifecycle_status_label(&LifecycleStepStatus::Pending).to_owned(),
         message: None,
+        details: None,
     })
     .collect()
 }
@@ -584,14 +585,15 @@ fn apply_progress_update(
                     step,
                     status: lifecycle_status_label(&LifecycleStepStatus::Pending).to_owned(),
                     message: None,
+                    details: None,
                 })
                 .collect::<Vec<_>>();
             ctx.set("lifecycle_bead_id", Some(bead_id));
             store_lifecycle_steps(ctx, live_steps);
             ctx.set("lifecycle_message", Option::<String>::None);
         }
-        LifecycleProgressUpdate::Step { step, status, message } => {
-            *live_steps = upsert_step(live_steps.clone(), step, status, message);
+        LifecycleProgressUpdate::Step { step, status, message, details } => {
+            *live_steps = upsert_step(live_steps.clone(), step, status, message, details);
             store_lifecycle_steps(ctx, live_steps);
         }
         LifecycleProgressUpdate::Finished { success, pr_url, message } => {
@@ -623,6 +625,7 @@ fn upsert_step(
     step: String,
     status: LifecycleStepStatus,
     message: Option<String>,
+    details: Option<Value>,
 ) -> Vec<LifecycleStepSnapshot> {
     let mut found = false;
     let mapped = steps
@@ -634,6 +637,7 @@ fn upsert_step(
                     step: item.step,
                     status: lifecycle_status_label(&status).to_owned(),
                     message: message.clone(),
+                    details: details.clone(),
                 }
             } else {
                 item
@@ -649,6 +653,7 @@ fn upsert_step(
                 step,
                 status: lifecycle_status_label(&status).to_owned(),
                 message,
+                details,
             }))
             .collect()
     }
@@ -765,6 +770,7 @@ fn extract_step_snapshots(raw: &str) -> Vec<LifecycleStepSnapshot> {
                 step,
                 status: "seen".to_owned(),
                 message: Some(command.to_owned()),
+                details: None,
             })
         })
         .collect()

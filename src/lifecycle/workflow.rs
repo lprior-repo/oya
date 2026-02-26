@@ -14,6 +14,7 @@ use crate::lifecycle::types::{
 };
 use futures_util::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LifecycleRunRequest {
@@ -47,9 +48,21 @@ pub enum LifecycleStepStatus {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LifecycleProgressUpdate {
-    Initialized { bead_id: String, steps: Vec<String> },
-    Step { step: String, status: LifecycleStepStatus, message: Option<String> },
-    Finished { success: bool, pr_url: Option<String>, message: Option<String> },
+    Initialized {
+        bead_id: String,
+        steps: Vec<String>,
+    },
+    Step {
+        step: String,
+        status: LifecycleStepStatus,
+        message: Option<String>,
+        details: Option<Value>,
+    },
+    Finished {
+        success: bool,
+        pr_url: Option<String>,
+        message: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -462,6 +475,7 @@ where
             step: step.name.clone(),
             status: LifecycleStepStatus::Running,
             message: None,
+            details: None,
         });
         acc = execute_step(executor, acc, step, on_progress).await?;
     }
@@ -486,6 +500,7 @@ where
                 step: step_name,
                 status: LifecycleStepStatus::Succeeded,
                 message: None,
+                details: step_details(&entry),
             });
             Ok(next)
         }
@@ -494,6 +509,7 @@ where
                 step: step_name,
                 status: LifecycleStepStatus::Failed,
                 message: Some(error.to_string()),
+                details: None,
             });
             Err(Box::new(StepFailure {
                 state: failed_state(&acc.state, &error),
@@ -502,6 +518,33 @@ where
                 error,
             }))
         }
+    }
+}
+
+fn step_details(entry: &EffectJournalEntry) -> Option<Value> {
+    match &entry.effect {
+        Effect::Opencode { .. } => {
+            let events = parse_json_lines(&entry.stdout)?;
+            Some(json!({
+                "events": events,
+                "stderr": entry.stderr,
+            }))
+        }
+        _ => None,
+    }
+}
+
+fn parse_json_lines(raw: &str) -> Option<Vec<Value>> {
+    let parsed = raw
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+        .collect::<Vec<_>>();
+    if parsed.is_empty() {
+        None
+    } else {
+        Some(parsed)
     }
 }
 
@@ -523,6 +566,7 @@ where
             step: step.name.clone(),
             status: LifecycleStepStatus::Failed,
             message: Some(error.to_string()),
+            details: None,
         });
         Box::new(StepFailure {
             state: prev_state.clone(),
