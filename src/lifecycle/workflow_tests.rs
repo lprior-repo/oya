@@ -418,3 +418,143 @@ fn step_details_keeps_stderr_when_opencode_stdout_has_no_json() {
         }))
     );
 }
+
+#[test]
+fn validate_dag_accepts_empty_step_list() {
+    let result = super::validate_dag(&[]);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn validate_dag_accepts_steps_with_no_dependencies() {
+    let steps = vec![
+        super::LifecycleStep {
+            name: "step_a".to_owned(),
+            effect: Effect::Br { args: vec![], cwd: None },
+            compensation: None,
+            transition: super::StepTransition::None,
+            dependencies: vec![],
+        },
+        super::LifecycleStep {
+            name: "step_b".to_owned(),
+            effect: Effect::Br { args: vec![], cwd: None },
+            compensation: None,
+            transition: super::StepTransition::None,
+            dependencies: vec![],
+        },
+    ];
+    let result = super::validate_dag(&steps);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn validate_dag_accepts_valid_dependency_chain() {
+    let steps = vec![
+        super::LifecycleStep {
+            name: "step_a".to_owned(),
+            effect: Effect::Br { args: vec![], cwd: None },
+            compensation: None,
+            transition: super::StepTransition::None,
+            dependencies: vec![],
+        },
+        super::LifecycleStep {
+            name: "step_b".to_owned(),
+            effect: Effect::Br { args: vec![], cwd: None },
+            compensation: None,
+            transition: super::StepTransition::None,
+            dependencies: vec!["step_a".to_owned()],
+        },
+    ];
+    let result = super::validate_dag(&steps);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn validate_dag_rejects_missing_dependency() {
+    let steps = vec![super::LifecycleStep {
+        name: "step_a".to_owned(),
+        effect: Effect::Br { args: vec![], cwd: None },
+        compensation: None,
+        transition: super::StepTransition::None,
+        dependencies: vec!["nonexistent_step".to_owned()],
+    }];
+    let result = super::validate_dag(&steps);
+    assert!(result.is_err());
+    let error = result.expect_err("expected missing dependency error");
+    assert_eq!(error.category(), FailureCategory::Validation);
+    assert!(error.message().contains("unknown dependency"));
+    assert!(error.message().contains("nonexistent_step"));
+}
+
+#[test]
+fn validate_dag_rejects_direct_cycle() {
+    let steps = vec![
+        super::LifecycleStep {
+            name: "step_a".to_owned(),
+            effect: Effect::Br { args: vec![], cwd: None },
+            compensation: None,
+            transition: super::StepTransition::None,
+            dependencies: vec!["step_b".to_owned()],
+        },
+        super::LifecycleStep {
+            name: "step_b".to_owned(),
+            effect: Effect::Br { args: vec![], cwd: None },
+            compensation: None,
+            transition: super::StepTransition::None,
+            dependencies: vec!["step_a".to_owned()],
+        },
+    ];
+    let result = super::validate_dag(&steps);
+    assert!(result.is_err());
+    let error = result.expect_err("expected cycle error");
+    assert_eq!(error.category(), FailureCategory::Validation);
+    assert!(error.message().contains("cycle"));
+}
+
+#[test]
+fn validate_dag_rejects_indirect_cycle() {
+    let steps = vec![
+        super::LifecycleStep {
+            name: "step_a".to_owned(),
+            effect: Effect::Br { args: vec![], cwd: None },
+            compensation: None,
+            transition: super::StepTransition::None,
+            dependencies: vec!["step_c".to_owned()],
+        },
+        super::LifecycleStep {
+            name: "step_b".to_owned(),
+            effect: Effect::Br { args: vec![], cwd: None },
+            compensation: None,
+            transition: super::StepTransition::None,
+            dependencies: vec!["step_a".to_owned()],
+        },
+        super::LifecycleStep {
+            name: "step_c".to_owned(),
+            effect: Effect::Br { args: vec![], cwd: None },
+            compensation: None,
+            transition: super::StepTransition::None,
+            dependencies: vec!["step_b".to_owned()],
+        },
+    ];
+    let result = super::validate_dag(&steps);
+    assert!(result.is_err());
+    let error = result.expect_err("expected indirect cycle error");
+    assert_eq!(error.category(), FailureCategory::Validation);
+    assert!(error.message().contains("cycle"));
+}
+
+#[test]
+fn validate_dag_rejects_self_dependency() {
+    let steps = vec![super::LifecycleStep {
+        name: "step_a".to_owned(),
+        effect: Effect::Br { args: vec![], cwd: None },
+        compensation: None,
+        transition: super::StepTransition::None,
+        dependencies: vec!["step_a".to_owned()],
+    }];
+    let result = super::validate_dag(&steps);
+    assert!(result.is_err());
+    let error = result.expect_err("expected self-dependency error");
+    assert_eq!(error.category(), FailureCategory::Validation);
+    assert!(error.message().contains("cycle"));
+}
