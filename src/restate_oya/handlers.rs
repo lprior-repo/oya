@@ -558,6 +558,7 @@ fn default_step_snapshots() -> Vec<LifecycleStepSnapshot> {
         "jj_rebase_main",
         "jj_track",
         "jj_describe",
+        "validate_changes",
         "bookmark_create",
         "bookmark_push",
         "pr_create",

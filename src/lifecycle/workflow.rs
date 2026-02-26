@@ -77,6 +77,7 @@ struct LifecycleStep {
 enum StepTransition {
     None,
     Static(LifecycleEvent),
+    ValidateWorkspaceChanges,
     PullRequestOpened { bead: BeadData },
 }
 
@@ -254,6 +255,7 @@ fn build_steps(bead: &BeadData, model: &Model, repo: Option<&str>) -> Vec<Lifecy
         jj_rebase_main_step(bead),
         jj_track_step(bead),
         jj_describe_step(bead),
+        validate_changes_step(bead),
         bookmark_create_step(bead),
     ];
     steps.push(bookmark_push_step(bead));
@@ -342,7 +344,7 @@ fn jj_rebase_main_step(bead: &BeadData) -> LifecycleStep {
 
 fn opencode_step(bead: &BeadData, model: &Model) -> LifecycleStep {
     let prompt = format!(
-        "Lifecycle smoke run for bead {}. Reply with a short JSON status and exit.",
+        "Implement bead {} in this workspace with real code changes. Do not call `oya` or `br`. Use moon/jj/gh as needed. Return short JSON summary with changed_files and ci_status.",
         bead.bead_id.as_str()
     );
     LifecycleStep {
@@ -354,6 +356,25 @@ fn opencode_step(bead: &BeadData, model: &Model) -> LifecycleStep {
         },
         compensation: None,
         transition: StepTransition::None,
+    }
+}
+
+fn validate_changes_step(bead: &BeadData) -> LifecycleStep {
+    LifecycleStep {
+        name: "validate_changes".to_owned(),
+        effect: Effect::Jj {
+            args: vec![
+                "diff".to_owned(),
+                "--name-only".to_owned(),
+                "--from".to_owned(),
+                "main@origin".to_owned(),
+                "--to".to_owned(),
+                "@".to_owned(),
+            ],
+            cwd: Some(bead.workspace_path.clone()),
+        },
+        compensation: None,
+        transition: StepTransition::ValidateWorkspaceChanges,
     }
 }
 
@@ -582,11 +603,41 @@ fn apply_transition(
     let event = match transition {
         StepTransition::None => return Ok(state.clone()),
         StepTransition::Static(event) => event.clone(),
+        StepTransition::ValidateWorkspaceChanges => {
+            validate_workspace_changes(&entry.stdout)?;
+            return Ok(state.clone());
+        }
         StepTransition::PullRequestOpened { bead } => {
             LifecycleEvent::PullRequestOpened(parse_pr_info(bead, &entry.stdout)?)
         }
     };
     apply_event(state, event)
+}
+
+fn validate_workspace_changes(stdout: &str) -> Result<(), LifecycleError> {
+    let files = stdout
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(strip_diff_prefix)
+        .filter(|line| !line.starts_with(".beads/"))
+        .collect::<Vec<_>>();
+    if files.is_empty() {
+        Err(LifecycleError::terminal(
+            FailureCategory::Command,
+            "no non-.beads changes detected after opencode; refusing to open empty PR".to_owned(),
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+fn strip_diff_prefix(line: &str) -> &str {
+    line.strip_prefix("M ")
+        .or_else(|| line.strip_prefix("A "))
+        .or_else(|| line.strip_prefix("R "))
+        .or_else(|| line.strip_prefix("D "))
+        .unwrap_or(line)
 }
 
 fn parse_pr_info(bead: &BeadData, stdout: &str) -> Result<PrInfo, LifecycleError> {
