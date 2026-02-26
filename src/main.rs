@@ -15,11 +15,14 @@ use restate_oya::{
 use serde::Deserialize;
 use serde_json::Value;
 use std::net::SocketAddr;
+use std::path::{Path, PathBuf};
 use tokio::process::Command as TokioCommand;
+use tokio::time::{sleep, Duration};
 
-const DEFAULT_BIND: &str = "127.0.0.1:9080";
-const DEFAULT_INGRESS: &str = "http://127.0.0.1:8080";
+const DEFAULT_BIND: &str = "127.0.0.1:9180";
+const DEFAULT_INGRESS: &str = "http://127.0.0.1:909";
 const DEFAULT_IMPL_MODEL: &str = "zai-coding-plan/glm-5";
+const DEFAULT_SERVICE_URL: &str = "http://127.0.0.1:9180/";
 
 #[derive(Debug, Parser)]
 #[command(name = "oya")]
@@ -31,12 +34,23 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    Init(InitArgs),
     Serve(ServeArgs),
     Invoke(InvokeArgs),
     Implement(ImplementArgs),
     Lifecycle(LifecycleArgs),
     Status(StatusArgs),
     Cancel(CancelArgs),
+}
+
+#[derive(Debug, clap::Args)]
+struct InitArgs {
+    #[arg(long, default_value = DEFAULT_INGRESS, value_parser = parse_ingress_url)]
+    ingress: String,
+    #[arg(long, default_value = DEFAULT_SERVICE_URL, value_parser = parse_service_url)]
+    service_url: String,
+    #[arg(long)]
+    down: bool,
 }
 
 #[derive(Debug, clap::Args)]
@@ -100,10 +114,17 @@ struct ReadyIssue {
     id: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct GhRepoView {
+    #[serde(rename = "nameWithOwner")]
+    name_with_owner: String,
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match cli.command {
+        Command::Init(args) => init_command(args).await,
         Command::Serve(args) => serve_command(args).await,
         Command::Invoke(args) => invoke_command(args).await,
         Command::Implement(args) => implement_command(args).await,
@@ -111,6 +132,181 @@ async fn main() -> anyhow::Result<()> {
         Command::Status(args) => status_command(args).await,
         Command::Cancel(args) => cancel_command(args).await,
     }
+}
+
+async fn init_command(args: InitArgs) -> anyhow::Result<()> {
+    let repo_root = find_repo_root()?;
+    disable_systemd_restate().await?;
+    if args.down {
+        stop_docker_restate(&repo_root).await?;
+        println!("[oya] Docker Restate stopped");
+        return Ok(());
+    }
+    start_fresh_docker_restate(&repo_root).await?;
+    restart_oya_service().await?;
+    wait_for_health(&args.ingress, 30).await?;
+    wait_for_service_discovery(30).await?;
+    register_services(&args.service_url).await?;
+    validate_registered_services().await?;
+    println!("[oya] Runtime ready (fresh Restate + handlers registered)");
+    println!("  Admin:   http://127.0.0.1:9070");
+    println!("  Ingress: {}", args.ingress);
+    println!("  Service: {}", args.service_url);
+    Ok(())
+}
+
+fn find_repo_root() -> anyhow::Result<PathBuf> {
+    let current = std::env::current_dir()?;
+    let root = current
+        .ancestors()
+        .find(|path| path.join("docker-compose.yml").is_file())
+        .map(Path::to_path_buf);
+    root.ok_or_else(|| anyhow::anyhow!("could not find docker-compose.yml from current directory"))
+}
+
+async fn disable_systemd_restate() -> anyhow::Result<()> {
+    let _ =
+        run_command_capture("systemctl", &["--user", "disable", "--now", "restate.service"], None)
+            .await;
+    let _ =
+        run_command_capture("systemctl", &["--user", "stop", "restate-manual.service"], None).await;
+    Ok(())
+}
+
+async fn stop_docker_restate(repo_root: &Path) -> anyhow::Result<()> {
+    run_command_capture(
+        "docker",
+        &["compose", "-f", "docker-compose.yml", "stop", "restate"],
+        Some(repo_root),
+    )
+    .await
+    .map(|_| ())
+}
+
+async fn start_fresh_docker_restate(repo_root: &Path) -> anyhow::Result<()> {
+    run_command_capture(
+        "docker",
+        &["compose", "-f", "docker-compose.yml", "down", "-v", "--remove-orphans"],
+        Some(repo_root),
+    )
+    .await?;
+    run_command_capture(
+        "docker",
+        &["compose", "-f", "docker-compose.yml", "pull", "restate"],
+        Some(repo_root),
+    )
+    .await?;
+    run_command_capture(
+        "docker",
+        &["compose", "-f", "docker-compose.yml", "up", "-d", "restate"],
+        Some(repo_root),
+    )
+    .await
+    .map(|_| ())
+}
+
+async fn restart_oya_service() -> anyhow::Result<()> {
+    run_command_capture("systemctl", &["--user", "restart", "oya.service"], None).await?;
+    let status =
+        run_command_capture("systemctl", &["--user", "is-active", "oya.service"], None).await?;
+    if status.trim() == "active" {
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!("oya.service is not active after restart"))
+    }
+}
+
+async fn wait_for_health(ingress: &str, retries: u8) -> anyhow::Result<()> {
+    let url = format!("{}/restate/health", ingress);
+    for _ in 0..retries {
+        if let Ok(response) = Client::new().get(&url).send().await {
+            if response.status().is_success() {
+                return Ok(());
+            }
+        }
+        sleep(Duration::from_secs(1)).await;
+    }
+    Err(anyhow::anyhow!("restate health check timed out: {url}"))
+}
+
+async fn wait_for_service_discovery(retries: u8) -> anyhow::Result<()> {
+    let url = "http://127.0.0.1:9180/discover";
+    for _ in 0..retries {
+        if let Ok(response) = Client::new().get(url).send().await {
+            if response.status().is_success() {
+                return Ok(());
+            }
+        }
+        sleep(Duration::from_secs(1)).await;
+    }
+    Err(anyhow::anyhow!("oya discovery endpoint timed out: {url}"))
+}
+
+async fn register_services(service_url: &str) -> anyhow::Result<()> {
+    run_command_capture("restate", &["deployments", "register", "--force", service_url], None)
+        .await
+        .map(|_| ())
+}
+
+async fn validate_registered_services() -> anyhow::Result<()> {
+    let output = run_command_capture("restate", &["services", "list"], None).await?;
+    if has_required_services(&output) {
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!(
+            "missing required services in Restate registry (expected Oya/OyaMemory/OyaService)"
+        ))
+    }
+}
+
+fn has_required_services(output: &str) -> bool {
+    let tokens = output.lines().flat_map(|line| line.split_whitespace()).collect::<Vec<_>>();
+    ["Oya", "OyaMemory", "OyaService"].iter().all(|name| tokens.iter().any(|token| token == name))
+}
+
+fn parse_ingress_url(value: &str) -> Result<String, String> {
+    parse_url_with_expected_port(value, 909, "ingress")
+}
+
+fn parse_service_url(value: &str) -> Result<String, String> {
+    parse_url_with_expected_port(value, 9180, "service")
+}
+
+fn parse_url_with_expected_port(
+    value: &str,
+    expected_port: u16,
+    label: &str,
+) -> Result<String, String> {
+    let parsed = url::Url::parse(value).map_err(|error| format!("invalid {label} URL: {error}"))?;
+    let port =
+        parsed.port_or_known_default().ok_or_else(|| format!("{label} URL must include port"))?;
+    if port == expected_port {
+        Ok(value.to_owned())
+    } else {
+        Err(format!("{label} URL must use port {expected_port} (avoid common 8080/80 ports)"))
+    }
+}
+
+async fn run_command_capture(
+    command: &str,
+    args: &[&str],
+    workdir: Option<&Path>,
+) -> anyhow::Result<String> {
+    let mut process = TokioCommand::new(command);
+    process.args(args);
+    if let Some(path) = workdir {
+        process.current_dir(path);
+    }
+    let output = process
+        .output()
+        .await
+        .map_err(|error| anyhow::anyhow!("failed to run {command}: {error}"))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(anyhow::anyhow!("{command} failed: {}", stderr.trim()));
+    }
+    String::from_utf8(output.stdout)
+        .map_err(|error| anyhow::anyhow!("{command} output was not UTF-8: {error}"))
 }
 
 async fn serve_command(args: ServeArgs) -> anyhow::Result<()> {
@@ -153,11 +349,38 @@ async fn implement_command(args: ImplementArgs) -> anyhow::Result<()> {
 
 async fn lifecycle_command(args: LifecycleArgs) -> anyhow::Result<()> {
     let workflow_key = args.bead.clone().unwrap_or_else(|| "auto".to_owned());
-    let request = LifecycleRequest { bead_id: args.bead, model: Some(args.model), repo: args.repo };
+    let repo = resolve_repo_slug(args.repo).await?;
+    let request = LifecycleRequest { bead_id: args.bead, model: Some(args.model), repo };
     let body =
         call_restate_service_json(&args.ingress, "Oya", &workflow_key, "run", request).await?;
     println!("{}", body.output);
     Ok(())
+}
+
+async fn resolve_repo_slug(repo: Option<String>) -> anyhow::Result<Option<String>> {
+    match repo {
+        Some(explicit) => Ok(Some(explicit)),
+        None => detect_repo_slug().await,
+    }
+}
+
+async fn detect_repo_slug() -> anyhow::Result<Option<String>> {
+    let output = TokioCommand::new("gh")
+        .args(["repo", "view", "--json", "nameWithOwner"])
+        .output()
+        .await
+        .map_err(|error| anyhow::anyhow!("failed to run gh repo view: {error}"))?;
+    if !output.status.success() {
+        return Ok(None);
+    }
+    let stdout = String::from_utf8(output.stdout)
+        .map_err(|error| anyhow::anyhow!("gh output was not UTF-8: {error}"))?;
+    extract_repo_slug_from_gh_output(&stdout).map(Some)
+}
+
+fn extract_repo_slug_from_gh_output(raw: &str) -> anyhow::Result<String> {
+    let payload: GhRepoView = serde_json::from_str(raw)?;
+    parse_repo_slug(&payload.name_with_owner).map_err(anyhow::Error::msg)
 }
 
 async fn status_command(args: StatusArgs) -> anyhow::Result<()> {
