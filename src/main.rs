@@ -44,6 +44,7 @@ enum Command {
     Lifecycle(LifecycleArgs),
     Status(StatusArgs),
     Cancel(CancelArgs),
+    Beads(BeadsArgs),
 }
 
 #[derive(Debug, clap::Args)]
@@ -122,6 +123,14 @@ struct CancelArgs {
     ingress: String,
 }
 
+#[derive(Debug, clap::Args)]
+struct BeadsArgs {
+    #[arg(long)]
+    ready: bool,
+    #[arg(long)]
+    json: bool,
+}
+
 #[derive(Debug, Deserialize)]
 struct ReadyIssue {
     id: String,
@@ -160,6 +169,7 @@ async fn main() -> anyhow::Result<()> {
         Command::Lifecycle(args) => lifecycle_command(args).await,
         Command::Status(args) => status_command(args).await,
         Command::Cancel(args) => cancel_command(args).await,
+        Command::Beads(args) => beads_command(args).await,
     }
 }
 
@@ -698,6 +708,37 @@ async fn cancel_command(args: CancelArgs) -> anyhow::Result<()> {
         call_restate_root_json(&args.ingress, "OyaService", "cancel", request).await?;
     let formatted = serde_json::to_string_pretty(&response)?;
     println!("{formatted}");
+    Ok(())
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BeadEntry {
+    id: String,
+    title: String,
+    status: String,
+    priority: u8,
+    issue_type: String,
+}
+
+async fn beads_command(args: BeadsArgs) -> anyhow::Result<()> {
+    let repo_root = find_repo_root()?;
+    let beads_path = repo_root.join(".beads").join("issues.jsonl");
+    let content = std::fs::read_to_string(&beads_path)
+        .map_err(|e| anyhow::anyhow!("failed to read {}: {}", beads_path.display(), e))?;
+    let mut beads: Vec<BeadEntry> =
+        content.lines().filter_map(|line| serde_json::from_str(line).ok()).collect();
+    if args.ready {
+        beads.retain(|b| b.status == "ready");
+    }
+    beads.sort_by(|a, b| b.priority.cmp(&a.priority));
+    if args.json {
+        let json = serde_json::to_string_pretty(&beads)?;
+        println!("{json}");
+    } else {
+        for bead in &beads {
+            println!("{} [{}/{}] {}", bead.id, bead.status, bead.priority, bead.title);
+        }
+    }
     Ok(())
 }
 
