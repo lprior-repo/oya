@@ -82,8 +82,7 @@ async fn run_lifecycle_success_path_executes_jj_only_git_bridge() {
     let bead = "edge-test-001";
     let workspace = "oya-edge-test-001";
     let workspace_path = "/home/lewis/src/oya-edge-test-001";
-    let prompt =
-        "Lifecycle smoke run for bead edge-test-001. Reply with a short JSON status and exit.";
+    let prompt = "Implement bead edge-test-001 in this workspace with real code changes. Do not call `oya` or `br`. Use moon/jj/gh as needed. Return short JSON summary with changed_files and ci_status.";
     let pr_body = "## Summary\n- Implements bead `edge-test-001` via lifecycle automation\n- Runs `moon run :ci` in workspace before opening PR\n- Publishes lifecycle status updates for polling";
     let executor = ScriptedExecutor::new(vec![
         call("br", &["update", bead, "--status", "in_progress"], None, ok("")),
@@ -104,6 +103,12 @@ async fn run_lifecycle_success_path_executes_jj_only_git_bridge() {
             &["describe", "-m", "chore: implement edge-test-001 via lifecycle"],
             Some(workspace_path),
             ok(""),
+        ),
+        call(
+            "jj",
+            &["diff", "--name-only", "--from", "main@origin", "--to", "@"],
+            Some(workspace_path),
+            ok("src/main.rs\nREADME.md\n"),
         ),
         call("jj", &["bookmark", "set", bead, "-r", "@"], Some(workspace_path), ok("")),
         call(
@@ -173,8 +178,7 @@ async fn run_lifecycle_pr_output_without_url_triggers_terminal_compensations() {
     let bead = "edge-test-002";
     let workspace = "oya-edge-test-002";
     let workspace_path = "/home/lewis/src/oya-edge-test-002";
-    let prompt =
-        "Lifecycle smoke run for bead edge-test-002. Reply with a short JSON status and exit.";
+    let prompt = "Implement bead edge-test-002 in this workspace with real code changes. Do not call `oya` or `br`. Use moon/jj/gh as needed. Return short JSON summary with changed_files and ci_status.";
     let executor = ScriptedExecutor::new(vec![
         call("br", &["update", bead, "--status", "in_progress"], None, ok("")),
         call("jj", &["workspace", "forget", workspace], None, ok("")),
@@ -194,6 +198,12 @@ async fn run_lifecycle_pr_output_without_url_triggers_terminal_compensations() {
             &["describe", "-m", "chore: implement edge-test-002 via lifecycle"],
             Some(workspace_path),
             ok(""),
+        ),
+        call(
+            "jj",
+            &["diff", "--name-only", "--from", "main@origin", "--to", "@"],
+            Some(workspace_path),
+            ok("src/main.rs\nREADME.md\n"),
         ),
         call("jj", &["bookmark", "set", bead, "-r", "@"], Some(workspace_path), ok("")),
         call(
@@ -256,8 +266,7 @@ async fn run_lifecycle_transient_failure_skips_terminal_compensations() {
     let bead = "edge-test-003";
     let workspace = "oya-edge-test-003";
     let workspace_path = "/home/lewis/src/oya-edge-test-003";
-    let prompt =
-        "Lifecycle smoke run for bead edge-test-003. Reply with a short JSON status and exit.";
+    let prompt = "Implement bead edge-test-003 in this workspace with real code changes. Do not call `oya` or `br`. Use moon/jj/gh as needed. Return short JSON summary with changed_files and ci_status.";
     let executor = ScriptedExecutor::new(vec![
         call("br", &["update", bead, "--status", "in_progress"], None, ok("")),
         call("jj", &["workspace", "forget", workspace], None, ok("")),
@@ -328,6 +337,70 @@ async fn run_lifecycle_rejects_invalid_repo_before_effects() {
     assert!(failure.error.message().contains("invalid repo slug"));
 }
 
+#[tokio::test]
+async fn run_lifecycle_fails_when_only_bead_files_changed() {
+    let bead = "edge-test-006";
+    let workspace = "oya-edge-test-006";
+    let workspace_path = "/home/lewis/src/oya-edge-test-006";
+    let prompt = "Implement bead edge-test-006 in this workspace with real code changes. Do not call `oya` or `br`. Use moon/jj/gh as needed. Return short JSON summary with changed_files and ci_status.";
+    let executor = ScriptedExecutor::new(vec![
+        call("br", &["update", bead, "--status", "in_progress"], None, ok("")),
+        call("jj", &["workspace", "forget", workspace], None, ok("")),
+        call("jj", &["workspace", "add", workspace_path, "--name", workspace], None, ok("")),
+        call(
+            "opencode",
+            &["run", "--format", "json", "--model", "zai-coding-plan/glm-5", prompt],
+            Some(workspace_path),
+            ok("{\"status\":\"ok\"}"),
+        ),
+        call("moon", &["run", ":ci"], Some(workspace_path), ok("")),
+        call("jj", &["git", "fetch", "--remote", "origin"], Some(workspace_path), ok("")),
+        call("jj", &["rebase", "-d", "main@origin"], Some(workspace_path), ok("")),
+        call("jj", &["file", "track", "."], Some(workspace_path), ok("")),
+        call(
+            "jj",
+            &["describe", "-m", "chore: implement edge-test-006 via lifecycle"],
+            Some(workspace_path),
+            ok(""),
+        ),
+        call(
+            "jj",
+            &["diff", "--name-only", "--from", "main@origin", "--to", "@"],
+            Some(workspace_path),
+            ok(".beads/beads.db\n"),
+        ),
+        call("jj", &["workspace", "forget", workspace], None, ok("")),
+        call(
+            "br",
+            &[
+                "update",
+                bead,
+                "--status",
+                "blocked",
+                "--notes",
+                "lifecycle failed after terminal error",
+            ],
+            None,
+            ok(""),
+        ),
+        call("jj", &["workspace", "forget", workspace], None, ok("")),
+    ]);
+
+    let result = run_lifecycle_with_progress(
+        &executor,
+        LifecycleRunRequest { bead_id: Some(bead.to_owned()), model: None, repo: None },
+        |_| {},
+    )
+    .await;
+
+    executor.assert_empty();
+    assert!(result.is_err());
+    let failure = result.expect_err("expected no-change failure");
+    assert!(failure.error.is_terminal());
+    assert_eq!(failure.error.category(), FailureCategory::Command);
+    assert!(failure.error.message().contains("no non-.beads changes"));
+}
+
 #[test]
 fn step_details_keeps_stderr_when_opencode_stdout_has_no_json() {
     let details = super::step_details(&EffectJournalEntry {
@@ -344,4 +417,144 @@ fn step_details_keeps_stderr_when_opencode_stdout_has_no_json() {
             "stderr": "warning on stderr"
         }))
     );
+}
+
+#[test]
+fn validate_dag_accepts_empty_step_list() {
+    let result = super::validate_dag(&[]);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn validate_dag_accepts_steps_with_no_dependencies() {
+    let steps = vec![
+        super::LifecycleStep {
+            name: "step_a".to_owned(),
+            effect: Effect::Br { args: vec![], cwd: None },
+            compensation: None,
+            transition: super::StepTransition::None,
+            dependencies: vec![],
+        },
+        super::LifecycleStep {
+            name: "step_b".to_owned(),
+            effect: Effect::Br { args: vec![], cwd: None },
+            compensation: None,
+            transition: super::StepTransition::None,
+            dependencies: vec![],
+        },
+    ];
+    let result = super::validate_dag(&steps);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn validate_dag_accepts_valid_dependency_chain() {
+    let steps = vec![
+        super::LifecycleStep {
+            name: "step_a".to_owned(),
+            effect: Effect::Br { args: vec![], cwd: None },
+            compensation: None,
+            transition: super::StepTransition::None,
+            dependencies: vec![],
+        },
+        super::LifecycleStep {
+            name: "step_b".to_owned(),
+            effect: Effect::Br { args: vec![], cwd: None },
+            compensation: None,
+            transition: super::StepTransition::None,
+            dependencies: vec!["step_a".to_owned()],
+        },
+    ];
+    let result = super::validate_dag(&steps);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn validate_dag_rejects_missing_dependency() {
+    let steps = vec![super::LifecycleStep {
+        name: "step_a".to_owned(),
+        effect: Effect::Br { args: vec![], cwd: None },
+        compensation: None,
+        transition: super::StepTransition::None,
+        dependencies: vec!["nonexistent_step".to_owned()],
+    }];
+    let result = super::validate_dag(&steps);
+    assert!(result.is_err());
+    let error = result.expect_err("expected missing dependency error");
+    assert_eq!(error.category(), FailureCategory::Validation);
+    assert!(error.message().contains("unknown dependency"));
+    assert!(error.message().contains("nonexistent_step"));
+}
+
+#[test]
+fn validate_dag_rejects_direct_cycle() {
+    let steps = vec![
+        super::LifecycleStep {
+            name: "step_a".to_owned(),
+            effect: Effect::Br { args: vec![], cwd: None },
+            compensation: None,
+            transition: super::StepTransition::None,
+            dependencies: vec!["step_b".to_owned()],
+        },
+        super::LifecycleStep {
+            name: "step_b".to_owned(),
+            effect: Effect::Br { args: vec![], cwd: None },
+            compensation: None,
+            transition: super::StepTransition::None,
+            dependencies: vec!["step_a".to_owned()],
+        },
+    ];
+    let result = super::validate_dag(&steps);
+    assert!(result.is_err());
+    let error = result.expect_err("expected cycle error");
+    assert_eq!(error.category(), FailureCategory::Validation);
+    assert!(error.message().contains("cycle"));
+}
+
+#[test]
+fn validate_dag_rejects_indirect_cycle() {
+    let steps = vec![
+        super::LifecycleStep {
+            name: "step_a".to_owned(),
+            effect: Effect::Br { args: vec![], cwd: None },
+            compensation: None,
+            transition: super::StepTransition::None,
+            dependencies: vec!["step_c".to_owned()],
+        },
+        super::LifecycleStep {
+            name: "step_b".to_owned(),
+            effect: Effect::Br { args: vec![], cwd: None },
+            compensation: None,
+            transition: super::StepTransition::None,
+            dependencies: vec!["step_a".to_owned()],
+        },
+        super::LifecycleStep {
+            name: "step_c".to_owned(),
+            effect: Effect::Br { args: vec![], cwd: None },
+            compensation: None,
+            transition: super::StepTransition::None,
+            dependencies: vec!["step_b".to_owned()],
+        },
+    ];
+    let result = super::validate_dag(&steps);
+    assert!(result.is_err());
+    let error = result.expect_err("expected indirect cycle error");
+    assert_eq!(error.category(), FailureCategory::Validation);
+    assert!(error.message().contains("cycle"));
+}
+
+#[test]
+fn validate_dag_rejects_self_dependency() {
+    let steps = vec![super::LifecycleStep {
+        name: "step_a".to_owned(),
+        effect: Effect::Br { args: vec![], cwd: None },
+        compensation: None,
+        transition: super::StepTransition::None,
+        dependencies: vec!["step_a".to_owned()],
+    }];
+    let result = super::validate_dag(&steps);
+    assert!(result.is_err());
+    let error = result.expect_err("expected self-dependency error");
+    assert_eq!(error.category(), FailureCategory::Validation);
+    assert!(error.message().contains("cycle"));
 }

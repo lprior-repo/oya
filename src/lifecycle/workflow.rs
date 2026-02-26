@@ -66,17 +66,19 @@ pub enum LifecycleProgressUpdate {
 }
 
 #[derive(Debug, Clone)]
-struct LifecycleStep {
-    name: String,
-    effect: Effect,
-    compensation: Option<Compensation>,
-    transition: StepTransition,
+pub struct LifecycleStep {
+    pub name: String,
+    pub effect: Effect,
+    pub compensation: Option<Compensation>,
+    pub transition: StepTransition,
+    pub dependencies: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
-enum StepTransition {
+pub enum StepTransition {
     None,
     Static(LifecycleEvent),
+    ValidateWorkspaceChanges,
     PullRequestOpened { bead: BeadData },
 }
 
@@ -98,6 +100,72 @@ struct StepFailure {
 #[derive(Debug, Deserialize)]
 struct ReadyIssue {
     id: String,
+}
+
+/// Validates the lifecycle step graph for cycles and missing dependencies.
+///
+/// # Errors
+/// Returns `LifecycleError` if the graph contains cycles or references unknown steps.
+pub fn validate_dag(steps: &[LifecycleStep]) -> Result<(), LifecycleError> {
+    let step_names: std::collections::HashSet<&str> =
+        steps.iter().map(|step| step.name.as_str()).collect();
+    for step in steps {
+        for dep in &step.dependencies {
+            if !step_names.contains(dep.as_str()) {
+                return Err(LifecycleError::terminal(
+                    FailureCategory::Validation,
+                    format!("step `{}` has unknown dependency `{}`", step.name, dep),
+                ));
+            }
+        }
+    }
+    detect_cycles(steps)
+}
+
+fn detect_cycles(steps: &[LifecycleStep]) -> Result<(), LifecycleError> {
+    let step_map: std::collections::HashMap<&str, &LifecycleStep> =
+        steps.iter().map(|step| (step.name.as_str(), step)).collect();
+    let mut visited = std::collections::HashSet::<&str>::new();
+    let mut recursion_stack = std::collections::HashSet::<&str>::new();
+    for step in steps {
+        if !visited.contains(step.name.as_str())
+            && has_cycle(step.name.as_str(), &step_map, &mut visited, &mut recursion_stack)?
+        {
+            return Err(LifecycleError::terminal(
+                FailureCategory::Validation,
+                format!("cycle detected in lifecycle step graph involving `{}`", step.name),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn has_cycle<'a>(
+    step_name: &'a str,
+    step_map: &std::collections::HashMap<&'a str, &'a LifecycleStep>,
+    visited: &mut std::collections::HashSet<&'a str>,
+    recursion_stack: &mut std::collections::HashSet<&'a str>,
+) -> Result<bool, LifecycleError> {
+    visited.insert(step_name);
+    recursion_stack.insert(step_name);
+    let step = step_map.get(step_name).ok_or_else(|| {
+        LifecycleError::terminal(
+            FailureCategory::Validation,
+            format!("internal error: step `{step_name}` not found in map"),
+        )
+    })?;
+    for dep in &step.dependencies {
+        let dep_name = dep.as_str();
+        if !visited.contains(dep_name) {
+            if has_cycle(dep_name, step_map, visited, recursion_stack)? {
+                return Ok(true);
+            }
+        } else if recursion_stack.contains(dep_name) {
+            return Ok(true);
+        }
+    }
+    recursion_stack.remove(step_name);
+    Ok(false)
 }
 
 /// Runs lifecycle steps and applies reverse-order compensations on terminal failures.
@@ -123,13 +191,36 @@ pub async fn run_lifecycle_with_progress<F>(
 where
     F: FnMut(LifecycleProgressUpdate),
 {
-    let bead =
-        resolve_bead_data(executor, &request).await.map_err(|error| LifecycleRunFailure {
-            error,
-            state: None,
-            journal: Vec::new(),
-            compensation_journal: Vec::new(),
-        })?;
+    let (bead, steps) = resolve_and_validate(executor, &request).await?;
+    let step_names = steps.iter().map(|step| step.name.clone()).collect::<Vec<_>>();
+    on_progress(LifecycleProgressUpdate::Initialized {
+        bead_id: bead.bead_id.as_str().to_owned(),
+        steps: step_names,
+    });
+    let initial = ExecutionAcc {
+        state: planned_state(bead.clone()),
+        journal: Vec::new(),
+        completed_compensations: Vec::new(),
+    };
+    let execution = execute_steps(executor, initial, steps, &mut on_progress).await;
+    match execution {
+        Ok(acc) => finalize_success(executor, acc, bead.workspace, &mut on_progress).await,
+        Err(failure) => {
+            finalize_failure(executor, *failure, bead.workspace, &mut on_progress).await
+        }
+    }
+}
+
+async fn resolve_and_validate(
+    executor: &dyn CommandExecutor,
+    request: &LifecycleRunRequest,
+) -> Result<(BeadData, Vec<LifecycleStep>), LifecycleRunFailure> {
+    let bead = resolve_bead_data(executor, request).await.map_err(|error| LifecycleRunFailure {
+        error,
+        state: None,
+        journal: Vec::new(),
+        compensation_journal: Vec::new(),
+    })?;
     let model = resolve_model(request.model.as_deref()).map_err(|error| LifecycleRunFailure {
         error,
         state: None,
@@ -144,25 +235,13 @@ where
             compensation_journal: Vec::new(),
         })?;
     let steps = build_steps(&bead, &model, repo.as_deref());
-    let step_names = steps.iter().map(|step| step.name.clone()).collect::<Vec<_>>();
-    on_progress(LifecycleProgressUpdate::Initialized {
-        bead_id: bead.bead_id.as_str().to_owned(),
-        steps: step_names,
-    });
-
-    let initial = ExecutionAcc {
-        state: planned_state(bead.clone()),
+    validate_dag(&steps).map_err(|error| LifecycleRunFailure {
+        error,
+        state: None,
         journal: Vec::new(),
-        completed_compensations: Vec::new(),
-    };
-
-    let execution = execute_steps(executor, initial, steps, &mut on_progress).await;
-    match execution {
-        Ok(acc) => finalize_success(executor, acc, bead.workspace, &mut on_progress).await,
-        Err(failure) => {
-            finalize_failure(executor, *failure, bead.workspace, &mut on_progress).await
-        }
-    }
+        compensation_journal: Vec::new(),
+    })?;
+    Ok((bead, steps))
 }
 
 async fn resolve_bead_data(
@@ -254,6 +333,7 @@ fn build_steps(bead: &BeadData, model: &Model, repo: Option<&str>) -> Vec<Lifecy
         jj_rebase_main_step(bead),
         jj_track_step(bead),
         jj_describe_step(bead),
+        validate_changes_step(bead),
         bookmark_create_step(bead),
     ];
     steps.push(bookmark_push_step(bead));
@@ -270,6 +350,7 @@ fn workspace_prepare_step(bead: &BeadData) -> LifecycleStep {
         },
         compensation: None,
         transition: StepTransition::None,
+        dependencies: vec![],
     }
 }
 
@@ -290,6 +371,7 @@ fn br_in_progress_step(bead: &BeadData) -> LifecycleStep {
             reason: "lifecycle failed after terminal error".to_owned(),
         }),
         transition: StepTransition::None,
+        dependencies: vec![],
     }
 }
 
@@ -308,6 +390,7 @@ fn workspace_create_step(bead: &BeadData) -> LifecycleStep {
         },
         compensation: Some(Compensation::ForgetWorkspace { workspace: bead.workspace.clone() }),
         transition: StepTransition::Static(LifecycleEvent::WorkspacePrepared),
+        dependencies: vec![],
     }
 }
 
@@ -325,6 +408,7 @@ fn jj_sync_main_step(bead: &BeadData) -> LifecycleStep {
         },
         compensation: None,
         transition: StepTransition::None,
+        dependencies: vec![],
     }
 }
 
@@ -337,12 +421,13 @@ fn jj_rebase_main_step(bead: &BeadData) -> LifecycleStep {
         },
         compensation: None,
         transition: StepTransition::None,
+        dependencies: vec![],
     }
 }
 
 fn opencode_step(bead: &BeadData, model: &Model) -> LifecycleStep {
     let prompt = format!(
-        "Lifecycle smoke run for bead {}. Reply with a short JSON status and exit.",
+        "Implement bead {} in this workspace with real code changes. Do not call `oya` or `br`. Use moon/jj/gh as needed. Return short JSON summary with changed_files and ci_status.",
         bead.bead_id.as_str()
     );
     LifecycleStep {
@@ -354,6 +439,27 @@ fn opencode_step(bead: &BeadData, model: &Model) -> LifecycleStep {
         },
         compensation: None,
         transition: StepTransition::None,
+        dependencies: vec![],
+    }
+}
+
+fn validate_changes_step(bead: &BeadData) -> LifecycleStep {
+    LifecycleStep {
+        name: "validate_changes".to_owned(),
+        effect: Effect::Jj {
+            args: vec![
+                "diff".to_owned(),
+                "--name-only".to_owned(),
+                "--from".to_owned(),
+                "main@origin".to_owned(),
+                "--to".to_owned(),
+                "@".to_owned(),
+            ],
+            cwd: Some(bead.workspace_path.clone()),
+        },
+        compensation: None,
+        transition: StepTransition::ValidateWorkspaceChanges,
+        dependencies: vec![],
     }
 }
 
@@ -363,6 +469,7 @@ fn moon_ci_step(bead: &BeadData) -> LifecycleStep {
         effect: Effect::MoonCi { cwd: Some(bead.workspace_path.clone()) },
         compensation: None,
         transition: StepTransition::None,
+        dependencies: vec![],
     }
 }
 
@@ -375,6 +482,7 @@ fn jj_track_step(bead: &BeadData) -> LifecycleStep {
         },
         compensation: None,
         transition: StepTransition::None,
+        dependencies: vec![],
     }
 }
 
@@ -388,6 +496,7 @@ fn jj_describe_step(bead: &BeadData) -> LifecycleStep {
         },
         compensation: None,
         transition: StepTransition::None,
+        dependencies: vec![],
     }
 }
 
@@ -406,6 +515,7 @@ fn bookmark_create_step(bead: &BeadData) -> LifecycleStep {
         },
         compensation: None,
         transition: StepTransition::None,
+        dependencies: vec![],
     }
 }
 
@@ -425,6 +535,7 @@ fn bookmark_push_step(bead: &BeadData) -> LifecycleStep {
         },
         compensation: None,
         transition: StepTransition::None,
+        dependencies: vec![],
     }
 }
 
@@ -457,6 +568,7 @@ fn pr_create_step(bead: &BeadData, repo: Option<&str>) -> LifecycleStep {
         effect: Effect::Gh { args, cwd: Some(bead.workspace_path.clone()) },
         compensation: None,
         transition: StepTransition::PullRequestOpened { bead: bead.clone() },
+        dependencies: vec![],
     }
 }
 
@@ -582,11 +694,41 @@ fn apply_transition(
     let event = match transition {
         StepTransition::None => return Ok(state.clone()),
         StepTransition::Static(event) => event.clone(),
+        StepTransition::ValidateWorkspaceChanges => {
+            validate_workspace_changes(&entry.stdout)?;
+            return Ok(state.clone());
+        }
         StepTransition::PullRequestOpened { bead } => {
             LifecycleEvent::PullRequestOpened(parse_pr_info(bead, &entry.stdout)?)
         }
     };
     apply_event(state, event)
+}
+
+fn validate_workspace_changes(stdout: &str) -> Result<(), LifecycleError> {
+    let files = stdout
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(strip_diff_prefix)
+        .filter(|line| !line.starts_with(".beads/"))
+        .collect::<Vec<_>>();
+    if files.is_empty() {
+        Err(LifecycleError::terminal(
+            FailureCategory::Command,
+            "no non-.beads changes detected after opencode; refusing to open empty PR".to_owned(),
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+fn strip_diff_prefix(line: &str) -> &str {
+    line.strip_prefix("M ")
+        .or_else(|| line.strip_prefix("A "))
+        .or_else(|| line.strip_prefix("R "))
+        .or_else(|| line.strip_prefix("D "))
+        .unwrap_or(line)
 }
 
 fn parse_pr_info(bead: &BeadData, stdout: &str) -> Result<PrInfo, LifecycleError> {
