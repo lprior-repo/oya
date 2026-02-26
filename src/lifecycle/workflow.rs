@@ -10,7 +10,7 @@ use crate::lifecycle::effects::{
 use crate::lifecycle::transitions::{apply_event, planned_state, LifecycleEvent};
 use crate::lifecycle::types::{
     BeadData, BeadId, FailureCategory, LifecycleError, LifecycleState, Model, PrInfo, PrNumber,
-    WorkspaceName,
+    RepoSlug, WorkspaceName,
 };
 use futures_util::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -224,24 +224,13 @@ fn resolve_model(model: Option<&str>) -> Result<Model, LifecycleError> {
 
 fn validate_repo_slug(repo: Option<&str>) -> Result<Option<String>, LifecycleError> {
     repo.map_or(Ok(None), |value| {
-        let trimmed = value.trim();
-        let maybe_parts = trimmed.split_once('/').filter(|(_, right)| !right.contains('/'));
-        let valid = maybe_parts.is_some_and(|(owner, name)| {
-            !owner.is_empty() && !name.is_empty() && valid_repo_part(owner) && valid_repo_part(name)
-        });
-        if valid {
-            Ok(Some(trimmed.to_owned()))
-        } else {
-            Err(LifecycleError::terminal(
+        RepoSlug::parse(value).map(|slug| Some(slug.as_str().to_owned())).map_err(|error| {
+            LifecycleError::terminal(
                 FailureCategory::Validation,
-                format!("invalid repo slug `{value}`; expected OWNER/REPO with [A-Za-z0-9._-]"),
-            ))
-        }
+                format!("invalid repo slug `{value}`: {error}"),
+            )
+        })
     })
-}
-
-fn valid_repo_part(value: &str) -> bool {
-    value.chars().all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-'))
 }
 
 fn build_steps(bead: &BeadData, model: &Model, repo: Option<&str>) -> Vec<LifecycleStep> {
