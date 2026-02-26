@@ -73,7 +73,7 @@ impl Oya for OyaBridge {
         let mut live_steps: Vec<LifecycleStepSnapshot> = Vec::new();
         let result = run_lifecycle_with_progress(
             &TokioCommandExecutor,
-            LifecycleRunRequest { bead_id: body.bead_id, model: body.model },
+            LifecycleRunRequest { bead_id: body.bead_id, model: body.model, repo: body.repo },
             |update| {
                 let update_clone = update.clone();
                 apply_progress_update(&ctx, &mut live_steps, update);
@@ -550,9 +550,14 @@ fn initialize_lifecycle_status(
 fn default_step_snapshots() -> Vec<LifecycleStepSnapshot> {
     [
         "mark_in_progress",
+        "workspace_prepare",
         "workspace_add",
         "opencode",
         "moon_ci",
+        "jj_sync_main",
+        "jj_rebase_main",
+        "jj_track",
+        "jj_describe",
         "bookmark_create",
         "bookmark_push",
         "pr_create",

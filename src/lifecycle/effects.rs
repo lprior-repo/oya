@@ -25,7 +25,6 @@ pub enum Effect {
     Jj { args: Vec<String>, cwd: Option<String> },
     Br { args: Vec<String>, cwd: Option<String> },
     Gh { args: Vec<String>, cwd: Option<String> },
-    Git { args: Vec<String>, cwd: Option<String> },
     MoonCi { cwd: Option<String> },
     Opencode { prompt: String, model: String, cwd: Option<String> },
 }
@@ -107,12 +106,12 @@ impl CommandExecutor for TokioCommandExecutor {
 #[must_use]
 pub fn effect_timeout_secs(effect: &Effect) -> u64 {
     match effect {
-        Effect::WorkspacePrepare { .. } => DEFAULT_CLI_TIMEOUT_SECS,
         Effect::MoonCi { .. } => MOON_CI_TIMEOUT_SECS,
         Effect::Opencode { .. } => OPENCODE_TIMEOUT_SECS,
-        Effect::Jj { .. } | Effect::Br { .. } | Effect::Gh { .. } | Effect::Git { .. } => {
-            DEFAULT_CLI_TIMEOUT_SECS
-        }
+        Effect::WorkspacePrepare { .. }
+        | Effect::Jj { .. }
+        | Effect::Br { .. }
+        | Effect::Gh { .. } => DEFAULT_CLI_TIMEOUT_SECS,
     }
 }
 
@@ -204,7 +203,7 @@ pub fn classify_non_zero(
             LifecycleError::terminal(FailureCategory::Workspace, message)
         }
         Effect::Jj { .. } => LifecycleError::terminal(FailureCategory::Workspace, message),
-        Effect::Br { .. } | Effect::MoonCi { .. } | Effect::Git { .. } => {
+        Effect::Br { .. } | Effect::MoonCi { .. } => {
             LifecycleError::terminal(FailureCategory::Command, message)
         }
         Effect::Gh { .. } => LifecycleError::terminal(FailureCategory::PullRequest, message),
@@ -222,8 +221,9 @@ fn effect_command(effect: &Effect) -> (&'static str, Vec<String>, Option<String>
         Effect::Jj { args, cwd } => ("jj", args.clone(), cwd.clone()),
         Effect::Br { args, cwd } => ("br", args.clone(), cwd.clone()),
         Effect::Gh { args, cwd } => ("gh", args.clone(), cwd.clone()),
-        Effect::Git { args, cwd } => ("git", args.clone(), cwd.clone()),
-        Effect::MoonCi { cwd } => ("moon", vec!["run".to_owned(), ":ci".to_owned()], cwd.clone()),
+        Effect::MoonCi { cwd } => {
+            ("moon", vec!["run".to_owned(), ":quick".to_owned()], cwd.clone())
+        }
         Effect::Opencode { prompt, model, cwd } => (
             "opencode",
             vec![

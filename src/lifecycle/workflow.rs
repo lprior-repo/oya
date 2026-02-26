@@ -19,6 +19,7 @@ use serde::{Deserialize, Serialize};
 pub struct LifecycleRunRequest {
     pub bead_id: Option<String>,
     pub model: Option<String>,
+    pub repo: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -116,7 +117,20 @@ where
             journal: Vec::new(),
             compensation_journal: Vec::new(),
         })?;
-    let steps = build_steps(&bead, request.model);
+    let model = resolve_model(request.model.as_deref()).map_err(|error| LifecycleRunFailure {
+        error,
+        state: None,
+        journal: Vec::new(),
+        compensation_journal: Vec::new(),
+    })?;
+    let repo =
+        validate_repo_slug(request.repo.as_deref()).map_err(|error| LifecycleRunFailure {
+            error,
+            state: None,
+            journal: Vec::new(),
+            compensation_journal: Vec::new(),
+        })?;
+    let steps = build_steps(&bead, &model, repo.as_deref());
     let step_names = steps.iter().map(|step| step.name.clone()).collect::<Vec<_>>();
     on_progress(LifecycleProgressUpdate::Initialized {
         bead_id: bead.bead_id.as_str().to_owned(),
@@ -182,21 +196,56 @@ fn extract_json_array(raw: &str) -> Result<&str, LifecycleError> {
     )
 }
 
-fn build_steps(bead: &BeadData, model: Option<String>) -> Vec<LifecycleStep> {
-    let chosen_model =
-        model.and_then(|value| Model::parse(&value).ok()).unwrap_or_else(Model::default_model);
-    vec![
+fn resolve_model(model: Option<&str>) -> Result<Model, LifecycleError> {
+    match model {
+        Some(value) => Model::parse(value).map_err(|error| {
+            LifecycleError::terminal(
+                FailureCategory::Validation,
+                format!("invalid model `{value}`: {error}"),
+            )
+        }),
+        None => Ok(Model::default_model()),
+    }
+}
+
+fn validate_repo_slug(repo: Option<&str>) -> Result<Option<String>, LifecycleError> {
+    repo.map_or(Ok(None), |value| {
+        let trimmed = value.trim();
+        let maybe_parts = trimmed.split_once('/').filter(|(_, right)| !right.contains('/'));
+        let valid = maybe_parts.is_some_and(|(owner, name)| {
+            !owner.is_empty() && !name.is_empty() && valid_repo_part(owner) && valid_repo_part(name)
+        });
+        if valid {
+            Ok(Some(trimmed.to_owned()))
+        } else {
+            Err(LifecycleError::terminal(
+                FailureCategory::Validation,
+                format!("invalid repo slug `{value}`; expected OWNER/REPO with [A-Za-z0-9._-]"),
+            ))
+        }
+    })
+}
+
+fn valid_repo_part(value: &str) -> bool {
+    value.chars().all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-'))
+}
+
+fn build_steps(bead: &BeadData, model: &Model, repo: Option<&str>) -> Vec<LifecycleStep> {
+    let mut steps = vec![
         br_in_progress_step(bead),
         workspace_prepare_step(bead),
         workspace_create_step(bead),
-        opencode_step(bead, &chosen_model),
+        opencode_step(bead, model),
         moon_ci_step(bead),
-        git_add_step(bead),
-        git_commit_step(bead),
+        jj_sync_main_step(bead),
+        jj_rebase_main_step(bead),
+        jj_track_step(bead),
+        jj_describe_step(bead),
         bookmark_create_step(bead),
-        bookmark_push_step(bead),
-        pr_create_step(bead),
-    ]
+    ];
+    steps.push(bookmark_push_step(bead));
+    steps.push(pr_create_step(bead, repo));
+    steps
 }
 
 fn workspace_prepare_step(bead: &BeadData) -> LifecycleStep {
@@ -235,7 +284,13 @@ fn workspace_create_step(bead: &BeadData) -> LifecycleStep {
     LifecycleStep {
         name: "workspace_add".to_owned(),
         effect: Effect::Jj {
-            args: vec!["workspace".to_owned(), "add".to_owned(), bead.workspace_path.clone()],
+            args: vec![
+                "workspace".to_owned(),
+                "add".to_owned(),
+                bead.workspace_path.clone(),
+                "--name".to_owned(),
+                bead.workspace.as_str().to_owned(),
+            ],
             cwd: None,
         },
         compensation: Some(Compensation::ForgetWorkspace { workspace: bead.workspace.clone() }),
@@ -243,9 +298,38 @@ fn workspace_create_step(bead: &BeadData) -> LifecycleStep {
     }
 }
 
+fn jj_sync_main_step(bead: &BeadData) -> LifecycleStep {
+    LifecycleStep {
+        name: "jj_sync_main".to_owned(),
+        effect: Effect::Jj {
+            args: vec![
+                "git".to_owned(),
+                "fetch".to_owned(),
+                "--remote".to_owned(),
+                "origin".to_owned(),
+            ],
+            cwd: Some(bead.workspace_path.clone()),
+        },
+        compensation: None,
+        transition: StepTransition::None,
+    }
+}
+
+fn jj_rebase_main_step(bead: &BeadData) -> LifecycleStep {
+    LifecycleStep {
+        name: "jj_rebase_main".to_owned(),
+        effect: Effect::Jj {
+            args: vec!["rebase".to_owned(), "-d".to_owned(), "main@origin".to_owned()],
+            cwd: Some(bead.workspace_path.clone()),
+        },
+        compensation: None,
+        transition: StepTransition::None,
+    }
+}
+
 fn opencode_step(bead: &BeadData, model: &Model) -> LifecycleStep {
     let prompt = format!(
-        "Implement bead {} with functional Rust lifecycle workflow. Run moon run :ci before finishing.",
+        "Lifecycle smoke run for bead {}. Reply with a short JSON status and exit.",
         bead.bead_id.as_str()
     );
     LifecycleStep {
@@ -269,11 +353,11 @@ fn moon_ci_step(bead: &BeadData) -> LifecycleStep {
     }
 }
 
-fn git_add_step(bead: &BeadData) -> LifecycleStep {
+fn jj_track_step(bead: &BeadData) -> LifecycleStep {
     LifecycleStep {
-        name: "git_add".to_owned(),
-        effect: Effect::Git {
-            args: vec!["add".to_owned(), ".".to_owned()],
+        name: "jj_track".to_owned(),
+        effect: Effect::Jj {
+            args: vec!["file".to_owned(), "track".to_owned(), ".".to_owned()],
             cwd: Some(bead.workspace_path.clone()),
         },
         compensation: None,
@@ -281,12 +365,12 @@ fn git_add_step(bead: &BeadData) -> LifecycleStep {
     }
 }
 
-fn git_commit_step(bead: &BeadData) -> LifecycleStep {
+fn jj_describe_step(bead: &BeadData) -> LifecycleStep {
     let message = format!("chore: implement {} via lifecycle", bead.bead_id.as_str());
     LifecycleStep {
-        name: "git_commit".to_owned(),
-        effect: Effect::Git {
-            args: vec!["commit".to_owned(), "-m".to_owned(), message],
+        name: "jj_describe".to_owned(),
+        effect: Effect::Jj {
+            args: vec!["describe".to_owned(), "-m".to_owned(), message],
             cwd: Some(bead.workspace_path.clone()),
         },
         compensation: None,
@@ -300,8 +384,10 @@ fn bookmark_create_step(bead: &BeadData) -> LifecycleStep {
         effect: Effect::Jj {
             args: vec![
                 "bookmark".to_owned(),
-                "create".to_owned(),
+                "set".to_owned(),
                 bead.bookmark.as_str().to_owned(),
+                "-r".to_owned(),
+                "@".to_owned(),
             ],
             cwd: Some(bead.workspace_path.clone()),
         },
@@ -313,11 +399,13 @@ fn bookmark_create_step(bead: &BeadData) -> LifecycleStep {
 fn bookmark_push_step(bead: &BeadData) -> LifecycleStep {
     LifecycleStep {
         name: "bookmark_push".to_owned(),
-        effect: Effect::Git {
+        effect: Effect::Jj {
             args: vec![
+                "git".to_owned(),
                 "push".to_owned(),
-                "--set-upstream".to_owned(),
+                "--remote".to_owned(),
                 "origin".to_owned(),
+                "--bookmark".to_owned(),
                 bead.bookmark.as_str().to_owned(),
             ],
             cwd: Some(bead.workspace_path.clone()),
@@ -327,25 +415,33 @@ fn bookmark_push_step(bead: &BeadData) -> LifecycleStep {
     }
 }
 
-fn pr_create_step(bead: &BeadData) -> LifecycleStep {
+fn pr_create_step(bead: &BeadData, repo: Option<&str>) -> LifecycleStep {
     let title = format!("Lifecycle {}", bead.bead_id.as_str());
     let body = format!(
         "## Summary\n- Implements bead `{}` via lifecycle automation\n- Runs `moon run :ci` in workspace before opening PR\n- Publishes lifecycle status updates for polling",
         bead.bead_id.as_str()
     );
+    let mut args = vec![
+        "pr".to_owned(),
+        "create".to_owned(),
+        "--head".to_owned(),
+        bead.bookmark.as_str().to_owned(),
+    ];
+    if let Some(value) = repo {
+        args.push("--repo".to_owned());
+        args.push(value.to_owned());
+    }
+    args.extend([
+        "--base".to_owned(),
+        "main".to_owned(),
+        "--title".to_owned(),
+        title,
+        "--body".to_owned(),
+        body,
+    ]);
     LifecycleStep {
         name: "pr_create".to_owned(),
-        effect: Effect::Gh {
-            args: vec![
-                "pr".to_owned(),
-                "create".to_owned(),
-                "--title".to_owned(),
-                title,
-                "--body".to_owned(),
-                body,
-            ],
-            cwd: Some(bead.workspace_path.clone()),
-        },
+        effect: Effect::Gh { args, cwd: Some(bead.workspace_path.clone()) },
         compensation: None,
         transition: StepTransition::PullRequestOpened { bead: bead.clone() },
     }
@@ -613,3 +709,7 @@ fn append_compensation(
 ) -> Vec<Compensation> {
     compensations.into_iter().chain(std::iter::once(compensation)).collect()
 }
+
+#[cfg(test)]
+#[path = "workflow_tests.rs"]
+mod workflow_tests;

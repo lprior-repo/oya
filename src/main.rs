@@ -75,6 +75,8 @@ struct LifecycleArgs {
     ingress: String,
     #[arg(long, default_value = DEFAULT_IMPL_MODEL)]
     model: String,
+    #[arg(long, value_parser = parse_repo_slug)]
+    repo: Option<String>,
 }
 
 #[derive(Debug, clap::Args)]
@@ -134,8 +136,8 @@ async fn implement_command(args: ImplementArgs) -> anyhow::Result<()> {
         Some(id) => id,
         None => pick_ready_bead().await?,
     };
-    run_simple_command("br", &["update", &bead_id, "--status", "in_progress"]).await?;
-    let bead_state_raw = run_capture_command("br", &["show", "--json", &bead_id]).await?;
+    run_simple_command(&["update", &bead_id, "--status", "in_progress"]).await?;
+    let bead_state_raw = run_capture_command(&["show", "--json", &bead_id]).await?;
     let bead_state = parse_json_payload(&bead_state_raw)?;
     let sync_request = BeadSyncRequest {
         bead_id: bead_id.clone(),
@@ -151,7 +153,7 @@ async fn implement_command(args: ImplementArgs) -> anyhow::Result<()> {
 
 async fn lifecycle_command(args: LifecycleArgs) -> anyhow::Result<()> {
     let workflow_key = args.bead.clone().unwrap_or_else(|| "auto".to_owned());
-    let request = LifecycleRequest { bead_id: args.bead, model: Some(args.model) };
+    let request = LifecycleRequest { bead_id: args.bead, model: Some(args.model), repo: args.repo };
     let body =
         call_restate_service_json(&args.ingress, "Oya", &workflow_key, "run", request).await?;
     println!("{}", body.output);
@@ -219,7 +221,7 @@ async fn call_restate_root_json<T: serde::Serialize, R: serde::de::DeserializeOw
 }
 
 async fn pick_ready_bead() -> anyhow::Result<String> {
-    let raw = run_capture_command("br", &["ready", "--json"]).await?;
+    let raw = run_capture_command(&["ready", "--json"]).await?;
     let json = extract_json_array(&raw)?;
     let issues: Vec<ReadyIssue> = serde_json::from_str(json)?;
     match issues.first() {
@@ -249,31 +251,31 @@ fn parse_json_payload(raw: &str) -> anyhow::Result<Value> {
     serde_json::from_str(&raw[start..]).map_err(Into::into)
 }
 
-async fn run_capture_command(binary: &str, args: &[&str]) -> anyhow::Result<String> {
-    let output = TokioCommand::new(binary)
+async fn run_capture_command(args: &[&str]) -> anyhow::Result<String> {
+    let output = TokioCommand::new("br")
         .args(args)
         .output()
         .await
-        .map_err(|error| anyhow::anyhow!("failed to run {binary}: {error}"))?;
+        .map_err(|error| anyhow::anyhow!("failed to run br: {error}"))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(anyhow::anyhow!("{binary} failed: {}", stderr.trim()));
+        return Err(anyhow::anyhow!("br failed: {}", stderr.trim()));
     }
     String::from_utf8(output.stdout)
-        .map_err(|error| anyhow::anyhow!("{binary} output was not UTF-8: {error}"))
+        .map_err(|error| anyhow::anyhow!("br output was not UTF-8: {error}"))
 }
 
-async fn run_simple_command(binary: &str, args: &[&str]) -> anyhow::Result<()> {
-    let output = TokioCommand::new(binary)
+async fn run_simple_command(args: &[&str]) -> anyhow::Result<()> {
+    let output = TokioCommand::new("br")
         .args(args)
         .output()
         .await
-        .map_err(|error| anyhow::anyhow!("failed to run {binary}: {error}"))?;
+        .map_err(|error| anyhow::anyhow!("failed to run br: {error}"))?;
     if output.status.success() {
         Ok(())
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(anyhow::anyhow!("{binary} failed: {}", stderr.trim()))
+        Err(anyhow::anyhow!("br failed: {}", stderr.trim()))
     }
 }
 
@@ -282,3 +284,24 @@ fn parse_socket_addr(value: String) -> anyhow::Result<SocketAddr> {
         .parse::<SocketAddr>()
         .map_err(|error| anyhow::anyhow!("invalid --bind '{}': {error}", value))
 }
+
+fn parse_repo_slug(value: &str) -> Result<String, String> {
+    let trimmed = value.trim();
+    let (owner, repo) =
+        trimmed.split_once('/').ok_or_else(|| "expected OWNER/REPO format".to_owned())?;
+    if owner.is_empty() || repo.is_empty() || repo.contains('/') {
+        return Err("expected OWNER/REPO format".to_owned());
+    }
+    if is_valid_repo_part(owner) && is_valid_repo_part(repo) {
+        Ok(trimmed.to_owned())
+    } else {
+        Err("repo may contain only [A-Za-z0-9._-]".to_owned())
+    }
+}
+
+fn is_valid_repo_part(value: &str) -> bool {
+    value.chars().all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-'))
+}
+
+#[cfg(test)]
+mod main_tests;
