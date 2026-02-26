@@ -126,6 +126,9 @@ pub async fn run_effect(
     if let Effect::WorkspacePrepare { workspace, path } = effect.clone() {
         return prepare_workspace(executor, workspace, path).await;
     }
+    if let Effect::MoonCi { cwd } = effect.clone() {
+        return run_moon_ci_effect(executor, effect, cwd).await;
+    }
     let (program, args, cwd) = effect_command(&effect);
     let timeout_secs = effect_timeout_secs(&effect);
     let timeout = Duration::from_secs(timeout_secs);
@@ -145,6 +148,62 @@ pub async fn run_effect(
         }
         Err(failure) => Err(classify_command_failure(&effect, failure)),
     }
+}
+
+async fn run_moon_ci_effect(
+    executor: &dyn CommandExecutor,
+    effect: Effect,
+    cwd: Option<String>,
+) -> Result<EffectJournalEntry, LifecycleError> {
+    let timeout_secs = effect_timeout_secs(&effect);
+    let timeout = Duration::from_secs(timeout_secs);
+    let attempts = moon_ci_attempts();
+    for args in &attempts {
+        let task = args.get(1).map_or("", String::as_str);
+        let output = executor.run("moon", args, timeout, cwd.as_deref()).await;
+        match output {
+            Ok(result) if status_ok(result.status_code) => {
+                return Ok(EffectJournalEntry {
+                    effect,
+                    timeout_secs,
+                    success: true,
+                    stdout: result.stdout,
+                    stderr: result.stderr,
+                });
+            }
+            Ok(result) => {
+                if is_missing_moon_task(&result.stdout, &result.stderr, task) {
+                    continue;
+                }
+                let err = classify_non_zero(
+                    &Effect::MoonCi { cwd: cwd.clone() },
+                    result.status_code,
+                    &result.stderr,
+                );
+                return Err(err);
+            }
+            Err(failure) => {
+                let err = classify_command_failure(&Effect::MoonCi { cwd: cwd.clone() }, failure);
+                return Err(err);
+            }
+        }
+    }
+    Err(LifecycleError::terminal(
+        FailureCategory::Command,
+        "moon CI task missing (tried: run :ci, run ci, run :quick, run quick)".to_owned(),
+    ))
+}
+
+fn moon_ci_attempts() -> Vec<Vec<String>> {
+    [":ci", "ci", ":quick", "quick"]
+        .iter()
+        .map(|task| vec!["run".to_owned(), (*task).to_owned()])
+        .collect()
+}
+
+fn is_missing_moon_task(stdout: &str, stderr: &str, task: &str) -> bool {
+    let combined = format!("{stdout}\n{stderr}");
+    combined.contains("No tasks found for target(s)") && combined.contains(task)
 }
 
 /// Executes a compensation command.
@@ -221,9 +280,7 @@ fn effect_command(effect: &Effect) -> (&'static str, Vec<String>, Option<String>
         Effect::Jj { args, cwd } => ("jj", args.clone(), cwd.clone()),
         Effect::Br { args, cwd } => ("br", args.clone(), cwd.clone()),
         Effect::Gh { args, cwd } => ("gh", args.clone(), cwd.clone()),
-        Effect::MoonCi { cwd } => {
-            ("moon", vec!["run".to_owned(), ":quick".to_owned()], cwd.clone())
-        }
+        Effect::MoonCi { cwd } => ("moon", vec!["run".to_owned(), ":ci".to_owned()], cwd.clone()),
         Effect::Opencode { prompt, model, cwd } => (
             "opencode",
             vec![

@@ -36,6 +36,16 @@ Shutdown:
 oya init --down
 ```
 
+Validate setup invariants:
+
+```bash
+oya doctor
+```
+
+`oya doctor` checks ingress/admin/service reachability, Restate service registration,
+moon task presence, and GitHub repo slug detection.
+Output is emitted as JSONL (`type=check` lines + `type=summary`).
+
 ## End-to-End Lifecycle
 
 ```bash

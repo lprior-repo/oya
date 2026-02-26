@@ -13,6 +13,7 @@ use restate_oya::{
     PipelineRequest, StartRequest, StartResponse,
 };
 use serde::Deserialize;
+use serde::Serialize;
 use serde_json::Value;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -21,6 +22,7 @@ use tokio::time::{sleep, Duration};
 
 const DEFAULT_BIND: &str = "127.0.0.1:9180";
 const DEFAULT_INGRESS: &str = "http://127.0.0.1:909";
+const DEFAULT_ADMIN: &str = "http://127.0.0.1:9070";
 const DEFAULT_IMPL_MODEL: &str = "zai-coding-plan/glm-5";
 const DEFAULT_SERVICE_URL: &str = "http://127.0.0.1:9180/";
 
@@ -35,6 +37,7 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Command {
     Init(InitArgs),
+    Doctor(DoctorArgs),
     Serve(ServeArgs),
     Invoke(InvokeArgs),
     Implement(ImplementArgs),
@@ -51,6 +54,16 @@ struct InitArgs {
     service_url: String,
     #[arg(long)]
     down: bool,
+}
+
+#[derive(Debug, clap::Args)]
+struct DoctorArgs {
+    #[arg(long, default_value = DEFAULT_INGRESS, value_parser = parse_ingress_url)]
+    ingress: String,
+    #[arg(long, default_value = DEFAULT_ADMIN, value_parser = parse_admin_url)]
+    admin: String,
+    #[arg(long, default_value = DEFAULT_SERVICE_URL, value_parser = parse_service_url)]
+    service_url: String,
 }
 
 #[derive(Debug, clap::Args)]
@@ -120,11 +133,27 @@ struct GhRepoView {
     name_with_owner: String,
 }
 
+#[derive(Debug, Serialize)]
+struct DoctorCheck {
+    id: String,
+    pass: bool,
+    expected: String,
+    actual: String,
+    remediation: String,
+}
+
+#[derive(Debug, Serialize)]
+struct DoctorReport {
+    ok: bool,
+    checks: Vec<DoctorCheck>,
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Command::Init(args) => init_command(args).await,
+        Command::Doctor(args) => doctor_command(args).await,
         Command::Serve(args) => serve_command(args).await,
         Command::Invoke(args) => invoke_command(args).await,
         Command::Implement(args) => implement_command(args).await,
@@ -144,8 +173,9 @@ async fn init_command(args: InitArgs) -> anyhow::Result<()> {
     }
     start_fresh_docker_restate(&repo_root).await?;
     restart_oya_service().await?;
+    verify_oya_service_unit().await?;
     wait_for_health(&args.ingress, 30).await?;
-    wait_for_service_discovery(30).await?;
+    wait_for_tcp_port("127.0.0.1", 9180, 30).await?;
     register_services(&args.service_url).await?;
     validate_registered_services().await?;
     println!("[oya] Runtime ready (fresh Restate + handlers registered)");
@@ -153,6 +183,38 @@ async fn init_command(args: InitArgs) -> anyhow::Result<()> {
     println!("  Ingress: {}", args.ingress);
     println!("  Service: {}", args.service_url);
     Ok(())
+}
+
+async fn doctor_command(args: DoctorArgs) -> anyhow::Result<()> {
+    let checks = vec![
+        check_http_ok("restate_ingress", &format!("{}/restate/health", args.ingress), "200").await,
+        check_tcp_open(
+            "restate_admin",
+            &args.admin,
+            9070,
+            "ensure Restate admin is running on configured host/port",
+        )
+        .await,
+        check_tcp_open(
+            "oya_service",
+            &args.service_url,
+            9180,
+            "ensure oya.service is running and bound to configured host/port",
+        )
+        .await,
+        check_restate_services().await,
+        check_restate_deployments().await,
+        check_moon_tasks().await,
+        check_repo_detection().await,
+    ];
+    let ok = checks.iter().all(|item| item.pass);
+    let report = DoctorReport { ok, checks };
+    print_doctor_jsonl(&report)?;
+    if ok {
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!("doctor checks failed"))
+    }
 }
 
 fn find_repo_root() -> anyhow::Result<PathBuf> {
@@ -216,6 +278,36 @@ async fn restart_oya_service() -> anyhow::Result<()> {
     }
 }
 
+async fn verify_oya_service_unit() -> anyhow::Result<()> {
+    let unit = run_command_capture("systemctl", &["--user", "cat", "oya.service"], None).await?;
+    let exec = extract_exec_start(&unit)
+        .ok_or_else(|| anyhow::anyhow!("oya.service missing ExecStart"))?;
+    let binary_ok =
+        extract_exec_binary(exec).map(std::path::Path::new).is_some_and(std::path::Path::exists);
+    if !binary_ok {
+        return Err(anyhow::anyhow!("oya.service ExecStart binary not found: {exec}"));
+    }
+    if !is_valid_oya_exec_start(exec) {
+        Err(anyhow::anyhow!(
+            "oya.service ExecStart must run 'oya serve' on port 9180 (current: {exec})"
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+fn extract_exec_start(unit_text: &str) -> Option<&str> {
+    unit_text.lines().find_map(|line| line.strip_prefix("ExecStart="))
+}
+
+fn extract_exec_binary(exec_start: &str) -> Option<&str> {
+    exec_start.split_whitespace().next()
+}
+
+fn is_valid_oya_exec_start(exec_start: &str) -> bool {
+    exec_start.contains("oya") && exec_start.contains("serve") && exec_start.contains(":9180")
+}
+
 async fn wait_for_health(ingress: &str, retries: u8) -> anyhow::Result<()> {
     let url = format!("{}/restate/health", ingress);
     for _ in 0..retries {
@@ -229,21 +321,18 @@ async fn wait_for_health(ingress: &str, retries: u8) -> anyhow::Result<()> {
     Err(anyhow::anyhow!("restate health check timed out: {url}"))
 }
 
-async fn wait_for_service_discovery(retries: u8) -> anyhow::Result<()> {
-    let url = "http://127.0.0.1:9180/discover";
+async fn wait_for_tcp_port(host: &str, port: u16, retries: u8) -> anyhow::Result<()> {
     for _ in 0..retries {
-        if let Ok(response) = Client::new().get(url).send().await {
-            if response.status().is_success() {
-                return Ok(());
-            }
+        if tokio::net::TcpStream::connect((host, port)).await.is_ok() {
+            return Ok(());
         }
         sleep(Duration::from_secs(1)).await;
     }
-    Err(anyhow::anyhow!("oya discovery endpoint timed out: {url}"))
+    Err(anyhow::anyhow!("tcp port check timed out: {host}:{port}"))
 }
 
 async fn register_services(service_url: &str) -> anyhow::Result<()> {
-    run_command_capture("restate", &["deployments", "register", "--force", service_url], None)
+    run_command_capture("restate", &["deployments", "register", "--force", "-y", service_url], None)
         .await
         .map(|_| ())
 }
@@ -272,6 +361,10 @@ fn parse_service_url(value: &str) -> Result<String, String> {
     parse_url_with_expected_port(value, 9180, "service")
 }
 
+fn parse_admin_url(value: &str) -> Result<String, String> {
+    parse_url_with_expected_port(value, 9070, "admin")
+}
+
 fn parse_url_with_expected_port(
     value: &str,
     expected_port: u16,
@@ -292,6 +385,25 @@ async fn run_command_capture(
     args: &[&str],
     workdir: Option<&Path>,
 ) -> anyhow::Result<String> {
+    let output = run_command_outcome(command, args, workdir).await?;
+    if output.success {
+        Ok(output.stdout)
+    } else {
+        Err(anyhow::anyhow!("{command} failed: {}", output.stderr.trim()))
+    }
+}
+
+struct CommandOutcome {
+    success: bool,
+    stdout: String,
+    stderr: String,
+}
+
+async fn run_command_outcome(
+    command: &str,
+    args: &[&str],
+    workdir: Option<&Path>,
+) -> anyhow::Result<CommandOutcome> {
     let mut process = TokioCommand::new(command);
     process.args(args);
     if let Some(path) = workdir {
@@ -301,12 +413,200 @@ async fn run_command_capture(
         .output()
         .await
         .map_err(|error| anyhow::anyhow!("failed to run {command}: {error}"))?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(anyhow::anyhow!("{command} failed: {}", stderr.trim()));
+    let stdout = String::from_utf8(output.stdout)
+        .map_err(|error| anyhow::anyhow!("{command} output was not UTF-8: {error}"))?;
+    let stderr = String::from_utf8(output.stderr)
+        .map_err(|error| anyhow::anyhow!("{command} output was not UTF-8: {error}"))?;
+    Ok(CommandOutcome { success: output.status.success(), stdout, stderr })
+}
+
+async fn check_http_ok(id: &str, url: &str, expected: &str) -> DoctorCheck {
+    let result = Client::new().get(url).send().await;
+    match result {
+        Ok(response) => DoctorCheck {
+            id: id.to_owned(),
+            pass: response.status().is_success(),
+            expected: expected.to_owned(),
+            actual: response.status().to_string(),
+            remediation: format!("verify service bound correctly for {url}"),
+        },
+        Err(error) => DoctorCheck {
+            id: id.to_owned(),
+            pass: false,
+            expected: expected.to_owned(),
+            actual: error.to_string(),
+            remediation: format!("start runtime with `oya init` and recheck {url}"),
+        },
     }
-    String::from_utf8(output.stdout)
-        .map_err(|error| anyhow::anyhow!("{command} output was not UTF-8: {error}"))
+}
+
+async fn check_tcp_open(
+    id: &str,
+    endpoint_url: &str,
+    expected_port: u16,
+    remediation: &str,
+) -> DoctorCheck {
+    match parse_host_port(endpoint_url, expected_port) {
+        Ok((host, port)) => {
+            let result = tokio::net::TcpStream::connect((host.as_str(), port)).await;
+            let pass = result.is_ok();
+            DoctorCheck {
+                id: id.to_owned(),
+                pass,
+                expected: format!("tcp:{port} open ({endpoint_url})"),
+                actual: if pass { "open".to_owned() } else { "closed".to_owned() },
+                remediation: remediation.to_owned(),
+            }
+        }
+        Err(error) => DoctorCheck {
+            id: id.to_owned(),
+            pass: false,
+            expected: format!("valid URL with port {expected_port}"),
+            actual: error,
+            remediation: remediation.to_owned(),
+        },
+    }
+}
+
+fn parse_host_port(endpoint_url: &str, expected_port: u16) -> Result<(String, u16), String> {
+    let parsed = url::Url::parse(endpoint_url).map_err(|error| error.to_string())?;
+    let host = parsed.host_str().ok_or_else(|| "URL missing host".to_owned())?.to_owned();
+    let port = parsed.port_or_known_default().ok_or_else(|| "URL missing port".to_owned())?;
+    if port == expected_port {
+        Ok((host, port))
+    } else {
+        Err(format!("expected port {expected_port}, found {port}"))
+    }
+}
+
+async fn check_restate_services() -> DoctorCheck {
+    let result = run_command_outcome("restate", &["services", "list"], None).await;
+    match result {
+        Ok(output) => {
+            let pass = output.success && has_required_services(&output.stdout);
+            DoctorCheck {
+                id: "restate_services".to_owned(),
+                pass,
+                expected: "Oya,OyaMemory,OyaService present".to_owned(),
+                actual: output.stdout.trim().to_owned(),
+                remediation: "run `oya init` to register handlers".to_owned(),
+            }
+        }
+        Err(error) => DoctorCheck {
+            id: "restate_services".to_owned(),
+            pass: false,
+            expected: "restate services list succeeds".to_owned(),
+            actual: error.to_string(),
+            remediation: "install/verify `restate` CLI and runtime".to_owned(),
+        },
+    }
+}
+
+async fn check_restate_deployments() -> DoctorCheck {
+    let result = run_command_outcome("restate", &["deployments", "list"], None).await;
+    match result {
+        Ok(output) => {
+            let lines = output.stdout;
+            let has_expected = lines.contains("http://127.0.0.1:9180/");
+            let has_stale = lines.contains("http://oya:9180/")
+                || lines.contains("http://127.0.0.1:8080/")
+                || lines.contains("http://127.0.0.1:9090/");
+            DoctorCheck {
+                id: "restate_deployments".to_owned(),
+                pass: output.success && has_expected && !has_stale,
+                expected: "single active endpoint http://127.0.0.1:9180/".to_owned(),
+                actual: lines.lines().take(4).collect::<Vec<_>>().join(" | "),
+                remediation:
+                    "remove stale endpoints with `restate deployments remove <id> --force -y`"
+                        .to_owned(),
+            }
+        }
+        Err(error) => DoctorCheck {
+            id: "restate_deployments".to_owned(),
+            pass: false,
+            expected: "restate deployments list succeeds".to_owned(),
+            actual: error.to_string(),
+            remediation: "ensure restate admin endpoint is healthy".to_owned(),
+        },
+    }
+}
+
+async fn check_moon_tasks() -> DoctorCheck {
+    let result = run_command_outcome("moon", &["query", "tasks"], None).await;
+    match result {
+        Ok(output) => {
+            let pass =
+                output.success && ["quick", "ci", "test"].iter().all(|v| output.stdout.contains(v));
+            DoctorCheck {
+                id: "moon_tasks".to_owned(),
+                pass,
+                expected: "moon tasks include quick, ci, test".to_owned(),
+                actual: output.stdout.lines().take(6).collect::<Vec<_>>().join(" | "),
+                remediation: "define required moon tasks in .moon/tasks/all.yml".to_owned(),
+            }
+        }
+        Err(error) => DoctorCheck {
+            id: "moon_tasks".to_owned(),
+            pass: false,
+            expected: "moon query tasks succeeds".to_owned(),
+            actual: error.to_string(),
+            remediation: "install moon and run from repo root".to_owned(),
+        },
+    }
+}
+
+async fn check_repo_detection() -> DoctorCheck {
+    match detect_repo_slug().await {
+        Ok(Some(slug)) => DoctorCheck {
+            id: "repo_slug".to_owned(),
+            pass: true,
+            expected: "owner/repo slug".to_owned(),
+            actual: slug,
+            remediation: "none".to_owned(),
+        },
+        Ok(None) => DoctorCheck {
+            id: "repo_slug".to_owned(),
+            pass: false,
+            expected: "owner/repo slug via gh".to_owned(),
+            actual: "not detected".to_owned(),
+            remediation: "authenticate gh or pass --repo explicitly".to_owned(),
+        },
+        Err(error) => DoctorCheck {
+            id: "repo_slug".to_owned(),
+            pass: false,
+            expected: "owner/repo slug via gh".to_owned(),
+            actual: error.to_string(),
+            remediation: "fix gh auth/config".to_owned(),
+        },
+    }
+}
+
+fn print_doctor_jsonl(report: &DoctorReport) -> anyhow::Result<()> {
+    for check in &report.checks {
+        let payload = serde_json::json!({
+            "type": "check",
+            "id": check.id,
+            "pass": check.pass,
+            "expected": check.expected,
+            "actual": check.actual,
+            "remediation": check.remediation,
+        });
+        println!("{}", serde_json::to_string(&payload)?);
+    }
+    let failed = report
+        .checks
+        .iter()
+        .filter(|item| !item.pass)
+        .map(|item| item.id.clone())
+        .collect::<Vec<_>>();
+    let summary = serde_json::json!({
+        "type": "summary",
+        "ok": report.ok,
+        "checks": report.checks.len(),
+        "failed": failed,
+    });
+    println!("{}", serde_json::to_string(&summary)?);
+    Ok(())
 }
 
 async fn serve_command(args: ServeArgs) -> anyhow::Result<()> {

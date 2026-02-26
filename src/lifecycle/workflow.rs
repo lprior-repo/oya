@@ -495,12 +495,13 @@ where
     let step_name = step.name.clone();
     match run_effect(executor, effect).await {
         Ok(entry) => {
+            let details = step_details(&entry);
             let next = success_acc(acc, step, entry, on_progress)?;
             on_progress(LifecycleProgressUpdate::Step {
                 step: step_name,
                 status: LifecycleStepStatus::Succeeded,
                 message: None,
-                details: step_details(&entry),
+                details,
             });
             Ok(next)
         }
@@ -523,29 +524,20 @@ where
 
 fn step_details(entry: &EffectJournalEntry) -> Option<Value> {
     match &entry.effect {
-        Effect::Opencode { .. } => {
-            let events = parse_json_lines(&entry.stdout)?;
-            Some(json!({
-                "events": events,
-                "stderr": entry.stderr,
-            }))
-        }
+        Effect::Opencode { .. } => Some(json!({
+            "events": parse_json_lines(&entry.stdout),
+            "stderr": entry.stderr,
+        })),
         _ => None,
     }
 }
 
-fn parse_json_lines(raw: &str) -> Option<Vec<Value>> {
-    let parsed = raw
-        .lines()
+fn parse_json_lines(raw: &str) -> Vec<Value> {
+    raw.lines()
         .map(str::trim)
         .filter(|line| !line.is_empty())
         .filter_map(|line| serde_json::from_str::<Value>(line).ok())
-        .collect::<Vec<_>>();
-    if parsed.is_empty() {
-        None
-    } else {
-        Some(parsed)
-    }
+        .collect::<Vec<_>>()
 }
 
 fn success_acc<F>(

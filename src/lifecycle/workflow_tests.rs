@@ -1,5 +1,7 @@
 use super::{run_lifecycle_with_progress, LifecycleProgressUpdate, LifecycleRunRequest};
-use crate::lifecycle::effects::{CommandExecutor, CommandFailure, CommandResult};
+use crate::lifecycle::effects::{
+    CommandExecutor, CommandFailure, CommandResult, Effect, EffectJournalEntry,
+};
 use crate::lifecycle::types::FailureCategory;
 use async_trait::async_trait;
 use std::collections::VecDeque;
@@ -93,7 +95,7 @@ async fn run_lifecycle_success_path_executes_jj_only_git_bridge() {
             Some(workspace_path),
             ok("{\"status\":\"ok\"}"),
         ),
-        call("moon", &["run", ":quick"], Some(workspace_path), ok("")),
+        call("moon", &["run", ":ci"], Some(workspace_path), ok("")),
         call("jj", &["git", "fetch", "--remote", "origin"], Some(workspace_path), ok("")),
         call("jj", &["rebase", "-d", "main@origin"], Some(workspace_path), ok("")),
         call("jj", &["file", "track", "."], Some(workspace_path), ok("")),
@@ -183,7 +185,7 @@ async fn run_lifecycle_pr_output_without_url_triggers_terminal_compensations() {
             Some(workspace_path),
             ok("{\"status\":\"ok\"}"),
         ),
-        call("moon", &["run", ":quick"], Some(workspace_path), ok("")),
+        call("moon", &["run", ":ci"], Some(workspace_path), ok("")),
         call("jj", &["git", "fetch", "--remote", "origin"], Some(workspace_path), ok("")),
         call("jj", &["rebase", "-d", "main@origin"], Some(workspace_path), ok("")),
         call("jj", &["file", "track", "."], Some(workspace_path), ok("")),
@@ -324,4 +326,22 @@ async fn run_lifecycle_rejects_invalid_repo_before_effects() {
     let failure = result.expect_err("expected validation failure");
     assert_eq!(failure.error.category(), FailureCategory::Validation);
     assert!(failure.error.message().contains("invalid repo slug"));
+}
+
+#[test]
+fn step_details_keeps_stderr_when_opencode_stdout_has_no_json() {
+    let details = super::step_details(&EffectJournalEntry {
+        effect: Effect::Opencode { prompt: "x".to_owned(), model: "m".to_owned(), cwd: None },
+        timeout_secs: 1200,
+        success: true,
+        stdout: "plain text output".to_owned(),
+        stderr: "warning on stderr".to_owned(),
+    });
+    assert_eq!(
+        details,
+        Some(serde_json::json!({
+            "events": [],
+            "stderr": "warning on stderr"
+        }))
+    );
 }
