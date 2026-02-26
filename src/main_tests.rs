@@ -1,4 +1,7 @@
-use super::parse_repo_slug;
+use super::{
+    extract_repo_slug_from_gh_output, has_required_services, parse_ingress_url, parse_repo_slug,
+    parse_service_url,
+};
 
 #[test]
 fn parse_repo_slug_accepts_valid_owner_repo() {
@@ -21,5 +24,49 @@ fn parse_repo_slug_rejects_extra_path_segments() {
 #[test]
 fn parse_repo_slug_rejects_invalid_chars() {
     let parsed = parse_repo_slug("owner/repo with spaces");
+    assert!(parsed.is_err());
+}
+
+#[test]
+fn has_required_services_accepts_expected_service_set() {
+    let output = "Oya\nOyaMemory\nOyaService\n";
+    assert!(has_required_services(output));
+}
+
+#[test]
+fn has_required_services_rejects_missing_service() {
+    let output = "Oya\nOyaMemory\n";
+    assert!(!has_required_services(output));
+}
+
+#[test]
+fn parse_ingress_url_accepts_port_909() {
+    let parsed = parse_ingress_url("http://127.0.0.1:909");
+    assert_eq!(parsed, Ok("http://127.0.0.1:909".to_owned()));
+}
+
+#[test]
+fn parse_ingress_url_rejects_non_909_port() {
+    let parsed = parse_ingress_url("http://127.0.0.1:9080");
+    assert!(parsed.is_err());
+}
+
+#[test]
+fn parse_service_url_accepts_container_endpoint() {
+    let parsed = parse_service_url("http://127.0.0.1:9180/");
+    assert_eq!(parsed, Ok("http://127.0.0.1:9180/".to_owned()));
+}
+
+#[test]
+fn extract_repo_slug_from_gh_output_accepts_name_with_owner() {
+    let raw = r#"{"nameWithOwner":"lprior-repo/oya"}"#;
+    let parsed = extract_repo_slug_from_gh_output(raw);
+    assert_eq!(parsed, Ok("lprior-repo/oya".to_owned()));
+}
+
+#[test]
+fn extract_repo_slug_from_gh_output_rejects_invalid_repo_name() {
+    let raw = r#"{"nameWithOwner":"bad repo/oya"}"#;
+    let parsed = extract_repo_slug_from_gh_output(raw);
     assert!(parsed.is_err());
 }

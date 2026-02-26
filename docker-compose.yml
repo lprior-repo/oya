@@ -4,6 +4,11 @@ services:
     container_name: oya-restate
     network_mode: host
     command: ["--node-name=restate-1", "--bind-ip", "127.0.0.1"]
+    environment:
+      RESTATE_INGRESS__BIND_PORT: "909"
+      RESTATE_INGRESS__ADVERTISED_ADDRESS: "http://127.0.0.1:909/"
+      RESTATE_ADMIN__BIND_PORT: "9070"
+      RESTATE_ADMIN__ADVERTISED_ADDRESS: "http://127.0.0.1:9070/"
     volumes:
       - oya_restate_data:/restate-data
     restart: unless-stopped

@@ -18,8 +18,9 @@
 {"kind":"ref","moon":"/home/lewis/src/oya/.moon/tasks.yml"}
 {"kind":"ref","rust":"/home/lewis/src/oya/docs/FUNCTIONAL_RUST.md"}
 {"kind":"ref","beads":"/home/lewis/src/oya/docs/BEADS.md"}
-{"kind":"restate","ui":"http://localhost:9070","ingress":"http://localhost:8080","service":"http://localhost:9080","default_runtime":"scripts/dev-up.sh"}
-{"kind":"cmd","tool":"restate","list":["scripts/dev-up.sh (start Docker-first runtime)","scripts/dev-down.sh (stop runtime)","scripts/dev-reset.sh (reset Restate state)","scripts/pipeline-run.sh <run_id> <bead_id> [context] (run + observe pipeline)","http://localhost:9070 (Admin/UI)","http://localhost:8080 (Ingress API)","http://localhost:8080/restate/health (Health)","http://localhost:8080/Oya/<id>/start/send (Start pipeline async)"]}
+{"kind":"restate","ui":"http://localhost:9070","ingress":"http://localhost:909","service":"http://localhost:9180","default_runtime":"oya init"}
+{"kind":"rule","id":"runtime-init","text":"Please use `oya init` to bootstrap local runtime. Use `oya init --down` to stop Docker Restate."}
+{"kind":"cmd","tool":"restate","list":["oya init (fresh Docker Restate + handler registration + validations)","oya init --down (stop Docker Restate)","scripts/pipeline-run.sh <run_id> <bead_id> [context] (run + observe pipeline)","http://localhost:9070 (Admin/UI)","http://localhost:909 (Ingress API)","http://localhost:909/restate/health (Health)","http://localhost:9180/discover (Oya discovery endpoint)","http://localhost:909/Oya/<id>/start/send (Start pipeline async)"]}
 {"kind":"section","title":"ATDD Workflow"}
 {"kind":"text","content":"The storm enforces TRUE test-driven development through the Red Gate pattern."}
 {"kind":"subsection","title":"Stage Sequence"}
