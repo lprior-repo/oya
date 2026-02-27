@@ -4,6 +4,7 @@
 #![forbid(unsafe_code)]
 
 use crate::lifecycle::effects::{run_effect, CommandExecutor, Effect, EffectJournalEntry};
+use crate::lifecycle::telemetry::{emit_step_telemetry, emit_unwind_signal};
 use crate::lifecycle::types::{FailureCategory, LifecycleError};
 use tokio::time::{sleep, Duration};
 
@@ -35,37 +36,91 @@ where
 {
     let mut acc = initial;
     for step in steps {
-        let step_name = step.name.clone();
-        let started_at = timestamp_now();
-        let start_instant = std::time::Instant::now();
-        on_progress(make_step_progress_running(&step_name, &started_at));
-        let result = execute_step(executor, acc, step).await;
-        let finished_at = timestamp_now();
-        let duration_ms = compute_duration_ms(&start_instant);
+        let result = run_step_with_telemetry(executor, acc, step, on_progress).await;
         match result {
-            Ok((next, details)) => {
-                on_progress(make_step_progress_success(
-                    step_name,
-                    details,
-                    &started_at,
-                    &finished_at,
-                    duration_ms,
-                ));
-                acc = next;
-            }
-            Err(failure) => {
-                on_progress(make_step_progress_failure(
-                    step_name,
-                    failure.error.to_string(),
-                    &started_at,
-                    &finished_at,
-                    duration_ms,
-                ));
-                return Err(failure);
-            }
+            Ok(next) => acc = next,
+            Err(failure) => return Err(failure),
         }
     }
     Ok(acc)
+}
+
+async fn run_step_with_telemetry<F>(
+    executor: &dyn CommandExecutor,
+    acc: ExecutionAcc,
+    step: LifecycleStep,
+    on_progress: &mut F,
+) -> Result<ExecutionAcc, Box<StepFailure>>
+where
+    F: FnMut(LifecycleProgressUpdate),
+{
+    let step_name = step.name.clone();
+    let started_at = timestamp_now();
+    let start_instant = std::time::Instant::now();
+    let running_progress = make_step_progress_running(&step_name, &started_at);
+    on_progress(running_progress.clone());
+    emit_step_telemetry(&running_progress);
+    let result = execute_step(executor, acc, step).await;
+    let finished_at = timestamp_now();
+    let duration_ms = compute_duration_ms(&start_instant);
+    match result {
+        Ok((next, details)) => {
+            let success_progress = make_step_progress_success(
+                step_name,
+                details,
+                &started_at,
+                &finished_at,
+                duration_ms,
+            );
+            on_progress(success_progress.clone());
+            emit_step_telemetry(&success_progress);
+            Ok(next)
+        }
+        Err(failure) => {
+            let timing = StepTiming { step_name, started_at, finished_at, duration_ms };
+            handle_step_failure(on_progress, &timing, &failure);
+            Err(failure)
+        }
+    }
+}
+
+struct StepTiming {
+    step_name: String,
+    started_at: String,
+    finished_at: String,
+    duration_ms: u64,
+}
+
+fn handle_step_failure<F>(on_progress: &mut F, timing: &StepTiming, failure: &StepFailure)
+where
+    F: FnMut(LifecycleProgressUpdate),
+{
+    let failure_progress = make_step_progress_failure(
+        timing.step_name.clone(),
+        failure.error.to_string(),
+        &timing.started_at,
+        &timing.finished_at,
+        timing.duration_ms,
+    );
+    on_progress(failure_progress.clone());
+    emit_step_telemetry(&failure_progress);
+    emit_pending_compensation_signals(&failure.completed_compensations);
+}
+
+fn emit_pending_compensation_signals(compensations: &[crate::lifecycle::effects::Compensation]) {
+    for compensation in compensations {
+        if let crate::lifecycle::effects::Compensation::MarkBeadBlocked { bead, reason } =
+            compensation
+        {
+            let diagnostic = crate::lifecycle::types::CompensationDiagnostic {
+                compensation_type: "mark_bead_blocked".to_owned(),
+                target: bead.bead_id.as_str().to_owned(),
+                success: false,
+                error: Some(reason.clone()),
+            };
+            emit_unwind_signal(&diagnostic);
+        }
+    }
 }
 
 async fn execute_step(

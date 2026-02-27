@@ -5,6 +5,7 @@
 #![forbid(unsafe_code)]
 
 pub mod effects;
+pub mod telemetry;
 pub mod transitions;
 pub mod types;
 pub mod workflow;
