@@ -382,6 +382,7 @@ fn update_runtime_progress(
                 done: false,
                 success: None,
                 message: None,
+                compensation_diagnostics: Vec::new(),
             });
         let next = runtime_status_next(current, live_steps, update);
         insert_runtime_status(&mut map, key, next);
@@ -417,6 +418,7 @@ fn seed_runtime_status(
                 done: false,
                 success: None,
                 message: None,
+                compensation_diagnostics: Vec::new(),
             },
         );
     }
@@ -454,6 +456,7 @@ fn runtime_status_next(
             done: false,
             success: None,
             message: None,
+            compensation_diagnostics: current.compensation_diagnostics,
         },
         LifecycleProgressUpdate::Step { message, .. } => LifecycleStatusSnapshot {
             bead_id: current.bead_id,
@@ -463,8 +466,14 @@ fn runtime_status_next(
             done: false,
             success: None,
             message,
+            compensation_diagnostics: current.compensation_diagnostics,
         },
-        LifecycleProgressUpdate::Finished { success, pr_url, message } => LifecycleStatusSnapshot {
+        LifecycleProgressUpdate::Finished {
+            success,
+            pr_url,
+            message,
+            compensation_diagnostics,
+        } => LifecycleStatusSnapshot {
             bead_id: current.bead_id,
             steps: live_steps.to_vec(),
             state: current.state,
@@ -472,6 +481,7 @@ fn runtime_status_next(
             done: true,
             success: Some(success),
             message,
+            compensation_diagnostics,
         },
     }
 }
@@ -545,6 +555,7 @@ fn initialize_lifecycle_status(
     ctx.set("lifecycle_done", false);
     ctx.clear("lifecycle_success");
     ctx.clear("lifecycle_message");
+    store_compensation_diagnostics(ctx, &[]);
 }
 
 fn default_step_snapshots() -> Vec<LifecycleStepSnapshot> {
@@ -569,6 +580,9 @@ fn default_step_snapshots() -> Vec<LifecycleStepSnapshot> {
         status: lifecycle_status_label(&LifecycleStepStatus::Pending).to_owned(),
         message: None,
         details: None,
+        started_at: None,
+        finished_at: None,
+        duration_ms: None,
     })
     .collect()
 }
@@ -587,21 +601,47 @@ fn apply_progress_update(
                     status: lifecycle_status_label(&LifecycleStepStatus::Pending).to_owned(),
                     message: None,
                     details: None,
+                    started_at: None,
+                    finished_at: None,
+                    duration_ms: None,
                 })
                 .collect::<Vec<_>>();
             ctx.set("lifecycle_bead_id", Some(bead_id));
             store_lifecycle_steps(ctx, live_steps);
             ctx.set("lifecycle_message", Option::<String>::None);
         }
-        LifecycleProgressUpdate::Step { step, status, message, details } => {
-            *live_steps = upsert_step(live_steps.clone(), step, status, message, details);
+        LifecycleProgressUpdate::Step {
+            step,
+            status,
+            message,
+            details,
+            started_at,
+            finished_at,
+            duration_ms,
+        } => {
+            *live_steps = upsert_step(
+                live_steps.clone(),
+                step,
+                status,
+                message,
+                details,
+                started_at,
+                finished_at,
+                duration_ms,
+            );
             store_lifecycle_steps(ctx, live_steps);
         }
-        LifecycleProgressUpdate::Finished { success, pr_url, message } => {
+        LifecycleProgressUpdate::Finished {
+            success,
+            pr_url,
+            message,
+            compensation_diagnostics,
+        } => {
             ctx.set("lifecycle_done", true);
             ctx.set("lifecycle_success", Some(success));
             ctx.set("lifecycle_pr_url", pr_url);
             ctx.set("lifecycle_message", message);
+            store_compensation_diagnostics(ctx, &compensation_diagnostics);
         }
     }
 }
@@ -609,6 +649,15 @@ fn apply_progress_update(
 fn store_lifecycle_steps(ctx: &WorkflowContext<'_>, steps: &[LifecycleStepSnapshot]) {
     if let Ok(value) = serde_json::to_value(steps) {
         ctx.set("lifecycle_steps", Json::from(value));
+    }
+}
+
+fn store_compensation_diagnostics(
+    ctx: &WorkflowContext<'_>,
+    diagnostics: &[crate::lifecycle::types::CompensationDiagnostic],
+) {
+    if let Ok(value) = serde_json::to_value(diagnostics) {
+        ctx.set("lifecycle_compensation_diagnostics", Json::from(value));
     }
 }
 
@@ -627,6 +676,9 @@ fn upsert_step(
     status: LifecycleStepStatus,
     message: Option<String>,
     details: Option<Value>,
+    started_at: Option<String>,
+    finished_at: Option<String>,
+    duration_ms: Option<u64>,
 ) -> Vec<LifecycleStepSnapshot> {
     let mut found = false;
     let mapped = steps
@@ -639,6 +691,9 @@ fn upsert_step(
                     status: lifecycle_status_label(&status).to_owned(),
                     message: message.clone(),
                     details: details.clone(),
+                    started_at: started_at.clone().or(item.started_at),
+                    finished_at: finished_at.clone().or(item.finished_at),
+                    duration_ms: duration_ms.or(item.duration_ms),
                 }
             } else {
                 item
@@ -655,6 +710,9 @@ fn upsert_step(
                 status: lifecycle_status_label(&status).to_owned(),
                 message,
                 details,
+                started_at,
+                finished_at,
+                duration_ms,
             }))
             .collect()
     }
@@ -699,6 +757,15 @@ async fn read_lifecycle_status(
         .await?
         .map(Json::into_inner)
         .and_then(|value| if value.is_null() { None } else { Some(value) });
+    let compensation_diagnostics = ctx
+        .get::<Json<Value>>("lifecycle_compensation_diagnostics")
+        .await?
+        .map(Json::into_inner)
+        .and_then(|value| {
+            serde_json::from_value::<Vec<crate::lifecycle::types::CompensationDiagnostic>>(value)
+                .ok()
+        })
+        .unwrap_or_default();
     Ok(LifecycleStatusSnapshot {
         bead_id: ctx.get::<String>("lifecycle_bead_id").await?,
         steps,
@@ -707,6 +774,7 @@ async fn read_lifecycle_status(
         done: ctx.get::<bool>("lifecycle_done").await?.unwrap_or(false),
         success: ctx.get::<bool>("lifecycle_success").await?,
         message: ctx.get::<String>("lifecycle_message").await?,
+        compensation_diagnostics,
     })
 }
 
@@ -772,6 +840,9 @@ fn extract_step_snapshots(raw: &str) -> Vec<LifecycleStepSnapshot> {
                 status: "seen".to_owned(),
                 message: Some(command.to_owned()),
                 details: None,
+                started_at: None,
+                finished_at: None,
+                duration_ms: None,
             })
         })
         .collect()
@@ -795,6 +866,7 @@ fn parse_lifecycle_status_snapshot(raw: &str, key: &str) -> LifecycleStatusSnaps
         done: !(is_running || is_backing_off),
         success: if is_running || is_backing_off { None } else { Some(!raw.contains("Error:")) },
         message,
+        compensation_diagnostics: Vec::new(),
     }
 }
 

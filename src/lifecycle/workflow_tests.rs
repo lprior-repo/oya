@@ -4,6 +4,7 @@ use crate::lifecycle::effects::{
 };
 use crate::lifecycle::types::FailureCategory;
 use async_trait::async_trait;
+use chrono::DateTime;
 use std::collections::VecDeque;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -487,6 +488,12 @@ fn validate_workspace_changes_ignores_whitespace() {
 }
 
 #[test]
+fn timestamp_now_emits_rfc3339() {
+    let timestamp = super::timestamp_now();
+    assert!(DateTime::parse_from_rfc3339(&timestamp).is_ok());
+}
+
+#[test]
 fn validate_dag_accepts_empty_step_list() {
     let result = super::validate_dag(&[]);
     assert!(result.is_ok());
@@ -624,4 +631,29 @@ fn validate_dag_rejects_self_dependency() {
     let error = result.expect_err("expected self-dependency error");
     assert_eq!(error.category(), FailureCategory::Validation);
     assert!(error.message().contains("cycle"));
+}
+
+#[test]
+fn validate_dag_rejects_dependency_after_step() {
+    let steps = vec![
+        super::LifecycleStep {
+            name: "step_b".to_owned(),
+            effect: Effect::Br { args: vec![], cwd: None },
+            compensation: None,
+            transition: super::StepTransition::None,
+            dependencies: vec!["step_a".to_owned()],
+        },
+        super::LifecycleStep {
+            name: "step_a".to_owned(),
+            effect: Effect::Br { args: vec![], cwd: None },
+            compensation: None,
+            transition: super::StepTransition::None,
+            dependencies: vec![],
+        },
+    ];
+    let result = super::validate_dag(&steps);
+    assert!(result.is_err());
+    let error = result.expect_err("expected order validation error");
+    assert_eq!(error.category(), FailureCategory::Validation);
+    assert!(error.message().contains("appears later"));
 }

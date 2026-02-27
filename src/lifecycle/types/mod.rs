@@ -15,7 +15,9 @@ mod workspace;
 
 pub use bead::{BeadId, BeadIdError, BeadStatus, BeadStatusError};
 pub use error::{FailureCategory, FailureClass, LifecycleError};
-pub use lifecycle::{BeadData, CancelState, LifecycleResult, LifecycleState, Phase};
+pub use lifecycle::{
+    BeadData, CancelState, CompensationDiagnostic, LifecycleResult, LifecycleState, Phase,
+};
 pub use model::{Model, ModelError};
 pub use pr::{PrInfo, PrNumber, PrNumberError};
 pub use repo::{RepoSlug, RepoSlugError};

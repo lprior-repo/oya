@@ -1,4 +1,4 @@
-use crate::lifecycle::types::{BeadId, BeadStatus, CancelState};
+use crate::lifecycle::types::{BeadId, BeadStatus, CancelState, CompensationDiagnostic};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -36,6 +36,9 @@ pub struct LifecycleStepSnapshot {
     pub status: String,
     pub message: Option<String>,
     pub details: Option<Value>,
+    pub started_at: Option<String>,
+    pub finished_at: Option<String>,
+    pub duration_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -47,6 +50,7 @@ pub struct LifecycleStatusSnapshot {
     pub done: bool,
     pub success: Option<bool>,
     pub message: Option<String>,
+    pub compensation_diagnostics: Vec<CompensationDiagnostic>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
