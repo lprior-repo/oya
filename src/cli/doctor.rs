@@ -3,9 +3,15 @@
 #![deny(clippy::panic)]
 #![forbid(unsafe_code)]
 
+mod commands;
+mod repo;
+
 use reqwest::Client;
 use serde::Serialize;
-use std::path::Path;
+
+use repo::detect_repo_slug;
+
+pub use commands::{run_command_capture, run_command_outcome};
 
 #[derive(Debug, Serialize)]
 pub struct DoctorCheck {
@@ -46,6 +52,50 @@ pub async fn run_doctor_checks(ingress: &str, admin: &str, service_url: &str) ->
     ];
     let ok = checks.iter().all(|item| item.pass);
     DoctorReport { ok, checks }
+}
+
+pub fn print_doctor_jsonl(report: &DoctorReport) -> anyhow::Result<()> {
+    for check in &report.checks {
+        let payload = serde_json::json!({
+            "type": "check",
+            "id": check.id,
+            "pass": check.pass,
+            "expected": check.expected,
+            "actual": check.actual,
+            "remediation": check.remediation,
+        });
+        println!("{}", serde_json::to_string(&payload)?);
+    }
+    let failed = report
+        .checks
+        .iter()
+        .filter(|item| !item.pass)
+        .map(|item| item.id.clone())
+        .collect::<Vec<_>>();
+    let summary = serde_json::json!({
+        "type": "summary",
+        "ok": report.ok,
+        "checks": report.checks.len(),
+        "failed": failed,
+    });
+    println!("{}", serde_json::to_string(&summary)?);
+    Ok(())
+}
+
+pub fn parse_host_port(endpoint_url: &str, expected_port: u16) -> Result<(String, u16), String> {
+    let parsed = url::Url::parse(endpoint_url).map_err(|error| error.to_string())?;
+    let host = parsed.host_str().ok_or_else(|| "URL missing host".to_owned())?.to_owned();
+    let port = parsed.port_or_known_default().ok_or_else(|| "URL missing port".to_owned())?;
+    if port == expected_port {
+        Ok((host, port))
+    } else {
+        Err(format!("expected port {expected_port}, found {port}"))
+    }
+}
+
+pub fn has_required_services(output: &str) -> bool {
+    let tokens = output.lines().flat_map(|line| line.split_whitespace()).collect::<Vec<_>>();
+    ["Oya", "OyaMemory", "OyaService"].iter().all(|name| tokens.iter().any(|token| token == name))
 }
 
 async fn check_http_ok(id: &str, url: &str, expected: &str) -> DoctorCheck {
@@ -93,17 +143,6 @@ async fn check_tcp_open(
             actual: error,
             remediation: remediation.to_owned(),
         },
-    }
-}
-
-pub fn parse_host_port(endpoint_url: &str, expected_port: u16) -> Result<(String, u16), String> {
-    let parsed = url::Url::parse(endpoint_url).map_err(|error| error.to_string())?;
-    let host = parsed.host_str().ok_or_else(|| "URL missing host".to_owned())?.to_owned();
-    let port = parsed.port_or_known_default().ok_or_else(|| "URL missing port".to_owned())?;
-    if port == expected_port {
-        Ok((host, port))
-    } else {
-        Err(format!("expected port {expected_port}, found {port}"))
     }
 }
 
@@ -207,101 +246,4 @@ async fn check_repo_detection() -> DoctorCheck {
             remediation: "fix gh auth/config".to_owned(),
         },
     }
-}
-
-pub fn has_required_services(output: &str) -> bool {
-    let tokens = output.lines().flat_map(|line| line.split_whitespace()).collect::<Vec<_>>();
-    ["Oya", "OyaMemory", "OyaService"].iter().all(|name| tokens.iter().any(|token| token == name))
-}
-
-pub fn print_doctor_jsonl(report: &DoctorReport) -> anyhow::Result<()> {
-    for check in &report.checks {
-        let payload = serde_json::json!({
-            "type": "check",
-            "id": check.id,
-            "pass": check.pass,
-            "expected": check.expected,
-            "actual": check.actual,
-            "remediation": check.remediation,
-        });
-        println!("{}", serde_json::to_string(&payload)?);
-    }
-    let failed = report
-        .checks
-        .iter()
-        .filter(|item| !item.pass)
-        .map(|item| item.id.clone())
-        .collect::<Vec<_>>();
-    let summary = serde_json::json!({
-        "type": "summary",
-        "ok": report.ok,
-        "checks": report.checks.len(),
-        "failed": failed,
-    });
-    println!("{}", serde_json::to_string(&summary)?);
-    Ok(())
-}
-
-pub struct CommandOutcome {
-    pub success: bool,
-    pub stdout: String,
-    pub stderr: String,
-}
-
-pub async fn run_command_outcome(
-    command: &str,
-    args: &[&str],
-    workdir: Option<&Path>,
-) -> anyhow::Result<CommandOutcome> {
-    let mut process = tokio::process::Command::new(command);
-    process.args(args);
-    if let Some(path) = workdir {
-        process.current_dir(path);
-    }
-    let output = process
-        .output()
-        .await
-        .map_err(|error| anyhow::anyhow!("failed to run {command}: {error}"))?;
-    let stdout = String::from_utf8(output.stdout)
-        .map_err(|error| anyhow::anyhow!("{command} output was not UTF-8: {error}"))?;
-    let stderr = String::from_utf8(output.stderr)
-        .map_err(|error| anyhow::anyhow!("{command} output was not UTF-8: {error}"))?;
-    Ok(CommandOutcome { success: output.status.success(), stdout, stderr })
-}
-
-pub async fn run_command_capture(
-    command: &str,
-    args: &[&str],
-    workdir: Option<&Path>,
-) -> anyhow::Result<String> {
-    let output = run_command_outcome(command, args, workdir).await?;
-    if output.success {
-        Ok(output.stdout)
-    } else {
-        Err(anyhow::anyhow!("{command} failed: {}", output.stderr.trim()))
-    }
-}
-
-async fn detect_repo_slug() -> anyhow::Result<Option<String>> {
-    let output = tokio::process::Command::new("gh")
-        .args(["repo", "view", "--json", "nameWithOwner"])
-        .output()
-        .await
-        .map_err(|error| anyhow::anyhow!("failed to run gh repo view: {error}"))?;
-    if !output.status.success() {
-        return Ok(None);
-    }
-    let stdout = String::from_utf8(output.stdout)
-        .map_err(|error| anyhow::anyhow!("gh output was not UTF-8: {error}"))?;
-    extract_repo_slug_from_gh_output(&stdout).map(Some)
-}
-
-fn extract_repo_slug_from_gh_output(raw: &str) -> anyhow::Result<String> {
-    #[derive(Debug, serde::Deserialize)]
-    struct GhRepoView {
-        #[serde(rename = "nameWithOwner")]
-        name_with_owner: String,
-    }
-    let payload: GhRepoView = serde_json::from_str(raw)?;
-    super::args::parse_repo_slug(&payload.name_with_owner).map_err(anyhow::Error::msg)
 }
