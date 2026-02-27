@@ -1,6 +1,7 @@
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
+#![warn(clippy::pedantic)]
 #![forbid(unsafe_code)]
 
 use std::fs;
@@ -14,6 +15,29 @@ use super::{
     classify_command_failure, classify_non_zero, effect_timeout_secs, run_compensation_effect,
     CommandExecutor, Compensation, Effect, EffectJournalEntry,
 };
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MoonTask {
+    Ci,
+    CiLegacy,
+    Quick,
+    QuickLegacy,
+}
+
+impl MoonTask {
+    fn as_arg(self) -> &'static str {
+        match self {
+            Self::Ci => ":ci",
+            Self::CiLegacy => "ci",
+            Self::Quick => ":quick",
+            Self::QuickLegacy => "quick",
+        }
+    }
+
+    fn command_args(self) -> Vec<String> {
+        vec!["run".to_owned(), self.as_arg().to_owned()]
+    }
+}
 
 /// Executes a lifecycle effect using the command executor.
 ///
@@ -139,8 +163,8 @@ async fn run_moon_ci_effect(
 ) -> Result<EffectJournalEntry, LifecycleError> {
     let timeout_secs = effect_timeout_secs(&effect);
     let timeout = Duration::from_secs(timeout_secs);
-    for args in moon_ci_attempts() {
-        let task = args.get(1).map_or("", String::as_str);
+    for task in moon_ci_attempts() {
+        let args = task.command_args();
         let output = executor.run("moon", &args, timeout, cwd.as_deref()).await;
         match output {
             Ok(result) if status_ok(result.status_code) => {
@@ -177,16 +201,13 @@ async fn run_moon_ci_effect(
     ))
 }
 
-fn moon_ci_attempts() -> Vec<Vec<String>> {
-    [":ci", "ci", ":quick", "quick"]
-        .iter()
-        .map(|task| vec!["run".to_owned(), (*task).to_owned()])
-        .collect()
+fn moon_ci_attempts() -> [MoonTask; 4] {
+    [MoonTask::Ci, MoonTask::CiLegacy, MoonTask::Quick, MoonTask::QuickLegacy]
 }
 
-fn is_missing_moon_task(stdout: &str, stderr: &str, task: &str) -> bool {
+fn is_missing_moon_task(stdout: &str, stderr: &str, task: MoonTask) -> bool {
     let combined = format!("{stdout}\n{stderr}");
-    combined.contains("No tasks found for target(s)") && combined.contains(task)
+    combined.contains("No tasks found for target(s)") && combined.contains(task.as_arg())
 }
 
 async fn prepare_workspace(
@@ -202,7 +223,10 @@ async fn prepare_workspace(
     let args = vec!["workspace".to_owned(), "forget".to_owned(), workspace.as_str().to_owned()];
     let forget_result = executor.run("jj", &args, timeout, None).await;
     let path_result = remove_workspace_dir(&path);
-    let stderr = forget_result.err().map(|error| error.to_string()).unwrap_or_default();
+    let stderr = match forget_result {
+        Ok(_) => String::new(),
+        Err(error) => error.to_string(),
+    };
     path_result.map(|stdout| EffectJournalEntry {
         effect: Effect::WorkspacePrepare { workspace, path },
         timeout_secs,
@@ -243,8 +267,10 @@ fn remove_workspace_dir_with_retry(target: &Path, path: &str) -> Result<(), Life
             Err(error) => return Err(workspace_cleanup_error(path, &error)),
         }
     }
-    let error = last_error.unwrap_or_else(|| std::io::Error::from(ErrorKind::Other));
-    Err(workspace_cleanup_error(path, &error))
+    match last_error {
+        Some(error) => Err(workspace_cleanup_error(path, &error)),
+        None => Err(workspace_cleanup_exhausted_error(path)),
+    }
 }
 
 fn is_retryable_workspace_cleanup_error(error: &std::io::Error) -> bool {
@@ -255,5 +281,12 @@ fn workspace_cleanup_error(path: &str, error: &std::io::Error) -> LifecycleError
     LifecycleError::terminal(
         FailureCategory::Workspace,
         format!("failed to clean workspace directory {path}: {error}"),
+    )
+}
+
+fn workspace_cleanup_exhausted_error(path: &str) -> LifecycleError {
+    LifecycleError::terminal(
+        FailureCategory::Workspace,
+        format!("failed to clean workspace directory {path}: retry exhausted"),
     )
 }

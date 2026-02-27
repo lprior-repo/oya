@@ -1,6 +1,7 @@
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
+#![warn(clippy::pedantic)]
 #![forbid(unsafe_code)]
 
 use crate::lifecycle::effects::{run_effect, CommandExecutor, Effect};
@@ -13,7 +14,17 @@ use crate::lifecycle::workflow::types::{LifecycleRunFailure, LifecycleRunRequest
 
 #[derive(Debug, Deserialize)]
 struct ReadyIssue {
-    id: String,
+    id: ReadyBeadId,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(transparent)]
+struct ReadyBeadId(String);
+
+impl ReadyBeadId {
+    fn into_string(self) -> String {
+        self.0
+    }
 }
 
 pub async fn resolve_and_validate(
@@ -56,7 +67,7 @@ async fn pick_ready_bead(executor: &dyn CommandExecutor) -> Result<String, Lifec
     })?;
     issues.first().map_or_else(
         || Err(LifecycleError::terminal(FailureCategory::Validation, "no ready beads found")),
-        |issue| Ok(issue.id.clone()),
+        |issue| Ok(issue.id.clone().into_string()),
     )
 }
 

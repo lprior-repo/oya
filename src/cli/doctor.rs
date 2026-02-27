@@ -1,6 +1,7 @@
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
+#![warn(clippy::pedantic)]
 #![forbid(unsafe_code)]
 
 mod commands;
@@ -26,6 +27,11 @@ pub struct DoctorCheck {
 pub struct DoctorReport {
     pub ok: bool,
     pub checks: Vec<DoctorCheck>,
+}
+
+struct DeploymentScan {
+    has_expected: bool,
+    has_stale: bool,
 }
 
 pub async fn run_doctor_checks(ingress: &str, admin: &str, service_url: &str) -> DoctorReport {
@@ -54,6 +60,9 @@ pub async fn run_doctor_checks(ingress: &str, admin: &str, service_url: &str) ->
     DoctorReport { ok, checks }
 }
 
+/// # Errors
+///
+/// Returns an error when JSON serialization fails for emitted JSONL records.
 pub fn print_doctor_jsonl(report: &DoctorReport) -> anyhow::Result<()> {
     for check in &report.checks {
         let payload = serde_json::json!({
@@ -66,12 +75,7 @@ pub fn print_doctor_jsonl(report: &DoctorReport) -> anyhow::Result<()> {
         });
         println!("{}", serde_json::to_string(&payload)?);
     }
-    let failed = report
-        .checks
-        .iter()
-        .filter(|item| !item.pass)
-        .map(|item| item.id.clone())
-        .collect::<Vec<_>>();
+    let failed = failed_check_ids(report);
     let summary = serde_json::json!({
         "type": "summary",
         "ok": report.ok,
@@ -82,6 +86,13 @@ pub fn print_doctor_jsonl(report: &DoctorReport) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn failed_check_ids(report: &DoctorReport) -> Vec<String> {
+    report.checks.iter().filter(|item| !item.pass).map(|item| item.id.clone()).collect()
+}
+
+/// # Errors
+///
+/// Returns an error string when the endpoint URL is invalid or uses the wrong port.
 pub fn parse_host_port(endpoint_url: &str, expected_port: u16) -> Result<(String, u16), String> {
     let parsed = url::Url::parse(endpoint_url).map_err(|error| error.to_string())?;
     let host = parsed.host_str().ok_or_else(|| "URL missing host".to_owned())?.to_owned();
@@ -93,9 +104,26 @@ pub fn parse_host_port(endpoint_url: &str, expected_port: u16) -> Result<(String
     }
 }
 
+#[must_use]
 pub fn has_required_services(output: &str) -> bool {
     let tokens = output.lines().flat_map(|line| line.split_whitespace()).collect::<Vec<_>>();
     ["Oya", "OyaMemory", "OyaService"].iter().all(|name| tokens.iter().any(|token| token == name))
+}
+
+fn sample_lines(output: &str, max_lines: usize) -> String {
+    output.lines().take(max_lines).collect::<Vec<_>>().join(" | ")
+}
+
+fn scan_deployments(output: &str) -> DeploymentScan {
+    let has_expected = output.contains("http://127.0.0.1:9180/");
+    let has_stale = ["http://oya:9180/", "http://127.0.0.1:8080/", "http://127.0.0.1:9090/"]
+        .iter()
+        .any(|endpoint| output.contains(endpoint));
+    DeploymentScan { has_expected, has_stale }
+}
+
+fn has_required_moon_tasks(output: &str) -> bool {
+    ["quick", "ci", "test"].iter().all(|task| output.contains(task))
 }
 
 async fn check_http_ok(id: &str, url: &str, expected: &str) -> DoctorCheck {
@@ -173,16 +201,12 @@ async fn check_restate_deployments() -> DoctorCheck {
     let result = run_command_outcome("restate", &["deployments", "list"], None).await;
     match result {
         Ok(output) => {
-            let lines = output.stdout;
-            let has_expected = lines.contains("http://127.0.0.1:9180/");
-            let has_stale = lines.contains("http://oya:9180/")
-                || lines.contains("http://127.0.0.1:8080/")
-                || lines.contains("http://127.0.0.1:9090/");
+            let scan = scan_deployments(&output.stdout);
             DoctorCheck {
                 id: "restate_deployments".to_owned(),
-                pass: output.success && has_expected && !has_stale,
+                pass: output.success && scan.has_expected && !scan.has_stale,
                 expected: "single active endpoint http://127.0.0.1:9180/".to_owned(),
-                actual: lines.lines().take(4).collect::<Vec<_>>().join(" | "),
+                actual: sample_lines(&output.stdout, 4),
                 remediation:
                     "remove stale endpoints with `restate deployments remove <id> --force -y`"
                         .to_owned(),
@@ -202,13 +226,12 @@ async fn check_moon_tasks() -> DoctorCheck {
     let result = run_command_outcome("moon", &["query", "tasks"], None).await;
     match result {
         Ok(output) => {
-            let pass =
-                output.success && ["quick", "ci", "test"].iter().all(|v| output.stdout.contains(v));
+            let pass = output.success && has_required_moon_tasks(&output.stdout);
             DoctorCheck {
                 id: "moon_tasks".to_owned(),
                 pass,
                 expected: "moon tasks include quick, ci, test".to_owned(),
-                actual: output.stdout.lines().take(6).collect::<Vec<_>>().join(" | "),
+                actual: sample_lines(&output.stdout, 6),
                 remediation: "define required moon tasks in .moon/tasks/all.yml".to_owned(),
             }
         }
