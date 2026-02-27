@@ -1,9 +1,9 @@
 use super::{
     decode_bead_entries, ensure_repo_matches_jj_origin, extract_exec_binary, extract_exec_start,
     extract_repo_slug_from_gh_output, extract_repo_slug_from_jj_remote_output,
-    has_required_services, is_valid_oya_exec_start, parse_admin_url, parse_host_port,
-    parse_ingress_url, parse_repo_slug, parse_repo_slug_from_remote_url, parse_service_url,
-    BeadEntry,
+    has_required_services, is_retryable_repo_lookup_stderr, is_valid_oya_exec_start,
+    parse_admin_url, parse_host_port, parse_ingress_url, parse_repo_slug,
+    parse_repo_slug_from_remote_url, parse_service_url, BeadEntry,
 };
 use serde_json::json;
 
@@ -171,6 +171,18 @@ fn ensure_repo_matches_jj_origin_rejects_mismatch() {
     let result =
         ensure_repo_matches_jj_origin("lprior-repo/claude-skills", Some("lprior-repo/oya"));
     assert!(result.is_err());
+}
+
+#[test]
+fn is_retryable_repo_lookup_stderr_accepts_transient_errors() {
+    let transient = "HTTP 503 Service Unavailable: please try again";
+    assert!(is_retryable_repo_lookup_stderr(transient));
+}
+
+#[test]
+fn is_retryable_repo_lookup_stderr_rejects_not_found() {
+    let not_found = "GraphQL: Could not resolve to a Repository with the name";
+    assert!(!is_retryable_repo_lookup_stderr(not_found));
 }
 
 #[test]
