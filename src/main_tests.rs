@@ -1,8 +1,9 @@
 use super::{
-    extract_exec_binary, extract_exec_start, extract_repo_slug_from_gh_output,
+    decode_bead_entries, extract_exec_binary, extract_exec_start, extract_repo_slug_from_gh_output,
     has_required_services, is_valid_oya_exec_start, parse_admin_url, parse_host_port,
     parse_ingress_url, parse_repo_slug, parse_service_url, BeadEntry,
 };
+use serde_json::json;
 
 #[test]
 fn parse_repo_slug_accepts_valid_owner_repo() {
@@ -135,4 +136,27 @@ fn bead_entry_serializes_to_json() {
     let json = serde_json::to_string(&entry).expect("should serialize");
     assert!(json.contains("src-xyz"));
     assert!(json.contains("sample"));
+}
+
+#[test]
+fn bead_entry_parses_ready_payload_with_type_alias() {
+    let payload = json!([
+        {
+            "id": "src-abc",
+            "title": "test bead",
+            "status": "open",
+            "priority": 0,
+            "type": "bug"
+        }
+    ]);
+    let parsed = decode_bead_entries(payload).expect("should parse ready payload");
+    assert_eq!(parsed.len(), 1);
+    assert_eq!(parsed[0].issue_type, "bug");
+}
+
+#[test]
+fn decode_bead_entries_rejects_object_without_items() {
+    let payload = json!({"unexpected": []});
+    let parsed = decode_bead_entries(payload);
+    assert!(parsed.is_err());
 }

@@ -717,20 +717,22 @@ struct BeadEntry {
     title: String,
     status: String,
     priority: u8,
+    #[serde(alias = "type")]
     issue_type: String,
 }
 
 async fn beads_command(args: BeadsArgs) -> anyhow::Result<()> {
     let repo_root = find_repo_root()?;
     let beads_path = repo_root.join(".beads").join("issues.jsonl");
-    let content = std::fs::read_to_string(&beads_path)
-        .map_err(|e| anyhow::anyhow!("failed to read {}: {}", beads_path.display(), e))?;
-    let mut beads: Vec<BeadEntry> =
-        content.lines().filter_map(|line| serde_json::from_str(line).ok()).collect();
-    if args.ready {
-        beads.retain(|b| b.status == "ready");
-    }
-    beads.sort_by(|a, b| b.priority.cmp(&a.priority));
+    let mut beads = if args.ready {
+        let raw = run_capture_command(&["ready", "--json"]).await?;
+        decode_bead_entries(parse_json_payload(&raw)?)?
+    } else {
+        let content = std::fs::read_to_string(&beads_path)
+            .map_err(|e| anyhow::anyhow!("failed to read {}: {}", beads_path.display(), e))?;
+        content.lines().filter_map(|line| serde_json::from_str(line).ok()).collect()
+    };
+    beads.sort_by(|a, b| a.priority.cmp(&b.priority));
     if args.json {
         let json = serde_json::to_string_pretty(&beads)?;
         println!("{json}");
@@ -740,6 +742,17 @@ async fn beads_command(args: BeadsArgs) -> anyhow::Result<()> {
         }
     }
     Ok(())
+}
+
+fn decode_bead_entries(payload: Value) -> anyhow::Result<Vec<BeadEntry>> {
+    match payload {
+        Value::Array(_) => serde_json::from_value(payload).map_err(Into::into),
+        Value::Object(mut obj) => match obj.remove("items") {
+            Some(items) => serde_json::from_value(items).map_err(Into::into),
+            None => Err(anyhow::anyhow!("br ready --json returned object payload without `items`")),
+        },
+        _ => Err(anyhow::anyhow!("br ready --json returned unsupported JSON payload")),
+    }
 }
 
 async fn call_restate_start(
