@@ -127,7 +127,11 @@ pub fn classify_command_failure(effect: &Effect, failure: CommandFailure) -> Lif
 }
 
 #[must_use]
-pub fn classify_non_zero(effect: &Effect, status_code: Option<i32>, stderr: &str) -> LifecycleError {
+pub fn classify_non_zero(
+    effect: &Effect,
+    status_code: Option<i32>,
+    stderr: &str,
+) -> LifecycleError {
     let message = format!("{effect:?} exited with {:?}: {}", status_code, stderr.trim());
     match effect {
         Effect::WorkspacePrepare { .. } | Effect::Jj { .. } => {

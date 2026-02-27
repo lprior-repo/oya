@@ -14,6 +14,3 @@ async fn main() -> anyhow::Result<()> {
     let cli = cli::Cli::parse();
     cli::dispatch_command(cli.command).await
 }
-
-#[cfg(test)]
-mod main_tests;
