@@ -4,6 +4,7 @@
 #![forbid(unsafe_code)]
 
 use crate::lifecycle::effects::CommandExecutor;
+use crate::lifecycle::telemetry::emit_step_telemetry;
 
 use super::types::{
     ExecutionAcc, LifecycleProgressUpdate, LifecycleRunFailure, LifecycleRunOutcome,
@@ -60,10 +61,12 @@ where
 {
     let (bead, steps) = resolve::resolve_and_validate(executor, &request).await?;
     let step_names = steps.iter().map(|step| step.name.clone()).collect::<Vec<_>>();
-    on_progress(LifecycleProgressUpdate::Initialized {
+    let initialized_update = LifecycleProgressUpdate::Initialized {
         bead_id: bead.bead_id.as_str().to_owned(),
         steps: step_names,
-    });
+    };
+    on_progress(initialized_update.clone());
+    emit_step_telemetry(&initialized_update);
     let initial = ExecutionAcc {
         state: planned_state(bead.clone()),
         journal: Vec::new(),

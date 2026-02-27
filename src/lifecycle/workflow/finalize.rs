@@ -6,6 +6,7 @@
 use crate::lifecycle::effects::{
     run_compensation, CommandExecutor, Compensation, EffectJournalEntry,
 };
+use crate::lifecycle::telemetry::{emit_step_telemetry, emit_unwind_signal};
 use crate::lifecycle::transitions::LifecycleEvent;
 use crate::lifecycle::types::{CompensationDiagnostic, WorkspaceName};
 use futures_util::stream::{self, StreamExt};
@@ -35,13 +36,18 @@ where
         )?;
     acc.state = completed_state;
     let (cleanup, cleanup_diagnostics) = workspace_cleanup(executor, workspace).await;
+    for diagnostic in &cleanup_diagnostics {
+        emit_unwind_signal(diagnostic);
+    }
     let pr_url = pr_url_from_state(&acc.state);
-    on_progress(LifecycleProgressUpdate::Finished {
+    let finished_update = LifecycleProgressUpdate::Finished {
         success: true,
-        pr_url,
+        pr_url: pr_url.clone(),
         message: None,
         compensation_diagnostics: cleanup_diagnostics.clone(),
-    });
+    };
+    on_progress(finished_update.clone());
+    emit_step_telemetry(&finished_update);
     Ok(LifecycleRunOutcome {
         state: acc.state,
         journal: acc.journal,
@@ -63,19 +69,29 @@ where
         Vec<EffectJournalEntry>,
         Vec<CompensationDiagnostic>,
     ) = if failure.error.is_terminal() {
-        run_compensations(executor, failure.completed_compensations).await
+        let (journal, diagnostics) =
+            run_compensations_with_telemetry(executor, failure.completed_compensations).await;
+        for diagnostic in &diagnostics {
+            emit_unwind_signal(diagnostic);
+        }
+        (journal, diagnostics)
     } else {
         (Vec::new(), Vec::new())
     };
     let (cleanup, cleanup_diagnostics) = workspace_cleanup(executor, workspace).await;
+    for diagnostic in &cleanup_diagnostics {
+        emit_unwind_signal(diagnostic);
+    }
     compensation_journal.extend(cleanup);
     compensation_diagnostics.extend(cleanup_diagnostics);
-    on_progress(LifecycleProgressUpdate::Finished {
+    let finished_update = LifecycleProgressUpdate::Finished {
         success: false,
         pr_url: pr_url_from_state(&failure.state),
         message: Some(failure.error.to_string()),
         compensation_diagnostics: compensation_diagnostics.clone(),
-    });
+    };
+    on_progress(finished_update.clone());
+    emit_step_telemetry(&finished_update);
     Err(LifecycleRunFailure {
         error: failure.error,
         state: Some(failure.state),
@@ -125,6 +141,17 @@ async fn run_compensations(
             journal.push(item);
         }
         diagnostics.push(diagnostic);
+    }
+    (journal, diagnostics)
+}
+
+async fn run_compensations_with_telemetry(
+    executor: &dyn CommandExecutor,
+    compensations: Vec<Compensation>,
+) -> (Vec<EffectJournalEntry>, Vec<CompensationDiagnostic>) {
+    let (journal, diagnostics) = run_compensations(executor, compensations).await;
+    for diagnostic in &diagnostics {
+        emit_unwind_signal(diagnostic);
     }
     (journal, diagnostics)
 }
