@@ -677,9 +677,7 @@ async fn run_effect_with_retries(
         }
         match run_effect(executor, effect.clone()).await {
             Ok(entry) => return Ok(entry),
-            Err(error) if should_retry_stage(&error) && attempt < STAGE_RETRY_BACKOFFS.len() => {
-                continue;
-            }
+            Err(error) if should_retry_stage(&error) && attempt < STAGE_RETRY_BACKOFFS.len() => {}
             Err(error) if should_retry_stage(&error) => {
                 return Err(with_retry_context(error, attempt + 1, STAGE_RETRY_BACKOFFS.len()));
             }
@@ -702,7 +700,7 @@ fn with_retry_context(error: LifecycleError, attempts: usize, retries: usize) ->
             category,
             format!("after {attempts} attempts ({retries} retries): {message}"),
         ),
-        other => other,
+        other @ LifecycleError::Terminal { .. } => other,
     }
 }
 
