@@ -398,7 +398,7 @@ async fn run_lifecycle_fails_when_only_bead_files_changed() {
     assert!(result.is_err());
     let failure = result.expect_err("expected no-change failure");
     assert!(failure.error.is_terminal());
-    assert_eq!(failure.error.category(), FailureCategory::Command);
+    assert_eq!(failure.error.category(), FailureCategory::EmptyChanges);
     assert!(failure.error.message().contains("no non-.beads changes"));
 }
 

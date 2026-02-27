@@ -785,7 +785,7 @@ fn validate_workspace_changes(stdout: &str) -> Result<(), LifecycleError> {
         .collect::<Vec<_>>();
     if files.is_empty() {
         Err(LifecycleError::terminal(
-            FailureCategory::Command,
+            FailureCategory::EmptyChanges,
             "no non-.beads changes detected after opencode; refusing to open empty PR".to_owned(),
         ))
     } else {

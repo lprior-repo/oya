@@ -8,6 +8,7 @@ pub enum FailureCategory {
     Bookmark,
     PullRequest,
     Command,
+    EmptyChanges,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
