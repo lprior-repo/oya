@@ -1,9 +1,10 @@
 use super::{
     decode_bead_entries, ensure_repo_matches_jj_origin, extract_exec_binary, extract_exec_start,
     extract_repo_slug_from_gh_output, extract_repo_slug_from_jj_remote_output,
-    has_required_services, is_retryable_repo_lookup_stderr, is_valid_oya_exec_start,
-    parse_admin_url, parse_host_port, parse_ingress_url, parse_repo_slug,
-    parse_repo_slug_from_remote_url, parse_service_url, BeadEntry,
+    format_repo_lookup_error_json, has_required_services, is_retryable_repo_lookup_stderr,
+    is_valid_oya_exec_start, normalize_error_message, parse_admin_url, parse_host_port,
+    parse_ingress_url, parse_repo_slug, parse_repo_slug_from_remote_url, parse_service_url,
+    BeadEntry,
 };
 use serde_json::json;
 
@@ -183,6 +184,24 @@ fn is_retryable_repo_lookup_stderr_accepts_transient_errors() {
 fn is_retryable_repo_lookup_stderr_rejects_not_found() {
     let not_found = "GraphQL: Could not resolve to a Repository with the name";
     assert!(!is_retryable_repo_lookup_stderr(not_found));
+}
+
+#[test]
+fn normalize_error_message_collapses_whitespace() {
+    let normalized = normalize_error_message("bad\n  request\t from   gh");
+    assert_eq!(normalized, "bad request from gh");
+}
+
+#[test]
+fn format_repo_lookup_error_json_emits_pretty_json_payload() {
+    let payload = format_repo_lookup_error_json("lprior-repo/oya", 2, 3, true, "  timeout\nretry ");
+    let parsed: serde_json::Value = serde_json::from_str(&payload).expect("valid JSON");
+    assert_eq!(parsed["category"], "repo_lookup");
+    assert_eq!(parsed["repo"], "lprior-repo/oya");
+    assert_eq!(parsed["attempt"], 2);
+    assert_eq!(parsed["max_retries"], 3);
+    assert_eq!(parsed["retryable"], true);
+    assert_eq!(parsed["message"], "timeout retry");
 }
 
 #[test]

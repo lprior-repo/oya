@@ -737,22 +737,33 @@ async fn ensure_repo_exists(repo: &str) -> anyhow::Result<()> {
             Ok(()) => return Ok(()),
             Err(failure) if failure.retryable => {
                 if attempt == REPO_LOOKUP_BACKOFFS.len() {
-                    return Err(anyhow::anyhow!(
-                        "repo `{repo}` remained unavailable after {} retry attempts: {}",
+                    return Err(anyhow::anyhow!(format_repo_lookup_error_json(
+                        repo,
+                        attempt + 1,
                         REPO_LOOKUP_BACKOFFS.len(),
-                        failure.message
-                    ));
+                        true,
+                        &failure.message,
+                    )));
                 }
             }
             Err(failure) => {
-                return Err(anyhow::anyhow!(
-                    "repo `{repo}` is not accessible: {}",
-                    failure.message
-                ));
+                return Err(anyhow::anyhow!(format_repo_lookup_error_json(
+                    repo,
+                    attempt + 1,
+                    REPO_LOOKUP_BACKOFFS.len(),
+                    false,
+                    &failure.message,
+                )));
             }
         }
     }
-    Err(anyhow::anyhow!("repo `{repo}` is not accessible after retries"))
+    Err(anyhow::anyhow!(format_repo_lookup_error_json(
+        repo,
+        REPO_LOOKUP_BACKOFFS.len() + 1,
+        REPO_LOOKUP_BACKOFFS.len(),
+        false,
+        "repo lookup exhausted retries",
+    )))
 }
 
 #[derive(Debug)]
@@ -809,6 +820,33 @@ fn is_retryable_repo_lookup_stderr(stderr: &str) -> bool {
     ]
     .iter()
     .any(|needle| lower.contains(needle))
+}
+
+fn format_repo_lookup_error_json(
+    repo: &str,
+    attempt: usize,
+    retries: usize,
+    retryable: bool,
+    message: &str,
+) -> String {
+    serde_json::to_string_pretty(&serde_json::json!({
+        "category": "repo_lookup",
+        "repo": repo,
+        "attempt": attempt,
+        "max_retries": retries,
+        "retryable": retryable,
+        "message": normalize_error_message(message),
+    }))
+    .unwrap_or_else(|_| {
+        format!(
+            "{{\"category\":\"repo_lookup\",\"repo\":\"{repo}\",\"message\":\"{}\"}}",
+            normalize_error_message(message)
+        )
+    })
+}
+
+fn normalize_error_message(message: &str) -> String {
+    message.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 fn extract_repo_slug_from_gh_output(raw: &str) -> anyhow::Result<String> {
