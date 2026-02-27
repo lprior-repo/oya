@@ -1,11 +1,11 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::time::Duration;
 use thiserror::Error;
 
 const MIN_TIMEOUT_SECS: u64 = 1;
 const MAX_TIMEOUT_SECS: u64 = 3600;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[serde(transparent)]
 pub struct TimeoutSeconds(u64);
 
@@ -18,9 +18,13 @@ pub enum TimeoutError {
 }
 
 impl TimeoutSeconds {
-    #[must_use]
-    pub const fn new(secs: u64) -> Self {
-        Self(secs)
+    /// Creates a validated timeout value in seconds.
+    ///
+    /// # Errors
+    /// Returns `TimeoutError::TooSmall` if value is less than 1 second.
+    /// Returns `TimeoutError::TooLarge` if value exceeds 3600 seconds.
+    pub fn new(secs: u64) -> Result<Self, TimeoutError> {
+        Self::parse(secs)
     }
 
     #[must_use]
@@ -65,6 +69,16 @@ impl Default for TimeoutSeconds {
     }
 }
 
+impl<'de> Deserialize<'de> for TimeoutSeconds {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let secs = u64::deserialize(deserializer)?;
+        TimeoutSeconds::parse(secs).map_err(serde::de::Error::custom)
+    }
+}
+
 impl From<TimeoutSeconds> for Duration {
     fn from(timeout: TimeoutSeconds) -> Self {
         timeout.duration()
@@ -100,7 +114,7 @@ mod tests {
 
     #[test]
     fn test_timeout_seconds_duration() {
-        let timeout = TimeoutSeconds::new(60);
+        let timeout = TimeoutSeconds::new(60).expect("timeout should be valid");
         assert_eq!(timeout.duration(), Duration::from_secs(60));
     }
 
@@ -112,15 +126,36 @@ mod tests {
 
     #[test]
     fn test_timeout_seconds_into_duration() {
-        let timeout = TimeoutSeconds::new(30);
+        let timeout = TimeoutSeconds::new(30).expect("timeout should be valid");
         let duration: Duration = timeout.into();
         assert_eq!(duration, Duration::from_secs(30));
     }
 
     #[test]
     fn test_timeout_seconds_into_u64() {
-        let timeout = TimeoutSeconds::new(45);
+        let timeout = TimeoutSeconds::new(45).expect("timeout should be valid");
         let value: u64 = timeout.into();
         assert_eq!(value, 45);
+    }
+
+    #[test]
+    fn test_timeout_seconds_new_rejects_out_of_range() {
+        assert!(matches!(TimeoutSeconds::new(0), Err(TimeoutError::TooSmall { .. })));
+        assert!(matches!(TimeoutSeconds::new(3601), Err(TimeoutError::TooLarge { .. })));
+    }
+
+    #[test]
+    fn test_timeout_seconds_deserialize_rejects_out_of_range() {
+        let too_small: Result<TimeoutSeconds, _> = serde_json::from_str("0");
+        let too_large: Result<TimeoutSeconds, _> = serde_json::from_str("3601");
+        assert!(too_small.is_err());
+        assert!(too_large.is_err());
+    }
+
+    #[test]
+    fn test_timeout_seconds_deserialize_accepts_valid() {
+        let parsed: TimeoutSeconds =
+            serde_json::from_str("120").expect("timeout should deserialize");
+        assert_eq!(parsed.secs(), 120);
     }
 }
