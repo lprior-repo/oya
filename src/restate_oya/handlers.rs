@@ -594,21 +594,7 @@ fn apply_progress_update(
 ) {
     match update {
         LifecycleProgressUpdate::Initialized { bead_id, steps } => {
-            *live_steps = steps
-                .into_iter()
-                .map(|step| LifecycleStepSnapshot {
-                    step,
-                    status: lifecycle_status_label(&LifecycleStepStatus::Pending).to_owned(),
-                    message: None,
-                    details: None,
-                    started_at: None,
-                    finished_at: None,
-                    duration_ms: None,
-                })
-                .collect::<Vec<_>>();
-            ctx.set("lifecycle_bead_id", Some(bead_id));
-            store_lifecycle_steps(ctx, live_steps);
-            ctx.set("lifecycle_message", Option::<String>::None);
+            apply_initialized_update(ctx, live_steps, bead_id, steps);
         }
         LifecycleProgressUpdate::Step {
             step,
@@ -619,17 +605,11 @@ fn apply_progress_update(
             finished_at,
             duration_ms,
         } => {
-            *live_steps = upsert_step(
-                live_steps.clone(),
-                step,
-                status,
-                message,
-                details,
-                started_at,
-                finished_at,
-                duration_ms,
+            apply_step_update(
+                ctx,
+                live_steps,
+                StepUpdate { step, status, message, details, started_at, finished_at, duration_ms },
             );
-            store_lifecycle_steps(ctx, live_steps);
         }
         LifecycleProgressUpdate::Finished {
             success,
@@ -637,13 +617,66 @@ fn apply_progress_update(
             message,
             compensation_diagnostics,
         } => {
-            ctx.set("lifecycle_done", true);
-            ctx.set("lifecycle_success", Some(success));
-            ctx.set("lifecycle_pr_url", pr_url);
-            ctx.set("lifecycle_message", message);
-            store_compensation_diagnostics(ctx, &compensation_diagnostics);
+            apply_finished_update(ctx, success, pr_url, message, compensation_diagnostics);
         }
     }
+}
+
+fn apply_initialized_update(
+    ctx: &WorkflowContext<'_>,
+    live_steps: &mut Vec<LifecycleStepSnapshot>,
+    bead_id: String,
+    steps: Vec<String>,
+) {
+    *live_steps = steps.into_iter().map(make_pending_snapshot).collect::<Vec<_>>();
+    ctx.set("lifecycle_bead_id", Some(bead_id));
+    store_lifecycle_steps(ctx, live_steps);
+    ctx.set("lifecycle_message", Option::<String>::None);
+}
+
+fn make_pending_snapshot(step: String) -> LifecycleStepSnapshot {
+    LifecycleStepSnapshot {
+        step,
+        status: lifecycle_status_label(&LifecycleStepStatus::Pending).to_owned(),
+        message: None,
+        details: None,
+        started_at: None,
+        finished_at: None,
+        duration_ms: None,
+    }
+}
+
+fn apply_step_update(
+    ctx: &WorkflowContext<'_>,
+    live_steps: &mut Vec<LifecycleStepSnapshot>,
+    update: StepUpdate,
+) {
+    *live_steps = upsert_step(live_steps.clone(), update);
+    store_lifecycle_steps(ctx, live_steps);
+}
+
+fn apply_finished_update(
+    ctx: &WorkflowContext<'_>,
+    success: bool,
+    pr_url: Option<String>,
+    message: Option<String>,
+    compensation_diagnostics: Vec<crate::lifecycle::types::CompensationDiagnostic>,
+) {
+    ctx.set("lifecycle_done", true);
+    ctx.set("lifecycle_success", Some(success));
+    ctx.set("lifecycle_pr_url", pr_url);
+    ctx.set("lifecycle_message", message);
+    store_compensation_diagnostics(ctx, &compensation_diagnostics);
+}
+
+struct StepUpdate {
+    step: String,
+    status: LifecycleStepStatus,
+    message: Option<String>,
+    details: Option<Value>,
+    started_at: Option<String>,
+    finished_at: Option<String>,
+    duration_ms: Option<u64>,
 }
 
 fn store_lifecycle_steps(ctx: &WorkflowContext<'_>, steps: &[LifecycleStepSnapshot]) {
@@ -672,14 +705,10 @@ fn lifecycle_status_label(status: &LifecycleStepStatus) -> &'static str {
 
 fn upsert_step(
     steps: Vec<LifecycleStepSnapshot>,
-    step: String,
-    status: LifecycleStepStatus,
-    message: Option<String>,
-    details: Option<Value>,
-    started_at: Option<String>,
-    finished_at: Option<String>,
-    duration_ms: Option<u64>,
+    update: StepUpdate,
 ) -> Vec<LifecycleStepSnapshot> {
+    let StepUpdate { step, status, message, details, started_at, finished_at, duration_ms } =
+        update;
     let mut found = false;
     let mapped = steps
         .into_iter()
@@ -928,4 +957,67 @@ async fn require_state_json(ctx: &ObjectContext<'_>, key: &str) -> Result<Value,
         .await?
         .map(Json::into_inner)
         .ok_or_else(|| TerminalError::new(format!("missing state key: {key}")).into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{lifecycle_status_label, parse_lifecycle_status_snapshot, upsert_step, StepUpdate};
+    use crate::lifecycle::workflow::LifecycleStepStatus;
+    use crate::restate_oya::types::LifecycleStepSnapshot;
+
+    #[test]
+    fn upsert_step_preserves_timestamps_across_progress_updates() {
+        let started_at = "2026-02-27T02:30:00Z".to_owned();
+        let finished_at = "2026-02-27T02:30:01Z".to_owned();
+        let initial = vec![LifecycleStepSnapshot {
+            step: "moon_ci".to_owned(),
+            status: lifecycle_status_label(&LifecycleStepStatus::Running).to_owned(),
+            message: Some("started".to_owned()),
+            details: None,
+            started_at: Some(started_at.clone()),
+            finished_at: None,
+            duration_ms: None,
+        }];
+
+        let updated = upsert_step(
+            initial,
+            StepUpdate {
+                step: "moon_ci".to_owned(),
+                status: LifecycleStepStatus::Succeeded,
+                message: Some("done".to_owned()),
+                details: None,
+                started_at: None,
+                finished_at: Some(finished_at.clone()),
+                duration_ms: Some(1_000),
+            },
+        );
+
+        assert_eq!(updated.len(), 1);
+        assert_eq!(updated[0].started_at, Some(started_at));
+        assert_eq!(updated[0].finished_at, Some(finished_at));
+        assert_eq!(updated[0].duration_ms, Some(1_000));
+    }
+
+    #[test]
+    fn parse_lifecycle_status_snapshot_running_state_is_incomplete() {
+        let snapshot =
+            parse_lifecycle_status_snapshot("Status: running\nCommand: moon run :ci\n", "src-1ji");
+
+        assert!(!snapshot.done);
+        assert_eq!(snapshot.success, None);
+        assert_eq!(snapshot.bead_id, Some("src-1ji".to_owned()));
+        assert_eq!(snapshot.steps.len(), 1);
+    }
+
+    #[test]
+    fn parse_lifecycle_status_snapshot_error_state_is_terminal() {
+        let snapshot = parse_lifecycle_status_snapshot(
+            "Status: completed\nError: failed to open PR\nhttps://github.com/lprior-repo/oya/pull/42\n",
+            "src-1ji",
+        );
+
+        assert!(snapshot.done);
+        assert_eq!(snapshot.success, Some(false));
+        assert_eq!(snapshot.pr_url, Some("https://github.com/lprior-repo/oya/pull/42".to_owned()));
+    }
 }
