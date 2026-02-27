@@ -4,7 +4,7 @@
 #![forbid(unsafe_code)]
 
 use super::runtime::{upsert_step, StepUpdate};
-use super::status::{lifecycle_status_label, parse_lifecycle_status_snapshot};
+use super::status::lifecycle_status_label;
 use crate::lifecycle::workflow::LifecycleStepStatus;
 use crate::restate_oya::types::LifecycleStepSnapshot;
 
