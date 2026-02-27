@@ -420,6 +420,73 @@ fn step_details_keeps_stderr_when_opencode_stdout_has_no_json() {
 }
 
 #[test]
+fn strip_diff_prefix_handles_modified() {
+    assert_eq!(super::strip_diff_prefix("M src/main.rs"), "src/main.rs");
+}
+
+#[test]
+fn strip_diff_prefix_handles_added() {
+    assert_eq!(super::strip_diff_prefix("A src/new_file.rs"), "src/new_file.rs");
+}
+
+#[test]
+fn strip_diff_prefix_handles_renamed() {
+    assert_eq!(super::strip_diff_prefix("R src/old.rs"), "src/old.rs");
+}
+
+#[test]
+fn strip_diff_prefix_handles_deleted() {
+    assert_eq!(super::strip_diff_prefix("D src/dead.rs"), "src/dead.rs");
+}
+
+#[test]
+fn strip_diff_prefix_passthrough_unknown() {
+    assert_eq!(super::strip_diff_prefix("src/plain.rs"), "src/plain.rs");
+    assert_eq!(super::strip_diff_prefix("? src/untracked.rs"), "? src/untracked.rs");
+}
+
+#[test]
+fn validate_workspace_changes_rejects_empty() {
+    let result = super::validate_workspace_changes("");
+    assert!(result.is_err());
+    assert!(result.expect_err("expected empty workspace failure").is_terminal());
+}
+
+#[test]
+fn validate_workspace_changes_rejects_only_beads() {
+    let result = super::validate_workspace_changes(".beads/beads.db\n.beads/config.yaml\n");
+    assert!(result.is_err());
+    assert!(result
+        .expect_err("expected .beads-only failure")
+        .message()
+        .contains("no non-.beads changes"));
+}
+
+#[test]
+fn validate_workspace_changes_accepts_mixed() {
+    let result = super::validate_workspace_changes("src/main.rs\n.beads/beads.db\n");
+    assert!(result.is_ok());
+}
+
+#[test]
+fn validate_workspace_changes_accepts_source_only() {
+    let result = super::validate_workspace_changes("src/main.rs\nsrc/lib.rs\n");
+    assert!(result.is_ok());
+}
+
+#[test]
+fn validate_workspace_changes_handles_prefixed_output() {
+    let result = super::validate_workspace_changes("M src/main.rs\nA src/new.rs\n");
+    assert!(result.is_ok());
+}
+
+#[test]
+fn validate_workspace_changes_ignores_whitespace() {
+    let result = super::validate_workspace_changes("  \n  src/main.rs  \n  \n");
+    assert!(result.is_ok());
+}
+
+#[test]
 fn validate_dag_accepts_empty_step_list() {
     let result = super::validate_dag(&[]);
     assert!(result.is_ok());
