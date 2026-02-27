@@ -1,7 +1,9 @@
 use super::{
-    decode_bead_entries, extract_exec_binary, extract_exec_start, extract_repo_slug_from_gh_output,
+    decode_bead_entries, ensure_repo_matches_jj_origin, extract_exec_binary, extract_exec_start,
+    extract_repo_slug_from_gh_output, extract_repo_slug_from_jj_remote_output,
     has_required_services, is_valid_oya_exec_start, parse_admin_url, parse_host_port,
-    parse_ingress_url, parse_repo_slug, parse_service_url, BeadEntry,
+    parse_ingress_url, parse_repo_slug, parse_repo_slug_from_remote_url, parse_service_url,
+    BeadEntry,
 };
 use serde_json::json;
 
@@ -110,6 +112,47 @@ fn extract_repo_slug_from_gh_output_rejects_invalid_repo_name() {
     let raw = r#"{"nameWithOwner":"bad repo/oya"}"#;
     let parsed = extract_repo_slug_from_gh_output(raw);
     assert!(parsed.is_err());
+}
+
+#[test]
+fn extract_repo_slug_from_jj_remote_output_reads_origin_slug() {
+    let raw =
+        "origin https://github.com/lprior-repo/oya.git\nbackup https://github.com/other/repo.git\n";
+    let parsed = extract_repo_slug_from_jj_remote_output(raw);
+    assert!(matches!(parsed, Ok(Some(value)) if value == "lprior-repo/oya"));
+}
+
+#[test]
+fn extract_repo_slug_from_jj_remote_output_accepts_ssh_origin_slug() {
+    let raw = "origin git@github.com:lprior-repo/oya.git\n";
+    let parsed = extract_repo_slug_from_jj_remote_output(raw);
+    assert!(matches!(parsed, Ok(Some(value)) if value == "lprior-repo/oya"));
+}
+
+#[test]
+fn extract_repo_slug_from_jj_remote_output_returns_none_without_origin() {
+    let raw = "upstream https://github.com/lprior-repo/oya.git\n";
+    let parsed = extract_repo_slug_from_jj_remote_output(raw);
+    assert!(matches!(parsed, Ok(None)));
+}
+
+#[test]
+fn parse_repo_slug_from_remote_url_rejects_non_github_remote() {
+    let parsed = parse_repo_slug_from_remote_url("https://gitlab.com/lprior-repo/oya.git");
+    assert!(parsed.is_err());
+}
+
+#[test]
+fn ensure_repo_matches_jj_origin_accepts_matching_values() {
+    let result = ensure_repo_matches_jj_origin("lprior-repo/oya", Some("lprior-repo/oya"));
+    assert!(result.is_ok());
+}
+
+#[test]
+fn ensure_repo_matches_jj_origin_rejects_mismatch() {
+    let result =
+        ensure_repo_matches_jj_origin("lprior-repo/claude-skills", Some("lprior-repo/oya"));
+    assert!(result.is_err());
 }
 
 #[test]
