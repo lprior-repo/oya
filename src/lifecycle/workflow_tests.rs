@@ -4,6 +4,7 @@ use crate::lifecycle::effects::{
 };
 use crate::lifecycle::types::FailureCategory;
 use async_trait::async_trait;
+use chrono::DateTime;
 use std::collections::VecDeque;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -484,6 +485,12 @@ fn validate_workspace_changes_handles_prefixed_output() {
 fn validate_workspace_changes_ignores_whitespace() {
     let result = super::validate_workspace_changes("  \n  src/main.rs  \n  \n");
     assert!(result.is_ok());
+}
+
+#[test]
+fn timestamp_now_emits_rfc3339() {
+    let timestamp = super::timestamp_now();
+    assert!(DateTime::parse_from_rfc3339(&timestamp).is_ok());
 }
 
 #[test]

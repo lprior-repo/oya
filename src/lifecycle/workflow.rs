@@ -12,6 +12,7 @@ use crate::lifecycle::types::{
     BeadData, BeadId, CompensationDiagnostic, FailureCategory, LifecycleError, LifecycleState,
     Model, PrInfo, PrNumber, RepoSlug, WorkspaceName,
 };
+use chrono::{SecondsFormat, Utc};
 use futures_util::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -648,14 +649,12 @@ async fn execute_step(
             let next = success_acc(acc, step, entry)?;
             Ok((next, details))
         }
-        Err(error) => {
-            Err(Box::new(StepFailure {
-                state: failed_state(&acc.state, &error),
-                journal: acc.journal,
-                completed_compensations: acc.completed_compensations,
-                error,
-            }))
-        }
+        Err(error) => Err(Box::new(StepFailure {
+            state: failed_state(&acc.state, &error),
+            journal: acc.journal,
+            completed_compensations: acc.completed_compensations,
+            error,
+        })),
     }
 }
 
@@ -712,15 +711,7 @@ fn compute_duration_ms(start: &std::time::Instant) -> u64 {
 }
 
 fn timestamp_now() -> String {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs());
-    let secs = now % 86400;
-    let hours = secs / 3600;
-    let mins = (secs % 3600) / 60;
-    let secs = secs % 60;
-    let days_since_epoch = now / 86400;
-    format!("1970-01-01T{hours:02}:{mins:02}:{secs:02}Z+{days_since_epoch}d")
+    Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)
 }
 
 fn step_details(entry: &EffectJournalEntry) -> Option<Value> {
@@ -912,10 +903,8 @@ where
     };
     let (cleanup, cleanup_diagnostics) = workspace_cleanup(executor, workspace).await;
     compensation_journal = compensation_journal.into_iter().chain(cleanup).collect();
-    compensation_diagnostics = compensation_diagnostics
-        .into_iter()
-        .chain(cleanup_diagnostics.into_iter())
-        .collect();
+    compensation_diagnostics =
+        compensation_diagnostics.into_iter().chain(cleanup_diagnostics.into_iter()).collect();
     on_progress(LifecycleProgressUpdate::Finished {
         success: false,
         pr_url: pr_url_from_state(&failure.state),
@@ -1004,14 +993,12 @@ async fn run_compensation_with_diagnostic(
 
 fn compensation_metadata(compensation: &Compensation) -> (String, String) {
     match compensation {
-        Compensation::ForgetWorkspace { workspace } => (
-            "forget_workspace".to_owned(),
-            workspace.as_str().to_owned(),
-        ),
-        Compensation::MarkBeadBlocked { bead, .. } => (
-            "mark_bead_blocked".to_owned(),
-            bead.bead_id.as_str().to_owned(),
-        ),
+        Compensation::ForgetWorkspace { workspace } => {
+            ("forget_workspace".to_owned(), workspace.as_str().to_owned())
+        }
+        Compensation::MarkBeadBlocked { bead, .. } => {
+            ("mark_bead_blocked".to_owned(), bead.bead_id.as_str().to_owned())
+        }
     }
 }
 
