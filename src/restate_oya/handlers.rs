@@ -897,6 +897,18 @@ fn extract_step_snapshots(raw: &str) -> Vec<LifecycleStepSnapshot> {
 }
 
 fn parse_lifecycle_status_snapshot(raw: &str, key: &str) -> LifecycleStatusSnapshot {
+    if is_terminal_not_found_status(raw) {
+        return LifecycleStatusSnapshot {
+            bead_id: Some(key.to_owned()),
+            steps: Vec::new(),
+            state: None,
+            pr_url: None,
+            done: true,
+            success: Some(false),
+            message: Some(format!("terminal not-found: lifecycle `{key}` not found")),
+            compensation_diagnostics: Vec::new(),
+        };
+    }
     let is_running = raw.contains("Status:") && raw.contains("running");
     let is_backing_off = raw.contains("Status:") && raw.contains("backing-off");
     let message = extract_status_line(raw).or_else(|| {
@@ -916,6 +928,14 @@ fn parse_lifecycle_status_snapshot(raw: &str, key: &str) -> LifecycleStatusSnaps
         message,
         compensation_diagnostics: Vec::new(),
     }
+}
+
+fn is_terminal_not_found_status(raw: &str) -> bool {
+    let normalized = raw.trim().to_ascii_lowercase();
+    normalized.is_empty()
+        || normalized.contains("no invocations found")
+        || normalized.contains("no active invocation")
+        || normalized.contains("invocation not found")
 }
 
 fn extract_status_line(stdout: &str) -> Option<String> {
@@ -1038,5 +1058,18 @@ mod tests {
         assert!(snapshot.done);
         assert_eq!(snapshot.success, Some(false));
         assert_eq!(snapshot.pr_url, Some("https://github.com/lprior-repo/oya/pull/42".to_owned()));
+    }
+
+    #[test]
+    fn parse_lifecycle_status_snapshot_unknown_key_is_terminal_not_found() {
+        let snapshot = parse_lifecycle_status_snapshot("No invocations found", "src-unknown");
+
+        assert!(snapshot.done);
+        assert_eq!(snapshot.success, Some(false));
+        assert_eq!(snapshot.steps.len(), 0);
+        assert_eq!(
+            snapshot.message,
+            Some("terminal not-found: lifecycle `src-unknown` not found".to_owned())
+        );
     }
 }
