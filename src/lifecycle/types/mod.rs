@@ -10,6 +10,7 @@ mod lifecycle;
 mod model;
 mod pr;
 mod repo;
+mod timeout;
 mod workspace;
 
 pub use bead::{BeadId, BeadIdError, BeadStatus, BeadStatusError};
@@ -18,6 +19,7 @@ pub use lifecycle::{BeadData, CancelState, LifecycleResult, LifecycleState, Phas
 pub use model::{Model, ModelError};
 pub use pr::{PrInfo, PrNumber, PrNumberError};
 pub use repo::{RepoSlug, RepoSlugError};
+pub use timeout::{TimeoutError, TimeoutSeconds};
 pub use workspace::{BookmarkName, BookmarkNameError, WorkspaceName, WorkspaceNameError};
 
 const MAX_BEAD_ID_LEN: usize = 64;
