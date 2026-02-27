@@ -625,3 +625,28 @@ fn validate_dag_rejects_self_dependency() {
     assert_eq!(error.category(), FailureCategory::Validation);
     assert!(error.message().contains("cycle"));
 }
+
+#[test]
+fn validate_dag_rejects_dependency_after_step() {
+    let steps = vec![
+        super::LifecycleStep {
+            name: "step_b".to_owned(),
+            effect: Effect::Br { args: vec![], cwd: None },
+            compensation: None,
+            transition: super::StepTransition::None,
+            dependencies: vec!["step_a".to_owned()],
+        },
+        super::LifecycleStep {
+            name: "step_a".to_owned(),
+            effect: Effect::Br { args: vec![], cwd: None },
+            compensation: None,
+            transition: super::StepTransition::None,
+            dependencies: vec![],
+        },
+    ];
+    let result = super::validate_dag(&steps);
+    assert!(result.is_err());
+    let error = result.expect_err("expected order validation error");
+    assert_eq!(error.category(), FailureCategory::Validation);
+    assert!(error.message().contains("appears later"));
+}

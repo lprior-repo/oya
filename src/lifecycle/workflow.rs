@@ -9,8 +9,8 @@ use crate::lifecycle::effects::{
 };
 use crate::lifecycle::transitions::{apply_event, planned_state, LifecycleEvent};
 use crate::lifecycle::types::{
-    BeadData, BeadId, FailureCategory, LifecycleError, LifecycleState, Model, PrInfo, PrNumber,
-    RepoSlug, WorkspaceName,
+    BeadData, BeadId, CompensationDiagnostic, FailureCategory, LifecycleError, LifecycleState,
+    Model, PrInfo, PrNumber, RepoSlug, WorkspaceName,
 };
 use futures_util::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -28,6 +28,7 @@ pub struct LifecycleRunOutcome {
     pub state: LifecycleState,
     pub journal: Vec<EffectJournalEntry>,
     pub compensation_journal: Vec<EffectJournalEntry>,
+    pub compensation_diagnostics: Vec<CompensationDiagnostic>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -36,6 +37,7 @@ pub struct LifecycleRunFailure {
     pub state: Option<LifecycleState>,
     pub journal: Vec<EffectJournalEntry>,
     pub compensation_journal: Vec<EffectJournalEntry>,
+    pub compensation_diagnostics: Vec<CompensationDiagnostic>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -57,11 +59,15 @@ pub enum LifecycleProgressUpdate {
         status: LifecycleStepStatus,
         message: Option<String>,
         details: Option<Value>,
+        started_at: Option<String>,
+        finished_at: Option<String>,
+        duration_ms: Option<u64>,
     },
     Finished {
         success: bool,
         pr_url: Option<String>,
         message: Option<String>,
+        compensation_diagnostics: Vec<CompensationDiagnostic>,
     },
 }
 
@@ -119,7 +125,24 @@ pub fn validate_dag(steps: &[LifecycleStep]) -> Result<(), LifecycleError> {
             }
         }
     }
-    detect_cycles(steps)
+    detect_cycles(steps)?;
+    validate_dependency_order(steps)
+}
+
+fn validate_dependency_order(steps: &[LifecycleStep]) -> Result<(), LifecycleError> {
+    let mut seen = std::collections::HashSet::new();
+    for step in steps {
+        for dep in &step.dependencies {
+            if !seen.contains(dep.as_str()) {
+                return Err(LifecycleError::terminal(
+                    FailureCategory::Validation,
+                    format!("step `{}` depends on `{}` which appears later", step.name, dep),
+                ));
+            }
+        }
+        seen.insert(step.name.as_str());
+    }
+    Ok(())
 }
 
 fn detect_cycles(steps: &[LifecycleStep]) -> Result<(), LifecycleError> {
@@ -220,12 +243,14 @@ async fn resolve_and_validate(
         state: None,
         journal: Vec::new(),
         compensation_journal: Vec::new(),
+        compensation_diagnostics: Vec::new(),
     })?;
     let model = resolve_model(request.model.as_deref()).map_err(|error| LifecycleRunFailure {
         error,
         state: None,
         journal: Vec::new(),
         compensation_journal: Vec::new(),
+        compensation_diagnostics: Vec::new(),
     })?;
     let repo =
         validate_repo_slug(request.repo.as_deref()).map_err(|error| LifecycleRunFailure {
@@ -233,6 +258,7 @@ async fn resolve_and_validate(
             state: None,
             journal: Vec::new(),
             compensation_journal: Vec::new(),
+            compensation_diagnostics: Vec::new(),
         })?;
     let steps = build_steps(&bead, &model, repo.as_deref());
     validate_dag(&steps).map_err(|error| LifecycleRunFailure {
@@ -240,6 +266,7 @@ async fn resolve_and_validate(
         state: None,
         journal: Vec::new(),
         compensation_journal: Vec::new(),
+        compensation_diagnostics: Vec::new(),
     })?;
     Ok((bead, steps))
 }
@@ -330,6 +357,10 @@ fn build_steps(bead: &BeadData, model: &Model, repo: Option<&str>) -> Vec<Lifecy
     steps
 }
 
+fn deps(values: &[&str]) -> Vec<String> {
+    values.iter().map(|value| (*value).to_owned()).collect()
+}
+
 fn workspace_prepare_step(bead: &BeadData) -> LifecycleStep {
     LifecycleStep {
         name: "workspace_prepare".to_owned(),
@@ -339,7 +370,7 @@ fn workspace_prepare_step(bead: &BeadData) -> LifecycleStep {
         },
         compensation: None,
         transition: StepTransition::None,
-        dependencies: vec![],
+        dependencies: deps(&["mark_in_progress"]),
     }
 }
 
@@ -360,7 +391,7 @@ fn br_in_progress_step(bead: &BeadData) -> LifecycleStep {
             reason: "lifecycle failed after terminal error".to_owned(),
         }),
         transition: StepTransition::None,
-        dependencies: vec![],
+        dependencies: Vec::new(),
     }
 }
 
@@ -379,7 +410,7 @@ fn workspace_create_step(bead: &BeadData) -> LifecycleStep {
         },
         compensation: Some(Compensation::ForgetWorkspace { workspace: bead.workspace.clone() }),
         transition: StepTransition::Static(LifecycleEvent::WorkspacePrepared),
-        dependencies: vec![],
+        dependencies: deps(&["workspace_prepare"]),
     }
 }
 
@@ -397,7 +428,7 @@ fn jj_sync_main_step(bead: &BeadData) -> LifecycleStep {
         },
         compensation: None,
         transition: StepTransition::None,
-        dependencies: vec![],
+        dependencies: deps(&["moon_ci"]),
     }
 }
 
@@ -410,7 +441,7 @@ fn jj_rebase_main_step(bead: &BeadData) -> LifecycleStep {
         },
         compensation: None,
         transition: StepTransition::None,
-        dependencies: vec![],
+        dependencies: deps(&["jj_sync_main"]),
     }
 }
 
@@ -428,7 +459,7 @@ fn opencode_step(bead: &BeadData, model: &Model) -> LifecycleStep {
         },
         compensation: None,
         transition: StepTransition::None,
-        dependencies: vec![],
+        dependencies: deps(&["workspace_add"]),
     }
 }
 
@@ -448,7 +479,7 @@ fn validate_changes_step(bead: &BeadData) -> LifecycleStep {
         },
         compensation: None,
         transition: StepTransition::ValidateWorkspaceChanges,
-        dependencies: vec![],
+        dependencies: deps(&["jj_describe"]),
     }
 }
 
@@ -458,7 +489,7 @@ fn moon_ci_step(bead: &BeadData) -> LifecycleStep {
         effect: Effect::MoonCi { cwd: Some(bead.workspace_path.clone()) },
         compensation: None,
         transition: StepTransition::None,
-        dependencies: vec![],
+        dependencies: deps(&["opencode"]),
     }
 }
 
@@ -471,7 +502,7 @@ fn jj_track_step(bead: &BeadData) -> LifecycleStep {
         },
         compensation: None,
         transition: StepTransition::None,
-        dependencies: vec![],
+        dependencies: deps(&["jj_rebase_main"]),
     }
 }
 
@@ -485,7 +516,7 @@ fn jj_describe_step(bead: &BeadData) -> LifecycleStep {
         },
         compensation: None,
         transition: StepTransition::None,
-        dependencies: vec![],
+        dependencies: deps(&["jj_track"]),
     }
 }
 
@@ -504,7 +535,7 @@ fn bookmark_create_step(bead: &BeadData) -> LifecycleStep {
         },
         compensation: None,
         transition: StepTransition::None,
-        dependencies: vec![],
+        dependencies: deps(&["validate_changes"]),
     }
 }
 
@@ -524,7 +555,7 @@ fn bookmark_push_step(bead: &BeadData) -> LifecycleStep {
         },
         compensation: None,
         transition: StepTransition::None,
-        dependencies: vec![],
+        dependencies: deps(&["bookmark_create"]),
     }
 }
 
@@ -557,7 +588,7 @@ fn pr_create_step(bead: &BeadData, repo: Option<&str>) -> LifecycleStep {
         effect: Effect::Gh { args, cwd: Some(bead.workspace_path.clone()) },
         compensation: None,
         transition: StepTransition::PullRequestOpened { bead: bead.clone() },
-        dependencies: vec![],
+        dependencies: deps(&["bookmark_push"]),
     }
 }
 
@@ -572,47 +603,52 @@ where
 {
     let mut acc = initial;
     for step in steps {
-        on_progress(LifecycleProgressUpdate::Step {
-            step: step.name.clone(),
-            status: LifecycleStepStatus::Running,
-            message: None,
-            details: None,
-        });
-        acc = execute_step(executor, acc, step, on_progress).await?;
+        let step_name = step.name.clone();
+        let started_at = timestamp_now();
+        let start_instant = std::time::Instant::now();
+        on_progress(make_step_progress_running(&step_name, &started_at));
+        let result = execute_step(executor, acc, step).await;
+        let finished_at = timestamp_now();
+        let duration_ms = compute_duration_ms(&start_instant);
+        match result {
+            Ok((next, details)) => {
+                on_progress(make_step_progress_success(
+                    step_name,
+                    details,
+                    &started_at,
+                    &finished_at,
+                    duration_ms,
+                ));
+                acc = next;
+            }
+            Err(failure) => {
+                on_progress(make_step_progress_failure(
+                    step_name,
+                    failure.error.to_string(),
+                    &started_at,
+                    &finished_at,
+                    duration_ms,
+                ));
+                return Err(failure);
+            }
+        }
     }
     Ok(acc)
 }
 
-async fn execute_step<F>(
+async fn execute_step(
     executor: &dyn CommandExecutor,
     acc: ExecutionAcc,
     step: LifecycleStep,
-    on_progress: &mut F,
-) -> Result<ExecutionAcc, Box<StepFailure>>
-where
-    F: FnMut(LifecycleProgressUpdate),
-{
+) -> Result<(ExecutionAcc, Option<Value>), Box<StepFailure>> {
     let effect = step.effect.clone();
-    let step_name = step.name.clone();
     match run_effect(executor, effect).await {
         Ok(entry) => {
             let details = step_details(&entry);
-            let next = success_acc(acc, step, entry, on_progress)?;
-            on_progress(LifecycleProgressUpdate::Step {
-                step: step_name,
-                status: LifecycleStepStatus::Succeeded,
-                message: None,
-                details,
-            });
-            Ok(next)
+            let next = success_acc(acc, step, entry)?;
+            Ok((next, details))
         }
         Err(error) => {
-            on_progress(LifecycleProgressUpdate::Step {
-                step: step_name,
-                status: LifecycleStepStatus::Failed,
-                message: Some(error.to_string()),
-                details: None,
-            });
             Err(Box::new(StepFailure {
                 state: failed_state(&acc.state, &error),
                 journal: acc.journal,
@@ -621,6 +657,70 @@ where
             }))
         }
     }
+}
+
+fn make_step_progress_running(step: &str, started_at: &str) -> LifecycleProgressUpdate {
+    LifecycleProgressUpdate::Step {
+        step: step.to_owned(),
+        status: LifecycleStepStatus::Running,
+        message: None,
+        details: None,
+        started_at: Some(started_at.to_owned()),
+        finished_at: None,
+        duration_ms: None,
+    }
+}
+
+fn make_step_progress_success(
+    step: String,
+    details: Option<Value>,
+    started_at: &str,
+    finished_at: &str,
+    duration_ms: u64,
+) -> LifecycleProgressUpdate {
+    LifecycleProgressUpdate::Step {
+        step,
+        status: LifecycleStepStatus::Succeeded,
+        message: None,
+        details,
+        started_at: Some(started_at.to_owned()),
+        finished_at: Some(finished_at.to_owned()),
+        duration_ms: Some(duration_ms),
+    }
+}
+
+fn make_step_progress_failure(
+    step: String,
+    message: String,
+    started_at: &str,
+    finished_at: &str,
+    duration_ms: u64,
+) -> LifecycleProgressUpdate {
+    LifecycleProgressUpdate::Step {
+        step,
+        status: LifecycleStepStatus::Failed,
+        message: Some(message),
+        details: None,
+        started_at: Some(started_at.to_owned()),
+        finished_at: Some(finished_at.to_owned()),
+        duration_ms: Some(duration_ms),
+    }
+}
+
+fn compute_duration_ms(start: &std::time::Instant) -> u64 {
+    u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX)
+}
+
+fn timestamp_now() -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    let secs = now % 86400;
+    let hours = secs / 3600;
+    let mins = (secs % 3600) / 60;
+    let secs = secs % 60;
+    let days_since_epoch = now / 86400;
+    format!("1970-01-01T{hours:02}:{mins:02}:{secs:02}Z+{days_since_epoch}d")
 }
 
 fn step_details(entry: &EffectJournalEntry) -> Option<Value> {
@@ -641,26 +741,16 @@ fn parse_json_lines(raw: &str) -> Vec<Value> {
         .collect::<Vec<_>>()
 }
 
-fn success_acc<F>(
+fn success_acc(
     acc: ExecutionAcc,
     step: LifecycleStep,
     entry: EffectJournalEntry,
-    on_progress: &mut F,
-) -> Result<ExecutionAcc, Box<StepFailure>>
-where
-    F: FnMut(LifecycleProgressUpdate),
-{
+) -> Result<ExecutionAcc, Box<StepFailure>> {
     let prev_state = acc.state;
     let prev_journal = acc.journal;
     let prev_compensations = acc.completed_compensations;
     let new_state = apply_transition(&prev_state, &step.transition, &entry);
     let state = new_state.map_err(|error| {
-        on_progress(LifecycleProgressUpdate::Step {
-            step: step.name.clone(),
-            status: LifecycleStepStatus::Failed,
-            message: Some(error.to_string()),
-            details: None,
-        });
         Box::new(StepFailure {
             state: prev_state.clone(),
             journal: append_entry(prev_journal.clone(), entry.clone()),
@@ -786,16 +876,23 @@ where
             state: Some(acc.state.clone()),
             journal: acc.journal.clone(),
             compensation_journal: Vec::new(),
+            compensation_diagnostics: Vec::new(),
         }
     })?;
     acc.state = completed_state;
-    let cleanup = workspace_cleanup(executor, workspace).await;
+    let (cleanup, cleanup_diagnostics) = workspace_cleanup(executor, workspace).await;
     let pr_url = pr_url_from_state(&acc.state);
-    on_progress(LifecycleProgressUpdate::Finished { success: true, pr_url, message: None });
+    on_progress(LifecycleProgressUpdate::Finished {
+        success: true,
+        pr_url,
+        message: None,
+        compensation_diagnostics: cleanup_diagnostics.clone(),
+    });
     Ok(LifecycleRunOutcome {
         state: acc.state,
         journal: acc.journal,
         compensation_journal: cleanup,
+        compensation_diagnostics: cleanup_diagnostics,
     })
 }
 
@@ -808,23 +905,29 @@ async fn finalize_failure<F>(
 where
     F: FnMut(LifecycleProgressUpdate),
 {
-    let mut compensation_journal = if failure.error.is_terminal() {
+    let (mut compensation_journal, mut compensation_diagnostics) = if failure.error.is_terminal() {
         run_compensations(executor, failure.completed_compensations).await
     } else {
-        Vec::new()
+        (Vec::new(), Vec::new())
     };
-    let cleanup = workspace_cleanup(executor, workspace).await;
+    let (cleanup, cleanup_diagnostics) = workspace_cleanup(executor, workspace).await;
     compensation_journal = compensation_journal.into_iter().chain(cleanup).collect();
+    compensation_diagnostics = compensation_diagnostics
+        .into_iter()
+        .chain(cleanup_diagnostics.into_iter())
+        .collect();
     on_progress(LifecycleProgressUpdate::Finished {
         success: false,
         pr_url: pr_url_from_state(&failure.state),
         message: Some(failure.error.to_string()),
+        compensation_diagnostics: compensation_diagnostics.clone(),
     });
     Err(LifecycleRunFailure {
         error: failure.error,
         state: Some(failure.state),
         journal: failure.journal,
         compensation_journal,
+        compensation_diagnostics,
     })
 }
 
@@ -843,24 +946,73 @@ fn pr_url_from_state(state: &LifecycleState) -> Option<String> {
 async fn workspace_cleanup(
     executor: &dyn CommandExecutor,
     workspace: WorkspaceName,
-) -> Vec<EffectJournalEntry> {
-    run_compensation(executor, Compensation::ForgetWorkspace { workspace })
-        .await
-        .ok()
-        .into_iter()
-        .collect()
+) -> (Vec<EffectJournalEntry>, Vec<CompensationDiagnostic>) {
+    let compensation = Compensation::ForgetWorkspace { workspace };
+    let (entry, diagnostic) = run_compensation_with_diagnostic(executor, compensation).await;
+    let journal = entry.into_iter().collect::<Vec<_>>();
+    (journal, vec![diagnostic])
 }
 
 async fn run_compensations(
     executor: &dyn CommandExecutor,
     compensations: Vec<Compensation>,
-) -> Vec<EffectJournalEntry> {
+) -> (Vec<EffectJournalEntry>, Vec<CompensationDiagnostic>) {
     let reversed = compensations.into_iter().rev().collect::<Vec<_>>();
     let attempts = stream::iter(reversed.into_iter())
-        .then(|compensation| async move { run_compensation(executor, compensation).await })
-        .collect::<Vec<anyhow::Result<EffectJournalEntry>>>()
+        .then(|compensation| async move {
+            run_compensation_with_diagnostic(executor, compensation).await
+        })
+        .collect::<Vec<(Option<EffectJournalEntry>, CompensationDiagnostic)>>()
         .await;
-    attempts.into_iter().filter_map(Result::ok).collect()
+    let mut journal = Vec::new();
+    let mut diagnostics = Vec::new();
+    for (entry, diagnostic) in attempts {
+        if let Some(item) = entry {
+            journal.push(item);
+        }
+        diagnostics.push(diagnostic);
+    }
+    (journal, diagnostics)
+}
+
+async fn run_compensation_with_diagnostic(
+    executor: &dyn CommandExecutor,
+    compensation: Compensation,
+) -> (Option<EffectJournalEntry>, CompensationDiagnostic) {
+    let (comp_type, target) = compensation_metadata(&compensation);
+    match run_compensation(executor, compensation).await {
+        Ok(entry) => (
+            Some(entry),
+            CompensationDiagnostic {
+                compensation_type: comp_type,
+                target,
+                success: true,
+                error: None,
+            },
+        ),
+        Err(error) => (
+            None,
+            CompensationDiagnostic {
+                compensation_type: comp_type,
+                target,
+                success: false,
+                error: Some(error.to_string()),
+            },
+        ),
+    }
+}
+
+fn compensation_metadata(compensation: &Compensation) -> (String, String) {
+    match compensation {
+        Compensation::ForgetWorkspace { workspace } => (
+            "forget_workspace".to_owned(),
+            workspace.as_str().to_owned(),
+        ),
+        Compensation::MarkBeadBlocked { bead, .. } => (
+            "mark_bead_blocked".to_owned(),
+            bead.bead_id.as_str().to_owned(),
+        ),
+    }
 }
 
 fn append_entry(
