@@ -9,6 +9,7 @@ use anyhow::Context;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io::ErrorKind;
 use std::path::Path;
 use std::process::Stdio;
 use std::time::Duration;
@@ -358,14 +359,37 @@ fn remove_workspace_dir(path: &str) -> Result<String, LifecycleError> {
         })?;
     }
     if target.exists() {
-        fs::remove_dir_all(target).map_err(|error| {
-            LifecycleError::terminal(
-                FailureCategory::Workspace,
-                format!("failed to clean workspace directory {path}: {error}"),
-            )
-        })?;
+        remove_workspace_dir_with_retry(target, path)?;
         Ok(format!("workspace path {path} prepared"))
     } else {
         Ok(format!("workspace path {path} already clean"))
     }
+}
+
+fn remove_workspace_dir_with_retry(target: &Path, path: &str) -> Result<(), LifecycleError> {
+    const ATTEMPTS: usize = 4;
+    let mut last_error: Option<std::io::Error> = None;
+    for _ in 0..ATTEMPTS {
+        match fs::remove_dir_all(target) {
+            Ok(()) => return Ok(()),
+            Err(error) if is_retryable_workspace_cleanup_error(&error) => {
+                last_error = Some(error);
+            }
+            Err(error) if error.kind() == ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(workspace_cleanup_error(path, error)),
+        }
+    }
+    let error = last_error.unwrap_or_else(|| std::io::Error::from(ErrorKind::Other));
+    Err(workspace_cleanup_error(path, error))
+}
+
+fn is_retryable_workspace_cleanup_error(error: &std::io::Error) -> bool {
+    error.kind() == ErrorKind::DirectoryNotEmpty
+}
+
+fn workspace_cleanup_error(path: &str, error: std::io::Error) -> LifecycleError {
+    LifecycleError::terminal(
+        FailureCategory::Workspace,
+        format!("failed to clean workspace directory {path}: {error}"),
+    )
 }
