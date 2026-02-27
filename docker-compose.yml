@@ -9,6 +9,8 @@ services:
       RESTATE_INGRESS__ADVERTISED_ADDRESS: "http://127.0.0.1:909/"
       RESTATE_ADMIN__BIND_PORT: "9070"
       RESTATE_ADMIN__ADVERTISED_ADDRESS: "http://127.0.0.1:9070/"
+      RESTATE_WORKER__INVOKER__INACTIVITY_TIMEOUT: "60m"
+      RESTATE_WORKER__INVOKER__ABORT_TIMEOUT: "30m"
     volumes:
       - oya_restate_data:/restate-data
     restart: unless-stopped
