@@ -765,13 +765,11 @@ fn parse_jj_remote_line(line: &str) -> Option<anyhow::Result<String>> {
 }
 
 fn parse_repo_slug_from_remote_url(value: &str) -> anyhow::Result<String> {
-    let normalized = value
-        .trim_end_matches('/')
-        .trim_end_matches(".git")
+    let trimmed = value.trim_end_matches('/').trim_end_matches(".git");
+    let normalized = trimmed
         .strip_prefix("https://github.com/")
-        .or_else(|| {
-            value.trim_end_matches('/').trim_end_matches(".git").strip_prefix("git@github.com:")
-        })
+        .or_else(|| trimmed.strip_prefix("git@github.com:"))
+        .or_else(|| trimmed.strip_prefix("ssh://git@github.com/"))
         .ok_or_else(|| {
             anyhow::anyhow!("unsupported origin URL `{value}`; expected github remote")
         })?;

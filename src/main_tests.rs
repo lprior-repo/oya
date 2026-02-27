@@ -143,6 +143,24 @@ fn parse_repo_slug_from_remote_url_rejects_non_github_remote() {
 }
 
 #[test]
+fn parse_repo_slug_from_remote_url_accepts_https_without_dot_git() {
+    let parsed = parse_repo_slug_from_remote_url("https://github.com/lprior-repo/oya");
+    assert!(matches!(parsed, Ok(value) if value == "lprior-repo/oya"));
+}
+
+#[test]
+fn parse_repo_slug_from_remote_url_accepts_ssh_scheme_form() {
+    let parsed = parse_repo_slug_from_remote_url("ssh://git@github.com/lprior-repo/oya.git");
+    assert!(matches!(parsed, Ok(value) if value == "lprior-repo/oya"));
+}
+
+#[test]
+fn parse_repo_slug_from_remote_url_rejects_missing_repo_segment() {
+    let parsed = parse_repo_slug_from_remote_url("https://github.com/lprior-repo");
+    assert!(parsed.is_err());
+}
+
+#[test]
 fn ensure_repo_matches_jj_origin_accepts_matching_values() {
     let result = ensure_repo_matches_jj_origin("lprior-repo/oya", Some("lprior-repo/oya"));
     assert!(result.is_ok());
