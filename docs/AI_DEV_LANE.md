@@ -36,11 +36,11 @@ This is the "conservative, correct side" of AI development: deterministic workfl
 | **jj** | Workspace isolation and merge-flow primitive |
 | **Beads (br)** | Intake and lifecycle source of truth for all work items |
 | **Codanna MCP** | Code discovery (symbols, callers, calls, impact, dependency tracing) |
-| **Sled** | Persistence baseline for run and evidence state |
+| **Runtime status + workflow state** | Durable/observable run state surfaced through Oya status handlers |
 
 ### Observability
 - **OpenObserve**: UI at `http://localhost:5080`, OTLP gRPC at `localhost:4317`
-- **Restate**: UI at `http://localhost:9070`, Ingress at `http://localhost:8080`
+- **Restate**: UI at `http://localhost:9070`, Ingress at `http://localhost:909`
 
 ---
 
@@ -114,7 +114,7 @@ The planner enforces spec quality before work begins:
 - All output is patches, not full‑file rewrites
 
 ### Stage 6: Green Phase
-- `moon run :fmt` → `moon run :clippy` → `moon run :test` → property tests (where configured)
+- `moon run :quick` → `moon run :test` → `moon run :ci` (plus property tests where configured)
 - Failures route back to implement with targeted constraints
 - All retries logged and visible in the workflow UI
 
@@ -135,11 +135,11 @@ The planner enforces spec quality before work begins:
 
 | Layer | Tool | Purpose |
 |-------|------|---------|
-| **Compiler + Lints** | `moon run :build`, `moon run :fmt`, `moon run :clippy` | Baseline correctness |
+| **Compiler + Lints** | `moon run :check`, `moon run :build`, `moon run :ci` | Baseline correctness |
 | **ATDD Tests** | Hidden from AI | Acceptance criteria validation |
 | **Unit + Integration** | `moon run :test` | Functional correctness |
 | **Property Tests** | proptest | Invariant validation |
-| **Mutation Tests** | cargo-mutants | Test suite quality (periodic) |
+| **Mutation Tests** | `moon run :mutants-quick` | Test suite quality (periodic) |
 | **AI Review** | Codex reviewer | Contract/style/leakage checks |
 | **Merge Queue** | Full re-run | Integration safety |
 

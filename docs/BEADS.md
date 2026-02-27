@@ -12,9 +12,11 @@
 br ready                           # Find actionable work
 br show <id>                      # View full details
 br update <id> --status in_progress  # Claim work
+oya lifecycle --bead <id> --repo <owner/repo>  # Run implementation flow
+moon run :ci                      # Validate code path
 
 # Complete work
-br close <id> --reason "Done"      # Close with reason
+br close <id>                      # Close issue
 br sync --flush-only                 # Export to JSONL
 git add .beads/ && git commit -m "..."  # Commit
 

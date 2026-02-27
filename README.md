@@ -8,6 +8,20 @@ This repo runs Oya with Docker Restate and fixed local ports:
 
 `8080` and `9090` are intentionally not used by Restate.
 
+## What Oya CLI Provides
+
+`oya` exposes these top-level commands:
+
+- `init` - bootstrap or tear down local Docker Restate runtime
+- `doctor` - validate runtime/network/service/task invariants as JSONL checks
+- `serve` - run Oya handler service (default `127.0.0.1:9180`)
+- `invoke` - call `OyaMemory/<id>/start`
+- `implement` - run `sync_bead` + `run_pipeline` against a bead
+- `lifecycle` - run `Oya/<key>/run` lifecycle workflow
+- `status` - call `OyaService/get_lifecycle`
+- `cancel` - call `OyaService/cancel`
+- `beads` - list beads from `.beads/issues.jsonl` or `br ready --json`
+
 ## Prerequisites
 
 - `docker` + `docker compose`
@@ -51,6 +65,11 @@ Output is emitted as JSONL (`type=check` lines + `type=summary`).
 ```bash
 oya lifecycle --bead <bead_id> --ingress http://127.0.0.1:909
 ```
+
+Lifecycle behavior highlights:
+
+- Lifecycle step DAGs are validated before execution (unknown dependency, cycle, or out-of-order dependency fails fast as terminal validation error).
+- `oya status --key <id>` returns terminal not-found status (`done: true`, `success: false`) when no lifecycle exists for that key.
 
 Repo selection:
 
