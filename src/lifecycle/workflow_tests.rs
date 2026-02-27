@@ -263,6 +263,84 @@ async fn run_lifecycle_pr_output_without_url_triggers_terminal_compensations() {
 }
 
 #[tokio::test]
+async fn run_lifecycle_existing_pr_in_stderr_is_treated_as_success() {
+    let bead = "edge-test-002b";
+    let workspace = "oya-edge-test-002b";
+    let workspace_path = "/home/lewis/src/oya-edge-test-002b";
+    let prompt = "Implement bead edge-test-002b in this workspace with real code changes. Do not call `oya` or `br`. Use moon/jj/gh as needed. Return short JSON summary with changed_files and ci_status.";
+    let executor = ScriptedExecutor::new(vec![
+        call("br", &["update", bead, "--status", "in_progress"], None, ok("")),
+        call("jj", &["workspace", "forget", workspace], None, ok("")),
+        call("jj", &["workspace", "add", workspace_path, "--name", workspace], None, ok("")),
+        call(
+            "opencode",
+            &["run", "--format", "json", "--model", "zai-coding-plan/glm-5", prompt],
+            Some(workspace_path),
+            ok("{\"status\":\"ok\"}"),
+        ),
+        call("moon", &["run", ":ci"], Some(workspace_path), ok("")),
+        call("jj", &["git", "fetch", "--remote", "origin"], Some(workspace_path), ok("")),
+        call("jj", &["rebase", "-d", "main@origin"], Some(workspace_path), ok("")),
+        call("jj", &["file", "track", "."], Some(workspace_path), ok("")),
+        call(
+            "jj",
+            &["describe", "-m", "chore: implement edge-test-002b via lifecycle"],
+            Some(workspace_path),
+            ok(""),
+        ),
+        call(
+            "jj",
+            &["diff", "--name-only", "--from", "main@origin", "--to", "@"],
+            Some(workspace_path),
+            ok("src/main.rs\n"),
+        ),
+        call("jj", &["bookmark", "set", bead, "-r", "@"], Some(workspace_path), ok("")),
+        call(
+            "jj",
+            &["git", "push", "--remote", "origin", "--bookmark", bead],
+            Some(workspace_path),
+            ok(""),
+        ),
+        call(
+            "gh",
+            &[
+                "pr",
+                "create",
+                "--head",
+                bead,
+                "--base",
+                "main",
+                "--title",
+                "Lifecycle edge-test-002b",
+                "--body",
+                "## Summary\n- Implements bead `edge-test-002b` via lifecycle automation\n- Runs `moon run :ci` in workspace before opening PR\n- Publishes lifecycle status updates for polling",
+            ],
+            Some(workspace_path),
+            non_zero("a pull request for branch \"edge-test-002b\" into branch \"main\" already exists:\nhttps://github.com/lprior-repo/oya/pull/4242\n"),
+        ),
+        call("jj", &["workspace", "forget", workspace], None, ok("")),
+    ]);
+
+    let mut progress = Vec::<LifecycleProgressUpdate>::new();
+    let result = run_lifecycle_with_progress(
+        &executor,
+        LifecycleRunRequest { bead_id: Some(bead.to_owned()), model: None, repo: None },
+        |update| progress.push(update),
+    )
+    .await;
+
+    executor.assert_empty();
+    assert!(result.is_ok());
+    assert!(progress.iter().any(|event| {
+        matches!(
+            event,
+            LifecycleProgressUpdate::Finished { success: true, pr_url: Some(url), .. }
+                if url.ends_with("/pull/4242")
+        )
+    }));
+}
+
+#[tokio::test]
 async fn run_lifecycle_transient_failure_skips_terminal_compensations() {
     let bead = "edge-test-003";
     let workspace = "oya-edge-test-003";

@@ -143,11 +143,39 @@ pub async fn run_effect(
             stderr: result.stderr,
         }),
         Ok(result) => {
+            if let Some(existing_url) = existing_pr_url_from_non_zero(&effect, &result.stderr) {
+                return Ok(EffectJournalEntry {
+                    effect,
+                    timeout_secs,
+                    success: true,
+                    stdout: existing_url,
+                    stderr: result.stderr,
+                });
+            }
             let error = classify_non_zero(&effect, result.status_code, &result.stderr);
             Err(error)
         }
         Err(failure) => Err(classify_command_failure(&effect, failure)),
     }
+}
+
+fn existing_pr_url_from_non_zero(effect: &Effect, stderr: &str) -> Option<String> {
+    match effect {
+        Effect::Gh { args, .. } if is_pr_create_args(args) => extract_pull_request_url(stderr),
+        _ => None,
+    }
+}
+
+fn is_pr_create_args(args: &[String]) -> bool {
+    args.first().is_some_and(|value| value == "pr")
+        && args.get(1).is_some_and(|value| value == "create")
+}
+
+fn extract_pull_request_url(raw: &str) -> Option<String> {
+    raw.split_whitespace()
+        .map(|token| token.trim_end_matches([')', ']', '.', ',', ';']))
+        .find(|token| token.starts_with("https://") && token.contains("/pull/"))
+        .map(std::borrow::ToOwned::to_owned)
 }
 
 async fn run_moon_ci_effect(
