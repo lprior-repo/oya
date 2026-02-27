@@ -421,6 +421,28 @@ fn step_details_keeps_stderr_when_opencode_stdout_has_no_json() {
 }
 
 #[test]
+fn step_details_parses_json_lines_from_opencode_stdout() {
+    let stdout = r#"{"type":"progress","message":"starting"}
+{"type":"result","status":"ok"}
+plain text ignored
+{"type":"done"}"#;
+    let details = super::step_details(&EffectJournalEntry {
+        effect: Effect::Opencode { prompt: "x".to_owned(), model: "m".to_owned(), cwd: None },
+        timeout_secs: 1200,
+        success: true,
+        stdout: stdout.to_owned(),
+        stderr: String::new(),
+    });
+    let details = details.expect("should return details");
+    let events =
+        details.get("events").expect("should have events").as_array().expect("events array");
+    assert_eq!(events.len(), 3);
+    assert_eq!(events[0]["type"], "progress");
+    assert_eq!(events[1]["type"], "result");
+    assert_eq!(events[2]["type"], "done");
+}
+
+#[test]
 fn strip_diff_prefix_handles_modified() {
     assert_eq!(super::strip_diff_prefix("M src/main.rs"), "src/main.rs");
 }
