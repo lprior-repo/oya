@@ -154,7 +154,7 @@ async fn run_lifecycle_success_path_executes_jj_only_git_bridge() {
 
     executor.assert_empty();
     assert!(result.is_ok());
-    let outcome = result.expect("expected success outcome");
+    let outcome = result.expect("success outcome");
     assert_eq!(outcome.compensation_journal.len(), 1);
     assert!(
         progress
@@ -278,6 +278,24 @@ async fn run_lifecycle_transient_failure_skips_terminal_compensations() {
             Some(workspace_path),
             non_zero("simulated opencode transient failure"),
         ),
+        call(
+            "opencode",
+            &["run", "--format", "json", "--model", "zai-coding-plan/glm-5", prompt],
+            Some(workspace_path),
+            non_zero("simulated opencode transient failure"),
+        ),
+        call(
+            "opencode",
+            &["run", "--format", "json", "--model", "zai-coding-plan/glm-5", prompt],
+            Some(workspace_path),
+            non_zero("simulated opencode transient failure"),
+        ),
+        call(
+            "opencode",
+            &["run", "--format", "json", "--model", "zai-coding-plan/glm-5", prompt],
+            Some(workspace_path),
+            non_zero("simulated opencode transient failure"),
+        ),
         call("jj", &["workspace", "forget", workspace], None, ok("")),
     ]);
 
@@ -293,7 +311,85 @@ async fn run_lifecycle_transient_failure_skips_terminal_compensations() {
     let failure = result.expect_err("expected transient opencode failure");
     assert_eq!(failure.error.category(), FailureCategory::Command);
     assert!(!failure.error.is_terminal());
+    assert!(failure.error.message().contains("after 4 attempts (3 retries)"));
     assert_eq!(failure.compensation_journal.len(), 1);
+}
+
+#[tokio::test]
+async fn run_lifecycle_transient_opencode_recovers_after_retry() {
+    let bead = "edge-test-003b";
+    let workspace = "oya-edge-test-003b";
+    let workspace_path = "/home/lewis/src/oya-edge-test-003b";
+    let prompt = "Implement bead edge-test-003b in this workspace with real code changes. Do not call `oya` or `br`. Use moon/jj/gh as needed. Return short JSON summary with changed_files and ci_status.";
+    let pr_body = "## Summary\n- Implements bead `edge-test-003b` via lifecycle automation\n- Runs `moon run :ci` in workspace before opening PR\n- Publishes lifecycle status updates for polling";
+    let executor = ScriptedExecutor::new(vec![
+        call("br", &["update", bead, "--status", "in_progress"], None, ok("")),
+        call("jj", &["workspace", "forget", workspace], None, ok("")),
+        call("jj", &["workspace", "add", workspace_path, "--name", workspace], None, ok("")),
+        call(
+            "opencode",
+            &["run", "--format", "json", "--model", "zai-coding-plan/glm-5", prompt],
+            Some(workspace_path),
+            non_zero("transient opencode failure"),
+        ),
+        call(
+            "opencode",
+            &["run", "--format", "json", "--model", "zai-coding-plan/glm-5", prompt],
+            Some(workspace_path),
+            ok("{\"status\":\"ok\"}"),
+        ),
+        call("moon", &["run", ":ci"], Some(workspace_path), ok("")),
+        call("jj", &["git", "fetch", "--remote", "origin"], Some(workspace_path), ok("")),
+        call("jj", &["rebase", "-d", "main@origin"], Some(workspace_path), ok("")),
+        call("jj", &["file", "track", "."], Some(workspace_path), ok("")),
+        call(
+            "jj",
+            &["describe", "-m", "chore: implement edge-test-003b via lifecycle"],
+            Some(workspace_path),
+            ok(""),
+        ),
+        call(
+            "jj",
+            &["diff", "--name-only", "--from", "main@origin", "--to", "@"],
+            Some(workspace_path),
+            ok("src/main.rs\n"),
+        ),
+        call("jj", &["bookmark", "set", bead, "-r", "@"], Some(workspace_path), ok("")),
+        call(
+            "jj",
+            &["git", "push", "--remote", "origin", "--bookmark", bead],
+            Some(workspace_path),
+            ok(""),
+        ),
+        call(
+            "gh",
+            &[
+                "pr",
+                "create",
+                "--head",
+                bead,
+                "--base",
+                "main",
+                "--title",
+                "Lifecycle edge-test-003b",
+                "--body",
+                pr_body,
+            ],
+            Some(workspace_path),
+            ok("https://github.com/lprior-repo/oya/pull/333\n"),
+        ),
+        call("jj", &["workspace", "forget", workspace], None, ok("")),
+    ]);
+
+    let result = run_lifecycle_with_progress(
+        &executor,
+        LifecycleRunRequest { bead_id: Some(bead.to_owned()), model: None, repo: None },
+        |_| {},
+    )
+    .await;
+
+    executor.assert_empty();
+    assert!(result.is_ok());
 }
 
 #[tokio::test]

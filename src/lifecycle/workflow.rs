@@ -16,6 +16,15 @@ use chrono::{SecondsFormat, Utc};
 use futures_util::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use tokio::time::{sleep, Duration};
+
+#[cfg(not(test))]
+const STAGE_RETRY_BACKOFFS: [Duration; 3] =
+    [Duration::from_secs(120), Duration::from_secs(120), Duration::from_secs(120)];
+
+#[cfg(test)]
+const STAGE_RETRY_BACKOFFS: [Duration; 3] =
+    [Duration::from_millis(0), Duration::from_millis(0), Duration::from_millis(0)];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LifecycleRunRequest {
@@ -643,7 +652,7 @@ async fn execute_step(
     step: LifecycleStep,
 ) -> Result<(ExecutionAcc, Option<Value>), Box<StepFailure>> {
     let effect = step.effect.clone();
-    match run_effect(executor, effect).await {
+    match run_effect_with_retries(executor, effect).await {
         Ok(entry) => {
             let details = step_details(&entry);
             let next = success_acc(acc, step, entry)?;
@@ -655,6 +664,45 @@ async fn execute_step(
             completed_compensations: acc.completed_compensations,
             error,
         })),
+    }
+}
+
+async fn run_effect_with_retries(
+    executor: &dyn CommandExecutor,
+    effect: Effect,
+) -> Result<EffectJournalEntry, LifecycleError> {
+    for attempt in 0..=STAGE_RETRY_BACKOFFS.len() {
+        if attempt > 0 {
+            sleep(STAGE_RETRY_BACKOFFS[attempt - 1]).await;
+        }
+        match run_effect(executor, effect.clone()).await {
+            Ok(entry) => return Ok(entry),
+            Err(error) if should_retry_stage(&error) && attempt < STAGE_RETRY_BACKOFFS.len() => {
+                continue;
+            }
+            Err(error) if should_retry_stage(&error) => {
+                return Err(with_retry_context(error, attempt + 1, STAGE_RETRY_BACKOFFS.len()));
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    Err(LifecycleError::terminal(
+        FailureCategory::Command,
+        "unreachable retry state in run_effect_with_retries",
+    ))
+}
+
+fn should_retry_stage(error: &LifecycleError) -> bool {
+    !error.is_terminal()
+}
+
+fn with_retry_context(error: LifecycleError, attempts: usize, retries: usize) -> LifecycleError {
+    match error {
+        LifecycleError::Transient { category, message } => LifecycleError::transient(
+            category,
+            format!("after {attempts} attempts ({retries} retries): {message}"),
+        ),
+        other => other,
     }
 }
 
