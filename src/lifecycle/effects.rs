@@ -376,18 +376,18 @@ fn remove_workspace_dir_with_retry(target: &Path, path: &str) -> Result<(), Life
                 last_error = Some(error);
             }
             Err(error) if error.kind() == ErrorKind::NotFound => return Ok(()),
-            Err(error) => return Err(workspace_cleanup_error(path, error)),
+            Err(error) => return Err(workspace_cleanup_error(path, &error)),
         }
     }
     let error = last_error.unwrap_or_else(|| std::io::Error::from(ErrorKind::Other));
-    Err(workspace_cleanup_error(path, error))
+    Err(workspace_cleanup_error(path, &error))
 }
 
 fn is_retryable_workspace_cleanup_error(error: &std::io::Error) -> bool {
     error.kind() == ErrorKind::DirectoryNotEmpty
 }
 
-fn workspace_cleanup_error(path: &str, error: std::io::Error) -> LifecycleError {
+fn workspace_cleanup_error(path: &str, error: &std::io::Error) -> LifecycleError {
     LifecycleError::terminal(
         FailureCategory::Workspace,
         format!("failed to clean workspace directory {path}: {error}"),

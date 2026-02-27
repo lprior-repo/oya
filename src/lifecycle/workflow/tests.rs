@@ -1,4 +1,10 @@
-use super::{run_lifecycle_with_progress, LifecycleProgressUpdate, LifecycleRunRequest};
+use super::dag::validate_dag;
+use super::execution::{
+    run_lifecycle_with_progress, step_details, strip_diff_prefix, validate_workspace_changes,
+};
+use super::progress::timestamp_now;
+use super::steps::{LifecycleStep, StepTransition};
+use super::types::{LifecycleProgressUpdate, LifecycleRunRequest, LifecycleStepStatus};
 use crate::lifecycle::effects::{
     CommandExecutor, CommandFailure, CommandResult, Effect, EffectJournalEntry,
 };
@@ -166,7 +172,7 @@ async fn run_lifecycle_success_path_executes_jj_only_git_bridge() {
             event,
             LifecycleProgressUpdate::Step {
                 step,
-                status: super::LifecycleStepStatus::Succeeded,
+                status: LifecycleStepStatus::Succeeded,
                 details: Some(details),
                 ..
             } if step == "opencode" && details.get("events").is_some()
@@ -578,7 +584,7 @@ async fn run_lifecycle_fails_when_only_bead_files_changed() {
 
 #[test]
 fn step_details_keeps_stderr_when_opencode_stdout_has_no_json() {
-    let details = super::step_details(&EffectJournalEntry {
+    let details = step_details(&EffectJournalEntry {
         effect: Effect::Opencode { prompt: "x".to_owned(), model: "m".to_owned(), cwd: None },
         timeout_secs: 1200,
         success: true,
@@ -596,40 +602,40 @@ fn step_details_keeps_stderr_when_opencode_stdout_has_no_json() {
 
 #[test]
 fn strip_diff_prefix_handles_modified() {
-    assert_eq!(super::strip_diff_prefix("M src/main.rs"), "src/main.rs");
+    assert_eq!(strip_diff_prefix("M src/main.rs"), "src/main.rs");
 }
 
 #[test]
 fn strip_diff_prefix_handles_added() {
-    assert_eq!(super::strip_diff_prefix("A src/new_file.rs"), "src/new_file.rs");
+    assert_eq!(strip_diff_prefix("A src/new_file.rs"), "src/new_file.rs");
 }
 
 #[test]
 fn strip_diff_prefix_handles_renamed() {
-    assert_eq!(super::strip_diff_prefix("R src/old.rs"), "src/old.rs");
+    assert_eq!(strip_diff_prefix("R src/old.rs"), "src/old.rs");
 }
 
 #[test]
 fn strip_diff_prefix_handles_deleted() {
-    assert_eq!(super::strip_diff_prefix("D src/dead.rs"), "src/dead.rs");
+    assert_eq!(strip_diff_prefix("D src/dead.rs"), "src/dead.rs");
 }
 
 #[test]
 fn strip_diff_prefix_passthrough_unknown() {
-    assert_eq!(super::strip_diff_prefix("src/plain.rs"), "src/plain.rs");
-    assert_eq!(super::strip_diff_prefix("? src/untracked.rs"), "? src/untracked.rs");
+    assert_eq!(strip_diff_prefix("src/plain.rs"), "src/plain.rs");
+    assert_eq!(strip_diff_prefix("? src/untracked.rs"), "? src/untracked.rs");
 }
 
 #[test]
 fn validate_workspace_changes_rejects_empty() {
-    let result = super::validate_workspace_changes("");
+    let result = validate_workspace_changes("");
     assert!(result.is_err());
     assert!(result.expect_err("expected empty workspace failure").is_terminal());
 }
 
 #[test]
 fn validate_workspace_changes_rejects_only_beads() {
-    let result = super::validate_workspace_changes(".beads/beads.db\n.beads/config.yaml\n");
+    let result = validate_workspace_changes(".beads/beads.db\n.beads/config.yaml\n");
     assert!(result.is_err());
     assert!(result
         .expect_err("expected .beads-only failure")
@@ -639,94 +645,94 @@ fn validate_workspace_changes_rejects_only_beads() {
 
 #[test]
 fn validate_workspace_changes_accepts_mixed() {
-    let result = super::validate_workspace_changes("src/main.rs\n.beads/beads.db\n");
+    let result = validate_workspace_changes("src/main.rs\n.beads/beads.db\n");
     assert!(result.is_ok());
 }
 
 #[test]
 fn validate_workspace_changes_accepts_source_only() {
-    let result = super::validate_workspace_changes("src/main.rs\nsrc/lib.rs\n");
+    let result = validate_workspace_changes("src/main.rs\nsrc/lib.rs\n");
     assert!(result.is_ok());
 }
 
 #[test]
 fn validate_workspace_changes_handles_prefixed_output() {
-    let result = super::validate_workspace_changes("M src/main.rs\nA src/new.rs\n");
+    let result = validate_workspace_changes("M src/main.rs\nA src/new.rs\n");
     assert!(result.is_ok());
 }
 
 #[test]
 fn validate_workspace_changes_ignores_whitespace() {
-    let result = super::validate_workspace_changes("  \n  src/main.rs  \n  \n");
+    let result = validate_workspace_changes("  \n  src/main.rs  \n  \n");
     assert!(result.is_ok());
 }
 
 #[test]
 fn timestamp_now_emits_rfc3339() {
-    let timestamp = super::timestamp_now();
+    let timestamp = timestamp_now();
     assert!(DateTime::parse_from_rfc3339(&timestamp).is_ok());
 }
 
 #[test]
 fn validate_dag_accepts_empty_step_list() {
-    let result = super::validate_dag(&[]);
+    let result = validate_dag(&[]);
     assert!(result.is_ok());
 }
 
 #[test]
 fn validate_dag_accepts_steps_with_no_dependencies() {
     let steps = vec![
-        super::LifecycleStep {
+        LifecycleStep {
             name: "step_a".to_owned(),
             effect: Effect::Br { args: vec![], cwd: None },
             compensation: None,
-            transition: super::StepTransition::None,
+            transition: StepTransition::None,
             dependencies: vec![],
         },
-        super::LifecycleStep {
+        LifecycleStep {
             name: "step_b".to_owned(),
             effect: Effect::Br { args: vec![], cwd: None },
             compensation: None,
-            transition: super::StepTransition::None,
+            transition: StepTransition::None,
             dependencies: vec![],
         },
     ];
-    let result = super::validate_dag(&steps);
+    let result = validate_dag(&steps);
     assert!(result.is_ok());
 }
 
 #[test]
 fn validate_dag_accepts_valid_dependency_chain() {
     let steps = vec![
-        super::LifecycleStep {
+        LifecycleStep {
             name: "step_a".to_owned(),
             effect: Effect::Br { args: vec![], cwd: None },
             compensation: None,
-            transition: super::StepTransition::None,
+            transition: StepTransition::None,
             dependencies: vec![],
         },
-        super::LifecycleStep {
+        LifecycleStep {
             name: "step_b".to_owned(),
             effect: Effect::Br { args: vec![], cwd: None },
             compensation: None,
-            transition: super::StepTransition::None,
+            transition: StepTransition::None,
             dependencies: vec!["step_a".to_owned()],
         },
     ];
-    let result = super::validate_dag(&steps);
+    let result = validate_dag(&steps);
     assert!(result.is_ok());
 }
 
 #[test]
 fn validate_dag_rejects_missing_dependency() {
-    let steps = vec![super::LifecycleStep {
+    let steps = vec![LifecycleStep {
         name: "step_a".to_owned(),
         effect: Effect::Br { args: vec![], cwd: None },
         compensation: None,
-        transition: super::StepTransition::None,
+        transition: StepTransition::None,
         dependencies: vec!["nonexistent_step".to_owned()],
     }];
-    let result = super::validate_dag(&steps);
+    let result = validate_dag(&steps);
     assert!(result.is_err());
     let error = result.expect_err("expected missing dependency error");
     assert_eq!(error.category(), FailureCategory::Validation);
@@ -737,22 +743,22 @@ fn validate_dag_rejects_missing_dependency() {
 #[test]
 fn validate_dag_rejects_direct_cycle() {
     let steps = vec![
-        super::LifecycleStep {
+        LifecycleStep {
             name: "step_a".to_owned(),
             effect: Effect::Br { args: vec![], cwd: None },
             compensation: None,
-            transition: super::StepTransition::None,
+            transition: StepTransition::None,
             dependencies: vec!["step_b".to_owned()],
         },
-        super::LifecycleStep {
+        LifecycleStep {
             name: "step_b".to_owned(),
             effect: Effect::Br { args: vec![], cwd: None },
             compensation: None,
-            transition: super::StepTransition::None,
+            transition: StepTransition::None,
             dependencies: vec!["step_a".to_owned()],
         },
     ];
-    let result = super::validate_dag(&steps);
+    let result = validate_dag(&steps);
     assert!(result.is_err());
     let error = result.expect_err("expected cycle error");
     assert_eq!(error.category(), FailureCategory::Validation);
@@ -762,29 +768,29 @@ fn validate_dag_rejects_direct_cycle() {
 #[test]
 fn validate_dag_rejects_indirect_cycle() {
     let steps = vec![
-        super::LifecycleStep {
+        LifecycleStep {
             name: "step_a".to_owned(),
             effect: Effect::Br { args: vec![], cwd: None },
             compensation: None,
-            transition: super::StepTransition::None,
+            transition: StepTransition::None,
             dependencies: vec!["step_c".to_owned()],
         },
-        super::LifecycleStep {
+        LifecycleStep {
             name: "step_b".to_owned(),
             effect: Effect::Br { args: vec![], cwd: None },
             compensation: None,
-            transition: super::StepTransition::None,
+            transition: StepTransition::None,
             dependencies: vec!["step_a".to_owned()],
         },
-        super::LifecycleStep {
+        LifecycleStep {
             name: "step_c".to_owned(),
             effect: Effect::Br { args: vec![], cwd: None },
             compensation: None,
-            transition: super::StepTransition::None,
+            transition: StepTransition::None,
             dependencies: vec!["step_b".to_owned()],
         },
     ];
-    let result = super::validate_dag(&steps);
+    let result = validate_dag(&steps);
     assert!(result.is_err());
     let error = result.expect_err("expected indirect cycle error");
     assert_eq!(error.category(), FailureCategory::Validation);
@@ -793,14 +799,14 @@ fn validate_dag_rejects_indirect_cycle() {
 
 #[test]
 fn validate_dag_rejects_self_dependency() {
-    let steps = vec![super::LifecycleStep {
+    let steps = vec![LifecycleStep {
         name: "step_a".to_owned(),
         effect: Effect::Br { args: vec![], cwd: None },
         compensation: None,
-        transition: super::StepTransition::None,
+        transition: StepTransition::None,
         dependencies: vec!["step_a".to_owned()],
     }];
-    let result = super::validate_dag(&steps);
+    let result = validate_dag(&steps);
     assert!(result.is_err());
     let error = result.expect_err("expected self-dependency error");
     assert_eq!(error.category(), FailureCategory::Validation);
@@ -810,22 +816,22 @@ fn validate_dag_rejects_self_dependency() {
 #[test]
 fn validate_dag_rejects_dependency_after_step() {
     let steps = vec![
-        super::LifecycleStep {
+        LifecycleStep {
             name: "step_b".to_owned(),
             effect: Effect::Br { args: vec![], cwd: None },
             compensation: None,
-            transition: super::StepTransition::None,
+            transition: StepTransition::None,
             dependencies: vec!["step_a".to_owned()],
         },
-        super::LifecycleStep {
+        LifecycleStep {
             name: "step_a".to_owned(),
             effect: Effect::Br { args: vec![], cwd: None },
             compensation: None,
-            transition: super::StepTransition::None,
+            transition: StepTransition::None,
             dependencies: vec![],
         },
     ];
-    let result = super::validate_dag(&steps);
+    let result = validate_dag(&steps);
     assert!(result.is_err());
     let error = result.expect_err("expected order validation error");
     assert_eq!(error.category(), FailureCategory::Validation);

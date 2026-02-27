@@ -1,10 +1,12 @@
-use super::{
-    decode_bead_entries, ensure_repo_matches_jj_origin, extract_exec_binary, extract_exec_start,
-    extract_repo_slug_from_gh_output, extract_repo_slug_from_jj_remote_output,
-    format_repo_lookup_error_json, has_required_services, is_retryable_repo_lookup_stderr,
-    is_valid_oya_exec_start, normalize_error_message, parse_admin_url, parse_host_port,
-    parse_ingress_url, parse_repo_slug, parse_repo_slug_from_remote_url, parse_service_url,
-    BeadEntry,
+use crate::cli::args::parse_repo_slug;
+use crate::cli::args::{parse_admin_url, parse_ingress_url, parse_service_url};
+use crate::cli::commands::{decode_bead_entries, BeadEntry};
+use crate::cli::doctor::{has_required_services, parse_host_port};
+use crate::cli::init::{extract_exec_binary, extract_exec_start, is_valid_oya_exec_start};
+use crate::cli::repo::{
+    ensure_repo_matches_jj_origin, extract_repo_slug_from_gh_output,
+    extract_repo_slug_from_jj_remote_output, format_repo_lookup_error_json,
+    is_retryable_repo_lookup_stderr, normalize_error_message, parse_repo_slug_from_remote_url,
 };
 use serde_json::json;
 
