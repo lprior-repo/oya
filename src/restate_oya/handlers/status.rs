@@ -25,24 +25,18 @@ pub async fn read_lifecycle_status(
 ) -> Result<LifecycleStatusSnapshot, HandlerError> {
     let steps = ctx
         .get::<Json<Value>>("lifecycle_steps")
-        .await
-        .ok()
-        .flatten()
+        .await?
         .map(Json::into_inner)
         .and_then(|value| serde_json::from_value::<Vec<LifecycleStepSnapshot>>(value).ok())
         .unwrap_or_default();
     let state = ctx
         .get::<Json<Value>>("lifecycle_state")
-        .await
-        .ok()
-        .flatten()
+        .await?
         .map(Json::into_inner)
         .and_then(|value| if value.is_null() { None } else { Some(value) });
     let compensation_diagnostics = ctx
         .get::<Json<Value>>("lifecycle_compensation_diagnostics")
-        .await
-        .ok()
-        .flatten()
+        .await?
         .map(Json::into_inner)
         .and_then(|value| {
             serde_json::from_value::<Vec<crate::lifecycle::types::CompensationDiagnostic>>(value)
@@ -50,25 +44,15 @@ pub async fn read_lifecycle_status(
         })
         .unwrap_or_default();
     Ok(LifecycleStatusSnapshot {
-        bead_id: get_optional_string(ctx, "lifecycle_bead_id").await?,
+        bead_id: ctx.get::<String>("lifecycle_bead_id").await?,
         steps,
         state,
-        pr_url: get_optional_string(ctx, "lifecycle_pr_url").await?,
-        done: ctx.get::<bool>("lifecycle_done").await.ok().flatten().unwrap_or(false),
-        success: ctx.get::<bool>("lifecycle_success").await.ok().flatten(),
-        message: get_optional_string(ctx, "lifecycle_message").await?,
+        pr_url: ctx.get::<String>("lifecycle_pr_url").await?,
+        done: ctx.get::<bool>("lifecycle_done").await?.unwrap_or(false),
+        success: ctx.get::<bool>("lifecycle_success").await?,
+        message: ctx.get::<String>("lifecycle_message").await?,
         compensation_diagnostics,
     })
-}
-
-async fn get_optional_string(
-    ctx: &SharedWorkflowContext<'_>,
-    key: &str,
-) -> Result<Option<String>, HandlerError> {
-    match ctx.get::<String>(key).await {
-        Ok(value) => Ok(value),
-        Err(_) => Ok(None),
-    }
 }
 
 pub fn serialize_workflow_outcome(
