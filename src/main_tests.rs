@@ -1,8 +1,9 @@
 use super::{
-    extract_exec_binary, extract_exec_start, extract_repo_slug_from_gh_output,
+    decode_bead_entries, extract_exec_binary, extract_exec_start, extract_repo_slug_from_gh_output,
     has_required_services, is_valid_oya_exec_start, parse_admin_url, parse_host_port,
-    parse_ingress_url, parse_repo_slug, parse_service_url,
+    parse_ingress_url, parse_repo_slug, parse_service_url, BeadEntry,
 };
+use serde_json::json;
 
 #[test]
 fn parse_repo_slug_accepts_valid_owner_repo() {
@@ -108,5 +109,54 @@ fn extract_repo_slug_from_gh_output_accepts_name_with_owner() {
 fn extract_repo_slug_from_gh_output_rejects_invalid_repo_name() {
     let raw = r#"{"nameWithOwner":"bad repo/oya"}"#;
     let parsed = extract_repo_slug_from_gh_output(raw);
+    assert!(parsed.is_err());
+}
+
+#[test]
+fn bead_entry_parses_valid_json() {
+    let raw =
+        r#"{"id":"src-abc","title":"test bead","status":"ready","priority":1,"issue_type":"task"}"#;
+    let entry: BeadEntry = serde_json::from_str(raw).expect("should parse");
+    assert_eq!(entry.id, "src-abc");
+    assert_eq!(entry.title, "test bead");
+    assert_eq!(entry.status, "ready");
+    assert_eq!(entry.priority, 1);
+    assert_eq!(entry.issue_type, "task");
+}
+
+#[test]
+fn bead_entry_serializes_to_json() {
+    let entry = BeadEntry {
+        id: "src-xyz".to_owned(),
+        title: "sample".to_owned(),
+        status: "blocked".to_owned(),
+        priority: 2,
+        issue_type: "feature".to_owned(),
+    };
+    let json = serde_json::to_string(&entry).expect("should serialize");
+    assert!(json.contains("src-xyz"));
+    assert!(json.contains("sample"));
+}
+
+#[test]
+fn bead_entry_parses_ready_payload_with_type_alias() {
+    let payload = json!([
+        {
+            "id": "src-abc",
+            "title": "test bead",
+            "status": "open",
+            "priority": 0,
+            "type": "bug"
+        }
+    ]);
+    let parsed = decode_bead_entries(payload).expect("should parse ready payload");
+    assert_eq!(parsed.len(), 1);
+    assert_eq!(parsed[0].issue_type, "bug");
+}
+
+#[test]
+fn decode_bead_entries_rejects_object_without_items() {
+    let payload = json!({"unexpected": []});
+    let parsed = decode_bead_entries(payload);
     assert!(parsed.is_err());
 }

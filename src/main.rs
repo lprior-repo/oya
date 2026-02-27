@@ -44,6 +44,7 @@ enum Command {
     Lifecycle(LifecycleArgs),
     Status(StatusArgs),
     Cancel(CancelArgs),
+    Beads(BeadsArgs),
 }
 
 #[derive(Debug, clap::Args)]
@@ -122,6 +123,14 @@ struct CancelArgs {
     ingress: String,
 }
 
+#[derive(Debug, clap::Args)]
+struct BeadsArgs {
+    #[arg(long)]
+    ready: bool,
+    #[arg(long)]
+    json: bool,
+}
+
 #[derive(Debug, Deserialize)]
 struct ReadyIssue {
     id: String,
@@ -160,6 +169,7 @@ async fn main() -> anyhow::Result<()> {
         Command::Lifecycle(args) => lifecycle_command(args).await,
         Command::Status(args) => status_command(args).await,
         Command::Cancel(args) => cancel_command(args).await,
+        Command::Beads(args) => beads_command(args).await,
     }
 }
 
@@ -699,6 +709,50 @@ async fn cancel_command(args: CancelArgs) -> anyhow::Result<()> {
     let formatted = serde_json::to_string_pretty(&response)?;
     println!("{formatted}");
     Ok(())
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BeadEntry {
+    id: String,
+    title: String,
+    status: String,
+    priority: u8,
+    #[serde(alias = "type")]
+    issue_type: String,
+}
+
+async fn beads_command(args: BeadsArgs) -> anyhow::Result<()> {
+    let repo_root = find_repo_root()?;
+    let beads_path = repo_root.join(".beads").join("issues.jsonl");
+    let mut beads = if args.ready {
+        let raw = run_capture_command(&["ready", "--json"]).await?;
+        decode_bead_entries(parse_json_payload(&raw)?)?
+    } else {
+        let content = std::fs::read_to_string(&beads_path)
+            .map_err(|e| anyhow::anyhow!("failed to read {}: {}", beads_path.display(), e))?;
+        content.lines().filter_map(|line| serde_json::from_str(line).ok()).collect()
+    };
+    beads.sort_by(|a, b| a.priority.cmp(&b.priority));
+    if args.json {
+        let json = serde_json::to_string_pretty(&beads)?;
+        println!("{json}");
+    } else {
+        for bead in &beads {
+            println!("{} [{}/{}] {}", bead.id, bead.status, bead.priority, bead.title);
+        }
+    }
+    Ok(())
+}
+
+fn decode_bead_entries(payload: Value) -> anyhow::Result<Vec<BeadEntry>> {
+    match payload {
+        Value::Array(_) => serde_json::from_value(payload).map_err(Into::into),
+        Value::Object(mut obj) => match obj.remove("items") {
+            Some(items) => serde_json::from_value(items).map_err(Into::into),
+            None => Err(anyhow::anyhow!("br ready --json returned object payload without `items`")),
+        },
+        _ => Err(anyhow::anyhow!("br ready --json returned unsupported JSON payload")),
+    }
 }
 
 async fn call_restate_start(
