@@ -46,9 +46,19 @@ pub async fn call_restate_service_json<T: serde::Serialize>(
 ) -> anyhow::Result<crate::restate_oya::StartResponse> {
     let url = format!("{ingress}/{service}/{id}/{handler}");
     let client = restate_http_client()?;
-    let response = post_json_with_retry(&client, &url, &request).await?;
-    let response = ensure_success(response).await?;
-    response.json().await.map_err(Into::into)
+    let mut attempt: u8 = 0;
+    loop {
+        let response = post_json_with_retry(&client, &url, &request).await?;
+        if response.status() == reqwest::StatusCode::INTERNAL_SERVER_ERROR
+            && attempt < RESTATE_RETRY_ATTEMPTS
+        {
+            attempt = attempt.saturating_add(1);
+            sleep(RESTATE_RETRY_DELAY).await;
+            continue;
+        }
+        let response = ensure_success(response).await?;
+        return response.json().await.map_err(Into::into);
+    }
 }
 
 pub async fn call_restate_root_json<T: serde::Serialize, R: DeserializeOwned>(
