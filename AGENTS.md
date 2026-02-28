@@ -13,9 +13,10 @@
 {"kind":"skill","load":"/rust-contract","when":"planning","purpose":"contracts + tests"}
 {"kind":"skill","load":"/red-queen","when":"qa","purpose":"adversarial regression and durability gates"}
 {"kind":"workflow","name":"bead","steps":["br ready","jj workspace add ../<id> --name <id>","br update <id> --status in_progress","oya lifecycle --bead <id> --repo lprior-repo/oya","moon run :ci","jj git fetch","jj rebase -d main@origin","jj bookmark set <name> -r @","jj git push --bookmark <name>","jj workspace forget <name>","br close <id>","br sync --flush-only"]}
-{"kind":"workflow","name":"self-build","steps":["planner init/add-task/process (create contract-grade beads)","oya lifecycle --bead <id> --repo lprior-repo/oya","oya doctor (runtime + deployment invariants)","red-queen gate (adversarial QA against lifecycle + status)","moon run :ci","gh pr create"]}
+{"kind":"workflow","name":"self-build","steps":["planner init/add-task/process (create contract-grade beads)","rust-contract spec/tests (design-by-contract)","red-queen adversarial QA (regression gates)","oya lifecycle --bead <id> --repo lprior-repo/oya","oya doctor (runtime + deployment invariants)","moon run :ci","gh pr create"]}
 {"kind":"cmd","tool":"br","list":["ready","show <id>","update <id> --status in_progress","close <id>","sync --flush-only"]}
 {"kind":"guide","id":"br-basic","text":"Basic br workflow: 1) `br ready` lists available beads 2) `br show <id>` displays details 3) `br update <id> --status in_progress` claims bead 4) work in jj workspace 5) `br close <id>` marks complete 6) `br sync --flush-only` persists state"}
+{"kind":"guide","id":"self-build-basic","text":"Self-build workflow: 1) planner decomposes feature into beads 2) rust-contract specifies contracts + tests 3) red-queen runs adversarial QA 4) oya lifecycle executes implementation 5) oya doctor validates runtime 6) moon run :ci validates build 7) gh pr creates pull request"}
 {"kind":"skill","load":"/br","when":"bead-work","purpose":"externalize executive function via beads_rust graph"}
 {"kind":"cmd","tool":"moon","list":["run :quick","run :ci","run :test","run :fmt-fix","run :build","run :check","run :coverage","run :mutants-quick"]}
 {"kind":"cmd","tool":"jj","list":["workspace add <destination> [--name <name>]","workspace forget <name>","git fetch","rebase -d <revision>","bookmark set <name> -r <revision>","bookmark list","log"]}
@@ -27,6 +28,7 @@
 {"kind":"rule","id":"fn-args","text":"Source functions must take <= 5 inputs (clippy::too_many_arguments)."}
 {"kind":"rule","id":"workspace","text":"jj workspace add before starting work."}
 {"kind":"rule","id":"planner-contract-first","text":"Every non-trivial change starts with planner bead decomposition and rust-contract artifacts before implementation."}
+{"kind":"rule","id":"self-build-planner-contract-qa","text":"MANDATORY: Self-build workflow MUST use planner (bead decomposition) + rust-contract (spec/tests) + red-queen (adversarial QA) in sequence before PR creation."}
 {"kind":"rule","id":"self-build-required","text":"Oya must self-build through `oya lifecycle` for implementation beads; manual one-off edits are only for emergency hotfixes."}
 {"kind":"rule","id":"no-empty-pr","text":"PR creation is forbidden when lifecycle diff contains only .beads or no meaningful source changes."}
 {"kind":"rule","id":"qa-red-queen","text":"Before merge, run adversarial QA with red-queen and keep regression evidence in status/PR output."}

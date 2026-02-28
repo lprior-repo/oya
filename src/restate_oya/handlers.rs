@@ -280,6 +280,11 @@ impl OyaService for OyaServiceBridge {
         let run_key = workflow_key.clone();
         let raw =
             ctx.run(move || fetch_lifecycle_status_raw(run_key)).name("get_lifecycle").await?;
+        if raw.trim().is_empty() || raw.contains("No invocations found") {
+            return Err(
+                TerminalError::new_with_code(404, format!("lifecycle not found: {key}")).into()
+            );
+        }
         let snapshot = parse_lifecycle_status_snapshot(&raw, &key);
         Ok(snapshot.into())
     }
