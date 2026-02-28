@@ -135,6 +135,9 @@ fn parse_url_with_expected_port(
     label: &str,
 ) -> Result<String, String> {
     let parsed = url::Url::parse(value).map_err(|error| format!("invalid {label} URL: {error}"))?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err(format!("{label} URL must use http or https"));
+    }
     let port =
         parsed.port_or_known_default().ok_or_else(|| format!("{label} URL must include port"))?;
     if port == expected_port {
