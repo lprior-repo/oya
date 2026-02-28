@@ -13,7 +13,8 @@ use crate::lifecycle::types::{FailureCategory, LifecycleError, WorkspaceName};
 
 use super::{
     classify_command_failure, classify_non_zero, effect_timeout_secs, run_compensation_effect,
-    CommandExecutor, Compensation, Effect, EffectJournalEntry, DEFAULT_CLI_TIMEOUT_SECS,
+    CommandExecutor, CommandResult, Compensation, Effect, EffectJournalEntry,
+    DEFAULT_CLI_TIMEOUT_SECS,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,10 +55,9 @@ pub async fn run_effect(
         return run_moon_ci_effect(executor, effect, cwd).await;
     }
 
-    let (program, args, cwd) = effect_command(&effect);
     let timeout_secs = effect_timeout_secs(&effect);
     let timeout = Duration::from_secs(timeout_secs);
-    let output = executor.run(program, &args, timeout, cwd.as_deref()).await;
+    let output = run_effect_command(executor, &effect, timeout).await;
 
     match output {
         Ok(result) if status_ok(result.status_code) => Ok(EffectJournalEntry {
@@ -81,6 +81,33 @@ pub async fn run_effect(
         }
         Err(failure) => Err(classify_command_failure(&effect, failure)),
     }
+}
+
+async fn run_effect_command(
+    executor: &dyn CommandExecutor,
+    effect: &Effect,
+    timeout: Duration,
+) -> Result<CommandResult, super::CommandFailure> {
+    let (program, args, cwd) = effect_command(effect);
+    let first = executor.run(program, &args, timeout, cwd.as_deref()).await;
+    match first {
+        Ok(result) if is_stale_workspace_add(effect, &result.stderr) => {
+            let refresh_args = vec!["workspace".to_owned(), "update-stale".to_owned()];
+            let _ = executor.run("jj", &refresh_args, timeout, None).await;
+            executor.run(program, &args, timeout, cwd.as_deref()).await
+        }
+        other => other,
+    }
+}
+
+fn is_stale_workspace_add(effect: &Effect, stderr: &str) -> bool {
+    matches!(effect, Effect::Jj { args, .. } if is_workspace_add_args(args))
+        && stderr.to_ascii_lowercase().contains("working copy is stale")
+}
+
+fn is_workspace_add_args(args: &[String]) -> bool {
+    args.first().is_some_and(|arg| arg == "workspace")
+        && args.get(1).is_some_and(|arg| arg == "add")
 }
 
 /// Executes a compensation command.

@@ -66,6 +66,7 @@ impl Oya for OyaBridge {
     ) -> Result<Json<StartResponse>, HandlerError> {
         let body = req.into_inner();
         let workflow_key = ctx.key().to_owned();
+        validate_runtime_key(&workflow_key)?;
         let initial_steps = default_step_snapshots();
         let requested_bead_id = body.bead_id.clone();
         initialize_lifecycle_status(&ctx, requested_bead_id.clone(), &initial_steps);
@@ -252,6 +253,7 @@ impl OyaService for OyaServiceBridge {
         req: Json<KeyRequest>,
     ) -> Result<Json<MemorySnapshot>, HandlerError> {
         let key = req.into_inner().key;
+        validate_runtime_key(&key)?;
         ctx.object_client::<OyaMemoryClient>(&key).get_state().call().await.map_err(Into::into)
     }
 
@@ -261,6 +263,7 @@ impl OyaService for OyaServiceBridge {
         req: Json<KeyRequest>,
     ) -> Result<Json<BeadSnapshot>, HandlerError> {
         let key = req.into_inner().key;
+        validate_runtime_key(&key)?;
         ctx.object_client::<OyaMemoryClient>(&key).get_bead().call().await.map_err(Into::into)
     }
 
@@ -270,6 +273,7 @@ impl OyaService for OyaServiceBridge {
         req: Json<KeyRequest>,
     ) -> Result<Json<LifecycleStatusSnapshot>, HandlerError> {
         let key = req.into_inner().key;
+        validate_runtime_key(&key)?;
         if let Some(snapshot) = get_runtime_status(&key) {
             return Ok(snapshot.into());
         }
@@ -297,6 +301,7 @@ impl OyaService for OyaServiceBridge {
         req: Json<KeyRequest>,
     ) -> Result<Json<CancelResponse>, HandlerError> {
         let key = req.into_inner().key;
+        validate_runtime_key(&key)?;
         let memory_result =
             ctx.object_client::<OyaMemoryClient>(&key).request_cancel().call().await;
         let workflow_query = format!("Oya/{key}/run");
@@ -309,6 +314,19 @@ impl OyaService for OyaServiceBridge {
             .await;
         Ok(compose_cancel_response(memory_result, workflow_result, cleanup_result).into())
     }
+}
+
+fn validate_runtime_key(key: &str) -> Result<(), HandlerError> {
+    if is_safe_runtime_key(key) {
+        Ok(())
+    } else {
+        Err(TerminalError::new(format!("invalid key: '{}'", key)).into())
+    }
+}
+
+fn is_safe_runtime_key(key: &str) -> bool {
+    !key.is_empty()
+        && key.chars().all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-'))
 }
 
 fn compose_cancel_response(
@@ -1141,7 +1159,7 @@ async fn require_state_json(ctx: &ObjectContext<'_>, key: &str) -> Result<Value,
 #[cfg(test)]
 mod tests {
     use super::{
-        is_uninitialized_workflow_snapshot, lifecycle_status_label,
+        is_safe_runtime_key, is_uninitialized_workflow_snapshot, lifecycle_status_label,
         parse_lifecycle_status_snapshot, upsert_step, StepUpdate,
     };
     use crate::lifecycle::workflow::LifecycleStepStatus;
@@ -1232,5 +1250,19 @@ mod tests {
             compensation_diagnostics: Vec::new(),
         };
         assert!(is_uninitialized_workflow_snapshot(&snapshot_with_bead));
+    }
+
+    #[test]
+    fn runtime_key_validation_accepts_safe_keys() {
+        assert!(is_safe_runtime_key("src-1fa"));
+        assert!(is_safe_runtime_key("abc_123.def"));
+    }
+
+    #[test]
+    fn runtime_key_validation_rejects_unsafe_keys() {
+        assert!(!is_safe_runtime_key(""));
+        assert!(!is_safe_runtime_key("a/b"));
+        assert!(!is_safe_runtime_key("a b"));
+        assert!(!is_safe_runtime_key("%00"));
     }
 }
