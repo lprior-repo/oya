@@ -19,6 +19,7 @@ use crate::restate_oya::{
 };
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BeadEntry {
@@ -123,12 +124,12 @@ async fn cancel_command(args: CancelArgs) -> anyhow::Result<()> {
 }
 
 async fn beads_command(args: BeadsArgs) -> anyhow::Result<()> {
-    let repo_root = super::init::find_repo_root()?;
-    let beads_path = repo_root.join(".beads").join("issues.jsonl");
     let mut beads = if args.ready {
         let raw = run_capture_command(&["ready", "--json"]).await?;
         decode_bead_entries(parse_json_payload(&raw)?)?
     } else {
+        let beads_root = find_beads_root()?;
+        let beads_path = beads_root.join(".beads").join("issues.jsonl");
         let content = std::fs::read_to_string(&beads_path)
             .map_err(|e| anyhow::anyhow!("failed to read {}: {}", beads_path.display(), e))?;
         content.lines().filter_map(|line| serde_json::from_str(line).ok()).collect()
@@ -143,6 +144,19 @@ async fn beads_command(args: BeadsArgs) -> anyhow::Result<()> {
         }
     }
     Ok(())
+}
+
+fn find_beads_root() -> anyhow::Result<PathBuf> {
+    let current = std::env::current_dir()?;
+    for path in current.ancestors() {
+        if path.join(".beads").join("issues.jsonl").is_file() {
+            return Ok(Path::to_path_buf(path));
+        }
+        if path.join(".git").exists() {
+            break;
+        }
+    }
+    Err(anyhow::anyhow!("could not find .beads/issues.jsonl from current git repository"))
 }
 
 pub fn decode_bead_entries(payload: serde_json::Value) -> anyhow::Result<Vec<BeadEntry>> {
