@@ -62,7 +62,7 @@ pub struct ServeArgs {
 pub struct InvokeArgs {
     #[arg(long, default_value = DEFAULT_INGRESS)]
     pub ingress: String,
-    #[arg(long, default_value = "default")]
+    #[arg(long, default_value = "default", value_parser = parse_object_key)]
     pub id: String,
     #[arg(long)]
     pub prompt: String,
@@ -94,7 +94,7 @@ pub struct LifecycleArgs {
 
 #[derive(Debug, clap::Args)]
 pub struct StatusArgs {
-    #[arg(long)]
+    #[arg(long, value_parser = parse_object_key)]
     pub key: String,
     #[arg(long, default_value = DEFAULT_INGRESS)]
     pub ingress: String,
@@ -102,7 +102,7 @@ pub struct StatusArgs {
 
 #[derive(Debug, clap::Args)]
 pub struct CancelArgs {
-    #[arg(long)]
+    #[arg(long, value_parser = parse_object_key)]
     pub key: String,
     #[arg(long, default_value = DEFAULT_INGRESS)]
     pub ingress: String,
@@ -157,6 +157,17 @@ pub fn parse_repo_slug(value: &str) -> Result<String, String> {
     }
 }
 
+pub fn parse_object_key(value: &str) -> Result<String, String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err("key/id must not be empty".to_owned());
+    }
+    if trimmed.contains('/') {
+        return Err("key/id must not contain '/'".to_owned());
+    }
+    Ok(trimmed.to_owned())
+}
+
 fn is_valid_repo_part(value: &str) -> bool {
     value.chars().all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-'))
 }
@@ -171,5 +182,12 @@ mod tests {
         assert!(parse_repo_slug("owner-name/repo_name").is_ok());
         assert!(parse_repo_slug("invalid").is_err());
         assert!(parse_repo_slug("owner/repo/extra").is_err());
+    }
+
+    #[test]
+    fn parse_object_key_rejects_empty_and_slash() {
+        assert!(parse_object_key("abc-123").is_ok());
+        assert!(parse_object_key("  ").is_err());
+        assert!(parse_object_key("abc/123").is_err());
     }
 }
