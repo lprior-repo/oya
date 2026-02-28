@@ -69,6 +69,12 @@ fn parse_ingress_url_rejects_non_http_scheme() {
 }
 
 #[test]
+fn parse_ingress_url_rejects_path_suffix() {
+    let parsed = parse_ingress_url("http://127.0.0.1:909/extra");
+    assert!(parsed.is_err());
+}
+
+#[test]
 fn parse_service_url_accepts_container_endpoint() {
     let parsed = parse_service_url("http://127.0.0.1:9180/");
     assert_eq!(parsed, Ok("http://127.0.0.1:9180/".to_owned()));

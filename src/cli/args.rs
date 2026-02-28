@@ -66,7 +66,7 @@ pub struct InvokeArgs {
     pub id: String,
     #[arg(long, value_parser = parse_non_empty_text)]
     pub prompt: String,
-    #[arg(long)]
+    #[arg(long, value_parser = parse_model_name)]
     pub model: Option<String>,
 }
 
@@ -139,6 +139,12 @@ fn parse_url_with_expected_port(
     }
     let port =
         parsed.port_or_known_default().ok_or_else(|| format!("{label} URL must include port"))?;
+    if parsed.path() != "/" && !parsed.path().is_empty() {
+        return Err(format!("{label} URL must not include a path suffix"));
+    }
+    if parsed.query().is_some() || parsed.fragment().is_some() {
+        return Err(format!("{label} URL must not include query or fragment"));
+    }
     if port == expected_port {
         Ok(value.to_owned())
     } else {
