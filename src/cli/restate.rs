@@ -92,17 +92,14 @@ fn extract_json_array(raw: &str) -> anyhow::Result<&str> {
 }
 
 pub fn parse_json_payload(raw: &str) -> anyhow::Result<serde_json::Value> {
-    let object_idx = raw.find('{');
-    let array_idx = raw.find('[');
-    let start = match (object_idx, array_idx) {
-        (Some(o), Some(a)) => o.min(a),
-        (Some(o), None) => o,
-        (None, Some(a)) => a,
-        (None, None) => {
-            return Err(anyhow::anyhow!("command returned no JSON payload to parse"));
+    for (index, ch) in raw.char_indices() {
+        if ch == '{' || ch == '[' {
+            if let Ok(value) = serde_json::from_str::<serde_json::Value>(&raw[index..]) {
+                return Ok(value);
+            }
         }
-    };
-    serde_json::from_str(&raw[start..]).map_err(Into::into)
+    }
+    Err(anyhow::anyhow!("command returned no JSON payload to parse"))
 }
 
 pub async fn run_capture_command(args: &[&str]) -> anyhow::Result<String> {

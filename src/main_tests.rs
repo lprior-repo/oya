@@ -10,7 +10,7 @@ use crate::cli::repo::{
     extract_repo_slug_from_jj_remote_output, format_repo_lookup_error_json, gh_repo_view_args,
     is_retryable_repo_lookup_stderr, normalize_error_message, parse_repo_slug_from_remote_url,
 };
-use crate::cli::restate::format_http_error;
+use crate::cli::restate::{format_http_error, parse_json_payload};
 use serde_json::json;
 
 #[test]
@@ -234,6 +234,13 @@ fn is_missing_container_error_detects_docker_message() {
         "Error response from daemon: No such container: oya-restate"
     ));
     assert!(!is_missing_container_error("permission denied"));
+}
+
+#[test]
+fn parse_json_payload_skips_non_json_prefix_with_braces() {
+    let raw = "warn: metadata {not json}\n{\"items\":[{\"id\":\"src-1\"}]}";
+    let parsed = parse_json_payload(raw).expect("should parse trailing JSON");
+    assert_eq!(parsed["items"][0]["id"], "src-1");
 }
 
 #[test]
