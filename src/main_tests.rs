@@ -289,6 +289,15 @@ fn map_special_error_maps_issue_not_found_from_500() {
 }
 
 #[test]
+fn map_special_error_maps_service_not_registered_from_404() {
+    let mapped = map_special_error(
+        "service 'OyaService' not found, make sure to register the service before calling it.",
+        reqwest::StatusCode::NOT_FOUND,
+    );
+    assert_eq!(mapped, Some("unavailable: restate service is not registered yet".to_owned()));
+}
+
+#[test]
 fn bead_entry_parses_valid_json() {
     let raw =
         r#"{"id":"src-abc","title":"test bead","status":"ready","priority":1,"issue_type":"task"}"#;

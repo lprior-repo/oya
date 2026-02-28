@@ -49,9 +49,7 @@ pub async fn call_restate_service_json<T: serde::Serialize>(
     let mut attempt: u8 = 0;
     loop {
         let response = post_json_with_retry(&client, &url, &request).await?;
-        if response.status() == reqwest::StatusCode::INTERNAL_SERVER_ERROR
-            && attempt < RESTATE_RETRY_ATTEMPTS
-        {
+        if should_retry_status(response.status()) && attempt < RESTATE_RETRY_ATTEMPTS {
             attempt = attempt.saturating_add(1);
             sleep(RESTATE_RETRY_DELAY).await;
             continue;
@@ -72,9 +70,7 @@ pub async fn call_restate_root_json<T: serde::Serialize, R: DeserializeOwned>(
     let mut attempt: u8 = 0;
     loop {
         let response = post_json_with_retry(&client, &url, &request).await?;
-        if response.status() == reqwest::StatusCode::INTERNAL_SERVER_ERROR
-            && attempt < RESTATE_RETRY_ATTEMPTS
-        {
+        if should_retry_status(response.status()) && attempt < RESTATE_RETRY_ATTEMPTS {
             attempt = attempt.saturating_add(1);
             sleep(RESTATE_RETRY_DELAY).await;
             continue;
@@ -99,9 +95,23 @@ async fn post_json_with_retry<T: serde::Serialize>(
                 attempt = attempt.saturating_add(1);
                 sleep(RESTATE_RETRY_DELAY).await;
             }
-            Err(error) => return Err(error.into()),
+            Err(error) => {
+                if let Some(mapped) = map_transport_error(&error) {
+                    return Err(anyhow::anyhow!(mapped));
+                }
+                return Err(error.into());
+            }
         }
     }
+}
+
+fn should_retry_status(status: reqwest::StatusCode) -> bool {
+    matches!(
+        status,
+        reqwest::StatusCode::INTERNAL_SERVER_ERROR
+            | reqwest::StatusCode::SERVICE_UNAVAILABLE
+            | reqwest::StatusCode::NOT_FOUND
+    )
 }
 
 fn is_transient_transport_error(error: &reqwest::Error) -> bool {
@@ -187,14 +197,34 @@ fn simplify_terminal_message(message: &str) -> String {
     message.to_owned()
 }
 
+fn map_transport_error(error: &reqwest::Error) -> Option<String> {
+    if error.is_connect() {
+        Some("unavailable: restate ingress is not reachable".to_owned())
+    } else if error.is_timeout() {
+        Some("timeout: restate ingress did not respond".to_owned())
+    } else {
+        None
+    }
+}
+
 pub fn map_special_error(message: &str, status: reqwest::StatusCode) -> Option<String> {
     if status == reqwest::StatusCode::INTERNAL_SERVER_ERROR
         && message.starts_with("Issue not found:")
     {
-        Some(format!("not_found: {message}"))
-    } else {
-        None
+        return Some(format!("not_found: {message}"));
     }
+    if status == reqwest::StatusCode::NOT_FOUND
+        && message.contains("service '")
+        && message.contains("not found")
+    {
+        return Some("unavailable: restate service is not registered yet".to_owned());
+    }
+    if status == reqwest::StatusCode::INTERNAL_SERVER_ERROR
+        && message.contains("internal routing error")
+    {
+        return Some("unavailable: restate ingress is rebalancing, retry shortly".to_owned());
+    }
+    None
 }
 
 pub async fn pick_ready_bead() -> anyhow::Result<String> {
