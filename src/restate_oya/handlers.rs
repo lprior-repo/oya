@@ -376,8 +376,7 @@ async fn read_workflow_status(
 }
 
 fn is_uninitialized_workflow_snapshot(status: &LifecycleStatusSnapshot) -> bool {
-    status.bead_id.is_none()
-        && status.steps.is_empty()
+    status.steps.is_empty()
         && status.state.is_none()
         && status.pr_url.is_none()
         && !status.done
@@ -1088,5 +1087,17 @@ mod tests {
             compensation_diagnostics: Vec::new(),
         };
         assert!(is_uninitialized_workflow_snapshot(&snapshot));
+
+        let snapshot_with_bead = LifecycleStatusSnapshot {
+            bead_id: Some("src-test".to_owned()),
+            steps: Vec::new(),
+            state: None,
+            pr_url: None,
+            done: false,
+            success: None,
+            message: None,
+            compensation_diagnostics: Vec::new(),
+        };
+        assert!(is_uninitialized_workflow_snapshot(&snapshot_with_bead));
     }
 }

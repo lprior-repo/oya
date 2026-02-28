@@ -173,11 +173,10 @@ pub fn parse_object_key(value: &str) -> Result<String, String> {
 }
 
 pub fn parse_non_empty_text(value: &str) -> Result<String, String> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
+    if value.trim().is_empty() {
         Err("value must not be empty".to_owned())
     } else {
-        Ok(trimmed.to_owned())
+        Ok(value.to_owned())
     }
 }
 
@@ -209,5 +208,6 @@ mod tests {
     fn parse_non_empty_text_rejects_blank_values() {
         assert!(parse_non_empty_text("hello").is_ok());
         assert!(parse_non_empty_text(" ").is_err());
+        assert_eq!(parse_non_empty_text("  hi  ").expect("valid"), "  hi  ");
     }
 }
