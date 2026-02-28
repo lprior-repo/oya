@@ -388,4 +388,22 @@ fn is_uninitialized_snapshot_detects_empty_status_payload() {
         compensation_diagnostics: Vec::new(),
     };
     assert!(is_uninitialized_snapshot(&snapshot));
+
+    let snapshot_with_default_gates = LifecycleStatusSnapshot {
+        bead_id: None,
+        steps: Vec::new(),
+        gates: vec![crate::restate_oya::types::LifecycleGateSnapshot {
+            gate_id: "G0".to_owned(),
+            status: "pending".to_owned(),
+            message: None,
+        }],
+        discipline_gates: Vec::new(),
+        state: None,
+        pr_url: None,
+        done: false,
+        success: None,
+        message: None,
+        compensation_diagnostics: Vec::new(),
+    };
+    assert!(is_uninitialized_snapshot(&snapshot_with_default_gates));
 }

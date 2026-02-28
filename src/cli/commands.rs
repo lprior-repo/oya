@@ -133,8 +133,6 @@ async fn status_command(args: StatusArgs) -> anyhow::Result<()> {
 pub(crate) fn is_uninitialized_snapshot(snapshot: &LifecycleStatusSnapshot) -> bool {
     snapshot.bead_id.is_none()
         && snapshot.steps.is_empty()
-        && snapshot.gates.is_empty()
-        && snapshot.discipline_gates.is_empty()
         && snapshot.state.is_none()
         && snapshot.pr_url.is_none()
         && !snapshot.done
