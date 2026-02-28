@@ -113,7 +113,8 @@ async fn ensure_success(response: Response) -> anyhow::Result<Response> {
     }
     let url = response.url().to_owned();
     let body = response.text().await.unwrap_or_default();
-    Err(anyhow::anyhow!(format_http_error(status, &url, &body)))
+    let normalized = normalize_http_error_body(&body);
+    Err(anyhow::anyhow!(format_http_error(status, &url, &normalized)))
 }
 
 pub fn format_http_error(status: reqwest::StatusCode, url: &reqwest::Url, body: &str) -> String {
@@ -123,6 +124,54 @@ pub fn format_http_error(status: reqwest::StatusCode, url: &reqwest::Url, body: 
     } else {
         format!("HTTP status {} for url ({url}): {trimmed}", status)
     }
+}
+
+pub fn normalize_http_error_body(body: &str) -> String {
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    let simplified = simplify_terminal_message(trimmed);
+    if simplified != trimmed {
+        return simplified;
+    }
+    extract_nested_terminal_message(trimmed)
+        .map(|message| simplify_terminal_message(&message))
+        .or_else(|| extract_top_level_message(trimmed))
+        .unwrap_or_else(|| trimmed.to_owned())
+}
+
+fn extract_nested_terminal_message(raw: &str) -> Option<String> {
+    let outer: serde_json::Value = serde_json::from_str(raw).ok()?;
+    let message = outer.get("message")?.as_str()?;
+    let nested: serde_json::Value = serde_json::from_str(message).ok()?;
+    nested
+        .pointer("/error/Terminal/message")
+        .and_then(serde_json::Value::as_str)
+        .map(std::borrow::ToOwned::to_owned)
+}
+
+fn extract_top_level_message(raw: &str) -> Option<String> {
+    let json: serde_json::Value = serde_json::from_str(raw).ok()?;
+    json.get("message").and_then(serde_json::Value::as_str).map(std::borrow::ToOwned::to_owned)
+}
+
+fn simplify_terminal_message(message: &str) -> String {
+    for (index, ch) in message.char_indices() {
+        if ch != '{' {
+            continue;
+        }
+        let parsed: serde_json::Value = match serde_json::from_str(&message[index..]) {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        if let Some(error_message) =
+            parsed.pointer("/error/message").and_then(serde_json::Value::as_str)
+        {
+            return error_message.to_owned();
+        }
+    }
+    message.to_owned()
 }
 
 pub async fn pick_ready_bead() -> anyhow::Result<String> {
