@@ -106,12 +106,27 @@ async fn lifecycle_command(args: LifecycleArgs) -> anyhow::Result<()> {
 }
 
 async fn status_command(args: StatusArgs) -> anyhow::Result<()> {
-    let request = KeyRequest { key: args.key };
+    let key = args.key;
+    let request = KeyRequest { key: key.clone() };
     let snapshot: LifecycleStatusSnapshot =
         call_restate_root_json(&args.ingress, "OyaService", "get_lifecycle", request).await?;
+    if is_uninitialized_snapshot(&snapshot) {
+        return Err(anyhow::anyhow!("not_found: lifecycle '{}' does not exist", key));
+    }
     let formatted = serde_json::to_string_pretty(&snapshot)?;
     println!("{formatted}");
     Ok(())
+}
+
+pub(crate) fn is_uninitialized_snapshot(snapshot: &LifecycleStatusSnapshot) -> bool {
+    snapshot.bead_id.is_none()
+        && snapshot.steps.is_empty()
+        && snapshot.state.is_none()
+        && snapshot.pr_url.is_none()
+        && !snapshot.done
+        && snapshot.success.is_none()
+        && snapshot.message.is_none()
+        && snapshot.compensation_diagnostics.is_empty()
 }
 
 async fn cancel_command(args: CancelArgs) -> anyhow::Result<()> {

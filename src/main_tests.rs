@@ -1,6 +1,6 @@
 use crate::cli::args::parse_repo_slug;
 use crate::cli::args::{parse_admin_url, parse_ingress_url, parse_service_url};
-use crate::cli::commands::{decode_bead_entries, BeadEntry};
+use crate::cli::commands::{decode_bead_entries, is_uninitialized_snapshot, BeadEntry};
 use crate::cli::doctor::{has_required_services, parse_host_port};
 use crate::cli::init::{
     extract_exec_binary, extract_exec_start, is_missing_container_error, is_valid_oya_exec_start,
@@ -11,6 +11,7 @@ use crate::cli::repo::{
     is_retryable_repo_lookup_stderr, normalize_error_message, parse_repo_slug_from_remote_url,
 };
 use crate::cli::restate::{format_http_error, parse_json_payload};
+use crate::restate_oya::types::LifecycleStatusSnapshot;
 use serde_json::json;
 
 #[test]
@@ -290,4 +291,19 @@ fn decode_bead_entries_rejects_object_without_items() {
     let payload = json!({"unexpected": []});
     let parsed = decode_bead_entries(payload);
     assert!(parsed.is_err());
+}
+
+#[test]
+fn is_uninitialized_snapshot_detects_empty_status_payload() {
+    let snapshot = LifecycleStatusSnapshot {
+        bead_id: None,
+        steps: Vec::new(),
+        state: None,
+        pr_url: None,
+        done: false,
+        success: None,
+        message: None,
+        compensation_diagnostics: Vec::new(),
+    };
+    assert!(is_uninitialized_snapshot(&snapshot));
 }

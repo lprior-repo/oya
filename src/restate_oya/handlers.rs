@@ -351,7 +351,11 @@ fn cleanup_outcome(result: Result<String, TerminalError>) -> String {
 
 fn get_runtime_status(key: &str) -> Option<LifecycleStatusSnapshot> {
     RUNTIME_LIFECYCLE_STATUS.read().ok().and_then(|map| {
-        runtime_lookup_keys(key).into_iter().find_map(|candidate| map.get(&candidate).cloned())
+        runtime_lookup_keys(key).into_iter().find_map(|candidate| {
+            map.get(&candidate)
+                .cloned()
+                .filter(|snapshot| !is_uninitialized_workflow_snapshot(snapshot))
+        })
     })
 }
 
