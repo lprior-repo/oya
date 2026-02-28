@@ -114,6 +114,9 @@ async fn ensure_success(response: Response) -> anyhow::Result<Response> {
     let url = response.url().to_owned();
     let body = response.text().await.unwrap_or_default();
     let normalized = normalize_http_error_body(&body);
+    if let Some(mapped) = map_special_error(normalized.as_str(), status) {
+        return Err(anyhow::anyhow!(mapped));
+    }
     Err(anyhow::anyhow!(format_http_error(status, &url, &normalized)))
 }
 
@@ -172,6 +175,16 @@ fn simplify_terminal_message(message: &str) -> String {
         }
     }
     message.to_owned()
+}
+
+pub fn map_special_error(message: &str, status: reqwest::StatusCode) -> Option<String> {
+    if status == reqwest::StatusCode::INTERNAL_SERVER_ERROR
+        && message.starts_with("Issue not found:")
+    {
+        Some(format!("not_found: {message}"))
+    } else {
+        None
+    }
 }
 
 pub async fn pick_ready_bead() -> anyhow::Result<String> {

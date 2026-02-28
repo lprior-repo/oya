@@ -10,7 +10,9 @@ use crate::cli::repo::{
     extract_repo_slug_from_jj_remote_output, format_repo_lookup_error_json, gh_repo_view_args,
     is_retryable_repo_lookup_stderr, normalize_error_message, parse_repo_slug_from_remote_url,
 };
-use crate::cli::restate::{format_http_error, normalize_http_error_body, parse_json_payload};
+use crate::cli::restate::{
+    format_http_error, map_special_error, normalize_http_error_body, parse_json_payload,
+};
 use crate::restate_oya::types::LifecycleStatusSnapshot;
 use serde_json::json;
 
@@ -275,6 +277,15 @@ fn normalize_http_error_body_simplifies_raw_terminal_payload() {
     let raw = r#"Br { args: [\"update\"] } exited with Some(3): {"error":{"message":"Issue not found: src-y"}}"#;
     let normalized = normalize_http_error_body(raw);
     assert_eq!(normalized, "Issue not found: src-y");
+}
+
+#[test]
+fn map_special_error_maps_issue_not_found_from_500() {
+    let mapped = map_special_error(
+        "Issue not found: src-missing",
+        reqwest::StatusCode::INTERNAL_SERVER_ERROR,
+    );
+    assert_eq!(mapped, Some("not_found: Issue not found: src-missing".to_owned()));
 }
 
 #[test]
