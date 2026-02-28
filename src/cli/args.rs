@@ -60,7 +60,7 @@ pub struct ServeArgs {
 
 #[derive(Debug, clap::Args)]
 pub struct InvokeArgs {
-    #[arg(long, default_value = DEFAULT_INGRESS)]
+    #[arg(long, default_value = DEFAULT_INGRESS, value_parser = parse_ingress_url)]
     pub ingress: String,
     #[arg(long, default_value = "default", value_parser = parse_object_key)]
     pub id: String,
@@ -74,7 +74,7 @@ pub struct InvokeArgs {
 pub struct ImplementArgs {
     #[arg(long)]
     pub bead: Option<String>,
-    #[arg(long, default_value = DEFAULT_INGRESS)]
+    #[arg(long, default_value = DEFAULT_INGRESS, value_parser = parse_ingress_url)]
     pub ingress: String,
     #[arg(long, default_value = DEFAULT_IMPL_MODEL)]
     pub model: String,
@@ -84,7 +84,7 @@ pub struct ImplementArgs {
 pub struct LifecycleArgs {
     #[arg(long)]
     pub bead: Option<String>,
-    #[arg(long, default_value = DEFAULT_INGRESS)]
+    #[arg(long, default_value = DEFAULT_INGRESS, value_parser = parse_ingress_url)]
     pub ingress: String,
     #[arg(long, default_value = DEFAULT_IMPL_MODEL)]
     pub model: String,
@@ -96,7 +96,7 @@ pub struct LifecycleArgs {
 pub struct StatusArgs {
     #[arg(long, value_parser = parse_object_key)]
     pub key: String,
-    #[arg(long, default_value = DEFAULT_INGRESS)]
+    #[arg(long, default_value = DEFAULT_INGRESS, value_parser = parse_ingress_url)]
     pub ingress: String,
 }
 
@@ -104,7 +104,7 @@ pub struct StatusArgs {
 pub struct CancelArgs {
     #[arg(long, value_parser = parse_object_key)]
     pub key: String,
-    #[arg(long, default_value = DEFAULT_INGRESS)]
+    #[arg(long, default_value = DEFAULT_INGRESS, value_parser = parse_ingress_url)]
     pub ingress: String,
 }
 
