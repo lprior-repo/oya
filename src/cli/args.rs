@@ -172,6 +172,9 @@ pub fn parse_object_key(value: &str) -> Result<String, String> {
     if trimmed.contains('/') {
         return Err("key/id must not contain '/'".to_owned());
     }
+    if !trimmed.chars().all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-')) {
+        return Err("key/id may contain only [A-Za-z0-9._-]".to_owned());
+    }
     Ok(trimmed.to_owned())
 }
 
@@ -205,6 +208,7 @@ mod tests {
         assert!(parse_object_key("  ").is_err());
         assert!(parse_object_key("abc 123").is_err());
         assert!(parse_object_key("abc/123").is_err());
+        assert!(parse_object_key("semi;colon").is_err());
     }
 
     #[test]
