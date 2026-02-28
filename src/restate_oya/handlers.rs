@@ -278,8 +278,12 @@ impl OyaService for OyaServiceBridge {
             return Ok(snapshot.into());
         }
         let run_key = workflow_key.clone();
+        let lookup_key = key.clone();
         let raw =
             ctx.run(move || fetch_lifecycle_status_raw(run_key)).name("get_lifecycle").await?;
+        if is_lifecycle_not_found(&raw) {
+            return Err(TerminalError::new(format!("lifecycle not_found: {}", lookup_key)).into());
+        }
         let snapshot = parse_lifecycle_status_snapshot(&raw, &key);
         Ok(snapshot.into())
     }
@@ -894,6 +898,16 @@ fn extract_step_snapshots(raw: &str) -> Vec<LifecycleStepSnapshot> {
             })
         })
         .collect()
+}
+
+pub(super) fn is_lifecycle_not_found(raw: &str) -> bool {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return true;
+    }
+    trimmed.contains("No invocations matched")
+        || trimmed.contains("not found")
+        || trimmed.contains("invocation not found")
 }
 
 fn parse_lifecycle_status_snapshot(raw: &str, key: &str) -> LifecycleStatusSnapshot {

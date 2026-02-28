@@ -3,6 +3,9 @@ mod opencode;
 mod trace;
 mod types;
 
+#[cfg(test)]
+mod handlers_tests;
+
 pub use handlers::serve;
 pub use opencode::pipeline_prompt;
 pub use types::{
