@@ -280,12 +280,15 @@ impl OyaService for OyaServiceBridge {
         let run_key = workflow_key.clone();
         let raw =
             ctx.run(move || fetch_lifecycle_status_raw(run_key)).name("get_lifecycle").await?;
-        if raw.trim().is_empty() {
-            Err(TerminalError::new(format!("not_found: lifecycle '{}' does not exist", key)).into())
-        } else {
-            let snapshot = parse_lifecycle_status_snapshot(&raw, &key);
-            Ok(snapshot.into())
+        if is_lifecycle_not_found(&raw) {
+            return Err(TerminalError::new(format!(
+                "not_found: lifecycle '{}' does not exist",
+                key
+            ))
+            .into());
         }
+        let snapshot = parse_lifecycle_status_snapshot(&raw, &key);
+        Ok(snapshot.into())
     }
 
     async fn cancel(
@@ -898,6 +901,10 @@ fn extract_step_snapshots(raw: &str) -> Vec<LifecycleStepSnapshot> {
             })
         })
         .collect()
+}
+
+pub(super) fn is_lifecycle_not_found(raw: &str) -> bool {
+    raw.trim().is_empty()
 }
 
 fn parse_lifecycle_status_snapshot(raw: &str, key: &str) -> LifecycleStatusSnapshot {
