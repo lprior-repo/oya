@@ -65,6 +65,7 @@ pub struct InvokeArgs {
     #[arg(long, default_value = "default", value_parser = parse_object_key)]
     pub id: String,
     #[arg(long)]
+    #[arg(long, value_parser = parse_non_empty_text)]
     pub prompt: String,
     #[arg(long)]
     pub model: Option<String>,
@@ -72,7 +73,7 @@ pub struct InvokeArgs {
 
 #[derive(Debug, clap::Args)]
 pub struct ImplementArgs {
-    #[arg(long)]
+    #[arg(long, value_parser = parse_object_key)]
     pub bead: Option<String>,
     #[arg(long, default_value = DEFAULT_INGRESS, value_parser = parse_ingress_url)]
     pub ingress: String,
@@ -82,7 +83,7 @@ pub struct ImplementArgs {
 
 #[derive(Debug, clap::Args)]
 pub struct LifecycleArgs {
-    #[arg(long)]
+    #[arg(long, value_parser = parse_object_key)]
     pub bead: Option<String>,
     #[arg(long, default_value = DEFAULT_INGRESS, value_parser = parse_ingress_url)]
     pub ingress: String,
@@ -168,6 +169,15 @@ pub fn parse_object_key(value: &str) -> Result<String, String> {
     Ok(trimmed.to_owned())
 }
 
+pub fn parse_non_empty_text(value: &str) -> Result<String, String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        Err("value must not be empty".to_owned())
+    } else {
+        Ok(trimmed.to_owned())
+    }
+}
+
 fn is_valid_repo_part(value: &str) -> bool {
     value.chars().all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-'))
 }
@@ -189,5 +199,11 @@ mod tests {
         assert!(parse_object_key("abc-123").is_ok());
         assert!(parse_object_key("  ").is_err());
         assert!(parse_object_key("abc/123").is_err());
+    }
+
+    #[test]
+    fn parse_non_empty_text_rejects_blank_values() {
+        assert!(parse_non_empty_text("hello").is_ok());
+        assert!(parse_non_empty_text(" ").is_err());
     }
 }
