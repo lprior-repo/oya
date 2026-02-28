@@ -163,6 +163,9 @@ pub fn parse_object_key(value: &str) -> Result<String, String> {
     if trimmed.is_empty() {
         return Err("key/id must not be empty".to_owned());
     }
+    if trimmed.chars().any(char::is_whitespace) {
+        return Err("key/id must not contain whitespace".to_owned());
+    }
     if trimmed.contains('/') {
         return Err("key/id must not contain '/'".to_owned());
     }
@@ -198,6 +201,7 @@ mod tests {
     fn parse_object_key_rejects_empty_and_slash() {
         assert!(parse_object_key("abc-123").is_ok());
         assert!(parse_object_key("  ").is_err());
+        assert!(parse_object_key("abc 123").is_err());
         assert!(parse_object_key("abc/123").is_err());
     }
 
