@@ -7,6 +7,10 @@ use reqwest::Client;
 use reqwest::Response;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
+use std::time::Duration;
+
+const RESTATE_HTTP_TIMEOUT: Duration = Duration::from_secs(4);
+const RESTATE_CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Deserialize)]
 pub struct ReadyIssue {
@@ -38,7 +42,7 @@ pub async fn call_restate_service_json<T: serde::Serialize>(
     request: T,
 ) -> anyhow::Result<crate::restate_oya::StartResponse> {
     let url = format!("{ingress}/{service}/{id}/{handler}");
-    let response = Client::new().post(url).json(&request).send().await?;
+    let response = restate_http_client()?.post(url).json(&request).send().await?;
     let response = ensure_success(response).await?;
     response.json().await.map_err(Into::into)
 }
@@ -50,9 +54,17 @@ pub async fn call_restate_root_json<T: serde::Serialize, R: DeserializeOwned>(
     request: T,
 ) -> anyhow::Result<R> {
     let url = format!("{ingress}/{service}/{handler}");
-    let response = Client::new().post(url).json(&request).send().await?;
+    let response = restate_http_client()?.post(url).json(&request).send().await?;
     let response = ensure_success(response).await?;
     response.json().await.map_err(Into::into)
+}
+
+fn restate_http_client() -> anyhow::Result<Client> {
+    Client::builder()
+        .connect_timeout(RESTATE_CONNECT_TIMEOUT)
+        .timeout(RESTATE_HTTP_TIMEOUT)
+        .build()
+        .map_err(|error| anyhow::anyhow!("failed to build HTTP client: {error}"))
 }
 
 async fn ensure_success(response: Response) -> anyhow::Result<Response> {
