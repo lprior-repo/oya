@@ -2,7 +2,9 @@ use crate::cli::args::parse_repo_slug;
 use crate::cli::args::{parse_admin_url, parse_ingress_url, parse_service_url};
 use crate::cli::commands::{decode_bead_entries, BeadEntry};
 use crate::cli::doctor::{has_required_services, parse_host_port};
-use crate::cli::init::{extract_exec_binary, extract_exec_start, is_valid_oya_exec_start};
+use crate::cli::init::{
+    extract_exec_binary, extract_exec_start, is_missing_container_error, is_valid_oya_exec_start,
+};
 use crate::cli::repo::{
     ensure_repo_matches_jj_origin, extract_repo_slug_from_gh_output,
     extract_repo_slug_from_jj_remote_output, format_repo_lookup_error_json, gh_repo_view_args,
@@ -224,6 +226,14 @@ fn format_http_error_includes_response_body_when_present() {
         message,
         "HTTP status 500 Internal Server Error for url (http://127.0.0.1:909/Oya/test/run): boom"
     );
+}
+
+#[test]
+fn is_missing_container_error_detects_docker_message() {
+    assert!(is_missing_container_error(
+        "Error response from daemon: No such container: oya-restate"
+    ));
+    assert!(!is_missing_container_error("permission denied"));
 }
 
 #[test]

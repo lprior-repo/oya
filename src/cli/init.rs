@@ -10,13 +10,13 @@ use std::time::Duration;
 use tokio::time::sleep;
 
 pub async fn init_command(ingress: &str, service_url: &str, down: bool) -> anyhow::Result<()> {
-    let repo_root = find_repo_root()?;
     disable_systemd_restate().await?;
     if down {
-        stop_docker_restate(&repo_root).await?;
+        stop_docker_restate().await?;
         println!("[oya] Docker Restate stopped");
         return Ok(());
     }
+    let repo_root = find_repo_root()?;
     start_fresh_docker_restate(&repo_root).await?;
     restart_oya_service().await?;
     verify_oya_service_unit().await?;
@@ -49,14 +49,30 @@ async fn disable_systemd_restate() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn stop_docker_restate(repo_root: &Path) -> anyhow::Result<()> {
-    run_command_capture(
-        "docker",
-        &["compose", "-f", "docker-compose.yml", "stop", "restate"],
-        Some(repo_root),
-    )
-    .await
-    .map(|_| ())
+async fn stop_docker_restate() -> anyhow::Result<()> {
+    if let Ok(repo_root) = find_repo_root() {
+        return run_command_capture(
+            "docker",
+            &["compose", "-f", "docker-compose.yml", "stop", "restate"],
+            Some(repo_root.as_path()),
+        )
+        .await
+        .map(|_| ());
+    }
+    stop_named_restate_container().await
+}
+
+async fn stop_named_restate_container() -> anyhow::Result<()> {
+    let outcome = run_command_outcome("docker", &["rm", "-f", "oya-restate"], None).await?;
+    if outcome.success || is_missing_container_error(&outcome.stderr) {
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!("docker rm -f oya-restate failed: {}", outcome.stderr.trim()))
+    }
+}
+
+pub(crate) fn is_missing_container_error(stderr: &str) -> bool {
+    stderr.to_ascii_lowercase().contains("no such container")
 }
 
 async fn start_fresh_docker_restate(repo_root: &Path) -> anyhow::Result<()> {
