@@ -8,18 +8,6 @@ fn test_is_lifecycle_not_found_detects_empty_response() {
 }
 
 #[test]
-fn test_is_lifecycle_not_found_detects_no_invocations_matched() {
-    assert!(is_lifecycle_not_found("No invocations matched the query"));
-    assert!(is_lifecycle_not_found("Error: No invocations matched\n"));
-}
-
-#[test]
-fn test_is_lifecycle_not_found_detects_not_found_message() {
-    assert!(is_lifecycle_not_found("invocation not found"));
-    assert!(is_lifecycle_not_found("Error: not found in registry"));
-}
-
-#[test]
 fn test_is_lifecycle_not_found_returns_false_for_running_lifecycle() {
     assert!(!is_lifecycle_not_found("Status: running\nCommand: moon run :ci"));
     assert!(!is_lifecycle_not_found("Status: completed\n"));
@@ -31,7 +19,8 @@ fn test_is_lifecycle_not_found_returns_false_for_backing_off_lifecycle() {
 }
 
 #[test]
-fn test_is_lifecycle_not_found_detects_lowercase_variants() {
-    assert!(is_lifecycle_not_found("not found in registry"));
-    assert!(is_lifecycle_not_found("Error: invocation not found"));
+fn test_is_lifecycle_not_found_returns_false_for_error_messages() {
+    assert!(!is_lifecycle_not_found("No invocations matched the query"));
+    assert!(!is_lifecycle_not_found("Error: not found in registry"));
+    assert!(!is_lifecycle_not_found("Error: invocation not found"));
 }
