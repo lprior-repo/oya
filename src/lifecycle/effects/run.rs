@@ -13,7 +13,7 @@ use crate::lifecycle::types::{FailureCategory, LifecycleError, WorkspaceName};
 
 use super::{
     classify_command_failure, classify_non_zero, effect_timeout_secs, run_compensation_effect,
-    CommandExecutor, Compensation, Effect, EffectJournalEntry,
+    CommandExecutor, Compensation, Effect, EffectJournalEntry, DEFAULT_CLI_TIMEOUT_SECS,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -91,24 +91,59 @@ pub async fn run_compensation(
     executor: &dyn CommandExecutor,
     compensation: Compensation,
 ) -> anyhow::Result<EffectJournalEntry> {
-    let effect = match compensation {
-        Compensation::ForgetWorkspace { workspace } => Effect::Jj {
-            args: vec!["workspace".to_owned(), "forget".to_owned(), workspace.as_str().to_owned()],
-            cwd: None,
-        },
-        Compensation::MarkBeadBlocked { bead, reason } => Effect::Br {
-            args: vec![
-                "update".to_owned(),
-                bead.bead_id.as_str().to_owned(),
-                "--status".to_owned(),
-                "blocked".to_owned(),
-                "--notes".to_owned(),
-                reason,
-            ],
-            cwd: None,
-        },
-    };
-    run_compensation_effect(executor, effect).await
+    match compensation {
+        Compensation::ForgetWorkspace { workspace } => {
+            run_forget_workspace_compensation(executor, workspace).await
+        }
+        Compensation::MarkBeadBlocked { bead, reason } => {
+            let effect = Effect::Br {
+                args: vec![
+                    "update".to_owned(),
+                    bead.bead_id.as_str().to_owned(),
+                    "--status".to_owned(),
+                    "blocked".to_owned(),
+                    "--notes".to_owned(),
+                    reason,
+                ],
+                cwd: None,
+            };
+            run_compensation_effect(executor, effect).await
+        }
+    }
+}
+
+async fn run_forget_workspace_compensation(
+    executor: &dyn CommandExecutor,
+    workspace: WorkspaceName,
+) -> anyhow::Result<EffectJournalEntry> {
+    let timeout_secs = DEFAULT_CLI_TIMEOUT_SECS;
+    let timeout = Duration::from_secs(timeout_secs);
+    let args = vec!["workspace".to_owned(), "forget".to_owned(), workspace.as_str().to_owned()];
+    let jj_result = executor.run("jj", &args, timeout, None).await;
+    let workspace_path = workspace.workspace_path();
+    let dir_result = remove_workspace_dir(&workspace_path);
+    match (jj_result, dir_result) {
+        (Ok(jj_output), Ok(_)) => Ok(EffectJournalEntry {
+            effect: Effect::Jj { args, cwd: None },
+            timeout_secs,
+            success: true,
+            stdout: jj_output.stdout,
+            stderr: jj_output.stderr,
+        }),
+        (Err(jj_err), Err(dir_err)) => {
+            let error_msg =
+                format!("jj forget failed: {jj_err}, directory removal failed: {dir_err}");
+            Err(anyhow::anyhow!(error_msg))
+        }
+        (Err(jj_err), Ok(_)) => {
+            let error_msg = format!("jj forget failed: {jj_err}");
+            Err(anyhow::anyhow!(error_msg))
+        }
+        (Ok(_), Err(dir_err)) => {
+            let error_msg = format!("directory removal failed: {dir_err}");
+            Err(anyhow::anyhow!(error_msg))
+        }
+    }
 }
 
 fn effect_command(effect: &Effect) -> (&'static str, Vec<String>, Option<String>) {
