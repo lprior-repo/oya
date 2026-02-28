@@ -52,7 +52,9 @@ pub struct LifecycleGateSnapshot {
 pub struct LifecycleStatusSnapshot {
     pub bead_id: Option<String>,
     pub steps: Vec<LifecycleStepSnapshot>,
+    #[serde(default)]
     pub gates: Vec<LifecycleGateSnapshot>,
+    #[serde(default)]
     pub discipline_gates: Vec<LifecycleGateSnapshot>,
     pub state: Option<Value>,
     pub pr_url: Option<String>,

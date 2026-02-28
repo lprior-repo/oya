@@ -8,9 +8,12 @@ use reqwest::Response;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use std::time::Duration;
+use tokio::time::sleep;
 
 const RESTATE_HTTP_TIMEOUT: Duration = Duration::from_secs(4);
 const RESTATE_CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
+const RESTATE_RETRY_DELAY: Duration = Duration::from_millis(150);
+const RESTATE_RETRY_ATTEMPTS: u8 = 2;
 
 #[derive(Debug, Deserialize)]
 pub struct ReadyIssue {
@@ -42,7 +45,8 @@ pub async fn call_restate_service_json<T: serde::Serialize>(
     request: T,
 ) -> anyhow::Result<crate::restate_oya::StartResponse> {
     let url = format!("{ingress}/{service}/{id}/{handler}");
-    let response = restate_http_client()?.post(url).json(&request).send().await?;
+    let client = restate_http_client()?;
+    let response = post_json_with_retry(&client, &url, &request).await?;
     let response = ensure_success(response).await?;
     response.json().await.map_err(Into::into)
 }
@@ -54,9 +58,44 @@ pub async fn call_restate_root_json<T: serde::Serialize, R: DeserializeOwned>(
     request: T,
 ) -> anyhow::Result<R> {
     let url = format!("{ingress}/{service}/{handler}");
-    let response = restate_http_client()?.post(url).json(&request).send().await?;
-    let response = ensure_success(response).await?;
-    response.json().await.map_err(Into::into)
+    let client = restate_http_client()?;
+    let mut attempt: u8 = 0;
+    loop {
+        let response = post_json_with_retry(&client, &url, &request).await?;
+        if response.status() == reqwest::StatusCode::INTERNAL_SERVER_ERROR
+            && attempt < RESTATE_RETRY_ATTEMPTS
+        {
+            attempt = attempt.saturating_add(1);
+            sleep(RESTATE_RETRY_DELAY).await;
+            continue;
+        }
+        let response = ensure_success(response).await?;
+        return response.json().await.map_err(Into::into);
+    }
+}
+
+async fn post_json_with_retry<T: serde::Serialize>(
+    client: &Client,
+    url: &str,
+    request: &T,
+) -> anyhow::Result<Response> {
+    let mut attempt: u8 = 0;
+    loop {
+        match client.post(url).json(request).send().await {
+            Ok(response) => return Ok(response),
+            Err(error)
+                if attempt < RESTATE_RETRY_ATTEMPTS && is_transient_transport_error(&error) =>
+            {
+                attempt = attempt.saturating_add(1);
+                sleep(RESTATE_RETRY_DELAY).await;
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+}
+
+fn is_transient_transport_error(error: &reqwest::Error) -> bool {
+    error.is_connect() || error.is_timeout()
 }
 
 fn restate_http_client() -> anyhow::Result<Client> {

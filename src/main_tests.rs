@@ -310,6 +310,8 @@ fn is_uninitialized_snapshot_detects_empty_status_payload() {
     let snapshot = LifecycleStatusSnapshot {
         bead_id: None,
         steps: Vec::new(),
+        gates: Vec::new(),
+        discipline_gates: Vec::new(),
         state: None,
         pr_url: None,
         done: false,
