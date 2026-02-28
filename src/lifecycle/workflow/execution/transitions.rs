@@ -80,7 +80,7 @@ fn apply_transition(
 }
 
 fn validate_receipt_fields(stdout: &str, required_fields: &[String]) -> Result<(), LifecycleError> {
-    let receipt = parse_receipt(stdout)?;
+    let receipt = parse_receipt(stdout, required_fields)?;
     let missing = required_fields
         .iter()
         .filter(|field| receipt.get(field.as_str()).is_none())
@@ -96,19 +96,47 @@ fn validate_receipt_fields(stdout: &str, required_fields: &[String]) -> Result<(
     }
 }
 
-fn parse_receipt(stdout: &str) -> Result<serde_json::Value, LifecycleError> {
+fn parse_receipt(
+    stdout: &str,
+    required_fields: &[String],
+) -> Result<serde_json::Value, LifecycleError> {
+    let objects = parse_json_objects(stdout);
+    if objects.is_empty() {
+        return Err(LifecycleError::terminal(
+            FailureCategory::Command,
+            "opencode did not return a JSON receipt object".to_owned(),
+        ));
+    }
+    best_receipt_candidate(objects, required_fields)
+}
+
+fn parse_json_objects(stdout: &str) -> Vec<serde_json::Value> {
     stdout
         .lines()
         .map(str::trim)
         .filter(|line| !line.is_empty())
         .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
-        .find(serde_json::Value::is_object)
+        .filter(serde_json::Value::is_object)
+        .collect::<Vec<_>>()
+}
+
+fn best_receipt_candidate(
+    objects: Vec<serde_json::Value>,
+    required_fields: &[String],
+) -> Result<serde_json::Value, LifecycleError> {
+    objects
+        .into_iter()
+        .max_by_key(|candidate| required_field_matches(candidate, required_fields))
         .ok_or_else(|| {
             LifecycleError::terminal(
                 FailureCategory::Command,
                 "opencode did not return a JSON receipt object".to_owned(),
             )
         })
+}
+
+fn required_field_matches(candidate: &serde_json::Value, required_fields: &[String]) -> usize {
+    required_fields.iter().filter(|field| candidate.get(field.as_str()).is_some()).count()
 }
 
 pub fn validate_workspace_changes(stdout: &str) -> Result<(), LifecycleError> {
@@ -184,4 +212,49 @@ fn append_compensation(
     compensation: Compensation,
 ) -> Vec<Compensation> {
     compensations.into_iter().chain(std::iter::once(compensation)).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_receipt_fields;
+
+    fn required() -> Vec<String> {
+        [
+            "objective",
+            "allowed_scope",
+            "files_touched",
+            "commands",
+            "exit_codes",
+            "key_stdout_stderr",
+            "diff_summary",
+            "risks_unknowns",
+            "pass_fail_recommendation",
+        ]
+        .into_iter()
+        .map(std::borrow::ToOwned::to_owned)
+        .collect::<Vec<_>>()
+    }
+
+    #[test]
+    fn validate_receipt_fields_accepts_receipt_after_event_objects() {
+        let stdout = r#"{"type":"step_start","timestamp":1}
+{"objective":"implement","allowed_scope":["src"],"files_touched":["src/main.rs"],"commands":["moon run :test"],"exit_codes":[0],"key_stdout_stderr":["ok"],"diff_summary":"done","risks_unknowns":["none"],"pass_fail_recommendation":"pass"}"#;
+
+        let result = validate_receipt_fields(stdout, &required());
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn validate_receipt_fields_rejects_missing_required_fields() {
+        let stdout = r#"{"type":"step_start","timestamp":1}
+{"status":"ok"}"#;
+
+        let result = validate_receipt_fields(stdout, &required());
+
+        assert!(result.is_err());
+        if let Err(error) = result {
+            assert!(error.message().contains("opencode receipt missing required fields"));
+        }
+    }
 }
