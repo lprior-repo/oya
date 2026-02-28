@@ -152,8 +152,11 @@ fn effect_command(effect: &Effect) -> (&'static str, Vec<String>, Option<String>
         Effect::Jj { args, cwd } => ("jj", args.clone(), cwd.clone()),
         Effect::Br { args, cwd } => ("br", args.clone(), cwd.clone()),
         Effect::Gh { args, cwd } => ("gh", args.clone(), cwd.clone()),
+        Effect::MoonRun { task, cwd } => {
+            ("moon", vec!["run".to_owned(), task.clone()], cwd.clone())
+        }
         Effect::MoonCi { cwd } => ("moon", vec!["run".to_owned(), ":ci".to_owned()], cwd.clone()),
-        Effect::Opencode { prompt, model, cwd } => (
+        Effect::Opencode { prompt, model, cwd } | Effect::OpencodeQa { prompt, model, cwd } => (
             "opencode",
             vec![
                 "run".to_owned(),

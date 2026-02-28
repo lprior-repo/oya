@@ -20,6 +20,7 @@ pub struct LifecycleStep {
 pub enum StepTransition {
     None,
     Static(LifecycleEvent),
+    ValidateReceipt { required_fields: Vec<String> },
     ValidateWorkspaceChanges,
     PullRequestOpened { bead: BeadData },
 }
@@ -30,6 +31,10 @@ pub fn build_steps(bead: &BeadData, model: &Model, repo: Option<&str>) -> Vec<Li
         workspace_prepare_step(bead),
         workspace_create_step(bead),
         opencode_step(bead, model),
+        qa_enforcer_step(bead, model),
+        ltc_quick_step(bead),
+        ltc_targeted_step(bead),
+        ltc_test_step(bead),
         moon_ci_step(bead),
         jj_sync_main_step(bead),
         jj_rebase_main_step(bead),
@@ -133,7 +138,7 @@ fn jj_rebase_main_step(bead: &BeadData) -> LifecycleStep {
 
 fn opencode_step(bead: &BeadData, model: &Model) -> LifecycleStep {
     let prompt = format!(
-        "Implement bead {} in this workspace with real code changes. Do not call `oya` or `br`. Use moon/jj/gh as needed. Return short JSON summary with changed_files and ci_status.",
+        "Implement bead {} in this workspace using functional-rust approach and tests derived from contract. Do not call `oya` or `br`. Use moon/jj/gh as needed. Return one JSON receipt object with required keys: objective, allowed_scope, files_touched, commands, exit_codes, key_stdout_stderr, diff_summary, risks_unknowns, pass_fail_recommendation.",
         bead.bead_id.as_str()
     );
     LifecycleStep {
@@ -144,8 +149,82 @@ fn opencode_step(bead: &BeadData, model: &Model) -> LifecycleStep {
             cwd: Some(bead.workspace_path.clone()),
         },
         compensation: None,
-        transition: StepTransition::None,
+        transition: StepTransition::ValidateReceipt { required_fields: receipt_required_fields() },
         dependencies: deps(&["workspace_add"]),
+    }
+}
+
+fn qa_enforcer_step(bead: &BeadData, model: &Model) -> LifecycleStep {
+    let prompt = format!(
+        "Run qa-enforcer verification for bead {} against implemented contract and tests. Execute adversarial and regression checks. Return one JSON receipt object with required keys: objective, allowed_scope, files_touched, commands, exit_codes, key_stdout_stderr, diff_summary, risks_unknowns, pass_fail_recommendation. Exit non-zero when verdict is fail.",
+        bead.bead_id.as_str()
+    );
+    LifecycleStep {
+        name: "qa_enforcer".to_owned(),
+        effect: Effect::OpencodeQa {
+            prompt,
+            model: model.as_str().to_owned(),
+            cwd: Some(bead.workspace_path.clone()),
+        },
+        compensation: None,
+        transition: StepTransition::ValidateReceipt { required_fields: receipt_required_fields() },
+        dependencies: deps(&["opencode"]),
+    }
+}
+
+fn receipt_required_fields() -> Vec<String> {
+    [
+        "objective",
+        "allowed_scope",
+        "files_touched",
+        "commands",
+        "exit_codes",
+        "key_stdout_stderr",
+        "diff_summary",
+        "risks_unknowns",
+        "pass_fail_recommendation",
+    ]
+    .into_iter()
+    .map(std::borrow::ToOwned::to_owned)
+    .collect()
+}
+
+fn ltc_quick_step(bead: &BeadData) -> LifecycleStep {
+    LifecycleStep {
+        name: "ltc_quick".to_owned(),
+        effect: Effect::MoonRun {
+            task: ":quick".to_owned(),
+            cwd: Some(bead.workspace_path.clone()),
+        },
+        compensation: None,
+        transition: StepTransition::None,
+        dependencies: deps(&["qa_enforcer"]),
+    }
+}
+
+fn ltc_targeted_step(bead: &BeadData) -> LifecycleStep {
+    LifecycleStep {
+        name: "ltc_targeted".to_owned(),
+        effect: Effect::MoonRun {
+            task: ":test".to_owned(),
+            cwd: Some(bead.workspace_path.clone()),
+        },
+        compensation: None,
+        transition: StepTransition::None,
+        dependencies: deps(&["ltc_quick"]),
+    }
+}
+
+fn ltc_test_step(bead: &BeadData) -> LifecycleStep {
+    LifecycleStep {
+        name: "ltc_test".to_owned(),
+        effect: Effect::MoonRun {
+            task: ":test".to_owned(),
+            cwd: Some(bead.workspace_path.clone()),
+        },
+        compensation: None,
+        transition: StepTransition::None,
+        dependencies: deps(&["ltc_targeted"]),
     }
 }
 
@@ -175,7 +254,7 @@ fn moon_ci_step(bead: &BeadData) -> LifecycleStep {
         effect: Effect::MoonCi { cwd: Some(bead.workspace_path.clone()) },
         compensation: None,
         transition: StepTransition::None,
-        dependencies: deps(&["opencode"]),
+        dependencies: deps(&["ltc_test"]),
     }
 }
 

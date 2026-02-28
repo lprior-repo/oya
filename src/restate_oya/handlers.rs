@@ -15,9 +15,9 @@ use super::opencode::{
 };
 use super::trace::{build_clean_trace, fallback_summary, parse_jsonl_events, summarize_events};
 use super::types::{
-    BeadSnapshot, BeadSyncRequest, CancelResponse, KeyRequest, LifecycleRequest,
-    LifecycleStatusSnapshot, LifecycleStepSnapshot, MemorySnapshot, PipelineRequest, StartRequest,
-    StartResponse,
+    BeadSnapshot, BeadSyncRequest, CancelResponse, KeyRequest, LifecycleGateSnapshot,
+    LifecycleRequest, LifecycleStatusSnapshot, LifecycleStepSnapshot, MemorySnapshot,
+    PipelineRequest, StartRequest, StartResponse,
 };
 
 #[restate_sdk::object]
@@ -407,6 +407,8 @@ fn update_runtime_progress(
             .unwrap_or_else(|| LifecycleStatusSnapshot {
                 bead_id: Some(key.to_owned()),
                 steps: Vec::new(),
+                gates: default_gate_snapshots(),
+                discipline_gates: default_discipline_gate_snapshots(),
                 state: None,
                 pr_url: None,
                 done: false,
@@ -443,6 +445,8 @@ fn seed_runtime_status(
             LifecycleStatusSnapshot {
                 bead_id,
                 steps: steps.to_vec(),
+                gates: gate_snapshots_from_steps(steps),
+                discipline_gates: discipline_gate_snapshots_from_steps(steps),
                 state: None,
                 pr_url: None,
                 done: false,
@@ -477,42 +481,45 @@ fn runtime_status_next(
     live_steps: &[LifecycleStepSnapshot],
     update: LifecycleProgressUpdate,
 ) -> LifecycleStatusSnapshot {
+    let base = runtime_status_base(current, live_steps);
     match update {
-        LifecycleProgressUpdate::Initialized { bead_id, .. } => LifecycleStatusSnapshot {
-            bead_id: Some(bead_id),
-            steps: live_steps.to_vec(),
-            state: current.state,
-            pr_url: current.pr_url,
-            done: false,
-            success: None,
-            message: None,
-            compensation_diagnostics: current.compensation_diagnostics,
-        },
-        LifecycleProgressUpdate::Step { message, .. } => LifecycleStatusSnapshot {
-            bead_id: current.bead_id,
-            steps: live_steps.to_vec(),
-            state: current.state,
-            pr_url: current.pr_url,
-            done: false,
-            success: None,
-            message,
-            compensation_diagnostics: current.compensation_diagnostics,
-        },
+        LifecycleProgressUpdate::Initialized { bead_id, .. } => {
+            LifecycleStatusSnapshot { bead_id: Some(bead_id), message: None, ..base }
+        }
+        LifecycleProgressUpdate::Step { message, .. } => {
+            LifecycleStatusSnapshot { message, ..base }
+        }
         LifecycleProgressUpdate::Finished {
             success,
             pr_url,
             message,
             compensation_diagnostics,
         } => LifecycleStatusSnapshot {
-            bead_id: current.bead_id,
-            steps: live_steps.to_vec(),
-            state: current.state,
             pr_url,
             done: true,
             success: Some(success),
             message,
             compensation_diagnostics,
+            ..base
         },
+    }
+}
+
+fn runtime_status_base(
+    current: LifecycleStatusSnapshot,
+    live_steps: &[LifecycleStepSnapshot],
+) -> LifecycleStatusSnapshot {
+    LifecycleStatusSnapshot {
+        bead_id: current.bead_id,
+        steps: live_steps.to_vec(),
+        gates: gate_snapshots_from_steps(live_steps),
+        discipline_gates: discipline_gate_snapshots_from_steps(live_steps),
+        state: current.state,
+        pr_url: current.pr_url,
+        done: false,
+        success: None,
+        message: None,
+        compensation_diagnostics: current.compensation_diagnostics,
     }
 }
 
@@ -580,6 +587,8 @@ fn initialize_lifecycle_status(
 ) {
     ctx.set("lifecycle_bead_id", bead_id);
     store_lifecycle_steps(ctx, steps);
+    store_lifecycle_gates(ctx, &default_gate_snapshots());
+    store_lifecycle_discipline_gates(ctx, &default_discipline_gate_snapshots());
     ctx.clear("lifecycle_state");
     ctx.clear("lifecycle_pr_url");
     ctx.set("lifecycle_done", false);
@@ -594,6 +603,10 @@ fn default_step_snapshots() -> Vec<LifecycleStepSnapshot> {
         "workspace_prepare",
         "workspace_add",
         "opencode",
+        "qa_enforcer",
+        "ltc_quick",
+        "ltc_targeted",
+        "ltc_test",
         "moon_ci",
         "jj_sync_main",
         "jj_rebase_main",
@@ -683,6 +696,92 @@ fn apply_step_update(
 ) {
     *live_steps = upsert_step(live_steps.clone(), update);
     store_lifecycle_steps(ctx, live_steps);
+    store_lifecycle_gates(ctx, &gate_snapshots_from_steps(live_steps));
+    store_lifecycle_discipline_gates(ctx, &discipline_gate_snapshots_from_steps(live_steps));
+}
+
+fn gate_snapshots_from_steps(steps: &[LifecycleStepSnapshot]) -> Vec<LifecycleGateSnapshot> {
+    apply_gate_updates(default_gate_snapshots(), steps, gate_for_step)
+}
+
+fn discipline_gate_snapshots_from_steps(
+    steps: &[LifecycleStepSnapshot],
+) -> Vec<LifecycleGateSnapshot> {
+    apply_gate_updates(default_discipline_gate_snapshots(), steps, discipline_gate_for_step)
+}
+
+fn apply_gate_updates(
+    gates: Vec<LifecycleGateSnapshot>,
+    steps: &[LifecycleStepSnapshot],
+    mapper: fn(&str) -> Option<&'static str>,
+) -> Vec<LifecycleGateSnapshot> {
+    steps.iter().fold(gates, |acc, step| {
+        mapper(&step.step).map_or(acc.clone(), |gate_id| {
+            acc.into_iter()
+                .map(|gate| {
+                    if gate.gate_id == gate_id {
+                        LifecycleGateSnapshot {
+                            gate_id: gate.gate_id,
+                            status: step.status.clone(),
+                            message: step.message.clone().or(gate.message),
+                        }
+                    } else {
+                        gate
+                    }
+                })
+                .collect()
+        })
+    })
+}
+
+fn gate_for_step(step: &str) -> Option<&'static str> {
+    match step {
+        "mark_in_progress" => Some("G0"),
+        "workspace_prepare" | "workspace_add" => Some("G1"),
+        "opencode" => Some("G4"),
+        "qa_enforcer" => Some("G6"),
+        "ltc_quick" | "ltc_targeted" | "ltc_test" | "moon_ci" => Some("G5"),
+        "jj_sync_main" | "jj_rebase_main" | "jj_track" | "jj_describe" | "validate_changes"
+        | "bookmark_create" | "bookmark_push" | "pr_create" => Some("G8"),
+        _ => None,
+    }
+}
+
+fn discipline_gate_for_step(step: &str) -> Option<&'static str> {
+    match step {
+        "opencode" => Some("DG2_impl_quality"),
+        "ltc_quick" | "ltc_targeted" | "ltc_test" | "moon_ci" => Some("DG3_validation_quality"),
+        "qa_enforcer" => Some("DG4_audit_quality"),
+        _ => None,
+    }
+}
+
+fn default_gate_snapshots() -> Vec<LifecycleGateSnapshot> {
+    ["G0", "G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8"]
+        .into_iter()
+        .map(make_pending_gate)
+        .collect()
+}
+
+fn default_discipline_gate_snapshots() -> Vec<LifecycleGateSnapshot> {
+    [
+        "DG0_contract_quality",
+        "DG1_test_quality",
+        "DG2_impl_quality",
+        "DG3_validation_quality",
+        "DG4_audit_quality",
+    ]
+    .into_iter()
+    .map(make_pending_gate)
+    .collect()
+}
+
+fn make_pending_gate(gate_id: &str) -> LifecycleGateSnapshot {
+    LifecycleGateSnapshot {
+        gate_id: gate_id.to_owned(),
+        status: lifecycle_status_label(&LifecycleStepStatus::Pending).to_owned(),
+        message: None,
+    }
 }
 
 fn apply_finished_update(
@@ -712,6 +811,20 @@ struct StepUpdate {
 fn store_lifecycle_steps(ctx: &WorkflowContext<'_>, steps: &[LifecycleStepSnapshot]) {
     if let Ok(value) = serde_json::to_value(steps) {
         ctx.set("lifecycle_steps", Json::from(value));
+    }
+}
+
+fn store_lifecycle_gates(ctx: &WorkflowContext<'_>, gates: &[LifecycleGateSnapshot]) {
+    store_named_gates(ctx, "lifecycle_gates", gates);
+}
+
+fn store_lifecycle_discipline_gates(ctx: &WorkflowContext<'_>, gates: &[LifecycleGateSnapshot]) {
+    store_named_gates(ctx, "lifecycle_discipline_gates", gates);
+}
+
+fn store_named_gates(ctx: &WorkflowContext<'_>, key: &str, gates: &[LifecycleGateSnapshot]) {
+    if let Ok(value) = serde_json::to_value(gates) {
+        ctx.set(key, Json::from(value));
     }
 }
 
@@ -818,35 +931,25 @@ async fn get_optional_string(
 async fn read_lifecycle_status(
     ctx: &SharedWorkflowContext<'_>,
 ) -> Result<LifecycleStatusSnapshot, HandlerError> {
-    let steps = ctx
-        .get::<Json<Value>>("lifecycle_steps")
-        .await
-        .ok()
-        .flatten()
-        .map(Json::into_inner)
-        .and_then(|value| serde_json::from_value::<Vec<LifecycleStepSnapshot>>(value).ok())
-        .unwrap_or_default();
-    let state = ctx
-        .get::<Json<Value>>("lifecycle_state")
-        .await
-        .ok()
-        .flatten()
-        .map(Json::into_inner)
-        .and_then(|value| if value.is_null() { None } else { Some(value) });
-    let compensation_diagnostics = ctx
-        .get::<Json<Value>>("lifecycle_compensation_diagnostics")
-        .await
-        .ok()
-        .flatten()
-        .map(Json::into_inner)
-        .and_then(|value| {
-            serde_json::from_value::<Vec<crate::lifecycle::types::CompensationDiagnostic>>(value)
-                .ok()
-        })
-        .unwrap_or_default();
+    let steps = get_json_vec::<LifecycleStepSnapshot>(ctx, "lifecycle_steps").await;
+    let state = get_json_value(ctx, "lifecycle_state").await;
+    let compensation_diagnostics = get_json_vec::<crate::lifecycle::types::CompensationDiagnostic>(
+        ctx,
+        "lifecycle_compensation_diagnostics",
+    )
+    .await;
+    let gates = get_json_vec::<LifecycleGateSnapshot>(ctx, "lifecycle_gates").await;
+    let discipline_gates =
+        get_json_vec::<LifecycleGateSnapshot>(ctx, "lifecycle_discipline_gates").await;
     Ok(LifecycleStatusSnapshot {
         bead_id: get_optional_string(ctx, "lifecycle_bead_id").await?,
         steps,
+        gates: if gates.is_empty() { default_gate_snapshots() } else { gates },
+        discipline_gates: if discipline_gates.is_empty() {
+            default_discipline_gate_snapshots()
+        } else {
+            discipline_gates
+        },
         state,
         pr_url: get_optional_string(ctx, "lifecycle_pr_url").await?,
         done: ctx.get::<bool>("lifecycle_done").await.ok().flatten().unwrap_or(false),
@@ -854,6 +957,24 @@ async fn read_lifecycle_status(
         message: get_optional_string(ctx, "lifecycle_message").await?,
         compensation_diagnostics,
     })
+}
+
+async fn get_json_vec<T>(ctx: &SharedWorkflowContext<'_>, key: &str) -> Vec<T>
+where
+    T: serde::de::DeserializeOwned,
+{
+    get_json_raw(ctx, key)
+        .await
+        .and_then(|value| serde_json::from_value::<Vec<T>>(value).ok())
+        .unwrap_or_default()
+}
+
+async fn get_json_value(ctx: &SharedWorkflowContext<'_>, key: &str) -> Option<Value> {
+    get_json_raw(ctx, key).await.and_then(|value| if value.is_null() { None } else { Some(value) })
+}
+
+async fn get_json_raw(ctx: &SharedWorkflowContext<'_>, key: &str) -> Option<Value> {
+    ctx.get::<Json<Value>>(key).await.ok().flatten().map(Json::into_inner)
 }
 
 async fn fetch_lifecycle_status_raw(key: String) -> Result<String, HandlerError> {
@@ -944,6 +1065,8 @@ fn parse_lifecycle_status_snapshot(raw: &str, key: &str) -> LifecycleStatusSnaps
     LifecycleStatusSnapshot {
         bead_id: Some(key.to_owned()),
         steps: extract_step_snapshots(raw),
+        gates: default_gate_snapshots(),
+        discipline_gates: default_discipline_gate_snapshots(),
         state: None,
         pr_url: extract_pr_url(raw),
         done: !(is_running || is_backing_off),

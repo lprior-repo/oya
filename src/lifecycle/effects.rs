@@ -25,8 +25,10 @@ pub enum Effect {
     Jj { args: Vec<String>, cwd: Option<String> },
     Br { args: Vec<String>, cwd: Option<String> },
     Gh { args: Vec<String>, cwd: Option<String> },
+    MoonRun { task: String, cwd: Option<String> },
     MoonCi { cwd: Option<String> },
     Opencode { prompt: String, model: String, cwd: Option<String> },
+    OpencodeQa { prompt: String, model: String, cwd: Option<String> },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -105,8 +107,9 @@ impl CommandExecutor for TokioCommandExecutor {
 pub fn effect_timeout_secs(effect: &Effect) -> u64 {
     match effect {
         Effect::MoonCi { .. } => MOON_CI_TIMEOUT_SECS,
-        Effect::Opencode { .. } => OPENCODE_TIMEOUT_SECS,
+        Effect::Opencode { .. } | Effect::OpencodeQa { .. } => OPENCODE_TIMEOUT_SECS,
         Effect::WorkspacePrepare { .. }
+        | Effect::MoonRun { .. }
         | Effect::Jj { .. }
         | Effect::Br { .. }
         | Effect::Gh { .. } => DEFAULT_CLI_TIMEOUT_SECS,
@@ -137,9 +140,10 @@ pub fn classify_non_zero(
         Effect::WorkspacePrepare { .. } | Effect::Jj { .. } => {
             LifecycleError::terminal(FailureCategory::Workspace, message)
         }
-        Effect::Br { .. } | Effect::MoonCi { .. } => {
-            LifecycleError::terminal(FailureCategory::Command, message)
-        }
+        Effect::Br { .. }
+        | Effect::MoonCi { .. }
+        | Effect::MoonRun { .. }
+        | Effect::OpencodeQa { .. } => LifecycleError::terminal(FailureCategory::Command, message),
         Effect::Gh { .. } => LifecycleError::terminal(FailureCategory::PullRequest, message),
         Effect::Opencode { .. } => LifecycleError::transient(FailureCategory::Command, message),
     }

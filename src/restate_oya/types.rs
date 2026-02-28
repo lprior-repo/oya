@@ -42,9 +42,18 @@ pub struct LifecycleStepSnapshot {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct LifecycleGateSnapshot {
+    pub gate_id: String,
+    pub status: String,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct LifecycleStatusSnapshot {
     pub bead_id: Option<String>,
     pub steps: Vec<LifecycleStepSnapshot>,
+    pub gates: Vec<LifecycleGateSnapshot>,
+    pub discipline_gates: Vec<LifecycleGateSnapshot>,
     pub state: Option<Value>,
     pub pr_url: Option<String>,
     pub done: bool,

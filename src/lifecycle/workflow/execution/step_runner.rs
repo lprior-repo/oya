@@ -38,18 +38,35 @@ where
 {
     let mut acc = initial;
     let mut succeeded_steps: HashSet<String> = HashSet::new();
-
+    let implementation_step = steps.iter().find(|step| step.name == IMPL_STEP_NAME).cloned();
     for step in steps {
         let step_name = step.name.clone();
         validate_dependencies(&step, &succeeded_steps, &acc)?;
-
+        let is_qa_step = step.name == QA_STEP_NAME;
+        let qa_step = if is_qa_step { Some(step.clone()) } else { None };
         let result = run_step_with_telemetry(executor, acc, step, on_progress).await;
         match result {
             Ok(next) => {
                 succeeded_steps.insert(step_name);
                 acc = next;
             }
-            Err(failure) => return Err(failure),
+            Err(failure) => {
+                if is_qa_step {
+                    if let (Some(implementation), Some(qa)) =
+                        (implementation_step.clone(), qa_step.clone())
+                    {
+                        let recovered =
+                            retry_qa_loop(executor, failure, implementation, qa, on_progress)
+                                .await?;
+                        succeeded_steps.insert(step_name);
+                        acc = recovered;
+                    } else {
+                        return Err(failure);
+                    }
+                } else {
+                    return Err(failure);
+                }
+            }
         }
     }
     Ok(acc)
@@ -77,6 +94,35 @@ fn validate_dependencies(
         }
     }
     Ok(())
+}
+
+const IMPL_STEP_NAME: &str = "opencode";
+const QA_STEP_NAME: &str = "qa_enforcer";
+const QA_MAX_RETRIES: usize = 3;
+
+async fn retry_qa_loop<F>(
+    executor: &dyn CommandExecutor,
+    failure: Box<StepFailure>,
+    implementation_step: LifecycleStep,
+    qa_step: LifecycleStep,
+    on_progress: &mut F,
+) -> Result<ExecutionAcc, Box<StepFailure>>
+where
+    F: FnMut(LifecycleProgressUpdate),
+{
+    let mut current_failure = failure;
+    for _ in 0..QA_MAX_RETRIES {
+        let StepFailure { state, journal, completed_compensations, .. } = *current_failure;
+        let acc = ExecutionAcc { state, journal, completed_compensations };
+        let after_impl =
+            run_step_with_telemetry(executor, acc, implementation_step.clone(), on_progress)
+                .await?;
+        match run_step_with_telemetry(executor, after_impl, qa_step.clone(), on_progress).await {
+            Ok(next) => return Ok(next),
+            Err(next_failure) => current_failure = next_failure,
+        }
+    }
+    Err(current_failure)
 }
 
 async fn run_step_with_telemetry<F>(

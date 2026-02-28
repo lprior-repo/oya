@@ -10,6 +10,8 @@ use crate::lifecycle::telemetry::{emit_step_telemetry, emit_unwind_signal};
 use crate::lifecycle::transitions::LifecycleEvent;
 use crate::lifecycle::types::{CompensationDiagnostic, WorkspaceName};
 use futures_util::stream::{self, StreamExt};
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use super::types::{
     ExecutionAcc, LifecycleProgressUpdate, LifecycleRunFailure, LifecycleRunOutcome, StepFailure,
@@ -35,6 +37,7 @@ where
             },
         )?;
     acc.state = completed_state;
+    persist_lifecycle_artifacts(&acc.state, &acc.journal, &[], true, None);
     let (cleanup, cleanup_diagnostics) = workspace_cleanup(executor, workspace).await;
     for diagnostic in &cleanup_diagnostics {
         emit_unwind_signal(diagnostic);
@@ -65,19 +68,8 @@ pub async fn finalize_failure<F>(
 where
     F: FnMut(LifecycleProgressUpdate),
 {
-    let (mut compensation_journal, mut compensation_diagnostics): (
-        Vec<EffectJournalEntry>,
-        Vec<CompensationDiagnostic>,
-    ) = if failure.error.is_terminal() {
-        let (journal, diagnostics) =
-            run_compensations_with_telemetry(executor, failure.completed_compensations).await;
-        for diagnostic in &diagnostics {
-            emit_unwind_signal(diagnostic);
-        }
-        (journal, diagnostics)
-    } else {
-        (Vec::new(), Vec::new())
-    };
+    let (mut compensation_journal, mut compensation_diagnostics) =
+        collect_failure_compensations(executor, &failure).await;
     let (cleanup, cleanup_diagnostics) = workspace_cleanup(executor, workspace).await;
     for diagnostic in &cleanup_diagnostics {
         emit_unwind_signal(diagnostic);
@@ -92,6 +84,13 @@ where
     };
     on_progress(finished_update.clone());
     emit_step_telemetry(&finished_update);
+    persist_lifecycle_artifacts(
+        &failure.state,
+        &failure.journal,
+        &compensation_diagnostics,
+        false,
+        Some(failure.error.to_string().as_str()),
+    );
     Err(LifecycleRunFailure {
         error: failure.error,
         state: Some(failure.state),
@@ -99,6 +98,159 @@ where
         compensation_journal,
         compensation_diagnostics,
     })
+}
+
+async fn collect_failure_compensations(
+    executor: &dyn CommandExecutor,
+    failure: &StepFailure,
+) -> (Vec<EffectJournalEntry>, Vec<CompensationDiagnostic>) {
+    if failure.error.is_terminal() {
+        run_compensations_with_telemetry(executor, failure.completed_compensations.clone()).await
+    } else {
+        (Vec::new(), Vec::new())
+    }
+}
+
+fn persist_lifecycle_artifacts(
+    state: &crate::lifecycle::types::LifecycleState,
+    journal: &[EffectJournalEntry],
+    diagnostics: &[CompensationDiagnostic],
+    success: bool,
+    error_message: Option<&str>,
+) {
+    if !artifacts_enabled() {
+        return;
+    }
+    let (bead_id, dir) = artifact_dir(state);
+    let writes = artifact_writes(&bead_id, journal, diagnostics, success, error_message);
+    write_artifact_files(&dir, writes);
+}
+
+fn artifacts_enabled() -> bool {
+    if cfg!(test) {
+        return false;
+    }
+    std::env::var("OYA_DISABLE_REPORT_ARTIFACTS")
+        .map(|value| value.trim().eq_ignore_ascii_case("1"))
+        .map_or(true, |disabled| !disabled)
+}
+
+fn artifact_dir(state: &crate::lifecycle::types::LifecycleState) -> (String, PathBuf) {
+    let bead_id = bead_id_from_state(state);
+    let mut dir = PathBuf::from(".oya");
+    dir.push("reports");
+    dir.push(&bead_id);
+    (bead_id, dir)
+}
+
+fn bead_id_from_state(state: &crate::lifecycle::types::LifecycleState) -> String {
+    match &state.phase {
+        crate::lifecycle::types::Phase::Planned(bead)
+        | crate::lifecycle::types::Phase::WorkspaceReady(bead)
+        | crate::lifecycle::types::Phase::Failed { bead, .. }
+        | crate::lifecycle::types::Phase::PrOpen { bead, .. } => bead.bead_id.as_str().to_owned(),
+        crate::lifecycle::types::Phase::Completed(result) => {
+            result.bead.bead_id.as_str().to_owned()
+        }
+    }
+}
+
+fn artifact_writes(
+    bead_id: &str,
+    journal: &[EffectJournalEntry],
+    diagnostics: &[CompensationDiagnostic],
+    success: bool,
+    error_message: Option<&str>,
+) -> Vec<(String, String)> {
+    let commands = summarize_commands(journal);
+    let validation = summarize_validation(journal);
+    let qa = summarize_qa(journal);
+    let audit = summarize_audit(success, diagnostics, error_message);
+    let mut files = vec![
+        report("orchestrator-plan.md", bead_id, "orchestration evidence", &commands),
+        report("contract-spec.md", bead_id, "contract evidence", &commands),
+        report("martin-fowler-tests.md", bead_id, "test evidence", &validation),
+        report("traceability-matrix.md", bead_id, "traceability evidence", &validation),
+        report("implementation-report.md", bead_id, "implementation evidence", &commands),
+        report("validation-report.md", bead_id, "validation evidence", &validation),
+        report("qa-report.md", bead_id, "qa evidence", &qa),
+        report("audit-report.md", bead_id, "audit evidence", &audit),
+    ];
+    if !success {
+        files.push(report("defects.md", bead_id, "defect evidence", &audit));
+    }
+    files
+}
+
+fn report(name: &str, bead_id: &str, title: &str, body: &str) -> (String, String) {
+    let content = format!("# {title}\n\nbead: `{bead_id}`\n\n{body}\n");
+    (name.to_owned(), content)
+}
+
+fn summarize_commands(journal: &[EffectJournalEntry]) -> String {
+    journal
+        .iter()
+        .map(|entry| format!("- effect: `{:?}` success: {}", entry.effect, entry.success))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn summarize_validation(journal: &[EffectJournalEntry]) -> String {
+    journal
+        .iter()
+        .filter(|entry| {
+            matches!(entry.effect, crate::lifecycle::effects::Effect::MoonRun { .. })
+                || matches!(entry.effect, crate::lifecycle::effects::Effect::MoonCi { .. })
+        })
+        .map(|entry| format!("- validation: `{:?}` success: {}", entry.effect, entry.success))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn summarize_qa(journal: &[EffectJournalEntry]) -> String {
+    journal
+        .iter()
+        .filter(|entry| {
+            matches!(entry.effect, crate::lifecycle::effects::Effect::OpencodeQa { .. })
+        })
+        .map(|entry| format!("- qa: success: {} stderr: {}", entry.success, entry.stderr.trim()))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn summarize_audit(
+    success: bool,
+    diagnostics: &[CompensationDiagnostic],
+    error_message: Option<&str>,
+) -> String {
+    let mut lines = vec![format!("- verdict: {}", if success { "pass" } else { "fail" })];
+    if let Some(error) = error_message {
+        lines.push(format!("- error: {error}"));
+    }
+    lines.extend(diagnostics.iter().map(|item| {
+        format!(
+            "- compensation: {} target={} success={} error={}",
+            item.compensation_type,
+            item.target,
+            item.success,
+            item.error.as_deref().unwrap_or("")
+        )
+    }));
+    lines.join("\n")
+}
+
+fn write_artifact_files(dir: &Path, files: Vec<(String, String)>) {
+    if let Err(error) = fs::create_dir_all(dir) {
+        tracing::warn!(path = %dir.display(), error = %error, "failed to create artifact directory");
+        return;
+    }
+    for (name, content) in files {
+        let mut path = PathBuf::from(dir);
+        path.push(name);
+        if let Err(error) = fs::write(&path, content) {
+            tracing::warn!(path = %path.display(), error = %error, "failed to write artifact file");
+        }
+    }
 }
 
 fn pr_url_from_state(state: &crate::lifecycle::types::LifecycleState) -> Option<String> {

@@ -64,6 +64,10 @@ fn apply_transition(
     let event = match transition {
         StepTransition::None => return Ok(state.clone()),
         StepTransition::Static(event) => event.clone(),
+        StepTransition::ValidateReceipt { required_fields } => {
+            validate_receipt_fields(&entry.stdout, required_fields)?;
+            return Ok(state.clone());
+        }
         StepTransition::ValidateWorkspaceChanges => {
             validate_workspace_changes(&entry.stdout)?;
             return Ok(state.clone());
@@ -73,6 +77,38 @@ fn apply_transition(
         }
     };
     apply_event(state, event)
+}
+
+fn validate_receipt_fields(stdout: &str, required_fields: &[String]) -> Result<(), LifecycleError> {
+    let receipt = parse_receipt(stdout)?;
+    let missing = required_fields
+        .iter()
+        .filter(|field| receipt.get(field.as_str()).is_none())
+        .cloned()
+        .collect::<Vec<_>>();
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        Err(LifecycleError::terminal(
+            FailureCategory::Command,
+            format!("opencode receipt missing required fields: {}", missing.join(", ")),
+        ))
+    }
+}
+
+fn parse_receipt(stdout: &str) -> Result<serde_json::Value, LifecycleError> {
+    stdout
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+        .find(serde_json::Value::is_object)
+        .ok_or_else(|| {
+            LifecycleError::terminal(
+                FailureCategory::Command,
+                "opencode did not return a JSON receipt object".to_owned(),
+            )
+        })
 }
 
 pub fn validate_workspace_changes(stdout: &str) -> Result<(), LifecycleError> {
