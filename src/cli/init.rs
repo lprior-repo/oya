@@ -9,6 +9,9 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::time::sleep;
 
+const OYA_SERVICE_RESTART_ATTEMPTS: u8 = 4;
+const OYA_SERVICE_RESTART_DELAY: Duration = Duration::from_millis(400);
+
 pub async fn init_command(ingress: &str, service_url: &str, down: bool) -> anyhow::Result<()> {
     disable_systemd_restate().await?;
     if down {
@@ -64,7 +67,10 @@ async fn stop_docker_restate() -> anyhow::Result<()> {
 
 async fn stop_named_restate_container() -> anyhow::Result<()> {
     let outcome = run_command_outcome("docker", &["rm", "-f", "oya-restate"], None).await?;
-    if outcome.success || is_missing_container_error(&outcome.stderr) {
+    if outcome.success
+        || is_missing_container_error(&outcome.stderr)
+        || is_container_removal_in_progress(&outcome.stderr)
+    {
         Ok(())
     } else {
         Err(anyhow::anyhow!("docker rm -f oya-restate failed: {}", outcome.stderr.trim()))
@@ -73,6 +79,11 @@ async fn stop_named_restate_container() -> anyhow::Result<()> {
 
 pub(crate) fn is_missing_container_error(stderr: &str) -> bool {
     stderr.to_ascii_lowercase().contains("no such container")
+}
+
+pub(crate) fn is_container_removal_in_progress(stderr: &str) -> bool {
+    let lowered = stderr.to_ascii_lowercase();
+    lowered.contains("removal") && lowered.contains("already in progress")
 }
 
 async fn start_fresh_docker_restate(repo_root: &Path) -> anyhow::Result<()> {
@@ -98,6 +109,28 @@ async fn start_fresh_docker_restate(repo_root: &Path) -> anyhow::Result<()> {
 }
 
 async fn restart_oya_service() -> anyhow::Result<()> {
+    for attempt in 0..=OYA_SERVICE_RESTART_ATTEMPTS {
+        match restart_oya_service_once().await {
+            Ok(()) => return Ok(()),
+            Err(error)
+                if attempt < OYA_SERVICE_RESTART_ATTEMPTS
+                    && is_restart_rate_limit_error(&error.to_string()) =>
+            {
+                let _ = run_command_capture(
+                    "systemctl",
+                    &["--user", "reset-failed", "oya.service"],
+                    None,
+                )
+                .await;
+                sleep(OYA_SERVICE_RESTART_DELAY).await;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    Err(anyhow::anyhow!("oya.service restart retries exhausted"))
+}
+
+async fn restart_oya_service_once() -> anyhow::Result<()> {
     run_command_capture("systemctl", &["--user", "restart", "oya.service"], None).await?;
     let status =
         run_command_capture("systemctl", &["--user", "is-active", "oya.service"], None).await?;
@@ -106,6 +139,12 @@ async fn restart_oya_service() -> anyhow::Result<()> {
     } else {
         Err(anyhow::anyhow!("oya.service is not active after restart"))
     }
+}
+
+pub(crate) fn is_restart_rate_limit_error(stderr: &str) -> bool {
+    let lowered = stderr.to_ascii_lowercase();
+    lowered.contains("attempted too often")
+        || lowered.contains("start request repeated too quickly")
 }
 
 async fn verify_oya_service_unit() -> anyhow::Result<()> {

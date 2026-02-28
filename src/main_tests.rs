@@ -5,7 +5,8 @@ use crate::cli::commands::{
 };
 use crate::cli::doctor::{has_required_services, parse_host_port};
 use crate::cli::init::{
-    extract_exec_binary, extract_exec_start, is_missing_container_error, is_valid_oya_exec_start,
+    extract_exec_binary, extract_exec_start, is_container_removal_in_progress,
+    is_missing_container_error, is_restart_rate_limit_error, is_valid_oya_exec_start,
 };
 use crate::cli::repo::{
     ensure_repo_matches_jj_origin, extract_repo_slug_from_gh_output,
@@ -251,6 +252,23 @@ fn is_missing_container_error_detects_docker_message() {
         "Error response from daemon: No such container: oya-restate"
     ));
     assert!(!is_missing_container_error("permission denied"));
+}
+
+#[test]
+fn is_container_removal_in_progress_detects_docker_race_message() {
+    assert!(is_container_removal_in_progress(
+        "Error response from daemon: removal of container oya-restate is already in progress"
+    ));
+    assert!(!is_container_removal_in_progress("No such container"));
+}
+
+#[test]
+fn is_restart_rate_limit_error_detects_systemd_throttle_message() {
+    assert!(is_restart_rate_limit_error(
+        "start of the service was attempted too often. See systemctl status"
+    ));
+    assert!(is_restart_rate_limit_error("Start request repeated too quickly"));
+    assert!(!is_restart_rate_limit_error("unit not found"));
 }
 
 #[test]
