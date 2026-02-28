@@ -17,6 +17,8 @@ use crate::lifecycle::workflow::progress::{
 use crate::lifecycle::workflow::steps::LifecycleStep;
 use crate::lifecycle::workflow::types::{ExecutionAcc, LifecycleProgressUpdate, StepFailure};
 
+use std::collections::HashSet;
+
 #[cfg(not(test))]
 const STAGE_RETRY_BACKOFFS: [Duration; 3] =
     [Duration::from_secs(120), Duration::from_secs(120), Duration::from_secs(120)];
@@ -35,14 +37,46 @@ where
     F: FnMut(LifecycleProgressUpdate),
 {
     let mut acc = initial;
+    let mut succeeded_steps: HashSet<String> = HashSet::new();
+
     for step in steps {
+        let step_name = step.name.clone();
+        validate_dependencies(&step, &succeeded_steps, &acc)?;
+
         let result = run_step_with_telemetry(executor, acc, step, on_progress).await;
         match result {
-            Ok(next) => acc = next,
+            Ok(next) => {
+                succeeded_steps.insert(step_name);
+                acc = next;
+            }
             Err(failure) => return Err(failure),
         }
     }
     Ok(acc)
+}
+
+fn validate_dependencies(
+    step: &LifecycleStep,
+    succeeded_steps: &HashSet<String>,
+    acc: &ExecutionAcc,
+) -> Result<(), Box<StepFailure>> {
+    for dep in &step.dependencies {
+        if !succeeded_steps.contains(dep) {
+            return Err(Box::new(StepFailure {
+                state: acc.state.clone(),
+                journal: acc.journal.clone(),
+                completed_compensations: acc.completed_compensations.clone(),
+                error: LifecycleError::terminal(
+                    FailureCategory::Validation,
+                    format!(
+                        "step `{}` cannot execute: dependency `{}` has not succeeded",
+                        step.name, dep
+                    ),
+                ),
+            }));
+        }
+    }
+    Ok(())
 }
 
 async fn run_step_with_telemetry<F>(
