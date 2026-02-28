@@ -20,7 +20,8 @@ fn test_is_lifecycle_not_found_returns_false_for_backing_off_lifecycle() {
 
 #[test]
 fn test_is_lifecycle_not_found_returns_false_for_error_messages() {
-    assert!(!is_lifecycle_not_found("No invocations matched the query"));
+    assert!(is_lifecycle_not_found("No invocations matched the query"));
+    assert!(is_lifecycle_not_found("Error: No invocations matched"));
     assert!(!is_lifecycle_not_found("Error: not found in registry"));
     assert!(!is_lifecycle_not_found("Error: invocation not found"));
 }

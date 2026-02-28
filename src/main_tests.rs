@@ -8,6 +8,7 @@ use crate::cli::repo::{
     extract_repo_slug_from_jj_remote_output, format_repo_lookup_error_json, gh_repo_view_args,
     is_retryable_repo_lookup_stderr, normalize_error_message, parse_repo_slug_from_remote_url,
 };
+use crate::cli::restate::format_http_error;
 use serde_json::json;
 
 #[test]
@@ -212,6 +213,16 @@ fn gh_repo_view_args_uses_positional_repo_argument() {
     assert_eq!(
         args,
         ["repo", "view", "lprior-repo/opencode-hypr-notifier", "--json", "nameWithOwner",]
+    );
+}
+
+#[test]
+fn format_http_error_includes_response_body_when_present() {
+    let url = reqwest::Url::parse("http://127.0.0.1:909/Oya/test/run").expect("valid URL");
+    let message = format_http_error(reqwest::StatusCode::INTERNAL_SERVER_ERROR, &url, " boom ");
+    assert_eq!(
+        message,
+        "HTTP status 500 Internal Server Error for url (http://127.0.0.1:909/Oya/test/run): boom"
     );
 }
 

@@ -359,11 +359,31 @@ async fn read_workflow_status(
     ctx: &Context<'_>,
     workflow_key: &str,
 ) -> Option<LifecycleStatusSnapshot> {
-    ctx.workflow_client::<OyaClient>(workflow_key).status().call().await.ok().map(|snapshot| {
-        let status = snapshot.into_inner();
-        seed_runtime_status(workflow_key, status.bead_id.clone(), status.steps.as_slice());
-        status
-    })
+    ctx.workflow_client::<OyaClient>(workflow_key)
+        .status()
+        .call()
+        .await
+        .ok()
+        .map(Json::into_inner)
+        .and_then(|status| {
+            if is_uninitialized_workflow_snapshot(&status) {
+                None
+            } else {
+                seed_runtime_status(workflow_key, status.bead_id.clone(), status.steps.as_slice());
+                Some(status)
+            }
+        })
+}
+
+fn is_uninitialized_workflow_snapshot(status: &LifecycleStatusSnapshot) -> bool {
+    status.bead_id.is_none()
+        && status.steps.is_empty()
+        && status.state.is_none()
+        && status.pr_url.is_none()
+        && !status.done
+        && status.success.is_none()
+        && status.message.is_none()
+        && status.compensation_diagnostics.is_empty()
 }
 
 fn workflow_key_for_service_key(key: &str) -> String {
@@ -904,7 +924,8 @@ fn extract_step_snapshots(raw: &str) -> Vec<LifecycleStepSnapshot> {
 }
 
 pub(super) fn is_lifecycle_not_found(raw: &str) -> bool {
-    raw.trim().is_empty()
+    let trimmed = raw.trim();
+    trimmed.is_empty() || trimmed.contains("No invocations matched")
 }
 
 fn parse_lifecycle_status_snapshot(raw: &str, key: &str) -> LifecycleStatusSnapshot {
@@ -991,9 +1012,12 @@ async fn require_state_json(ctx: &ObjectContext<'_>, key: &str) -> Result<Value,
 
 #[cfg(test)]
 mod tests {
-    use super::{lifecycle_status_label, parse_lifecycle_status_snapshot, upsert_step, StepUpdate};
+    use super::{
+        is_uninitialized_workflow_snapshot, lifecycle_status_label,
+        parse_lifecycle_status_snapshot, upsert_step, StepUpdate,
+    };
     use crate::lifecycle::workflow::LifecycleStepStatus;
-    use crate::restate_oya::types::LifecycleStepSnapshot;
+    use crate::restate_oya::types::{LifecycleStatusSnapshot, LifecycleStepSnapshot};
 
     #[test]
     fn upsert_step_preserves_timestamps_across_progress_updates() {
@@ -1049,5 +1073,20 @@ mod tests {
         assert!(snapshot.done);
         assert_eq!(snapshot.success, Some(false));
         assert_eq!(snapshot.pr_url, Some("https://github.com/lprior-repo/oya/pull/42".to_owned()));
+    }
+
+    #[test]
+    fn uninitialized_workflow_snapshot_is_detected() {
+        let snapshot = LifecycleStatusSnapshot {
+            bead_id: None,
+            steps: Vec::new(),
+            state: None,
+            pr_url: None,
+            done: false,
+            success: None,
+            message: None,
+            compensation_diagnostics: Vec::new(),
+        };
+        assert!(is_uninitialized_workflow_snapshot(&snapshot));
     }
 }

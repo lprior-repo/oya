@@ -4,6 +4,7 @@
 #![forbid(unsafe_code)]
 
 use reqwest::Client;
+use reqwest::Response;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 
@@ -38,7 +39,7 @@ pub async fn call_restate_service_json<T: serde::Serialize>(
 ) -> anyhow::Result<crate::restate_oya::StartResponse> {
     let url = format!("{ingress}/{service}/{id}/{handler}");
     let response = Client::new().post(url).json(&request).send().await?;
-    let response = response.error_for_status()?;
+    let response = ensure_success(response).await?;
     response.json().await.map_err(Into::into)
 }
 
@@ -50,8 +51,27 @@ pub async fn call_restate_root_json<T: serde::Serialize, R: DeserializeOwned>(
 ) -> anyhow::Result<R> {
     let url = format!("{ingress}/{service}/{handler}");
     let response = Client::new().post(url).json(&request).send().await?;
-    let response = response.error_for_status()?;
+    let response = ensure_success(response).await?;
     response.json().await.map_err(Into::into)
+}
+
+async fn ensure_success(response: Response) -> anyhow::Result<Response> {
+    let status = response.status();
+    if status.is_success() {
+        return Ok(response);
+    }
+    let url = response.url().to_owned();
+    let body = response.text().await.unwrap_or_default();
+    Err(anyhow::anyhow!(format_http_error(status, &url, &body)))
+}
+
+pub fn format_http_error(status: reqwest::StatusCode, url: &reqwest::Url, body: &str) -> String {
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        format!("HTTP status {} for url ({url})", status)
+    } else {
+        format!("HTTP status {} for url ({url}): {trimmed}", status)
+    }
 }
 
 pub async fn pick_ready_bead() -> anyhow::Result<String> {
