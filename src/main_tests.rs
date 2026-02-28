@@ -5,7 +5,7 @@ use crate::cli::doctor::{has_required_services, parse_host_port};
 use crate::cli::init::{extract_exec_binary, extract_exec_start, is_valid_oya_exec_start};
 use crate::cli::repo::{
     ensure_repo_matches_jj_origin, extract_repo_slug_from_gh_output,
-    extract_repo_slug_from_jj_remote_output, format_repo_lookup_error_json,
+    extract_repo_slug_from_jj_remote_output, format_repo_lookup_error_json, gh_repo_view_args,
     is_retryable_repo_lookup_stderr, normalize_error_message, parse_repo_slug_from_remote_url,
 };
 use serde_json::json;
@@ -204,6 +204,15 @@ fn format_repo_lookup_error_json_emits_pretty_json_payload() {
     assert_eq!(parsed["max_retries"], 3);
     assert_eq!(parsed["retryable"], true);
     assert_eq!(parsed["message"], "timeout retry");
+}
+
+#[test]
+fn gh_repo_view_args_uses_positional_repo_argument() {
+    let args = gh_repo_view_args("lprior-repo/opencode-hypr-notifier");
+    assert_eq!(
+        args,
+        ["repo", "view", "lprior-repo/opencode-hypr-notifier", "--json", "nameWithOwner",]
+    );
 }
 
 #[test]

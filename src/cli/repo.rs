@@ -112,14 +112,13 @@ struct RepoLookupFailure {
 }
 
 async fn try_ensure_repo_exists(repo: &str) -> Result<(), RepoLookupFailure> {
-    let output = tokio::process::Command::new("gh")
-        .args(["repo", "view", "--repo", repo, "--json", "nameWithOwner"])
-        .output()
-        .await
-        .map_err(|error| RepoLookupFailure {
-            message: format!("failed to run gh repo view: {error}"),
-            retryable: true,
-        })?;
+    let output =
+        tokio::process::Command::new("gh").args(gh_repo_view_args(repo)).output().await.map_err(
+            |error| RepoLookupFailure {
+                message: format!("failed to run gh repo view: {error}"),
+                retryable: true,
+            },
+        )?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
         return Err(RepoLookupFailure {
@@ -141,6 +140,10 @@ async fn try_ensure_repo_exists(repo: &str) -> Result<(), RepoLookupFailure> {
             retryable: false,
         })
     }
+}
+
+pub(crate) fn gh_repo_view_args(repo: &str) -> [&str; 5] {
+    ["repo", "view", repo, "--json", "nameWithOwner"]
 }
 
 pub fn is_retryable_repo_lookup_stderr(stderr: &str) -> bool {
