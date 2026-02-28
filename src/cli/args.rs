@@ -64,7 +64,6 @@ pub struct InvokeArgs {
     pub ingress: String,
     #[arg(long, default_value = "default", value_parser = parse_object_key)]
     pub id: String,
-    #[arg(long)]
     #[arg(long, value_parser = parse_non_empty_text)]
     pub prompt: String,
     #[arg(long)]
@@ -77,7 +76,7 @@ pub struct ImplementArgs {
     pub bead: Option<String>,
     #[arg(long, default_value = DEFAULT_INGRESS, value_parser = parse_ingress_url)]
     pub ingress: String,
-    #[arg(long, default_value = DEFAULT_IMPL_MODEL)]
+    #[arg(long, default_value = DEFAULT_IMPL_MODEL, value_parser = parse_model_name)]
     pub model: String,
 }
 
@@ -87,7 +86,7 @@ pub struct LifecycleArgs {
     pub bead: Option<String>,
     #[arg(long, default_value = DEFAULT_INGRESS, value_parser = parse_ingress_url)]
     pub ingress: String,
-    #[arg(long, default_value = DEFAULT_IMPL_MODEL)]
+    #[arg(long, default_value = DEFAULT_IMPL_MODEL, value_parser = parse_model_name)]
     pub model: String,
     #[arg(long, value_parser = parse_repo_slug)]
     pub repo: Option<String>,
@@ -186,6 +185,20 @@ pub fn parse_non_empty_text(value: &str) -> Result<String, String> {
     }
 }
 
+pub fn parse_model_name(value: &str) -> Result<String, String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err("model must not be empty".to_owned());
+    }
+    if !trimmed
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-' | '/' | ':'))
+    {
+        return Err("model may contain only [A-Za-z0-9._:/-]".to_owned());
+    }
+    Ok(trimmed.to_owned())
+}
+
 fn is_valid_repo_part(value: &str) -> bool {
     value.chars().all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-'))
 }
@@ -216,5 +229,13 @@ mod tests {
         assert!(parse_non_empty_text("hello").is_ok());
         assert!(parse_non_empty_text(" ").is_err());
         assert_eq!(parse_non_empty_text("  hi  ").expect("valid"), "  hi  ");
+    }
+
+    #[test]
+    fn parse_model_name_rejects_empty_and_invalid_chars() {
+        assert!(parse_model_name("zai-coding-plan/glm-5").is_ok());
+        assert!(parse_model_name("provider:model-v1").is_ok());
+        assert!(parse_model_name(" ").is_err());
+        assert!(parse_model_name("bad model").is_err());
     }
 }
