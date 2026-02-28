@@ -7,6 +7,7 @@ use reqwest::Client;
 use reqwest::Response;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
+use std::path::Path;
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -256,8 +257,13 @@ pub fn parse_json_payload(raw: &str) -> anyhow::Result<serde_json::Value> {
 }
 
 pub async fn run_capture_command(args: &[&str]) -> anyhow::Result<String> {
+    run_capture_command_in(args, None).await
+}
+
+pub async fn run_capture_command_in(args: &[&str], cwd: Option<&Path>) -> anyhow::Result<String> {
     let output = tokio::process::Command::new("br")
         .args(args)
+        .current_dir(cwd.unwrap_or_else(|| Path::new(".")))
         .output()
         .await
         .map_err(|error| anyhow::anyhow!("failed to run br: {error}"))?;

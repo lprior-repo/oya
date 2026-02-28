@@ -1,6 +1,8 @@
 use crate::cli::args::parse_repo_slug;
 use crate::cli::args::{parse_admin_url, parse_ingress_url, parse_service_url};
-use crate::cli::commands::{decode_bead_entries, is_uninitialized_snapshot, BeadEntry};
+use crate::cli::commands::{
+    decode_bead_entries, is_already_invoked_error_text, is_uninitialized_snapshot, BeadEntry,
+};
 use crate::cli::doctor::{has_required_services, parse_host_port};
 use crate::cli::init::{
     extract_exec_binary, extract_exec_start, is_missing_container_error, is_valid_oya_exec_start,
@@ -295,6 +297,13 @@ fn map_special_error_maps_service_not_registered_from_404() {
         reqwest::StatusCode::NOT_FOUND,
     );
     assert_eq!(mapped, Some("unavailable: restate service is not registered yet".to_owned()));
+}
+
+#[test]
+fn is_already_invoked_error_text_detects_conflict_message() {
+    let message =
+        "HTTP status 409 Conflict for url (http://127.0.0.1:909/Oya/src-1fa/run): the workflow method was already invoked";
+    assert!(is_already_invoked_error_text(message));
 }
 
 #[test]

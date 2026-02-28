@@ -11,7 +11,8 @@ use super::init::init_command;
 use super::repo::resolve_repo_slug;
 use super::restate::{
     call_restate_json, call_restate_root_json, call_restate_service_json, call_restate_start,
-    parse_json_payload, pick_ready_bead, run_capture_command, run_simple_command,
+    parse_json_payload, pick_ready_bead, run_capture_command, run_capture_command_in,
+    run_simple_command,
 };
 use crate::restate_oya::{
     BeadSyncRequest, CancelResponse, KeyRequest, LifecycleRequest, LifecycleStatusSnapshot,
@@ -99,10 +100,21 @@ async fn lifecycle_command(args: LifecycleArgs) -> anyhow::Result<()> {
     let workflow_key = args.bead.clone().unwrap_or_else(|| "auto".to_owned());
     let repo = resolve_repo_slug(args.repo).await?;
     let request = LifecycleRequest { bead_id: args.bead, model: Some(args.model), repo };
-    let body =
-        call_restate_service_json(&args.ingress, "Oya", &workflow_key, "run", request).await?;
-    println!("{}", body.output);
-    Ok(())
+    match call_restate_service_json(&args.ingress, "Oya", &workflow_key, "run", request).await {
+        Ok(body) => {
+            println!("{}", body.output);
+            Ok(())
+        }
+        Err(error) if is_already_invoked_error_text(&error.to_string()) => {
+            println!("lifecycle already running for key '{}'", workflow_key);
+            Ok(())
+        }
+        Err(error) => Err(error),
+    }
+}
+
+pub(crate) fn is_already_invoked_error_text(message: &str) -> bool {
+    message.contains("409 Conflict") && message.contains("already invoked")
 }
 
 async fn status_command(args: StatusArgs) -> anyhow::Result<()> {
@@ -142,7 +154,8 @@ async fn cancel_command(args: CancelArgs) -> anyhow::Result<()> {
 
 async fn beads_command(args: BeadsArgs) -> anyhow::Result<()> {
     let mut beads = if args.ready {
-        let raw = run_capture_command(&["ready", "--json"]).await?;
+        let beads_root = find_beads_root()?;
+        let raw = run_capture_command_in(&["ready", "--json"], Some(beads_root.as_path())).await?;
         decode_bead_entries(parse_json_payload(&raw)?)?
     } else {
         let beads_root = find_beads_root()?;
