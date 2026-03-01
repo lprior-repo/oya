@@ -25,9 +25,14 @@ pub enum StepTransition {
     PullRequestOpened { bead: BeadData },
 }
 
-pub fn build_steps(bead: &BeadData, model: &Model, repo: Option<&str>) -> Vec<LifecycleStep> {
+pub fn build_steps(
+    bead: &BeadData,
+    model: &Model,
+    repo: Option<&str>,
+    cwd: Option<&str>,
+) -> Vec<LifecycleStep> {
     let mut steps = vec![
-        br_in_progress_step(bead),
+        br_in_progress_step(bead, cwd),
         workspace_prepare_step(bead),
         workspace_create_step(bead),
         opencode_step(bead, model),
@@ -65,7 +70,7 @@ fn workspace_prepare_step(bead: &BeadData) -> LifecycleStep {
     }
 }
 
-fn br_in_progress_step(bead: &BeadData) -> LifecycleStep {
+fn br_in_progress_step(bead: &BeadData, cwd: Option<&str>) -> LifecycleStep {
     LifecycleStep {
         name: "mark_in_progress".to_owned(),
         effect: Effect::Br {
@@ -75,7 +80,7 @@ fn br_in_progress_step(bead: &BeadData) -> LifecycleStep {
                 "--status".to_owned(),
                 "in_progress".to_owned(),
             ],
-            cwd: None,
+            cwd: cwd.map(String::from),
         },
         compensation: Some(Compensation::MarkBeadBlocked {
             bead: bead.clone(),

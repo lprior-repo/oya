@@ -179,6 +179,7 @@ async fn run_lifecycle_success_path_executes_jj_only_git_bridge() {
             bead_id: Some(bead.to_owned()),
             model: None,
             repo: Some("lprior-repo/oya".to_owned()),
+            cwd: None,
         },
         |update| progress.push(update),
     )
@@ -291,7 +292,7 @@ async fn run_lifecycle_pr_output_without_url_triggers_terminal_compensations() {
 
     let result = run_lifecycle_with_progress(
         &executor,
-        LifecycleRunRequest { bead_id: Some(bead.to_owned()), model: None, repo: None },
+        LifecycleRunRequest { bead_id: Some(bead.to_owned()), model: None, repo: None, cwd: None },
         |_| {},
     )
     .await;
@@ -376,7 +377,7 @@ async fn run_lifecycle_existing_pr_in_stderr_is_treated_as_success() {
     let mut progress = Vec::<LifecycleProgressUpdate>::new();
     let result = run_lifecycle_with_progress(
         &executor,
-        LifecycleRunRequest { bead_id: Some(bead.to_owned()), model: None, repo: None },
+        LifecycleRunRequest { bead_id: Some(bead.to_owned()), model: None, repo: None, cwd: None },
         |update| progress.push(update),
     )
     .await;
@@ -431,7 +432,7 @@ async fn run_lifecycle_transient_failure_skips_terminal_compensations() {
 
     let result = run_lifecycle_with_progress(
         &executor,
-        LifecycleRunRequest { bead_id: Some(bead.to_owned()), model: None, repo: None },
+        LifecycleRunRequest { bead_id: Some(bead.to_owned()), model: None, repo: None, cwd: None },
         |_| {},
     )
     .await;
@@ -523,7 +524,7 @@ async fn run_lifecycle_transient_opencode_recovers_after_retry() {
 
     let result = run_lifecycle_with_progress(
         &executor,
-        LifecycleRunRequest { bead_id: Some(bead.to_owned()), model: None, repo: None },
+        LifecycleRunRequest { bead_id: Some(bead.to_owned()), model: None, repo: None, cwd: None },
         |_| {},
     )
     .await;
@@ -541,6 +542,7 @@ async fn run_lifecycle_rejects_invalid_model_before_effects() {
             bead_id: Some("edge-test-004".to_owned()),
             model: Some(" ".to_owned()),
             repo: None,
+            cwd: None,
         },
         |_| {},
     )
@@ -562,6 +564,7 @@ async fn run_lifecycle_rejects_invalid_repo_before_effects() {
             bead_id: Some("edge-test-005".to_owned()),
             model: None,
             repo: Some("owner/repo/extra".to_owned()),
+            cwd: None,
         },
         |_| {},
     )
@@ -635,7 +638,7 @@ async fn run_lifecycle_fails_when_only_bead_files_changed() {
 
     let result = run_lifecycle_with_progress(
         &executor,
-        LifecycleRunRequest { bead_id: Some(bead.to_owned()), model: None, repo: None },
+        LifecycleRunRequest { bead_id: Some(bead.to_owned()), model: None, repo: None, cwd: None },
         |_| {},
     )
     .await;
@@ -683,7 +686,7 @@ async fn run_lifecycle_fails_when_opencode_receipt_is_missing_fields() {
 
     let result = run_lifecycle_with_progress(
         &executor,
-        LifecycleRunRequest { bead_id: Some(bead.to_owned()), model: None, repo: None },
+        LifecycleRunRequest { bead_id: Some(bead.to_owned()), model: None, repo: None, cwd: None },
         |_| {},
     )
     .await;
@@ -774,7 +777,7 @@ async fn run_lifecycle_qa_failure_retries_three_times_then_blocks() {
 
     let result = run_lifecycle_with_progress(
         &executor,
-        LifecycleRunRequest { bead_id: Some(bead.to_owned()), model: None, repo: None },
+        LifecycleRunRequest { bead_id: Some(bead.to_owned()), model: None, repo: None, cwd: None },
         |_| {},
     )
     .await;

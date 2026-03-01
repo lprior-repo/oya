@@ -6,6 +6,7 @@ use crate::lifecycle::workflow::{
 use restate_sdk::prelude::*;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::env;
 use std::net::SocketAddr;
 use std::sync::{LazyLock, RwLock};
 use tokio::process::Command;
@@ -67,6 +68,13 @@ impl Oya for OyaBridge {
         let body = req.into_inner();
         let workflow_key = ctx.key().to_owned();
         validate_runtime_key(&workflow_key)?;
+
+        let cwd = body
+            .cwd
+            .clone()
+            .or_else(|| env::current_dir().ok().map(|p| p.to_string_lossy().to_string()));
+        validate_cwd(&cwd)?;
+
         let initial_steps = default_step_snapshots();
         let requested_bead_id = body.bead_id.clone();
         initialize_lifecycle_status(&ctx, requested_bead_id.clone(), &initial_steps);
@@ -74,7 +82,7 @@ impl Oya for OyaBridge {
         let mut live_steps: Vec<LifecycleStepSnapshot> = Vec::new();
         let result = run_lifecycle_with_progress(
             &TokioCommandExecutor,
-            LifecycleRunRequest { bead_id: body.bead_id, model: body.model, repo: body.repo },
+            LifecycleRunRequest { bead_id: body.bead_id, model: body.model, repo: body.repo, cwd },
             |update| {
                 let update_clone = update.clone();
                 apply_progress_update(&ctx, &mut live_steps, update);
@@ -322,6 +330,19 @@ fn validate_runtime_key(key: &str) -> Result<(), HandlerError> {
     } else {
         Err(TerminalError::new(format!("invalid key: '{}'", key)).into())
     }
+}
+
+fn validate_cwd(cwd: &Option<String>) -> Result<(), HandlerError> {
+    if let Some(ref path) = cwd {
+        let p = std::path::Path::new(path);
+        if !p.exists() {
+            return Err(TerminalError::new(format!("cwd does not exist: '{}'", path)).into());
+        }
+        if !p.is_dir() {
+            return Err(TerminalError::new(format!("cwd is not a directory: '{}'", path)).into());
+        }
+    }
+    Ok(())
 }
 
 fn is_safe_runtime_key(key: &str) -> bool {

@@ -28,6 +28,7 @@ pub struct LifecycleRequest {
     pub bead_id: Option<String>,
     pub model: Option<String>,
     pub repo: Option<String>,
+    pub cwd: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

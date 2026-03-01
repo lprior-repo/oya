@@ -34,7 +34,7 @@ pub async fn resolve_and_validate(
     let bead = resolve_bead_data(executor, request).await.map_err(map_startup_failure)?;
     let model = resolve_model(request.model.as_deref()).map_err(map_startup_failure)?;
     let repo = validate_repo_slug(request.repo.as_deref()).map_err(map_startup_failure)?;
-    let steps = build_steps(&bead, &model, repo.as_deref());
+    let steps = build_steps(&bead, &model, repo.as_deref(), request.cwd.as_deref());
     validate_dag(&steps).map_err(map_startup_failure)?;
     Ok((bead, steps))
 }
@@ -45,17 +45,23 @@ async fn resolve_bead_data(
 ) -> Result<BeadData, LifecycleError> {
     let selected = match &request.bead_id {
         Some(bead_id) => bead_id.clone(),
-        None => pick_ready_bead(executor).await?,
+        None => pick_ready_bead(executor, request.cwd.as_deref()).await?,
     };
     BeadId::parse(&selected)
         .map(BeadData::from_bead_id)
         .map_err(|error| LifecycleError::terminal(FailureCategory::Validation, error.to_string()))
 }
 
-async fn pick_ready_bead(executor: &dyn CommandExecutor) -> Result<String, LifecycleError> {
+async fn pick_ready_bead(
+    executor: &dyn CommandExecutor,
+    cwd: Option<&str>,
+) -> Result<String, LifecycleError> {
     let entry = run_effect(
         executor,
-        Effect::Br { args: vec!["ready".to_owned(), "--json".to_owned()], cwd: None },
+        Effect::Br {
+            args: vec!["ready".to_owned(), "--json".to_owned()],
+            cwd: cwd.map(String::from),
+        },
     )
     .await?;
     let json = extract_json_array(&entry.stdout)?;

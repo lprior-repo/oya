@@ -99,7 +99,8 @@ async fn implement_command(args: ImplementArgs) -> anyhow::Result<()> {
 async fn lifecycle_command(args: LifecycleArgs) -> anyhow::Result<()> {
     let workflow_key = args.bead.clone().unwrap_or_else(|| "auto".to_owned());
     let repo = resolve_repo_slug(args.repo).await?;
-    let request = LifecycleRequest { bead_id: args.bead, model: Some(args.model), repo };
+    let cwd = std::env::current_dir().ok().map(|p| p.to_string_lossy().to_string());
+    let request = LifecycleRequest { bead_id: args.bead, model: Some(args.model), repo, cwd };
     match call_restate_service_json(&args.ingress, "Oya", &workflow_key, "run", request).await {
         Ok(body) => {
             println!("{}", body.output);
