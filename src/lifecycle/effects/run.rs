@@ -147,9 +147,21 @@ async fn run_forget_workspace_compensation(
     let timeout = Duration::from_secs(timeout_secs);
     let args = vec!["workspace".to_owned(), "forget".to_owned(), workspace.as_str().to_owned()];
     let jj_result = executor.run("jj", &args, timeout, None).await;
+
+    let jj_status = match &jj_result {
+        Ok(result) if status_ok(result.status_code) => Ok(result.clone()),
+        Ok(result) => Err(anyhow::anyhow!(
+            "jj forget failed with status {:?}: {}",
+            result.status_code,
+            result.stderr.trim()
+        )),
+        Err(err) => Err(anyhow::anyhow!("jj forget failed: {err}")),
+    };
+
     let workspace_path = workspace.workspace_path();
     let dir_result = remove_workspace_dir(&workspace_path);
-    match (jj_result, dir_result) {
+
+    match (jj_status, dir_result) {
         (Ok(jj_output), Ok(_)) => Ok(EffectJournalEntry {
             effect: Effect::Jj { args, cwd: None },
             timeout_secs,
@@ -158,18 +170,10 @@ async fn run_forget_workspace_compensation(
             stderr: jj_output.stderr,
         }),
         (Err(jj_err), Err(dir_err)) => {
-            let error_msg =
-                format!("jj forget failed: {jj_err}, directory removal failed: {dir_err}");
-            Err(anyhow::anyhow!(error_msg))
+            Err(anyhow::anyhow!("{jj_err}, directory removal failed: {dir_err}"))
         }
-        (Err(jj_err), Ok(_)) => {
-            let error_msg = format!("jj forget failed: {jj_err}");
-            Err(anyhow::anyhow!(error_msg))
-        }
-        (Ok(_), Err(dir_err)) => {
-            let error_msg = format!("directory removal failed: {dir_err}");
-            Err(anyhow::anyhow!(error_msg))
-        }
+        (Err(jj_err), Ok(_)) => Err(jj_err),
+        (Ok(_), Err(dir_err)) => Err(anyhow::anyhow!("directory removal failed: {dir_err}")),
     }
 }
 
@@ -354,4 +358,234 @@ fn workspace_cleanup_exhausted_error(path: &str) -> LifecycleError {
         FailureCategory::Workspace,
         format!("failed to clean workspace directory {path}: retry exhausted"),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lifecycle::effects::{CommandExecutor, CommandFailure, CommandResult, Compensation};
+    use crate::lifecycle::types::{BeadData, BeadId};
+    use async_trait::async_trait;
+    use std::collections::VecDeque;
+    use std::sync::Mutex;
+    use std::time::Duration;
+
+    #[derive(Debug)]
+    struct ExpectedCall {
+        program: String,
+        args: Vec<String>,
+        result: Result<CommandResult, CommandFailure>,
+    }
+
+    #[derive(Debug)]
+    struct MockExecutor {
+        calls: Mutex<VecDeque<ExpectedCall>>,
+    }
+
+    impl MockExecutor {
+        fn new(calls: Vec<ExpectedCall>) -> Self {
+            Self { calls: Mutex::new(calls.into_iter().collect()) }
+        }
+    }
+
+    #[async_trait]
+    impl CommandExecutor for MockExecutor {
+        async fn run(
+            &self,
+            program: &str,
+            args: &[String],
+            _timeout: Duration,
+            _cwd: Option<&str>,
+        ) -> Result<CommandResult, CommandFailure> {
+            let mut guard = self
+                .calls
+                .lock()
+                .map_err(|_| CommandFailure::Spawn { message: "test mutex poisoned".to_owned() })?;
+            let next = guard.pop_front().ok_or_else(|| CommandFailure::Spawn {
+                message: "unexpected extra command".to_owned(),
+            })?;
+            assert_eq!(program, next.program);
+            assert_eq!(args, next.args);
+            next.result
+        }
+    }
+
+    fn ok_result() -> Result<CommandResult, CommandFailure> {
+        Ok(CommandResult { status_code: Some(0), stdout: String::new(), stderr: String::new() })
+    }
+
+    fn err_result(msg: &str) -> Result<CommandResult, CommandFailure> {
+        Ok(CommandResult { status_code: Some(1), stdout: String::new(), stderr: msg.to_owned() })
+    }
+
+    fn timeout_result() -> Result<CommandResult, CommandFailure> {
+        Err(CommandFailure::Timeout { timeout_secs: 120 })
+    }
+
+    fn spawn_result(msg: &str) -> Result<CommandResult, CommandFailure> {
+        Err(CommandFailure::Spawn { message: msg.to_owned() })
+    }
+
+    fn workspace_from_bead(id: &str) -> WorkspaceName {
+        WorkspaceName::from_bead_id(&BeadId::parse(id).unwrap())
+    }
+
+    fn create_temp_workspace_dir(workspace: &WorkspaceName) -> tempfile::TempDir {
+        let path = workspace.workspace_path();
+        let parent = std::path::Path::new(&path).parent().unwrap();
+        std::fs::create_dir_all(parent).ok();
+        tempfile::TempDir::new_in(parent).unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_compensation_runs_jj_workspace_forget_and_removes_directory() {
+        let workspace = workspace_from_bead("test-abc123");
+        let temp_dir = create_temp_workspace_dir(&workspace);
+        let workspace_path = workspace.workspace_path();
+
+        std::fs::create_dir_all(&workspace_path).unwrap();
+        assert!(std::path::Path::new(&workspace_path).exists());
+
+        let executor = MockExecutor::new(vec![ExpectedCall {
+            program: "jj".to_owned(),
+            args: vec!["workspace".to_owned(), "forget".to_owned(), workspace.as_str().to_owned()],
+            result: ok_result(),
+        }]);
+
+        let compensation = Compensation::ForgetWorkspace { workspace: workspace.clone() };
+        let result = run_compensation(&executor, compensation).await;
+
+        assert!(result.is_ok());
+        let entry = result.unwrap();
+        assert!(entry.success);
+        assert!(!std::path::Path::new(&workspace_path).exists());
+
+        drop(temp_dir);
+    }
+
+    #[tokio::test]
+    async fn test_compensation_succeeds_when_directory_already_missing() {
+        let workspace = workspace_from_bead("test-def456");
+        let workspace_path = workspace.workspace_path();
+
+        assert!(!std::path::Path::new(&workspace_path).exists());
+
+        let executor = MockExecutor::new(vec![ExpectedCall {
+            program: "jj".to_owned(),
+            args: vec!["workspace".to_owned(), "forget".to_owned(), workspace.as_str().to_owned()],
+            result: ok_result(),
+        }]);
+
+        let compensation = Compensation::ForgetWorkspace { workspace: workspace.clone() };
+        let result = run_compensation(&executor, compensation).await;
+
+        assert!(result.is_ok());
+        let entry = result.unwrap();
+        assert!(entry.success);
+    }
+
+    #[tokio::test]
+    async fn test_compensation_fails_when_jj_workspace_forget_fails() {
+        let workspace = workspace_from_bead("test-ghi789");
+
+        let executor = MockExecutor::new(vec![ExpectedCall {
+            program: "jj".to_owned(),
+            args: vec!["workspace".to_owned(), "forget".to_owned(), workspace.as_str().to_owned()],
+            result: err_result("workspace not found"),
+        }]);
+
+        let compensation = Compensation::ForgetWorkspace { workspace: workspace.clone() };
+        let result = run_compensation(&executor, compensation).await;
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("jj forget failed"));
+    }
+
+    #[tokio::test]
+    async fn test_compensation_fails_when_jj_not_available() {
+        let workspace = workspace_from_bead("test-jkl012");
+
+        let executor = MockExecutor::new(vec![ExpectedCall {
+            program: "jj".to_owned(),
+            args: vec!["workspace".to_owned(), "forget".to_owned(), workspace.as_str().to_owned()],
+            result: spawn_result("command not found"),
+        }]);
+
+        let compensation = Compensation::ForgetWorkspace { workspace: workspace.clone() };
+        let result = run_compensation(&executor, compensation).await;
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("jj forget failed"));
+    }
+
+    #[tokio::test]
+    async fn test_compensation_handles_timeout_gracefully() {
+        let workspace = workspace_from_bead("test-mno345");
+
+        let executor = MockExecutor::new(vec![ExpectedCall {
+            program: "jj".to_owned(),
+            args: vec!["workspace".to_owned(), "forget".to_owned(), workspace.as_str().to_owned()],
+            result: timeout_result(),
+        }]);
+
+        let compensation = Compensation::ForgetWorkspace { workspace: workspace.clone() };
+        let result = run_compensation(&executor, compensation).await;
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("jj forget failed"));
+    }
+
+    #[tokio::test]
+    async fn test_compensation_journal_entry_contains_correct_effect() {
+        let workspace = workspace_from_bead("test-pqr678");
+
+        let executor = MockExecutor::new(vec![ExpectedCall {
+            program: "jj".to_owned(),
+            args: vec!["workspace".to_owned(), "forget".to_owned(), workspace.as_str().to_owned()],
+            result: ok_result(),
+        }]);
+
+        let compensation = Compensation::ForgetWorkspace { workspace: workspace.clone() };
+        let result = run_compensation(&executor, compensation).await;
+
+        assert!(result.is_ok());
+        let entry = result.unwrap();
+        assert!(entry.success);
+        assert_eq!(entry.timeout_secs, DEFAULT_CLI_TIMEOUT_SECS);
+        match entry.effect {
+            Effect::Jj { args, cwd } => {
+                assert_eq!(args, vec!["workspace", "forget", workspace.as_str()]);
+                assert!(cwd.is_none());
+            }
+            _ => panic!("expected Jj effect"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_compensation_mark_bead_blocked_executes_br_command() {
+        let bead_id = BeadId::parse("test-stu901").unwrap();
+        let bead = BeadData::from_bead_id(bead_id);
+
+        let executor = MockExecutor::new(vec![ExpectedCall {
+            program: "br".to_owned(),
+            args: vec![
+                "update".to_owned(),
+                "test-stu901".to_owned(),
+                "--status".to_owned(),
+                "blocked".to_owned(),
+                "--notes".to_owned(),
+                "test reason".to_owned(),
+            ],
+            result: ok_result(),
+        }]);
+
+        let compensation =
+            Compensation::MarkBeadBlocked { bead: bead.clone(), reason: "test reason".to_owned() };
+        let result = run_compensation(&executor, compensation).await;
+
+        assert!(result.is_ok());
+    }
 }
