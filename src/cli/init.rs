@@ -9,128 +9,108 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::time::sleep;
 
-const OYA_SERVICE_RESTART_ATTEMPTS: u8 = 4;
-const OYA_SERVICE_RESTART_DELAY: Duration = Duration::from_millis(400);
+const SYSTEMD_SERVICE: &str = "restate.service";
 
 pub async fn init_command(ingress: &str, service_url: &str, down: bool) -> anyhow::Result<()> {
-    disable_systemd_restate().await?;
     if down {
-        stop_docker_restate().await?;
-        println!("[oya] Docker Restate stopped");
+        stop_restate().await?;
+        println!("[oya] Restate stopped");
         return Ok(());
     }
-    let repo_root = find_repo_root()?;
-    start_fresh_docker_restate(&repo_root).await?;
+
+    let restate_path = find_restate_binary()?;
+
+    if is_restate_running().await {
+        println!("[oya] Restate already running");
+    } else {
+        start_restate(&restate_path).await?;
+        wait_for_health(ingress, 30).await?;
+        println!("[oya] Restate started");
+    }
+
     restart_oya_service().await?;
     verify_oya_service_unit().await?;
-    wait_for_health(ingress, 30).await?;
     wait_for_tcp_port("127.0.0.1", 9180, 30).await?;
     register_services(service_url).await?;
     validate_registered_services().await?;
-    println!("[oya] Runtime ready (fresh Restate + handlers registered)");
-    println!("  Admin:   http://127.0.0.1:9070");
+
+    println!("[oya] Runtime ready");
+    println!("  Admin:   http://127.0.0.1:29070");
     println!("  Ingress: {ingress}");
     println!("  Service: {service_url}");
     Ok(())
 }
 
-pub fn find_repo_root() -> anyhow::Result<PathBuf> {
-    let current = std::env::current_dir()?;
-    let root = current
-        .ancestors()
-        .find(|path| path.join("docker-compose.yml").is_file())
-        .map(Path::to_path_buf);
-    root.ok_or_else(|| anyhow::anyhow!("could not find docker-compose.yml from current directory"))
+fn find_restate_binary() -> anyhow::Result<PathBuf> {
+    // Check for restate-server first (production binary)
+    let server_path = PathBuf::from(
+        "/home/lewis/.local/share/mise/installs/ubi-restatedev-restate/1.6.2/restate-server",
+    );
+    if server_path.exists() {
+        return Ok(server_path);
+    }
+
+    // Fallback to restate CLI
+    let cli_path = PathBuf::from(
+        "/home/lewis/.local/share/mise/installs/ubi-restatedev-restate/1.6.2/restate",
+    );
+    if cli_path.exists() {
+        return Ok(cli_path);
+    }
+
+    Err(anyhow::anyhow!("restate not found. Install via: mise install restate"))
 }
 
-async fn disable_systemd_restate() -> anyhow::Result<()> {
-    let _ =
-        run_command_capture("systemctl", &["--user", "disable", "--now", "restate.service"], None)
-            .await;
-    let _ =
-        run_command_capture("systemctl", &["--user", "stop", "restate-manual.service"], None).await;
+async fn is_restate_running() -> bool {
+    if let Ok(response) = Client::new().get("http://127.0.0.1:29080/restate/health").send().await {
+        return response.status().is_success();
+    }
+    false
+}
+
+async fn stop_restate() -> anyhow::Result<()> {
+    let _ = run_command_capture("systemctl", &["--user", "stop", SYSTEMD_SERVICE], None).await;
     Ok(())
 }
 
-async fn stop_docker_restate() -> anyhow::Result<()> {
-    if let Ok(repo_root) = find_repo_root() {
-        return run_command_capture(
-            "docker",
-            &["compose", "-f", "docker-compose.yml", "stop", "restate"],
-            Some(repo_root.as_path()),
-        )
-        .await
-        .map(|_| ());
-    }
-    stop_named_restate_container().await
-}
+async fn start_restate(binary: &PathBuf) -> anyhow::Result<()> {
+    let service_content = format!(
+        r#"[Unit]
+Description=Restate Server (managed by Oya)
+After=network.target
 
-async fn stop_named_restate_container() -> anyhow::Result<()> {
-    let outcome = run_command_outcome("docker", &["rm", "-f", "oya-restate"], None).await?;
-    if outcome.success
-        || is_missing_container_error(&outcome.stderr)
-        || is_container_removal_in_progress(&outcome.stderr)
-    {
-        Ok(())
-    } else {
-        Err(anyhow::anyhow!("docker rm -f oya-restate failed: {}", outcome.stderr.trim()))
-    }
-}
+[Service]
+Type=simple
+ExecStart={} server
+Restart=always
+RestartSec=5
+Environment="RESTATE_INGRESS__BIND_PORT=29080"
+Environment="RESTATE_ADMIN__BIND_PORT=29070"
+Environment="RESTATE_BIND_IP=127.0.0.1"
 
-pub(crate) fn is_missing_container_error(stderr: &str) -> bool {
-    stderr.to_ascii_lowercase().contains("no such container")
-}
+[Install]
+WantedBy=multi-user.target
+"#,
+        binary.display()
+    );
 
-pub(crate) fn is_container_removal_in_progress(stderr: &str) -> bool {
-    let lowered = stderr.to_ascii_lowercase();
-    lowered.contains("removal") && lowered.contains("already in progress")
-}
+    let unit_dir = std::env::var("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")))
+        .join("systemd")
+        .join("user");
 
-async fn start_fresh_docker_restate(repo_root: &Path) -> anyhow::Result<()> {
-    run_command_capture(
-        "docker",
-        &["compose", "-f", "docker-compose.yml", "down", "-v", "--remove-orphans"],
-        Some(repo_root),
-    )
-    .await?;
-    run_command_capture(
-        "docker",
-        &["compose", "-f", "docker-compose.yml", "pull", "restate"],
-        Some(repo_root),
-    )
-    .await?;
-    run_command_capture(
-        "docker",
-        &["compose", "-f", "docker-compose.yml", "up", "-d", "restate"],
-        Some(repo_root),
-    )
-    .await
-    .map(|_| ())
+    std::fs::create_dir_all(&unit_dir)?;
+    let service_path = unit_dir.join(SYSTEMD_SERVICE);
+    std::fs::write(&service_path, service_content)?;
+
+    run_command_capture("systemctl", &["--user", "daemon-reload"], None).await?;
+    run_command_capture("systemctl", &["--user", "enable", "--now", SYSTEMD_SERVICE], None).await?;
+
+    Ok(())
 }
 
 async fn restart_oya_service() -> anyhow::Result<()> {
-    for attempt in 0..=OYA_SERVICE_RESTART_ATTEMPTS {
-        match restart_oya_service_once().await {
-            Ok(()) => return Ok(()),
-            Err(error)
-                if attempt < OYA_SERVICE_RESTART_ATTEMPTS
-                    && is_restart_rate_limit_error(&error.to_string()) =>
-            {
-                let _ = run_command_capture(
-                    "systemctl",
-                    &["--user", "reset-failed", "oya.service"],
-                    None,
-                )
-                .await;
-                sleep(OYA_SERVICE_RESTART_DELAY).await;
-            }
-            Err(error) => return Err(error),
-        }
-    }
-    Err(anyhow::anyhow!("oya.service restart retries exhausted"))
-}
-
-async fn restart_oya_service_once() -> anyhow::Result<()> {
     run_command_capture("systemctl", &["--user", "restart", "oya.service"], None).await?;
     let status =
         run_command_capture("systemctl", &["--user", "is-active", "oya.service"], None).await?;
@@ -141,18 +121,11 @@ async fn restart_oya_service_once() -> anyhow::Result<()> {
     }
 }
 
-pub(crate) fn is_restart_rate_limit_error(stderr: &str) -> bool {
-    let lowered = stderr.to_ascii_lowercase();
-    lowered.contains("attempted too often")
-        || lowered.contains("start request repeated too quickly")
-}
-
 async fn verify_oya_service_unit() -> anyhow::Result<()> {
     let unit = run_command_capture("systemctl", &["--user", "cat", "oya.service"], None).await?;
     let exec = extract_exec_start(&unit)
         .ok_or_else(|| anyhow::anyhow!("oya.service missing ExecStart"))?;
-    let binary_ok =
-        extract_exec_binary(exec).map(std::path::Path::new).is_some_and(std::path::Path::exists);
+    let binary_ok = extract_exec_binary(exec).map(Path::new).is_some_and(Path::exists);
     if !binary_ok {
         return Err(anyhow::anyhow!("oya.service ExecStart binary not found: {exec}"));
     }
@@ -201,13 +174,30 @@ async fn wait_for_tcp_port(host: &str, port: u16, retries: u8) -> anyhow::Result
 }
 
 async fn register_services(service_url: &str) -> anyhow::Result<()> {
-    run_command_capture("restate", &["deployments", "register", "--force", "-y", service_url], None)
-        .await
-        .map(|_| ())
+    run_command_capture(
+        "restate",
+        &[
+            "--endpoint",
+            "http://127.0.0.1:29080",
+            "deployments",
+            "register",
+            "--force",
+            "-y",
+            service_url,
+        ],
+        None,
+    )
+    .await
+    .map(|_| ())
 }
 
 async fn validate_registered_services() -> anyhow::Result<()> {
-    let output = run_command_outcome("restate", &["services", "list"], None).await?;
+    let output = run_command_outcome(
+        "restate",
+        &["--endpoint", "http://127.0.0.1:29080", "services", "list"],
+        None,
+    )
+    .await?;
     if super::doctor::has_required_services(&output.stdout) {
         Ok(())
     } else {
