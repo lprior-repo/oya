@@ -116,7 +116,17 @@ fn should_retry_status(status: reqwest::StatusCode) -> bool {
 }
 
 fn is_transient_transport_error(error: &reqwest::Error) -> bool {
-    error.is_connect() || error.is_timeout()
+    error.is_connect()
+        || error.is_timeout()
+        || error.is_request()
+        || is_transient_transport_text(&error.to_string())
+}
+
+pub fn is_transient_transport_text(message: &str) -> bool {
+    let lowered = message.to_ascii_lowercase();
+    lowered.contains("connection closed before message completed")
+        || lowered.contains("connection reset by peer")
+        || lowered.contains("broken pipe")
 }
 
 fn restate_http_client() -> anyhow::Result<Client> {
@@ -203,6 +213,8 @@ fn map_transport_error(error: &reqwest::Error) -> Option<String> {
         Some("unavailable: restate ingress is not reachable".to_owned())
     } else if error.is_timeout() {
         Some("timeout: restate ingress did not respond".to_owned())
+    } else if error.is_request() || is_transient_transport_text(&error.to_string()) {
+        Some("unavailable: restate ingress closed the connection".to_owned())
     } else {
         None
     }

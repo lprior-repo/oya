@@ -14,7 +14,8 @@ use crate::cli::repo::{
     is_retryable_repo_lookup_stderr, normalize_error_message, parse_repo_slug_from_remote_url,
 };
 use crate::cli::restate::{
-    format_http_error, map_special_error, normalize_http_error_body, parse_json_payload,
+    format_http_error, is_transient_transport_text, map_special_error, normalize_http_error_body,
+    parse_json_payload,
 };
 use crate::restate_oya::types::LifecycleStatusSnapshot;
 use serde_json::json;
@@ -315,6 +316,13 @@ fn map_special_error_maps_service_not_registered_from_404() {
         reqwest::StatusCode::NOT_FOUND,
     );
     assert_eq!(mapped, Some("unavailable: restate service is not registered yet".to_owned()));
+}
+
+#[test]
+fn is_transient_transport_text_detects_closed_connection_messages() {
+    assert!(is_transient_transport_text("connection closed before message completed"));
+    assert!(is_transient_transport_text("Connection reset by peer"));
+    assert!(!is_transient_transport_text("invalid URL"));
 }
 
 #[test]
