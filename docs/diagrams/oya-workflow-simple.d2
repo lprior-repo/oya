@@ -1,0 +1,117 @@
+# OYA Workflow Architecture - Simple D2 Diagram
+
+direction: right
+
+# User Layer
+User: {
+  icon: https://icons.terraformdesign.io/emoji/user.svg
+  style.stroke-dash: 3
+}
+
+# CLI Layer
+br_cli["br CLI"]: {
+  icon: https://icons.terraformdesign.io/emoji/terminal.svg
+}
+pipeline_script["pipeline-run.sh"] { }
+
+# Service Layer
+restate_ingress["Restate Ingress :8080"]: {
+  icon: https://icons.terraformdesign.io/logos/restate.svg
+  style.fill: "#e6ccff"
+}
+
+restate_admin["Restate Admin :9070"]: {
+  icon: https://icons.terraformdesign.io/logos/restate.svg
+  style.fill: "#e6ccff"
+}
+
+oya_orchestrator["OyaOrchestrator Workflow"]: {
+  icon: https://icons.terraformdesign.io/logos/rust.svg
+  style.fill: "#ffd6e6"
+}
+
+oya_binary["oya binary (13MB)"]: {
+  icon: https://icons.terraformdesign.io/logos/rust.svg
+  style.fill: "#d6ffe6"
+}
+
+# AI Tools
+opencode["OpenCode :4098"]: {
+  icon: https://icons.terraformdesign.io/emoji/brain.svg
+  style.fill: "#ffe6cc"
+}
+
+ai_models["AI Models"]: {
+  icon: https://icons.terraformdesign.io/emoji/robot.svg
+  style.fill: "#e6ccff"
+}
+
+# Workflow Stages
+plan["Plan Stage"]: {
+  icon: https://icons.terraformdesign.io/emoji/memo.svg
+  style.fill: "#ccffeb"
+}
+
+contract["Contract Stage"]: {
+  icon: https://icons.terraformdesign.io/emoji/document.svg
+  style.fill: "#ccffeb"
+}
+
+red_gate["Acceptance Test\nRED Gate"]: {
+  icon: https://icons.terraformdesign.io/emoji/x.svg
+  style.fill: "#ffd6d6"
+}
+
+green_gate["Implementation\nGREEN Gate"]: {
+  icon: https://icons.terraformdesign.io/emoji/check.svg
+  style.fill: "#d6ffeb"
+}
+
+qa["QA & Completion"]: {
+  icon: https://icons.terraformdesign.io/emoji/shield.svg
+  style.fill: "#fff0cc"
+}
+
+# Tools
+moon["Moon Build"]: {
+  icon: https://icons.terraformdesign.io/logos/moonrepo.svg
+}
+
+jj["jj Workspaces"]: {
+  icon: https://icons.terraformdesign.io/emoji/folder.svg
+}
+
+# Data
+beads_db["beads_rust DB"]: {
+  icon: https://icons.terraformdesign.io/logos/postgres.svg
+}
+
+journal["Restate Journal"]: {
+  icon: https://icons.terraformdesign.io/emoji/bookmark.svg
+}
+
+# Connections
+User -> br_cli: "1. br ready"
+br_cli -> beads_db: "2. query"
+beads_db -> br_cli: "3. return bead"
+br_cli -> pipeline_script: "4. execute"
+pipeline_script -> restate_ingress: "5. POST run"
+
+restate_ingress -> oya_orchestrator: "invoke"
+oya_orchestrator -> oya_binary: "runs via"
+oya_binary -> opencode: "calls"
+opencode -> ai_models: "queries"
+ai_models -> opencode: "response"
+opencode -> oya_binary: "returns"
+oya_binary -> moon: "build"
+oya_binary -> jj: "isolate"
+
+oya_orchestrator -> plan: "stage 1"
+plan -> contract: "stage 2"
+contract -> red_gate: "stage 3"
+red_gate -> green_gate: "stage 4"
+green_gate -> qa: "stage 5"
+
+oya_orchestrator -> journal: "state"
+restate_admin -> oya_orchestrator: "monitor"
+User -> restate_admin: "view"

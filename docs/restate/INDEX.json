@@ -1,0 +1,1988 @@
+{
+  "project": "Restate",
+  "description": "Durable execution runtime for resilient backends and AI agents",
+  "documents": [
+    {
+      "title": "Cluster state endpoint",
+      "path": "docs/admin-api/cluster_health/cluster-state-endpoint.md",
+      "source": "https://docs.restate.dev/admin-api/cluster_health/cluster-state-endpoint",
+      "category": "admin-api"
+    },
+    {
+      "title": "Delete deployment",
+      "path": "docs/admin-api/deployment/delete-deployment.md",
+      "source": "https://docs.restate.dev/admin-api/deployment/delete-deployment",
+      "category": "admin-api"
+    },
+    {
+      "title": "Get deployment",
+      "path": "docs/admin-api/deployment/get-deployment.md",
+      "source": "https://docs.restate.dev/admin-api/deployment/get-deployment",
+      "category": "admin-api"
+    },
+    {
+      "title": "List deployments",
+      "path": "docs/admin-api/deployment/list-deployments.md",
+      "source": "https://docs.restate.dev/admin-api/deployment/list-deployments",
+      "category": "admin-api"
+    },
+    {
+      "title": "Register deployment",
+      "path": "docs/admin-api/deployment/register-deployment.md",
+      "source": "https://docs.restate.dev/admin-api/deployment/register-deployment",
+      "category": "admin-api"
+    },
+    {
+      "title": "Update deployment",
+      "path": "docs/admin-api/deployment/update-deployment.md",
+      "source": "https://docs.restate.dev/admin-api/deployment/update-deployment",
+      "category": "admin-api"
+    },
+    {
+      "title": "Health check endpoint",
+      "path": "docs/admin-api/health/health-check-endpoint.md",
+      "source": "https://docs.restate.dev/admin-api/health/health-check-endpoint",
+      "category": "admin-api"
+    },
+    {
+      "title": "Query the system and service state by using SQL.",
+      "path": "docs/admin-api/introspection/query-the-system-and-service-state-by-using-sql.md",
+      "source": "https://docs.restate.dev/admin-api/introspection/query-the-system-and-service-state-by-using-sql",
+      "category": "admin-api"
+    },
+    {
+      "title": "Cancel an invocation",
+      "path": "docs/admin-api/invocation/cancel-an-invocation.md",
+      "source": "https://docs.restate.dev/admin-api/invocation/cancel-an-invocation",
+      "category": "admin-api"
+    },
+    {
+      "title": "Delete an invocation",
+      "path": "docs/admin-api/invocation/delete-an-invocation.md",
+      "source": "https://docs.restate.dev/admin-api/invocation/delete-an-invocation",
+      "category": "admin-api"
+    },
+    {
+      "title": "Kill an invocation",
+      "path": "docs/admin-api/invocation/kill-an-invocation.md",
+      "source": "https://docs.restate.dev/admin-api/invocation/kill-an-invocation",
+      "category": "admin-api"
+    },
+    {
+      "title": "Pause an invocation",
+      "path": "docs/admin-api/invocation/pause-an-invocation.md",
+      "source": "https://docs.restate.dev/admin-api/invocation/pause-an-invocation",
+      "category": "admin-api"
+    },
+    {
+      "title": "Purge a completed invocation",
+      "path": "docs/admin-api/invocation/purge-a-completed-invocation.md",
+      "source": "https://docs.restate.dev/admin-api/invocation/purge-a-completed-invocation",
+      "category": "admin-api"
+    },
+    {
+      "title": "Purge invocation journal",
+      "path": "docs/admin-api/invocation/purge-invocation-journal.md",
+      "source": "https://docs.restate.dev/admin-api/invocation/purge-invocation-journal",
+      "category": "admin-api"
+    },
+    {
+      "title": "Restart invocation as new",
+      "path": "docs/admin-api/invocation/restart-invocation-as-new.md",
+      "source": "https://docs.restate.dev/admin-api/invocation/restart-invocation-as-new",
+      "category": "admin-api"
+    },
+    {
+      "title": "Resume an invocation",
+      "path": "docs/admin-api/invocation/resume-an-invocation.md",
+      "source": "https://docs.restate.dev/admin-api/invocation/resume-an-invocation",
+      "category": "admin-api"
+    },
+    {
+      "title": "Get service",
+      "path": "docs/admin-api/service/get-service.md",
+      "source": "https://docs.restate.dev/admin-api/service/get-service",
+      "category": "admin-api"
+    },
+    {
+      "title": "Get service OpenAPI definition",
+      "path": "docs/admin-api/service/get-service-openapi-definition.md",
+      "source": "https://docs.restate.dev/admin-api/service/get-service-openapi-definition",
+      "category": "admin-api"
+    },
+    {
+      "title": "List services",
+      "path": "docs/admin-api/service/list-services.md",
+      "source": "https://docs.restate.dev/admin-api/service/list-services",
+      "category": "admin-api"
+    },
+    {
+      "title": "Modify service configuration",
+      "path": "docs/admin-api/service/modify-service-configuration.md",
+      "source": "https://docs.restate.dev/admin-api/service/modify-service-configuration",
+      "category": "admin-api"
+    },
+    {
+      "title": "Modify service state",
+      "path": "docs/admin-api/service/modify-service-state.md",
+      "source": "https://docs.restate.dev/admin-api/service/modify-service-state",
+      "category": "admin-api"
+    },
+    {
+      "title": "Get service handler",
+      "path": "docs/admin-api/service_handler/get-service-handler.md",
+      "source": "https://docs.restate.dev/admin-api/service_handler/get-service-handler",
+      "category": "admin-api"
+    },
+    {
+      "title": "List service handlers",
+      "path": "docs/admin-api/service_handler/list-service-handlers.md",
+      "source": "https://docs.restate.dev/admin-api/service_handler/list-service-handlers",
+      "category": "admin-api"
+    },
+    {
+      "title": "Create subscription",
+      "path": "docs/admin-api/subscription/create-subscription.md",
+      "source": "https://docs.restate.dev/admin-api/subscription/create-subscription",
+      "category": "admin-api"
+    },
+    {
+      "title": "Delete subscription",
+      "path": "docs/admin-api/subscription/delete-subscription.md",
+      "source": "https://docs.restate.dev/admin-api/subscription/delete-subscription",
+      "category": "admin-api"
+    },
+    {
+      "title": "Get subscription",
+      "path": "docs/admin-api/subscription/get-subscription.md",
+      "source": "https://docs.restate.dev/admin-api/subscription/get-subscription",
+      "category": "admin-api"
+    },
+    {
+      "title": "List subscriptions",
+      "path": "docs/admin-api/subscription/list-subscriptions.md",
+      "source": "https://docs.restate.dev/admin-api/subscription/list-subscriptions",
+      "category": "admin-api"
+    },
+    {
+      "title": "Get version information",
+      "path": "docs/admin-api/version/get-version-information.md",
+      "source": "https://docs.restate.dev/admin-api/version/get-version-information",
+      "category": "admin-api"
+    },
+    {
+      "title": "AI Agent Quickstart",
+      "path": "docs/ai-quickstart.md",
+      "source": "https://docs.restate.dev/ai-quickstart",
+      "category": "root"
+    },
+    {
+      "title": "AI Examples",
+      "path": "docs/ai/ai-examples.md",
+      "source": "https://docs.restate.dev/ai/ai-examples",
+      "category": "ai"
+    },
+    {
+      "title": "AI / Agents with Restate",
+      "path": "docs/ai/index.md",
+      "source": "https://docs.restate.dev/ai/index",
+      "category": "ai"
+    },
+    {
+      "title": "Chat UI Integration",
+      "path": "docs/ai/patterns/chat-ui-integration.md",
+      "source": "https://docs.restate.dev/ai/patterns/chat-ui-integration",
+      "category": "ai"
+    },
+    {
+      "title": "Competitive Racing",
+      "path": "docs/ai/patterns/competitive-racing.md",
+      "source": "https://docs.restate.dev/ai/patterns/competitive-racing",
+      "category": "ai"
+    },
+    {
+      "title": "Human-in-the-loop steps",
+      "path": "docs/ai/patterns/human-in-the-loop.md",
+      "source": "https://docs.restate.dev/ai/patterns/human-in-the-loop",
+      "category": "ai"
+    },
+    {
+      "title": "Multi-Agent Systems",
+      "path": "docs/ai/patterns/multi-agent.md",
+      "source": "https://docs.restate.dev/ai/patterns/multi-agent",
+      "category": "ai"
+    },
+    {
+      "title": "Notify when ready",
+      "path": "docs/ai/patterns/notify-when-ready.md",
+      "source": "https://docs.restate.dev/ai/patterns/notify-when-ready",
+      "category": "ai"
+    },
+    {
+      "title": "Parallelizing Tools and Agents",
+      "path": "docs/ai/patterns/parallelization.md",
+      "source": "https://docs.restate.dev/ai/patterns/parallelization",
+      "category": "ai"
+    },
+    {
+      "title": "Prompt Chaining",
+      "path": "docs/ai/patterns/prompt-chaining.md",
+      "source": "https://docs.restate.dev/ai/patterns/prompt-chaining",
+      "category": "ai"
+    },
+    {
+      "title": "Rollback on Failures",
+      "path": "docs/ai/patterns/rollback.md",
+      "source": "https://docs.restate.dev/ai/patterns/rollback",
+      "category": "ai"
+    },
+    {
+      "title": "Durable Sessions",
+      "path": "docs/ai/patterns/sessions.md",
+      "source": "https://docs.restate.dev/ai/patterns/sessions",
+      "category": "ai"
+    },
+    {
+      "title": "Streaming Responses",
+      "path": "docs/ai/patterns/streaming-responses.md",
+      "source": "https://docs.restate.dev/ai/patterns/streaming-responses",
+      "category": "ai"
+    },
+    {
+      "title": "Tools and Workflows",
+      "path": "docs/ai/patterns/tools.md",
+      "source": "https://docs.restate.dev/ai/patterns/tools",
+      "category": "ai"
+    },
+    {
+      "title": "Restate & Google ADK",
+      "path": "docs/ai/sdk-integrations/google-adk.md",
+      "source": "https://docs.restate.dev/ai/sdk-integrations/google-adk",
+      "category": "ai"
+    },
+    {
+      "title": "Integrating Restate with LLM / Agent SDKs",
+      "path": "docs/ai/sdk-integrations/integration-guide.md",
+      "source": "https://docs.restate.dev/ai/sdk-integrations/integration-guide",
+      "category": "ai"
+    },
+    {
+      "title": "Restate & LiteLLM",
+      "path": "docs/ai/sdk-integrations/litellm.md",
+      "source": "https://docs.restate.dev/ai/sdk-integrations/litellm",
+      "category": "ai"
+    },
+    {
+      "title": "Restate & OpenAI Agents SDK",
+      "path": "docs/ai/sdk-integrations/openai-agents-sdk.md",
+      "source": "https://docs.restate.dev/ai/sdk-integrations/openai-agents-sdk",
+      "category": "ai"
+    },
+    {
+      "title": "Restate & Vercel AI SDK",
+      "path": "docs/ai/sdk-integrations/vercel-ai-sdk.md",
+      "source": "https://docs.restate.dev/ai/sdk-integrations/vercel-ai-sdk",
+      "category": "ai"
+    },
+    {
+      "title": "Connecting services to Restate Cloud",
+      "path": "docs/cloud/connecting-services.md",
+      "source": "https://docs.restate.dev/cloud/connecting-services",
+      "category": "cloud"
+    },
+    {
+      "title": "Getting Started with Restate Cloud",
+      "path": "docs/cloud/getting-started.md",
+      "source": "https://docs.restate.dev/cloud/getting-started",
+      "category": "cloud"
+    },
+    {
+      "title": "AI-Assisted Development",
+      "path": "docs/develop/ai-assistant.md",
+      "source": "https://docs.restate.dev/develop/ai-assistant",
+      "category": "develop"
+    },
+    {
+      "title": "Concurrent Tasks",
+      "path": "docs/develop/java/concurrent-tasks.md",
+      "source": "https://docs.restate.dev/develop/java/concurrent-tasks",
+      "category": "develop"
+    },
+    {
+      "title": "Durable Steps",
+      "path": "docs/develop/java/durable-steps.md",
+      "source": "https://docs.restate.dev/develop/java/durable-steps",
+      "category": "develop"
+    },
+    {
+      "title": "Scheduling & Timers",
+      "path": "docs/develop/java/durable-timers.md",
+      "source": "https://docs.restate.dev/develop/java/durable-timers",
+      "category": "develop"
+    },
+    {
+      "title": "Error Handling",
+      "path": "docs/develop/java/error-handling.md",
+      "source": "https://docs.restate.dev/develop/java/error-handling",
+      "category": "develop"
+    },
+    {
+      "title": "External Events",
+      "path": "docs/develop/java/external-events.md",
+      "source": "https://docs.restate.dev/develop/java/external-events",
+      "category": "develop"
+    },
+    {
+      "title": "Logging",
+      "path": "docs/develop/java/logging.md",
+      "source": "https://docs.restate.dev/develop/java/logging",
+      "category": "develop"
+    },
+    {
+      "title": "Serialization",
+      "path": "docs/develop/java/serialization.md",
+      "source": "https://docs.restate.dev/develop/java/serialization",
+      "category": "develop"
+    },
+    {
+      "title": "Service Communication",
+      "path": "docs/develop/java/service-communication.md",
+      "source": "https://docs.restate.dev/develop/java/service-communication",
+      "category": "develop"
+    },
+    {
+      "title": "Services",
+      "path": "docs/develop/java/services.md",
+      "source": "https://docs.restate.dev/develop/java/services",
+      "category": "develop"
+    },
+    {
+      "title": "Serving",
+      "path": "docs/develop/java/serving.md",
+      "source": "https://docs.restate.dev/develop/java/serving",
+      "category": "develop"
+    },
+    {
+      "title": "State",
+      "path": "docs/develop/java/state.md",
+      "source": "https://docs.restate.dev/develop/java/state",
+      "category": "develop"
+    },
+    {
+      "title": "Testing",
+      "path": "docs/develop/java/testing.md",
+      "source": "https://docs.restate.dev/develop/java/testing",
+      "category": "develop"
+    },
+    {
+      "title": "Concurrent Tasks",
+      "path": "docs/develop/python/concurrent-tasks.md",
+      "source": "https://docs.restate.dev/develop/python/concurrent-tasks",
+      "category": "develop"
+    },
+    {
+      "title": "Durable Steps",
+      "path": "docs/develop/python/durable-steps.md",
+      "source": "https://docs.restate.dev/develop/python/durable-steps",
+      "category": "develop"
+    },
+    {
+      "title": "Scheduling & Timers",
+      "path": "docs/develop/python/durable-timers.md",
+      "source": "https://docs.restate.dev/develop/python/durable-timers",
+      "category": "develop"
+    },
+    {
+      "title": "Error Handling",
+      "path": "docs/develop/python/error-handling.md",
+      "source": "https://docs.restate.dev/develop/python/error-handling",
+      "category": "develop"
+    },
+    {
+      "title": "External Events",
+      "path": "docs/develop/python/external-events.md",
+      "source": "https://docs.restate.dev/develop/python/external-events",
+      "category": "develop"
+    },
+    {
+      "title": "Serialization",
+      "path": "docs/develop/python/serialization.md",
+      "source": "https://docs.restate.dev/develop/python/serialization",
+      "category": "develop"
+    },
+    {
+      "title": "Service Communication",
+      "path": "docs/develop/python/service-communication.md",
+      "source": "https://docs.restate.dev/develop/python/service-communication",
+      "category": "develop"
+    },
+    {
+      "title": "Services",
+      "path": "docs/develop/python/services.md",
+      "source": "https://docs.restate.dev/develop/python/services",
+      "category": "develop"
+    },
+    {
+      "title": "Serving",
+      "path": "docs/develop/python/serving.md",
+      "source": "https://docs.restate.dev/develop/python/serving",
+      "category": "develop"
+    },
+    {
+      "title": "State",
+      "path": "docs/develop/python/state.md",
+      "source": "https://docs.restate.dev/develop/python/state",
+      "category": "develop"
+    },
+    {
+      "title": "Testing",
+      "path": "docs/develop/python/testing.md",
+      "source": "https://docs.restate.dev/develop/python/testing",
+      "category": "develop"
+    },
+    {
+      "title": "Rust SDK",
+      "path": "docs/develop/rust.md",
+      "source": "https://docs.restate.dev/develop/rust",
+      "category": "develop"
+    },
+    {
+      "title": "Concurrent Tasks",
+      "path": "docs/develop/ts/concurrent-tasks.md",
+      "source": "https://docs.restate.dev/develop/ts/concurrent-tasks",
+      "category": "develop"
+    },
+    {
+      "title": "Durable Steps",
+      "path": "docs/develop/ts/durable-steps.md",
+      "source": "https://docs.restate.dev/develop/ts/durable-steps",
+      "category": "develop"
+    },
+    {
+      "title": "Scheduling & Timers",
+      "path": "docs/develop/ts/durable-timers.md",
+      "source": "https://docs.restate.dev/develop/ts/durable-timers",
+      "category": "develop"
+    },
+    {
+      "title": "Error Handling",
+      "path": "docs/develop/ts/error-handling.md",
+      "source": "https://docs.restate.dev/develop/ts/error-handling",
+      "category": "develop"
+    },
+    {
+      "title": "External Events",
+      "path": "docs/develop/ts/external-events.md",
+      "source": "https://docs.restate.dev/develop/ts/external-events",
+      "category": "develop"
+    },
+    {
+      "title": "Logging",
+      "path": "docs/develop/ts/logging.md",
+      "source": "https://docs.restate.dev/develop/ts/logging",
+      "category": "develop"
+    },
+    {
+      "title": "Serialization",
+      "path": "docs/develop/ts/serialization.md",
+      "source": "https://docs.restate.dev/develop/ts/serialization",
+      "category": "develop"
+    },
+    {
+      "title": "Service Communication",
+      "path": "docs/develop/ts/service-communication.md",
+      "source": "https://docs.restate.dev/develop/ts/service-communication",
+      "category": "develop"
+    },
+    {
+      "title": "Services",
+      "path": "docs/develop/ts/services.md",
+      "source": "https://docs.restate.dev/develop/ts/services",
+      "category": "develop"
+    },
+    {
+      "title": "Serving",
+      "path": "docs/develop/ts/serving.md",
+      "source": "https://docs.restate.dev/develop/ts/serving",
+      "category": "develop"
+    },
+    {
+      "title": "State",
+      "path": "docs/develop/ts/state.md",
+      "source": "https://docs.restate.dev/develop/ts/state",
+      "category": "develop"
+    },
+    {
+      "title": "Testing",
+      "path": "docs/develop/ts/testing.md",
+      "source": "https://docs.restate.dev/develop/ts/testing",
+      "category": "develop"
+    },
+    {
+      "title": "Documentation",
+      "path": "docs/docs.md",
+      "source": "https://docs.restate.dev/docs",
+      "category": "root"
+    },
+    {
+      "title": "Examples",
+      "path": "docs/examples.md",
+      "source": "https://docs.restate.dev/examples",
+      "category": "root"
+    },
+    {
+      "title": "Actions",
+      "path": "docs/foundations/actions.md",
+      "source": "https://docs.restate.dev/foundations/actions",
+      "category": "foundations"
+    },
+    {
+      "title": "Handlers",
+      "path": "docs/foundations/handlers.md",
+      "source": "https://docs.restate.dev/foundations/handlers",
+      "category": "foundations"
+    },
+    {
+      "title": "Invocations",
+      "path": "docs/foundations/invocations.md",
+      "source": "https://docs.restate.dev/foundations/invocations",
+      "category": "foundations"
+    },
+    {
+      "title": "Key Concepts",
+      "path": "docs/foundations/key-concepts.md",
+      "source": "https://docs.restate.dev/foundations/key-concepts",
+      "category": "foundations"
+    },
+    {
+      "title": "Services",
+      "path": "docs/foundations/services.md",
+      "source": "https://docs.restate.dev/foundations/services",
+      "category": "foundations"
+    },
+    {
+      "title": "Local Restate Cluster with Docker",
+      "path": "docs/guides/cluster.md",
+      "source": "https://docs.restate.dev/guides/cluster",
+      "category": "guides"
+    },
+    {
+      "title": "Connecting Kubernetes Services to Restate Cloud",
+      "path": "docs/guides/connecting-k8s-services-to-cloud.md",
+      "source": "https://docs.restate.dev/guides/connecting-k8s-services-to-cloud",
+      "category": "guides"
+    },
+    {
+      "title": "Cron Jobs",
+      "path": "docs/guides/cron.md",
+      "source": "https://docs.restate.dev/guides/cron",
+      "category": "guides"
+    },
+    {
+      "title": "Databases and Restate",
+      "path": "docs/guides/databases.md",
+      "source": "https://docs.restate.dev/guides/databases",
+      "category": "guides"
+    },
+    {
+      "title": "Durable Webhooks",
+      "path": "docs/guides/durable-webhooks.md",
+      "source": "https://docs.restate.dev/guides/durable-webhooks",
+      "category": "guides"
+    },
+    {
+      "title": "Error Handling",
+      "path": "docs/guides/error-handling.md",
+      "source": "https://docs.restate.dev/guides/error-handling",
+      "category": "guides"
+    },
+    {
+      "title": "Guides",
+      "path": "docs/guides/index.md",
+      "source": "https://docs.restate.dev/guides/index",
+      "category": "guides"
+    },
+    {
+      "title": "Restate-Kafka Quickstart",
+      "path": "docs/guides/kafka-quickstart.md",
+      "source": "https://docs.restate.dev/guides/kafka-quickstart",
+      "category": "guides"
+    },
+    {
+      "title": "Scaling to Multi-Node Deployments",
+      "path": "docs/guides/local-to-replicated.md",
+      "source": "https://docs.restate.dev/guides/local-to-replicated",
+      "category": "guides"
+    },
+    {
+      "title": "Parallelizing Work",
+      "path": "docs/guides/parallelizing-work.md",
+      "source": "https://docs.restate.dev/guides/parallelizing-work",
+      "category": "guides"
+    },
+    {
+      "title": "Rate Limiting",
+      "path": "docs/guides/rate-limiting.md",
+      "source": "https://docs.restate.dev/guides/rate-limiting",
+      "category": "guides"
+    },
+    {
+      "title": "Request Lifecycle",
+      "path": "docs/guides/request-lifecycle.md",
+      "source": "https://docs.restate.dev/guides/request-lifecycle",
+      "category": "guides"
+    },
+    {
+      "title": "Kubernetes deployments with Helm",
+      "path": "docs/guides/restate-on-kind-with-helm.md",
+      "source": "https://docs.restate.dev/guides/restate-on-kind-with-helm",
+      "category": "guides"
+    },
+    {
+      "title": "Kubernetes deployments with Restate Operator",
+      "path": "docs/guides/restate-on-kind-with-operator.md",
+      "source": "https://docs.restate.dev/guides/restate-on-kind-with-operator",
+      "category": "guides"
+    },
+    {
+      "title": "Sagas",
+      "path": "docs/guides/sagas.md",
+      "source": "https://docs.restate.dev/guides/sagas",
+      "category": "guides"
+    },
+    {
+      "title": "XState",
+      "path": "docs/guides/xstate.md",
+      "source": "https://docs.restate.dev/guides/xstate",
+      "category": "guides"
+    },
+    {
+      "title": "Welcome to Restate!",
+      "path": "docs/index.md",
+      "source": "https://docs.restate.dev/index",
+      "category": "root"
+    },
+    {
+      "title": "Installation",
+      "path": "docs/installation.md",
+      "source": "https://docs.restate.dev/installation",
+      "category": "root"
+    },
+    {
+      "title": "Quickstart",
+      "path": "docs/quickstart.md",
+      "source": "https://docs.restate.dev/quickstart",
+      "category": "root"
+    },
+    {
+      "title": "Restate Architecture",
+      "path": "docs/references/architecture.md",
+      "source": "https://docs.restate.dev/references/architecture",
+      "category": "references"
+    },
+    {
+      "title": "CLI Configuration",
+      "path": "docs/references/cli-config.md",
+      "source": "https://docs.restate.dev/references/cli-config",
+      "category": "references"
+    },
+    {
+      "title": "Error Codes",
+      "path": "docs/references/errors.md",
+      "source": "https://docs.restate.dev/references/errors",
+      "category": "references"
+    },
+    {
+      "title": "Go API",
+      "path": "docs/references/gopkg.md",
+      "source": "https://docs.restate.dev/references/gopkg",
+      "category": "references"
+    },
+    {
+      "title": "Javadocs",
+      "path": "docs/references/javadocs.md",
+      "source": "https://docs.restate.dev/references/javadocs",
+      "category": "references"
+    },
+    {
+      "title": "KotlinDocs",
+      "path": "docs/references/ktdocs.md",
+      "source": "https://docs.restate.dev/references/ktdocs",
+      "category": "references"
+    },
+    {
+      "title": "Restate Server Configuration",
+      "path": "docs/references/server-config.md",
+      "source": "https://docs.restate.dev/references/server-config",
+      "category": "references"
+    },
+    {
+      "title": "SQL Introspection API",
+      "path": "docs/references/sql-introspection.md",
+      "source": "https://docs.restate.dev/references/sql-introspection",
+      "category": "references"
+    },
+    {
+      "title": "Typescript API",
+      "path": "docs/references/tsdocs.md",
+      "source": "https://docs.restate.dev/references/tsdocs",
+      "category": "references"
+    },
+    {
+      "title": "Highly-Available Clusters",
+      "path": "docs/server/clusters.md",
+      "source": "https://docs.restate.dev/server/clusters",
+      "category": "server"
+    },
+    {
+      "title": "Restate Server Configuration",
+      "path": "docs/server/configuration.md",
+      "source": "https://docs.restate.dev/server/configuration",
+      "category": "server"
+    },
+    {
+      "title": "Deploying Restate on AWS",
+      "path": "docs/server/deploy/aws.md",
+      "source": "https://docs.restate.dev/server/deploy/aws",
+      "category": "server"
+    },
+    {
+      "title": "Deploying Restate on Azure",
+      "path": "docs/server/deploy/azure.md",
+      "source": "https://docs.restate.dev/server/deploy/azure",
+      "category": "server"
+    },
+    {
+      "title": "null",
+      "path": "docs/server/deploy/docker.md",
+      "source": "https://docs.restate.dev/server/deploy/docker",
+      "category": "server"
+    },
+    {
+      "title": "Deploying Restate on GCP",
+      "path": "docs/server/deploy/gcp.md",
+      "source": "https://docs.restate.dev/server/deploy/gcp",
+      "category": "server"
+    },
+    {
+      "title": "null",
+      "path": "docs/server/deploy/kubernetes.md",
+      "source": "https://docs.restate.dev/server/deploy/kubernetes",
+      "category": "server"
+    },
+    {
+      "title": "Memory Configuration",
+      "path": "docs/server/memory.md",
+      "source": "https://docs.restate.dev/server/memory",
+      "category": "server"
+    },
+    {
+      "title": "Metadata Storage",
+      "path": "docs/server/metadata.md",
+      "source": "https://docs.restate.dev/server/metadata",
+      "category": "server"
+    },
+    {
+      "title": "Logging",
+      "path": "docs/server/monitoring/logging.md",
+      "source": "https://docs.restate.dev/server/monitoring/logging",
+      "category": "server"
+    },
+    {
+      "title": "Metrics",
+      "path": "docs/server/monitoring/metrics.md",
+      "source": "https://docs.restate.dev/server/monitoring/metrics",
+      "category": "server"
+    },
+    {
+      "title": "Tracing",
+      "path": "docs/server/monitoring/tracing.md",
+      "source": "https://docs.restate.dev/server/monitoring/tracing",
+      "category": "server"
+    },
+    {
+      "title": "Networking",
+      "path": "docs/server/networking.md",
+      "source": "https://docs.restate.dev/server/networking",
+      "category": "server"
+    },
+    {
+      "title": "Self-hosted Restate Overview",
+      "path": "docs/server/overview.md",
+      "source": "https://docs.restate.dev/server/overview",
+      "category": "server"
+    },
+    {
+      "title": "Snapshots & Backups",
+      "path": "docs/server/snapshots.md",
+      "source": "https://docs.restate.dev/server/snapshots",
+      "category": "server"
+    },
+    {
+      "title": "Upgrading Restate",
+      "path": "docs/server/upgrading.md",
+      "source": "https://docs.restate.dev/server/upgrading",
+      "category": "server"
+    },
+    {
+      "title": "Service Configuration",
+      "path": "docs/services/configuration.md",
+      "source": "https://docs.restate.dev/services/configuration",
+      "category": "services"
+    },
+    {
+      "title": "Cloudflare Workers",
+      "path": "docs/services/deploy/cloudflare-workers.md",
+      "source": "https://docs.restate.dev/services/deploy/cloudflare-workers",
+      "category": "services"
+    },
+    {
+      "title": "Deno Deploy",
+      "path": "docs/services/deploy/deno-deploy.md",
+      "source": "https://docs.restate.dev/services/deploy/deno-deploy",
+      "category": "services"
+    },
+    {
+      "title": "Kubernetes",
+      "path": "docs/services/deploy/kubernetes.md",
+      "source": "https://docs.restate.dev/services/deploy/kubernetes",
+      "category": "services"
+    },
+    {
+      "title": "AWS Lambda",
+      "path": "docs/services/deploy/lambda.md",
+      "source": "https://docs.restate.dev/services/deploy/lambda",
+      "category": "services"
+    },
+    {
+      "title": "Standalone",
+      "path": "docs/services/deploy/standalone.md",
+      "source": "https://docs.restate.dev/services/deploy/standalone",
+      "category": "services"
+    },
+    {
+      "title": "Vercel",
+      "path": "docs/services/deploy/vercel.md",
+      "source": "https://docs.restate.dev/services/deploy/vercel",
+      "category": "services"
+    },
+    {
+      "title": "Introspection",
+      "path": "docs/services/introspection.md",
+      "source": "https://docs.restate.dev/services/introspection",
+      "category": "services"
+    },
+    {
+      "title": "Go SDK Clients",
+      "path": "docs/services/invocation/clients/go-sdk.md",
+      "source": "https://docs.restate.dev/services/invocation/clients/go-sdk",
+      "category": "services"
+    },
+    {
+      "title": "Java/Kotlin SDK Clients",
+      "path": "docs/services/invocation/clients/java-sdk.md",
+      "source": "https://docs.restate.dev/services/invocation/clients/java-sdk",
+      "category": "services"
+    },
+    {
+      "title": "TypeScript SDK Clients",
+      "path": "docs/services/invocation/clients/typescript-sdk.md",
+      "source": "https://docs.restate.dev/services/invocation/clients/typescript-sdk",
+      "category": "services"
+    },
+    {
+      "title": "HTTP",
+      "path": "docs/services/invocation/http.md",
+      "source": "https://docs.restate.dev/services/invocation/http",
+      "category": "services"
+    },
+    {
+      "title": "null",
+      "path": "docs/services/invocation/kafka.md",
+      "source": "https://docs.restate.dev/services/invocation/kafka",
+      "category": "services"
+    },
+    {
+      "title": "Managing Invocations",
+      "path": "docs/services/invocation/managing-invocations.md",
+      "source": "https://docs.restate.dev/services/invocation/managing-invocations",
+      "category": "services"
+    },
+    {
+      "title": "Security",
+      "path": "docs/services/security.md",
+      "source": "https://docs.restate.dev/services/security",
+      "category": "services"
+    },
+    {
+      "title": "Versioning",
+      "path": "docs/services/versioning.md",
+      "source": "https://docs.restate.dev/services/versioning",
+      "category": "services"
+    },
+    {
+      "title": "Tour of Restate for Agents with Google ADK",
+      "path": "docs/tour/google-adk.md",
+      "source": "https://docs.restate.dev/tour/google-adk",
+      "category": "tour"
+    },
+    {
+      "title": "Microservice Orchestration",
+      "path": "docs/tour/microservice-orchestration.md",
+      "source": "https://docs.restate.dev/tour/microservice-orchestration",
+      "category": "tour"
+    },
+    {
+      "title": "Tour of Restate for Agents with OpenAI SDK",
+      "path": "docs/tour/openai-agents.md",
+      "source": "https://docs.restate.dev/tour/openai-agents",
+      "category": "tour"
+    },
+    {
+      "title": "Tour of Restate for Agents with Vercel AI SDK",
+      "path": "docs/tour/vercel-ai-agents.md",
+      "source": "https://docs.restate.dev/tour/vercel-ai-agents",
+      "category": "tour"
+    },
+    {
+      "title": "Workflows",
+      "path": "docs/tour/workflows.md",
+      "source": "https://docs.restate.dev/tour/workflows",
+      "category": "tour"
+    },
+    {
+      "title": "AI Agents",
+      "path": "docs/use-cases/ai-agents.md",
+      "source": "https://docs.restate.dev/use-cases/ai-agents",
+      "category": "use-cases"
+    },
+    {
+      "title": "Event Processing",
+      "path": "docs/use-cases/event-processing.md",
+      "source": "https://docs.restate.dev/use-cases/event-processing",
+      "category": "use-cases"
+    },
+    {
+      "title": "Microservice Orchestration",
+      "path": "docs/use-cases/microservice-orchestration.md",
+      "source": "https://docs.restate.dev/use-cases/microservice-orchestration",
+      "category": "use-cases"
+    },
+    {
+      "title": "Workflows",
+      "path": "docs/use-cases/workflows.md",
+      "source": "https://docs.restate.dev/use-cases/workflows",
+      "category": "use-cases"
+    },
+    {
+      "title": "Rust SDK (v0.8.0)",
+      "path": "docs/develop/rust/index.md",
+      "source": "https://docs.rs/restate-sdk/latest/restate_sdk/",
+      "category": "develop"
+    }
+  ],
+  "categories": {
+    "admin-api": [
+      {
+        "title": "Cluster state endpoint",
+        "path": "docs/admin-api/cluster_health/cluster-state-endpoint.md",
+        "source": "https://docs.restate.dev/admin-api/cluster_health/cluster-state-endpoint",
+        "category": "admin-api"
+      },
+      {
+        "title": "Delete deployment",
+        "path": "docs/admin-api/deployment/delete-deployment.md",
+        "source": "https://docs.restate.dev/admin-api/deployment/delete-deployment",
+        "category": "admin-api"
+      },
+      {
+        "title": "Get deployment",
+        "path": "docs/admin-api/deployment/get-deployment.md",
+        "source": "https://docs.restate.dev/admin-api/deployment/get-deployment",
+        "category": "admin-api"
+      },
+      {
+        "title": "List deployments",
+        "path": "docs/admin-api/deployment/list-deployments.md",
+        "source": "https://docs.restate.dev/admin-api/deployment/list-deployments",
+        "category": "admin-api"
+      },
+      {
+        "title": "Register deployment",
+        "path": "docs/admin-api/deployment/register-deployment.md",
+        "source": "https://docs.restate.dev/admin-api/deployment/register-deployment",
+        "category": "admin-api"
+      },
+      {
+        "title": "Update deployment",
+        "path": "docs/admin-api/deployment/update-deployment.md",
+        "source": "https://docs.restate.dev/admin-api/deployment/update-deployment",
+        "category": "admin-api"
+      },
+      {
+        "title": "Health check endpoint",
+        "path": "docs/admin-api/health/health-check-endpoint.md",
+        "source": "https://docs.restate.dev/admin-api/health/health-check-endpoint",
+        "category": "admin-api"
+      },
+      {
+        "title": "Query the system and service state by using SQL.",
+        "path": "docs/admin-api/introspection/query-the-system-and-service-state-by-using-sql.md",
+        "source": "https://docs.restate.dev/admin-api/introspection/query-the-system-and-service-state-by-using-sql",
+        "category": "admin-api"
+      },
+      {
+        "title": "Cancel an invocation",
+        "path": "docs/admin-api/invocation/cancel-an-invocation.md",
+        "source": "https://docs.restate.dev/admin-api/invocation/cancel-an-invocation",
+        "category": "admin-api"
+      },
+      {
+        "title": "Delete an invocation",
+        "path": "docs/admin-api/invocation/delete-an-invocation.md",
+        "source": "https://docs.restate.dev/admin-api/invocation/delete-an-invocation",
+        "category": "admin-api"
+      },
+      {
+        "title": "Kill an invocation",
+        "path": "docs/admin-api/invocation/kill-an-invocation.md",
+        "source": "https://docs.restate.dev/admin-api/invocation/kill-an-invocation",
+        "category": "admin-api"
+      },
+      {
+        "title": "Pause an invocation",
+        "path": "docs/admin-api/invocation/pause-an-invocation.md",
+        "source": "https://docs.restate.dev/admin-api/invocation/pause-an-invocation",
+        "category": "admin-api"
+      },
+      {
+        "title": "Purge a completed invocation",
+        "path": "docs/admin-api/invocation/purge-a-completed-invocation.md",
+        "source": "https://docs.restate.dev/admin-api/invocation/purge-a-completed-invocation",
+        "category": "admin-api"
+      },
+      {
+        "title": "Purge invocation journal",
+        "path": "docs/admin-api/invocation/purge-invocation-journal.md",
+        "source": "https://docs.restate.dev/admin-api/invocation/purge-invocation-journal",
+        "category": "admin-api"
+      },
+      {
+        "title": "Restart invocation as new",
+        "path": "docs/admin-api/invocation/restart-invocation-as-new.md",
+        "source": "https://docs.restate.dev/admin-api/invocation/restart-invocation-as-new",
+        "category": "admin-api"
+      },
+      {
+        "title": "Resume an invocation",
+        "path": "docs/admin-api/invocation/resume-an-invocation.md",
+        "source": "https://docs.restate.dev/admin-api/invocation/resume-an-invocation",
+        "category": "admin-api"
+      },
+      {
+        "title": "Get service",
+        "path": "docs/admin-api/service/get-service.md",
+        "source": "https://docs.restate.dev/admin-api/service/get-service",
+        "category": "admin-api"
+      },
+      {
+        "title": "Get service OpenAPI definition",
+        "path": "docs/admin-api/service/get-service-openapi-definition.md",
+        "source": "https://docs.restate.dev/admin-api/service/get-service-openapi-definition",
+        "category": "admin-api"
+      },
+      {
+        "title": "List services",
+        "path": "docs/admin-api/service/list-services.md",
+        "source": "https://docs.restate.dev/admin-api/service/list-services",
+        "category": "admin-api"
+      },
+      {
+        "title": "Modify service configuration",
+        "path": "docs/admin-api/service/modify-service-configuration.md",
+        "source": "https://docs.restate.dev/admin-api/service/modify-service-configuration",
+        "category": "admin-api"
+      },
+      {
+        "title": "Modify service state",
+        "path": "docs/admin-api/service/modify-service-state.md",
+        "source": "https://docs.restate.dev/admin-api/service/modify-service-state",
+        "category": "admin-api"
+      },
+      {
+        "title": "Get service handler",
+        "path": "docs/admin-api/service_handler/get-service-handler.md",
+        "source": "https://docs.restate.dev/admin-api/service_handler/get-service-handler",
+        "category": "admin-api"
+      },
+      {
+        "title": "List service handlers",
+        "path": "docs/admin-api/service_handler/list-service-handlers.md",
+        "source": "https://docs.restate.dev/admin-api/service_handler/list-service-handlers",
+        "category": "admin-api"
+      },
+      {
+        "title": "Create subscription",
+        "path": "docs/admin-api/subscription/create-subscription.md",
+        "source": "https://docs.restate.dev/admin-api/subscription/create-subscription",
+        "category": "admin-api"
+      },
+      {
+        "title": "Delete subscription",
+        "path": "docs/admin-api/subscription/delete-subscription.md",
+        "source": "https://docs.restate.dev/admin-api/subscription/delete-subscription",
+        "category": "admin-api"
+      },
+      {
+        "title": "Get subscription",
+        "path": "docs/admin-api/subscription/get-subscription.md",
+        "source": "https://docs.restate.dev/admin-api/subscription/get-subscription",
+        "category": "admin-api"
+      },
+      {
+        "title": "List subscriptions",
+        "path": "docs/admin-api/subscription/list-subscriptions.md",
+        "source": "https://docs.restate.dev/admin-api/subscription/list-subscriptions",
+        "category": "admin-api"
+      },
+      {
+        "title": "Get version information",
+        "path": "docs/admin-api/version/get-version-information.md",
+        "source": "https://docs.restate.dev/admin-api/version/get-version-information",
+        "category": "admin-api"
+      }
+    ],
+    "root": [
+      {
+        "title": "AI Agent Quickstart",
+        "path": "docs/ai-quickstart.md",
+        "source": "https://docs.restate.dev/ai-quickstart",
+        "category": "root"
+      },
+      {
+        "title": "Documentation",
+        "path": "docs/docs.md",
+        "source": "https://docs.restate.dev/docs",
+        "category": "root"
+      },
+      {
+        "title": "Examples",
+        "path": "docs/examples.md",
+        "source": "https://docs.restate.dev/examples",
+        "category": "root"
+      },
+      {
+        "title": "Welcome to Restate!",
+        "path": "docs/index.md",
+        "source": "https://docs.restate.dev/index",
+        "category": "root"
+      },
+      {
+        "title": "Installation",
+        "path": "docs/installation.md",
+        "source": "https://docs.restate.dev/installation",
+        "category": "root"
+      },
+      {
+        "title": "Quickstart",
+        "path": "docs/quickstart.md",
+        "source": "https://docs.restate.dev/quickstart",
+        "category": "root"
+      }
+    ],
+    "ai": [
+      {
+        "title": "AI Examples",
+        "path": "docs/ai/ai-examples.md",
+        "source": "https://docs.restate.dev/ai/ai-examples",
+        "category": "ai"
+      },
+      {
+        "title": "AI / Agents with Restate",
+        "path": "docs/ai/index.md",
+        "source": "https://docs.restate.dev/ai/index",
+        "category": "ai"
+      },
+      {
+        "title": "Chat UI Integration",
+        "path": "docs/ai/patterns/chat-ui-integration.md",
+        "source": "https://docs.restate.dev/ai/patterns/chat-ui-integration",
+        "category": "ai"
+      },
+      {
+        "title": "Competitive Racing",
+        "path": "docs/ai/patterns/competitive-racing.md",
+        "source": "https://docs.restate.dev/ai/patterns/competitive-racing",
+        "category": "ai"
+      },
+      {
+        "title": "Human-in-the-loop steps",
+        "path": "docs/ai/patterns/human-in-the-loop.md",
+        "source": "https://docs.restate.dev/ai/patterns/human-in-the-loop",
+        "category": "ai"
+      },
+      {
+        "title": "Multi-Agent Systems",
+        "path": "docs/ai/patterns/multi-agent.md",
+        "source": "https://docs.restate.dev/ai/patterns/multi-agent",
+        "category": "ai"
+      },
+      {
+        "title": "Notify when ready",
+        "path": "docs/ai/patterns/notify-when-ready.md",
+        "source": "https://docs.restate.dev/ai/patterns/notify-when-ready",
+        "category": "ai"
+      },
+      {
+        "title": "Parallelizing Tools and Agents",
+        "path": "docs/ai/patterns/parallelization.md",
+        "source": "https://docs.restate.dev/ai/patterns/parallelization",
+        "category": "ai"
+      },
+      {
+        "title": "Prompt Chaining",
+        "path": "docs/ai/patterns/prompt-chaining.md",
+        "source": "https://docs.restate.dev/ai/patterns/prompt-chaining",
+        "category": "ai"
+      },
+      {
+        "title": "Rollback on Failures",
+        "path": "docs/ai/patterns/rollback.md",
+        "source": "https://docs.restate.dev/ai/patterns/rollback",
+        "category": "ai"
+      },
+      {
+        "title": "Durable Sessions",
+        "path": "docs/ai/patterns/sessions.md",
+        "source": "https://docs.restate.dev/ai/patterns/sessions",
+        "category": "ai"
+      },
+      {
+        "title": "Streaming Responses",
+        "path": "docs/ai/patterns/streaming-responses.md",
+        "source": "https://docs.restate.dev/ai/patterns/streaming-responses",
+        "category": "ai"
+      },
+      {
+        "title": "Tools and Workflows",
+        "path": "docs/ai/patterns/tools.md",
+        "source": "https://docs.restate.dev/ai/patterns/tools",
+        "category": "ai"
+      },
+      {
+        "title": "Restate & Google ADK",
+        "path": "docs/ai/sdk-integrations/google-adk.md",
+        "source": "https://docs.restate.dev/ai/sdk-integrations/google-adk",
+        "category": "ai"
+      },
+      {
+        "title": "Integrating Restate with LLM / Agent SDKs",
+        "path": "docs/ai/sdk-integrations/integration-guide.md",
+        "source": "https://docs.restate.dev/ai/sdk-integrations/integration-guide",
+        "category": "ai"
+      },
+      {
+        "title": "Restate & LiteLLM",
+        "path": "docs/ai/sdk-integrations/litellm.md",
+        "source": "https://docs.restate.dev/ai/sdk-integrations/litellm",
+        "category": "ai"
+      },
+      {
+        "title": "Restate & OpenAI Agents SDK",
+        "path": "docs/ai/sdk-integrations/openai-agents-sdk.md",
+        "source": "https://docs.restate.dev/ai/sdk-integrations/openai-agents-sdk",
+        "category": "ai"
+      },
+      {
+        "title": "Restate & Vercel AI SDK",
+        "path": "docs/ai/sdk-integrations/vercel-ai-sdk.md",
+        "source": "https://docs.restate.dev/ai/sdk-integrations/vercel-ai-sdk",
+        "category": "ai"
+      }
+    ],
+    "cloud": [
+      {
+        "title": "Connecting services to Restate Cloud",
+        "path": "docs/cloud/connecting-services.md",
+        "source": "https://docs.restate.dev/cloud/connecting-services",
+        "category": "cloud"
+      },
+      {
+        "title": "Getting Started with Restate Cloud",
+        "path": "docs/cloud/getting-started.md",
+        "source": "https://docs.restate.dev/cloud/getting-started",
+        "category": "cloud"
+      }
+    ],
+    "develop": [
+      {
+        "title": "AI-Assisted Development",
+        "path": "docs/develop/ai-assistant.md",
+        "source": "https://docs.restate.dev/develop/ai-assistant",
+        "category": "develop"
+      },
+      {
+        "title": "Concurrent Tasks",
+        "path": "docs/develop/java/concurrent-tasks.md",
+        "source": "https://docs.restate.dev/develop/java/concurrent-tasks",
+        "category": "develop"
+      },
+      {
+        "title": "Durable Steps",
+        "path": "docs/develop/java/durable-steps.md",
+        "source": "https://docs.restate.dev/develop/java/durable-steps",
+        "category": "develop"
+      },
+      {
+        "title": "Scheduling & Timers",
+        "path": "docs/develop/java/durable-timers.md",
+        "source": "https://docs.restate.dev/develop/java/durable-timers",
+        "category": "develop"
+      },
+      {
+        "title": "Error Handling",
+        "path": "docs/develop/java/error-handling.md",
+        "source": "https://docs.restate.dev/develop/java/error-handling",
+        "category": "develop"
+      },
+      {
+        "title": "External Events",
+        "path": "docs/develop/java/external-events.md",
+        "source": "https://docs.restate.dev/develop/java/external-events",
+        "category": "develop"
+      },
+      {
+        "title": "Logging",
+        "path": "docs/develop/java/logging.md",
+        "source": "https://docs.restate.dev/develop/java/logging",
+        "category": "develop"
+      },
+      {
+        "title": "Serialization",
+        "path": "docs/develop/java/serialization.md",
+        "source": "https://docs.restate.dev/develop/java/serialization",
+        "category": "develop"
+      },
+      {
+        "title": "Service Communication",
+        "path": "docs/develop/java/service-communication.md",
+        "source": "https://docs.restate.dev/develop/java/service-communication",
+        "category": "develop"
+      },
+      {
+        "title": "Services",
+        "path": "docs/develop/java/services.md",
+        "source": "https://docs.restate.dev/develop/java/services",
+        "category": "develop"
+      },
+      {
+        "title": "Serving",
+        "path": "docs/develop/java/serving.md",
+        "source": "https://docs.restate.dev/develop/java/serving",
+        "category": "develop"
+      },
+      {
+        "title": "State",
+        "path": "docs/develop/java/state.md",
+        "source": "https://docs.restate.dev/develop/java/state",
+        "category": "develop"
+      },
+      {
+        "title": "Testing",
+        "path": "docs/develop/java/testing.md",
+        "source": "https://docs.restate.dev/develop/java/testing",
+        "category": "develop"
+      },
+      {
+        "title": "Concurrent Tasks",
+        "path": "docs/develop/python/concurrent-tasks.md",
+        "source": "https://docs.restate.dev/develop/python/concurrent-tasks",
+        "category": "develop"
+      },
+      {
+        "title": "Durable Steps",
+        "path": "docs/develop/python/durable-steps.md",
+        "source": "https://docs.restate.dev/develop/python/durable-steps",
+        "category": "develop"
+      },
+      {
+        "title": "Scheduling & Timers",
+        "path": "docs/develop/python/durable-timers.md",
+        "source": "https://docs.restate.dev/develop/python/durable-timers",
+        "category": "develop"
+      },
+      {
+        "title": "Error Handling",
+        "path": "docs/develop/python/error-handling.md",
+        "source": "https://docs.restate.dev/develop/python/error-handling",
+        "category": "develop"
+      },
+      {
+        "title": "External Events",
+        "path": "docs/develop/python/external-events.md",
+        "source": "https://docs.restate.dev/develop/python/external-events",
+        "category": "develop"
+      },
+      {
+        "title": "Serialization",
+        "path": "docs/develop/python/serialization.md",
+        "source": "https://docs.restate.dev/develop/python/serialization",
+        "category": "develop"
+      },
+      {
+        "title": "Service Communication",
+        "path": "docs/develop/python/service-communication.md",
+        "source": "https://docs.restate.dev/develop/python/service-communication",
+        "category": "develop"
+      },
+      {
+        "title": "Services",
+        "path": "docs/develop/python/services.md",
+        "source": "https://docs.restate.dev/develop/python/services",
+        "category": "develop"
+      },
+      {
+        "title": "Serving",
+        "path": "docs/develop/python/serving.md",
+        "source": "https://docs.restate.dev/develop/python/serving",
+        "category": "develop"
+      },
+      {
+        "title": "State",
+        "path": "docs/develop/python/state.md",
+        "source": "https://docs.restate.dev/develop/python/state",
+        "category": "develop"
+      },
+      {
+        "title": "Testing",
+        "path": "docs/develop/python/testing.md",
+        "source": "https://docs.restate.dev/develop/python/testing",
+        "category": "develop"
+      },
+      {
+        "title": "Rust SDK",
+        "path": "docs/develop/rust.md",
+        "source": "https://docs.restate.dev/develop/rust",
+        "category": "develop"
+      },
+      {
+        "title": "Concurrent Tasks",
+        "path": "docs/develop/ts/concurrent-tasks.md",
+        "source": "https://docs.restate.dev/develop/ts/concurrent-tasks",
+        "category": "develop"
+      },
+      {
+        "title": "Durable Steps",
+        "path": "docs/develop/ts/durable-steps.md",
+        "source": "https://docs.restate.dev/develop/ts/durable-steps",
+        "category": "develop"
+      },
+      {
+        "title": "Scheduling & Timers",
+        "path": "docs/develop/ts/durable-timers.md",
+        "source": "https://docs.restate.dev/develop/ts/durable-timers",
+        "category": "develop"
+      },
+      {
+        "title": "Error Handling",
+        "path": "docs/develop/ts/error-handling.md",
+        "source": "https://docs.restate.dev/develop/ts/error-handling",
+        "category": "develop"
+      },
+      {
+        "title": "External Events",
+        "path": "docs/develop/ts/external-events.md",
+        "source": "https://docs.restate.dev/develop/ts/external-events",
+        "category": "develop"
+      },
+      {
+        "title": "Logging",
+        "path": "docs/develop/ts/logging.md",
+        "source": "https://docs.restate.dev/develop/ts/logging",
+        "category": "develop"
+      },
+      {
+        "title": "Serialization",
+        "path": "docs/develop/ts/serialization.md",
+        "source": "https://docs.restate.dev/develop/ts/serialization",
+        "category": "develop"
+      },
+      {
+        "title": "Service Communication",
+        "path": "docs/develop/ts/service-communication.md",
+        "source": "https://docs.restate.dev/develop/ts/service-communication",
+        "category": "develop"
+      },
+      {
+        "title": "Services",
+        "path": "docs/develop/ts/services.md",
+        "source": "https://docs.restate.dev/develop/ts/services",
+        "category": "develop"
+      },
+      {
+        "title": "Serving",
+        "path": "docs/develop/ts/serving.md",
+        "source": "https://docs.restate.dev/develop/ts/serving",
+        "category": "develop"
+      },
+      {
+        "title": "State",
+        "path": "docs/develop/ts/state.md",
+        "source": "https://docs.restate.dev/develop/ts/state",
+        "category": "develop"
+      },
+      {
+        "title": "Testing",
+        "path": "docs/develop/ts/testing.md",
+        "source": "https://docs.restate.dev/develop/ts/testing",
+        "category": "develop"
+      },
+      {
+        "title": "Rust SDK (v0.8.0)",
+        "path": "docs/develop/rust/index.md",
+        "source": "https://docs.rs/restate-sdk/latest/restate_sdk/",
+        "category": "develop"
+      }
+    ],
+    "foundations": [
+      {
+        "title": "Actions",
+        "path": "docs/foundations/actions.md",
+        "source": "https://docs.restate.dev/foundations/actions",
+        "category": "foundations"
+      },
+      {
+        "title": "Handlers",
+        "path": "docs/foundations/handlers.md",
+        "source": "https://docs.restate.dev/foundations/handlers",
+        "category": "foundations"
+      },
+      {
+        "title": "Invocations",
+        "path": "docs/foundations/invocations.md",
+        "source": "https://docs.restate.dev/foundations/invocations",
+        "category": "foundations"
+      },
+      {
+        "title": "Key Concepts",
+        "path": "docs/foundations/key-concepts.md",
+        "source": "https://docs.restate.dev/foundations/key-concepts",
+        "category": "foundations"
+      },
+      {
+        "title": "Services",
+        "path": "docs/foundations/services.md",
+        "source": "https://docs.restate.dev/foundations/services",
+        "category": "foundations"
+      }
+    ],
+    "guides": [
+      {
+        "title": "Local Restate Cluster with Docker",
+        "path": "docs/guides/cluster.md",
+        "source": "https://docs.restate.dev/guides/cluster",
+        "category": "guides"
+      },
+      {
+        "title": "Connecting Kubernetes Services to Restate Cloud",
+        "path": "docs/guides/connecting-k8s-services-to-cloud.md",
+        "source": "https://docs.restate.dev/guides/connecting-k8s-services-to-cloud",
+        "category": "guides"
+      },
+      {
+        "title": "Cron Jobs",
+        "path": "docs/guides/cron.md",
+        "source": "https://docs.restate.dev/guides/cron",
+        "category": "guides"
+      },
+      {
+        "title": "Databases and Restate",
+        "path": "docs/guides/databases.md",
+        "source": "https://docs.restate.dev/guides/databases",
+        "category": "guides"
+      },
+      {
+        "title": "Durable Webhooks",
+        "path": "docs/guides/durable-webhooks.md",
+        "source": "https://docs.restate.dev/guides/durable-webhooks",
+        "category": "guides"
+      },
+      {
+        "title": "Error Handling",
+        "path": "docs/guides/error-handling.md",
+        "source": "https://docs.restate.dev/guides/error-handling",
+        "category": "guides"
+      },
+      {
+        "title": "Guides",
+        "path": "docs/guides/index.md",
+        "source": "https://docs.restate.dev/guides/index",
+        "category": "guides"
+      },
+      {
+        "title": "Restate-Kafka Quickstart",
+        "path": "docs/guides/kafka-quickstart.md",
+        "source": "https://docs.restate.dev/guides/kafka-quickstart",
+        "category": "guides"
+      },
+      {
+        "title": "Scaling to Multi-Node Deployments",
+        "path": "docs/guides/local-to-replicated.md",
+        "source": "https://docs.restate.dev/guides/local-to-replicated",
+        "category": "guides"
+      },
+      {
+        "title": "Parallelizing Work",
+        "path": "docs/guides/parallelizing-work.md",
+        "source": "https://docs.restate.dev/guides/parallelizing-work",
+        "category": "guides"
+      },
+      {
+        "title": "Rate Limiting",
+        "path": "docs/guides/rate-limiting.md",
+        "source": "https://docs.restate.dev/guides/rate-limiting",
+        "category": "guides"
+      },
+      {
+        "title": "Request Lifecycle",
+        "path": "docs/guides/request-lifecycle.md",
+        "source": "https://docs.restate.dev/guides/request-lifecycle",
+        "category": "guides"
+      },
+      {
+        "title": "Kubernetes deployments with Helm",
+        "path": "docs/guides/restate-on-kind-with-helm.md",
+        "source": "https://docs.restate.dev/guides/restate-on-kind-with-helm",
+        "category": "guides"
+      },
+      {
+        "title": "Kubernetes deployments with Restate Operator",
+        "path": "docs/guides/restate-on-kind-with-operator.md",
+        "source": "https://docs.restate.dev/guides/restate-on-kind-with-operator",
+        "category": "guides"
+      },
+      {
+        "title": "Sagas",
+        "path": "docs/guides/sagas.md",
+        "source": "https://docs.restate.dev/guides/sagas",
+        "category": "guides"
+      },
+      {
+        "title": "XState",
+        "path": "docs/guides/xstate.md",
+        "source": "https://docs.restate.dev/guides/xstate",
+        "category": "guides"
+      }
+    ],
+    "references": [
+      {
+        "title": "Restate Architecture",
+        "path": "docs/references/architecture.md",
+        "source": "https://docs.restate.dev/references/architecture",
+        "category": "references"
+      },
+      {
+        "title": "CLI Configuration",
+        "path": "docs/references/cli-config.md",
+        "source": "https://docs.restate.dev/references/cli-config",
+        "category": "references"
+      },
+      {
+        "title": "Error Codes",
+        "path": "docs/references/errors.md",
+        "source": "https://docs.restate.dev/references/errors",
+        "category": "references"
+      },
+      {
+        "title": "Go API",
+        "path": "docs/references/gopkg.md",
+        "source": "https://docs.restate.dev/references/gopkg",
+        "category": "references"
+      },
+      {
+        "title": "Javadocs",
+        "path": "docs/references/javadocs.md",
+        "source": "https://docs.restate.dev/references/javadocs",
+        "category": "references"
+      },
+      {
+        "title": "KotlinDocs",
+        "path": "docs/references/ktdocs.md",
+        "source": "https://docs.restate.dev/references/ktdocs",
+        "category": "references"
+      },
+      {
+        "title": "Restate Server Configuration",
+        "path": "docs/references/server-config.md",
+        "source": "https://docs.restate.dev/references/server-config",
+        "category": "references"
+      },
+      {
+        "title": "SQL Introspection API",
+        "path": "docs/references/sql-introspection.md",
+        "source": "https://docs.restate.dev/references/sql-introspection",
+        "category": "references"
+      },
+      {
+        "title": "Typescript API",
+        "path": "docs/references/tsdocs.md",
+        "source": "https://docs.restate.dev/references/tsdocs",
+        "category": "references"
+      }
+    ],
+    "server": [
+      {
+        "title": "Highly-Available Clusters",
+        "path": "docs/server/clusters.md",
+        "source": "https://docs.restate.dev/server/clusters",
+        "category": "server"
+      },
+      {
+        "title": "Restate Server Configuration",
+        "path": "docs/server/configuration.md",
+        "source": "https://docs.restate.dev/server/configuration",
+        "category": "server"
+      },
+      {
+        "title": "Deploying Restate on AWS",
+        "path": "docs/server/deploy/aws.md",
+        "source": "https://docs.restate.dev/server/deploy/aws",
+        "category": "server"
+      },
+      {
+        "title": "Deploying Restate on Azure",
+        "path": "docs/server/deploy/azure.md",
+        "source": "https://docs.restate.dev/server/deploy/azure",
+        "category": "server"
+      },
+      {
+        "title": "null",
+        "path": "docs/server/deploy/docker.md",
+        "source": "https://docs.restate.dev/server/deploy/docker",
+        "category": "server"
+      },
+      {
+        "title": "Deploying Restate on GCP",
+        "path": "docs/server/deploy/gcp.md",
+        "source": "https://docs.restate.dev/server/deploy/gcp",
+        "category": "server"
+      },
+      {
+        "title": "null",
+        "path": "docs/server/deploy/kubernetes.md",
+        "source": "https://docs.restate.dev/server/deploy/kubernetes",
+        "category": "server"
+      },
+      {
+        "title": "Memory Configuration",
+        "path": "docs/server/memory.md",
+        "source": "https://docs.restate.dev/server/memory",
+        "category": "server"
+      },
+      {
+        "title": "Metadata Storage",
+        "path": "docs/server/metadata.md",
+        "source": "https://docs.restate.dev/server/metadata",
+        "category": "server"
+      },
+      {
+        "title": "Logging",
+        "path": "docs/server/monitoring/logging.md",
+        "source": "https://docs.restate.dev/server/monitoring/logging",
+        "category": "server"
+      },
+      {
+        "title": "Metrics",
+        "path": "docs/server/monitoring/metrics.md",
+        "source": "https://docs.restate.dev/server/monitoring/metrics",
+        "category": "server"
+      },
+      {
+        "title": "Tracing",
+        "path": "docs/server/monitoring/tracing.md",
+        "source": "https://docs.restate.dev/server/monitoring/tracing",
+        "category": "server"
+      },
+      {
+        "title": "Networking",
+        "path": "docs/server/networking.md",
+        "source": "https://docs.restate.dev/server/networking",
+        "category": "server"
+      },
+      {
+        "title": "Self-hosted Restate Overview",
+        "path": "docs/server/overview.md",
+        "source": "https://docs.restate.dev/server/overview",
+        "category": "server"
+      },
+      {
+        "title": "Snapshots & Backups",
+        "path": "docs/server/snapshots.md",
+        "source": "https://docs.restate.dev/server/snapshots",
+        "category": "server"
+      },
+      {
+        "title": "Upgrading Restate",
+        "path": "docs/server/upgrading.md",
+        "source": "https://docs.restate.dev/server/upgrading",
+        "category": "server"
+      }
+    ],
+    "services": [
+      {
+        "title": "Service Configuration",
+        "path": "docs/services/configuration.md",
+        "source": "https://docs.restate.dev/services/configuration",
+        "category": "services"
+      },
+      {
+        "title": "Cloudflare Workers",
+        "path": "docs/services/deploy/cloudflare-workers.md",
+        "source": "https://docs.restate.dev/services/deploy/cloudflare-workers",
+        "category": "services"
+      },
+      {
+        "title": "Deno Deploy",
+        "path": "docs/services/deploy/deno-deploy.md",
+        "source": "https://docs.restate.dev/services/deploy/deno-deploy",
+        "category": "services"
+      },
+      {
+        "title": "Kubernetes",
+        "path": "docs/services/deploy/kubernetes.md",
+        "source": "https://docs.restate.dev/services/deploy/kubernetes",
+        "category": "services"
+      },
+      {
+        "title": "AWS Lambda",
+        "path": "docs/services/deploy/lambda.md",
+        "source": "https://docs.restate.dev/services/deploy/lambda",
+        "category": "services"
+      },
+      {
+        "title": "Standalone",
+        "path": "docs/services/deploy/standalone.md",
+        "source": "https://docs.restate.dev/services/deploy/standalone",
+        "category": "services"
+      },
+      {
+        "title": "Vercel",
+        "path": "docs/services/deploy/vercel.md",
+        "source": "https://docs.restate.dev/services/deploy/vercel",
+        "category": "services"
+      },
+      {
+        "title": "Introspection",
+        "path": "docs/services/introspection.md",
+        "source": "https://docs.restate.dev/services/introspection",
+        "category": "services"
+      },
+      {
+        "title": "Go SDK Clients",
+        "path": "docs/services/invocation/clients/go-sdk.md",
+        "source": "https://docs.restate.dev/services/invocation/clients/go-sdk",
+        "category": "services"
+      },
+      {
+        "title": "Java/Kotlin SDK Clients",
+        "path": "docs/services/invocation/clients/java-sdk.md",
+        "source": "https://docs.restate.dev/services/invocation/clients/java-sdk",
+        "category": "services"
+      },
+      {
+        "title": "TypeScript SDK Clients",
+        "path": "docs/services/invocation/clients/typescript-sdk.md",
+        "source": "https://docs.restate.dev/services/invocation/clients/typescript-sdk",
+        "category": "services"
+      },
+      {
+        "title": "HTTP",
+        "path": "docs/services/invocation/http.md",
+        "source": "https://docs.restate.dev/services/invocation/http",
+        "category": "services"
+      },
+      {
+        "title": "null",
+        "path": "docs/services/invocation/kafka.md",
+        "source": "https://docs.restate.dev/services/invocation/kafka",
+        "category": "services"
+      },
+      {
+        "title": "Managing Invocations",
+        "path": "docs/services/invocation/managing-invocations.md",
+        "source": "https://docs.restate.dev/services/invocation/managing-invocations",
+        "category": "services"
+      },
+      {
+        "title": "Security",
+        "path": "docs/services/security.md",
+        "source": "https://docs.restate.dev/services/security",
+        "category": "services"
+      },
+      {
+        "title": "Versioning",
+        "path": "docs/services/versioning.md",
+        "source": "https://docs.restate.dev/services/versioning",
+        "category": "services"
+      }
+    ],
+    "tour": [
+      {
+        "title": "Tour of Restate for Agents with Google ADK",
+        "path": "docs/tour/google-adk.md",
+        "source": "https://docs.restate.dev/tour/google-adk",
+        "category": "tour"
+      },
+      {
+        "title": "Microservice Orchestration",
+        "path": "docs/tour/microservice-orchestration.md",
+        "source": "https://docs.restate.dev/tour/microservice-orchestration",
+        "category": "tour"
+      },
+      {
+        "title": "Tour of Restate for Agents with OpenAI SDK",
+        "path": "docs/tour/openai-agents.md",
+        "source": "https://docs.restate.dev/tour/openai-agents",
+        "category": "tour"
+      },
+      {
+        "title": "Tour of Restate for Agents with Vercel AI SDK",
+        "path": "docs/tour/vercel-ai-agents.md",
+        "source": "https://docs.restate.dev/tour/vercel-ai-agents",
+        "category": "tour"
+      },
+      {
+        "title": "Workflows",
+        "path": "docs/tour/workflows.md",
+        "source": "https://docs.restate.dev/tour/workflows",
+        "category": "tour"
+      }
+    ],
+    "use-cases": [
+      {
+        "title": "AI Agents",
+        "path": "docs/use-cases/ai-agents.md",
+        "source": "https://docs.restate.dev/use-cases/ai-agents",
+        "category": "use-cases"
+      },
+      {
+        "title": "Event Processing",
+        "path": "docs/use-cases/event-processing.md",
+        "source": "https://docs.restate.dev/use-cases/event-processing",
+        "category": "use-cases"
+      },
+      {
+        "title": "Microservice Orchestration",
+        "path": "docs/use-cases/microservice-orchestration.md",
+        "source": "https://docs.restate.dev/use-cases/microservice-orchestration",
+        "category": "use-cases"
+      },
+      {
+        "title": "Workflows",
+        "path": "docs/use-cases/workflows.md",
+        "source": "https://docs.restate.dev/use-cases/workflows",
+        "category": "use-cases"
+      }
+    ]
+  }
+}

@@ -1,0 +1,196 @@
+# Kubernetes
+
+Source: https://docs.restate.dev/services/deploy/kubernetes
+
+Learn how to run Restate applications on Kubernetes.
+
+Kubernetes is a common choice for running Restate services in production environments.
+This page explains how to deploy Restate applications on Kubernetes using several approaches:
+
+* **Restate Operator**: the recommended way to manage deployments, handle service registration, automate versioning, and connect to Restate Cloud.
+* **Direct Kubernetes Deployments**: for teams who prefer to manage their own Deployments and Services without the operator.
+* **Knative Deployments**: for environments that benefit from autoscaling and scale-to-zero capabilities.
+
+## Deployment with Restate Operator
+
+When deploying Restate services to Kubernetes, we recommend using the Restate Operator.
+
+<Card title="Restate Operator GitHub" href="https://github.com/restatedev/restate-operator" icon="github" />
+
+The Restate Operator helps you manage Restate service deployments, including registration with your Restate cluster and versioning of your services.
+It also helps with connecting your services to Restate Cloud.
+
+### Operator deployment
+
+Install the Restate Operator via Helm:
+
+```bash theme={null}
+helm install restate-operator \
+  oci://ghcr.io/restatedev/restate-operator-helm \
+  --namespace restate-operator \
+  --create-namespace
+```
+
+To install the operator, you need to be able to create namespaces and CRDs.
+
+### RestateDeployment CRD
+
+The Restate operator allows for the use of a `RestateDeployment` CRD to deploy your services:
+
+```yaml theme={null}
+apiVersion: restate.dev/v1beta1
+kind: RestateDeployment
+metadata:
+  name: service
+spec:
+  replicas: 1
+  restate:
+    register:
+      # set this if you want to register against your RestateCluster named 'restate'
+      # alternatively, you can set a url or a Service reference to register against
+      cluster: restate
+  selector:
+    matchLabels:
+      app: service
+  template:
+    metadata:
+      labels:
+        app: service
+    spec:
+      containers:
+        - name: service
+          image: path.to/yourrepo:yourtag
+          env:
+            - name: PORT
+              value: "9080"
+          ports:
+            - containerPort: 9080
+              name: restate
+```
+
+The CRD is an extension of a native `Deployment` and `Service` object, but automatically manages registration and [versioning](/services/deploy/kubernetes#automatic-service-versioning) for you.
+
+View the full spec of the `RestateDeployment` CRD as [pkl file](https://github.com/restatedev/restate-operator/blob/main/crd/RestateDeployment.pkl) or less-readable [yaml file](https://github.com/restatedev/restate-operator/blob/main/crd/restatedeployments.yaml).
+
+<Info>
+  Try running a local kind cluster with a Restate deployment by following this [guide](/guides/restate-on-kind-with-operator).
+</Info>
+
+### Connecting to Restate Cloud
+
+The Restate Operator can help you connect your services to Restate Cloud by managing authentication and secure communication.
+
+<Info>
+  Try connecting your Kubernetes services to Restate Cloud by following this [guide](/guides/connecting-k8s-services-to-cloud).
+  Or check out the [Restate Cloud documentation](/cloud/connecting-services#connecting-kubernetes-services) for more information.
+</Info>
+
+### Automatic Service Versioning
+
+Versioning gets handled automatically by the operator by keeping old ReplicaSets around with an associated Service object so that in-flight invocations can drain against the old code versions.
+
+Have a look at the [versioning documentation](/services/versioning#automatic-versioning-with-kubernetes-operator) to learn more.
+
+## Direct Kubernetes Deployments
+
+If you prefer not to use the Restate Operator, you can deploy your Restate services directly using standard Kubernetes `Deployment` and `Service` resources.
+
+A Kubernetes `Deployment` of more than one replica is generally appropriate,
+and a Kubernetes `Service` is used to provide a stable DNS name and IP for the pods.
+
+Here is an example manifest with a single pod in Kubernetes:
+
+```yaml theme={null}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: service
+  template:
+    metadata:
+      labels:
+        app: service
+    spec:
+      containers:
+        - name: service
+          image: path.to/yourrepo:yourtag
+          env:
+            - name: PORT
+              value: "9080"
+          ports:
+            - containerPort: 9080
+              name: restate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service
+spec:
+  selector:
+    app: service
+  ports:
+    - port: 9080
+      name: restate
+  type: ClusterIP
+```
+
+Once you have applied the manifest, [register the service](/services/versioning#registering-a-deployment) at `http://<service>.<namespace>:9080`.
+
+⚠️ Note that this setup will not account for keeping around old code versions, so updating your code can break in-flight invocations.
+Check the [versioning documentation](/services/versioning) for more information.
+
+## Horizontal scaling and load balancing
+
+Restate allows scaling your services horizontally by running multiple replicas of your pods.
+To distribute traffic across these pods, you need to set up load balancing in between the Restate server and your service pods.
+This way, Restate gets a stable endpoint to send requests to, and the load balancer distributes the requests across the available pods.
+
+In a standard Kubernetes setup, you would typically use a `Service` of type `ClusterIP` or `LoadBalancer` to distribute traffic across your pods.
+Kubernetes Services use a round-robin algorithm to balance the load among the pods.
+
+If your services are running over HTTP2 (the default), each Restate partition will generally have only one TCP connection to a single destination pod.
+However, because there are many partitions (by default 24, typically more in a larger cluster) this should get your pods a reasonably
+even distribution of traffic.
+
+For more advanced load balancing options, you can use an L7 load balancer like Istio or Cilium.
+
+Note that there is no need for routing to be sticky, because each invocation is self-contained and has all the context it needs to execute (the journal and any K/V state).
+No context is assumed to be sticky on the node.
+However, if you wish to do so, you can do sticky routing via the invocation ID in your request headers (`x-restate-invocation-id`).
+
+## Knative Deployment
+
+Restate supports Knative services. Knative allows scaling to zero when there are no in-flight invocations and automatically configures an L7 load balancer. There are no special requirements to deploy a service deployment container with Knative:
+
+```shell theme={null}
+kn service create service-name --port h2c:9080 --image path.to/yourrepo:yourtag
+```
+
+Or using the YAML manifest:
+
+```yaml theme={null}
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: service-name
+spec:
+  template:
+    spec:
+      containers:
+        - image: path.to/yourrepo:yourtag
+          ports:
+            - name: h2c
+              containerPort: 9080
+```
+
+The service will be accessible at `http://<service-name>.<namespace>` but to handle [versioning](/services/configuration), it is preferable to register the new revision url like `http://<service-name>-0001.<namespace>` as part of your deployment workflow.
+
+By default Knative exposes the service through the Ingress. This is not required by Restate, and you can disable this behavior adding the argument `--cluster-local` to the aforementioned creation command.
+
+<Info>
+  Learn more about deploying Restate services with Knative by reading this [blog post](https://www.restate.dev/blog/building-stateful-serverless-applications-with-knative-and-restate) and the [Golang example](https://github.com/restatedev/examples/tree/main/go/integrations/knative-go).
+</Info>
