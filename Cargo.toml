@@ -46,6 +46,10 @@ panic = "deny"
 too_many_arguments = "deny"
 too_many_lines = "deny"
 
+[[bin]]
+name = "golden-retriever"
+path = "src/bin/golden-retriever.rs"
+
 [dev-dependencies]
 restate-sdk-testcontainers = "0.8"
 wiremock = "0.6"
