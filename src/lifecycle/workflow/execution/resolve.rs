@@ -55,14 +55,14 @@ async fn resolve_bead_data(
 async fn pick_ready_bead(executor: &dyn CommandExecutor) -> Result<String, LifecycleError> {
     let entry = run_effect(
         executor,
-        Effect::Br { args: vec!["ready".to_owned(), "--json".to_owned()], cwd: None },
+        Effect::Bd { args: vec!["ready".to_owned(), "--json".to_owned()], cwd: None },
     )
     .await?;
     let json = extract_json_array(&entry.stdout)?;
     let issues = serde_json::from_str::<Vec<ReadyIssue>>(json).map_err(|error| {
         LifecycleError::terminal(
             FailureCategory::Validation,
-            format!("failed to parse br ready payload: {error}"),
+            format!("failed to parse bd ready payload: {error}"),
         )
     })?;
     issues.first().map_or_else(
@@ -76,7 +76,7 @@ fn extract_json_array(raw: &str) -> Result<&str, LifecycleError> {
         || {
             Err(LifecycleError::terminal(
                 FailureCategory::Validation,
-                "br ready --json returned no JSON payload",
+                "bd ready --json returned no JSON payload",
             ))
         },
         |index| Ok(&raw[index..]),

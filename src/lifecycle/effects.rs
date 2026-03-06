@@ -23,7 +23,7 @@ pub const DEFAULT_CLI_TIMEOUT_SECS: u64 = 120;
 pub enum Effect {
     WorkspacePrepare { workspace: WorkspaceName, path: String },
     Jj { args: Vec<String>, cwd: Option<String> },
-    Br { args: Vec<String>, cwd: Option<String> },
+    Bd { args: Vec<String>, cwd: Option<String> },
     Gh { args: Vec<String>, cwd: Option<String> },
     MoonRun { task: String, cwd: Option<String> },
     MoonCi { cwd: Option<String> },
@@ -91,6 +91,12 @@ impl CommandExecutor for TokioCommandExecutor {
         if let Some(path) = cwd {
             command.current_dir(path);
         }
+        if program == "bd" {
+            command.env("BEADS_DIR", "/home/lewis/src/oya/.beads");
+        }
+        if program == "bd" {
+            command.env("BEADS_DIR", "/home/lewis/src/oya/.beads");
+        }
         let output = time::timeout(timeout, command.output())
             .await
             .map_err(|_| CommandFailure::Timeout { timeout_secs: timeout.as_secs() })?
@@ -111,7 +117,7 @@ pub fn effect_timeout_secs(effect: &Effect) -> u64 {
         Effect::WorkspacePrepare { .. }
         | Effect::MoonRun { .. }
         | Effect::Jj { .. }
-        | Effect::Br { .. }
+        | Effect::Bd { .. }
         | Effect::Gh { .. } => DEFAULT_CLI_TIMEOUT_SECS,
     }
 }
@@ -140,7 +146,7 @@ pub fn classify_non_zero(
         Effect::WorkspacePrepare { .. } | Effect::Jj { .. } => {
             LifecycleError::terminal(FailureCategory::Workspace, message)
         }
-        Effect::Br { .. }
+        Effect::Bd { .. }
         | Effect::MoonCi { .. }
         | Effect::MoonRun { .. }
         | Effect::OpencodeQa { .. } => LifecycleError::terminal(FailureCategory::Command, message),
