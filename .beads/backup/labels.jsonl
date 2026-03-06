@@ -9,6 +9,9 @@
 {"issue_id":"oya-cp4","label":"rust"}
 {"issue_id":"oya-eeh","label":"test"}
 {"issue_id":"oya-eeh","label":"verification"}
+{"issue_id":"oya-lf6","label":"architecture"}
+{"issue_id":"oya-lf6","label":"quality"}
+{"issue_id":"oya-lf6","label":"refactor"}
 {"issue_id":"oya-rbj","label":"proof"}
 {"issue_id":"oya-rbj","label":"test"}
 {"issue_id":"oya-v04","label":"feature"}
