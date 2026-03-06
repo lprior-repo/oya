@@ -935,7 +935,7 @@ fn validate_dag_accepts_valid_dependency_chain() {
 fn validate_dag_rejects_missing_dependency() {
     let steps = vec![LifecycleStep {
         name: "step_a".to_owned(),
-        effect: Effect::Br { args: vec![], cwd: None },
+        effect: Effect::Bd { args: vec![], cwd: None },
         compensation: None,
         transition: StepTransition::None,
         dependencies: vec!["nonexistent_step".to_owned()],
@@ -1009,7 +1009,7 @@ fn validate_dag_rejects_indirect_cycle() {
 fn validate_dag_rejects_self_dependency() {
     let steps = vec![LifecycleStep {
         name: "step_a".to_owned(),
-        effect: Effect::Br { args: vec![], cwd: None },
+        effect: Effect::Bd { args: vec![], cwd: None },
         compensation: None,
         transition: StepTransition::None,
         dependencies: vec!["step_a".to_owned()],

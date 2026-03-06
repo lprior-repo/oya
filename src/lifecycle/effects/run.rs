@@ -123,7 +123,7 @@ pub async fn run_compensation(
             run_forget_workspace_compensation(executor, workspace).await
         }
         Compensation::MarkBeadBlocked { bead, reason } => {
-            let effect = Effect::Br {
+            let effect = Effect::Bd {
                 args: vec![
                     "update".to_owned(),
                     bead.bead_id.as_str().to_owned(),
@@ -177,7 +177,7 @@ fn effect_command(effect: &Effect) -> (&'static str, Vec<String>, Option<String>
     match effect {
         Effect::WorkspacePrepare { .. } => ("true", Vec::new(), None),
         Effect::Jj { args, cwd } => ("jj", args.clone(), cwd.clone()),
-        Effect::Br { args, cwd } => ("bd", args.clone(), cwd.clone()),
+        Effect::Bd { args, cwd } => ("bd", args.clone(), cwd.clone()),
         Effect::Gh { args, cwd } => ("gh", args.clone(), cwd.clone()),
         Effect::MoonRun { task, cwd } => {
             ("moon", vec!["run".to_owned(), task.clone()], cwd.clone())

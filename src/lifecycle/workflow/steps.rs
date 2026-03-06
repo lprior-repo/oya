@@ -68,7 +68,7 @@ fn workspace_prepare_step(bead: &BeadData) -> LifecycleStep {
 fn br_in_progress_step(bead: &BeadData) -> LifecycleStep {
     LifecycleStep {
         name: "mark_in_progress".to_owned(),
-        effect: Effect::Br {
+        effect: Effect::Bd {
             args: vec![
                 "update".to_owned(),
                 bead.bead_id.as_str().to_owned(),

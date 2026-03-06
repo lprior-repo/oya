@@ -301,16 +301,3 @@ pub async fn run_simple_command(args: &[&str]) -> anyhow::Result<()> {
     }
 }
 
-pub async fn run_simple_command(args: &[&str]) -> anyhow::Result<()> {
-    let output = tokio::process::Command::new("bd")
-        .args(args)
-        .output()
-        .await
-        .map_err(|error| anyhow::anyhow!("failed to run bd: {error}"))?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(anyhow::anyhow!("bd failed: {}", stderr.trim()))
-    }
-}
