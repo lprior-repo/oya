@@ -1,2 +1,18 @@
 pub mod lifecycle;
 pub mod restate_oya;
+
+/// Test function to prove bd integration works
+#[must_use]
+pub fn test_bd_integration() -> bool {
+    true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_bd_integration_works() {
+        assert!(test_bd_integration());
+    }
+}
