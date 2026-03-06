@@ -22,6 +22,8 @@
 {"issue_id":"oya-lf6","label":"refactor"}
 {"issue_id":"oya-rbj","label":"proof"}
 {"issue_id":"oya-rbj","label":"test"}
+{"issue_id":"oya-s87","label":"manual"}
+{"issue_id":"oya-s87","label":"proof"}
 {"issue_id":"oya-v04","label":"feature"}
 {"issue_id":"oya-v04","label":"game"}
 {"issue_id":"oya-v04","label":"rust"}
