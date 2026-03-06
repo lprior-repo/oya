@@ -253,7 +253,7 @@ pub async fn pick_ready_bead() -> anyhow::Result<String> {
 fn extract_json_array(raw: &str) -> anyhow::Result<&str> {
     match raw.find('[') {
         Some(index) => Ok(&raw[index..]),
-        None => Err(anyhow::anyhow!("br ready --json returned no JSON payload")),
+        None => Err(anyhow::anyhow!("bd ready --json returned no JSON payload")),
     }
 }
 
@@ -273,30 +273,44 @@ pub async fn run_capture_command(args: &[&str]) -> anyhow::Result<String> {
 }
 
 pub async fn run_capture_command_in(args: &[&str], cwd: Option<&Path>) -> anyhow::Result<String> {
-    let output = tokio::process::Command::new("br")
+    let output = tokio::process::Command::new("bd")
         .args(args)
         .current_dir(cwd.unwrap_or_else(|| Path::new(".")))
         .output()
         .await
-        .map_err(|error| anyhow::anyhow!("failed to run br: {error}"))?;
+        .map_err(|error| anyhow::anyhow!("failed to run bd: {error}"))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(anyhow::anyhow!("br failed: {}", stderr.trim()));
     }
     String::from_utf8(output.stdout)
-        .map_err(|error| anyhow::anyhow!("br output was not UTF-8: {error}"))
+        .map_err(|error| anyhow::anyhow!("bd output was not UTF-8: {error}"))
 }
 
 pub async fn run_simple_command(args: &[&str]) -> anyhow::Result<()> {
-    let output = tokio::process::Command::new("br")
+    let output = tokio::process::Command::new("bd")
         .args(args)
         .output()
         .await
-        .map_err(|error| anyhow::anyhow!("failed to run br: {error}"))?;
+        .map_err(|error| anyhow::anyhow!("failed to run bd: {error}"))?;
     if output.status.success() {
         Ok(())
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(anyhow::anyhow!("br failed: {}", stderr.trim()))
+        Err(anyhow::anyhow!("bd failed: {}", stderr.trim()))
+    }
+}
+
+pub async fn run_simple_command(args: &[&str]) -> anyhow::Result<()> {
+    let output = tokio::process::Command::new("bd")
+        .args(args)
+        .output()
+        .await
+        .map_err(|error| anyhow::anyhow!("failed to run bd: {error}"))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(anyhow::anyhow!("bd failed: {}", stderr.trim()))
     }
 }

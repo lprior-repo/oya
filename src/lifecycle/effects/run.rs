@@ -177,7 +177,7 @@ fn effect_command(effect: &Effect) -> (&'static str, Vec<String>, Option<String>
     match effect {
         Effect::WorkspacePrepare { .. } => ("true", Vec::new(), None),
         Effect::Jj { args, cwd } => ("jj", args.clone(), cwd.clone()),
-        Effect::Br { args, cwd } => ("br", args.clone(), cwd.clone()),
+        Effect::Br { args, cwd } => ("bd", args.clone(), cwd.clone()),
         Effect::Gh { args, cwd } => ("gh", args.clone(), cwd.clone()),
         Effect::MoonRun { task, cwd } => {
             ("moon", vec!["run".to_owned(), task.clone()], cwd.clone())

@@ -72,7 +72,7 @@ fn non_zero(stderr: &str) -> Result<CommandResult, CommandFailure> {
 
 fn opencode_prompt(bead: &str) -> String {
     format!(
-        "Implement bead {bead} in this workspace using functional-rust approach and tests derived from contract. Do not call `oya` or `br`. Use moon/jj/gh as needed. Return one JSON receipt object with required keys: objective, allowed_scope, files_touched, commands, exit_codes, key_stdout_stderr, diff_summary, risks_unknowns, pass_fail_recommendation.",
+        "Implement bead {bead} in this workspace using functional-rust approach and tests derived from contract. Do not call `oya` or `bd`. Use moon/jj/gh as needed. Return one JSON receipt object with required keys: objective, allowed_scope, files_touched, commands, exit_codes, key_stdout_stderr, diff_summary, risks_unknowns, pass_fail_recommendation.",
     )
 }
 
@@ -109,7 +109,7 @@ async fn run_lifecycle_success_path_executes_jj_only_git_bridge() {
     let qa = qa_prompt(bead);
     let pr_body = "## Summary\n- Implements bead `edge-test-001` via lifecycle automation\n- Runs `moon run :ci` in workspace before opening PR\n- Publishes lifecycle status updates for polling";
     let executor = ScriptedExecutor::new(vec![
-        call("br", &["update", bead, "--status", "in_progress"], None, ok("")),
+        call("bd", &["update", bead, "--status", "in_progress"], None, ok("")),
         call("jj", &["workspace", "forget", workspace], None, ok("")),
         call("jj", &["workspace", "add", workspace_path, "--name", workspace], None, ok("")),
         call(
@@ -214,7 +214,7 @@ async fn run_lifecycle_pr_output_without_url_triggers_terminal_compensations() {
     let prompt = opencode_prompt(bead);
     let qa = qa_prompt(bead);
     let executor = ScriptedExecutor::new(vec![
-        call("br", &["update", bead, "--status", "in_progress"], None, ok("")),
+        call("bd", &["update", bead, "--status", "in_progress"], None, ok("")),
         call("jj", &["workspace", "forget", workspace], None, ok("")),
         call("jj", &["workspace", "add", workspace_path, "--name", workspace], None, ok("")),
         call(
@@ -274,7 +274,7 @@ async fn run_lifecycle_pr_output_without_url_triggers_terminal_compensations() {
         ),
         call("jj", &["workspace", "forget", workspace], None, ok("")),
         call(
-            "br",
+            "bd",
             &[
                 "update",
                 bead,
@@ -312,7 +312,7 @@ async fn run_lifecycle_existing_pr_in_stderr_is_treated_as_success() {
     let prompt = opencode_prompt(bead);
     let qa = qa_prompt(bead);
     let executor = ScriptedExecutor::new(vec![
-        call("br", &["update", bead, "--status", "in_progress"], None, ok("")),
+        call("bd", &["update", bead, "--status", "in_progress"], None, ok("")),
         call("jj", &["workspace", "forget", workspace], None, ok("")),
         call("jj", &["workspace", "add", workspace_path, "--name", workspace], None, ok("")),
         call(
@@ -399,7 +399,7 @@ async fn run_lifecycle_transient_failure_skips_terminal_compensations() {
     let workspace_path = "/home/lewis/src/oya-edge-test-003";
     let prompt = opencode_prompt(bead);
     let executor = ScriptedExecutor::new(vec![
-        call("br", &["update", bead, "--status", "in_progress"], None, ok("")),
+        call("bd", &["update", bead, "--status", "in_progress"], None, ok("")),
         call("jj", &["workspace", "forget", workspace], None, ok("")),
         call("jj", &["workspace", "add", workspace_path, "--name", workspace], None, ok("")),
         call(
@@ -454,7 +454,7 @@ async fn run_lifecycle_transient_opencode_recovers_after_retry() {
     let qa = qa_prompt(bead);
     let pr_body = "## Summary\n- Implements bead `edge-test-003b` via lifecycle automation\n- Runs `moon run :ci` in workspace before opening PR\n- Publishes lifecycle status updates for polling";
     let executor = ScriptedExecutor::new(vec![
-        call("br", &["update", bead, "--status", "in_progress"], None, ok("")),
+        call("bd", &["update", bead, "--status", "in_progress"], None, ok("")),
         call("jj", &["workspace", "forget", workspace], None, ok("")),
         call("jj", &["workspace", "add", workspace_path, "--name", workspace], None, ok("")),
         call(
@@ -582,7 +582,7 @@ async fn run_lifecycle_fails_when_only_bead_files_changed() {
     let prompt = opencode_prompt(bead);
     let qa = qa_prompt(bead);
     let executor = ScriptedExecutor::new(vec![
-        call("br", &["update", bead, "--status", "in_progress"], None, ok("")),
+        call("bd", &["update", bead, "--status", "in_progress"], None, ok("")),
         call("jj", &["workspace", "forget", workspace], None, ok("")),
         call("jj", &["workspace", "add", workspace_path, "--name", workspace], None, ok("")),
         call(
@@ -618,7 +618,7 @@ async fn run_lifecycle_fails_when_only_bead_files_changed() {
         ),
         call("jj", &["workspace", "forget", workspace], None, ok("")),
         call(
-            "br",
+            "bd",
             &[
                 "update",
                 bead,
@@ -655,7 +655,7 @@ async fn run_lifecycle_fails_when_opencode_receipt_is_missing_fields() {
     let workspace_path = "/home/lewis/src/oya-edge-test-007";
     let prompt = opencode_prompt(bead);
     let executor = ScriptedExecutor::new(vec![
-        call("br", &["update", bead, "--status", "in_progress"], None, ok("")),
+        call("bd", &["update", bead, "--status", "in_progress"], None, ok("")),
         call("jj", &["workspace", "forget", workspace], None, ok("")),
         call("jj", &["workspace", "add", workspace_path, "--name", workspace], None, ok("")),
         call(
@@ -666,7 +666,7 @@ async fn run_lifecycle_fails_when_opencode_receipt_is_missing_fields() {
         ),
         call("jj", &["workspace", "forget", workspace], None, ok("")),
         call(
-            "br",
+            "bd",
             &[
                 "update",
                 bead,
@@ -704,7 +704,7 @@ async fn run_lifecycle_qa_failure_retries_three_times_then_blocks() {
     let prompt = opencode_prompt(bead);
     let qa = qa_prompt(bead);
     let executor = ScriptedExecutor::new(vec![
-        call("br", &["update", bead, "--status", "in_progress"], None, ok("")),
+        call("bd", &["update", bead, "--status", "in_progress"], None, ok("")),
         call("jj", &["workspace", "forget", workspace], None, ok("")),
         call("jj", &["workspace", "add", workspace_path, "--name", workspace], None, ok("")),
         call(
@@ -757,7 +757,7 @@ async fn run_lifecycle_qa_failure_retries_three_times_then_blocks() {
         ),
         call("jj", &["workspace", "forget", workspace], None, ok("")),
         call(
-            "br",
+            "bd",
             &[
                 "update",
                 bead,
@@ -892,14 +892,14 @@ fn validate_dag_accepts_steps_with_no_dependencies() {
     let steps = vec![
         LifecycleStep {
             name: "step_a".to_owned(),
-            effect: Effect::Br { args: vec![], cwd: None },
+            effect: Effect::Bd { args: vec![], cwd: None },
             compensation: None,
             transition: StepTransition::None,
             dependencies: vec![],
         },
         LifecycleStep {
             name: "step_b".to_owned(),
-            effect: Effect::Br { args: vec![], cwd: None },
+            effect: Effect::Bd { args: vec![], cwd: None },
             compensation: None,
             transition: StepTransition::None,
             dependencies: vec![],
@@ -914,14 +914,14 @@ fn validate_dag_accepts_valid_dependency_chain() {
     let steps = vec![
         LifecycleStep {
             name: "step_a".to_owned(),
-            effect: Effect::Br { args: vec![], cwd: None },
+            effect: Effect::Bd { args: vec![], cwd: None },
             compensation: None,
             transition: StepTransition::None,
             dependencies: vec![],
         },
         LifecycleStep {
             name: "step_b".to_owned(),
-            effect: Effect::Br { args: vec![], cwd: None },
+            effect: Effect::Bd { args: vec![], cwd: None },
             compensation: None,
             transition: StepTransition::None,
             dependencies: vec!["step_a".to_owned()],
@@ -953,14 +953,14 @@ fn validate_dag_rejects_direct_cycle() {
     let steps = vec![
         LifecycleStep {
             name: "step_a".to_owned(),
-            effect: Effect::Br { args: vec![], cwd: None },
+            effect: Effect::Bd { args: vec![], cwd: None },
             compensation: None,
             transition: StepTransition::None,
             dependencies: vec!["step_b".to_owned()],
         },
         LifecycleStep {
             name: "step_b".to_owned(),
-            effect: Effect::Br { args: vec![], cwd: None },
+            effect: Effect::Bd { args: vec![], cwd: None },
             compensation: None,
             transition: StepTransition::None,
             dependencies: vec!["step_a".to_owned()],
@@ -978,21 +978,21 @@ fn validate_dag_rejects_indirect_cycle() {
     let steps = vec![
         LifecycleStep {
             name: "step_a".to_owned(),
-            effect: Effect::Br { args: vec![], cwd: None },
+            effect: Effect::Bd { args: vec![], cwd: None },
             compensation: None,
             transition: StepTransition::None,
             dependencies: vec!["step_c".to_owned()],
         },
         LifecycleStep {
             name: "step_b".to_owned(),
-            effect: Effect::Br { args: vec![], cwd: None },
+            effect: Effect::Bd { args: vec![], cwd: None },
             compensation: None,
             transition: StepTransition::None,
             dependencies: vec!["step_a".to_owned()],
         },
         LifecycleStep {
             name: "step_c".to_owned(),
-            effect: Effect::Br { args: vec![], cwd: None },
+            effect: Effect::Bd { args: vec![], cwd: None },
             compensation: None,
             transition: StepTransition::None,
             dependencies: vec!["step_b".to_owned()],
@@ -1026,14 +1026,14 @@ fn validate_dag_rejects_dependency_after_step() {
     let steps = vec![
         LifecycleStep {
             name: "step_b".to_owned(),
-            effect: Effect::Br { args: vec![], cwd: None },
+            effect: Effect::Bd { args: vec![], cwd: None },
             compensation: None,
             transition: StepTransition::None,
             dependencies: vec!["step_a".to_owned()],
         },
         LifecycleStep {
             name: "step_a".to_owned(),
-            effect: Effect::Br { args: vec![], cwd: None },
+            effect: Effect::Bd { args: vec![], cwd: None },
             compensation: None,
             transition: StepTransition::None,
             dependencies: vec![],
