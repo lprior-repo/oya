@@ -56,3 +56,7 @@ PLAN_docker-fix-bead3.md
 .orchestrator/
 workspaces/
 src-*.*/
+
+# Dolt database files (added by bd init)
+.dolt/
+*.db
