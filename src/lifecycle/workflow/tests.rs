@@ -71,10 +71,10 @@ fn non_zero(stderr: &str) -> Result<CommandResult, CommandFailure> {
 }
 
 fn workspace_path(workspace: &str) -> String {
-    std::env::current_dir()
-        .map_or_else(|_| format!("/home/lewis/src/{}", workspace), |p| {
-            p.join(workspace).to_string_lossy().to_string()
-        })
+    std::env::current_dir().map_or_else(
+        |_| format!("/home/lewis/src/{}", workspace),
+        |p| p.join(workspace).to_string_lossy().to_string(),
+    )
 }
 
 fn opencode_prompt(bead: &str) -> String {
@@ -111,50 +111,50 @@ fn call(
 async fn run_lifecycle_success_path_executes_jj_only_git_bridge() {
     let bead = "edge-test-001";
     let workspace = "oya-edge-test-001";
-    let workspace_path = workspace_path(workspace);
+    let ws_path = workspace_path(workspace);
     let prompt = opencode_prompt(bead);
     let qa = qa_prompt(bead);
     let pr_body = "## Summary\n- Implements bead `edge-test-001` via lifecycle automation\n- Runs `moon run :ci` in workspace before opening PR\n- Publishes lifecycle status updates for polling";
     let executor = ScriptedExecutor::new(vec![
         call("bd", &["update", bead, "--status", "in_progress"], None, ok("")),
         call("jj", &["workspace", "forget", workspace], None, ok("")),
-        call("jj", &["workspace", "add", workspace_path, "--name", workspace], None, ok("")),
+        call("jj", &["workspace", "add", &ws_path, "--name", workspace], None, ok("")),
         call(
             "opencode",
             &["run", "--format", "json", "--model", "zai-coding-plan/glm-5", prompt.as_str()],
-            Some(workspace_path),
+            Some(&ws_path),
             ok(valid_receipt_json()),
         ),
         call(
             "opencode",
             &["run", "--format", "json", "--model", "zai-coding-plan/glm-5", qa.as_str()],
-            Some(workspace_path),
+            Some(&ws_path),
             ok(valid_receipt_json()),
         ),
-        call("moon", &["run", ":quick"], Some(workspace_path), ok("")),
-        call("moon", &["run", ":test"], Some(workspace_path), ok("")),
-        call("moon", &["run", ":test"], Some(workspace_path), ok("")),
-        call("moon", &["run", ":ci"], Some(workspace_path), ok("")),
-        call("jj", &["git", "fetch", "--remote", "origin"], Some(workspace_path), ok("")),
-        call("jj", &["rebase", "-d", "main@origin"], Some(workspace_path), ok("")),
-        call("jj", &["file", "track", "."], Some(workspace_path), ok("")),
+        call("moon", &["run", ":quick"], Some(&ws_path), ok("")),
+        call("moon", &["run", ":test"], Some(&ws_path), ok("")),
+        call("moon", &["run", ":test"], Some(&ws_path), ok("")),
+        call("moon", &["run", ":ci"], Some(&ws_path), ok("")),
+        call("jj", &["git", "fetch", "--remote", "origin"], Some(&ws_path), ok("")),
+        call("jj", &["rebase", "-d", "main@origin"], Some(&ws_path), ok("")),
+        call("jj", &["file", "track", "."], Some(&ws_path), ok("")),
         call(
             "jj",
             &["describe", "-m", "chore: implement edge-test-001 via lifecycle"],
-            Some(workspace_path),
+            Some(&ws_path),
             ok(""),
         ),
         call(
             "jj",
             &["diff", "--name-only", "--from", "main@origin", "--to", "@"],
-            Some(workspace_path),
+            Some(&ws_path),
             ok("src/main.rs\nREADME.md\n"),
         ),
-        call("jj", &["bookmark", "set", bead, "-r", "@"], Some(workspace_path), ok("")),
+        call("jj", &["bookmark", "set", bead, "-r", "@"], Some(&ws_path), ok("")),
         call(
             "jj",
             &["git", "push", "--remote", "origin", "--bookmark", bead],
-            Some(workspace_path),
+            Some(&ws_path),
             ok(""),
         ),
         call(
@@ -173,7 +173,7 @@ async fn run_lifecycle_success_path_executes_jj_only_git_bridge() {
                 "--body",
                 pr_body,
             ],
-            Some(workspace_path),
+            Some(&ws_path),
             ok("https://github.com/lprior-repo/oya/pull/321\n"),
         ),
         call("jj", &["workspace", "forget", workspace], None, ok("")),
@@ -217,49 +217,49 @@ async fn run_lifecycle_success_path_executes_jj_only_git_bridge() {
 async fn run_lifecycle_pr_output_without_url_triggers_terminal_compensations() {
     let bead = "edge-test-002";
     let workspace = "oya-edge-test-002";
-    let workspace_path = "/home/lewis/src/oya-edge-test-002";
+    let ws_path = workspace_path(workspace);
     let prompt = opencode_prompt(bead);
     let qa = qa_prompt(bead);
     let executor = ScriptedExecutor::new(vec![
         call("bd", &["update", bead, "--status", "in_progress"], None, ok("")),
         call("jj", &["workspace", "forget", workspace], None, ok("")),
-        call("jj", &["workspace", "add", workspace_path, "--name", workspace], None, ok("")),
+        call("jj", &["workspace", "add", &ws_path, "--name", workspace], None, ok("")),
         call(
             "opencode",
             &["run", "--format", "json", "--model", "zai-coding-plan/glm-5", prompt.as_str()],
-            Some(workspace_path),
+            Some(&ws_path),
             ok(valid_receipt_json()),
         ),
         call(
             "opencode",
             &["run", "--format", "json", "--model", "zai-coding-plan/glm-5", qa.as_str()],
-            Some(workspace_path),
+            Some(&ws_path),
             ok(valid_receipt_json()),
         ),
-        call("moon", &["run", ":quick"], Some(workspace_path), ok("")),
-        call("moon", &["run", ":test"], Some(workspace_path), ok("")),
-        call("moon", &["run", ":test"], Some(workspace_path), ok("")),
-        call("moon", &["run", ":ci"], Some(workspace_path), ok("")),
-        call("jj", &["git", "fetch", "--remote", "origin"], Some(workspace_path), ok("")),
-        call("jj", &["rebase", "-d", "main@origin"], Some(workspace_path), ok("")),
-        call("jj", &["file", "track", "."], Some(workspace_path), ok("")),
+        call("moon", &["run", ":quick"], Some(&ws_path), ok("")),
+        call("moon", &["run", ":test"], Some(&ws_path), ok("")),
+        call("moon", &["run", ":test"], Some(&ws_path), ok("")),
+        call("moon", &["run", ":ci"], Some(&ws_path), ok("")),
+        call("jj", &["git", "fetch", "--remote", "origin"], Some(&ws_path), ok("")),
+        call("jj", &["rebase", "-d", "main@origin"], Some(&ws_path), ok("")),
+        call("jj", &["file", "track", "."], Some(&ws_path), ok("")),
         call(
             "jj",
             &["describe", "-m", "chore: implement edge-test-002 via lifecycle"],
-            Some(workspace_path),
+            Some(&ws_path),
             ok(""),
         ),
         call(
             "jj",
             &["diff", "--name-only", "--from", "main@origin", "--to", "@"],
-            Some(workspace_path),
+            Some(&ws_path),
             ok("src/main.rs\nREADME.md\n"),
         ),
-        call("jj", &["bookmark", "set", bead, "-r", "@"], Some(workspace_path), ok("")),
+        call("jj", &["bookmark", "set", bead, "-r", "@"], Some(&ws_path), ok("")),
         call(
             "jj",
             &["git", "push", "--remote", "origin", "--bookmark", bead],
-            Some(workspace_path),
+            Some(&ws_path),
             ok(""),
         ),
         call(
@@ -276,7 +276,7 @@ async fn run_lifecycle_pr_output_without_url_triggers_terminal_compensations() {
                 "--body",
                 "## Summary\n- Implements bead `edge-test-002` via lifecycle automation\n- Runs `moon run :ci` in workspace before opening PR\n- Publishes lifecycle status updates for polling",
             ],
-            Some(workspace_path),
+            Some(&ws_path),
             ok("created but no url in output\n"),
         ),
         call("jj", &["workspace", "forget", workspace], None, ok("")),
