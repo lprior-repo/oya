@@ -70,6 +70,13 @@ fn non_zero(stderr: &str) -> Result<CommandResult, CommandFailure> {
     Ok(CommandResult { status_code: Some(1), stdout: String::new(), stderr: stderr.to_owned() })
 }
 
+fn workspace_path(workspace: &str) -> String {
+    std::env::current_dir()
+        .map_or_else(|_| format!("/home/lewis/src/{}", workspace), |p| {
+            p.join(workspace).to_string_lossy().to_string()
+        })
+}
+
 fn opencode_prompt(bead: &str) -> String {
     format!(
         "Implement bead {bead} in this workspace using functional-rust approach and tests derived from contract. Do not call `oya` or `bd`. Use moon/jj/gh as needed. Return one JSON receipt object with required keys: objective, allowed_scope, files_touched, commands, exit_codes, key_stdout_stderr, diff_summary, risks_unknowns, pass_fail_recommendation.",
@@ -104,7 +111,7 @@ fn call(
 async fn run_lifecycle_success_path_executes_jj_only_git_bridge() {
     let bead = "edge-test-001";
     let workspace = "oya-edge-test-001";
-    let workspace_path = "/home/lewis/src/oya-edge-test-001";
+    let workspace_path = workspace_path(workspace);
     let prompt = opencode_prompt(bead);
     let qa = qa_prompt(bead);
     let pr_body = "## Summary\n- Implements bead `edge-test-001` via lifecycle automation\n- Runs `moon run :ci` in workspace before opening PR\n- Publishes lifecycle status updates for polling";
