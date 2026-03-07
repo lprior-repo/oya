@@ -1,0 +1,138 @@
+# Notify when ready
+
+Source: https://docs.restate.dev/ai/patterns/notify-when-ready
+
+Build async notification systems for your agents with just a few lines of code.
+
+Let users subscribe to notifications for long-running agent tasks instead of waiting.
+With Restate's durable promises, you can coordinate between agent execution and notification handlers, no extra infrastructure needed.
+
+## How does Restate help?
+
+Building this yourself requires message queues, databases, and polling workers. Restate replaces all that with a few lines of code:
+
+* **Durable promises**: Create promises that survive failures and restarts
+* **Zero infrastructure**: No queues, databases, or polling workers needed
+* **No race conditions**: Late subscribers immediately receive already-resolved results
+* **Serverless-friendly**: Handlers suspend while waiting - pay only for active compute
+* Works with **any LLM SDK** and **any language** supported by Restate
+
+## Example
+
+The pattern works in two steps:
+
+**Step 1:** The agent handler processes the request and resolves a durable promise with the result.
+
+**Step 2:** The notification handler awaits that promise and sends the notification when it resolves.
+
+```python Python {"CODE_LOAD::https://raw.githubusercontent.com/restatedev/ai-examples/refs/heads/main/openai-agents/examples/notify_when_ready/agent.py?collapse_imports"}  theme={null}
+agent_service = restate.Workflow("AsyncNotificationsAgent")
+
+agent = Agent(
+    name="Assistant",
+    instructions="You are a helpful assistant.",
+)
+
+
+@agent_service.main()
+async def run(ctx: restate.WorkflowContext, user_query: str):
+    # Process the user's query with the AI agent
+    response = await DurableRunner.run(agent, user_query)
+
+    # Notify other handlers of the response
+    await ctx.promise("agent_response").resolve(response.final_output)
+
+    # Return synchronous response
+    return response.final_output
+
+
+@agent_service.handler()
+async def on_notify(ctx: restate.WorkflowContext, email: str):
+    # Wait for the agent's response
+    response = await ctx.promise("agent_response", type_hint=str).value()
+
+    # Send the email
+    await ctx.run_typed("Email", send_email, email=email, body=response)
+```
+
+View on GitHub: [Python](https://github.com/restatedev/ai-examples/blob/main/openai-agents/examples/notify_when_ready/agent.py)
+
+Check out the SDK documentation for more details on the durable promises API ([TS](/develop/ts/external-events) / [Python](/develop/python/external-events)).
+
+<Tip>
+  This pattern is implementable with any of our SDKs and any AI SDK.
+  If you need help with a specific SDK, please reach out to us via [Discord](https://discord.restate.dev) or [Slack](https://slack.restate.dev).
+</Tip>
+
+<Accordion title="Run the example">
+  <Steps>
+    <Step title="Requirements">
+      * AI SDK of your choice (e.g., OpenAI, LangChain, Pydantic AI, LiteLLM, etc.) to make LLM calls.
+      * API key for your model provider.
+    </Step>
+
+    <Step title="Download the example">
+      ```shell Python theme={null}
+      git clone https://github.com/restatedev/ai-examples.git &&
+      cd ai-examples/openai-agents/examples/notify_when_ready
+      ```
+    </Step>
+
+    <Step title="Start the Restate Server">
+      ```shell theme={null}
+      restate-server
+      ```
+    </Step>
+
+    <Step title="Start the Service">
+      Export the API key of your model provider as an environment variable and then start the agent. For example, for OpenAI:
+
+      ```shell Python theme={null}
+      export OPENAI_API_KEY=your_openai_api_key
+      uv run .
+      ```
+    </Step>
+
+    <Step title="Register the services">
+      <Tabs>
+        <Tab title="UI">
+          <img alt="Service Registration" />
+        </Tab>
+
+        <Tab title="CLI">
+          ```shell theme={null}
+          restate deployments register localhost:9080
+          ```
+        </Tab>
+      </Tabs>
+    </Step>
+
+    <Step title="Send a request">
+      In the UI (`http://localhost:9070`), click on the `run` handler of the `AsyncNotificationsAgent` to open the playground and send a request to the `run` handler and then the `on_notify` handler.
+
+      Or send requests via the terminal.
+
+      First, start the agent asynchronously by adding `/send` to the end of the URL:
+
+      ```json theme={null}
+      curl localhost:8080/AsyncNotificationsAgent/msg-123/run/send \
+        --json '"Write a 1000-word description of Durable Execution"'
+      ```
+
+      Then, asynchronously call the `on_notify` handler to send the agent response via email once it's ready:
+
+      ```json theme={null}
+      curl localhost:8080/AsyncNotificationsAgent/msg-123/on_notify/send \
+        --json '"me@mail.com"'
+      ```
+
+      Notice that the key `msg-123` is identical for both requests, to send them to the same workflow instance.
+    </Step>
+
+    <Step title="Check the Restate UI">
+      In the Restate UI, you see how the notify handler waited on the agent response and then sent the email.
+
+      <img />
+    </Step>
+  </Steps>
+</Accordion>

@@ -1,0 +1,103 @@
+# Serving
+
+Source: https://docs.restate.dev/develop/ts/serving
+
+Create an endpoint to serve your services.
+
+Restate services can run in a few ways: as a Node.js HTTP handler, as an AWS
+Lambda handler, or on other Javascript runtimes like Bun, Deno and Cloudflare
+Workers.
+
+## Creating a Node.js HTTP handler
+
+Use `restate.serve` to serve the provided services, starting an HTTP/2 server on port `9080`.
+
+```typescript {"CODE_LOAD::ts/src/develop/serving.ts#endpoint"}  theme={null}
+import * as restate from "@restatedev/restate-sdk";
+restate.serve({
+  services: [myService, myVirtualObject, myWorkflow],
+});
+```
+
+<Accordion title="Customizing the HTTP2 server">
+  If you need to manually control or customize the HTTP2 server, use `restate.createEndpointHandler` to create a Node HTTP/2 handler, and then use it to manually instantiate the HTTP server:
+
+  ```ts {"CODE_LOAD::ts/src/develop/serving.ts#custom_endpoint"}  theme={null}
+  const http2Handler = restate.createEndpointHandler({
+    services: [myService, myVirtualObject, myWorkflow],
+  });
+  const httpServer = http2.createServer(http2Handler);
+  httpServer.listen();
+  ```
+</Accordion>
+
+## Creating a Lambda handler
+
+To register your service as a Lambda function, use the `/lambda` import
+component and use `restate.createEndpointHandler`:
+
+```typescript {"CODE_LOAD::ts/src/develop/serving_lambda.ts#lambda"}  theme={null}
+import * as restate from "@restatedev/restate-sdk/lambda";
+export const handler = restate.createEndpointHandler({
+  services: [myService, myVirtualObject, myWorkflow],
+});
+```
+
+The implementation of your services and handlers remains the same for both deployment options.
+
+Have a look at the [deployment section](/services/deploy/lambda)
+for guidance on how to deploy your services on AWS Lambda.
+
+## Creating a Deno/Cloudflare Workers handler
+
+Other Javascript runtimes like Deno and Cloudflare Workers have
+built on top of the [Fetch Standard](https://github.com/whatwg/fetch) for
+defining HTTP server handlers. To register your service as a fetch handler, use
+the `/fetch` import component.
+
+```typescript {"CODE_LOAD::ts/src/develop/serving_fetch.ts#fetch"}  theme={null}
+import * as restate from "@restatedev/restate-sdk/fetch";
+const handler = restate.createEndpointHandler({
+  services: [myService, myVirtualObject, myWorkflow],
+});
+// Cloudflare expects the handler as a default export
+export default handler;
+// Deno expects to be passed the fetch function
+Deno.serve({ port: 9080 }, handler);
+```
+
+By default, a fetch handler will not advertise itself as working
+bidirectionally; the SDK will end the HTTP request at each suspension point,
+and the Restate runtime will re-invoke the service when there is more work to
+do.
+
+However, you can use the option `bidirectional: true` to change this on supported platforms,
+which will improve latencies once the service is re-registered with the runtime.
+
+* Deno (including Deno Deploy) supports HTTP2 and therefore bidirectional mode can be enabled.
+* Cloudflare Workers do not support end-to-end HTTP2 or bidirectional HTTP1.1,
+  and enabling bidirectional mode will cause invocations to stall and time out.
+  Services running on Workers must be discovered with the `--use-http1.1`
+  CLI flag.
+
+<Accordion title="Cloudflare Workers and minification">
+  Cloudflare Workers minification is not working correctly with the Restate SDK. If you see an issue similar to:
+
+  ```
+  ✘ [ERROR] restate-cloudflare-worker: Uncaught TypeError: Cannot read properties of undefined (reading '__wbindgen_malloc')
+  ```
+
+  Then most likely you have enabled minification when deploying. Disable it with `minify = false` in your `workers.toml` file.
+</Accordion>
+
+## Validating request identity
+
+SDKs can validate that incoming requests come from a particular Restate
+instance. You can find out more about request identity in the [Security docs](/services/security#locking-down-service-access)
+
+```typescript {"CODE_LOAD::ts/src/develop/serving.ts#identity"}  theme={null}
+restate.serve({
+  services: [myService],
+  identityKeys: ["publickeyv1_w7YHemBctH5Ck2nQRQ47iBBqhNHy4FV7t2Usbye2A6f"],
+});
+```

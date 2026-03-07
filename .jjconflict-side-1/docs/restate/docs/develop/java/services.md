@@ -1,0 +1,252 @@
+# Services
+
+Source: https://docs.restate.dev/develop/java/services
+
+Implementing Restate services with the Java/Kotlin SDK.
+
+The Restate Java/Kotlin SDK is open source and available on [GitHub](https://github.com/restatedev/sdk-java).
+
+The Restate SDK lets you implement **handlers**. Handlers can be part of a **[Basic Service](/foundations/services#basic-service)**, a **[Virtual Object](/foundations/services#virtual-object)**, or a **[Workflow](/foundations/services#workflow)**. This page shows how to define them with the Java/Kotlin SDK.
+
+## Prerequisites
+
+* [JDK](https://whichjdk.com/) >= 17
+
+## Getting started
+
+<Tip>
+  Get started quickly with the [Java](/quickstart#java) or [Kotlin](/quickstart#kotlin) Quickstart.
+</Tip>
+
+To start building Restate services, you need two dependencies in your Maven/Gradle project manifest:
+
+* The SDK dependency.
+* The annotation processor dependency.
+
+The SDK dependency comes in different flavors: Java or Kotlin API, HTTP or Lambda.
+Choose the one you need depending on the language you want to use and whether you want to deploy the service as an HTTP server or as AWS Lambda.
+
+<CodeGroup>
+  ```kt Java/Gradle theme={null}
+  // Annotation processor
+  annotationProcessor("dev.restate:sdk-api-gen:2.4.1")
+
+  // For deploying as HTTP service
+  implementation("dev.restate:sdk-java-http:2.4.1")
+  // Or for deploying using AWS Lambda
+  implementation("dev.restate:sdk-java-lambda:2.4.1")
+  ```
+
+  ```xml Java/Maven theme={null}
+  <properties>
+      <restate.version>2.4.1</restate.version>
+  </properties>
+  <dependencies>
+      <!-- For deploying as HTTP service -->
+      <dependency>
+          <groupId>dev.restate</groupId>
+          <artifactId>sdk-java-http</artifactId>
+          <version>${restate.version}</version>
+      </dependency>
+      <!-- For deploying using AWS Lambda -->
+      <dependency>
+          <groupId>dev.restate</groupId>
+          <artifactId>sdk-java-http</artifactId>
+          <version>${restate.version}</version>
+      </dependency>
+  </dependencies>
+  <build>
+      <plugins>
+          <plugin>
+              <groupId>org.apache.maven.plugins</groupId>
+              <artifactId>maven-compiler-plugin</artifactId>
+              <configuration>
+                  <annotationProcessorPaths>
+                      <!-- Setup annotation processor -->
+                      <path>
+                          <groupId>dev.restate</groupId>
+                          <artifactId>sdk-api-gen</artifactId>
+                          <version>${restate.version}</version>
+                      </path>
+                  </annotationProcessorPaths>
+              </configuration>
+          </plugin>
+      </plugins>
+  </build>
+  ```
+
+  ```kt Kotlin/Gradle theme={null}
+  // KSP annotation processor
+  ksp("dev.restate:sdk-api-kotlin-gen:2.4.1")
+
+  // For deploying as HTTP service
+  implementation("dev.restate:sdk-kotlin-http:2.4.1")
+  // Or for deploying using AWS Lambda
+  implementation("dev.restate:sdk-kotlin-lambda:2.4.1")
+  ```
+</CodeGroup>
+
+<Accordion title="Troubleshooting: Cannot resolve symbol '<MyServiceName>Client'">
+  Make sure the annotation processor is correctly configured, as described above, and **build the project** at least once.
+</Accordion>
+
+<Accordion title="IntelliJ won't update the Client classes when building">
+  Make sure you have annotation processing enabled in the IntelliJ compiler, check the relevant [documentation](https://www.jetbrains.com/help/idea/annotation-processors-support.html).
+  An example setup is available here: [compiler.xml](https://github.com/restatedev/examples/blob/main/java/templates/java-gradle/.idea/compiler.xml)
+</Accordion>
+
+## Basic Services
+
+[Basic Services](/foundations/services) group related **handlers** and expose them as callable endpoints:
+
+<CodeGroup>
+  ```java Java {"CODE_LOAD::java/src/main/java/develop/MyService.java?collapse_prequel"}  theme={null}
+  @Service
+  public class MyService {
+    @Handler
+    public String myHandler(Context ctx, String greeting) {
+      return greeting + "!";
+    }
+
+    public static void main(String[] args) {
+      RestateHttpServer.listen(Endpoint.bind(new MyService()));
+    }
+  }
+  ```
+
+  ```kotlin Kotlin {"CODE_LOAD::kotlin/src/main/kotlin/develop/MyService.kt?collapse_prequel"}  theme={null}
+  @Service
+  class MyService {
+    @Handler suspend fun myHandler(ctx: Context, greeting: String) = "$greeting!"
+  }
+
+  fun main() {
+    RestateHttpServer.listen(endpoint { bind(MyService()) })
+  }
+  ```
+</CodeGroup>
+
+* Define a service using the [`@Service`](http://docs.restate.dev/javadocs/dev/restate/sdk/annotation/Service.html) and [`@Handler`](http://docs.restate.dev/javadocs/dev/restate/sdk/annotation/Handler.html) annotations
+* Each handler can be called at `<RESTATE_INGRESS>/MyService/myHandler`. To override the service name (default is simple class name), use the annotation [`@Name`](http://docs.restate.dev/javadocs/dev/restate/sdk/annotation/Name.html).
+* Handlers take the `Context` ([JavaDocs](https://restatedev.github.io/sdk-java/javadocs/dev/restate/sdk/ObjectContext)/[KotlinDocs](https://restatedev.github.io/sdk-java/ktdocs/sdk-api-kotlin/dev.restate.sdk.kotlin/-context/)) as the first argument.
+* The input parameter (at most one) and return type are optional and can be of any type. See [serialization](/develop/java/serialization) for more details.
+* Create an endpoint to expose the service over HTTP (port `9080` by default).
+
+## Virtual Objects
+
+[Virtual Objects](/foundations/services) are services that are stateful and key-addressable — each object instance has a unique ID and persistent state.
+
+<CodeGroup>
+  ```java Java {"CODE_LOAD::java/src/main/java/develop/MyObject.java?collapse_prequel"}  theme={null}
+  @VirtualObject
+  public class MyObject {
+
+    @Handler
+    public String myHandler(ObjectContext ctx, String greeting) {
+      String objectId = ctx.key();
+
+      return greeting + " " + objectId + "!";
+    }
+
+    @Shared
+    public String myConcurrentHandler(SharedObjectContext ctx, String input) {
+      return "my-output";
+    }
+
+    public static void main(String[] args) {
+      RestateHttpServer.listen(Endpoint.bind(new MyObject()));
+    }
+  }
+  ```
+
+  ```kotlin Kotlin {"CODE_LOAD::kotlin/src/main/kotlin/develop/MyObject.kt?collapse_prequel"}  theme={null}
+  @VirtualObject
+  class MyObject {
+
+    @Handler
+    suspend fun myHandler(ctx: ObjectContext, greeting: String): String {
+      val objectKey = ctx.key()
+
+      return "$greeting $objectKey!"
+    }
+
+    @Shared suspend fun myConcurrentHandler(ctx: SharedObjectContext, input: String) = "my-output"
+  }
+
+  fun main() {
+    RestateHttpServer.listen(endpoint { bind(MyObject()) })
+  }
+  ```
+</CodeGroup>
+
+* Use the `@VirtualObject` annotation.
+* The first argument of the handler must be the `ObjectContext` parameter ([JavaDocs](https://restatedev.github.io/sdk-java/javadocs/dev/restate/sdk/ObjectContext)/[KotlinDocs](https://restatedev.github.io/sdk-java/ktdocs/sdk-api-kotlin/dev.restate.sdk.kotlin/-object-context/)).
+* Each instance is identified by a key (accessible via `ctx.key()`).
+* Virtual Objects can have [exclusive and shared handlers](/foundations/handlers#handler-behavior).
+* Exclusive handlers receive an `ObjectContext`, allowing read/write access to object state.
+* Shared handlers use the [`@Shared`](http://docs.restate.dev/javadocs/dev/restate/sdk/annotation/Shared.html) annotation and the `SharedObjectContext` ([JavaDocs](https://restatedev.github.io/sdk-java/javadocs/dev/restate/sdk/SharedObjectContext)/[KotlinDocs](https://restatedev.github.io/sdk-java/ktdocs/sdk-api-kotlin/dev.restate.sdk.kotlin/-shared-object-context/)).
+
+## Workflows
+
+[Workflows](/foundations/services) are long-lived processes with a defined lifecycle. They run once per key and are ideal for orchestrating multi-step operations, which require external interaction via signals and queries.
+
+<CodeGroup>
+  ```java Java {"CODE_LOAD::java/src/main/java/develop/MyWorkflow.java?collapse_prequel"}  theme={null}
+  @Workflow
+  public class MyWorkflow {
+
+    @Workflow
+    public String run(WorkflowContext ctx, String input) {
+
+      // implement workflow logic here
+
+      return "success";
+    }
+
+    @Shared
+    public String interactWithWorkflow(SharedWorkflowContext ctx, String input) {
+      // implement interaction logic here
+      return "my result";
+    }
+
+    public static void main(String[] args) {
+      RestateHttpServer.listen(Endpoint.bind(new MyWorkflow()));
+    }
+  }
+  ```
+
+  ```kotlin Kotlin {"CODE_LOAD::kotlin/src/main/kotlin/develop/MyWorkflow.kt?collapse_prequel"}  theme={null}
+  @Workflow
+  class MyWorkflow {
+
+    @Workflow
+    suspend fun run(ctx: WorkflowContext, input: String): String {
+      // implement workflow logic here
+
+      return "success"
+    }
+
+    @Handler
+    suspend fun interactWithWorkflow(ctx: SharedWorkflowContext, input: String): String {
+      // implement interaction logic here
+      return "my result"
+    }
+  }
+
+  fun main() {
+    RestateHttpServer.listen(endpoint { bind(MyWorkflow()) })
+  }
+  ```
+</CodeGroup>
+
+* Create the workflow by using the [`@Workflow`](http://docs.restate.dev/javadocs/dev/restate/sdk/annotation/Workflow.html) annotation.
+* Every workflow **must** include a `run` handler:
+  * This is the main orchestration entry point
+  * It runs exactly once per workflow execution and uses the `WorkflowContext` ([JavaDocs](https://restatedev.github.io/sdk-java/javadocs/dev/restate/sdk/WorkflowContext)/[KotlinDocs](https://restatedev.github.io/sdk-java/ktdocs/sdk-api-kotlin/dev.restate.sdk.kotlin/-workflow-context/))
+  * Resubmission of the same workflow will fail with "Previously accepted". The invocation ID can be found in the request header `x-restate-id`.
+  * Use `ctx.key()` to access the workflow's unique ID
+* Additional handlers must use the `SharedWorkflowContext` ([JavaDocs](https://restatedev.github.io/sdk-java/javadocs/dev/restate/sdk/SharedWorkflowContext)/[KotlinDocs](https://restatedev.github.io/sdk-java/ktdocs/sdk-api-kotlin/dev.restate.sdk.kotlin/-shared-workflow-context/)) and can signal or query the workflow. They can run concurrently with the `run` handler and until the retention time expires.
+
+## Configuring services
+
+Check out the [service configuration docs](/services/configuration) to learn how to configure service behavior, including timeouts and retention policies.

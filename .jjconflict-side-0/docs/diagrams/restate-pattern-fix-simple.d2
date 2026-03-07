@@ -1,0 +1,137 @@
+# Restate Determinism Pattern
+
+direction: down
+
+wrong_title: {
+  label: WRONG PATTERN
+  style.fill: "#ffd6d6"
+  style.stroke: "#ff5252"
+  style.bold: true
+}
+
+wrong_1: {
+  label: ctx.run starts
+}
+
+wrong_2: {
+  label: spawn_blocking INSIDE
+  style.fill: "#ffe6e6"
+  style.stroke: "#ff5252"
+}
+
+wrong_3: {
+  label: Blocking runs
+}
+
+wrong_4: {
+  label: Result journaled
+}
+
+wrong_replay: {
+  label: Replay
+  style.fill: "#ffe6e6"
+}
+
+wrong_r1: {
+  label: ctx.run re-executes
+}
+
+wrong_r2: {
+  label: spawn_blocking AGAIN
+  style.fill: "#ffd6d6"
+  style.stroke: "#ff0000"
+  style.stroke-width: 3
+}
+
+wrong_r3: {
+  label: State divergence
+  style.fill: "#ffd6d6"
+  style.bold: true
+}
+
+correct_title: {
+  label: CORRECT PATTERN
+  style.fill: "#d6ffeb"
+  style.stroke: "#20c997"
+  style.bold: true
+}
+
+correct_1: {
+  label: spawn_blocking OUTSIDE
+  style.fill: "#e6ffe6"
+  style.stroke: "#40c057"
+}
+
+correct_2: {
+  label: Blocking runs
+}
+
+correct_3: {
+  label: Result captured
+}
+
+correct_4: {
+  label: ctx.run starts
+}
+
+correct_5: {
+  label: Transform to Json
+  style.fill: "#e6f7ff"
+  style.stroke: "#4dabf7"
+}
+
+correct_6: {
+  label: Result journaled
+  style.fill: "#e6ffe6"
+}
+
+correct_replay: {
+  label: Replay
+  style.fill: "#f0fff6"
+}
+
+correct_r1: {
+  label: ctx.run re-executes
+}
+
+correct_r2: {
+  label: Uses journaled result
+  style.fill: "#e6ffe6"
+}
+
+correct_r3: {
+  label: spawn_blocking NOT called
+  style.fill: "#d6ffeb"
+}
+
+correct_r4: {
+  label: Determinism guaranteed
+  style.fill: "#d6ffeb"
+  style.bold: true
+}
+
+wrong_title -> wrong_1
+wrong_1 -> wrong_2
+wrong_2 -> wrong_3
+wrong_3 -> wrong_4
+
+wrong_replay -> wrong_r1
+wrong_r1 -> wrong_r2
+wrong_r2 -> wrong_r3
+
+correct_title -> correct_1
+correct_1 -> correct_2
+correct_2 -> correct_3
+correct_3 -> correct_4
+correct_4 -> correct_5
+correct_5 -> correct_6
+
+correct_replay -> correct_r1
+correct_r1 -> correct_r2
+correct_r2 -> correct_r3
+correct_r3 -> correct_r4
+
+wrong_2.wrong_3: BUG
+wrong_r2.wrong_r3: CRITICAL
+correct_1.correct_2: CORRECT
+correct_r4: SUCCESS

@@ -1,0 +1,45 @@
+# Testing
+
+Source: https://docs.restate.dev/develop/python/testing
+
+Utilities to test your handler logic.
+
+The Python SDK has a testing harness to test your Restate handlers.
+
+This uses [Testcontainers](https://testcontainers.com/) to run a Restate Server in a Docker container and provides a client to let you test your Restate handlers.
+
+## Setup
+
+Install the package:
+
+```bash theme={null}
+pip install restate_sdk[harness]
+```
+
+## Testing handlers
+
+If you have a service as follows:
+
+```python {"CODE_LOAD::python/src/develop/testing.py#service"}  theme={null}
+import restate
+
+greeter = restate.Service("greeter")
+
+
+@greeter.handler()
+async def greet(ctx: restate.Context, name: str) -> str:
+    return f"Hello {name}!"
+
+
+app = restate.app(services=[greeter])
+```
+
+Then you can test it via:
+
+```python {"CODE_LOAD::python/src/develop/testing.py#testing"}  theme={null}
+import restate
+
+with restate.test_harness(app) as harness:
+    restate_client = harness.ingress_client()
+    print(restate_client.post("/greeter/greet", json="Alice").json())
+```

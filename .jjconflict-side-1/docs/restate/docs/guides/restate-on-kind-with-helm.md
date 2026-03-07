@@ -1,0 +1,158 @@
+# Kubernetes deployments with Helm
+
+Source: https://docs.restate.dev/guides/restate-on-kind-with-helm
+
+Learn how to deploy a Restate cluster using Helm on a kind Kubernetes cluster.
+
+This tutorial will guide you through deploying a single-node Restate cluster on a local Kubernetes cluster using Helm.
+
+We will use [kind](https://kind.sigs.k8s.io/) to create a local Kubernetes cluster for testing purposes.
+
+<Steps>
+  <Step title="Prerequisites">
+    Install the following on your local machine:
+
+    * [Docker](https://docs.docker.com/)
+    * [Helm](https://helm.sh/docs/intro/install/)
+    * [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl)
+    * [Restate](/installation)
+    * [kind](https://kind.sigs.k8s.io/docs/user/quick-start)
+
+    This guide was written with kind v0.30.0, and Restate v1.5.0.
+    Contact us on [Discord](https://discord.restate.dev) or [Slack](https://slack.restate.dev) if something does not work as expected.
+  </Step>
+
+  <Step title="Create a kind cluster">
+    ```bash theme={null}
+    kind create cluster
+    ```
+
+    Set `kubectl` context to `kind-kind`:
+
+    ```bash theme={null}
+    kubectl cluster-info --context kind-kind
+    ```
+  </Step>
+
+  <Step title="Install the single-node Restate Helm chart">
+    ```bash theme={null}
+    helm install restate oci://ghcr.io/restatedev/restate-helm \
+      --namespace restate
+      --create-namespace
+    ```
+
+    This will deploy a single-node Restate cluster in the `restate` namespace.
+
+    Wait until the `restate-0` pod is in the `Ready` state:
+
+    ```bash theme={null}
+    kubectl get pods -n restate -w
+    ```
+  </Step>
+
+  <Step title="Forward the ports of the Restate ingress and the UI to your local machine">
+    ```bash theme={null}
+    kubectl port-forward svc/restate -n restate 8080:8080 9070:9070
+    ```
+
+    Now you can access the Restate UI at `http://localhost:9070`.
+  </Step>
+
+  <Step title="Build and upload a Restate service Docker image to the kind cluster">
+    For example, download the TypeScript Hello World service:
+
+    ```bash theme={null}
+    restate example typescript-hello-world &&
+    cd typescript-hello-world &&
+    npm install
+    ```
+
+    Build a Docker image for the service:
+
+    ```bash theme={null}
+    docker build -t my-restate-service:0.0.1 .
+    ```
+
+    Upload the image to the kind cluster:
+
+    ```bash theme={null}
+    kind load docker-image my-restate-service:0.0.1
+    ```
+  </Step>
+
+  <Step title="Deploy the Restate service">
+    Create a `RestateDeployment` manifest for the service in a file called `service-deployment.yaml`:
+
+    ```yaml service-deployment.yaml theme={null}
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: my-app
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: my-app
+      template:
+        metadata:
+          labels:
+            app: my-app
+        spec:
+          containers:
+          - name: app
+            image: my-restate-service:0.0.1
+            ports:
+            - name: http
+              containerPort: 9080
+    ---
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: my-app
+    spec:
+      selector:
+        app: my-app
+      ports:
+      - name: http
+        port: 9080
+        targetPort: 9080
+    ```
+
+    Apply the manifest to deploy the service:
+
+    ```bash theme={null}
+    kubectl apply -f service-deployment.yaml -n restate
+    ```
+  </Step>
+
+  <Step title="Register the service">
+    In the Restate UI, you can now register the deployment `http://my-app.restate.svc.cluster.local:9080/` via the UI at `http://localhost:9070`.
+
+    Once it is registered, you should see the deployed service listed in the Restate UI:
+
+    <Frame>
+      <img />
+    </Frame>
+  </Step>
+
+  <Step title="Invoke the service">
+    In the Restate UI playground, you can now invoke the service. In the overview page, click on the `greet` handler of your service to open the playground.
+    Then send a request:
+
+    <Frame>
+      <img />
+    </Frame>
+  </Step>
+
+  <Step title="🎉 You did it!">
+    You have successfully deployed a Restate cluster and a Restate service on a local kind Kubernetes cluster using the Helm chart!
+
+    Check out the [Restate Helm deployment docs](/server/deploy/kubernetes#helm-chart) for more information.
+  </Step>
+</Steps>
+
+After you are done experimenting, you can delete the kind cluster:
+
+```bash theme={null}
+kind delete cluster
+```

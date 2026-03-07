@@ -1,0 +1,34 @@
+$schema: "https://moonrepo.dev/schemas/tasks.json"
+
+tasks:
+  fmt-fix:
+    command: "cargo fmt --all"
+    description: "Auto-fix code formatting"
+
+  build:
+    command: "cargo build --release --workspace"
+    description: "Build release binaries"
+
+  check:
+    command: "cargo check --workspace --all-features"
+    description: "Fast type check"
+
+  test:
+    command: "cargo test --workspace --all-features"
+    description: "Run all tests"
+
+  coverage:
+    command: "cargo tarpaulin --workspace --all-features --out Html --out Lcov --output-dir target/coverage -- --test-threads=1"
+    description: "Generate test coverage report"
+
+  mutants-quick:
+    command: "cargo mutants -p oya-core -p oya-workflow -p oya-events --baseline run"
+    description: "Quick mutation test on core packages"
+
+  quick:
+    command: "cargo check --workspace --all-features"
+    description: "Quick validation"
+
+  ci:
+    command: "cargo clippy --workspace --all-features --lib --bins --examples -- -D warnings -W clippy::all -D clippy::too_many_lines -D clippy::too_many_arguments && cargo test --workspace --all-features && cargo build --release --workspace"
+    description: "CI validation pipeline"

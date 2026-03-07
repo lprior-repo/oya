@@ -1,0 +1,116 @@
+# OYA Workflow Architecture Diagram
+
+direction: right
+
+# Actors and Tools
+User
+
+br_cli: {
+  label: br CLI
+}
+
+pipeline: {
+  label: pipeline-run.sh
+}
+
+# Services
+ingress: {
+  label: Restate Ingress
+  style.fill: "#e6ccff"
+}
+
+admin: {
+  label: Restate Admin
+  style.fill: "#e6ccff"
+}
+
+orchestrator: {
+  label: OyaOrchestrator
+  style.fill: "#ffd6e6"
+}
+
+oya_binary: {
+  label: oya binary 13MB
+  style.fill: "#d6ffe6"
+}
+
+# AI
+opencode: {
+  label: OpenCode
+  style.fill: "#ffe6cc"
+}
+
+models: {
+  label: AI Models
+}
+
+# Stages
+plan: {
+  label: Plan Stage
+  style.fill: "#ccffeb"
+}
+
+contract: {
+  label: Contract Stage
+  style.fill: "#ccffeb"
+}
+
+acceptance: {
+  label: Acceptance Test
+  style.fill: "#ffd6d6"
+  style.stroke-width: 3
+}
+
+implementation: {
+  label: Implementation
+  style.fill: "#d6ffeb"
+  style.stroke-width: 3
+}
+
+qa: {
+  label: QA Complete
+  style.fill: "#fff0cc"
+}
+
+# Tools
+moon: {
+  label: Moon Build
+}
+
+jj: {
+  label: jj Workspace
+}
+
+# Data
+beads: {
+  label: beads DB
+}
+
+journal: {
+  label: Journal State
+}
+
+# Connections
+User -> br_cli: br ready
+br_cli -> beads: query
+beads -> br_cli: return bead
+br_cli -> pipeline: execute
+pipeline -> ingress: POST run
+ingress -> orchestrator: invoke
+orchestrator -> oya_binary: runs
+oya_binary -> opencode: calls
+opencode -> models: queries
+models -> opencode: response
+opencode -> oya_binary: output
+oya_binary -> moon: build
+oya_binary -> jj: isolate
+
+orchestrator -> plan: 1
+plan -> contract: 2
+contract -> acceptance: 3
+acceptance -> implementation: 4
+implementation -> qa: 5
+
+orchestrator -> journal: state
+admin -> orchestrator: monitor
+User -> admin: view UI
