@@ -892,14 +892,14 @@ fn validate_dag_accepts_steps_with_no_dependencies() {
     let steps = vec![
         LifecycleStep {
             name: "step_a".to_owned(),
-            effect: Effect::Bd { args: vec![], cwd: None },
+            effect: Effect::Br { args: vec![], cwd: None },
             compensation: None,
             transition: StepTransition::None,
             dependencies: vec![],
         },
         LifecycleStep {
             name: "step_b".to_owned(),
-            effect: Effect::Bd { args: vec![], cwd: None },
+            effect: Effect::Br { args: vec![], cwd: None },
             compensation: None,
             transition: StepTransition::None,
             dependencies: vec![],
@@ -914,14 +914,14 @@ fn validate_dag_accepts_valid_dependency_chain() {
     let steps = vec![
         LifecycleStep {
             name: "step_a".to_owned(),
-            effect: Effect::Bd { args: vec![], cwd: None },
+            effect: Effect::Br { args: vec![], cwd: None },
             compensation: None,
             transition: StepTransition::None,
             dependencies: vec![],
         },
         LifecycleStep {
             name: "step_b".to_owned(),
-            effect: Effect::Bd { args: vec![], cwd: None },
+            effect: Effect::Br { args: vec![], cwd: None },
             compensation: None,
             transition: StepTransition::None,
             dependencies: vec!["step_a".to_owned()],
@@ -953,14 +953,14 @@ fn validate_dag_rejects_direct_cycle() {
     let steps = vec![
         LifecycleStep {
             name: "step_a".to_owned(),
-            effect: Effect::Bd { args: vec![], cwd: None },
+            effect: Effect::Br { args: vec![], cwd: None },
             compensation: None,
             transition: StepTransition::None,
             dependencies: vec!["step_b".to_owned()],
         },
         LifecycleStep {
             name: "step_b".to_owned(),
-            effect: Effect::Bd { args: vec![], cwd: None },
+            effect: Effect::Br { args: vec![], cwd: None },
             compensation: None,
             transition: StepTransition::None,
             dependencies: vec!["step_a".to_owned()],
@@ -978,21 +978,21 @@ fn validate_dag_rejects_indirect_cycle() {
     let steps = vec![
         LifecycleStep {
             name: "step_a".to_owned(),
-            effect: Effect::Bd { args: vec![], cwd: None },
+            effect: Effect::Br { args: vec![], cwd: None },
             compensation: None,
             transition: StepTransition::None,
             dependencies: vec!["step_c".to_owned()],
         },
         LifecycleStep {
             name: "step_b".to_owned(),
-            effect: Effect::Bd { args: vec![], cwd: None },
+            effect: Effect::Br { args: vec![], cwd: None },
             compensation: None,
             transition: StepTransition::None,
             dependencies: vec!["step_a".to_owned()],
         },
         LifecycleStep {
             name: "step_c".to_owned(),
-            effect: Effect::Bd { args: vec![], cwd: None },
+            effect: Effect::Br { args: vec![], cwd: None },
             compensation: None,
             transition: StepTransition::None,
             dependencies: vec!["step_b".to_owned()],
@@ -1026,14 +1026,14 @@ fn validate_dag_rejects_dependency_after_step() {
     let steps = vec![
         LifecycleStep {
             name: "step_b".to_owned(),
-            effect: Effect::Bd { args: vec![], cwd: None },
+            effect: Effect::Br { args: vec![], cwd: None },
             compensation: None,
             transition: StepTransition::None,
             dependencies: vec!["step_a".to_owned()],
         },
         LifecycleStep {
             name: "step_a".to_owned(),
-            effect: Effect::Bd { args: vec![], cwd: None },
+            effect: Effect::Br { args: vec![], cwd: None },
             compensation: None,
             transition: StepTransition::None,
             dependencies: vec![],

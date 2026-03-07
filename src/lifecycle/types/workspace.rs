@@ -47,9 +47,10 @@ impl WorkspaceName {
 
     #[must_use]
     pub fn workspace_path(&self) -> String {
-        std::env::current_dir()
-            .map(|p| p.join(&self.0).to_string_lossy().to_string())
-            .unwrap_or_else(|_| format!("/home/lewis/src/{}", self.0))
+        std::env::current_dir().map_or_else(
+            |_| format!("/home/lewis/src/{}", self.0),
+            |p| p.join(&self.0).to_string_lossy().to_string(),
+        )
     }
 }
 

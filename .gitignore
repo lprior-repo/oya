@@ -36,6 +36,14 @@ timer
 
 # Moon cache
 .moon/cache/
+.moon-zjj-reference/cache/
+
+# Oya runtime artifacts
+.oya/runs/
+.oya/bridge/
+
+# ZJJ undo log
+.zjj/undo.log
 
 # TDD cache
 .tdd15-cache/
