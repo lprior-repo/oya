@@ -55,6 +55,31 @@ impl DiscoverySession {
         Self { id: id.to_string(), version: 0, requirements: Vec::new(), writable: true }
     }
 
+    pub fn new_readonly(id: &str) -> Self{
+        Self { id: id.to_string(), version: 0, requirements: Vec::new(), writable: false }
+    }
+
+    pub fn version(&self) -> u64 {
+        self.version
+    }
+
+    pub fn requirement_count(&self) -> usize {
+        self.requirements.len()
+    }
+
+    pub fn is_writable(&self) -> bool {
+        self.writable
+    }
+
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    pub fn get_requirement_description(&self, _id: &str) -> Option<String> {
+        None
+    }
+}
+
     pub fn new_readonly(id: &str) -> Self {
         Self { id: id.to_string(), version: 0, requirements: Vec::new(), writable: false }
     }
