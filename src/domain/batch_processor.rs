@@ -55,7 +55,7 @@ impl DiscoverySession {
         Self { id: id.to_string(), version: 0, requirements: Vec::new(), writable: true }
     }
 
-    pub fn new_readonly(id: &str) -> Self{
+    pub fn new_readonly(id: &str) -> Self {
         Self { id: id.to_string(), version: 0, requirements: Vec::new(), writable: false }
     }
 

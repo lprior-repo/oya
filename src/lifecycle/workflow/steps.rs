@@ -25,6 +25,7 @@ pub enum StepTransition {
     PullRequestOpened { bead: BeadData },
 }
 
+#[must_use]
 pub fn build_steps(bead: &BeadData, model: &Model, repo: Option<&str>) -> Vec<LifecycleStep> {
     let mut steps = vec![
         br_in_progress_step(bead),
