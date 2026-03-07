@@ -54,7 +54,24 @@ mod module_depth_tests {
             .position(|c| *c == "src")
             .ok_or_else(|| format!("File {} is not under src/", file_path))?;
 
-        let depth = components.len() - src_index - 2;
+        // Special case: src/lib.rs and src/main.rs are depth 0 (crate root)
+        let filename = components.last()
+            .ok_or_else(|| format!("Invalid file path: {}", file_path))?;
+        
+        if *filename == "lib.rs" || *filename == "main.rs" {
+            return Ok(0);
+        }
+
+        let filename_without_ext = filename
+            .strip_suffix(".rs")
+            .unwrap_or(filename);
+        
+        // If filename is "mod.rs", don't count it as an extra component
+        let depth = if filename_without_ext == "mod" {
+            components.len() - src_index - 2 // -2 for "src" and "mod.rs"
+        } else {
+            components.len() - src_index - 1 // -1 for "src"
+        };
 
         Ok(depth)
     }
@@ -116,10 +133,12 @@ mod module_depth_tests {
 
     #[test]
     fn test_module_depth_calculation() {
+        // Test the depth calculation logic
         assert_eq!(calculate_module_depth("src/lib.rs").unwrap(), 0);
         assert_eq!(calculate_module_depth("src/domain/mod.rs").unwrap(), 1);
-        assert_eq!(calculate_module_depth("src/lifecycle/types/bead.rs").unwrap(), 2);
+        assert_eq!(calculate_module_depth("src/lifecycle/types/bead.rs").unwrap(), 3);
         assert_eq!(calculate_module_depth("src/cli/doctor/commands.rs").unwrap(), 3);
+        assert_eq!(calculate_module_depth("src/lifecycle/workflow/execution/transitions.rs").unwrap(), 4);
     }
 
     #[test]
