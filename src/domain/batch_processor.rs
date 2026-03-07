@@ -46,29 +46,17 @@ impl BatchProcessor {
         _session: &DiscoverySession,
         _changes: Vec<RequirementChange>,
     ) -> Result<BatchReport, BatchError> {
-        Err(BatchError::ProcessingFailed {
-            message: "BatchProcessor not implemented".to_string(),
-        })
+        Err(BatchError::ProcessingFailed { message: "BatchProcessor not implemented".to_string() })
     }
 }
 
 impl DiscoverySession {
     pub fn new(id: &str) -> Self {
-        Self {
-            id: id.to_string(),
-            version: 0,
-            requirements: Vec::new(),
-            writable: true,
-        }
+        Self { id: id.to_string(), version: 0, requirements: Vec::new(), writable: true }
     }
 
     pub fn new_readonly(id: &str) -> Self {
-        Self {
-            id: id.to_string(),
-            version: 0,
-            requirements: Vec::new(),
-            writable: false,
-        }
+        Self { id: id.to_string(), version: 0, requirements: Vec::new(), writable: false }
     }
 
     pub fn version(&self) -> u64 {
