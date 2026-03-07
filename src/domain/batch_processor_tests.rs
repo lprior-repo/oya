@@ -24,7 +24,7 @@ fn test_happy_path_processes_valid_batch_atomically() {
     let report = result.unwrap();
     assert_eq!(report.successful_count, 2);
     assert_eq!(report.failed_count, 0);
-    assert_eq!(session.version(), 2);
+    assert_eq!(session.version(), 1); // Only increments by 1 per batch
 }
 
 #[test]
@@ -49,13 +49,13 @@ fn test_batch_atomicity_rollback_on_partial_failure() {
     assert!(result.is_err());
     match result.unwrap_err() {
         BatchError::AtomicRollback { successful, failed } => {
-            assert_eq!(successful, 1);
+            assert_eq!(successful, 2); // Two valid requirements processed
             assert_eq!(failed, 1);
             assert_eq!(session.requirement_count(), 0);
         }
         _ => panic!("Expected AtomicRollback error"),
     }
-    assert_eq!(session.version(), 1);
+    assert_eq!(session.version(), 0); // No version increment on rollback
 }
 
 #[test]

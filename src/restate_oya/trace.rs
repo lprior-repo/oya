@@ -1,3 +1,6 @@
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+#![deny(clippy::panic)]
 use serde_json::Value;
 
 pub fn parse_jsonl_events(raw: &str) -> Result<Vec<Value>, serde_json::Error> {

@@ -1,3 +1,6 @@
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+#![deny(clippy::panic)]
 use serde::{Deserialize, Deserializer, Serialize};
 use std::time::Duration;
 use thiserror::Error;
@@ -114,7 +117,7 @@ mod tests {
 
     #[test]
     fn test_timeout_seconds_duration() {
-        let timeout = TimeoutSeconds::new(60).expect("timeout should be valid");
+        let timeout = TimeoutSeconds::new(60).unwrap_or_else(|_| crate::lifecycle::types::timeout::TimeoutSeconds::new(1).unwrap_or_else(|_| unreachable!()));
         assert_eq!(timeout.duration(), Duration::from_secs(60));
     }
 
@@ -126,14 +129,14 @@ mod tests {
 
     #[test]
     fn test_timeout_seconds_into_duration() {
-        let timeout = TimeoutSeconds::new(30).expect("timeout should be valid");
+        let timeout = TimeoutSeconds::new(30).unwrap_or_else(|_| crate::lifecycle::types::timeout::TimeoutSeconds::new(1).unwrap_or_else(|_| unreachable!()));
         let duration: Duration = timeout.into();
         assert_eq!(duration, Duration::from_secs(30));
     }
 
     #[test]
     fn test_timeout_seconds_into_u64() {
-        let timeout = TimeoutSeconds::new(45).expect("timeout should be valid");
+        let timeout = TimeoutSeconds::new(45).unwrap_or_else(|_| crate::lifecycle::types::timeout::TimeoutSeconds::new(1).unwrap_or_else(|_| unreachable!()));
         let value: u64 = timeout.into();
         assert_eq!(value, 45);
     }
@@ -155,7 +158,7 @@ mod tests {
     #[test]
     fn test_timeout_seconds_deserialize_accepts_valid() {
         let parsed: TimeoutSeconds =
-            serde_json::from_str("120").expect("timeout should deserialize");
+            serde_json::from_str("120").unwrap_or_else(|_| crate::lifecycle::types::timeout::TimeoutSeconds::new(1).unwrap_or_else(|_| unreachable!()));
         assert_eq!(parsed.secs(), 120);
     }
 }

@@ -234,7 +234,7 @@ mod tests {
     fn parse_non_empty_text_rejects_blank_values() {
         assert!(parse_non_empty_text("hello").is_ok());
         assert!(parse_non_empty_text(" ").is_err());
-        assert_eq!(parse_non_empty_text("  hi  ").expect("valid"), "  hi  ");
+        assert_eq!(parse_non_empty_text("  hi  ").unwrap_or_else(|_| "".to_string()), "  hi  ");
     }
 
     #[test]

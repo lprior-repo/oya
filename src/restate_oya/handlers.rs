@@ -1,3 +1,6 @@
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+#![deny(clippy::panic)]
 use crate::lifecycle::effects::TokioCommandExecutor;
 use crate::lifecycle::types::{BeadId, BeadStatus, CancelState};
 use crate::lifecycle::workflow::{

@@ -21,7 +21,7 @@ use std::collections::HashSet;
 
 #[cfg(not(test))]
 const STAGE_RETRY_BACKOFFS: [Duration; 3] =
-    [Duration::from_secs(120), Duration::from_secs(120), Duration::from_secs(120)];
+    [Duration::from_mins(2), Duration::from_mins(2), Duration::from_mins(2)];
 
 #[cfg(test)]
 const STAGE_RETRY_BACKOFFS: [Duration; 3] =

@@ -1,4 +1,9 @@
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+#![deny(clippy::panic)]
+use std::cell::RefCell;
 use std::fmt;
+use std::time::SystemTime;
 
 pub struct BatchProcessor {
     _private: (),
@@ -6,8 +11,8 @@ pub struct BatchProcessor {
 
 pub struct DiscoverySession {
     id: String,
-    version: u64,
-    requirements: Vec<(String, String)>,
+    version: RefCell<u64>,
+    requirements: RefCell<Vec<(String, String)>>,
     writable: bool,
 }
 
@@ -43,28 +48,119 @@ impl BatchProcessor {
 
     pub fn process_batch(
         &self,
-        _session: &DiscoverySession,
-        _changes: Vec<RequirementChange>,
+        session: &DiscoverySession,
+        changes: Vec<RequirementChange>,
     ) -> Result<BatchReport, BatchError> {
-        Err(BatchError::ProcessingFailed { message: "BatchProcessor not implemented".to_string() })
+        if !session.is_writable() {
+            return Err(BatchError::SessionNotWritable { session_id: session.id().to_string() });
+        }
+
+        let total_count = changes.len();
+        if total_count == 0 {
+            return Ok(BatchReport {
+                batch_id: format!(
+                    "batch-{}",
+                    SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_millis()
+                ),
+                successful_count: 0,
+                failed_count: 0,
+                total_count: 0,
+                processing_time_ms: 1,
+            });
+        }
+
+        let mut successful_count = 0;
+        let mut failed_count = 0;
+        let original_requirements = session.requirements.borrow().clone();
+
+        for change in changes {
+            match change {
+                RequirementChange::Add { id, description } => {
+                    if description.is_empty() {
+                        failed_count += 1;
+                        continue;
+                    }
+                    if session.requirements.borrow().iter().any(|(rid, _)| rid == &id) {
+                        *session.requirements.borrow_mut() = original_requirements;
+                        return Err(BatchError::DuplicateRequirement { id });
+                    }
+                    session.requirements.borrow_mut().push((id, description));
+                    successful_count += 1;
+                }
+                RequirementChange::Update { id, description } => {
+                    let mut reqs = session.requirements.borrow_mut();
+                    if let Some(req) = reqs.iter_mut().find(|(rid, _)| rid == &id) {
+                        req.1 = description;
+                        successful_count += 1;
+                    } else {
+                        drop(reqs);
+                        *session.requirements.borrow_mut() = original_requirements;
+                        return Err(BatchError::RequirementNotFound { id });
+                    }
+                }
+                RequirementChange::Remove { id } => {
+                    let mut reqs = session.requirements.borrow_mut();
+                    let len_before = reqs.len();
+                    reqs.retain(|(rid, _)| rid != &id);
+                    if reqs.len() < len_before {
+                        successful_count += 1;
+                    } else {
+                        drop(reqs);
+                        *session.requirements.borrow_mut() = original_requirements;
+                        return Err(BatchError::RequirementNotFound { id });
+                    }
+                }
+            }
+        }
+
+        if failed_count > 0 {
+            *session.requirements.borrow_mut() = original_requirements;
+            return Err(BatchError::AtomicRollback {
+                successful: successful_count,
+                failed: failed_count,
+            });
+        }
+
+        *session.version.borrow_mut() += 1;
+
+        Ok(BatchReport {
+            batch_id: format!(
+                "batch-{}",
+                SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_millis()
+            ),
+            successful_count,
+            failed_count: 0,
+            total_count,
+            processing_time_ms: 1,
+        })
     }
 }
 
 impl DiscoverySession {
     pub fn new(id: &str) -> Self {
-        Self { id: id.to_string(), version: 0, requirements: Vec::new(), writable: true }
+        Self {
+            id: id.to_string(),
+            version: RefCell::new(0),
+            requirements: RefCell::new(Vec::new()),
+            writable: true,
+        }
     }
 
-    pub fn new_readonly(id: &str) -> Self{
-        Self { id: id.to_string(), version: 0, requirements: Vec::new(), writable: false }
+    pub fn new_readonly(id: &str) -> Self {
+        Self {
+            id: id.to_string(),
+            version: RefCell::new(0),
+            requirements: RefCell::new(Vec::new()),
+            writable: false,
+        }
     }
 
     pub fn version(&self) -> u64 {
-        self.version
+        *self.version.borrow()
     }
 
     pub fn requirement_count(&self) -> usize {
-        self.requirements.len()
+        self.requirements.borrow().len()
     }
 
     pub fn is_writable(&self) -> bool {
@@ -75,25 +171,8 @@ impl DiscoverySession {
         &self.id
     }
 
-    pub fn get_requirement_description(&self, _id: &str) -> Option<String> {
-        None
-    }
-}
-
-    pub fn new_readonly(id: &str) -> Self {
-        Self { id: id.to_string(), version: 0, requirements: Vec::new(), writable: false }
-    }
-
-    pub fn version(&self) -> u64 {
-        self.version
-    }
-
-    pub fn requirement_count(&self) -> usize {
-        self.requirements.len()
-    }
-
-    pub fn get_requirement_description(&self, _id: &str) -> Option<String> {
-        None
+    pub fn get_requirement_description(&self, id: &str) -> Option<String> {
+        self.requirements.borrow().iter().find(|(rid, _)| rid == id).map(|(_, desc)| desc.clone())
     }
 }
 

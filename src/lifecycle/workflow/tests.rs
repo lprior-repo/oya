@@ -73,13 +73,13 @@ fn non_zero(stderr: &str) -> Result<CommandResult, CommandFailure> {
 fn workspace_path(workspace: &str) -> String {
     std::env::current_dir().map_or_else(
         |_| format!("/home/lewis/src/{}", workspace),
-        |p| p.join(workspace).to_string_lossy().to_string(),
+        |p| format!("{}/{}", p.to_string_lossy(), workspace),
     )
 }
 
 fn opencode_prompt(bead: &str) -> String {
     format!(
-        "Implement bead {bead} in this workspace using functional-rust approach and tests derived from contract. Do not call `oya` or `bd`. Use moon/jj/gh as needed. Return one JSON receipt object with required keys: objective, allowed_scope, files_touched, commands, exit_codes, key_stdout_stderr, diff_summary, risks_unknowns, pass_fail_recommendation.",
+        "Implement bead {bead} in this workspace using functional-rust approach and tests derived from contract. Do not call `oya` or `br`. Use moon/jj/gh as needed. Return one JSON receipt object with required keys: objective, allowed_scope, files_touched, commands, exit_codes, key_stdout_stderr, diff_summary, risks_unknowns, pass_fail_recommendation.",
     )
 }
 
@@ -315,49 +315,49 @@ async fn run_lifecycle_pr_output_without_url_triggers_terminal_compensations() {
 async fn run_lifecycle_existing_pr_in_stderr_is_treated_as_success() {
     let bead = "edge-test-002b";
     let workspace = "oya-edge-test-002b";
-    let workspace_path = "/home/lewis/src/oya-edge-test-002b";
+    let workspace_path = workspace_path("oya-edge-test-002b");
     let prompt = opencode_prompt(bead);
     let qa = qa_prompt(bead);
     let executor = ScriptedExecutor::new(vec![
         call("bd", &["update", bead, "--status", "in_progress"], None, ok("")),
         call("jj", &["workspace", "forget", workspace], None, ok("")),
-        call("jj", &["workspace", "add", workspace_path, "--name", workspace], None, ok("")),
+        call("jj", &["workspace", "add", &workspace_path, "--name", workspace], None, ok("")),
         call(
             "opencode",
             &["run", "--format", "json", "--model", "zai-coding-plan/glm-5", prompt.as_str()],
-            Some(workspace_path),
+            Some(&workspace_path),
             ok(valid_receipt_json()),
         ),
         call(
             "opencode",
             &["run", "--format", "json", "--model", "zai-coding-plan/glm-5", qa.as_str()],
-            Some(workspace_path),
+            Some(&workspace_path),
             ok(valid_receipt_json()),
         ),
-        call("moon", &["run", ":quick"], Some(workspace_path), ok("")),
-        call("moon", &["run", ":test"], Some(workspace_path), ok("")),
-        call("moon", &["run", ":test"], Some(workspace_path), ok("")),
-        call("moon", &["run", ":ci"], Some(workspace_path), ok("")),
-        call("jj", &["git", "fetch", "--remote", "origin"], Some(workspace_path), ok("")),
-        call("jj", &["rebase", "-d", "main@origin"], Some(workspace_path), ok("")),
-        call("jj", &["file", "track", "."], Some(workspace_path), ok("")),
+        call("moon", &["run", ":quick"], Some(&workspace_path), ok("")),
+        call("moon", &["run", ":test"], Some(&workspace_path), ok("")),
+        call("moon", &["run", ":test"], Some(&workspace_path), ok("")),
+        call("moon", &["run", ":ci"], Some(&workspace_path), ok("")),
+        call("jj", &["git", "fetch", "--remote", "origin"], Some(&workspace_path), ok("")),
+        call("jj", &["rebase", "-d", "main@origin"], Some(&workspace_path), ok("")),
+        call("jj", &["file", "track", "."], Some(&workspace_path), ok("")),
         call(
             "jj",
             &["describe", "-m", "chore: implement edge-test-002b via lifecycle"],
-            Some(workspace_path),
+            Some(&workspace_path),
             ok(""),
         ),
         call(
             "jj",
             &["diff", "--name-only", "--from", "main@origin", "--to", "@"],
-            Some(workspace_path),
+            Some(&workspace_path),
             ok("src/main.rs\n"),
         ),
-        call("jj", &["bookmark", "set", bead, "-r", "@"], Some(workspace_path), ok("")),
+        call("jj", &["bookmark", "set", bead, "-r", "@"], Some(&workspace_path), ok("")),
         call(
             "jj",
             &["git", "push", "--remote", "origin", "--bookmark", bead],
-            Some(workspace_path),
+            Some(&workspace_path),
             ok(""),
         ),
         call(
@@ -374,7 +374,7 @@ async fn run_lifecycle_existing_pr_in_stderr_is_treated_as_success() {
                 "--body",
                 "## Summary\n- Implements bead `edge-test-002b` via lifecycle automation\n- Runs `moon run :ci` in workspace before opening PR\n- Publishes lifecycle status updates for polling",
             ],
-            Some(workspace_path),
+            Some(&workspace_path),
             non_zero("a pull request for branch \"edge-test-002b\" into branch \"main\" already exists:\nhttps://github.com/lprior-repo/oya/pull/4242\n"),
         ),
         call("jj", &["workspace", "forget", workspace], None, ok("")),
@@ -403,34 +403,34 @@ async fn run_lifecycle_existing_pr_in_stderr_is_treated_as_success() {
 async fn run_lifecycle_transient_failure_skips_terminal_compensations() {
     let bead = "edge-test-003";
     let workspace = "oya-edge-test-003";
-    let workspace_path = "/home/lewis/src/oya-edge-test-003";
+    let workspace_path = workspace_path("oya-edge-test-003");
     let prompt = opencode_prompt(bead);
     let executor = ScriptedExecutor::new(vec![
         call("bd", &["update", bead, "--status", "in_progress"], None, ok("")),
         call("jj", &["workspace", "forget", workspace], None, ok("")),
-        call("jj", &["workspace", "add", workspace_path, "--name", workspace], None, ok("")),
+        call("jj", &["workspace", "add", &workspace_path, "--name", workspace], None, ok("")),
         call(
             "opencode",
             &["run", "--format", "json", "--model", "zai-coding-plan/glm-5", prompt.as_str()],
-            Some(workspace_path),
+            Some(&workspace_path),
             non_zero("simulated opencode transient failure"),
         ),
         call(
             "opencode",
             &["run", "--format", "json", "--model", "zai-coding-plan/glm-5", prompt.as_str()],
-            Some(workspace_path),
+            Some(&workspace_path),
             non_zero("simulated opencode transient failure"),
         ),
         call(
             "opencode",
             &["run", "--format", "json", "--model", "zai-coding-plan/glm-5", prompt.as_str()],
-            Some(workspace_path),
+            Some(&workspace_path),
             non_zero("simulated opencode transient failure"),
         ),
         call(
             "opencode",
             &["run", "--format", "json", "--model", "zai-coding-plan/glm-5", prompt.as_str()],
-            Some(workspace_path),
+            Some(&workspace_path),
             non_zero("simulated opencode transient failure"),
         ),
         call("jj", &["workspace", "forget", workspace], None, ok("")),
@@ -456,56 +456,56 @@ async fn run_lifecycle_transient_failure_skips_terminal_compensations() {
 async fn run_lifecycle_transient_opencode_recovers_after_retry() {
     let bead = "edge-test-003b";
     let workspace = "oya-edge-test-003b";
-    let workspace_path = "/home/lewis/src/oya-edge-test-003b";
+    let workspace_path = workspace_path("oya-edge-test-003b");
     let prompt = opencode_prompt(bead);
     let qa = qa_prompt(bead);
     let pr_body = "## Summary\n- Implements bead `edge-test-003b` via lifecycle automation\n- Runs `moon run :ci` in workspace before opening PR\n- Publishes lifecycle status updates for polling";
     let executor = ScriptedExecutor::new(vec![
         call("bd", &["update", bead, "--status", "in_progress"], None, ok("")),
         call("jj", &["workspace", "forget", workspace], None, ok("")),
-        call("jj", &["workspace", "add", workspace_path, "--name", workspace], None, ok("")),
+        call("jj", &["workspace", "add", &workspace_path, "--name", workspace], None, ok("")),
         call(
             "opencode",
             &["run", "--format", "json", "--model", "zai-coding-plan/glm-5", prompt.as_str()],
-            Some(workspace_path),
+            Some(&workspace_path),
             non_zero("transient opencode failure"),
         ),
         call(
             "opencode",
             &["run", "--format", "json", "--model", "zai-coding-plan/glm-5", prompt.as_str()],
-            Some(workspace_path),
+            Some(&workspace_path),
             ok(valid_receipt_json()),
         ),
         call(
             "opencode",
             &["run", "--format", "json", "--model", "zai-coding-plan/glm-5", qa.as_str()],
-            Some(workspace_path),
+            Some(&workspace_path),
             ok(valid_receipt_json()),
         ),
-        call("moon", &["run", ":quick"], Some(workspace_path), ok("")),
-        call("moon", &["run", ":test"], Some(workspace_path), ok("")),
-        call("moon", &["run", ":test"], Some(workspace_path), ok("")),
-        call("moon", &["run", ":ci"], Some(workspace_path), ok("")),
-        call("jj", &["git", "fetch", "--remote", "origin"], Some(workspace_path), ok("")),
-        call("jj", &["rebase", "-d", "main@origin"], Some(workspace_path), ok("")),
-        call("jj", &["file", "track", "."], Some(workspace_path), ok("")),
+        call("moon", &["run", ":quick"], Some(&workspace_path), ok("")),
+        call("moon", &["run", ":test"], Some(&workspace_path), ok("")),
+        call("moon", &["run", ":test"], Some(&workspace_path), ok("")),
+        call("moon", &["run", ":ci"], Some(&workspace_path), ok("")),
+        call("jj", &["git", "fetch", "--remote", "origin"], Some(&workspace_path), ok("")),
+        call("jj", &["rebase", "-d", "main@origin"], Some(&workspace_path), ok("")),
+        call("jj", &["file", "track", "."], Some(&workspace_path), ok("")),
         call(
             "jj",
             &["describe", "-m", "chore: implement edge-test-003b via lifecycle"],
-            Some(workspace_path),
+            Some(&workspace_path),
             ok(""),
         ),
         call(
             "jj",
             &["diff", "--name-only", "--from", "main@origin", "--to", "@"],
-            Some(workspace_path),
+            Some(&workspace_path),
             ok("src/main.rs\n"),
         ),
-        call("jj", &["bookmark", "set", bead, "-r", "@"], Some(workspace_path), ok("")),
+        call("jj", &["bookmark", "set", bead, "-r", "@"], Some(&workspace_path), ok("")),
         call(
             "jj",
             &["git", "push", "--remote", "origin", "--bookmark", bead],
-            Some(workspace_path),
+            Some(&workspace_path),
             ok(""),
         ),
         call(
@@ -522,7 +522,7 @@ async fn run_lifecycle_transient_opencode_recovers_after_retry() {
                 "--body",
                 pr_body,
             ],
-            Some(workspace_path),
+            Some(&workspace_path),
             ok("https://github.com/lprior-repo/oya/pull/333\n"),
         ),
         call("jj", &["workspace", "forget", workspace], None, ok("")),
@@ -585,42 +585,42 @@ async fn run_lifecycle_rejects_invalid_repo_before_effects() {
 async fn run_lifecycle_fails_when_only_bead_files_changed() {
     let bead = "edge-test-006";
     let workspace = "oya-edge-test-006";
-    let workspace_path = "/home/lewis/src/oya-edge-test-006";
+    let workspace_path = workspace_path("oya-edge-test-006");
     let prompt = opencode_prompt(bead);
     let qa = qa_prompt(bead);
     let executor = ScriptedExecutor::new(vec![
         call("bd", &["update", bead, "--status", "in_progress"], None, ok("")),
         call("jj", &["workspace", "forget", workspace], None, ok("")),
-        call("jj", &["workspace", "add", workspace_path, "--name", workspace], None, ok("")),
+        call("jj", &["workspace", "add", &workspace_path, "--name", workspace], None, ok("")),
         call(
             "opencode",
             &["run", "--format", "json", "--model", "zai-coding-plan/glm-5", prompt.as_str()],
-            Some(workspace_path),
+            Some(&workspace_path),
             ok(valid_receipt_json()),
         ),
         call(
             "opencode",
             &["run", "--format", "json", "--model", "zai-coding-plan/glm-5", qa.as_str()],
-            Some(workspace_path),
+            Some(&workspace_path),
             ok(valid_receipt_json()),
         ),
-        call("moon", &["run", ":quick"], Some(workspace_path), ok("")),
-        call("moon", &["run", ":test"], Some(workspace_path), ok("")),
-        call("moon", &["run", ":test"], Some(workspace_path), ok("")),
-        call("moon", &["run", ":ci"], Some(workspace_path), ok("")),
-        call("jj", &["git", "fetch", "--remote", "origin"], Some(workspace_path), ok("")),
-        call("jj", &["rebase", "-d", "main@origin"], Some(workspace_path), ok("")),
-        call("jj", &["file", "track", "."], Some(workspace_path), ok("")),
+        call("moon", &["run", ":quick"], Some(&workspace_path), ok("")),
+        call("moon", &["run", ":test"], Some(&workspace_path), ok("")),
+        call("moon", &["run", ":test"], Some(&workspace_path), ok("")),
+        call("moon", &["run", ":ci"], Some(&workspace_path), ok("")),
+        call("jj", &["git", "fetch", "--remote", "origin"], Some(&workspace_path), ok("")),
+        call("jj", &["rebase", "-d", "main@origin"], Some(&workspace_path), ok("")),
+        call("jj", &["file", "track", "."], Some(&workspace_path), ok("")),
         call(
             "jj",
             &["describe", "-m", "chore: implement edge-test-006 via lifecycle"],
-            Some(workspace_path),
+            Some(&workspace_path),
             ok(""),
         ),
         call(
             "jj",
             &["diff", "--name-only", "--from", "main@origin", "--to", "@"],
-            Some(workspace_path),
+            Some(&workspace_path),
             ok(".beads/beads.db\n"),
         ),
         call("jj", &["workspace", "forget", workspace], None, ok("")),
@@ -659,16 +659,16 @@ async fn run_lifecycle_fails_when_only_bead_files_changed() {
 async fn run_lifecycle_fails_when_opencode_receipt_is_missing_fields() {
     let bead = "edge-test-007";
     let workspace = "oya-edge-test-007";
-    let workspace_path = "/home/lewis/src/oya-edge-test-007";
+    let workspace_path = workspace_path("oya-edge-test-007");
     let prompt = opencode_prompt(bead);
     let executor = ScriptedExecutor::new(vec![
         call("bd", &["update", bead, "--status", "in_progress"], None, ok("")),
         call("jj", &["workspace", "forget", workspace], None, ok("")),
-        call("jj", &["workspace", "add", workspace_path, "--name", workspace], None, ok("")),
+        call("jj", &["workspace", "add", &workspace_path, "--name", workspace], None, ok("")),
         call(
             "opencode",
             &["run", "--format", "json", "--model", "zai-coding-plan/glm-5", prompt.as_str()],
-            Some(workspace_path),
+            Some(&workspace_path),
             ok("{\"status\":\"ok\"}"),
         ),
         call("jj", &["workspace", "forget", workspace], None, ok("")),
@@ -707,59 +707,59 @@ async fn run_lifecycle_fails_when_opencode_receipt_is_missing_fields() {
 async fn run_lifecycle_qa_failure_retries_three_times_then_blocks() {
     let bead = "edge-test-007b";
     let workspace = "oya-edge-test-007b";
-    let workspace_path = "/home/lewis/src/oya-edge-test-007b";
+    let workspace_path = workspace_path("oya-edge-test-007b");
     let prompt = opencode_prompt(bead);
     let qa = qa_prompt(bead);
     let executor = ScriptedExecutor::new(vec![
         call("bd", &["update", bead, "--status", "in_progress"], None, ok("")),
         call("jj", &["workspace", "forget", workspace], None, ok("")),
-        call("jj", &["workspace", "add", workspace_path, "--name", workspace], None, ok("")),
+        call("jj", &["workspace", "add", &workspace_path, "--name", workspace], None, ok("")),
         call(
             "opencode",
             &["run", "--format", "json", "--model", "zai-coding-plan/glm-5", prompt.as_str()],
-            Some(workspace_path),
+            Some(&workspace_path),
             ok(valid_receipt_json()),
         ),
         call(
             "opencode",
             &["run", "--format", "json", "--model", "zai-coding-plan/glm-5", qa.as_str()],
-            Some(workspace_path),
+            Some(&workspace_path),
             non_zero("qa failed"),
         ),
         call(
             "opencode",
             &["run", "--format", "json", "--model", "zai-coding-plan/glm-5", prompt.as_str()],
-            Some(workspace_path),
+            Some(&workspace_path),
             ok(valid_receipt_json()),
         ),
         call(
             "opencode",
             &["run", "--format", "json", "--model", "zai-coding-plan/glm-5", qa.as_str()],
-            Some(workspace_path),
+            Some(&workspace_path),
             non_zero("qa failed"),
         ),
         call(
             "opencode",
             &["run", "--format", "json", "--model", "zai-coding-plan/glm-5", prompt.as_str()],
-            Some(workspace_path),
+            Some(&workspace_path),
             ok(valid_receipt_json()),
         ),
         call(
             "opencode",
             &["run", "--format", "json", "--model", "zai-coding-plan/glm-5", qa.as_str()],
-            Some(workspace_path),
+            Some(&workspace_path),
             non_zero("qa failed"),
         ),
         call(
             "opencode",
             &["run", "--format", "json", "--model", "zai-coding-plan/glm-5", prompt.as_str()],
-            Some(workspace_path),
+            Some(&workspace_path),
             ok(valid_receipt_json()),
         ),
         call(
             "opencode",
             &["run", "--format", "json", "--model", "zai-coding-plan/glm-5", qa.as_str()],
-            Some(workspace_path),
+            Some(&workspace_path),
             non_zero("qa failed"),
         ),
         call("jj", &["workspace", "forget", workspace], None, ok("")),
