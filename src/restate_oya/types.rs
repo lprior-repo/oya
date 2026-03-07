@@ -1,6 +1,9 @@
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+#![deny(clippy::panic)]
 use crate::lifecycle::types::{BeadId, BeadStatus, CancelState, CompensationDiagnostic};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

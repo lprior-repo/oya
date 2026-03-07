@@ -1,6 +1,9 @@
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+#![deny(clippy::panic)]
 use crate::lifecycle::types::Model;
 use restate_sdk::prelude::{HandlerError, TerminalError};
 use serde_json::Value;
