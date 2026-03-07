@@ -7,6 +7,9 @@ pub mod cli;
 pub mod lifecycle;
 pub mod restate_oya;
 
+#[cfg(test)]
+mod zero_panic_lint_tests;
+
 use clap::Parser;
 
 #[tokio::main]
