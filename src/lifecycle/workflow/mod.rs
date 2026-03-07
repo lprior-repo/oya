@@ -7,7 +7,7 @@ mod dag;
 mod execution;
 mod finalize;
 mod progress;
-mod steps;
+pub mod steps;
 mod types;
 
 #[cfg(test)]

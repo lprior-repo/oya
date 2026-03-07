@@ -10,6 +10,9 @@ pub mod restate_oya;
 #[cfg(test)]
 mod zero_panic_lint_tests;
 
+#[cfg(test)]
+mod lifecycle_e2e_tests;
+
 use clap::Parser;
 
 #[tokio::main]

@@ -80,23 +80,6 @@ impl DiscoverySession {
     }
 }
 
-    pub fn new_readonly(id: &str) -> Self {
-        Self { id: id.to_string(), version: 0, requirements: Vec::new(), writable: false }
-    }
-
-    pub fn version(&self) -> u64 {
-        self.version
-    }
-
-    pub fn requirement_count(&self) -> usize {
-        self.requirements.len()
-    }
-
-    pub fn get_requirement_description(&self, _id: &str) -> Option<String> {
-        None
-    }
-}
-
 impl fmt::Display for BatchError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
