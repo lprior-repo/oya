@@ -23,6 +23,7 @@ pub enum RequirementChange {
 }
 
 #[derive(Debug)]
+#[allow(clippy::too_many_lines)]
 pub enum BatchError {
     AtomicRollback { successful: usize, failed: usize },
     SessionNotWritable { session_id: String },
@@ -33,6 +34,7 @@ pub enum BatchError {
 }
 
 #[derive(Debug)]
+#[allow(clippy::too_many_lines)]
 pub struct BatchReport {
     pub batch_id: String,
     pub successful_count: usize,
@@ -46,6 +48,7 @@ impl BatchProcessor {
         Self { _private: () }
     }
 
+    #[allow(clippy::too_many_lines)]
     pub fn process_batch(
         &self,
         session: &DiscoverySession,
