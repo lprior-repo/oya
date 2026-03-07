@@ -1,5 +1,3 @@
-{"issue_id":"oya-2h4","label":"proof"}
-{"issue_id":"oya-2h4","label":"test"}
 {"issue_id":"oya-3cz","label":"feature"}
 {"issue_id":"oya-3cz","label":"game"}
 {"issue_id":"oya-3cz","label":"rust"}
@@ -13,19 +11,10 @@
 {"issue_id":"oya-cp4","label":"feature"}
 {"issue_id":"oya-cp4","label":"game"}
 {"issue_id":"oya-cp4","label":"rust"}
-{"issue_id":"oya-eeh","label":"test"}
-{"issue_id":"oya-eeh","label":"verification"}
 {"issue_id":"oya-fun","label":"test"}
 {"issue_id":"oya-fun","label":"verification"}
 {"issue_id":"oya-hgo","label":"test"}
 {"issue_id":"oya-hgo","label":"verification"}
-{"issue_id":"oya-lf6","label":"architecture"}
-{"issue_id":"oya-lf6","label":"quality"}
-{"issue_id":"oya-lf6","label":"refactor"}
-{"issue_id":"oya-rbj","label":"proof"}
-{"issue_id":"oya-rbj","label":"test"}
-{"issue_id":"oya-s87","label":"manual"}
-{"issue_id":"oya-s87","label":"proof"}
 {"issue_id":"oya-v04","label":"feature"}
 {"issue_id":"oya-v04","label":"game"}
 {"issue_id":"oya-v04","label":"rust"}
