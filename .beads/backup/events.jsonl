@@ -47,3 +47,5 @@
 {"actor":"Test User","comment":null,"created_at":"2026-03-09T23:21:37Z","event_type":"closed","id":47,"issue_id":"oya-iwy","new_value":"Implemented stak worktree list - lists all worktrees for stacked branches","old_value":""}
 {"actor":"Test User","comment":null,"created_at":"2026-03-09T23:28:23Z","event_type":"closed","id":48,"issue_id":"oya-9z0","new_value":"Implemented deterministic snap line tie-break (GEO-019). Fixed test comment at geometry/mod.rs line 878.","old_value":""}
 {"actor":"Test User","comment":null,"created_at":"2026-03-09T23:30:25Z","event_type":"closed","id":49,"issue_id":"oya-an6","new_value":"Implementation complete - isolate CLI commands added","old_value":""}
+{"actor":"Test User","comment":null,"created_at":"2026-03-09T23:32:31Z","event_type":"closed","id":50,"issue_id":"oya-cv5","new_value":"Implemented ImageBounds with natural vs displayed size, aspect ratio handling, and scaling methods. All contract tests pass.","old_value":""}
+{"actor":"Test User","comment":null,"created_at":"2026-03-10T00:06:10Z","event_type":"created","id":51,"issue_id":"oya-4ye","new_value":"","old_value":""}
