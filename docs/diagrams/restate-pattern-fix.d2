@@ -1,0 +1,134 @@
+# Restate Determinism Pattern Wrong vs Correct
+# spawn_blocking placement in ctx.run()
+
+direction: down
+
+# WRONG PATTERN Current Bug
+wrong_title: {
+  label: WRONG PATTERN Current Bug
+  style.stroke-width: 3
+  style.bold: true
+}
+
+wrong_ctx: {
+  label: ctx.run with async closure
+}
+
+wrong_spawn: {
+  label: tokio task spawn_blocking inside
+  style.stroke-width: 2
+}
+
+wrong_problem: {
+  label: PROBLEM Non-deterministic operation inside ctx.run
+  style.stroke-width: 2
+}
+
+wrong_result: {
+  label: Result journaled
+}
+
+wrong_replay_title: {
+  label: On Workflow REPLAY
+  style.stroke-dash: 2
+}
+
+wrong_reexec: {
+  label: ctx.run closure RE-EXECUTES
+}
+
+wrong_runs_again: {
+  label: spawn_blocking RUNS AGAIN
+  style.stroke-width: 3
+  style.bold: true
+}
+
+wrong_divergence: {
+  label: State DIVERGENCE
+  style.bold: true
+}
+
+# CORRECT PATTERN Fixed
+correct_title: {
+  label: CORRECT PATTERN Fixed
+  style.stroke-width: 3
+  style.bold: true
+}
+
+correct_spawn: {
+  label: tokio task spawn_blocking outside ctx.run
+  style.stroke-width: 2
+}
+
+correct_capture: {
+  label: Result captured in variable
+}
+
+correct_ctx: {
+  label: ctx.run with transformation only
+}
+
+correct_transform: {
+  label: result.map Json and error handling
+  style.stroke-width: 2
+}
+
+correct_journal: {
+  label: Transformation journaled
+}
+
+correct_replay_title: {
+  label: On Workflow REPLAY
+}
+
+correct_reexec: {
+  label: ctx.run closure RE-EXECUTES
+}
+
+correct_uses_journal: {
+  label: Uses journaled transformation
+}
+
+correct_no_spawn: {
+  label: spawn_blocking NOT called again
+}
+
+correct_determinism: {
+  label: DETERMINISM GUARANTEED
+  style.stroke-width: 2
+  style.bold: true
+}
+
+# WRONG FLOW CONNECTIONS
+wrong_title -> wrong_ctx
+wrong_ctx -> wrong_spawn
+wrong_spawn -> wrong_problem
+wrong_problem -> wrong_result
+
+wrong_replay_title -> wrong_reexec
+wrong_reexec -> wrong_runs_again
+wrong_runs_again -> wrong_divergence
+
+# CORRECT FLOW CONNECTIONS
+correct_title -> correct_spawn
+correct_spawn -> correct_capture
+correct_capture -> correct_ctx
+correct_ctx -> correct_transform
+correct_transform -> correct_journal
+
+correct_replay_title -> correct_reexec
+correct_reexec -> correct_uses_journal
+correct_uses_journal -> correct_no_spawn
+correct_no_spawn -> correct_determinism
+
+# KEY PRINCIPLE
+explanation: {
+  label: Non-deterministic operations must be outside ctx.run
+  style.stroke-dash: 2
+}
+
+# FILE REFERENCE
+file_ref: {
+  label: src stage_executor.rs lines 51-82
+  style.stroke-dash: 2
+}

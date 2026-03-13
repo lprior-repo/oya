@@ -1,0 +1,14 @@
+$schema: "https://moonrepo.dev/schemas/toolchain.json"
+
+# Rust toolchain configuration (Moon v2 format)
+# Moon orchestrates cargo commands; Rust version managed via rust-toolchain.toml
+rust:
+  version: "nightly"
+  bins:
+    - "cargo-nextest@latest"
+    - "cargo-tarpaulin@latest"
+    - "cargo-mutants@latest"
+    - "trunk@latest"
+  syncToolchainConfig: true  # Syncs to rust-toolchain.toml
+
+telemetry: false

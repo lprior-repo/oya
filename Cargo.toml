@@ -1,0 +1,57 @@
+[package]
+name = "oya"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1"
+async-trait = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4", features = ["derive"] }
+im = "15.1"
+itertools = "0.14"
+futures-util = "0.3"
+opentelemetry = "0.31"
+opentelemetry-otlp = { version = "0.31", features = ["grpc-tonic"] }
+opentelemetry_sdk = { version = "0.31", features = ["rt-tokio"] }
+reqwest = { version = "0.12", features = ["json", "blocking"] }
+restate-sdk = "0.8"
+rpds = "1.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+sled = "0.34"
+strum = { version = "0.27", features = ["derive"] }
+tap = "1.0"
+thiserror = "2"
+tokio = { version = "1", features = ["full"] }
+tracing = { version = "0.1", features = ["attributes"] }
+tracing-opentelemetry = "0.32"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
+ulid = "1"
+url = "2"
+crossterm = "0.28"
+ratatui = "0.29"
+# Security: Pin time to >=0.3.47 to fix RUSTSEC-2026-0009 (DoS via stack exhaustion)
+# This is a transitive dependency via jsonwebtoken -> simple_asn1 -> time
+time = ">=0.3.47"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+too_many_arguments = "deny"
+too_many_lines = "deny"
+
+[dev-dependencies]
+restate-sdk-testcontainers = "0.8"
+wiremock = "0.6"
+proptest = "1.5"
+insta = { version = "1.40", features = ["yaml"] }
+tempfile = "3.12"
+pretty_assertions = "1.4"
+async-trait = "0.1"
+tokio-test = "0.4"
