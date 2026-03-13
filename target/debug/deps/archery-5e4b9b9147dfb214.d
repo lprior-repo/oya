@@ -1,0 +1,10 @@
+/home/lewis/src/oya/target/debug/deps/archery-5e4b9b9147dfb214.d: /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/archery-1.2.2/src/lib.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/archery-1.2.2/src/shared_pointer/mod.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/archery-1.2.2/src/shared_pointer/kind/mod.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/archery-1.2.2/src/shared_pointer/kind/arc/mod.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/archery-1.2.2/src/shared_pointer/kind/arct/mod.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/archery-1.2.2/src/shared_pointer/kind/rc/mod.rs
+
+/home/lewis/src/oya/target/debug/deps/libarchery-5e4b9b9147dfb214.rmeta: /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/archery-1.2.2/src/lib.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/archery-1.2.2/src/shared_pointer/mod.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/archery-1.2.2/src/shared_pointer/kind/mod.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/archery-1.2.2/src/shared_pointer/kind/arc/mod.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/archery-1.2.2/src/shared_pointer/kind/arct/mod.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/archery-1.2.2/src/shared_pointer/kind/rc/mod.rs
+
+/cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/archery-1.2.2/src/lib.rs:
+/cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/archery-1.2.2/src/shared_pointer/mod.rs:
+/cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/archery-1.2.2/src/shared_pointer/kind/mod.rs:
+/cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/archery-1.2.2/src/shared_pointer/kind/arc/mod.rs:
+/cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/archery-1.2.2/src/shared_pointer/kind/arct/mod.rs:
+/cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/archery-1.2.2/src/shared_pointer/kind/rc/mod.rs:

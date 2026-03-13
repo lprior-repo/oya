@@ -1,0 +1,14 @@
+/home/lewis/src/scp/target/debug/deps/yansi-bfd56850de26c9b6.d: /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/yansi-1.0.1/src/lib.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/yansi-1.0.1/src/macros.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/yansi-1.0.1/src/windows.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/yansi-1.0.1/src/attr_quirk.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/yansi-1.0.1/src/style.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/yansi-1.0.1/src/color.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/yansi-1.0.1/src/paint.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/yansi-1.0.1/src/global.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/yansi-1.0.1/src/condition.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/yansi-1.0.1/src/set.rs
+
+/home/lewis/src/scp/target/debug/deps/libyansi-bfd56850de26c9b6.rmeta: /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/yansi-1.0.1/src/lib.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/yansi-1.0.1/src/macros.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/yansi-1.0.1/src/windows.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/yansi-1.0.1/src/attr_quirk.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/yansi-1.0.1/src/style.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/yansi-1.0.1/src/color.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/yansi-1.0.1/src/paint.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/yansi-1.0.1/src/global.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/yansi-1.0.1/src/condition.rs /cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/yansi-1.0.1/src/set.rs
+
+/cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/yansi-1.0.1/src/lib.rs:
+/cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/yansi-1.0.1/src/macros.rs:
+/cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/yansi-1.0.1/src/windows.rs:
+/cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/yansi-1.0.1/src/attr_quirk.rs:
+/cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/yansi-1.0.1/src/style.rs:
+/cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/yansi-1.0.1/src/color.rs:
+/cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/yansi-1.0.1/src/paint.rs:
+/cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/yansi-1.0.1/src/global.rs:
+/cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/yansi-1.0.1/src/condition.rs:
+/cache/cargo-shared/registry/src/index.crates.io-1949cf8c6b5b557f/yansi-1.0.1/src/set.rs:
