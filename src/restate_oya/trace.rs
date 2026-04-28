@@ -16,8 +16,7 @@ pub fn summarize_events(events: &[Value]) -> Value {
         .iter()
         .rev()
         .find_map(|event| event.get("part")?.get("text")?.as_str())
-        .map(|text| text.chars().take(500).collect::<String>())
-        .map_or_else(String::new, std::convert::identity);
+        .map_or_else(String::new, |text| truncate_text(text, 500));
     serde_json::json!({
         "event_count": events.len(),
         "tool_calls": tool_calls,
@@ -91,8 +90,7 @@ fn text_entry(event: &Value, step: usize) -> Value {
         .get("part")
         .and_then(|value| value.get("text"))
         .and_then(Value::as_str)
-        .map(|value| truncate_text(value, 500))
-        .map_or_else(String::new, std::convert::identity);
+        .map_or_else(String::new, |value| truncate_text(value, 500));
     serde_json::json!({
         "step": step,
         "kind": "text",

@@ -69,7 +69,8 @@ mod tests {
 
     #[test]
     fn parse_accepts_valid_owner_repo() {
-        let slug = RepoSlug::parse("lprior-repo/oya").unwrap_or_else(|_| crate::lifecycle::types::repo::RepoSlug("".to_string()));
+        let slug = RepoSlug::parse("lprior-repo/oya")
+            .unwrap_or_else(|_| crate::lifecycle::types::repo::RepoSlug("".to_string()));
         assert_eq!(slug.as_str(), "lprior-repo/oya");
         assert_eq!(slug.owner(), "lprior-repo");
         assert_eq!(slug.repo(), "oya");
@@ -77,13 +78,15 @@ mod tests {
 
     #[test]
     fn parse_accepts_dots_and_underscores() {
-        let slug = RepoSlug::parse("user_name/repo.name").unwrap_or_else(|_| crate::lifecycle::types::repo::RepoSlug("".to_string()));
+        let slug = RepoSlug::parse("user_name/repo.name")
+            .unwrap_or_else(|_| crate::lifecycle::types::repo::RepoSlug("".to_string()));
         assert_eq!(slug.as_str(), "user_name/repo.name");
     }
 
     #[test]
     fn parse_trims_whitespace() {
-        let slug = RepoSlug::parse("  owner/repo  ").unwrap_or_else(|_| crate::lifecycle::types::repo::RepoSlug("".to_string()));
+        let slug = RepoSlug::parse("  owner/repo  ")
+            .unwrap_or_else(|_| crate::lifecycle::types::repo::RepoSlug("".to_string()));
         assert_eq!(slug.as_str(), "owner/repo");
     }
 

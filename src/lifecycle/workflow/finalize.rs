@@ -280,20 +280,14 @@ async fn run_compensations(
     compensations: Vec<Compensation>,
 ) -> (Vec<EffectJournalEntry>, Vec<CompensationDiagnostic>) {
     let reversed = compensations.into_iter().rev().collect::<Vec<_>>();
-    let attempts = stream::iter(reversed.into_iter())
+    let attempts = stream::iter(reversed)
         .then(|compensation| async move {
             run_compensation_with_diagnostic(executor, compensation).await
         })
         .collect::<Vec<(Option<EffectJournalEntry>, CompensationDiagnostic)>>()
         .await;
-    let mut journal = Vec::new();
-    let mut diagnostics = Vec::new();
-    for (entry, diagnostic) in attempts {
-        if let Some(item) = entry {
-            journal.push(item);
-        }
-        diagnostics.push(diagnostic);
-    }
+    let journal = attempts.iter().filter_map(|(entry, _)| entry.clone()).collect::<Vec<_>>();
+    let diagnostics = attempts.into_iter().map(|(_, diagnostic)| diagnostic).collect::<Vec<_>>();
     (journal, diagnostics)
 }
 

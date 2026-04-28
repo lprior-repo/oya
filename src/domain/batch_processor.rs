@@ -63,7 +63,10 @@ impl BatchProcessor {
             return Ok(BatchReport {
                 batch_id: format!(
                     "batch-{}",
-                    SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_millis()
+                    SystemTime::now()
+                        .duration_since(SystemTime::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis()
                 ),
                 successful_count: 0,
                 failed_count: 0,
@@ -129,7 +132,10 @@ impl BatchProcessor {
         Ok(BatchReport {
             batch_id: format!(
                 "batch-{}",
-                SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_millis()
+                SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis()
             ),
             successful_count,
             failed_count: 0,

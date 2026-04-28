@@ -3,7 +3,6 @@
 #![deny(clippy::panic)]
 #![forbid(unsafe_code)]
 
-use jj_lib::repo::Repo;
 use std::path::Path;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -32,5 +31,9 @@ impl JjBackend {
             )));
         }
         Ok(Self { repo_path })
+    }
+
+    pub fn repo_path(&self) -> &Path {
+        self.repo_path.as_path()
     }
 }

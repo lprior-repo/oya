@@ -162,7 +162,7 @@ async fn beads_command(args: BeadsArgs) -> anyhow::Result<()> {
             .map_err(|e| anyhow::anyhow!("failed to read {}: {}", beads_path.display(), e))?;
         content.lines().filter_map(|line| serde_json::from_str(line).ok()).collect()
     };
-    beads.sort_by(|a, b| a.priority.cmp(&b.priority));
+    beads.sort_by_key(|bead| bead.priority);
     if args.json {
         let json = serde_json::to_string_pretty(&beads)?;
         println!("{json}");
