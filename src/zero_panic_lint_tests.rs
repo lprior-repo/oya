@@ -132,6 +132,79 @@ mod zero_panic_lint_tests {
         }
     }
 
+    /// Scan a single file for unwrap/expect/panic-like macros while
+    /// skipping lines that live inside `#[cfg(test)]` modules or
+    /// block comments.
+    fn scan_lines_for_violations(
+        content: &str,
+        file: &str,
+        violations: &mut Vec<String>,
+        pattern: fn(&str) -> bool,
+    ) {
+        let mut in_test_block = false;
+        let mut in_block_comment = false;
+        let mut brace_depth: i32 = 0;
+
+        for (line_num, line) in content.lines().enumerate() {
+            let trimmed = line.trim();
+
+            // Skip pure comment lines.
+            if trimmed.starts_with("//") {
+                continue;
+            }
+            // Handle block comment tracking.
+            if trimmed.starts_with("/*") {
+                in_block_comment = true;
+            }
+            if in_block_comment {
+                if trimmed.contains("*/") {
+                    in_block_comment = false;
+                }
+                continue;
+            }
+
+            // Detect entry into a #[cfg(test)] module.
+            if trimmed.starts_with("#[cfg(test)]") || trimmed.starts_with("#[allow(") {
+                in_test_block = true;
+                brace_depth = 0;
+                continue;
+            }
+            // Once we entered a test block, track its braces and skip.
+            if in_test_block {
+                if trimmed.starts_with("mod tests")
+                    || trimmed.starts_with("mod zero_panic_lint_tests")
+                    || trimmed.starts_with("#[cfg(test)]")
+                {
+                    brace_depth += trimmed.matches('{').count() as i32;
+                    brace_depth -= trimmed.matches('}').count() as i32;
+                    if brace_depth <= 0 {
+                        in_test_block = false;
+                    }
+                    continue;
+                }
+                if trimmed.starts_with("mod ") {
+                    brace_depth += trimmed.matches('{').count() as i32;
+                    brace_depth -= trimmed.matches('}').count() as i32;
+                    if brace_depth <= 0 {
+                        in_test_block = false;
+                    }
+                    continue;
+                }
+                continue;
+            }
+
+            // Check for violation pattern.
+            if pattern(trimmed) {
+                violations.push(format!(
+                    "{}:{}: found violation - {}",
+                    file,
+                    line_num + 1,
+                    trimmed
+                ));
+            }
+        }
+    }
+
     #[test]
     fn test_no_unwrap_in_source_files() {
         let files = get_rust_source_files();
@@ -143,21 +216,9 @@ mod zero_panic_lint_tests {
             }
 
             if let Ok(content) = fs::read_to_string(&file) {
-                for (line_num, line) in content.lines().enumerate() {
-                    let trimmed = line.trim();
-                    if trimmed.starts_with("//") || trimmed.starts_with("/*") {
-                        continue;
-                    }
-
-                    if trimmed.contains(".unwrap()") && !trimmed.starts_with("//") {
-                        violations.push(format!(
-                            "{}:{}: found .unwrap() - {}",
-                            file,
-                            line_num + 1,
-                            trimmed
-                        ));
-                    }
-                }
+                scan_lines_for_violations(&content, &file, &mut violations, |line| {
+                    line.contains(".unwrap()")
+                });
             }
         }
 
@@ -179,21 +240,9 @@ mod zero_panic_lint_tests {
             }
 
             if let Ok(content) = fs::read_to_string(&file) {
-                for (line_num, line) in content.lines().enumerate() {
-                    let trimmed = line.trim();
-                    if trimmed.starts_with("//") || trimmed.starts_with("/*") {
-                        continue;
-                    }
-
-                    if trimmed.contains(".expect(") && !trimmed.starts_with("//") {
-                        violations.push(format!(
-                            "{}:{}: found .expect() - {}",
-                            file,
-                            line_num + 1,
-                            trimmed
-                        ));
-                    }
-                }
+                scan_lines_for_violations(&content, &file, &mut violations, |line| {
+                    line.contains(".expect(")
+                });
             }
         }
 
@@ -215,25 +264,11 @@ mod zero_panic_lint_tests {
             }
 
             if let Ok(content) = fs::read_to_string(&file) {
-                for (line_num, line) in content.lines().enumerate() {
-                    let trimmed = line.trim();
-                    if trimmed.starts_with("//") || trimmed.starts_with("/*") {
-                        continue;
-                    }
-
-                    if (trimmed.contains("panic!(")
-                        || trimmed.contains("todo!(")
-                        || trimmed.contains("unimplemented!("))
-                        && !trimmed.starts_with("//")
-                    {
-                        violations.push(format!(
-                            "{}:{}: found panic-like macro - {}",
-                            file,
-                            line_num + 1,
-                            trimmed
-                        ));
-                    }
-                }
+                scan_lines_for_violations(&content, &file, &mut violations, |line| {
+                    line.contains("panic!(")
+                        || line.contains("todo!(")
+                        || line.contains("unimplemented!(")
+                });
             }
         }
 

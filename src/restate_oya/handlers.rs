@@ -58,6 +58,12 @@ trait Oya {
 
 pub struct OyaBridge;
 
+static STATE_DB: std::sync::OnceLock<crate::lifecycle::state::StateDb> = std::sync::OnceLock::new();
+
+pub fn init_state_db(db: crate::lifecycle::state::StateDb) {
+    let _ = STATE_DB.set(db);
+}
+
 static RUNTIME_LIFECYCLE_STATUS: LazyLock<RwLock<HashMap<String, LifecycleStatusSnapshot>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
 
@@ -122,6 +128,7 @@ impl OyaMemory for OyaMemoryBridge {
         let model = model_or_default(body.model);
         let output = ctx.run(move || run_opencode(prompt, model)).name("opencode_run").await?;
         store_output(&ctx, &output);
+        flush_memory_state(&ctx).await?;
         Ok(StartResponse { output }.into())
     }
 
@@ -134,6 +141,7 @@ impl OyaMemory for OyaMemoryBridge {
         ctx.set("bead_id", bead.bead_id.clone());
         ctx.set("bead_status", bead.bead_status.clone());
         ctx.set("bead_state", Json::from(bead.bead_state));
+        flush_memory_state(&ctx).await?;
         let output = format!("synced bead {}", bead.bead_id);
         Ok(StartResponse { output }.into())
     }
@@ -160,6 +168,7 @@ impl OyaMemory for OyaMemoryBridge {
         let output = ctx.run(move || run_opencode(prompt, model)).name("opencode_pipeline").await?;
         store_output(&ctx, &output);
         ctx.clear("active_invocation_id");
+        flush_memory_state(&ctx).await?;
         Ok(StartResponse { output }.into())
     }
 
@@ -167,6 +176,16 @@ impl OyaMemory for OyaMemoryBridge {
         &self,
         ctx: SharedObjectContext<'_>,
     ) -> Result<Json<MemorySnapshot>, HandlerError> {
+        if let Some(db) = STATE_DB.get() {
+            if let Ok(bead_id) = BeadId::parse(ctx.key()) {
+                if let Ok(Some(json)) = db.load_memory(&bead_id) {
+                    if let Ok(snapshot) = serde_json::from_str::<MemorySnapshot>(&json) {
+                        return Ok(snapshot.into());
+                    }
+                }
+            }
+        }
+
         let bead = BeadSnapshot {
             bead_id: ctx
                 .get::<String>("bead_id")
@@ -221,6 +240,7 @@ impl OyaMemory for OyaMemoryBridge {
         ctx: ObjectContext<'_>,
     ) -> Result<Json<CancelResponse>, HandlerError> {
         ctx.set("cancel_state", "cancel_requested".to_owned());
+        flush_memory_state(&ctx).await?;
         let active_invocation_id = ctx.get::<String>("active_invocation_id").await?;
         match active_invocation_id {
             Some(invocation_id) => {
@@ -371,6 +391,17 @@ fn cleanup_outcome(result: Result<String, TerminalError>) -> String {
 }
 
 fn get_runtime_status(key: &str) -> Option<LifecycleStatusSnapshot> {
+    if let Some(db) = STATE_DB.get() {
+        for candidate in runtime_lookup_keys(key) {
+            if let Ok(Some(json)) = db.load_status(&candidate) {
+                if let Ok(snapshot) = serde_json::from_str::<LifecycleStatusSnapshot>(&json) {
+                    if !is_uninitialized_workflow_snapshot(&snapshot) {
+                        return Some(snapshot);
+                    }
+                }
+            }
+        }
+    }
     RUNTIME_LIFECYCLE_STATUS.read().ok().and_then(|map| {
         runtime_lookup_keys(key).into_iter().find_map(|candidate| {
             map.get(&candidate)
@@ -421,6 +452,15 @@ fn update_runtime_progress(
     live_steps: &[LifecycleStepSnapshot],
     update: LifecycleProgressUpdate,
 ) {
+    if let Some(db) = STATE_DB.get() {
+        if let Ok(bead_id) = BeadId::parse(key) {
+            if let Ok(json) = serde_json::to_string(&update) {
+                let _ = db.append_journal(&bead_id, &json);
+                let _ = db.flush();
+            }
+        }
+    }
+
     if let Ok(mut map) = RUNTIME_LIFECYCLE_STATUS.write() {
         let current = runtime_lookup_keys(key)
             .into_iter()
@@ -447,11 +487,18 @@ fn insert_runtime_status(
     workflow_key: &str,
     snapshot: LifecycleStatusSnapshot,
 ) {
-    runtime_store_keys(workflow_key, snapshot.bead_id.as_deref()).into_iter().for_each(
-        |candidate| {
-            map.insert(candidate, snapshot.clone());
-        },
-    );
+    let keys = runtime_store_keys(workflow_key, snapshot.bead_id.as_deref());
+    if let Some(db) = STATE_DB.get() {
+        if let Ok(json) = serde_json::to_string(&snapshot) {
+            for key in &keys {
+                let _ = db.persist_status(key, &json);
+            }
+            let _ = db.flush();
+        }
+    }
+    keys.into_iter().for_each(|candidate| {
+        map.insert(candidate, snapshot.clone());
+    });
 }
 
 fn seed_runtime_status(
@@ -919,9 +966,18 @@ fn store_lifecycle_state(
     let value = serde_json::to_value(state).map_err(|error| {
         HandlerError::from(format!("failed to serialize lifecycle state: {error}"))
     })?;
+    let json_string = serde_json::to_string(state).map_err(|error| {
+        HandlerError::from(format!("failed to serialize lifecycle state to string: {error}"))
+    })?;
     let pr_url = extract_pr_url_from_state(state);
     ctx.set("lifecycle_state", Json::from(value));
     ctx.set("lifecycle_pr_url", pr_url);
+
+    if let Some(db) = STATE_DB.get() {
+        if let Ok(bead_id) = BeadId::parse(ctx.key()) {
+            let _ = db.batch_persist_state(&bead_id, &json_string, &[]);
+        }
+    }
     Ok(())
 }
 
@@ -1122,6 +1178,61 @@ fn persist_bead_state(ctx: &ObjectContext<'_>, request: &StartRequest) {
     if let Some(bead_state) = &request.bead_state {
         ctx.set("bead_state", Json::from(bead_state.clone()));
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn build_memory_snapshot(
+    bead_id: Option<String>,
+    bead_status: Option<String>,
+    bead_state: Option<Value>,
+    last_output_summary: Option<Value>,
+    last_output_trace: Option<Value>,
+    active_invocation_id: Option<String>,
+    cancel_state: Option<String>,
+) -> MemorySnapshot {
+    let bead = BeadSnapshot {
+        bead_id: bead_id.and_then(|v| BeadId::parse(&v).ok()),
+        bead_status: bead_status.and_then(|v| BeadStatus::parse(&v).ok()),
+        bead_state,
+    };
+    MemorySnapshot {
+        bead,
+        last_output_summary,
+        last_output_trace,
+        active_invocation_id,
+        cancel_state: cancel_state.and_then(parse_cancel_state).unwrap_or_default(),
+    }
+}
+
+async fn flush_memory_state(ctx: &ObjectContext<'_>) -> Result<(), HandlerError> {
+    let bead_id_val = ctx.get::<String>("bead_id").await?;
+    let bead_status_val = ctx.get::<String>("bead_status").await?;
+    let bead_state_val = ctx.get::<Json<Value>>("bead_state").await?.map(Json::into_inner);
+    let summary = ctx.get::<Json<Value>>("last_output_summary").await?.map(Json::into_inner);
+    let trace = ctx.get::<Json<Value>>("last_output_trace").await?.map(Json::into_inner);
+    let active_inv = ctx.get::<String>("active_invocation_id").await?;
+    let cancel = ctx.get::<String>("cancel_state").await?;
+
+    let snapshot = build_memory_snapshot(
+        bead_id_val,
+        bead_status_val,
+        bead_state_val,
+        summary,
+        trace,
+        active_inv,
+        cancel,
+    )
+    .await;
+
+    if let Some(db) = STATE_DB.get() {
+        if let Ok(bead_id) = BeadId::parse(ctx.key()) {
+            if let Ok(json) = serde_json::to_string(&snapshot) {
+                let _ = db.persist_memory(&bead_id, &json);
+                let _ = db.flush();
+            }
+        }
+    }
+    Ok(())
 }
 
 fn store_output(ctx: &ObjectContext<'_>, output: &str) {

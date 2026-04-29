@@ -4,7 +4,7 @@
 #![warn(clippy::pedantic)]
 #![forbid(unsafe_code)]
 
-mod run;
+pub mod run;
 
 use crate::lifecycle::types::{BeadData, FailureCategory, LifecycleError, WorkspaceName};
 use anyhow::Context;

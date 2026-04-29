@@ -44,6 +44,7 @@ impl MoonTask {
 ///
 /// # Errors
 /// Returns a classified `LifecycleError` when command execution fails or exits non-zero.
+#[allow(clippy::too_many_lines)]
 pub async fn run_effect(
     executor: &dyn CommandExecutor,
     effect: Effect,
@@ -60,13 +61,25 @@ pub async fn run_effect(
     let output = run_effect_command(executor, &effect, timeout).await;
 
     match output {
-        Ok(result) if status_ok(result.status_code) => Ok(EffectJournalEntry {
-            effect,
-            timeout_secs,
-            success: true,
-            stdout: result.stdout,
-            stderr: result.stderr,
-        }),
+        Ok(result) if status_ok(result.status_code) => {
+            let success = match &effect {
+                Effect::Opencode { .. } | Effect::OpencodeQa { .. } => {
+                    !opencode_output_is_error(&result.stdout, &result.stderr)
+                }
+                _ => true,
+            };
+            if success {
+                Ok(EffectJournalEntry {
+                    effect,
+                    timeout_secs,
+                    success: true,
+                    stdout: result.stdout,
+                    stderr: result.stderr,
+                })
+            } else {
+                Err(classify_non_zero(&effect, result.status_code, &result.stderr))
+            }
+        }
         Ok(result) => {
             if let Some(existing_url) = existing_pr_url_from_non_zero(&effect, &result.stderr) {
                 return Ok(EffectJournalEntry {
@@ -200,6 +213,15 @@ fn effect_command(effect: &Effect) -> (&'static str, Vec<String>, Option<String>
 
 fn status_ok(status_code: Option<i32>) -> bool {
     status_code == Some(0)
+}
+
+/// Detects if `OpenCode` output contains an error.
+/// Used for both command failure classification and error message sanitization.
+#[must_use]
+pub fn opencode_output_is_error(stdout: &str, stderr: &str) -> bool {
+    stdout.contains("\"type\":\"error\"")
+        || stderr.contains("ProviderModelNotFoundError")
+        || stderr.contains("Model not found")
 }
 
 fn existing_pr_url_from_non_zero(effect: &Effect, stderr: &str) -> Option<String> {

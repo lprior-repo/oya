@@ -60,6 +60,9 @@ async fn doctor_command(ingress: &str, admin: &str, service_url: &str) -> anyhow
 
 async fn serve_command(args: ServeArgs) -> anyhow::Result<()> {
     let bind = parse_socket_addr(args.bind)?;
+    let data_dir = std::env::var("OYA_DATA_DIR").unwrap_or_else(|_| ".oya-lite".to_owned());
+    let db = crate::lifecycle::state::StateDb::open(data_dir)?;
+    crate::restate_oya::init_state_db(db);
     crate::restate_oya::serve(bind).await
 }
 

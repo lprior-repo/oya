@@ -236,52 +236,32 @@ tasks:
       cache: true
 
   bench:
-    command: "cargo bench --workspace"
-    description: "Run all Criterion benchmarks"
-    toolchains:
-      - rust
-    inputs:
-      - "crates/**/*.rs"
-      - "benches/**/*.rs"
-      - "Cargo.toml"
-      - "/Cargo.lock"
-    options:
-      cache: false
+     command: "cargo bench --workspace"
+     description: "Run all Criterion benchmarks"
+     toolchains:
+       - rust
+     inputs:
+       - "src/**/*.rs"
+       - "Cargo.toml"
+       - "/Cargo.lock"
+     options:
+       cache: false
 
   # ============================================================================
   # DEVELOPMENT SERVERS
   # ============================================================================
-
-  serve:
-    command: "cargo run --release -p oya-web --bin oya-server"
-    description: "Run full stack server (frontend + API on http://localhost:3000)"
-    toolchains:
-      - rust
-    options:
-      cache: false
-      runInCI: false
-      persistent: true
-
-  build-ui:
-    script: "cd crates/oya-ui && trunk build --release"
-    description: "Build Leptos frontend to dist/"
-    toolchains:
-      - rust
-    options:
-      cache: false
-      runInCI: false
 
   # ============================================================================
   # MUTATION TESTING
   # ============================================================================
 
   mutants:
-    command: "cargo mutants --workspace --baseline run"
-    description: "Run mutation testing on all 2000+ mutations"
+    command: "cargo mutants --baseline run"
+    description: "Run mutation testing on all mutations"
     toolchains:
       - rust
     inputs:
-      - "crates/**/*.rs"
+      - "src/**/*.rs"
       - ".cargo/mutants.toml"
     options:
       cache: false
@@ -305,17 +285,8 @@ tasks:
       runInCI: false
       mergeArgs: "append"
 
-  mutants-quick:
-    command: "cargo mutants -p oya-core -p oya-workflow -p oya-events --baseline run"
-    description: "Quick mutation test on core packages"
-    toolchains:
-      - rust
-    options:
-      cache: false
-      runInCI: false
-
   mutants-diff:
-    command: "cargo mutants --workspace --in-diff main --baseline run"
+    command: "cargo mutants --in-diff main --baseline run"
     description: "Mutation test only files changed vs main branch"
     toolchains:
       - rust
@@ -331,81 +302,6 @@ tasks:
     options:
       cache: false
       runInCI: false
-
-  # ============================================================================
-  # OYA-SHARED (Shared types for WASM + native)
-  # ============================================================================
-
-  check-shared:
-    command: "cargo check -p oya-shared"
-    description: "Type check oya-shared crate"
-    toolchains:
-      - rust
-    inputs:
-      - "crates/oya-shared/**/*.rs"
-      - "crates/oya-shared/Cargo.toml"
-    options:
-      cache: true
-
-  test-shared:
-    command: "cargo test -p oya-shared"
-    description: "Run oya-shared tests"
-    toolchains:
-      - rust
-    inputs:
-      - "crates/oya-shared/**/*.rs"
-      - "crates/oya-shared/Cargo.toml"
-    options:
-      cache: true
-
-  # ============================================================================
-  # ZELLIJ FRONTEND (WASM plugin + UI components)
-  # ============================================================================
-
-  check-zellij:
-    script: "cd crates/zellij-frontend && cargo check"
-    description: "Type check zellij-frontend crate"
-    toolchains:
-      - rust
-    inputs:
-      - "crates/zellij-frontend/src/**/*.rs"
-      - "crates/zellij-frontend/Cargo.toml"
-    options:
-      cache: true
-
-  test-zellij:
-    script: "cd crates/zellij-frontend && cargo test --target x86_64-unknown-linux-gnu"
-    description: "Run zellij-frontend tests (native target)"
-    toolchains:
-      - rust
-    inputs:
-      - "crates/zellij-frontend/src/**/*.rs"
-      - "crates/zellij-frontend/Cargo.toml"
-    options:
-      cache: true
-
-  build-zellij:
-    command: "cargo build --release --target wasm32-wasip1 -p zellij-frontend"
-    description: "Build Zellij plugin to WASM"
-    toolchains:
-      - rust
-    inputs:
-      - "crates/zellij-frontend/**/*.rs"
-      - "crates/zellij-frontend/Cargo.toml"
-    options:
-      cache: true
-      runFromWorkspaceRoot: true
-
-  install-zellij:
-    script: "mkdir -p ~/.config/zellij/plugins && cp target/wasm32-wasip1/release/zellij_frontend.wasm ~/.config/zellij/plugins/ && cp crates/zellij-frontend/plugin.yaml ~/.config/zellij/plugins/oya.yaml && echo '✅ Installed zellij-frontend plugin to ~/.config/zellij/plugins/'"
-    description: "Install Zellij plugin to user config"
-    toolchains:
-      - rust
-    deps:
-      - "build-zellij"
-    options:
-      cache: false
-      runFromWorkspaceRoot: true
 
   # ============================================================================
   # OYA CLI (workspace-level tasks)
@@ -435,7 +331,6 @@ tasks:
     description: "Build all release targets (oya binary + WASM plugin)"
     deps:
       - "~:build-oya"
-      - "~:build-zellij"
     options:
       cache: false
 
@@ -461,7 +356,6 @@ tasks:
     description: "Install everything (oya binary + WASM plugin)"
     deps:
       - "~:install"
-      - "~:install-zellij"
     options:
       cache: false
 
