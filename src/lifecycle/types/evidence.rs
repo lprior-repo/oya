@@ -37,6 +37,7 @@ pub enum EvidenceKind {
     RepairBlocked,
     AgentRequest,
     AgentRun,
+    VcsSyncFailed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

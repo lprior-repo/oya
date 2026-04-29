@@ -157,6 +157,7 @@ fn evidence_kind_name(kind: &EvidenceKind) -> &'static str {
         EvidenceKind::RepairBlocked => "repair_blocked",
         EvidenceKind::AgentRequest => "agent_request",
         EvidenceKind::AgentRun => "agent_run",
+        EvidenceKind::VcsSyncFailed => "vcs_sync_failed",
     }
 }
 

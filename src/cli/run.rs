@@ -14,7 +14,9 @@ use super::agent::{
 };
 use super::args::RunArgs;
 use super::verify::{persist_run_verification_gate, RunVerificationResult};
-use super::workspace::{branch_name_from_ids, ensure_clean_workspace_for_run};
+use super::workspace::{
+    branch_name_from_ids, ensure_clean_workspace_for_run, sync_workspace_with_main, VcsSyncError,
+};
 use crate::lifecycle::state::StateDb;
 use crate::lifecycle::types::{
     BeadId, EvidenceEnvelope, EvidenceEnvelopeParts, EvidenceKind, EvidenceMetadata,
@@ -73,6 +75,7 @@ pub async fn run_command(args: RunArgs) -> anyhow::Result<()> {
     let run_id = RunId::from_bead_id(&bead_id);
     ensure_clean_workspace_for_run(run_id.as_str()).await?;
     let db = StateDb::open(data_dir())?;
+    sync_workspace_with_main_or_record_failure(&db, &bead_id, &run_id).await?;
     let skeleton =
         persist_run_skeleton_evidence(&db, bead_id, &args.prompt, &args.model, Utc::now())?;
     let output = run_output(&db, &skeleton, &args.prompt, &args.model).await?;
@@ -111,6 +114,33 @@ fn persist_run_skeleton_evidence(
     db.append_evidence(&agent_request)?;
     db.flush()?;
     Ok(RunSkeletonEvidence { agent_request, evidence_records: 3 })
+}
+
+async fn sync_workspace_with_main_or_record_failure(
+    db: &StateDb,
+    bead_id: &BeadId,
+    run_id: &RunId,
+) -> anyhow::Result<()> {
+    match sync_workspace_with_main().await {
+        Ok(()) => Ok(()),
+        Err(error) => {
+            persist_vcs_sync_failed(db, bead_id, run_id, Utc::now(), &error)?;
+            Err(error.into())
+        }
+    }
+}
+
+fn persist_vcs_sync_failed(
+    db: &StateDb,
+    bead_id: &BeadId,
+    run_id: &RunId,
+    timestamp: DateTime<Utc>,
+    error: &VcsSyncError,
+) -> anyhow::Result<EvidenceEnvelope> {
+    let envelope = vcs_sync_failed_envelope(bead_id, run_id, timestamp, error)?;
+    db.append_evidence(&envelope)?;
+    db.flush()?;
+    Ok(envelope)
 }
 
 async fn run_output(
@@ -430,6 +460,24 @@ fn agent_request_envelope(
     .map_err(Into::into)
 }
 
+fn vcs_sync_failed_envelope(
+    bead_id: &BeadId,
+    run_id: &RunId,
+    timestamp: DateTime<Utc>,
+    error: &VcsSyncError,
+) -> anyhow::Result<EvidenceEnvelope> {
+    EvidenceEnvelope::new(EvidenceEnvelopeParts {
+        record_id: vcs_sync_failed_record_id(bead_id, timestamp)?,
+        run_id: run_id.clone(),
+        bead_id: bead_id.clone(),
+        timestamp,
+        kind: EvidenceKind::VcsSyncFailed,
+        metadata: vcs_sync_failed_metadata(error),
+        previous_checksum: None,
+    })
+    .map_err(Into::into)
+}
+
 fn agent_request_timestamp(timestamp: DateTime<Utc>) -> anyhow::Result<DateTime<Utc>> {
     timestamp
         .checked_add_signed(Duration::milliseconds(1))
@@ -472,6 +520,18 @@ fn agent_request_id(
     .map_err(Into::into)
 }
 
+fn vcs_sync_failed_record_id(
+    bead_id: &BeadId,
+    timestamp: DateTime<Utc>,
+) -> anyhow::Result<EvidenceRecordId> {
+    EvidenceRecordId::parse(&format!(
+        "ev-{}-vcs-failed-{}",
+        bead_id.as_str(),
+        timestamp.timestamp_millis()
+    ))
+    .map_err(Into::into)
+}
+
 fn prompt_metadata(prompt: &str) -> EvidenceMetadata {
     EvidenceMetadata::from([
         ("prompt_bytes".to_owned(), prompt.len().to_string()),
@@ -497,6 +557,16 @@ fn agent_request_metadata(model: &str, prompt_record: &EvidenceEnvelope) -> Evid
             branch_name_from_ids(prompt_record.bead_id.as_str(), prompt_record.run_id.as_str()),
         ),
         ("workspace_status".to_owned(), "clean_at_agent_request".to_owned()),
+    ])
+}
+
+fn vcs_sync_failed_metadata(error: &VcsSyncError) -> EvidenceMetadata {
+    EvidenceMetadata::from([
+        ("command".to_owned(), error.command().to_owned()),
+        ("failure_type".to_owned(), "VcsSyncFailed".to_owned()),
+        ("redacted".to_owned(), "true".to_owned()),
+        ("sanitized_message".to_owned(), error.sanitized_message().to_owned()),
+        ("status".to_owned(), "failed".to_owned()),
     ])
 }
 
@@ -597,6 +667,34 @@ mod tests {
             Some(&"clean_at_agent_request".to_owned())
         );
         assert!(!agent_request_json.contains("super-secret-token"));
+    }
+
+    #[test]
+    fn vcs_sync_failure_records_typed_evidence() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = StateDb::open(dir.path().join("db")).unwrap();
+        let bead_id = BeadId::parse("demo").unwrap();
+        let run_id = RunId::parse("run-demo").unwrap();
+        let timestamp = Utc.timestamp_opt(1_779_999_600, 0).unwrap();
+        let error = crate::cli::workspace::VcsSyncError::VcsSyncFailed {
+            command: "git fetch origin",
+            message: "[redacted] fatal: authentication failed".to_owned(),
+        };
+
+        let failure = persist_vcs_sync_failed(&db, &bead_id, &run_id, timestamp, &error).unwrap();
+        let evidence = db.load_evidence(&run_id).unwrap();
+        let failure_json = failure.to_canonical_json().unwrap();
+
+        assert_eq!(evidence.len(), 1);
+        assert_eq!(failure.kind, EvidenceKind::VcsSyncFailed);
+        assert_eq!(failure.metadata.get("failure_type"), Some(&"VcsSyncFailed".to_owned()));
+        assert_eq!(failure.metadata.get("status"), Some(&"failed".to_owned()));
+        assert_eq!(failure.metadata.get("command"), Some(&"git fetch origin".to_owned()));
+        assert_eq!(
+            failure.metadata.get("sanitized_message"),
+            Some(&"[redacted] fatal: authentication failed".to_owned())
+        );
+        assert!(!failure_json.contains("server-secret-token"));
     }
 
     #[test]

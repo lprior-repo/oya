@@ -24,6 +24,12 @@ pub(crate) enum WorkspaceOwnershipError {
     InvalidOutput,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub(crate) enum VcsSyncError {
+    #[error("vcs_sync_failed: {command} failed: {message}")]
+    VcsSyncFailed { command: &'static str, message: String },
+}
+
 pub(crate) async fn ensure_clean_workspace_for_run(
     run_id: &str,
 ) -> Result<(), WorkspaceOwnershipError> {
@@ -63,6 +69,61 @@ pub(crate) fn branch_name_from_ids(bead_id: &str, run_id: &str) -> String {
     let suffix =
         format!("{}-{}", sanitize_branch_component(bead_id), sanitize_branch_component(run_id));
     format!("{BRANCH_PREFIX}{}", bound_branch_suffix(&suffix))
+}
+
+pub(crate) async fn sync_workspace_with_main() -> Result<(), VcsSyncError> {
+    run_vcs_sync_command("git fetch origin", &["fetch", "origin"]).await?;
+    run_vcs_sync_command("git rebase origin/main", &["rebase", "origin/main"]).await
+}
+
+impl VcsSyncError {
+    #[must_use]
+    pub(crate) fn command(&self) -> &'static str {
+        match self {
+            Self::VcsSyncFailed { command, .. } => command,
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn sanitized_message(&self) -> &str {
+        match self {
+            Self::VcsSyncFailed { message, .. } => message,
+        }
+    }
+}
+
+async fn run_vcs_sync_command(
+    command_name: &'static str,
+    args: &[&str],
+) -> Result<(), VcsSyncError> {
+    let output = Command::new("git").args(args).output().await.map_err(|error| {
+        VcsSyncError::VcsSyncFailed {
+            command: command_name,
+            message: sanitize_vcs_message(&error.to_string()),
+        }
+    })?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(vcs_sync_failure_from_output(command_name, &stdout, &stderr))
+    }
+}
+
+fn vcs_sync_failure_from_output(command: &'static str, stdout: &str, stderr: &str) -> VcsSyncError {
+    VcsSyncError::VcsSyncFailed {
+        command,
+        message: sanitize_vcs_message(vcs_failure_message(stdout, stderr)),
+    }
+}
+
+fn vcs_failure_message<'a>(stdout: &'a str, stderr: &'a str) -> &'a str {
+    if stderr.trim().is_empty() {
+        stdout
+    } else {
+        stderr
+    }
 }
 
 fn sanitize_branch_component(value: &str) -> String {
@@ -112,6 +173,31 @@ fn sanitize_status_message(message: &str) -> String {
     message.split_whitespace().take(24).collect::<Vec<_>>().join(" ")
 }
 
+fn sanitize_vcs_message(message: &str) -> String {
+    let redacted = message.lines().map(redact_vcs_line).collect::<Vec<_>>().join(" ");
+    let summarized = sanitize_status_message(&redacted);
+    if summarized.is_empty() {
+        "no diagnostic output".to_owned()
+    } else {
+        summarized
+    }
+}
+
+fn redact_vcs_line(line: &str) -> String {
+    let normalized = line.to_ascii_lowercase();
+    if is_sensitive_vcs_line(&normalized) {
+        "[redacted]".to_owned()
+    } else {
+        line.trim().to_owned()
+    }
+}
+
+fn is_sensitive_vcs_line(normalized: &str) -> bool {
+    ["token", "secret", "password", "api_key", "apikey"]
+        .into_iter()
+        .any(|needle| normalized.contains(needle))
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -149,6 +235,25 @@ mod tests {
                 pending_changes: 1,
             })
         );
+    }
+
+    #[test]
+    fn vcs_sync_failure_is_typed_and_sanitized() {
+        let result = vcs_sync_failure_from_output(
+            "git fetch origin",
+            "",
+            "remote: password=server-secret-token\nfatal: authentication failed",
+        );
+
+        assert_eq!(
+            result,
+            VcsSyncError::VcsSyncFailed {
+                command: "git fetch origin",
+                message: "[redacted] fatal: authentication failed".to_owned(),
+            }
+        );
+        assert!(result.to_string().contains("vcs_sync_failed"));
+        assert!(!result.to_string().contains("server-secret-token"));
     }
 
     #[test]

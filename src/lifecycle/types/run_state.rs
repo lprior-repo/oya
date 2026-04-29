@@ -48,6 +48,7 @@ pub enum RunEvent {
     RepairRequested,
     RepairAttempted,
     RepairBlocked,
+    VcsSyncFailed,
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -188,6 +189,7 @@ impl RunEvent {
             Self::RepairRequested => "repair_requested",
             Self::RepairAttempted => "repair_attempted",
             Self::RepairBlocked => "repair_blocked",
+            Self::VcsSyncFailed => "vcs_sync_failed",
         }
     }
 }
@@ -219,6 +221,7 @@ fn transition_target(phase: RunPhase, event: RunEvent) -> Option<RunPhase> {
         RunEvent::RepairRequested => next_if(phase == RunPhase::Blocked, RunPhase::Repairing),
         RunEvent::RepairAttempted => next_if(phase == RunPhase::Repairing, RunPhase::Repairing),
         RunEvent::RepairBlocked => next_if(repair_can_block(phase), RunPhase::RepairBlocked),
+        RunEvent::VcsSyncFailed => next_if(vcs_sync_can_block(phase), RunPhase::Blocked),
     }
 }
 
@@ -228,6 +231,10 @@ fn gate_can_start(phase: RunPhase) -> bool {
 
 fn repair_can_block(phase: RunPhase) -> bool {
     matches!(phase, RunPhase::Blocked | RunPhase::Repairing)
+}
+
+fn vcs_sync_can_block(phase: RunPhase) -> bool {
+    matches!(phase, RunPhase::Planned | RunPhase::Started)
 }
 
 fn next_if(allowed: bool, phase: RunPhase) -> Option<RunPhase> {
@@ -246,6 +253,7 @@ fn event_from_evidence(envelope: &EvidenceEnvelope) -> Result<RunEvent, RunState
         EvidenceKind::RepairRequest => Ok(RunEvent::RepairRequested),
         EvidenceKind::RepairAttempt => Ok(RunEvent::RepairAttempted),
         EvidenceKind::RepairBlocked => Ok(RunEvent::RepairBlocked),
+        EvidenceKind::VcsSyncFailed => Ok(RunEvent::VcsSyncFailed),
     }
 }
 
