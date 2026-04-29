@@ -66,6 +66,10 @@ pub enum RunStateTransitionError {
     InvalidStatus { record_id: String, status: String },
     #[error("invalid run state transition from {from} with {event}")]
     InvalidTransition { from: RunPhase, event: RunEvent },
+    #[error(
+        "EvidenceIntegrityViolation: evidence record '{record_id}' failed checksum verification"
+    )]
+    EvidenceIntegrityViolation { record_id: String },
 }
 
 impl RunState {
@@ -111,6 +115,7 @@ impl RunState {
         &self,
         envelope: &EvidenceEnvelope,
     ) -> Result<Self, RunStateTransitionError> {
+        ensure_evidence_integrity(envelope)?;
         self.ensure_evidence_matches(envelope)?;
         self.apply_event(event_from_evidence(envelope)?)
     }
@@ -145,6 +150,12 @@ impl RunState {
         }
         Ok(())
     }
+}
+
+fn ensure_evidence_integrity(envelope: &EvidenceEnvelope) -> Result<(), RunStateTransitionError> {
+    envelope.verify_checksum().map_err(|_| RunStateTransitionError::EvidenceIntegrityViolation {
+        record_id: envelope.record_id.as_str().to_owned(),
+    })
 }
 
 impl RunPhase {
@@ -417,6 +428,23 @@ mod tests {
             Err(RunStateTransitionError::BeadIdMismatch { expected, actual })
                 if expected == "demo" && actual == "other"
         ));
+    }
+
+    #[test]
+    fn run_state_machine_blocks_tampered_evidence_with_integrity_violation() {
+        let mut evidence = simple_evidence(EvidenceKind::RunStarted, 1, None);
+        evidence.metadata.insert("secret".to_owned(), "server-secret-token".to_owned());
+
+        let result = planned_state().apply_evidence(&evidence);
+
+        assert!(matches!(
+            result,
+            Err(RunStateTransitionError::EvidenceIntegrityViolation { ref record_id })
+                if record_id == "ev-demo-run-state-machine-1"
+        ));
+        let message = result.unwrap_err().to_string();
+        assert!(message.contains("EvidenceIntegrityViolation"));
+        assert!(!message.contains("server-secret-token"));
     }
 
     #[test]

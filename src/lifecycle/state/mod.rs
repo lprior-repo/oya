@@ -47,6 +47,10 @@ pub enum StateDbError {
     Serialization(#[from] serde_json::Error),
     #[error("evidence envelope error: {0}")]
     EvidenceEnvelope(#[from] EvidenceEnvelopeError),
+    #[error(
+        "EvidenceIntegrityViolation: evidence record at key '{key}' failed checksum verification"
+    )]
+    EvidenceIntegrityViolation { key: String },
     #[error("duplicate evidence record: {0}")]
     DuplicateEvidenceRecord(String),
     #[error("invalid utf-8 evidence record: {0}")]
@@ -185,10 +189,13 @@ impl StateDb {
         self.evidence
             .prefix(&prefix)
             .map(|guard| {
-                let value = guard.value()?;
+                let (key_bytes, value) = guard.into_inner()?;
+                let key = String::from_utf8(key_bytes.to_vec())
+                    .map_err(|error| StateDbError::InvalidEvidenceUtf8(error.to_string()))?;
                 let json = String::from_utf8(value.to_vec())
                     .map_err(|error| StateDbError::InvalidEvidenceUtf8(error.to_string()))?;
-                EvidenceEnvelope::from_canonical_json(&json).map_err(StateDbError::from)
+                EvidenceEnvelope::from_canonical_json(&json)
+                    .map_err(|error| evidence_decode_error(key, error))
             })
             .collect()
     }
@@ -201,10 +208,13 @@ impl StateDb {
         self.evidence
             .iter()
             .map(|guard| {
-                let value = guard.value()?;
+                let (key_bytes, value) = guard.into_inner()?;
+                let key = String::from_utf8(key_bytes.to_vec())
+                    .map_err(|error| StateDbError::InvalidEvidenceUtf8(error.to_string()))?;
                 let json = String::from_utf8(value.to_vec())
                     .map_err(|error| StateDbError::InvalidEvidenceUtf8(error.to_string()))?;
-                EvidenceEnvelope::from_canonical_json(&json).map_err(StateDbError::from)
+                EvidenceEnvelope::from_canonical_json(&json)
+                    .map_err(|error| evidence_decode_error(key, error))
             })
             .find_map(|result| match result {
                 Ok(envelope) if envelope.record_id.as_str() == record_id.as_str() => {
@@ -256,6 +266,15 @@ impl StateDb {
     #[allow(dead_code)]
     pub fn next_journal_key(&self, bead_id: &BeadId) -> String {
         next_journal_key(bead_id)
+    }
+}
+
+fn evidence_decode_error(key: String, error: EvidenceEnvelopeError) -> StateDbError {
+    match error {
+        EvidenceEnvelopeError::ChecksumMismatch => StateDbError::EvidenceIntegrityViolation { key },
+        EvidenceEnvelopeError::Json(error) => {
+            StateDbError::EvidenceEnvelope(EvidenceEnvelopeError::Json(error))
+        }
     }
 }
 
@@ -390,6 +409,29 @@ mod tests {
         let duplicate = db.append_evidence(&envelope);
 
         assert!(matches!(duplicate, Err(StateDbError::DuplicateEvidenceRecord(_))));
+    }
+
+    #[test]
+    fn evidence_fjall_blocks_tampered_raw_record_with_integrity_violation() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = StateDb::open(dir.path().join("db")).unwrap();
+        let mut envelope =
+            evidence_envelope("ev-oya-3uu-tamper", 0, EvidenceKind::RunStarted, None);
+        let key = evidence_key(&envelope);
+        db.append_evidence(&envelope).unwrap();
+        envelope.metadata.insert("secret".to_owned(), "server-secret-token".to_owned());
+        let tampered_json = serde_json::to_string(&envelope).unwrap();
+
+        db.evidence.insert(key.as_str(), tampered_json.as_str()).unwrap();
+        let result = db.load_evidence(&run_id());
+
+        assert!(matches!(
+            result,
+            Err(StateDbError::EvidenceIntegrityViolation { key: ref actual }) if actual == &key
+        ));
+        let message = result.unwrap_err().to_string();
+        assert!(message.contains("EvidenceIntegrityViolation"));
+        assert!(!message.contains("server-secret-token"));
     }
 
     fn evidence_envelope(

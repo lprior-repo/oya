@@ -61,6 +61,10 @@ pub(crate) enum EvidenceCheckError {
         "invalid_chain: evidence record '{record_id}' belongs to run '{actual}', not '{expected}'"
     )]
     RunIdMismatch { record_id: String, expected: String, actual: String },
+    #[error(
+        "EvidenceIntegrityViolation: evidence record '{record_id}' failed checksum verification"
+    )]
+    EvidenceIntegrityViolation { record_id: String },
 }
 
 pub(crate) fn evidence_check_report(
@@ -70,6 +74,7 @@ pub(crate) fn evidence_check_report(
     let Some(last) = evidence.last() else {
         return Err(EvidenceCheckError::EmptyRun { run_id: run_id.as_str().to_owned() });
     };
+    validate_record_integrity(evidence)?;
     validate_first_record(evidence)?;
     validate_run_ids(run_id, evidence)?;
     validate_previous_checksums(evidence)?;
@@ -103,6 +108,14 @@ fn validate_run_ids(
             record_id: record.record_id.as_str().to_owned(),
             expected: run_id.as_str().to_owned(),
             actual: record.run_id.as_str().to_owned(),
+        })
+    })
+}
+
+fn validate_record_integrity(evidence: &[EvidenceEnvelope]) -> Result<(), EvidenceCheckError> {
+    evidence.iter().find(|record| record.verify_checksum().is_err()).map_or(Ok(()), |record| {
+        Err(EvidenceCheckError::EvidenceIntegrityViolation {
+            record_id: record.record_id.as_str().to_owned(),
         })
     })
 }
@@ -172,6 +185,29 @@ mod tests {
         let report = evidence_check_report(&run_id(), &[first, second]);
 
         assert!(matches!(report, Err(EvidenceCheckError::BrokenPreviousChecksum { .. })));
+    }
+
+    #[test]
+    fn evidence_check_blocks_tampered_payload_with_integrity_violation() {
+        let first = evidence_envelope("ev-demo-run-started-001", 0, EvidenceKind::RunStarted, None);
+        let mut second = evidence_envelope(
+            "ev-demo-prompt-record-002",
+            1,
+            EvidenceKind::PromptRecord,
+            Some(first.checksum.clone()),
+        );
+        second.metadata.insert("password".to_owned(), "server-secret-token".to_owned());
+
+        let report = evidence_check_report(&run_id(), &[first, second]);
+
+        assert!(matches!(
+            report,
+            Err(EvidenceCheckError::EvidenceIntegrityViolation { ref record_id })
+                if record_id == "ev-demo-prompt-record-002"
+        ));
+        let message = report.unwrap_err().to_string();
+        assert!(message.contains("EvidenceIntegrityViolation"));
+        assert!(!message.contains("server-secret-token"));
     }
 
     fn evidence_envelope(

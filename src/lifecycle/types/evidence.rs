@@ -180,6 +180,19 @@ impl EvidenceEnvelope {
         let envelope = serde_json::from_str::<Self>(input)?;
         verify_envelope_checksum(envelope)
     }
+
+    /// Verifies this envelope's stored checksum against its current payload.
+    ///
+    /// # Errors
+    /// Returns `EvidenceEnvelopeError::ChecksumMismatch` when any checksum-covered
+    /// field has been modified after the envelope was built.
+    pub fn verify_checksum(&self) -> Result<(), EvidenceEnvelopeError> {
+        if checksum_for_envelope(self)? == self.checksum {
+            Ok(())
+        } else {
+            Err(EvidenceEnvelopeError::ChecksumMismatch)
+        }
+    }
 }
 
 impl Serialize for EvidenceRecordId {
