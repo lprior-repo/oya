@@ -173,7 +173,7 @@ sleep 5
 **Ports**:
 | Port | Purpose | API Path |
 |------|---------|----------|
-| 909 | HTTP Ingress (service invocation) | `/{service}/{handler}`, `/{object}/{key}/{handler}`, `/{workflow}/{id}/run` |
+| 8080 | HTTP Ingress (service invocation) | `/{service}/{handler}`, `/{object}/{key}/{handler}`, `/{workflow}/{id}/run` |
 | 9070 | Admin API (introspection) | `/query`, `/deployments`, `/services`, `/invocations/{id}/*` |
 
 ### Admin API (Port 9070)
@@ -199,7 +199,7 @@ curl -s -X POST http://localhost:9070/query \
   -d '{"query": "SELECT * FROM sys_invocation LIMIT 5"}'
 ```
 
-### Ingress API (Port 909)
+### Ingress API (Port 8080)
 
 Built in `src/graph/execution_runtime/service_calls.rs`. Used to invoke services:
 
@@ -233,20 +233,20 @@ UI Panels (src/ui/restate/)
 ```bash
 # 1. Ensure Restate is running
 curl -s http://localhost:9070/deployments  # Should return {"deployments":[]}
-curl -s http://localhost:909/               # Should return service error (not connection error)
+curl -s http://localhost:8080/restate/health # Should return JSON health
 
 # 2. Run the E2E test suite
 moon run :ci --force
 
 # 3. Or run the Restate-specific E2E test
-./e2e/agent_restate.sh http://localhost:909
+./e2e/agent_restate.sh http://localhost:8080
 ```
 
 ### Troubleshooting
 
 **Port already in use**:
 ```bash
-lsof -i :909   # Find process
+lsof -i :8080  # Find process
 kill -9 <PID>  # Kill it
 ```
 
@@ -264,16 +264,16 @@ pkill -9 restate-server
 
 ### E2E Test Notes
 
-**Dioxus Version**: Project now uses `dioxus = "0.7.5"` (aligned with `dx` CLI 0.7.5)
+**Dioxus Version**: Project uses Dioxus 0.7.
 
 **Current Status**:
 - ✅ Restate integration works at code level (901 tests pass)
 - ✅ Admin API (9070) verified working  
-- ✅ Ingress API (909) verified working
+- ✅ Ingress API (8080) verified working
 - ✅ Clippy passes
-- ⚠️ E2E browser tests have WASM initialization issues in headless Chrome
+- ✅ Browser E2E passes via `moon run frontend:e2e`
 
-**E2E Browser Test Issue**: The WASM app partially renders ("Hello from Oya!" visible) but the full React-like app doesn't initialize. The "Your app is being rebuilt" message indicates Dioxus's hot-reload state isn't resolving.
+**E2E Browser Gate**: The Playwright suite builds the frontend in release mode to avoid Dioxus dev hot-reload overlays during headless execution.
 
 **Running Tests**:
 ```bash
@@ -283,6 +283,6 @@ moon run :test
 # Run clippy (passes)
 moon run :clippy
 
-# Run E2E (may fail due to WASM init in headless Chrome)
-moon run :ci --force
+# Run browser E2E
+moon run frontend:e2e
 ```

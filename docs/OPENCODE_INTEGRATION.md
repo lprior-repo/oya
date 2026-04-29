@@ -58,16 +58,16 @@ Bead run request
 ## Requirements
 
 - `opencode` CLI installed and available in `PATH`.
-- Restate service available for workflow execution (Docker-first local default via `scripts/dev-up.sh`).
-- Sled available for local persistence.
+- Restate service available for workflow execution through `oya init` managed local `restate-server`.
+- Fjall-backed local persistence available for run/evidence state.
 
 ## Local Runtime (Default)
 
-Use Docker-first runtime commands:
+Use the zero-Docker local runtime commands:
 
-- `scripts/dev-up.sh` starts Restate (Docker), builds OYA, starts OYA service, and registers deployment.
-- `scripts/dev-down.sh` stops local runtime.
-- `scripts/dev-reset.sh` clears local Restate state when replay history conflicts with new workflow code.
+- `oya init` starts managed Restate on `127.0.0.1:8080`/`9070`, starts or reuses the Oya handler service, and registers deployments.
+- `oya init --down` stops only the managed Restate process recorded by Oya.
+- `oya doctor` validates ingress, admin, handler, registration, Moon tasks, persistence, and GitHub slug checks.
 
 For live QA validation workflow details (including ingress handler checks and deployment staleness
 troubleshooting), see `docs/QA_RESTATE_VALIDATION.md`.

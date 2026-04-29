@@ -36,7 +36,7 @@ This is the "conservative, correct side" of AI development: deterministic workfl
 | **Git/GitHub** | Branch/worktree isolation and PR merge-flow primitive |
 | **Beads (br)** | Intake and lifecycle source of truth for all work items |
 | **Codanna MCP** | Code discovery (symbols, callers, calls, impact, dependency tracing) |
-| **Sled** | Persistence baseline for run and evidence state |
+| **Fjall** | Persistence baseline for run and evidence state |
 
 ### Observability
 - **OpenObserve**: UI at `http://localhost:5080`, OTLP gRPC at `localhost:4317`

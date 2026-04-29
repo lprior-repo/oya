@@ -1,8 +1,10 @@
 # Oya CLI Enhancement Design
 
 **Date**: 2026-02-18
-**Status**: Approved
-**Goal**: Single-binary CLI with bundled Restate, workspace isolation, and full development velocity tooling
+**Status**: Historical design note; superseded by current release docs
+**Goal**: Original target for a self-contained CLI with bundled Restate, workspace isolation, and full development velocity tooling
+
+> Release-state note (2026-04-29): the current implementation is zero-Docker but not a one-file bundle. `oya init` discovers a local `restate-server` binary (`OYA_RESTATE_SERVER`, `bin/restate-server`, `target/release/restate-server`, or `$HOME/bin/restate-server`) and manages it as a local subprocess on ingress `8080` and admin `9070`.
 
 ## Overview
 

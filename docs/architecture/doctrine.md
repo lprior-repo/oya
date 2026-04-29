@@ -76,7 +76,7 @@ Oya's architecture reflects the nine aspects of Oya (Yoruba storm goddess):
        └── OpenTelemetry traces, metrics, logs
 
 7. State Store (The Memory)
-   └── sled-store (Sled embedded DB)
+   └── fjall-store (Fjall embedded DB)
        └── Durable run state, evidence, artifacts
 
 8. Quality Gates (The Judgment)
@@ -261,7 +261,7 @@ pub fn process_bead(bead: Bead) -> Result<Vector<Effect>, BeadError> {
 │  (Durable Execution Engine)                             │
 └─────────────────────────────────────────────────────────┘
          │
-         │ Ingress API (http://127.0.0.1:909)
+         │ Ingress API (http://127.0.0.1:8080)
          │
          ▼
 ┌─────────────────────────────────────────────────────────┐
@@ -331,9 +331,9 @@ impl Oya {
 
 | Endpoint | Purpose |
 |----------|---------|
-| `http://127.0.0.1:909/Oya/<key>/run` | Start workflow |
-| `http://127.0.0.1:909/OyaService/get_lifecycle` | Query status |
-| `http://127.0.0.1:909/OyaService/cancel` | Cancel workflow |
+| `http://127.0.0.1:8080/Oya/<key>/run` | Start workflow |
+| `http://127.0.0.1:8080/OyaService/get_lifecycle` | Query status |
+| `http://127.0.0.1:8080/OyaService/cancel` | Cancel workflow |
 | `http://127.0.0.1:9070` | Restate Admin UI |
 
 ---
@@ -570,12 +570,12 @@ Attempt 1
 
 ┌──────────────────┐
 │ Restate          │  Durable execution
-│ (Docker)         │  - State management
+│ (managed local)  │  - State management
 │                  │  - Automatic retries
 │                  │  - Invocation tracking
 │                  │
 │  Ports:          │
-│  - 909 (ingress) │
+│  - 8080 (ingress)│
 │  - 9070 (admin)  │
 └──────────────────┘
 
@@ -608,7 +608,7 @@ Attempt 1
 └──────────────────┘
 
 ┌──────────────────┐
-│ Sled             │  Embedded database
+│ Fjall            │  Embedded database
 │                  │  - Durable state
 │                  │  - Run evidence
 └──────────────────┘
@@ -638,7 +638,7 @@ Attempt 1
 | `serde` | Serialization |
 | `tracing` | Structured logging |
 | `clap` | CLI argument parsing |
-| `sled` | Embedded database |
+| `fjall` | Embedded database |
 | `reqwest` | HTTP client |
 
 ---
@@ -653,11 +653,11 @@ Attempt 1
 └─────────────────────────────────────────────────────────┘
 
 ┌──────────────────┐       ┌──────────────────┐
-│  User            │       │  Docker          │
+│  User            │       │  Managed         │
 │  Terminal        │       │  Restate         │
 │                  │       │  (fresh state)   │
 │  $ oya init      │──────▶│                  │
-│  $ oya lifecycle │       │  - Port 909      │
+│  $ oya lifecycle │       │  - Port 8080     │
 │  $ oya status    │       │  - Port 9070     │
 └──────────────────┘       └──────────────────┘
          │                          │
@@ -667,7 +667,7 @@ Attempt 1
 │  oya.service     │       │  Restate         │
 │  (systemd)       │       │  Ingress         │
 │                  │       │                  │
-│  Port 9180       │◀──────│  localhost:909   │
+│  Port 9180       │◀──────│  localhost:8080  │
 └──────────────────┘       └──────────────────┘
          │
          │ Uses
@@ -689,9 +689,8 @@ $ oya init
 1. Stop user-systemd Restate services
    └─ systemctl --user stop restate.service
 
-2. Recreate Docker Restate (fresh state)
-   └─ docker compose down -v
-   └─ docker compose up -d
+2. Start managed Restate (fresh local state)
+   └─ restate-server --base-dir .oya-lite/restate-data --auto-provision=true
 
 3. Start oya.service
    └─ systemctl --user restart oya.service
@@ -704,7 +703,7 @@ $ oya init
    └─ Check: Oya, OyaMemory, OyaService present
 
 6. Health checks
-   └─ http://127.0.0.1:909/restate/health
+   └─ http://127.0.0.1:8080/restate/health
 ```
 
 ### Runtime Validation
@@ -715,7 +714,7 @@ $ oya doctor
 Checks:
 ┌─────────────────────────────────┐
 │ Ingress Reachability            │
-│ http://127.0.0.1:909            │
+│ http://127.0.0.1:8080           │
 └─────────────────────────────────┘
 ┌─────────────────────────────────┐
 │ Admin UI Reachability           │
@@ -849,7 +848,7 @@ Exported:
 
 - **Local-only**: Services bind to 127.0.0.1 only
 - **No authentication**: Local development only (not production)
-- **Docker isolation**: Restate runs in Docker container
+- **Managed process**: Restate runs as a local managed subprocess bound to `127.0.0.1`
 
 ---
 
@@ -908,7 +907,7 @@ Exported:
 
 | Issue | Cause | Solution |
 |-------|-------|----------|
-| Restate not reachable | Docker not running | `docker compose up -d` |
+| Restate not reachable | Managed Restate stopped | `oya init` |
 | Service not registered | Handler not started | `oya init` |
 | Bead blocked | Max retries exceeded | Check logs, fix issue, retry |
 | Tests failing | Implementation incomplete | Continue green stage |
@@ -927,7 +926,7 @@ restate deployments list
 restate sql "SELECT * FROM sys_invocation ORDER BY modified_at DESC LIMIT 10"
 
 # Check service health
-curl http://127.0.0.1:909/restate/health
+curl http://127.0.0.1:8080/restate/health
 
 # View logs
 restate logs tail
