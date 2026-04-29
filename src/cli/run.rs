@@ -14,6 +14,7 @@ use super::agent::{
 };
 use super::args::RunArgs;
 use super::verify::{persist_run_verification_gate, RunVerificationResult};
+use super::workspace::ensure_clean_workspace_for_run;
 use crate::lifecycle::state::StateDb;
 use crate::lifecycle::types::{
     BeadId, EvidenceEnvelope, EvidenceEnvelopeParts, EvidenceKind, EvidenceMetadata,
@@ -68,8 +69,10 @@ struct RunSkeletonEvidence {
 }
 
 pub async fn run_command(args: RunArgs) -> anyhow::Result<()> {
-    let db = StateDb::open(data_dir())?;
     let bead_id = BeadId::parse(&args.bead_id)?;
+    let run_id = RunId::from_bead_id(&bead_id);
+    ensure_clean_workspace_for_run(run_id.as_str()).await?;
+    let db = StateDb::open(data_dir())?;
     let skeleton =
         persist_run_skeleton_evidence(&db, bead_id, &args.prompt, &args.model, Utc::now())?;
     let output = run_output(&db, &skeleton, &args.prompt, &args.model).await?;
@@ -487,6 +490,9 @@ fn agent_request_metadata(model: &str, prompt_record: &EvidenceEnvelope) -> Evid
         ("prompt_record_id".to_owned(), prompt_record.record_id.as_str().to_owned()),
         ("redacted".to_owned(), "true".to_owned()),
         ("status".to_owned(), "requested".to_owned()),
+        ("workspace_owner_bead_id".to_owned(), prompt_record.bead_id.as_str().to_owned()),
+        ("workspace_owner_run_id".to_owned(), prompt_record.run_id.as_str().to_owned()),
+        ("workspace_status".to_owned(), "clean_at_agent_request".to_owned()),
     ])
 }
 
@@ -573,6 +579,15 @@ mod tests {
         assert_eq!(evidence[2].metadata.get("agent"), Some(&"opencode".to_owned()));
         assert_eq!(evidence[2].metadata.get("model"), Some(&"bad/model".to_owned()));
         assert_eq!(evidence[2].metadata.get("status"), Some(&"requested".to_owned()));
+        assert_eq!(evidence[2].metadata.get("workspace_owner_bead_id"), Some(&"demo".to_owned()));
+        assert_eq!(
+            evidence[2].metadata.get("workspace_owner_run_id"),
+            Some(&"run-demo".to_owned())
+        );
+        assert_eq!(
+            evidence[2].metadata.get("workspace_status"),
+            Some(&"clean_at_agent_request".to_owned())
+        );
         assert!(!agent_request_json.contains("super-secret-token"));
     }
 

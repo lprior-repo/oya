@@ -15,6 +15,7 @@ pub mod report;
 pub mod restate;
 pub mod run;
 pub mod verify;
+pub mod workspace;
 
 pub use args::{Cli, Command};
 pub use commands::dispatch_command;
