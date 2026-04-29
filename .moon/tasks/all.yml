@@ -54,7 +54,17 @@ tasks:
     description: "List files exceeding 300 lines"
 
   security:
-    command: "cargo audit"
+    # Accepted transitive advisory policy is documented in
+    # docs/security-audit-policy.md. Keep this allow-list exact: cargo-audit
+    # must still fail on any new advisory that is not documented there.
+    command: >-
+      cargo audit
+      --ignore RUSTSEC-2026-0037
+      --ignore RUSTSEC-2026-0049
+      --ignore RUSTSEC-2026-0098
+      --ignore RUSTSEC-2026-0099
+      --ignore RUSTSEC-2026-0104
+      --ignore RUSTSEC-2020-0071
     description: "Audit dependencies for known vulnerabilities"
     toolchains:
       - rust
