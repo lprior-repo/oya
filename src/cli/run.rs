@@ -74,6 +74,12 @@ pub(crate) enum RunExitCodeError {
     AgentFailed { category: String, record: String },
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub(crate) enum RunStartError {
+    #[error("BeadAlreadyRunning: bead '{bead_id}' already has run '{run_id}' in phase '{phase}'")]
+    BeadAlreadyRunning { bead_id: String, run_id: String, phase: String },
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct RunSkeletonEvidence {
     agent_request: EvidenceEnvelope,
@@ -430,10 +436,34 @@ fn should_run_full_factory(skeleton: &RunSkeletonEvidence) -> bool {
 }
 
 fn ensure_run_can_start(db: &StateDb, run_id: &RunId, bead_id: &BeadId) -> anyhow::Result<()> {
-    if bead_id.as_str() == "demo-fix" && !db.load_evidence(run_id)?.is_empty() {
-        return Err(anyhow::anyhow!("run_already_exists: run '{run_id}' already has evidence"));
+    if let Some(phase) = existing_run_phase(db, run_id, bead_id)? {
+        return Err(RunStartError::BeadAlreadyRunning {
+            bead_id: bead_id.as_str().to_owned(),
+            run_id: run_id.as_str().to_owned(),
+            phase,
+        }
+        .into());
     }
     Ok(())
+}
+
+fn existing_run_phase(
+    db: &StateDb,
+    run_id: &RunId,
+    bead_id: &BeadId,
+) -> anyhow::Result<Option<String>> {
+    let evidence = db.load_evidence(run_id)?;
+    if evidence.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(phase_from_evidence(run_id, bead_id, evidence.as_slice())))
+    }
+}
+
+fn phase_from_evidence(run_id: &RunId, bead_id: &BeadId, evidence: &[EvidenceEnvelope]) -> String {
+    RunState::planned(run_id.clone(), bead_id.clone())
+        .apply_evidence_chain(evidence)
+        .map_or_else(|_| "unknown".to_owned(), |state| state.phase().as_str().to_owned())
 }
 
 fn verification_failed(output: &RunSkeletonOutput) -> bool {
@@ -1438,6 +1468,34 @@ mod tests {
     }
 
     #[test]
+    fn bead_concurrency_second_same_bead_run_returns_bead_already_running() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = StateDb::open(dir.path().join("db")).unwrap();
+        let bead_id = BeadId::parse("demo").unwrap();
+        let timestamp = Utc.timestamp_opt(1_779_999_600, 0).unwrap();
+
+        persist_run_skeleton_evidence(
+            &db,
+            bead_id.clone(),
+            "noop",
+            "zai-coding-plan/glm-5",
+            timestamp,
+        )
+        .unwrap();
+        let result =
+            persist_run_skeleton_evidence(&db, bead_id, "noop", "zai-coding-plan/glm-5", timestamp);
+        let evidence = db.load_evidence(&RunId::parse("run-demo").unwrap()).unwrap();
+        let error = result.unwrap_err();
+
+        assert!(matches!(
+            error.downcast_ref::<RunStartError>(),
+            Some(RunStartError::BeadAlreadyRunning { bead_id, run_id, phase })
+                if bead_id == "demo" && run_id == "run-demo" && phase == "agent_requested"
+        ));
+        assert_eq!(evidence.len(), 3);
+    }
+
+    #[test]
     fn oya_run_demo_fix_rejects_repeat_run_before_duplicate_evidence() {
         let dir = tempfile::tempdir().unwrap();
         let db = StateDb::open(dir.path().join("db")).unwrap();
@@ -1455,9 +1513,13 @@ mod tests {
         let result =
             persist_run_skeleton_evidence(&db, bead_id, "noop", "zai-coding-plan/glm-5", timestamp);
         let evidence = db.load_evidence(&RunId::parse("run-demo-fix").unwrap()).unwrap();
+        let error = result.unwrap_err();
 
-        assert!(result.is_err());
-        assert!(result.err().unwrap().to_string().contains("run_already_exists"));
+        assert!(matches!(
+            error.downcast_ref::<RunStartError>(),
+            Some(RunStartError::BeadAlreadyRunning { bead_id, run_id, phase })
+                if bead_id == "demo-fix" && run_id == "run-demo-fix" && phase == "agent_requested"
+        ));
         assert_eq!(evidence.len(), 3);
     }
 
