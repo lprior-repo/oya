@@ -42,6 +42,23 @@ pub(crate) enum DiffValidationError {
     GitFailed { message: String },
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PullRequestOutcome {
+    pub(crate) branch: String,
+    pub(crate) url: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub(crate) enum PullRequestError {
+    #[error("pull_request_command_failed: {command} failed: {message}")]
+    CommandFailed { command: &'static str, message: String },
+
+    #[error(
+        "pull_request_url_missing: gh pr create did not return a PR URL for branch '{branch}'"
+    )]
+    MissingUrl { branch: String },
+}
+
 pub(crate) async fn ensure_clean_workspace_for_run(
     run_id: &str,
 ) -> Result<(), WorkspaceOwnershipError> {
@@ -105,6 +122,15 @@ pub(crate) async fn validate_meaningful_git_diff() -> Result<(), DiffValidationE
     }
 }
 
+pub(crate) async fn create_pull_request_after_green_gates(
+    branch: &str,
+    title: &str,
+    body: &str,
+) -> Result<PullRequestOutcome, PullRequestError> {
+    push_branch_for_pull_request(branch).await?;
+    create_github_pull_request(branch, title, body).await
+}
+
 pub(crate) fn validate_meaningful_diff_from_paths(
     changed_paths_stdout: &str,
 ) -> Result<(), DiffValidationError> {
@@ -165,6 +191,73 @@ impl DiffValidationError {
     }
 }
 
+impl PullRequestError {
+    #[must_use]
+    pub(crate) fn failure_type(&self) -> &'static str {
+        match self {
+            Self::CommandFailed { .. } => "PullRequestCommandFailed",
+            Self::MissingUrl { .. } => "PullRequestUrlMissing",
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn command(&self) -> Option<&'static str> {
+        match self {
+            Self::CommandFailed { command, .. } => Some(command),
+            Self::MissingUrl { .. } => None,
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn sanitized_message(&self) -> &str {
+        match self {
+            Self::CommandFailed { message, .. } => message,
+            Self::MissingUrl { .. } => "pull request URL missing",
+        }
+    }
+}
+
+async fn push_branch_for_pull_request(branch: &str) -> Result<(), PullRequestError> {
+    let refspec = format!("HEAD:{branch}");
+    run_pull_request_command("git push origin HEAD:<branch>", "git", &["push", "origin", &refspec])
+        .await
+        .map(|_| ())
+}
+
+async fn create_github_pull_request(
+    branch: &str,
+    title: &str,
+    body: &str,
+) -> Result<PullRequestOutcome, PullRequestError> {
+    let output = run_pull_request_command(
+        "gh pr create",
+        "gh",
+        &["pr", "create", "--head", branch, "--title", title, "--body", body],
+    )
+    .await?;
+    pull_request_from_output(branch, &output)
+}
+
+async fn run_pull_request_command(
+    command_name: &'static str,
+    program: &str,
+    args: &[&str],
+) -> Result<String, PullRequestError> {
+    let output = Command::new(program).args(args).output().await.map_err(|error| {
+        PullRequestError::CommandFailed {
+            command: command_name,
+            message: sanitize_vcs_message(&error.to_string()),
+        }
+    })?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if output.status.success() {
+        Ok(stdout.into_owned())
+    } else {
+        Err(pull_request_failure_from_output(command_name, &stdout, &stderr))
+    }
+}
+
 async fn run_vcs_sync_command(
     command_name: &'static str,
     args: &[&str],
@@ -191,6 +284,29 @@ fn vcs_sync_failure_from_output(command: &'static str, stdout: &str, stderr: &st
     }
 }
 
+fn pull_request_from_output(
+    branch: &str,
+    stdout: &str,
+) -> Result<PullRequestOutcome, PullRequestError> {
+    stdout
+        .lines()
+        .map(str::trim)
+        .find(|line| is_pull_request_url(line))
+        .map(|url| PullRequestOutcome { branch: branch.to_owned(), url: url.to_owned() })
+        .ok_or_else(|| PullRequestError::MissingUrl { branch: branch.to_owned() })
+}
+
+fn pull_request_failure_from_output(
+    command: &'static str,
+    stdout: &str,
+    stderr: &str,
+) -> PullRequestError {
+    PullRequestError::CommandFailed {
+        command,
+        message: sanitize_vcs_message(vcs_failure_message(stdout, stderr)),
+    }
+}
+
 fn vcs_failure_message<'a>(stdout: &'a str, stderr: &'a str) -> &'a str {
     if stderr.trim().is_empty() {
         stdout
@@ -201,6 +317,10 @@ fn vcs_failure_message<'a>(stdout: &'a str, stderr: &'a str) -> &'a str {
 
 fn is_meaningful_diff_path(path: &str) -> bool {
     !matches!(path, ".beads") && !path.starts_with(".beads/")
+}
+
+fn is_pull_request_url(line: &str) -> bool {
+    (line.starts_with("https://") || line.starts_with("http://")) && line.contains("/pull/")
 }
 
 fn sanitize_branch_component(value: &str) -> String {
@@ -348,6 +468,37 @@ mod tests {
         let result = validate_meaningful_diff_from_paths(".beads/state.json\nsrc/cli/run.rs\n");
 
         assert_eq!(result, Ok(()));
+    }
+
+    #[test]
+    fn pr_creation_extracts_url_and_branch_from_output() {
+        let result = pull_request_from_output(
+            "oya/demo-run-demo",
+            "https://github.com/priorlewis43/oya/pull/123\n",
+        )
+        .unwrap();
+
+        assert_eq!(result.branch, "oya/demo-run-demo");
+        assert_eq!(result.url, "https://github.com/priorlewis43/oya/pull/123");
+    }
+
+    #[test]
+    fn pr_creation_failure_is_typed_and_sanitized() {
+        let result = pull_request_failure_from_output(
+            "gh pr create",
+            "",
+            "remote: token=server-secret-token\nfatal: authentication failed",
+        );
+
+        assert_eq!(
+            result,
+            PullRequestError::CommandFailed {
+                command: "gh pr create",
+                message: "[redacted] fatal: authentication failed".to_owned(),
+            }
+        );
+        assert!(result.to_string().contains("pull_request_command_failed"));
+        assert!(!result.to_string().contains("server-secret-token"));
     }
 
     #[test]

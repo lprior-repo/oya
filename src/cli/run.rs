@@ -15,8 +15,9 @@ use super::agent::{
 use super::args::RunArgs;
 use super::verify::{persist_run_verification_gate, RunVerificationResult};
 use super::workspace::{
-    branch_name_from_ids, ensure_clean_workspace_for_run, sync_workspace_with_main,
-    validate_meaningful_git_diff, DiffValidationError, VcsSyncError,
+    branch_name_from_ids, create_pull_request_after_green_gates, ensure_clean_workspace_for_run,
+    sync_workspace_with_main, validate_meaningful_git_diff, DiffValidationError, PullRequestError,
+    PullRequestOutcome, VcsSyncError,
 };
 use crate::lifecycle::state::StateDb;
 use crate::lifecycle::types::{
@@ -35,6 +36,7 @@ pub struct RunSkeletonOutput {
     pub agent_request_id: String,
     pub agent_run_id: Option<String>,
     pub verification: Option<RunVerificationSummary>,
+    pub pull_request: Option<PullRequestSummary>,
     pub failure_category: Option<String>,
     pub error: Option<String>,
     pub stdout: Option<AgentOutputSummary>,
@@ -53,6 +55,13 @@ pub struct RunVerificationSummary {
     pub finding_id: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PullRequestSummary {
+    pub branch: String,
+    pub url: String,
+    pub record_id: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub(crate) enum RunExitCodeError {
     #[error("run verification failed with verdict '{verdict}'")]
@@ -69,6 +78,11 @@ pub(crate) enum RunExitCodeError {
 struct RunSkeletonEvidence {
     agent_request: EvidenceEnvelope,
     evidence_records: usize,
+}
+
+struct PullRequestFailure<'a> {
+    branch: &'a str,
+    error: &'a PullRequestError,
 }
 
 pub async fn run_command(args: RunArgs) -> anyhow::Result<()> {
@@ -157,6 +171,32 @@ fn persist_diff_validation_failed(
     Ok(envelope)
 }
 
+fn persist_pull_request_created(
+    db: &StateDb,
+    bead_id: &BeadId,
+    run_id: &RunId,
+    timestamp: DateTime<Utc>,
+    pull_request: &PullRequestOutcome,
+) -> anyhow::Result<EvidenceEnvelope> {
+    let envelope = pull_request_created_envelope(bead_id, run_id, timestamp, pull_request)?;
+    db.append_evidence(&envelope)?;
+    db.flush()?;
+    Ok(envelope)
+}
+
+fn persist_pull_request_failed(
+    db: &StateDb,
+    bead_id: &BeadId,
+    run_id: &RunId,
+    timestamp: DateTime<Utc>,
+    failure: PullRequestFailure<'_>,
+) -> anyhow::Result<EvidenceEnvelope> {
+    let envelope = pull_request_failed_envelope(bead_id, run_id, timestamp, failure)?;
+    db.append_evidence(&envelope)?;
+    db.flush()?;
+    Ok(envelope)
+}
+
 async fn run_output(
     db: &StateDb,
     skeleton: &RunSkeletonEvidence,
@@ -198,6 +238,9 @@ async fn run_full_factory(
         output.verification = Some(RunVerificationSummary::from_result(&verification));
         if diff_validation_required {
             output = validate_verified_run_diff_or_block(db, &agent_run, output).await?;
+            if output.error.is_none() {
+                output = create_pull_request_or_block(db, &agent_run, output).await?;
+            }
         }
     }
     output = output.with_verdict_from_evidence(db)?;
@@ -205,6 +248,42 @@ async fn run_full_factory(
         output.error = Some("moon verification failed".to_owned());
     }
     Ok(output)
+}
+
+async fn create_pull_request_or_block(
+    db: &StateDb,
+    agent_run: &EvidenceEnvelope,
+    mut output: RunSkeletonOutput,
+) -> anyhow::Result<RunSkeletonOutput> {
+    let branch = branch_name_from_ids(agent_run.bead_id.as_str(), agent_run.run_id.as_str());
+    let title = pull_request_title(&agent_run.bead_id);
+    let body = pull_request_body(&agent_run.bead_id, &agent_run.run_id);
+    match create_pull_request_after_green_gates(&branch, &title, &body).await {
+        Ok(pull_request) => {
+            let evidence = persist_pull_request_created(
+                db,
+                &agent_run.bead_id,
+                &agent_run.run_id,
+                Utc::now(),
+                &pull_request,
+            )?;
+            output.pull_request =
+                Some(PullRequestSummary::from_pull_request(&evidence, &pull_request));
+            Ok(output)
+        }
+        Err(error) => {
+            let failure = PullRequestFailure { branch: &branch, error: &error };
+            persist_pull_request_failed(
+                db,
+                &agent_run.bead_id,
+                &agent_run.run_id,
+                Utc::now(),
+                failure,
+            )?;
+            output.error = Some(error.sanitized_message().to_owned());
+            Ok(output)
+        }
+    }
 }
 
 async fn validate_verified_run_diff_or_block(
@@ -273,6 +352,7 @@ impl RunSkeletonOutput {
             agent_request_id: envelope.record_id.as_str().to_owned(),
             agent_run_id: None,
             verification: None,
+            pull_request: None,
             failure_category: None,
             error: None,
             stdout: None,
@@ -299,6 +379,7 @@ impl RunSkeletonOutput {
             agent_request_id: request.record_id.as_str().to_owned(),
             agent_run_id: Some(agent_run.record_id.as_str().to_owned()),
             verification: None,
+            pull_request: None,
             failure_category: result.failure_category_name().map(str::to_owned),
             error: result.sanitized_error(),
             stdout: Some(result.stdout.summary()),
@@ -317,6 +398,16 @@ impl RunSkeletonOutput {
         self.status = status_from_phase(state.phase()).to_owned();
         self.evidence_records = evidence.len();
         Ok(self)
+    }
+}
+
+impl PullRequestSummary {
+    fn from_pull_request(evidence: &EvidenceEnvelope, pull_request: &PullRequestOutcome) -> Self {
+        Self {
+            branch: pull_request.branch.clone(),
+            url: pull_request.url.clone(),
+            record_id: evidence.record_id.as_str().to_owned(),
+        }
     }
 }
 
@@ -535,6 +626,42 @@ fn diff_validation_failed_envelope(
     .map_err(Into::into)
 }
 
+fn pull_request_created_envelope(
+    bead_id: &BeadId,
+    run_id: &RunId,
+    timestamp: DateTime<Utc>,
+    pull_request: &PullRequestOutcome,
+) -> anyhow::Result<EvidenceEnvelope> {
+    EvidenceEnvelope::new(EvidenceEnvelopeParts {
+        record_id: pull_request_created_record_id(bead_id, timestamp)?,
+        run_id: run_id.clone(),
+        bead_id: bead_id.clone(),
+        timestamp,
+        kind: EvidenceKind::PullRequestCreated,
+        metadata: pull_request_created_metadata(pull_request),
+        previous_checksum: None,
+    })
+    .map_err(Into::into)
+}
+
+fn pull_request_failed_envelope(
+    bead_id: &BeadId,
+    run_id: &RunId,
+    timestamp: DateTime<Utc>,
+    failure: PullRequestFailure<'_>,
+) -> anyhow::Result<EvidenceEnvelope> {
+    EvidenceEnvelope::new(EvidenceEnvelopeParts {
+        record_id: pull_request_failed_record_id(bead_id, timestamp)?,
+        run_id: run_id.clone(),
+        bead_id: bead_id.clone(),
+        timestamp,
+        kind: EvidenceKind::PullRequestFailed,
+        metadata: pull_request_failed_metadata(failure.branch, failure.error),
+        previous_checksum: None,
+    })
+    .map_err(Into::into)
+}
+
 fn agent_request_timestamp(timestamp: DateTime<Utc>) -> anyhow::Result<DateTime<Utc>> {
     timestamp
         .checked_add_signed(Duration::milliseconds(1))
@@ -601,6 +728,30 @@ fn diff_validation_failed_record_id(
     .map_err(Into::into)
 }
 
+fn pull_request_created_record_id(
+    bead_id: &BeadId,
+    timestamp: DateTime<Utc>,
+) -> anyhow::Result<EvidenceRecordId> {
+    EvidenceRecordId::parse(&format!(
+        "ev-{}-pr-created-{}",
+        bead_id.as_str(),
+        timestamp.timestamp_millis()
+    ))
+    .map_err(Into::into)
+}
+
+fn pull_request_failed_record_id(
+    bead_id: &BeadId,
+    timestamp: DateTime<Utc>,
+) -> anyhow::Result<EvidenceRecordId> {
+    EvidenceRecordId::parse(&format!(
+        "ev-{}-pr-failed-{}",
+        bead_id.as_str(),
+        timestamp.timestamp_millis()
+    ))
+    .map_err(Into::into)
+}
+
 fn prompt_metadata(prompt: &str) -> EvidenceMetadata {
     EvidenceMetadata::from([
         ("prompt_bytes".to_owned(), prompt.len().to_string()),
@@ -650,6 +801,41 @@ fn diff_validation_failed_metadata(error: &DiffValidationError) -> EvidenceMetad
         metadata.insert("changed_paths".to_owned(), changed_paths.to_string());
     }
     metadata
+}
+
+fn pull_request_created_metadata(pull_request: &PullRequestOutcome) -> EvidenceMetadata {
+    EvidenceMetadata::from([
+        ("branch".to_owned(), pull_request.branch.clone()),
+        ("redacted".to_owned(), "true".to_owned()),
+        ("status".to_owned(), "created".to_owned()),
+        ("url".to_owned(), pull_request.url.clone()),
+    ])
+}
+
+fn pull_request_failed_metadata(branch: &str, error: &PullRequestError) -> EvidenceMetadata {
+    let mut metadata = EvidenceMetadata::from([
+        ("branch".to_owned(), branch.to_owned()),
+        ("failure_type".to_owned(), error.failure_type().to_owned()),
+        ("redacted".to_owned(), "true".to_owned()),
+        ("sanitized_message".to_owned(), error.sanitized_message().to_owned()),
+        ("status".to_owned(), "failed".to_owned()),
+    ]);
+    if let Some(command) = error.command() {
+        metadata.insert("command".to_owned(), command.to_owned());
+    }
+    metadata
+}
+
+fn pull_request_title(bead_id: &BeadId) -> String {
+    format!("Oya run for {}", bead_id.as_str())
+}
+
+fn pull_request_body(bead_id: &BeadId, run_id: &RunId) -> String {
+    format!(
+        "Automated Oya PR after green gates for bead `{}` and run `{}`.",
+        bead_id.as_str(),
+        run_id.as_str()
+    )
 }
 
 fn data_dir() -> PathBuf {
@@ -800,6 +986,32 @@ mod tests {
         assert_eq!(
             failure.metadata.get("sanitized_message"),
             Some(&"empty diff blocks PR creation".to_owned())
+        );
+    }
+
+    #[test]
+    fn pr_creation_records_url_and_branch_evidence() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = StateDb::open(dir.path().join("db")).unwrap();
+        let bead_id = BeadId::parse("demo").unwrap();
+        let run_id = RunId::parse("run-demo").unwrap();
+        let timestamp = Utc.timestamp_opt(1_779_999_600, 0).unwrap();
+        let pull_request = crate::cli::workspace::PullRequestOutcome {
+            branch: "oya/demo-run-demo".to_owned(),
+            url: "https://github.com/priorlewis43/oya/pull/123".to_owned(),
+        };
+
+        let evidence =
+            persist_pull_request_created(&db, &bead_id, &run_id, timestamp, &pull_request).unwrap();
+        let persisted = db.load_evidence(&run_id).unwrap();
+
+        assert_eq!(persisted.len(), 1);
+        assert_eq!(evidence.kind, EvidenceKind::PullRequestCreated);
+        assert_eq!(evidence.metadata.get("status"), Some(&"created".to_owned()));
+        assert_eq!(evidence.metadata.get("branch"), Some(&"oya/demo-run-demo".to_owned()));
+        assert_eq!(
+            evidence.metadata.get("url"),
+            Some(&"https://github.com/priorlewis43/oya/pull/123".to_owned())
         );
     }
 
@@ -1346,6 +1558,7 @@ mod tests {
                 gate_run_finished_id: "ev-demo-fix-g-fmt-f-1".to_owned(),
                 finding_id: None,
             }),
+            pull_request: None,
             failure_category: None,
             error: error.map(str::to_owned),
             stdout: None,

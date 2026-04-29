@@ -50,6 +50,8 @@ pub enum RunEvent {
     RepairBlocked,
     VcsSyncFailed,
     DiffValidationFailed,
+    PullRequestCreated,
+    PullRequestFailed,
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -192,6 +194,8 @@ impl RunEvent {
             Self::RepairBlocked => "repair_blocked",
             Self::VcsSyncFailed => "vcs_sync_failed",
             Self::DiffValidationFailed => "diff_validation_failed",
+            Self::PullRequestCreated => "pull_request_created",
+            Self::PullRequestFailed => "pull_request_failed",
         }
     }
 }
@@ -227,6 +231,8 @@ fn transition_target(phase: RunPhase, event: RunEvent) -> Option<RunPhase> {
         RunEvent::DiffValidationFailed => {
             next_if(diff_validation_can_block(phase), RunPhase::Blocked)
         }
+        RunEvent::PullRequestCreated => next_if(phase == RunPhase::Completed, RunPhase::Completed),
+        RunEvent::PullRequestFailed => next_if(phase == RunPhase::Completed, RunPhase::Blocked),
     }
 }
 
@@ -274,6 +280,8 @@ fn event_from_evidence(envelope: &EvidenceEnvelope) -> Result<RunEvent, RunState
         EvidenceKind::RepairBlocked => Ok(RunEvent::RepairBlocked),
         EvidenceKind::VcsSyncFailed => Ok(RunEvent::VcsSyncFailed),
         EvidenceKind::DiffValidationFailed => Ok(RunEvent::DiffValidationFailed),
+        EvidenceKind::PullRequestCreated => Ok(RunEvent::PullRequestCreated),
+        EvidenceKind::PullRequestFailed => Ok(RunEvent::PullRequestFailed),
     }
 }
 
