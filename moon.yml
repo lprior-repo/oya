@@ -1,0 +1,39 @@
+$schema: "https://moonrepo.dev/schemas/project.json"
+
+tasks:
+  oya:
+    command: "oya"
+    description: "Run installed oya CLI (requires 'moon run install' first)"
+    options:
+      runFromWorkspaceRoot: true
+
+  oya-install-and-run:
+    command: "true"
+    description: "Ensure oya is installed and run it"
+    deps:
+      - "install"
+    options:
+      runFromWorkspaceRoot: true
+      cache: false
+
+  run:
+    command: "./target/release/oya"
+    description: "Run the built oya CLI through Moon"
+    deps:
+      - "build-oya"
+    options:
+      cache: false
+      runInCI: false
+      runFromWorkspaceRoot: true
+      mergeArgs: "append"
+
+  run-serve:
+    command: "./target/release/oya serve"
+    description: "Start OYA IPC server"
+    deps:
+      - "build-oya"
+    options:
+      cache: false
+      runInCI: false
+      runFromWorkspaceRoot: true
+      mergeArgs: "append"

@@ -314,25 +314,6 @@ tasks:
       runInCI: false
 
   # ============================================================================
-  # OYA CLI (workspace-level tasks)
-  # ============================================================================
-
-  oya:
-    command: "oya"
-    description: "Run installed oya CLI (requires 'moon run install' first)"
-    options:
-      runFromWorkspaceRoot: true
-
-  oya-install-and-run:
-    command: "true"
-    description: "Ensure oya is installed and run it"
-    deps:
-      - "install"
-    options:
-      runFromWorkspaceRoot: true
-      cache: false
-
-  # ============================================================================
   # RELEASE TARGETS (Single oya binary + WASM plugin)
   # ============================================================================
 
@@ -369,18 +350,6 @@ tasks:
     options:
       cache: false
 
-  # Run oya directly from moon (without installing)
-  run:
-    script: "cargo run --release --bin oya --"
-    description: "Run oya directly (via moon)"
-    toolchains:
-      - rust
-    options:
-      cache: false
-      runInCI: false
-      runFromWorkspaceRoot: true
-      mergeArgs: "append"
-
   # ============================================================================
   # CUE VALIDATION
   # ============================================================================
@@ -394,15 +363,4 @@ tasks:
     options:
       runInCI: true
       cache: true
-      runFromWorkspaceRoot: true
-
-  # Convenience: start IPC server
-  run-serve:
-    script: "cargo run --release --bin oya -- serve"
-    description: "Start OYA IPC server"
-    toolchains:
-      - rust
-    options:
-      cache: false
-      runInCI: false
       runFromWorkspaceRoot: true
