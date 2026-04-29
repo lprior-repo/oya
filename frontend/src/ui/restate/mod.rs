@@ -15,6 +15,8 @@ pub mod deployment_browser;
 pub mod details_panel;
 pub mod invocation_actions;
 pub mod journal_viewer;
+pub mod lifecycle_status_model;
+pub mod lifecycle_status_panel;
 #[cfg(target_arch = "wasm32")]
 pub mod opencode_trace_panel;
 #[cfg(target_arch = "wasm32")]
@@ -28,6 +30,8 @@ pub use deployment_browser::DeploymentBrowserPanel;
 #[cfg(target_arch = "wasm32")]
 pub use details_panel::RestateInvocationDetails;
 pub use journal_viewer::RestateJournalViewer;
+#[cfg(target_arch = "wasm32")]
+pub use lifecycle_status_panel::LifecycleStatusPanel;
 #[cfg(target_arch = "wasm32")]
 pub use opencode_trace_panel::OpenCodeTracePanel;
 #[cfg(target_arch = "wasm32")]

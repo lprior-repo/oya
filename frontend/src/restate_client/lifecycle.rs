@@ -108,11 +108,23 @@ fn normalize_ingress_url(ingress_url: &str) -> String {
 fn map_request_error(error: reqwest::Error) -> LifecycleStatusError {
     if error.is_timeout() {
         LifecycleStatusError::Timeout
-    } else if error.is_connect() {
+    } else {
+        map_non_timeout_request_error(error)
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn map_non_timeout_request_error(error: reqwest::Error) -> LifecycleStatusError {
+    if error.is_connect() {
         LifecycleStatusError::ConnectionUnavailable(error.to_string())
     } else {
         LifecycleStatusError::RequestError(error)
     }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn map_non_timeout_request_error(error: reqwest::Error) -> LifecycleStatusError {
+    LifecycleStatusError::ConnectionUnavailable(error.to_string())
 }
 
 async fn parse_lifecycle_response(
