@@ -1,16 +1,16 @@
 # Oya Runtime Flow
 
-This repo runs Oya with Docker Restate and fixed local ports:
+This repo runs Oya with a managed local `restate-server` process and fixed local ports:
 
-- Restate ingress/API: `http://127.0.0.1:909`
+- Restate ingress/API: `http://127.0.0.1:8080`
 - Restate admin/UI: `http://127.0.0.1:9070`
 - Oya handler service: `http://127.0.0.1:9180`
 
-`8080` and `9090` are intentionally not used by Restate.
+Port `909` is intentionally not used for the rootless local runtime because Linux treats it as a privileged port for unprivileged processes.
 
 ## Prerequisites
 
-- `docker` + `docker compose`
+- `restate-server` available at `bin/restate-server`, `target/release/restate-server`, `$HOME/bin/restate-server`, or `OYA_RESTATE_SERVER`
 - `restate` CLI (optional; Oya falls back to Restate Admin API for registration and validation)
 - `gh` CLI authenticated
 - `oya` binary available on host
@@ -24,7 +24,7 @@ oya init
 `oya init` does all required prep each run:
 
 1. Disables/stops user-systemd Restate services.
-2. Recreates Docker Restate from `docker-compose.yml` with fresh state.
+2. Starts a managed local `restate-server` with state under `.oya-lite/restate-data`.
 3. Restarts `oya.service` on `:9180`, or starts a local `oya serve` fallback when no user service is installed.
 4. Waits for health/discovery checks.
 5. Registers Oya handlers with Restate.
@@ -49,7 +49,7 @@ Output is emitted as JSONL (`type=check` lines + `type=summary`).
 ## End-to-End Lifecycle
 
 ```bash
-oya lifecycle --bead <bead_id> --ingress http://127.0.0.1:909
+oya lifecycle --bead <bead_id> --ingress http://127.0.0.1:8080
 ```
 
 Repo selection:
@@ -64,8 +64,8 @@ git remote get-url origin
 Status/cancel:
 
 ```bash
-oya status --key <workflow_key_or_bead_id> --ingress http://127.0.0.1:909
-oya cancel --key <workflow_key_or_bead_id> --ingress http://127.0.0.1:909
+oya status --key <workflow_key_or_bead_id> --ingress http://127.0.0.1:8080
+oya cancel --key <workflow_key_or_bead_id> --ingress http://127.0.0.1:8080
 ```
 
 ## Opencode Observability (Clean JSON)

@@ -8,7 +8,7 @@ use clap::{Parser, Subcommand};
 use crate::lifecycle::types::{BeadId, GateId, RunId};
 
 const DEFAULT_BIND: &str = "127.0.0.1:9180";
-const DEFAULT_INGRESS: &str = "http://127.0.0.1:909";
+const DEFAULT_INGRESS: &str = "http://127.0.0.1:8080";
 const DEFAULT_ADMIN: &str = "http://127.0.0.1:9070";
 const DEFAULT_IMPL_MODEL: &str = "zai-coding-plan/glm-5";
 const DEFAULT_SERVICE_URL: &str = "http://127.0.0.1:9180/";
@@ -180,7 +180,7 @@ pub struct BeadsArgs {
 }
 
 pub fn parse_ingress_url(value: &str) -> Result<String, String> {
-    parse_url_with_expected_port(value, 909, "ingress")
+    parse_url_with_expected_port(value, 8080, "ingress")
 }
 
 pub fn parse_service_url(value: &str) -> Result<String, String> {
@@ -346,6 +346,15 @@ mod tests {
         assert!(parse_model_name("provider:model-v1").is_ok());
         assert!(parse_model_name(" ").is_err());
         assert!(parse_model_name("bad model").is_err());
+    }
+
+    #[test]
+    fn no_docker_ingress_accepts_rootless_restate_port() {
+        assert_eq!(
+            parse_ingress_url("http://127.0.0.1:8080"),
+            Ok("http://127.0.0.1:8080".to_owned())
+        );
+        assert!(parse_ingress_url("http://127.0.0.1:909").is_err());
     }
 
     #[test]

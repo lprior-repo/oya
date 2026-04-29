@@ -286,15 +286,15 @@ async fn check_restate_ingress(ingress: &str) -> DoctorCheck {
     match canonical_host_port(
         "restate_ingress",
         ingress,
-        909,
-        "use canonical Restate ingress http://127.0.0.1:909 or run `oya init`",
+        8080,
+        "use rootless Restate ingress http://127.0.0.1:8080 or run `oya init`",
     ) {
         Ok(_) => {
             let health_url = format!("{}/restate/health", ingress.trim_end_matches('/'));
             check_http_ok(
                 "restate_ingress",
                 &health_url,
-                "HTTP 200 from canonical ingress port 909",
+                "HTTP 200 from rootless ingress port 8080",
             )
             .await
         }
@@ -794,7 +794,7 @@ mod tests {
 
     #[test]
     fn canonical_host_port_accepts_oya_ports() {
-        let ingress = canonical_host_port("restate_ingress", "http://127.0.0.1:909", 909, "fix");
+        let ingress = canonical_host_port("restate_ingress", "http://127.0.0.1:8080", 8080, "fix");
         let admin = canonical_host_port("restate_admin", "http://127.0.0.1:9070", 9070, "fix");
         let service = canonical_host_port("oya_service", "http://127.0.0.1:9180/", 9180, "fix");
 
@@ -807,8 +807,8 @@ mod tests {
     fn canonical_host_port_rejects_noncanonical_port_before_network_check() {
         let Err(check) = canonical_host_port(
             "restate_ingress",
-            "http://127.0.0.1:8080",
-            909,
+            "http://127.0.0.1:909",
+            8080,
             "use canonical ingress",
         ) else {
             assert!(false, "noncanonical ingress port should fail before network checks");
@@ -817,8 +817,8 @@ mod tests {
 
         assert!(!check.pass);
         assert_eq!(check.id, "restate_ingress");
-        assert_eq!(check.expected, "canonical URL with port 909");
-        assert_eq!(check.actual, "expected port 909, found 8080");
+        assert_eq!(check.expected, "canonical URL with port 8080");
+        assert_eq!(check.actual, "expected port 8080, found 909");
     }
 
     #[test]
