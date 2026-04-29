@@ -224,6 +224,7 @@ fn run_phase(kind: &EvidenceKind) -> &'static str {
         EvidenceKind::AgentRequest => "agent_requested",
         EvidenceKind::AgentRun => "agent_ran",
         EvidenceKind::VcsSyncFailed => "blocked",
+        EvidenceKind::DiffValidationFailed => "blocked",
     }
 }
 
@@ -233,6 +234,7 @@ fn run_status(kind: &EvidenceKind) -> &'static str {
         EvidenceKind::Finding => "blocked",
         EvidenceKind::RepairBlocked => "blocked",
         EvidenceKind::VcsSyncFailed => "blocked",
+        EvidenceKind::DiffValidationFailed => "blocked",
         EvidenceKind::RepairRequest | EvidenceKind::RepairAttempt => "repairing",
         EvidenceKind::GateRunStarted | EvidenceKind::AgentRequest => "running",
         EvidenceKind::GateRunFinished | EvidenceKind::AgentRun => "recorded",
@@ -252,6 +254,7 @@ fn evidence_kind_name(kind: &EvidenceKind) -> &'static str {
         EvidenceKind::AgentRequest => "agent_request",
         EvidenceKind::AgentRun => "agent_run",
         EvidenceKind::VcsSyncFailed => "vcs_sync_failed",
+        EvidenceKind::DiffValidationFailed => "diff_validation_failed",
     }
 }
 

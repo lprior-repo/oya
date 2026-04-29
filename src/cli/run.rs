@@ -15,7 +15,8 @@ use super::agent::{
 use super::args::RunArgs;
 use super::verify::{persist_run_verification_gate, RunVerificationResult};
 use super::workspace::{
-    branch_name_from_ids, ensure_clean_workspace_for_run, sync_workspace_with_main, VcsSyncError,
+    branch_name_from_ids, ensure_clean_workspace_for_run, sync_workspace_with_main,
+    validate_meaningful_git_diff, DiffValidationError, VcsSyncError,
 };
 use crate::lifecycle::state::StateDb;
 use crate::lifecycle::types::{
@@ -143,6 +144,19 @@ fn persist_vcs_sync_failed(
     Ok(envelope)
 }
 
+fn persist_diff_validation_failed(
+    db: &StateDb,
+    bead_id: &BeadId,
+    run_id: &RunId,
+    timestamp: DateTime<Utc>,
+    error: &DiffValidationError,
+) -> anyhow::Result<EvidenceEnvelope> {
+    let envelope = diff_validation_failed_envelope(bead_id, run_id, timestamp, error)?;
+    db.append_evidence(&envelope)?;
+    db.flush()?;
+    Ok(envelope)
+}
+
 async fn run_output(
     db: &StateDb,
     skeleton: &RunSkeletonEvidence,
@@ -180,13 +194,38 @@ async fn run_full_factory(
     if result.succeeded() {
         let verification =
             persist_run_verification_gate(db, &agent_run.bead_id, &GateId::Fmt.model()).await?;
+        let diff_validation_required = verification.status == "passed";
         output.verification = Some(RunVerificationSummary::from_result(&verification));
+        if diff_validation_required {
+            output = validate_verified_run_diff_or_block(db, &agent_run, output).await?;
+        }
     }
     output = output.with_verdict_from_evidence(db)?;
     if verification_failed(&output) {
         output.error = Some("moon verification failed".to_owned());
     }
     Ok(output)
+}
+
+async fn validate_verified_run_diff_or_block(
+    db: &StateDb,
+    agent_run: &EvidenceEnvelope,
+    mut output: RunSkeletonOutput,
+) -> anyhow::Result<RunSkeletonOutput> {
+    match validate_meaningful_git_diff().await {
+        Ok(()) => Ok(output),
+        Err(error) => {
+            persist_diff_validation_failed(
+                db,
+                &agent_run.bead_id,
+                &agent_run.run_id,
+                Utc::now(),
+                &error,
+            )?;
+            output.error = Some(error.sanitized_message().to_owned());
+            Ok(output)
+        }
+    }
 }
 
 async fn run_agent_for_factory(prompt: &str, model: &str) -> AgentRunResult {
@@ -478,6 +517,24 @@ fn vcs_sync_failed_envelope(
     .map_err(Into::into)
 }
 
+fn diff_validation_failed_envelope(
+    bead_id: &BeadId,
+    run_id: &RunId,
+    timestamp: DateTime<Utc>,
+    error: &DiffValidationError,
+) -> anyhow::Result<EvidenceEnvelope> {
+    EvidenceEnvelope::new(EvidenceEnvelopeParts {
+        record_id: diff_validation_failed_record_id(bead_id, timestamp)?,
+        run_id: run_id.clone(),
+        bead_id: bead_id.clone(),
+        timestamp,
+        kind: EvidenceKind::DiffValidationFailed,
+        metadata: diff_validation_failed_metadata(error),
+        previous_checksum: None,
+    })
+    .map_err(Into::into)
+}
+
 fn agent_request_timestamp(timestamp: DateTime<Utc>) -> anyhow::Result<DateTime<Utc>> {
     timestamp
         .checked_add_signed(Duration::milliseconds(1))
@@ -532,6 +589,18 @@ fn vcs_sync_failed_record_id(
     .map_err(Into::into)
 }
 
+fn diff_validation_failed_record_id(
+    bead_id: &BeadId,
+    timestamp: DateTime<Utc>,
+) -> anyhow::Result<EvidenceRecordId> {
+    EvidenceRecordId::parse(&format!(
+        "ev-{}-diff-failed-{}",
+        bead_id.as_str(),
+        timestamp.timestamp_millis()
+    ))
+    .map_err(Into::into)
+}
+
 fn prompt_metadata(prompt: &str) -> EvidenceMetadata {
     EvidenceMetadata::from([
         ("prompt_bytes".to_owned(), prompt.len().to_string()),
@@ -568,6 +637,19 @@ fn vcs_sync_failed_metadata(error: &VcsSyncError) -> EvidenceMetadata {
         ("sanitized_message".to_owned(), error.sanitized_message().to_owned()),
         ("status".to_owned(), "failed".to_owned()),
     ])
+}
+
+fn diff_validation_failed_metadata(error: &DiffValidationError) -> EvidenceMetadata {
+    let mut metadata = EvidenceMetadata::from([
+        ("failure_type".to_owned(), error.failure_type().to_owned()),
+        ("redacted".to_owned(), "true".to_owned()),
+        ("sanitized_message".to_owned(), error.sanitized_message().to_owned()),
+        ("status".to_owned(), "blocked".to_owned()),
+    ]);
+    if let Some(changed_paths) = error.changed_paths() {
+        metadata.insert("changed_paths".to_owned(), changed_paths.to_string());
+    }
+    metadata
 }
 
 fn data_dir() -> PathBuf {
@@ -695,6 +777,30 @@ mod tests {
             Some(&"[redacted] fatal: authentication failed".to_owned())
         );
         assert!(!failure_json.contains("server-secret-token"));
+    }
+
+    #[test]
+    fn diff_validation_records_empty_diff_blocking_evidence() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = StateDb::open(dir.path().join("db")).unwrap();
+        let bead_id = BeadId::parse("demo").unwrap();
+        let run_id = RunId::parse("run-demo").unwrap();
+        let timestamp = Utc.timestamp_opt(1_779_999_600, 0).unwrap();
+        let error = crate::cli::workspace::DiffValidationError::EmptyDiff { changed_paths: 0 };
+
+        let failure =
+            persist_diff_validation_failed(&db, &bead_id, &run_id, timestamp, &error).unwrap();
+        let evidence = db.load_evidence(&run_id).unwrap();
+
+        assert_eq!(evidence.len(), 1);
+        assert_eq!(failure.kind, EvidenceKind::DiffValidationFailed);
+        assert_eq!(failure.metadata.get("failure_type"), Some(&"EmptyDiff".to_owned()));
+        assert_eq!(failure.metadata.get("status"), Some(&"blocked".to_owned()));
+        assert_eq!(failure.metadata.get("changed_paths"), Some(&"0".to_owned()));
+        assert_eq!(
+            failure.metadata.get("sanitized_message"),
+            Some(&"empty diff blocks PR creation".to_owned())
+        );
     }
 
     #[test]

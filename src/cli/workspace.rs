@@ -30,6 +30,18 @@ pub(crate) enum VcsSyncError {
     VcsSyncFailed { command: &'static str, message: String },
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub(crate) enum DiffValidationError {
+    #[error("empty_diff: PR creation blocked because diff has no meaningful source changes ({changed_paths} changed path(s))")]
+    EmptyDiff { changed_paths: usize },
+
+    #[error("diff_validation_unavailable: failed to run git diff: {message}")]
+    GitUnavailable { message: String },
+
+    #[error("diff_validation_failed: git diff exited unsuccessfully: {message}")]
+    GitFailed { message: String },
+}
+
 pub(crate) async fn ensure_clean_workspace_for_run(
     run_id: &str,
 ) -> Result<(), WorkspaceOwnershipError> {
@@ -76,6 +88,40 @@ pub(crate) async fn sync_workspace_with_main() -> Result<(), VcsSyncError> {
     run_vcs_sync_command("git rebase origin/main", &["rebase", "origin/main"]).await
 }
 
+pub(crate) async fn validate_meaningful_git_diff() -> Result<(), DiffValidationError> {
+    let output = Command::new("git")
+        .args(["diff", "--name-only", "origin/main...HEAD"])
+        .output()
+        .await
+        .map_err(|error| DiffValidationError::GitUnavailable {
+            message: sanitize_vcs_message(&error.to_string()),
+        })?;
+    if output.status.success() {
+        validate_meaningful_diff_from_paths(&String::from_utf8_lossy(&output.stdout))
+    } else {
+        Err(DiffValidationError::GitFailed {
+            message: sanitize_vcs_message(&String::from_utf8_lossy(&output.stderr)),
+        })
+    }
+}
+
+pub(crate) fn validate_meaningful_diff_from_paths(
+    changed_paths_stdout: &str,
+) -> Result<(), DiffValidationError> {
+    let (changed_paths, has_meaningful_diff) = changed_paths_stdout
+        .lines()
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+        .fold((0_usize, false), |(count, meaningful), path| {
+            (count + 1, meaningful || is_meaningful_diff_path(path))
+        });
+    if has_meaningful_diff {
+        Ok(())
+    } else {
+        Err(DiffValidationError::EmptyDiff { changed_paths })
+    }
+}
+
 impl VcsSyncError {
     #[must_use]
     pub(crate) fn command(&self) -> &'static str {
@@ -88,6 +134,33 @@ impl VcsSyncError {
     pub(crate) fn sanitized_message(&self) -> &str {
         match self {
             Self::VcsSyncFailed { message, .. } => message,
+        }
+    }
+}
+
+impl DiffValidationError {
+    #[must_use]
+    pub(crate) fn failure_type(&self) -> &'static str {
+        match self {
+            Self::EmptyDiff { .. } => "EmptyDiff",
+            Self::GitUnavailable { .. } => "GitUnavailable",
+            Self::GitFailed { .. } => "GitFailed",
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn changed_paths(&self) -> Option<usize> {
+        match self {
+            Self::EmptyDiff { changed_paths } => Some(*changed_paths),
+            Self::GitUnavailable { .. } | Self::GitFailed { .. } => None,
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn sanitized_message(&self) -> &str {
+        match self {
+            Self::EmptyDiff { .. } => "empty diff blocks PR creation",
+            Self::GitUnavailable { message } | Self::GitFailed { message } => message,
         }
     }
 }
@@ -124,6 +197,10 @@ fn vcs_failure_message<'a>(stdout: &'a str, stderr: &'a str) -> &'a str {
     } else {
         stderr
     }
+}
+
+fn is_meaningful_diff_path(path: &str) -> bool {
+    !matches!(path, ".beads") && !path.starts_with(".beads/")
 }
 
 fn sanitize_branch_component(value: &str) -> String {
@@ -254,6 +331,23 @@ mod tests {
         );
         assert!(result.to_string().contains("vcs_sync_failed"));
         assert!(!result.to_string().contains("server-secret-token"));
+    }
+
+    #[test]
+    fn diff_validation_blocks_empty_or_beads_only_diff() {
+        let empty = validate_meaningful_diff_from_paths("");
+        let beads_only =
+            validate_meaningful_diff_from_paths(".beads/state.json\n.beads/dolt/config\n");
+
+        assert_eq!(empty, Err(DiffValidationError::EmptyDiff { changed_paths: 0 }));
+        assert_eq!(beads_only, Err(DiffValidationError::EmptyDiff { changed_paths: 2 }));
+    }
+
+    #[test]
+    fn diff_validation_accepts_meaningful_source_diff() {
+        let result = validate_meaningful_diff_from_paths(".beads/state.json\nsrc/cli/run.rs\n");
+
+        assert_eq!(result, Ok(()));
     }
 
     #[test]

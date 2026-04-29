@@ -49,6 +49,7 @@ pub enum RunEvent {
     RepairAttempted,
     RepairBlocked,
     VcsSyncFailed,
+    DiffValidationFailed,
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -190,6 +191,7 @@ impl RunEvent {
             Self::RepairAttempted => "repair_attempted",
             Self::RepairBlocked => "repair_blocked",
             Self::VcsSyncFailed => "vcs_sync_failed",
+            Self::DiffValidationFailed => "diff_validation_failed",
         }
     }
 }
@@ -222,6 +224,9 @@ fn transition_target(phase: RunPhase, event: RunEvent) -> Option<RunPhase> {
         RunEvent::RepairAttempted => next_if(phase == RunPhase::Repairing, RunPhase::Repairing),
         RunEvent::RepairBlocked => next_if(repair_can_block(phase), RunPhase::RepairBlocked),
         RunEvent::VcsSyncFailed => next_if(vcs_sync_can_block(phase), RunPhase::Blocked),
+        RunEvent::DiffValidationFailed => {
+            next_if(diff_validation_can_block(phase), RunPhase::Blocked)
+        }
     }
 }
 
@@ -235,6 +240,20 @@ fn repair_can_block(phase: RunPhase) -> bool {
 
 fn vcs_sync_can_block(phase: RunPhase) -> bool {
     matches!(phase, RunPhase::Planned | RunPhase::Started)
+}
+
+fn diff_validation_can_block(phase: RunPhase) -> bool {
+    matches!(
+        phase,
+        RunPhase::Planned
+            | RunPhase::Started
+            | RunPhase::PromptRecorded
+            | RunPhase::AgentRequested
+            | RunPhase::AgentRan
+            | RunPhase::GateRunning
+            | RunPhase::Completed
+            | RunPhase::Blocked
+    )
 }
 
 fn next_if(allowed: bool, phase: RunPhase) -> Option<RunPhase> {
@@ -254,6 +273,7 @@ fn event_from_evidence(envelope: &EvidenceEnvelope) -> Result<RunEvent, RunState
         EvidenceKind::RepairAttempt => Ok(RunEvent::RepairAttempted),
         EvidenceKind::RepairBlocked => Ok(RunEvent::RepairBlocked),
         EvidenceKind::VcsSyncFailed => Ok(RunEvent::VcsSyncFailed),
+        EvidenceKind::DiffValidationFailed => Ok(RunEvent::DiffValidationFailed),
     }
 }
 

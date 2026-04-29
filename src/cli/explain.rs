@@ -158,6 +158,7 @@ fn evidence_kind_name(kind: &EvidenceKind) -> &'static str {
         EvidenceKind::AgentRequest => "agent_request",
         EvidenceKind::AgentRun => "agent_run",
         EvidenceKind::VcsSyncFailed => "vcs_sync_failed",
+        EvidenceKind::DiffValidationFailed => "diff_validation_failed",
     }
 }
 
