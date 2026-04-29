@@ -1522,30 +1522,43 @@ mod tests {
     }
 
     #[test]
-    fn bounded_gate_output_truncates_and_marks_metadata() {
+    fn output_limit_bounds_gate_output_and_finding_evidence() {
         let dir = tempfile::tempdir().unwrap();
         let db = StateDb::open(dir.path().join("db")).unwrap();
         let bead_id = bead_id();
         let model = GateId::Fmt.model();
-        let oversized = vec![b'a'; GATE_OUTPUT_LIMIT_BYTES + 7];
+        let oversized = oversized_gate_output("stdout-tail-marker");
         let result =
             gate_result(ExitStatus::from_raw(256), &oversized, b"token=super-secret-token");
 
         let started = persist_gate_started(&db, &bead_id, &model, timestamp(0)).unwrap();
         let finished = persist_gate_finished(&db, &model, &started, &result, timestamp(1)).unwrap();
+        let finding = persist_finding_if_failed(&db, &model, &finished, &result, timestamp(2))
+            .unwrap()
+            .unwrap();
         let json = finished.to_canonical_json().unwrap();
+        let finding_json = finding.to_canonical_json().unwrap();
 
         assert_eq!(finished.metadata.get("stdout_truncated"), Some(&"true".to_owned()));
         assert_eq!(
             finished.metadata.get("stdout_original_bytes"),
-            Some(&(GATE_OUTPUT_LIMIT_BYTES + 7).to_string())
+            Some(&oversized.len().to_string())
         );
         assert_eq!(
             finished.metadata.get("stdout_stored_bytes"),
             Some(&GATE_OUTPUT_LIMIT_BYTES.to_string())
         );
+        assert_eq!(
+            finding.metadata.get("stdout_stored_bytes"),
+            Some(&GATE_OUTPUT_LIMIT_BYTES.to_string())
+        );
         assert_eq!(finished.metadata.get("stderr_preview"), Some(&"[redacted]".to_owned()));
+        assert!(json.len() < GATE_OUTPUT_LIMIT_BYTES * 3);
+        assert!(finding_json.len() < GATE_OUTPUT_LIMIT_BYTES * 3);
+        assert!(!json.contains("stdout-tail-marker"));
         assert!(!json.contains("super-secret-token"));
+        assert!(!finding_json.contains("stdout-tail-marker"));
+        assert!(!finding_json.contains("super-secret-token"));
     }
 
     #[test]
@@ -1625,6 +1638,12 @@ mod tests {
 
     fn repair_prompt_spam_output() -> String {
         format!("{}raw-log-spam-tail-marker", "raw-log-spam ".repeat(600))
+    }
+
+    fn oversized_gate_output(marker: &str) -> Vec<u8> {
+        let mut output = vec![b'a'; GATE_OUTPUT_LIMIT_BYTES + 128];
+        output.extend(marker.as_bytes());
+        output
     }
 
     fn timestamp(offset_seconds: i64) -> DateTime<Utc> {

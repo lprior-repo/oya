@@ -566,6 +566,7 @@ fn byte_boundary(input: &str, max_bytes: usize) -> usize {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::lifecycle::types::{BeadId, RunId};
 
     #[cfg(unix)]
     use std::os::unix::process::ExitStatusExt;
@@ -633,5 +634,55 @@ mod tests {
         assert!(!preview.contains("Provider.request"));
         assert!(!preview.contains("Traceback"));
         assert_eq!(preview, "[redacted]\n[redacted]\n[redacted]");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn output_limit_bounds_agent_evidence_preview_and_metadata() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = StateDb::open(dir.path().join("db")).unwrap();
+        let request = agent_request_fixture();
+        let stdout = oversized_agent_output("stdout-tail-marker");
+        let stderr = b"password=server-secret-token";
+        let result = AgentRunResult::from_process(ExitStatus::from_raw(0), &stdout, stderr);
+
+        let evidence =
+            persist_agent_run(&db, "zai-coding-plan/glm-5", &request, &result, request.timestamp)
+                .unwrap();
+        let json = evidence.to_canonical_json().unwrap();
+
+        assert_eq!(evidence.metadata.get("stdout_truncated"), Some(&"true".to_owned()));
+        assert_eq!(evidence.metadata.get("stdout_original_bytes"), Some(&stdout.len().to_string()));
+        assert_eq!(
+            evidence.metadata.get("stdout_stored_bytes"),
+            Some(&AGENT_OUTPUT_LIMIT_BYTES.to_string())
+        );
+        assert_eq!(
+            evidence.metadata.get("stdout_limit_bytes"),
+            Some(&AGENT_OUTPUT_LIMIT_BYTES.to_string())
+        );
+        assert_eq!(evidence.metadata.get("stderr_preview"), Some(&"[redacted]".to_owned()));
+        assert!(json.len() < AGENT_OUTPUT_LIMIT_BYTES * 3);
+        assert!(!json.contains("stdout-tail-marker"));
+        assert!(!json.contains("server-secret-token"));
+    }
+
+    fn agent_request_fixture() -> EvidenceEnvelope {
+        EvidenceEnvelope::new(EvidenceEnvelopeParts {
+            record_id: EvidenceRecordId::parse("ev-demo-agent-request-001").unwrap(),
+            run_id: RunId::parse("run-demo").unwrap(),
+            bead_id: BeadId::parse("demo").unwrap(),
+            timestamp: Utc::now(),
+            kind: EvidenceKind::AgentRequest,
+            metadata: EvidenceMetadata::from([("status".to_owned(), "requested".to_owned())]),
+            previous_checksum: None,
+        })
+        .unwrap()
+    }
+
+    fn oversized_agent_output(marker: &str) -> Vec<u8> {
+        let mut output = vec![b'a'; AGENT_OUTPUT_LIMIT_BYTES + 128];
+        output.extend(marker.as_bytes());
+        output
     }
 }
