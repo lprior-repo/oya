@@ -881,12 +881,30 @@ mod tests {
     use chrono::TimeZone;
 
     use super::*;
-    use crate::cli::evidence::evidence_check_report;
+    use crate::cli::evidence::{evidence_check_report, EvidenceCheckError};
     use crate::cli::report::RunReport;
     use crate::cli::verify::persist_synthetic_run_verification_gate;
+    use crate::cli::workspace::{ensure_workspace_owned_from_status, WorkspaceOwnershipError};
 
     #[cfg(unix)]
     use std::os::unix::process::ExitStatusExt;
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct ReleaseNegativeCase {
+        name: &'static str,
+        outcome: &'static str,
+        failure_type: &'static str,
+    }
+
+    impl ReleaseNegativeCase {
+        const fn new(
+            name: &'static str,
+            outcome: &'static str,
+            failure_type: &'static str,
+        ) -> Self {
+            Self { name, outcome, failure_type }
+        }
+    }
 
     #[test]
     fn run_started_is_persisted_before_blocked_output() {
@@ -1493,6 +1511,129 @@ mod tests {
                 if bead_id == "demo" && run_id == "run-demo" && phase == "agent_requested"
         ));
         assert_eq!(evidence.len(), 3);
+    }
+
+    #[test]
+    fn release_negative_e2e_matrix_proves_typed_blocked_and_failed_outcomes() {
+        let matrix = release_negative_e2e_matrix();
+
+        assert_eq!(matrix.len(), 4);
+        assert!(matrix.contains(&ReleaseNegativeCase::new(
+            "invalid_model",
+            "failed",
+            "invalid_model",
+        )));
+        assert!(matrix.contains(&ReleaseNegativeCase::new(
+            "dirty_workspace",
+            "blocked",
+            "WorkingTreeInvalid",
+        )));
+        assert!(matrix.contains(&ReleaseNegativeCase::new(
+            "evidence_tamper",
+            "blocked",
+            "EvidenceIntegrityViolation",
+        )));
+        assert!(matrix.contains(&ReleaseNegativeCase::new(
+            "concurrency",
+            "blocked",
+            "BeadAlreadyRunning",
+        )));
+    }
+
+    fn release_negative_e2e_matrix() -> Vec<ReleaseNegativeCase> {
+        vec![
+            release_negative_invalid_model(),
+            release_negative_dirty_workspace(),
+            release_negative_evidence_tamper(),
+            release_negative_concurrency(),
+        ]
+    }
+
+    fn release_negative_invalid_model() -> ReleaseNegativeCase {
+        let dir = tempfile::tempdir().unwrap();
+        let db = StateDb::open(dir.path().join("db")).unwrap();
+        let bead_id = BeadId::parse("demo").unwrap();
+        let timestamp = Utc.timestamp_opt(1_779_999_600, 0).unwrap();
+        let skeleton =
+            persist_run_skeleton_evidence(&db, bead_id, "noop", "bad/model", timestamp).unwrap();
+        let result =
+            AgentRunResult::from_server_failure(500, b"Model not found: token=server-secret-token");
+
+        let output = persist_agent_result(&db, &skeleton, "bad/model", &result).unwrap();
+        let evidence = db.load_evidence(&RunId::parse("run-demo").unwrap()).unwrap();
+        let agent_run_json = evidence[3].to_canonical_json().unwrap();
+
+        assert_eq!(output.phase, "blocked");
+        assert_eq!(output.verdict, "fail");
+        assert_eq!(output.status, "failed");
+        assert_eq!(output.failure_category, Some("invalid_model".to_owned()));
+        assert_eq!(output.error, Some("opencode invalid model".to_owned()));
+        assert_eq!(evidence[3].kind, EvidenceKind::AgentRun);
+        assert!(!agent_run_json.contains("server-secret-token"));
+        ReleaseNegativeCase::new("invalid_model", "failed", "invalid_model")
+    }
+
+    fn release_negative_dirty_workspace() -> ReleaseNegativeCase {
+        let result = ensure_workspace_owned_from_status("run-demo", " M src/secret.rs\n?? .env\n");
+
+        assert!(matches!(
+            &result,
+            Err(WorkspaceOwnershipError::WorkingTreeInvalid { run_id, pending_changes })
+                if run_id == "run-demo" && *pending_changes == 2
+        ));
+        let message = result.unwrap_err().to_string();
+        assert!(message.contains("working_tree_invalid"));
+        assert!(!message.contains(".env"));
+        ReleaseNegativeCase::new("dirty_workspace", "blocked", "WorkingTreeInvalid")
+    }
+
+    fn release_negative_evidence_tamper() -> ReleaseNegativeCase {
+        let bead_id = BeadId::parse("demo").unwrap();
+        let run_id = RunId::parse("run-demo").unwrap();
+        let timestamp = Utc.timestamp_opt(1_779_999_600, 0).unwrap();
+        let first = run_started_envelope(&bead_id, &run_id, timestamp).unwrap();
+        let mut second = prompt_record_envelope(&bead_id, &run_id, "noop", &first).unwrap();
+        second.metadata.insert("secret".to_owned(), "server-secret-token".to_owned());
+
+        let result = evidence_check_report(&run_id, &[first, second]);
+
+        assert!(matches!(
+            &result,
+            Err(EvidenceCheckError::EvidenceIntegrityViolation { record_id })
+                if record_id.starts_with("ev-demo-prompt-record-")
+        ));
+        let message = result.unwrap_err().to_string();
+        assert!(message.contains("EvidenceIntegrityViolation"));
+        assert!(!message.contains("server-secret-token"));
+        ReleaseNegativeCase::new("evidence_tamper", "blocked", "EvidenceIntegrityViolation")
+    }
+
+    fn release_negative_concurrency() -> ReleaseNegativeCase {
+        let dir = tempfile::tempdir().unwrap();
+        let db = StateDb::open(dir.path().join("db")).unwrap();
+        let bead_id = BeadId::parse("demo").unwrap();
+        let timestamp = Utc.timestamp_opt(1_779_999_600, 0).unwrap();
+
+        persist_run_skeleton_evidence(
+            &db,
+            bead_id.clone(),
+            "noop",
+            "zai-coding-plan/glm-5",
+            timestamp,
+        )
+        .unwrap();
+        let result =
+            persist_run_skeleton_evidence(&db, bead_id, "noop", "zai-coding-plan/glm-5", timestamp);
+        let evidence = db.load_evidence(&RunId::parse("run-demo").unwrap()).unwrap();
+        let error = result.unwrap_err();
+
+        assert!(matches!(
+            error.downcast_ref::<RunStartError>(),
+            Some(RunStartError::BeadAlreadyRunning { bead_id, run_id, phase })
+                if bead_id == "demo" && run_id == "run-demo" && phase == "agent_requested"
+        ));
+        assert_eq!(evidence.len(), 3);
+        ReleaseNegativeCase::new("concurrency", "blocked", "BeadAlreadyRunning")
     }
 
     #[test]
